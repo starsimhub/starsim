@@ -125,6 +125,7 @@ from .connectors import Connector, modify, change
 t('conditions')
 from . import conditions
 from .conditions import state, child # Conditions on a state by path, and on a mother when her child goes through an event
+from . import fast # Hidden machinery for speed (exact draws in Numba): ss.fast.draws
 from . import kernels
 from .kernels import compile # Compile the solver kernels ahead of time
 
@@ -160,6 +161,10 @@ from . import named # Places and contact matrices by name (ss.geo.location('Keny
 
 t('gradients')
 from . import gradients # Used as ss.gradients; JAX is imported only when it is used
+
+t('fast')
+from . import fast # Hidden fast paths: ss.jit, and the draws compiled code can make (ss.fast.binomial, ...)
+from .fast import jit
 
 t('sim')
 from .sim import Sim, AlreadyRunError, demo

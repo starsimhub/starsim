@@ -311,6 +311,9 @@ class ClippedToRange(Note):
     probabilities of the branches out of a state come to more than 1, so they were scaled to sum to 1. Said once per quantity
     """
 
+class NotCompiled(Note):
+    """ A function or method given to `ss.jit` can't be compiled (or traced by JAX), so it runs as written; says why (e.g. what Numba couldn't compile, or what a method reads that compiled code can't take). Said once per function, or once per sim for a method (in `sim.notes`) """
+
 class SmallCounts(Note):
     """ `ode` with a disease that starts with only a few infected, so that whether it takes off is a matter of chance """
 

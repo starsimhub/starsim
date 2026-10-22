@@ -1,6 +1,7 @@
 """
 Diseases whose states are tracked jointly in a compartmental run
 """
+import importlib
 import numpy as np
 import numba as nb
 import sciris as sc
@@ -592,7 +593,8 @@ class Crossing:
         out = {}
         for key in keys:
             if key in ['fixed', 'mult', 'consts', 'rel_trans']: # Tables, with a row for each step (or one for all of them)
-                vals = [xp.repeat(X[key], r, axis=0) if r > 1 and len(X[key]) > 1 else X[key] for X,r in zip(Xs, reps)]
+                vals = [xp.broadcast_to(X[key], X[key].shape[:2] + (engine.n_groups,)) for X,engine in zip(Xs, self.engines)] # By group, if kept once for all of them (see ss.gradients.capture())
+                vals = [xp.repeat(v, r, axis=0) if r > 1 and len(v) > 1 else v for v,r in zip(vals, reps)]
                 T = max(len(v) for v in vals)
                 parts = [v[:, I[:, None], C] for v,(I,C) in zip(vals, self.pieces[dict(fixed='flows', mult='flows').get(key, key)])]
                 out[key] = cat([xp.broadcast_to(part, (T,) + part.shape[1:]) for part in parts], axis=1)
@@ -707,7 +709,10 @@ class Crossing:
     def whole_run(self, engine, use_jax=False):
         """ The output of a whole run for one engine: the first engine to ask takes the run for all of them """
         if not self.outs:
-            outs = ss.gradients.run_crossing(self) if use_jax else self.run()
+            if use_jax:
+                outs = ss.gradients.run_crossing(self) if self.sim.solver not in ['binomial', 'tau'] else importlib.import_module('starsim.fast._chain').run_crossing(self)
+            else:
+                outs = self.run()
             self.outs = dict(zip(self.names, outs))
         return self.outs.pop(engine.mod.name)
 
@@ -791,14 +796,18 @@ class Crossing:
         ys = np.repeat(y0[None], n_runs, axis=0)
         length = max(int(50e6//((len(program.fixed) + len(program.mult) + len(program.consts) + len(program.rel_trans))*per_step*R*8)), 1) # Steps per part, as in ss.solvers.Compartmental.run_many()
         start = 0
-        kn = self.kernels(runs=n_runs)
-        while True:
-            end = min(start + length, npts - 1)
-            kn.run_many(rngs, ys, program, dt, start, end + 1, solver, n_sub, *self.tables(start, end), self.register, self.shifts, stocks, flows, stocks_g, flows_g,
-                                tally, tally_g, np.arange(nc), np.zeros(0, dtype=int) if rows is None else rows, grp_state, grp_flow, per_step)
-            if end >= npts - 1:
-                break
-            start = end
+        if self.sim.solver in ['binomial', 'tau'] and ss.solvers.choose_engine(self.sim)[0]: # In JAX, as a single run would be (see ss.solvers.choose_engine())
+            kept = (range(nc), range(nflows)) if grouped else ([], [])
+            stocks, flows, stocks_g, flows_g = importlib.import_module('starsim.fast._chain').run_many(self, seeds, np.arange(nc), *kept, rows)[:4]
+        else:
+            kn = self.kernels(runs=n_runs)
+            while True: # A part at a time
+                end = min(start + length, npts - 1)
+                kn.run_many(rngs, ys, program, dt, start, end + 1, solver, n_sub, *self.tables(start, end), self.register, self.shifts, stocks, flows, stocks_g, flows_g,
+                                    tally, tally_g, np.arange(nc), np.zeros(0, dtype=int) if rows is None else rows, grp_state, grp_flow, per_step)
+                if end >= npts - 1:
+                    break
+                start = end
         outs = []
         for k,engine in enumerate(engines):
             states = range(len(engine.graph.states))

@@ -231,8 +231,7 @@ class Births(Demographics):
 
         # The rate is per person, but the parents are women of reproductive age: the same number of births, from them
         ppl = sim.people
-        mothers = ppl.auids[ppl.female.raw[ppl.auids]]
-        mothers = mothers[(ppl.age.raw[mothers] >= p.min_age) & (ppl.age.raw[mothers] < p.max_age)]
+        mothers = ss.fast._passes.women(ppl.auids, ppl.female.raw, ppl.age.raw, p.min_age, p.max_age).view(ss.uids)
         if not len(mothers):
             return ss.uids()
 

@@ -4,6 +4,7 @@ Test the ODE run in JAX: that it matches the kernels, its gradients, gradient-ba
 
 # %% Imports and settings
 import warnings
+import importlib
 import importlib.util
 import pytest
 import numpy as np
@@ -48,6 +49,89 @@ def test_jax_run():
         assert diff < 1e-9, f'{key}: the run in JAX differs from the kernels by {diff}'
         assert not stepped # Including the TB model, whose transfer has a constant rate
     return sims
+
+
+def compare(make, n=30):
+    """ Final states (and deliveries) of n runs by the kernels and by JAX: the z of each difference in means, and whether every JAX run has the same people """
+    out = {}
+    for jax in [False, True]:
+        rows = []
+        for seed in range(n):
+            sim = make(seed)
+            sim.jax = jax
+            sim.run()
+            assert not [note for note in sim.notes if 'JAX cannot' in note]
+            rows.append([mod.results[f'n_{state}'][-1] for mod in sim.declared for state in mod.graph.states] + [mod.results.delivered.values.sum() for mod in sim.interventions() if 'delivered' in mod.results])
+        out[jax] = np.array(rows)
+    a, b = out[True], out[False]
+    z = (a.mean(0) - b.mean(0))/np.sqrt((a.var(0) + b.var(0))/n + 1e-12)
+    print(f'JAX {a.mean(0).round()}, kernels {b.mean(0).round()}, z {z.round(2)}')
+    return z
+
+
+@sc.timer()
+def test_jax_binomial():
+    sc.heading('Testing the chain binomial and tau-leaping in JAX against the kernels, in distribution')
+    make, pars = models.seir # Seasonal transmission, a dwell time in stages, and a branch
+    z = compare(lambda seed: ss.Sim(make(), **sc.mergedicts(pars, kw), solver='binomial', rand_seed=seed))
+    assert np.all(np.abs(z) < 4), f'The chain binomial in JAX differs from the kernels: z = {z}'
+
+    # Deliveries, with substeps; tau-leaping with a movement register; two diseases tracked jointly
+    def deliveries(seed):
+        S, I, R = ss.states('S I R')
+        sir = ss.Disease(infection=ss.Transition(S, I, rate=0.3 * I), recovery=ss.Transition(I, R, dur=10), init_prev=0.01, name='sir').stratify(age=[0, 15, 65])
+        offer = ss.vaccinate(ss.Vaccine(efficacy=0.9), where=sir.S, coverage=ss.by(age=[0.6, 0.3, 0.0]), start=10)
+        return ss.Sim(sir, interventions=offer, solver='binomial', substeps=2, unit='day', stop=60, total_pop=20_000, rand_seed=seed, **kw)
+    def register(seed):
+        moves = sc.dataframe(date=[5, 10, 20], n=[1000, 500, 300], states=[None, 'S', None], **{'from':['a', None, 'b'], 'to':['b', 'c', None]})
+        S, I, R = ss.states('S I R')
+        sir = ss.Disease(infection=ss.Transition(S, I, rate=ss.perday(0.3) * I), recovery=ss.Transition(I, R, dur=ss.days(10)), init_n=dict(I=ss.by(place=[20, 0, 0])), name='sir')
+        sir.stratify(place=['a', 'b', 'c'], kind='space', split=[0.5, 0.3, 0.2], mobility=ss.geo.Mobility(data=moves))
+        return ss.Sim(sir, solver='tau', total_pop=10_000, unit='day', stop=40, rand_seed=seed, **kw)
+    def crossing(seed):
+        S, I = ss.states('S I')
+        a = ss.Disease(infection=ss.Transition(S, I, rate=0.3 * I), cure=ss.Transition(I, S, dur=ss.days(10)), init_prev=0.05, name='a')
+        S, I, R = ss.states('S I R')
+        b = ss.Disease(infection=ss.Transition(S, I, rate=0.25 * I), recovery=ss.Transition(I, R, dur=ss.lognorm_ex(8, 3)), init_prev=0.01, name='b')
+        return ss.Sim(diseases=[a, b], connectors=ss.modify(b.rel_sus, multiply=2.0, where=a.I), solver='binomial', unit='day', stop=60, total_pop=10_000, rand_seed=seed, **kw)
+    for make in [deliveries, register, crossing]:
+        z = compare(make, n=20)
+        assert np.all(np.abs(z) < 4), f'{make.__name__}: JAX differs from the kernels: z = {z}'
+    return z
+
+
+@sc.timer()
+def test_jax_engine():
+    sc.heading('Testing the choice of JAX or the kernels, and the guard on the FFI handler')
+    chain = importlib.import_module('starsim.fast._chain')
+    assert chain.check() == chain.api_version() # The handler reports the XLA FFI API version of the installed JAX
+    make, pars = models.towns
+    sim = ss.Sim(make(), **sc.mergedicts(pars, kw), solver='binomial').run()
+    assert sim.engine_reason.startswith('kernels: a short run') # Shorter than JAX takes to start
+    after = ss.solvers.choose.jax_after
+    try:
+        ss.solvers.choose.jax_after = 0 # As if it were a long run
+        sim = ss.Sim(make(), **sc.mergedicts(pars, kw), solver='binomial', rand_seed=3).run()
+        assert sim.engine_reason.startswith('JAX: a long run')
+        msim = ss.Sim(make(), **sc.mergedicts(pars, kw), solver='binomial').run(n_runs=4) # Taken together in JAX, each as it would be alone
+        assert np.array_equal(msim.results.sir.n_I.values[2], sim.results.sir.n_I.values) # Seeds 1 to 4
+        ode = ss.Sim(make(), **sc.mergedicts(pars, kw), solver='ode').run() # The ODE too, which agrees with the kernels
+        assert ode.engine_reason.startswith('JAX: a long run')
+        ref = ss.Sim(make(), **sc.mergedicts(pars, kw), solver='ode')
+        ref.jax = False
+        assert np.allclose(ode.results.sir.n_I.values, ref.run().results.sir.n_I.values, rtol=1e-9, atol=0)
+    finally:
+        ss.solvers.choose.jax_after = after
+    reported = chain.reported_version
+    try: # A handler that reports another version is not used: the run falls back to the kernels, with a note
+        chain.reported_version = lambda handler: (0, 0)
+        sim = ss.Sim(make(), **sc.mergedicts(pars, kw), solver='binomial')
+        sim.jax = True
+        sim.run()
+        assert any('JAX cannot' in note and 'API version' in note for note in sim.notes)
+    finally:
+        chain.reported_version = reported
+    return sim
 
 
 @sc.timer()
@@ -259,6 +343,8 @@ if __name__ == '__main__':
     T = sc.timer()
 
     sims = test_jax_run()
+    binom = test_jax_binomial()
+    engine = test_jax_engine()
     grad = test_gradient()
     fit = test_fit()
     ident = test_identifiability()

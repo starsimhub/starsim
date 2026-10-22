@@ -44,7 +44,7 @@ The table below is made from the code (`ss.errors.catalog()`, from the docstring
 
 <!-- catalog start -->
 
-60 names: 44 errors, 7 warnings, and 9 notes. Each is `ss.errors.<Name>` (and `ss.CapabilityError` is also at the root, as `ss.CapabilityError`); the errors are subclasses of `ss.CodedError` (itself a `ValueError`), and the warnings and notes of `ss.StarsimWarning` (itself a `RuntimeWarning`).
+61 names: 44 errors, 7 warnings, and 10 notes. Each is `ss.errors.<Name>` (and `ss.CapabilityError` is also at the root, as `ss.CapabilityError`); the errors are subclasses of `ss.CodedError` (itself a `ValueError`), and the warnings and notes of `ss.StarsimWarning` (itself a `RuntimeWarning`).
 
 | Name | Kind | When |
 |---|---|---|
@@ -104,6 +104,7 @@ The table below is made from the code (`ss.errors.catalog()`, from the docstring
 | `MatrixAggregated` | note | In a compartmental run, a contact matrix whose age groups are not the model's was aggregated to the model's groups, weighted by population. Names the matrix and both sets of groups. Agents use the matrix's own groups and get no note |
 | `OverlappingSet` | note | Two `set=` modifiers are active for the same people at once; the one later in the loop is used. Names both |
 | `ClippedToRange` | note | The modifiers of a rate, duration, or multiplier made it negative, so it was set to 0 where it was; or made the probabilities of the branches out of a state come to more than 1, so they were scaled to sum to 1. Said once per quantity |
+| `NotCompiled` | note | A function or method given to `ss.jit` can't be compiled (or traced by JAX), so it runs as written; says why (e.g. what Numba couldn't compile, or what a method reads that compiled code can't take). Said once per function, or once per sim for a method (in `sim.notes`) |
 | `SmallCounts` | note | `ode` with a disease that starts with only a few infected, so that whether it takes off is a matter of chance |
 | `ExtinctionPossible` | note | `ode` on a model where the number infected falls so low that the epidemic could plausibly die out by chance |
 | `StagesUnderAuto` | note | A compartmental run represented a dwell time that is not exponential or Erlang by fitted Erlang stages. Names the transition, the number of stages, and the mean and standard deviation kept. `stages=` on the transition silences it, and `approx=True` keeps it without printing it; with `approx=False` it is a `CapabilityError` instead, and `solver='auto'` runs the model as agents |

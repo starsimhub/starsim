@@ -1,6 +1,7 @@
 """
 The compartmental engine: a declared model run as groups of people (`ode`, `binomial`, `gillespie`, and tau-leaping)
 """
+import importlib
 import numpy as np
 import numba as nb
 import scipy.sparse as sps
@@ -1820,9 +1821,12 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
         sim.t.ti = mod.t.ti = 0
         rows = npts*per_step if self.time_pars else 1
 
+        grouped = [] # Whether any value of each table differs by group (otherwise ss.gradients.capture() keeps it once for all of them)
+
         def table(vals):
             """ The values by group, at each step if any of them varies in time (a series over the steps), and otherwise once """
             steps = any(np.ndim(val) == 2 and len(val) > 1 for val in vals)
+            grouped.append(any(np.shape(val)[-1] > 1 for val in vals if np.ndim(val))) # A series is steps by groups
             vals = [val[start*per_step:stop*per_step] if np.ndim(val) == 2 and len(val) > 1 else val for val in vals] # The steps asked for
             shape = ((stop - start)*per_step if steps else 1, self.n_groups)
             return np.array([np.broadcast_to(val, shape) for val in vals], dtype=float).reshape(len(vals), *shape).swapaxes(0, 1)
@@ -1848,6 +1852,8 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
             self.cache.clear()
             shape = (self.n_groups,)
             fixed, mult, consts, rel_trans = [np.array([[np.broadcast_to(val, shape) for val in row[k]] for row in rows], dtype=float).reshape(len(rows), len(rows[0][k]), self.n_groups) for k in range(4)]
+            grouped = [True]*4
+        self.tables_by_group = grouped
         for par in self.time_pars: # For the results, a value is a series over the steps (and over the groups, for an ss.by)
             vals = series[id(par)][::per_step]
             self.cache[id(par)] = vals[:, 0] if vals.shape[1] == 1 else vals
@@ -1925,6 +1931,10 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
             out, self.given = self.given, None
         elif self.cross is not None: # Together with the other diseases in the crossing, by one program
             out = self.cross.whole_run(self, use_jax=use_jax)
+        elif use_jax and self.sim.solver in ['binomial', 'tau']: # The chain binomial or tau-leaping in JAX: see ss.fast._chain
+            *out, tally = importlib.import_module('starsim.fast._chain').run(self)
+            for k,mod in enumerate(self.deliveries):
+                mod.compartments.store_shifts(tally[:, k])
         elif use_jax:
             out = ss.gradients.run(self)
         elif self.rows is not None: # The results by group are kept every few steps, so the run is taken a part at a time, and only those are kept
@@ -1938,7 +1948,7 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
                 mod.compartments.store_shifts(tally[:, k])
         self.y, stocks, flows, short = out
         flows = self.count_deaths(flows)
-        if (use_jax or tally is None) and getattr(self, 'deliveries', None): # A run taken in JAX: the deliveries' results, from the compartments at each time point they happened at
+        if tally is None and getattr(self, 'deliveries', None): # The ODE taken in JAX: the deliveries' results, from the compartments at each time point they happened at
             self.store_replayed(stocks)
         if self.rows is not None:
             self.check_short(short)
@@ -2048,8 +2058,10 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
         totals = sc.objdict(stocks=np.zeros((len(states), npts)), flows=np.zeros((n_flows, npts)), new_infections=np.zeros(npts))
         groups = sc.objdict(stocks=np.zeros((len(ends), len(kept_s), ng)), flows=np.zeros((len(ends), len(kept_f), ng))) # Only those needed
         pos_s, pos_f = {i:j for j,i in enumerate(kept_s)}, {i:j for j,i in enumerate(kept_f)}
-        grouped = self.outcomes and ng > 1 # Outcomes are then worked out by group, a step at a time as a stepped run does, so the flows by group at each step need not be kept
+        grouped = self.outcomes and ng > 1 # Outcomes are then worked out by group, from the flows they come from by group at each step
         sources = sorted({key for info in self.outcomes.values() for key,weight in info.sources if key in self.tr_index}) if grouped else []
+        whole = grouped and not any(isinstance(weight, ss.transitions.Expr) for info in self.outcomes.values() for key,weight in info.sources) # For the whole run at once (see derived_outcomes()), unless a weight is an expression, which can change in time: then a step at a time, as a stepped run does
+        src = sc.objdict({key:np.zeros((npts, ng)) for key in sources}) if whole else None # The flows the outcomes come from, by step and group
         if grouped:
             for name in self.outcomes:
                 for key in [name, f'n_{name}']:
@@ -2065,12 +2077,25 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
                 totals.new_infections[tis] = sum(flows[:, self.tr_index[tr.name]] for tr in graph.transmissions).sum(axis=1)
             at_ends(groups.stocks, rows, ends, tis, by_state[:, kept_s])
             add_rows(groups.flows, rows, tis, flows[:, kept_f])
-            if grouped:
+            if whole:
+                for key in sources:
+                    src[key][tis] = flows[:, self.tr_index[key]]
+            elif grouped:
                 for j,ti in enumerate(tis):
                     mod.t.ti = ti
                     self.cache.clear() # Values held for a step (see Engine.call() and by_group()) are for another step
                     self.flow_groups = sc.objdict({key:flows[j, self.tr_index[key]] for key in sources})
                     self.step_outcomes()
+        if whole:
+            tis = np.arange(npts)
+            for key,vals in self.derived_outcomes(sc.objdict({key:vals.T for key,vals in src.items()})).items():
+                vals = np.ascontiguousarray(vals.T) # Steps by groups
+                res[key][:] = vals.sum(axis=1)
+                if getattr(res[key], 'strata', None) is not None:
+                    if key in self.outcomes: # A flow, added up over the steps of each row
+                        add_rows(res[key].strata, rows, tis, vals)
+                    else: # The number at the end of each row
+                        at_ends(res[key].strata, rows, ends, tis, vals)
         self.flow_groups = sc.objdict()
         self.sim.t.ti = mod.t.ti = npts - 1
         store = self.store_run
@@ -2148,14 +2173,17 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
         per_step = self.per_step()
         length = max(int(50e6//(sum(len(table) for table in [program.fixed, program.mult, program.consts, program.rel_trans])*per_step*ng*8)), 1) # Steps per part, so the tables of values that vary in time (by group, at every step) are not all held at once
         start = 0
-        kn = self.kernels(runs=n_runs)
-        while True:
-            end = min(start + length, npts - 1)
-            kn.run_many(rngs, ys, program, dt, start, end + 1, solver, n_sub, *self.tables(start, end), self.register, self.shifts, stocks, flows, stocks_g, flows_g,
-                                tally, tally_g, state_of, np.zeros(0, dtype=int) if rows is None else rows, grp_state, grp_flow, per_step)
-            if end >= npts - 1:
-                break
-            start = end
+        if self.sim.solver in ['binomial', 'tau'] and ss.solvers.choose_engine(self.sim)[0]: # In JAX, as a single run would be (see ss.solvers.choose_engine())
+            stocks, flows, stocks_g, flows_g, tally, tally_g = importlib.import_module('starsim.fast._chain').run_many(self, seeds, state_of, kept_s, kept_f, rows)
+        else:
+            kn = self.kernels(runs=n_runs)
+            while True: # A part at a time
+                end = min(start + length, npts - 1)
+                kn.run_many(rngs, ys, program, dt, start, end + 1, solver, n_sub, *self.tables(start, end), self.register, self.shifts, stocks, flows, stocks_g, flows_g,
+                                    tally, tally_g, state_of, np.zeros(0, dtype=int) if rows is None else rows, grp_state, grp_flow, per_step)
+                if end >= npts - 1:
+                    break
+                start = end
         out = self.collect(stocks, flows, grouped=None if rows is None else (stocks_g, flows_g, kept_s, kept_f, group_ti), seeds=seeds)
         out.deliveries = sc.objdict({mod.name:mod.compartments.many_shifts(tally[:, :, k], None if rows is None else tally_g[:, :, k], group_ti) for k,mod in enumerate(self.deliveries)})
         return out
@@ -2281,8 +2309,9 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
                     weight = self.eval(weight)
                     if np.ndim(weight) == 1 and np.ndim(flow) >= 2 and np.shape(flow)[-2] == len(weight): # A weight for each group, with the flows by group
                         weight = weight[:, None]
-                if draw and np.all((0 <= weight) & (weight <= 1)): # A fraction of whole events is a draw
-                    amount = amount + self.rng.binomial(np.round(flow).astype(int), weight)
+                if draw and np.all((0 <= weight) & (weight <= 1)): # A fraction of whole events is a draw, made a step at a time (the steps first), so it is the draw of a run taken a step at a time (see step_outcomes()) if it is the only one
+                    n = np.round(flow).astype(int)
+                    amount = amount + np.moveaxis(self.rng.binomial(np.moveaxis(n, -1, 0), np.moveaxis(np.broadcast_to(weight, n.shape), -1, 0)), 0, -1)
                 else:
                     amount = amount + flow*weight
             kernel = info.kernel

@@ -1,11 +1,12 @@
 """
 The agent engine: a declared model run as agents (`abm`)
 """
+import functools
 import operator
 import numpy as np
 import sciris as sc
 import starsim as ss
-from .engine import Bunch, CountState, Engine
+from .engine import Bunch, CountState, Engine, times
 from .compartmental import Compartmental
 
 __all__ = ['Agents']
@@ -2200,15 +2201,26 @@ class Agents(Engine):
         rates = [(tr, self.eval_for(tr.rate, uids)*self.adjusted(tr.name, uids)) for tr in self.competing[state.name]]
         rates = [(tr, rate) for tr,rate in rates if np.ndim(rate) or rate > 0] # A rate of 0 for everyone (e.g. ss.Pregnancy's infant_rate by default) moves nobody, so it is left out of the draw
         competing = [tr for tr,rate in rates]
-        hazards = [np.broadcast_to(np.maximum(rate, 0), len(uids))*self.stayed(tr, state, uids) for tr,rate in rates]
-        total = np.sum(hazards, axis=0) if hazards else np.zeros(len(uids))
+        stays = [self.stayed(tr, state, uids) for tr,rate in rates]
+        same = key is None and len(uids) and np.ndim(dt) == 0 and all(np.ndim(rate) == 0 for tr,rate in rates) and all(np.ndim(s) == 0 for s in stays) # The same chances for everyone: worked out once
+        n = 1 if same else len(uids)
+        hazards = [np.broadcast_to(np.maximum(rate, 0), n)*stay for (tr,rate),stay in zip(rates, stays)]
+        total = np.sum(hazards, axis=0) if hazards else np.zeros(n)
         if np.isnan(total).any():
             bad = [tr.name for tr,h in zip(competing, hazards) if np.isnan(h).any()]
             raise ss.errors.ClockOutsideDomain(f'the rate of {sc.strjoin(bad)} out of {state.name} is NaN for some people: it reads a clock or an attribute where it has no value.')
         p_exit = -np.expm1(-total*dt)
+        edges = np.cumsum([np.zeros(n)] + hazards, axis=0)*np.divide(p_exit, total, out=np.zeros(n), where=total>0)
+        crn = self.dists[f'exit_{state.name}'].crn_key() if same else None
+        if crn is not None: # The usual case: each agent's draw is made in one compiled pass, as rvs() would make it, so only those who leave are listed
+            pos, which = ss.fast._passes.competing_exits(uids, self.sim.people.slot_raw(), *crn, p_exit[0], edges[:, 0])
+            leaving = np.zeros(len(uids), dtype=bool)
+            leaving[pos] = True
+            for i,tr in enumerate(competing):
+                self.move(tr, state, uids[pos[which == i]])
+            return leaving
         rvs = self.dists[f'exit_{state.name}'].rvs(uids) if key is None else self.draw(key, uids) # Drawn on entry as well, so perhaps more than once a step
         leaving = rvs < p_exit
-        edges = np.cumsum([np.zeros(len(uids))] + hazards, axis=0)*np.divide(p_exit, total, out=np.zeros(len(uids)), where=total>0)
         for i,tr in enumerate(competing):
             self.move(tr, state, uids[leaving & (rvs >= edges[i]) & (rvs < edges[i+1])])
         return leaving
@@ -2732,7 +2744,7 @@ class Agents(Engine):
             return self.draw_infections(tr, sus, hazards, dt, carried, superinfects)
 
         # Otherwise, transmit over each route. Mixing pools give each person a hazard, and networks a chance for each contact
-        sus_raw = mod[src.name].raw*mod.rel_sus.raw*src.rel_sus*self.mult_raw('rel_sus')*self.mult_raw('transition', tr.name)
+        sus_raw = times(mod[src.name].raw*mod.rel_sus.raw, src.rel_sus, self.mult_raw('rel_sus'), self.mult_raw('transition', tr.name))
         if self.adjust[tr.name] is not None:
             sus_raw = sus_raw*self.adjust[tr.name][sim.groups.group_raw()]
         rel_sus = mod.rel_sus.asnew(sus_raw, copy=False)
@@ -2761,11 +2773,10 @@ class Agents(Engine):
             weights = mod.rel_trans.raw*0
             for state,c in coefs.items():
                 weights = weights + mod[state.name].raw*(c/ref)*state.rel_trans
-            rel_trans = mod.rel_trans.asnew(weights*mod.rel_trans.raw*self.mult_raw('rel_trans')*by_strain, copy=False)
+            rel_trans = mod.rel_trans.asnew(times(weights*mod.rel_trans.raw, self.mult_raw('rel_trans'), by_strain), copy=False)
             beta = -np.expm1(-ref*dt)
             if isinstance(route, ss.Network):
-                beta_per_dt = route.net_beta(disease_beta=beta, disease=mod) if len(route) else None
-                edge_beta = lambda d, src, trg: beta_per_dt*mult(Ellipsis, trg) # For the people they would infect
+                edge_beta = lambda d, inds, src, trg: route.edge_net_beta(inds, disease_beta=beta, disease=mod)*mult(inds, trg) # For the edges that might transmit (see ss.Network.transmit()), and the people they would infect
                 for srcs, trgs in route.transmit(rel_trans.raw, route_sus.raw, edge_beta, mod.trans_rng):
                     new_cases.append(trgs)
                     pairs.append((srcs, trgs, i))
@@ -3019,7 +3030,7 @@ class Agents(Engine):
         hazards = {state: np.asarray(self.route_beta(coef, nkey, route), dtype=float) for state,coef in tr.terms.items()} # Directions (by groups) for each source state
         if not any(np.any(h > 0) for h in hazards.values()):
             return
-        trans = mod.rel_trans.raw*self.mult_raw('rel_trans')*by_strain
+        trans = times(mod.rel_trans.raw, self.mult_raw('rel_trans'), by_strain)
         groups = sim.groups.group_raw() if any(h.ndim > 1 for h in hazards.values()) else None
         mult = lambda inds, trg: ss.connectors.route_mult(self, tr.name, route, inds, trg)
 
@@ -3032,14 +3043,14 @@ class Agents(Engine):
                 act += mod[state.name].raw[src]*state.rel_trans*hs
             return act
 
-        if route.custom_beta: # Starsim 3's contract
-            edge_beta = lambda d, src, trg: route.net_beta(disease_beta=-np.expm1(-act_hazard(src, trg)), disease=mod)*mult(Ellipsis, trg)
+        if route.custom_beta: # Starsim 3's contract, whose net_beta() is for every edge
+            edge_beta = lambda d, inds, src, trg: route.edge_net_beta(inds, disease_beta=-np.expm1(-act_hazard(*route.ends(d))), disease=mod)*mult(inds, trg)
             out = route.transmit(trans, rel_sus.raw, edge_beta, mod.trans_rng)
         else:
-            source = sum(mod[state.name].raw*state.rel_trans for state in hazards) # Whether each agent is infectious, with the rel_trans of their state
-            weight = route.edges.beta*route.edges.acts
-            prob = lambda d, inds, src, trg: -np.expm1(-weight[inds]*act_hazard(src, trg)*trans[src]*rel_sus.raw[trg]*mult(inds, trg))
-            out = route.transmit(trans*source, rel_sus.raw, lambda d, src, trg: weight, mod.trans_rng, prob=prob)
+            source = functools.reduce(operator.add, [mod[state.name].raw*state.rel_trans for state in hazards]) # Whether each agent is infectious, with the rel_trans of their state
+            weight = lambda inds: route.edges.beta[inds]*route.edges.acts[inds]
+            prob = lambda d, inds, src, trg: -np.expm1(-weight(inds)*act_hazard(src, trg)*trans[src]*rel_sus.raw[trg]*mult(inds, trg))
+            out = route.transmit(trans*source, rel_sus.raw, lambda d, inds, src, trg: weight(inds), mod.trans_rng, prob=prob)
         for srcs, trgs in out:
             new_cases.append(trgs)
             pairs.append((srcs, trgs, i))

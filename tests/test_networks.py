@@ -1098,6 +1098,22 @@ def test_between():
     return
 
 
+@sc.timer()
+def test_transmit_candidates():
+    sc.heading('Testing that the edges that might transmit are found exactly, by a byte for each agent for many edges, or directly for a few')
+    rng = np.random.default_rng(1)
+    n = 1000
+    rel_trans = np.where(rng.random(n) < 0.2, rng.random(n), 0).astype(np.float32)
+    rel_sus = np.where(rng.random(n) < 0.7, 1.0, 0.0)
+    rel_sus[:5] = np.nan # A candidate, ruled out later by the chance itself
+    for n_edges in [50, 5000]: # Under an eighth of the agents, read directly
+        p1, p2 = rng.integers(n, size=(2, n_edges))
+        found = ss.fast._passes.candidates(p1, p2, rel_trans, rel_sus)
+        for (src, trg), inds in zip([(p1, p2), (p2, p1)], found):
+            assert np.array_equal(inds, np.flatnonzero((rel_trans[src] != 0) & (rel_sus[trg] != 0))), f'Wrong candidates with {n_edges} edges'
+    return
+
+
 # %% Run as a script
 if __name__ == '__main__':
     do_plot = True
@@ -1137,5 +1153,6 @@ if __name__ == '__main__':
     pa = test_partnership_approx()
     spec = test_peract_spec()
     default = test_beta_default()
+    cand = test_transmit_candidates()
 
     T.toc()

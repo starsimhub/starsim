@@ -68,6 +68,49 @@ def reason(sim):
 
 #%% The run
 
+class OneHot:
+    """
+    Which of n rows each group is in (e.g. its place), applied as a one-hot matrix would be, but as sums and indexing (O(groups), not O(groups²)): nothing at all when each group is its own row
+
+    Args:
+        index (array): the row of each group
+        n (int): the number of rows
+    """
+    def __init__(self, index, n):
+        self.index = np.asarray(index, dtype=int)
+        self.n = n
+        ng = len(self.index)
+        k = ng//n if n else 0
+        rows = np.arange(n)
+        if n == ng and np.array_equal(self.index, rows):
+            self.kind = 'identity'
+        elif n*k == ng and np.array_equal(self.index, np.repeat(rows, k)): # Each row's groups together (one row: all of them)
+            self.kind = 'blocks'
+        elif n*k == ng and np.array_equal(self.index, np.tile(rows, k)): # Each row's groups k apart
+            self.kind = 'strided'
+        else:
+            self.kind = 'scatter'
+        return
+
+    def sum(self, v):
+        """ The sum of v (by group) over the groups in each row """
+        if self.kind == 'identity':
+            return v
+        elif self.kind == 'blocks':
+            return v.reshape(self.n, -1).sum(axis=1)
+        elif self.kind == 'strided':
+            return v.reshape(-1, self.n).sum(axis=0)
+        return jax().ops.segment_sum(v, self.index, self.n)
+
+    def spread(self, w):
+        """ The value of each group's row, from w by row """
+        return w if self.kind == 'identity' else w[self.index]
+
+    def local(self, v):
+        """ The sum of v over the groups in the same row as each group """
+        return self.spread(self.sum(v))
+
+
 class Run:
     """
     One engine's run, as a function of the numbers in it
@@ -109,8 +152,8 @@ class Run:
         self.nflows = p.n_trans + p.n_movers
         self.dynamic = [f for f in range(nf) if p.starts[f] < p.starts[f+1]]
         self.leaves = np.flatnonzero(p.src >= 0) # The flows that leave a compartment
-        self.place = np.zeros((p.n_places, ng)) # Which place each group is in
-        self.place[p.places, np.arange(ng)] = 1
+        self.place = OneHot(p.places, p.n_places) # Which place each group is in
+        self.cells = [OneHot(p.levels[t], int(p.sizes[t])) for t in range(len(p.sizes))] # ... and which level of each stratification
         self.sets = [p.set_comps[p.set_starts[s]:p.set_starts[s+1]] for s in range(len(p.set_starts) - 1)]
         self.tgt_flow = np.repeat(np.arange(nf), np.diff(p.tgt_starts)) # The flow each target belongs to
         self.crd_flow = np.repeat(np.arange(nf), np.diff(p.crd_starts)) # ... and each transition a flow is also counted as
@@ -163,10 +206,11 @@ class Run:
         jnp = jax().numpy
         p = self.p
         fixed, mult, consts, rel_trans, X = vals
+        fixed = jnp.broadcast_to(fixed, (self.nf, self.ng)) # A table kept once for every group (see capture())
         if not self.dynamic:
             return fixed
         n = ys[p.people].sum(axis=0) # The people in each group
-        local_n = n if self.simple else self.place.T @ (self.place @ n) # ... and in the same place as each group
+        local_n = n if self.simple else self.place.local(n) # ... and in the same place as each group
         exposures = []
         for e in range(len(p.exp_set)): # Exposure to each infectious state through each mixing term
             s = p.exp_set[e]
@@ -184,11 +228,8 @@ class Run:
                 exposures.append(expo)
                 continue
             for t in range(len(p.sizes)):
-                size = int(p.sizes[t])
-                cells = np.zeros((size, self.ng))
-                cells[p.levels[t], np.arange(self.ng)] = 1
-                num = cells @ infectious
-                den = cells @ n
+                num = self.cells[t].sum(infectious)
+                den = self.cells[t].sum(n)
                 block = int(p.block[t])
                 if p.use[0, t]: # Move people to where they spend their time
                     num = self.share(num, block, X, True)
@@ -198,7 +239,7 @@ class Run:
                     prev = (prev.reshape(-1, block) @ X['mat'][t, :block, :block].T).ravel()
                 if p.use[2, t]: # Mix between places
                     prev = self.share(prev, block, X, False)
-                expo = expo + X['contacts'][min(e, len(p.contacts) - 1), t]*prev[p.levels[t]]
+                expo = expo + X['contacts'][min(e, len(p.contacts) - 1), t]*self.cells[t].spread(prev)
             exposures.append(expo)
 
         rows = [fixed[f] for f in range(self.nf)]
@@ -223,7 +264,7 @@ class Run:
             elif op in [kn.COUNT, kn.FRAC]:
                 local = ys[self.sets[arg]].sum(axis=0)
                 if not self.simple:
-                    local = self.place.T @ (self.place @ local)
+                    local = self.place.local(local)
                 stack.append(local/local_n if op == kn.FRAC else local)
             elif op >= kn.EXP:
                 x = stack.pop()
@@ -253,7 +294,7 @@ class Run:
         p = self.p
         v = v.reshape(-1, block)
         if self.dense_share:
-            return (X['sh_mat'] @ v if by_columns else X['sh_mat'].T @ v).ravel()
+            return (X['sh_mat' if by_columns else 'sh_mat_t'] @ v).ravel()
         frm, to = (p.sh_pair[0], p.sh_pair[1]) if by_columns else (p.sh_pair[1], p.sh_pair[0]) # Taken from the entry's row and added to its column, or the reverse
         return jnp.zeros_like(v).at[to].add(X['sh_val'][:, None]*v[frm]).ravel()
 
@@ -397,6 +438,18 @@ class Run:
             y = y - reached + a @ X['sh_to'][k] + b @ X['sh_rest'][k]
         return y
 
+    def prepare(self, X):
+        """
+        The numbers of a run, with what is worked out from them once a run: the time share as a matrix from place to
+        place, if it is dense (a product with it is much faster in XLA than adding into an array at indices: 4x for 50
+        places), and its transpose (since XLA transposes a matrix that is an input again at every step: 10x slower for Ghana)
+        """
+        if not self.dense_share:
+            return X
+        p = self.p
+        zeros = jax().numpy.zeros((p.n_places, p.n_places))
+        return dict(X, sh_mat=zeros.at[p.sh_pair[1], p.sh_pair[0]].add(X['sh_val']), sh_mat_t=zeros.at[p.sh_pair[0], p.sh_pair[1]].add(X['sh_val']))
+
     def function(self, clamp=False):
         """
         The run, as a function of a dict of its numbers (see `capture()`): returns the compartments at the end, at the end of each step, the flows over each step, and the most substeps a step needed
@@ -408,9 +461,7 @@ class Run:
         jnp = jx.numpy
 
         def run(X):
-            if self.dense_share: # As a matrix, from place to place, made once a run: a product with it is much faster in XLA than adding into an array at indices (4x for 50 places)
-                p = self.p
-                X = dict(X, sh_mat=jnp.zeros((p.n_places, p.n_places)).at[p.sh_pair[1], p.sh_pair[0]].add(X['sh_val']))
+            X = self.prepare(X)
             step = self.stepper(X, clamp)
             def body(y, ti):
                 y = self.deliver(y, X, ti)
@@ -490,12 +541,17 @@ class CrossRun:
         return self.compiled[kind]
 
 
-def capture(engine):
-    """ The numbers in an engine's run, as it is set up now (with its current parameter values): the program, how to run it, and the numbers """
+def capture(engine, compact=True):
+    """
+    The numbers in an engine's run, as it is set up now (with its current parameter values): the program, how to run it, and the numbers
+
+    Args:
+        compact (bool): keep a table that is the same for every group once for all of them, rather than for each (as the kernels take it)
+    """
     args, tables = engine.run_args()
     y, program, dt, npts, solver, n_sub = args
     X = {name:np.array(getattr(program, name), dtype=float) for name in diff_fields}
-    X.update({name:np.array(table, dtype=float) for name,table in zip(table_fields, tables)})
+    X.update({name:np.array(table if grouped or not compact else table[:, :, :1], dtype=float) for name,table,grouped in zip(table_fields, tables, engine.tables_by_group)})
     X['y'] = np.array(y, dtype=float)
     sh = engine.shifts # The deliveries, with where each group's people go as matrices
     onehot = lambda to: np.eye(engine.n_groups)[to] if len(to) else np.zeros((0, engine.n_groups, engine.n_groups))
@@ -503,18 +559,19 @@ def capture(engine):
     return program, (dt, npts, solver, n_sub, engine.per_step()), X
 
 
+runs = {} # The runs made in this session, by what they depend on apart from the numbers in them (see `Run.key()`), so a new sim of the same model is not traced and compiled again
+
+
 def runner(engine, program, how):
-    """ The engine's `Run`, made again only if how its flows are put together has changed """
+    """ The engine's `Run`, made again only if how its flows are put together has changed, and shared with any other engine whose flows are put together the same way """
     kept = engine.jax_run
     if kept is not None and kept[1] is program and kept[2] == how: # The same program: nothing can have changed
         return kept[3]
     key = Run.key(program, *how)
-    if kept is None or kept[0] != key:
-        run = Run(program, *how, n_max=kept[3].n_max if kept is not None else 4)
-    else:
-        run = kept[3]
-    engine.jax_run = (key, program, how, run)
-    return run
+    if key not in runs:
+        runs[key] = Run(program, *how, n_max=kept[3].n_max if kept is not None else 4)
+    engine.jax_run = (key, program, how, runs[key])
+    return runs[key]
 
 
 def joint_runner(cross, captured, n_max=None):
@@ -988,7 +1045,7 @@ class Density:
                 if dw is not None and dw.dist is not None and any(id(leaf) in self.index for leaf in dw.par.leaves):
                     raise Unsupported(f'a fitted parameter of the distribution of a dwell time ("{flow.tr.name}")')
                 if any(id(leaf) in self.index for leaf in leaves):
-                    mult = np.broadcast_to(engine.flow_mult(flow), (engine.n_groups,)).astype(float)
+                    mult = np.reshape(engine.flow_mult(flow), -1).astype(float) # For each group, or once for all (as the table is then kept: see capture())
                     fixed.append((f, flow, dw, mult))
             self.fixed.append(fixed)
 

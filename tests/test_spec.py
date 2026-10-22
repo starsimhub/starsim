@@ -140,7 +140,7 @@ DynamicNetwork Event FloatArr IndexArr IntArr MaternalNet ModifiableArr Pars Per
 Pregnancy Lactation PregnancyPars PrenatalNet Product Results SEIR SIR SIS SimPars beta_dist beta_mean
 check_requires choose_n demo dtypes dynamics_by_age histogram infection_log
 multi_random ndict note parse_age_range plot_args randint random register_modules required return_fig root
-show shrink state child mother attr on stay style to_code uids warn
+show shrink state child mother attr on stay style to_code uids warn jit
 """.split()
 
 

@@ -49,6 +49,14 @@ def changed(old, new):
     return old != new
 
 
+def times(x, *factors):
+    """ An array times each of the factors, leaving out those that are a number equal to 1 that would not change its dtype, so the values are the same, bit for bit, in fewer passes (but may be `x` itself, not a copy) """
+    for f in factors:
+        if not (np.ndim(f) == 0 and f == 1 and np.result_type(x, f) == x.dtype):
+            x = x*f
+    return x
+
+
 def add_rows(out, rows, tis, vals):
     """ Add values at consecutive time points `tis` (along the first axis of `vals`) into the rows of `out` they belong to: see `ss.Sim.group_rows()` """
     r = rows[tis]

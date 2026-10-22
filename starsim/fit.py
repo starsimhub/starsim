@@ -450,7 +450,7 @@ class Swarm:
         # Each fitted value must set the rates of the run, or the time share between places, and nothing else: the rest is the same for every particle
         self.x0 = x0 = to_x(z0)[0]
         set_pars(x0)
-        base = ss.gradients.capture(engine)[2]
+        base = ss.gradients.capture(engine, compact=False)[2]
         self.base = [base[key] for key in ss.gradients.table_fields]
         self.sh0 = base['sh_val'] # The time share at x0, and its change with each value (see shares())
         self.sh_slopes = np.zeros((len(self.names), len(self.sh0)))
@@ -458,7 +458,7 @@ class Swarm:
         for i,name in enumerate(self.names):
             x = to_x(z0 + 0.5*np.eye(len(z0))[i])[0] # Another value of this one
             set_pars(x)
-            X = ss.gradients.capture(engine)[2]
+            X = ss.gradients.capture(engine, compact=False)[2]
             changed = [key for key in X if not np.array_equal(X[key], base[key])]
             others = [key for key in changed if key not in ['fixed', 'consts', 'sh_val']]
             if others or not changed:

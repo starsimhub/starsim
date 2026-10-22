@@ -870,15 +870,15 @@ class Infection(Disease):
 
         # Main use case: networks
         if isinstance(route, ss.Network):
-            def edge_beta(d, src, trg):
+            def edge_beta(d, inds, src, trg): # For the edges that might transmit (see ss.Network.transmit())
                 beta = betas[d]
                 if isinstance(beta, np.ndarray): # A probability per act for each direction of the network
-                    beta = beta[route.edge_directions(src, trg)]
+                    beta = beta[route.edge_directions(*(route.ends(d) if route.custom_beta else (src, trg)))] # For every edge, for a net_beta() of its own
                 elif not beta: # Skip directions with no transmission
                     return None
                 disease_beta = beta.to_prob(self.t.dt) if isinstance(beta, ss.Rate) else beta
-                beta_per_dt = route.net_beta(disease_beta=disease_beta, disease=self) # Compute beta for this network and timestep
-                m = mult(Ellipsis, trg)
+                beta_per_dt = route.edge_net_beta(inds, disease_beta=disease_beta, disease=self) # Compute beta for this network and timestep
+                m = mult(inds, trg)
                 return beta_per_dt*m if np.ndim(m) or m != 1 else beta_per_dt # Bit for bit as before, with no modifiers
             for source_uids, target_uids in route.transmit(rel_trans.raw, rel_sus.raw, edge_beta, self.trans_rng):
                 new_cases.append(target_uids)

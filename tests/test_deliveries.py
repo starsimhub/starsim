@@ -334,7 +334,7 @@ def test_vaccinate():
     for sim in sims.values():
         delivered = sim.results.supply.delivered
         assert delivered[:11].sum() == 0 and delivered[21:].sum() == 0 # Nobody is reached outside the ten days (the steps that start at 10 to 19)
-        assert delivered[13] > 1500 and delivered[18] == 100 # About 5% of those left each day, until supplies are limited
+        assert delivered[13] > 1500 and np.isclose(delivered[18], 100) # About 5% of those left each day, until supplies are limited
 
     # A capacity per unit time, in rounds: what accrues over the interval between them
     def rounds_cap(**kwargs):

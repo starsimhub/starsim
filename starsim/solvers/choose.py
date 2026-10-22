@@ -2,6 +2,8 @@
 Choosing the solver: which engine runs a declared model, and why (`choose_solver()`)
 """
 import inspect
+import importlib
+import importlib.util
 import numpy as np
 import sciris as sc
 import starsim as ss
@@ -9,7 +11,7 @@ from .compartmental import Compartmental
 from .agents import Agents
 from .engine import convert
 
-__all__ = ['solver_names', 'integrators', 'Undeclared', 'make_engine', 'choose_solver', 'observer', 'init_crossings', 'init_capabilities', 'auto_reasons']
+__all__ = ['solver_names', 'integrators', 'Undeclared', 'make_engine', 'choose_solver', 'choose_engine', 'kernel_seconds', 'observer', 'init_crossings', 'init_capabilities', 'auto_reasons']
 
 
 solver_names = ['auto', 'ode', 'binomial', 'gillespie', 'tau', 'abm'] # The solvers that can be asked for
@@ -75,7 +77,9 @@ def choose_solver(sim):
     Work out the sim's unit and solver; see `ss.Disease` for declaring a model that can be run with different solvers
 
     A sim with no declared states and transitions is run as agents, as in earlier
-    versions of Starsim, and none of this applies to it.
+    versions of Starsim, and none of this applies to it. Which engine then takes a whole
+    stochastic compartmental run, JAX or the kernels, is chosen when the sim is run, by
+    `choose_engine()`.
     """
     pars = sim.pars
     solvers = ss.solvers
@@ -209,6 +213,88 @@ def choose_solver(sim):
     if sim.unit_source:
         ss.note(f"unit='{sim.unit}' (from {sim.unit_source})", ss.errors.UnitInferred, sim=sim)
     return
+
+
+jax_after = 0.5 # The seconds above which a run taken by the kernels is taken by JAX instead, if sim.jax is None: see choose_engine()
+
+
+def kernel_seconds(sim):
+    """
+    About how long the kernels would take for a whole run of the sim. For the chain binomial and tau-leaping: 0.15 µs
+    for each group, flow (and two for each stage of a dwell time), and step (each substep, or for tau-leaping each
+    leap, which is short enough that the fastest of the rates that do not depend on the compartments changes them by
+    3%), which fits declared SIRs over 50 places, Ghana measles over 260 districts, and two SEIRs with stages tracked
+    jointly to within a factor of 2. For the ODE: 1/400 of what it would take as plain Python (see
+    `ss.kernels.plain_seconds()`, which counts the mixing between groups too), which fits the same SIRs and Ghana
+    measles to within a factor of 2. A run of one group takes about 2 ms, mostly the sim's own work.
+    """
+    seconds = 0.0
+    for mod in sim.declared:
+        engine = mod.engine
+        cross = engine.cross
+        if cross is not None and cross.lead != mod.name: # Diseases tracked jointly run as one program, counted once
+            continue
+        for e in cross.engines if cross is not None else [engine]:
+            if e.program is None:
+                e.init_program()
+        if cross is not None and (cross.program is None or cross.built != [id(e.program) for e in cross.engines]):
+            cross.build([e.program for e in cross.engines])
+        p = cross.program if cross is not None else engine.program
+        groups = cross.n_cols if cross is not None else engine.n_groups
+        leaps = 1
+        if sim.solver in ['tau', 'ode']:
+            rates = np.concatenate([np.ravel(e.flow_base(flow)*e.flow_mult(flow)) for e in (cross.engines if cross is not None else [engine]) for flow in e.flows if flow.src is not None and not flow.dynamic and flow.kind != 'conveyor'] + [p.mov_rate])
+        if sim.solver == 'ode':
+            solver = ss.kernels.solvers[sim.integrator]
+            n_sub = ss.kernels.substeps(rates, engine.dt, engine.substeps(), solver)
+            seconds += ss.kernels.plain_seconds(p, np.empty((cross.n_rows if cross is not None else engine.n_comps, groups)), mod.t.npts, solver, n_sub)/400
+            continue
+        elif sim.solver == 'tau':
+            leaps = max(np.max(rates, initial=0)*engine.dt/0.03, 1)
+        seconds += 1.5e-7*mod.t.npts*groups*(len(p.src) + p.n_movers + 2*np.sum(p.src_chain))*leaps*max(engine.substeps(), 1)
+    return seconds
+
+
+def choose_engine(sim):
+    """
+    Whether JAX takes the sim's whole compartmental run (the ODE as `ss.gradients` runs it, the chain binomial and
+    tau-leaping as `ss.fast._chain` does), rather than the kernels, and why
+
+    By `sim.jax`: True for JAX, False for the kernels, or None (the default) to choose: JAX if the run would take the
+    kernels more than `jax_after` seconds (see `kernel_seconds()`). Once started, JAX takes 0.27 to 0.45 times as long
+    as the kernels for the chain binomial, and 0.1 to 0.3 times for the ODE over many groups, but starting it takes
+    about half a second in a session (0.3 s to import it, and 0.1 to 0.25 s to trace a model; compiled code is kept
+    on disk), which a short run would notice. The choice depends on the model only, not on what has run before, so a
+    sim with a seed gives the same results whenever it is run (an ODE run in JAX agrees with the kernels to about
+    1e-14). A model JAX does not cover (see `ss.gradients.reason()` and `ss.fast._chain.reason()`) is taken by the
+    kernels, with a note if JAX was asked for.
+
+    Returns whether to use JAX, and the reason, also kept as `sim.engine_reason`.
+    """
+    use, why = False, None
+    if sim.jax is False:
+        why = 'kernels, as asked (sim.jax = False)'
+    elif sim.solver not in ['ode', 'binomial', 'tau']:
+        why = f'kernels: JAX does not run solver="{sim.solver}"'
+        if sim.jax:
+            ss.note(f'JAX does not run solver="{sim.solver}", so it is run by the kernels', sim=sim)
+    elif sim.jax is None and importlib.util.find_spec('jax') is None:
+        why = 'kernels: JAX is not installed'
+    else:
+        seconds = kernel_seconds(sim) if sim.jax is None else None
+        if seconds is not None and seconds < jax_after:
+            why = f'kernels: a short run (about {seconds:.2g} s), shorter than JAX takes to start (about {jax_after} s a session)'
+        else:
+            no = ss.gradients.reason(sim) if sim.solver not in ['binomial', 'tau'] else importlib.import_module('starsim.fast._chain').reason(sim) # Imported only when used
+            if no is not None:
+                why = f'kernels: JAX cannot run this sim, since {no}'
+                if sim.jax:
+                    ss.note(f'JAX cannot run this sim, since {no}, so it is run by the kernels', sim=sim)
+            else:
+                use = True
+                why = 'JAX, as asked (sim.jax = True)' if sim.jax else f'JAX: a long run (about {seconds:.2g} s by the kernels), which it takes in a fraction of the time'
+    sim.engine_reason = why
+    return use, why
 
 
 def init_where(sim):

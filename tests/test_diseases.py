@@ -76,8 +76,8 @@ def test_sir_epi():
         if par == 'p_death':
             v0, v1 = s0.results.cum_deaths[-1], s1.results.cum_deaths[-1]
         else:
-            ind = 1 if par == 'init_prev' else -1
-            v0, v1 = s0.results.sir.prevalence[ind], s1.results.sir.prevalence[ind]
+            prev = [s.results.sir.prevalence for s in [s0, s1]]
+            v0, v1 = [p[1] if par == 'init_prev' else p.max() if par in ['beta', 'n_contacts'] else p[-1] for p in prev] # The peak for what speeds the epidemic up, which may have burned out by the end
         assert v0 <= v1, f'Expected prevalence to be lower with {par}={lo} than with {par}={hi}, but {v0} > {v1})'
 
     return s0, s1

@@ -61,20 +61,6 @@ def nb_transmit(src, trg, rel_trans, rel_sus, beta, randvals):
     return src_out[:m], trg_out[:m]
 
 
-@nb.jit(cache=True) # No fastmath: a stray NaN must compare False (edge dropped), as in nb_transmit()
-def nb_can_transmit(src, trg, rel_trans, rel_sus, beta):
-    """ Return the indices of the edges with a nonzero transmission probability, in edge order """
-    n = src.shape[0]
-    inds = np.empty(n, dtype=np.int64)
-    m = 0
-    for i in range(n):
-        can_transmit = rel_trans[src[i]] * rel_sus[trg[i]] * beta[i] > 0 # Same expression as nb_transmit()
-        inds[m] = i # Written every iteration (branchless); kept only if m advances
-        m += can_transmit
-    return inds[:m]
-
-
-
 # %% General network classes
 
 def cond_str(cond):
@@ -273,13 +259,15 @@ class Network(Route):
 
         An edge from `src` to `trg` transmits with probability `rel_trans[src]·rel_sus[trg]·beta`, or `prob()` if it is given.
         Random numbers are drawn only for the edges that can transmit: with CRN, each edge's number depends only on its source
-        and target, so this gives the same result as drawing one for every edge.
+        and target, so this gives the same result as drawing one for every edge. The beta is worked out only for the edges from
+        someone infectious to someone susceptible, which are found for both directions in one pass.
 
         Args:
             rel_trans (array): the transmissibility of each agent, by UID (0 if not infectious)
             rel_sus (array): the susceptibility of each agent, by UID (0 if not susceptible)
-            edge_beta (func): of the direction (0 or 1) and its sources and targets (all edges), the beta of each edge (an array, or a number for all): with
-                `prob`, only where it is 0 matters (no transmission); None to skip the direction (no random numbers are drawn)
+            edge_beta (func): of the direction (0 or 1), and the indices, sources, and targets of the edges from someone with `rel_trans` not 0
+                to someone with `rel_sus` not 0, the beta of each of them (an array, or a number for all; see `edge_net_beta()`): with `prob`, only
+                where it is 0 matters (no transmission); None to skip the direction (no random numbers are drawn)
             rng (`ss.multi_random`): the random numbers, by source and target
             prob (func): of the direction, and the indices, sources, and targets of the edges that can transmit, the probability of each, in place of the product above
 
@@ -290,18 +278,21 @@ class Network(Route):
         if not len(self):
             return out
         edges = self.edges
-        for d in range(1 if self.one_way else 2): # Mother-to-child networks transmit one way
-            src, trg = (edges.p1, edges.p2) if d == 0 else (edges.p2, edges.p1)
-            beta = edge_beta(d, src, trg)
+        found = ss.fast._passes.candidates(edges.p1, edges.p2, rel_trans, rel_sus, two_way=not self.one_way) # Mother-to-child networks transmit one way
+        for d,inds in enumerate(found):
+            src, trg = [ends[inds] for ends in self.ends(d)]
+            beta = edge_beta(d, inds, src, trg)
             if beta is None:
                 continue
-            if np.ndim(beta) == 0:
-                beta = np.full(len(src), beta, dtype=ss_float)
-            inds = nb_can_transmit(src, trg, rel_trans, rel_sus, beta)
-            src, trg = src[inds], trg[inds]
+            beta = np.asarray(beta, dtype=ss_float) if np.ndim(beta) == 0 else beta # One value for all edges
+            can = ss.fast._passes.can_transmit(src, trg, rel_trans, rel_sus, beta) # Of those, the ones with a chance above 0, exactly as over every edge
+            if len(can) < len(inds):
+                inds, src, trg = inds[can], src[can], trg[can]
+                beta = beta[can] if np.ndim(beta) else beta
             rvs = rng.rvs(src, trg) # Called even if empty, to keep CRN draws in sync
             if prob is None:
-                src, trg = nb_transmit(np.asarray(src), np.asarray(trg), rel_trans, rel_sus, beta[inds], rvs)
+                beta = np.broadcast_to(beta, len(inds)) if np.ndim(beta) == 0 else beta
+                src, trg = nb_transmit(np.asarray(src), np.asarray(trg), rel_trans, rel_sus, beta, rvs)
             else:
                 hit = rvs < prob(d, inds, src, trg)
                 src, trg = np.asarray(src)[hit], np.asarray(trg)[hit]
@@ -656,17 +647,20 @@ class Network(Route):
         This method is typically called via `People.remove()` and
         is specifically used when removing agents from the simulation.
         """
-        p1 = self.edges.p1
-        p2 = self.edges.p2
-
-        # Make a lookup table of the UIDs to remove (much faster than np.isin() for many edges)
-        n = max(np.max(p1, initial=-1), np.max(p2, initial=-1), np.max(uids, initial=-1)) + 1
-        is_removed = np.zeros(n, dtype=bool)
+        p1, p2 = self.edges.p1, self.edges.p2
+        n = len(self.sim.people.alive.raw) if self.initialized else max(np.max(p1, initial=-1), np.max(p2, initial=-1)) + 1 # Every UID in the network
+        is_removed = np.zeros(max(n, np.max(uids, initial=-1) + 1), dtype=bool) # A lookup table of the UIDs to remove (much faster than np.isin() for many edges)
         is_removed[uids] = True
+        self.drop_edges(*ss.fast._passes.touching(p1, p2, is_removed)) # Remove edges where either partner is being removed
+        return
 
-        # Remove edges where either partner is being removed
-        remove = is_removed[p1] | is_removed[p2]
-        self.remove_edges(remove)
+    def drop_edges(self, k, gone):
+        """ Remove the `k` edges at the indices `gone` (in order; all edges if `k` is the number of edges), as `ss.fast._passes.ending()` gives them; not for the user """
+        if not k:
+            return
+        for key in self.meta_keys():
+            arr = self.edges[key]
+            self.edges[key] = arr[:0] if k == len(arr) else ss.fast._passes.compress(arr, gone).view(type(arr))
         return
 
     def net_beta(self, disease_beta=None, inds=None, disease=None):
@@ -679,6 +673,17 @@ class Network(Route):
         if self.has_acts: # The number of acts in each partnership in the step
             return self.edges.beta[inds] * (1 - (1 - disease_beta) ** self.edges.acts[inds])
         return self.edges.beta[inds] * disease_beta # Beta should already include dt if desired
+
+    def ends(self, d):
+        """ The sources and targets of every edge, in direction `d`: p1 to p2 (0) or p2 to p1 (1) """
+        return (self.edges.p1, self.edges.p2) if d == 0 else (self.edges.p2, self.edges.p1)
+
+    def edge_net_beta(self, inds, disease_beta=None, disease=None):
+        """ `net_beta()` for the edges at `inds`; one written as code (see `custom_beta`) is worked out for every edge, as in Starsim 3, so `disease_beta` is then a number or a value for every edge; not for the user """
+        if self.custom_beta:
+            beta = self.net_beta(disease_beta=disease_beta, disease=disease)
+            return beta[inds] if np.ndim(beta) else beta
+        return self.net_beta(disease_beta=disease_beta, inds=inds, disease=disease)
 
 
 class DynamicNetwork(Network):
@@ -696,14 +701,12 @@ class DynamicNetwork(Network):
 
     def end_pairs(self):
         """ Remove partnerships whose duration has expired or whose members have died. """
-        people = self.sim.people
-        self.edges.dur = self.edges.dur - 1 # dur is stored in units of self.t.dt (timesteps), so decrement by 1 per step
-
-        # Non-alive agents are removed
-        active = (self.edges.dur > 0) & people.alive[self.edges.p1] & people.alive[self.edges.p2]
-        for k in self.meta_keys():
-            self.edges[k] = self.edges[k][active]
-        return len(active)
+        n = len(self)
+        k, gone = ss.fast._passes.ending(self.edges.dur, self.edges.p1, self.edges.p2, self.sim.people.alive.raw) # Those with no steps left after this one, or a partner not alive
+        self.drop_edges(k, gone)
+        if k < n:
+            self.edges.dur = self.edges.dur - 1 # dur is stored in units of self.t.dt (timesteps), so decrement by 1 per step
+        return n
 
 
 def check_acts(net, acts):
@@ -821,24 +824,11 @@ class RandomNet(DynamicNetwork):
         """
         if self.pars.method == 'exact':
             return self.shuffle_edges(inds, n_contacts)
-        source = np.repeat(inds, n_contacts)
-        n = len(source)
-        if n and self.pars.method == 'uniform':
-            idx = self.dist.rng.integers(0, len(inds), n) # A random target agent for each source stub
-            target = np.take(np.asarray(inds), idx).view(ss.uids)
-        elif n:
-            idx = self.dist.rng.integers(0, n, n) # A random target stub for each source stub; sampling stubs rather than agents keeps selection probability proportional to n_contacts
-            nc = np.asarray(n_contacts)
-            nc0 = int(nc.flat[0])
-            # Fast path: if every agent has the same number of stubs, then stub j belongs to agent j//nc0,
-            # so the (identical) targets can be gathered from the much smaller, cache-resident agent array
-            if nc.size == 1 or (nc == nc0).all():
-                np.floor_divide(idx, nc0, out=idx)
-                target = np.take(np.asarray(inds), idx).view(ss.uids)
-            else:
-                target = np.take(np.asarray(source), idx).view(ss.uids) # np.take is slightly faster than source[idx] since it skips the ss.uids subclass machinery
-        else:
-            target = source
+        nc = np.asarray(n_contacts)
+        by_agent = self.pars.method == 'uniform' or nc.size <= 1 or (nc == nc.flat[0]).all() # With the same number of stubs each, the owner of a stub drawn at random is an agent drawn at random
+        seed = self.dist.rng.integers(2**62) # The key of this step's uniforms, one for each edge (from a counter, so a large network can be made by several threads)
+        source, target = ss.fast._passes.random_edges(inds, nc, seed, by_agent) # A random target stub for each source stub; sampling stubs rather than agents keeps selection probability proportional to n_contacts
+        source, target = source.view(ss.uids), target.view(ss.uids)
         self.dist.jump() # Reset the RNG manually, as in shuffle_edges()
         return source, target
 
@@ -901,47 +891,65 @@ class RandomNet(DynamicNetwork):
             super().step()
         return
 
+    def same_contacts(self, n, current):
+        """
+        The number of new contacts for each of `n` agents when it is the same whole number for everyone, so that nothing need be drawn: when
+        `n_contacts` is a whole number, and the edges needed (with `current` edges) give each a whole number (as every step with `dur=0`); else
+        None. Only with common random numbers, since without them a draw not made would change the draws after it.
+        """
+        nc = self.pars.n_contacts
+        v = nc.pars.v if isinstance(nc, ss.constant) and nc.unit is None else None
+        if not ss.options.crn or not sc.isnumber(v) or not float(v).is_integer() or not n:
+            return None
+        orig = v*n
+        needed = orig/2 - current
+        scaled = v*needed/orig # The same arithmetic as add_pairs(), for one agent
+        return int(scaled) if needed > 0 and float(scaled).is_integer() else None
+
     def add_pairs(self):
         """ Generate edges """
         p = self.pars
         people = self.sim.people
         uids = self.eligible(p.age_range).uids
-        if isinstance(p.n_contacts, ss.Dist):
-            n_conn = p.n_contacts.rvs(uids)
-        else:
-            n_conn = np.full(len(people), p.n_contacts)
-
-        # See how many new edges we need
-        orig = n_conn.sum()
-        target = orig / 2 # Divide by 2 since bi-directional
         current = len(self)
-        needed = target - current
-        if needed > 0:
+        n_conn = self.same_contacts(len(uids), current)
+        if n_conn is None:
+            if isinstance(p.n_contacts, ss.Dist):
+                n_conn = p.n_contacts.rvs(uids)
+            else:
+                n_conn = np.full(len(people), p.n_contacts)
+
+            # See how many new edges we need
+            orig = n_conn.sum()
+            target = orig / 2 # Divide by 2 since bi-directional
+            needed = target - current
+            if needed <= 0:
+                return
             n_conn = n_conn*needed/orig
             n_conn = p.n_contacts.randround(n_conn) # CRN-safe stochastic integer rounding
 
-            # Get the new edges -- the key step
-            p1, p2 = self.pair(uids, n_conn)
-            n = len(p1)
-            beta = np.full(n, self.pars.beta, dtype=ss_float)
+        # Get the new edges -- the key step
+        p1, p2 = self.pair(uids, n_conn)
+        n = len(p1)
+        beta = np.full(n, self.pars.beta, dtype=ss_float)
 
-            if isinstance(p.dur, ss.Dist):
-                dur = p.dur.rvs(p1)
-            elif p.dur == 0:
-                dur = np.zeros(n)
-            else:
-                dur = np.ones(n)*(p.dur/self.t.dt)
+        if isinstance(p.dur, ss.Dist):
+            dur = p.dur.rvs(p1)
+        elif p.dur == 0:
+            dur = np.zeros(n, dtype=ss_float) # In its dtype (half the memory of float64), as validate() would make it
+        else:
+            dur = np.ones(n)*(p.dur/self.t.dt)
 
-            # Use zero-copy view for UIDs and skip concatenation when network is empty
-            p1 = p1.view(ss.uids)
-            p2 = p2.view(ss.uids)
-            if current == 0:
-                self.edges.p1 = p1
-                self.edges.p2 = p2
-                self.edges.beta = beta
-                self.edges.dur = dur
-            else:
-                self.append(p1=p1, p2=p2, beta=beta, dur=dur)
+        # Use zero-copy view for UIDs and skip concatenation when network is empty
+        p1 = p1.view(ss.uids)
+        p2 = p2.view(ss.uids)
+        if current == 0:
+            self.edges.p1 = p1
+            self.edges.p2 = p2
+            self.edges.beta = beta
+            self.edges.dur = dur
+        else:
+            self.append(p1=p1, p2=p2, beta=beta, dur=dur)
         return
 
 
@@ -1385,9 +1393,10 @@ class SexualNet(DegreeTargets, DynamicNetwork):
     def set_network_states(self):
         """ Draw the age of debut of anyone who has none (newborns, and people who arrive at any age), and whether each person takes part, when they reach their debut """
         people = self.sim.people
-        uids = (people.alive & self.debut.isnan).uids
+        debuts = lambda reached: ss.fast._passes.debuts(people.auids, people.alive.raw, self.decided.raw, people.age.raw, self.debut.raw, reached).view(ss.uids)
+        uids = debuts(False) # Alive, with no debut age
         self.debut[uids] = self.pars.debut.rvs(uids)
-        uids = (people.alive & ~self.decided & (people.age >= self.debut)).uids
+        uids = debuts(True) # Alive, at least their debut age, and not decided
         self.participant[uids] = self.pars.participation.rvs(uids)
         self.decided[uids] = True
         return
@@ -1396,7 +1405,10 @@ class SexualNet(DegreeTargets, DynamicNetwork):
         """ Pair the people looking for a partner: everyone who takes part and has none, or with n_contacts, those who look on this step, given how many they have """
         active = self.people_seeking(self.sim.people)
         if not self.targeted:
-            seekers = active[self.degrees(active) == 0]
+            partnered = np.zeros(len(self.sim.people.alive.raw), dtype=bool)
+            partnered[self.edges.p1] = True
+            partnered[self.edges.p2] = True
+            seekers = active[~partnered[active]]
         else:
             seekers = self.seeking(active, self.rng_seek)
             waiting = self.waiting[np.isin(self.waiting, active)]

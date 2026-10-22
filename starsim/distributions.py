@@ -64,6 +64,26 @@ def _hash_uniforms_fill(seed, ind, slots, out, shift, scale):
     return
 
 
+def inverse(name, rands, *pars, big=None, fallback=None):
+    """
+    The inverse CDF of a distribution at the uniforms rands, compiled (by `ss.fast.draws`, exact); not for the user
+
+    Args:
+        name (str): the distribution in `ss.fast.draws.many`
+        rands (array): the uniforms
+        pars (list): its parameters, each a number or an array (one value per uniform)
+        big (array): where the draws are not by inversion in `ss.fast.draws` (means above its `INV_MAX`), so are taken from fallback instead, to stay monotone in the uniform
+        fallback (func): the inverse CDF to use there, as a function of the uniforms and the indices of the draws
+    """
+    u = np.asarray(rands, dtype=np.float64)
+    pars = [float(p) if np.ndim(p) == 0 else np.asarray(p, dtype=np.float64) for p in pars]
+    out = ss.fast.draws.many[name].from_u(*pars, u, np.empty(len(u)))
+    if big is not None and np.any(big):
+        inds = np.flatnonzero(np.broadcast_to(big, u.shape))
+        out[inds] = fallback(u[inds], inds)
+    return out
+
+
 static_types = (int, float, bool, type(None), np.number, type) # Parameter values that cannot change without being replaced
 
 def same_objects(a, b):
@@ -1246,6 +1266,27 @@ class Dist:
 
         return rvs
 
+    def crn_key(self):
+        """
+        For a compiled loop that draws the uniforms itself (e.g. `ss.kernels.infect()`, or a method compiled by `ss.jit`), in place of `rvs(uids)`: the seed and
+        index of this call's draws, which are `hash_uniforms(seed, ind, slots)` at `dtype`, with the bookkeeping of one call to
+        `rvs()`; not for the user. None if they cannot be drawn that way (without common random numbers, or while the draws
+        are being recorded or debugged), in which case `rvs()` is called instead.
+        """
+        diagnostics = self.sim.diagnostics if self.sim is not None else None
+        if not ss.options.crn or self.initialized is not True or self.slots is None or self.debug or (diagnostics and diagnostics.rvs is not None):
+            return None
+        if not self.ready and self.strict:
+            raise DistNotReadyError(self)
+        self.make_history()
+        key = (self.seed, self.ind, np.dtype(self.hash_dtype or ss.dtypes.float))
+        self.called += 1
+        if self.auto:
+            self.jump()
+        elif self.strict:
+            self.ready = False
+        return key
+
     @staticmethod
     def validate_round(round):
         """ Check that the rounding option is valid; not for the user """
@@ -1353,27 +1394,6 @@ class random(Dist):
 
     def ppf(self, rands):
         return rands
-
-    def crn_key(self):
-        """
-        For a compiled loop that draws the uniforms itself (e.g. `ss.kernels.infect()`), in place of `rvs(uids)`: the seed and
-        index of this call's draws, which are `hash_uniforms(seed, ind, slots)` at `dtype`, with the bookkeeping of one call to
-        `rvs()`; not for the user. None if they cannot be drawn that way (without common random numbers, or while the draws
-        are being recorded or debugged), in which case `rvs()` is called instead.
-        """
-        diagnostics = self.sim.diagnostics if self.sim is not None else None
-        if not ss.options.crn or self.initialized is not True or self.slots is None or self.debug or (diagnostics and diagnostics.rvs is not None):
-            return None
-        if not self.ready and self.strict:
-            raise DistNotReadyError(self)
-        self.make_history()
-        key = (self.seed, self.ind, np.dtype(self.hash_dtype or ss.dtypes.float))
-        self.called += 1
-        if self.auto:
-            self.jump()
-        elif self.strict:
-            self.ready = False
-        return key
 
 
 class uniform(Dist):
@@ -1589,6 +1609,14 @@ class expon(Dist):
         super().__init__(distname='exponential', dist=sps.expon, scale=scale, **kwargs)
         return
 
+    def ppf(self, rands):
+        """ The inverse CDF, compiled (see `ss.fast.draws`); SciPy's for unusual parameters """
+        scale, loc = self.dist.kwds.get('scale', 1.0), self.dist.kwds.get('loc', 0.0)
+        if not np.all(np.asarray(scale) > 0):
+            return super().ppf(rands)
+        rvs = inverse('expon', rands, scale)
+        return rvs + loc if np.any(loc) else rvs
+
 
 class poisson(Dist):
     """
@@ -1622,7 +1650,8 @@ class poisson(Dist):
         and for CRN draws it is called every time an ``ss.poisson`` is sampled by
         UID. For a scalar ``lam`` we instead precompute the CDF once and map each
         uniform via ``np.searchsorted``, which is 30-60x faster and produces
-        bitwise-identical results. Array-valued ``lam`` falls back to SciPy.
+        bitwise-identical results. Array-valued ``lam`` is inverted by `ss.fast.draws`
+        (SciPy's above a mean of 30, and for unusual values).
         """
         lam = self._pars.lam
         if np.isscalar(lam) or (isinstance(lam, np.ndarray) and lam.ndim == 0):
@@ -1632,8 +1661,10 @@ class poisson(Dist):
                 self._ppf_cdf = sps.poisson.cdf(np.arange(kmax + 1), lam)
                 self._ppf_lam = lam
             rvs = np.searchsorted(self._ppf_cdf, rands, side='left') # side='left' matches sps.poisson.ppf
+        elif np.all(lam >= 0):
+            rvs = inverse('poisson', rands, lam, big=lam > ss.fast.draws.INV_MAX, fallback=lambda u, i: sps.poisson.ppf(u, lam[i]))
         else:
-            rvs = self.dist.ppf(rands) # Fallback for array-valued lambda
+            rvs = self.dist.ppf(rands)
         return rvs.astype(ss.dtypes.int) # Poisson yields integer counts, matching the native rvs path (SciPy's ppf returns float)
 
 
@@ -1710,6 +1741,14 @@ class nbinom(Dist):
         super().__init__(distname='negative_binomial', dist=sps.nbinom, n=n, p=p, **kwargs)
         return
 
+    def ppf(self, rands):
+        """ The inverse CDF, compiled (see `ss.fast.draws`); SciPy's above a mean of 30, and for unusual parameters """
+        n, p = np.asarray(self.dist.kwds['n']), np.asarray(self.dist.kwds['p'])
+        if not (np.all(n > 0) and np.all(p > 0) and np.all(p <= 1)):
+            return super().ppf(rands)
+        big = n*(1 - p)/p > ss.fast.draws.INV_MAX
+        return inverse('nbinom', rands, n, p, big=big, fallback=lambda u, i: sps.nbinom.ppf(u, n if n.ndim == 0 else n[i], p if p.ndim == 0 else p[i]))
+
 
 class binom(Dist):
     """
@@ -1724,6 +1763,14 @@ class binom(Dist):
     def __init__(self, n=1, p=0.5, **kwargs):
         super().__init__(distname='binomial', dist=sps.binom, n=n, p=p, **kwargs)
         return
+
+    def ppf(self, rands):
+        """ The inverse CDF, compiled (see `ss.fast.draws`); SciPy's above a mean of 30 (on the smaller side of 1/2), and for unusual parameters """
+        n, p = np.asarray(self.dist.kwds['n']), np.asarray(self.dist.kwds['p'])
+        if not (np.all(n >= 0) and np.all(n == np.floor(n)) and np.all(p >= 0) and np.all(p <= 1)):
+            return super().ppf(rands)
+        big = n*np.minimum(p, 1 - p) > ss.fast.draws.INV_MAX
+        return inverse('binomial', rands, n, p, big=big, fallback=lambda u, i: sps.binom.ppf(u, n if n.ndim == 0 else n[i], p if p.ndim == 0 else p[i]))
 
 
 class randint(Dist):
@@ -1815,6 +1862,15 @@ class weibull(Dist):
     def __init__(self, c=1.0, scale=1.0, *, loc=0.0, **kwargs):
         super().__init__(distname='weibull', dist=sps.weibull_min, c=c, scale=scale, loc=loc, **kwargs)
         return
+
+    def ppf(self, rands):
+        """ The inverse CDF, compiled (see `ss.fast.draws`); SciPy's for unusual parameters """
+        kw = self.dist.kwds
+        c, scale, loc = kw['c'], kw.get('scale', 1.0), kw.get('loc', 0.0)
+        if not (np.all(np.asarray(c) > 0) and np.all(np.asarray(scale) > 0)):
+            return super().ppf(rands)
+        rvs = inverse('weibull', rands, c, scale)
+        return rvs + loc if np.any(loc) else rvs
 
     def make_rvs(self):
         """ Use SciPy rather than NumPy to include the scale parameter """

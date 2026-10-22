@@ -295,6 +295,14 @@ def _():
     truth = model().run().results.sir.n_I
     return model(pd.DataFrame(dict(n_I=truth.values[::10]), index=truth.timevec[::10])).calibrate(pars=['beta', 'c']).sim
 
+@trigger(ss.errors.NotCompiled, note='runs as Python')
+def _():
+    class Coded(ssl.AgentSIR):
+        @ss.jit
+        def step_state(self):
+            self.sim.people.request_death((self.ti_dead <= self.ti).uids, cause=self) # Compiled code can't call into the sim
+    return ss.Sim(n_agents=100, diseases=Coded(), networks='random', stop=2002, **kw).run()
+
 
 # %% Define the tests
 

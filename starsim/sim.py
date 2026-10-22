@@ -94,7 +94,7 @@ class Sim(ss.Base):
         self._name_modules(ss.utils.caller_names(1), demographics, connectors, networks, interventions, diseases, analyzers, custom, modules)
         interventions = self._order_steps(interventions)
         self.par_values = None # Values of model parameters by name, e.g. pars=dict(beta=0.1) or pars=fit.pars
-        self.jax = False # Whether a whole run of the ODE is taken in JAX (as ss.parallel() does for many runs with different values): see ss.gradients
+        self.jax = None # Whether a whole run is taken in JAX: of the ODE (as ss.parallel() does for many runs with different values; see ss.gradients), or of the chain binomial and tau-leaping (see ss.fast._chain); None to choose (see ss.solvers.choose_engine())
         if isinstance(pars, dict) and len(pars): # Values of the model's parameters by name; a sim setting only by its own name, if no parameter of the model has it (so pars=fit.pars works with a parameter called dur)
             given = [mod for arg in [modules, demographics, connectors, networks, interventions, diseases, analyzers, custom] for mod in sc.tolist(arg) if isinstance(mod, ss.Module)]
             names = {name for mod in given for name in mod.pars.keys()}
@@ -498,6 +498,7 @@ class Sim(ss.Base):
             if key not in kwargs:
                 sim.pars[key] = sc.dcp(val)
         sim.par_values = sc.mergedicts(self.par_values, pars)
+        sim.jax = self.jax
         if hasattr(self, 'imported'): # The same import, with what it did not translate
             sim.imported = self.imported
         return sim
@@ -1717,12 +1718,9 @@ class Sim(ss.Base):
             kernels = until is None and not profile and reason is None
             if reason is not None and self.solver != 'abm' and getattr(self, 'declared', None): # Say once why a compartmental run is taken a step at a time
                 sc.printv(f'Run step by step, since {reason}', 1, self.verbose)
-            use_jax = False
-            if self.jax:
-                why = ss.gradients.reason(self)
-                use_jax = why is None
-                if why:
-                    ss.note(f'JAX cannot run this sim, since {why}, so it is run by the kernels', sim=self)
+            if kernels: # JAX or the kernels: see ss.solvers.choose_engine()
+                use_jax, why = ss.solvers.choose_engine(self)
+                sc.printv(f'engine: {why}', 2, self.verbose)
             if kernels: # Nothing needs to happen between the steps, so each module takes all of them at once
                 for mod in self.declared:
                     mod.engine.run_all(use_jax=use_jax)

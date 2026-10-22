@@ -23,6 +23,7 @@ import numba as nb
 import sciris as sc
 import starsim as ss
 from .distributions import _GOLDEN, _MIX1, _MIX2, _U30, _U27, _U31, _U11, _U40, _INV53, _INV24
+from .fast import _draws as draws, _cache
 
 __all__ = ['Program', 'Register', 'Shifts', 'opcodes']
 
@@ -130,6 +131,10 @@ shift_fields = [
 Shifts = collections.namedtuple('Shifts', shift_fields)
 
 plain = __name__ == 'starsim.plain_kernels' # Whether this is the copy of the kernels that runs as plain Python: see uncompiled()
+if plain:
+    draws = draws.plain_copy() # The draws as plain Python too
+else:
+    _cache.depends(__file__, draws.__file__) # So the cached kernels are compiled again when the draws change
 
 def kernel(error_model='numpy', **kwargs):
     """ Compile a kernel with Numba (cached on disk), or leave it as plain Python in the copy that `uncompiled()` gives """
@@ -139,6 +144,7 @@ jit = kernel()
 pieces = 4 # The stochastic solvers that take steps of their own length hold values that vary in time for a quarter of a step at a time: see step()
 golden = np.uint64(0x9e3779b97f4a7c15) # The step between the counters of a random stream: see uniform()
 sparse_flows = 256 # The flows above which the exact solver by place follows only the compartments that hold anyone: see sparse_events()
+row_groups = 50 # The groups from which a draw for every group is made as a vectorized row, which is faster for many groups (and slower for a few): measured for 1, 16, 50, and 260 groups, see v4_design/oct22/jax/draws.md
 
 
 compile_seconds = 60 # About how long compiling the kernels takes, once per install: runs that would take longer than this as plain Python are compiled first (by default: see choose())
@@ -156,7 +162,8 @@ entries = ['run', 'run_many', 'one_step', 'advance', 'advance_threads', 'apply_e
 def uncompiled():
     """
     The kernels as plain Python: this module's code, run without compiling it, which gives the same results with the
-    same random numbers (Numba follows NumPy's algorithms for its draws). Much slower for a large model, but there is
+    same random numbers (the draws are the same code, `ss.fast.draws`, run as plain Python too, and Numba follows NumPy's
+    algorithms for the uniforms). Much slower for a large model, but there is
     nothing to wait for. Its entry points ignore the overflow of the random streams' integer arithmetic, as compiled
     code does.
     """
@@ -313,17 +320,66 @@ def workspace(y, p):
     yt        = np.empty((nc, ng))
     chain     = np.empty((p.src_chain.max() if len(p.src_chain) else 0) + 2) # Where people at a stage of a dwell time end up: see chain_probs()
     credits   = np.empty((2, (np.diff(p.crd_starts).max() if len(p.crd_starts) > 1 else 0) + 1, ng)) # For credit(): the count of each credit of a flow not yet shared among those nested in it, and their weight left
-    return rates, exposures, stack, groups, cells, dy, df, yt, chain, credits
+    rows      = np.empty((11, ng))              # For binomials() and poissons(): the uniforms, the chances or means, and scratch for the draws
+    return rates, exposures, stack, groups, cells, dy, df, yt, chain, credits, rows
 
 
 @jit
 def binomial(rng, n, prob):
-    """ The number of n people that something with a probability happens to """
+    """ The number of n people that something with a probability happens to, from one uniform (see `ss.fast.draws.binomial()`) """
     if n <= 0 or prob <= 0:
         return 0.0
     elif prob >= 1:
         return float(n)
-    return float(rng.binomial(int(n), prob))
+    return draws.binomial(n, prob, rng.random())
+
+
+@jit
+def poisson(rng, lam):
+    """ A Poisson count with mean lam, from one uniform (see `ss.fast.draws.poisson()`) """
+    return draws.poisson(lam, rng.random()) if lam > 0 else 0.0
+
+
+@kernel(inline='always') # A call with arrays costs more than the draws of a small model
+def binomials(rng, n, prob, out, rows):
+    """
+    A binomial draw for every group (of n people, each with a chance prob), into out: one at a time for fewer than
+    `row_groups` groups, and otherwise as a vectorized row, from counter-based uniforms (one key a call: see
+    `ss.fast.draws`). rows is scratch (see `workspace()`)
+    """
+    ng = len(n)
+    if ng < row_groups:
+        for g in range(ng):
+            out[g] = binomial(rng, n[g], prob[g])
+    else:
+        draws.binomials(n, prob, draws.uniforms(rng.integers(0, 2**62), 0, rows[0]), out, rows[2:])
+    return
+
+
+@kernel(inline='always') # A call with arrays costs more than the draws of a small model
+def poissons(rng, lam, out, rows):
+    """ A Poisson draw for every group, with mean lam, into out: as `binomials()` """
+    ng = len(lam)
+    if ng < row_groups:
+        for g in range(ng):
+            out[g] = poisson(rng, lam[g])
+    else:
+        draws.poissons(lam, draws.uniforms(rng.integers(0, 2**62), 0, rows[0]), out, rows[2:])
+    return
+
+
+@kernel(inline='always')
+def some_binomials(rng, n, prob, out, rows):
+    """ As `binomials()`, but as a row only if `row_groups` groups or more have anyone to draw for (a split of one event of the exact solver has one) """
+    k = 0
+    for g in range(len(n)):
+        k += n[g] > 0
+    if k < row_groups:
+        for g in range(len(n)):
+            out[g] = binomial(rng, n[g], prob[g])
+    else:
+        draws.binomials(n, prob, draws.uniforms(rng.integers(0, 2**62), 0, rows[0]), out, rows[2:])
+    return
 
 
 @jit
@@ -370,10 +426,10 @@ def land(rng, n, m, maps, out):
 
 
 @jit
-def split(rng, n, a, b, weights, credit, out, comps, which, maps, scratch, rec, counted):
-    """ Share n whole events between the targets of a flow (or the transitions it is also counted as), at random; a target's share is also counted in the flow to its destination (rec, in counted), if it has one """
+def split(rng, n, a, b, weights, credit, out, comps, which, maps, scratch, rec, counted, rows):
+    """ Share n whole events between the targets of a flow (or the transitions it is also counted as), at random; a target's share is also counted in the flow to its destination (rec, in counted), if it has one. rows is scratch for the draws (see `workspace()`) """
     ng = len(n)
-    total, left, drawn = scratch[0], scratch[1], scratch[2]
+    total, left, drawn, prob = scratch[0], scratch[1], scratch[2], rows[1]
     if b - a == 1 and weights[a].min() >= 1 - 1e-12:
         land(rng, n, -1 if credit else which[a], maps, out[comps[a]])
         if not credit and rec[a] >= 0:
@@ -391,7 +447,9 @@ def split(rng, n, a, b, weights, credit, out, comps, which, maps, scratch, rec, 
                 total[g] = 1.0
         for k in range(a, b): # One multinomial draw, as a chain of conditional binomials
             for g in range(ng):
-                drawn[g] = binomial(rng, left[g], weights[k, g]/total[g]) if total[g] > 0 else 0.0
+                prob[g] = weights[k, g]/total[g] if total[g] > 0 else 0.0
+            some_binomials(rng, left, prob, drawn, rows)
+            for g in range(ng):
                 left[g] -= drawn[g]
                 total[g] -= weights[k, g]
             land(rng, drawn, -1 if credit else which[k], maps, out[comps[k]])
@@ -407,34 +465,36 @@ def split(rng, n, a, b, weights, credit, out, comps, which, maps, scratch, rec, 
 
 
 @jit
-def credit(rng, n, a, b, p, scratch, flows):
+def credit(rng, n, a, b, p, scratch, flows, rows):
     """
     Count the events of a flow (n, by group) also in the transitions they pass through with no wait (see
     `ss.solvers.Compartmental.entry`). The credits nested in the same one (or in none) are exclusive, so they are one
-    multinomial draw from its count, as a chain of conditional binomials; a credit that overlaps the others is drawn on its own
+    multinomial draw from its count, as a chain of conditional binomials; a credit that overlaps the others is drawn on
+    its own. rows is scratch for the draws (see `workspace()`)
     """
     if b == a:
         return
     ng = len(n)
-    left, mass = scratch[0], scratch[1]
+    left, mass, prob = scratch[0], scratch[1], rows[1]
     for g in range(ng):
         left[0, g] = n[g]
         mass[0, g] = 1.0
     for k in range(a, b):
         q = p.crd_parent[k]
         i = k - a + 1
+        j = 0 if q < 0 else q - a + 1
+        if q == -2:
+            some_binomials(rng, n, p.crd_w[k], left[i], rows)
+        else:
+            for g in range(ng):
+                prob[g] = p.crd_w[k, g]/mass[j, g] if mass[j, g] > 0 else 0.0
+            some_binomials(rng, left[j], prob, left[i], rows)
         for g in range(ng):
-            w = p.crd_w[k, g]
-            if q == -2:
-                c = binomial(rng, n[g], w)
-            else:
-                j = 0 if q < 0 else q - a + 1
-                c = binomial(rng, left[j, g], w/mass[j, g]) if mass[j, g] > 0 else 0.0
-                left[j, g] -= c
-                mass[j, g] -= w
-            left[i, g] = c
-            mass[i, g] = w
-            flows[p.crd_index[k], g] += c
+            if q != -2:
+                left[j, g] -= left[i, g]
+                mass[j, g] -= p.crd_w[k, g]
+            mass[i, g] = p.crd_w[k, g]
+            flows[p.crd_index[k], g] += left[i, g]
     return
 
 
@@ -543,13 +603,13 @@ def draw_chain(rng, y, p, w, s, dt, new, flows):
             left[g] -= n[g]
         if p.named[f]:
             land(rng, n, p.record[f], p.maps, flows[p.index[f]])
-        split(rng, n, p.tgt_starts[f], p.tgt_starts[f+1], p.tgt_w, False, new, p.tgt_comp, p.tgt_map, p.maps, groups, p.tgt_rec, flows)
-        credit(rng, n, p.crd_starts[f], p.crd_starts[f+1], p, w[9], flows)
+        split(rng, n, p.tgt_starts[f], p.tgt_starts[f+1], p.tgt_w, False, new, p.tgt_comp, p.tgt_map, p.maps, groups, p.tgt_rec, flows, w[10])
+        credit(rng, n, p.crd_starts[f], p.crd_starts[f+1], p, w[9], flows, w[10])
     f = p.src_last[s] # The last stage
     if p.named[f]:
         land(rng, ends, p.record[f], p.maps, flows[p.index[f]])
-    split(rng, ends, p.tgt_starts[f], p.tgt_starts[f+1], p.tgt_w, False, new, p.tgt_comp, p.tgt_map, p.maps, groups, p.tgt_rec, flows)
-    credit(rng, ends, p.crd_starts[f], p.crd_starts[f+1], p, w[9], flows)
+    split(rng, ends, p.tgt_starts[f], p.tgt_starts[f+1], p.tgt_w, False, new, p.tgt_comp, p.tgt_map, p.maps, groups, p.tgt_rec, flows, w[10])
+    credit(rng, ends, p.crd_starts[f], p.crd_starts[f+1], p, w[9], flows, w[10])
     return
 
 
@@ -563,8 +623,8 @@ def draw(rng, y, p, w, dt, flows, tau):
     which flow each leaves by. Called by `step()`, which has worked out the rates.
     """
     ng = y.shape[1]
-    rates, groups, new = w[0], w[3], w[7]
-    total, left, n = groups[3], groups[4], groups[5]
+    rates, groups, new, rows = w[0], w[3], w[7], w[10]
+    total, left, n, prob = groups[3], groups[4], groups[5], rows[1]
     new[:] = y
     for s in range(len(p.src_starts) - 1):
         a, b = p.src_starts[s], p.src_starts[s+1]
@@ -582,22 +642,29 @@ def draw(rng, y, p, w, dt, flows, tau):
                 total[g] = 0
                 for k in range(a, b):
                     total[g] += max(rates[p.src_flows[k], g], 0.0)
-                if tau:
-                    left[g] = min(float(rng.poisson(total[g]*y[src, g]*dt)), y[src, g]) # Everyone who leaves, clipped once, so the order of the flows does not matter
-                else:
-                    left[g] = binomial(rng, y[src, g], -np.expm1(-total[g]*dt))
+                prob[g] = total[g]*y[src, g]*dt if tau else -np.expm1(-total[g]*dt)
+            if tau:
+                poissons(rng, prob, left, rows)
+            else:
+                binomials(rng, y[src], prob, left, rows)
+            for g in range(ng):
+                left[g] = min(left[g], y[src, g]) # For tau-leaping, everyone who leaves, clipped once, so the order of the flows does not matter
                 new[src, g] -= left[g]
         for k in range(a, b):
             f = p.src_flows[k]
             if p.det[f]:
                 continue
-            for g in range(ng):
-                if src < 0: # An inflow
-                    n[g] = rng.poisson(max(rates[f, g]*p.inflow[f, g]*dt, 0.0))
-                else:
+            if src < 0: # An inflow
+                for g in range(ng):
+                    prob[g] = max(rates[f, g]*p.inflow[f, g]*dt, 0.0)
+                poissons(rng, prob, n, rows)
+            else: # Which flow they leave by: one multinomial draw, as a chain of conditional binomials
+                for g in range(ng):
                     hazard = max(rates[f, g], 0.0)
-                    n[g] = binomial(rng, left[g], hazard/total[g]) if total[g] > 0 else 0.0
+                    prob[g] = hazard/total[g] if total[g] > 0 else 0.0
                     total[g] -= hazard
+                binomials(rng, left, prob, n, rows)
+                for g in range(ng):
                     left[g] -= n[g]
             if p.named[f] and p.record[f] < 0: # Counted in the group it happens in: as land() does, but written out (as is the one target below), since the calls cost more than the draws of a small model
                 for g in range(ng):
@@ -609,8 +676,8 @@ def draw(rng, y, p, w, dt, flows, tau):
                 for g in range(ng):
                     new[p.tgt_comp[t], g] += n[g]
             else:
-                split(rng, n, t, p.tgt_starts[f+1], p.tgt_w, False, new, p.tgt_comp, p.tgt_map, p.maps, groups, p.tgt_rec, flows)
-            credit(rng, n, p.crd_starts[f], p.crd_starts[f+1], p, w[9], flows)
+                split(rng, n, t, p.tgt_starts[f+1], p.tgt_w, False, new, p.tgt_comp, p.tgt_map, p.maps, groups, p.tgt_rec, flows, w[10])
+            credit(rng, n, p.crd_starts[f], p.crd_starts[f+1], p, w[9], flows, w[10])
     for m in range(p.n_movers): # Movement between groups: as move() does, but written out, since a call here (once a leap) slows tau-leaping by a few percent
         for e in range(p.mov_starts[1, m], p.mov_starts[1, m+1]):
             if p.mov_rate[e] != 0:
@@ -1344,8 +1411,8 @@ def event(rng, y, p, w, dt, flows):
         y[p.src[which], where] -= 1
     if p.named[which]:
         land(rng, n, p.record[which], p.maps, flows[p.index[which]])
-    split(rng, n, p.tgt_starts[which], p.tgt_starts[which+1], p.tgt_w, False, y, p.tgt_comp, p.tgt_map, p.maps, groups, p.tgt_rec, flows)
-    credit(rng, n, p.crd_starts[which], p.crd_starts[which+1], p, w[9], flows)
+    split(rng, n, p.tgt_starts[which], p.tgt_starts[which+1], p.tgt_w, False, y, p.tgt_comp, p.tgt_map, p.maps, groups, p.tgt_rec, flows, w[10])
+    credit(rng, n, p.crd_starts[which], p.crd_starts[which+1], p, w[9], flows, w[10])
     return wait
 
 
@@ -1444,8 +1511,8 @@ def convey(rng, y, p, w, flows, release):
                     idle[p.places[g]] = 0
             if p.named[f]:
                 land(rng, n, p.record[f], p.maps, flows[p.index[f]])
-            split(rng, n, p.tgt_starts[f], p.tgt_starts[f+1] - 1, p.tgt_w, False, y, p.tgt_comp, p.tgt_map, p.maps, groups, p.tgt_rec, flows) # Not the last target, which is the slot they leave
-            credit(rng, n, p.crd_starts[f], p.crd_starts[f+1], p, w[9], flows)
+            split(rng, n, p.tgt_starts[f], p.tgt_starts[f+1] - 1, p.tgt_w, False, y, p.tgt_comp, p.tgt_map, p.maps, groups, p.tgt_rec, flows, w[10]) # Not the last target, which is the slot they leave
+            credit(rng, n, p.crd_starts[f], p.crd_starts[f+1], p, w[9], flows, w[10])
         else:
             for g in range(ng):
                 for k in range(b-1, a+1, -1): # The last slot is empty by now (or nearly, by rounding, in the ODE)
@@ -1553,7 +1620,7 @@ def step(rng, y, p, w, dt, n_sub, solver, flows, tables, row):
         tables (tuple): the fixed, mult, consts, and rel_trans tables (see `run()`), with three rows per step
         row (int): the row of the start of this step, or -1 if the program holds for the whole step
     """
-    rates, exposures, stack, groups, cells, dy, df, yt, chain, credits = w
+    rates, exposures, stack, groups, cells, dy, df, yt, chain, credits, rows = w
     n, local_n, vals, infectious = groups[0], groups[1], groups[2], groups[3]
     num, den, num2, den2, prev = cells[0], cells[1], cells[2], cells[3], cells[4]
     nc, ng = y.shape
