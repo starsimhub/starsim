@@ -2362,7 +2362,7 @@ def ov_mean(x):
     return lambda x: np.mean(x)
 
 
-#%% Draws for compiled code (ss.fast.key, uniform, binomial, poisson): thin wrappers over the draw library, the same from Python and compiled code
+#%% Draws for compiled code (ss.perflib.key, uniform, binomial, poisson): thin wrappers over the draw library, the same from Python and compiled code
 
 def key(seed, ind):
     """ The key of a stream of uniforms (e.g. one a step), from a seed and an index, as `ss.Dist` makes them """

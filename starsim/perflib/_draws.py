@@ -68,7 +68,7 @@ def plain_copy():
     """ This module as plain Python: the same code run without compiling it, which gives the same draws (for ss.kernels.uncompiled()) """
     global plain_draws
     if plain_draws is None:
-        spec = importlib.util.spec_from_file_location('starsim.fast.plain_draws', __file__)
+        spec = importlib.util.spec_from_file_location('starsim.perflib.plain_draws', __file__)
         plain_draws = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(plain_draws)
     return plain_draws

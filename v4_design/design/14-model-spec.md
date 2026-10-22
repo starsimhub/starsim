@@ -233,7 +233,7 @@ Values by stratum, time series, and seasonal curves:
 {"seasonal": {"mean": 0.05, "amplitude": 0.3, "peak": "January"}}
 ```
 
-Arrays are written in full. Named data (`ss.people('Kenya')`, `ss.contacts('Kenya')`, `ss.geo.location(...)`) is stored as the provider, place, source, and version that were resolved ([04-parameters.md](04-parameters.md#named-data)).
+Arrays are written in full. Named data (`ss.people('Kenya')`, `ss.contacts('Kenya')`, `ss.geo.geography(...)`) is stored as the provider, place, source, and version that were resolved ([04-parameters.md](04-parameters.md#named-data)).
 
 ## Functions
 

@@ -122,11 +122,11 @@ def test_error_catalog():
 # The counted vocabulary of 17-vocabulary.md: for each group, its names in `ss.`, and which of them the specification adds to Starsim ('all' for every one)
 vocabulary = {
     'Sim and modules': ('Sim People people ppl Module Disease Strains Infection Demographics Intervention Connector Analyzer', 'people ppl Strains'),
-    'States, transitions, parameters, results': ('State states null Transition birth death immigration emigration lifetable transfer par outcome data', 'all'),
+    'States, transitions, parameters, results': ('State states null Transition birth death immigration emigration lifetable transfer par outcome simdata', 'all'),
     'Time': ('dur days weeks months years day week month year datedur per perday perweek permonth peryear prob probperday probperweek probpermonth probperyear freq freqperday freqperweek freqpermonth freqperyear date peract', 'peract'),
     'Distributions': ('Dist normal lognorm_ex lognorm_im expon gamma weibull poisson nbinom binom uniform bernoulli constant choice erlang truncnorm', 'binom erlang truncnorm'),
     'Parameter forms': ('by timeseries seasonal', 'all'),
-    'Mixing and space': ('Network RandomNet SexualNet MixingPool MixingPools contacts geo.location geo.Mobility geo.gravity', 'contacts geo.location geo.Mobility geo.gravity'),
+    'Mixing and space': ('Network RandomNet SexualNet MixingPool MixingPools contacts geo.geography geo.Mobility geo.gravity', 'contacts geo.geography geo.Mobility geo.gravity'),
     'Interactions and interventions': ('modify change immunity Vaccine Diagnostic Treatment vaccinate screen treat', 'all'),
     'Running, comparing, saving': ('MultiSim parallel options diff load save compile', 'diff compile'),
     'Types you get back or subclass': ('Result Loop Timeline Rate TimePar', ''),
@@ -230,7 +230,7 @@ def test_vocabulary():
         names, new = split_names(names, new)
         for name in names:
             obj = ss
-            for part in name.split('.'): # E.g. ss.geo.location
+            for part in name.split('.'): # E.g. ss.geo.geography
                 obj = getattr(obj, part, None)
             assert obj is not None and not isinstance(obj, types.ModuleType), f'17-vocabulary.md counts ss.{name}, which Starsim does not export'
             assert f'ss.{name}`' in sections[group], f'ss.{name} is counted in "{group}" but not listed there in 17-vocabulary.md'

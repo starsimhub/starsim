@@ -296,7 +296,7 @@ The target is the parameter's path as a string, since `school.pars.n_contacts` i
 Space is a dimension ([05-dimensions.md](05-dimensions.md#space)), and mobility is the optional movement between its levels. Without a mobility model, people mix within their own patch and patches do not affect each other. The routes act within each patch: a contact matrix by age under every solver, and, as agents, a mixing pool of everyone and a random network too, as in a compartmental run (people contact others where they live, or where they commute to).
 
 ```python
-kenya     = ss.geo.location('Kenya', level=1)
+kenya     = ss.geo.geography('Kenya', level=1)
 sir.stratify(patch=kenya, mobility=ss.geo.gravity(away=0.1, a=1.0, b=1.0, c=2.0))
 ```
 
@@ -359,12 +359,12 @@ Travelers in transit (in neither their home patch nor their destination) are out
 
 <!-- fragment -->
 ```python
-ss.geo.location('Kenya', level=1)                       # its 47 counties, bundled
-ss.geo.location('Kenya', level=1, places=['Nairobi', 'Kiambu'])
-ss.geo.location(['Kenya', 'Uganda'], level=1)           # several countries, named 'Kenya:Busia' and so on
-ss.geo.location('USA', level=2, year=2015)              # US counties, populations for 2015: fetched
-ss.geo.location('districts.csv')                        # the user's own: name, pop, and lat and lon (or x and y)
-ss.geo.location(names=['a', 'b'], pop=[1e4, 2e4], x=[0, 1], y=[0, 0])    # or given directly (or with distances=)
+ss.geo.geography('Kenya', level=1)                       # its 47 counties, bundled
+ss.geo.geography('Kenya', level=1, places=['Nairobi', 'Kiambu'])
+ss.geo.geography(['Kenya', 'Uganda'], level=1)           # several countries, named 'Kenya:Busia' and so on
+ss.geo.geography('USA', level=2, year=2015)              # US counties, populations for 2015: fetched
+ss.geo.geography('districts.csv')                        # the user's own: name, pop, and lat and lon (or x and y)
+ss.geo.geography(names=['a', 'b'], pop=[1e4, 2e4], x=[0, 1], y=[0, 0])    # or given directly (or with distances=)
 ```
 
 A geography supplies names, populations, centroids, distances, and which places share a border (`geo.adjacency`). Levels are numbers, as the boundary sources number them (0 the country, 1 its provinces, states, or counties, 2 the next), since what a level is called differs from country to country. The source used is recorded in `describe()`, in the model spec, and in `sim.hash()`. Geographic data follows the same policy as the rest of the named data ([04-parameters.md](04-parameters.md#named-data)): what is small and common is bundled, the rest is fetched on demand and cached, each data set is adapted once with its provenance recorded, and nothing depends on another framework's data package. Every country's first two levels are bundled with `starsim_data` (`pip install starsim[data]`); finer levels and other years are fetched (which needs `pip install starsim_data[spatial]`).

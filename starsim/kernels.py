@@ -23,7 +23,7 @@ import numba as nb
 import sciris as sc
 import starsim as ss
 from .distributions import _GOLDEN, _MIX1, _MIX2, _U30, _U27, _U31, _U11, _U40, _INV53, _INV24
-from .fast import _draws as draws, _cache
+from .perflib import _draws as draws, _cache
 
 __all__ = ['Program', 'Register', 'Shifts', 'opcodes']
 
@@ -162,7 +162,7 @@ entries = ['run', 'run_many', 'one_step', 'advance', 'advance_threads', 'apply_e
 def uncompiled():
     """
     The kernels as plain Python: this module's code, run without compiling it, which gives the same results with the
-    same random numbers (the draws are the same code, `ss.fast.draws`, run as plain Python too, and Numba follows NumPy's
+    same random numbers (the draws are the same code, `ss.perflib.draws`, run as plain Python too, and Numba follows NumPy's
     algorithms for the uniforms). Much slower for a large model, but there is
     nothing to wait for. Its entry points ignore the overflow of the random streams' integer arithmetic, as compiled
     code does.
@@ -326,7 +326,7 @@ def workspace(y, p):
 
 @jit
 def binomial(rng, n, prob):
-    """ The number of n people that something with a probability happens to, from one uniform (see `ss.fast.draws.binomial()`) """
+    """ The number of n people that something with a probability happens to, from one uniform (see `ss.perflib.draws.binomial()`) """
     if n <= 0 or prob <= 0:
         return 0.0
     elif prob >= 1:
@@ -336,7 +336,7 @@ def binomial(rng, n, prob):
 
 @jit
 def poisson(rng, lam):
-    """ A Poisson count with mean lam, from one uniform (see `ss.fast.draws.poisson()`) """
+    """ A Poisson count with mean lam, from one uniform (see `ss.perflib.draws.poisson()`) """
     return draws.poisson(lam, rng.random()) if lam > 0 else 0.0
 
 
@@ -345,7 +345,7 @@ def binomials(rng, n, prob, out, rows):
     """
     A binomial draw for every group (of n people, each with a chance prob), into out: one at a time for fewer than
     `row_groups` groups, and otherwise as a vectorized row, from counter-based uniforms (one key a call: see
-    `ss.fast.draws`). rows is scratch (see `workspace()`)
+    `ss.perflib.draws`). rows is scratch (see `workspace()`)
     """
     ng = len(n)
     if ng < row_groups:

@@ -1,5 +1,5 @@
 """
-Places and the movement between them: a geography (`ss.geo.location`), and movement between its places (`ss.geo.Mobility`, from a matrix, a data file of moves, or a movement model such as `ss.geo.gravity`)
+Places and the movement between them: a geography (`ss.geo.geography`), and movement between its places (`ss.geo.Mobility`, from a matrix, a data file of moves, or a movement model such as `ss.geo.gravity`)
 """
 import numpy as np
 import pandas as pd
@@ -7,14 +7,14 @@ import scipy.sparse as spsp
 import sciris as sc
 import starsim as ss
 
-__all__ = ['location', 'gravity', 'Mobility']
+__all__ = ['geography', 'gravity', 'Mobility']
 
 
-class location:
+class geography:
     """
     A geography: named places with populations and positions, used as the levels of a spatial stratification
 
-    A country's administrative units come from `starsim_data` by name (`ss.geo.location('Kenya', level=1)`):
+    A country's administrative units come from `starsim_data` by name (`ss.geo.geography('Kenya', level=1)`):
     their names, populations, centroids, areas, p-codes, and which share a border. The first
     two levels of every country are bundled, so this needs no download.
 
@@ -34,8 +34,8 @@ class location:
 
     Examples:
         ```python
-        kenya = ss.geo.location('Kenya', level=1) # Its 47 counties
-        towns = ss.geo.location(names=['north', 'south', 'east'], pop=[50_000, 30_000, 20_000], x=[0, 0, 40], y=[0, 30, 0])
+        kenya = ss.geo.geography('Kenya', level=1) # Its 47 counties
+        towns = ss.geo.geography(names=['north', 'south', 'east'], pop=[50_000, 30_000, 20_000], x=[0, 0, 40], y=[0, 30, 0])
         S, I, R = ss.states(3)
         sir = ss.Disease(infection=S >> I @ 0.3*I, recovery=ss.Transition(I, R, dur=10), init_prev=0.01)
         sir.stratify(patch=towns, mobility=ss.geo.gravity(k=0.01))
@@ -47,7 +47,7 @@ class location:
         self.codes = None
         named = isinstance(data, str) and not data.endswith(('.csv', '.xlsx')) or (isinstance(data, (list, tuple)) and all(isinstance(d, str) for d in data))
         if named: # A country's administrative units, from starsim_data
-            found = ss.named.geography(data, level=level, year=year, places=places)
+            found = ss.data.geography(data, level=level, year=year, places=places)
             names, lat, lon, adjacency = [found[key] for key in ['names', 'lat', 'lon', 'adjacency']]
             pop = found['pop'] if pop is None else pop # Populations given by hand win
             self.area, self.codes, self.ref = found['area'], found['codes'], found['ref']
@@ -58,7 +58,7 @@ class location:
             cols = {key:data[key].tolist() for key in ['name', 'pop', 'x', 'y', 'lat', 'lon'] if key in data.columns}
             names, pop, x, y, lat, lon = [cols.get(key) for key in ['name', 'pop', 'x', 'y', 'lat', 'lon']]
         if names is None:
-            errormsg = 'ss.geo.location() needs the names of the places: names=[...], or a table with a column called "name"'
+            errormsg = 'ss.geo.geography() needs the names of the places: names=[...], or a table with a column called "name"'
             raise ValueError(errormsg)
         self.names = list(names)
         self.pop = None if pop is None else np.array(pop, dtype=float)
@@ -77,14 +77,14 @@ class location:
             self.distances = 2*6371*np.arcsin(np.sqrt(a))
         for key,val in dict(pop=self.pop, distances=self.distances, adjacency=self.adjacency).items():
             if val is not None and len(val) != len(self.names):
-                errormsg = f'ss.geo.location() has {len(self.names)} places but {len(val)} entries in {key}'
+                errormsg = f'ss.geo.geography() has {len(self.names)} places but {len(val)} entries in {key}'
                 raise ValueError(errormsg)
         return
 
     def __repr__(self):
         if self.ref is not None:
-            return f"location({self.ref['place']!r}, level={self.ref['level']}: {len(self)} places)"
-        return f'location({sc.strjoin(self.names)})'
+            return f"geography({self.ref['place']!r}, level={self.ref['level']}: {len(self)} places)"
+        return f'geography({sc.strjoin(self.names)})'
 
     def __len__(self):
         return len(self.names)
@@ -95,7 +95,7 @@ class gravity:
     The gravity model of movement: the share of their time that a person from place `i` spends in place `j` (or, for migration,
     the rate at which they move there) is `k × pop[i]^(a−1) × pop[j]^b / distance[i,j]^c`
 
-    Populations and distances come from the geography of the dimension it is used on (`ss.geo.location`).
+    Populations and distances come from the geography of the dimension it is used on (`ss.geo.geography`).
     The model gives the shape of the movement, and `away=` its amount: the share of their time
     that people spend away from home, split between the other places by gravity. `k` has units
     of distance^c / pop^(a+b−1), so no default fits both three towns and a country; give it only
@@ -134,7 +134,7 @@ class gravity:
         place = strat.geo
         if place is None or place.distances is None or place.pop is None:
             raise ss.errors.NoGeography(f'ss.geo.gravity() is used on "{strat.name}", which has no geography to give the populations and distances it needs.\n'
-                                 f'     Give the places with ss.geo.location(names=[...], pop=[...], x=[...], y=[...]), or give the movement itself with ss.geo.Mobility(matrix=...).')
+                                 f'     Give the places with ss.geo.geography(names=[...], pop=[...], x=[...], y=[...]), or give the movement itself with ss.geo.Mobility(matrix=...).')
         pop, dist = place.pop, place.distances
         k, a, b, c = [float(v) for v in [sc.ifelse(self.k, 1.0), self.a, self.b, self.c]] # Any can be a fitted ss.par
         with np.errstate(divide='ignore'):

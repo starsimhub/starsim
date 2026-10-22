@@ -53,6 +53,7 @@ Measured 2026-10-22, 04:15–04:35, on the shared 20-core machine at a 1-minute 
 | LASER, marginal ns per agent-step (100k vs 300k agents, 20 days) | 1.1 ns (LASER, 20 threads) | 4.2–4.4 ns | 3.3–4.6 ns |
 | LASER, peak bytes per agent | 30 (LASER) | 45.7 | 51.2 |
 
+- Re-timed on 2026-10-22 at 10:45 on a quiet machine (load 0.2; warm, three runs each, interleaved twice): the code from before the night's work 1.73–1.74 s; the branch after the JAX track's merge 1.25 s on the kernels and 0.54–0.56 s in JAX, which it now chooses by default. The 2.2 s above was the same code as the 1.74 s, timed at load 4–5.
 - Ghana measles: Starsim's binomial run (the model from `oct21/numba_vs_jax/models.py`, compiled kernels) is about 2.2× the hand-written NumPy loop, unchanged by tonight's work. (October 17 found them about equal, at about 2 s each, on a busier machine; today the NumPy loop runs in 1.0 s.) numba_vs_jax.md's JAX run (1.7 s) and its one-uniform-per-draw study (2.3× faster draws) are the known routes to closing the gap.
 - LASER: unchanged by tonight's work. The full model here takes 9.6 s single-threaded (the brief's load rules keep Numba to one thread); `test_laser.py` quotes 7–8.5 s threaded against LASER's 2.75 s on 20 threads, so about 3×.
 

@@ -1931,8 +1931,8 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
             out, self.given = self.given, None
         elif self.cross is not None: # Together with the other diseases in the crossing, by one program
             out = self.cross.whole_run(self, use_jax=use_jax)
-        elif use_jax and self.sim.solver in ['binomial', 'tau']: # The chain binomial or tau-leaping in JAX: see ss.fast._chain
-            *out, tally = importlib.import_module('starsim.fast._chain').run(self)
+        elif use_jax and self.sim.solver in ['binomial', 'tau']: # The chain binomial or tau-leaping in JAX: see ss.perflib._chain
+            *out, tally = importlib.import_module('starsim.perflib._chain').run(self)
             for k,mod in enumerate(self.deliveries):
                 mod.compartments.store_shifts(tally[:, k])
         elif use_jax:
@@ -2174,7 +2174,7 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
         length = max(int(50e6//(sum(len(table) for table in [program.fixed, program.mult, program.consts, program.rel_trans])*per_step*ng*8)), 1) # Steps per part, so the tables of values that vary in time (by group, at every step) are not all held at once
         start = 0
         if self.sim.solver in ['binomial', 'tau'] and ss.solvers.choose_engine(self.sim)[0]: # In JAX, as a single run would be (see ss.solvers.choose_engine())
-            stocks, flows, stocks_g, flows_g, tally, tally_g = importlib.import_module('starsim.fast._chain').run_many(self, seeds, state_of, kept_s, kept_f, rows)
+            stocks, flows, stocks_g, flows_g, tally, tally_g = importlib.import_module('starsim.perflib._chain').run_many(self, seeds, state_of, kept_s, kept_f, rows)
         else:
             kn = self.kernels(runs=n_runs)
             while True: # A part at a time

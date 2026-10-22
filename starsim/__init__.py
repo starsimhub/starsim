@@ -98,10 +98,10 @@ from .networks import (
     PrenatalNet, MaternalNet, PostnatalNet, BreastfeedingNet,
     AgeGroup, MixingPools, MixingPool, contacts,
 )
-from . import geo # Places and the movement between them: ss.geo.location, ss.geo.Mobility, ss.geo.gravity
+from . import geo # Places and the movement between them: ss.geo.geography, ss.geo.Mobility, ss.geo.gravity
 
 t('results')
-from .results import Result, Results, data
+from .results import Result, Results, simdata
 
 t('demographics')
 from .demographics import (
@@ -125,7 +125,7 @@ from .connectors import Connector, modify, change
 t('conditions')
 from . import conditions
 from .conditions import state, child # Conditions on a state by path, and on a mother when her child goes through an event
-from . import fast # Hidden machinery for speed (exact draws in Numba): ss.fast.draws
+from . import perflib # Hidden machinery for speed (exact draws in Numba), which the kernels use
 from . import kernels
 from .kernels import compile # Compile the solver kernels ahead of time
 
@@ -156,15 +156,14 @@ from .loop import Loop
 t('spec')
 from .spec import to_code, diff
 
-t('named')
-from . import named # Places and contact matrices by name (ss.geo.location('Kenya'), ss.contacts('Kenya')); starsim_data is imported only when they are used
+t('data')
+from . import data # Data by place, from starsim_data: ss.data.age('Kenya'), ss.data.population(), ss.data.contacts(), ss.data.geography(); starsim_data is imported only when they are used
 
 t('gradients')
 from . import gradients # Used as ss.gradients; JAX is imported only when it is used
 
-t('fast')
-from . import fast # Hidden fast paths: ss.jit, and the draws compiled code can make (ss.fast.binomial, ...)
-from .fast import jit
+t('jit')
+from .perflib import jit # Compile users' own code; the machinery for speed is hidden in ss.perflib
 
 t('sim')
 from .sim import Sim, AlreadyRunError, demo

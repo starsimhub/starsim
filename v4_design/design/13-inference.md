@@ -110,11 +110,11 @@ Data is attached to the sim and matched to results by name, as in Covasim:
 
 <!-- fragment -->
 ```python
-sim = ss.Sim(sir, data='cases.csv')       # a path, a dataframe, or ss.data(...)
+sim = ss.Sim(sir, data='cases.csv')       # a path, a dataframe, or ss.simdata(...)
 ```
 
 - The time column is `date`, `year`, `t`, or `time`. Every other column is matched to a result with the same name (`cases`, or `sir.cases` when the short name is ambiguous). A column that matches nothing is an error that lists the closest result names (`UnknownDataColumn`).
-- Headers that do not match are renamed on the way in, and columns that are not wanted are dropped: `data=ss.data(df, aliases=dict(cases='Reported Cases', year='Years'), ignore_extra=True)` ([09-results.md](09-results.md#data)).
+- Headers that do not match are renamed on the way in, and columns that are not wanted are dropped: `data=ss.simdata(df, aliases=dict(cases='Reported Cases', year='Years'), ignore_extra=True)` ([09-results.md](09-results.md#data)).
 - Results that have data are plotted against it by `sim.plot()` without being asked.
 - **Alignment is automatic.** A result that is a state of the system at a point in time (a count, a prevalence) is compared at the data's dates, interpolating if needed. A result that is a flow (new infections, reported cases, deaths) is summed over the interval ending at each data date. The library knows which is which because results are declared ([09-results.md](09-results.md)).
 - Stratified data uses extra columns named after the stratification (`age`, `sex`), matched to the result's coordinates.

@@ -162,7 +162,7 @@ sir.stratify(age=[0, 15, 65])                  # bin edges: 0-14, 15-64, 65+
 sir.stratify(risk=['low', 'high'])             # labels
 sir.stratify(vaccinated=[False, True])         # a boolean property
 hiv.stratify(cd4=[0, 200, 350, 500])           # bin edges on a continuous property
-sir.stratify(patch=ss.geo.location('Kenya', level=1))          # a named source: Kenya's 47 counties
+sir.stratify(patch=ss.geo.geography('Kenya', level=1))          # a named source: Kenya's 47 counties
 ```
 
 A list of numbers is bin edges when the property is continuous and labels otherwise; `kind=` settles any ambiguity. The last bin is open-ended. Levels can be referred to by label (`'15-64'`, `'500+'`) or by position.
@@ -176,7 +176,7 @@ Some dimensions carry structure. The kind comes from the value, not the name: a 
 | Kind | From the value | What is generated |
 |---|---|---|
 | `age` | a dimension called `age`, with bin edges | Aging between adjacent levels, if people are born or die |
-| `space` | an `ss.geo.location` value, or `mobility=` | Nothing by default; movement if `mobility=` is given |
+| `space` | an `ss.geo.geography` value, or `mobility=` | Nothing by default; movement if `mobility=` is given |
 | `strain` | made by `ss.Strains` on the disease ([below](#strains)) | A force of infection per strain; sets carried; protection between strains |
 | `clock` | `kind='clock'`, with levels that are times | The time since an event, which advances with time; a level `none` for people who have not had it |
 | `plain` | anything else | Nothing |
@@ -206,7 +206,7 @@ Space is a dimension, not a separate kind of model. It is valid with or without 
 
 <!-- fragment -->
 ```python
-kenya = ss.geo.location('Kenya', level=1)
+kenya = ss.geo.geography('Kenya', level=1)
 
 sir.stratify(patch=kenya)                                # patches; nobody moves
 sir.stratify(patch=kenya, mobility=ss.geo.gravity(away=0.1, a=1.0, b=1.0, c=2.0))    # or: patches coupled by travel
@@ -322,7 +322,7 @@ A negative multiplier raises `InvalidAdjustment`. A multiplier that makes the br
 
 Parameters that differ by level can also be given directly in the base model with `ss.by(age=[...])` ([04-parameters.md](04-parameters.md)); `adjust` is for when the base model should not know about the dimension.
 
-A population that is not the product of a split by each dimension (more children in one patch than another) is given as one split over several dimensions: `sir.stratify(patch=ss.geo.location(names=['north', 'south']), split=ss.by(pop, dims=['age', 'patch']))`, where `pop` has a row for each age group and a column for each patch. Each dimension's own split is then the total over the others. A split given to one of them as well must agree with that total, or `InconsistentDimension` is raised (rows of shares given one dimension, as in a table of P(wealth | urban), are multiplied by that dimension's split first). A split over age and other dimensions whose row for each age group sums to 1 (`ss.by([[0, 1], [1, 0], [1, 0]], dims=['age', 'wealth'])`) is instead the share within each age group: people keep their ages, and the age groups their own split (noted as guessed). People born into the model (as agents, from `ss.Births` or `ss.Pregnancy`) take the youngest age group's share of the other dimensions, and the place of their parent for a dimension of places.
+A population that is not the product of a split by each dimension (more children in one patch than another) is given as one split over several dimensions: `sir.stratify(patch=ss.geo.geography(names=['north', 'south']), split=ss.by(pop, dims=['age', 'patch']))`, where `pop` has a row for each age group and a column for each patch. Each dimension's own split is then the total over the others. A split given to one of them as well must agree with that total, or `InconsistentDimension` is raised (rows of shares given one dimension, as in a table of P(wealth | urban), are multiplied by that dimension's split first). A split over age and other dimensions whose row for each age group sums to 1 (`ss.by([[0, 1], [1, 0], [1, 0]], dims=['age', 'wealth'])`) is instead the share within each age group: people keep their ages, and the age groups their own split (noted as guessed). People born into the model (as agents, from `ss.Births` or `ss.Pregnancy`) take the youngest age group's share of the other dimensions, and the place of their parent for a dimension of places.
 
 ## Mixing over a dimension
 
@@ -339,7 +339,7 @@ ss.Sim(sir, networks=ss.contacts('Kenya'))
 - **In a compartmental run** the matrix is aggregated to the model's groups, weighted by population. Where a model group cuts through a matrix band, the band is split in proportion to population. A one-line note says the matrix was aggregated (`MatrixAggregated`).
 - **In an agent-based run** the matrix is used with its own groups: each agent has an exact age and is counted in whichever band the matrix uses.
 - **With places**, a contact matrix acts within each place, under every solver ([06-routes.md](06-routes.md#mobility)); a matrix over the places themselves (`ss.contacts(patch=...)`) says who meets whom across them, and is how a force of infection shared between places (LASER's coupling) is written.
-- **The data is optional.** A matrix given as numbers needs nothing else: only a country's matrix by name (and `ss.geo.location` and `ss.people` by name) reads `starsim_data`, the optional `data` extra, and a model with no named data never imports it.
+- **The data is optional.** A matrix given as numbers needs nothing else: only a country's matrix by name (and `ss.geo.geography` and `ss.people` by name) reads `starsim_data`, the optional `data` extra, and a model with no named data never imports it.
 
 With no mixing given, people mix homogeneously across the levels of every dimension except space, where the default is to mix within the patch ([06-routes.md](06-routes.md)).
 

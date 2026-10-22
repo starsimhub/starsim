@@ -64,7 +64,7 @@ def weekly_totals(sim):
     for place in places:
         weekly = pd.Series(np.asarray(res.select(subpop=place).values), index=dates).resample('W-SAT').sum()
         rows += [dict(date=date, subpop=place, incidHosp=val) for date,val in weekly.items()]
-    return ss.data(pd.DataFrame(rows))
+    return ss.simdata(pd.DataFrame(rows))
 
 
 def test_flepimop_import(tmp_path):

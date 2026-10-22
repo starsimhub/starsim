@@ -74,7 +74,7 @@ data
 
 The data need not be on the model's time step, and nothing says how to align the two: each result knows whether it is a stock or a flow. A stock or a ratio, like prevalence, is compared with the model's value at the data's time; a flow, like weekly reported cases, is compared with the model's flow summed over each interval of the data. A column that matches no result is an error that lists the closest result names, so a typo in a header is caught.
 
-Real files rarely arrive with matching headers, so `ss.data()` renames columns on the way in, e.g. `ss.data('moh_2020.csv', aliases=dict(prevalence='Prevalence (survey)', date='Survey date'), ignore_extra=True)`.
+Real files rarely arrive with matching headers, so `ss.simdata()` renames columns on the way in, e.g. `ss.simdata('moh_2020.csv', aliases=dict(prevalence='Prevalence (survey)', date='Survey date'), ignore_extra=True)`.
 
 ## Calibrating
 

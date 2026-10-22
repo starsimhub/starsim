@@ -869,8 +869,8 @@ def test_stratify():
     assert np.allclose(ss.by(age=0.2).per_group(sims.ode), 0.2) # One value for every level
     assert (1/ss.by(sex=[0.5, 2])).values == [2, 0.5] and np.allclose((ss.by([[1, 2]], dims=['a', 'b'])*2).array, [[2, 4]]) # Arithmetic on values by group
     pop = (res.n_S + res.n_I + res.n_R).by('age').values[0]
-    world = ss.named.world
-    assert np.allclose(pop, 100_000*ss.named.age_split([0, 15, 65], world.ages, world.counts), rtol=0.01) and pop[2] < 0.15*pop.sum() # With no split given, the people's ages are the world's (not uniform to 100, which put 35% over 65)
+    world = ss.data.world
+    assert np.allclose(pop, 100_000*ss.data.age_split([0, 15, 65], world.ages, world.counts), rtol=0.01) and pop[2] < 0.15*pop.sum() # With no split given, the people's ages are the world's (not uniform to 100, which put 35% over 65)
     attack = [res.infection.select(age=i).sum()/pop[i] for i in range(3)]
     assert attack[0] > attack[2], 'Children have the most contacts, so should have the highest attack rate'
     for solver in ['binomial', 'abm']:
@@ -1068,7 +1068,7 @@ def test_outcomes():
     assert any('casess' in note for note in typo.notes) # Data on a sim can be just for plotting, so a column that matches no result is noted, and an error only when fitting
     with pytest.raises(ss.errors.UnknownDataColumn):
         typo.calibrate()
-    renamed = ss.data(df.rename(columns=dict(cases='Reported')), aliases=dict(cases='Reported'))
+    renamed = ss.simdata(df.rename(columns=dict(cases='Reported')), aliases=dict(cases='Reported'))
     assert 'cases' in ss.Sim(make(0.3), data=renamed, **pars).init().data.columns
     assert 'cases' in ss.Sim(make(0.3), **pars).new(data=renamed).init().data.columns # Or to a new sim
     with pytest.raises(ss.errors.UnknownParameter):

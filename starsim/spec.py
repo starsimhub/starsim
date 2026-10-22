@@ -92,7 +92,7 @@ def strat_kwargs(strat):
         split = joint_split(split)
     levels = strat['levels']
     if strat.get('geo'): # A named geography, looked up again; the split is as the spec has it
-        levels = ss.geo.location(strat['geo']['place'], **named_args(strat['geo'], geo_keys))
+        levels = ss.geo.geography(strat['geo']['place'], **named_args(strat['geo'], geo_keys))
     if strat['kind'] == 'clock' and strat.get('unit'): # Durations
         levels = Code(f"ss.{strat['unit']}s({levels})")
     out = {strat['name']:levels, 'split':split, 'adjust':strat['adjust'] or None, 'kind':strat['kind']}
@@ -494,7 +494,7 @@ def movable(strat, left):
     out = strat_kwargs({**plain, 'mobility':None})
     if strat.get('geo'): # A named geography as the call that looks it up, with its own split
         ref = strat['geo']
-        out[strat['name']] = Code(f"ss.geo.location({ref['place']!r}{''.join(f', {k}={v!r}' for k,v in named_args(ref, geo_keys).items())})")
+        out[strat['name']] = Code(f"ss.geo.geography({ref['place']!r}{''.join(f', {k}={v!r}' for k,v in named_args(ref, geo_keys).items())})")
         out.pop('split')
     if strat.get('split_from'):
         out.pop('split', None)

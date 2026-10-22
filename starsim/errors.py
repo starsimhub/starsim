@@ -195,7 +195,7 @@ class DataMisaligned(CodedError):
 
 class UnknownDataColumn(CodedError, KeyError):
     """
-    A data column matches no result, when a fit compares it with the results (at `init()` it is a note). Lists the closest result names and suggests `ss.data(..., aliases=dict(result='Column'))`
+    A data column matches no result, when a fit compares it with the results (at `init()` it is a note). Lists the closest result names and suggests `ss.simdata(..., aliases=dict(result='Column'))`
     to rename it or `ignore_extra=True` to drop it. Also data by stratum for a level the dimension does not have, or for a
     result that is not kept by group, or kept by group only every few steps
     """

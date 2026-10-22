@@ -94,7 +94,7 @@ class Sim(ss.Base):
         self._name_modules(ss.utils.caller_names(1), demographics, connectors, networks, interventions, diseases, analyzers, custom, modules)
         interventions = self._order_steps(interventions)
         self.par_values = None # Values of model parameters by name, e.g. pars=dict(beta=0.1) or pars=fit.pars
-        self.jax = None # Whether a whole run is taken in JAX: of the ODE (as ss.parallel() does for many runs with different values; see ss.gradients), or of the chain binomial and tau-leaping (see ss.fast._chain); None to choose (see ss.solvers.choose_engine())
+        self.jax = None # Whether a whole run is taken in JAX: of the ODE (as ss.parallel() does for many runs with different values; see ss.gradients), or of the chain binomial and tau-leaping (see ss.perflib._chain); None to choose (see ss.solvers.choose_engine())
         if isinstance(pars, dict) and len(pars): # Values of the model's parameters by name; a sim setting only by its own name, if no parameter of the model has it (so pars=fit.pars works with a parameter called dur)
             given = [mod for arg in [modules, demographics, connectors, networks, interventions, diseases, analyzers, custom] for mod in sc.tolist(arg) if isinstance(mod, ss.Module)]
             names = {name for mod in given for name in mod.pars.keys()}
@@ -717,8 +717,8 @@ class Sim(ss.Base):
             return named.ages, named.counts
         elif getattr(self, 'given_pyramid', None) is not None:
             return self.given_pyramid
-        elif strat is None or strat.guessed.get('split') == ss.named.world.guess:
-            return ss.named.world.ages, ss.named.world.counts
+        elif strat is None or strat.guessed.get('split') == ss.data.world.guess:
+            return ss.data.world.ages, ss.data.world.counts
         return None
 
     def get_declared(self, name):
@@ -742,7 +742,7 @@ class Sim(ss.Base):
         if isinstance(pars.people, ss.People) and named is None and self.declared and pars.solver not in ['abm', 'auto']: # Their ages and number, not their agents
             dist = sc.dcp(pars.people.age.default)
             dist.init(force=True)
-            edges = ss.named.world.ages
+            edges = ss.data.world.ages
             counts = np.histogram(np.asarray(dist.rvs(100_000)), bins=np.append(edges, np.inf))[0]
             self.given_pyramid = (edges, counts)
             if 'total_pop' not in self.given:
@@ -1333,7 +1333,7 @@ class Sim(ss.Base):
                     elif strat.female is not None and 'p_female' not in kwargs: # A sex dimension is people.female, so its split is the share of women
                         kwargs['p_female'] = strat.split[strat.female]
             if 'age_data' not in kwargs: # Otherwise the ages are a named population's, or the world's, as a guess (as is the split of age groups that are not given one)
-                kwargs['age_data'] = ss.named.age_data(*self.pyramid())
+                kwargs['age_data'] = ss.data.to_age_data(*self.pyramid())
             people = ss.People(n_agents=n_agents, **kwargs)  # This just assigns UIDs and length
         elif self.solver == 'abm':
             self.groups.kept = {strat.name for strat in self.groups.strats if strat.kind != 'age' and strat.female is None and strat.attr in people.states} # People who come with a property keep it: it is binned into the levels, not drawn from the split
@@ -1569,10 +1569,10 @@ class Sim(ss.Base):
     def init_data(self, data=None):
         """ Initialize or add data to the sim """
         data = data if data is not None else self.data
-        if isinstance(data, ss.data):
+        if isinstance(data, ss.simdata):
             data = data.load(self)
         elif isinstance(data, (str, os.PathLike)):
-            data = ss.data(data).load(self)
+            data = ss.simdata(data).load(self)
         self.data = ss.results.validate_sim_data(data)
         if self.data is not None and ss.results.by_year(self.data):
             ss.note('the data has whole years (an integer year column), so each row is compared with the year it names: a flow summed over the year, a stock or ratio averaged over it', sim=self)

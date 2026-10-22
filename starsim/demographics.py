@@ -158,7 +158,7 @@ class Births(Demographics):
     """
     def __init__(self, pars=None, birth_rate=_, rel_birth=_, min_age=_, max_age=_, rate_units=_, metadata=None, **kwargs):
         if isinstance(birth_rate, str): # A named place: its UN crude birth rates, per 1,000
-            birth_rate = ss.named.rates(birth_rate, 'births')
+            birth_rate = ss.data.rates(birth_rate, 'births')
             rate_units = 1000 if rate_units is _ else rate_units
         super().__init__()
         self.define_pars(
@@ -231,7 +231,7 @@ class Births(Demographics):
 
         # The rate is per person, but the parents are women of reproductive age: the same number of births, from them
         ppl = sim.people
-        mothers = ss.fast._passes.women(ppl.auids, ppl.female.raw, ppl.age.raw, p.min_age, p.max_age).view(ss.uids)
+        mothers = ss.perflib._passes.women(ppl.auids, ppl.female.raw, ppl.age.raw, p.min_age, p.max_age).view(ss.uids)
         if not len(mothers):
             return ss.uids()
 
@@ -355,7 +355,7 @@ class Deaths(Demographics):
     """
     def __init__(self, pars=None, rel_death=_, death_rate=_, rate_units=_, metadata=None, lifetable=None, **kwargs):
         if isinstance(death_rate, str): # A named place: its UN death rates by year, sex, and age, per person
-            death_rate = ss.named.rates(death_rate, 'deaths')
+            death_rate = ss.data.rates(death_rate, 'deaths')
             rate_units = 1 if rate_units is _ else rate_units
         if lifetable is not None: # The death rate of each age band of each table, by year and sex, per person
             if death_rate is not _:

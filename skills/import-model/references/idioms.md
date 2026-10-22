@@ -29,7 +29,7 @@ What to write for the pieces that `ss.load()` lists as not translated (`ImportIn
 | A capacity (fewer than K in a state) | A comparison of counts in the rate: `I >> Q @ 0.01 * (Q.n < K)` |
 | A minimum stay before the other ways out apply | `after=` on each way out (`ss.Transition(E, I, rate=0.3, after=ss.days(10))`); `before=` for a way out that applies only during the stay (EMULSION's escape) |
 | A variable that is not a flow (odin's `update()` of a lag, a running maximum, a switch) | A module written as code keeps it in its `step()` (a connector with `self.peak = max(self.peak, I.n/N)`), and a function in the rate reads it (`lambda sim: np.exp(-5*sim.connectors.track.peak)`); agents only |
-| Groups (age, place, risk) | `dis.stratify(age=[0, 15, 65], split=..., adjust={'infection': [...]})`; places with `ss.geo.location(...)` and `ss.geo.Mobility(...)` |
+| Groups (age, place, risk) | `dis.stratify(age=[0, 15, 65], split=..., adjust={'infection': [...]})`; places with `ss.geo.geography(...)` and `ss.geo.Mobility(...)` |
 
 ## People coming and going
 

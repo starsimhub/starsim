@@ -302,14 +302,14 @@ class People:
 
         Note: `age_data` can also be provided as a string (interpreted as a filename).
 
-        If no value is provided, the ages are the world's (`ss.named.world`), as for a sim
+        If no value is provided, the ages are the world's (`ss.data.age('world')`), as for a sim
         with no named population.
 
         Returns:
             An [`ss.Dist`](`starsim.distributions.Dist`) instance that returns an age for newly created agents
         """
         if age_data is None:
-            age_data = ss.named.age_data(ss.named.world.ages, ss.named.world.counts)
+            age_data = ss.data.age('world')
         if isinstance(age_data, ss.Dist): # A distribution of ages, used as is
             dist = age_data
         else:
@@ -977,9 +977,9 @@ def people(place, year=None, n_agents=None, revision=None):
         sim = ss.Sim(sir, people=ss.people('Kenya', year=2024), networks=ss.contacts('Kenya'))
         ss.people('NG').named.total # The population of Nigeria in 2024
     """
-    ages, female, male, ref = ss.named.population(place, year=year, revision=revision)
+    ages, female, male, ref = ss.data.population(place, year=year, revision=revision)
     total = female + male
-    ppl = People(n_agents=sc.ifelse(n_agents, ss.SimPars().n_agents), age_data=ss.named.age_data(ages, total), p_female=female.sum()/total.sum())
+    ppl = People(n_agents=sc.ifelse(n_agents, ss.SimPars().n_agents), age_data=ss.data.to_age_data(ages, total), p_female=female.sum()/total.sum())
     ppl.named = sc.objdict(place=place, year=year, n_agents=n_agents, revision=revision, total=float(total.sum()), ages=ages, counts=total, ref=ref)
     return ppl
 

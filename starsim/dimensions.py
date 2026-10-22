@@ -6,7 +6,7 @@ import sciris as sc
 import starsim as ss
 from .expressions import as_expr, did_you_mean
 from .parameters import by
-from .geo import location, gravity, Mobility
+from .geo import geography, gravity, Mobility
 from .transitions import level_pair, parse_increment
 
 __all__ = ['Strat', 'Transfer', 'transfer', 'Groups']
@@ -26,9 +26,9 @@ class Strat:
     Args:
         name (str): the dimension, e.g. 'age'
         levels (list): bin edges (for a continuous property such as age) or labels
-        split (list): the share of the population in each level (if not given: from an `ss.geo.location`'s populations; for age groups, the world's ages; for a boolean dimension, everyone at the first level; otherwise equal)
+        split (list): the share of the population in each level (if not given: from an `ss.geo.geography`'s populations; for age groups, the world's ages; for a boolean dimension, everyone at the first level; otherwise equal)
         adjust (dict): multipliers on named transitions, one per level: on its rate (a duration is divided), or on its probability for a branch chosen with p=
-        kind (str): 'age', 'space', 'clock', or 'plain'; if not given, 'space' for an `ss.geo.location` or with `mobility=`, 'age' for a dimension called age, and otherwise 'plain'
+        kind (str): 'age', 'space', 'clock', or 'plain'; if not given, 'space' for an `ss.geo.geography` or with `mobility=`, 'age' for a dimension called age, and otherwise 'plain'
             (a strain dimension, kind 'strain', is made by `ss.Strains`: see `strains`)
         states (list): the names of the states it applies to (default: every state that is people)
         where (dict): the groups it applies to, as a dimension and a level (or list of levels), e.g. `dict(sex='female')`; people in other groups have no level of it (default: every group)
@@ -43,7 +43,7 @@ class Strat:
 
     def __init__(self, name, levels, split=None, adjust=None, kind=None, states=None, where=None, mobility=None):
         self.name = name
-        self.geo = levels if isinstance(levels, location) else None
+        self.geo = levels if isinstance(levels, geography) else None
         self.kind = kind or ('space' if (self.geo is not None or mobility is not None) else 'age' if name == 'age' else 'plain')
         self.guessed = sc.objdict()
         self.states = states
@@ -120,8 +120,8 @@ class Strat:
             split = self.at_none()
             self.guessed['split'] = 'everyone at none, since nobody has had the event yet'
         elif self.kind == 'age' and self.edges is not None: # As the people of a declared model, unless the sim has a named population
-            world = ss.named.world
-            split = ss.named.age_split(self.edges, world.ages, world.counts)
+            world = ss.data.world
+            split = ss.data.age_split(self.edges, world.ages, world.counts)
             self.guessed['split'] = world.guess
         elif all(isinstance(v, (bool, np.bool_)) for v in self.labels): # e.g. vaccinated=[False, True]
             split = self.first()
@@ -615,9 +615,9 @@ class Groups:
         named = getattr(sim, 'named_people', None)
         given = getattr(sim, 'given_pyramid', None)
         for strat in self.strats: # Age groups with no split of their own take that of a named population, or of the people given to a compartmental run
-            if (named is not None or given is not None) and strat.kind == 'age' and strat.edges is not None and strat.guessed.get('split') == ss.named.world.guess:
+            if (named is not None or given is not None) and strat.kind == 'age' and strat.edges is not None and strat.guessed.get('split') == ss.data.world.guess:
                 ages, counts = (named.ages, named.counts) if named is not None else given
-                strat.split = ss.named.age_split(strat.edges, ages, counts)
+                strat.split = ss.data.age_split(strat.edges, ages, counts)
                 strat.split_from = 'people'
                 strat.guessed.pop('split')
         pops = [strat for strat in self.strats if strat.geo is not None and strat.geo.pop is not None]

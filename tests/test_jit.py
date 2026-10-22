@@ -1,6 +1,6 @@
 """
 Test ss.jit: functions compiled by Numba or traced by JAX, a module's methods and a whole coded class compiled with the
-same results, what falls back to Python, and the draws compiled code can make (ss.fast)
+same results, what falls back to Python, and the draws compiled code can make (ss.perflib)
 """
 
 # %% Imports and settings
@@ -180,7 +180,7 @@ def test_class():
     assert r1.n_tested[-1] > 0 and s1.people.n_uids > s1.people.n_alive
     parts = {name:getattr(Compiled, name).plan.parts for name in ['step_state', 'set_prognoses', 'step_die', 'update_results']}
     for name, p in parts.items():
-        assert any(isinstance(x, ss.fast._jit.Segment) and not x.failed for x in p), f'{name}() has no compiled part'
+        assert any(isinstance(x, ss.perflib._jit.Segment) and not x.failed for x in p), f'{name}() has no compiled part'
     assert Compiled.step_die.plan.whole is not None # With self.clear_infection() compiled in
     assert Compiled.set_prognoses.plan.whole is None # Starsim's own super().set_prognoses() runs as Python, the rest is compiled
     return
@@ -188,14 +188,14 @@ def test_class():
 
 def test_fast_draws():
     sc.heading('Testing the draws compiled code can make: the same from Python and compiled, and the right distribution')
-    k = ss.fast.key(1, 2)
+    k = ss.perflib.key(1, 2)
     m = 200_000
-    u = ss.fast.uniform(k, np.arange(m))
+    u = ss.perflib.uniform(k, np.arange(m))
     assert u.min() > 0 and u.max() < 1 and abs(u.mean() - 0.5) < 0.005
-    compiled = ss.jit(lambda n, p, lam, k: (ss.fast.binomial(n, p, ss.fast.uniform(k, np.arange(n.size))), ss.fast.poisson(lam, ss.fast.uniform(k, np.arange(n.size)))))
+    compiled = ss.jit(lambda n, p, lam, k: (ss.perflib.binomial(n, p, ss.perflib.uniform(k, np.arange(n.size))), ss.perflib.poisson(lam, ss.perflib.uniform(k, np.arange(n.size)))))
     for n, p, lam in [(20, 0.3, 0.5), (10_000, 0.001, 8.0), (5000, 0.9, 400.0)]: # Inversion from 0, and from the mode
         ns, lams = np.full(m, n), np.full(m, lam)
-        b, q = ss.fast.binomial(ns, p, u), ss.fast.poisson(lams, u)
+        b, q = ss.perflib.binomial(ns, p, u), ss.perflib.poisson(lams, u)
         b2, q2 = compiled(ns, p, lams, k)
         assert np.array_equal(b, b2) and np.array_equal(q, q2)
         for x, mean, var in [(b, n*p, n*p*(1 - p)), (q, lam, lam)]:

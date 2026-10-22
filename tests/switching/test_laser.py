@@ -1,7 +1,7 @@
 """
 Switching demo for the LASER seat: 3.3M agents across 149 places with life tables and seeding.
 
-Passes when: within 2 to 3x of LASER threaded, at about 50 bytes per agent.
+Passes when: within 2 to 3x of LASER threaded, at about 55 bytes per agent.
 Blocked today by: N25.
 Scaled down to 100,000 and 400,000 agents over 149 synthetic places; speed and memory are compared per agent-step and per agent, which do not depend on the size.
 """
@@ -15,7 +15,7 @@ import starsim as ss
 
 ref_ns_per_agent_step = 1.1 # LASER on 20 threads, England and Wales within 150 km of Norwich (3.3M agents, 149 places); switching/laser.md, "The second week" §1
 ref_bytes_per_agent   = 30  # LASER's peak memory per agent; same section
-target_bytes          = 50  # The realistic target for v4 (int32 UIDs, int16 day timers, exit arrays only where needed); "The second week" §2
+target_bytes          = 55  # The realistic target for v4 (int16 day timers, exit arrays only where needed); "The second week" §2 said 50 with int32 UIDs, but UIDs stay int64 for speed (NumPy indexes 2-4x faster with them)
 n_places = 149
 
 
@@ -50,7 +50,7 @@ def make_sim(total, days=30, declared=False):
         name      = 'measles',
         **deaths,
     )
-    measles.stratify(patch=ss.geo.location(names=d.names, pop=d.popsize, distances=d.dist), mobility=ss.geo.Mobility(matrix=d.gravity, kind='force'))
+    measles.stratify(patch=ss.geo.geography(names=d.names, pop=d.popsize, distances=d.dist), mobility=ss.geo.Mobility(matrix=d.gravity, kind='force'))
     seeding = None
     if declared: # Three people seeded every 30 days; and age groups, for the life table as compartments
         measles.stratify(age=[0, 5, 15, 30, 50, 70])
@@ -86,7 +86,7 @@ def peak_memory(total, fresh=True):
     return peak
 
 
-# About 48 bytes per agent at the peak (81 before the groups were kept as 16-bit integers in the property itself, people.uid became the index with no array, and only the entry times something reads were kept): the People arrays (age, alive, female, the 32-bit auids, the 16-bit patch, ti_dead, and ti_removed), the disease's four states, the times of entering E and I and leaving them, and the scheduled exits, all with a fifth more room for births, and the temporaries of growing the arrays
+# About 51 bytes per agent at the peak (81 before the groups were kept as 16-bit integers in the property itself, people.uid became the index with no array, and only the entry times something reads were kept): the People arrays (age, alive, female, the 64-bit auids, the 16-bit patch, ti_dead, and ti_removed), the disease's four states, the times of entering E and I and leaving them, and the scheduled exits, all with a fifth more room for births, and the temporaries of growing the arrays
 def test_laser_memory():
     sc.heading('LASER: memory per agent')
     n1, n2 = 50_000, 200_000

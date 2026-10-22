@@ -42,9 +42,9 @@ def make_seasonal(data=None):
 def weekly_data():
     """ Weekly new infections from one run at the true value """
     dates = pd.date_range('2020-03-01', periods=13, freq='W')
-    truth = make_seasonal(data=ss.data(pd.DataFrame({'new_infections': 0.0}, index=dates))).run()
+    truth = make_seasonal(data=ss.simdata(pd.DataFrame({'new_infections': 0.0}, index=dates))).run()
     weekly = ss.results.compare(truth)['new_infections'][1]
-    return ss.data(pd.DataFrame({'new_infections': np.round(weekly)}, index=dates))
+    return ss.simdata(pd.DataFrame({'new_infections': np.round(weekly)}, index=dates))
 
 
 def test_epydemix_kenya():

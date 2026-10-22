@@ -41,7 +41,7 @@ Then, in Starsim, `sim = ss.load('model.json')`. The dump records the last `simu
 | Seasonality from a sine with a peak date | The array passed to the run is imported; by hand, `ss.seasonal(mean=(1 + smin)/2, amplitude=(1 - smin)/(1 + smin), peak=14/365)` | no |
 | Initial numbers drawn at random in each run | The recorded draw, fixed | no |
 | Scenarios (contacts higher from a date) | `ss.modify(dis.S_to_E, multiply=1.3, start='2020-06-01')` | no |
-| `ABCSampler` (ABC-SMC) | `ss.par(..., bounds=[...])`, `data=ss.data(...)`, `sim.calibrate()`: a point estimate, no posterior | no |
+| `ABCSampler` (ABC-SMC) | `ss.par(..., bounds=[...])`, `data=ss.simdata(...)`, `sim.calibrate()`: a point estimate, no posterior | no |
 
 ## What needs care
 
@@ -51,7 +51,7 @@ Then, in Starsim, `sim = ss.load('model.json')`. The dump records the last `simu
 - **Weeks end a day apart.** A Starsim flow summed weekly to a data date covers the week to the end of the day before (the date is the start of that day); epydemix's weeks end on Sunday. Sum the original's daily transitions to the same weeks before comparing.
 - **No posterior.** ABC-SMC is not implemented; the Starsim fit is a point estimate inside the original's posterior, and projections from one point can differ a lot from projections averaged over a posterior. Compare at fixed parameter values first; the calibration is a separate, looser check.
 - **Results by age group.** `res.n_I.select(age=0)` is the first group; select run by run in a multisim.
-- `ss.data()` wants a `str` path, not a `Path`.
+- `ss.simdata()` wants a `str` path, not a `Path`.
 
 ## Worked example
 

@@ -66,7 +66,7 @@ def test_fitted_mobility():
         infection = S >> I @ 0.4 * I
         cases = ss.outcome(infection, likelihood=ss.poisson())
         sir = ss.Disease(infection, I >> R @ ss.days(6), cases, init_n=dict(I=ss.by(patch=[20, 0])), name='sir')
-        sir.stratify(patch=ss.geo.location(names=['a', 'b']), mobility=ss.geo.Mobility(matrix=[[0, 1], [1, 0]], away=ss.par(away, bounds=[0.001, 0.3], name='away')))
+        sir.stratify(patch=ss.geo.geography(names=['a', 'b']), mobility=ss.geo.Mobility(matrix=[[0, 1], [1, 0]], away=ss.par(away, bounds=[0.001, 0.3], name='away')))
         return ss.Sim(sir, unit='day', start='2020-01-01', stop='2020-04-01', solver=solver, total_pop=20_000, data=data, verbose=0, rand_seed=3)
 
     # A restart with a new value works out the movement again, as a new sim does

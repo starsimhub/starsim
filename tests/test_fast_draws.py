@@ -1,5 +1,5 @@
 """
-Test the exact draws in starsim/fast/_draws.py against their distributions
+Test the exact draws in starsim/perflib/_draws.py against their distributions
 """
 
 # %% Imports and settings
@@ -10,7 +10,7 @@ import scipy.special as spec
 import scipy.stats as sps
 import starsim as ss
 
-D = ss.fast.draws
+D = ss.perflib.draws
 N = 200_000 # Draws for each distribution
 rng = np.random.default_rng(1)
 

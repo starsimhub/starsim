@@ -2213,7 +2213,7 @@ class Agents(Engine):
         edges = np.cumsum([np.zeros(n)] + hazards, axis=0)*np.divide(p_exit, total, out=np.zeros(n), where=total>0)
         crn = self.dists[f'exit_{state.name}'].crn_key() if same else None
         if crn is not None: # The usual case: each agent's draw is made in one compiled pass, as rvs() would make it, so only those who leave are listed
-            pos, which = ss.fast._passes.competing_exits(uids, self.sim.people.slot_raw(), *crn, p_exit[0], edges[:, 0])
+            pos, which = ss.perflib._passes.competing_exits(uids, self.sim.people.slot_raw(), *crn, p_exit[0], edges[:, 0])
             leaving = np.zeros(len(uids), dtype=bool)
             leaving[pos] = True
             for i,tr in enumerate(competing):

@@ -185,7 +185,7 @@ A reference to data is part of the model: not just a contact matrix, but which o
 ```python
 ss.people('Kenya', year=2024)                     # size, age structure, sex ratio; returns an ss.People
 ss.contacts('Kenya', source='prem2021')           # an age contact matrix; returns a set of ss.MixingPools (layer='home' for one setting)
-ss.geo.location('Kenya', level=1)                          # its counties: names, populations, centroids, distances, borders
+ss.geo.geography('Kenya', level=1)                          # its counties: names, populations, centroids, distances, borders
 ss.Sim(sir, data='weekly_cases.csv')              # observations, attached to results by column name
 ```
 
@@ -193,7 +193,7 @@ ss.Sim(sir, data='weekly_cases.csv')              # observations, attached to re
 sim = ss.Sim(sir, people=ss.people('Kenya', year=2024), networks=ss.contacts('Kenya', source='prem2021'))
 ```
 
-`ss.people`, `ss.contacts`, and `ss.geo.location` are lowercase because they are loaders: each looks up named data and returns the ordinary object. `ss.People(n_agents=10_000)` remains the class.
+`ss.people`, `ss.contacts`, and `ss.geo.geography` are lowercase because they are loaders: each looks up named data and returns the ordinary object. `ss.People(n_agents=10_000)` remains the class.
 
 A named population gives the sim its size and the split of an age stratification that does not have one of its own, so it serves a compartmental model as well as agents; it makes the model agent-based only if it is given `n_agents=`. Without `year=`, it is the population in the year the sim starts, if the sim has dates, and otherwise in the year of the data's revision.
 

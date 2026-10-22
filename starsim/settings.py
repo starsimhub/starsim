@@ -150,6 +150,9 @@ class Options(sc.objdict):
         optdesc.max_joint = 'The most compartments that the diseases tracked jointly in a compartmental run may take (their joint states times the groups of the other dimensions; see ss.solvers.Crossing): above it, solver="auto" runs agents, and a compartmental solver that was asked for stops before anything is made. 0 for no limit'
         options.max_joint = sc.parse_env('STARSIM_MAX_JOINT', 10_000, int) # 6,912 compartments (three diseases with Erlang stages, by four age groups) take about 2 GB over 400 steps
 
+        optdesc.keep_memory = 'If True (default), large arrays that a sim frees are kept by the process for reuse, rather than given back to the system, which makes sims with networks 15-30% faster, but the process keeps its peak memory until it ends (Linux only). Set False (before importing Starsim, via the environment variable) to give memory back as it is freed; ss.perflib.release_memory() gives back what is free now'
+        options.keep_memory = sc.parse_env('STARSIM_KEEP_MEMORY', True, bool)
+
         optdesc.jax_cache = 'The folder where JAX keeps what it compiles (e.g. for a posterior from NUTS), so that it need not compile it again in a later session; "" for none. Set before Starsim first uses JAX'
         options.jax_cache = sc.parse_env('STARSIM_JAX_CACHE', os.path.join(os.path.expanduser('~'), '.cache', 'starsim', 'jax'), str)
 

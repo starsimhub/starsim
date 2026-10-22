@@ -80,7 +80,7 @@ def make_tb():
 
 def make_towns(**kwargs):
     """ An SIR model in three towns, with nobody infected """
-    towns = ss.geo.location(names=['north', 'south', 'east'], pop=[50_000, 30_000, 20_000], x=[0, 0, 40], y=[0, 30, 0])
+    towns = ss.geo.geography(names=['north', 'south', 'east'], pop=[50_000, 30_000, 20_000], x=[0, 0, 40], y=[0, 30, 0])
     S, I, R = ss.states('S I R')
     sir = ss.Disease(
         infection = ss.Transition(S, I, rate=0.3 * I),
@@ -439,12 +439,12 @@ def test_space():
     text = sim.describe(output=True)
     assert 'patch (space): north, south, east' in text and "kind='force'" in text
 
-    # The kind of a dimension comes from its value, not its name: places are an ss.geo.location (or kind='space'), and a name such as region is noted
+    # The kind of a dimension comes from its value, not its name: places are an ss.geo.geography (or kind='space'), and a name such as region is noted
     def regions(levels):
         S, I, R = ss.states('S I R')
         sir = ss.Disease(infection=ss.Transition(S, I, rate=0.3 * I), recovery=ss.Transition(I, R, dur=10), init_n=dict(I=ss.by(region=[10, 0])), name='sir')
         return ss.Sim(sir.stratify(region=levels), total_pop=20_000, unit='day', stop=200, solver='ode', **kw).run()
-    plain, places = regions(['a', 'b']), regions(ss.geo.location(names=['a', 'b']))
+    plain, places = regions(['a', 'b']), regions(ss.geo.geography(names=['a', 'b']))
     assert np.all(plain.results.sir.infection.cum.by('region').values[-1] > 4000) # Its levels mix: a name says nothing of the kind
     assert places.results.sir.infection.cum.by('region').values[-1, 1] == 0 # Places are apart
 
@@ -508,7 +508,7 @@ def test_space():
     def commuters(away):
         S, I, R = ss.states('S I R')
         sir = ss.Disease(infection=ss.Transition(S, I, rate=0.3 * I), recovery=ss.Transition(I, R, dur=10), init_n=dict(I=ss.by(patch=[10, 0, 0])), name='sir')
-        return sir.stratify(patch=ss.geo.location(names=['a', 'b', 'c'], pop=[1e5, 1e5, 1e5], x=[0, 100, 200], y=[0, 0, 0]), mobility=ss.geo.Mobility(ss.geo.gravity(), away=away))
+        return sir.stratify(patch=ss.geo.geography(names=['a', 'b', 'c'], pop=[1e5, 1e5, 1e5], x=[0, 100, 200], y=[0, 0, 0]), mobility=ss.geo.Mobility(ss.geo.gravity(), away=away))
     pars = dict(total_pop=3e5, unit='day', stop=150, **kw)
     for solver in ['ode', 'binomial']:
         truth = ss.Sim(commuters(0.02), solver=solver, **pars).run().results.sir.infection
@@ -585,7 +585,7 @@ import numpy as np
 import starsim as ss
 S, I, R = ss.states(3)
 sir = ss.Disease(infection=S >> I @ 0.3*I, recovery=I >> R @ ss.days(10), init_prev=0.01, name='sir')
-towns = ss.geo.location(names=['a', 'b'], pop=[6000, 4000], x=[0, 10], y=[0, 0])
+towns = ss.geo.geography(names=['a', 'b'], pop=[6000, 4000], x=[0, 10], y=[0, 0])
 ss.Sim(sir.stratify(patch=towns, mobility=ss.geo.gravity()), networks=ss.contacts([[3, 1], [1, 2]], bands=[0, 18]), unit='day', stop=20, verbose=0).run()
 ss.Sim(sir, networks=ss.RandomNet(), n_agents=500, unit='day', stop=20, verbose=0).run()
 ss.Sim(ss.SIS(), stratify=dict(age=[0, 15, 65]), solver='ode', verbose=0).run()

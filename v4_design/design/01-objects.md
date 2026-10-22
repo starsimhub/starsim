@@ -187,7 +187,7 @@ ss.Sim(
     interventions = None,
     connectors    = None,
     analyzers     = None,
-    data      = None,            # a file, a dataframe, or ss.data(...), with columns named like results (09-results.md)
+    data      = None,            # a file, a dataframe, or ss.simdata(...), with columns named like results (09-results.md)
     pars      = None,            # parameter values by name (04-parameters.md)
     results   = None,            # the results to keep by group, e.g. ['n_I', 'cases']; the totals are always kept (09-results.md)
     label     = None,

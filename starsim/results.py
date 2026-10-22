@@ -1376,7 +1376,7 @@ def format_axes(ax, res, n_ticks=None, show_module=None):
 
 #%% Data, and how the results are lined up with it
 
-class data:
+class simdata:
     """
     Data to compare with a sim's results, matched by name: each column is named like the result it corresponds to
 
@@ -1387,7 +1387,7 @@ class data:
 
     Examples:
         ```python
-        data = ss.data('kenya_2020.csv', aliases=dict(cases='Reported Cases (weekly)', date='Week ending'), ignore_extra=True)
+        data = ss.simdata('kenya_2020.csv', aliases=dict(cases='Reported Cases (weekly)', date='Week ending'), ignore_extra=True)
         sim = ss.Sim(sir, data=data, start='2020-01-01', stop='2020-12-31')
         ```
     """
@@ -1400,7 +1400,7 @@ class data:
     def __repr__(self):
         source = repr(self.source) if isinstance(self.source, (str, os.PathLike)) else f'a {type(self.source).__name__} of {len(self.source)} rows'
         aliases = f', aliases={self.aliases}' if self.aliases else ''
-        return f'ss.data({source}{aliases}); data.load() gives the dataframe'
+        return f'ss.simdata({source}{aliases}); data.load() gives the dataframe'
 
     def load(self, sim=None):
         """ Load the data and rename the columns """
@@ -1436,7 +1436,7 @@ def validate_sim_data(data=None, die=None):
         # Try loading the data
         try:
             data = sc.dataframe(data) # Convert it to a dataframe
-            timecols = ss.data.time_cols # If a time column is supplied, use it as the index
+            timecols = ss.simdata.time_cols # If a time column is supplied, use it as the index
             found = False
             for timecol in timecols:
                 if timecol in data.cols:
@@ -1582,10 +1582,10 @@ def check_data(sim, df, die=False):
         if match_column(sim, col) is None:
             several = [mod.name for mod in sim.modules if name in mod.results and isinstance(mod.results[name], ss.Result)]
             if len(several) > 1: # The name of a result of more than one module
-                msg = f'the data column "{col}" could be the result {name} of any of {sc.strjoin(several)}; name the column after one of them, e.g. "{several[0]}.{name}", or rename it with ss.data(..., aliases=dict(...)).'
+                msg = f'the data column "{col}" could be the result {name} of any of {sc.strjoin(several)}; name the column after one of them, e.g. "{several[0]}.{name}", or rename it with ss.simdata(..., aliases=dict(...)).'
             else:
                 msg = (f'the data column "{col}" matches no result. The closest results are {ss.transitions.closest(col, [o.split(".")[-1] for o in options])}.\n'
-                       f"     Rename it with ss.data(..., aliases=dict(result='{col}')), or drop it with ss.data(..., ignore_extra=True).")
+                       f"     Rename it with ss.simdata(..., aliases=dict(result='{col}')), or drop it with ss.simdata(..., ignore_extra=True).")
             if die:
                 raise ss.errors.UnknownDataColumn(msg)
             ss.note(f'{msg[0].upper()}{msg[1:]} It is not compared with the results.', sim=sim)

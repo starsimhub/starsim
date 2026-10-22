@@ -166,8 +166,8 @@ sim = ss.Sim(sir, data='kenya_2020.csv', start='2020-01-01', stop='2020-12-31').
 sim.plot()
 ```
 
-- `data=` takes a file name, a data frame, or an `ss.data(...)` object (below). It has a time column (`date`, `year`, `t`, or `time`) and one column per data series, **named like the result it corresponds to** (`cases`, `deaths`, `prevalence`, or `cin.X` for the flow to one destination of a transition). With several modules, a column is matched to the one module that has a result of that name, or is written `sir.cases` when the name is ambiguous. This works the same for modules written as code (Starsim 3's diseases among them), so it is a way into fitting for a Starsim 3 model.
-- A column that matches no result is noted when the sim is initialized, with the result names closest to it, since data on a sim can be just for plotting (or read by a fit's own `gof=`); when a fit compares every column with its result, it is an error (`UnknownDataColumn`), so a typo in a header is caught. `ss.data(..., ignore_extra=True)` drops such columns. Data entirely outside the simulated period raises `DataMisaligned` when it is compared with the results (by `sim.calibrate()`, for instance); data partly outside is used where it overlaps.
+- `data=` takes a file name, a data frame, or an `ss.simdata(...)` object (below). It has a time column (`date`, `year`, `t`, or `time`) and one column per data series, **named like the result it corresponds to** (`cases`, `deaths`, `prevalence`, or `cin.X` for the flow to one destination of a transition). With several modules, a column is matched to the one module that has a result of that name, or is written `sir.cases` when the name is ambiguous. This works the same for modules written as code (Starsim 3's diseases among them), so it is a way into fitting for a Starsim 3 model.
+- A column that matches no result is noted when the sim is initialized, with the result names closest to it, since data on a sim can be just for plotting (or read by a fit's own `gof=`); when a fit compares every column with its result, it is an error (`UnknownDataColumn`), so a typo in a header is caught. `ss.simdata(..., ignore_extra=True)` drops such columns. Data entirely outside the simulated period raises `DataMisaligned` when it is compared with the results (by `sim.calibrate()`, for instance); data partly outside is used where it overlaps.
 - Data for particular strata is given in long form: extra columns named after dimensions (`age`, `patch`) say which stratum each row belongs to, by the level's label (or position). Each result and stratum is then one data series, named like `cases[age=0-14]` and compared with `cases.select(age='0-14')`; a likelihood or weight given for `cases` applies to every stratum of it.
 - For a disease whose strains have courses of their own, a strain's own result is its column (`hpv16.cancer`), and in long form a column named after the strains (`strain`, or the name given to `ss.Strains`) gives it: `cancer` in a row for `strain=hpv16` is `hpv16.cancer`. `hpv.cancer[strain=hpv16]` is an error naming `hpv16.cancer`.
 - The data need not be on the model's time step. A flow (weekly reported cases) is compared with the model's flow summed over each data interval; a stock or ratio (a prevalence survey) is compared with the model's value at the data's time. The result already knows which it is. The interval assumed for flow data is the spacing of the data. Data by calendar year, an integer `year` column (as in UNAIDS-style data and `res.resample('year')`), is the year each row names, not 1 January of it: a flow is summed over the year and a stock or ratio averaged over it, with a note; only whole years inside the run are compared. A result of a module with a timestep of its own is compared on that module's timeline.
@@ -178,7 +178,7 @@ Real files rarely arrive with matching headers, so `ss.data` renames on the way 
 
 <!-- fragment -->
 ```python
-ss.data(
+ss.simdata(
     source,                 # a file name or a data frame
     aliases      = None,    # dict of result (or time-column) name -> the column that holds it
     ignore_extra = False,   # True: drop columns that match no result instead of raising
@@ -186,7 +186,7 @@ ss.data(
 ```
 
 ```python
-data = ss.data('kenya_moh_2020.csv', aliases=dict(cases='Reported Cases (weekly)', date='Week ending'), ignore_extra=True)
+data = ss.simdata('kenya_moh_2020.csv', aliases=dict(cases='Reported Cases (weekly)', date='Week ending'), ignore_extra=True)
 sim  = ss.Sim(sir, data=data, start='2020-01-01', stop='2020-12-31')
 ```
 

@@ -278,14 +278,14 @@ class Network(Route):
         if not len(self):
             return out
         edges = self.edges
-        found = ss.fast._passes.candidates(edges.p1, edges.p2, rel_trans, rel_sus, two_way=not self.one_way) # Mother-to-child networks transmit one way
+        found = ss.perflib._passes.candidates(edges.p1, edges.p2, rel_trans, rel_sus, two_way=not self.one_way) # Mother-to-child networks transmit one way
         for d,inds in enumerate(found):
             src, trg = [ends[inds] for ends in self.ends(d)]
             beta = edge_beta(d, inds, src, trg)
             if beta is None:
                 continue
             beta = np.asarray(beta, dtype=ss_float) if np.ndim(beta) == 0 else beta # One value for all edges
-            can = ss.fast._passes.can_transmit(src, trg, rel_trans, rel_sus, beta) # Of those, the ones with a chance above 0, exactly as over every edge
+            can = ss.perflib._passes.can_transmit(src, trg, rel_trans, rel_sus, beta) # Of those, the ones with a chance above 0, exactly as over every edge
             if len(can) < len(inds):
                 inds, src, trg = inds[can], src[can], trg[can]
                 beta = beta[can] if np.ndim(beta) else beta
@@ -651,16 +651,16 @@ class Network(Route):
         n = len(self.sim.people.alive.raw) if self.initialized else max(np.max(p1, initial=-1), np.max(p2, initial=-1)) + 1 # Every UID in the network
         is_removed = np.zeros(max(n, np.max(uids, initial=-1) + 1), dtype=bool) # A lookup table of the UIDs to remove (much faster than np.isin() for many edges)
         is_removed[uids] = True
-        self.drop_edges(*ss.fast._passes.touching(p1, p2, is_removed)) # Remove edges where either partner is being removed
+        self.drop_edges(*ss.perflib._passes.touching(p1, p2, is_removed)) # Remove edges where either partner is being removed
         return
 
     def drop_edges(self, k, gone):
-        """ Remove the `k` edges at the indices `gone` (in order; all edges if `k` is the number of edges), as `ss.fast._passes.ending()` gives them; not for the user """
+        """ Remove the `k` edges at the indices `gone` (in order; all edges if `k` is the number of edges), as `ss.perflib._passes.ending()` gives them; not for the user """
         if not k:
             return
         for key in self.meta_keys():
             arr = self.edges[key]
-            self.edges[key] = arr[:0] if k == len(arr) else ss.fast._passes.compress(arr, gone).view(type(arr))
+            self.edges[key] = arr[:0] if k == len(arr) else ss.perflib._passes.compress(arr, gone).view(type(arr))
         return
 
     def net_beta(self, disease_beta=None, inds=None, disease=None):
@@ -702,7 +702,7 @@ class DynamicNetwork(Network):
     def end_pairs(self):
         """ Remove partnerships whose duration has expired or whose members have died. """
         n = len(self)
-        k, gone = ss.fast._passes.ending(self.edges.dur, self.edges.p1, self.edges.p2, self.sim.people.alive.raw) # Those with no steps left after this one, or a partner not alive
+        k, gone = ss.perflib._passes.ending(self.edges.dur, self.edges.p1, self.edges.p2, self.sim.people.alive.raw) # Those with no steps left after this one, or a partner not alive
         self.drop_edges(k, gone)
         if k < n:
             self.edges.dur = self.edges.dur - 1 # dur is stored in units of self.t.dt (timesteps), so decrement by 1 per step
@@ -827,7 +827,7 @@ class RandomNet(DynamicNetwork):
         nc = np.asarray(n_contacts)
         by_agent = self.pars.method == 'uniform' or nc.size <= 1 or (nc == nc.flat[0]).all() # With the same number of stubs each, the owner of a stub drawn at random is an agent drawn at random
         seed = self.dist.rng.integers(2**62) # The key of this step's uniforms, one for each edge (from a counter, so a large network can be made by several threads)
-        source, target = ss.fast._passes.random_edges(inds, nc, seed, by_agent) # A random target stub for each source stub; sampling stubs rather than agents keeps selection probability proportional to n_contacts
+        source, target = ss.perflib._passes.random_edges(inds, nc, seed, by_agent) # A random target stub for each source stub; sampling stubs rather than agents keeps selection probability proportional to n_contacts
         source, target = source.view(ss.uids), target.view(ss.uids)
         self.dist.jump() # Reset the RNG manually, as in shuffle_edges()
         return source, target
@@ -1393,7 +1393,7 @@ class SexualNet(DegreeTargets, DynamicNetwork):
     def set_network_states(self):
         """ Draw the age of debut of anyone who has none (newborns, and people who arrive at any age), and whether each person takes part, when they reach their debut """
         people = self.sim.people
-        debuts = lambda reached: ss.fast._passes.debuts(people.auids, people.alive.raw, self.decided.raw, people.age.raw, self.debut.raw, reached).view(ss.uids)
+        debuts = lambda reached: ss.perflib._passes.debuts(people.auids, people.alive.raw, self.decided.raw, people.age.raw, self.debut.raw, reached).view(ss.uids)
         uids = debuts(False) # Alive, with no debut age
         self.debut[uids] = self.pars.debut.rvs(uids)
         uids = debuts(True) # Alive, at least their debut age, and not decided
@@ -2074,7 +2074,7 @@ def contacts(matrix=None, bands=None, name=None, source='prem2021', layer='all',
     kwargs = dict(dims)
     ref = None
     if isinstance(matrix, str): # A country's matrix, from starsim_data
-        matrix, bands, ref = ss.named.contact_matrix(matrix, source=source, layer=layer)
+        matrix, bands, ref = ss.data.contacts(matrix, source=source, layer=layer)
     elif matrix is None:
         errormsg = 'ss.contacts() needs a matrix: a country (ss.contacts("Kenya")), a matrix with its age groups (ss.contacts(matrix, bands=[...])), or a matrix for each stratification (ss.contacts(age=...))'
         raise ValueError(errormsg)
