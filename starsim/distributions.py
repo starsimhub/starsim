@@ -680,10 +680,10 @@ class Dist:
         Automatically jump on the next value of dt
 
         Args:
-            ti (int): if specified, jump to this timestep (default: current module timestep plus one)
+            ti (int): if specified, jump to this timestep (default: the module's current one)
         """
         if ti is None:
-            ti = self.module.t.ti + 1
+            ti = self.module.t.ti
         to = self.dt_jump_size*ti
         return self.jump(to=to, force=force)
 
@@ -1347,8 +1347,8 @@ class random(Dist):
     """ Random distribution, with values on the interval (0, 1) """
     valid_pars = ['dtype']
     scaling = scale_types.false # Always (0,1), can't be scaled
-    def __init__(self, **kwargs):
-        super().__init__(distname='random', dtype=ss.dtypes.float, **kwargs)
+    def __init__(self, dtype=None, **kwargs):
+        super().__init__(distname='random', dtype=ss.dtypes.float if dtype is None else dtype, **kwargs)
         return
 
     def ppf(self, rands):
@@ -2191,6 +2191,7 @@ class histogram(Dist):
         dist = sps.rv_histogram((values, bins), density=density) # Create the SciPy distribution
         super().__init__(dist=dist, distname='histogram', **kwargs)
         self.cdf_bins = (dist._hcdf, dist._hbins) # For ppf()
+        self.hist = (values, bins, density) # As given (not in pars, which SciPy would read): for copies, see ss.transitions.numeric_dist()
         # Leave _use_ppf as None (the default) so UID draws go through the hash-based
         # CRN path: one uniform per slot mapped through the SciPy histogram's inverse
         # CDF (self.dist.ppf). This is CRN-safe and draws exactly len(uids) numbers,

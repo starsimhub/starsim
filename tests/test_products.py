@@ -102,7 +102,7 @@ def test_test_diseases():
             return seen[combine]
         r = sim.results
         k = int(np.flatnonzero(r.prog.delivered)[0])
-        n = {g:np.array([r[g][f'n_{x}'][k] for x in ['S', 'I', 'CIN', 'CA']]) for g in ['hpv16', 'hpv18']}
+        n = {g:np.array([r[g][f'n_{x}'][k-1] for x in ['S', 'I', 'CIN', 'CA']]) for g in ['hpv16', 'hpv18']} # At the start of the step it was delivered in
         N = n['hpv16'].sum()
         p = 0.0
         for x in range(4):
@@ -161,7 +161,7 @@ def test_outcomes():
         p = np.array([[sum(table[res].get(x, 0) for res in list(table)[j:]) for j in range(3)] for x in ['S', 'I', 'CIN', 'CA']])
         miss = 1.0
         for g in ['hpv16', 'hpv18']:
-            n = np.array([r[g][f'n_{x}'][k] for x in ['S', 'I', 'CIN', 'CA']])
+            n = np.array([r[g][f'n_{x}'][k-1] for x in ['S', 'I', 'CIN', 'CA']]) # At the start of the step it was delivered in
             N = n.sum()
             miss = miss*(1 - n/N @ p)
         tails = np.concatenate([[1], 1 - miss, [0]])
@@ -222,7 +222,7 @@ def test_any():
         k = int(np.flatnonzero(r.prog.delivered)[0])
         exp = seen
         if solver == 'ode': # Independent genotypes: from the marginals
-            f = {x:[r[g][f'n_{x}'][k]/10_000 for g in ['hpv16', 'hpv18']] for x in ['CIN', 'CA']}
+            f = {x:[r[g][f'n_{x}'][k-1]/10_000 for g in ['hpv16', 'hpv18']] for x in ['CIN', 'CA']} # At the start of the step it was delivered in
             no_ca = np.prod([1 - p for p in f['CA']])
             exp = sc.objdict(eligible=10_000*no_ca, found=0.9*10_000*(no_ca - np.prod([1 - a - b for a,b in zip(f['CA'], f['CIN'])])))
         assert np.isclose(r.prog.eligible[k], exp.eligible) and np.isclose(r.prog.positive[k], exp.found, rtol=1e-6 if solver == 'ode' else 0.05), solver
@@ -255,25 +255,24 @@ def test_result_none():
 
 
 def test_strain_efficacy():
-    sc.heading('Testing an efficacy by a strain that susceptibles do not carry: an error, pointing to efficacy by disease')
+    sc.heading('Testing an efficacy by strain: against acquiring each strain, as agents and compartments; and against transmission by the strain carried')
     def make(eff, **kwargs):
         S, I = ss.states('S I')
-        hpv = ss.Disease(infection=ss.Transition(S, I, rate=ss.peryear(1.2) * I), clearance=I >> S @ ss.years(1), init_prev=0.1, name='hpv')
-        hpv.stratify(genotype=['hpv16', 'hpv18'], kind='strain') # In v4 a name only suggests a kind
+        hpv = ss.Disease(infection=ss.Transition(S, I, rate=ss.peryear(1.2) * I), clearance=I >> S @ ss.years(1), init_prev=0.1, name='hpv', strains=ss.Strains(['hpv16', 'hpv18'], name='genotype'))
         return ss.Sim(hpv, interventions=ss.vaccinate(ss.Vaccine(efficacy=eff), at=[2005]), **kwargs)
     for solver in ['abm', 'ode']:
-        with pytest.raises(ss.errors.InvalidAdjustment, match='"genotype", but people in S of "hpv" have no level of it.*efficacy=dict.hpv16=0.95'):
-            make(ss.by(genotype=[0.95, 0.0]), solver=solver, **kw).init()
+        res = [make(eff, solver=solver, **kw).run().results.hpv.infection.by('genotype').values[-1] for eff in [0.0, ss.by(genotype=[0.95, 0.0])]]
+        assert res[1][0] < 0.5*res[0][0] and res[1][1] > 0.9*res[0][1], f'{solver}: {res}' # Against hpv16 only
     sim = make(dict(transmission=ss.by(genotype=[0.5, 0.0])), solver='abm', **kw).run() # Infectious people do carry a genotype
     assert sim.results.vaccinate.delivered.sum() > 0
     return sim
 
 
 def test_disease_list():
-    sc.heading('Testing disease= as a list or an ss.Strains (HP7, agents only): a bivalent vaccine, a test and a cure of each, and their counts')
+    sc.heading('Testing disease= as a list or strains with courses of their own (HP7, agents only): a bivalent vaccine, a test and a cure of each, and their counts')
     def make(dis=None, vx=True, **kwargs):
         g16, g18 = make_geno('hpv16'), make_geno('hpv18')
-        given = ss.Strains('hpv', [g16, g18]) if dis == 'strains' else [g16, g18]
+        given = ss.Disease(name='hpv', strains=ss.Strains([g16, g18])) if dis == 'strains' else [g16, g18]
         ivs = [ss.vaccinate(ss.Vaccine(efficacy=0.95 if vx else 0.0), coverage=0.8, at=[2001], disease=given, name='vx')]
         if kwargs.get('solver') == 'abm':
             dna = ss.screen(ss.Diagnostic(sensitivity=0.9, specificity=1.0), coverage=0.5, at=[2005], disease=given, name='dna')
@@ -391,8 +390,8 @@ def test_own_product():
     sim = run_abm(make)
     r = sim.results
     assert r.screening.delivered.sum() > 0 and r.screening.positive.sum() > 0
-    assert np.array_equal(r.reached.swabbed[1:], r.screening.delivered[:-1]) # An analyzer reads the step just taken
-    assert np.array_equal(r.reached.positive[1:], r.screening.positive[:-1])
+    assert np.array_equal(r.reached.swabbed, r.screening.delivered) # An analyzer reads the step just taken, at the same index
+    assert np.array_equal(r.reached.positive, r.screening.positive)
     assert np.array_equal(r.treatment.cured, r.screening.positive) # Every one found is treated, and cured
     with pytest.raises(AttributeError):
         sim.interventions.screening.reached('negative')

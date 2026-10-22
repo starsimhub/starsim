@@ -687,9 +687,11 @@ class Crossing:
             return ss.kernels if self.compiled else ss.kernels.uncompiled()
         sim = self.sim
         if self.program is None: # Before the program is made (the events of a register at the start), as the kernels are now
-            return ss.kernels.choose(verbose=False)
+            return ss.kernels.choose()
         solver = ss.kernels.solvers[sim.integrator if sim.solver == 'ode' else sim.solver]
-        kn = ss.kernels.choose(runs*ss.kernels.plain_seconds(self.program, self.y, self.engines[0].mod.t.npts, solver), verbose=sim.pars.get('verbose', 0))
+        first = self.engines[0]
+        n_sub = ss.kernels.substeps(np.append(self.program.fixed[self.program.src >= 0], self.program.mov_rate), first.dt, first.substeps(), solver) # The rates of the step last refreshed
+        kn = ss.kernels.choose(runs*ss.kernels.plain_seconds(self.program, self.y, first.mod.t.npts, solver, n_sub))
         if runs == 1:
             self.compiled = kn is ss.kernels
         return kn
@@ -752,7 +754,7 @@ class Crossing:
         kn = self.kernels()
         self.y, flows = kn.one_step(self.rng, self.y, p, first.dt, ss.kernels.solvers[solver], first.substeps(), tables, row)
         if sim.mixing.register is not None: # The events dated at the end of the step
-            sim.get_declared(self.lead).engine.check_short(kn.apply_events(self.rng, self.y, self.register, first.mod.ti + 1, first.integer))
+            sim.get_declared(self.lead).engine.check_short(kn.apply_events(self.rng, self.y, self.register, first.mod.ti, first.integer))
         if solver == 'gillespie' and p.local and p.has_det: # By place, the counts are settled after the events, as in SimInf
             kn.settle_places(self.y, p, first.dt, flows)
         recorded = []

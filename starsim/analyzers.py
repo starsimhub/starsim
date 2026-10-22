@@ -17,8 +17,9 @@ class Analyzer(ss.Module):
     out of sim.people on a particular timestep before they get updated on the next step.
 
     The key method of the analyzer is `step()`, which is called at each time point:
-    after each step, with `self.ti` the end of the step (where its results go), and
-    at the first time point (`self.ti == 0`), before any step, to record the start.
+    at the end of each step, once its results are recorded (with `self.ti` the step's,
+    as in every module), and at the first time point (`self.ti == 0`), before any step,
+    to record the start.
     """
     pass
 

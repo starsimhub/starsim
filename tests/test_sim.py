@@ -41,6 +41,7 @@ def test_capabilities_two_modules():
         catch = ss.Transition(S, I, rate=ss.peryear(0.1))
     class B(ss.Disease):
         X, Y = ss.states('X Y')
+        first = 'X'
         h = ss.par(None)
         go = ss.Transition(X, Y, rate=h)
         def __init__(self, **kwargs):
@@ -207,8 +208,12 @@ def test_complex_api():
     s1 = ss.Sim(pars1).run()
     s2 = ss.Sim(pars=pars2, networks=networks, diseases=diseases, demographics=demographics, interventions=interventions).run()
     assert ss.debugtools.check_sims_match(s1, s2), 'Sims should match'
-    with pytest.raises(ValueError): # verbose is 0, 1, or 2; Starsim 3's fraction of steps is now verbose=1
-        ss.Sim(n_agents=100, verbose=0.1).init()
+    with sc.capture() as out: # A fraction, as in Starsim 3: progress every quarter of the run
+        ss.Sim(n_agents=100, start=2000, stop=2020, verbose=0.25).run()
+    assert out.count('Running') == 4, out
+    with pytest.raises(ValueError):
+        ss.Sim(n_agents=100, verbose=-1).init()
+    assert len(ss.Sim(n_agents=100, networks=[['random', 'sexual'], 'maternal'], verbose=0).init().networks) == 3 # One level of nested lists, e.g. from a helper that returns several modules
 
     return s1
 
@@ -365,7 +370,7 @@ def test_update_pars():
     sir = ssl.AgentSIR(init_prev=0.05, dur_inf=6, p_death=0)
     assert isinstance(sir.pars.init_prev, ss.bernoulli) and sir.pars.init_prev.pars.p == 0.05 # A probability
     assert isinstance(sir.pars.dur_inf, ss.lognorm_ex) and sir.pars.dur_inf.pars.mean == ss.years(6) # Its mean, in the unit of the default
-    assert isinstance(ss.SexualNet(dur=ss.days(15)).pars.dur, ss.lognorm_ex) and isinstance(ss.SexualNet(dur=ss.constant(ss.days(15))).pars.dur, ss.constant) # A fixed value is a constant
+    assert isinstance(ss.SexualNet(dur=ss.days(15)).pars.dur, ss.expon) and isinstance(ss.SexualNet(dur=ss.constant(ss.days(15))).pars.dur, ss.constant) # A single duration on a network of partnerships is a mean, ending at a constant rate; a fixed value is a constant
     assert isinstance(ss.RandomNet(n_contacts=dict(type='poisson', lam=4)).pars.n_contacts, ss.poisson) # A distribution given by its type
     for value in [[6, 2], dict(mean=6)]: # The distribution's arguments, or values? Neither: use its own method
         with pytest.raises(TypeError, match='set'):
@@ -373,6 +378,14 @@ def test_update_pars():
     sir.pars.dur_inf = ss.lognorm_ex(mean=ss.years(6), std=ss.years(1))
     sir.pars.dur_inf.set(mean=8) # Keeps the standard deviation, and the unit
     assert sir.pars.dur_inf.pars.mean == ss.years(8) and sir.pars.dur_inf.pars.std == ss.years(1)
+
+    # A sim parameter set before init() is kept, as if given (e.g. by a subclass of ss.Sim, as STIsim's does)
+    sim = ss.Sim(n_agents=100, start=2000, stop=2002, verbose=0)
+    sim.pars.use_aging = True
+    sim.init()
+    age0 = sim.people.age.raw[:100].copy()
+    sim.run()
+    assert sim.pars.use_aging and np.allclose(sim.people.age.raw[:100] - age0, 2)
     return
 
 
@@ -441,7 +454,7 @@ def test_rescale():
     rescaled = make_sim(init_inf=20, rescale=True).run()
     scale = rescaled.results.pop_scale
     assert scale[0] == 1 and scale[-1] == 10 # Scale starts at 1 and ends at pop_scale
-    assert make_sim(init_inf=20, rescale=True)._current_scale == 1 # Available before the sim is initialized
+    assert make_sim(init_inf=20, rescale=True).current_scale == 1 # Available before the sim is initialized
     cum_fixed = fixed.results.sir.cum_infections[-1]
     cum_rescaled = rescaled.results.sir.cum_infections[-1]
     assert abs(cum_rescaled/cum_fixed - 1) < 0.1 # Rescaling gives about the same epidemic

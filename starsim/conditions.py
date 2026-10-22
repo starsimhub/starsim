@@ -513,6 +513,19 @@ def evaluate(obj, ctx):
     return obj
 
 
+def person_cond(expr):
+    """ Arithmetic on people's properties and states as a condition, which gives each person's value (1 or 0 for a state) """
+    if isinstance(expr, ss.expressions.BinOp) and expr.op in ops:
+        return Cond(expr.op, person_cond(expr.a), person_cond(expr.b))
+    elif isinstance(expr, ss.expressions.Prop):
+        return expr.cond
+    elif isinstance(expr, ss.State):
+        return as_cond(expr)
+    elif isinstance(expr, ss.expressions.par) and expr.literal and sc.isnumber(expr.raw):
+        return expr.raw
+    return expr
+
+
 def as_bool(val):
     """ A stratification on its own is a condition: true for every level but the first (so for True, of False and True) """
     val = np.asarray(val)
@@ -854,7 +867,7 @@ class Selector:
         name = tr.name
         res = mod.results
         strata = lambda key: np.asarray(res[key].strata if res[key].strata is not None else np.asarray(res[key].values)[:, None]) # By group
-        ti = min(sim.ti, len(res[name]) - 1) # The last time point with results
+        ti = min(max(sim.ti - 1, 0), len(res[name]) - 1) # The last time point with results: that of the step before this one
         steps = 1 if over is None else ss.connectors.to_steps(sim, over)
         flows = strata(name)[max(ti - steps + 1, 0):ti + 1].sum(axis=0)
         people = sum(strata(f'n_{key}')[ti] for key,state in mod.graph.states.items() if state.people)
@@ -1054,6 +1067,11 @@ class Selector:
     def per_person(self, val, convert=None):
         """ A value (a number, `ss.by`, or a function of the sim) as a scalar or one value per agent or per group """
         sim = self.sim
+        if isinstance(val, ss.transitions.Expr) and any(isinstance(leaf, (ss.State, ss.expressions.Prop)) for leaf in val.leaves): # Of people's properties or states (of any module), read for each person as where= reads them, e.g. multiply=1 - 0.9*meth.on
+            val = person_cond(val)
+        if isinstance(val, Cond): # E.g. multiply=ss.ppl.age/50
+            val = val.eval(self)
+            val = val.astype(float) if isinstance(val, np.ndarray) and val.dtype == bool else val
         if isinstance(val, ss.transitions.Expr) and self.mod is not None: # A parameter (e.g. one that is fitted), or an expression of parameters
             val = self.expr(val) if ss.expressions.clocks_in(val) else self.mod.engine.eval(val) # One that reads a clock has a value for each agent
         if isinstance(val, ss.by):

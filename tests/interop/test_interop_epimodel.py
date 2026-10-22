@@ -72,7 +72,7 @@ def test_epimodel_dcm():
         departure_S = S >> ss.null @ ds_rate,
         departure_I = I >> ss.null @ di_rate,
         departure_R = R >> ss.null @ dr_rate,
-        init = dict(S=1000, I=1), name='sir',
+        init_n = dict(S=1000, I=1), name='sir',
     )
     ref = ss.Sim(dis, solver='ode', total_pop=1001, unit='day', dt=ss.days(0.5), start=0, stop=499, verbose=0).run()
     for k in 'SIR':

@@ -45,6 +45,20 @@ def infer_rate_units(units, rates, name):
     return units
 
 
+def rate_rows(data):
+    """
+    Rates by year (or year and sex), and by age, as NumPy, so that no step reads a dataframe
+
+    Returns a dict of the rows (a number, or an array by age) by the index of each row, e.g. (2010, 'f'), the
+    years, and the ages (the columns, if any); None if the rates are not a dataframe or series
+    """
+    if not isinstance(data, (pd.Series, pd.DataFrame)):
+        return None
+    years = np.unique(data.index.get_level_values('year') if 'year' in data.index.names else data.index)
+    ages = data.columns.to_numpy(dtype=float) if isinstance(data, pd.DataFrame) else None
+    return dict(zip(data.index, data.to_numpy(dtype=float))), years, ages
+
+
 def period_year(years, year):
     """
     The year of the data that applies at `year`: the latest at or before it, as `ss.timeseries` holds each value until the next
@@ -166,6 +180,7 @@ class Births(Demographics):
         # Process data, which may be provided as a number, dict, dataframe, or series, or a named place (its UN rates)
         # If it's a number it's left as-is; otherwise it's converted to a dataframe
         self.pars.birth_rate = self.standardize_birth_data()
+        self.birth_rows = rate_rows(self.pars.birth_rate)
         self.pars.rate_units = infer_rate_units(self.pars.rate_units, self.pars.birth_rate, 'birth_rate')
         self.n_births_this_step = 0 # For results tracking
         self.dist = ss.bernoulli(p=0) # Per-agent birth draw (CRN path); set to the birth rate each step
@@ -203,8 +218,9 @@ class Births(Demographics):
         sim = self.sim
         p = self.pars
 
-        if isinstance(p.birth_rate, (pd.Series, pd.DataFrame)):
-            this_birth_rate = p.birth_rate.loc[period_year(p.birth_rate.index, sim.t.now('year'))] * p.rate_units * p.rel_birth
+        if self.birth_rows is not None:
+            rows, years, _ = self.birth_rows
+            this_birth_rate = rows[period_year(years, sim.t.now('year'))] * p.rate_units * p.rel_birth
         else:
             this_birth_rate = p.birth_rate
             if isinstance(this_birth_rate, ss.Rate):
@@ -369,6 +385,7 @@ class Deaths(Demographics):
         # Process data, which may be provided as a number, dict, dataframe, or series, or a named place (its UN rates)
         # If it's a number it's left as-is; otherwise it's converted to a dataframe
         self.death_rate_data = self.standardize_death_data() # TODO: refactor
+        self.death_rows = rate_rows(self.death_rate_data)
         self.pars.rate_units = infer_rate_units(self.pars.rate_units, self.death_rate_data, 'death_rate')
         self._p_death = ss.bernoulli(p=0)  # Placeholder, populated by make_p_death
         self.n_deaths = 0 # For results tracking
@@ -409,21 +426,19 @@ class Deaths(Demographics):
             ppl = sim.people
             uids = ppl.auids  # Get the UIDs of all alive people
 
-            nearest_year = period_year(drd.index.get_level_values('year'), sim.t.now('year')) # Each period's rate holds until the next
+            rows, years, ages = self.death_rows
+            nearest_year = period_year(years, sim.t.now('year')) # Each period's rate holds until the next
 
             death_rate = np.empty(uids.shape, dtype=ss_float)
 
-            if 'sex' in drd.index.names:
-                s = drd.loc[nearest_year, 'f']
-                binned_ages = np.digitize(ppl.age[ppl.female], s.index)-1 # Negative ages will be in the first bin - do *not* subtract 1 so that this bin is 0
-                death_rate[ppl.female] = s.values[binned_ages]
-                s = drd.loc[nearest_year, 'm']
-                binned_ages = np.digitize(ppl.age[ppl.male], s.index)-1 # Negative ages will be in the first bin - do *not* subtract 1 so that this bin is 0
-                death_rate[ppl.male] = s.values[binned_ages]
+            if (nearest_year, 'f') in rows:
+                binned_ages = np.digitize(ppl.age[ppl.female], ages)-1 # Negative ages will be in the first bin - do *not* subtract 1 so that this bin is 0
+                death_rate[ppl.female] = rows[nearest_year, 'f'][binned_ages]
+                binned_ages = np.digitize(ppl.age[ppl.male], ages)-1 # Negative ages will be in the first bin - do *not* subtract 1 so that this bin is 0
+                death_rate[ppl.male] = rows[nearest_year, 'm'][binned_ages]
             else:
-                s = drd.loc[nearest_year]
-                binned_ages = np.digitize(ppl.age, s.index)-1 # Negative ages will be in the first bin - do *not* subtract 1 so that this bin is 0
-                death_rate[:] = s.values[binned_ages]
+                binned_ages = np.digitize(ppl.age, ages)-1 # Negative ages will be in the first bin - do *not* subtract 1 so that this bin is 0
+                death_rate[:] = rows[nearest_year][binned_ages]
             death_rate *= self.pars.rate_units * self.pars.rel_death
 
         # Scale from rate to probability

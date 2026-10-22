@@ -109,13 +109,13 @@ class HIV(ss.Infection):
     def update_results(self):
         super().update_results()
         ti = self.ti
-        self.results['new_deaths'][ti] = np.count_nonzero(self.ti_dead == ti - 1) # Died in the step that ends now (ti_dead is its start)
+        self.results['new_deaths'][ti] = np.count_nonzero(self.ti_dead == ti) # Died in this step
         return
 
     def set_prognoses(self, uids, sources=None):
         super().set_prognoses(uids, sources) # Also makes the agents non-susceptible
         self.infected[uids] = True
-        self.ti_infected[uids] = self.ti_entry # At the end of the step, as a declared disease dates it
+        self.ti_infected[uids] = self.ti
         return
 
     def set_congenital(self, uids, sources):
@@ -176,7 +176,7 @@ class ART(ss.Intervention):
         hiv = self.sim.diseases.hiv
         infected = hiv.infected.uids
         ti_delay = np.round(self.pars.art_delay.rvs(infected)).astype(int)
-        recently_infected = infected[hiv.ti_infected[infected] == ti - ti_delay]
+        recently_infected = infected[hiv.ti_infected[infected] == ti - 1 - ti_delay] # Infected in the step before (the disease steps after the interventions), or ti_delay steps before that
 
         n_added = 0
         if len(recently_infected) > 0:

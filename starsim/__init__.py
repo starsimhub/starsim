@@ -172,7 +172,8 @@ def __getattr__(name):
     if name == 'fit':
         import importlib
         return importlib.import_module('.fit', __name__)
-    raise AttributeError(f'module "starsim" has no attribute "{name}"')
+    hint = '; import it first: import starsim.library as ssl' if name == 'library' else ''
+    raise AttributeError(f'module "starsim" has no attribute "{name}"{hint}')
 
 # Load fonts
 def _load_fonts(debug=debug):

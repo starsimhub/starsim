@@ -469,7 +469,7 @@ def test_uids_construction():
         ('none',        ss.uids()),
     ]:
         assert isinstance(arr, ss.uids), f'{label} must return a uids'
-        assert arr.dtype in [ss.dtypes.int, ss.dtypes.uid], f'{label} must have integer dtype, got {arr.dtype}' # 32-bit integers (as people.auids are) are kept as they are
+        assert arr.dtype in [ss.dtypes.int, ss.dtypes.uid], f'{label} must have integer dtype, got {arr.dtype}' # 32-bit integers are kept as they are
 
     assert list(ss.uids([1.0, 2.0, 3.0])) == [1, 2, 3], 'integer-valued floats must be preserved as ints'
     assert sorted(ss.uids({3, 1, 2})) == [1, 2, 3], 'set construction must preserve values'

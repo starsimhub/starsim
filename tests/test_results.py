@@ -241,7 +241,7 @@ def test_time_points():
     def kill(sim):
         sim.people.request_death(sim.people.auids[:2])
     S, I = ss.states('S I')
-    dis = ss.Disease(infection=ss.Transition(S, I, rate=0.0 * I), init=dict(I=1), kill=kill, name='dis')
+    dis = ss.Disease(infection=ss.Transition(S, I, rate=0.0 * I), init_n=dict(I=1), kill=kill, name='dis')
     res = ss.Sim(dis, people=ss.People(1000), unit='day', stop=4, verbose=0).run().results
     assert np.array_equal(res.n_alive, [1000, 998, 996, 994, 992])
     assert np.array_equal(res.new_deaths, [0, 2, 2, 2, 2])
@@ -250,7 +250,7 @@ def test_time_points():
     S, I, R = ss.states(3)
     infection = S >> I @ ss.perday(0.4)*I
     cases = ss.outcome(0.6*infection)
-    sim = ss.Sim(ss.Disease(infection, I >> R @ ss.perday(0.15), cases, init=dict(I=10), name='sir'), total_pop=10_000, unit='day', stop=ss.weeks(12), verbose=0).run()
+    sim = ss.Sim(ss.Disease(infection, I >> R @ ss.perday(0.15), cases, init_n=dict(I=10), name='sir'), total_pop=10_000, unit='day', stop=ss.weeks(12), verbose=0).run()
     res = sim.results.sir
     weeks = np.arange(7, 85, 7)
     weekly = lambda flow: np.add.reduceat(flow.values[1:], np.arange(0, 84, 7)) # Days 1 to 7, 8 to 14, ...
@@ -265,7 +265,7 @@ def cohort(solver, p=0.3, data=None):
     """ 10,000 people who leave P after 5 days on average: a share p to C, and the rest to R """
     P, C, R = ss.states('P C R')
     course = ss.Transition(P, [C, R], dur=ss.days(5), p=[p, None])
-    dis = ss.Disease(P, C, R, course=course, cases=ss.outcome(0.5*course.C), init=dict(P=10_000), name='dis')
+    dis = ss.Disease(P, C, R, course=course, cases=ss.outcome(0.5*course.C), first='P', name='dis')
     dis.stratify(age=ss.years([0, 40]))
     return ss.Sim(dis, n_agents=10_000, solver=solver, unit='day', stop=60, data=data, verbose=0)
 

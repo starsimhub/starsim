@@ -60,7 +60,7 @@ def note(msg, category=None, sim=None, verbose=None):
         sim.notes.append(msg)
         verbose = sc.ifelse(verbose, sim.pars.verbose)
     verbose = sc.ifelse(verbose, ss.options.verbose)
-    if verbose >= 1:
+    if verbose > 0:
         print(f'  note: {msg}')
     return
 
@@ -151,6 +151,14 @@ class UnmodifiableTarget(CodedError):
     a name that does not exist). Lists the closest names
     """
 
+class Unapplied(CodedError):
+    """
+    A modifier, change, or efficacy of a product on a quantity that no solver would apply: a plain parameter of a declared module
+    (read only by its own code), a value over "to" in a `p=` table, the `rel_sus` or `rel_trans` of a disease that is not
+    transmitted, a condition on people on an inflow or a transition of counts, or an efficacy on a transition with several
+    destinations (rather than on one of them); or a stratification of a sim in which nothing uses it. Names it and why
+    """
+
 class UnknownEffect(CodedError, KeyError):
     """
     A product names something it cannot act on: a key of a product's `efficacy` that is not something it can act on in the
@@ -187,7 +195,7 @@ class DataMisaligned(CodedError):
 
 class UnknownDataColumn(CodedError, KeyError):
     """
-    A data column matches no result. Lists the closest result names and suggests `ss.data(..., aliases=dict(result='Column'))`
+    A data column matches no result, when a fit compares it with the results (at `init()` it is a note). Lists the closest result names and suggests `ss.data(..., aliases=dict(result='Column'))`
     to rename it or `ignore_extra=True` to drop it. Also data by stratum for a level the dimension does not have, or for a
     result that is not kept by group, or kept by group only every few steps
     """
@@ -234,7 +242,7 @@ class TimeOutsideSim(CodedError):
     """
 
 class MissingDimension(CodedError, KeyError):
-    """ An `ss.transfer` names a stratification the model does not have (a boolean coordinate that does not exist yet is created instead); or a transition uses a value by level of a dimension (`ss.by()`) that the states it moves have no level of """
+    """ An `ss.transfer` names a stratification the model does not have (a boolean coordinate that does not exist yet is created instead); or a transition uses a value by level of a dimension (`ss.by()`) that the states it moves have no level of; or a value by position along a dimension (`ss.by(age=[...])`) that the sim is not stratified by """
 
 class NothingToFit(CodedError):
     """ `calibrate()` or `sensitivity()` is called and no parameter has `bounds` """

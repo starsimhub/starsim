@@ -3,8 +3,10 @@ Fitting sims to data: likelihoods, particle filters, samplers, and what `sim.cal
 
 Imported when it is first used (by `ss.fit.X`, `sim.calibrate()`, or `sim.sensitivity()`), not by `import starsim`.
 """
+import os
 import inspect
 import sys
+import tempfile
 import functools
 import numpy as np
 import pandas as pd
@@ -60,6 +62,8 @@ def likelihoods(sim, df=None, likelihood=None):
     for col in ([] if df is None else df.columns): # No data, with a loss that is a function of the sim
         name = parse_column(col)[0] # A stratum of a result has the likelihood of the result
         res = match_name(sim, name)
+        if res is None: # A column that matches no result, which is not compared (see ss.results.check_data())
+            continue
         given = (likelihood or {}).get(col, (likelihood or {}).get(name, (likelihood or {}).get(res.name)))
         if given is None:
             for mod in sim.declared:
@@ -1048,7 +1052,7 @@ def product_pairs(sim, names):
             uses += [tf.rate, tf.dur] + sc.tolist(tf.p)
         for oc in graph.outcomes.values():
             uses += [oc.source, oc.delay, oc.duration]
-        uses += list(graph.exprs.values()) + [state.init for state in graph.states.values()]
+        uses += list(graph.exprs.values()) + [init for state in graph.states.values() for init in [state.init, state.init_n]]
     uses += [m.amount for mods in sim.modifiers.values() for m in mods]
     uses = [use for use in uses if isinstance(use, ss.transitions.Expr)]
 
@@ -1450,6 +1454,8 @@ class Problem:
             raise ss.errors.NoData('calibrate() needs data: attach it to the sim with ss.Sim(..., data=...), with one column named like each result to fit; or give gof= as a function of the sim that returns the loss.')
         self.verbose = verbose = sc.ifelse(verbose, ss.options.verbose)
         check_gof(gof)
+        if probe.data is not None and not callable(gof): # Every column is compared with its result, so one that matches none is an error; a loss that is a function of the sim reads what it needs
+            ss.results.check_data(probe, probe.data, die=True)
         self.base, self.likelihood, self.weights, self.gof = base, likelihood, weights, gof
 
         # The parameters
@@ -1567,11 +1573,11 @@ class Problem:
         """ Minus the log of the priors, so that with likelihoods an optimizer finds the most probable values (the maximum a posteriori) rather than ignoring the priors """
         return -sum(logprior(p, val) for p,val,has in zip(self.fitted.values(), x, self.priors) if has) if self.use_map else 0.0
 
-    def objective(self, x):
-        """ What an optimizer minimizes: the mean score over the runs (plus the penalty of the priors); each evaluation is recorded """
+    def objective(self, x, number=None):
+        """ What an optimizer minimizes: the mean score over the runs (plus the penalty of the priors); each evaluation is recorded. With fresh seeds, evaluation `number` (default: the next) takes seeds after those of the evaluations before it """
         seeds = self.seeds
-        if self.fresh: # Seeds of this evaluation's own, after those of the evaluations before it
-            seeds = [seed + self.n_runs*len(self.trials) for seed in seeds]
+        if self.fresh: # Seeds of this evaluation's own
+            seeds = [seed + self.n_runs*sc.ifelse(number, len(self.trials)) for seed in seeds]
         values = [self.measure(self.run(x, seed=seed)) for seed in seeds]
         value = float(np.mean(values)) + self.penalty(x)
         self.trials.append(dict(zip(self.names, x), objective=value))
@@ -1730,8 +1736,13 @@ class Problem:
         for name,z,lo,hi,val,low,high in zip(names, zs, zlo, zhi, best, self.lows, self.highs):
             if min(z - lo, hi - z) < 0.01*(hi - lo):
                 ss.warn(f'the best-fit value of "{name}" ({val:n}) is at one of its bounds [{low:n}, {high:n}]; consider widening them', ss.errors.AtBound)
+        mismatch = float(np.mean(scores)) + self.penalty(best)
+        if out.converged and self.stochastic and 'zs' not in out and mismatch > self.mismatch_before: # A best fit of a stochastic sim, whose scores are noisy, that did not find better values
+            out.converged = False
+            out.why += f'; but rerun with the same seeds, the best values score {mismatch:.4g}, worse than the initial values ({self.mismatch_before:.4g}), so the best trial may have been chance; try more trials or more runs a point (n_runs=)'
         if self.verbose:
             print(f'{"Converged" if out.converged else "Not converged"}: {out.why}')
+            print(f'The {"negative log-posterior" if self.use_map else "negative log-likelihood" if self.use_lik else "goodness of fit"} is {mismatch:.4g} at the best values and {self.mismatch_before:.4g} at the initial values')
         best_pars = sc.objdict()
         for name,val,cls,p in zip(names, best, self.types, self.fitted.values()):
             val = cls(val) if cls is not None else float(val)
@@ -1743,17 +1754,22 @@ class Problem:
                 best_pars[name] = val
         diagnostics = sc.objdict(divergences=out.get('divergences'), acceptance=out.get('acceptance'), band=out.get('band'))
         return Fit(sim=after, before=before, pars=best_pars, table=out.table, trials=pd.DataFrame(self.trials), method=method,
-                   mismatch=float(np.mean(scores)) + self.penalty(best), mismatch_before=self.mismatch_before,
+                   mismatch=mismatch, mismatch_before=self.mismatch_before,
                    measure='negative log-posterior' if self.use_map else 'negative log-likelihood' if self.use_lik else 'goodness of fit',
                    samples=out.get('samples'), diagnostics=diagnostics, converged=out.converged, why=out.why, scores=scores, seeds=seeds)
 
 
 #%% The fitting methods: each a function of a Problem, returning the best values (or draws from a posterior), whether it converged, and why
 
-def fit_scipy(problem, method='nelder-mead', scan=None, restarts=3, **options):
-    """ A `scipy.optimize.minimize` method, from each of the best few points of a scan that are apart (`restarts`), with gradients from JAX for the methods that use them; it has converged if the best two searches end at the same value """
+def fit_scipy(problem, method='nelder-mead', scan=None, restarts=None, **options):
+    """
+    A `scipy.optimize.minimize` method, from each of the best few points of a scan that are apart (`restarts`), with gradients
+    from JAX for the methods that use them; it has converged if the best two searches end at the same value. By default 3 searches,
+    or 1 for a single parameter of a deterministic sim, where the scan already finds the right valley and SciPy's own stopping rule is enough.
+    """
     import scipy.optimize as spo
     p = problem
+    restarts = sc.ifelse(restarts, 1 if len(p.names) == 1 and not p.stochastic else 3)
     bounds = list(zip(p.encode(p.lows), p.encode(p.highs)))
     options = sc.mergedicts(dict(xatol=1e-4, fatol=1e-6) if method == 'nelder-mead' else None, options)
     if method in grad_methods and not p.no_grad: # The gradient with respect to the scale searched on: d/dz = x d/dx where x = exp(z)
@@ -1807,34 +1823,91 @@ def smoothed_best(zs, values):
     return int(np.argmin(smoothed))
 
 
-def fit_optuna(problem, trials=None, n_trials=100, scan=None, **kwargs): # The search starts from the initial values, not from a scan
-    """ Optuna's tree-structured Parzen estimator, from the initial values: a best fit, with the spread of the best trials """
+def optuna_study(problem, storage=None, worker=0):
+    """ The Optuna study of a fit: new, or loaded from `storage` (see `fit_optuna()`), with a sampler seeded for this worker so that workers propose different points """
+    import optuna
+    optuna.logging.set_verbosity(optuna.logging.WARNING)
+    if isinstance(storage, (str, os.PathLike)) and '://' not in str(storage): # A file name: an Optuna journal, which processes can share without a database
+        storage = optuna.storages.JournalStorage(optuna.storages.journal.JournalFileBackend(str(storage)))
+    sampler = optuna.samplers.TPESampler(seed=sc.ifelse(problem.rand_seed, 0) + worker)
+    return optuna.create_study(sampler=sampler, storage=storage, study_name='calibrate', load_if_exists=True)
+
+
+def optuna_trial(problem, trial):
+    """ The objective at the values a trial proposes, with the trial's own seeds if each point takes fresh ones """
+    p = problem
+    x = [trial.suggest_float(name, lo, hi, log=bool(log)) for name,lo,hi,log in zip(p.names, p.lows, p.highs, p.logs)]
+    return p.objective(np.array(x), number=trial.number)
+
+
+def optuna_worker(worker, n, problem, storage, kwargs):
+    """ One worker process of a fit by Optuna: `n` trials, shared with the others through the storage """
+    study = optuna_study(problem, storage, worker=worker)
+    study.optimize(functools.partial(optuna_trial, problem), n_trials=n, **kwargs)
+    return
+
+
+def fit_optuna(problem, trials=None, n_trials=100, scan=None, n_workers=None, storage=None, **kwargs): # The search starts from the initial values, not from a scan
+    """
+    Optuna's tree-structured Parzen estimator, from the initial values: a best fit, with the spread of the best trials
+
+    Args:
+        trials (int): the number of trials (each one point, run once for agents), including any already in `storage`
+        n_workers (int): the number of processes that propose and run trials at once, sharing what they have learned (default 1)
+        storage (str): where the trials are kept, so that a fit that stopped can be resumed by calling it again with the same storage:
+            a file name (kept as an Optuna journal), a database URL (e.g. `'sqlite:///fit.db'`), or an Optuna storage
+        kwargs (dict): Optuna's own keywords for `study.optimize()`
+
+    It has not converged if the best trial is the initial values or one of the first 10 (which are random), or if the best improved
+    by 1% or more over the last quarter of the trials.
+    """
     import optuna
     p = problem
-    optuna.logging.set_verbosity(optuna.logging.WARNING)
-    study = optuna.create_study(sampler=optuna.samplers.TPESampler(seed=p.rand_seed))
-    study.enqueue_trial(dict(zip(p.names, p.x0)))
-    def trial_objective(trial):
-        x = [trial.suggest_float(name, lo, hi, log=bool(log)) for name,lo,hi,log in zip(p.names, p.lows, p.highs, p.logs)]
-        return p.objective(np.array(x))
-    known = [key for key in inspect.signature(study.optimize).parameters if key not in ['func', 'n_trials']]
+    known = [key for key in inspect.signature(optuna.Study.optimize).parameters if key not in ['self', 'func', 'n_trials']]
     unknown = [key for key in kwargs if key not in known]
     if unknown:
-        errormsg = f'calibrate(method="optuna") takes trials= (the number of trials) and Optuna\'s own keywords ({sc.strjoin(known)}), not {sc.strjoin(unknown)}'
+        errormsg = f'calibrate(method="optuna") takes trials= (the number of trials), n_workers=, storage=, and Optuna\'s own keywords ({sc.strjoin(known)}), not {sc.strjoin(unknown)}'
         raise TypeError(errormsg)
-    study.optimize(trial_objective, n_trials=sc.ifelse(trials, n_trials), **kwargs) # Optuna's own name works too
-    best = np.array([study.best_params[name] for name in p.names])
-    if p.fresh and len(p.trials) >= 10: # With fresh seeds the lowest trial is the luckiest, which favors values whose runs vary most, so take the trial whose neighbors score lowest
-        tried = pd.DataFrame(p.trials)
-        best = tried[p.names].values[smoothed_best(p.encode(tried[p.names].values), tried.objective.values)]
-    values = np.array([t.value for t in study.trials if t.value is not None])
+    n_workers = n_workers or 1
+    temp = None
+    if n_workers > 1 and storage is None: # The workers share their trials through a file, deleted afterwards
+        storage = temp = os.path.join(tempfile.gettempdir(), f'starsim_fit_{sc.uuid().hex}.log')
+    study = optuna_study(p, storage)
+    if not study.trials: # The initial values, already scored by Problem.start()
+        dists = {name:optuna.distributions.FloatDistribution(lo, hi, log=bool(log)) for name,lo,hi,log in zip(p.names, p.lows, p.highs, p.logs)}
+        study.add_trial(optuna.trial.create_trial(params=dict(zip(p.names, p.x0)), distributions=dists, value=p.mismatch_before))
+    remaining = sc.ifelse(trials, n_trials) - len(study.trials)
+    if remaining > 0 and n_workers > 1:
+        shares = [len(part) for part in np.array_split(np.arange(remaining), n_workers)]
+        with ss.kernels.one_blas_thread(): # The workers share the cores, so each takes one thread, as in ss.parallel()
+            sc.parallelize(functools.partial(ss.kernels.one_thread, optuna_worker), iterarg=list(enumerate(shares)), kwargs=dict(problem=p, storage=storage, kwargs=kwargs), ncpus=n_workers, start_method=ss.kernels.start_method())
+        study = optuna_study(p, storage)
+    elif remaining > 0:
+        study.optimize(functools.partial(optuna_trial, p), n_trials=remaining, **kwargs)
+    done = [t for t in study.trials if t.value is not None] # In the order they were started, from every worker and every earlier fit with this storage
+    if temp is not None:
+        for path in [temp, temp + '.lock']:
+            if os.path.exists(path):
+                os.remove(path)
+    p.trials = [dict(t.params, objective=t.value) for t in done]
+    tried = pd.DataFrame(p.trials)
+    values = tried.objective.values
+    i = int(np.argmin(values))
+    if p.fresh and len(values) >= 10: # With fresh seeds the lowest trial is the luckiest, which favors values whose runs vary most, so take the trial whose neighbors score lowest
+        i = smoothed_best(p.encode(tried[p.names].values), values)
+    best = tried[p.names].values[i]
     early = values[:max(1, int(np.ceil(0.75*len(values))))].min() # The best before the last quarter of the trials
     gain = (early - values.min())/max(abs(early), 1e-12)
-    converged = gain < 0.01
-    why = f'the best value improved by {gain:.1%} over the last quarter of the {len(values)} trials' + ('' if converged else '; try more trials (trials=)')
+    n_random = 10 # Optuna's first trials, which are random (TPESampler's n_startup_trials)
+    if i == 0:
+        converged, why = False, f'the best of the {len(values)} trials was the initial values, so the search found nothing better; try more trials (trials=)'
+    elif i < n_random:
+        converged, why = False, f'the best of the {len(values)} trials was trial {i}, one of the first {n_random}, which are random, so the search did not improve on them; try more trials (trials=)'
+    else:
+        converged = gain < 0.01
+        why = f'the best score improved by {gain:.1%} over the last quarter of the {len(values)} trials' + ('' if converged else '; try more trials (trials=)')
     spread = None
     if len(p.trials) >= 10: # Not a posterior, but some indication of the uncertainty: the spread of the best trials
-        tried = pd.DataFrame(p.trials)
         top = tried.nsmallest(max(5, len(tried)//10), 'objective')
         spread = top[p.names].min().values, top[p.names].max().values
     return sc.objdict(best=best, converged=converged, why=why, spread=spread)

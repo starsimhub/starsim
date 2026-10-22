@@ -47,14 +47,14 @@ def jax():
 
 def reason(sim):
     """ Why the sim cannot be run in JAX, in a few words, or None if it can """
-    families = [mod for mod in sim.diseases() if isinstance(mod, ss.Strains)]
+    families = [mod for mod in sim.diseases() if isinstance(mod, ss.strains.Family)]
     funcs = [(fam.name, getattr(imm.combine, '__name__', 'function')) for fam in families for imm in fam.immunity if callable(imm.combine)]
     if funcs:
         return f'"{funcs[0][0]}" combines protection with a function ({funcs[0][1]}), which has no gradient; the rules "max", "sum", and "multiply" do'
     elif not getattr(sim, 'declared', None): # Code of its own, whose gradient is not known (a fit of it uses the runs alone)
         return 'the model is written as code, with no declared states and transitions, so it has no gradient'
     elif families: # Its step works out the couplings and unions in Python
-        return f'"{families[0].name}" is a family of diseases (ss.Strains), which is run a step at a time for now'
+        return f'"{families[0].name}" has strains with courses of their own (ss.Strains(shared=...)), which are run a step at a time for now'
     elif sim.solver != 'ode':
         return f'solver="{sim.solver}" is stochastic (gradients are for solver="ode" only)'
     elif not sim.kernel_only():

@@ -141,8 +141,13 @@ golden = np.uint64(0x9e3779b97f4a7c15) # The step between the counters of a rand
 sparse_flows = 256 # The flows above which the exact solver by place follows only the compartments that hold anyone: see sparse_events()
 
 
-compile_after = 20 # The seconds that runs would take as plain Python, in a session, above which the kernels are compiled (by default: see choose())
+compile_seconds = 60 # About how long compiling the kernels takes, once per install: runs that would take longer than this as plain Python are compiled first (by default: see choose())
+speedup = 50 # About how many times faster the compiled kernels are than plain Python (40 to 150 times for stiff ODEs)
+note_after = 1 # The seconds of a plain run above which choose() says how long it would take compiled
 plain_total = 0.0 # The seconds that the runs taken as plain Python in this session would have taken, as estimated: see choose()
+noted = False # Whether choose() has said that a run is taken as plain Python, in this session
+chosen = False # Whether choose() has chosen to compile the kernels, in this session
+compiling = False # Whether ss.compile() is compiling the kernels
 plain_copy = None # The copy of the kernels that runs as plain Python, once made: see uncompiled()
 on_disk = None # Whether the compiled kernels were found in Numba's cache, once looked for: see is_compiled()
 entries = ['run', 'run_many', 'one_step', 'advance', 'advance_threads', 'apply_events', 'apply_shifts', 'settle_places'] # What the engines call
@@ -182,49 +187,71 @@ def is_compiled():
     return on_disk or bool(step.signatures)
 
 
-def plain_seconds(p, y, npts, solver):
+def plain_seconds(p, y, npts, solver, n_sub=1):
     """
     About how long a run would take as plain Python, in seconds: about 20 µs a step (or, for the exact solver, an
     event), and 0.4 µs for each group times each flow, operation, and compartment, and each pair of levels or places
-    that mix; RK4 and tau-leaping take about four times as many steps, and the exact solver about one event for
-    each person and flow. Fitted to declared SIRs with 1 to 50 groups, to within about 2×, which is enough to
-    choose whether to compile.
+    that mix; RK4 and tau-leaping take about four times as many steps, each substep counts as a step, and the exact
+    solver takes about one event for each person and flow. Fitted to declared SIRs with 1 to 50 groups, to within
+    about 2×, which is enough to choose whether to compile.
+
+    Args:
+        n_sub (int): the substeps in each step (see `substeps()`)
     """
     nc, ng = y.shape
     size = ng*(len(p.src) + len(p.ops) + nc) + len(p.exp_set)*(3*len(p.sh_val) + (p.sizes**2).sum())
     if solver == solvers['gillespie']:
         return y.sum()*len(p.src)*(1e-5 + 3e-7*size)
     stages = 4 if solver in [solvers['rk4'], solvers['tau']] else 1
-    return npts*stages*(2e-5 + 4e-7*size)
+    return npts*stages*max(n_sub, 1)*(2e-5 + 4e-7*size)
 
 
-def choose(seconds=0.0, verbose=True):
+def substeps(rates, dt, n_sub, solver):
+    """ About how many substeps a solver takes in each step, for `plain_seconds()`: those given (`n_sub`), or else for the ODE, enough for the fastest of the rates out of a compartment given, as `step()` chooses them """
+    if n_sub > 0 or solver >= 2: # The stochastic solvers that take steps of their own length count them in their own way
+        return max(n_sub, 1)
+    rates = np.ravel(rates)
+    fastest = np.max(rates[np.isfinite(rates)], initial=0.0)
+    return max(int(np.ceil(fastest*dt/0.25)), 1)
+
+
+def choose(seconds=0.0):
     """
     The kernels to take a run with: these, compiled by Numba, or the same code as plain Python (see `uncompiled()`)
 
-    Compiling them takes about a minute, once per install (or ahead of time, with `ss.compile()`), so by default
-    (`ss.options.compile = 'auto'`) a run is taken as plain Python, unless the kernels are compiled already, or the
-    runs taken that way in this session, with this one, would take longer than `compile_after` seconds (as a
-    calibration's many small runs would).
+    Compiling them takes about a minute, once per install (or ahead of time, with `ss.compile()`). By default
+    (`ss.options.compile = 'auto'`) they are compiled first if the runs taken as plain Python in this session, with
+    this one, would take longer than that (as a long run, or a calibration's many small runs, would), with a note
+    saying so; and otherwise the run is taken as plain Python, with a note (once a session, for a run of more than
+    `note_after` seconds) of how long it would take each way. A note is printed whatever the sim's `verbose`, since
+    a minute of silence looks like a hang.
 
     Args:
         seconds (float): about how long the run (or runs) would take as plain Python: see `plain_seconds()`
-        verbose (bool): whether to say when the kernels are compiled for a run
     """
+    global plain_total, noted, chosen
     mode = ss.options.compile
     if mode not in ['auto', 'always', 'never']:
         raise ValueError(f'ss.options.compile must be "auto", "always", or "never", not {mode!r}')
     if mode == 'never':
         return uncompiled()
-    if mode == 'always' or is_compiled():
+    if chosen or is_compiled():
         return sys.modules[__name__]
-    global plain_total
-    if plain_total + seconds < compile_after:
-        plain_total += seconds
+    if mode == 'always':
+        chosen = True
+        if not compiling: # ss.compile() says so itself
+            print('Note: compiling the solver (about a minute, once per install)')
+        return sys.modules[__name__]
+    total = plain_total + seconds
+    if total < compile_seconds:
+        plain_total = total
+        if seconds >= note_after and not noted:
+            noted = True
+            print(f'Note: running the solver as plain Python (about {seconds:.0f} s; about {seconds/speedup:.2g} s compiled, after compiling once per install for about a minute: ss.compile())')
         return uncompiled()
-    if verbose:
-        which = f'this run would take about {seconds:.0f} s' if seconds >= compile_after else f'the runs so far would take more than {compile_after} s'
-        print(f'Compiling the solver kernels, since {which} uncompiled (about a minute, once per install; ss.compile() does it ahead of time)')
+    chosen = True
+    which = 'this run' if seconds >= compile_seconds else 'the runs in this session'
+    print(f'Note: compiling the solver (about a minute, once per install), since {which} would take about {total:.0f} s as plain Python and {total/speedup:.2g} s compiled')
     return sys.modules[__name__]
 
 
@@ -240,9 +267,11 @@ def compile(verbose=True):
 
         ss.compile()
     """
+    global compiling
     T = sc.timer()
     if verbose:
         print('Compiling the solver kernels (about a minute)...')
+    compiling = True
     def make(solver='binomial'):
         S, I, R = ss.states(3)
         sir = ss.Disease(S >> I @ 0.3*I, I >> R @ ss.days(10), init=dict(I=0.1), name='sir')
@@ -262,6 +291,7 @@ def compile(verbose=True):
         apply_shifts(engine.make_rng(), y, engine.shifts, 0, True, np.zeros((0, 2, y.shape[1])))
         settle_places(y, p, engine.dt, np.zeros((p.n_trans + p.n_movers, y.shape[1])))
     make('abm').run() # The passes over the agents, which are kept in the same cache (so they are compiled again whenever this file changes)
+    compiling = False
     if verbose:
         print(f'Compiled the solver kernels in {T.toc(output=True):.0f} s')
     return
@@ -1178,8 +1208,25 @@ def settle(y, p, rates, dt, flows):
 
     A count is a real number, not a number of people, so it is never drawn. Its flows are
     integrated over dt by RK4, at the current rates and with the people as they are, so a count
-    that is filled at a steady rate and decays settles where it would in continuous time.
+    that is filled at a steady rate and decays settles where it would in continuous time. As
+    in the ODE, the step is split into enough substeps that no count turns over by more than
+    a quarter in one: in one step, RK4 is unstable once a count turns over by more than 2.8,
+    and mosquitoes that live 10 days died out at a 30-day step (MA6).
     """
+    fastest = 0.0
+    for f in range(len(p.src)):
+        if p.det[f] and p.src[f] >= 0:
+            for g in range(y.shape[1]):
+                fastest = max(fastest, rates[f, g])
+    n_sub = max(1, int(np.ceil(fastest*dt/0.25)))
+    for sub in range(n_sub):
+        settle_step(y, p, rates, dt/n_sub, flows)
+    return
+
+
+@jit
+def settle_step(y, p, rates, dt, flows):
+    """ For `settle()`: one RK4 step of the counts over a time dt """
     nc, ng = y.shape
     nf = len(p.src)
     nflows = flows.shape[0]
@@ -1442,19 +1489,35 @@ def release_rates(y, p, rates, dt):
     those arriving in the first slot over a step, of whom a share (1 - exp(-h·dt))/(h·dt) are left at
     its end, the exits act over the whole delay, as for agents: a delay of K steps keeps a share
     exp(-h·K·dt), where leaving the last slot by itself kept exp(-h·(K - 1/2)·dt).
+
+    A flow from a last slot to last slots only (in a crossing, another disease's move, which
+    keeps the slot) is not an exit: the people it moves are due to leave as well, and those
+    in all the last slots together leave over the step, so none are left when the slots move.
     """
     nf = len(p.src)
     ng = y.shape[1]
+    is_last = np.zeros(y.shape[0], dtype=np.bool_)
+    for i in range(len(p.starts) - nf - 1):
+        a, b = p.starts[nf+i], p.starts[nf+i+1]
+        if p.ops[a] == CONVEY:
+            is_last[p.args[b-1]] = True
     for i in range(len(p.starts) - nf - 1):
         a, b = p.starts[nf+i], p.starts[nf+i+1]
         if p.ops[a] != CONVEY:
             continue
         last = p.args[b-1]
         f_out = p.args[a]
+        exits = np.zeros(nf, dtype=np.bool_)
+        for f in range(nf):
+            if p.src[f] == last:
+                exits[f] = p.tgt_starts[f+1] == p.tgt_starts[f] # A flow out of the model (a death) is an exit
+                for t in range(p.tgt_starts[f], p.tgt_starts[f+1]):
+                    if not is_last[p.tgt_comp[t]]:
+                        exits[f] = True
         for g in range(ng):
             x = 0.0
             for f in range(nf):
-                if p.src[f] == last:
+                if exits[f]:
                     x += max(rates[f, g], 0.0)*dt
             if x > 1e-12:
                 p.inflow[f_out, g] *= x/np.expm1(x)
@@ -1943,8 +2006,8 @@ def run(rng, y, p, dt, npts, solver, n_sub, fixed, mult, consts, rel_trans, reg,
         fixed, mult, consts, rel_trans (arrays): the values of these parts of the program at each step, or a single
             entry if they are the same throughout
         reg (Register): the events of a movement register, applied at the end of the step they are dated in (those of the start are already in y)
-        sh (Shifts): the deliveries, applied at the start of the step from the time point they happen at
-        tally (array): filled in with the number each delivery reached and found eligible, by group (time points by deliveries by 2 by groups)
+        sh (Shifts): the deliveries, applied at the start of each step they happen in; `due` is by the time point the step starts from
+        tally (array): filled in with the number each delivery reached and found eligible, by group, at the time point of the step it happened in, its end (time points by deliveries by 2 by groups)
         per_step (int): 3 if the tables have the values at the start, middle, and end of each step (for the ODE), and otherwise 1
         start (int): the time point that y is at; the run is taken from there to time point npts-1, so it can be taken a part at a time
             (the tables then start at the step from `start`, unless they have a single entry)
@@ -1965,7 +2028,7 @@ def run(rng, y, p, dt, npts, solver, n_sub, fixed, mult, consts, rel_trans, reg,
     for ti in range(start + 1, npts): # Step ti goes from time point ti-1 to ti, with the values at the start of it
         k = ti - start
         if len(sh.to):
-            apply_shifts(rng, y, sh, ti-1, whole, tally[k-1])
+            apply_shifts(rng, y, sh, ti-1, whole, tally[k])
             if sh.due[:, ti-1].any():
                 wake(w)
         set_step((p.fixed, p.mult, p.consts, p.rel_trans), (k-1)*per_step, tables)
@@ -2021,11 +2084,11 @@ def run_many(rngs, ys, p, dt, start, npts, solver, n_sub, fixed, mult, consts, r
                         wake(w)
                     for d in range(len(sh.to)):
                         for g in range(ng):
-                            tally[r, ti-1, d, 0, 0] += now_sh[d, 0, g]
-                            tally[r, ti-1, d, 1, 0] += now_sh[d, 1, g]
+                            tally[r, ti, d, 0, 0] += now_sh[d, 0, g]
+                            tally[r, ti, d, 1, 0] += now_sh[d, 1, g]
                             if n_rows:
-                                tally_g[r, rows[ti-1], d, 0, g] += now_sh[d, 0, g]
-                                tally_g[r, rows[ti-1], d, 1, g] += now_sh[d, 1, g]
+                                tally_g[r, rows[ti], d, 0, g] += now_sh[d, 0, g]
+                                tally_g[r, rows[ti], d, 1, g] += now_sh[d, 1, g]
                 set_step((p.fixed, p.mult, p.consts, p.rel_trans), (k-1)*per_step, tables)
                 step(rng, y, p, w, dt, n_sub, solver, now, tables, (k-1)*per_step if per_step == 3 else -1)
                 if len(reg.src):

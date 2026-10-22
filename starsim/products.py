@@ -262,6 +262,22 @@ class Effect:
         return f'{self.name:<16s} multiply={mult}   where={self.product.dim} ({self.key} efficacy of {type(self.product).__name__.lower()})'
 
 
+class StrainEffect(Effect):
+    """ The effect of a product against acquiring each strain of a disease with shared states, for the people who hold it: on each strain's force of infection (see `ss.solvers.Engine.strain_effect()`) """
+    tabulated = False # Worked out for each strain as the force of infection is
+    constant = False
+
+    def for_strain(self, strain):
+        """ The effect against one strain, as for any product """
+        return Effect(self.product, self.key, float(self.efficacy[strain]))
+
+    def apply(self, value, engine):
+        return value # It acts only through for_strain()
+
+    def describe(self):
+        return f'{self.name:<16s} multiply=1 − efficacy of each strain {self.efficacy.tolist()}   where={self.product.dim} (acquisition, by strain)'
+
+
 class Held(Product):
     """
     Base class for products that change rates for the people who hold them
@@ -391,12 +407,29 @@ class Held(Product):
                 else:
                     options = ['acquisition', 'transmission'] + ['mortality']*bool(deaths) + list(graph.transitions) + graph.destinations()
                     raise ss.errors.UnknownEffect(f'the efficacy of "{self.name}" has the key "{key}", which is not something it can act on in "{dis.name}". Valid keys are {sc.strjoin(options)}{ss.transitions.did_you_mean(key, options)}')
+                by_strain = self.by_strain(eff, key, dis)
+                if by_strain is not None: # Against acquiring each strain, on each strain's force of infection
+                    sim.modifiers[(dis.name, 'strain_sus', None)].append(StrainEffect(self, key, by_strain))
+                    continue
                 self.check_dims(eff, key, dis, states)
                 for kind,name in targets:
                     if kind == 'transition':
                         kind = graph.modifier_kind(name)
                     sim.modifiers[(dis.name, kind, name)].append(Effect(self, key, eff))
         return
+
+    def by_strain(self, eff, key, dis):
+        """ An efficacy against acquisition by the strains of a disease with shared states (`ss.by(strain=[...])`, one per strain, or a dict by name): one for each strain, or None (for anything else) """
+        strat = next((strat for strat in dis.graph.strats if strat.strains is not None), None)
+        if key != 'acquisition' or not isinstance(eff, ss.by) or strat is None or eff.dims != [strat.name] or eff.table is not None or eff.array is not None: # Others act on people who carry a strain, by its level, as for any dimension
+            return None
+        names = strat.strains.names
+        vals = eff.given[strat.name]
+        vals = [vals[name] for name in names] if isinstance(vals, dict) else list(vals)
+        if len(vals) != len(names):
+            errormsg = f'the acquisition efficacy of "{self.name}" is by the strains of "{dis.name}", against acquiring each strain, so it takes one value per strain ({sc.strjoin(names)}), not {len(vals)}'
+            raise ss.errors.InvalidAdjustment(errormsg)
+        return np.array(vals, dtype=float)
 
     def check_dims(self, eff, key, dis, states):
         """ An efficacy by a dimension (`ss.by(genotype=...)`) that the people it acts on have no level of, such as a strain, which susceptibles do not carry, is an error """
@@ -419,7 +452,7 @@ class Held(Product):
         uids = (arr == 1).uids
         if len(uids):
             dis = ss.interventions.coded_disease(sim, self.disease) or sim.get_declared(self.disease)
-            eng = dis.engine if isinstance(dis, ss.Disease) else ss.connectors.AgentModifiers.engine(dis, sim)
+            eng = dis.engine if dis.graph is not None else ss.connectors.AgentModifiers.engine(dis, sim)
             p = -np.expm1(-eng.dt/eng.convert(self.waning))
             lost = uids[self.rng_wane.rvs(uids) < p]
             arr[lost] = 0
@@ -440,7 +473,9 @@ class Vaccine(Held):
         efficacy (float/dict): protection against acquisition (required); or a dict of efficacy against each of 'acquisition' (scales
             `rel_sus`), 'transmission' (scales `rel_trans`), 'mortality' (scales the death transitions), or any named transition
         waning (dur/func): a duration, for protection that is lost after an exponentially distributed time with that mean;
-            or a function of the time since delivery returning the fraction of protection that remains (agents only)
+            or a function of the time since delivery returning the fraction of protection that remains (agents only; a delivery
+            gives it again to those who hold it, restarting it). For other shapes under every solver (a box then a decay,
+            two rates in turn), write the protection as states and move people into them: see `ss.Delivery`'s `move=`
         doses (list): for a vaccine given in doses, the relative efficacy after each (e.g. `[0.85, 1.0]`); holding it then has a
             level per dose, and each delivery to someone who holds it gives them the next dose
         leaky (bool): if True (the default), everyone who receives it is partly protected (by `efficacy`); if False, a share `efficacy` of them are fully protected and the rest not at all ("all or nothing")

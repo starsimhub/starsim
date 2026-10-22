@@ -117,6 +117,37 @@ def test_change():
     return sims
 
 
+def test_applied():
+    sc.heading('Testing that every modifier and product is applied, or refused when the sim is made')
+    # Refused: a value over "to" in a p= table, and an efficacy on a transition with several destinations
+    none, pill, iud = ss.states('none pill iud')
+    w = ss.par(ss.by(to=dict(pill=1.0, iud=1.0)))
+    contra = ss.Disease(none, pill, iud, switch=ss.Transition(none, [none, pill, iud], dur=ss.months(6), p=[0.5, 0.5*w]), w=w, first='none', name='contra')
+    with pytest.raises(ss.errors.Unapplied, match='p= table'):
+        ss.Sim(contra, interventions=ss.change('contra.w', at=10, to=ss.by(to=dict(pill=3.0, iud=1.0))), **kw).init()
+    P, C, R = ss.states('P C R')
+    hpv = ss.Disease(precin=ss.Transition(P, [C, R], dur=ss.years(2), p=[0.2, 0.8]), init=dict(P=1.0), first='P', name='hpv')
+    with pytest.raises(ss.errors.Unapplied, match="'precin.C'"):
+        ss.Sim(hpv, interventions=ss.vaccinate(ss.Vaccine(efficacy=dict(precin=0.5)), at=0), **kw).init()
+
+    # Applied: modifiers of a disease written as code that overrides infect(), and a change to an inflow under the ODE
+    class OwnInfect(ssl.AgentSIS):
+        def infect(self): # Its own loop over the routes, as Covasim's is
+            betamap = self.validate_beta()
+            rel_trans = self.rel_trans.asnew(self.infectious.raw*self.rel_trans.raw, copy=False)
+            rel_sus = self.rel_sus.asnew(self.susceptible.raw*self.rel_sus.raw, copy=False)
+            out = [self.infect_route(i, route, betamap[ss.utils.standardize_netkey(key)], rel_trans, rel_sus) for i,(key,route) in enumerate(self.sim.networks.items())]
+            return self.finalize_infections(*zip(*out))
+    sim = ss.Sim(diseases=OwnInfect(name='sis'), networks='random', connectors=ss.modify('sis.rel_sus', multiply=0), n_agents=1000, verbose=0).run()
+    assert sim.results.sis.new_infections.sum() == 0
+    for solver in ['ode', 'abm']:
+        Sv = ss.State('Sv', people=False)
+        mosq = ss.Disease(ss.State('S'), Sv, emergence=ss.null >> Sv @ ss.perday(100), mortality=Sv >> ss.null @ ss.days(10), init=dict(Sv=1000), name='mosq')
+        sim = ss.Sim(mosq, interventions=ss.change(mosq.emergence, at=10, by=0.5), solver=solver, n_agents=1000, unit='day', stop=100, verbose=0).run()
+        assert np.isclose(sim.results.mosq.n_Sv[-1], 500, rtol=0.05), solver
+    return sim
+
+
 def test_modify_where():
     sc.heading('Testing modifiers with conditions, and targets other than parameters')
     def make(**kwargs):
@@ -189,13 +220,13 @@ def test_conditions():
     sims = run_each(make, stop=20)
     for sim in sims.values():
         n_S = sim.results.sir.n_S.by('age').values[5, 0]
-        assert np.isclose(sim.results.kids.delivered[5], n_S, rtol=0.02) # Every susceptible child, and nobody else
-        assert np.allclose(sim.results.kids.delivered.by('age').values[5], [sim.results.kids.delivered[5], 0, 0]) # By stratum: all in the youngest group
+        assert np.isclose(sim.results.kids.delivered[6], n_S, rtol=0.02) # Every susceptible child at time 5, and nobody else, in the step from it
+        assert np.allclose(sim.results.kids.delivered.by('age').values[6], [sim.results.kids.delivered[6], 0, 0]) # By stratum: all in the youngest group
     check_close(sims, lambda sim: sim.results.kids.delivered.sum(), rtol=0.05)
 
     # A function of the sim does the same
     func = make(eligible=lambda sim: sim.people.age < 15, solver='ode', stop=20, **kw).run()
-    assert func.results.kids.delivered[5] > sims.ode.results.kids.delivered[5] # Including the children who are not susceptible
+    assert func.results.kids.delivered[6] > sims.ode.results.kids.delivered[6] # Including the children who are not susceptible
 
     # An age that is not the edge of a group cannot be used on groups, so the model runs as agents unless told otherwise
     auto = make(eligible=ppl.age < 10, stop=20, **kw).init()
@@ -225,7 +256,7 @@ def test_vaccinate():
     sims = run_each(campaign)
     for sim in sims.values():
         res = sim.results.rounds
-        assert np.isclose(res.delivered.sum(), 30_000, rtol=0.02) and np.isclose(res.coverage[5], 0.6, atol=0.02)
+        assert np.isclose(res.delivered.sum(), 30_000, rtol=0.02) and np.isclose(res.coverage[6], 0.6, atol=0.02)
         assert np.isclose(res.cost.sum(), 2*res.delivered.sum())
         assert sim.results.sir.infection.cum[-1] < 0.5*base.results.sir.infection.cum[-1]
         assert [strat.name for strat in sim.groups.strats] == ['has_vaccine'] # Holding the vaccine is a property of people
@@ -241,7 +272,7 @@ def test_vaccinate():
     sims = run_each(routine)
     for sim in sims.values():
         res = sim.results.offer
-        assert np.isclose(res.delivered[10], 25_000, rtol=0.03) and res.delivered[:10].sum() == 0 and res.delivered[11:].sum() == 0
+        assert np.isclose(res.delivered[11], 25_000, rtol=0.03) and res.delivered[:11].sum() == 0 and res.delivered[12:].sum() == 0 # In the step that starts at 10
 
     # Routine delivery by age is given as people reach the age, not to everyone already older at the start
     for solver in ['ode', 'abm']:
@@ -265,9 +296,9 @@ def test_vaccinate():
     sims = run_each(waning, stop=200)
     for sim in sims.values():
         delivered = sim.results.rounds.delivered
-        assert list(np.flatnonzero(delivered)) == [20, 70, 120, 170]
+        assert list(np.flatnonzero(delivered)) == [21, 71, 121, 171] # The steps that start at 20, 70, ...
         expected = 0.8*(10_000 + 40_000*(1 - np.exp(-50/30))) # Those missed in the last round, and those who have lost their protection since
-        assert np.isclose(delivered[70], expected, rtol=0.05)
+        assert np.isclose(delivered[71], expected, rtol=0.05)
     check_close(sims, lambda sim: sim.results.sis.n_I[100])
 
     # A number available per day, while stocks last; and coverage by age
@@ -279,7 +310,7 @@ def test_vaccinate():
     sims = run_each(capacity, stop=60)
     for sim in sims.values():
         delivered = sim.results.stock.delivered
-        assert np.allclose(delivered[10:40], 500, rtol=0.15) and delivered[:10].sum() == 0 and delivered[40:].sum() == 0 # The binomial solver draws the number reached, so is a little under the capacity on some days
+        assert np.allclose(delivered[11:41], 500, rtol=0.15) and delivered[:11].sum() == 0 and delivered[41:].sum() == 0 # The binomial solver draws the number reached, so is a little under the capacity on some days
     with pytest.raises(ValueError): # A bare number for routine delivery has no unit of time (it was per unit time, while in a campaign it is per round)
         ss.Sim(make_sir(), interventions=ss.vaccinate(ss.Vaccine(efficacy=0.9), capacity=100, start=10), **kw).init()
 
@@ -302,8 +333,8 @@ def test_vaccinate():
     sims = run_each(varying, stop=30)
     for sim in sims.values():
         delivered = sim.results.supply.delivered
-        assert delivered[:10].sum() == 0 and delivered[20:].sum() == 0 # Nobody is reached outside the ten days
-        assert delivered[12] > 1500 and delivered[17] == 100 # About 5% of those left each day, until supplies are limited
+        assert delivered[:11].sum() == 0 and delivered[21:].sum() == 0 # Nobody is reached outside the ten days (the steps that start at 10 to 19)
+        assert delivered[13] > 1500 and delivered[18] == 100 # About 5% of those left each day, until supplies are limited
 
     # A capacity per unit time, in rounds: what accrues over the interval between them
     def rounds_cap(**kwargs):
@@ -313,7 +344,7 @@ def test_vaccinate():
     sims = run_each(rounds_cap, stop=30)
     for sim in sims.values():
         delivered = sim.results.rounds.delivered
-        assert list(np.flatnonzero(delivered)) == [0, 10, 20] and np.allclose(delivered[[0, 10, 20]], 1000)
+        assert list(np.flatnonzero(delivered)) == [1, 11, 21] and np.allclose(delivered[[1, 11, 21]], 1000)
 
     # A typed probability as coverage: over the interval between rounds
     def typed_cov(**kwargs):
@@ -321,7 +352,7 @@ def test_vaccinate():
         return ss.Sim(make_sir(), interventions=rounds, **kwargs)
     sims = run_each(typed_cov, stop=100)
     for sim in sims.values():
-        assert np.isclose(sim.results.rounds.coverage[0], 1 - 0.5**(91/365), rtol=0.05)
+        assert np.isclose(sim.results.rounds.coverage[1], 1 - 0.5**(91/365), rtol=0.05)
     return sims
 
 
@@ -334,15 +365,15 @@ def test_transfer():
     sims = run_each(make)
     for sim in sims.values():
         delivered = sim.results.rollout.delivered
-        assert np.allclose(delivered[[5, 30]], [35_000, 10_500], rtol=0.05) # 70% of everyone, then 70% of those left (not of the half that started unvaccinated)
-    check_close(sims, lambda sim: sim.results.sir.infection.cum[-1], rtol=0.3) # What is left after the campaign depends on how far the epidemic had got, which varies by about 10% between agent-based runs, and agents are about 10% below the ODE at a step of a day
+        assert np.allclose(delivered[[6, 31]], [35_000, 10_500], rtol=0.05) # 70% of everyone, then 70% of those left (not of the half that started unvaccinated)
+    check_close(sims, lambda sim: sim.results.sir.infection.cum[-1], rtol=0.35) # What is left after the campaign depends on how far the epidemic had got, which varies by about 10% between agent-based runs, and agents are about 10% below the ODE at a step of a day
     with pytest.raises(TypeError): # ss.transfer() is movement at a rate, never a delivery
         ss.transfer(vaccinated=True, coverage=0.7, at=[5])
 
     # From one level to another, given as an arrow
     sir = make_sir().stratify(risk=['low', 'high'], split=[1, 0])
-    sim = ss.Sim(sir, interventions=ss.Delivery(move=dict(risk='low -> high'), coverage=0.4, at=[5], name='riskier'), solver='ode', stop=10, **kw).run()
-    assert np.isclose(sim.results.riskier.delivered[5], 0.4*kw['total_pop'], rtol=0.01)
+    sim = ss.Sim(sir, interventions=ss.Delivery(move=dict(risk=('low', 'high')), coverage=0.4, at=[5], name='riskier'), solver='ode', stop=10, **kw).run()
+    assert np.isclose(sim.results.riskier.delivered[6], 0.4*kw['total_pop'], rtol=0.01)
     return sims
 
 
@@ -360,7 +391,7 @@ def test_treat():
     for solver,sim in sims.items():
         res = sim.results
         assert res.sis.n_I[-1] < 0.9*base.results.sis.n_I[-1]
-        assert np.isclose(res.rounds.delivered[30], 0.3*res.sis.n_I[30], rtol=0.15 if solver == 'abm' else 0.07) # By default, the people who are infected at the time (as agents, those infected after the step's exits, and one run)
+        assert np.isclose(res.rounds.delivered[31], 0.3*res.sis.n_I[30], rtol=0.15 if solver == 'abm' else 0.07) # By default, the people who are infected at the time (as agents, those infected after the step's exits, and one run)
     check_close(sims, lambda sim: sim.results.rounds.delivered.sum(), rtol=0.12) # As agents, about 9% fewer are infected (a difference of order dt)
 
     # A treatment that changes rates, with protection that fades by a function of time (agents only)
@@ -403,7 +434,7 @@ def test_treat():
         both = ss.treat(ss.Treatment(cure=0.5, efficacy=dict(mortality=0.9)), coverage=0.5, interval=5, name='both')
         sim = ss.Sim(sird, interventions=both, solver=solver, stop=150, **kw).run()
         res = sim.results
-        assert np.isclose(res.both.delivered[0], 0.5*res.sird.n_I[0], rtol=0.1 if solver == 'ode' else 0.3) # Not to everyone (it was 10,000 of 10,000); as agents, half of about 100, after the step's exits
+        assert np.isclose(res.both.delivered[1], 0.5*res.sird.n_I[0], rtol=0.1 if solver == 'ode' else 0.3) # Not to everyone (it was 10,000 of 10,000); as agents, half of about 100, after the step's exits
         assert res.sird.death.sum() < 0.6*untreated.results.sird.death.sum()
     for bad in [lambda: ss.Treatment(efficacy=0.9), lambda: ss.Vaccine()]:
         with pytest.raises(ValueError):
@@ -426,8 +457,8 @@ def test_screen():
     for solver,sim in sims.items():
         res = sim.results
         rtol = 0.05 # Under every solver the screening sees the people at the start of the step, before the disease's transitions in it (as agents it saw them after the exits, and was 8% low)
-        ti = 37
-        n_I = res.sis.n_I[ti] # At the time
+        ti = 38 # The step from time 37
+        n_I = res.sis.n_I[ti-1] # At the time
         expected = 0.4*(0.9*n_I + 0.05*(50_000 - n_I)) # True positives and false positives
         assert np.isclose(res.screening.delivered[ti], 20_000, rtol=0.03)
         assert np.isclose(res.screening.positive[ti], expected, rtol=rtol)
@@ -463,9 +494,9 @@ def test_screen():
         protect = ss.vaccinate(ss.Vaccine(efficacy=0.5), who=slow.negative)
         return ss.Sim(sis, interventions=[slow, cure, protect], **kwargs)
     res = delay(solver='abm', stop=60, **kw).run().results
-    assert list(np.flatnonzero(res.slow.delivered)) == [40] and list(np.flatnonzero(res.slow.positive)) == [43]
-    assert np.isclose(res.cure.delivered[43], res.slow.positive[43])
-    assert np.isclose(res.slow.positive[43] + res.protect.delivered[43], res.slow.delivered[40], rtol=0.01) # Everyone tested has one result or the other
+    assert list(np.flatnonzero(res.slow.delivered)) == [41] and list(np.flatnonzero(res.slow.positive)) == [44]
+    assert np.isclose(res.cure.delivered[44], res.slow.positive[44])
+    assert np.isclose(res.slow.positive[44] + res.protect.delivered[44], res.slow.delivered[41], rtol=0.01) # Everyone tested has one result or the other
     check_agents(delay, **kw)
 
     # Someone waiting for a result is not tested again, so a test repeated more often than its delay still returns results
@@ -489,7 +520,7 @@ def test_triggered():
     out = {}
     for key,who in dict(union=lambda a,b: a.positive | b.positive, list=lambda a,b: [a.positive, b.positive], both=lambda a,b: [a.positive, b.positive]).items():
         res = union(key, who, **kw).run().results
-        out[key] = res.tx.delivered[20]/res.sir.n_I[20]
+        out[key] = res.tx.delivered[21]/res.sir.n_I[20]
         check_agents(lambda **kwargs: union(key, who, **kwargs), **kw)
     print(out)
     assert np.isclose(out['union'], 0.75, atol=0.03) and out['list'] == out['union'] # Half of the infected tested by each, independently: 75% by either, once each (not 100%)
@@ -502,9 +533,9 @@ def test_triggered():
         v1 = ss.vaccinate(ss.Vaccine(efficacy=0.5, name='vx1'), who=s.positive, name='v1')
         v2 = ss.vaccinate(ss.Vaccine(efficacy=0.5, name='vx2'), who=s.positive, name='v2')
         res = ss.Sim(make_sir(), interventions=[s, cure, v1, v2], solver=solver, stop=30, **kw).run().results
-        n = res.s.positive[20]
-        assert n > 0 and np.allclose([res.cure.delivered[20], res.v1.delivered[20], res.v2.delivered[20]], n) # Not fewer for the later steps
-        assert np.isclose(res.cure.cured[20] + res.cure.failed[20] + res.cure.unneeded[20], n)
+        n = res.s.positive[21]
+        assert n > 0 and np.allclose([res.cure.delivered[21], res.v1.delivered[21], res.v2.delivered[21]], n) # Not fewer for the later steps
+        assert np.isclose(res.cure.cured[21] + res.cure.failed[21] + res.cure.unneeded[21], n)
 
     # Steps given in any order run in the order of their triggers (as agents, since it reads rapid.since and pcr has a delay)
     def make(reverse=False, **kwargs):
@@ -587,7 +618,7 @@ def test_memory():
     assert sim.solver == 'abm' and sim.results.scr.delivered.sum() > 0
     S, M, H = ss.states(3)
     dis = ss.Disease(S >> M @ ss.peryear(0.5), M >> S @ ss.days(10), H >> S @ ss.days(5), name='dis')
-    sim = ss.Sim(dis, interventions=ss.Delivery(move='M -> H', who=M, interval=ss.days(1)), n_agents=1000, stop=ss.days(30), dt=ss.days(1), verbose=0).init()
+    sim = ss.Sim(dis, interventions=ss.Delivery(move=M >> H, who=M, interval=ss.days(1)), n_agents=1000, stop=ss.days(30), dt=ss.days(1), verbose=0).init()
     assert sim.diseases.dis.graph.first.name == 'S' # Was H, so everyone started in hospital
     return sims
 
@@ -668,9 +699,10 @@ def test_coinfection_compartments():
         S, I = ss.states('S I')
         hiv = ss.Disease(infection=ss.Transition(S, I, rate=0.15 * I), death=ss.death(I, rate=0.05), init_prev=0.05)
         S, I = ss.states('S I')
-        syph = ss.Disease(infection=ss.Transition(S, I, rate=1.0 * I), cure=ss.Transition(I, S, dur=ss.years(1)), init_prev=0.05)
-        if strains:
-            syph.stratify(strain=['A', 'B'], kind='strain', states=strains, split=[0.5, 0.5], adjust=dict(rel_trans=[1.0, 1.5]))
+        syph = ss.Disease(infection=ss.Transition(S, I, rate=1.0 * I), cure=ss.Transition(I, S, dur=ss.years(1)), init_prev=0.05,
+                          strains=ss.Strains(['A', 'B'], split=[0.5, 0.5], rel_trans=[1.0, 1.5]) if strains == 'strains' else None) # In I
+        if isinstance(strains, list):
+            syph.stratify(group=['A', 'B'], states=strains, split=[0.5, 0.5])
         coinfection = [
             ss.modify(hiv.rel_trans, multiply=3.0, where=syph.I, name='hiv_trans'),
             ss.modify(syph.rel_sus, multiply=2.0, where=hiv.I, name='syph_sus'),
@@ -713,10 +745,10 @@ def test_coinfection_compartments():
     sim = make(coinfect=False, interventions=True).run()
     res = sim.results
     ti = np.argmax(res.vx.delivered > 0)
-    assert np.isclose(res.vx.delivered[ti], res.hiv.n_I[ti])
+    assert np.isclose(res.vx.delivered[ti], res.hiv.n_I[ti-1]) # Those in I at the start of the step
 
     # A dimension of some states of one disease only, e.g. a strain
-    sim = make(strains=['I']).run()
+    sim = make(strains='strains').run()
     res = sim.results
     assert np.allclose(res.syph.n_I.by('strain').values.sum(axis=1), res.syph.n_I)
     assert np.allclose(res.hiv.n_S + res.hiv.n_I, res.syph.n_S + res.syph.n_I)
@@ -811,7 +843,7 @@ def test_triggers():
             sim = self.sim
             if self.closed and sim.ti >= self.reopen:
                 self.closed = False
-            if not self.closed and sim.results.sir.n_I[sim.ti] > self.threshold: # During a step, sim.ti is its start, the last time point with results (it was [sim.ti - 1] when code saw the step's end)
+            if not self.closed and sim.results.sir.n_I[sim.ti - 1] > self.threshold: # During a step, sim.ti is its own index, so the last results are those of the step before
                 self.closed = True
                 self.reopen = sim.ti + 7*self.weeks
             self.days_closed += self.closed
@@ -827,7 +859,7 @@ def test_triggers():
 
     # Or hold=: a condition that holds on one step keeps the modifier on for ten, as start= and stop= would
     sir = make()
-    once = ss.Sim(sir, interventions=ss.modify(sir.pars.beta, multiply=0.3, when=lambda sim: sim.ti == 50, hold=10), **pars).run()
+    once = ss.Sim(sir, interventions=ss.modify(sir.pars.beta, multiply=0.3, when=lambda sim: sim.ti == 51, hold=10), **pars).run() # The step that starts at 50
     sir = make()
     timed = ss.Sim(sir, interventions=ss.modify(sir.pars.beta, multiply=0.3, start=50, stop=60), **pars).run()
     assert np.allclose(once.results.sir.n_I, timed.results.sir.n_I)
@@ -838,21 +870,24 @@ def test_move_leaky_at_age():
     sc.heading('Testing a one-off move between states, an all-or-nothing vaccine, and routine doses at an age')
     def make():
         S, I, R, V = ss.states(4)
-        return ss.Disease(S >> I @ 0.3*I, I >> R @ ss.days(8), V >> S @ ss.days(100), init=dict(I=10), name='sir')
+        return ss.Disease(S >> I @ 0.3*I, I >> R @ ss.days(8), V >> S @ ss.days(100), init_n=dict(I=10), name='sir')
     for solver in ['ode', 'abm']:
-        sim = ss.Sim(make(), interventions=ss.vaccinate(move='S -> V', at=[5], coverage=0.5, name='sia'), unit='day', stop=10, solver=solver, n_agents=10_000, verbose=0).run()
-        res, moved = sim.results.sir, sim.results.sia.delivered[5]
+        sir = make()
+        sim = ss.Sim(sir, interventions=ss.vaccinate(move=sir.S >> sir.V, at=[5], coverage=0.5, name='sia'), unit='day', stop=10, solver=solver, n_agents=10_000, verbose=0).run()
+        res, moved = sim.results.sir, sim.results.sia.delivered[6]
         assert np.isclose(moved, 0.5*res.n_S[5], rtol=0.05) and np.isclose(res.n_V.max(), moved, rtol=0.02) # Half of those in S move to V, at once
     with pytest.raises(ValueError):
-        ss.vaccinate(ss.Vaccine(efficacy=0.9), move='S -> V')
+        ss.vaccinate(ss.Vaccine(efficacy=0.9), move=sir.S >> sir.V)
+    with pytest.raises(ValueError): # The states themselves, not their names
+        ss.vaccinate(move='S -> V')
 
     # All or nothing: 85% of those vaccinated fully protected and 15% not at all, so with R0 = 8 an epidemic among the 15% infects about 5% of everyone; a leaky vaccine leaves everyone 15% susceptible, and about 31% are infected
     def final(leaky, solver):
         S, I, R = ss.states('S I R')
-        sir = ss.Disease(infection=ss.Transition(S, I, rate=1.0 * I), recovery=ss.Transition(I, R, dur=8), init=dict(I=10), name='sir')
+        sir = ss.Disease(infection=ss.Transition(S, I, rate=1.0 * I), recovery=ss.Transition(I, R, dur=8), init_n=dict(I=10), name='sir')
         vx = ss.vaccinate(ss.Vaccine(efficacy=0.85, leaky=leaky), at=[1], coverage=1.0, name='vx')
         sim = ss.Sim(sir, interventions=vx, unit='day', stop=300, solver=solver, n_agents=20_000, verbose=0).run()
-        assert np.isclose(sim.results.vx.delivered[1], sim.results.sir.n_S[1], rtol=0.01) # Everyone received it
+        assert np.isclose(sim.results.vx.delivered[2], sim.results.sir.n_S[1], rtol=0.01) # Everyone received it
         return sim.results.sir.n_R[-1]/sim.results.sir.n_S[0]
     for solver in ['ode', 'abm']:
         aon, leaky = final(False, solver), final(True, solver)
@@ -872,13 +907,13 @@ def test_move_leaky_at_age():
 def test_coverage_by_group():
     sc.heading('Testing that the coverage of several groups is what was delivered over who was eligible in them')
     S, I, R = ss.states('S I R')
-    sir = ss.Disease(infection=ss.Transition(S, I, rate=0.2 * I), recovery=ss.Transition(I, R, dur=10), init=dict(I=10), name='sir')
+    sir = ss.Disease(infection=ss.Transition(S, I, rate=0.2 * I), recovery=ss.Transition(I, R, dur=10), init_n=dict(I=10), name='sir')
     sir.stratify(age=[0, 5, 15])
     vx = ss.vaccinate(ss.Vaccine(efficacy=0.9), at=[5], coverage=ss.by(age=[0.8, 0.2, 0.5]), name='vx')
     res = ss.Sim(sir, interventions=vx, unit='day', stop=20, solver='ode', verbose=0).run().results.vx
     young = ['0-4', '5-14']
-    assert np.allclose(res.coverage.by('age').values[5], [0.8, 0.2, 0.5])
-    assert np.isclose(res.coverage.select(age=young)[5], res.delivered.select(age=young)[5]/res.eligible.select(age=young)[5]) # Not 0.8 + 0.2
+    assert np.allclose(res.coverage.by('age').values[6], [0.8, 0.2, 0.5])
+    assert np.isclose(res.coverage.select(age=young)[6], res.delivered.select(age=young)[6]/res.eligible.select(age=young)[6]) # Not 0.8 + 0.2
     return res
 
 
@@ -887,7 +922,7 @@ def test_hold_by_place():
     def run(solver, by='patch', hold=ss.days(14), npi=True):
         beta = ss.par(0.3)
         S, I, R = ss.states('S I R')
-        sir = ss.Disease(infection=ss.Transition(S, I, rate=beta * I), recovery=ss.Transition(I, R, rate=ss.perday(0.1)), init=dict(I=ss.by(patch=[10, 0, 0])), name='sir')
+        sir = ss.Disease(infection=ss.Transition(S, I, rate=beta * I), recovery=ss.Transition(I, R, rate=ss.perday(0.1)), init_n=dict(I=ss.by(patch=[10, 0, 0])), name='sir')
         sir.stratify(patch=['a', 'b', 'c'], mobility=ss.geo.Mobility(matrix=0.01*(1 - np.eye(3)))) # The other places are infected later
         cond = sir.infection.incidence(over=ss.days(7), by=by) > 0.02 # A week's infections in each place, as a share of its people
         rule = ss.modify(beta, multiply=0.3, where=cond, hold=hold) if npi else None
@@ -913,8 +948,8 @@ def test_sensitivity_by_state():
         return ss.Sim(seir, interventions=screening, stop=60, **sc.mergedicts(dict(total_pop=50_000), kwargs))
     for solver,pars in [('ode', {}), ('abm', dict(n_agents=50_000))]:
         res = make(solver=solver, **kw, **pars).run().results
-        ti = 30
-        before = lambda name, **sel: res.seir[f'n_{name}'].select(**sel)[ti] if sel else res.seir[f'n_{name}'][ti]
+        ti = 31 # The step from time 30
+        before = lambda name, **sel: res.seir[f'n_{name}'].select(**sel)[ti-1] if sel else res.seir[f'n_{name}'][ti-1]
         expected = 0.5*(0.5*before('I', age=0) + 0.9*before('I', age=1) + 0.2*before('E')) # Nobody else tests positive
         print(f'{solver}: {res.screening.positive[ti]:.0f} positive, expected {expected:.0f}')
         assert np.isclose(res.screening.positive[ti], expected, rtol=0.05 if solver == 'ode' else 0.15)
@@ -1005,7 +1040,7 @@ def test_branch_modifiers():
         A, B, C = ss.states('A B C')
         trs = dict(leave=ss.Transition(A, [B, C], dur=ss.years(1), p=[sB, 1 - sB])) if multi else dict(a_to_B=ss.Transition(A, B, dur=ss.years(1), p=sB), a_to_C=ss.Transition(A, C, dur=ss.years(1), p=1 - sB))
         for solver in solvers:
-            d = ss.Disease(**trs, back=ss.Transition([B, C], A, rate=ss.peryear(4)), name='d')
+            d = ss.Disease(**trs, back=ss.Transition([B, C], A, rate=ss.peryear(4)), first='A', name='d')
             size = dict(n_agents=5000) if solver == 'abm' else dict(total_pop=5000)
             r = ss.Sim(d, interventions=ss.change('d.pars.sB', at=2005, to=0.8), start=2000, stop=2012, dt=ss.months(1), solver=solver, verbose=0, **size).run().results.d
             assert np.isclose(r.n_B[-1]/(r.n_B[-1] + r.n_C[-1]), 0.8, atol=0.05), solver
@@ -1013,7 +1048,7 @@ def test_branch_modifiers():
     # An efficacy on one destination of a transition with several halves its probability, without changing the dwell time
     for solver in ['ode', 'abm']:
         P, C, R = ss.states('P C R')
-        hpv = ss.Disease(P, C, R, precin=ss.Transition(P, [C, R], p=[0.2, 0.8], dur=ss.years(2)), name='hpv')
+        hpv = ss.Disease(P, C, R, precin=ss.Transition(P, [C, R], p=[0.2, 0.8], dur=ss.years(2)), first='P', name='hpv')
         txvx = ss.vaccinate(ss.Vaccine(efficacy={'precin.C': 0.5}), coverage=0.5, at=[2000], name='txvx')
         size = dict(n_agents=20_000) if solver == 'abm' else dict(total_pop=20_000)
         res = ss.Sim(hpv, interventions=txvx, start=2000, stop=2012, dt=ss.years(0.25), solver=solver, verbose=0, **size).run().results.hpv
@@ -1122,12 +1157,12 @@ def test_delay():
     check_agents(make) # Who is waiting is each person's own, so agents only, fixed or drawn
     check_agents(make, delay=ss.uniform(ss.months(1), ss.months(5)))
     res = make(solver='abm', n_agents=20_000).run().results
-    pos, tx = res.screening.positive[:-4], res.treatment.delivered[3:-1] # Nothing is delivered at the last time point, which has no step
+    pos, tx = res.screening.positive[1:-3], res.treatment.delivered[4:] # Nothing is delivered at the first time point, which has no step
     assert tx[0] > 0 and tx[1:3].sum() == 0
     assert np.allclose(tx, pos, rtol=1e-6), f'{tx[::3]} treated against {pos[::3]} positive'
     sim = make(delay=ss.uniform(ss.months(1), ss.months(5)), solver='abm', n_agents=20_000).run() # Drawn per person: 2 to 5 steps after the test
     tx = sim.results.treatment.delivered
-    assert tx[:2].sum() == 0 and np.isclose(tx[2:5].sum(), 0.75*sim.results.screening.positive[0], rtol=0.1) # Those due after 2, 3, or 4 steps
+    assert tx[:3].sum() == 0 and np.isclose(tx[3:6].sum(), 0.75*sim.results.screening.positive[1], rtol=0.1) # Those due after 2, 3, or 4 steps
     assert 'after 3 months' in make(solver='abm', n_agents=1000).init().interventions.treatment.describe()
     with pytest.raises(ValueError, match='needs an event'):
         ss.treat(ss.Treatment(cure=0.9), delay=ss.months(3))
@@ -1230,13 +1265,53 @@ def test_agents_only():
         return ss.Sim(sis, interventions=[scr, tx, after], **kwargs)
     for solver,sim in run_each(follow, stop=10).items():
         r = sim.results
-        assert r.tx.unneeded[5] > 0 and np.isclose(r.after.delivered[5], r.tx.delivered[5], rtol=0.01 if solver == 'binomial' else 1e-6), solver # Was 11% short as an ODE, the parts taken as independent; the binomial solver draws
+        assert r.tx.unneeded[6] > 0 and np.isclose(r.after.delivered[6], r.tx.delivered[6], rtol=0.01 if solver == 'binomial' else 1e-6), solver # Was 11% short as an ODE, the parts taken as independent; the binomial solver draws
     return sim
+
+
+def test_waning_as_states():
+    sc.heading('Testing waning written as states outside Starsim (two rates in turn, re-dosed), under agents and the ODE; and re-dosing a product that fades by a function')
+    def two_rate(early, switch, late, name='prot'):
+        """ User code: protection lost at one rate until `switch`, then at another (`early=None` is a box then a decay) """
+        U, P1, P2 = ss.states('U P1 P2')
+        early = {} if early is None else dict(early=P1 >> U @ early)
+        return ss.Disease(**early, switch=P1 >> P2 @ ss.constant(switch), late=P2 >> U @ late, first='U', name=name)
+
+    def make(solver):
+        S, I = ss.states('S I')
+        mal = ss.Disease(infection=S >> I @ ss.peryear(2.0), recovery=I >> S @ ss.days(100), name='mal')
+        prot = two_rate(ss.days(50), ss.days(40), ss.days(200))
+        rounds = ss.Delivery(move=prot.U + prot.P1 + prot.P2 >> prot.P1, coverage=0.8, at=[ss.days(20), ss.days(150)], name='rounds') # A new dose restarts the protection
+        eff = ss.modify(mal.infection, multiply=0.2, where=prot.P1 | prot.P2, name='eff')
+        size = dict(n_agents=20_000) if solver == 'abm' else dict(total_pop=20_000)
+        return ss.Sim([mal, prot], interventions=rounds, connectors=eff, unit='day', dt=0.5, stop=250, solver=solver, verbose=0, **size).run()
+
+    sims = {solver:make(solver) for solver in ['ode', 'abm']}
+    t = np.array([40, 60, 100, 150, 200, 250])
+    held = {k:(sim.results.prot.n_P1 + sim.results.prot.n_P2)[2*t]/20_000 for k,sim in sims.items()}
+    dt = t[:3] - 20
+    expected = 0.8*np.where(dt < 40, np.exp(-dt/50), np.exp(-40/50)*np.exp(-(dt - 40)/200))
+    assert np.allclose(held['ode'][:3], expected, atol=0.005), held['ode'] # Held in the ODE as written
+    assert np.allclose(held['abm'], held['ode'], atol=0.02), held # Agents agree, re-dosing included
+    p = sims['ode'].results.prot
+    assert p.n_P1[2*155]/20_000 > 0.7 # Everyone reached in round 2 restarted, including those still protected from round 1 (0.8*exp(-5/50) of them)
+    prev = {k:sim.results.mal.n_I[2*t]/20_000 for k,sim in sims.items()}
+    assert np.allclose(prev['abm'], prev['ode'], rtol=0.05), prev
+
+    # A product that fades by a function is given again to those who hold it, which restarts it (MA15; agents only)
+    S, I = ss.states('S I')
+    mal = ss.Disease(infection=S >> I @ ss.peryear(2.0), recovery=I >> S @ ss.days(20), name='mal')
+    vax = ss.Vaccine(efficacy=dict(infection=1.0), waning=lambda t: (np.asarray(t) < 100).astype(float))
+    sim = ss.Sim(mal, interventions=ss.vaccinate(vax, coverage=1.0, at=[10, 60], name='rounds'), n_agents=2000, unit='day', stop=200, verbose=0).run()
+    inf = sim.results.mal.infection
+    assert sim.results.rounds.delivered[61] == 2000 and inf[12:159].sum() == 0 and inf[162:].sum() > 0 # Protected until day 160, not 110
+    return sims
 
 
 if __name__ == '__main__':
     sc.options(interactive=False)
     change = test_change()
+    applied = test_applied()
     where  = test_modify_where()
     conds  = test_conditions()
     vx     = test_vaccinate()
@@ -1258,6 +1333,7 @@ if __name__ == '__main__':
     anytr  = test_treat_any_transition()
     trace  = test_trace()
     branch = test_branch_modifiers()
+    states = test_waning_as_states()
     nets   = test_network_contacts()
     effective = test_effective()
     whole  = test_whole_run()

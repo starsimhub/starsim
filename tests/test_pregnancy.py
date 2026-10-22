@@ -185,8 +185,8 @@ def test_burnin_pregnancies():
 
 @sc.timer()
 def test_mmr():
-    sc.heading('Testing the maternal mortality ratio')
-    preg = ss.Pregnancy(fertility_rate=ss.freqperyear(100), p_maternal_death=ss.bernoulli(0.05), p_infertile=ss.bernoulli(0.2))
+    sc.heading('Testing the maternal mortality ratio, and infant mortality')
+    preg = ss.Pregnancy(fertility_rate=ss.freqperyear(100), p_maternal_death=ss.bernoulli(0.05), p_infertile=ss.bernoulli(0.2), infant_rate=ss.peryear(0.05))
     sim = ss.Sim(demographics=preg, n_agents=5000, start=2000, stop=2010, dt=ss.months(1), verbose=0).run()
     r = sim.results.pregnancy
     births, md = r.birth.values, r.maternal_deaths.values
@@ -195,6 +195,8 @@ def test_mmr():
     assert r.mmr.summarize_by == 'mean'
     mmr = md.sum()/births.sum()*100e3
     assert 3500 < mmr < 6500, f'An MMR of {mmr:.0f} per 100,000 from a 5% chance of death at delivery'
+    imr = r.infant_mortality.sum()/births.sum()
+    assert 0.02 < imr < 0.06, f'{imr:.3f} of children died before the age of 1 at a rate of 0.05 per year (less for the last year)'
 
     # The reproduction: no KeyError
     sim = ss.Sim(demographics=ss.Pregnancy(fertility_rate=ss.freqperyear(100)), n_agents=500, start=2000, stop=2002).run()
@@ -412,6 +414,10 @@ def test_code_pars():
     assert half.results.pregnancy.conception.sum() < 0.7*base.results.pregnancy.conception.sum()
     with pytest.raises(ss.errors.UnknownParameter): # A misspelled parameter from the user is still an error
         FP(age_scal=0.3)
+    with pytest.raises(ss.CapabilityError, match='conception_rate'): # A method of Starsim 3's pregnancy, which would never be called
+        class V3(ss.Pregnancy):
+            def make_p_conceive(self, uids=None):
+                return 0
     preg = ss.Pregnancy()
     preg.pars['rel_fertilty'] = 2 # ... and so is one added later that nothing reads
     with pytest.raises(ss.errors.UnknownParameter, match='nothing would read it'):

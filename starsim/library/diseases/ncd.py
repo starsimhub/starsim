@@ -7,13 +7,13 @@ import starsim as ss
 _ = None # Sentinel for "not provided" default arguments
 
 
-class NCD(ss.Infection):
+class NCD(ss.Disease):
     """
     Example non-communicable disease
 
     This class implements a basic NCD model with risk of developing a condition
     (e.g., hypertension, diabetes), a state for having the condition, and associated
-    mortality. It is written as code (see `ss.Infection`), and is not transmitted.
+    mortality. It is written as code (see `ss.Disease`), and is not transmitted.
 
     Args:
         initial_risk (float/`ss.bernoulli`): initial prevalence of risk factors
@@ -34,7 +34,6 @@ class NCD(ss.Infection):
             ss.BoolState('affected', label='Affected'),
             ss.FloatArr('ti_affected', label='Time of becoming affected'),
             ss.FloatArr('ti_dead', label='Time of death'),
-            reset = True, # Not an infection, so without the states of ss.Infection
         )
         return
 
@@ -76,9 +75,9 @@ class NCD(ss.Infection):
 
     def init_results(self):
         """
-        Initialize results (not those of an infection)
+        Initialize results
         """
-        ss.Module.init_results(self)
+        super().init_results()
         self.define_results(
             ss.Result('n_not_at_risk', dtype=int,   label='Not at risk'),
             ss.Result('prevalence',    dtype=float, label='Prevalence'),
@@ -87,14 +86,9 @@ class NCD(ss.Infection):
         return
 
     def update_results(self):
-        ss.Module.update_results(self)
+        super().update_results()
         ti = self.ti
-        if ti + 1 < len(self.results.new_deaths):
-            self.results.new_deaths[ti + 1] = len(self.sim.people.died_of(self)) # Deaths attributable to this module, at the end of the step (ti is its start), once each has one cause
+        self.results.new_deaths[ti] = len(self.sim.people.died_of(self)) # Deaths attributable to this module in this step, once each has one cause
         self.results.n_not_at_risk[ti] = np.count_nonzero(self.not_at_risk)
         self.results.prevalence[ti]    = np.count_nonzero(self.affected)/self.sim.people.n_alive
-        return
-
-    def finalize_results(self):
-        ss.Module.finalize_results(self)
         return

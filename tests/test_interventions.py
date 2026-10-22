@@ -101,10 +101,10 @@ def test_routine_delivery():
     screening = ss.screen(make_dx(), coverage=1.0, start=start, stop=stop, interval=ss.years(1))
     sim = ss.Sim(pars, interventions=screening).run()
     n_screened = sim.results.screening.delivered
-    years = sim.t.yearvec
-    assert n_screened[years < start].sum() == 0, f'Expected zero screenings before {start}'
-    assert n_screened[years >= stop].sum() == 0, f'Expected zero screenings from {stop}'
-    assert n_screened[(years >= start) & (years < stop)].min() > 0, f'Expected screenings each year from {start} to {stop}'
+    years = sim.t.yearvec # A step's results are at its end, so those of the step that starts in a year are at the next
+    assert n_screened[years <= start].sum() == 0, f'Expected zero screenings before {start}'
+    assert n_screened[years > stop].sum() == 0, f'Expected zero screenings from {stop}'
+    assert n_screened[(years > start) & (years <= stop)].min() > 0, f'Expected screenings each year from {start} to {stop}'
 
     # A coverage that changes by year (Starsim 3's years= with an array of prob=)
     coverage = ss.timeseries(np.arange(2005, 2016), np.linspace(0.05, 0.95, 11), mode='linear')
@@ -118,8 +118,8 @@ def test_routine_delivery():
     # No window: the whole sim, offered at every step with a probability per year (Starsim 3's annual_prob=True)
     sim = ss.Sim(make_pars(start=2010, stop=2014), dt=0.5, interventions=ss.screen(make_dx(), coverage=ss.probperyear(0.5), name='screening')).run()
     n_screened = sim.results.screening.delivered
-    assert n_screened[:-1].min() > 0, 'Expected screening on every step when no window is given'
-    assert np.isclose(n_screened[0]/2000, 1 - 0.5**0.5, atol=0.05), 'Expected the probability per year to be per step'
+    assert n_screened[1:].min() > 0, 'Expected screening on every step when no window is given'
+    assert np.isclose(n_screened[1]/2000, 1 - 0.5**0.5, atol=0.05), 'Expected the probability per year to be per step'
     return sim
 
 
@@ -131,7 +131,7 @@ def test_campaign_delivery():
     # One year only
     sim = ss.Sim(pars, interventions=ss.screen(make_dx(), coverage=0.5, at=[2010], name='screening')).run()
     n_screened = sim.results.screening.delivered
-    on_year = np.isclose(sim.t.yearvec, 2010)
+    on_year = np.isclose(sim.t.yearvec, 2011) # The results of the step that starts in 2010
     assert n_screened[on_year].sum() > 0 and n_screened[~on_year].sum() == 0, 'Expected screenings in 2010 only'
 
     # Several years, each with its own coverage
@@ -139,7 +139,7 @@ def test_campaign_delivery():
     coverage = ss.timeseries(years, [0.3, 0.5, 0.7])
     sim = ss.Sim(pars, interventions=ss.screen(make_dx(), coverage=coverage, at=years, name='screening')).run()
     n_screened = sim.results.screening.delivered
-    on = np.isin(sim.t.yearvec, years)
+    on = np.isin(sim.t.yearvec, np.array(years) + 1) # The results of the steps that start in those years
     assert n_screened[~on].sum() == 0, 'Expected no screenings outside campaign years'
     assert np.all(np.diff(n_screened[on]) > 0), 'Expected each round to reach its own coverage'
 

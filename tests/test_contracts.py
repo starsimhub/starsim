@@ -109,7 +109,7 @@ def test_streams(solver):
         def declared(order):
             states = dict(zip(order.split(), ss.states(order)))
             S, I, R, V = [states[name] for name in 'SIRV']
-            sir = ss.Disease(infection=S >> I @ ss.perday(0.42) * I, recovery=I >> R @ ss.perday(0.09), vax=S >> V @ ss.perday(0.011), breakthrough=V >> I @ ss.perday(0.17) * I, init=dict(I=25), name='sir')
+            sir = ss.Disease(infection=S >> I @ ss.perday(0.42) * I, recovery=I >> R @ ss.perday(0.09), vax=S >> V @ ss.perday(0.011), breakthrough=V >> I @ ss.perday(0.17) * I, init_n=dict(I=25), name='sir')
             return ss.Sim(sir, total_pop=10_000, stop=60, unit='day', solver=solver, rand_seed=587, verbose=0).run().results.sir.n_I.values
         siv, svi = declared('S I R V'), declared('S V I R')
         assert np.array_equal(siv, svi), f'Declaring the states in another order changed n_I by up to {np.abs(siv - svi).max():n}' # 155 under binomial before
@@ -117,7 +117,7 @@ def test_streams(solver):
         # A rate that varies in time takes the same values in a run stepped from Python as in a whole one, so the same draws (C12c)
         def seasonal(solver):
             S, I, R, V = ss.states('S I R V')
-            sir = ss.Disease(infection=S >> I @ ss.seasonal(mean=0.421, amplitude=0.46, peak=0.92) * I, recovery=I >> R @ ss.perday(0.0909), vax=S >> V @ ss.perday(0.011), init=dict(I=25), name='sir')
+            sir = ss.Disease(infection=S >> I @ ss.seasonal(mean=0.421, amplitude=0.46, peak=0.92) * I, recovery=I >> R @ ss.perday(0.0909), vax=S >> V @ ss.perday(0.011), init_n=dict(I=25), name='sir')
             return ss.Sim(sir, total_pop=100_000, stop=60, unit='day', solver=solver, rand_seed=587, verbose=0)
         for s in [solver, 'ode']:
             whole, stepped = [seasonal(s).run(profile=profile).results.sir.vax.values for profile in [False, True]]
@@ -188,6 +188,27 @@ def test_solvers_agree(name):
     return ode
 
 
+def test_agents_match_ode():
+    sc.heading('Testing that agents match the ODE on the spec\'s models, and that R0() is the analytic value')
+    analytic = dict( # From the corpus's parameters
+        sir     = 0.3*10, # β·D
+        seir    = 0.3*10, # β·D, since everyone exposed becomes infectious
+        malaria = np.sqrt(0.3*0.5*50_000/10_000*100 * 0.3*0.5*0.1/(0.1 + 0.1)*10), # √(abM/(Nr) · acσ/((σ + μ)μ)) = 7.5, with M = 50,000 mosquitoes at equilibrium and N = 10,000 people (was 0)
+    )
+    for name,R0 in analytic.items():
+        sim = corpus.models[name](solver='ode', **fine)
+        ode = mean_states(sim.run())
+        assert np.isclose(sim.diseases[name].R0(), R0), f'{name}: R0() is {sim.diseases[name].R0():n}, not {R0:n}'
+        if name in simple: # Agents are compared for these in test_solvers_agree()
+            continue
+        runs = [mean_states(corpus.models[name](solver='abm', rand_seed=seed, **fine).run()) for seed in range(3)]
+        floor = 0.1*max(ode.values())
+        for key,val in ode.items():
+            mean = np.mean([run[key] for run in runs])
+            assert abs(mean - val) <= 0.03*max(val, floor), f'{name} as agents: {key} averages {mean:n}, against {val:n} for the ODE' # About 1% apart at a quarter-day step
+    return
+
+
 @pytest.mark.parametrize('solver', ['ode', 'binomial', 'gillespie', 'tau', 'abm'])
 def test_exit_order(solver):
     sc.heading(f'Testing that the order of competing exits does not matter under {solver}')
@@ -196,7 +217,7 @@ def test_exit_order(solver):
         I = ss.State(name='I')
         dests = {key:ss.State(name=key.upper()) for key in 'abc'}
         exits = {key:I >> dests[key] @ ss.perday(1.0) for key in order} # Three equal exits, fast compared with the step
-        dis = ss.Disease(I, *dests.values(), **exits, name='exits')
+        dis = ss.Disease(I, *dests.values(), **exits, first='I', name='exits')
         agents = dict(n_agents=20_000) if solver == 'abm' else {}
         sim = ss.Sim(dis, unit='day', stop=5, solver=solver, total_pop=100_000, verbose=0, **agents).run()
         assert sim.solver == solver
@@ -222,7 +243,7 @@ def test_dwell_forms():
     )
     def run(form, solver):
         I, R, D = ss.states('I R D')
-        dis = ss.Disease(I, R, D, **forms[form](I, R, D), name='cohort')
+        dis = ss.Disease(I, R, D, **forms[form](I, R, D), first='I', name='cohort')
         size = dict(n_agents=20_000) if solver == 'abm' else dict(total_pop=20_000)
         res = ss.Sim(dis, unit='day', dt=0.05, stop=15, solver=solver, rand_seed=1, verbose=0, **size).run().results.cohort
         return np.array([res.n_I.values.mean(), res.n_R[-1], res.n_D[-1]])/20_000 # Time infected, and where people end up
@@ -232,11 +253,24 @@ def test_dwell_forms():
     return
 
 
+def test_wide_dwell():
+    sc.heading('Testing that a dwell time too variable for Erlang stages runs as agents under auto, and warns under the ODE')
+    def make(c, solver='auto'):
+        A, B = ss.states('A B')
+        dis = ss.Disease(A, B, go=A >> B @ ss.peryear(1), back=ss.Transition(B, A, dur=ss.weibull(c=c, scale=ss.years(1))), first='A', name='m')
+        return ss.Sim(dis, total_pop=1000, stop=2010, solver=solver, verbose=0).init()
+    assert make(0.5).solver == 'ode' # A coefficient of variation of 2.2
+    assert make(0.3).solver == 'abm' # Of 5.4: one exponential stage at its mean of 9.3 years kept nearly everyone in B (FP53)
+    with pytest.warns(RuntimeWarning, match='coefficient of variation'):
+        make(0.3, 'ode')
+    return
+
+
 def test_destinations():
     sc.heading('Testing that every solver agrees on the flow to each destination, by age')
     def run(solver, seed=1):
         I, R, D = ss.states('I R D')
-        dis = ss.Disease(I, R, D, out=ss.Transition(I, [R, D], p=[0.7, 0.3], dur=ss.days(4)), init=dict(I=1000), name='cohort')
+        dis = ss.Disease(I, R, D, out=ss.Transition(I, [R, D], p=[0.7, 0.3], dur=ss.days(4)), init_n=dict(I=1000), first='I', name='cohort')
         dis.stratify(age=ss.years([0, 40]))
         res = ss.Sim(dis, n_agents=1000, unit='day', stop=40, solver=solver, rand_seed=seed, verbose=0).run().results.cohort
         return np.array([res.out.D.select(age=age).sum() for age in [0, 1]])
@@ -266,12 +300,37 @@ def test_conservation(name):
     return
 
 
+@pytest.mark.parametrize('dwell', ['exponential', 'fixed', 'erlang', 'lognormal', 'after'])
+def test_crossing_conservation(dwell):
+    sc.heading(f'Testing that diseases tracked jointly keep their people under every solver, with a dwell that is {dwell}')
+    dwells = dict(
+        exponential = lambda P, NP: ss.Transition(P, NP, dur=ss.months(9)),
+        fixed       = lambda P, NP: ss.Transition(P, NP, dur=ss.constant(ss.months(9))), # A conveyor: the ODE lost 9% of people (FP51)
+        erlang      = lambda P, NP: ss.Transition(P, NP, dur=ss.months(9), stages=3),
+        lognormal   = lambda P, NP: ss.Transition(P, NP, dur=ss.lognorm_ex(ss.months(9), ss.months(3))),
+        after       = lambda P, NP: ss.Transition(P, NP, rate=ss.peryear(2), after=ss.months(3)),
+    )
+    for solver in ['ode', 'binomial', 'abm']:
+        M = ss.states('M0 M1 M2')
+        m = ss.Disease(*M, **{f'go{i}':M[i] >> M[(i+1) % 3] @ ss.peryear(1.0) for i in range(3)}, first='M0', name='m')
+        NP, P = ss.states('NP P')
+        p = ss.Disease(NP, P, conception=NP >> P @ ss.peryear(0.25), birth=dwells[dwell](P, NP), first='NP', name='p')
+        mod = ss.modify(p.conception, multiply=0.1, where=M[1]) # Crosses the two
+        size = dict(n_agents=2000) if solver == 'abm' else dict(total_pop=2000)
+        sim = ss.Sim([m, p], connectors=mod, start=2000, stop=2010, dt=ss.months(1), solver=solver, verbose=0, **size).run()
+        assert solver == 'abm' or sim.crossings
+        for mod in sim.declared:
+            total = sum(mod.results[f'n_{state.name}'].values for state in mod.graph.people_states)
+            assert np.allclose(total, 2000, rtol=1e-9), f'{dwell} under {solver}: the population of {mod.name} goes from {total[0]:n} to {total[-1]:n}'
+    return
+
+
 def test_identities():
     sc.heading('Testing constant-rate decay and a fixed branch share against their exact values')
 
     # Constant-rate decay is exponential
     I, R = ss.states('I R')
-    decay = ss.Disease(recovery=ss.Transition(I, R, rate=ss.perday(0.1)), name='decay')
+    decay = ss.Disease(recovery=ss.Transition(I, R, rate=ss.perday(0.1)), first='I', name='decay')
     res = ss.Sim(decay, total_pop=1e6, unit='day', stop=50, solver='ode', verbose=0).run().results.decay
     t = np.arange(51)
     assert np.allclose(res.n_I.values, 1e6*np.exp(-0.1*t), rtol=1e-5) # RK4's error is about 1e-7 a step at this rate
@@ -279,7 +338,7 @@ def test_identities():
     # A fixed branch share is the share that leaves by each branch
     for solver in ['ode', 'binomial', 'abm']:
         I, R, D = ss.states('I R D')
-        branch = ss.Disease(course=ss.Transition(I, [R, D], dur=5, p=[None, 0.2]), name='branch')
+        branch = ss.Disease(course=ss.Transition(I, [R, D], dur=5, p=[None, 0.2]), first='I', name='branch')
         agents = dict(n_agents=50_000) if solver == 'abm' else {}
         res = ss.Sim(branch, total_pop=1e6, unit='day', stop=100, solver=solver, verbose=0, **agents).run().results.branch
         share = res.n_D[-1]/(res.n_R[-1] + res.n_D[-1])
@@ -290,12 +349,12 @@ def test_identities():
     E, I = ss.states(2)
     for solver in ['ode', 'binomial', 'gillespie', 'abm']:
         size = dict(n_agents=1000) if solver == 'abm' else dict(total_pop=1000)
-        cohort = ss.Disease(onset=E >> I @ ss.constant(ss.days(10)), name='cohort')
+        cohort = ss.Disease(onset=E >> I @ ss.constant(ss.days(10)), first='E', name='cohort')
         n_E = ss.Sim(cohort, unit='day', stop=20, solver=solver, verbose=0, **size).run().results.cohort.n_E.values
         assert n_E[10] == 1000 and n_E[11] == 0, f'{solver}: {n_E[10]:n} in E on day 10 and {n_E[11]:n} on day 11, not 1000 and 0'
 
     # With a constant inflow as well, E holds the inflow over the delay: exactly in the ODE at every step, and on average in the stochastic solvers
-    flow = ss.Disease(arrival=ss.null >> E @ ss.perday(100), onset=E >> I @ ss.constant(ss.days(10)), name='flow')
+    flow = ss.Disease(arrival=ss.null >> E @ ss.perday(100), onset=E >> I @ ss.constant(ss.days(10)), first='E', name='flow')
     exact = np.r_[1000 + 100*np.arange(11), np.full(20, 1000)] # Those who started in E leave on day 10, and the arrivals of each day 10 days later
     n_E = ss.Sim(flow, total_pop=1000, unit='day', stop=30, verbose=0).run().results.flow.n_E.values
     assert np.allclose(n_E, exact, rtol=1e-9)
@@ -321,7 +380,6 @@ def test_acquisition():
         return ss.Disease(infection=S >> I @ ss.perday(0.2)*I, imported=ss.Transition(S, I, rate=ss.perday(0.01), acquisition=acq), recovery=I >> R @ ss.days(10), name='sir')
     protected = [ss.Sim(imported(acq), interventions=ss.modify('sir.rel_sus', multiply=0), unit='day', stop=50, total_pop=1000, verbose=0).run().results.sir.imported.values.sum() for acq in [None, True]]
     assert protected[0] > 300 and protected[1] == 0
-    assert np.isclose(sim.diseases.malaria.R0(), 7.5) # √(abM/(Nr) · acσ/((σ + μ)μ)) with M = 50,000 mosquitoes at equilibrium and N = 10,000 people; was 0
     return
 
 
@@ -339,7 +397,7 @@ def behavior(solver, seed=1, n=2000):
         remove   = ss.Transition(iud, none, rate=ss.peryear(0.1)),
         conceive = ss.Transition(none, P, rate=ss.peryear(0.2)),
         deliver  = ss.Transition(P, none, dur=ss.months(9), increment='parity'),
-        mix=mix, name='contra')
+        mix=mix, first='none', name='contra')
     size = dict(n_agents=n) if solver == 'abm' else dict(total_pop=n)
     sim = ss.Sim(contra, solver=solver, rand_seed=seed, start=2000, stop=2006, dt=ss.months(1), use_aging=False, verbose=0, **size)
     sim.stratify(age=[0, 30])
@@ -450,7 +508,7 @@ def test_joint_population():
     ba, bb = ss.peryear(0.5), ss.peryear(0.3)
     joint = ss.Disease(SS, SI, IS, II, a1=SS >> IS @ ba*(IS + II), a2=SI >> II @ ba*(IS + II), b1=SS >> SI @ bb*(SI + II), b2=IS >> II @ bb*(SI + II),
                        r1=SI >> SS @ ss.years(3), r2=II >> IS @ ss.years(3), d1=ss.Transition(IS, ss.null, dur=2), d2=ss.Transition(II, ss.null, dur=2),
-                       init=dict(SS=0.81, SI=0.09, IS=0.09, II=0.01), name='ab')
+                       init=dict(SS=0.81, SI=0.09, IS=0.09, II=0.01), first='SS', name='ab')
     j = ss.Sim(joint, total_pop=20_000, stop=2030, verbose=0).run().results.ab
     res = pair().run().results
     assert np.allclose(res.a.n_I.values, j.n_IS.values + j.n_II.values, rtol=1e-9) and np.allclose(res.b.n_I.values, j.n_SI.values + j.n_II.values, rtol=1e-9)

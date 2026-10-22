@@ -125,7 +125,7 @@ def test_summer2():
         incidence       = ss.Transition(E, I, rate=0.5),
         recovery        = ss.Transition(I, R, rate=0.3),
         infection_death = ss.death(I, rate=0.05),
-        init            = dict(I=ss.by([[5, 0, 0, 0], [5, 0, 0, 0]], dims=['age', 'clinical'])),
+        init_n          = dict(I=ss.by([[5, 0, 0, 0], [5, 0, 0, 0]], dims=['age', 'clinical'])),
     )
     seir.stratify(age=['young', 'old'], adjust={'incidence': [1, 1.1]})
     seir.stratify(clinical=['asymptomatic', 'symptomatic', 'isolated', 'hospital'], states=['I'],

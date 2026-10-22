@@ -30,7 +30,7 @@ Classes can be accessed either at the top level (`ssl.Measles`) or via their sub
 | `ART` | `ss.Intervention` | Scales up antiretroviral therapy over time; requires `HIV` |
 | `CD4_analyzer` | `ss.Analyzer` | Records every agent's CD4 count at every timestep |
 | `Measles` | `AgentSEIR` | Measles as an SEIR model, with CDC natural history parameters |
-| `NCD` | `ss.Infection` | A non-communicable disease: a risk factor, the condition, and death from it; not transmitted |
+| `NCD` | `ss.Disease` | A non-communicable disease: a risk factor, the condition, and death from it; not transmitted |
 
 ### Networks (`networks/`)
 

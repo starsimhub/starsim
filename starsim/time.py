@@ -1260,7 +1260,8 @@ class peract:
         if self.value is not None:
             return [self.value]*max(len(dirs), 1)
         if not dirs:
-            errormsg = f'"{name}" has no sides, so one beta is used in every direction: give ss.peract({sc.strjoin(self.directions.values())}) a single value, or give the network sides (sides= when it is made, or in its class, e.g. sides = dict(m="male", f="female"))'
+            fix = "between= when it is made, e.g. between='mf' for men and women" if isinstance(net, ss.SexualNet) else 'sides= when it is made, or in its class, e.g. sides = dict(m="male", f="female")'
+            errormsg = f'"{name}" has no sides, so one beta is used in every direction: give ss.peract({sc.strjoin(self.directions.values())}) a single value, or give the network sides ({fix})'
             raise ss.errors.RouteMismatch(errormsg)
         sides = f"{name}'s {net.sides_str()}"
         for key in self.directions:
@@ -1306,7 +1307,7 @@ class years(dur):
         to_convert = (str, pd.Timestamp)
         if isinstance(value, to_convert): # A single date or date string
             value = sc.datetoyear(value)
-        elif np.iterable(value) and any(isinstance(val, to_convert) for val in value): # Create a new array rather than modifying the input
+        elif np.iterable(value) and getattr(value, 'dtype', np.dtype(object)).kind in 'OUS' and any(isinstance(val, to_convert) for val in value): # Create a new array rather than modifying the input; an array of numbers is not scanned
             value = np.array([sc.datetoyear(val) if isinstance(val, to_convert) else val for val in value])
         super().__init__(value=value, base=base)
         return

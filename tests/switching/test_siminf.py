@@ -43,7 +43,7 @@ def make_herds(u0, register, stop, **kwargs):
     """ SimInf's SIR in herds, linked by the register """
     S, I, R = ss.states('S I R')
     sir = ss.Disease(infection=ss.Transition(S, I, rate=ss.perday(0.16) * I), recovery=ss.Transition(I, R, rate=ss.perday(0.01)),
-                     init=dict(I=ss.by(herd=u0.I.values)), name='sir')
+                     init_n=dict(I=ss.by(herd=u0.I.values)), name='sir')
     size = u0[['S', 'I', 'R']].sum(axis=1)
     sir.stratify(herd=list(u0.node.astype(str)), kind='space', split=size/size.sum(), mobility=ss.geo.Mobility(data=register))
     return ss.Sim(sir, solver='gillespie', unit='day', start=0, stop=stop, total_pop=size.sum(), verbose=0, **kwargs)
@@ -64,7 +64,7 @@ def make_pmcmc():
     beta  = ss.par(ss.perday(0.2), bounds=[0.01, 1])
     gamma = ss.par(ss.perday(0.1), bounds=[0.01, 1])
     S, I, R = ss.states('S I R')
-    sir = ss.Disease(infection=ss.Transition(S, I, rate=beta * I), recovery=ss.Transition(I, R, rate=gamma), init=dict(I=5), name='sir')
+    sir = ss.Disease(infection=ss.Transition(S, I, rate=beta * I), recovery=ss.Transition(I, R, rate=gamma), init_n=dict(I=5), name='sir')
     data = pd.DataFrame(dict(t=ref_obs_t, n_I=ref_obs_I))
     return ss.Sim(sir, total_pop=1000, solver='gillespie', unit='day', start=1, stop=100, data=data, verbose=0)
 

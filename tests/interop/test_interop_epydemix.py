@@ -62,7 +62,7 @@ def test_epydemix():
         S_to_E = S >> E @ 0.3*r*I,
         E_to_I = E >> I @ eps,
         I_to_D_or_R = ss.Transition(I, [D, R], rate=0.2, p=[ss.by([0.01, 0.1], dims=['age']), None]),
-        init = dict(I=ss.by([10, 10], dims=['age'])),
+        init_n = dict(I=ss.by([10, 10], dims=['age'])),
         name = 'epydemix',
     )
     seird.stratify(age=[0, 20], split=[0.6, 0.4])

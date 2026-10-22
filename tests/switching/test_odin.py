@@ -45,7 +45,7 @@ def make_seir(fitted=False):
     S, E, I, R = ss.states(4)
     infection = S >> E @ beta * I
     cases = ss.outcome(rho * infection, likelihood=ss.nbinom(n=20)) # Compared with weekly data by its total over each week
-    seir = ss.Disease(infection, E >> I @ ss.perday(0.2), I >> R @ gamma, cases, init=dict(I=ss.by(age=[10, 0, 0, 0])), name='seir')
+    seir = ss.Disease(infection, E >> I @ ss.perday(0.2), I >> R @ gamma, cases, init_n=dict(I=ss.by(age=[10, 0, 0, 0])), name='seir')
     seir.stratify(age=ages, split=pop/pop.sum())
     data = pd.DataFrame(dict(time=7*np.arange(1, 41), cases=ref_cases)) if fitted else None
     return ss.Sim(seir, networks=ss.contacts(m, bands=ages), total_pop=pop.sum(), unit='day', dt=0.25, stop=280 if fitted else 365,
@@ -103,7 +103,7 @@ def test_odin_delay():
         births    = ss.birth(S, rate=ss.peryear(b)),
         deaths    = ss.death(rate=ss.peryear(b)),
         history   = ss.null >> I @ ss.timeseries({0: ss.perday(surv), 14: 0}), # odin's delay() takes the first 14 days from before the start (see the vignette's README)
-        init      = dict(I=1),
+        init_n    = dict(I=1),
         name      = 'seir',
     )
     seir.stratify(age=[0, 1, 5, 15, 30], split=split)

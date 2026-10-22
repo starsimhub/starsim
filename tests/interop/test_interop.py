@@ -186,7 +186,7 @@ def test_to_code(tmp_path):
     dur = ss.par(ss.lognorm_ex(mean=ss.days(10), std=ss.days(3)), name='dur')
     sir = ss.Disease(S, I, R, D, V, infection=S >> I @ ss.par(ss.perday(0.3), bounds=[0.1, 1], name='beta') * I,
                      recovery=ss.Transition(I, [R, D], dur=dur, p=[0.9, None]), vax=S >> V @ ss.perday(0.01),
-                     cases=ss.outcome('infection', delay=ss.days(3)), prev=I/(S + I + R), init=dict(I=10), name='sir')
+                     cases=ss.outcome('infection', delay=ss.days(3)), prev=I/(S + I + R), init_n=dict(I=10), name='sir')
     sir.stratify(age=[0, 15, 65], split=[0.3, 0.5, 0.2])
     same(ss.Sim(sir, total_pop=1000, stop=ss.days(50), unit='day', **kw))
 
@@ -250,7 +250,7 @@ def test_round_trip(tmp_path):
     S, I, R = ss.states('S I R')
     beta = ss.par(ss.timeseries({0: 0.3, 20.5: 0.2}), name='beta')
     dur = ss.par(ss.days(10), bounds=[5, 15], prior=ss.uniform(5, 15), name='dur')
-    sir = ss.Disease(infection=S >> I @ beta * I, recovery=I >> R @ dur, init=dict(I=50), name='sir').stratify(risk=['lo', 'hi'])
+    sir = ss.Disease(infection=S >> I @ beta * I, recovery=I >> R @ dur, init_n=dict(I=50), name='sir').stratify(risk=['lo', 'hi'])
     mixing = ss.contacts([[3, 1], [1, 2]], bands=[0, 15])
     distancing = ss.modify(sir.pars.beta, multiply=0.5, start=12.5, stop=30, where=sir.risk == 'hi')
     vaccine = ss.vaccinate(ss.Vaccine(efficacy=0.8, waning=ss.days(50), name='vx'), coverage=0.3, interval=ss.days(7), start=5, where=ss.ppl.age < 15)
@@ -278,7 +278,7 @@ def test_diff(tmp_path):
             detection  = I >> Q @ (0.05 * (Q.n < 20)),
             release    = Q >> R @ ss.constant(ss.days(10)),
             death      = I >> ss.null @ ss.perday(0.001),
-            init       = dict(I=10),
+            init_n     = dict(I=10),
             name       = 'seirq',
         )
         return ss.Sim(seirq, total_pop=1000, stop=ss.days(100), solver='binomial', **kw)
@@ -294,7 +294,7 @@ def test_diff(tmp_path):
 
 def test_no_disease():
     sc.heading('Testing what an import of networks only gives')
-    S = ss.State(init=100) # A disease with no transitions, as an import of a fully custom model may give, runs and stays as it is
+    S = ss.State(init_n=100) # A disease with no transitions, as an import of a fully custom model may give, runs and stays as it is
     sim = ss.Sim(ss.Disease(S, name='d'), solver='binomial', total_pop=100, stop=10, verbose=0).run()
     assert np.ptp(sim.results.d.n_S.values) == 0
     sim = ss.Sim(networks=ss.SexualNet(), n_agents=100, unit='week', stop=10, verbose=0) # A sim of networks only keeps its unit in code

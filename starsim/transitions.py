@@ -20,7 +20,7 @@ import itertools
 import numpy as np
 import sciris as sc
 import starsim as ss
-from .expressions import as_expr, BinOp, closest, dists_in, Count, count_power, did_you_mean, dimension, evaluate, Expr, Flow, format_expr, Func, is_one, Nameable, par, value_str
+from .expressions import as_expr, BinOp, closest, dists_in, Count, count_power, did_you_mean, dimension, evaluate, Expr, Flow, format_expr, Func, is_one, linear, Nameable, par, value_str
 from .parameters import by, seasonal, Static, timeseries, TimeValue
 
 __all__ = ['Expr', 'par', 'State', 'states', 'null',
@@ -39,8 +39,9 @@ class State(Nameable, Expr):
 
     Args:
         name (str): the name; if not given, taken from the keyword or the variable the state is assigned to
-        init (float/int): the initial fraction (below 1) or count (above 1) in the state
-        people (bool): whether this state holds people (the default), or is a count of something else (`people=False`: bacteria in the water, mosquitoes)
+        init (float): the share of people who start in the state (1.0 is everyone); for a state that is not people, its starting amount
+        init_n (int): instead, the number of people who start in the state
+        people (bool): whether this state holds people (the default), or is a count of something else (`people=False`: bacteria in the water, mosquitoes); `people=True` says so explicitly, for a group of people that only an inflow fills
         rel_sus (float): susceptibility multiplier while in this state
         rel_trans (float): infectiousness multiplier while in this state
         label (str): a human-readable name, for plots
@@ -48,16 +49,22 @@ class State(Nameable, Expr):
     Examples:
         ```python
         S, R = ss.states(2)
-        I = ss.State(init=0.01)
+        I = ss.State(init=0.01)     # 1% of people
+        E = ss.State(init_n=10)     # 10 people
         V = ss.State(rel_sus=0.2, label='Vaccinated')
         ```
     """
     _counter = itertools.count() # States are ordered by when they were created
 
-    def __init__(self, name=None, init=None, people=True, rel_sus=1.0, rel_trans=1.0, label=None):
+    def __init__(self, name=None, init=None, init_n=None, people=None, rel_sus=1.0, rel_trans=1.0, label=None, **kwargs):
+        if kwargs:
+            hint = '; infectious= is gone: a state is infectious when it is in a transmission rate (e.g. rate=beta*I)' if 'infectious' in kwargs else ''
+            raise TypeError(f'ss.State() got unexpected arguments: {sc.strjoin(kwargs)}{hint}')
         self.name = name
         self.init = init
-        self.people = people
+        self.init_n = init_n
+        self.people = people is not False
+        self.people_given = people is not None # Said explicitly, so not checked (see ss.transitions.Graph.check_counts())
         self.infectious = False # Whether it is a source of infection: in the rate of a transmission (see ss.transitions.Graph.resolve_transitions())
         self.rel_sus = rel_sus
         self.rel_trans = rel_trans
@@ -72,6 +79,11 @@ class State(Nameable, Expr):
     @property
     def label_name(self):
         return self.name or '<unnamed state>'
+
+    @property
+    def given_init(self):
+        """ Whether a starting value is given (`init=` or `init_n=`) """
+        return self.init is not None or self.init_n is not None
 
     def __rshift__(self, other):
         """ S >> I, or S >> (a transition into I) """
@@ -206,16 +218,23 @@ def parse_increment(increment, what):
     return out
 
 
-def parse_arrow(arrow):
-    """ Parse an arrow between the levels of a dimension, such as 'low -> high' or 'none -> pill | iud' (in `move=` and `ss.transfer()`), into a source and a list of destinations """
-    parts = re.split(r'-->|->|>>', arrow)
-    if len(parts) != 2:
-        errormsg = f'Could not understand "{arrow}": expecting an arrow between levels, such as "low -> high"'
+def level_pair(value, what):
+    """
+    A move between the levels of a dimension, given as a pair `(from, to)` (in `move=` and `ss.transfer()`): returns the levels people move from (a list), and the level (or list of levels) they move to
+
+    Either end can be a list: several levels moved from (`(['a', 'b'], 'c')`), or one of several moved to (`('none', ['pill', 'iud'])`, with `p=`).
+    """
+    if isinstance(value, str) and re.search(r'->|>>', value):
+        src, _, dst = re.split(r'(-->|->|>>)', value, maxsplit=1)
+        errormsg = f'{what} gives a move between levels as a pair (from, to), e.g. ("{src.strip()}", "{dst.strip()}"), not an arrow string "{value}"'
         raise ValueError(errormsg)
-    src = [name.strip() for name in parts[0].split('|') if name.strip()] or null # Several sources, e.g. 'M | S | R ->'
-    src = src[0] if isinstance(src, list) and len(src) == 1 else src
-    dst = [name.strip() for name in parts[1].split('|') if name.strip()] or null
-    return src, dst
+    if not isinstance(value, tuple):
+        return None, value
+    if len(value) != 2:
+        errormsg = f'{what} gives a move between levels as a pair (from, to), e.g. ("low", "high"); not {value!r}'
+        raise ValueError(errormsg)
+    src, dst = value
+    return sc.tolist(src), (dst[0] if isinstance(dst, list) and len(dst) == 1 else dst)
 
 
 class on:
@@ -283,8 +302,8 @@ class Transition(Nameable):
         p (float/list): branch probability
         stages (int): number of sub-stages used to realize the dwell time
         where (Cond/func): who it applies to: a condition (e.g. `ppl.age > 30`), as for `ss.modify(where=)`; for everyone else its rate is 0
-        move (dict): a change of level in a dimension as well as of state: the dimension, and an arrow between two of its levels
-            (e.g. `move=dict(strain='A+B -> A')`, which applies only to people at the first), or the level people move to
+        move (dict/StrainMove): a change of level in a dimension as well as of state: the dimension, and the level people move to, or a pair of
+            levels (e.g. `move=dict(risk=('low', 'high'))`, which applies only to people at the first); or a change of strains (`move=DS >> (DS, RIF)`, see `ss.strains.Strain`)
         increment (str/dict): a counter that goes up as well: its name, which adds 1 (`increment='parity'`), or a dict of the amount for each
             (`increment=dict(parity=2)` for twins, `dict(doses=-1)`); a counter is a dimension with integer levels, whose last level is open-ended
         after (dur): a minimum stay: nobody leaves by this transition until they have been in its source state this long (a rate applies from then on, and a dwell time starts then)
@@ -292,6 +311,12 @@ class Transition(Nameable):
         acquisition (bool): whether it is an acquisition of the disease, which `rel_sus`, a product's efficacy against acquisition, and `ss.treat` act on. If not given: a
             contact-mediated transition is, and so is any other transition out of the disease's first state if none out of it is contact-mediated (an infection by a bite rate or an EIR)
         on (Cond/Event/func): a trigger, instead of a rate or a dwell time (see `ss.on`): people move as soon as a condition holds, or when an event happens to them (`on=preg.delivery`), or `dur=` after it (a time drawn for each person), as agents
+        per (str): `'strain'`, for an event of a disease with strains (`ss.Strains`) in a state they share, with an outcome for each strain
+            carried: with `p=`, each strain carried takes the first destination with its own probability (`p=` times the strain's value for
+            the transition, or `p='<value>'`, the strains' values of that name, with their values for the transition then multiplying its rate), and anyone left with a strain takes the second (or stays),
+            carrying those left, e.g. cure by treatment
+        alone (bool): with `per='strain'` and a rate: each strain carried has its own rate (the rate times its value), and the first to happen
+            moves on alone (the others are dropped), e.g. one of two strains progressing
         name (str): the name; if not given, taken from the keyword or the variable it is assigned to
         label (str): a human-readable name
 
@@ -302,14 +327,14 @@ class Transition(Nameable):
         cure      = ss.Transition(I, S) # No driver: only by treatment
         recovery  = ss.Transition(I, R, dur=ss.days(10))
         maturing  = ss.Transition(J, A, rate=ss.perday(1), where=ppl.age > 1) # Only adults
-        selection = ss.Transition(L, A, rate=ss.peryear(0.1), move=dict(strain='A+B -> A')) # Progression with one of two strains
+        failure   = ss.Transition(Tx, I, rate=ss.peryear(0.1), move=DS >> (DS, RIF)) # Treatment fails, and the strain acquires resistance (DS, RIF = strains)
         twins     = ss.Transition(P, PP, dur=ss.months(9), p=0.02, increment=dict(parity=2), move=dict(since_birth=0)) # Parity goes up by 2, and a clock is set to 0
         weaning   = ss.Transition(NB, W, rate=ss.perday(0.5), after=ss.days(21)) # At least 21 days old first, as EMULSION's duration
         postpartum = ss.Transition(PP, NP, on=preg.delivery, dur=ss.months(6)) # Six months after each woman's own delivery
         importation = ss.Transition(S, I, rate=ss.perday(1e-4), acquisition=True) # An infection from outside, alongside one by contact
         ```
     """
-    def __init__(self, src=None, dst=None, rate=None, dur=None, p=None, stages=None, name=None, label=None, where=None, move=None, increment=None, after=None, before=None, acquisition=None, on=None):
+    def __init__(self, src=None, dst=None, rate=None, dur=None, p=None, stages=None, name=None, label=None, where=None, move=None, increment=None, after=None, before=None, acquisition=None, on=None, per=None, alone=False):
         delay = None # With on= an event: the time after it that people move, if dur= is given
         if on is not None and dur is not None and ss.conditions.is_event(ss.on(on).x): # e.g. on=preg.delivery, dur=ss.months(6)
             delay, dur = dur, None
@@ -342,18 +367,32 @@ class Transition(Nameable):
         self.after = after # A minimum stay in the source state before this transition can happen
         self.before = before # Or the time in it after which it cannot
         self.move = None # A change of level in some dimensions: {dim: level}
+        if move is not None and not isinstance(move, dict) and isinstance(move, ss.strains.StrainMove): # A change of the strains people carry, e.g. move=DS >> (DS, RIF)
+            move = {move.strains.name: move}
         self.move_given = dict(move) if move else None # As given, for the model spec
-        self.move_from = {} # The levels it applies to, from an arrow in move=: {dim: [levels]}
+        self.move_from = {} # The levels it applies to, from a pair (from, to) in move=: {dim: [levels]}
         if move:
             self.move = sc.objdict()
             for dim,level in move.items():
-                if isinstance(level, str) and re.search(r'->|>>', level):
-                    srcs, dsts = parse_arrow(level)
-                    level = dsts[0]
-                    self.move_from[dim] = sc.tolist(srcs)
-                    at = ss.conditions.Cond('dim', dim) == srcs # Only people at the level they move from
+                if type(level).__name__ == 'StrainMove': # Each level that carries the strains it changes, to the level that carries them changed
+                    mapping = level.mapping()
+                    srcs = [label for label,m in zip(level.strains.labels, mapping) if m >= 0]
+                    level = ('map', tuple(mapping.tolist())) # Hashable, as a move is a key of the engines' maps
+                else:
+                    srcs, level = level_pair(level, f'move= of a transition ({dim}=...)')
+                if srcs is not None:
+                    self.move_from[dim] = srcs
+                    at = ss.conditions.Cond('dim', dim) == srcs[0] if len(srcs) == 1 else ss.conditions.Cond('dim', dim).isin(srcs) # Only people at a level they move from
                     self.where = at if self.where is None else ss.conditions.as_cond(self.where) & at
                 self.move[dim] = level
+        if per not in [None, 'strain']:
+            errormsg = f'per= of a transition is "strain" (an outcome for each strain carried), not {per!r}'
+            raise ValueError(errormsg)
+        if alone and per is None:
+            errormsg = 'alone=True is for an event of each strain carried, so it goes with per="strain"'
+            raise ValueError(errormsg)
+        self.per_strain = per == 'strain' # An outcome for each strain carried: see ss.strains.per_strain()
+        self.alone = bool(alone)
         self.increment = parse_increment(increment, 'a transition') # A relative move along some counters: {dim: amount}
         both = [dim for dim in (self.increment or {}) if dim in (self.move or {})]
         if both:
@@ -432,8 +471,10 @@ class Transition(Nameable):
 
     @property
     def immediate(self):
-        """ Whether it has no wait (`dur=0`): people go through it in the step they arrive in its source, or, with `where=`, in the step the condition first holds for them """
+        """ Whether it has no wait (`dur=0`, or `ss.constant(0)`): people go through it in the step they arrive in its source, or, with `where=`, in the step the condition first holds for them """
         raw = getattr(self.dur, 'raw', None)
+        if isinstance(raw, ss.constant): # Under the compartmental solvers, a conveyor of no steps waited one (ST32)
+            raw = raw.pars.get('v')
         raw = raw.value if isinstance(raw, ss.dur) else raw
         return sc.isnumber(raw) and raw == 0
 
@@ -503,6 +544,8 @@ class Transition(Nameable):
             new.trigger = driver
             return new
         value = driver.value if isinstance(driver, par) else driver
+        if isinstance(value, dict) and any(isinstance(leaf, State) for val in value.values() if isinstance(val, Expr) for leaf in val.leaves): # A rate for each route, with its own sources
+            driver = value = route_rate(value)
         if isinstance(value, ss.bernoulli):
             errormsg = f'"@ {value}" is a probability, not a rate or a duration; a share that goes one way is p=, e.g. ss.Transition(I, [R, D], dur=10, p=[None, 0.1])'
             raise TypeError(errormsg)
@@ -962,6 +1005,20 @@ def flow_key(base):
     return base.name
 
 
+def route_rate(rates):
+    """
+    A rate written for each route with its sources, e.g. `dict(random=b*(A + 0.5*B), maternalnet=b2*(A + B))`, as a beta for each
+    route for each source state: `{'random':b, 'maternalnet':b2}*A + {'random':0.5*b, 'maternalnet':b2}*B`
+    """
+    split = {route:linear(as_expr(val)) for route,val in rates.items()}
+    if any(const is not None for const,terms in split.values()):
+        errormsg = f'A rate for each route ({sc.strjoin(rates.keys())}) has to be a beta times the source states on every route, e.g. dict(random=b*(A + 0.5*B), maternalnet=b2*A)'
+        raise TypeError(errormsg)
+    states = list(dict.fromkeys(state for const,terms in split.values() for state in terms))
+    parts = [BinOp('*', par({route:terms.get(state, 0.0) for route,(const,terms) in split.items()}, literal=True), state) for state in states]
+    return sum(parts[1:], parts[0])
+
+
 class FlowSum:
     """ A weighted sum of flows (transitions and outcomes), or a share of one, used as the source of an outcome: 0.1*mild + 0.5*severe, or 0.5*infection """
     def __init__(self, items):
@@ -977,6 +1034,11 @@ class FlowSum:
     def __mul__(self, other):
         return FlowSum([(base, weight*other if sc.isnumber(weight) and sc.isnumber(other) else BinOp('*', weight, other)) for base,weight in self.items])
     __rmul__ = __mul__
+
+    def __truediv__(self, other):
+        """ Divided by something, in a result, e.g. 1e5*cancer/N """
+        flows = [BinOp('*', weight, Flow(base)) for base,weight in self.items]
+        return BinOp('/', sum(flows[1:], flows[0]), Flow(other) if isinstance(other, (Transition, Destination)) else as_expr(other))
 
     def __repr__(self):
         return f'FlowSum({self.items})'
@@ -1051,7 +1113,7 @@ def numeric_pars(dist, convert, per_agent=None):
     A function is called by the distribution, for the agents drawn for; a value for each group (`ss.by`) becomes
     such a function, made by `per_agent`.
     """
-    shape_pars = ['a', 'c', 'n', 'p']
+    shape_pars = ['a', 'c', 'n', 'p', 'dtype']
     pars = dict()
     for key,val in dist.pars.items():
         if isinstance(val, par): # A named parameter, e.g. ss.bernoulli(ss.par(0.6, name='sero')): its current value, which the sim's pars= or a calibration sets
@@ -1098,7 +1160,12 @@ def person_func(expr):
 
 def numeric_dist(dist, convert, per_agent=None):
     """ A copy of a distribution with its parameters as plain numbers in the sim's unit, so it samples durations in that unit """
-    return type(dist)(**numeric_pars(dist, convert, per_agent))
+    if isinstance(dist, ss.histogram): # Its values and bins are not parameters
+        values, bins, density = dist.hist
+        bins = bins if dist.unit is None else np.asarray(convert(dist.unit(np.asarray(bins, dtype=float))), dtype=float)
+        return ss.histogram(values=values, bins=bins, density=density)
+    cls = ss.beta_dist if isinstance(dist, ss.beta_mean) else type(dist) # Whose parameters are those of a beta distribution
+    return cls(**numeric_pars(dist, convert, per_agent))
 
 
 def varying_pars(dist):

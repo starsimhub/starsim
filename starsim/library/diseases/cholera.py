@@ -141,13 +141,13 @@ class Cholera(AgentSEIR):
 
         n_symptomatic = self.symptomatic.sum()
         n_asymptomatic = self.asymptomatic.sum()
-        old_prev = self.results.env_prev[ti]
+        old_prev = self.results.env_prev[ti-1]
 
         new_bacteria = (p.shedding_rate * (n_symptomatic + p.asymp_trans * n_asymptomatic)).to_events()
         old_bacteria = old_prev * (1 - p.decay_rate.to_prob())
 
-        r.env_prev[ti+1] = new_bacteria + old_bacteria # At the end of the step (ti is its start)
-        r.env_conc[ti+1] = r.env_prev[ti+1] / (r.env_prev[ti+1] + p.half_sat_rate)
+        r.env_prev[ti] = new_bacteria + old_bacteria
+        r.env_conc[ti] = r.env_prev[ti] / (r.env_prev[ti] + p.half_sat_rate)
         return
 
     def set_progression(self, uids):
@@ -178,7 +178,7 @@ class Cholera(AgentSEIR):
         # Make new cases via indirect transmission
         pars = self.pars
         res = self.results
-        p_transmit = (res.env_conc[self.ti + 1] * pars.beta_env).to_prob()
+        p_transmit = (res.env_conc[self.ti] * pars.beta_env).to_prob()
         pars.p_env_transmit.set(p=p_transmit)
         new_cases_env = pars.p_env_transmit.filter(self.susceptible).remove(new_cases) # Don't infect agents who were just infected directly
 
@@ -199,6 +199,6 @@ class Cholera(AgentSEIR):
         super().update_results()
         res = self.results
         ti = self.ti
-        res.new_deaths[ti] = np.count_nonzero((self.ti_dead > ti - 2) & (self.ti_dead <= ti - 1)) # Deaths requested in the step that ends now (whose start is ti - 1), since ti_dead is fractional
+        res.new_deaths[ti] = np.count_nonzero((self.ti_dead > ti - 1) & (self.ti_dead <= ti)) # Deaths requested in this step, since ti_dead is fractional
         res.cum_deaths[ti] = np.sum(res.new_deaths[:ti+1])
         return

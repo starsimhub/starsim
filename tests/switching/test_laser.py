@@ -45,7 +45,8 @@ def make_sim(total, days=30, declared=False):
         onset     = ss.Transition(E, I, dur=ss.erlang(k=40, mean=ss.days(10))),
         recovery  = ss.Transition(I, R, dur=ss.normal(7, 2, unit='days')),
         births    = ss.birth(S, rate=ss.peryear(0.017)),
-        init      = dict(I=ss.by(patch=[3]*n_places), R=0.95),
+        init      = dict(R=0.95),
+        init_n    = dict(I=ss.by(patch=[3]*n_places)),
         name      = 'measles',
         **deaths,
     )
@@ -53,7 +54,7 @@ def make_sim(total, days=30, declared=False):
     seeding = None
     if declared: # Three people seeded every 30 days; and age groups, for the life table as compartments
         measles.stratify(age=[0, 5, 15, 30, 50, 70])
-        seeding = ss.Delivery(move='S -> I', capacity=3, start=ss.days(30), interval=ss.days(30), name='seeding')
+        seeding = ss.Delivery(move=measles.S >> measles.I, capacity=3, start=ss.days(30), interval=ss.days(30), name='seeding')
     people = ss.People(int(d.popsize.sum()), age_data=np.array([ages, pyramid]).T)
     return ss.Sim(measles, people=people, interventions=seeding, unit='day', stop=days, verbose=0)
 

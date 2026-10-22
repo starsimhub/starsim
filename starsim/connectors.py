@@ -97,7 +97,9 @@ def reached(now, time):
 
 def to_ti(sim, val, name='time', after=False):
     """
-    The first timestep at or after a time, which must be within the sim and before its last time point (where no step starts)
+    The first step that starts at or after a time, which must be within the sim and before its last time point (where no step starts)
+
+    Step `ti` runs from time point `ti-1` to `ti` (see `ss.Loop`), so a time at the start of the sim is step 1.
 
     Args:
         sim (Sim): the sim
@@ -116,7 +118,7 @@ def to_ti(sim, val, name='time', after=False):
     ti = next((ti for ti,now in enumerate(tvec) if reached(now, time)), len(tvec)) # len(tvec) if after the end
     if ti >= len(tvec) - 1 and not after: # The last time point records the end of the run: no step starts there, so nothing timed then would happen
         raise ss.errors.TimeOutsideSim(f'{name} ({val}) is after the start of the last step ({tvec[-2]}), so it would never happen: the last time point ({tvec[-1]}) is the end of the run, where no step starts. Give an earlier time, or a later stop.')
-    return ti
+    return ti + 1 # The step from that time point
 
 
 def to_steps(sim, dur):
@@ -190,13 +192,73 @@ def route_mult(engine, name, route, inds, trg):
     return out
 
 
+def check_applied(sim):
+    """
+    Raise `ss.errors.Unapplied` for any modifier, change, or efficacy of a product that nothing in the sim would apply, naming it and why
+
+    Called once by `sim.init()`, after every module has registered its modifiers in `sim.modifiers` (by module, kind of
+    quantity, and name). For each quantity modified, the module it belongs to says whether it reads it: a declared module
+    from its graph (`unapplied()`), and a disease written as code from what its own code reads (`AgentModifiers.unapplied()`).
+    A network's contacts are read by every transmission over it. It costs one pass over the quantities modified.
+    """
+    modules = {mod.name:mod for mod in sim.modules}
+    for (modname, kind, name), mods in sim.modifiers.items():
+        if not mods:
+            continue
+        mod = modules.get(modname)
+        if getattr(mod, 'graph', None) is not None:
+            why = unapplied(mod.graph, modname, kind, name, mods)
+        elif isinstance(mod, ss.Disease):
+            why = AgentModifiers.unapplied(mod, kind)
+        else: # A network's contacts, read by every transmission over it
+            continue
+        if why:
+            path = f'{modname}.pars.{name}' if kind == 'par' else f'{modname}.{name or kind}'.split('@')[0]
+            raise ss.errors.Unapplied(f'{sc.strjoin(describe_mod(m) for m in mods)} on {path} would not be applied by any solver: {why}')
+    return
+
+
+def describe_mod(m):
+    """ What a modifier is, for a message: `ss.modify()`, `ss.change()`, a product's efficacy, or another's (e.g. a strain's immunity) """
+    if isinstance(m, modify):
+        return f'ss.{"change" if m.times else "modify"}() "{m.name}"'
+    elif isinstance(m, ss.products.Effect):
+        return f'the {m.key} efficacy of "{m.name}"'
+    return f'"{m.name}"'
+
+
+def unapplied(graph, modname, kind, name, mods):
+    """ Why a declared module (its graph and name) would not apply the modifiers (`mods`) on one of its quantities (`kind` and `name`, as keyed in `sim.modifiers`), or None if it would """
+    if kind == 'par':
+        if name not in graph.pars:
+            return (f'"{name}" is a plain parameter of "{modname}", not one of its model\'s parameters (ss.par), so only the module\'s own code reads it, and a modifier cannot change it. '
+                    f'Modify a parameter or transition of its model instead (e.g. {modname}.{next(iter(graph.transitions), "transition")}), or give the value when the module is made.')
+        tables = [tr.name for tr in graph.transitions.values() for p in getattr(tr, 'p_given', None) or [] for leaf in ss.expressions.to_pars(p) if leaf.name == name]
+        if tables:
+            dsts = sc.strjoin(f"'{modname}.{tables[0]}.{dst.name}'" for dst in graph.transitions[tables[0]].dst)
+            return f'it is a value over "to" in the p= table of "{tables[0]}", which is built once, when the sim is made (a change to the table is not yet supported). To change the probability of one destination, modify it by name: {dsts}.'
+    elif kind in ['rel_sus', 'rel_trans']:
+        if not (graph.acquisitions if kind == 'rel_sus' else graph.infectious):
+            return f'"{modname}" has no {"acquisition" if kind == "rel_sus" else "transmission"} for it to scale. Modify one of its transitions by name instead: {sc.strjoin(graph.transitions)}.'
+    elif kind in ['transition', 'branch']:
+        tr = graph.transitions.get(name)
+        if tr is None: # A transfer, or one destination of a transition with several
+            return None
+        if (not tr.src or not tr.people) and any(not isinstance(m, modify) or m.where is not None for m in mods): # A product's efficacy is for the people who hold it
+            return f'"{name}" ({tr.arrow}) is {"an inflow" if not tr.src else "a transition of counts"}, which has no people for a condition on people (where=, or holding a product) to select. Give the modifier no where=, or a condition on time.'
+        if kind == 'transition' and tr.split and any(isinstance(m, ss.products.Effect) or getattr(m, 'efficacy', None) is not None for m in mods):
+            dsts = sc.strjoin(f"'{name}.{dst.name}'" for dst in tr.dst)
+            return f'"{name}" has several destinations, so an efficacy on it would slow everyone\'s exit from {sc.strjoin(s.name for s in tr.src)}, not lower the chance of one destination. Name the destination it protects against: {dsts}.'
+    return None
+
+
 class AgentModifiers:
     """
     Applies the modifiers of a disease written as code to its `rel_sus` and `rel_trans`, as agents, as a declared disease's engine does for its own;
     and is what a delivery for it uses as its engine (see `engine()`): its conditions, and a cure as `clear_infection()`
 
     The array becomes an `ss.ModifiableArr`, whose base values the disease's code sets as before, and
-    whose `.effective` values (with the modifiers that are active applied) `ss.Infection.infect()` uses.
+    whose `.effective` values (with the modifiers that are active applied) `ss.Infection.infect_route()` uses.
     """
     cross = None # Never tracked jointly with another disease
 
@@ -244,6 +306,14 @@ class AgentModifiers:
 
     def clip(self, value, path):
         return np.maximum(value, 0) # As mult_raw()
+
+    @staticmethod
+    def unapplied(mod, kind):
+        """ Why a disease written as code would not apply the modifiers on its `rel_sus` or `rel_trans` (`kind`), or None if it would: a transmitted `ss.Infection` reads them in `infect_route()` (see `check_applied()`) """
+        if isinstance(mod, ss.Infection) and 'beta' in mod.pars:
+            return None
+        why = 'it is not an ss.Infection' if not isinstance(mod, ss.Infection) else 'it has no beta'
+        return f'"{mod.name}" is written as code and is not transmitted ({why}), so nothing reads its rel_sus or rel_trans; a product or modifier acts on it only through its transmission.'
 
     @staticmethod
     def attach(mod, kind, sim):
@@ -357,7 +427,7 @@ class modify(Connector):
         options += [f'{mod.name}.{key}' for mod in sim.declared for key in list(mod.graph.transitions) + mod.graph.destinations() + list(mod.graph.attrs) + ['rel_sus', 'rel_trans']]
         options += [f'{net}.pars.n_contacts' for net in nets]
         found = False
-        coded = {key:dis for key,dis in sim.diseases.items() if isinstance(dis, ss.Infection)}
+        coded = {key:dis for key,dis in sim.diseases.items() if isinstance(dis, ss.Disease) and dis.graph is None}
         if modname in nets and modname not in mods: # The contacts of a network: see Engine.contact_mult()
             found = kind in [None, 'par'] and name == 'n_contacts'
             kind = 'par'

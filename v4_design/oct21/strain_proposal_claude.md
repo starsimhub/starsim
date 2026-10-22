@@ -1,5 +1,7 @@
 # Strains from the biology up: a proposal (S7.4)
 
+**Superseded (2026-10-22)** by [strain_plan.md](strain_plan.md), now built (see [oct22/worklogs/c_strains.md](../oct22/worklogs/c_strains.md)). Kept as the record.
+
 Written 2026-10-21, as a counterpart to [strains.md](strains.md). That document compares the three mechanisms Starsim has today (the family `ss.Strains`, the strain dimension, and co-carriage) and argues for keeping all three. This one starts from what strains do in a host and a population, asks whether HPV and TB really differ in kind, and proposes one spelling built on that. Research and design only: no code was changed.
 
 ## Summary

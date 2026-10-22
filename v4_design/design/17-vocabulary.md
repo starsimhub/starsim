@@ -27,9 +27,9 @@ The names below are checked against the code: each one is exported by `starsim`,
 | **`ss.people`** | A named population: `ss.people('Kenya', year=2024)` returns an `ss.People` |
 | **`ss.ppl`** | The people's properties before there are people: `ss.ppl.age < 15` is a condition, and `expit(b0 + b1*ss.ppl.urban)` a rate, with each person's value (each group's, as compartments) |
 | `ss.Module` | The one module abstraction; everything below is one |
-| `ss.Disease` | A declared disease: states and the transitions between them. Most states hold people; a reservoir or a vector population is a state that holds a count |
-| **`ss.Strains`** | A family of declared diseases that a person can have several of at once, each with its own natural history (HPV genotypes): `ss.Strains('hpv', [hpv16, hpv18], immunity=..., init_prev=..., split=..., exclusive=...)`. Its results and conditions are unions over its members (`sim.results.hpv.infected`, `where=hpv.infected`, `hpv.infected.count() >= 2`); agents only for now |
-| `ss.Infection` | Base class for a disease written as code (`define_states()`, `step()`, `set_prognoses()`), as in Starsim 3 |
+| `ss.Disease` | Any disease: declared states and the transitions between them, code (`define_states()`, `step()`), or both. Most states hold people; a reservoir or a vector population is a state that holds a count |
+| **`ss.Strains`** | The strains of a disease, `ss.Disease(..., strains=ss.Strains(['DS', 'RIF'], ...))`, giving `dis.strains`; unpacked into strain objects (`DS, RIF = strains`) for conditions and `move=DS >> (DS, RIF)`. States are shared (one course, sets carried up to `max_strains`) or each strain's own (`shared=False`, or `shared=['Ca']`); strains can also be diseases of their own sharing a natural history (`ss.Strains([hpv16, hpv18])`) |
+| `ss.Infection` | An `ss.Disease` with transmission written as code (`beta` over networks, `rel_sus`, `rel_trans`, `set_prognoses()`), as in Starsim 3 |
 | `ss.Demographics` | Births, deaths, pregnancy, migration |
 | `ss.Intervention` | Base class for interventions with custom `step()` code |
 | `ss.Connector` | Base class for cross-module `step()` code |
@@ -87,7 +87,7 @@ Everything spatial is in the submodule `ss.geo`.
 | Name | What it is |
 |---|---|
 | `ss.Network` | Base class for networks |
-| `ss.RandomNet` `ss.SexualNet` | Individual-level networks (Starsim's; its other networks are available too, and the library's, e.g. `ssl.StaticNet` for a NetworkX graph). `ss.SexualNet` is partnerships between men and women (`sides='mf'`), or between men (`sides='mm'`), with acts per unit time in each, as in Starsim 3 (people with no partner are paired), or with a target number of partners at a time (`n_contacts`, `concurrency`, `max_contacts`). Partnerships between anyone (needle sharing), and EpiModel's targets (`match=`), are the library's `ssl.DegreeNet`; more structured sexual networks are STIsim's |
+| `ss.RandomNet` `ss.SexualNet` | Individual-level networks (Starsim's; its other networks are available too, and the library's, e.g. `ssl.StaticNet` for a NetworkX graph). `ss.SexualNet` is partnerships between two groups (`between=`): men and women (`'mf'`, the default), men (`'mm'`), or e.g. sex workers and clients (`('fsw', 'client')`), with acts per unit time in each, as in Starsim 3 (people with no partner are paired), or with a target number of partners at a time (`n_contacts`, `concurrency`, `max_contacts`). Partnerships between anyone (needle sharing), and EpiModel's targets (`match=`), are the library's `ssl.DegreeNet`; more structured sexual networks are STIsim's |
 | `ss.MixingPool` `ss.MixingPools` | Group-level mixing; `ss.MixingPool(n_contacts=10)` with no groups is homogeneous |
 | **`ss.contacts`** | A contact matrix as mixing pools: a named one, `ss.contacts('Kenya')`, or one given as a matrix (over several dimensions together with `dims=`) |
 | **`ss.geo.location`** | A geography: names, populations, centroids, distances; named (`ss.geo.location('Kenya', level=1)`) or given directly |
@@ -100,7 +100,7 @@ Everything spatial is in the submodule `ss.geo`.
 |---|---|
 | **`ss.modify`** | While a condition holds, multiply, add to, or set a named quantity |
 | **`ss.change`** | A parameter change at given times; shorthand for a modifier |
-| **`ss.immunity`** | Protection between strains, combined by a rule: the quantity it lowers is the keyword and the protection its value, a matrix (rows from, columns against) or a number (`ss.immunity(protected='nab', rel_sus=m, combine='sum')`, `rel_trans=`, `dur=dict(In=m)`); for `ss.Strains`, and for a strain dimension's `immunity=` |
+| **`ss.immunity`** | Protection between strains, combined by a rule: what protects is `due_to=` (a state, an attribute, `strains.last`, `strains.ever`), the quantity it lowers is the keyword and the protection its value, a matrix (rows from, columns against) or a number (`ss.immunity(due_to=R, rel_sus=m, combine='sum')`, `rel_trans=`, `dur=dict(In=m)`, `p=dict(to_symp=m)`); for `ss.Strains(immunity=)` |
 | **`ss.Vaccine`** **`ss.Diagnostic`** **`ss.Treatment`** | Products: nouns for things (Starsim 3's `ss.Vx`, `ss.Dx`, `ss.Tx` remain only as base classes for products written as code, not as aliases; `ss.Diagnostic` was `ss.Test`, renamed so that no product and delivery differ only by case) |
 | **`ss.vaccinate`** **`ss.screen`** **`ss.treat`** | Deliveries: verbs (`ss.Delivery` with no product is a step people attend, a visit) |
 
@@ -164,16 +164,16 @@ Keywords are not counted above, but they are vocabulary too, so the main sets ar
 |---|---|
 | `ss.Sim` | the model (a module or a list of modules) as the first argument; `networks` `people` `total_pop` `n_agents` `start` `stop` `dt` `unit` `solver` `integrator` `substeps` `approx` `stratify` `rand_seed` `verbose` `interventions` `connectors` `analyzers` `data` `pars` `results` `use_aging` `label`; plus `diseases`, `demographics`, `modules` as in Starsim. `solver` may also be given to `sim.run` before the sim is initialized, and `n_runs` to `sim.run` |
 | `ss.MultiSim`, `ss.parallel` | `n_runs` `pars` `priors`, and one keyword per scenario |
-| `ss.Disease` | `name` `dt` `init_prev` `init` `transitions` `results` `outcomes`, and one keyword per member |
+| `ss.Disease` | `name` `dt` `init_prev` `init` `init_n` `first` `transitions` `results` `outcomes`, and one keyword per member |
 | `ss.State` | `name` `people` `init` `rel_sus` `rel_trans` `label` |
 | `ss.Transition` | `rate` `dur` `p` `stages` `where` `move` `increment` `after` `before` `name` `label` |
 | `ss.birth`, `ss.immigration` | `rate` |
 | `ss.death`, `ss.emigration` | `rate` `dur`; `lifetable` (`ss.death`) |
 | `ss.transfer` | the stratification's name (or `increment`, for a counter), `rate` `dur` `p` `states`, and the delivery keywords |
 | `ss.par` | `bounds` `prior` `source` `doc` `literal` |
-| `stratify` (on a model or a sim) | the dimension's name, `split` `adjust` `states` `where` `inplace` `mobility` `immunity` `kind` (`'age'`, `'space'`, `'strain'`, `'clock'`, `'plain'`) |
-| `ss.Strains` | `name` and `members` (first and second, or by keyword), `immunity` `init_prev` `split` `exclusive` `label` |
-| `ss.immunity` | `protected` `rel_sus` `rel_trans` `dur` `combine` |
+| `stratify` (on a model or a sim) | the dimension's name, `split` `adjust` `states` `where` `inplace` `mobility` `kind` (`'age'`, `'space'`, `'clock'`, `'plain'`) |
+| `ss.Strains` | the strains (names, a dict of values by strain, or diseases), `shared` `immunity` `max_strains` `transmit` `split` `cross_immunity` `name` `label`, and values by parameter |
+| `ss.immunity` | `due_to` `scale` `curve` `rel_sus` `rel_trans` `dur` `p` `combine` |
 | `ss.modify` | `multiply` `add` `set` `efficacy` `share` `route` `where` `when` `start` `stop` `hold` `name` |
 | `ss.change` | `at` `by` `to` |
 | Deliveries | `what` `who` `operator` `start` `stop` `at` `interval` `at_age` `where` `coverage` `capacity` `deliver` `on` `when` `trace` `move` `increment` `disease` |
@@ -181,10 +181,10 @@ Keywords are not counted above, but they are vocabulary too, so the main sets ar
 | `ss.outcome` | `delay` `duration` `likelihood` |
 | `ss.data` | `aliases` `ignore_extra` |
 | `ss.MixingPool` | `n_contacts` `src` `dst` `beta` |
-| `ss.SexualNet` | `sides` (`'mf'` or `'mm'`) `dur` `acts` `participation` `debut` `n_contacts` `concurrency` `max_contacts` |
+| `ss.SexualNet` | `between` (`'mf'`, `'mm'`, or a pair of groups) `dur` `acts` `participation` `debut` `n_contacts` `concurrency` `max_contacts` `match` |
 | `ss.geo.Mobility` | `matrix` `data` `kind` `away` |
 | `ss.contacts` | `bands` `name` `source` `layer` `dims`, and a matrix for each stratification by its name |
-| Networks | `sides` (and `net.directions`, which follow from them) |
+| Networks | `sides` (and `net.directions`, which follow from them; `between` on `ss.SexualNet`) |
 | `sim.calibrate` | `pars` `data` `weights` `likelihood` `gof` `method` `n_runs` `rand_seed`, and the method's own settings |
 | `ss.fit.optimize` | `maximize` `minimize` `at` `start` `total` `spend` `bounds` |
 | `ss.fit.compare_models` | `data` `holdout` `folds` |
@@ -200,7 +200,8 @@ A bare number in any of these slots takes the slot's type and the sim's unit ([0
 | `dur=` | a duration; a scalar means an exponential dwell time with that mean | `ss.Transition`, `ss.transfer`, networks |
 | `p=` | a branch probability | `ss.Transition`, `ss.transfer` |
 | `stages=` | a whole number of sub-stages | `ss.Transition` |
-| `init=` | below 1 a fraction, 1 or more a number of people (whether written `1` or `1.0`); on the disease, a dict of these by state name | `ss.State`, `ss.Disease` |
+| `init=` | a share of people, up to 1 (a whole number too, with a warning to write a float); on the disease, a dict of these by state name | `ss.State`, `ss.Disease` |
+| `init_n=` | a number of people; on the disease, a dict of these by state name | `ss.State`, `ss.Disease` |
 | `init_prev=` | a fraction | `ss.Disease` |
 | `n_contacts=` | contacts per unit time; on a sexual network, the mean number of partners at a time | `ss.MixingPool`, `ss.RandomNet`, `ss.SexualNet` |
 | `acts=` | on lasting partnerships, an error (it would be acts per step): give acts per unit time, e.g. `ss.freqperweek(2)` | `ss.SexualNet` |
@@ -208,7 +209,7 @@ A bare number in any of these slots takes the slot's type and the sim's unit ([0
 | `coverage=` | a fraction of the eligible people | deliveries, `ss.transfer` |
 | `capacity=` | a number per round (or step), or a rate per unit time (required for routine delivery) | deliveries |
 | `efficacy=`, `sensitivity=`, `specificity=` | a probability | products; `efficacy=` also on `ss.modify` (`multiply=1 - efficacy`) |
-| `waning=` | a duration: the product is lost at an exponentially distributed time with that mean (a function of the time since delivery fades the efficacy instead, as agents only) | products |
+| `waning=` | a duration: the product is lost at an exponentially distributed time with that mean (a function of the time since delivery fades the efficacy instead, as agents only, and a new dose restarts it); other shapes are written as states ([08](08-interventions.md#products)) | products |
 | `delay=`, `duration=` | a duration | `ss.outcome`, `ss.Diagnostic` |
 | `interval=`, `away=` | a duration; `away` is a fraction of time | deliveries, `ss.geo.Mobility` |
 | `multiply=`, `add=`, `set=`, `by=`, `to=` | a multiplier, or a value in the target's own type | `ss.modify`, `ss.change` |

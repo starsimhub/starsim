@@ -367,9 +367,9 @@ def load_camdl(filename, pars=None, scenario=None, solver='ode', camdlc=None, ve
         if iv.get('kind') != 'event' and not names & set(enabled): # An intervention, unlike an event, is off unless enabled: listed all the same, since a scenario that enables it is the model's question
             where = [k for k,scen in scens.items() if names & set(scen.get('enable', []))]
             src.skip(iv['name'], f'an intervention ({acts}, {when}) that is off unless enabled{", as scenario " + sc.strjoin(where) + " does" if where else ""}; '
-                                 f'write it as a one-off move, ss.Delivery(move="S -> V", ...), with its times')
+                                 f'write it as a one-off move, ss.Delivery(move=S >> V, ...), with its times')
             continue
-        src.skip(iv['name'], f'a scheduled effect ({acts}, {when}); write it as a one-off move, ss.Delivery(move="S -> V", ...), with its times')
+        src.skip(iv['name'], f'a scheduled effect ({acts}, {when}); write it as a one-off move, ss.Delivery(move=S >> V, ...), with its times')
 
     # The run
     simulation = m.get('simulation', {})

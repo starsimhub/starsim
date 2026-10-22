@@ -113,7 +113,7 @@ def test_syntax():
     assert ss.date('2020-01-01') + ss.datedur(years=1) == ss.date('2021-01-01') # Should give us 1st Jan 2021
     assert ss.date('2000-01-01') + ss.days(200) == ss.days(200) + ss.date('2000-01-01') == ss.date('2000-07-19') # Days are added as days (was a day late after the leap day)
     monthly = ss.Sim(stop=2, dt=1/12, unit='year', verbose=0).init()
-    assert ss.connectors.to_ti(monthly, ss.months(7)) == ss.connectors.to_ti(monthly, 7/12) == 7 # On its step (was step 8, from rounding)
+    assert ss.connectors.to_ti(monthly, ss.months(7)) == ss.connectors.to_ti(monthly, 7/12) == 8 # The step that starts at 7 months (was the next, from rounding)
 
     # Operations on date vectors
     ss.date.arange(2020,2030)+ss.years(1) # add years to date array
@@ -300,7 +300,7 @@ def test_years_conversion():
     # Timeline.now('yearvec') outside the sim period must also be in years
     tl = ss.Timeline(start=ss.days(0), stop=ss.days(100), dt=ss.days(1))
     tl.init()
-    tl.ti = 500 # Deliberately past the end, to hit the extrapolation branch
+    tl.ti = 501 # Deliberately past the end, to hit the extrapolation branch: the step that starts at time point 500
     assert np.isclose(tl.now('yearvec'), 500/365), 'now("yearvec") should be in years, not days'
 
     return
@@ -462,7 +462,7 @@ def test_bare_units():
     sc.heading('Testing the units of bare numbers beside typed ones')
     def sis(rec):
         S, I = ss.states('S I')
-        return ss.Disease(inf=S >> I @ ss.permonth(0.0)*I, rec=I >> S @ rec, init=dict(I=1000), name='d')
+        return ss.Disease(inf=S >> I @ ss.permonth(0.0)*I, rec=I >> S @ rec, init_n=dict(I=1000), name='d')
 
     # A bare dt beside calendar years is in years, with a warning, though the model's unit is months (FP21: 2,881 points instead of 241)
     with pytest.warns(ss.errors.UnitInferred):

@@ -1,5 +1,7 @@
 # Strains: families and strain dimensions (S7.4)
 
+**Superseded (2026-10-22)** by [strain_plan.md](strain_plan.md), now built (see [oct22/worklogs/c_strains.md](../oct22/worklogs/c_strains.md)). Kept as the record.
+
 Written 2026-10-21 on `v4-simplify` (uncommitted tree after `9cf7766f`), for S7.4 of [plan.md](plan.md) and decision 16. Research only: no code was changed. Scratch checks are in `/tmp/claude-1000/-home-cliffk-idm-ssv4/95a2919b-da64-4203-8e56-0999a64fe595/scratchpad/s74/` (`checks.py`, `checks2.py`, `checks3.py`, `check4.py`).
 
 ## Summary

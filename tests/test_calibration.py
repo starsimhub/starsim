@@ -65,7 +65,7 @@ def test_fitted_mobility():
         S, I, R = ss.states(3)
         infection = S >> I @ 0.4 * I
         cases = ss.outcome(infection, likelihood=ss.poisson())
-        sir = ss.Disease(infection, I >> R @ ss.days(6), cases, init=dict(I=ss.by(patch=[20, 0])), name='sir')
+        sir = ss.Disease(infection, I >> R @ ss.days(6), cases, init_n=dict(I=ss.by(patch=[20, 0])), name='sir')
         sir.stratify(patch=ss.geo.location(names=['a', 'b']), mobility=ss.geo.Mobility(matrix=[[0, 1], [1, 0]], away=ss.par(away, bounds=[0.001, 0.3], name='away')))
         return ss.Sim(sir, unit='day', start='2020-01-01', stop='2020-04-01', solver=solver, total_pop=20_000, data=data, verbose=0, rand_seed=3)
 
@@ -90,7 +90,72 @@ def test_fitted_mobility():
     return fit
 
 
+@sc.timer()
+def test_fit_inputs(tmp_path):
+    sc.heading('Testing data by calendar year, results on their own timeline, settings of code, and workers that resume')
+
+    # Data by calendar year (an integer year column) is the year each row names, not 1 January of it; one parameter of a deterministic sim takes one search
+    def make(beta=0.3, data=None):
+        beta = ss.par(beta, bounds=[0.05, 1], name='beta')
+        S, I, R = ss.states(3)
+        sir = ss.Disease(S >> I @ beta*I, I >> R @ ss.years(2), ss.Transition(R, S, dur=ss.years(3)), init_prev=0.01, name='sir')
+        return ss.Sim(sir, start=2000, stop=2020, dt=ss.years(0.05), data=data, verbose=0)
+    res = make().run().results.sir
+    flows, stocks = res.S_to_I.resample('year'), res.n_I.resample('year', kind='ratio') # A flow summed over each year, a stock averaged over it
+    df = pd.DataFrame(dict(year=flows.timevec, S_to_I=flows.values, n_I=stocks.values)).iloc[1:-1]
+    fit = make(beta=0.5, data=df).calibrate(verbose=0)
+    assert np.isclose(fit.pars.beta, 0.3, rtol=1e-3) # Before, 0.279, from data compared a year off
+    assert len(fit.trials) < 60 # Before, 3 searches (131 evaluations)
+
+    # A module with a timestep of its own, a setting of an intervention written as code, a bounded parameter passed through a package's Pars, and a column that a loss of its own does not read
+    class cure(ss.Intervention):
+        def __init__(self, p=0.1, **kwargs):
+            super().__init__(**kwargs)
+            self.p = p # A setting kept as an attribute, as Covasim's are
+            return
+        def step(self):
+            sis = self.sim.diseases.sis
+            cured = sis.I.uids[np.random.default_rng(self.ti).random(sis.I.count()) < self.p]
+            sis.I[cured] = False
+            sis.S[cured] = True
+            return
+    defaults = sc.dcp(ss.RandomNet().pars) # As a package builds a module's parameters
+    defaults.update(n_contacts=ss.par(4, bounds=[2, 10]))
+    net = ss.RandomNet()
+    net.pars.update(defaults)
+    data = pd.DataFrame(dict(year=np.arange(2002, 2010), sis_prevalence=0.1, notes=1))
+    sim = ss.Sim(diseases=ss.SIS(dt=ss.years(1)), networks=net, interventions=cure(p=ss.par(0.1, bounds=[0.01, 0.5])), n_agents=300, start=2000, stop=2010, data=data, verbose=0)
+    with pytest.raises(ss.errors.UnknownDataColumn): # Compared with the results, the column must match one
+        sim.calibrate()
+    loss = lambda sim: abs(sim.results.sis.prevalence[-1] - 0.1)
+    path = tmp_path/'fit.log'
+    fit = sim.calibrate(gof=loss, trials=6, n_workers=2, storage=path, verbose=0)
+    assert list(fit.pars.keys()) == ['n_contacts', 'p'] and len(fit.trials) == 6
+    assert np.isfinite(ss.fit.mismatch(fit.sim, fit.sim.data[['sis_prevalence']])) # Before, a broadcast error
+    again = sim.calibrate(gof=loss, trials=8, storage=path, verbose=0) # Resumed: two more trials
+    assert len(again.trials) == 8 and np.allclose(again.trials.objective[:6], fit.trials.objective)
+    return fit
+
+@sc.timer()
+def test_strain_data():
+    sc.heading('Testing data by strain for strains with courses of their own: long data with a strain column is each strain\'s own result')
+    def genotype(name):
+        S, I, R = ss.states('S I R')
+        return ss.Disease(infection=S >> I @ ss.peryear(3)*I, clearance=I >> R @ ss.years(1), name=name)
+    def make(data):
+        hpv = ss.Disease(name='hpv', init_prev=0.2, strains=ss.Strains([genotype('hpv16'), genotype('hpv18')], name='genotype'))
+        return ss.Sim(hpv, n_agents=500, start=2000, stop=2010, data=data, verbose=0)
+    data = pd.DataFrame(dict(year=[2003, 2006]*2, genotype=['hpv16']*2 + ['hpv18']*2, clearance=[100, 50, 90, 40]))
+    sim = make(data).run()
+    assert sim.data.columns.tolist() == ['hpv16.clearance', 'hpv18.clearance']
+    assert np.isfinite(ss.fit.mismatch(sim))
+    with pytest.raises(ss.errors.UnknownDataColumn): # One spelling: the strain's own result
+        make(pd.DataFrame({'year':[2003], 'hpv.clearance[genotype=hpv16]':[100]})).init()
+    return sim
+
+
 #%% Run as a script
 if __name__ == '__main__':
     test_particle_mcmc()
     test_fitted_mobility()
+    test_strain_data()

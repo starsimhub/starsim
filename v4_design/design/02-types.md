@@ -115,6 +115,8 @@ A typed value (`ss.perday(0.05)`) keeps its own unit and is converted to the sim
 
 The model's unit is a property of the model, so its own typed values come before how the run is written; `dt` then sets only the step. Only `start` and `stop` supply a unit from dates: a date on an intervention or in the data does not. A year-like number for `start` or `stop` (`stop=2020`) is a calendar year, since Starsim 3 sims are written that way, unless `unit=` gives another unit. The unit is never guessed from the size of the numbers: 0.05 is plausible per day and per year.
 
+A function that gives a rate or a duration (`rate=fn`, `dur=fn`) and returns a bare number, in a model whose unit comes from its typed values (rule 2), raises `IncompatibleTypes` when the sim runs, saying to return a typed value or give `unit=`: which unit the function meant cannot be guessed, and reading it in the inferred unit gave silent wrong answers when a typed value elsewhere was in weeks (ST33, decided 2026-10-22). Zero is accepted, and with `unit=` given (or no typed values) a bare number is in the sim's unit, as elsewhere.
+
 The rule is the same whether a disease is declared or written as code. The other modules' typed values are their own defaults or settings, which say nothing of the unit of the model's bare numbers, so they count only when nothing else gives a unit. A bare number given for a parameter of a module written as code (`ss.RandomNet(dur=5)`) keeps the unit of its default, as in Starsim 3, with a warning when that differs from the sim's.
 
 Whenever the unit comes from rules 2 to 6 it is a guess about what the bare numbers meant, so the sim says where it came from (`UnitInferred`), at `init()` and in `describe()`:
@@ -162,6 +164,18 @@ ss.Sim(sir, stop=100)                                               # relative t
 All four are supported. A string is a calendar date; a bare number in `start=` or `stop=` is read as a year if it looks like one (`2020`) and as a relative time otherwise (`0`), and the reading is printed (`unit='year' (from start and stop years)`). Relative time works with or without a unit.
 
 The sim's `Timeline` provides the parallel time vectors Starsim already has (`tvec`, `yearvec`, `datevec`, `timevec`, and so on), so output can be requested in the frame the data are in. Nothing is added to it; whether it can be reduced is an open question below.
+
+## The timing contract
+
+A run has N + 1 time points (index 0 is the start) and N steps; step k goes from time point k − 1 to k. The full loop is in [10-execution.md](10-execution.md); what a modeler needs is this:
+
+- **One index per step.** Throughout step k, in every phase and every module, `self.ti == k`, so `self.results.x[self.ti] = v` is right wherever it is written. The loop itself records index 0 (the start), before the first step.
+- **Inputs are read at the step's start.** `self.now` is time point k − 1: values by year, `ss.timeseries`, data labeled by period, and dates (`start=2020`) are taken there, as in Starsim 3.
+- **An infection is dated at the end of its step** (`ti_I == ti`), since it has happened by then. What follows it (a latent period, a recovery) starts then, so durations ported unchanged from a model that dates infections at the start put the epidemic about a step later (CV5: 11 days on Covasim's daily model, from its latent period). Other moves are taken at the step's start.
+- **A state's count includes the step people enter it**, and people stay for their whole dwell, so `n_X` carries one extra step per stay (ST4: it cost STIsim's trichomoniasis about 14% of its infections against Starsim 3, since people reinfected as soon as they clear are counted per stay).
+- **Dwells are whole steps for agents.** A drawn dwell is rounded at random to the step before or after (0.2 steps is 0 steps 80% of the time), which keeps its mean; `dur=0` is instant. The compartmental solvers take dwells as continuous, or as whole slots for a fixed delay.
+
+`describe()` prints the two lines that change counts (CV5 and ST4) for any disease with a transmission.
 
 ## Per-module timesteps
 

@@ -1,5 +1,7 @@
 # Strains, starting from the biology
 
+**Superseded (2026-10-22)** by [strain_plan.md](strain_plan.md), now built (see [oct22/worklogs/c_strains.md](../oct22/worklogs/c_strains.md)). Kept as the record.
+
 Proposal for discussion, 2026-10-21. Based on [strains.md](strains.md), the current Starsim strain implementations, tbsim's resistance model, and the biological studies linked below. API sketches are proposals, not working Starsim syntax.
 
 **TB and HPV do not biologically require unrelated strain machinery.** Both involve distinguishable pathogen populations occupying the same host, potentially interacting through immunity, competition, disease, and treatment. They differ in which of those processes matter, and in how much detail a particular model retains. My recommendation is one public strain concept, with shared operations for transmission, carriage, immunity, and changes of strain. Within it, support two explicit ways of describing disease history: one course for the host, or a course for each strain. These are choices about model resolution, available to either disease.

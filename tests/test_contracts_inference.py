@@ -40,7 +40,7 @@ def make_beta(kind='both', b=0.5, init=100, data=None, **kwargs):
     season = ss.seasonal(mean=0.9, amplitude=0.1/0.9, peak=14/365)
     beta = dict(ts=b*r, season=b*season, both=b*season*r)[kind]
     S, I, R = ss.states('S I R')
-    dis = ss.Disease(infection=ss.Transition(S, I, rate=beta * I), recovery=ss.Transition(I, R, rate=ss.perday(0.25)), init=dict(I=init), name='sir')
+    dis = ss.Disease(infection=ss.Transition(S, I, rate=beta * I), recovery=ss.Transition(I, R, rate=ss.perday(0.25)), init_n=dict(I=init), name='sir')
     return corpus.make_sim(dis, kwargs, total_pop=1e6, unit='day', start=start, stop=stop, data=data)
 
 
@@ -50,7 +50,7 @@ def make_detection(d=0.2, init=100, data=None, **kwargs):
     scaleup = ss.timeseries(dict(zip(dates.strftime('%Y-%m-%d'), np.linspace(0.2, 1.0, len(dates)))))
     d = ss.par(d, bounds=[0.05, 1])
     S, I, T, R = ss.states('S I T R')
-    dis = ss.Disease(infection=S >> I @ 0.5*I, recovery=I >> R @ 0.25, detection=I >> T @ d*scaleup, treatment=T >> R @ 0.5, init=dict(I=init), name='sir')
+    dis = ss.Disease(infection=S >> I @ 0.5*I, recovery=I >> R @ 0.25, detection=I >> T @ d*scaleup, treatment=T >> R @ 0.5, init_n=dict(I=init), name='sir')
     return corpus.make_sim(dis, kwargs, total_pop=1e6, unit='day', start=start, stop=stop, data=data)
 
 
@@ -313,7 +313,7 @@ def test_value_per_level():
     def make(b, data=None):
         beta = ss.par(ss.by(patch=list(b)), bounds=[0.1, 0.8])
         S, I, R = ss.states('S I R')
-        sir = ss.Disease(infection=ss.Transition(S, I, rate=beta * I), recovery=ss.Transition(I, R, rate=0.1), init=dict(I=ss.by(patch=[10, 10])), name='sir')
+        sir = ss.Disease(infection=ss.Transition(S, I, rate=beta * I), recovery=ss.Transition(I, R, rate=0.1), init_n=dict(I=ss.by(patch=[10, 10])), name='sir')
         sir.stratify(patch=['a', 'b'])
         return ss.Sim(sir, stop=60, data=data, verbose=0)
     truth = make([0.25, 0.4]).run().results.sir.infection
@@ -334,7 +334,7 @@ def test_fitted_where_used():
     def make(effect, dur):
         beta = ss.par(0.3, name='beta')
         S, I, R = ss.states('S I R')
-        sir = ss.Disease(infection=ss.Transition(S, I, rate=beta * I), recovery=ss.Transition(I, R, dur=dur), init=dict(I=10), name='sir')
+        sir = ss.Disease(infection=ss.Transition(S, I, rate=beta * I), recovery=ss.Transition(I, R, dur=dur), init_n=dict(I=10), name='sir')
         masks = ss.modify(sir.pars.beta, multiply=effect, start=30) # A parameter used only by an intervention
         return ss.Sim(sir, interventions=masks, unit='day', stop=60, verbose=0)
     truth = make(0.4, ss.days(12)).run().results.sir.infection
@@ -371,7 +371,7 @@ def test_optimize():
         a, b = ss.par(50.0, name='spend_a'), ss.par(50.0, name='spend_b') # Spending on two programs: a cuts transmission twice as much as b
         cov = lambda spend, cost: np.minimum(spend/cost/(S + I + R).total, 1)
         beta = 0.3*(1 - 0.5*cov(a, 0.01) - 0.25*cov(b, 0.01))
-        sir = ss.Disease(S >> I @ beta*I.frac, I >> R @ ss.days(10), init=dict(I=10), name='sir')
+        sir = ss.Disease(S >> I @ beta*I.frac, I >> R @ ss.days(10), init_n=dict(I=10), name='sir')
         return ss.Sim(sir, total_pop=10_000, unit='day', stop=100, verbose=0)
     best = ss.fit.optimize(make(), spend=dict(a='spend_a', b='spend_b'), minimize='sir.n_R')
     assert best.alloc['a'] > 95 and np.isclose(sum(best.alloc.values()), 100) # Almost all of it to the better program, keeping the total
@@ -386,9 +386,9 @@ def test_data_files(tmp_path):
     assert list(ss.data(path).load().columns) == ['time', 'infection']
     def make(name):
         S, I, R = ss.states(3)
-        return ss.Disease(infection=S >> I @ 0.2*I.frac, recovery=I >> R @ ss.days(10), init=dict(I=10), name=name)
+        return ss.Disease(infection=S >> I @ 0.2*I.frac, recovery=I >> R @ ss.days(10), init_n=dict(I=10), name=name)
     with pytest.raises(ss.errors.UnknownDataColumn, match='flu.infection'):
-        ss.Sim([make('flu'), make('rsv')], unit='day', stop=60, verbose=0, data=ss.data(path)).init()
+        ss.Sim([make('flu'), make('rsv')], unit='day', stop=60, verbose=0, data=ss.data(path)).calibrate()
     return path
 
 

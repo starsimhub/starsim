@@ -18,7 +18,7 @@ def make_sir():
     infection = S >> I @ ss.perday(0.4) * I
     recovery  = I >> R @ ss.perday(0.15)
     cases     = ss.outcome(0.6 * infection)
-    return ss.Disease(infection, recovery, cases, init=dict(I=10), name='sir')
+    return ss.Disease(infection, recovery, cases, init_n=dict(I=10), name='sir')
 
 
 def make_seir():
@@ -47,7 +47,7 @@ def make_ages():
 def make_towns():
     """ Three towns with commuting between them """
     towns = ss.geo.location(names=['north', 'south', 'east'], pop=[50_000, 30_000, 20_000], x=[0, 0, 40], y=[0, 30, 0])
-    return make_plain(0.3, init=dict(I=ss.by(patch=[50, 0, 0]))).stratify(patch=towns, mobility=ss.geo.gravity(k=2e-4))
+    return make_plain(0.3, init_n=dict(I=ss.by(patch=[50, 0, 0]))).stratify(patch=towns, mobility=ss.geo.gravity(k=2e-4))
 
 
 def make_commute():
@@ -137,7 +137,7 @@ def test_stochastic():
                 assert np.all(n_I == np.round(n_I)) # Whole people
 
     # Many places, most of which have no events (skipped until something changes them): the same run as step by step
-    herds = make_plain(0.3, init=dict(I=ss.by(herd=[2] + [0]*599))).stratify(herd=[str(i) for i in range(600)], kind='space')
+    herds = make_plain(0.3, init_n=dict(I=ss.by(herd=[2] + [0]*599))).stratify(herd=[str(i) for i in range(600)], kind='space')
     base = ss.Sim(herds, solver='gillespie', unit='day', stop=30, total_pop=600*50, **kw)
     assert largest_diff(base.new().run(), base.new().run(profile=True)) == 0
 
@@ -163,9 +163,9 @@ def test_stochastic():
 
     # Strata that mix: the same epidemic as one group
     def strata(K, **pars):
-        sir = make_plain(ss.perday(0.3), init=dict(I=ss.by(risk=[2] + [0]*(K-1)))).stratify(risk=[f'g{i}' for i in range(K)])
+        sir = make_plain(ss.perday(0.3), init_n=dict(I=ss.by(risk=[2] + [0]*(K-1)))).stratify(risk=[f'g{i}' for i in range(K)])
         return ss.Sim(sir, solver='gillespie', unit='day', stop=100, total_pop=200*K, **pars, **kw)
-    one = ss.Sim(make_plain(ss.perday(0.3), init=dict(I=2)), solver='gillespie', unit='day', stop=100, total_pop=2000, **kw).run(n_runs=60).results.sir.n_R.values[:, -1]
+    one = ss.Sim(make_plain(ss.perday(0.3), init_n=dict(I=2)), solver='gillespie', unit='day', stop=100, total_pop=2000, **kw).run(n_runs=60).results.sir.n_R.values[:, -1]
     ten = strata(10).run(n_runs=60).results.sir.n_R.values[:, -1]
     assert abs(one.mean() - ten.mean()) < 3*np.hypot(one.std(), ten.std())/np.sqrt(60) # The same final size
     return sims
@@ -194,7 +194,7 @@ def test_stages():
     # Through the stages in whole steps, with another way out: the same as the ODE
     def cohort(solver):
         E, I, D = ss.states('E I D')
-        sim = ss.Sim(ss.Disease(onset=ss.Transition(E, I, dur=ss.normal(7, 1)), death=ss.Transition(E, D, dur=20), name='d'), unit='day', stop=10, total_pop=1_000_000, solver=solver, **kw)
+        sim = ss.Sim(ss.Disease(onset=ss.Transition(E, I, dur=ss.normal(7, 1)), death=ss.Transition(E, D, dur=20), first='E', name='d'), unit='day', stop=10, total_pop=1_000_000, solver=solver, **kw)
         return sim.run().results.d
     ode, res = cohort('ode'), cohort('binomial')
     assert np.allclose([res.n_I[6], res.n_I[8], res.n_D[10]], [ode.n_I[6], ode.n_I[8], ode.n_D[10]], rtol=0.01)
@@ -226,7 +226,7 @@ def test_seasonal_steps():
     beta = ss.par(0.5, name='b')*ss.seasonal(mean=0.9, amplitude=0.1)*ss.timeseries(dict(zip(days, np.linspace(1.0, 0.3, len(days))))) # A time series is a step function by default
     def sir():
         S, I, R = ss.states('S I R')
-        return ss.Disease(infection=ss.Transition(S, I, rate=beta * I), recovery=ss.Transition(I, R, rate=ss.perday(0.25)), init=dict(I=100), name='sir')
+        return ss.Disease(infection=ss.Transition(S, I, rate=beta * I), recovery=ss.Transition(I, R, rate=ss.perday(0.25)), init_n=dict(I=100), name='sir')
     whole = ss.Sim(sir(), unit='day', start='2020-01-01', stop='2020-02-15', total_pop=1e6, **kw).run()
     stepped = ss.Sim(sir(), unit='day', start='2020-01-01', stop='2020-02-15', total_pop=1e6, **kw).run(until='2020-02-15')
     assert np.allclose(stepped.results.sir.n_I, whole.results.sir.n_I, rtol=1e-9)
@@ -279,7 +279,7 @@ def test_restart():
     # The exact solver runs place by place when places do not affect each other within a step, with the same results as event by event over all places
     def herds(local):
         S, I, R = ss.states('S I R')
-        sir = ss.Disease(infection=ss.Transition(S, I, rate=ss.perday(0.3) * I), recovery=ss.Transition(I, R, dur=ss.days(10)), init=dict(I=ss.by(herd=[5]*20)), name='herds')
+        sir = ss.Disease(infection=ss.Transition(S, I, rate=ss.perday(0.3) * I), recovery=ss.Transition(I, R, dur=ss.days(10)), init_n=dict(I=ss.by(herd=[5]*20)), name='herds')
         sir.stratify(herd=[str(i) for i in range(20)], kind='space')
         out = []
         for seed in range(10):
@@ -299,21 +299,21 @@ def test_restart():
     wane = 0.05*ss.timeseries({0: 0.0, 29: 0.0, 30: 1.0})
     S, I, R = ss.states('S I R')
     sirs = ss.Disease(infection=ss.Transition(S, I, rate=ss.perday(0.3) * I), recovery=ss.Transition(I, R, dur=ss.days(10)), waning=ss.Transition(R, S, rate=wane),
-                      init=dict(I=ss.by(herd=[5, 0]), R=ss.by(herd=[0, 50])), name='sirs')
+                      init_n=dict(I=ss.by(herd=[5, 0]), R=ss.by(herd=[0, 50])), name='sirs')
     sirs.stratify(herd=['a', 'b'], kind='space')
     S_b = ss.Sim(sirs, total_pop=200, solver='gillespie', unit='day', stop=60, **kw).run().results.sirs.n_S.select(herd='b').values
     assert S_b[60] > S_b[29] # Herd b's recovered wane once waning starts
 
     # How often a small outbreak dies out, from the runs' results
     S, I, R = ss.states('S I R')
-    small = ss.Disease(infection=ss.Transition(S, I, rate=0.15 * I), recovery=ss.Transition(I, R, dur=10), init=dict(I=2), name='small')
+    small = ss.Disease(infection=ss.Transition(S, I, rate=0.15 * I), recovery=ss.Transition(I, R, dur=10), init_n=dict(I=2), name='small')
     msim_small = ss.Sim(small, total_pop=200, solver='gillespie', unit='day', stop=100, **kw).run(n_runs=50)
     died = (msim_small.results.small.n_I.values[:, -1] == 0).mean()
     assert 0.3 < died < 0.9
 
     # How often it is a major outbreak (more than 10% infected), which dying out does not say for an SIR, since every run dies out in the end
     S, I, R = ss.states('S I R')
-    sir = ss.Disease(infection=ss.Transition(S, I, rate=2/7 * I), recovery=ss.Transition(I, R, dur=7), init=dict(I=1), name='sir')
+    sir = ss.Disease(infection=ss.Transition(S, I, rate=2/7 * I), recovery=ss.Transition(I, R, dur=7), init_n=dict(I=1), name='sir')
     msim = ss.Sim(sir, total_pop=1000, solver='gillespie', unit='day', stop=365, **kw).run(n_runs=40)
     major = (msim.results.sir.infection.values.sum(axis=1) > 100).mean()
     assert 0.25 < major < 0.75 and (msim.results.sir.n_I.values[:, -1] == 0).all()
@@ -341,6 +341,22 @@ def test_plain():
     return res
 
 
+@sc.timer()
+def test_plain_estimate():
+    sc.heading('Testing that the estimate of a plain run counts the substeps of a stiff ODE')
+    S, I, R = ss.states(3)
+    sis = ss.Disease(S >> I @ ss.perday(2.0)*I.frac, I >> R @ ss.days(1), R >> S @ ss.years(1), init=dict(I=0.01), name='sis')
+    sim = ss.Sim(sis, total_pop=1e5, dt=ss.months(1), stop=ss.years(30), solver='ode', **kw).init()
+    engine = sim.diseases[0].engine
+    engine.init_program()
+    seconds = []
+    for n_sub in [1, None]: # As if no substeps were taken, then as the run takes them
+        sim.pars.substeps = n_sub
+        seconds.append(engine.plain_seconds())
+    assert seconds[1] > 100*seconds[0] # Recovery in a day under monthly steps: 122 substeps a step, so that no one turns over by more than a quarter in one
+    return seconds
+
+
 # %% Run as a script
 if __name__ == '__main__':
     do_plot = True
@@ -355,5 +371,6 @@ if __name__ == '__main__':
     seasonal = test_seasonal_steps()
     msim = test_restart()
     res = test_plain()
+    plain = test_plain_estimate()
 
     T.toc()

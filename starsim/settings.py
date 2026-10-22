@@ -16,7 +16,7 @@ import starsim as ss # Only used to set references
 dtypes = sc.dictobj(
     bool = bool,
     int = np.int64, # np.int32 is actually much slower for indexing arrays
-    uid = np.int32, # The active agents (people.auids), to save memory; ss.uids keeps either width
+    uid = np.int64, # The active agents (people.auids): 64-bit, since NumPy converts a 32-bit index array at every use (2-4 times slower), at 4 bytes more per agent; ss.uids keeps either width
     nbint = nb.int64,
     rand_int = np.int32,
     rand_uint = np.uint32,
@@ -138,7 +138,7 @@ class Options(sc.objdict):
         optdesc.threads = 'The number of threads that the passes over the agents of a large sim, and the particles of a particle filter, take: 0 (default) for as many as Numba has (by default, one per core), 1 for none. Each worker of ss.parallel() and of a calibration takes one, since the workers share the cores already'
         options.threads = sc.parse_env('STARSIM_THREADS', 0, int)
 
-        optdesc.compile = 'Whether the compartmental solvers run compiled (by Numba) or as plain Python, which gives the same results: "auto" (default) for compiled if they are compiled already (see ss.compile()), or if a run would take more than about 20 s uncompiled; "always" to always compile them first (about a minute, once per install); "never" for plain Python'
+        optdesc.compile = 'Whether the compartmental solvers run compiled (by Numba) or as plain Python, which gives the same results: "auto" (default) for compiled if they are compiled already (see ss.compile()), or if the runs in a session would take longer uncompiled than compiling takes (about a minute, once per install), with a note either way; "always" to always compile them first; "never" for plain Python'
         options.compile = sc.parse_env('STARSIM_COMPILE', 'auto', str)
 
         optdesc.crn = 'If True (default), use common random numbers (CRN) for reproducibility across scenarios. Set False for faster draws (one plain uniform per agent/edge, skipping the slot machinery); statistically valid but not CRN-safe across scenarios.'

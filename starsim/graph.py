@@ -61,13 +61,14 @@ class Graph(Presentation):
         args (list): transitions and outcomes passed positionally
         members (dict): states, transitions, parameters, results, and functions, by name
         init_prev (float): the initial prevalence, seeded through the transmission
-        init (dict): the initial fraction or count in each state, by name
-        first (str): the state people are in unless they are put elsewhere (by default, the one nothing moves people into; see `anchor()`)
+        init (dict): the share of people who start in each state, by name
+        init_n (dict): the number of people who start in each state, by name
+        first (str): the state people are in unless they are put elsewhere (by default, the one named `S` or `susceptible`; see `resolve_people()`)
         names (dict): the names of the variables of the code that made the module, by the id of what they hold (see `ss.utils.caller_names()`), which name the states, transitions, and parameters given without one
     """
     grouped = ['transitions', 'results', 'outcomes'] # The keywords that each take several members, e.g. ss.Disease(transitions=[...])
 
-    def __init__(self, module, args=None, members=None, init_prev=None, init=None, first=None, names=None):
+    def __init__(self, module, args=None, members=None, init_prev=None, init=None, init_n=None, first=None, names=None):
         self.module = module
         self.names = names or {}
         self.first_given = first # The state people are in unless they are put elsewhere, if given
@@ -75,6 +76,7 @@ class Graph(Presentation):
         if isinstance(init_prev, par): # So it can be fitted
             init_prev.name = init_prev.name or 'init_prev'
         self.init = dict(init or {})
+        self.init_n = dict(init_n or {})
         self.states = sc.objdict()
         self.transitions = TransitionTable()
         self.pars = sc.objdict()
@@ -246,10 +248,14 @@ class Graph(Presentation):
             self.add(self.states, state.name, state)
 
         # Initial conditions given on the module
-        for name,val in self.init.items():
-            if name not in self.states:
-                raise ss.errors.UnknownState(f'init= names a state "{name}" that "{self.module.name}" does not have. States are {sc.strjoin(self.states.keys())}.')
-            self.states[name].init = val
+        for key,given in [('init', self.init), ('init_n', self.init_n)]:
+            for name,val in given.items():
+                if name not in self.states:
+                    raise ss.errors.UnknownState(f'{key}= names a state "{name}" that "{self.module.name}" does not have. States are {sc.strjoin(self.states.keys())}.')
+                setattr(self.states[name], key, val)
+        for state in statelist:
+            if state.init is not None and state.init_n is not None:
+                raise ValueError(f'"{state.name}" of "{self.module.name}" is given both init= (a share of people) and init_n= (a number of people); give one or the other')
         return
 
     def resolve_transitions(self):
@@ -321,7 +327,9 @@ class Graph(Presentation):
         """
         Which states are people: every state, unless it is declared a count (`ss.State(people=False)`, e.g. mosquitoes or
         bacteria in the water); and the first state, where people are unless they are put elsewhere: `first=` if given,
-        else the first state of people declared
+        else the state named `S` or `susceptible` (in any case). Nothing else is guessed: with neither, `check_first()` raises
+        when the sim is initialized (a birth into a state of its own, `ss.birth(X)`, needs no first state, but the people who
+        start in no state do)
         """
         states = list(self.states.values())
         self.people_states = [s for s in states if s.people]
@@ -331,10 +339,12 @@ class Graph(Presentation):
             if name not in self.states:
                 raise ss.errors.UnknownState(f'first="{name}" is not a state of "{self.module.name}". Its states are {sc.strjoin(self.states.keys())}{did_you_mean(name, list(self.states.keys()))}')
             self.first = self.states[name]
+        elif any(s.name.lower() in ['s', 'susceptible'] for s in self.people_states):
+            self.first = next(s for s in self.people_states if s.name.lower() in ['s', 'susceptible'])
         else:
-            self.first = (self.people_states or states)[0]
+            self.first = None # Raises when the sim is initialized: see check_first()
         for tr in self.transitions.values(): # A birth or immigration with no state given
-            if tr.dst is None:
+            if tr.dst is None and self.first is not None:
                 tr.dst = [self.first]
         self.resolve_rest()
 
@@ -353,6 +363,43 @@ class Graph(Presentation):
                 counts = [s.name for s in ends if not s.people]
                 raise ss.errors.PeopleAndCounts(f'"{name}" moves between people ({sc.strjoin(s.name for s in ends if s.people)}) and counts ({sc.strjoin(counts)}, declared with people=False). '
                                          f'If {sc.strjoin(counts)} {"is" if len(counts) == 1 else "are"} people, leave out people=False.')
+        self.check_counts()
+        return
+
+    def check_counts(self):
+        """
+        Refuse a forgotten `people=False` (MA35): a group of states of people that no transition links to the first state
+        and that only an inflow (not a birth) fills, as mosquitoes are, would otherwise silently become agents
+        """
+        links = {id(s):set() for s in self.people_states}
+        if id(self.first) not in links: # No first state given (sim.init() raises), or not one of people
+            return
+        for tr in self.transitions.values():
+            ends = [s for s in (tr.src or []) + (tr.dst or []) if s.people]
+            for s in ends:
+                links[id(s)].update(id(e) for e in ends)
+        group, todo = set(), [id(self.first)]
+        while todo: # The states linked to the first, in either direction
+            i = todo.pop()
+            if i not in group:
+                group.add(i)
+                todo += links[i]
+        for tr in self.transitions.values():
+            dst = [s for s in tr.dst or [] if id(s) not in group]
+            if tr.inflow and tr.people and dst and not getattr(tr, 'per_capita', False) and tr.per is None and not any(s.people_given for s in dst):
+                others = [s.name for s in self.people_states if id(s) not in group]
+                raise ss.errors.PeopleAndCounts(f'"{tr.name}" ({tr.arrow}) fills {sc.strjoin(others)}, which no transition links to {self.first.name}, where people start, so {"it looks like" if len(others) == 1 else "they look like"} a count of something else (e.g. mosquitoes). '
+                                                f'Every state is people unless declared a count: if {"it is" if len(others) == 1 else "they are"} not people, declare {sc.strjoin(others)} with ss.State(people=False) (or ss.states(n, people=False)); if {"it is" if len(others) == 1 else "they are"} people, say so with people=True.')
+        return
+
+    def check_first(self, why=None):
+        """ Raise if the module has states of people but no first state (see `resolve_people()`), which every solver needs: it is where people start unless they are put elsewhere, and where those added later (born, or seeded from) come from """
+        if self.first is None and self.people_states:
+            names = [s.name for s in self.people_states]
+            errormsg = (f'"{self.module.name}" has no first state, the state people {why or "start in unless they are put elsewhere, and are born into"}. It is the state named S or susceptible, '
+                        f'and "{self.module.name}" has neither (its states are {sc.strjoin(names)}).\n'
+                        f'     Say which with first=, e.g. ss.Disease(..., first="{names[0]}")')
+            raise ss.errors.UnknownState(errormsg)
         return
 
     def resolve_rest(self):
@@ -363,14 +410,14 @@ class Graph(Presentation):
         must sum to 1 (see `Engine.init_fractions()`)
         """
         seeded = {id(st) for tr in self.transitions.values() if tr.contact for st in tr.dst or []} if self.init_prev is not None else set() # Where init_prev puts people
-        both = [s.name for s in self.people_states if id(s) in seeded and s.init is not None]
+        both = [s.name for s in self.people_states if id(s) in seeded and s.given_init]
         if both:
             errormsg = f'"{self.module.name}" is given both init_prev= and init= for {sc.strjoin(both)}, where init_prev= puts people; give one or the other'
             raise ValueError(errormsg)
         self.rest = self.first
-        if self.first.init is None:
+        if self.first is None or not self.first.given_init:
             return
-        unset = [s for s in self.people_states if s.init is None and id(s) not in seeded]
+        unset = [s for s in self.people_states if not s.given_init and id(s) not in seeded]
         if len(unset) == 1:
             self.rest = unset[0]
             self.guessed['rest'] = f'{self.rest.name}, the only state with no initial value, since {self.first.name} has one'
@@ -417,7 +464,7 @@ class Graph(Presentation):
             if name not in self.pars and name.startswith(('init', 'seed')): # e.g. init_infected=100
                 state = self.infectious[0].name if self.infectious else 'I'
                 raise ss.errors.UnknownParameter(f'"{name}={value}" was given to "{self.module.name}", but it has no parameter called "{name}".\n'
-                                          f'     To start with people in a state, use init=dict({state}={value!r}); init_prev= seeds the state a new infection enters (by default 1% of people), as a share or a number of people.')
+                                          f'     To start with people in a state, use init=dict({state}=0.01) for a share of people, or init_n=dict({state}=10) for a number; init_prev= seeds the state a new infection enters (by default 1% of people), as a share or a number of people.')
             elif name not in self.pars:
                 raise ss.errors.UnknownParameter(f'"{name}={value}" was given to "{self.module.name}", but it has no parameter called "{name}"; its parameters are {sc.strjoin(self.pars.keys())}.\n'
                                           f'     To add a parameter, use it in a transition, e.g. infection = S >> I @ {name} * I with {name} = ss.par({value}).\n'
@@ -446,7 +493,8 @@ class Graph(Presentation):
             elif tr.contact and tr.const is None: # The coefficient of the source of infection is beta
                 coefs = list(tr.terms.values())
                 rate = tr.rate
-                alone = isinstance(rate, BinOp) and not any(isinstance(leaf, par) and not leaf.literal for leaf in rate.b.leaves) # Only the rate as a whole has a unit, so a factor of a product of parameters is a number: R0 in R0 * (gamma * I)
+                beta = lambda leaf: isinstance(leaf, par) and (not leaf.literal or isinstance(leaf.raw, (dict, ss.peract)) or ss.expressions.value_dimension(leaf.raw) is not None) # A parameter, a beta for each route, or a typed value
+                alone = isinstance(rate, BinOp) and not any(beta(leaf) for leaf in rate.b.leaves) # Only the rate as a whole has a unit, so a factor of a product of parameters (or of a typed beta) is a number: R0 in R0 * (gamma * I), or 0.275 in 0.275*(dict(sexualnet=ss.peract(0.05))*I)
                 if isinstance(rate, BinOp) and rate.op == '*' and isinstance(rate.a, par) and alone:
                     rate.a.slot = 'rate'
                     slots.append(('beta', rate.a))
@@ -485,7 +533,7 @@ class Graph(Presentation):
             for key,val in (oc.likelihood.pars.items() if oc.likelihood is not None else []):
                 if isinstance(val, par) and not val.literal and val.name is None and self.names.get(id(val)) is None:
                     val.name = f'{oc.name}_{key}'
-        used += [(f'init of {state.name}', state.init) for state in self.states.values() if isinstance(state.init, Expr)] # So an initial count can be fitted
+        used += [(f'init of {state.name}', init) for state in self.states.values() for init in [state.init, state.init_n] if isinstance(init, Expr)] # So an initial count can be fitted
         used += [(name, expr) for name,tf in self.transfers.items() for expr in [tf.rate, tf.dur] + sc.tolist(tf.p)] # And a parameter in the rate of a transfer
         used += [(name, expr) for name,a in self.attrs.items() for expr in ([e for names,e in a.cases] if a.cases is not None else [a.value]) if isinstance(expr, Expr) and not isinstance(expr, ss.expressions.attr)] # And in an attribute
         used += [(name, val) for name,a in self.attrs.items() if a.kind in ['drawn', 'trait'] for p in ss.expressions.dists_in(a.value) for val in p.value.pars.values() if isinstance(val, par)] # And a parameter of a distribution an attribute is drawn from, e.g. ss.bernoulli(ss.par(0.6, name='sero'))
@@ -661,7 +709,17 @@ class Graph(Presentation):
                 if name not in self.states:
                     raise ss.errors.UnknownState(f'an attribute of "{self.module.name}" names a state "{name}" that it does not have. Its states are {sc.strjoin(self.states.keys())}.')
             return out
+        for tr in self.transitions.values(): # One written in a transition rather than passed to the module, e.g. rate=b*ss.attr(ss.uniform(0.5, 1.5), name='frailty')*I, is the module's
+            for expr in [tr.rate, tr.dur] + list(tr.p or []):
+                for leaf in (expr.leaves if isinstance(expr, Expr) else []):
+                    if isinstance(leaf, ss.expressions.attr) and leaf.module is None and not any(a is leaf for a in self.attrs.values()):
+                        if leaf.name is None:
+                            raise ValueError(f'Could not find a name for {leaf} in "{tr.name}"; give it one, e.g. ss.attr(..., name="frailty"), or pass it as a keyword, e.g. ss.Disease(..., frailty=ss.attr(...))')
+                        self.add(self.attrs, leaf.name, leaf)
         for name,a in self.attrs.items():
+            if a.module is not None and a.module is not self.module: # HP43: it would be drawn for each module separately, not shared
+                raise ss.errors.DuplicateDeclaration(f'the attribute "{name}" is given to two modules, "{a.module.name}" and "{self.module.name}"; an attribute belongs to one module, and each would draw its own values. '
+                                                     f'For one value per person read by both, give it to one and read it from the other in a function of the sim.')
             a.module = self.module
             if isinstance(a.value, str):
                 if a.value not in self.attrs:
@@ -743,6 +801,8 @@ class Graph(Presentation):
             raise ss.errors.DuplicateDeclaration(f'"{self.module.name}" already has a transition named "{name}"; give the one in demographics= another name, e.g. ss.birth(..., name="{name}2")')
         tr.name = name
         if tr.inflow: # Born into (or arriving in) the state given, or else the state people are in unless they are put elsewhere
+            if not tr.state_given:
+                self.check_first(f'added by "{name}" in demographics= are put in')
             dst = tr.dst[0] if tr.state_given else self.first
             if not any(s is dst for s in self.people_states):
                 raise ss.errors.UnknownState(f'"{name}" in demographics= adds people to "{dst.name}", which is not a state of people of "{self.module.name}"; its states are {sc.strjoin(s.name for s in self.people_states)}')
@@ -787,7 +847,7 @@ class Graph(Presentation):
     def uninfected(self):
         """ The names of the states people can be in without ever having been infected: those reached from the first state by transitions that are not an acquisition """
         seen = []
-        todo = [self.first]
+        todo = [self.first] if self.first is not None else []
         while todo:
             state = todo.pop()
             if state.name not in seen and state.people:

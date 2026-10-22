@@ -36,12 +36,12 @@ def make_polio(sia=False):
         progression = E >> I @ ss.perday(0.2),
         recovery    = I >> R @ ss.perday(gamma),
         waning      = V >> S @ ss.perday(0.003),
-        init        = dict(I=ss.by(patch=[5, 0, 0, 0, 0])),
+        init_n      = dict(I=ss.by(patch=[5, 0, 0, 0, 0])),
         name        = 'seir',
     )
     seir.stratify(patch=patches, kind='space', split=N0/N0.sum())
     if sia: # camdl's transfer(S -> V), in each patch on its own days
-        sia = [ss.vaccinate(move='S -> V', at=days, coverage=ss.by(patch=[0.8*(q == p) for q in patches]), name=f'sia_{p}') for p, days in sia_days.items()]
+        sia = [ss.vaccinate(move=seir.S >> seir.V, at=days, coverage=ss.by(patch=[0.8*(q == p) for q in patches]), name=f'sia_{p}') for p, days in sia_days.items()]
     return ss.Sim(seir, networks=ss.contacts(patch=np.diag(R0*gamma) + kappa*W), interventions=sia or None,
                   total_pop=N0.sum(), unit='day', stop=3*365, solver='ode', verbose=0)
 
@@ -68,13 +68,13 @@ def test_camdl_units():
         S, I, R = ss.states(3)
         with pytest.raises(ss.CodedError): # When the transitions or the disease are built, or at init
             infection, recovery = slip(S, I, R)
-            sir = ss.Disease(infection=infection, recovery=recovery, init=dict(I=10), name='sir')
+            sir = ss.Disease(infection=infection, recovery=recovery, init_n=dict(I=10), name='sir')
             ss.Sim(sir, total_pop=10_000, unit='day', stop=84, verbose=0).init()
             print(f'Not caught: {key}')
 
     # A count for a share is density-dependent transmission, which is a model of its own, so it is a note; at this size everyone is infected within the first day (before, the substeps did not follow the growth and the run stopped on a NaN)
     S, I, R = ss.states(3)
-    sir = ss.Disease(infection=S >> I @ ss.perday(0.4) * I.n, recovery=I >> R @ ss.perday(0.15), init=dict(I=10), name='sir')
+    sir = ss.Disease(infection=S >> I @ ss.perday(0.4) * I.n, recovery=I >> R @ ss.perday(0.15), init_n=dict(I=10), name='sir')
     sim = ss.Sim(sir, total_pop=10_000, unit='day', stop=84, verbose=0).run()
     assert np.isclose(sim.results.sir.n_I[1], 10_000*np.exp(-0.15), rtol=1e-3) # Everyone infected at once, then a day of recovery
     assert any('density-dependent' in str(note) for note in sim.notes)
@@ -88,7 +88,7 @@ def test_camdl_if2():
     S, I, R = ss.states(3)
     infection = S >> I @ beta * I
     cases = ss.outcome(0.6 * infection, likelihood=ss.nbinom(n=10))
-    sir = ss.Disease(infection, I >> R @ gamma, cases, init=dict(I=10), name='sir')
+    sir = ss.Disease(infection, I >> R @ gamma, cases, init_n=dict(I=10), name='sir')
     data = pd.DataFrame(dict(time=7*np.arange(1, 13), cases=ref_cases))
     sim = ss.Sim(sir, total_pop=10_000, unit='day', stop=ss.weeks(12), solver='binomial', data=data, verbose=0)
     fit = sim.calibrate(method='if2')

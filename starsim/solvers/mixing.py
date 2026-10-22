@@ -104,6 +104,16 @@ class Mixing:
         return prev if self.share is None else self.spread(prev)
 
     @staticmethod
+    def carries(beta, unit):
+        """ Whether a beta for a network can be above 0: a probability per act if any direction's can, and anything that is not a number (e.g. an expression) """
+        if isinstance(beta, ss.peract):
+            return any(Mixing.carries(val, unit) for val in beta.values)
+        val = convert(beta, unit)
+        if not sc.isnumber(val) and not isinstance(val, np.ndarray):
+            return True
+        return bool(np.any(np.asarray(val) > 0))
+
+    @staticmethod
     def mean(val, unit):
         """ The mean of a number of contacts, given as a number or a distribution; one given as a rate (e.g. `ss.perday(10)`) is per unit of the sim's time, as a bare number is """
         if isinstance(val, ss.Dist):
@@ -125,7 +135,7 @@ class Mixing:
             named = all(isinstance(getattr(coef, 'raw', coef), dict) for mod in sim.declared for tr in mod.graph.transmissions for coef in (getattr(tr, 'terms', None) or {}).values()) # Every transmission names its routes
             key = ss.utils.standardize_netkey(net.name)
             betas = [val for mod in sim.declared for tr in mod.graph.transmissions for coef in (getattr(tr, 'terms', None) or {}).values() for k,val in getattr(coef, 'raw', coef).items() if ss.utils.standardize_netkey(k) == key] if named else None
-            if betas and not any(np.any(np.asarray(convert(val, sim.unit_base)) > 0) for val in betas): # Named by transmissions, but none over it
+            if betas and not any(self.carries(val, sim.unit_base) for val in betas): # Named by transmissions, but none over it
                 ss.note(f'"{net.name}" carries no transmission (every beta for it is 0), so it adds no contacts', sim=sim)
                 continue
             beta = net.pars.get('beta', 1.0) if isinstance(net, (ss.MixingPool, ss.MixingPools)) else 1.0
@@ -137,7 +147,7 @@ class Mixing:
                 self.terms.append(sc.objdict(kind='homogeneous', contacts=self.mean(net.pars.n_contacts, sim.unit_base)*beta, name=net.name))
             elif isinstance(net, ss.networks.DegreeTargets): # Lasting partnerships (ss.SexualNet, ssl.DegreeNet): the partner-change model
                 terms = self.partnerships(net)
-                what = f'"{net.name}" ({type(net).__name__}) uses the partner-change model: partnerships formed at {terms[0].partnership.formed:.3g} per person per {sim.unit_name}, each with the chance it transmits over its whole length, from people drawn from the population (Anderson and May\'s model: it has no concurrency, and for a curable infection whose partnerships last about as long as it does, it runs high)'
+                what = f'"{net.name}" ({type(net).__name__}) uses the partner-change model: partnerships formed at {terms[0].partnership.formed:.3g} per person per {sim.unit_name}, each with the chance it transmits over its whole length, from people drawn from the population (Anderson and May\'s model: it counts at most one transmission in each partnership, from a partner in the source state when it forms, so it leaves out reinfection within a partnership and concurrency, and runs low when a curable infection passes within a partnership faster than it is cleared, or with concurrency; it runs high for a long infection in long partnerships, where infection stays within pairs)'
                 if approx is False:
                     raise ss.CapabilityError(f'cannot run with solver="{sim.solver}" and approx=False: {what}. Run with solver="abm".')
                 ss.note(what, sim=sim, verbose=0 if approx else None)
@@ -204,9 +214,13 @@ class Mixing:
         if p.get('where') is not None:
             raise ss.CapabilityError(f'cannot run "{net.name}" with solver="{sim.solver}": the partner-change model takes partnerships between everyone, or by sex (ss.SexualNet), not among some people (where=). {fix}')
 
-        # The side of each group: by sex on a sexual network, whose partnerships are a man and a woman (sides='mf') or two men ('mm')
+        # The side of each group: by sex on a sexual network, whose partnerships are a man and a woman (between='mf') or two men ('mm')
         sexual = isinstance(net, ss.SexualNet)
-        two_sided = sexual and p.sides == 'mf' # Each partnership has one person of each side
+        if sexual and net.forms_own:
+            raise ss.CapabilityError(f'cannot run "{net.name}" with solver="{sim.solver}": {type(net).__name__} forms its own partnerships (its own step()), which only agents follow. {fix}')
+        if sexual and not set(net.groups) <= {'male', 'female'}:
+            raise ss.CapabilityError(f'cannot run "{net.name}" with solver="{sim.solver}": the partner-change model takes partnerships by sex (between="mf" or "mm"), not between {net.groups[0]} and {net.groups[1]}. {fix}')
+        two_sided = sexual and net.sides is not None # Each partnership has one person of each side
         side = np.zeros(sim.groups.n_groups, dtype=int) # The position in net.sides of each group's side, -1 for neither
         n_sides = 1
         if sexual:
@@ -214,7 +228,7 @@ class Mixing:
             if d is None:
                 raise ss.CapabilityError(f'"{net.name}" has partnerships by sex, which with solver="{sim.solver}" must be a dimension of the model: add sim.stratify(sex=["female", "male"]). Or {fix[0].lower() + fix[1:]}')
             female = coords[:, d] == strats[d].female
-            side = female.astype(int) if two_sided else np.where(female, -1, 0) # Its sides are m (0) and f (1); between men, women take no part
+            side = np.where(female, net.groups.index('female'), net.groups.index('male')) if two_sided else np.where(female == (net.groups[0] == 'female'), 0, -1) # Its sides are m (0) and f (1); within one sex, the other takes no part
             n_sides = 2 if two_sided else 1
 
         # The property of people partners are counted or matched by, which must be a dimension too
@@ -249,7 +263,8 @@ class Mixing:
                 older = 1 - np.interp(debut, ends, np.append(0, np.cumsum(counts))/np.sum(counts))
             else: # Agents' ages with no age data: uniform from 0 to 60
                 older = np.clip(1 - debut/60, 0, 1)
-            k = np.full(size, float(part)*older*(1.0 if p.get('n_contacts') is None else mean(p.n_contacts)))
+            per = [1.0] if p.get('n_contacts') is None else [mean(v) for v in net.per_group(p.n_contacts)] # One target, or one for each side
+            k = float(part)*older*np.array(per)[cell_side if len(per) > 1 else np.zeros(size, dtype=int)]
         elif by is not None:
             k = np.array([mean(v) for v in sc.tolist(by.values)])[cell_lev]
         else:
@@ -269,7 +284,9 @@ class Mixing:
         if p.get('match'): # A share at the same level, as ssl.DegreeNet pairs them (see its match_pairs())
             share = list(p.match.values())[0]
             same = cell_lev[:, None] == cell_lev[None, :]
-            by_chance = np.sum(np.bincount(cell_lev, weights=stubs, minlength=n_lev)**2)/max(stubs.sum()**2, 1e-300)
+            shares = [np.bincount(cell_lev[cell_side == s], weights=stubs[cell_side == s], minlength=n_lev) for s in range(n_sides)]
+            shares = [v/max(v.sum(), 1e-300) for v in shares]
+            by_chance = shares[0] @ shares[-1] # Between the two sides, or within one
             within = np.clip((share - by_chance)/(1 - by_chance), 0, 1) if by_chance < 1 else 1.0
             local = same*mix
             local = np.divide(local, local.sum(axis=1, keepdims=True), out=np.zeros((size, size)), where=local.sum(axis=1, keepdims=True)>0)
@@ -351,6 +368,7 @@ class Mixing:
 
         to_dst = share(levels, dst_bands) # The share of each model group that is in each band
         from_src = share(bands, levels) # The share of each band that is in each model group
+        net.to_unit(sim)
         contacts = np.array(pars.n_contacts, dtype=object)
         contacts = np.vectorize(lambda n: self.mean(n, sim.unit_base))(contacts).astype(float) # [source band, destination band]
         matrix = to_dst @ contacts.T @ from_src # Contacts per unit time of one person in model group i with people in model group j
@@ -406,6 +424,7 @@ class Mixing:
     def dim_matrices(self, net, beta):
         """ A contact matrix for each of one or more of the model's dimensions: the contacts between two groups are the product of the entries; or one matrix over several dimensions together (`ss.contacts(matrix, dims=[...])`) """
         sim = self.sim
+        net.to_unit(sim)
         full = getattr(net, 'full', None)
         if full is not None:
             net.init_full(sim) # Checks the dimensions and the shape

@@ -6,6 +6,7 @@ import os
 import pytest
 import sciris as sc
 import starsim as ss
+import benchmark_models as bm
 
 baseline_filename   = sc.thisdir(__file__, 'baseline.yaml')
 benchmark_filename  = sc.thisdir(__file__, 'benchmark.yaml')
@@ -156,6 +157,8 @@ def perf_cases():
     - births_run: demographics (birth draw + grow)
     - crn_false_run: the crn=False path (guards the distribution jumping gate; all other
       cases run crn=True and so would not catch a reinstated per-step/per-draw RNG jump)
+    - fseis10, counts, coded, by_age (init and run): the models in benchmark_models.py, a model written as code
+      beside a coded ODE (malariasim), counts stepped beside agents, a coded disease on a network, and ss.by age tables
 
     Each case is (factory, which, crn).
     """
@@ -175,6 +178,14 @@ def perf_cases():
         'het_init':           (het, 'init', True),
         'births_run':         (births, 'run', True),
         'crn_false_run':      (crnf, 'run', False),
+        'fseis10_init':       (bm.make_fseis, 'init', False),
+        'fseis10_run':        (bm.make_fseis, 'run', False),
+        'counts_init':        (bm.make_counts, 'init', True),
+        'counts_run':         (bm.make_counts, 'run', True),
+        'coded_init':         (bm.make_coded, 'init', True),
+        'coded_run':          (bm.make_coded, 'run', True),
+        'by_age_init':        (bm.make_by_age, 'init', True),
+        'by_age_run':         (bm.make_by_age, 'run', True),
     }
 
 
@@ -215,6 +226,7 @@ def test_performance_guard(do_save=False, verbose=True):
         pytest.skip('Performance guard is timing-sensitive; run serially (pytest test_baselines.py::test_performance_guard).')
 
     repeats = dict(bare_init=8, bare_run=4, bare_run_no_people=4, het_init=8, births_run=4, crn_false_run=4)
+    repeats.update({f'{name}_{which}':(8 if which == 'init' else 3) for name in ['fseis10', 'counts', 'coded', 'by_age'] for which in ['init', 'run']})
 
     # Measure, bracketed by CPU benchmarks for normalization
     r1 = sc.benchmark(which='numpy')

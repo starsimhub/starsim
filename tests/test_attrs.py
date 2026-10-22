@@ -279,7 +279,7 @@ def test_attr_errors():
     sc.heading('Attributes: read where they have no value')
     with pytest.raises(ss.errors.ClockOutsideDomain): # A case of a derived attribute reads a clock of another state
         A, B = ss.states('A B')
-        ss.Disease(A, B, ab=A >> B @ 0.1, x=ss.attr({B: A.time}), name='d')
+        ss.Disease(A, B, ab=A >> B @ 0.1, x=ss.attr({B: A.time}), first='A', name='d')
     S, I = ss.states('S I')
     infection = S >> I @ ss.perday(0.1)*I
     rec = ss.attr(ss.normal(10, 1), on=infection)

@@ -586,7 +586,7 @@ def test_cause_of_death():
     """ Someone whose death two modules request in one step dies once, of one cause, counted once """
     sc.heading('Testing causes of death...')
     S, I = ss.states(2)
-    sis = ss.Disease(infection=S >> I @ ss.peryear(0)*I, death=ss.death(I, rate=ss.peryear(1.0)), init=dict(I=10_000), name='sis')
+    sis = ss.Disease(infection=S >> I @ ss.peryear(0)*I, death=ss.death(I, rate=ss.peryear(1.0)), init_n=dict(I=10_000), name='sis')
     sim = ss.Sim(diseases=sis, demographics=ss.Deaths(death_rate=ss.peryear(1.0), rate_units=1), n_agents=10_000, start=2010, stop=2011, dt=ss.months(1), verbose=0).run()
     r = sim.results
     by_disease, by_deaths, total = r.sis.death.sum(), r.deaths.new.sum(), r.new_deaths.sum()

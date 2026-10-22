@@ -10,9 +10,11 @@ import sciris as sc
 import paths
 
 rscript = shutil.which('Rscript')
+stale = pytest.mark.xfail(reason='stale: rstarsim is not yet updated for v4', strict=False) # Fix rstarsim later, then remove
 has_reticulate = rscript is not None and subprocess.run([rscript, '-e', 'quit(status=!requireNamespace("reticulate", quietly=TRUE))'], capture_output=True).returncode == 0
 
 
+@stale
 @pytest.mark.skipif(not has_reticulate, reason='needs R with reticulate')
 def test_r():
     sc.heading('Testing a declared model built and run from R')
@@ -25,6 +27,7 @@ def test_r():
 
 
 @pytest.mark.skipif(not has_reticulate or not paths.rstarsim.exists(), reason='needs R with reticulate, and the rstarsim repo (set STARSIM_RSTARSIM)')
+@stale
 def test_r_declare():
     sc.heading('Testing a model declared in R, with formulas for rates')
     script = sc.thispath() / 'r' / 'declare.R'

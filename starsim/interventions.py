@@ -104,7 +104,7 @@ class Event(ss.FloatArr):
     def current(self):
         """ The people the event is news for on this step """
         sim = self.mod.sim
-        late = isinstance(self.mod, (ss.Disease, ss.Analyzer)) # It steps after the interventions, so what it fired on the last step is news now
+        late = isinstance(self.mod, ss.Analyzer) or getattr(self.mod, 'graph', None) is not None # It steps after the interventions, so what it fired on the last step is news now
         if self.fired is None or not (self.fired[0] == sim.ti or (late and self.fired[0] == sim.ti - 1)):
             return ss.uids()
         return self.fired[1]
@@ -223,7 +223,7 @@ def remembered(selector, cond):
 def coded_disease(sim, name):
     """ The disease of this name if it is written as code (not declared), else None """
     dis = sim.diseases.get(name) if name is not None and sim.diseases is not None else None
-    return dis if isinstance(dis, ss.Infection) else None
+    return dis if isinstance(dis, ss.Disease) and dis.graph is None else None
 
 
 def trigger_moves(owner, outcome, sel, eng=None, before=None):
@@ -368,7 +368,7 @@ class Delivery(ss.products.EventSource, Intervention):
             or a delivery), or a combination with `&` and `|` (an event `|` a condition raises, being neither triggered nor routine);
             or a list, joined by `operator=`; or a function of the sim
         operator (str): for a list in who=: 'any' (the default, the same as `|`) or 'all' (the same as `&`)
-        move (str/dict): instead of a product, a move between two states for the people reached, e.g. `move='S -> V'` (a one-off campaign); or the level of a stratification they move to, e.g. `move=dict(vaccinated=True)` or `move=dict(risk='low -> high')`
+        move (Transition/dict/StrainMove): instead of a product, a move between two states for the people reached, written with the states, e.g. `move=S >> V` (a one-off campaign), or from any of several (`move=U + P + W >> P`: a re-dose, which restarts the time in `P` of those already there); or the level of a stratification they move to, e.g. `move=dict(vaccinated=True)`, or from one level to another, `move=dict(risk=('low', 'high'))`; or a change of strains, e.g. `move=DS >> RIF`
         increment (str/dict): instead of a product, a counter that goes up for the people reached: its name, which adds 1 (`increment='doses'`), or a dict of the amount for each (`dict(doses=2)`)
         at_age (dur/float): routine delivery to people as they reach this age (a bare number is in years), e.g. `at_age=ss.months(9)`
         start (date/float): when delivery starts, within the sim (default: the start of the sim); a number is a time in the sim's unit (in a sim with dates, that long after the start)
@@ -403,7 +403,7 @@ class Delivery(ss.products.EventSource, Intervention):
     Examples:
         ```python
         # Seeding: three people, chosen from everyone susceptible, infected every 30 days for ten years
-        seeds = ss.Delivery(move='S -> I', capacity=3, start=ss.days(30), interval=ss.days(30), stop=ss.years(10))
+        seeds = ss.Delivery(move=S >> I, capacity=3, start=ss.days(30), interval=ss.days(30), stop=ss.years(10))
 
         # A move along a stratification for 70% of people in two rounds, e.g. a campaign that leaves a mark
         rollout = ss.Delivery(move=dict(vaccinated=True), coverage=0.7, at=[5, 30], who=~sir.vaccinated)
@@ -425,13 +425,18 @@ class Delivery(ss.products.EventSource, Intervention):
         product = what
         trigger, eligible = ss.conditions.split_who(who, operator=operator, where=where, on=on)
         super().__init__(name=name, label=label, **kwargs)
-        self.move_states = None # With move='S -> V': the state people move from, and the one they move to
+        self.move_states = None # With move=S >> V: the names of the states people move from (a list), and the one they move to
+        if isinstance(move, ss.strains.StrainMove): # A change of the strains people carry, e.g. move=DS >> RIF
+            move = {move.strains.name: move}
         if isinstance(move, str):
-            src, dst = [sc.tolist(end) for end in ss.transitions.parse_arrow(move)]
-            if product is not None or len(src) != 1 or len(dst) != 1 or None in src + dst:
-                errormsg = f'move= of "{name or type(self).__name__}" is a move from one state to another for the people reached, e.g. move="S -> V", instead of a product; not {move!r}' + (' with a product' if product is not None else '')
+            errormsg = f'move= of "{name or type(self).__name__}" is a move between states written with the states, e.g. move=S >> V (or U + B >> B from either), not a string ({move!r})'
+            raise ValueError(errormsg)
+        if isinstance(move, ss.Transition):
+            src, dst = move.src or [], move.dst or []
+            if product is not None or len(dst) != 1 or not src or not all(isinstance(st, ss.State) for st in src + dst) or move.rate is not None or move.dur is not None or move.p is not None:
+                errormsg = f'move= of "{name or type(self).__name__}" is a move from one state (or several) to another for the people reached, e.g. move=S >> V, instead of a product; not {move!r}' + (' with a product' if product is not None else '')
                 raise ValueError(errormsg)
-            self.move_states = (src[0], dst[0])
+            self.move_states = ([st.name for st in src], dst[0].name)
             move = None
         if self.kind is not None and not isinstance(product, self.kind) and self.move_states is None:
             errormsg = f'ss.{type(self).__name__}() delivers an ss.{self.kind.__name__}, not {type(product).__name__}'
@@ -472,10 +477,11 @@ class Delivery(ss.products.EventSource, Intervention):
         self.priority = priority
         self.queue = None if queue is False else queue
         self.disease_list = None # Several diseases (HP7): the product acts on each, as if its values were keyed by them (see init_pre())
-        if isinstance(disease, (list, tuple, ss.Strains)):
-            self.disease_list = [d for item in (disease if isinstance(disease, (list, tuple)) else [disease]) for d in (item._members if isinstance(item, ss.Strains) else [item])]
+        family = lambda item: getattr(item, 'family', None) # A disease whose strains have courses of their own: its strains, each a disease
+        if isinstance(disease, (list, tuple)) or family(disease) is not None:
+            self.disease_list = [d for item in sc.tolist(disease) for d in (family(item)._members if family(item) is not None else [item])]
             if self.product is None or not self.disease_list:
-                errormsg = f'disease= of a delivery is one disease, or a list (or an ss.Strains) of them that its product acts on; "{name or type(self).__name__}" has {"no product" if self.product is None else "an empty list"}'
+                errormsg = f'disease= of a delivery is one disease, or a list of them that its product acts on; "{name or type(self).__name__}" has {"no product" if self.product is None else "an empty list"}'
                 raise TypeError(errormsg)
             disease = self.disease_list[0]
         self.disease = disease
@@ -510,7 +516,7 @@ class Delivery(ss.products.EventSource, Intervention):
     def outcome_names(self):
         product = self.__dict__.get('product')
         out = product.outcome_names() if product is not None else []
-        return out + (['never_ran'] if self.__dict__.get('queue') not in [None, True] else []) # Left the queue unserved at its end
+        return out + (['never_ran'] if self.__dict__.get('queue') is not None and self.queue is not True else []) # Left the queue unserved at its end
 
     @property
     def cost(self):
@@ -572,9 +578,19 @@ class Delivery(ss.products.EventSource, Intervention):
     def remembers(self):
         """ Whether the model has to record who has been offered the product; not if everyone eligible receives something they then hold for good, nor for a rate among those eligible """
         full = self.coverage is None and self.capacity is None and self.when is None
-        lost = self.holds and self.product.loses # Once lost, they would be eligible again, and given it again at the next step
+        lost = self.holds and self.product.waning is not None # Once lost (or for waning by a function, at once), they would be eligible again, and given it again at the next step
         rate = isinstance(self.coverage, ss.TimePar) or self.typed_function() # Typed coverage (or a function giving it) is a rate among those eligible, offered at every step
         return self.routine and not rate and (self.at_age is not None or not ((self.holds or self.move) and full and not lost))
+
+    @property
+    def move_names(self):
+        """ With move= between states: the names of the states it moves people from, and the one it moves them to """
+        return self.move_states[0] + [self.move_states[1]]
+
+    @property
+    def move_arrow(self):
+        """ With move= between states: the move, as written (`S >> V`) """
+        return f'{" + ".join(self.move_states[0])} >> {self.move_states[1]}'
 
     @property
     def offered(self):
@@ -654,18 +670,26 @@ class Delivery(ss.products.EventSource, Intervention):
     def selector(self):
         return self.eng.selector
 
+    def key_product(self, sim):
+        """ For a delivery for several diseases (`disease=[...]`): their names, as the sim has them, and the product keyed by them """
+        if self.disease_list is None:
+            return
+        declared = [mod.name for mod in sim.declared]
+        names = [d if isinstance(d, str) else d.name for d in self.disease_list]
+        names = [m for n in names for m in (sim.diseases[n].member_names if isinstance(sim.diseases.get(n), ss.strains.Family) else [n])] # Strains with courses of their own, by the disease's name
+        missing = [n for n in names if n not in declared]
+        if missing:
+            raise ss.errors.UnknownDisease(f'disease= of "{self.name}" names {sc.strjoin(missing)}, which {"is not a declared disease" if len(missing) == 1 else "are not declared diseases"} in the sim; these are {sc.strjoin(declared)}.')
+        self.disease_list = names
+        self.disease = names[0]
+        self.product.key_by([sim.get_declared(n) for n in names])
+        return
+
     def init_pre(self, sim):
         declared = [mod.name for mod in sim.declared]
         ss.conditions.check_path_events(sim, self.on, self.name)
-        if self.disease_list is not None: # Several diseases: their names now, as the sim has them, and the product keyed by them
-            names = [d if isinstance(d, str) else d.name for d in self.disease_list]
-            names = [m for n in names for m in (sim.diseases[n].member_names if isinstance(sim.diseases.get(n), ss.Strains) else [n])] # A family by name
-            missing = [n for n in names if n not in declared]
-            if missing:
-                raise ss.errors.UnknownDisease(f'disease= of "{self.name}" names {sc.strjoin(missing)}, which {"is not a declared disease" if len(missing) == 1 else "are not declared diseases"} in the sim; these are {sc.strjoin(declared)}.')
-            self.disease_list = names
-            self.disease = names[0]
-            self.product.key_by([sim.get_declared(n) for n in names])
+        for other in [self] + [iv for iv in sim.interventions() if isinstance(iv, Delivery) and iv is not self and iv.product is not None and iv.product is self.product]:
+            other.key_product(sim) # A product shared with a delivery for several diseases is keyed by them before any delivery initializes it, whatever the order (HP38)
         if isinstance(self.delay, ss.Dist) and not getattr(self.delay, '_numeric', False): # Durations in the sim's unit, however they are given
             self.delay = ss.transitions.numeric_dist(self.delay, lambda val: ss.solvers.convert(val, sim.unit_base))
             self.delay._numeric = True
@@ -677,6 +701,10 @@ class Delivery(ss.products.EventSource, Intervention):
             self.disease = self.product.diseases[0]
         if self.disease is None and self.holds: # One whose efficacy is keyed by diseases given by name
             self.disease = next((name for name in self.product.disease_effects(sim) if name is not None), None)
+        if self.disease is None and self.move_states is not None: # A move between states: the one module that has them
+            owners = [mod.name for mod in sim.declared if all(name in mod.graph.states for name in self.move_names)]
+            if len(owners) == 1:
+                self.disease = owners[0]
         if self.disease is None and self.product is None and self.move is None and self.move_states is None and len(declared) > 1: # A step with no product or move (a visit) acts on no disease: the one its trigger is of, or the first
             self.disease = self.trigger_disease(sim) or declared[0]
         if self.disease is None and len(declared) > 1: # The disease of the step that triggers it
@@ -716,14 +744,17 @@ class Delivery(ss.products.EventSource, Intervention):
             self.trace_nets = [sim.networks[net if isinstance(net, str) else net.name] for net in sc.tolist(self.trace)]
         to_ti = ss.connectors.to_ti
         npts = sim.t.npts
-        self.ti_start = 0 if self.start is None else to_ti(sim, self.start, name=f'the start of "{self.name}"')
+        self.ti_start = 1 if self.start is None else to_ti(sim, self.start, name=f'the start of "{self.name}"') # The first step is 1 (see ss.Loop)
         self.ti_stop = npts if self.stop is None else to_ti(sim, self.stop, name=f'the stop of "{self.name}"', after=True) # A stop after the end never stops it
         self.round_tis = None
         if self.in_rounds:
             tis = [to_ti(sim, time, name=f'a round of "{self.name}"') for time in self.rounds]
             every = 1
             if self.interval is not None:
-                every = max(1, int(round(self.convert(self.interval)/self.dt_sim)))
+                steps = self.convert(self.interval)/self.dt_sim
+                every = max(1, int(round(steps)))
+                if steps < 0.5: # E.g. every 30 days with yearly steps: a round once a year
+                    ss.note(f'the interval of "{self.name}" is {steps:.2g} of a step, so it has one round per step; use a smaller dt to deliver it as often as that', sim=sim)
                 tis += list(range(self.ti_start, min(self.ti_stop, npts), every))
             self.round_tis = set(tis)
             tis = sorted(self.round_tis)
@@ -732,18 +763,24 @@ class Delivery(ss.products.EventSource, Intervention):
             self.round_span = {ti:gap*self.dt_sim for ti,gap in zip(tis, gaps)} # The time each round stands for, which a capacity or coverage per unit time is scaled by
         if self.move_states is not None:
             states = self.dis.graph.states
-            for name in self.move_states:
+            for name in self.move_names:
                 if name not in states or not states[name].people:
                     raise ss.errors.UnknownState(f'move= of "{self.name}" names "{name}", which is not a state of people of "{self.dis.name}"; its states are {sc.strjoin(k for k,v in states.items() if v.people)}')
         self.changes = {} # For a transfer: the level in each dimension that people move to, and the one they move from (if given)
         self.sources = {}
+        self.carriers = None # For a change of strains: the states that carry them
         for dim,level in (self.move or {}).items():
             d = sim.groups.dim_index(dim)
             strat = sim.groups.strats[d]
-            if isinstance(level, str) and ('->' in level or '>>' in level):
-                src, dst = ss.transitions.parse_arrow(level)
-                self.sources[d] = strat.index(sc.tolist(src)[0])
-                level = sc.tolist(dst)[0]
+            if isinstance(level, ss.strains.StrainMove): # Each level that carries the strains it changes, to the level that carries them changed
+                mapping = level.mapping()
+                self.sources[d] = np.flatnonzero(mapping >= 0)
+                self.changes[d] = ('map', tuple(mapping.tolist()))
+                self.carriers = strat.states
+                continue
+            src, level = ss.transitions.level_pair(level, f'move= of "{self.name}" ({dim}=...)')
+            if src is not None:
+                self.sources[d] = np.array([strat.index(lev) for lev in src])
             self.changes[d] = strat.move_level(level)
         for dim,k in (self.increment or {}).items(): # A counter: ('+', amount), which nobody is already at
             self.changes[sim.groups.dim_index(dim)] = ('+', k)
@@ -893,7 +930,7 @@ class Delivery(ss.products.EventSource, Intervention):
         """ The number of people selected, whatever the results count in """
         if self.compartments is not None:
             return self.compartments.n_selected(sel)
-        return self.n_agents(sel)*self.sim._current_scale
+        return self.n_agents(sel)*self.sim.current_scale
 
     def shift(self, sel, changes, mover=None):
         """ Move the selected people to other levels of some dimensions (`mover` is the event they are, if known, which a compartmental run uses) """
@@ -933,7 +970,7 @@ class Delivery(ss.products.EventSource, Intervention):
         return self.when is None or bool(self.when(sim))
 
     def step(self):
-        """ Deliver the product to whoever it is due to now: at the time of the start of the step (as for all code in a step: see `ss.Loop`), before the disease's transitions in it, under every solver """
+        """ Deliver the product to whoever it is due to in this step (at its time point, as for all code in a step: see `ss.Loop`), before the disease's transitions in it, under every solver """
         flush_memory(self.sim)
         self.step_deliver()
         for owner in [self] + ([self.product] if self.product is not None else []): # The memory of its events, for the steps after it
@@ -946,6 +983,9 @@ class Delivery(ss.products.EventSource, Intervention):
         if self.product is not None: # Before anyone is offered anything: protection lost, and test results that have come
             self.product.step_waning()
         self.step_results()
+        for owner in [self] + ([self.product] if self.product is not None else []): # The results that have come are remembered before anyone is offered it (CV3)
+            if owner.__dict__.get('_pending'):
+                owner.flush(self.sim.ti)
         if not self.due():
             if self.queue is not None: # Those waiting are served even if nobody new arrives
                 self.receive(self.selector.nobody())
@@ -1003,7 +1043,7 @@ class Delivery(ss.products.EventSource, Intervention):
         """ Who is eligible if nothing is said: for a treatment that is not triggered, the people it can cure (those in the sources of its moves, or who are infected) """
         selector = self.selector
         if isinstance(self.product, ss.Treatment) and self.on is None:
-            if self.product.moves is not None:
+            if self.product.moves is not None or (self.disease_list and self.edges): # Over every disease it cures, with disease=[...]
                 return selector.select(self.edge_sources())
             return selector.in_states(self.infected_states())*selector.everyone()
         return selector.everyone()
@@ -1019,7 +1059,7 @@ class Delivery(ss.products.EventSource, Intervention):
 
     def infected_states(self):
         """ The infected states of the disease, which a test with no detects= finds and a treatment with no where= is for; raises if there are none (TL52: nobody was found, with no message) """
-        if isinstance(self.dis, ss.Infection): # Written as code: see check_coded()
+        if self.dis.graph is None: # Written as code: see check_coded()
             return ['infected']
         out = [s.name for s in self.dis.graph.infected if s.people]
         if not out:
@@ -1078,20 +1118,22 @@ class Delivery(ss.products.EventSource, Intervention):
         return sel
 
     def eligible_now(self, held=True):
-        """ Who can receive it now: eligible, in the state a move is from, not holding it already (unless `held=False`), and not at the level a transfer moves them to """
+        """ Who can receive it now: eligible, in a state a move is from (or carrying the strains a change of strains is from), not holding it already (unless `held=False`, or its protection fades by a function of time, when a new dose restarts it), and not at the level a transfer moves them to """
         selector = self.selector
         sel = selector.select(self.eligible) if self.eligible is not None else self.default_eligible()
         if self.move_states is not None: # Only the people in the state they move from
-            sel = sel*selector.in_states([self.move_states[0]])
-        if self.holds and held: # Not to people who already hold it (or every dose of it)
+            sel = sel*selector.in_states(self.move_states[0])
+        if self.carriers is not None: # Only the people carrying strains, for a change of them
+            sel = sel*selector.in_states(self.carriers)
+        if self.holds and held and not callable(self.product.waning): # Not to people who already hold it (or every dose of it); a product that fades by a function is given again, restarting it (MA15)
             level = selector.dim(self.product.dim)
             doses = self.product.doses
             sel = sel*((level < len(doses)) if doses else (level == 0))
         for d,level in self.changes.items(): # Or who are already there
             if not isinstance(level, tuple):
                 sel = sel*(selector.dim(self.sim.groups.strats[d].name) != level)
-        for d,level in self.sources.items():
-            sel = sel*(selector.dim(self.sim.groups.strats[d].name) == level)
+        for d,levels in self.sources.items():
+            sel = sel*np.isin(selector.dim(self.sim.groups.strats[d].name), levels)
         if selector.abm:
             sel = sel & selector.to_selection(self.sim.people.auids)
         return sel
@@ -1199,7 +1241,7 @@ class Delivery(ss.products.EventSource, Intervention):
         if self.compartments is not None:
             return self.compartments.take(cands, n, key, wait)
         uids = self.uids(cands)
-        k = n/self.sim._current_scale # In agents
+        k = n/self.sim.current_scale # In agents
         if carry:
             k += self.carry
             self.carry = k - int(k) if len(uids) >= int(k) else 0.0
@@ -1295,8 +1337,8 @@ class Delivery(ss.products.EventSource, Intervention):
             return self.compartments.give(chosen)
 
         if self.move_states is not None: # A one-off move between states
-            src, dst = [self.dis.graph.states[name] for name in self.move_states]
-            self.fire(None, self.eng.move_states(self.uids(chosen), [src], dst))
+            states = self.dis.graph.states
+            self.fire(None, self.eng.move_states(self.uids(chosen), [states[name] for name in self.move_states[0]], states[self.move_states[1]]))
             return
         if product is None: # A transfer, or a step with neither (a visit)
             self.fire(None, self.follow(chosen, chosen, self.changes) if self.changes else chosen)
@@ -1458,12 +1500,10 @@ class Delivery(ss.products.EventSource, Intervention):
         return
 
     def update_results(self):
-        """ The coverage of what was delivered in the step, at the time point it was delivered: the start of the step """
+        """ The coverage of what was delivered in the step """
         super().update_results()
         res = self.results
-        ti = self.sim.ti - 1
-        if ti < 0:
-            return
+        ti = self.sim.ti
         res.coverage[ti] = res.delivered[ti]/res.eligible[ti] if res.eligible[ti] else 0.0
         if getattr(res.coverage, 'strata', None) is not None:
             row = self.row(ti)
@@ -1473,7 +1513,7 @@ class Delivery(ss.products.EventSource, Intervention):
 
     def describe(self):
         """ A line saying what is delivered and how """
-        what = f'move {self.move_states[0]} -> {self.move_states[1]}' if self.move_states is not None else f'increment {sc.strjoin(f"{k}{v:+d}" for k,v in self.increment.items())}' if self.increment else ('visit' if not self.move else 'transfer') if self.product is None else self.product.describe()
+        what = f'move {self.move_arrow}' if self.move_states is not None else f'increment {sc.strjoin(f"{k}{v:+d}" for k,v in self.increment.items())}' if self.increment else ('visit' if not self.move else 'transfer') if self.product is None else self.product.describe()
         routine = 'routine (each person is offered it once in each spell of being eligible)' if self.remembers else 'routine'
         how = 'in rounds' if self.in_rounds else 'by a function' if self.deliver is not None else f'on {self.on}' if self.on is not None else routine
         if isinstance(self.eligible, ss.conditions.Cond):
@@ -1501,7 +1541,7 @@ class Delivery(ss.products.EventSource, Intervention):
         """ Its part of the model spec (`sim.to_spec()`), for `sim.hash()`, `ss.diff()`, and `ss.to_code()` """
         out = super().to_spec()
         out.pop('pars', None)
-        move = f'{self.move_states[0]} -> {self.move_states[1]}' if self.move_states is not None else self.move
+        move = self.move_arrow if self.move_states is not None else None if self.move is None else {k:ss.presentation.move_json(v) for k,v in self.move.items()}
         names = [d if isinstance(d, str) else d.name for d in self.disease_list] if self.disease_list else None
         out.update(type=type(self).__name__, product=None if self.product is None else self.product.describe(), move=move, disease=names or self.disease)
         if self.increment:

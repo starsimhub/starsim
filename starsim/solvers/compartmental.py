@@ -274,8 +274,8 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
                     add_flow(other, ind, 'hazard')
             for other in exits.contact:
                 add_flow(other, ind, 'contact')
-            if any(state is s for s in self.immune_states): # Infected again, by another strain, as far as their last strain does not protect them
-                for other in self.graph.transmissions:
+            if any(state is s for s in self.immune_states): # Infected again, by another strain, as far as the strains they carry do not protect them
+                for other in [tr for tr in self.graph.transmissions if not getattr(tr, 'generated', False)]:
                     add_flow(other, ind, 'contact')
             return
 
@@ -427,6 +427,8 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
         else:
             fixed = ' (nearly fixed, not exponential)' if dw.std < dw.mean/2 else '' # e.g. ss.SIR(dur_inf=ss.days(7)), whose std is 1 day
             ss.note(f'{name} has a {dw.family} dwell time{fixed}, approximated by {what}', ss.errors.StagesUnderAuto, sim=sim, verbose=0 if approx else None)
+            if dw.std > ss.solvers.choose.max_cv*dw.mean: # solver='auto' runs it as agents (FP53)
+                ss.warn(f'{name} has a {dw.family} dwell time whose coefficient of variation is {dw.std/dw.mean:.3g}, so one exponential stage keeps only its mean, and its long tail is lost; run with solver="abm" to keep it')
         return
 
     def unsupported(self, tr, what):
@@ -434,7 +436,7 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
                                  f'     Run with solver="abm".')
 
     def whole_steps(self, tr, what, dur, lowest, nearest=False):
-        """ A time as a number of whole steps, as agents count it (up, or to the nearest with `nearest=True`; at least `lowest`), with a note if it is not one """
+        """ A time as a number of whole steps (up, or to the nearest with `nearest=True`; at least `lowest`), with a note if it is not one """
         step = getattr(getattr(self.mod, 't', None), 'dt', None) or getattr(getattr(self.sim, 'pars', None), 'dt', None) # The sim's, if the module has no timeline yet (see init_crossings())
         if not isinstance(step, ss.dur): # Laid out before the module is in a sim, for its equations (see ss.transitions.Graph.flow_terms()): one slot
             return max(lowest, 1)
@@ -443,7 +445,7 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
         if abs(x - round(x)) > 1e-6:
             unit = self.sim.unit_name
             dt = float(self.convert(dur))/x
-            ss.note(f'{tr.name} has {what} of {x*dt:n} {unit}s, which is {n} step{"s" if n != 1 else ""} ({n*dt:n} {unit}s), as agents take it; a step that divides it makes it exact', ss.errors.LargeStep, sim=self.sim)
+            ss.note(f'{tr.name} has {what} of {x*dt:n} {unit}s, which is {n} step{"s" if n != 1 else ""} ({n*dt:n} {unit}s) here (agents round each dwell to whole steps at random, keeping its mean); a step that divides it makes it exact', ss.errors.LargeStep, sim=self.sim)
         return n
 
     def delay_steps(self, tr):
@@ -677,7 +679,7 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
     def force(self, frac, tr, dst, srcs=None, y=None):
         """ Move a fraction of the people in each state a transition leaves from (or in `srcs`), and each group, to a state, counted in the transition's flow if there is one (as when a treatment cures); a synchronized flow moves other modules' coordinates too; with `y`, of those people (by compartment and group) rather than the engine's """
         syn = self.syncs_of(tr, dst.name) if tr is not None else []
-        total, recorded = self.move_states(frac, tr.src if srcs is None else srcs, dst, syn=syn, y=y)
+        total, recorded = self.move_states(frac, tr.src if srcs is None else srcs, dst, syn=syn, y=y, move=self.moves(tr) if tr is not None else None) # With its change of level (ST30)
         if tr is None:
             return total
         self.flowcounts[tr.name] += recorded.sum()
@@ -686,8 +688,8 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
             self.pass_syncs({sy.row:recorded*sy.mask for sy in syn})
         return recorded
 
-    def move_states(self, frac, srcs, dst, syn=None, y=None):
-        """ Move a fraction of the people in each of some states, and each group, to a state: along a transition (see `force()`), or along none, as a one-off move (`ss.vaccinate(move='S -> V')`); with `syn` (synchronized flows), also returns the moves in this module's own groups; with `y`, of those people rather than the engine's """
+    def move_states(self, frac, srcs, dst, syn=None, y=None, move=None):
+        """ Move a fraction of the people in each of some states, and each group, to a state: along a transition (see `force()`), or along none, as a one-off move (`ss.vaccinate(move=S >> V)`); with `syn` (synchronized flows), also returns the moves in this module's own groups; with `y`, of those people rather than the engine's """
         own = y is None
         y = self.y if own else y
         total = np.zeros(self.n_groups)
@@ -697,7 +699,7 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
             if not state.people:
                 continue
             s = self.selector.states.index(state.name)
-            base = self.dim_map(state.name, dst.name)
+            base = self.dim_map(state.name, dst.name, move=move)
             dim_map = self.synced(base, syn) if syn else base
             for comp in self.state_comps[state.name]:
                 n = self.take(y[comp], frac[s])
@@ -1174,6 +1176,8 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
         lasting = any('partnership' in term for term in terms) # Under the partner-change model, by source state
         acts = lasting or any(getattr(net, 'has_acts', False) for net in nets.values())
         betas = [leaf for leaf in flow.expr.leaves if isinstance(leaf, ss.par) and (isinstance(leaf.raw, (dict, ss.peract)) or (acts and leaf.slot == 'rate'))]
+        if len({id(b) for b in betas if isinstance(b.raw, dict)}) > 1:
+            raise ss.CapabilityError(f'"{flow.tr.name}" has a rate for each route with its own sources (e.g. dict(random=b*(A + 0.5*B), home=b2*(A + B))), which only agents can run yet: run with solver="abm", or give one beta for each route times the same sources, e.g. dict(random=b, home=b2)*(A + 0.5*B).')
         if betas:
             raw = betas[0].raw
             def route(term, state=None): # The keys of a dict are checked when the sim is initialized
@@ -1250,17 +1254,17 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
             mult = flow.rel_sus*self.mult_raw('rel_sus', state=flow.state)
             if flow.strain is not None and self.strain_adjust[tr.name] is not None:
                 mult = mult*self.strain_adjust[tr.name][flow.strain]
-            if self.immunity is not None and any(flow.state is s for s in self.immune_states):
-                mult = mult*self.protection(self.sim.groups.group_coords[:, self.strain], flow.strain)
+            if flow.state.name in self.protect: # Protected in part by the strains they carry
+                mult = mult*self.protection(flow.state, self.sim.groups.group_coords[:, self.strain], flow.strain)
+            if flow.strain is not None and self.sim.modifiers.get((self.mod.name, 'strain_sus', None)): # By a product against acquiring the strain
+                mult = mult*self.strain_effect(flow.strain, state=flow.state)
             if flow.strain is not None and self.carriage is not None and self.applies[flow.state.name][self.strain] and self.superinfects(tr, flow.state): # Infected with another strain while staying in the same state: only if they do not carry it already
                 mult = mult*self.can_take(self.sim.groups.group_coords[:, self.strain], flow.strain)
         elif tr.acquisition and flow.src is not None: # An acquisition that is not contact-mediated, e.g. by a bite rate: the susceptibility of its source too
             mult = flow.rel_sus*self.mult_raw('rel_sus', state=flow.state)
         if self.adjust[tr.name] is not None:
             mult = mult*self.adjust[tr.name]
-        if flow.src is not None:
-            mult = mult*self.mult_raw('transition', tr.name, state=flow.state)
-        return mult
+        return mult*self.mult_raw('transition', tr.name, state=flow.state) # An inflow's too (MA36)
 
     def rates(self):
         """ The rate of every flow, per unit time and per member of its source compartment (or in total, for an inflow) """
@@ -1590,17 +1594,20 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
             self.at_time(frac*dt)
             self.refresh_program()
             rows.append([p.fixed.copy(), p.mult.copy(), p.consts.copy(), p.rel_trans.copy()])
-        self.at_time(0)
+        self.at_time(None)
         return tuple(np.array([r[k] for r in rows]) for k in range(4)), 0
 
     def at_time(self, t):
-        """ Take values that vary in time at a time t (in the sim's unit) into the step: the year worked out as `tables()` does, so that a stepped run takes the same values as a whole one """
+        """
+        Take values that vary smoothly in time at a time t (in the sim's unit) into the step, which runs from time point `ti-1` to `ti`: the year
+        worked out as `tables()` does, so that a stepped run takes the same values as a whole one; with t=None, at its start, as for the rest
+        """
         if self.smooth:
             years, ti = self.mod.t.yearvec, self.mod.t.ti
-            start = years[ti]
-            end = years[ti+1] if ti + 1 < len(years) else start + (start - years[ti-1] if ti else 0)
-            frac = t/self.dt
-            self.year = None if frac == 0 else (start + end)/2 if frac == 0.5 else end if frac == 1 else start + frac*(end - start)
+            end = years[ti]
+            start = years[ti-1] if ti else end
+            frac = None if t is None else t/self.dt
+            self.year = None if frac is None else (start + end)/2 if frac == 0.5 else end if frac == 1 else start + frac*(end - start)
             self.cache.clear()
         return
 
@@ -1805,8 +1812,8 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
                     else:
                         vals = raw.series(years, sim, self.convert)
                 else:
-                    for ti in range(npts):
-                        sim.t.ti = mod.t.ti = ti
+                    for ti in range(npts): # The values for the step from ti, which is step ti+1 (see ss.Loop)
+                        sim.t.ti = mod.t.ti = min(ti + 1, npts - 1)
                         vals.append(raw.per_group(sim, self.convert) if isinstance(raw, ss.by) else self.convert(raw(sim))) # Not by_group(), which holds a value for the step
                 kept = self.series[id(par)] = (raw, np.array(vals, dtype=float).reshape(len(vals), -1), per_step, inner)
             self.cache[id(par)] = kept[1] # Steps by groups, where a value is otherwise one number or a number for each group
@@ -1828,16 +1835,16 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
         if any(key[0] == mod.name and not getattr(m, 'constant', False) for key,mods in sim.modifiers.items() for m in mods): # Modifiers that depend only on time (see kernel_only()): work out every part of the program at each step (and stage), with them applied
             rows = []
             for ti in range(start, stop):
-                for frac in ([0, 0.5, 1] if per_step == 3 else [0]):
-                    sim.t.ti = mod.t.ti = ti
-                    self.at_time(frac*self.dt)
+                for frac in ([0, 0.5, 1] if per_step == 3 else [None]):
+                    sim.t.ti = mod.t.ti = min(ti + 1, npts - 1) # The step from ti, which is step ti+1 (see ss.Loop)
+                    self.at_time(None if frac is None else frac*self.dt)
                     self.cache.clear()
                     rows.append([[0.0 if flow.dynamic else self.flow_base(flow)*self.flow_mult(flow) for flow in self.flows],
                                  [self.flow_mult(flow) if flow.dynamic else 1.0 for flow in self.flows],
                                  [self.prog_value(par) for par in self.prog_pars],
                                  [state.rel_trans*self.mult_raw('rel_trans', state=state)*mask for state,mask in self.prog_exposures]])
             sim.t.ti = mod.t.ti = 0
-            self.at_time(0)
+            self.at_time(None)
             self.cache.clear()
             shape = (self.n_groups,)
             fixed, mult, consts, rel_trans = [np.array([[np.broadcast_to(val, shape) for val in row[k]] for row in rows], dtype=float).reshape(len(rows), len(rows[0][k]), self.n_groups) for k in range(4)]
@@ -1876,14 +1883,20 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
         """ The kernels to take the run (or `runs` runs) with, compiled or as plain Python, chosen once for a run: see `ss.kernels.choose()` """
         if runs == 1 and self.compiled is not None:
             return ss.kernels if self.compiled else ss.kernels.uncompiled()
-        sim = self.sim
         if self.program is None: # Before the program is made (the events of a register at the start), as the kernels are now
-            return ss.kernels.choose(verbose=False)
-        solver = ss.kernels.solvers[sim.integrator if sim.solver == 'ode' else sim.solver]
-        kn = ss.kernels.choose(runs*ss.kernels.plain_seconds(self.program, self.y, self.mod.t.npts, solver), verbose=sim.pars.get('verbose', 0))
+            return ss.kernels.choose()
+        kn = ss.kernels.choose(runs*self.plain_seconds())
         if runs == 1:
             self.compiled = kn is ss.kernels
         return kn
+
+    def plain_seconds(self):
+        """ About how long the run would take as plain Python: see `ss.kernels.plain_seconds()` """
+        sim = self.sim
+        solver = ss.kernels.solvers[sim.integrator if sim.solver == 'ode' else sim.solver]
+        rates = [np.ravel(self.flow_base(flow)*self.flow_mult(flow)) for flow in self.flows if flow.src is not None and not flow.dynamic and flow.kind != 'conveyor'] # The rates out of compartments at the start that do not depend on them, which a stiff ODE takes many substeps for
+        n_sub = ss.kernels.substeps(np.concatenate(rates + [self.program.mov_rate]), self.dt, self.substeps(), solver)
+        return ss.kernels.plain_seconds(self.program, self.y, self.mod.t.npts, solver, n_sub)
 
     def init_shifts(self):
         """ The deliveries that the kernels take in a whole run (see `ss.Delivery.tabulated`), as arrays: see `ss.kernels.Shifts` """
@@ -2010,7 +2023,7 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
             short += more
             last = end == npts - 1
             for k,mod in enumerate(self.deliveries):
-                mod.compartments.store_shifts(tally[:, k] if last else tally[:-1, k], start=start, done=last) # The last row is the start of the next part's first step
+                mod.compartments.store_shifts(tally[:, k] if start == 0 else tally[1:, k], start=0 if start == 0 else start + 1, done=last) # The first row is the end of the part before
             yield (start, stocks, flows) if start == 0 else (start + 1, stocks[1:], flows[1:])
             start = end
         self.y = y
@@ -2089,7 +2102,7 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
         tally = np.zeros((self.mod.t.npts, len(sh.to), 2, self.n_groups))
         for ti in np.flatnonzero(sh.due.any(axis=0)):
             if ti < len(stocks) - 1: # No step follows the last time point
-                self.kernels().apply_shifts(self.rng, np.array(stocks[ti]), sh, ti, False, tally[ti]) # Expected numbers, so nothing is drawn
+                self.kernels().apply_shifts(self.rng, np.array(stocks[ti]), sh, ti, False, tally[ti+1]) # Expected numbers, so nothing is drawn; at the time point of the step from ti, its end
         for k,mod in enumerate(self.deliveries):
             mod.compartments.store_shifts(tally[:, k])
         return
@@ -2338,7 +2351,7 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
         kn = self.kernels()
         self.y, flows = kn.one_step(self.kernel_rng, self.y, self.program, dt, ss.kernels.solvers[solver], self.substeps(), tables, row)
         if self.sim.mixing.register is not None: # The events dated at the end of the step
-            self.check_short(kn.apply_events(self.kernel_rng, self.y, self.register, self.mod.ti + 1, self.integer))
+            self.check_short(kn.apply_events(self.kernel_rng, self.y, self.register, self.mod.ti, self.integer))
         if solver == 'gillespie' and self.program.local and self.program.has_det: # By place, the counts are settled after the events, as in SimInf
             kn.settle_places(self.y, self.program, dt, flows)
         self.record_flows(flows)

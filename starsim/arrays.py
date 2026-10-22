@@ -395,7 +395,7 @@ class Arr(BaseArr):
             - BoolArr, boolean array, or full slice: values
             - tuple (for 2D arrays, e.g. `arr[uids, v]`): the first element is converted as above, and the second can be a column name
         """
-        if isinstance(key, (uids, int, ss_int, ss_uid)) or (isinstance(key, np.ndarray) and key.dtype in (ss_int, ss_uid)): # Catch immediately for speed; 32-bit, as people.auids are, too
+        if isinstance(key, (uids, int, ss_int, ss_uid)) or (isinstance(key, np.ndarray) and key.dtype in (ss_int, ss_uid)): # Catch immediately for speed
             return key
         elif isinstance(key, tuple):
             rows = self._convert_key(key[0])
@@ -990,7 +990,9 @@ class StepArr(Arr):
 
     With `late=True` (as for `people.ti_dead`), "not set" is stored as the largest
     integer, the same as after the end of the run, so `raw <= ti` is whether the time
-    has come, with no special case; both read as NaN.
+    has come, with no special case; both read as NaN. With `wide=True`, they are always
+    32-bit, for times that can lie far beyond the run and still be needed (a scheduled
+    exit that a change of speed can bring back into it).
 
     Example:
         ```python
@@ -1000,8 +1002,9 @@ class StepArr(Arr):
         years = sir.ti_I.years # The year of infection of each agent (NaN if never infected)
         ```
     """
-    def __init__(self, name=None, dtype=np.int32, late=False, **kwargs):
+    def __init__(self, name=None, dtype=np.int32, late=False, wide=False, **kwargs):
         self.late = late
+        self.wide = wide
         super().__init__(name=name, dtype=dtype, nan=self.sentinels(dtype)[0], **kwargs)
         self.lowest, self.never = self.sentinels(dtype)[1:]
         self.nan_eq = False # Read as floats, so NaN is found with np.isnan()
@@ -1016,7 +1019,7 @@ class StepArr(Arr):
     def fit(self, t):
         """ Use 16-bit integers if the module's run (on timeline `t`) fits in them """
         self.t = t
-        dtype = np.int16 if t.npts < 32_000 else np.int32
+        dtype = np.int16 if t.npts < 32_000 and not self.wide else np.int32
         if dtype != self.dtype:
             nan = self.raw == self.nan
             self.dtype = dtype
@@ -1304,8 +1307,7 @@ class BoolState(BoolArr):
         engine = getattr(self.watch, 'engine', None)
         if engine is None:
             raise AttributeError(f'"{self.name}" is not a state of a declared disease run as agents, so has no time in state (.time)')
-        mod = engine.mod
-        return (mod.ti - mod[f'ti_{self.name}'].raw)*engine.dt
+        return (engine.ti - engine.mod[f'ti_{self.name}'].raw)*engine.dt
 
     def __init__(self, name=None, **kwargs):
         if kwargs.get('columns') is not None: # Automatic results are 1D, so don't allow 2D states
@@ -1589,7 +1591,7 @@ class uids(np.ndarray):
         can never index an array.
         """
         if arr.dtype == ss_int or arr.dtype == ss_uid:
-            return arr.view(cls) # Fast path: already the correct type (64-bit, or 32-bit as people.auids are), no copy needed
+            return arr.view(cls) # Fast path: already the correct type, no copy needed
         if arr.dtype.kind not in ('i', 'u'):
             # Non-integer dtype: isfinite rejects nan/inf, floor rejects fractions
             if not (np.isfinite(arr).all() and (arr == np.floor(arr)).all()):
