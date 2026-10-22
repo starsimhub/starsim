@@ -1,8 +1,8 @@
 """
 Test importing odin and SBML models
 """
-import os
 import sys
+import tempfile
 import subprocess
 import pytest
 import numpy as np
@@ -202,16 +202,19 @@ sbml_sir = '''<?xml version="1.0" encoding="UTF-8"?>
 '''
 
 
+tmpdir = tempfile.TemporaryDirectory() # Removed when Python exits
+
 def write(text, ext):
     """ Write a fixture to a temporary file """
-    path = sc.path(sc.makefilepath(folder=os.path.join(os.path.dirname(os.path.abspath(__file__)), 'temp'), filename=f'interop_{sc.uuid().hex[:8]}{ext}', makedirs=True))
+    path = sc.path(tmpdir.name) / f'interop_{sc.uuid().hex[:8]}{ext}'
     path.write_text(text)
     return path
 
 
 def hand_sir(**kwargs):
     """ The same SIR, written by hand """
-    sir = ss.Disease(infection=ss.transmission('S -> I', beta=ss.perday(0.3)), recovery=ss.progression('I -> R', rate=ss.perday(0.1)), init=dict(I=kwargs.pop('I', 1)), name='sir')
+    S, I, R = ss.states('S I R')
+    sir = ss.Disease(infection=ss.Transition(S, I, rate=ss.perday(0.3) * I), recovery=ss.Transition(I, R, rate=ss.perday(0.1)), init=dict(I=kwargs.pop('I', 1)), name='sir')
     return ss.Sim(sir, unit='day', stop=ss.days(100), verbose=0, **kwargs).run().results.sir
 
 
@@ -340,11 +343,10 @@ def test_sbml():
 
 
 if __name__ == '__main__':
-    import tempfile
     T = sc.timer()
     test_odin_ode()
     test_odin_discrete()
-    test_odin_contacts(sc.path(tempfile.mkdtemp()))
+    test_odin_contacts(sc.path(tmpdir.name))
     test_odin_examples()
     test_sbml()
     T.toc()

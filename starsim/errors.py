@@ -1,8 +1,8 @@
 """
 Errors, warnings, and notes.
 
-Each error is an exception class, e.g. `ss.UnknownState`, and each warning a
-warning class, e.g. `ss.ImportIncomplete`. A note is a line about something that
+Each error is an exception class, e.g. `ss.errors.UnknownState`, and each warning a
+warning class, e.g. `ss.errors.ImportIncomplete`. A note is a line about something that
 was assumed or approximated: it is kept in `sim.notes` and printed when `verbose`
 is 1 or more (see `ss.note()`). The docstring of each class says when it is raised,
 and is what the catalog in the specification (`15-errors.md`) is made from: see
@@ -12,23 +12,23 @@ import re
 import sciris as sc
 import starsim as ss
 
-__all__ = ['CodedError', 'StarsimWarning', 'Note', 'note']
+__all__ = ['CodedError', 'StarsimWarning', 'Note', 'note', 'CapabilityError'] # The base classes, and the error for what a solver cannot run, are also ss.<Name>; the rest are ss.errors.<Name>
 
 
 #%% Base classes
 
 class CodedError(ValueError):
-    """ Base class for Starsim's named errors, e.g. `ss.UnknownState`; `except ss.CodedError` catches any of them """
+    """ Base class for Starsim's named errors, e.g. `ss.errors.UnknownState`; `except ss.CodedError` catches any of them """
     __str__ = Exception.__str__ # Not KeyError's, which would quote the message
 
 
 class StarsimWarning(RuntimeWarning):
-    """ Base class for Starsim's named warnings, e.g. `ss.ImportIncomplete` """
+    """ Base class for Starsim's named warnings, e.g. `ss.errors.ImportIncomplete` """
     pass
 
 
 class Note(StarsimWarning):
-    """ Base class for Starsim's named notes, e.g. `ss.UnitInferred`; a note is said with `ss.note()` """
+    """ Base class for Starsim's named notes, e.g. `ss.errors.UnitInferred`; a note is said with `ss.note()` """
     pass
 
 
@@ -41,16 +41,16 @@ def note(msg, category=None, sim=None, verbose=None):
 
     Args:
         msg (str): what was assumed or approximated
-        category (class): the kind of note, if it has a name, e.g. `ss.LargeStep`
+        category (class): the kind of note, if it has a name, e.g. `ss.errors.LargeStep`
         sim (Sim): the sim to keep the note in
         verbose (int): whether to print it
 
     **Example**:
 
-        ss.note("unit='day' (from start and stop dates)", ss.UnitInferred, sim=sim)
+        ss.note("unit='day' (from start and stop dates)", ss.errors.UnitInferred, sim=sim)
     """
     if category is not None and not (isinstance(category, type) and issubclass(category, Note)):
-        errormsg = f'The category of a note must be a subclass of ss.Note (e.g. ss.LargeStep), not {category}'
+        errormsg = f'The category of a note must be a subclass of ss.Note (e.g. ss.errors.LargeStep), not {category}'
         raise TypeError(errormsg)
     if sim is not None and not hasattr(sim, 'notes'): # A stand-in, e.g. for a disease's equations before it is in a sim
         sim = None
@@ -82,7 +82,7 @@ class ReservedName(CodedError):
     """ A state, transition, parameter, or result is named like an attribute of `ss.Module` (`step`, `results`, `pars`, `describe`, `stratify`, `name`, `dt`, ...) """
 
 class UnknownState(CodedError, KeyError):
-    """ States were declared explicitly and an arrow string or `source=` names one that was not. Lists the closest declared names. Not raised when states are inferred """
+    """ A state is named (in `init=`, `first=`, `states=`, a product, or a delivery) that the module does not have. Lists the closest names """
 
 class BadBranchSplit(CodedError):
     """ Constant branch probabilities out of one state do not sum to 1, or `ss.null` is one of several destinations (a branch out of the model is a transition of its own) """
@@ -104,12 +104,6 @@ class UnnamedState(CodedError):
 
 class ExposureToCount(CodedError):
     """ A bare state that does not hold people appears in a rate (`beta * W`). There is no contact with a reservoir to work out. Suggests `W.n` """
-
-class SourceNeeded(CodedError):
-    """
-    The string form of a transmission has no `source=`, and its destination leads on to a state that people then leave, as in
-    an SEIR (`'S -> E'` then `'E -> I'` and `'I -> R'`), so the source cannot be guessed. Suggests `source='I'`
-    """
 
 class UnknownTransition(CodedError, KeyError):
     """ `adjust=` names a transition that does not exist. Lists the ones that do """
@@ -141,7 +135,7 @@ class InconsistentDimension(CodedError):
     """
 
 class NoGeography(CodedError):
-    """ A movement model such as `ss.gravity()` is used on a dimension with no geography to supply distances """
+    """ A movement model such as `ss.geo.gravity()` is used on a dimension with no geography to supply distances """
 
 class RouteMismatch(CodedError):
     """
@@ -211,7 +205,7 @@ class NoScheduledDwell(CodedError):
     """ `X.progress` is read, but `X` has only rates out of it, so no dwell time is scheduled when people enter it """
 
 class PeopleAndCounts(CodedError):
-    """ A transition moves between states of people and states that are counts (not people); names them, and suggests `ss.State(people=True)` """
+    """ A transition moves between states of people and states that are counts (not people); names them, and says to leave out `people=False` if they are people """
 
 class InitWhereNobodyIs(CodedError):
     """ `init=` gives people a state only at levels of the stratifications where the split puts nobody, so nobody would start there (given at some such levels only, it is a note) """
@@ -227,9 +221,8 @@ class CapabilityError(CodedError):
 class TimeNotKept(CodedError):
     """
     A declared disease run as agents keeps the time each agent entered a state (`ti_X`) only for the states whose times
-    something reads: the engine (for scheduled exits and `after=`/`before=`), or code in the sim's modules (see
-    `ss.Disease.times_read()`). Raised when code that was not found reads one of the others, e.g. a script after the run;
-    names the array and says to set `ss.options.keep_times = True`
+    the engine reads (for scheduled exits, clocks, and `after=`/`before=`), unless `ss.options.keep_times = True`. Raised
+    when code reads one of the others, e.g. an analyzer or a script after the run; names the array and says to set the option
     """
 
 class TimeOutsideSim(CodedError):
@@ -295,13 +288,6 @@ class UnitInferred(Note):
 class LargeStep(Note):
     """ `rate × dt > 0.1` for a converted rate, or a mean dwell time shorter than the step; says how far `rate × dt` is from `1 − exp(−rate × dt)` and points to `sim.check_dt()` """
 
-class StateNotPeople(Note):
-    """
-    A state was inferred to hold a count and not people, because no transition connects it to the module's first state
-    (`state 'W' treated as a count, not people (no transition connects it to 'S')`). `ss.State(people=False)` confirms it and
-    `ss.State(people=True)` overrides it; either silences the note
-    """
-
 class MatrixAggregated(Note):
     """
     In a compartmental run, a contact matrix whose age groups are not the model's was aggregated to the model's groups,
@@ -365,7 +351,7 @@ def catalog():
 
     found = classes()
     counts = {k:sum(kind(cls).startswith(k) for cls in found) for k in ['error', 'warning', 'note']}
-    lines = [f'{len(found)} names: {counts["error"]} errors, {counts["warning"]} warnings, and {counts["note"]} notes. Each is `ss.<Name>`; the errors are subclasses of `ss.CodedError` (itself a `ValueError`), and the warnings and notes of `ss.StarsimWarning` (itself a `RuntimeWarning`).', '']
+    lines = [f'{len(found)} names: {counts["error"]} errors, {counts["warning"]} warnings, and {counts["note"]} notes. Each is `ss.errors.<Name>` (and `ss.CapabilityError` is also at the root, as `ss.CapabilityError`); the errors are subclasses of `ss.CodedError` (itself a `ValueError`), and the warnings and notes of `ss.StarsimWarning` (itself a `RuntimeWarning`).', '']
     lines += ['| Name | Kind | When |', '|---|---|---|']
     lines += [f'| `{cls.__name__}` | {kind(cls)} | {when(cls)} |' for cls in found]
     return '\n'.join(lines) + '\n'
@@ -390,5 +376,3 @@ def check_catalog(filename, write=False):
         sc.savetext(filename, text[:match.start(2)] + '\n' + new + '\n' + text[match.end(2):])
     return same
 
-
-__all__ += [cls.__name__ for cls in classes()] # Every error, warning, and note is ss.<Name>

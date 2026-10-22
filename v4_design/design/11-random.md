@@ -81,7 +81,7 @@ config:   same
 scenario: none -> vx
 ```
 
-The hashes are computed from the model spec, whose canonical form is in [14-model-spec.md](14-model-spec.md). Custom Python code is hashed by its source text and the plain values it closes over, which is a best effort: code that depends on something else outside its own source can change behavior without changing the hash.
+The hashes are computed from the model spec, whose canonical form is in [14-model-spec.md](14-model-spec.md), with SHA-256 of its canonical JSON, so they are the same in every process and on every machine. Custom Python code is hashed by its source text and the plain values it closes over, which is a best effort: code that depends on something else outside its own source can change behavior without changing the hash. A function without source is known by where it can be imported from, and user code can give a function, or the class of a module written as code, a `version` that is used as its identity; a module written as code is otherwise seen through its class and parameters, not its code. A function that cannot be identified at all (a `functools.partial`) makes `sim.hash()` raise an error, rather than hash two different models the same ([14-model-spec.md](14-model-spec.md#functions)). Running and fitting do not use the hash.
 
 A likelihood attached to a result is declared with the model and is part of `model`. Fitting settings (weights, fitting method, number of trials) do not change the model, so they are not in `sim.hash()` (the data is, as its own part), and changing the number of trials does not look like a change to the model.
 
@@ -90,16 +90,17 @@ Caching results by hash, so that an identical re-run is served from disk, is def
 ## Convergence checks
 
 ```python
+S, I, R = ss.states('S I R')
 sir = ss.Disease(
-    infection = ss.transmission('S -> I', beta=0.3),
-    recovery  = ss.progression('I -> R', dur=4),
+    infection = ss.Transition(S, I, rate=0.3 * I),
+    recovery  = ss.Transition(I, R, dur=4),
     init_prev = 0.01,
 )
 sim = ss.Sim(sir, solver='binomial', unit='day', stop=100)
 sim.check_dt()      # halve dt, re-run, and report the change in every result
 ```
 
-`check_dt()` re-runs the sim at half the timestep (`factor=` for another ratio) and reports how much each result moves, as a share of its largest value. In a run that takes whole steps this covers every effect that is O(dt): the rate-to-probability conversion, the delay of one step between modules, and the effect of module order ([10-execution.md](10-execution.md)). If the results of interest do not move, none of these matters for this model at this timestep. In a stochastic run the change also includes the difference between two runs. It is for sims with declared states and transitions, and does not run automatically; the note that a step is large for a transition (`ss.LargeStep`) names it.
+`check_dt()` re-runs the sim at half the timestep (`factor=` for another ratio) and reports how much each result moves, as a share of its largest value. In a run that takes whole steps this covers every effect that is O(dt): the rate-to-probability conversion, the delay of one step between modules, and the effect of module order ([10-execution.md](10-execution.md)). If the results of interest do not move, none of these matters for this model at this timestep. In a stochastic run the change also includes the difference between two runs. It is for sims with declared states and transitions, and does not run automatically; the note that a step is large for a transition (`ss.errors.LargeStep`) names it.
 
 A companion `msim.check_runs()` on a MultiSim, estimating from the variance between runs how many a stated comparison needs, is deferred ([19-open-questions.md](19-open-questions.md#c-deferred-not-in-v1)). With CRN on, a paired comparison of a small change needs fewer runs (how many fewer depends on how far the scenarios diverge), and `check_runs()` is where that would be stated concretely.
 

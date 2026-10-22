@@ -161,9 +161,10 @@ Both approaches model similar transmission patterns, but mixing pools work with 
 The most common use of mixing between groups is mixing by age, from a contact matrix. For this, the disease is split into age groups with `stratify()`, and `ss.contacts()` gives the mixing between them: here a matrix of daily contacts, where `matrix[i, j]` is the number of contacts a person in group `i` has with people in group `j` (`ss.contacts('Kenya')` loads a published matrix for a country instead). With a contact matrix, `beta` is the chance of infection per contact:
 
 ```{python}
+S, I, R = ss.states('S I R')
 sir = ss.Disease(
-    infection = ss.transmission('S -> I', beta=0.02),
-    recovery = ss.progression('I -> R', dur=10),
+    infection = ss.Transition(S, I, rate=0.02 * I),
+    recovery = ss.Transition(I, R, dur=10),
     init_prev = 0.001,
 )
 sir.stratify(age=[0, 15, 65]) # Age groups 0-14, 15-64, and 65+

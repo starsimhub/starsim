@@ -8,7 +8,7 @@ ranges (grouped into scenarios), and outcomes chained from the flows.
 
 The compartments become states (with several dimensions, one state for each combination,
 named as flepiMoP names them, e.g. `S_unvaccinated`); the places become a stratification
-`subpop` with commuting (`ss.Mobility(kind='visit')`, as flepiMoP's force of infection
+`subpop` with commuting (`ss.geo.Mobility(kind='visit')`, as flepiMoP's force of infection
 mixes in the places its people visit for half the day); each transition becomes a flow,
 classified by the shared rules; the modifiers of a scenario become `ss.modify` interventions;
 and the outcomes become `ss.outcome`s. Parameters drawn from a distribution are imported at
@@ -266,7 +266,7 @@ def load_flepimop(filename, scenario=None, verbose=None, **kwargs):
 
     # Places, as a stratification with commuting; and their initial numbers
     if places:
-        mob = None if away is None or not away.any() else ss.Mobility(matrix=away, kind='visit')
+        mob = None if away is None or not away.any() else ss.geo.Mobility(matrix=away, kind='visit')
         src.stratify(subpop=places, split=list(sizes/sizes.sum()), kind='space', mobility=mob)
         if mob is not None:
             notes.append('subpop: commuting as visits, each traveler away for half the day (flepiMoP\'s percent_day_away)')
@@ -290,7 +290,7 @@ def load_flepimop(filename, scenario=None, verbose=None, **kwargs):
     src.config.update(cfg_sim)
 
     # What is not translated
-    for key,why in dict(seeding='seeding (scheduled importations): an ss.Mobility(data=...) register would carry it',
+    for key,why in dict(seeding='seeding (scheduled importations): an ss.geo.Mobility(data=...) register would carry it',
                         inference='inference (fitting to data): use sim.calibrate() with ss.data()',
                         outcome_modifiers='outcome modifiers (changes to the outcomes\' probabilities over date ranges): ss.modify on the weights would carry them').items():
         if cfg.get(key):

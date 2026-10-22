@@ -7,12 +7,12 @@ This guide explains how infection gets from one person to another in Starsim: th
 
 ## Routes: who meets whom
 
-A disease says who infects whom (`S >> I @ beta * I`, or `ss.transmission('S -> I', beta=beta)`); the **routes** say who meets whom and how often. Changing from homogeneous mixing to a contact matrix to a network does not change the disease. Routes are passed to the sim with `networks=`, which takes networks and mixing pools alike, singly or as a list:
+A disease says who infects whom (`S >> I @ beta * I`); the **routes** say who meets whom and how often. Changing from homogeneous mixing to a contact matrix to a network does not change the disease. Routes are passed to the sim with `networks=`, which takes networks and mixing pools alike, singly or as a list:
 
 - **No network given**: mixing is homogeneous, with one contact per unit time. `beta` is then the classical transmission rate (per unit time, in the sim's unit), and the model runs as an ODE under `solver='auto'`.
 - **`ss.MixingPool(n_contacts=10)`**: homogeneous mixing with 10 contacts per unit time. `beta` is now the probability of transmission per contact. This still has a compartmental form, so it also runs as an ODE.
 - **`ss.contacts(...)`**: a contact matrix between groups (by age, say), used with a stratified model. It runs as an ODE, or as agents.
-- **A network** such as `ss.RandomNet(n_contacts=10)`, `ss.MFNet()`, or `ss.StaticNet()`: individual contacts, with `beta` per contact (per act, on a sexual network that defines acts). A model with a network runs as agents under `solver='auto'`.
+- **A network** such as `ss.RandomNet(n_contacts=10)`, `ss.MFNet()`, or `ssl.StaticNet()`: individual contacts, with `beta` per contact (per act, on a sexual network that defines acts). A model with a network runs as agents under `solver='auto'`.
 
 Here is the same disease under three kinds of mixing. With no network, `beta=0.05` per day and a 10-day infection give R0 = 0.5, so there is no epidemic; with 10 contacts a day, R0 is about 5, and the mixing pool (an ODE) and the random network (agents) give nearly the same epidemic:
 
@@ -21,9 +21,10 @@ import starsim as ss
 import starsim.library as ssl
 ss.options(jupyter=True)
 
+S, I, R = ss.states('S I R')
 sir = ss.Disease(
-    infection = ss.transmission('S -> I', beta=0.05),
-    recovery  = ss.progression('I -> R', dur=ss.days(10)),
+    infection = ss.Transition(S, I, rate=0.05 * I),
+    recovery  = ss.Transition(I, R, dur=ss.days(10)),
     init_prev = 0.01,
     name = 'sir',
 )
@@ -37,11 +38,11 @@ sims = ss.parallel(
 sims.plot()
 ```
 
-The disease object is the same in all three. `sim.solvers()` shows which solvers can run a model with a given route, and `describe()` shows the mixing and what each rate resolved to:
+The disease object is the same in all three. `sim.describe()` shows which solvers can run a model with a given route, the mixing, and what each rate resolved to:
 
 ```{python}
 sim = ss.Sim(sir, networks=ss.RandomNet(n_contacts=10), **kw)
-sim.solvers()
+sim.describe()
 ```
 
 A compartmental solver can be asked for even with a network: `solver='ode'` approximates a `RandomNet` by homogeneous mixing with the same number of contacts, and says so in one line. Partnership networks (`ss.MFNet`, `ss.PartnerNet`) have no compartmental approximation yet, so they run as agents (and `solver='ode'` raises `CapabilityError`).
@@ -52,7 +53,7 @@ A compartmental solver can be asked for even with a network: `solver='ode'` appr
 | `ss.MixingPool(n_contacts=c)` | homogeneous mixing, `c` contacts per unit time | exact | exact |
 | `ss.MixingPools(...)`, `ss.contacts(...)` | a contact matrix between groups | exact | exact (for age groups) |
 | `ss.RandomNet(n_contacts=c)` | individual contacts | exact | approximated by homogeneous mixing with `c` contacts |
-| `ss.StaticNet(graph=...)` | a fixed set of contacts | exact | approximated by homogeneous mixing with the graph's mean degree |
+| `ssl.StaticNet(graph=...)` | a fixed set of contacts | exact | approximated by homogeneous mixing with the graph's mean degree |
 | `ss.MFNet()`, `ss.PartnerNet()`, and other partnership networks | partnerships with durations and acts | exact | not available |
 
 ### Contact matrices
@@ -90,9 +91,10 @@ print(f'Infected at the end: {res.select(risk="low")[-1]:,.0f} at low risk, {res
 Infectiousness belongs to the disease and contact to the network, but transmission can differ by route (HIV is far more transmissible through a shared needle than through sex, and more from men to women than the reverse). The disease then gives one `beta` per network, keyed by the network's name; a pair is the two directions of a directed network (for `ss.MFNet`, male to female and then female to male):
 
 ```{python}
+S, I = ss.states('S I')
 sis = ss.Disease(
-    infection = ss.transmission('S -> I', beta=dict(randomnet=ss.peryear(0.2), mfnet=[ss.peryear(1.0), ss.peryear(0.5)])),
-    recovery  = ss.progression('I -> S', dur=ss.years(1)),
+    infection = ss.Transition(S, I, rate=dict(randomnet=ss.peryear(0.2), mfnet=[ss.peryear(1.0), ss.peryear(0.5)]) * I),
+    recovery  = ss.Transition(I, S, dur=ss.years(1)),
     init_prev = 0.05,
     name = 'sis',
 )
@@ -152,10 +154,9 @@ Starsim provides different network types for different transmission scenarios:
 ### Contact network implementations
 | Class | Purpose | Parameters | Use Case |
 |-------|---------|------------|----------|
-| `StaticNet` | NetworkX graph conversion | `graph`, `p`, `n_contacts` | Pre-defined network structures |
 | `RandomNet` | Random connections | `n_contacts`, `dur`, `dynamic`, `age_range`, `method` | General infectious diseases |
-| `PartnerNet` | Partnerships with a target number of partners at a time | `n_contacts`, `dur`, `concurrency`, `max_contacts`, `match` | Partnership networks fitted to target statistics (as in EpiModel) |
-| `MFNet` | Male-female partnerships | `dur`, `acts`, `debut`, `n_contacts`, `concurrency` | Heterosexual STI transmission |
+| `PartnerNet` | Lasting partnerships, between anyone, some people (`where=`), or two groups (`between=`) | `n_contacts`, `dur`, `acts`, `between`, `where` | Needle sharing, sex work, other lasting partnerships |
+| `MFNet` | Male-female partnerships | `dur`, `acts`, `debut`, `participation`, `n_contacts`, `concurrency`, `max_contacts` | Heterosexual STI transmission |
 | `PrenatalNet` | Prenatal transmission | `dur`, `start`, `end` | In-utero (vertical) transmission |
 | `PostnatalNet` | Postnatal transmission | Inherits from `DynamicNetwork` | Breastfeeding, birth canal |
 
@@ -167,6 +168,8 @@ Starsim provides different network types for different transmission scenarios:
 | `ClusterNet` | Fully connected clusters | `cluster_size`, `dynamic`, `age_range` | Households and other small groups |
 | `HybridNet` | Covasim's household, school, work, and community networks | `household_size`, `contacts`, `school_ages`, `work_ages` | Respiratory diseases with structured contacts |
 | `MSMNet` | Male-male partnerships | `dur`, `acts`, `participation` | MSM STI transmission |
+| `DegreeNet` | Partnerships with a target number of partners at a time | `n_contacts`, `dur`, `concurrency`, `max_contacts`, `match` | Partnership networks fitted to target statistics (as in EpiModel) |
+| `StaticNet` | NetworkX graph conversion | `graph`, `p`, `n_contacts` | Pre-defined network structures |
 | `RandomSafeNet` | Random connections that are random-number safe | `n_edges`, `dur` | Scenario comparisons that need common random numbers |
 | `ErdosRenyiNet` | Probabilistic edges | `p` (edge probability), `dur` | Theoretical network studies |
 | `DiskNet` | Spatial proximity | `r` (radius), `v` (velocity) | Geographic transmission |
@@ -190,13 +193,14 @@ Starsim provides different network types for different transmission scenarios:
     - `ssl.HybridNet`: Households, schools, workplaces, and community, as in Covasim
 - **For sexually transmitted infections:**
     - `MFNet`: Male-female (heterosexual) transmission
-    - `PartnerNet`: Partnerships with a target number of partners at a time
+    - `PartnerNet`: Lasting partnerships (e.g. needle sharing, or between sex workers and clients)
+    - `ssl.DegreeNet`: Partnerships with a target number of partners at a time
     - `ssl.MSMNet`: Transmission between men who have sex with men (MSM)
 - **For mother-to-child transmission:**
     - `PrenatalNet`: In-utero transmission (HIV, syphilis)
     - `PostnatalNet`: Birth/breastfeeding transmission (HIV, HBV)
 - **For special purposes:**
-    - `StaticNet`: Use existing NetworkX graphs
+    - `ssl.StaticNet`: Use existing NetworkX graphs
     - `DiskNet`: Proof-of-concept spatial/geographic transmission
     - `NullNet`: Testing/debugging without transmission
     - `ErdosRenyiNet`: Theoretical network analysis
@@ -402,7 +406,7 @@ sim.plot('sis')
 `ssl.HybridNet` reproduces [Covasim](https://covasim.org/)'s "hybrid" population: when added to a sim, it expands into four separate networks, households (`h`, an `ssl.ClusterNet`), and schools (`s`), workplaces (`w`), and community (`c`), each an `ss.RandomNet` restricted by age where appropriate. Any `dt`, `start`, or `stop` given to `ssl.HybridNet` is passed to all four networks, and each network can then be accessed (or modified) separately, e.g. `sim.networks.s`:
 
 ```{python}
-sim = ss.Sim(n_agents=2000, diseases='sis', networks=ssl.HybridNet(household_size=3), verbose=0)
+sim = ss.Sim(n_agents=2000, diseases='sis', networks=ssl.HybridNet(household_size=ss.poisson(3)), verbose=0)
 sim.run()
 for net in sim.networks():
     print(f'{net.name} ({net.label}): {len(net)} edges')

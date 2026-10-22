@@ -65,13 +65,40 @@ class Loop:
     `advance()` then moves the time to k, where `update_results()` and the analyzers record
     the results. At the first time point there is no step: only the results (of the start) are
     recorded and the analyzers run (`at_start`).
+
+    A loop also runs ordinary functions with no sim. Each step is called as `step(t, dt)` for
+    each step, where `t` is the time at its start; each record function is called as `record(t)`
+    at each time point, including the first, after the steps that end there. At a time point,
+    the steps run in the order given, then the records, so a change made by one step is seen by
+    the steps after it and by the records. A step given as `(step, times)` has times of its own:
+    it runs only at those, and what it sets holds in between.
+
+    Args:
+        sim (Sim): the sim to run (usually made by the sim itself)
+        steps (list/dict): with no sim, the functions to call each step, `step(t, dt)`; a dict gives their labels, and a `(step, times)` pair gives a step times of its own
+        times (array/Timeline): with no sim, the time points
+        record (list/dict): with no sim, the functions to call at each time point, `record(t)`
+
+    **Example**:
+
+        y = np.array([0.99, 0.01, 0.0])
+        def step(t, dt):
+            S, I, R = y
+            y[:] = [S - 0.3*S*I*dt, I + (0.3*S*I - 0.1*I)*dt, R + 0.1*I*dt]
+        loop = ss.Loop(steps=[step], times=np.arange(0, 101))
+        loop.run()
     """
-    def __init__(self, sim):
+    def __init__(self, sim=None, steps=None, times=None, record=None):
+        if sim is None and steps is None:
+            errormsg = 'A loop needs a sim, or steps= (and times=) to run with no sim'
+            raise ValueError(errormsg)
         self.sim = sim
+        self.steps = steps
+        self.times = times
+        self.record = record
         self.funcs = None
         self.at_start = None # The functions that also run at the first time point, by function order: those that record the start
         self.shared_timelines = [] # The timelines of the modules on the sim's timeline, which the sim's advance() moves
-        self.func_list = []
         self.abs_tvecs = None
         self.abs_numvecs = None # Canonical numeric (float-year) time arrays, parallel to abs_tvecs, used for sorting/uniformity
         self._plan = None # Made when it is first needed: see the plan property
@@ -85,12 +112,69 @@ class Loop:
         return
 
     def init(self):
-        """ Parse the sim into the integration plan """
-        self.collect_funcs()
-        self.collect_abs_tvecs()
+        """ Parse the sim (or the steps) into the integration plan """
+        if self.sim is None:
+            self.collect_steps()
+        else:
+            self.collect_funcs()
+            self.collect_abs_tvecs()
         self._plan = None
+        self.index = 0
         self.initialized = True
-        return
+        return self
+
+    def collect_steps(self):
+        """ With no sim: the steps and record functions, each with its time points """
+        def as_times(times):
+            if times is None:
+                errormsg = 'A loop with no sim needs times=, e.g. times=np.arange(0, 101)'
+                raise ValueError(errormsg)
+            if isinstance(times, ss.Timeline): # The functions are given its times (dates or durations) and its dt
+                times = times.init() if not times.initialized else times
+                return times, np.asarray(times.yearvec, dtype=float)
+            times = np.asarray(times, dtype=float)
+            return times, times
+
+        def labeled(funcs):
+            if funcs is None:
+                return []
+            if isinstance(funcs, dict):
+                return list(funcs.items())
+            items = []
+            for func in sc.tolist(funcs):
+                f = func[0] if isinstance(func, tuple) else func
+                items.append((getattr(f, '__name__', type(f).__name__.lower()), func))
+            return items
+
+        def caller(func, times, record):
+            j = [-1 if record else 0] # The time point the function was last called at, in its own times: a step is first called for the step ending at the second
+            timeline = isinstance(times, ss.Timeline)
+            tvec = times.tvec if timeline else times
+            def call():
+                j[0] += 1
+                k = j[0]
+                if record:
+                    return func(tvec[k])
+                return func(tvec[k-1], times.dt if timeline else tvec[k] - tvec[k-1])
+            call.__name__ = getattr(func, '__name__', 'step')
+            return call
+
+        self.funcs = []
+        self.abs_tvecs = sc.objdict()
+        self.abs_numvecs = sc.objdict()
+        sim_times, self.abs_numvecs['sim'] = as_times(self.times)
+        self.abs_tvecs['sim'] = sim_times.tvec if isinstance(sim_times, ss.Timeline) else sim_times
+        rows = [(label, func, False) for label,func in labeled(self.steps)] + [(label, func, True) for label,func in labeled(self.record)]
+        labels = [label for label,_,_ in rows]
+        for label,func,record in rows:
+            func, times = func if isinstance(func, tuple) else (func, None)
+            key = label if labels.count(label) == 1 else f'{label}_{len(self.funcs)}'
+            own, numvec = as_times(times) if times is not None else (sim_times, self.abs_numvecs['sim'])
+            self.abs_tvecs[key] = own.tvec if isinstance(own, ss.Timeline) else own
+            self.abs_numvecs[key] = numvec
+            self.funcs.append(dict(func_order=len(self.funcs), module=key, func_name='record' if record else 'step', func_path=key, func=caller(func, own, record)))
+        self.at_start = {row['func_order'] for row in self.funcs if row['func_name'] == 'record'}
+        return self.funcs
 
     @property
     def plan(self):
@@ -107,7 +191,7 @@ class Loop:
         if self.initialized:
             return len(self.plan)
         else:
-            return 0 # Or None?
+            return 0
 
     def __iadd__(self, func):
         """ Allow functions to be added to the function list """
@@ -173,7 +257,7 @@ class Loop:
         # Carry out autonomous state changes in the disease modules. This allows autonomous state changes/initializations
         # to be applied to newly created agents
         for disease in sim.diseases():
-            if isinstance(disease, ss.Disease):
+            if isinstance(disease, ss.diseases.DiseaseBase):
                 self += disease.step_state
 
         # Update connectors
@@ -217,10 +301,8 @@ class Loop:
                 self += mod.update_results
 
         # Apply analyzers
-        self.analyzer_names = set()
         for ana in sim.analyzers():
             self += ana.step
-            self.analyzer_names.add(ana.name)
         self.at_start = set(range(first, len(self.funcs)))
 
         # Clean up dead agents, and perform other housekeeping tasks
@@ -301,11 +383,11 @@ class Loop:
     def _timelines_uniform(self):
         """ Check whether every module shares the sim's canonical timeline (numeric values, length, and unit) """
         sim_num = self.abs_numvecs['sim']
-        sim_unit = self.abs_tvecs['sim'].unit
+        sim_unit = getattr(self.abs_tvecs['sim'], 'unit', None) # Plain numbers have no unit
         npts = len(sim_num)
         for key, num in self.abs_numvecs.items():
             # Exact numeric equality plus matching unit: only then is the schedule provably identical
-            if len(num) != npts or self.abs_tvecs[key].unit is not sim_unit or not np.array_equal(num, sim_num):
+            if len(num) != npts or getattr(self.abs_tvecs[key], 'unit', None) is not sim_unit or not np.array_equal(num, sim_num):
                 return False
         return True
 
@@ -441,20 +523,7 @@ class Loop:
 
             if self.profile:
                 start = time.perf_counter()
-            if entry.func_name == 'update_results' and entry.ti == 0 and entry.module not in ['sim', 'people']: # At the first time point, before any step: code written to Starsim 3 may read what its step() makes
-                try:
-                    entry.func()
-                except (AttributeError, KeyError, IndexError, TypeError) as e:
-                    errormsg = (f'{entry.label}() failed at the first time point: {type(e).__name__}: {e}\n'
-                                f'     update_results() now also runs at the start, before any step(), to record the starting values (in Starsim 3 it ran only after a step). '
-                                f'If it reads something step() makes, return early at the start, e.g. "if self.ti == 0: return" (see the migrate-starsim3 skill)')
-                    try:
-                        new = type(e)(errormsg)
-                    except Exception: # An error class that takes other arguments
-                        new = RuntimeError(errormsg)
-                    raise new from e
-            else:
-                entry.func() # Execute the function -- this is where all of Starsim happens!!
+            entry.func() # Execute the function -- this is where all of Starsim happens!!
 
             # Tidy up
             self.index += 1 # Increment the count
@@ -741,7 +810,8 @@ class Loop:
 
         Examples:
             ```python
-            sis = ss.library.AgentSIS(dt=0.1) # A module written as code can have a timestep of its own
+            import starsim.library as ssl
+            sis = ssl.AgentSIS(dt=0.1) # A module written as code can have a timestep of its own
             net = ss.RandomNet(dt=0.5)
             births = ss.Births(dt=1)
             sim = ss.Sim(dt=0.1, dur=5, diseases=sis, networks=net, demographics=births)

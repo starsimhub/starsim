@@ -1,6 +1,7 @@
 """
 Theoretical networks, useful for comparison against analytic results and for debugging.
 """
+import inspect
 import numpy as np
 import sciris as sc
 import starsim as ss
@@ -91,8 +92,9 @@ class NullNet(ss.Network):
 
     For an empty network (ie, no edges) use
     >> import starsim as ss
+    >> import starsim.library as ssl
     >> import networkx as nx
-    >> empty_net_static = ss.StaticNet(nx.empty_graph)
+    >> empty_net_static = ssl.StaticNet(nx.empty_graph)
     >> empty_net_rand = ss.RandomNet(n_contacts=0)
 
     Args:
@@ -235,3 +237,88 @@ class RandomSafeNet(ss.DynamicNetwork):
             fig = plt.figure(**kw.fig)
             plt.imshow(dm)
         return ss.return_fig(fig)
+
+
+class StaticNet(ss.Network):
+    """
+    A network class of static partnerships converted from a networkx graph. There's no formation of new partnerships
+    and initialized partnerships only end when one of the partners dies. The networkx graph can be created outside Starsim
+    if population size is known. Or the graph can be created by passing a networkx generator function to Starsim.
+
+    If "seed=True" is passed as a keyword argument or a parameter in pars, it is replaced with the built-in RNG.
+    The parameter "n" is supplied automatically to be equal to n_agents.
+
+    Examples:
+        ```python
+        # Generate a networkx graph and pass to Starsim
+        import networkx as nx
+        import starsim as ss
+        import starsim.library as ssl
+        g = nx.scale_free_graph(n=10000)
+        ssl.StaticNet(graph=g)
+
+        # Pass a networkx graph generator to Starsim
+        ssl.StaticNet(graph=nx.erdos_renyi_graph, p=0.0001, seed=True)
+        ```
+    """
+
+    def __init__(self, graph=None, pars=None, **kwargs):
+        super().__init__()
+        self.nx_graph = graph # Not self.graph, which is the graph of states and transitions of a declared model
+        self.define_pars(seed=True, p=None, n_contacts=10)
+        self.graph_kwargs = {k:kwargs.pop(k) for k in list(kwargs) if k not in self.pars and k not in ss.modules.module_args} # Other arguments are passed to the graph generator
+        self.update_pars(pars, **kwargs)
+        self.dist = ss.Dist(name='StaticNet')
+        return
+
+    def init_pre(self, sim):
+        super().init_pre(sim)
+        self.n_agents = sim.pars.n_agents
+        if self.nx_graph is None:
+            import networkx as nx # Lazy import since slow
+            self.nx_graph = nx.fast_gnp_random_graph # Fast random (Erdos-Renyi) graph creator
+        n_contacts = self.pars.pop('n_contacts') # Remove from pars dict, but use only if p is not supplied
+        if self.pars.p is None: # Convert from n_contacts to probability
+            self.pars.p = n_contacts/self.n_agents
+        return
+
+    def init_post(self):
+        super().init_post()
+        if 'seed' in self.pars and self.pars.seed is True:
+            self.pars.seed = self.dist.rng
+        if callable(self.nx_graph):
+            args = inspect.signature(self.nx_graph).parameters
+            kw = {k:v for k,v in self.pars.items() if k in args} # Only pass p and seed if the generator accepts them
+            try:
+                self.nx_graph = self.nx_graph(n=self.n_agents, **kw, **self.graph_kwargs)
+            except TypeError as e:
+                ss.warn(f"{str(e)}: networkx {self.nx_graph.name} not supported. Try using ssl.StaticNet() instead.")
+                raise e
+        self.validate_pop(self.n_agents)
+        self.get_edges()
+        return
+
+    def validate_pop(self, n_agents):
+        n_nodes = self.nx_graph.number_of_nodes()
+        if n_nodes > n_agents:
+            errmsg = (f"Please ensure the number of nodes in graph ({n_nodes}) is less than "
+                      f"or equal to (<=) the agent population size ({n_agents}).")
+            raise ValueError(errmsg)
+
+        if not self.nx_graph.number_of_edges():
+            errmsg = f"The nx generator {self.nx_graph.name} produced a graph with no edges"
+            raise ValueError(errmsg)
+
+    def get_edges(self):
+        p1s = []
+        p2s = []
+        for edge in self.nx_graph.edges():
+            p1, p2 = edge
+            p1s.append(p1)
+            p2s.append(p2)
+        edges = dict(p1=p1s, p2=p2s, beta=np.ones_like(p1s))
+        self.append(edges)
+        return
+
+    def step(self):
+        pass

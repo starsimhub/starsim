@@ -7,6 +7,7 @@ import pandas as pd
 import pytest
 import sciris as sc
 import starsim as ss
+import starsim.interop
 import paths
 from starsim.interop.memilio import load_memilio
 
@@ -150,7 +151,7 @@ def test_secir():
         CriticalPerSevere=age(0.25, 0.4), DeathsPerSevere=age(0.0, 0.05), DeathsPerCritical=age(0.3, 0.5),
         Seasonality=num(0.2), StartDay=num(60.0), TestAndTraceCapacity=num(20.0), TestAndTraceCapacityMaxRisk=num(5.0), ICUCapacity=num(15.0),
     )
-    with pytest.warns(ss.ImportIncomplete): # The share who recover without symptoms differs by age where the groups are summed, for test and trace
+    with pytest.warns(ss.errors.ImportIncomplete): # The share who recover without symptoms differs by age where the groups are summed, for test and trace
         sim = load_memilio(d, **kw)
     assert [k for k,_ in sim.imported.incomplete] == ['RecoveredPerInfectedNoSymptoms by age group']
     sim.run()
@@ -193,7 +194,7 @@ def test_graph_json():
     )
     totals = np.array([[6000, 2000], [4000, 1000]])
     seir.stratify(age=['0', '1'], split=[8/13, 5/13])
-    seir.stratify(patch=['0', '1'], split=ss.by(totals/totals.sum(), dims=['age', 'patch']), mobility=ss.Mobility(matrix=[[0, 0.05], [0.1, 0]], kind='commute'))
+    seir.stratify(patch=['0', '1'], split=ss.by(totals/totals.sum(), dims=['age', 'patch']), mobility=ss.geo.Mobility(matrix=[[0, 0.05], [0.1, 0]], kind='commute'))
     ref = ss.Sim(seir, networks=ss.contacts(age=[[4.0, 1.0], [1.0, 3.0]]), total_pop=13_000, unit='day', stop=ss.days(60), solver='ode', verbose=0).run()
     assert np.allclose(res.n_Infected.values, ref.results.oseir.n_Infected.values, rtol=1e-9), 'The import should match the model written by hand'
     return sim
@@ -204,7 +205,7 @@ def test_graph(tmp_path):
     sc.heading('Testing importing a MEmilio MobilityGraph against MEmilio\'s own run')
     (tmp_path/'graph.py').write_text(graph_script)
     subprocess.run([str(python), '-I', str(dump), 'graph.py', 'graph.json'], check=True, cwd=tmp_path, capture_output=True)
-    sim = ss.load(str(tmp_path/'graph.json'), format='memilio', **kw)
+    sim = ss.interop.load(str(tmp_path/'graph.json'), format='memilio', **kw)
     assert not sim.imported.incomplete
     res = sim.run().results.osecir.n_InfectedSymptoms
     theirs = np.load(tmp_path/'graph.npy') # The number with symptoms in each place on each day
@@ -221,7 +222,7 @@ def test_study(tmp_path):
     sc.heading('Testing importing a MEmilio GraphParameterStudy, with its distributions as priors')
     (tmp_path/'graph.py').write_text(graph_script)
     subprocess.run([str(python), '-I', str(dump), 'graph.py', 'study.json'], check=True, cwd=tmp_path, capture_output=True, env=dict(STUDY='10'))
-    sim = ss.load(str(tmp_path/'study.json'), format='memilio', **kw)
+    sim = ss.interop.load(str(tmp_path/'study.json'), format='memilio', **kw)
     assert not sim.imported.incomplete and sim.imported.runs == 10
 
     # MEmilio's draws, given to the import: TransmissionProbabilityOnContact is drawn in each age group from its own range, so the import draws a share of the range
@@ -260,7 +261,7 @@ def test_examples(example, tmp_path):
     script = next((folder / 'original').glob('*.py'))
     path = tmp_path / 'model.json'
     subprocess.run([str(python), '-I', str(dump), str(script), str(path)], check=True, cwd=tmp_path, capture_output=True)
-    sim = ss.load(str(path), format=ss.interop.sniff(str(path)), **kw).run()
+    sim = ss.interop.load(str(path), format=ss.interop.sniff(str(path)), **kw).run()
     ref = pd.read_csv(folder / 'reference/results.csv')
     total = ref[ref.time == 0].value.sum()
     res = sim.results.osecir

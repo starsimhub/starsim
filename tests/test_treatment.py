@@ -18,11 +18,11 @@ def make_sis(cure=None):
 
 
 def w209(sim):
-    """ The ss.UndrivenUnused warnings raised when a sim is initialized """
+    """ The ss.errors.UndrivenUnused warnings raised when a sim is initialized """
     with warnings.catch_warnings(record=True) as w:
         warnings.simplefilter('always')
         sim.init()
-    return [str(x.message) for x in w if issubclass(x.category, ss.UndrivenUnused)]
+    return [str(x.message) for x in w if issubclass(x.category, ss.errors.UndrivenUnused)]
 
 
 # %% Define the tests
@@ -32,7 +32,6 @@ def test_undriven():
     forms = dict(
         op  = lambda S, I: I >> S,
         tr  = lambda S, I: ss.Transition(I, S),
-        arr = lambda S, I: ss.progression('I -> S'),
     )
     for key,form in forms.items():
         sis = make_sis(form)
@@ -59,15 +58,9 @@ def test_undriven():
         assert np.isclose(res.sis.cure.sum(), 0.9*res.tx.delivered.sum(), rtol=0.05)
         assert res.sis.cure.sum() > 0
 
-    # Declared undriven on purpose (moved only by treatment, which this sim has none of): not warned about
-    for form in [lambda S, I: ss.Transition(I, S, undriven=True), lambda S, I: ss.progression('I -> S', undriven=True)]:
-        sis = make_sis(form)
-        assert sis.cure.undriven and not w209(ss.Sim(sis, stop=10, **kw))
-    with pytest.raises(ValueError, match='undriven'): # It cannot also have a driver
-        ss.progression('I -> S', rate=0.1, undriven=True)
-
-    with pytest.raises(ss.UndrivenTransition): # An inflow still needs a rate
-        ss.Disease(births=ss.Transition(ss.null, 'S'), infection=ss.transmission('S -> I', beta=0.3))
+    with pytest.raises(ss.errors.UndrivenTransition): # An inflow still needs a rate
+        S, I = ss.states('S I')
+        ss.Disease(births=ss.Transition(ss.null, S), infection=ss.Transition(S, I, rate=0.3 * I))
     return sim
 
 
@@ -87,7 +80,7 @@ def make_sti(name='ng', beta=0.015, fail=None, init_prev=0.1, p_fail=None):
     S, E, A, P, Y, C = ss.states('S E A P Y C')
     trs = dict(
         infection = S >> E @ beta*(A + P + Y + C),
-        latency   = ss.progression('E -> P | A', p=0.4, dur=ss.days(5)),
+        latency   = ss.Transition(E, [P, A], p=0.4, dur=ss.days(5)),
         onset     = P >> Y @ ss.days(10),
         seek      = Y >> C @ ss.days(20),
         clear_a   = A >> S @ ss.days(150),
@@ -190,8 +183,6 @@ def test_crossed_outcomes():
     for solver,sim in run_both(make_one).items():
         r = sim.results
         assert np.isclose(r.fail_step.delivered.sum(), r.clinic.failed.sum(), rtol=0.01), f'{solver}: {r.fail_step.delivered.sum()} of {r.clinic.failed.sum()} failures'
-    with pytest.raises(TypeError, match='failed'): # on_fail= is written as a transition triggered by the outcome
-        ss.Treatment(moves='ng.cure', on_fail='ng.fail')
     return sims
 
 
@@ -244,7 +235,7 @@ def test_syphilis_stages():
 
     # A person who could match two transitions of one disease is an error
     syph = make_syph()
-    with pytest.raises(ss.OverlappingSources):
+    with pytest.raises(ss.errors.OverlappingSources):
         ss.Sim(syph, interventions=ss.treat(ss.Treatment(moves=[syph.cure_early, syph.late])), **kw).init()
     return sims
 
@@ -273,8 +264,6 @@ def test_syndromic():
     check_close(sims, lambda sim: sim.results.syndromic.unneeded.select(disease='ct').sum(), rtol=0.15)
     check_close(sims, lambda sim: sim.results.syndromic.cured.select(disease='ng').sum(), rtol=0.15)
     assert sims.ode.crossings # The diseases are tracked jointly, since the treatment acts on both
-    with pytest.raises(TypeError, match='on=drug.failed'): # Removed: failure is a transition or a step of its own
-        ss.Treatment(moves='ng.cure', on_fail='ng.fail')
     return sims
 
 
@@ -284,13 +273,13 @@ def test_bv():
         CST1, CST3, CST4a, CST4p, CST4s, P = ss.states('CST1 CST3 CST4a CST4p CST4s P')
         return ss.Disease(
             shift13  = CST1 >> CST3 @ ss.probpermonth(0.10),
-            onset    = ss.progression('CST3 -> CST4p | CST4a', rate=ss.probpermonth(0.05), p=0.7),
+            onset    = ss.Transition(CST3, [CST4p, CST4a], rate=ss.probpermonth(0.05), p=0.7),
             revert   = CST3 >> CST1 @ ss.weeks(10),
             symptoms = CST4p >> CST4s @ ss.weeks(2),
             clear_s  = CST4s >> CST1 @ ss.weeks(25),
             clear_a  = CST4a >> CST1 @ ss.weeks(25),
             tx       = (CST4a + CST4p + CST4s) >> P, # Moved only by treatment
-            recur    = ss.progression('P -> CST4p | CST4a', rate=ss.permonth(0.1), p=0.7),
+            recur    = ss.Transition(P, [CST4p, CST4a], rate=ss.permonth(0.1), p=0.7),
             settle   = P >> CST1 @ ss.months(6),
             init=dict(CST3=0.3, CST4a=0.1), name='bv',
         )

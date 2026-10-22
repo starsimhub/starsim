@@ -33,11 +33,13 @@ In Starsim, `ss.contacts('Kenya')` and `ss.people('Kenya')` are bundled (Prem 20
 ```{python}
 import numpy as np
 import starsim as ss
+import starsim.interop
 ss.options(jupyter=True)
 
+S, I, R = ss.states('S I R')
 sir = ss.Disease(
-    infection = ss.transmission('S -> I', beta=0.04),
-    recovery  = ss.progression('I -> R', rate=0.1),
+    infection = ss.Transition(S, I, rate=0.04 * I),
+    recovery  = ss.Transition(I, R, rate=0.1),
     init      = dict(I=10),
 )
 sir.stratify(age=[0, 5, 20, 50, 65])
@@ -58,7 +60,7 @@ msim.plot()
 
 | Model | Agreement |
 |---|---|
-| The Kenya tutorial (above) | Agree: the mean of 100 runs peaks at 54.5% to 54.7% of the population on day 39 (in different sets of runs), against epydemix's 54.46% on day 40, and the final size is 99.6% against 99.63%. Starsim's population is the UN's (52.2 million in 2020) and epydemix's is 55.9 million; with epydemix's population, the peak is 54.32%. Imported with `ss.load()` from epydemix's own script, the peak is 54.41% on day 40 |
+| The Kenya tutorial (above) | Agree: the mean of 100 runs peaks at 54.5% to 54.7% of the population on day 39 (in different sets of runs), against epydemix's 54.46% on day 40, and the final size is 99.6% against 99.63%. Starsim's population is the UN's (52.2 million in 2020) and epydemix's is 55.9 million; with epydemix's population, the peak is 54.32%. Imported with `ss.interop.load()` from epydemix's own script, the peak is 54.41% on day 40 |
 | The COVID tutorial (SEIR with an Erlang delay to death, mobility, seasonality, three reopening scenarios) | Agree at fixed values: weekly deaths within 0.9% of the peak, and 10,534 deaths by 2 August against 10,525 (means of 200 runs). This needs `substeps=1`, so that the chain binomial takes whole days as epydemix does; without it, the Erlang delay makes Starsim substep the model, and there are 6,039 deaths. The fitted values are each inside the original's 90% range, but the comparison was of a point estimate against a posterior |
 
 ## Timings
@@ -97,7 +99,8 @@ mobility = ss.timeseries(dict(zip(days.strftime('%Y-%m-%d'), np.linspace(1.0, 0.
 season = ss.seasonal(mean=0.9, amplitude=0.1/0.9, peak=14/365)
 
 def make_sim(b, data=None):
-    sir = ss.Disease(infection=ss.transmission('S -> I', beta=b*season*mobility), recovery=ss.progression('I -> R', rate=ss.perday(0.25)), init=dict(I=100), name='sir')
+    S, I, R = ss.states('S I R')
+    sir = ss.Disease(infection=ss.Transition(S, I, rate=b*season*mobility * I), recovery=ss.Transition(I, R, rate=ss.perday(0.25)), init=dict(I=100), name='sir')
     return ss.Sim(sir, total_pop=1e6, unit='day', start='2020-02-23', stop='2020-05-31', solver='binomial', data=data, verbose=0)
 
 # The data: weekly new infections from one run at b = 0.5
@@ -116,4 +119,4 @@ proj.to_df(quantiles=[0.05, 0.5, 0.95]).head()
 
 ## Bringing your model in
 
-`ss.load(source, format='epydemix')` reads an epydemix model: either a live `EpiModel` (if epydemix is installed alongside Starsim) or the JSON written by `dump_epydemix.py` (in `starsim/interop/`), which runs your script in epydemix's own environment. Each compartment becomes a state, each mediated transition exposure through the population's contact matrices (summed over the settings, as epydemix does), each spontaneous transition a rate per day, and the population's age groups a stratification. The sim runs as a chain binomial in daily steps (`solver='binomial'`, `substeps=1`), as epydemix does. On the Kenya tutorial, dumping takes about 4 s (it downloads the population), and the import and 100 runs take 0.26 s, with the same results as epydemix; `sim.to_code()` writes a Python file you can keep.
+`ss.interop.load(source, format='epydemix')` reads an epydemix model: either a live `EpiModel` (if epydemix is installed alongside Starsim) or the JSON written by `dump_epydemix.py` (in `starsim/interop/`), which runs your script in epydemix's own environment. Each compartment becomes a state, each mediated transition exposure through the population's contact matrices (summed over the settings, as epydemix does), each spontaneous transition a rate per day, and the population's age groups a stratification. The sim runs as a chain binomial in daily steps (`solver='binomial'`, `substeps=1`), as epydemix does. On the Kenya tutorial, dumping takes about 4 s (it downloads the population), and the import and 100 runs take 0.26 s, with the same results as epydemix; `sim.to_code()` writes a Python file you can keep.

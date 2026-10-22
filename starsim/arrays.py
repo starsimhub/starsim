@@ -361,7 +361,7 @@ class Arr(BaseArr):
         # If we have a mock People object, initialize the values
         if mock:
             n_agents = len(raw) if raw is not None else mock
-            self.people = ss.mock_people(n_agents)
+            self.people = ss.debugtools.mock_people(n_agents)
             if raw is None:
                 self.init_vals()
             else:
@@ -569,11 +569,11 @@ class Arr(BaseArr):
         result of the operation needs to be applied to active agents only.
         """
 
+        if not self.initialized and not inplace and op in ss.conditions.ops: # Before the sim exists, this builds a lazy condition instead, as a comparison does (or, with a typed value, an expression for a rate): see ss.conditions.Cond
+            arr = ss.conditions.from_arr(self)
+            return ss.conditions.Cond.arith(op, other, arr) if reverse else ss.conditions.Cond.arith(op, arr, other)
         if isinstance(other, (ss.TimePar, ss.date)):
             return NotImplemented # Not implemented here, at least for now. But allow falling back to the other classes if they have an implementation
-        if not self.initialized and not inplace and op in ss.conditions.ops: # Before the sim exists, this builds a lazy expression instead, as a comparison does: see ss.conditions.Cond
-            arr = ss.conditions.from_arr(self)
-            return ss.conditions.Cond(op, other, arr) if reverse else ss.conditions.Cond(op, arr, other)
 
         inds = self.auids
         a = self._index(self.raw, inds)
@@ -1095,9 +1095,9 @@ class StepArr(Arr):
 
 class Unkept(BaseArr):
     """
-    A declared disease's time of entering a state (`ti_X`) that is not kept, since nothing in the sim reads it (see `ss.Disease.times_read()`)
+    A declared disease's time of entering a state (`ti_X`) that is not kept, since the engine does not need it (see `ss.options.keep_times`)
 
-    Setting it does nothing, and reading it raises `ss.TimeNotKept`, which says how to keep it.
+    Setting it does nothing, and reading it raises `ss.errors.TimeNotKept`, which says how to keep it.
     It takes no memory, and is not one of the module's states.
     """
     def __init__(self, name, mod):
@@ -1107,9 +1107,9 @@ class Unkept(BaseArr):
 
     @property
     def values(self):
-        errormsg = (f'{self.mod.name}.{self.name} is not kept, since nothing in the sim read it when it was initialized (to save memory).\n'
+        errormsg = (f'{self.mod.name}.{self.name} is not kept, since the engine does not need it (to save memory).\n'
                     f'     Set ss.options.keep_times = True before the sim is initialized to keep the time of entering every state.')
-        raise ss.TimeNotKept(errormsg)
+        raise ss.errors.TimeNotKept(errormsg)
 
     raw = values
 
@@ -1299,11 +1299,11 @@ class BoolState(BoolArr):
         return float(len(uids))
 
     @property
-    def dwell(self):
-        """ For a state of a declared disease run as agents: the time each person in it (or leaving it) has spent there, in the sim's unit, by UID, as `P.dwell` is in `p=`; e.g. `hpv.P.dwell[uids]` in a function """
+    def time(self):
+        """ For a state of a declared disease run as agents: the time each person in it (or leaving it) has spent there, in the sim's unit, by UID, as `P.time` is in `p=`; e.g. `hpv.P.time[uids]` in a function """
         engine = getattr(self.watch, 'engine', None)
         if engine is None:
-            raise AttributeError(f'"{self.name}" is not a state of a declared disease run as agents, so has no time in state (.dwell)')
+            raise AttributeError(f'"{self.name}" is not a state of a declared disease run as agents, so has no time in state (.time)')
         mod = engine.mod
         return (mod.ti - mod[f'ti_{self.name}'].raw)*engine.dt
 
@@ -1391,7 +1391,7 @@ class BoolState(BoolArr):
         return out
 
 
-class Watch:
+class Watch(ss.utils.NoDists):
     """
     The link from a state to the engine that keeps count of who is in it (`BoolState.watch`), which is told of
     every change to it (see `ss.solvers.Agents.wrote()`). It is never searched for distributions (see `ss.distributions.no_dists()`),

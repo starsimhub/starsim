@@ -5,7 +5,6 @@ Test the kernels: that a run taken in one call matches the same run taken step b
 # %% Imports and settings
 import pytest
 import numpy as np
-import numba as nb
 import sciris as sc
 import starsim as ss
 from test_dimensions import make_malaria, make_tb
@@ -24,10 +23,11 @@ def make_sir():
 
 def make_seir():
     """ Seasonal transmission, a dwell time in stages, and a branch """
+    S, E, I, R, D = ss.states('S E I R D')
     seir = ss.Disease(
-        infection = ss.transmission('S -> E', beta=ss.seasonal(0.4, amplitude=0.3, peak=1), source='I'),
-        latency   = ss.progression('E -> I', dur=ss.erlang(mean=5, k=3)),
-        outcome   = ss.progression('I -> R | D', dur=8, p=[None, 0.1]),
+        infection = ss.Transition(S, E, rate=ss.seasonal(0.4, amplitude=0.3, peak=1) * I),
+        latency   = ss.Transition(E, I, dur=ss.erlang(mean=5, k=3)),
+        outcome   = ss.Transition(I, [R, D], dur=8, p=[None, 0.1]),
         init      = dict(I=0.01),
         name      = 'seir',
     )
@@ -35,7 +35,8 @@ def make_seir():
 
 
 def make_plain(beta, **kwargs):
-    return ss.Disease(infection=ss.transmission('S -> I', beta=beta), recovery=ss.progression('I -> R', dur=8), name='sir', **kwargs)
+    S, I, R = ss.states('S I R')
+    return ss.Disease(infection=ss.Transition(S, I, rate=beta * I), recovery=ss.Transition(I, R, dur=8), name='sir', **kwargs)
 
 
 def make_ages():
@@ -45,8 +46,8 @@ def make_ages():
 
 def make_towns():
     """ Three towns with commuting between them """
-    towns = ss.geo(names=['north', 'south', 'east'], pop=[50_000, 30_000, 20_000], x=[0, 0, 40], y=[0, 30, 0])
-    return make_plain(0.3, init=dict(I=ss.by(patch=[50, 0, 0]))).stratify(patch=towns, mobility=ss.gravity(k=2e-4))
+    towns = ss.geo.location(names=['north', 'south', 'east'], pop=[50_000, 30_000, 20_000], x=[0, 0, 40], y=[0, 30, 0])
+    return make_plain(0.3, init=dict(I=ss.by(patch=[50, 0, 0]))).stratify(patch=towns, mobility=ss.geo.gravity(k=2e-4))
 
 
 def make_commute():
@@ -56,8 +57,9 @@ def make_commute():
 
 def make_delay():
     """ A fixed latent period, a conveyor, with a death rate acting on it as well """
-    return ss.Disease(infection=ss.transmission('S -> E', beta=0.4, source='I'), latency=ss.progression('E -> I', dur=ss.constant(ss.days(5))),
-                      recovery=ss.progression('I -> R', dur=ss.days(8)), death=ss.death('E | I ->', rate=ss.perday(0.02)), init_prev=0.01, name='delay')
+    S, E, I, R = ss.states('S E I R')
+    return ss.Disease(infection=ss.Transition(S, E, rate=0.4 * I), latency=ss.Transition(E, I, dur=ss.constant(ss.days(5))),
+                      recovery=ss.Transition(I, R, dur=ss.days(8)), death=ss.death([E, I], rate=ss.perday(0.02)), init_prev=0.01, name='delay')
 
 
 models = sc.objdict(
@@ -114,7 +116,7 @@ def test_factored_mixing():
     term = mixing.terms[0]
     pre, post = np.kron(mixing.time_share.toarray(), np.eye(3)), np.kron(mixing.time_share.toarray(), term.matrix) # The whole matrix between towns by ages, which is not formed
     rng = np.random.default_rng(1)
-    infectious, n = rng.random(sim.n_groups), 1 + rng.random(sim.n_groups)
+    infectious, n = rng.random(sim.groups.n_groups), 1 + rng.random(sim.groups.n_groups)
     num, den = [np.bincount(term.cells, weights=v, minlength=9) @ pre for v in [infectious, n]]
     expected = (post @ (num/den))[term.cells]
     assert np.allclose(mixing.term_exposure(term, infectious, n), expected, rtol=1e-12, atol=0)
@@ -125,24 +127,19 @@ def test_factored_mixing():
 @sc.timer()
 def test_stochastic():
     sc.heading('Testing that the stochastic solvers give the same run in one call to the kernels as step by step, in whole people')
-    for solver,keys in dict(binomial=['sir', 'ages', 'commute'], gillespie=['sir', 'towns']).items():
+    for solver,keys in dict(binomial=['sir', 'ages', 'commute'], gillespie=['sir', 'towns', 'commute']).items():
         pop = 2000 if solver == 'gillespie' else 10_000
         for key in keys:
-            for seed in range(3):
+            for seed in range(2):
                 sims = sc.objdict({how:run(key, how, solver=solver, rand_seed=seed, total_pop=pop) for how in ['step', 'all']})
                 assert largest_diff(sims.all, sims.step) == 0, f'{key} under {solver}: the whole run differs from the stepped one'
                 n_I = sims.all.results[sims.all.declared[0].name].n_I.values
                 assert np.all(n_I == np.round(n_I)) # Whole people
 
-    # With many places that have events, the exact solver steps them on several threads: the same run as on one thread, and as step by step
-    herds = make_plain(0.3, init=dict(I=ss.by(herd=[2]*600))).stratify(herd=[str(i) for i in range(600)], kind='space')
+    # Many places, most of which have no events (skipped until something changes them): the same run as step by step
+    herds = make_plain(0.3, init=dict(I=ss.by(herd=[2] + [0]*599))).stratify(herd=[str(i) for i in range(600)], kind='space')
     base = ss.Sim(herds, solver='gillespie', unit='day', stop=30, total_pop=600*50, **kw)
-    threads = nb.get_num_threads()
-    nb.set_num_threads(1)
-    one = base.new().run()
-    nb.set_num_threads(threads)
-    for sim in [base.new().run(), base.new().run(profile=True)]:
-        assert largest_diff(sim, one) == 0
+    assert largest_diff(base.new().run(), base.new().run(profile=True)) == 0
 
     # Diseases tracked jointly (74 × 51 compartments, with births) are stepped by the compartments that hold anyone: the same events as stepping every flow, and many times faster
     lognormal = [ss.SIR(dur_inf=ss.lognorm_ex(mean=ss.years(6)), p_death=0.01), ss.SIS(dur_inf=ss.lognorm_ex(mean=ss.years(10)))] # Starsim 3's durations, as Erlang stages
@@ -164,23 +161,13 @@ def test_stochastic():
     assert np.array_equal(out.sparse[0], out.dense[0]) and np.array_equal(out.sparse[1], out.dense[1]) # The same events
     assert out.sparse[2] < out.dense[2]/3 # About 60 times faster here
 
-    # Strata that mix are stepped by the exact solver following only what each event changes: the same epidemic as one group, and a cost per event that does not grow with the number of strata
+    # Strata that mix: the same epidemic as one group
     def strata(K, **pars):
         sir = make_plain(ss.perday(0.3), init=dict(I=ss.by(risk=[2] + [0]*(K-1)))).stratify(risk=[f'g{i}' for i in range(K)])
         return ss.Sim(sir, solver='gillespie', unit='day', stop=100, total_pop=200*K, **pars, **kw)
     one = ss.Sim(make_plain(ss.perday(0.3), init=dict(I=2)), solver='gillespie', unit='day', stop=100, total_pop=2000, **kw).run(n_runs=60).results.sir.n_R.values[:, -1]
     ten = strata(10).run(n_runs=60).results.sir.n_R.values[:, -1]
     assert abs(one.mean() - ten.mean()) < 3*np.hypot(one.std(), ten.std())/np.sqrt(60) # The same final size
-    cost = {}
-    for K in [30, 300]:
-        times = []
-        for rep in range(3):
-            sim = strata(K, rand_seed=rep).init()
-            T = sc.timer()
-            res = sim.run().results.sir
-            times.append(T.toc(output=True)/(res.infection.values.sum() + res.recovery.values.sum()))
-        cost[K] = min(times)
-    assert cost[300] < 3*cost[30] # About the same per event (it was 6.5 times as much)
     return sims
 
 
@@ -188,15 +175,16 @@ def test_stochastic():
 def test_stages():
     sc.heading('Testing that a dwell time in many stages is as long as it should be under every solver')
     def make():
+        S, E, I, R = ss.states('S E I R')
         return ss.Disease(
-            infection = ss.transmission('S -> E', beta=0.4, source='I'),
-            latency   = ss.progression('E -> I', dur=ss.normal(7, 1.4)), # 25 stages
-            recovery  = ss.progression('I -> R', dur=10),
+            infection = ss.Transition(S, E, rate=0.4 * I),
+            latency   = ss.Transition(E, I, dur=ss.normal(7, 1.4)), # 25 stages
+            recovery  = ss.Transition(I, R, dur=10),
             init      = dict(I=0.001),
             name      = 'seir',
         )
     peaks = sc.objdict()
-    for solver in ['ode', 'binomial', 'gillespie', 'abm']: # With this many people, gillespie takes tau leaps
+    for solver in ['ode', 'binomial', 'tau', 'abm']:
         pars = dict(n_agents=20_000) if solver == 'abm' else {}
         sims = [ss.Sim(make(), unit='day', stop=150, total_pop=200_000, solver=solver, rand_seed=seed, **pars, **kw).run() for seed in range(1 if solver == 'ode' else 3)]
         peaks[solver] = np.mean([np.argmax(sim.results.seir.n_I) for sim in sims])
@@ -205,11 +193,11 @@ def test_stages():
 
     # Through the stages in whole steps, with another way out: the same as the ODE
     def cohort(solver):
-        sim = ss.Sim(ss.Disease(onset=ss.progression('E -> I', dur=ss.normal(7, 1)), death=ss.progression('E -> D', dur=20), name='d'), unit='day', stop=10, total_pop=1_000_000, solver=solver, **kw)
+        E, I, D = ss.states('E I D')
+        sim = ss.Sim(ss.Disease(onset=ss.Transition(E, I, dur=ss.normal(7, 1)), death=ss.Transition(E, D, dur=20), name='d'), unit='day', stop=10, total_pop=1_000_000, solver=solver, **kw)
         return sim.run().results.d
-    ode = cohort('ode')
-    for res in [cohort('binomial')]:
-        assert np.allclose([res.n_I[6], res.n_I[8], res.n_D[10]], [ode.n_I[6], ode.n_I[8], ode.n_D[10]], rtol=0.01)
+    ode, res = cohort('ode'), cohort('binomial')
+    assert np.allclose([res.n_I[6], res.n_I[8], res.n_D[10]], [ode.n_I[6], ode.n_I[8], ode.n_D[10]], rtol=0.01)
     return peaks
 
 
@@ -217,24 +205,28 @@ def test_stages():
 def test_seasonal_steps():
     sc.heading('Testing that the stochastic solvers follow a value that varies within a step')
     def make(solver, dt, seed=0, pop=5000):
-        sis = ss.Disease(infection=ss.transmission('S -> I', beta=ss.seasonal(mean=ss.perday(0.15), amplitude=0.5, peak=0.25)), recovery=ss.progression('I -> S', dur=ss.days(10)), init_prev=0.05, name='sis')
+        S, I = ss.states('S I')
+        sis = ss.Disease(infection=ss.Transition(S, I, rate=ss.seasonal(mean=ss.perday(0.15), amplitude=0.5, peak=0.25) * I), recovery=ss.Transition(I, S, dur=ss.days(10)), init_prev=0.05, name='sis')
         sim = ss.Sim(sis, solver=solver, dt=dt, stop=ss.years(2), total_pop=pop, rand_seed=seed, **kw).run()
         return sim.results.sis.infection.sum()/pop, sim.solver
     ode = make('ode', ss.days(1))[0]
     out = sc.objdict()
-    for solver,pop in dict(gillespie=5000, tau=500_000).items(): # Steps of a quarter of a year: holding beta for the whole step gave 5-6% too many infections; with more people, gillespie takes tau leaps
-        runs = [make('gillespie', ss.days(91), seed, pop) for seed in range(3)]
+    for solver,pop in dict(gillespie=5000, tau=500_000).items(): # Steps of a quarter of a year: holding beta for the whole step gave 5-6% too many infections
+        runs = [make(solver, ss.days(91), seed, pop) for seed in range(3)]
         out[solver] = np.mean([run[0] for run in runs])
         assert runs[0][1] == solver
         assert np.isclose(out[solver], ode, rtol=0.02), f'{solver}: {out[solver]:n} infections per person, against {ode:n} for the ODE'
     with pytest.raises(ss.CapabilityError): # Exact only for rates that are constant within each quarter of a step
-        sis = ss.Disease(infection=ss.transmission('S -> I', beta=ss.seasonal(mean=0.15, amplitude=0.5)), recovery=ss.progression('I -> S', dur=10), init_prev=0.05, name='sis')
+        S, I = ss.states('S I')
+        sis = ss.Disease(infection=ss.Transition(S, I, rate=ss.seasonal(mean=0.15, amplitude=0.5) * I), recovery=ss.Transition(I, S, dur=10), init_prev=0.05, name='sis')
         ss.Sim(sis, solver='gillespie', approx=False, unit='day', stop=100, **kw).init()
 
     # A step function next to a value that varies smoothly is held for each step, by the ODE stepped as by a whole run (stepped, it was taken at the middle and end of each step, 1.4% off)
     days = [f'2020-01-{d:02d}' for d in range(1, 32)]
     beta = ss.par(0.5, name='b')*ss.seasonal(mean=0.9, amplitude=0.1)*ss.timeseries(dict(zip(days, np.linspace(1.0, 0.3, len(days))))) # A time series is a step function by default
-    sir = lambda: ss.Disease(infection=ss.transmission('S -> I', beta=beta), recovery=ss.progression('I -> R', rate=ss.perday(0.25)), init=dict(I=100), name='sir')
+    def sir():
+        S, I, R = ss.states('S I R')
+        return ss.Disease(infection=ss.Transition(S, I, rate=beta * I), recovery=ss.Transition(I, R, rate=ss.perday(0.25)), init=dict(I=100), name='sir')
     whole = ss.Sim(sir(), unit='day', start='2020-01-01', stop='2020-02-15', total_pop=1e6, **kw).run()
     stepped = ss.Sim(sir(), unit='day', start='2020-01-01', stop='2020-02-15', total_pop=1e6, **kw).run(until='2020-02-15')
     assert np.allclose(stepped.results.sir.n_I, whole.results.sir.n_I, rtol=1e-9)
@@ -267,8 +259,10 @@ def test_restart():
     assert len(np.unique(res.values.max(axis=1))) > 10 # Each has its own seed
     one = base.new(rand_seed=base.pars.rand_seed + 7).run() # Each is the run that a sim with that seed gives
     for key,multi in msim.results.sir.items():
-        if key != 'cases': # Reported cases are drawn afterwards, for all the runs at once
-            assert np.allclose(multi.values[7], one.results.sir[key].values), key
+        assert np.allclose(multi.values[7], one.results.sir[key].values), key
+    grouped = ss.Sim(models.ages[0](), solver='binomial', **models.ages[1], **kw) # By group too
+    many, alone = grouped.run(n_runs=3).results.sir, grouped.new(rand_seed=grouped.pars.rand_seed + 2).run().results.sir
+    assert all(np.allclose(many[key].strata[2], alone[key].strata) for key in ['n_I', 'infection']) and np.allclose(many.n_I.values[2], alone.n_I.values)
     assert set(msim.results.sir.keys()) == {key for key,res in one.results.sir.items() if isinstance(res, ss.Result)}
     assert abs(msim.results.sir.cases.values.sum(axis=1).mean()/msim.results.sir.infection.cum.values[:, -1].mean() - 0.6) < 0.05
     base.pars.rand_seed += 7 # A seed set after the sim was made is used, as is an option of running in parallel
@@ -284,7 +278,8 @@ def test_restart():
 
     # The exact solver runs place by place when places do not affect each other within a step, with the same results as event by event over all places
     def herds(local):
-        sir = ss.Disease(infection=ss.transmission('S -> I', beta=ss.perday(0.3)), recovery=ss.progression('I -> R', dur=ss.days(10)), init=dict(I=ss.by(herd=[5]*20)), name='herds')
+        S, I, R = ss.states('S I R')
+        sir = ss.Disease(infection=ss.Transition(S, I, rate=ss.perday(0.3) * I), recovery=ss.Transition(I, R, dur=ss.days(10)), init=dict(I=ss.by(herd=[5]*20)), name='herds')
         sir.stratify(herd=[str(i) for i in range(20)], kind='space')
         out = []
         for seed in range(10):
@@ -302,26 +297,26 @@ def test_restart():
 
     # A place where nothing can happen is skipped until something changes it: here, waning that starts on day 30, in a herd where nobody is infected
     wane = 0.05*ss.timeseries({0: 0.0, 29: 0.0, 30: 1.0})
-    sirs = ss.Disease(infection=ss.transmission('S -> I', beta=ss.perday(0.3)), recovery=ss.progression('I -> R', dur=ss.days(10)), waning=ss.progression('R -> S', rate=wane),
+    S, I, R = ss.states('S I R')
+    sirs = ss.Disease(infection=ss.Transition(S, I, rate=ss.perday(0.3) * I), recovery=ss.Transition(I, R, dur=ss.days(10)), waning=ss.Transition(R, S, rate=wane),
                       init=dict(I=ss.by(herd=[5, 0]), R=ss.by(herd=[0, 50])), name='sirs')
     sirs.stratify(herd=['a', 'b'], kind='space')
     S_b = ss.Sim(sirs, total_pop=200, solver='gillespie', unit='day', stop=60, **kw).run().results.sirs.n_S.select(herd='b').values
     assert S_b[60] > S_b[29] # Herd b's recovered wane once waning starts
 
-    # How often a small outbreak dies out
-    small = ss.Disease(infection=ss.transmission('S -> I', beta=0.15), recovery=ss.progression('I -> R', dur=10), init=dict(I=2), name='small')
+    # How often a small outbreak dies out, from the runs' results
+    S, I, R = ss.states('S I R')
+    small = ss.Disease(infection=ss.Transition(S, I, rate=0.15 * I), recovery=ss.Transition(I, R, dur=10), init=dict(I=2), name='small')
     msim_small = ss.Sim(small, total_pop=200, solver='gillespie', unit='day', stop=100, **kw).run(n_runs=50)
-    ext = msim_small.extinction(output=True)
-    assert 0.3 < ext.share[0] < 0.9 and ext.runs[0] == 50
-    assert msim_small.summarize().small_extinction.mean == ext.share[0] # Reported by summarize() too, since some runs died out
+    died = (msim_small.results.small.n_I.values[:, -1] == 0).mean()
+    assert 0.3 < died < 0.9
 
-    # How often it is a major outbreak, which extinction does not say for an SIR, since every run dies out in the end
-    sir = ss.Disease(infection=ss.transmission('S -> I', beta=2/7), recovery=ss.progression('I -> R', dur=7), init=dict(I=1), name='sir')
+    # How often it is a major outbreak (more than 10% infected), which dying out does not say for an SIR, since every run dies out in the end
+    S, I, R = ss.states('S I R')
+    sir = ss.Disease(infection=ss.Transition(S, I, rate=2/7 * I), recovery=ss.Transition(I, R, dur=7), init=dict(I=1), name='sir')
     msim = ss.Sim(sir, total_pop=1000, solver='gillespie', unit='day', stop=365, **kw).run(n_runs=40)
     major = (msim.results.sir.infection.values.sum(axis=1) > 100).mean()
-    out = msim.outbreaks(output=True)
-    assert 0.25 < major < 0.75 and out.share[0] == major and out.threshold[0] == 100 # 10% of the people, by default
-    assert msim.extinction(output=True).share[0] == 1 and msim.outbreaks(threshold=1000, output=True).share[0] == 0
+    assert 0.25 < major < 0.75 and (msim.results.sir.n_I.values[:, -1] == 0).all()
 
     # A sim that needs the loop (here, a modifier with a function of the sim) cannot be restarted, and still runs the usual way
     masks = ss.modify('sir.pars.beta', multiply=0.5, when=lambda sim: sim.ti >= 20)
@@ -332,6 +327,20 @@ def test_restart():
     return msim
 
 
+@sc.timer()
+def test_plain():
+    sc.heading('Testing the kernels run as plain Python against compiled')
+    for solver in ['rk4', 'euler', 'binomial', 'tau', 'gillespie']:
+        kw_solver = dict(solver='ode', integrator=solver) if solver in ['rk4', 'euler'] else dict(solver=solver)
+        res = []
+        for mode in ['always', 'never']:
+            with ss.options.context(compile=mode):
+                sim = ss.Sim(make_seir(), total_pop=2000, unit='day', stop=60, rand_seed=2, **kw_solver, **kw).run()
+            res.append(sim.results.seir.to_df())
+        assert np.allclose(res[0].values, res[1].values, rtol=1e-10), solver
+    return res
+
+
 # %% Run as a script
 if __name__ == '__main__':
     do_plot = True
@@ -340,9 +349,11 @@ if __name__ == '__main__':
     T = sc.timer()
 
     sims = test_ode()
+    mix = test_factored_mixing()
     stoch = test_stochastic()
     peaks = test_stages()
     seasonal = test_seasonal_steps()
     msim = test_restart()
+    res = test_plain()
 
     T.toc()

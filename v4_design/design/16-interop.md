@@ -13,7 +13,7 @@ People have to want to write models in this language for any of this to matter. 
 An importer reads another framework's model into an `ss.interop.Source`: its states, parameters, flows as rate expressions in the source's own terms, stratifications, outcomes, and what it could not translate. `ss.interop.build()` turns a source into a sim by the same rules for every format (below), so each framework needs one reader. An exporter writes a sim's compartmental form in another format. There are no direct framework-to-framework converters.
 
 ```
-EMULSION, odin, SBML, SimInf,                                                        ┌─▶ SBML, odin, Mermaid (ss.save(..., format=))
+EMULSION, odin, SBML, SimInf,                                                        ┌─▶ SBML, odin, Mermaid (ss.interop.export(..., format=))
 flepiMoP, summer2, Atomica, camdl,  ─▶ reader ─▶ ss.interop.Source ─▶ build() ─▶ sim ┤
 EpiModel, epydemix, MEmilio                                                          └─▶ Python that builds it again (sim.to_code())
 ```
@@ -22,11 +22,12 @@ EpiModel, epydemix, MEmilio                                                     
 
 <!-- fragment -->
 ```python
-sim = ss.load('model.xml',  format='sbml')
-sim = ss.load('model.yaml', format='emulsion')
-sim = ss.load('config.yml', format='flepimop')
-sim = ss.load('framework.xlsx', format='atomica', databook='databook.xlsx')
-sim = ss.load(summer_model)                 # a Python object from another framework; format taken from its type
+import starsim.interop # Not imported by import starsim
+sim = ss.interop.load('model.xml',  format='sbml')
+sim = ss.interop.load('model.yaml', format='emulsion')
+sim = ss.interop.load('config.yml', format='flepimop')
+sim = ss.interop.load('framework.xlsx', format='atomica', databook='databook.xlsx')
+sim = ss.interop.load(summer_model)                 # a Python object from another framework; format taken from its type
 ```
 
 The result is an ordinary sim (`ss.interop.formats` lists the importers; the format is told from the file or object where it can be). `sim.describe()` prints it, it can be stratified, run, and fitted like one written by hand, and `sim.to_code()` writes it as a Python script that builds it again, which is the usual next step. `sim.imported` records how it was read: the format and file, how each rate was read (`choices`), what could not be translated (`incomplete`), and the prompt for finishing it (`prompt`). A framework with no importer can still fill in an `ss.interop.Source` by hand and call `ss.interop.build()`.
@@ -61,12 +62,12 @@ Rules 2 and 3 are guesses about what the source meant, and the difference matter
 | **EMULSION** | `'emulsion'` (YAML) | Each state machine as a disease, with its numbers in EMULSION's time unit; the solver follows the aggregation type (`binomial` for compartments, `abm` for individuals and hybrid models); minimum stays as `after=` |
 | **odin** | `'odin'` (the R DSL) | `deriv()` and `update()` equations split into signed terms and paired into flows; `rbinom()` draws as a chain binomial; `lambda`, `if`, contact matrices, seasonality, and counts |
 | **SBML** | `'sbml'` (XML) | Species as states, reactions as transitions, classified by the rules above |
-| **SimInf** | `'siminf'` (an R script with `mparse()` or a predefined model) | The transitions, run by `gillespie`; several nodes as a stratification of places, with the scheduled events as a movement register (`ss.Mobility(data=...)`); the continuous state `v` as a state that is not people |
+| **SimInf** | `'siminf'` (an R script with `mparse()` or a predefined model) | The transitions, run by `gillespie`; several nodes as a stratification of places, with the scheduled events as a movement register (`ss.geo.Mobility(data=...)`); the continuous state `v` as a state that is not people |
 | **flepiMoP** | `'flepimop'` (the config YAML) | Compartment products, `proportional_to` rates, the outcomes chain as `ss.outcome`, `seir_modifiers` (every scenario kept in `sim.imported.scenarios`), and drawn parameters with their distributions as priors |
 | **summer2** | `'summer2'` (a JSON dump, or the model) | Each flow kind as one transition, `stratify_with` as `stratify`, adjustments as `adjust=`, and the mixing matrix; the derived outputs are worked out from the results by `ss.interop.summer2.outputs()` |
 | **Atomica** | `'atomica'` (the framework, databook, and program book workbooks) | Compartments, transitions, characteristics, and the databook's values; the program book's spending as parameters whose coverage moves the parameters they affect |
 | **camdl** | `'camdl'` (a `.camdl` file, camdlc's JSON, or a pycamdl model) | The model, with the parameter values of one of its scenarios (`scenario=`), as an ODE or a chain binomial as camdl's backends run it |
-| **EpiModel** | `'epimodel'` (a JSON dump from `dump_epimodel.R`, or the R script) | `netsim()`, `dcm()`, and `icm()` runs with the built-in models and networks (`ss.PartnerNet` for the network model's targets); custom modules are listed with their R source |
+| **EpiModel** | `'epimodel'` (a JSON dump from `dump_epimodel.R`, or the R script) | `netsim()`, `dcm()`, and `icm()` runs with the built-in models and networks (`ssl.DegreeNet` for the network model's targets); custom modules are listed with their R source |
 | **epydemix** | `'epydemix'` (a JSON dump from `dump_epydemix.py`, or the model) | The transitions, the population, and its contact matrices |
 | **MEmilio** | `'memilio'` (a JSON dump from `dump_memilio.py`) | The ODE models (`osir`, `oseir`, `oseirdb`, `osecir`), alone, on a mobility graph (as places with commuting), or in a parameter study (its distributions as priors) |
 
@@ -79,19 +80,21 @@ Writing the importers found gaps in the language. Each import lists the part it 
 ## Export
 
 ```python
-sir = ss.Disease(infection=ss.transmission('S -> I', beta=0.3), recovery=ss.progression('I -> R', dur=10), init_prev=0.01, name='sir')
+import starsim.interop
+S, I, R = ss.states('S I R')
+sir = ss.Disease(infection=ss.Transition(S, I, rate=0.3 * I), recovery=ss.Transition(I, R, dur=10), init_prev=0.01, name='sir')
 sim = ss.Sim(sir, unit='day')
 
 ss.save('model.py', sim)                     # Python that builds the sim again (sim.to_code())
-ss.save('model.xml', sim, format='sbml')
-ss.save('model.R', sim, format='odin')
-ss.save('model.md', sim, format='mermaid')
+ss.interop.export(sim, 'sbml', filename='model.xml')
+ss.interop.export(sim, 'odin', filename='model.R')
+ss.interop.export(sim, 'mermaid', filename='model.md')
 ```
 
-The code is the complete form of a declared model; what `to_code()` cannot write (a network or module written as code, a prior) it lists in the file and as `LossyExport`. The model spec (`sim.to_spec()`, [14-model-spec.md](14-model-spec.md)) is the normalized form for `sim.hash()` and `ss.diff()`, and is not read back. Every other format carries less, and each export MUST print what was left out or changed, one line per declaration (`LossyExport`):
+The code is the complete form of a declared model; `to_code()` writes only the declared parts, and what it does not write (a network or module written as code, named by the class that makes it, a prior that is not a distribution) it lists in the file and as `LossyExport` ([14-model-spec.md](14-model-spec.md#saved-forms)). The model spec (`sim.to_spec()`, [14-model-spec.md](14-model-spec.md)) is the normalized form for `sim.hash()` and `ss.diff()`, and is not read back. Every other format carries less, and each export MUST print what was left out or changed, one line per declaration (`LossyExport`):
 
 ```text
->>> ss.save('model.xml', sim, format='sbml')    # stratified by age, with a lognormal dwell time and a random network
+>>> ss.interop.export(sim, 'sbml', filename='model.xml')    # stratified by age, with a lognormal dwell time and a random network
 LossyExport: exported to SBML: 3 states, 2 transitions, as 13 species and 12 reactions (rates per day)
   changed: the agent-based sim was written as its compartmental form (an ODE)
   changed: the lognorm_ex dwell time "dur" written as 11 exponential stages (Erlang) with its mean, 10 days
@@ -101,17 +104,18 @@ LossyExport: exported to SBML: 3 states, 2 transitions, as 13 species and 12 rea
 
 An export does not fail because something cannot be carried; it writes what it can and lists the rest. A model with functions in it exports its declared parts and lists the functions as not exported ([14-model-spec.md](14-model-spec.md#functions)).
 
-Petri nets and the other frameworks' formats are not exported (`v4_design/admin/deferred.md`, "Won't do"). SBML and odin are written from the compartmental form of the model (what `sir.equations()` prints), with the numbers in the sim's unit (SBML's `timeUnits`): a dwell time that is not exponential is written as its Erlang stages, and a stratification as one group, both listed. Both read back with `ss.load()`. `ss.interop.export(sim, format)` returns the text without writing a file.
+Petri nets and the other frameworks' formats are not exported (`v4_design/admin/deferred.md`, "Won't do"). SBML and odin are written from the compartmental form of the model (what `sir.equations()` prints), with the numbers in the sim's unit (SBML's `timeUnits`): a dwell time that is not exponential is written as its Erlang stages, and a stratification as one group, both listed. Both read back with `ss.interop.load()`. `ss.interop.export(sim, format)` returns the text without writing a file.
 
-The diagram is produced by `sir.diagram()`. A generated data-entry form (Atomica's databook, `sim.requires(to='form.csv')` in [04-parameters.md](04-parameters.md#requirements)) is deferred from v1.
+The diagram is the text of a Mermaid flowchart, from `sir.diagram()`; `format='mermaid'` writes the same diagram for every declared disease in the sim, in one chart. There is no drawn (Matplotlib) diagram: Mermaid is drawn by GitHub, Quarto, and most Markdown viewers.
 
 ## Comparing two models
 
 Since both are data, comparing them is mechanical:
 
 ```python
-sim_a = ss.Sim(ss.Disease(infection=ss.transmission('S -> I', beta=0.05), recovery=ss.progression('I -> R', dur=10), init_prev=0.01, name='sir'), unit='day')
-sim_b = ss.Sim(ss.Disease(infection=ss.transmission('S -> I', beta=0.08), recovery=ss.progression('I -> R', dur=ss.gamma(a=3, scale=10/3)), init_prev=0.01, name='sir'), unit='day')
+S, I, R = ss.states('S I R')
+sim_a = ss.Sim(ss.Disease(infection=ss.Transition(S, I, rate=0.05 * I), recovery=ss.Transition(I, R, dur=10), init_prev=0.01, name='sir'), unit='day')
+sim_b = ss.Sim(ss.Disease(infection=ss.Transition(S, I, rate=0.08 * I), recovery=ss.Transition(I, R, dur=ss.gamma(a=3, scale=10/3)), init_prev=0.01, name='sir'), unit='day')
 ss.diff(sim_a, sim_b)
 ```
 

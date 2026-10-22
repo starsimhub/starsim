@@ -2,6 +2,7 @@
 Dates: `ss.date`, an array of them (`ss.DateArray`), and calendar durations (`ss.datedur`)
 """
 import numbers
+import operator
 import calendar
 import datetime as dt
 import dateutil.relativedelta as drd
@@ -82,26 +83,6 @@ class DateArray(np.ndarray):
     def __rsub__(self, other):
         return self.__sub__(other)
 
-    def is_(self, which):
-        """ Checks if the DateArray is comprised of ss.date objects """
-        if isinstance(which, type(type)):
-            types = which
-        elif isinstance(which, str):
-            mapping = dict(date=ss.date, dur=ss.dur, datedur=ss.datedur, float=numbers.Number, scalar=numbers.Number)
-            if which in mapping:
-                types = mapping[which]
-            else:
-                errormsg = f'"which" must be "date", "dur", "datedur", "float", or a type, not "{which}"'
-                raise ValueError(errormsg)
-
-        if not len(self):
-            ss.warn('Checking the type of a length-zero DateArray always returns False')
-            return False
-
-        # Do the check
-        out = isinstance(self[0], types)
-        return out
-
     @property
     def is_date(self):
         return issubclass(self.unit, ss.date)
@@ -116,7 +97,8 @@ class DateArray(np.ndarray):
 
     @property
     def is_float(self):
-        return self.is_('float')
+        """ Whether the array holds plain numbers (False if it is empty) """
+        return len(self) > 0 and isinstance(self[0], numbers.Number)
 
     @property
     def subdaily(self):
@@ -455,61 +437,27 @@ class date(pd.Timestamp):
         elif isinstance(other, ss.dur):
             # As this is __rsub__, this corresponds to `other - self` hence this operation is not permitted
             raise TypeError("Cannot subtract a date from a duration")
-        elif isinstance(other, (ss.date, dt.date, dt.datetime)):
-            if not isinstance(other, pd.Timestamp):
-                other = pd.Timestamp(other)
-            return ss.datedur(other - self.to_pandas())
+        elif isinstance(other, (ss.date, dt.date, dt.datetime)): # As date - date, so the same interval gives the same calendar duration
+            return ss.date(other) - self
         else:
             errormsg = f'Attempted to subtract "{self}" from "{other}" ({type(other)}), which is not supported. Only dates can be subtracted from dates e.g., datetime.date(2020, 1, 1) - ss.date(2010), which will return ss.datedur.'
             raise TypeError(errormsg)
 
-    def __lt__(self, other):
+    def _compare(self, other, op):
+        """ Compare with a number as a year, with each element of an array, and otherwise as a timestamp """
         if sc.isnumber(other):
-            return self.to_year() < other
+            return op(self.to_year(), other)
         elif isinstance(other, np.ndarray):
-            return np.vectorize(self.__lt__)(other)
+            return np.vectorize(lambda x: self._compare(x, op))(other)
         else:
-            return super().__lt__(other)
+            return getattr(pd.Timestamp, f'__{op.__name__}__')(self, other)
 
-    def __gt__(self, other):
-        if sc.isnumber(other):
-            return self.to_year() > other
-        elif isinstance(other, np.ndarray):
-            return np.vectorize(self.__gt__)(other)
-        else:
-            return super().__gt__(other)
-
-    def __le__(self, other):
-        if sc.isnumber(other):
-            return self.to_year() <= other
-        elif isinstance(other, np.ndarray):
-            return np.vectorize(self.__le__)(other)
-        else:
-            return super().__le__(other)
-
-    def __ge__(self, other):
-        if sc.isnumber(other):
-            return self.to_year() >= other
-        elif isinstance(other, np.ndarray):
-            return np.vectorize(self.__ge__)(other)
-        else:
-            return super().__ge__(other)
-
-    def __eq__(self, other):
-        if sc.isnumber(other):
-            return self.to_year() == other
-        elif isinstance(other, np.ndarray):
-            return np.vectorize(self.__eq__)(other)
-        else:
-            return super().__eq__(other)
-
-    def __ne__(self, other):
-        if sc.isnumber(other):
-            return self.to_year() != other
-        elif isinstance(other, np.ndarray):
-            return np.vectorize(self.__ne__)(other)
-        else:
-            return super().__ne__(other)
+    def __lt__(self, other): return self._compare(other, operator.lt)
+    def __gt__(self, other): return self._compare(other, operator.gt)
+    def __le__(self, other): return self._compare(other, operator.le)
+    def __ge__(self, other): return self._compare(other, operator.ge)
+    def __eq__(self, other): return self._compare(other, operator.eq)
+    def __ne__(self, other): return self._compare(other, operator.ne)
 
     def __hash__(self):
         # As equality with float years is implemented, this allows interoperability with dicts that use float year keys
@@ -804,7 +752,7 @@ class datedur(dur):
         Returns:
             A float representing the duration in that unit
         """
-        return sum([self.value.kwds.get(k, 0)/v for k, v in ss.time.factors[unit].unit_items.items()])
+        return sum([self.value.kwds.get(k, 0)/v for k, v in ss.time.factors[unit].items()])
 
     @property
     def years(self):
@@ -825,13 +773,6 @@ class datedur(dur):
     def days(self):
         """ Shortcut to datedur.to('days') """
         return self.to('days')
-
-    @property
-    def is_variable(self):
-        if self.value.kwds.get('years',0) or self.value.kwds.get('months',0):
-            return True
-        else:
-            return False
 
     @classmethod
     def round_duration(cls, vals=None, **kwargs):

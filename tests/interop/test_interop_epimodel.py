@@ -5,6 +5,7 @@ import copy
 import numpy as np
 import sciris as sc
 import starsim as ss
+import starsim.library as ssl
 from starsim.interop.epimodel import load_epimodel
 
 # EpiModel's introduction (lingua_franca_design/examples/epimodel/sis-network), as dump_epimodel.R writes it
@@ -45,7 +46,7 @@ def test_epimodel_netsim():
     sim = load_epimodel(sis, verbose=0)
     assert not sim.imported.incomplete, 'the introduction should import completely'
     net = sim.pars.networks
-    assert isinstance(net, ss.PartnerNet)
+    assert isinstance(net, ssl.DegreeNet)
     assert (net.pars.n_contacts, net.pars.concurrency, net.pars.max_contacts, net.pars.dur) == (0.7, 0.22, 3, 50), 'the network should have EpiModel\'s targets'
     sim.run()
     res = sim.results.sis
@@ -53,7 +54,7 @@ def test_epimodel_netsim():
     prev = res.n_I[-200:].mean() # EpiModel: 227.5, against 234 over 200 runs (its recovery in the step of infection makes it lower)
     assert 180 < prev < 290, f'the equilibrium should be near EpiModel\'s, not {prev}'
     code = sim.to_code()
-    assert 'ss.PartnerNet(n_contacts=0.7, concurrency=0.22, max_contacts=3, dur=50)' in code
+    assert 'ssl.DegreeNet(n_contacts=0.7, concurrency=0.22, max_contacts=3, dur=50)' in code
     return sim
 
 
@@ -95,7 +96,7 @@ def test_epimodel_listed():
     second['param']['inf.prob'] = 0.2
     d['runs'].append(second)
 
-    sim = load_epimodel(d, verbose=0) # Warns ss.ImportIncomplete for what is listed
+    sim = load_epimodel(d, verbose=0) # Warns ss.errors.ImportIncomplete for what is listed
     listed = sc.strjoin([k for k,why in sim.imported.incomplete])
     for key in ['gwesp', 'recovery.FUN', 'inter.eff']:
         assert key in listed, f'{key} should be listed as not translated'

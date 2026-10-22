@@ -1,20 +1,18 @@
 """
 Test Starsim features not covered by other test files
 """
-import warnings
 import pytest
 import numpy as np
 import sciris as sc
 import starsim as ss
 import starsim.library as ssl
-from starsim.migrate import migrate_text
+from starsim.interop.migrate import migrate_text
 import matplotlib.pyplot as plt
 
 sc.options.interactive = False # Assume not running interactively
 # ss.options.warnings = 'error' # For additional debugging
 
 small = 100
-medium = 1000
 
 # %% Define the tests
 
@@ -27,16 +25,9 @@ def test_microsim(do_plot=False):
     # Set beta. The first entry represents transmission risk from infected p1 -> susceptible p2
     # Need to be careful to get the ordering right. The set-up here assumes that in the simple
     # sexual  network, p1 is male and p2 is female. In the prenatal network, p1=mothers, p2=babies.
-    hiv.pars['beta'] = {'mf': [0.15, 0.10], 'prenatal': [0.2, 0]}
+    hiv.pars['beta'] = {'sexual': [0.15, 0.10], 'prenatal': [0.2, 0]}
 
-    sim = ss.Sim(
-        people=ss.People(small),
-        networks=[ss.MFNet(), ss.PrenatalNet()],
-        demographics=ss.Pregnancy(),
-        diseases=hiv,
-        copy_inputs = False, # So we can reuse hiv
-    )
-    sim.init()
+    sim = ss.Sim(n_agents=small, networks=[ss.SexualNet(), ss.PrenatalNet()], demographics=ss.Pregnancy(), diseases=hiv)
     sim.run()
 
     if do_plot:
@@ -52,15 +43,10 @@ def test_deepcopy():
     sc.heading('Testing deepcopy')
     s1 = ss.Sim(pars=dict(diseases='sir', networks=ss.RandomNet()), n_agents=small)
     s1.init()
-
     s2 = sc.dcp(s1)
-
     s1.run()
     s2.run()
-    s1.plot()
-    s2.plot()
-
-    ss.diff_sims(s1, s2, full=True)
+    ss.debugtools.diff_sims(s1, s2, full=True)
     assert np.allclose(s1.summary[:], s2.summary[:], rtol=0, atol=0, equal_nan=True)
 
     return s1, s2
@@ -71,16 +57,11 @@ def test_deepcopy_until():
     sc.heading('Testing deepcopy with until')
     s1 = ss.Sim(diseases=ss.SIR(init_prev=0.1), networks='random', n_agents=small, start=2000)
     s1.init()
-
     s1.run(until=ss.date(2005))
-
     s2 = sc.dcp(s1)
-
     s1.run()
     s2.run()
-    s1.plot()
-    s2.plot()
-
+    s1.plot() # Plotting a sim that was copied part way through
     assert np.allclose(s1.summary[:], s2.summary[:], rtol=0, atol=0, equal_nan=True)
 
     return s1, s2
@@ -89,7 +70,6 @@ def test_deepcopy_until():
 @sc.timer()
 def test_custom_imports():
     sc.heading('Testing custom imports')
-    o = sc.objdict()
 
     class MyDisease(ss.SIS):
         pass
@@ -97,11 +77,9 @@ def test_custom_imports():
     class MyNetwork(ss.RandomNet):
         pass
 
-    my_modules = [MyDisease, MyNetwork]
-
     # Make both library and custom modules searchable
-    ss.register_modules(ssl.diseases, my_modules)
-    sim = ss.Sim(n_agents=1000, diseases=['hiv', 'mydisease'], networks='mynetwork')
+    ss.register_modules(ssl.diseases, [MyDisease, MyNetwork])
+    sim = ss.Sim(n_agents=small, diseases=['hiv', 'mydisease'], networks='mynetwork')
     sim.run()
 
     # A method of a disease written as code, on a declared one, would never be called (before, it was silently ignored)
@@ -110,7 +88,7 @@ def test_custom_imports():
             def set_prognoses(self, uids, sources=None):
                 pass
 
-    return o
+    return sim
 
 
 @sc.timer()
@@ -135,49 +113,19 @@ class Counter(ss.Module):
     new, changes, todo = migrate_text(old)
     assert 'new_events[self.ti + 1]' in new # A result written in step() goes at the end of the step
 
-    # Run both: the Starsim 3 code silently sees nothing, with a warning; the migrated code sees every event
+    # Run both: the Starsim 3 code silently sees nothing; the migrated code sees every event
     for text, seen in [(old, 0), (new, 50)]:
         scope = {}
         exec(text, scope)
-        sim = ss.Sim(n_agents=100, modules=scope['Counter'](), start=0, stop=10, verbose=0)
-        if seen:
-            sim.run()
-        else:
-            with pytest.warns(RuntimeWarning, match='time index'):
-                sim.run()
+        sim = ss.Sim(n_agents=100, modules=scope['Counter'](), start=0, stop=10, verbose=0).run()
         assert sim.results.counter.seen.sum() == seen
 
-    # A subclass of a Starsim delivery: Starsim's own results are not flagged, but a result the subclass writes the Starsim 3 way is
-    S, I = ss.states('S I')
-    def make_screen(cls):
-        d = ss.Disease(infection=S >> I @ ss.permonth(0.3)*I, recovery=I >> S @ ss.months(6), init_prev=0.1, name='d')
-        return ss.Sim(d, interventions=cls(ss.Diagnostic(sensitivity=0.9), coverage=ss.probperyear(0.5), name='scr'), n_agents=500, start=2000, stop=2005, dt=ss.months(1), verbose=0)
-    class MyScreen(ss.screen):
-        pass
-    class OldScreen(ss.screen):
-        def init_results(self):
-            super().init_results()
-            self.define_results(ss.Result('steps', dtype=int, scale=False))
-        def step(self):
-            super().step()
-            self.results.steps[self.ti] += 1 # Starsim 3: the step's index
-    class AliasScreen(ss.screen): # A copy of one of Starsim's results under an older name, as STIsim keeps its Starsim 3 names
-        def finalize_results(self):
-            super().finalize_results()
-            self.results += ss.Result('new_tests', values=sc.dcp(self.results.delivered.values), timevec=self.results.delivered.timevec, module=self.name)
-            self.results += ss.Result('new_doses', values=14*self.results.delivered.values, timevec=self.results.delivered.timevec, module=self.name) # Or a multiple of one
-    for cls in [MyScreen, AliasScreen]:
-        with warnings.catch_warnings():
-            warnings.simplefilter('error', RuntimeWarning)
-            make_screen(cls).run()
-    with pytest.warns(RuntimeWarning, match=r'time index \(scr\.steps\)'):
-        make_screen(OldScreen).run()
-
-    # Renames, a fractional verbose, and Starsim 3's diseases written as code (a subclass of ss.Disease is unchanged)
+    # Renames, a fractional verbose, and Starsim 3's diseases written as code
     text, changes, todo = migrate_text("p = ss.time_prob(0.1); pars = dict(verbose=1/12)\nclass MySIS(ss.SIS): pass\nclass MyNCD(ss.Disease): pass")
-    assert text == "p = ss.probperyear(0.1); pars = dict(verbose=1)\nclass MySIS(ssl.AgentSIS): pass\nclass MyNCD(ss.Disease): pass"
+    assert text == "p = ss.probperyear(0.1); pars = dict(verbose=1)\nclass MySIS(ssl.AgentSIS): pass\nclass MyNCD(ss.Infection): pass"
     assert migrate_text('ss.link_dists(obj, sim)')[0] == 'ss.distributions.link_dists(obj, sim)' # Internal helpers are in their submodules
     assert 'ssl.AgentSIR' in migrate_text('sir = ss.SIR(beta=0.1)')[2][0][1] # A use of ss.SIR is flagged, not rewritten
+    assert 'sim.calibrate()' in migrate_text('calib = ss.Calibration(sim, calib_pars)')[2][0][1] # Removed names are flagged with what to use instead
     for old in ['ss.demographics.Pregnancy', 'ss.LegacyPregnancy']: # Starsim 3's pregnancy, by its old path or its prerelease name
         assert migrate_text(f'preg = {old}(fertility_rate=20)')[0] == 'preg = ss.Pregnancy(fertility_rate=20)'
     todo = migrate_text('class MyPreg(ss.Pregnancy):\n    def make_embryos(self, conceive_uids):\n        return super().make_embryos(conceive_uids)')[2]
@@ -188,13 +136,15 @@ class Counter(ss.Module):
     assert migrate_text('ppl = ss.people.People(10)')[0] == 'ppl = ss.people.People(10)' # Starsim 3's module, left alone
     assert migrate_text('class Pap(ss.Test):\n    pass\nok = isinstance(t, ss.Test)')[0] == 'class Pap(ss.Diagnostic):\n    pass\nok = isinstance(t, ss.Diagnostic)' # ss.Test as a name, e.g. a base class
     assert migrate_text('ss.Tests(); ss.Testing')[0] == 'ss.Tests(); ss.Testing'
+    todo = migrate_text('class screening(ss.BaseScreening, ss.RoutineDelivery): pass\ntx = ss.treat_num(product=ss.Tx(df=df), max_capacity=50)')[2] # Starsim 3's delivery classes and products are flagged
+    assert [line for line,msg in todo] == [1, 2, 2] and 'queue=True' in todo[1][1] + todo[2][1]
     text, changes, todo = migrate_text("hiv = ssl.HIV(beta={'mf': [0.08, 0.04], 'prenatal': [0.2, 0], 'msm': [0.1, 0.1]})") # A beta pair has direction names (N7, HP3)
     assert text == "hiv = ssl.HIV(beta={'mf': ss.peract(m2f=0.08, f2m=0.04), 'prenatal': 0.2, 'msm': [0.1, 0.1]})" and any('"msm"' in msg for line,msg in todo)
 
-    # A test's follow-ups nested in it (Starsim 4's prereleases) become steps of their own, in a cascade under the same variable
-    text = migrate_text("screening = ss.screen(ss.Test(), interval=7, on_positive=ss.treat(ss.Treatment()))")[0]
-    assert text.splitlines() == ['screening = ss.screen(ss.Diagnostic(), interval=7)', 'screening_positive = ss.treat(ss.Treatment(), who=screening.positive)',
-                                 "screening = ss.cascade(screening, screening_positive, name='screening_cascade')"]
+    # A test's follow-ups nested in it (Starsim 4's prereleases) become steps of their own, flagged to add to the interventions
+    text, changes, todo = migrate_text("screening = ss.screen(ss.Test(), interval=7, on_positive=ss.treat(ss.Treatment()))")
+    assert text.splitlines() == ['screening = ss.screen(ss.Diagnostic(), interval=7)', 'screening_positive = ss.treat(ss.Treatment(), who=screening.positive)']
+    assert any('screening_positive' in msg for line,msg in todo)
 
     # An override of set_prognoses() that skips counting the infections, as before Starsim 3.6
     class Quiet(ssl.AgentSIS):

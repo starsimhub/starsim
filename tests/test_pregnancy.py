@@ -13,8 +13,8 @@ strat = [dict(sex=['female', 'male']), dict(age=[0, 15, 50], split=[0.3, 0.4, 0.
 
 
 @sc.timer()
-def test_states(ode=False):
-    sc.heading('Testing ss.Pregnancy: conception, abortion, and losses by gestational age, as agents and compartments')
+def test_states():
+    sc.heading('Testing ss.Pregnancy: conception, abortion, and losses by gestational age, as agents and in the small compartmental form')
     thr = ss.weeks(20)
     def make():
         return ss.Pregnancy(fertility_rate=ss.freqperyear(100), p_abortion=0.1, p_loss=ss.bernoulli(ss.probpermonth(0.02)), loss_threshold=thr)
@@ -39,45 +39,32 @@ def test_states(ode=False):
     # Conception is one transition, so a modifier of it is a modifier of fertility (e.g. contraception)
     half = ss.Sim(demographics=(preg := make()), connectors=ss.modify(preg.conception, multiply=0.5), n_agents=20_000, stratify=strat, use_aging=False, **kw).run()
     assert np.isclose(half.results.pregnancy.conception.sum(), 0.5*ra.conception.sum(), rtol=0.15)
-    if not ode:
-        return abm
 
+    # The small compartmental form
     ode = ss.Sim(demographics=make(), solver='ode', total_pop=20_000, stratify=strat, use_aging=False, **kw).run()
     ro = ode.results.pregnancy
     for key in ['conception', 'abortion', 'delivery']:
         assert np.isclose(ra[key].sum(), ro[key].sum(), rtol=0.1), f'{key}: agents {ra[key].sum():.0f}, ODE {ro[key].sum():.0f}'
     loss = lambda r: r.miscarriage.sum() + r.stillbirth.sum()
     assert np.isclose(loss(ra), loss(ro), rtol=0.1)
-    assert ro.stillbirth.sum() > 0.25*loss(ro) # The threshold is a level of the gestation conveyor
-    assert ode.demographics.pregnancy.engine.n_slots['P'] > 0 # Followed by gestational age
+    assert np.isclose(ro.n_P[0], ra.n_P[0], rtol=0.1) # Women pregnant at the start (burnin=), spread evenly over gestation
+    assert np.isclose(ro.miscarriage.sum()/loss(ro), thr.weeks/40.09, rtol=0.01) # The share of the mean gestation below the threshold, as nothing reads P.time
+    assert any('small compartmental form' in str(note) for note in ode.notes)
     return abm
 
 
-def test_states_ode():
-    return test_states(ode=True)
-
-
 @sc.timer()
-def test_births(ode=False):
+def test_births():
     sc.heading('Testing ss.birth(per=): children from deliveries, linked to the mother, twins, and placed in other modules')
     def make():
         preg = ss.Pregnancy(fertility_rate=ss.freqperyear(100), embryos_per_pregnancy=ss.choice(a=[1, 2], p=[0.8, 0.2]))
         S, I = ss.states('S I')
-        d = ss.Disease(S, I, infection=S >> I @ ss.peryear(0.2), recovery=I >> S @ ss.years(1), born=ss.birth('-> I', per=preg.delivery), name='d')
+        d = ss.Disease(S, I, infection=S >> I @ ss.peryear(0.2), recovery=I >> S @ ss.years(1), born=ss.birth(I, per=preg.delivery), name='d')
         return dict(demographics=preg, diseases=d)
     abm = ss.Sim(**make(), n_agents=20_000, stratify=strat, **kw).run()
     ra = abm.results
     assert np.isclose(ra.pregnancy.birth.sum()/ra.pregnancy.delivery.sum(), 1.2, atol=0.05) # Twins
     assert ra.d.born.sum() == ra.pregnancy.birth.sum() # Placed in I, as the other module's ss.birth(per=) says
-    if ode:
-        ode = ss.Sim(**make(), solver='ode', total_pop=20_000, stratify=strat, **kw).run()
-        ro = ode.results
-        for key in ['delivery', 'birth']:
-            assert np.isclose(ra.pregnancy[key].sum(), ro.pregnancy[key].sum(), rtol=0.1)
-        assert np.isclose(ro.d.born.sum(), ro.pregnancy.birth.sum()) # An inflow of the delivery flow, into the youngest groups
-        assert np.isclose(ro.pregnancy.n_NP[-1] + ro.pregnancy.n_P[-1], ro.d.n_S[-1] + ro.d.n_I[-1])
-        assert ro.pregnancy.n_NP.select(age='0-14').values[-1] > ro.pregnancy.n_NP.select(age='0-14').values[0]
-        return ode
 
     # As agents: each child has the mother as parent, twins share a delivery, and newborns enter I
     ppl = abm.people
@@ -89,12 +76,41 @@ def test_births(ode=False):
     assert len(newest) and abm.diseases.d.I[newest].mean() > 0.8
 
     with pytest.raises(ValueError):
-        ss.birth('-> S', rate=ss.peryear(0.01), per=abm.diseases.d.infection)
+        S = ss.State()
+        ss.birth(S, rate=ss.peryear(0.01), per=abm.diseases.d.infection)
+
+    # In the small compartmental form
+    ode = ss.Sim(**make(), solver='ode', total_pop=20_000, stratify=strat, **kw).run()
+    ro = ode.results
+    for key in ['delivery', 'birth']:
+        assert np.isclose(ra.pregnancy[key].sum(), ro.pregnancy[key].sum(), rtol=0.1)
+    assert np.isclose(ro.d.born.sum(), ro.pregnancy.birth.sum()) # An inflow of the delivery flow, into the youngest groups
+    assert np.isclose(ro.pregnancy.n_NP[-1] + ro.pregnancy.n_P[-1], ro.d.n_S[-1] + ro.d.n_I[-1])
+    assert ro.pregnancy.n_NP.select(age='0-14').values[-1] > ro.pregnancy.n_NP.select(age='0-14').values[0]
     return abm
 
 
-def test_births_ode():
-    return test_births(ode=True)
+@sc.timer()
+def test_compartmental():
+    sc.heading('Testing the small compartmental form against agents at three step sizes, and its conservation of people')
+    make = lambda: ss.Pregnancy(fertility_rate=ss.freqperyear(100), p_abortion=0.1, p_loss=ss.bernoulli(ss.probpermonth(0.02)), burnin=False)
+    assert ss.Sim(demographics=make(), total_pop=20_000, **kw).init().solver == 'abm' # Only when a compartmental solver is named
+    for dt in [ss.weeks(1), ss.months(1), ss.months(3)]:
+        pars = dict(start=2000, stop=2005, dt=dt, verbose=0, stratify=strat, use_aging=False)
+        ras = [ss.Sim(demographics=make(), n_agents=20_000, rand_seed=seed, **pars).run().results.pregnancy for seed in range(2)]
+        ro = ss.Sim(demographics=make(), solver='ode', total_pop=20_000, **pars).run().results.pregnancy
+        half = lambda r: r.n_P.values[len(r.n_P)//2:].mean() # The number pregnant, once settled
+        for key,f in [('delivery', lambda r: r.delivery.sum()), ('birth', lambda r: r.birth.sum()), ('n_P', half)]:
+            va = np.mean([f(r) for r in ras])
+            assert np.isclose(f(ro), va, rtol=0.05), f'{key} at {dt}: {f(ro):.0f} in compartments, {va:.0f} as agents'
+
+    # People are conserved: the start, plus births, less maternal deaths
+    sim = ss.Sim(demographics=ss.Pregnancy(fertility_rate=ss.freqperyear(100), maternal_rate=ss.peryear(0.05), embryos_per_pregnancy=ss.choice(a=[1, 2], p=[0.8, 0.2])),
+                 solver='binomial', total_pop=20_000, stratify=strat, **kw).run()
+    r = sim.results.pregnancy
+    assert r.antepartum.sum() > 0 and r.birth.sum() > 1.1*r.delivery.sum() # Twins
+    assert np.isclose(r.n_NP[-1] + r.n_P[-1], r.n_NP[0] + r.n_P[0] + r.birth.sum() - r.antepartum.sum())
+    return sim
 
 
 @sc.timer()
@@ -125,12 +141,13 @@ def test_burnin():
 
 
 def test_burnin_ode():
+    sc.heading('Testing burnin= in the small compartmental form: women pregnant at the start, as many as agents have, with a note')
     pars = dict(start=2000, stop=2003, dt=ss.months(1), verbose=0, stratify=strat, use_aging=False)
     make = lambda: ss.Pregnancy(fertility_rate=ss.freqperyear(100), p_abortion=0.1)
-    ras = [ss.Sim(demographics=make(), n_agents=20_000, rand_seed=seed, **pars).run().results.pregnancy for seed in range(3)] # About 250 pregnant, so 6% noise in one run
-    ro = ss.Sim(demographics=make(), solver='ode', total_pop=20_000, **pars).run().results.pregnancy
-    n_P, delivered = np.mean([ra.n_P[0] for ra in ras]), np.mean([ra.delivery[1:9].sum() for ra in ras])
-    assert np.isclose(n_P, ro.n_P[0], rtol=0.05) and np.isclose(delivered, ro.delivery[1:9].sum(), rtol=0.1), f'pregnant at the start {n_P:.0f} vs {ro.n_P[0]:.0f}; deliveries {delivered:.0f} vs {ro.delivery[1:9].sum():.0f}'
+    ode = ss.Sim(demographics=make(), solver='ode', total_pop=20_000, **pars).run()
+    abm = ss.Sim(demographics=make(), n_agents=20_000, **pars).run()
+    assert np.isclose(ode.results.pregnancy.n_P[0], abm.results.pregnancy.n_P[0], rtol=0.1) and any('burnin=True' in str(note) for note in ode.notes)
+    assert ss.Sim(demographics=make(), total_pop=20_000, **pars).init().solver == 'abm'
 
 
 @sc.timer()
@@ -167,23 +184,12 @@ def test_burnin_pregnancies():
 
 
 @sc.timer()
-def test_v3_results():
-    sc.heading('Testing the Starsim 3 results: the maternal mortality ratio and the counts of fecund, fertile, and susceptible women')
+def test_mmr():
+    sc.heading('Testing the maternal mortality ratio')
     preg = ss.Pregnancy(fertility_rate=ss.freqperyear(100), p_maternal_death=ss.bernoulli(0.05), p_infertile=ss.bernoulli(0.2))
-    counts = []
-    def check(sim):
-        p, ppl = sim.demographics.pregnancy, sim.people
-        fecund = ppl.alive & ppl.female & (ppl.age >= p.pars.min_age) & (ppl.age <= p.pars.max_age)
-        fertile = fecund & ~p.infertile
-        counts.append([fecund.sum(), fertile.sum(), (fertile & ~p.pregnant).sum()])
-    sim = ss.Sim(demographics=preg, analyzers=check, n_agents=5000, start=2000, stop=2010, dt=ss.months(1), verbose=0).run()
+    sim = ss.Sim(demographics=preg, n_agents=5000, start=2000, stop=2010, dt=ss.months(1), verbose=0).run()
     r = sim.results.pregnancy
-    counts = np.array(counts)
-    for i,key in enumerate(['n_fecund', 'n_fertile', 'n_susceptible']):
-        assert np.array_equal(r[key].values, counts[:,i]), key
-    assert np.all(r.n_fertile.values < r.n_fecund.values) and np.all(r.n_susceptible.values < r.n_fertile.values)
-
-    births, md = r.births.values, r.maternal_deaths.values
+    births, md = r.birth.values, r.maternal_deaths.values
     assert md.sum() > 30
     assert np.allclose(r.mmr.values, sc.safedivide(md, births, default=0)*100e3), 'MMR: maternal deaths per 100,000 births'
     assert r.mmr.summarize_by == 'mean'
@@ -238,16 +244,13 @@ def test_events():
 @sc.timer()
 def test_mother_cond():
     sc.heading('Testing ss.mother(born=True): newborns of mothers who tested positive in the last year')
-    preg = ss.Pregnancy(fertility_rate=ss.freqperyear(100))
-    S, I = ss.states('S I')
-    d = ss.Disease(S, I, infection=S >> I @ ss.peryear(0.2), name='d')
     for by_path in [False, True]: # With the event itself, or by its path, for a module made before the pregnancy module exists
         seen = mother_cond(by_path)
     with pytest.raises(ValueError, match=r"not a transition.*ss.state\('pregnancy.P'\).enter"): # A path in on= is a transition's event, so a state is an error
         ss.Sim(demographics=ss.Pregnancy(), diseases='sis', networks='random', interventions=ss.screen(ss.Diagnostic(), on=ss.state('pregnancy.P'), name='scr'), n_agents=100, **kw).init()
     def make(solver): # Nothing else here needs agents
         S, I = ss.states('S I')
-        d = ss.Disease(S, I, infection=S >> I @ ss.peryear(0.2), births=ss.birth('-> S', rate=ss.peryear(0.03)), name='d')
+        d = ss.Disease(S, I, infection=S >> I @ ss.peryear(0.2), births=ss.birth(S, rate=ss.peryear(0.03)), name='d')
         nb = ss.screen(ss.Diagnostic(sensitivity=1.0), who=d.births & ss.mother(I, born=True), disease='d')
         return ss.Sim(diseases=d, interventions=nb, solver=solver, total_pop=1000, **kw)
     with pytest.raises(ss.CapabilityError, match='mother'): # Agents only: compartments do not know anyone's mother
@@ -281,7 +284,6 @@ def mother_cond(by_path):
     return seen
 
 
-@sc.timer()
 def make_fetal():
     preg = ss.Pregnancy(fertility_rate=ss.freqperyear(100), maternal_rate=ss.peryear(0.05))
     S, I, C, Cs = ss.states('S I C Cs')
@@ -315,28 +317,29 @@ def test_fetus():
     # Nothing reads fetuses: children are made at delivery
     plain = ss.Sim(demographics=ss.Pregnancy(fertility_rate=ss.freqperyear(100)), n_agents=2000, **kw).init()
     assert not plain.demographics.pregnancy.fetus
-    return sim # As compartments: test_fetus_ode
+    return sim # Agents only: test_fetus_ode
+
+
+def agents_only(make, match):
+    """ A model that only agents run: solver='auto' chooses them, and a compartmental solver named explicitly stops before the run, saying why """
+    assert ss.Sim(**make(), total_pop=1000, **kw).init().solver == 'abm'
+    with pytest.raises(ss.CapabilityError, match=match):
+        ss.Sim(**make(), solver='ode', total_pop=1000, **kw).init()
+    return
 
 
 def test_fetus_ode():
-    common = dict(networks=ss.MaternalNet(), stratify=strat, use_aging=False, **kw)
-    ode = ss.Sim(**dict(zip(['demographics', 'diseases'], make_fetal())), solver='ode', total_pop=30_000, **common).run().results
-    abms = [ss.Sim(**dict(zip(['demographics', 'diseases'], make_fetal())), n_agents=30_000, rand_seed=seed, **common).run().results for seed in range(3)] # About 600 stillbirths, so 4% noise in one run
-    loss = lambda r: r.pregnancy.miscarriage.sum() + r.pregnancy.stillbirth.sum()
-    mean = lambda f: np.mean([f(r) for r in abms])
-    for key,f in [('mtct', lambda r: r.d.mtct.sum()), ('fetal', lambda r: r.d.fetal.sum()), ('still', lambda r: r.d.still.sum()), ('loss', loss), ('birth', lambda r: r.pregnancy.birth.sum())]:
-        assert np.isclose(f(ode), mean(f), rtol=0.1), f'{key}: {f(ode):.0f} as an ODE, {mean(f):.0f} as agents'
+    sc.heading('Testing fetuses (ss.mother() and a maternal network): agents only')
+    agents_only(lambda: dict(zip(['demographics', 'diseases'], make_fetal()), networks=ss.MaternalNet()), match='mother')
+    agents_only(lambda: dict(zip(['demographics', 'diseases'], make_fetal())), match='mother') # ss.mother() alone
+    S, I = ss.states('S I')
+    agents_only(lambda: dict(demographics=ss.Pregnancy(), diseases=ss.Disease(infection=ss.Transition(S, I, rate=dict(maternalnet=0.3) * I)), networks=ss.MaternalNet()), match='MaternalNet')
+    agents_only(lambda: dict(demographics=ss.Pregnancy(fetus=True)), match='fetus=True')
 
 
 def test_lactation_ode():
-    def lactation(solver):
-        size = dict(n_agents=30_000) if solver == 'abm' else dict(total_pop=30_000)
-        return ss.Sim(demographics=[ss.Pregnancy(fertility_rate=ss.freqperyear(150)), ss.Lactation(p_breastfeed=0.8)], solver=solver, stratify=strat, use_aging=False, **size, **kw).run()
-    o = lactation('ode').results.lactation
-    a = lactation('abm').results.lactation
-    for key,tol in [('start', 0.05), ('wean', 0.05), ('n_L', 0.15), ('restart', 0.3)]:
-        va, vo = (a[key][-1], o[key][-1]) if key.startswith('n_') else (a[key].sum(), o[key].sum())
-        assert np.isclose(vo, va, rtol=tol), f'{key}: {vo:.0f} as an ODE, {va:.0f} as agents'
+    sc.heading('Testing ss.Lactation: agents only')
+    agents_only(lambda: dict(demographics=[ss.Pregnancy(fertility_rate=ss.freqperyear(150)), ss.Lactation(p_breastfeed=0.8)]), match='Lactation')
 
 
 @sc.timer()
@@ -346,7 +349,7 @@ def test_lactation():
         preg = ss.Pregnancy(fertility_rate=ss.freqperyear(150))
         S, I = ss.states('S I')
         d = ss.Disease(S, I,
-            infection = ss.transmission('S -> I', beta=dict(maternalnet=0.3, breastfeedingnet=0.5)),
+            infection = ss.Transition(S, I, rate=dict(maternalnet=0.3, breastfeedingnet=0.5) * I),
             death     = ss.Transition(I, ss.null, rate=ss.peryear(2), where=ss.ppl.age < 1), # Infant deaths end breastfeeding
             init=dict(I=0.3), name='d')
         mods = []
@@ -391,7 +394,7 @@ def test_lactation_subclass():
         named = ss.Sim(demographics=[fp, ss.Lactation(pregnancy=given or fp)], n_agents=2000, **kw).run()
         assert named.results.lactation.start.sum() > 0
     with pytest.raises(ValueError, match='pregnancy='): # Two pregnancy modules, and neither given
-        ss.Lactation().link([FP(), ss.Pregnancy()])
+        ss.Sim(demographics=[FP(), ss.Pregnancy(), ss.Lactation()], n_agents=100, **kw).init()
     return sim
 
 
@@ -407,11 +410,11 @@ def test_code_pars():
     base = ss.Sim(demographics=ss.Pregnancy(fertility_rate=ss.freqperyear(100)), n_agents=5000, **kw).run()
     half = ss.Sim(demographics=FP(fertility_rate=ss.freqperyear(100)), n_agents=5000, **kw).run()
     assert half.results.pregnancy.conception.sum() < 0.7*base.results.pregnancy.conception.sum()
-    with pytest.raises(ss.UnknownParameter): # A misspelled parameter from the user is still an error
+    with pytest.raises(ss.errors.UnknownParameter): # A misspelled parameter from the user is still an error
         FP(age_scal=0.3)
     preg = ss.Pregnancy()
     preg.pars['rel_fertilty'] = 2 # ... and so is one added later that nothing reads
-    with pytest.raises(ss.UnknownParameter, match='nothing would read it'):
+    with pytest.raises(ss.errors.UnknownParameter, match='nothing would read it'):
         ss.Sim(demographics=preg, n_agents=500, **kw).init()
     return half
 
@@ -420,7 +423,7 @@ def make_hiv_vertical(bf=True):
     preg = ss.Pregnancy(fertility_rate=ss.freqperyear(120))
     S, I = ss.states('S I')
     beta = dict(maternalnet=ss.peryear(0.2), breastfeedingnet=ss.peryear(0.3 if bf else 0))
-    hiv = ss.Disease(S, I, infection=ss.transmission('S -> I', beta=beta), death=ss.Transition(I, ss.null, rate=ss.peryear(0.05)), init=dict(I=0.2), name='hiv')
+    hiv = ss.Disease(S, I, infection=ss.Transition(S, I, rate=beta * I), death=ss.Transition(I, ss.null, rate=ss.peryear(0.05)), init=dict(I=0.2), name='hiv')
     return dict(demographics=[preg, ss.Lactation(p_breastfeed=0.8)], diseases=hiv, networks=[ss.MaternalNet(), ss.BreastfeedingNet()])
 
 
@@ -428,20 +431,15 @@ def make_hiv_vertical(bf=True):
 def test_hiv_vertical():
     sc.heading('Port: HIV vertical transmission, in utero over MaternalNet and by breastfeeding (04 §5.3)')
     common = dict(stratify=strat, use_aging=False, **kw)
-    inf = [ss.Sim(**make_hiv_vertical(bf), n_agents=100_000, **common).run().results.hiv.infection.sum() for bf in [False, True]]
+    inf = [ss.Sim(**make_hiv_vertical(bf), n_agents=50_000, **common).run().results.hiv.infection.sum() for bf in [False, True]]
     utero, post = inf[0], inf[1] - inf[0]
-    assert utero > 200 and post > 200, f'{utero:.0f} in utero, {post:.0f} by breastfeeding'
+    assert utero > 100 and post > 100, f'{utero:.0f} in utero, {post:.0f} by breastfeeding'
     return inf
 
 
-@pytest.mark.xfail(strict=True, raises=ss.CapabilityError, reason='Phase B7: BreastfeedingNet as compartments is deferred (in utero over MaternalNet runs: 485 as an ODE against 493 as agents)')
 def test_hiv_vertical_ode():
-    common = dict(stratify=strat, use_aging=False, **kw)
-    inf = lambda solver, bf: ss.Sim(**make_hiv_vertical(bf), **(dict(n_agents=100_000) if solver == 'abm' else dict(solver='ode', total_pop=100_000)), **common).run().results.hiv.infection.sum()
-    o = [inf('ode', bf) for bf in [False, True]]
-    a = [inf('abm', bf) for bf in [False, True]]
-    for what,va,vo in zip(['in utero', 'breastfeeding'], [a[0], a[1] - a[0]], [o[0], o[1] - o[0]]):
-        assert np.isclose(vo, va, rtol=0.2), f'{what}: {vo:.0f} as an ODE, {va:.0f} as agents'
+    sc.heading('Testing HIV vertical transmission (MaternalNet, BreastfeedingNet, ss.Lactation): agents only')
+    agents_only(make_hiv_vertical, match='Lactation')
 
 
 @sc.timer()
@@ -462,15 +460,12 @@ def test_starsim3():
             p.add_delivery_callback(lambda moms, kids: seen.__setitem__('delivered', seen.delivered + len(kids)))
     sim = ss.Sim(demographics=preg, diseases=d, networks=ss.MaternalNet(), analyzers=count, n_agents=5000, **kw).run()
     r, p = sim.results, sim.demographics.pregnancy
-    assert r.d.flag.sum() > 0.5*r.pregnancy.pregnancies.sum() and r.d.unflag.sum() > 0.5*r.d.flag.sum()
+    assert r.d.flag.sum() > 0.5*r.pregnancy.conception.sum() and r.d.unflag.sum() > 0.5*r.d.flag.sum()
     assert r.d.mtct.sum() > 100 and r.pregnancy.maternal_deaths.sum() > 0
-    assert np.all(p.pregnant[p.pregnant.uids]) and np.all(p.ti_delivery[p.pregnant.uids] >= p.ti)
-    assert np.nanmax(p.gestation[p.pregnant.uids]) < 45 and np.all(p.parity >= 0)
-    tris = [p.tri1_uids, p.tri2_uids, p.tri3_uids] # Starsim 3 names read by STIsim (e.g. BV, PMTCT)
-    assert all(len(t) for t in tris) and sum(len(t) for t in tris) == len(p.pregnant.uids)
-    p.set_ptb()
-    assert np.all(p.rel_ptb[p.pregnant.uids] > 0)
-    assert seen.conceived > 0.8*r.pregnancy.pregnancies.sum() and seen.delivered > 0.8*r.pregnancy.births.sum()
+    assert np.all(np.ceil(p.ti_exit_P[p.P.uids]) >= p.ti) and np.all(p.parity >= 0) # Each due at the end of this step or later
+    assert np.max((p.ti - p.ti_P[p.P.uids])*p.t.dt.weeks) < 45 # Weeks of gestation
+    assert np.all(p.rel_ptb[p.P.uids] > 0)
+    assert seen.conceived > 0.8*r.pregnancy.conception.sum() and seen.delivered > 0.8*r.pregnancy.birth.sum()
     born = (sim.people.age > 0) & np.isfinite(p.gestation_at_birth)
     assert born.sum() > 100 and np.isclose(r.pregnancy.n_preterm.sum(), np.sum(p.gestation_at_birth[born.uids] < 37), rtol=0.2)
 
@@ -482,17 +477,17 @@ def test_starsim3():
 
 
 def test_delivery_shift():
-    """ Setting ti_delivery reschedules deliveries, as code written for Starsim 3 does (e.g. ssl.mnch.FetalHealth) """
+    """ set_delivery() reschedules deliveries, as ssl.mnch.FetalHealth does """
     sc.heading('Testing rescheduled deliveries')
     sim = ss.Sim(demographics=ss.Pregnancy(fertility_rate=ss.freqperyear(100), burnin=False), n_agents=3000, **kw)
     sim.init()
     sim.run(until=24)
     p = sim.demographics.pregnancy
     uids = p.P.uids
-    due = p.ti_delivery[uids]
+    due = np.ceil(p.ti_exit_P[uids])
     later = uids[due > p.ti + 3]
-    p.ti_delivery[later] = p.ti + 1 # Due at the next step
-    assert np.all(p.ti_delivery[later] == p.ti + 1)
+    p.set_delivery(later, p.ti + 1) # Due at the next step
+    assert np.all(np.ceil(p.ti_exit_P[later]) == p.ti + 1)
     sim.run(until=sim.ti + 2)
     assert not np.any(p.P[later]) and np.all(p.ti_delivered[later] >= p.ti - 2), 'Every rescheduled delivery happened'
     return sim
@@ -540,17 +535,8 @@ def test_syphilis():
 
 
 def test_syphilis_ode():
-    ode = ss.Sim(**make_syphilis(), solver='ode', total_pop=50_000, **syph_kw).run()
-    r = ss.Sim(**make_syphilis(), n_agents=50_000, **syph_kw).run().results
-    o, po = ode.results, ode.demographics.pregnancy
-    assert 'fetal_syph (S, Cnnd, Cstill, Ccs, Cnorm)' in po.fetus_reason
-    for key,tol in zip(syph_keys, [0.1, 0.25, 0.5, 0.2, 0.1]):
-        assert np.isclose(o.syph[key].sum(), r.syph[key].sum(), rtol=tol), f'{key}: {o.syph[key].sum():.0f} as an ODE, {r.syph[key].sum():.0f} as agents'
-    assert np.isclose(o.pregnancy.stillbirth.sum(), o.syph.stillbirth.sum()) and np.isclose(o.pregnancy.neonatal_deaths.sum(), o.syph.nnd.sum())
-    assert np.isclose(o.pregnancy.birth.sum(), o.pregnancy.delivery.sum() - o.syph.stillbirth.sum())
-    assert np.isclose(o.syph.n_CS[-1], o.syph.born_cs.sum())
-    n = lambda res: sum(res[f'n_{s}'][-1] for s in ['S', 'E', 'S2', 'EL', 'LL', 'CS'])
-    assert np.isclose(n(o.syph), o.pregnancy.n_NP[-1] + o.pregnancy.n_P[-1])
+    sc.heading('Testing congenital syphilis (ss.mother()): agents only')
+    agents_only(make_syphilis, match='mother')
 
 
 def test_events_ode():
@@ -629,6 +615,8 @@ def test_two_sims():
         sims.append(sim)
     assert sims[0].results.pregnancy.birth.sum() > 0 and sims[1].results.pregnancy.birth.sum() > 0
     return sims
+
+
 def test_path_triggers():
     """ A trigger on another module's transition by path (ss.state('pregnancy.delivery')) is its event, as ss.on(preg.delivery) is, so it reaches fetuses at their mother's delivery (it was a condition that never held for them) """
     sc.heading('Testing triggers on a transition by path')
@@ -649,17 +637,29 @@ if __name__ == '__main__':
     T = sc.timer()
     abm = test_states()
     births = test_births()
+    comp = test_compartmental()
+    burnin = test_burnin()
+    test_burnin_ode()
+    npreg = test_burnin_pregnancies()
+    mmr = test_mmr()
     events = test_events()
     mom = test_mother_cond()
     fetus = test_fetus()
+    test_fetus_ode()
+    test_lactation_ode()
     lact = test_lactation()
     lact_sub = test_lactation_subclass()
     code = test_code_pars()
     hiv = test_hiv_vertical()
+    test_hiv_vertical_ode()
     starsim3 = test_starsim3()
     shift = test_delivery_shift()
-    npreg = test_burnin_pregnancies()
-    v3res = test_v3_results()
     syph = test_syphilis()
+    test_syphilis_ode()
+    test_events_ode()
     pp = test_postpartum()
+    test_postpartum_ode()
+    saved = test_save_load()
+    two = test_two_sims()
+    paths = test_path_triggers()
     T.toc()

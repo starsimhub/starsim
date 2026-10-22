@@ -5,7 +5,7 @@ jupyter: python3
 
 
 
-Each Starsim module can have its own results, which get added to the full list of results in the Sim object. For example, the `ss.Pregnancy` module adds results like `sim.results.pregnancy.pregnant`, and the `ssl.HIV` module adds results like `sim.results.hiv.new_infections`. A declared disease gets a result for every state and transition automatically, and extra results (ratios, sums of states, `ss.outcome()`) are declared with the model (see [Results](basics_results.qmd)). If you are writing your own module, you can add whatever custom results you want. However, another option is to create an `Analyzer` to store results that you might need for one particular analysis but won't need all the time. An `Analyzer` is very similar to other Starsim modules in its structure, but the general idea of an analyzer is that it gets called at the end of a timestep, and reports of the state of things after everything else has been updated without changing any of the module states itself.
+Each Starsim module can have its own results, which get added to the full list of results in the Sim object. For example, the `ss.Pregnancy` module adds results like `sim.results.pregnancy.n_P` (the number pregnant), and the `ssl.HIV` module adds results like `sim.results.hiv.new_infections`. A declared disease gets a result for every state and transition automatically, and extra results (ratios, sums of states, `ss.outcome()`) are declared with the model (see [Results](basics_results.qmd)). If you are writing your own module, you can add whatever custom results you want. However, another option is to create an `Analyzer` to store results that you might need for one particular analysis but won't need all the time. An `Analyzer` is very similar to other Starsim modules in its structure, but the general idea of an analyzer is that it gets called at the end of a timestep, and reports of the state of things after everything else has been updated without changing any of the module states itself.
 
 ## When analyzers run
 
@@ -77,7 +77,7 @@ class HIV_preg(ss.Analyzer):
         sim = self.sim
         ti = self.ti # The end of the step that has just run, where its results go
         hiv = sim.diseases.hiv
-        pregnant = sim.demographics.pregnancy.pregnant
+        pregnant = sim.demographics.pregnancy.P
         newly_infected = hiv.ti_infected == ti # Infections during the step are dated at its end
         self.results['new_infections_pregnancy'][ti] = len((newly_infected & pregnant).uids)
         return
@@ -202,9 +202,9 @@ class dynamics_by_age(ss.Analyzer):
 
 # Demonstrate
 by_age = dynamics_by_age('sis.I', age_bins=(0, 10, 30, 100)) # People's states are named by module and state
-sim = ss.Sim(diseases='sis', networks='random', analyzers=by_age, copy_inputs=False)
+sim = ss.Sim(diseases='sis', networks='random', analyzers=by_age)
 sim.run()
-by_age.plot()
+sim.analyzers[0].plot() # The sim's copy of the analyzer, which ran
 ```
 
 Since we are using a random network, we wouldn't expect any differences in transmission by age, so what you're seeing here is the difference in age bin size.

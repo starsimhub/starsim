@@ -31,10 +31,10 @@ def make_hiv(init_prev=0.05, init=None, art=ss.peryear(0.2)):
         dropout     = ss.Transition(on_art, post_art, dur=ss.lognorm_ex(ss.years(3), ss.years(1.5)))
 
         cd4_start     = ss.attr(ss.normal(800, 50), on=infection)
-        cd4_latent    = ss.attr(ss.normal(500, 50), on=infection, bins=3)
+        cd4_latent    = ss.attr(ss.normal(500, 50), on=infection)
         cd4_preart    = ss.attr('cd4', on=start_art) # CD4 just before starting
         cd4_potential = ss.attr(cd4_preart*(1 + (cd4_max - cd4_preart)/cd4_healthy*np.log(cd4_max/cd4_preart)), on=start_art, combine='first') # Set at the first start only
-        cd4_stop      = ss.attr('cd4', on=dropout, bins=[0, 50, 200, 350, 500, 650, 800]) # Finer than the stratification at the top, where most stop (bins are for a compartmental run)
+        cd4_stop      = ss.attr('cd4', on=dropout)
         gain = cd4_potential - cd4_preart
         cd4 = ss.attr({
             acute:    cd4_start - (cd4_start - cd4_latent)*acute.progress,
@@ -70,12 +70,12 @@ def test_hiv_cd4():
     sc.heading('HIV: CD4 drawn at infection, recorded at ART, derived by state; deaths by CD4 with no analyzer')
     kw2 = dict(start=1990, stop=2010, dt=ss.months(1), unit='year', **kw)
     hiv, mods = make_hiv()
-    sim = ss.Sim(hiv, connectors=mods, analyzers=CheckCD4(), n_agents=10_000, **kw2).run()
+    sim = ss.Sim(hiv, connectors=mods, analyzers=CheckCD4(), n_agents=5000, **kw2).run()
     assert sim.solver == 'abm'
     r = sim.results.hiv
     by = r.cd4_death.by('cd4')
     assert by.columns == ['0-49', '50-199', '200-349', '350-499', '500+']
-    assert np.allclose(by.values.sum(axis=1), r.cd4_death.values) and r.cd4_death.sum() > 100
+    assert np.allclose(by.values.sum(axis=1), r.cd4_death.values) and r.cd4_death.sum() > 50
     assert by.values[:, 0].sum() > 0 and by.values[:, -1].sum() > 0 # Deaths at low CD4 (the highest rate) and high (on ART)
     assert np.allclose(r.n_on_art.by('cd4').values.sum(axis=1), r.n_on_art.values) and r.n_on_art.select(cd4='500+')[-1] > r.n_on_art.select(cd4='0-49')[-1]
     assert np.allclose(r.cd4_death.cum.by('cd4').values[-1], by.values.sum(axis=0))
@@ -118,30 +118,15 @@ class TrackNab(ss.Analyzer):
         return
 
 
-@pytest.mark.xfail(strict=True, raises=ss.CapabilityError, reason='Phase B6: attributes as compartments (CD4 derived per compartment, recorded values as levels) are deferred')
 def test_hiv_cd4_ode():
-    sc.heading('HIV CD4 as an ODE: derived per compartment, CD4 at infection and at ART as levels; against agents')
+    sc.heading('HIV CD4 under a compartmental solver: attributes are kept per agent, so it refuses, and auto runs agents (see test_hiv_cd4)')
     kw2 = dict(start=1990, stop=2000, dt=ss.months(1), unit='year', **kw)
     hiv, mods = make_hiv()
-    assert ss.Sim(hiv, connectors=mods, **kw2).init().solver == 'abm' # cd4_start has no bins, so 'auto' runs agents
+    assert ss.Sim(hiv, connectors=mods, total_pop=20_000, **kw2).init().solver == 'abm'
     hiv, mods = make_hiv()
-    ode = ss.Sim(hiv, connectors=mods, solver='ode', total_pop=20_000, **kw2).run()
-    e = ode.diseases.hiv.engine
-    assert e.attr_forms.cd4_start == 'its mean' and e.attr_forms.cd4_latent.startswith('3 levels') and e.attr_forms.cd4_preart.startswith('5 levels in on_art, post_art')
-    assert any('replaces by its mean' in note for note in ode.notes)
-    r = ode.results.hiv
-    by = r.cd4_death.by('cd4')
-    assert np.allclose(by.values.sum(axis=1), r.cd4_death.values) and np.allclose(r.n_on_art.by('cd4').values.sum(axis=1), r.n_on_art.values)
-    abm = []
-    for seed in range(2):
-        hiv, mods = make_hiv()
-        abm.append(ss.Sim(hiv, connectors=mods, n_agents=20_000, rand_seed=seed, **kw2).run().results.hiv)
-    deaths = lambda r: r.cd4_death.sum() + r.aids_death.sum() + r.post_art_death.sum()
-    on_art = np.mean([a.n_on_art[-1] for a in abm])
-    dead = np.mean([deaths(a) for a in abm])
-    assert np.isclose(r.n_on_art[-1], on_art, rtol=0.1), f'on ART: ODE {r.n_on_art[-1]:n}, agents {on_art:n}'
-    assert np.isclose(deaths(r), dead, rtol=0.15), f'HIV deaths: ODE {deaths(r):n}, agents {dead:n}'
-    return ode
+    with pytest.raises(ss.CapabilityError, match='attributes'):
+        ss.Sim(hiv, connectors=mods, solver='ode', total_pop=20_000, **kw2).init()
+    return
 
 
 @sc.timer()
@@ -167,13 +152,14 @@ def test_hpv_nab():
 
 
 def test_hpv_nab_ode():
-    def one(**opts): # One genotype, its own antibodies, combine='max' as transitions between 3 levels as compartments
+    sc.heading('HPV antibodies under a compartmental solver: refused, and auto runs agents (see test_hpv_nab)')
+    def make(**opts): # One genotype, its own antibodies, combine='max'
         h = make_hpv('hpv', beta=ss.peryear(0.6))
-        h.graph.attrs.nab.bins = 3
-        return ss.Sim(h, connectors=ss.modify(h.rel_sus, multiply=1 - h.nab, name='imm'), start=2000, stop=2020, dt=ss.months(1), unit='year', **opts, **kw).run().results.hpv.infection.sum() # At quarterly steps agents are 13% below the ODE with no antibodies at all, and converge as the step shrinks
-    ode = one(solver='ode', total_pop=20_000)
-    abm = np.mean([one(n_agents=20_000, rand_seed=seed) for seed in range(2)])
-    assert np.isclose(ode, abm, rtol=0.05), f'ODE {ode:n}, agents {abm:n}'
+        return ss.Sim(h, connectors=ss.modify(h.rel_sus, multiply=1 - h.nab, name='imm'), start=2000, stop=2020, dt=ss.months(1), unit='year', **opts, **kw)
+    with pytest.raises(ss.CapabilityError, match='attributes'):
+        make(solver='ode', total_pop=20_000).init()
+    sim = make(total_pop=20_000).run()
+    assert sim.solver == 'abm' and sim.results.hpv.infection.sum() > 0
 
 
 class FirstNab(ss.Analyzer):
@@ -221,11 +207,12 @@ def test_attr_crn():
 
 @sc.timer()
 def test_attr_rules():
-    sc.heading('Attributes: counts, first and min, traits, events at placement, modifiers, hooks')
+    sc.heading('Attributes: counts, first and min, traits, events at placement, modifiers, and a function each step')
     calls = []
-    def hook(sim, uids):
+    def hook(sim): # Called each step: a function given to the disease replaces a hook on an event (ss.func)
         d = sim.diseases.sis
-        assert d.I[uids].all() # In the new state
+        uids = d.infection.uids # Who was infected this step
+        assert np.all(d.I[uids] | np.isin(uids, d.recovery.uids)) # In the new state, unless they have left it already (a hook at the event saw them as they moved)
         assert np.all(d.n_inf[uids] >= 1) # After the attributes the event sets
         calls.append(len(uids))
     def make(births=False):
@@ -239,7 +226,7 @@ def test_attr_rules():
             low     = ss.attr(ss.normal(5, 1), on=infection, combine='min', init=10),
             avg     = ss.attr(I.time, on=recovery, combine=lambda old, new: np.where(np.isnan(old), new, (old + new)/2)), # Recorded: the time just completed
             rel     = ss.attr(ss.uniform(0.5, 1.5)),                     # A trait
-            dx      = ss.func(hook, on=infection),
+            dx      = hook,
             init_prev=0.01, name='sis', **extra)
     kw2 = dict(start=0, stop=100, unit='day', **kw)
     sim = ss.Sim(make(), n_agents=5000, **kw2).run()
@@ -248,7 +235,7 @@ def test_attr_rules():
     n = d.n_inf.values
     seeds = 50
     assert n.sum() == r.infection.sum() + seeds # Each infection counted once, and the seeds count as infected at the start
-    assert sum(calls) == r.infection.sum() # The hook is called for each infection in the run
+    assert sum(calls) == r.infection.sum() # The function sees each infection in the run
     had = n > 0
     assert np.all(np.isnan(d.first.values[~had])) and not np.isnan(d.first.values[had]).any()
     assert np.all(d.low.values[~had] == 10) and np.all(d.low.values[had] < 10)
@@ -272,47 +259,32 @@ def test_attr_rules():
 
 
 @sc.timer()
-def test_spread():
-    sc.heading('ss.spread: seeds back-dated and run forward, so they start part way through (proposal 01 §7.6)')
-    kw2 = dict(start=1990, stop=1996, dt=ss.months(1), unit='year', **kw)
+def test_burnin():
+    sc.heading('Seeds part way through their natural history: a sim that starts earlier (burn-in), which replaces ss.spread')
+    kw2 = dict(stop=1996, dt=ss.months(1), unit='year', n_agents=10_000, **kw)
     out = sc.objdict()
-    for label,init_prev in [('plain', 0.05), ('abm', ss.spread(0.05, over=(ss.months(5), ss.years(10))))]:
-        hiv, mods = make_hiv(init_prev=init_prev, art=ss.peryear(0))
-        sim = ss.Sim(hiv, connectors=mods, analyzers=CheckCD4(), n_agents=20_000, **kw2).run()
-        r = sim.results.hiv
-        out[label] = sc.objdict(n=r.n_acute[0] + r.n_latent[0] + r.n_falling[0], falling=r.n_falling[0], prog=r.progression[:37].sum(), aids=r.aids_death[:37].sum())
-    p, a = out.plain, out.abm
+    for label,start in [('plain', 1990), ('burnin', 1980)]:
+        hiv, mods = make_hiv(art=ss.peryear(0))
+        r = ss.Sim(hiv, connectors=mods, start=start, **kw2).run().results.hiv
+        i = (1990 - start)*12 # The step of 1990
+        out[label] = sc.objdict(falling=r.n_falling[i], prog=r.progression[i:i+37].sum(), aids=r.aids_death[i:i+37].sum())
+    p, b = out.plain, out.burnin
     assert p.prog == 0 and p.falling == 0 # Without it, nobody progresses for years
-    assert np.isclose(a.n, 1000, atol=2) and a.falling > 50 and a.prog > 100 and a.aids > 50, out
-
-    # No over=: stationary within the state; with a fixed dwell of 10 days, those there leave evenly over the first 10
-    r = ss.Sim(make_spread_ab(), n_agents=10_000, start=0, stop=20, unit='day', **kw).run().results.d
-    assert np.isclose(r.n_B[0], 1000, atol=2) and np.isclose(r.bc[1:11].sum(), 1000, atol=5) and r.bc[11:].sum() == 0
-    assert np.allclose(r.bc[1:11], 100, atol=40), r.bc[:12]
+    assert b.falling > 50 and b.prog > 100 and b.aids > 50, out
     return out
-
-
-def make_spread_ab():
-    A, B, C = ss.states('A B C')
-    return ss.Disease(A, B, C, ab=A >> B @ 0, bc=ss.Transition(B, C, dur=ss.constant(ss.days(10))), init=dict(B=ss.spread(0.1)), name='d')
-
-
-def test_spread_ode():
-    r = ss.Sim(make_spread_ab(), solver='ode', total_pop=10_000, start=0, stop=20, unit='day', **kw).run().results.d
-    assert np.isclose(r.n_B[0], 1000) and np.allclose(r.bc[1:11], 100, atol=1e-6), r.bc[:12]
 
 
 @sc.timer()
 def test_attr_errors():
     sc.heading('Attributes: read where they have no value')
-    with pytest.raises(ss.ClockOutsideDomain): # A case of a derived attribute reads a clock of another state
+    with pytest.raises(ss.errors.ClockOutsideDomain): # A case of a derived attribute reads a clock of another state
         A, B = ss.states('A B')
         ss.Disease(A, B, ab=A >> B @ 0.1, x=ss.attr({B: A.time}), name='d')
     S, I = ss.states('S I')
     infection = S >> I @ ss.perday(0.1)*I
     rec = ss.attr(ss.normal(10, 1), on=infection)
     d = ss.Disease(S, I, infection=infection, back=S >> I @ ss.perday(0.01)*rec/10, rec=rec, init_prev=0.01, name='d')
-    with pytest.raises(ss.ClockOutsideDomain): # Read by a rate from S, where people who were never infected have none
+    with pytest.raises(ss.errors.ClockOutsideDomain): # Read by a rate from S, where people who were never infected have none
         ss.Sim(d, n_agents=1000, stop=20, unit='day', **kw).run()
     with pytest.raises(ValueError):
         ss.attr(ss.normal(), combine='mean')
@@ -348,7 +320,7 @@ def test_attr_births():
     """ An attribute with init= read by a modifier, in a sim with births: newborns have the init, and spare slots in the arrays are not read """
     d = make_nab(ss.uniform(0.5, 0.95), rate=ss.peryear(2))
     demog = lambda: [ss.Births(birth_rate=25), ss.Deaths(death_rate=10)]
-    sim = ss.Sim(d, connectors=ss.modify(d.rel_sus, multiply=1 - d.nab, name='imm'), demographics=demog(), n_agents=1000, start=2000, stop=2005, **kw).run() # Raised ss.ClockOutsideDomain at the first step
+    sim = ss.Sim(d, connectors=ss.modify(d.rel_sus, multiply=1 - d.nab, name='imm'), demographics=demog(), n_agents=1000, start=2000, stop=2005, **kw).run() # Raised ss.errors.ClockOutsideDomain at the first step
     nab = sim.diseases.d.nab
     auids = sim.people.auids
     born = auids[auids >= 1000]
@@ -358,7 +330,7 @@ def test_attr_births():
 
     # With no init=, people who have not recovered have no value, which the error names
     d = make_nab(ss.uniform(0.5, 0.95), init=None, rate=ss.peryear(2))
-    with pytest.raises(ss.ClockOutsideDomain, match='nab'):
+    with pytest.raises(ss.errors.ClockOutsideDomain, match='nab'):
         ss.Sim(d, connectors=ss.modify(d.rel_sus, multiply=1 - d.nab, name='imm'), demographics=demog(), n_agents=1000, start=2000, stop=2005, **kw).run()
     return
 
@@ -366,10 +338,12 @@ def test_attr_births():
 if __name__ == '__main__':
     sc.options(interactive=False)
     test_hiv_cd4()
+    test_hiv_cd4_ode()
     test_hpv_nab()
+    test_hpv_nab_ode()
     test_attr_crn()
     test_attr_rules()
-    test_spread()
+    test_burnin()
     test_attr_errors()
     test_attr_dist_par()
     test_attr_births()

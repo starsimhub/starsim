@@ -19,10 +19,6 @@ medium = 1000
 def test_people():
     sc.heading('Testing people object')
 
-    # Base people contains only the states defined in base.base_states
-    ppl = ss.People(small)
-    del ppl
-
     # Possible to initialize people with extra states, e.g. a geolocation
     def geo_func(n):
         locs = [1,2,3]
@@ -109,15 +105,9 @@ def test_ppl_construction(do_plot=False):
         loc[sim.people.female[uids]] = 21
         return loc
 
-    mf_pars = {
-        'debut': ss.normal(loc=init_debut, scale=2),  # Age of debut can vary by using callable parameter values
-    }
-    sim_pars = {'networks': [ss.MFNet(**mf_pars)], 'n_agents': small}
-    gon_pars = {'beta': {'mf': [0.08, 0.04]}}
-    gon = ssl.diseases.HIV(**gon_pars)
-
-    sim = ss.Sim(pars=sim_pars, diseases=[gon])
-    sim.init()
+    net = ss.SexualNet(debut=ss.normal(loc=init_debut, scale=2)) # Age of debut can vary by using callable parameter values
+    hiv = ssl.diseases.HIV(beta={'sexual': [0.08, 0.04]})
+    sim = ss.Sim(pars=dict(networks=[net], n_agents=small), diseases=[hiv])
     sim.run()
     if do_plot:
         plt.figure()

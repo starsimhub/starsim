@@ -9,9 +9,10 @@ Justified by [best-practices/parameters-and-distributions.md](../best-practices/
 A parameter used once lives in the transition that uses it. There is no parameter block to fill in.
 
 ```python
+S, I, R = ss.states('S I R')
 sir = ss.Disease(
-    infection = ss.transmission('S -> I', beta=0.3),
-    recovery  = ss.progression('I -> R', dur=ss.days(10)),
+    infection = ss.Transition(S, I, rate=0.3 * I),
+    recovery  = ss.Transition(I, R, dur=ss.days(10)),
     init_prev = 0.01,
 )
 ```
@@ -44,7 +45,7 @@ sir = ss.Disease(
 )
 ```
 
-An `ss.par` behaves like its value in arithmetic, so it can be used anywhere a number can, including after `@` and inside rates. In the string form it is passed the same way: `ss.transmission('S -> I', beta=beta)`.
+An `ss.par` behaves like its value in arithmetic, so it can be used anywhere a number can, including after `@` and inside rates.
 
 - **Names.** A named parameter is collected into the module's `pars`, Starsim's parameter container, under its name: `sir.pars.beta`. The name is the keyword if it was passed as one (`ss.Disease(beta=ss.par(0.05), ...)`), else the variable it is bound to, by the same lookup as for transitions ([01-objects.md](01-objects.md#names)). A plain Python number used in a rate is just a number; wrap it in `ss.par` to make it addressable by name.
 - **`bounds`** is what makes a parameter fittable: `sim.calibrate()` fits every parameter that has bounds to every result that has data, wherever it is used (a rate, an initial value, a seasonal mean, a modifier's amount) ([13-inference.md](13-inference.md)). Bounds that are positive and span a factor of 10 or more are searched on a log scale, and others on a linear one. Bounds given as bare numbers are in the unit of the value, and typed bounds are converted (`ss.par(ss.days(8), bounds=[ss.days(3), ss.weeks(4)])`). A value outside its bounds raises `OutOfBounds` when the sim is initialized.
@@ -62,6 +63,18 @@ UnknownParameter: "dur_inff=3" was given to "sir", but it has no parameter calle
      To add a parameter, use it in a transition, e.g. infection = S >> I @ dur_inff * I with dur_inff = ss.par(3).
 ```
 
+### Setting a parameter
+
+A value given for a parameter (as a keyword, in `pars=`, or by `pars.update()`) replaces it. There are three exceptions, and each keeps the parameter rather than changing what it means:
+
+- **A declared parameter** (an `ss.par`) takes the new value and keeps its name and bounds (`sir.pars.beta = 0.1`), since the module's transitions use that same object. A new `ss.par` gives its bounds, prior and description as well.
+- **A bare number for a typed value** keeps the unit of the default: `ss.SexualNet(dur=5)` on a default in years is `ss.years(5)`, with a warning if the sim runs in another unit.
+- **A single value for a distribution** sets its main parameter and keeps the rest, as in Starsim 3: for `ss.bernoulli` its probability (`init_prev=0.05`), for `ss.lognorm_ex` its mean (`dur=5` is a lognormal of mean 5 with the default's standard deviation), in the default's unit if the value is a bare number. A fixed value is `ss.constant(...)`. A dict with a `type` is a distribution (`n_contacts=dict(type='poisson', lam=4)`).
+
+To change one parameter of a distribution and keep the others, use the distribution's own method, `pars.dur_inf.set(mean=8)`. A list or another dict given for a distribution raises `TypeError` and names that method, since it could mean the distribution's arguments or the values themselves.
+
+The value of a parameter in the current context, with the modifiers that are active on it applied, is `mod.value(name)`: a number in the sim's unit, or one for each group or agent when the modifiers differ between them. `float(sir.pars.beta)` is the same number when it is one number, so a function that reads a parameter sees an `ss.change` to it; when the modifiers give it different values for different people, `float()` raises rather than averaging them. `par.raw` is the value without the modifiers.
+
 ## The ladder
 
 Every slot that takes a value accepts every form below. The slot fixes what the value means; the form is free.
@@ -78,7 +91,7 @@ beta = lambda sim: 0.05 if sim.now < ss.date('2020-03-15') else 0.03      # a fu
 ```
 
 - `ss.timeseries(..., period=ss.years(1))` repeats with the period given, as a seasonal pattern written out over one year does.
-- `ss.timeseries` interpolates with `mode='constant'`, `'linear'`, `'cosine'` (an S-shaped change between each value and the next), or `'spline'`. A bare number for a time is a time in the sim's unit counted from the start ([02-types.md](02-types.md#bare-numbers)).
+- `ss.timeseries` interpolates with `mode='constant'`, `'linear'`, or `'cosine'` (an S-shaped change between each value and the next). A bare number for a time is a time in the sim's unit counted from the start ([02-types.md](02-types.md#bare-numbers)).
 - `ss.seasonal(mean=, amplitude=, peak=)` is `mean × (1 + amplitude × cos(2π(t − peak)))` with `t` in years; a peak given as a month is the middle of that month, and in a sim with no dates time starts at the beginning of a year. Its `mean` may be an `ss.par`, which is then fitted or set like any other.
 - A function is `fn(sim)`, or `fn(sim, uids)` for agent-only logic. It is tried on whatever the solver provides, agents or groups, and if it needs something that only exists per agent the compartmental run stops and says what it asked for. The rule is in [03-states-and-transitions.md](03-states-and-transitions.md#functions-in-any-slot).
 - The forms combine: `ss.by(age=[...])` may hold time series, a time series or a seasonal value may be multiplied by a number or a parameter, and a function may return any of the others' values.
@@ -91,7 +104,8 @@ Every solver handles every form or says that it cannot, and no solver freezes a 
 A distribution means two different things depending on where it is put, and the place decides:
 
 ```python
-ss.progression('I -> R', dur=ss.lognorm_ex(mean=10, std=3, unit='days'))    # variation between people
+I, R = ss.states('I R')
+ss.Transition(I, R, dur=ss.lognorm_ex(mean=10, std=3, unit='days'))    # variation between people
 ss.par(0.05, prior=ss.lognorm_ex(mean=0.05, std=0.01))                      # uncertainty about one number
 ```
 
@@ -145,14 +159,15 @@ Values live inline by default. They can also be supplied separately, which is us
 
 ```python
 beta = ss.par(bounds=[0.001, 2.0], doc='transmission rate')
+S, I, R = ss.states('S I R')
 sir  = ss.Disease(
-    infection = ss.transmission('S -> I', beta=beta),
-    recovery  = ss.progression('I -> R', dur=ss.days(10)),
+    infection = ss.Transition(S, I, rate=beta * I),
+    recovery  = ss.Transition(I, R, dur=ss.days(10)),
 )
-sim = ss.Sim(sir, pars='params/kenya_2024.csv', unit='day')
+sim = ss.Sim(sir, pars=sc.loadjson('params/kenya_2024.json'), unit='day')
 ```
 
-`pars=` takes a dict or a file of values by name (`beta`, or `sir.beta` when there is more than one module): a CSV with a column of names and a column of values (`name,value`) or one row with a column per parameter, or a TOML or JSON table. One level of a value per level is named with brackets (`beta[a]`). Names it does not recognize raise `UnknownParameter`.
+`pars=` takes a dict of values by name (`beta`, or `sir.beta` when there is more than one module); values kept in a file are read into one first (`sc.loadjson()`, `pd.read_csv()`), since reading files is not the sim's job. One level of a value per level is named with brackets (`beta[a]`). Names it does not recognize raise `UnknownParameter`.
 
 Either way, `sim.hash()` returns the parts of the run's identity as an `sc.objdict` ([11-random.md](11-random.md)):
 
@@ -163,26 +178,6 @@ objdict(model='8f3a21', pars='c47e90', config='1b6d55', scenario='baseline', dat
 
 A change of values changes `pars` and nothing else, so the question "did the model change, or did the numbers?" has an answer whether or not the values were in a separate file. The hash is a cheap by-product, useful for telling apart the many runs of a sweep or a calibration made from one commit; the git hash or tag of the code remains the main record of what was run.
 
-## Requirements
-
-A module MAY list the data it needs. One word, `requires`, names the list on the module, the entries in it, and the table. This is optional metadata, used to tell the user what to supply and to check inputs before anything runs. It is not enforced: a module can read anything, and a module that lists nothing works as before.
-
-```python
-class MyNetwork(ss.Network):
-    requires = [
-        ss.Requires('population',     shape='patch',     source='UN WPP 2024'),
-        ss.Requires('contact_matrix', shape='age x age', source='Prem et al. 2021'),
-    ]
-```
-
-`ss.Requires(name, shape=, source=, doc=, default=)` describes one item. For modules made only of states, transitions, and parameters, the list is generated from the parameters, so nothing has to be written.
-
-```python
-sim.requires()                 # the table of what this sim requires, and which items are still missing
-```
-
-`sim.requires()` works without initializing the sim. A data-entry form generated from the list (`sim.requires(to='form.csv')`, Atomica's databook) serves one use case and is deferred from v1 ([19-open-questions.md](19-open-questions.md#c-deferred-not-in-v1)). Because the list is optional, the table is as complete as the declarations are; items a module reads without listing do not appear in it.
-
 ## Named data
 
 A reference to data is part of the model: not just a contact matrix, but which one, from which source, for which place.
@@ -190,7 +185,7 @@ A reference to data is part of the model: not just a contact matrix, but which o
 ```python
 ss.people('Kenya', year=2024)                     # size, age structure, sex ratio; returns an ss.People
 ss.contacts('Kenya', source='prem2021')           # an age contact matrix; returns a set of ss.MixingPools (layer='home' for one setting)
-ss.geo('Kenya', level=1)                          # its counties: names, populations, centroids, distances, borders
+ss.geo.location('Kenya', level=1)                          # its counties: names, populations, centroids, distances, borders
 ss.Sim(sir, data='weekly_cases.csv')              # observations, attached to results by column name
 ```
 
@@ -198,7 +193,7 @@ ss.Sim(sir, data='weekly_cases.csv')              # observations, attached to re
 sim = ss.Sim(sir, people=ss.people('Kenya', year=2024), networks=ss.contacts('Kenya', source='prem2021'))
 ```
 
-`ss.people`, `ss.contacts`, and `ss.geo` are lowercase because they are loaders: each looks up named data and returns the ordinary object. `ss.People(n_agents=10_000)` remains the class.
+`ss.people`, `ss.contacts`, and `ss.geo.location` are lowercase because they are loaders: each looks up named data and returns the ordinary object. `ss.People(n_agents=10_000)` remains the class.
 
 A named population gives the sim its size and the split of an age stratification that does not have one of its own, so it serves a compartmental model as well as agents; it makes the model agent-based only if it is given `n_agents=`. Without `year=`, it is the population in the year the sim starts, if the sim has dates, and otherwise in the year of the data's revision.
 

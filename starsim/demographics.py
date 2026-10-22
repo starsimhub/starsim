@@ -71,6 +71,7 @@ class Demographics(ss.Module):
     the `ss.People` population and can interact with `ss.Network` objects
     (e.g. to add newborns to contact networks).
     """
+    sets_unit = False # Its typed defaults (e.g. rates per year) do not set the unit of the model's bare numbers: see ss.Sim._init_unit()
     pass
 
 
@@ -86,7 +87,7 @@ class Flows(Demographics):
     used directly.
 
     Args:
-        transitions (list): births (`ss.birth()`), deaths of everyone (`ss.death()` with no arrow), and migration (`ss.immigration()`, `ss.emigration()` with no arrow)
+        transitions (list): births (`ss.birth()`), deaths of everyone (`ss.death()` with no state), and migration (`ss.immigration()`, `ss.emigration()` with no state)
     """
     compartmental = True
 
@@ -94,7 +95,7 @@ class Flows(Demographics):
         super().__init__(**kwargs)
         for tr in transitions:
             if not (tr.inflow or getattr(tr, 'every_state', False)):
-                errormsg = f'demographics= takes births, deaths, and migration of everyone; "{tr.arrow}" is a transition of some people, so it goes in the disease, e.g. ss.SIR(deaths=ss.death("{tr.arrow}", ...))'
+                errormsg = f'demographics= takes births, deaths, and migration of everyone; "{tr.arrow}" is a transition of some people, so it goes in the disease, e.g. ss.Disease(..., deaths=ss.death(I, rate=...))'
                 raise ValueError(errormsg)
         self.transitions = list(transitions)
         return
@@ -176,7 +177,7 @@ class Births(Demographics):
 
     def standardize_birth_data(self):
         """ Standardize/validate birth rates - handled in an external file due to shared functionality """
-        birth_rate = ss.standardize_data(data=self.pars.birth_rate, metadata=self.metadata)
+        birth_rate = ss.utils.standardize_data(data=self.pars.birth_rate, metadata=self.metadata)
         if isinstance(birth_rate, (pd.Series, pd.DataFrame)):
             return birth_rate.xs(0,level='age')
         if sc.isnumber(birth_rate):
@@ -203,16 +204,14 @@ class Births(Demographics):
         p = self.pars
 
         if isinstance(p.birth_rate, (pd.Series, pd.DataFrame)):
-            this_birth_rate = p.birth_rate.loc[period_year(p.birth_rate.index, sim.t.now('year'))]
-            scaled_birth_prob = ss.prob.array_to_prob(this_birth_rate, self.t.dt, v=p.rate_units * p.rel_birth)
+            this_birth_rate = p.birth_rate.loc[period_year(p.birth_rate.index, sim.t.now('year'))] * p.rate_units * p.rel_birth
         else:
             this_birth_rate = p.birth_rate
             if isinstance(this_birth_rate, ss.Rate):
                 this_birth_rate = ss.prob(this_birth_rate.value * self.pars.rate_units * self.pars.rel_birth, this_birth_rate.unit).to_prob(ss.years(1))
             else: # number
                 this_birth_rate = this_birth_rate * self.pars.rate_units * self.pars.rel_birth
-
-            scaled_birth_prob = ss.prob.array_to_prob(np.array([this_birth_rate]), self.t.dt)[0]
+        scaled_birth_prob = ss.probperyear(np.asarray(this_birth_rate, dtype=float)).to_prob(self.t.dt) # A probability per year, over the step
 
         # The rate is per person, but the parents are women of reproductive age: the same number of births, from them
         ppl = sim.people
@@ -377,7 +376,7 @@ class Deaths(Demographics):
 
     def standardize_death_data(self):
         """ Standardize/validate death rates - handled in an external file due to shared functionality """
-        death_rate = ss.standardize_data(data=self.pars.death_rate, metadata=self.metadata)
+        death_rate = ss.utils.standardize_data(data=self.pars.death_rate, metadata=self.metadata)
         if isinstance(death_rate, (pd.Series, pd.DataFrame)):
             death_rate = death_rate.unstack(level='age')
             if death_rate.isna().any(axis=None):
@@ -397,12 +396,12 @@ class Deaths(Demographics):
 
         # We are going to set up death_rate as a prob with unit=ss.years(1). That is the probability of death in 1 year
         if sc.isnumber(drd):
-            death_rate = np.array([drd * self.pars.rate_units * self.pars.rel_death])  # Later gets interpreted as a prob with unit=ss.years(1) by ss.prob.array_to_prob
+            death_rate = np.array([drd * self.pars.rate_units * self.pars.rel_death])  # A rate per year, converted to a probability per timestep below
         elif isinstance(drd, ss.Rate):
             if drd.unit == ss.years(1): # drd is already in years so don't need to translate
                 death_rate = np.array([drd.value * self.pars.rate_units * self.pars.rel_death])
             else:
-                # Convert from prob per drd.unit to prob per year, ss.prob.array_to_prob will convert to prob per timestep later
+                # Convert from prob per drd.unit to prob per year, converted to a probability per timestep below
                 death_rate = np.array([ss.prob(drd.value * self.pars.rate_units * self.pars.rel_death, drd.unit).to_prob(ss.years(1))])
 
         # Process data

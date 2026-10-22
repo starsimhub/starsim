@@ -10,7 +10,7 @@ A flepiMoP model is a configuration YAML plus CSV files beside it: `compartments
 |---|---|---|
 | `compartments` | One state for each combination, named as flepiMoP names them (`S_unvaccinated`) | yes |
 | `subpop_setup.geodata` | A stratification `subpop` (kind `'space'`), split by the initial numbers | yes |
-| `subpop_setup.mobility` | `ss.Mobility(matrix=0.5*amount/pop, kind='visit')` (travelers spend half the day away: gempyor's `percent_day_away`) | yes |
+| `subpop_setup.mobility` | `ss.geo.Mobility(matrix=0.5*amount/pop, kind='visit')` (travelers spend half the day away: gempyor's `percent_day_away`) | yes |
 | `initial_conditions` (`SetInitialConditions`, `Default`) | `init=dict(...)`, by place as `ss.by(subpop=[...])` | yes |
 | `seir.parameters` (numbers, arithmetic) | Parameters | yes |
 | A parameter drawn from a distribution | Its mean (listed); a prior, and a draw for each run, by hand | no |
@@ -22,7 +22,7 @@ A flepiMoP model is a configuration YAML plus CSV files beside it: `compartments
 | A modifier for some places only | `where=` on the `ss.modify`, against the place | no |
 | `MultiPeriodModifier`, `subpop_groups`, `outcome_modifiers` | One `ss.modify` per period, by hand | no |
 | A parameter from a `timeseries` file | `ss.timeseries({date: value, ...})`, `ss.by` over places | no |
-| `seeding` (importations on dates) | An `ss.Mobility(data=df)` register (rows with no `from` add people) | no |
+| `seeding` (importations on dates) | An `ss.geo.Mobility(data=df)` register (rows with no `from` add people) | no |
 | An outcome from a prevalence | A result (`p * I`), or custom code | no |
 | `inference` | `sim.calibrate()` with the data | no |
 

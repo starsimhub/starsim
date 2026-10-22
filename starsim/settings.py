@@ -138,11 +138,17 @@ class Options(sc.objdict):
         optdesc.threads = 'The number of threads that the passes over the agents of a large sim, and the particles of a particle filter, take: 0 (default) for as many as Numba has (by default, one per core), 1 for none. Each worker of ss.parallel() and of a calibration takes one, since the workers share the cores already'
         options.threads = sc.parse_env('STARSIM_THREADS', 0, int)
 
+        optdesc.compile = 'Whether the compartmental solvers run compiled (by Numba) or as plain Python, which gives the same results: "auto" (default) for compiled if they are compiled already (see ss.compile()), or if a run would take more than about 20 s uncompiled; "always" to always compile them first (about a minute, once per install); "never" for plain Python'
+        options.compile = sc.parse_env('STARSIM_COMPILE', 'auto', str)
+
         optdesc.crn = 'If True (default), use common random numbers (CRN) for reproducibility across scenarios. Set False for faster draws (one plain uniform per agent/edge, skipping the slot machinery); statistically valid but not CRN-safe across scenarios.'
         options.crn = sc.parse_env('STARSIM_CRN', True, bool)
 
-        optdesc.keep_times = 'If True, a declared disease run as agents keeps the time each agent entered every state (e.g. ti_S); by default (False), only those that something in the sim reads, to save memory (see ss.Disease.times_read())'
+        optdesc.keep_times = 'If True, a declared disease run as agents keeps the time each agent entered every state (e.g. ti_S); by default (False), only those the engine needs, to save memory (reading another raises ss.errors.TimeNotKept)'
         options.keep_times = sc.parse_env('STARSIM_KEEP_TIMES', False, bool)
+
+        optdesc.max_joint = 'The most compartments that the diseases tracked jointly in a compartmental run may take (their joint states times the groups of the other dimensions; see ss.solvers.Crossing): above it, solver="auto" runs agents, and a compartmental solver that was asked for stops before anything is made. 0 for no limit'
+        options.max_joint = sc.parse_env('STARSIM_MAX_JOINT', 10_000, int) # 6,912 compartments (three diseases with Erlang stages, by four age groups) take about 2 GB over 400 steps
 
         optdesc.jax_cache = 'The folder where JAX keeps what it compiles (e.g. for a posterior from NUTS), so that it need not compile it again in a later session; "" for none. Set before Starsim first uses JAX'
         options.jax_cache = sc.parse_env('STARSIM_JAX_CACHE', os.path.join(os.path.expanduser('~'), '.cache', 'starsim', 'jax'), str)

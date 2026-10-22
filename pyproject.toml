@@ -37,7 +37,9 @@ dependencies = [
     "scipy",
     "networkx",
     "matplotlib",
-    "optuna"
+    "optuna",
+    "jax",
+    "blackjax",
 ]
 
 [project.optional-dependencies]
@@ -58,12 +60,6 @@ interop = [
   "openpyxl",
 ]
 
-# For running an ODE in JAX, for gradients (see ss.gradients), and for posteriors from NUTS (sim.calibrate(method='nuts'))
-jax = [
-  "jax",
-  "blackjax",
-]
-
 # For running the tests
 test = [
     "pytest>=7.4",
@@ -71,7 +67,6 @@ test = [
     "pytest-env",
     "pytest-xdist",
     "pylint",
-    "seaborn", # For the plots of Starsim 3's ss.Calibration, which import it when used
 ]
 
 # For building the documentation
@@ -90,7 +85,9 @@ dev = [
 
 # For exactly reproducible results (replaces uv.lock)
 lock = [
+    "absl-py==2.5.1",
     "alembic==1.20.0",
+    "blackjax==1.7.1",
     "colorlog==6.12.0",
     "contourpy==1.4.0",
     "cycler==0.12.1",
@@ -99,6 +96,8 @@ lock = [
     "fonttools==4.66.1",
     "gitdb==4.0.12",
     "gitpython==3.2.0",
+    "jax==0.11.2",
+    "jaxlib==0.11.2",
     "jellyfish==1.2.1",
     "jsonpickle==4.1.2",
     "kiwisolver==1.5.1",
@@ -108,11 +107,14 @@ lock = [
     "markupsafe==3.0.3",
     "matplotlib==3.11.2",
     "memory-profiler==0.61.0",
+    "ml-dtypes==0.6.0",
     "multiprocess==0.70.19",
     "networkx==3.7",
     "numba==0.68.0",
     "numpy==2.5.3",
     "openpyxl==3.1.5",
+    "opt-einsum==3.4.0",
+    "optax==0.2.8",
     "optuna==5.0.0",
     "packaging==26.3",
     "pandas==3.0.6",
@@ -123,7 +125,6 @@ lock = [
     "pyyaml==6.0.3",
     "scipy==1.18.1",
     "sciris==3.4.0",
-    "seaborn==0.13.2",
     "setuptools==84.0.0",
     "six==1.17.0",
     "smmap==5.0.3",

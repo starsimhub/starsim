@@ -86,7 +86,7 @@ def test_callable_dists():
     sc.heading('Testing callable distributions')
     def loc(module, sim, uids):
         return np.arange(uids)
-    module = ss.mock_module(dt=ss.days(1))
+    module = ss.debugtools.mock_module(dt=ss.days(1))
     d = ss.normal(loc, 2, unit='days', module=module, strict=False)
     d.init()
     d.rvs(10)
@@ -112,7 +112,7 @@ def test_syntax():
     assert ss.date('2020-01-01') + 52*ss.years(1/52) == ss.date('2021-01-01') # Should give us 1st Jan 2021
     assert ss.date('2020-01-01') + ss.datedur(years=1) == ss.date('2021-01-01') # Should give us 1st Jan 2021
     assert ss.date('2000-01-01') + ss.days(200) == ss.days(200) + ss.date('2000-01-01') == ss.date('2000-07-19') # Days are added as days (was a day late after the leap day)
-    monthly = ss.Sim(stop=2, dt=1/12, verbose=0).init()
+    monthly = ss.Sim(stop=2, dt=1/12, unit='year', verbose=0).init()
     assert ss.connectors.to_ti(monthly, ss.months(7)) == ss.connectors.to_ti(monthly, 7/12) == 7 # On its step (was step 8, from rounding)
 
     # Operations on date vectors
@@ -183,67 +183,44 @@ def test_datearray_operations():
     assert len(ss.date.arange('2020-03-01', '2020-01-01', ss.months(1))) == 0
 
     # A rate cannot be subtracted from a number
-    with pytest.raises(ss.IncompatibleTypes, match='cannot be subtracted'):
+    with pytest.raises(ss.errors.IncompatibleTypes, match='cannot be subtracted'):
         1 - ss.peryear(0.1)
 
     a = ss.DateArray([ss.date('2020-01-01'), ss.date('2021-01-01')])
     b = ss.DateArray([ss.years(1), ss.years(2)])
     c = ss.years([1, 2])
 
-    expected_dates_plus_month = ss.DateArray([ss.date('2020-01-31'), ss.date('2021-01-31')])
-    assert np.array_equal(a + ss.months(1), expected_dates_plus_month)
-    assert np.array_equal(ss.months(1) + a, expected_dates_plus_month)
-
-    expected_months_plus = ss.DateArray([ss.months(13), ss.months(25)])
-    assert np.array_equal(ss.months(1) + b, expected_months_plus)
-    assert np.array_equal(b + ss.months(1), expected_months_plus)
-
-    expected_months_plus_float = ss.months([13, 25])
-    assert np.array_equal(ss.months(1) + c, expected_months_plus_float)
-    expected_years_plus = ss.years([1 + 1/12, 2 + 1/12])
-    assert np.array_equal(c + ss.months(1), expected_years_plus)
-
-    with pytest.raises(TypeError):
-        _ = a + ss.date('2020-01-01')
-    with pytest.raises(TypeError):
-        _ = ss.date('2020-01-01') + a
-
-    expected_dates_plus = ss.DateArray([ss.date('2021-01-01'), ss.date('2022-01-01')])
-    assert np.array_equal(b + ss.date('2020-01-01'), expected_dates_plus)
-    assert np.array_equal(ss.date('2020-01-01') + b, expected_dates_plus)
-    assert np.array_equal(c + ss.date('2020-01-01'), expected_dates_plus)
-    assert np.array_equal(ss.date('2020-01-01') + c, expected_dates_plus)
-
-    expected_dates_minus_month = ss.DateArray([ss.date('2019-12-02'), ss.date('2020-12-02')])
-    assert np.array_equal(a - ss.months(1), expected_dates_minus_month)
-
-    with pytest.raises(TypeError):
-        _ = ss.months(1) - a
-
-    expected_months_minus = ss.DateArray([ss.months(-11), ss.months(-23)])
-    assert np.array_equal(ss.months(1) - b, expected_months_minus)
-
-    expected_months_sub = ss.DateArray([ss.months(11), ss.months(23)])
-    assert np.array_equal(b - ss.months(1), expected_months_sub)
-    expected_months_minus_float = ss.months([-11, -23])
-    assert np.array_equal(ss.months(1) - c, expected_months_minus_float)
-    expected_years_minus = ss.years([1 - 1/12, 2 - 1/12])
-    assert np.array_equal(c - ss.months(1), expected_years_minus)
-
-    expected_datedur_from_date = ss.DateArray([ss.datedur(years=0), ss.datedur(years=-1)])
-    assert np.array_equal(ss.date('2020-01-01') - a, expected_datedur_from_date)
-
-    expected_datedur_from_array = ss.DateArray([ss.datedur(years=0), ss.datedur(years=1)])
-    assert np.array_equal(a - ss.date('2020-01-01'), expected_datedur_from_array)
-
-    with pytest.raises(TypeError):
-        _ = b - ss.date('2020-01-01')
-    with pytest.raises(TypeError):
-        _ = c - ss.date('2020-01-01')
-
-    expected_dates_from_date = ss.DateArray([ss.date('2019-01-01'), ss.date('2018-01-01')])
-    assert np.array_equal(ss.date('2020-01-01') - b, expected_dates_from_date)
-    assert np.array_equal(ss.date('2020-01-01') - c, expected_dates_from_date)
+    d0, m1 = ss.date('2020-01-01'), ss.months(1)
+    plus_month = ss.DateArray([ss.date('2020-01-31'), ss.date('2021-01-31')])
+    months_plus = ss.DateArray([ss.months(13), ss.months(25)])
+    dates_plus = ss.DateArray([ss.date('2021-01-01'), ss.date('2022-01-01')])
+    dates_minus = ss.DateArray([ss.date('2019-01-01'), ss.date('2018-01-01')])
+    cases = [ # Each operation, and what it gives
+        (lambda: a + m1, plus_month),
+        (lambda: m1 + a, plus_month),
+        (lambda: m1 + b, months_plus),
+        (lambda: b + m1, months_plus),
+        (lambda: m1 + c, ss.months([13, 25])),
+        (lambda: c + m1, ss.years([1 + 1/12, 2 + 1/12])),
+        (lambda: b + d0, dates_plus),
+        (lambda: d0 + b, dates_plus),
+        (lambda: c + d0, dates_plus),
+        (lambda: d0 + c, dates_plus),
+        (lambda: a - m1, ss.DateArray([ss.date('2019-12-02'), ss.date('2020-12-02')])),
+        (lambda: m1 - b, ss.DateArray([ss.months(-11), ss.months(-23)])),
+        (lambda: b - m1, ss.DateArray([ss.months(11), ss.months(23)])),
+        (lambda: m1 - c, ss.months([-11, -23])),
+        (lambda: c - m1, ss.years([1 - 1/12, 2 - 1/12])),
+        (lambda: d0 - a, ss.DateArray([ss.datedur(years=0), ss.datedur(years=-1)])),
+        (lambda: a - d0, ss.DateArray([ss.datedur(years=0), ss.datedur(years=1)])),
+        (lambda: d0 - b, dates_minus),
+        (lambda: d0 - c, dates_minus),
+    ]
+    for i,(func,expected) in enumerate(cases):
+        assert np.array_equal(func(), expected), f'Case {i}: {func()} ≠ {expected}'
+    for func in [lambda: a + d0, lambda: d0 + a, lambda: m1 - a, lambda: b - d0, lambda: c - d0]: # Not defined
+        with pytest.raises(TypeError):
+            func()
 
     # Exact elapsed days, rather than calendar differences
     assert np.array_equal(a.days_since('2020-01-01'), [0, 366])
@@ -349,7 +326,7 @@ def test_to_dt():
         ss.years(100).to_dt()
 
     # Inside a module, the timestep is filled in automatically
-    module = ss.mock_module(dt=ss.months(1))
+    module = ss.debugtools.mock_module(dt=ss.months(1))
     dur = ss.years(100).set_default_dur(module.dt)
     assert dur.to_dt() == 1200
 
@@ -449,8 +426,8 @@ def test_arithmetic():
         (p(0.1), '*', d(2), 0.19),
         (r(0.2), '/', r(0.1), 2),
         (1, '/', d(10), r(0.1)),  (2, '/', r(0.1), d(20)),  (2, '/', f(0.1), d(20)),
-        (r(0.1), '+', p(0.1), ss.IncompatibleTypes),  (r(0.1), '-', f(0.1), ss.IncompatibleTypes),  (r(0.1), '+', 1, ss.IncompatibleTypes),  (1, '-', r(0.1), ss.IncompatibleTypes),  (d(3), '+', r(0.1), ss.IncompatibleTypes),  (1, '/', p(0.1), ss.IncompatibleTypes),
-        (r(0.1), '*', r(0.1), ss.WrongDimension),  (r(0.1), '/', d(3), ss.WrongDimension),  (d(3), '*', d(3), ss.WrongDimension),  (d(3), '/', r(0.1), ss.WrongDimension),
+        (r(0.1), '+', p(0.1), ss.errors.IncompatibleTypes),  (r(0.1), '-', f(0.1), ss.errors.IncompatibleTypes),  (r(0.1), '+', 1, ss.errors.IncompatibleTypes),  (1, '-', r(0.1), ss.errors.IncompatibleTypes),  (d(3), '+', r(0.1), ss.errors.IncompatibleTypes),  (1, '/', p(0.1), ss.errors.IncompatibleTypes),
+        (r(0.1), '*', r(0.1), ss.errors.WrongDimension),  (r(0.1), '/', d(3), ss.errors.WrongDimension),  (d(3), '*', d(3), ss.errors.WrongDimension),  (d(3), '/', r(0.1), ss.errors.WrongDimension),
     ]
     for a, op, b, expected in rows:
         row = f'{a!r} {op} {b!r}'
@@ -469,13 +446,13 @@ def test_arithmetic():
 
     # The slot is checked: a rate times a duration, or a duration, is not a rate, and a rate is not a dwell time
     S, I, R = ss.states('S I R')
-    for slip in [lambda: ss.progression('I -> R', rate=ss.peryear(0.1) * ss.days(3)), lambda: I >> R @ (ss.peryear(0.1) * ss.days(3)),
-                 lambda: ss.progression('I -> R', rate=ss.days(10)), lambda: ss.progression('I -> R', dur=ss.prob(0.1, 'day')),
+    for slip in [lambda: ss.Transition(I, R, rate=ss.peryear(0.1) * ss.days(3)), lambda: I >> R @ (ss.peryear(0.1) * ss.days(3)),
+                 lambda: ss.Transition(I, R, rate=ss.days(10)), lambda: ss.Transition(I, R, dur=ss.prob(0.1, 'day')),
                  lambda: ss.Disease(S >> I @ ss.perday(0.3) * I * ss.days(3), I >> R @ ss.days(10), name='sir')]:
-        with pytest.raises(ss.WrongDimension):
+        with pytest.raises(ss.errors.WrongDimension):
             slip()
-    sir = ss.Disease(S >> I @ 2.5 * I / ss.days(10), ss.progression('I -> R', rate=1/ss.days(10)), name='sir') # A duration that divides is fine
-    assert ss.progression('I -> R', dur=2/ss.perday(0.1)).dur.raw == ss.days(20)
+    sir = ss.Disease(S >> I @ 2.5 * I / ss.days(10), I >> R @ (1/ss.days(10)), name='sir') # A duration that divides is fine
+    assert ss.Transition(I, R, dur=2/ss.perday(0.1)).dur.raw == ss.days(20)
     return sir
 
 
@@ -488,7 +465,7 @@ def test_bare_units():
         return ss.Disease(inf=S >> I @ ss.permonth(0.0)*I, rec=I >> S @ rec, init=dict(I=1000), name='d')
 
     # A bare dt beside calendar years is in years, with a warning, though the model's unit is months (FP21: 2,881 points instead of 241)
-    with pytest.warns(ss.UnitInferred):
+    with pytest.warns(ss.errors.UnitInferred):
         sim = ss.Sim(sis(ss.months(6)), start=2000, stop=2020, dt=1/12, n_agents=1000, verbose=0).init()
     assert sim.t.npts == 241
 

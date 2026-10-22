@@ -17,7 +17,6 @@ and smooth, so this is accurate to about 1e-9 of the value.
 import os
 import sys
 import itertools
-import importlib.util
 import numpy as np
 import sciris as sc
 import starsim as ss
@@ -31,7 +30,7 @@ table_fields = ['fixed', 'mult', 'consts', 'rel_trans'] # As tables over the ste
 
 def jax():
     """
-    Import JAX, or say that it is needed
+    Import JAX (imported only when first used, since it takes a few tenths of a second)
 
     If JAX has not been imported yet, it is given a device for each core of the CPU (as
     `numpyro.set_host_device_count()` does), so that the chains of a posterior run on
@@ -39,31 +38,21 @@ def jax():
     """
     if 'jax' not in sys.modules and 'xla_force_host_platform_device_count' not in os.environ.get('XLA_FLAGS', ''):
         os.environ['XLA_FLAGS'] = f'{os.environ.get("XLA_FLAGS", "")} --xla_force_host_platform_device_count={os.cpu_count() or 1}'.strip()
-    try:
-        import jax
-    except ImportError as e:
-        errormsg = 'This needs JAX, which is not installed: pip install jax'
-        raise ImportError(errormsg) from e
+    import jax
     if ss.options.jax_cache and jax.config.jax_compilation_cache_dir is None: # Keep what is compiled for later sessions, unless told otherwise
         jax.config.update('jax_compilation_cache_dir', ss.options.jax_cache)
         jax.config.update('jax_persistent_cache_min_compile_time_secs', 0.25)
     return jax
 
 
-def available():
-    """ Whether JAX is installed (without importing it) """
-    return importlib.util.find_spec('jax') is not None
-
-
-
 def reason(sim):
     """ Why the sim cannot be run in JAX, in a few words, or None if it can """
     families = [mod for mod in sim.diseases() if isinstance(mod, ss.Strains)]
     funcs = [(fam.name, getattr(imm.combine, '__name__', 'function')) for fam in families for imm in fam.immunity if callable(imm.combine)]
-    if not available():
-        return 'JAX is not installed'
-    elif funcs:
+    if funcs:
         return f'"{funcs[0][0]}" combines protection with a function ({funcs[0][1]}), which has no gradient; the rules "max", "sum", and "multiply" do'
+    elif not getattr(sim, 'declared', None): # Code of its own, whose gradient is not known (a fit of it uses the runs alone)
+        return 'the model is written as code, with no declared states and transitions, so it has no gradient'
     elif families: # Its step works out the couplings and unions in Python
         return f'"{families[0].name}" is a family of diseases (ss.Strains), which is run a step at a time for now'
     elif sim.solver != 'ode':
@@ -146,10 +135,8 @@ class Run:
         self.gather_crd = np.zeros((ncr, nf))
         self.gather_crd[np.arange(ncr), self.crd_flow] = 1
         self.simple = p.n_places == 1 and ng == 1 # One group: no places or cells to go through
-        extra = [(p.starts[i], p.starts[i+1]) for i in range(nf, len(p.starts) - 1)] # The conveyors and updates, after the flows' operations (see ss.kernels.convey() and update_values())
-        conveyors = [(a, b) for a,b in extra if p.ops[a] == ss.kernels.CONVEY]
-        self.updates = [(a, b) for a,b in extra if p.ops[a] != ss.kernels.CONVEY] # The operations of each (the last sets its compartment)
-        self.up_comp = np.array([p.args[b-1] for a,b in self.updates], dtype=int)
+        self.dense_share = 8*len(p.sh_val) >= p.n_places**2 > 1 # A time share with at least an eighth of its entries is taken as a matrix (see function())
+        conveyors = [(p.starts[i], p.starts[i+1]) for i in range(nf, len(p.starts) - 1)] # After the flows' operations (see ss.kernels.convey())
         self.cv_flow = np.array([p.args[a] for a,b in conveyors], dtype=int)
         slots = [p.args[a+1:b] for a,b in conveyors] # The slots of each conveyor: its first, last, and each that people move along from and to
         self.cv_first = np.array([s[0] for s in slots], dtype=int)
@@ -255,23 +242,18 @@ class Run:
                 elif op == kn.LT:  stack.append(jnp.where(x < y, 1.0, 0.0))
                 elif op == kn.LE:  stack.append(jnp.where(x <= y, 1.0, 0.0))
                 elif op == kn.GT:  stack.append(jnp.where(x > y, 1.0, 0.0))
-                else:              stack.append(jnp.where(x >= y, 1.0, 0.0))
+                elif op == kn.GE:  stack.append(jnp.where(x >= y, 1.0, 0.0))
+                else:
+                    raise ValueError(f'Unknown operation {op} on two values in the program of a rate')
         return stack[0]
-
-    def update_values(self, ys, consts):
-        """ The values that counts are set to at the end of a step (`ss.update()`), from the compartments at its start (as `ss.kernels.update_values()`) """
-        jnp = jax().numpy
-        p = self.p
-        n = ys[p.people].sum(axis=0)
-        local_n = n if self.simple else self.place.T @ (self.place @ n)
-        local_n = jnp.where(local_n > 0, local_n, jnp.inf) # A share of nobody is 0, as in the kernels
-        return jnp.stack([jnp.broadcast_to(self.evaluate(ys, a, b-1, consts, [], local_n), (self.ng,)) for a,b in self.updates])
 
     def share(self, v, block, X, by_columns):
         """ The time share between places times values by place and level (as `ss.kernels.share()`) """
         jnp = jax().numpy
         p = self.p
         v = v.reshape(-1, block)
+        if self.dense_share:
+            return (X['sh_mat'] @ v if by_columns else X['sh_mat'].T @ v).ravel()
         frm, to = (p.sh_pair[0], p.sh_pair[1]) if by_columns else (p.sh_pair[1], p.sh_pair[0]) # Taken from the entry's row and added to its column, or the reverse
         return jnp.zeros_like(v).at[to].add(X['sh_val'][:, None]*v[frm]).ravel()
 
@@ -343,8 +325,6 @@ class Run:
 
         def step(y, ti):
             due = y[self.cv_last] # The people due to leave each conveyor, at a constant rate over the step (see ss.kernels.convey())
-            if len(self.updates): # Counts set to a value at the end of the step, worked out from the start
-                values = self.update_values(y, at(X['consts'], ti, 0.0))
 
             if len(self.cv_flow): # The people due to leave each conveyor leave at a constant rate over the step, as the inflow of its flow (whose last target is its last slot, with a share of -1), lowered so that the slot is empty at its end with its other exits (see ss.kernels.release_rates())
                 x = self.cv_exits @ jnp.maximum(self.rates(y, vals(ti, 0.0)), 0.0)*dt
@@ -403,8 +383,6 @@ class Run:
                 _, y_end, flows = lax.while_loop(lambda carry: carry[0] < n, body, (0, y, flows))
             if len(self.cv_flow): # Everyone in a conveyor moves along one slot
                 y_end = y_end.at[self.cv_next].set(y_end[self.cv_prev]).at[self.cv_first].set(0.0)
-            if len(self.updates):
-                y_end = y_end.at[self.up_comp].set(values)
             return jnp.maximum(y_end, 0.0), flows, n # The compartments after the step, as the kernels record them
 
         return step
@@ -430,6 +408,9 @@ class Run:
         jnp = jx.numpy
 
         def run(X):
+            if self.dense_share: # As a matrix, from place to place, made once a run: a product with it is much faster in XLA than adding into an array at indices (4x for 50 places)
+                p = self.p
+                X = dict(X, sh_mat=jnp.zeros((p.n_places, p.n_places)).at[p.sh_pair[1], p.sh_pair[0]].add(X['sh_val']))
             step = self.stepper(X, clamp)
             def body(y, ti):
                 y = self.deliver(y, X, ti)
@@ -865,11 +846,11 @@ class Context:
 
 class Density:
     """
-    The log of the posterior density of a sim's fitted parameters, as one function in JAX, so that it can be compiled and differentiated whole (see `ss.fit()` with method='nuts')
+    The log of the posterior density of a sim's fitted parameters, as one function in JAX, so that it can be compiled and differentiated whole (see `sim.calibrate()` with method='nuts')
 
     The numbers in the run are worked out from the parameters in JAX: the values in the rates
     by evaluating the model's own expressions, and the rest (e.g. the compartments at the start)
-    from the change in them as each parameter changes, which has to be linear (`ss.fit()` checks
+    from the change in them as each parameter changes, which has to be linear (`sim.calibrate()` checks
     the result against runs of the sim). Then the run, the results that have data, and the
     likelihood and priors. If anything is not covered, `Unsupported` says what.
 
@@ -878,12 +859,13 @@ class Density:
         fitted (dict): the fitted parameters, by name
         x0 (array): their values to start from
         set_pars (func): restarts the sim with an array of values
-        likelihood (dict): the likelihood of each data series, as for `ss.loglik()`
+        likelihood (dict): the likelihood of each data series, as for `ss.fit.loglik()`
         weights (dict): a multiplier on each series' log-likelihood
         external (list): for each parameter, whether it belongs to a likelihood given at calibration time (rather than to the model)
         bounds (tuple): the lowest and highest value of each parameter, over which a step is allowed as many substeps as the run needs (default: each parameter's `bounds`)
     """
     def __init__(self, sim, fitted, x0, set_pars, likelihood=None, weights=None, external=None, bounds=None):
+        import starsim.fit # For its likelihoods and priors, which are worked out here in JAX
         self.sim = sim
         self.fitted = list(fitted.values())
         self.names = list(fitted.keys())
@@ -936,7 +918,7 @@ class Density:
         if self.bounds is not None:
             lows, highs = [np.asarray(b, dtype=float) for b in self.bounds]
         else:
-            bound = ss.calibration.bound_value
+            bound = ss.fit.bound_value
             lims = [[bound(b, p.raw) for b in p.bounds] if p.bounds is not None else [x, x] for p,x in zip(self.fitted, self.x0)]
             lows, highs = np.array(lims, dtype=float).T
         if len(self.x0) <= 4:
@@ -1005,8 +987,6 @@ class Density:
                 leaves = flow.expr.leaves if flow.expr is not None else [dw.par] if dw is not None and dw.dist is None else []
                 if dw is not None and dw.dist is not None and any(id(leaf) in self.index for leaf in dw.par.leaves):
                     raise Unsupported(f'a fitted parameter of the distribution of a dwell time ("{flow.tr.name}")')
-                if dw is not None and flow.at is not None and any(id(leaf) in self.index for leaf in dw.par.leaves): # Followed by the time in its state (see ss.solvers.Compartmental.slot_rate())
-                    raise Unsupported(f'a fitted dwell time out of a state followed by the time in it ("{flow.tr.name}")')
                 if any(id(leaf) in self.index for leaf in leaves):
                     mult = np.broadcast_to(engine.flow_mult(flow), (engine.n_groups,)).astype(float)
                     fixed.append((f, flow, dw, mult))
@@ -1040,7 +1020,7 @@ class Density:
             X = {}
             for key,X0 in self.X0[j].items():
                 val = jnp.asarray(X0)
-                for i,slope in self.slopes[j].get(key, {}).items(): # Linear in each parameter (checked in ss.fit()); the values in the rates are replaced below by what they exactly are
+                for i,slope in self.slopes[j].get(key, {}).items(): # Linear in each parameter (checked in sim.calibrate()); the values in the rates are replaced below by what they exactly are
                     val = val + slope*(x[i] - self.x0[i])
                 X[key] = val
             for k,i in self.consts[j].items():
@@ -1062,8 +1042,8 @@ class Density:
     def init_outputs(self):
         """ Which result each data series is compared with, and the matrix that lines it up with the data """
         sim = self.sim
-        liks = ss.calibration.likelihoods(sim, likelihood=self.likelihood)
-        lined = ss.calibration.lineup(sim)
+        liks = ss.fit.likelihoods(sim, likelihood=self.likelihood)
+        lined = ss.results.lineup(sim)
         self.member = [np.array([[comp.state.name == name for comp in engine.comps] for name in engine.graph.states], dtype=float) for engine in self.engines] # Which compartments each state is
         self.series = []
         for col in sim.data.columns:
@@ -1088,7 +1068,7 @@ class Density:
             if (name in graph.outcomes and name not in engine.outcomes) or (staying and engine.outcomes[name[2:]].stay is None and engine.outcomes[name[2:]].p_leave is None):
                 raise Unsupported(f'the outcome "{name}"')
             W, expected, rows = lined[col]
-            self.series.append(sc.objdict(col=col, j=j, name=name, keep=keep, W=W, expected=expected, lik=liks[col], weight=ss.calibration.series_weight(self.weights, col)))
+            self.series.append(sc.objdict(col=col, j=j, name=name, keep=keep, W=W, expected=expected, lik=liks[col], weight=ss.fit.series_weight(self.weights, col)))
         return
 
     def outcomes(self, engine, ctx, new, npts):
@@ -1145,11 +1125,11 @@ class Density:
         return out
 
     def loglik(self, dist, observed, model, x):
-        """ As `ss.calibration.logpdf()`, in JAX, with the fitted parameters of the likelihood at their values in x """
+        """ As `ss.fit.logpdf()`, in JAX, with the fitted parameters of the likelihood at their values in x """
         def par(val):
             i = self.index.get(id(val)) if isinstance(val, ss.par) else None
             return x[i] if i is not None else (val.raw if isinstance(val, ss.par) else val)
-        return ss.calibration.logpdf(dist, observed, model, xp=jax().numpy, pars={key:par(val) for key,val in dist.pars.items()})
+        return ss.fit.logpdf(dist, observed, model, xp=jax().numpy, pars={key:par(val) for key,val in dist.pars.items()})
 
     #%% The whole of it
 
@@ -1192,7 +1172,7 @@ class Density:
             model = jax().numpy.asarray(s.W) @ results[s.col]
             total = total + s.weight*self.loglik(s.lik, s.expected, model, x).sum()
         for i in range(len(self.fitted)):
-            total = total + ss.calibration.logprior(self.fitted[i], x[i], xp=jax().numpy)
+            total = total + ss.fit.logprior(self.fitted[i], x[i], xp=jax().numpy)
         return total
 
 

@@ -43,8 +43,8 @@ Condoms and similar per-act protection are modifiers of each disease's transmiss
 <!-- fragment -->
 ```python
 use = ss.timeseries({2000: 0.05, 2020: 0.3})                                       # share of acts with a condom
-condoms = [ss.modify(ng.infection, efficacy=0.9, share=use, route='mfnet'),        # gonorrhea
-           ss.modify(ct.infection, efficacy=0.4, share=use, route='mfnet')]        # chlamydia
+condoms = [ss.modify(ng.infection, efficacy=0.9, share=use, route='sexualnet'),    # gonorrhea
+           ss.modify(ct.infection, efficacy=0.4, share=use, route='sexualnet')]    # chlamydia
 nsp = ss.modify(hiv.infection, multiply=0.2, share=0.5, route='needles', start=2005)   # needle and syringe programs
 ```
 
@@ -57,7 +57,7 @@ coinfection = [
     ss.modify(hiv.rel_sus,        multiply=2.7, where=syphilis.active),
     ss.modify(syphilis.rel_sus,   multiply=1.5, where=hiv.infected & ~hiv.on_art),
 ]
-sim = ss.Sim(diseases=[hiv, syphilis], networks=ss.MFNet(), connectors=coinfection)
+sim = ss.Sim(diseases=[hiv, syphilis], networks=ss.SexualNet(), connectors=coinfection)
 ```
 
 ### Targets
@@ -65,7 +65,8 @@ sim = ss.Sim(diseases=[hiv, syphilis], networks=ss.MFNet(), connectors=coinfecti
 The target is a named numeric quantity of a declared module, given as the object or as its path:
 
 ```python
-sir = ss.Disease(infection=ss.transmission('S -> I', beta=0.05), recovery=ss.progression('I -> R', dur=10), init_prev=0.01)
+S, I, R = ss.states('S I R')
+sir = ss.Disease(infection=ss.Transition(S, I, rate=0.05 * I), recovery=ss.Transition(I, R, dur=10), init_prev=0.01)
 targets = [
     sir.pars.beta,              # a parameter
     sir.recovery.dur,           # a transition's inline value, which is a parameter too
@@ -77,7 +78,7 @@ targets = [
 ]
 ```
 
-A target is a reference to the quantity, not a copy of its current value: `ss.modify(sir.pars.beta, ...)` refers to the parameter, and the string path is the same reference spelled as text, for when the object is not in scope. A transfer ([05-dimensions.md](05-dimensions.md#moving-between-coordinates-sstransfer)) is a target as a transition is. The contacts of a network are a target only as a path, since `school.pars.n_contacts` is a plain value. It works under every solver; as agents, a multiplier below 1 makes each contact happen with that probability in a step. Of a disease written as code (an `ss.Infection`), only `rel_sus` and `rel_trans` can be targets: its parameters are plain values that its own code reads, so modifying one raises `CapabilityError`.
+A target is a reference to the quantity, not a copy of its current value: `ss.modify(sir.pars.beta, ...)` refers to the parameter, and the string path is the same reference spelled as text, for when the object is not in scope. A transfer ([05-dimensions.md](05-dimensions.md#moving-between-coordinates-sstransfer)) is a target as a transition is. The contacts of a network are a target only as a path, since `school.pars.n_contacts` is a plain value. It works under every solver; as agents, a multiplier below 1 makes each contact happen with that probability in a step. Of a disease written as code (an `ss.Infection`), only `rel_sus` and `rel_trans` can be targets: its parameters are plain values that its own code reads, so modifying one raises `CapabilityError`. It has no transmission to name, so a modifier on a route is of its `rel_sus` (`ss.modify(hiv.rel_sus, efficacy=0.8, share=lambda net: net.edges.condoms, route='mf')`), of the people who would be infected over it, as for a declared disease's transmission; the modifiers of a network's contacts apply to it as well.
 
 A modifier on a transition chosen with `p=`, one of several branches out of a state, changes its probability, and the other branches share the rest. If the target cannot be resolved when the sim is built (a plain number, a boolean state, a name that does not exist), `UnmodifiableTarget` is raised, listing the quantities that can be modified. Boolean flips and anything else that is not "change a number" belong in `step()` code.
 
@@ -250,7 +251,7 @@ CapabilityError: a condition uses people.age and 70, but the model's age bins ar
 
 The lazy form is checked this way. A function of the sim that compares ages with a number that is not a bin edge is not: it runs, with each group at the age of its midpoint.
 
-A condition on another module's state (`where=syphilis.active` on an HIV quantity) needs the two modules' states tracked jointly. In an agent-based run that is free. In a compartmental run the two diseases' states are tracked jointly, each as a dimension of the other (so `hiv.results.n_I.by('syph')` splits HIV by syphilis state), and the model grows to the product. The crossed diseases then run as one model ([12-backends.md](12-backends.md)), and each disease's results are its view of the product.
+A condition on another module's state (`where=syphilis.active` on an HIV quantity) needs the two modules' states tracked jointly. In an agent-based run that is free. In a compartmental run the two diseases' states are tracked jointly, each as a dimension of the other (so `hiv.results.n_I.by('syph')` splits HIV by syphilis state), and the model grows to the product. The crossed diseases then run as one model ([12-backends.md](12-backends.md)), and each disease's results are its view of the product. Diseases are also tracked jointly when people are born or die ([03-states-and-transitions.md](03-states-and-transitions.md)) or die of one of them (a transition to `ss.null`), since those people leave every disease; the members of a family (`ss.Strains`) already have people who die of one die in the others, so dying of a member crosses the family only with diseases outside it. The product is counted before anything is made, including the stages of dwell times, the slots of fixed delays, and a copy of each count for each combination of the others: above `ss.options.max_joint` compartments (10,000 by default, counting the joint states in each group of the other dimensions), `auto` runs agents, and a compartmental solver that was asked for raises `CapabilityError` naming the limit, which can be raised where there is the memory. `describe()` shows why the diseases are tracked jointly, the product's size, the memory of a whole run, and what is assumed: the diseases start independent of each other, and step together at one timestep.
 
 ## Plain code in `step()`
 
@@ -317,8 +318,6 @@ A function can be used in place of a class when no state is needed: a plain func
 ### No required declarations
 
 A module does not declare what it reads or writes. Declarations of that kind get forgotten and drift away from the code, and an out-of-date declaration is worse than none. What modifies a quantity through `ss.modify` is declared, and `what_modifies()` lists it; code that writes a quantity directly is not tracked.
-
-`requires = [ss.Requires(...)]` is optional metadata that says what input data a module expects, for `sim.requires()` ([04-parameters.md](04-parameters.md#requirements)). It is never enforced as access control: a module can read anything in the sim.
 
 ## Execution order
 

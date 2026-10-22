@@ -98,10 +98,10 @@ msim.compare() # Compare the summaries
 msim.compare(t='2030-01-01') # Compare the results on a particular date
 ```
 
-Use `output=True` to get the comparison as a dataframe, or `msim.plot_compare()` to plot it as a bar chart, with one panel per result:
+Use `output=True` to get the comparison as a dataframe, or `do_plot=True` to plot it as a bar chart, with one panel per result:
 
 ```{python}
-msim.plot_compare()
+msim.compare(do_plot=True)
 ```
 
 ## Combining, merging, and splitting
@@ -130,9 +130,7 @@ m1, m2 = merged.split() # Back to two MultiSims with 3 runs each (or use inds or
 
 ## Copies
 
-Both `ss.Sim` and `ss.MultiSim` objects let you control whether or not the objects passed into them are copied. By default, sims _do_ copy inputs and multisims _don't_. Let's look at a few examples.
-
-Sims copy inputs by default because it's common to want to reuse a module between sims, which wouldn't be allowed if it wasn't copied (since it's modified in place during run). For example:
+A sim copies the modules it is given, together, so the same modules can be given to several sims, and the ones you made are never run themselves:
 
 ```{python}
 sis = ss.SIS(beta=0.1)
@@ -142,13 +140,13 @@ s2 = ss.Sim(label='High contacts', n_agents=2000, diseases=sis, networks=ss.Rand
 ss.parallel(s1, s2).plot()
 ```
 
-But this can be confusing, because it means the `sis` in the simulation is a different object than the `sis` you created. If you want to keep it the same, set `copy_inputs=False`, for example, to use it directly afterwards:
+To use a module after the run, take the sim's copy of it, e.g. `sim.diseases.sir`, and write functions given to a sim to read modules from the sim they are given (`lambda sim: sim.diseases.sir.I.n`) rather than from a variable:
 
 ```{python}
 sir = ss.SIR(beta=0.035)
-sim = ss.Sim(n_agents=2000, diseases=sir, networks='random', copy_inputs=False)
+sim = ss.Sim(n_agents=2000, diseases=sir, networks='random')
 sim.run()
-sir.plot() # This wouldn't work without copy_inputs=False
+sim.diseases.sir.plot()
 ```
 
 Conversely, `ss.MultiSim()` by default does _not_ copy the input sims, so they are modified in place:

@@ -58,6 +58,7 @@ In Starsim, the age groups are a stratification and the contact matrix is `ss.co
 ```{python}
 import numpy as np
 import starsim as ss
+import starsim.interop
 ss.options(jupyter=True)
 
 m = [[12, 4, 2, 1], [4, 8, 3, 1], [2, 3, 6, 2], [1, 1, 2, 3]] # Contacts a day
@@ -77,12 +78,12 @@ print(f'Mean final R over 20 runs: {final_R.mean():,.0f} (odin, 1,000 runs: 532,
 msim.plot()
 ```
 
-The same file can also be imported. `ss.load()` reads odin's language directly, without R or odin, and turns the arrays coupled by the contact matrix into an age stratification with `ss.contacts()`:
+The same file can also be imported. `ss.interop.load()` reads odin's language directly, without R or odin, and turns the arrays coupled by the contact matrix into an age stratification with `ss.contacts()`:
 
 ```{python}
 #| eval: false
 #| label: starsim-import
-sim = ss.load('age_seir.R', format='odin', pars=dict(S0=pop - [10, 0, 0, 0], I0=[10, 0, 0, 0], m=m), stop=365)
+sim = ss.interop.load('age_seir.R', format='odin', pars=dict(S0=pop - [10, 0, 0, 0], I0=[10, 0, 0, 0], m=m), stop=365)
 msim = sim.run(n_runs=20)
 ```
 
@@ -115,15 +116,15 @@ These are from Starsim's switching demo for odin users (`tests/switching/test_od
 | Import the model above (`lambda`, a contact matrix, `rbinom()`) | **Works**: mean final `R` within 3% of odin's |
 | Write it by hand | **Works**: 10 lines against 46 |
 | Run it many times after `sim.init()` (as `gen$new()` then `$run()`) | **Works**: 20 distinct runs from `ss.parallel(sim, n_runs=20)` |
-| Fit by particle MCMC | **Works**: `sim.calibrate()` chooses particle MCMC for a stochastic model with a likelihood (`ss.outcome(..., likelihood=ss.nbinom(n=20))` and `data=`); on camdl's SIR its posterior matched camdl's PMMH to two decimals |
+| Fit by particle MCMC | **Works**: `sim.calibrate(method='pmcmc')`, for a stochastic model with a likelihood (`ss.outcome(..., likelihood=ss.nbinom(n=20))` and `data=`); on camdl's SIR its posterior matched camdl's PMMH to two decimals |
 | The speed of the particle filter | **Works**: 2.9 µs per particle-step on one thread with 100 particles (3.6 µs with 1,000), against 1.35 µs for odin 1.2.7's forward run (the demo asks for within 3 times); the particles are shared between threads, each with random numbers of its own, so on eight threads it takes 0.8 µs (1.4 µs with 1,000), and the estimate does not depend on how many threads there are |
-| Fit the ODE by NUTS with gradients | **Works**: `solver='ode'`, and `sim.calibrate()` chooses NUTS with JAX gradients; `sim.log_density()` gives the log-density, with `.grad()` by reverse mode, for a sampler of your own |
+| Fit the ODE by NUTS with gradients | **Works**: `solver='ode'`, and `sim.calibrate(method='nuts')`, with JAX gradients; `sim.log_density()` gives the log-density, with `.grad()` by reverse mode, for a sampler of your own |
 | A fitted parameter inside `ss.seasonal(mean=)` | **Works** |
 | A fixed delay (`delay()`) | **Works**: `ss.constant(ss.days(14))` is a conveyor of whole steps under every solver, exact at each step, and the ODE's release within a step is exact to second order (above) |
-| Any difference equation (a running maximum, a state that is not a flow) | **Works** for a count set each step from the model: `ss.update(peak, np.maximum(peak.n, I.frac))`, in the kernels (and in JAX); anything else is Python in a `step()` |
+| Any difference equation (a running maximum, a state that is not a flow) | **Partly**: Python in a `step()` of a module written as code; a value it keeps can be read by a function in a rate, which runs as agents |
 | The same model as agents, `sim.new(solver='abm', n_agents=20_000)` | **Fails**: 10 initial infections among a million people are 0.2 of an agent at this scale, which rounds to none with no note, so there is no epidemic |
-| Build and run a model from R | **Works**: through reticulate, with arrow strings and `name=` (the operators `>>` and `@` have no R spelling); R-Starsim's `transition()` and `disease()` wrap this |
+| Build and run a model from R | **Works**: through reticulate, with `ss$Transition()`, states named with `ss$states()`, and `name=` (the operators `>>` and `@` have no R spelling); R-Starsim's `transition()` and `disease()` wrap this |
 
 ## Bringing your model in
 
-`ss.load('model.R', format='odin')` reads a model in odin's language. The file is parsed in Python, so neither R nor odin is needed. Each equation is split into its terms, and a term that leaves one state and enters another becomes a flow between them. Arrays of independent copies (replicates) become one model run many times; arrays with flows from each level to the next (aging) become an age stratification; arrays coupled through a matrix become a stratification with `ss.contacts()`; and `delay()` of a flow into a state becomes a fixed dwell time. Values given with `user()` can be passed as `pars=`. What is not translated is listed (`sim.imported.incomplete`), and `sim.imported.prompt` is a prompt for an AI assistant with Starsim's import-model skill to finish the job.
+`ss.interop.load('model.R', format='odin')` reads a model in odin's language. The file is parsed in Python, so neither R nor odin is needed. Each equation is split into its terms, and a term that leaves one state and enters another becomes a flow between them. Arrays of independent copies (replicates) become one model run many times; arrays with flows from each level to the next (aging) become an age stratification; arrays coupled through a matrix become a stratification with `ss.contacts()`; and `delay()` of a flow into a state becomes a fixed dwell time. Values given with `user()` can be passed as `pars=`. What is not translated is listed (`sim.imported.incomplete`), and `sim.imported.prompt` is a prompt for an AI assistant with Starsim's import-model skill to finish the job.

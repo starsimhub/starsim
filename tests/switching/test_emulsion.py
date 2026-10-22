@@ -11,6 +11,7 @@ import numpy as np
 import pytest
 import sciris as sc
 import starsim as ss
+import starsim.interop
 sys.path.insert(0, str(sc.thispath().parent)) # For tests/paths.py when run as a script (conftest.py does this under pytest)
 import paths
 
@@ -36,7 +37,7 @@ def check_quickstart(msim, age='growth', health='health'):
 @pytest.mark.xfail(reason='The import lists the untranslated parts (cond, when, on_cross, statevars, the calendar; minimum stays are now after=), and warns and hands them to the import-model skill when run (15 animals at the end against 66); a complete import needs after=/before= and offspring=, as test_emulsion_quickstart', strict=False)
 def test_emulsion_import():
     sc.heading('Testing importing EMULSION\'s quickstart and matching its published output')
-    sim = ss.load(paths.lfd/'examples/emulsion/quickstart/original/quickstart.yaml', format='emulsion', verbose=False)
+    sim = ss.interop.load(paths.lfd/'examples/emulsion/quickstart/original/quickstart.yaml', format='emulsion', verbose=False)
     assert not sim.imported.incomplete, f'{len(sim.imported.incomplete)} parts of the model were not translated'
     check_quickstart(sim.new(verbose=0).run(n_runs=n_runs), age='age_group', health='health_state')
 
@@ -55,7 +56,7 @@ prototypes: {population: [{infected: {health_state: I}}]}
 initial_conditions: {population: [{prototype: infected, amount: 1000}]}
 '''
     sc.savetext(tmp_path/'proba.yaml', yaml)
-    sim = ss.load(tmp_path/'proba.yaml', format='emulsion', verbose=False).new(solver='ode', verbose=0).run()
+    sim = ss.interop.load(tmp_path/'proba.yaml', format='emulsion', verbose=False).new(solver='ode', verbose=0).run()
     left = sim.results[sim.diseases[0].name].n_I.values[1]/1000
     assert np.isclose(left, ref_proba_left, rtol=1e-3), f'{left:.1%} still infectious after one step, against {ref_proba_left:.1%} in EMULSION'
 
@@ -98,7 +99,7 @@ def make_metapop(staged=False):
     if staged: # As an EMULSION user writes it: the stage as a dimension, with births from adults
         S, I, R = ss.states(3)
         N = S + I + R
-        sir = ss.Disease(infection=S >> I @ ss.perday(0.5)*I.n/N.n, recovery=I >> R @ ss.perday(0.1), births=ss.birth('-> S', rate=ss.by(stage=[0, 2*b])),
+        sir = ss.Disease(infection=S >> I @ ss.perday(0.5)*I.n/N.n, recovery=I >> R @ ss.perday(0.1), births=ss.birth(S, rate=ss.by(stage=[0, 2*b])),
                          deaths=ss.death(rate=b*N.n/K), maturation=ss.transfer(stage='J -> A', rate=ss.perday(1/20)), init=dict(I=ss.by(pop=[10] + [0]*9)), name='sir')
         sir.stratify(stage=['J', 'A'], split=[1, 0])
     else: # The two machines crossed by hand into six states

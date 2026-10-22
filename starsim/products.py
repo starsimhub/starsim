@@ -5,7 +5,6 @@ import inspect
 import starsim as ss
 import sciris as sc
 import numpy as np
-import pandas as pd
 
 
 
@@ -15,7 +14,7 @@ class EventSource:
 
     Each is a condition that triggers a delivery (`ss.treat(who=screening.positive)`), and remembers per person whether
     (`.ever`), how often (`.count`), and how long ago (`.since`) it happened, including on the current step once the delivery
-    that fired it has run. The memory is kept only for the events that something in the sim reads, or with `count_events=`.
+    that fired it has run. The memory is kept only for the events that something in the sim reads.
     """
     def outcome_names(self):
         """ The names of its outcomes, e.g. ['positive', 'negative'] for a test """
@@ -63,15 +62,14 @@ class EventSource:
         return AttributeError(f'"{name}" has no attribute or outcome "{attr}"; its outcomes (events) are {sc.strjoin(names) if names else "none"}{ss.transitions.did_you_mean(attr, names)}')
 
     def init_events(self, sim):
-        """ Before a run: the people of each event on the current step, and the memory and log the sim needs (as agents, arrays of each person's last time and count) """
+        """ Before a run: the people of each event on the current step, and the memory the sim needs (as agents, arrays of each person's last time and count) """
         self._live = {} # Outcome (None for the event itself): the selections fired on the last step it was fired, as (time index, selection, people in each state and group then, engine)
         self._pending = [] # Fired, not yet in the memory: (outcome, entry)
-        self._log = [] # (time index, outcome, UIDs) for count_events=
         needs = ss.interventions.memory_needs(sim)
         self._needs = {o:needs[(self.name, o)] for o in [None] + self.outcome_names() if (self.name, o) in needs}
         self._mem = {}
         if sim.solver == 'abm':
-            for o,need in self._needs.items():
+            for o in self._needs:
                 key = 'event' if o is None else o
                 last, count = ss.FloatArr(f'last_{key}', label=f'Time index of the last {key}'), ss.FloatArr(f'count_{key}', default=0, label=f'Number of times: {key}')
                 for arr in [last, count]:
@@ -87,37 +85,40 @@ class EventSource:
         if sim.solver == 'abm':
             entry = [ti, ss.uids(np.flatnonzero(sel)) if not isinstance(sel, ss.uids) else sel, None, None]
         else:
-            entry = [ti, np.array(sel, dtype=float), eng.state_counts() if before is None else before, eng] # Carried along later moves: see ss.Delivery.carry_events()
+            entry = [ti, np.array(sel, dtype=float), eng.state_counts() if before is None else before, eng] # Carried along later moves: see ss.solvers.CompartmentalDelivery.carry_events()
         live = self._live.setdefault(outcome, [])
         if live and live[0][0] != ti:
             live.clear()
         live.append(entry)
         if outcome in self._needs:
             self._pending.append((outcome, entry))
-            if self._needs[outcome].log and sim.solver == 'abm':
-                self._log.append((ti, outcome, entry[1]))
         ss.interventions.trigger_moves(self, outcome, entry[1], eng, entry[2])
         return
 
     def current(self, outcome, selector):
         """ The people an event happened to on this step, as a selection for a module's selector """
-        sim = self.sim
-        entries = [e for e in self.__dict__.get('_live', {}).get(outcome, []) if e[0] == sim.ti]
-        if selector.abm:
-            out = selector.nobody()
-            for e in entries:
-                out[e[1]] = True
-            return out
-        out = None
-        for _,sel,before,eng in entries:
-            after = eng.state_counts()
-            now = np.clip(np.divide(sel*before, after, out=np.zeros_like(after), where=after>0), 0, 1) # The same people, now that others may have moved
-            if eng.mod is not selector.mod:
-                if not np.allclose(now, now[0]):
-                    raise ss.CapabilityError(f'the event "{self.name}{"." + outcome if outcome else ""}" selects people by their state in "{eng.mod.name}", which cannot be carried over to "{selector.mod.name}" with solver="{sim.solver}". Run with solver="abm".')
-                now = np.broadcast_to(now[0], selector.shape).astype(float)
-            out = now if out is None else out + now - out*now
-        return selector.nobody() if out is None else out
+        entries = [e for e in self.__dict__.get('_live', {}).get(outcome, []) if e[0] == self.sim.ti]
+        if not selector.abm:
+            return ss.solvers.current_groups(self, outcome, entries, selector)
+        out = selector.nobody()
+        for e in entries:
+            out[e[1]] = True
+        return out
+
+    def reached(self, outcome=None):
+        """
+        The UIDs of the people it reached on its last step (agents only), or of those with one of its outcomes (e.g. `screening.reached('positive')`)
+
+        Its last step is the current one once it has run in it, and otherwise the one before: so code that runs after the
+        interventions (a disease or an analyzer) reads the people of the step just taken, as for an event.
+        """
+        if self.sim.solver != 'abm':
+            raise ss.CapabilityError(f'"{self.name}".reached() is the UIDs of the people it reached, which exist only per agent; with solver="{self.sim.solver}", read its results')
+        if outcome is not None and outcome not in self.outcome_names():
+            raise self.no_outcome(outcome)
+        ti = self.__dict__.get('_ti_step') # Set by its deliveries: see ss.Delivery.step()
+        entries = [e[1] for e in self.__dict__.get('_live', {}).get(outcome, []) if e[0] == ti]
+        return ss.uids.concatenate(entries).unique() if entries else ss.uids()
 
     def flush(self, ti):
         """ Put the people events happened to, up to and including time index ti, into the memory """
@@ -131,24 +132,24 @@ class EventSource:
                 last[sel] = t
                 count[sel] = count[sel] + 1
             else:
-                ss.interventions.remember_levels(self, outcome, t, sel, before, eng, ti)
+                ss.solvers.remember_levels(self, outcome, sel, before, eng)
         self._pending = keep
         return
-
-    def events_df(self):
-        """ The log of events kept with count_events=, as agents: one row for each person and event """
-        rows = [(int(uid), self.sim.t.timevec[t] if t < len(self.sim.t.timevec) else t, self.name if o is None else f'{self.name}.{o}') for t,o,uids in self.__dict__.get('_log', []) for uid in uids]
-        return sc.dataframe(rows, columns=['uid', 'time', 'event'])
 
 
 class Product(EventSource, ss.Module):
     """
-    Generic product base class; subclasses implement administer().
+    Generic product base class: see `ss.Vaccine`, `ss.Diagnostic`, and `ss.Treatment`
 
-    Products represent diagnostic tests, treatments, or vaccines that can be
-    administered to agents by an Intervention. A product is an event too: the people any delivery of it reached on the
+    Products represent diagnostic tests, treatments, or vaccines, delivered by `ss.vaccinate()`,
+    `ss.screen()`, and `ss.treat()`. A product is an event too: the people any delivery of it reached on the
     step (`cytology`), with its outcomes (`cytology.positive`), and their memory (`cytology.since`): see `ss.products.EventSource`.
+    A product whose effect is code of your own defines `administer()`.
     """
+    holds = False # Whether people hold it (see ss.products.Held)
+    cost = None
+    disease = None # Set by its delivery
+
     def __getattr__(self, attr):
         """ An outcome of the product over all its deliveries, as an event: e.g. `hiv_rdt.positive` """
         out = self.outcome_attr(attr)
@@ -161,6 +162,34 @@ class Product(EventSource, ss.Module):
                 raise self.no_outcome(attr) from None
             raise
 
+    def administer(self, uids):
+        """
+        The effect of a product written as code: called with the UIDs of the people a delivery gave it to on the step, after
+        what a product of its kind does (agents only). Override it in a subclass of `ss.Product` (or of `ss.Vaccine` etc.).
+
+        It may return the UIDs with each of its outcomes, as a dict (e.g. `dict(positive=uids)`): they are then results and
+        events of the delivery, as a test's are, which can trigger the steps that follow. The outcomes are those that
+        `outcome_names()` lists.
+
+        Examples:
+            ```python
+            class Bednet(ss.Product):
+                def administer(self, uids):
+                    self.sim.diseases.malaria.rel_sus[uids] *= 0.5
+            ```
+        """
+        return None
+
+    def step_waning(self):
+        """ Called by its deliveries at the start of each step, before anyone is offered it: see `ss.products.Held` """
+        return
+
+    def agent_reasons(self):
+        """ The reasons, if any, that this product needs agents """
+        if type(self).administer is not Product.administer:
+            return [f'the product "{self.name}" has an administer() of its own, which acts on agents']
+        return []
+
     def key_by(self, mods):
         """ For a delivery with `disease=` several diseases (a list or an `ss.Strains`, HP7): the product's values as keyed by each, if they are not already (see the subclasses) """
         return
@@ -172,15 +201,13 @@ class Product(EventSource, ss.Module):
         return isinstance(vals, dict) and any(isinstance(k, ss.Module) or k in names for k in vals)
 
     def init_pre(self, sim):
-        """ Initialize the product; skips if already initialized """
-        if not self.initialized:
-            super().init_pre(sim)
-        else:
+        """ Initialize the product, and its events, once: both the sim and its deliveries initialize it """
+        if getattr(self, 'linked', False):
             return
-
-    def administer(self, uids):
-        """ Administer a Product - implemented by derived classes """
-        raise NotImplementedError
+        self.linked = True
+        self.init_events(sim)
+        super().init_pre(sim)
+        return
 
     spec_keys = [] # The keywords that make the product, for the model spec
 
@@ -189,148 +216,6 @@ class Product(EventSource, ss.Module):
         out = dict(type=type(self).__name__, name=self.name)
         out.update({key:ss.interventions.spec_value(getattr(self, key)) for key in self.spec_keys if getattr(self, key) is not None})
         return out
-
-
-class Dx(Product):
-    """
-    Generic class for diagnostics, written as code: test outcomes from a table of probabilities by disease state (for declared models, see `ss.Diagnostic`)
-    """
-    def __init__(self, df=None, hierarchy=None, *args, **kwargs):
-        if df is None:
-            raise TypeError('ss.Dx is the Starsim 3 diagnostic written as code, and needs df=, a table of test outcomes by disease state; for a declared model, use ss.Diagnostic(sensitivity=..., specificity=...)')
-        super().__init__(*args, **kwargs)
-        self.df = df
-        self.health_states = df.state.unique()
-        self.diseases = df.disease.unique()
-
-        if hierarchy is None:
-            self.hierarchy = df.result.unique()  # Drawn from the order in which the outcomes are specified
-        else:
-            self.hierarchy = hierarchy
-
-        # Create placeholder for multinomial sampling
-        n_results = len(self.hierarchy)
-        self.result_dist = ss.choice(a=n_results)
-        return
-
-    @property
-    def default_value(self):
-        return len(self.hierarchy) - 1
-
-    def administer(self, uids, return_format='dict'):
-        """
-        Administer a testing product.
-
-        Returns:
-
-             if return_format=='array': an array of length len(inds) with integer entries that map each person to one of the result_states
-             if return_format=='dict': a dictionary keyed by result_states with values containing the indices of people classified into this state
-        """
-
-        # Pre-fill with the default value, which is set to be the last value in the hierarchy
-        results = pd.Series(self.default_value, index=uids)
-
-        for disease in self.diseases:
-            for state in self.health_states:
-                df_filter = (self.df.state == state) & (self.df.disease == disease)
-                if not df_filter.any(): continue # Skip disease-state combinations not in the dataframe
-                this_state = getattr(self.sim.diseases[disease], state)
-                true_uids = this_state.uids # Find people for which this state is true
-                these_uids = true_uids.intersect(uids) # Find intersection of people in this state and the supplied UIDs
-
-                # Filter the dataframe to extract test results for people in this state
-                thisdf = self.df[df_filter]  # apply filter to get the results for this state & genotype
-                probs = [thisdf[thisdf.result == result].probability.values[0] for result in self.hierarchy]
-                self.result_dist.pars['p'] = probs  # Overwrite distribution probabilities
-
-                # Sort people into one of the possible result states and then update their overall results
-                this_result = self.result_dist.rvs(these_uids)
-                results.loc[these_uids] = np.minimum(this_result, results.loc[these_uids])
-
-        if return_format == 'dict':
-            return {k: ss.uids(results.index[results == i]) for i, k in enumerate(self.hierarchy)}
-        elif return_format == 'array':
-            return results
-        else:
-            errormsg = f'Unknown return_format "{return_format}": must be "dict" or "array"'
-            raise ValueError(errormsg)
-
-class Tx(Product):
-    """
-    Treatment products change fundamental properties about People, including their prognoses and infectiousness (for declared models, see `ss.Treatment`).
-
-    Args:
-        df (DataFrame): treatment specification with columns 'disease', 'state', 'post_state', 'efficacy'
-    """
-    def __init__(self, df=None, *args, **kwargs):
-        if df is None:
-            raise TypeError('ss.Tx is the Starsim 3 treatment written as code, and needs df=, a table of treatment outcomes by disease state; for a declared model, use ss.Treatment(cure=...)')
-        super().__init__(*args, **kwargs)
-        self.df = df
-        self.diseases = df.disease.unique()
-        self.health_states = df.state.unique()
-        self.efficacy_dist = ss.bernoulli(p=0)
-        return
-
-    def administer(self, uids, return_format='dict'):
-        """
-        Loop over treatment states to determine those who are successfully treated and clear infection
-        """
-
-        tx_successful = []  # Initialize list of successfully treated individuals
-
-        for disease_name in self.diseases:
-            disease = self.sim.diseases[disease_name]
-
-            for state in self.health_states:
-                df_filter = (self.df.state == state) & (self.df.disease == disease_name)  # Filter by state
-                if not df_filter.any(): continue # Skip disease-state combinations not in the dataframe
-                pre_tx_state = getattr(disease, state)
-                true_uids = pre_tx_state.uids # People in this state
-                these_uids = true_uids.intersect(uids)
-
-                if len(these_uids):
-                    thisdf = self.df[df_filter]  # apply filter to get the results for this state & genotype
-
-                    # Determine whether treatment is successful
-                    self.efficacy_dist.set(p=thisdf.efficacy.values[0])
-                    eff_treat_inds = self.efficacy_dist.filter(these_uids) # TODO: think if there's a way of not calling this inside a loop like this
-
-                    post_tx_state_name = thisdf.post_state.values[0]
-                    post_tx_state = getattr(disease, post_tx_state_name)
-
-                    if len(eff_treat_inds):
-                        tx_successful += list(eff_treat_inds)
-                        pre_tx_state[eff_treat_inds] = False  # People who get treated effectively
-                        post_tx_state[eff_treat_inds] = True
-
-        tx_successful = ss.uids(set(tx_successful))
-        tx_unsuccessful = np.setdiff1d(uids, tx_successful)
-        if return_format == 'dict':
-            output = {'successful': tx_successful, 'unsuccessful': tx_unsuccessful}
-        elif return_format == 'array':
-            output = tx_successful
-        else:
-            errormsg = f'Unknown return_format "{return_format}": must be "dict" or "array"'
-            raise ValueError(errormsg)
-
-        return output
-
-
-class Vx(Product):
-    """
-    Vaccine product, written as code: subclasses implement administer() to apply immunity (for declared models, see `ss.Vaccine`)
-    """
-    def __init__(self, diseases=None, *args, **kwargs):
-        if 'efficacy' in kwargs:
-            raise TypeError('ss.Vx is the Starsim 3 base class for a vaccine written as code (a subclass implements administer()), and takes no efficacy=; for a declared model, use ss.Vaccine(efficacy=...)')
-        super().__init__(*args, **kwargs)
-        self.diseases = sc.tolist(diseases)
-        return
-
-    def administer(self, uids):
-        """ Apply the vaccine to the requested uids. """
-        pass
 
 
 #%% Products for declared models: what is delivered by ss.vaccinate(), ss.screen(), and ss.treat()
@@ -367,11 +252,9 @@ class Effect:
         efficacy = selector.per_person(self.efficacy)
         if getattr(product, 'doses', None): # Relative efficacy after each dose
             efficacy = efficacy*np.concatenate([[0.0], product.doses])[np.clip(np.nan_to_num(level).astype(int), 0, len(product.doses))]
-        if callable(product.waning) and selector.abm: # Scaled by how much protection is left, given the time since it was delivered
+        if callable(product.waning): # Scaled by how much protection is left, given the time since it was delivered (agents only: see agent_reasons())
             elapsed = (product.sim.ti - product.ti_delivered.raw)*engine.dt
             efficacy = efficacy*np.where(holds, product.waning(np.where(holds, elapsed, 0.0)), 0.0)
-        elif callable(product.waning): # In a compartmental run, the level is the time since delivery: see init_stages()
-            efficacy = efficacy*product.stage_factors[level]
         return value*np.where(holds, 1 - efficacy, 1.0)
 
     def describe(self):
@@ -388,8 +271,6 @@ class Held(Product):
     """
     compartmental = True
     default_key = 'acquisition'
-    n_stages = 10 # In a compartmental run, the levels of time since delivery for a product whose protection fades by a function of it: at least this many, and more (up to max_stages) until the protection changes by less than 2% across each (see init_stages())
-    max_stages = 40
 
     def __init__(self, efficacy=None, waning=None, doses=None, cost=None, name=None, label=None, **kwargs):
         super().__init__(name=name, label=label, **kwargs)
@@ -421,7 +302,7 @@ class Held(Product):
     @property
     def held(self):
         """ Whether each person holds it now, as a condition: `ss.modify(..., where=vx.held)` """
-        return ss.conditions.Cond('dim', self.dim) > 0
+        return ss.conditions.Cond('dim', self) > 0
 
     @property
     def effects(self):
@@ -455,7 +336,7 @@ class Held(Product):
             return {self.disease:self.effects}
         if not all(keyed):
             others = [k for k,ok in zip(eff, keyed) if not ok]
-            raise ss.UnknownEffect(f'the efficacy of "{self.name}" is keyed by diseases and by {sc.strjoin(others)}, which is not a declared disease; the diseases are {sc.strjoin(names)}. '
+            raise ss.errors.UnknownEffect(f'the efficacy of "{self.name}" is keyed by diseases and by {sc.strjoin(others)}, which is not a declared disease; the diseases are {sc.strjoin(names)}. '
                                    f'Give the efficacy against each thing within each disease, e.g. dict(hpv16=dict(acquisition=0.9)).')
         return {ss.conditions.modname(k):(dict(v) if isinstance(v, dict) else {self.default_key:v}) for k,v in eff.items()}
 
@@ -470,78 +351,24 @@ class Held(Product):
         return self.waning is not None and not callable(self.waning)
 
     def agent_reasons(self):
-        return []
-
-    @property
-    def staged(self):
-        """ Whether holding the product has levels of time since delivery in a compartmental run, for protection that fades by a function of it """
-        return self.holds and callable(self.waning)
-
-    def stage_levels(self, sim=None):
-        """ The levels of holding the product in a compartmental run: not holding it, then the levels of time since delivery """
-        n = self.choose_stages(sim)[0] if sim is not None else self.n_stages
-        return [False] + [f'stage {j+1}' for j in range(n)]
-
-    def choose_stages(self, sim):
-        """ The number of levels of time since delivery, and the steps in each: they cover the time until the protection settles, with as few levels (from n_stages to max_stages) as keep it within 2% across each """
-        dt = float(sim.pars.dt.to(sim.unit_base).value) if isinstance(sim.pars.dt, ss.dur) else float(sim.pars.dt)
-        if getattr(self, '_stages', None) is not None and self._stages[0] == dt:
-            return self._stages[1]
-        span = ss.years(100).to(sim.unit_base).value # Long enough for any protection to settle; the levels then stop where it does
-        t = np.linspace(0, span, 20_001)
-        w = np.broadcast_to(np.asarray(self.waning(t), dtype=float), t.shape)
-        top = max(np.abs(w).max(), 1e-12)
-        moving = np.flatnonzero(np.abs(w - w[-1]) > 0.01*top)
-        settled = t[min(moving[-1] + 1, len(t) - 1)] if len(moving) else 0.0
-        for n in range(type(self).n_stages, self.max_stages + 1):
-            steps = max(1, int(np.ceil(settled/dt/(n - 1) - 1e-9))) # Steps in each level
-            edges = np.arange(n + 1)*steps*dt
-            if steps == 1 or np.max(np.abs(np.diff(np.asarray(self.waning(edges), dtype=float)))[:-1], initial=0) <= 0.02*top:
-                break
-        self._stages = (dt, (n, steps))
-        return n, steps
-
-    def init_stages(self, sim):
-        """
-        For a compartmental run: how long people stay in each level of time since delivery, and the protection in each
-
-        The levels cover the time until the protection settles (to within 1% of its
-        largest value), or the whole sim; the last level is kept for good. Everyone moves
-        up a level every `stage_steps` steps: see `ss.Delivery.step_stages()`. With one
-        step to a level this is exact; with more, the time since delivery is that of the
-        middle of the level, and a note says so.
-        """
-        dt = sim.t.dt.to(sim.unit_base).value
-        n, steps = self.choose_stages(sim)
-        start = np.arange(n)*steps # The steps since delivery at the start of each level
-        mids = np.append(start[:-1] + (steps - 1)/2, start[-1]) # The middle of each level, and the start of the last
-        if steps > 1:
-            mids[0] = (steps - 1)/4 # People delivered between the moves stay in the first level for less than a level, on average
-            if sim.pars.approx is False:
-                raise ss.CapabilityError(f'cannot run with solver="{sim.solver}" and approx=False: the protection of "{self.name}" fades by a function of time, which is kept as {n} levels of {steps} steps each. Run with solver="abm".')
-            else:
-                ss.note(f'the protection of "{self.name}" fades by a function of the time since delivery, approximated by {n} levels of {steps} steps each', sim=sim, verbose=0 if sim.pars.approx else None)
-        self.stage_steps = steps
-        self.stage_factors = np.concatenate([[0.0], np.broadcast_to(np.asarray(self.waning(mids*dt), dtype=float), (n,))]) # The share of protection left, at each level
-        return
+        out = super().agent_reasons()
+        if callable(self.waning):
+            out.append(f'the protection of "{self.name}" fades by a function of the time since delivery, which only agents keep')
+        return out
 
     def init_pre(self, sim):
         if getattr(self, 'linked', False): # Both the sim and the deliveries initialize a product
             return
-        self.linked = True
-        self.init_events(sim)
         super().init_pre(sim)
         if not self.holds:
             return
-        if self.staged and sim.solver != 'abm':
-            self.init_stages(sim)
         for disname,effects in self.disease_effects(sim).items(): # One modifier per disease and quantity, all keyed on holding it
             coded = ss.interventions.coded_disease(sim, disname)
             if coded is not None: # Written as code (PL2): its rel_sus and rel_trans, as for ss.modify()
                 for key,eff in effects.items():
                     kind = dict(acquisition='rel_sus', transmission='rel_trans').get(key)
                     if kind is None:
-                        raise ss.UnknownEffect(f'the efficacy of "{self.name}" has the key "{key}", but "{disname}" is written as code, so a product acts only on its acquisition (rel_sus) and transmission (rel_trans)')
+                        raise ss.errors.UnknownEffect(f'the efficacy of "{self.name}" has the key "{key}", but "{disname}" is written as code, so a product acts only on its acquisition (rel_sus) and transmission (rel_trans)')
                     ss.connectors.AgentModifiers.attach(coded, kind, sim)
                     sim.modifiers[(disname, kind, None)].append(Effect(self, key, eff))
                 continue
@@ -563,7 +390,7 @@ class Held(Product):
                     states = (graph.transitions.get(key) or graph.destination(key)).src
                 else:
                     options = ['acquisition', 'transmission'] + ['mortality']*bool(deaths) + list(graph.transitions) + graph.destinations()
-                    raise ss.UnknownEffect(f'the efficacy of "{self.name}" has the key "{key}", which is not something it can act on in "{dis.name}". Valid keys are {sc.strjoin(options)}{ss.transitions.did_you_mean(key, options)}')
+                    raise ss.errors.UnknownEffect(f'the efficacy of "{self.name}" has the key "{key}", which is not something it can act on in "{dis.name}". Valid keys are {sc.strjoin(options)}{ss.transitions.did_you_mean(key, options)}')
                 self.check_dims(eff, key, dis, states)
                 for kind,name in targets:
                     if kind == 'transition':
@@ -578,7 +405,7 @@ class Held(Product):
         for strat in dis.graph.strats:
             missing = [s.name for s in states if s.people and s.name not in strat.states] if strat.states is not None and strat.name in eff.dims else []
             if missing:
-                raise ss.InvalidAdjustment(f'the {key} efficacy of "{self.name}" is by "{strat.name}", but people in {sc.strjoin(missing)} of "{dis.name}" have no level of it (as agents, they would be read at the level of their last infection). '
+                raise ss.errors.InvalidAdjustment(f'the {key} efficacy of "{self.name}" is by "{strat.name}", but people in {sc.strjoin(missing)} of "{dis.name}" have no level of it (as agents, they would be read at the level of their last infection). '
                                            f'For an efficacy against each genotype, make each a disease and key the efficacy by disease: ss.Vaccine(efficacy=dict(hpv16=0.95, hpv18=0.95)).')
         return
 
@@ -592,7 +419,7 @@ class Held(Product):
         uids = (arr == 1).uids
         if len(uids):
             dis = ss.interventions.coded_disease(sim, self.disease) or sim.get_declared(self.disease)
-            eng = dis.engine if dis.graph is not None else ss.connectors.AgentModifiers.engine(dis, sim)
+            eng = dis.engine if isinstance(dis, ss.Disease) else ss.connectors.AgentModifiers.engine(dis, sim)
             p = -np.expm1(-eng.dt/eng.convert(self.waning))
             lost = uids[self.rng_wane.rvs(uids) < p]
             arr[lost] = 0
@@ -613,7 +440,7 @@ class Vaccine(Held):
         efficacy (float/dict): protection against acquisition (required); or a dict of efficacy against each of 'acquisition' (scales
             `rel_sus`), 'transmission' (scales `rel_trans`), 'mortality' (scales the death transitions), or any named transition
         waning (dur/func): a duration, for protection that is lost after an exponentially distributed time with that mean;
-            or a function of the time since delivery returning the fraction of protection that remains (in a compartmental run, kept as levels of time since delivery)
+            or a function of the time since delivery returning the fraction of protection that remains (agents only)
         doses (list): for a vaccine given in doses, the relative efficacy after each (e.g. `[0.85, 1.0]`); holding it then has a
             level per dose, and each delivery to someone who holds it gives them the next dose
         leaky (bool): if True (the default), everyone who receives it is partly protected (by `efficacy`); if False, a share `efficacy` of them are fully protected and the rest not at all ("all or nothing")
@@ -686,7 +513,7 @@ class Treatment(Held):
     of several diseases, and the probability for each can differ; a modifier of an undriven transition
     (`ss.modify(ng.cure, multiply=0.5, where=...)`) multiplies the probability for the people it applies to.
     It is then given to the people in their sources. What happens at failure (resistance) is a transition of
-    the disease triggered by the outcome: `ss.Transition('I -> R_res', on=drug.failed, p=0.05)`.
+    the disease triggered by the outcome: `ss.Transition(I, R_res, on=drug.failed, p=0.05)`.
 
     Args:
         cure (float/dict): the probability that treatment cures: the person leaves whichever infected state they are in for the
@@ -714,9 +541,6 @@ class Treatment(Held):
     spec_keys = ['cure', 'efficacy', 'transition', 'to', 'moves', 'waning', 'cost']
 
     def __init__(self, cure=None, efficacy=None, transition=None, to=None, moves=None, **kwargs):
-        if 'on_fail' in kwargs:
-            errormsg = 'on_fail= is removed: what happens at failure is a transition of the disease triggered by the outcome, e.g. ss.Transition("I -> R_res", on=drug.failed, p=0.05), or a step of its own, e.g. ss.treat(second_line, who=first_line.failed)'
-            raise TypeError(errormsg)
         if efficacy is not None and not isinstance(efficacy, dict):
             errormsg = f'The efficacy= of ss.Treatment() is its effects while it is held, as a dict (e.g. efficacy=dict(transmission=0.96)); the probability that it cures is cure= (e.g. ss.Treatment(cure={efficacy}))'
             raise ValueError(errormsg)
@@ -814,16 +638,16 @@ class Treatment(Held):
             graph = dis.graph
             trname = spec.rpartition('.')[2] if isinstance(spec, str) else spec.name
             if trname not in graph.transitions:
-                raise ss.UnknownEffect(f'the treatment "{self.name}" moves people along "{trname}", which "{dis.name}" does not have. Its transitions are {sc.strjoin(graph.transitions.keys())}.')
+                raise ss.errors.UnknownEffect(f'the treatment "{self.name}" moves people along "{trname}", which "{dis.name}" does not have. Its transitions are {sc.strjoin(graph.transitions.keys())}.')
             tr = graph.transitions[trname]
             if len(tr.dst) != 1 or not tr.people:
-                raise ss.UnknownEffect(f'the treatment "{self.name}" moves people along "{trname}" ({tr.arrow}), which has to go from states of people to one state of people.')
+                raise ss.errors.UnknownEffect(f'the treatment "{self.name}" moves people along "{trname}" ({tr.arrow}), which has to go from states of people to one state of people.')
             edges.append(sc.objdict(dis=dis.name, tr=tr, dst=tr.dst[0], srcs=[s for s in tr.src if s.people], eff=eff))
         for i,a in enumerate(edges): # Each person treated moves along at most one transition of each disease
             for b in edges[i+1:]:
                 both = [s.name for s in a.srcs if a.dis == b.dis and s in b.srcs]
                 if both:
-                    raise ss.OverlappingSources(f'the treatment "{self.name}" moves people in {sc.strjoin(both)} along both "{a.tr.name}" and "{b.tr.name}" of "{a.dis}"; '
+                    raise ss.errors.OverlappingSources(f'the treatment "{self.name}" moves people in {sc.strjoin(both)} along both "{a.tr.name}" and "{b.tr.name}" of "{a.dis}"; '
                                                 f'each person treated can move along only one transition of a disease, so give the sources of each once.')
         return edges
 
@@ -850,11 +674,11 @@ class Treatment(Held):
         tr = None
         if self.transition is not None:
             if self.transition not in graph.transitions:
-                raise ss.UnknownEffect(f'the treatment "{self.name}" has transition="{self.transition}", which "{dis.name}" does not have. Its transitions are {sc.strjoin(graph.transitions.keys())}.')
+                raise ss.errors.UnknownEffect(f'the treatment "{self.name}" has transition="{self.transition}", which "{dis.name}" does not have. Its transitions are {sc.strjoin(graph.transitions.keys())}.')
             tr = graph.transitions[self.transition]
         if self.to is not None:
             if self.to not in graph.states or not graph.states[self.to].people:
-                raise ss.UnknownState(f'the treatment "{self.name}" has to="{self.to}", which is not a state of people of "{dis.name}". Its states are {sc.strjoin(k for k,v in graph.states.items() if v.people)}.')
+                raise ss.errors.UnknownState(f'the treatment "{self.name}" has to="{self.to}", which is not a state of people of "{dis.name}". Its states are {sc.strjoin(k for k,v in graph.states.items() if v.people)}.')
             dst = graph.states[self.to]
         elif tr is not None:
             dst = tr.dst[0]
@@ -862,7 +686,7 @@ class Treatment(Held):
             dsts = {id(t.dst[0]):t.dst[0] for t in options.values()}
             if len(dsts) != 1:
                 example = next((d for d in dsts.values() if d is graph.first), graph.first)
-                raise ss.UnknownEffect(f'the treatment "{self.name}" cures, so it needs the state that cured people of "{dis.name}" go to, and its recoveries lead to {"none" if not dsts else "several: " + sc.strjoin(s.name for s in dsts.values())} ({sc.strjoin(options.keys()) or "no transition"}).\n'
+                raise ss.errors.UnknownEffect(f'the treatment "{self.name}" cures, so it needs the state that cured people of "{dis.name}" go to, and its recoveries lead to {"none" if not dsts else "several: " + sc.strjoin(s.name for s in dsts.values())} ({sc.strjoin(options.keys()) or "no transition"}).\n'
                                        f'     Give it with to= (e.g. to="{example.name}"), or give efficacy as a dict for a treatment that changes rates without curing.')
             dst = list(dsts.values())[0]
         if tr is None: # The flow that counts the cured: the one recovery into that state, if there is one
@@ -882,7 +706,7 @@ class Treatment(Held):
             for name in self.cure:
                 state = graph.states.get(name)
                 if state is None or not state.people:
-                    raise ss.UnknownState(f'the treatment "{self.name}" has a cure for "{name}", which is not a state of people of "{dis.name}". Its states are {sc.strjoin(k for k,v in graph.states.items() if v.people)}.')
+                    raise ss.errors.UnknownState(f'the treatment "{self.name}" has a cure for "{name}", which is not a state of people of "{dis.name}". Its states are {sc.strjoin(k for k,v in graph.states.items() if v.people)}.')
                 if state is not dst and not any(s is state for s in srcs):
                     srcs.append(state)
         self.cures = f'from {sc.strjoin(s.name for s in srcs)} to {dst.name}' + (f' (counted in {tr.name})' if tr is not None else '')
@@ -922,7 +746,7 @@ class Diagnostic(Product):
         combine (str): for someone in states of several diseases, 'worst' (a result for each disease, and the most severe of them is theirs;
             for a positive and a negative result, each disease is detected independently), or 'max' (the highest probability of each result
             or a more severe one, so for a positive and a negative result, the highest sensitivity)
-        delay (dur/dict): the time from the test to the result (in a compartmental run, people wait in levels of one step each); a dict gives one for each result
+        delay (dur/dict): the time from the test to the result (agents only); a dict gives one for each result
         detects (Cond/func): the condition the test detects (default: being in an infected state of the disease)
         cost (float): the cost of each delivery
         name (str): the name; if not given, taken from the variable the test is assigned to
@@ -936,7 +760,6 @@ class Diagnostic(Product):
         ```
     """
     compartmental = True
-    holds = False
     waning = None
     doses = None
     spec_keys = ['sensitivity', 'specificity', 'delay', 'detects', 'cost']
@@ -1012,21 +835,13 @@ class Diagnostic(Product):
         return self.sim.solver != 'abm'
 
     def agent_reasons(self):
-        out = []
+        out = super().agent_reasons()
         detects = self.detects
         if callable(detects) and not isinstance(detects, ss.conditions.Cond) and ss.utils.n_args(detects) >= 2:
             out.append(f'what the test "{self.name}" detects is a function of uids')
+        if self.delay is not None:
+            out.append(f'the results of the test "{self.name}" come after a delay, which only agents wait for')
         return out
-
-    def init_pre(self, sim):
-        if not getattr(self, 'linked', False):
-            self.linked = True
-            self.init_events(sim)
-            super().init_pre(sim)
-        return
-
-    def step_waning(self):
-        return
 
     @staticmethod
     def key_ref(key):
@@ -1067,7 +882,7 @@ class Diagnostic(Product):
                     raise ss.CapabilityError(f'the test "{self.name}" has a {"sensitivity" if self.results_given is None else "result"} for the state "{state}" of "{name}", which is written as code, so has no declared states; give one sensitivity=, for its infected, or detects=')
                 states = sim.get_declared(name).graph.states
                 if state not in states:
-                    raise ss.UnknownEffect(f'the test "{self.name}" has a {"sensitivity" if self.results_given is None else "result"} for "{state}", which is not a state of "{name}". Its states are {sc.strjoin(states.keys())}.')
+                    raise ss.errors.UnknownEffect(f'the test "{self.name}" has a {"sensitivity" if self.results_given is None else "result"} for "{state}", which is not a state of "{name}". Its states are {sc.strjoin(states.keys())}.')
             vals = [t.get(key, 0.0) for t in tables]
             if all(sc.isnumber(v) for v in vals) and (sum(vals) > 1 + 1e-9 or min(vals) < 0):
                 errormsg = f'The results of the test "{self.name}" for {name if state is None else name + "." + state} have probabilities {vals}, which have to be between 0 and 1 and sum to at most 1'

@@ -5,7 +5,7 @@ Import models from other frameworks
 `v4_design/design/16-interop.md`. Each importer reads its format into an
 `ss.interop.Source`, and `ss.interop.build()` turns that into a sim by the same
 rules for every format: how each rate was read is printed, and what could not be
-translated is listed as `ss.ImportIncomplete` and kept in `sim.imported`.
+translated is listed as `ss.errors.ImportIncomplete` and kept in `sim.imported`.
 """
 import re
 import sciris as sc
@@ -21,9 +21,9 @@ from .odin import load_odin
 from .sbml import load_sbml
 from .siminf import load_siminf
 from .summer2 import load_summer2
-from .export import exporters, export
+from .export import exporters, export, to_hub
 
-__all__ = ['Source', 'build', 'formats', 'sniff', 'load', 'exporters', 'export']
+__all__ = ['Source', 'build', 'formats', 'sniff', 'load', 'exporters', 'export', 'to_hub']
 
 formats = dict(
     atomica  = load_atomica,
@@ -88,18 +88,23 @@ def sniff(source):
     return None
 
 
-def load(source, format, **kwargs):
+def load(source, format=None, **kwargs):
     """
-    Read another framework's model into a sim; usually called as `ss.load(source, format=...)`
+    Read another framework's model into a sim, e.g. `ss.interop.load('workbook.xlsx')` (after `import starsim.interop`)
 
     Args:
         source (str/any): the file (or, for some formats, the model object)
-        format (str): the framework, one of `ss.interop.formats`
+        format (str): the framework, one of `ss.interop.formats`; if not given, told from the file or object (see `sniff()`)
         kwargs (dict): passed to the importer
 
     Returns:
         An `ss.Sim`, with `sim.imported` saying how it was read and what was not translated
     """
+    if format is None:
+        format = sniff(source)
+        if format is None:
+            errormsg = f'Cannot tell which framework {source} is from; give format=, one of {sc.strjoin(formats)}'
+            raise ValueError(errormsg)
     key = str(format).lower().replace('-', '').replace('_', '')
     if key not in formats:
         errormsg = f'Cannot import format "{format}"; the formats are {sc.strjoin(formats)}'

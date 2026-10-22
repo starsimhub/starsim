@@ -7,9 +7,10 @@ Justified by [best-practices/results-and-observation.md](../best-practices/resul
 ## Automatic results
 
 ```python
+S, I, R = ss.states('S I R')
 sir = ss.Disease(
-    infection = ss.transmission('S -> I', beta=0.3),
-    recovery  = ss.progression('I -> R', dur=10),
+    infection = ss.Transition(S, I, rate=0.3 * I),
+    recovery  = ss.Transition(I, R, dur=10),
     init_prev = 0.01,
 )
 sim = ss.Sim(sir, unit='day').run()
@@ -26,7 +27,7 @@ A build MUST generate, for every module with states and transitions:
 
 - `n_<state>` for every state: the number of people in it at each time point;
 - `<transition>` for every named transition: the number of people who made that transition during each step (a flow, not a stock), named exactly as the transition is;
-- and `<transition>.<state>` for each destination of a transition with several (`cin = ss.progression('C -> X | R', ...)` gives `cin.X` and `cin.R`): the number who made it and arrived in that state, whose sum is the transition's flow. It is read `res.cin.X` or `res['cin.X']`, and `res.cin.select(to='X')` is the same result; it is kept by group like the total, is a source of an outcome (`ss.outcome(0.8*cin.X)`) and a series in a result expression, and is matched by a data column named `cin.X`. A destination may not be named like an attribute of a result (`cum`, `values`, ...), which raises when the disease is made.
+- and `<transition>.<state>` for each destination of a transition with several (`cin = ss.Transition(C, [X, R], ...)` gives `cin.X` and `cin.R`): the number who made it and arrived in that state, whose sum is the transition's flow. It is read `res.cin.X` or `res['cin.X']`, and `res.cin.select(to='X')` is the same result; it is kept by group like the total, is a source of an outcome (`ss.outcome(0.8*cin.X)`) and a series in a result expression, and is matched by a data column named `cin.X`. A destination may not be named like an attribute of a result (`cum`, `values`, ...), which raises when the disease is made.
 
 Each flow's running total is `res.<transition>.cum`, a result (a stock) computed when it is asked for, not a second stored series.
 
@@ -221,22 +222,17 @@ n_I.values                                   # the full array, runs by time
 - `n_runs` belongs to the MultiSim, not to the sim. `ss.Sim` has no replicate count, and `sim.results` always holds one series per result. Each run has its own seed ([11-random.md](11-random.md)).
 - **A MultiSim is its results, and a MultiSim result is the same `ss.Result` with a `run` dimension first.** `.select()` and `.by()` work as on a single sim (`msim.results.sir.n_I.select(age=0).quantiles([0.5])`), `.select(run=3)` is one run (a result of one sim), and arithmetic, `.resample()`, `.to_df()`, and `.plot()` work on it as on any result. `len(msim)` is the number of runs, whichever way they were taken (restarted compartmental runs, runs in one call to the kernels or to JAX, or sims run in parallel).
 - `.quantiles(q)` takes a list of quantiles and returns a result with one series per quantile (for each scenario), over the runs; `.median()` and `.mean()` return the series over the runs (of each scenario). `.values` is the full array with one row per run.
-- `msim.summarize()`, `msim.diff()`, `msim.extinction()`, `msim.outbreaks()`, and `msim.compare()` work from the results.
+- `msim.summarize()`, `msim.diff()`, and `msim.compare()` work from the results. `ss.interop.to_hub(msim, ...)` writes them as a submission to a forecast hub.
 - `msim.plot()` draws the median and an interval. `msim.plot(lines=True)` draws every run, because extinction, bimodality, and threshold behavior cannot be seen in a median.
 - `ss.parallel(baseline=sim_a, vaccine=sim_b, n_runs=100)` returns one object whose results are indexed by scenario, run, and time ([08-interventions.md](08-interventions.md)): `msim.results.sir.n_I.select(scenario='vaccine')`. A sweep, `ss.parallel(sim, pars=dict(beta=[0.2, 0.4]), n_runs=10)`, has the values as coordinates of the runs: `msim.results.sir.n_I.select(beta=0.2).quantiles()`.
 - `ss.parallel()` is the one way to run many sims, and `sim.run(n_runs=100)` is its shortcut for running one sim many times; both end in the same results.
 
 
-Where extinction is possible, `msim.extinction()` reports it, for each declared disease and scenario: the share of runs with nobody infected at the end (not counting runs that started with nobody infected), and the median time it happened (`output=True` gives the table as a data frame):
+How often a disease died out, or caused a major outbreak, is read from the runs' results, for each declared disease and scenario. A disease that nobody can catch again dies out in every run that is long enough, after a major outbreak as after a minor one, so for it the question is how often there was a major outbreak, counted from the acquisitions over the run (so the people infected at the start are not counted):
 
-```text
-sir: died out in 41% of 500 runs (median time 23 days)
-```
-
-A disease that nobody can catch again dies out in every run that is long enough, after a major outbreak as after a minor one, so for it the question is how often there was a major outbreak. `msim.outbreaks(threshold=0.1)` gives the share of runs in which more than a threshold were infected: a share of the people at the start, or a number of people if it is 1 or more. The number infected is the total of the acquisitions over the run, so the people infected at the start are not counted:
-
-```text
-sir: a major outbreak (more than 100 infected) in 48% of 500 runs
+```python
+died = (msim.results.sir.n_I.values[:, -1] == 0).mean()                  # the share of runs with nobody infected at the end
+major = (msim.results.sir.infection.values.sum(axis=1) > 100).mean()     # the share of runs with more than 100 infected
 ```
 
 ## The transmission log

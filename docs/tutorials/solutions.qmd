@@ -32,9 +32,10 @@ import starsim as ss
 ss.options(jupyter=True)
 import sciris as sc
 
+S, I = ss.states('S I')
 sis = ss.Disease(
-    infection = ss.transmission('S -> I', beta=0.3),
-    recovery = ss.progression('I -> S', dur=10), # <-- change this
+    infection = ss.Transition(S, I, rate=0.3 * I),
+    recovery = ss.Transition(I, S, dur=10), # <-- change this
     init_prev = 0.01,
 )
 sim = ss.Sim(sis, stop=100)
@@ -282,10 +283,11 @@ Higher values of `protection` make it harder for the second strain to spread thr
 Another way is to split one disease into strains with `stratify()`, giving the protection that infection with each strain gives against each other strain as a matrix. Strains with partial cross-immunity can't run over a network yet, so this version uses homogeneous mixing (and runs as an ODE):
 
 ```{python}
+S, I, R = ss.states('S I R')
 flu = ss.Disease(
-    infection = ss.transmission('S -> I', beta=ss.peryear(0.5)),
-    recovery = ss.progression('I -> R', dur=ss.years(4)),
-    waning = ss.progression('R -> S', dur=ss.years(10)),
+    infection = ss.Transition(S, I, rate=ss.peryear(0.5) * I),
+    recovery = ss.Transition(I, R, dur=ss.years(4)),
+    waning = ss.Transition(R, S, dur=ss.years(10)),
     init_prev = 0.01,
 )
 flu.stratify(strain=['A', 'B'], immunity=[[1.0, 0.5], [0.5, 1.0]])

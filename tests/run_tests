@@ -8,4 +8,4 @@ export SCIRIS_BACKEND='agg'
 export STARSIM_SHOW=0
 
 # Run the tests
-pytest test_*.py -n auto --durations=0
+pytest test_*.py interop -n auto --durations=0

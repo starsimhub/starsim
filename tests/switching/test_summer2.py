@@ -10,6 +10,8 @@ import pandas as pd
 import pytest
 import sciris as sc
 import starsim as ss
+import starsim.fit
+import starsim.interop
 
 ref_n_I = {1990: 3150.376, 2010: 1527.021, 2025: 1477.900} # switching/summer2.md, "The second week" §1: summer2's active TB (all ages) from tb_summer2.py
 ref_notifications = {1990: 2341.466, 2010: 2263.245, 2024: 2194.623} # Same section: summer2's notifications (v4: 2,341, 2,260, 2,195)
@@ -40,8 +42,8 @@ def make_tb(ages=True, data=None):
     S, E, L, I, T, R = ss.states('S E L I T R')
     tb = ss.Disease(infection=S >> E @ beta*I, reinfection_L=L >> E @ beta*0.21*I, reinfection_R=R >> E @ beta*0.21*I,
                     stabilisation=E >> L @ 2.0, early_activation=E >> I @ 0.2, late_activation=L >> I @ 0.002, self_recovery=I >> R @ 0.2,
-                    detection=I >> T @ detect_max*scaleup, treatment_end=T >> R @ 2.0, tb_death=ss.death('I ->', rate=0.2),
-                    death=ss.death(rate=1/70), birth=ss.birth('-> S', rate=0.02), init=dict(I=1000), name='tb')
+                    detection=I >> T @ detect_max*scaleup, treatment_end=T >> R @ 2.0, tb_death=ss.death(I, rate=0.2),
+                    death=ss.death(rate=1/70), birth=ss.birth(S, rate=0.02), init=dict(I=1000), name='tb')
     if ages:
         tb.stratify(age=[0, 5, 15, 35, 50, 70], split=[1/6]*6, adjust={'early_activation': [3, 1.5, 1, 1, 1, 1], 'rel_trans': [0.1, 0.2, 1, 1, 1, 1]})
     return ss.Sim(tb, networks=ss.contacts(age=mixing) if ages else None, total_pop=1e6, start=1950, stop=2025, unit='year', data=data, verbose=0)
@@ -62,7 +64,7 @@ def jax_logdensity(sim, x):
     with jax.enable_x64(True):
         in_jax = float(density(jax.numpy.asarray(x)))
     set_pars(x)
-    from_sim = ss.calibration.loglik(sim.run(), likelihood=lik) + sum(ss.calibration.logprior(p, v) for p,v in zip(fitted.values(), x))
+    from_sim = ss.fit.loglik(sim.run(), likelihood=lik) + sum(ss.fit.logprior(p, v) for p,v in zip(fitted.values(), x))
     return in_jax, from_sim
 
 
@@ -94,7 +96,7 @@ def test_summer2_import_live():
     m.add_death_flow('tb_death', 0.2, 'I')
     m.add_universal_death_flows('universal_death', death_rate=1/70)
     m.add_crude_birth_flow('birth', 0.02, 'S')
-    sim = ss.load(m, pars=dict(contact_rate=10.0, rr_reinf=0.21, detect_max=1.5), verbose=0)
+    sim = ss.interop.load(m, pars=dict(contact_rate=10.0, rr_reinf=0.21, detect_max=1.5), verbose=0)
     assert not sim.imported.incomplete, f'Not translated: {sim.imported.incomplete}'
     ours = np.asarray(make_tb(ages=False).run().results.tb.detection.values)
     theirs = np.asarray(sim.run().results.summer2.detection.values) # The flow in each year, as make_tb's (summer2's own output is the mean of the rates at either end of the year)

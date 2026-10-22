@@ -1,7 +1,7 @@
 """
 Named data: places and contact matrices looked up by name
 
-`ss.people('Kenya')`, `ss.geo('Kenya', level=1)`, and `ss.contacts('Kenya')` read their data from
+`ss.people('Kenya')`, `ss.geo.location('Kenya', level=1)`, and `ss.contacts('Kenya')` read their data from
 `starsim_data` (https://github.com/starsimhub/starsim_data), which bundles what is
 small and common and fetches the rest on demand. Each lookup returns the data with a
 record of where it came from (`ref`), which is written into the model spec, so the
@@ -51,15 +51,15 @@ def provider():
     try:
         import starsim_data as ssd
     except ImportError as E:
-        errormsg = 'Named data (ss.geo("Kenya"), ss.contacts("Kenya")) comes from the starsim_data package: pip install starsim_data'
+        errormsg = 'Named data (ss.geo.location("Kenya"), ss.contacts("Kenya")) comes from the starsim_data package: pip install starsim_data'
         raise ImportError(errormsg) from E
     return ssd
 
 
 def unknown(place, E, what='place'):
-    """ Raise `ss.UnknownLocation` for a place that the provider cannot resolve, with its suggestions """
+    """ Raise `ss.errors.UnknownLocation` for a place that the provider cannot resolve, with its suggestions """
     msg = str(E).strip('"\'')
-    raise ss.UnknownLocation(f'the {what} "{place}" was not found in starsim_data: {msg}.')
+    raise ss.errors.UnknownLocation(f'the {what} "{place}" was not found in starsim_data: {msg}.')
 
 
 def ref(ssd, df, **kwargs):
@@ -96,7 +96,7 @@ def nodes(ssd, place, level, year):
 
 def geography(place, level=1, year=None, places=None):
     """
-    The places of a named geography, for `ss.geo('Kenya', level=1)`
+    The places of a named geography, for `ss.geo.location('Kenya', level=1)`
 
     Args:
         place (str/list): a country, by name or code ('Kenya', 'KE', 'KEN'), or several
@@ -225,6 +225,6 @@ def contact_matrix(place, source='prem2021', layer='all'):
             unknown(place, E)
         others = [s for s in ['prem2021', 'prem2017', 'mistry2021'] if s != source and key in ssd.list_locations(s)]
         hint = f'; it is in {sc.strjoin(others)}, e.g. ss.contacts("{place}", source="{others[0]}")' if others else ''
-        raise ss.UnknownLocation(f'"{source}" has no contact matrix for {key}{hint}.')
+        raise ss.errors.UnknownLocation(f'"{source}" has no contact matrix for {key}{hint}.')
     ages = [float(a) for a in df.index]
     return df.values.astype(float), ages, ref(ssd, df, place=place, source=source, layer=layer, location=df.attrs.get('location'))

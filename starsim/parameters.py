@@ -7,7 +7,6 @@ import pandas as pd
 import sciris as sc
 import starsim as ss
 import datetime as dt
-import itertools
 from .expressions import as_expr, evaluate, Expr, par
 
 
@@ -58,7 +57,7 @@ class Pars(sc.objdict):
         return
 
     def bare_units(self, unit, label):
-        """ Warn about each parameter set to a bare number whose unit (that of its default) is not the sim's, e.g. ss.MFNet(dur=5) in a sim in days """
+        """ Warn about each parameter set to a bare number whose unit (that of its default) is not the sim's, e.g. ss.SexualNet(dur=5) in a sim in days """
         for key,base in (self._bare or {}).items():
             if base != unit:
                 runs = f'runs in {unit}' if unit else 'counts time in timesteps'
@@ -102,6 +101,10 @@ class Pars(sc.objdict):
     def update(self, pars=None, create=False, **kwargs):
         """
         Update internal dict with new pars.
+
+        A new value replaces the old one, except that a declared parameter (`ss.par`) takes the value and keeps its name and bounds,
+        a bare number for a typed value keeps its unit, and a single value for a distribution is the fixed value of that kind
+        (see `_update_dist()`). To change one parameter of a distribution, use its own method, e.g. `pars.dur_inf.set(mean=8)`.
 
         Args:
             pars (dict): the parameters to update (if None, do nothing)
@@ -214,50 +217,36 @@ class Pars(sc.objdict):
         return
 
     def _update_dist(self, key, old, new):
-        """ Update a Dist object in the parameters, e.g. sim.pars.diseases.sir.dur_inf """
+        """
+        Update a Dist object in the parameters, e.g. sim.pars.diseases.sir.dur_inf
+
+        A distribution (or a dict with a `type`) replaces it. A single value (a number, duration, rate, or function) sets
+        its main parameter and keeps the rest, as in Starsim 3: for `ss.bernoulli`, its probability (`init_prev=0.05`);
+        for `ss.lognorm_ex`, its mean (`dur=5` is a lognormal of mean 5, with the same standard deviation); for
+        `ss.constant`, its value. A bare number keeps the unit of the distribution (see `note_bare()`). To change other
+        parameters, use its own method, e.g. `pars.dur_inf.set(mean=8, std=2)`; for a fixed value, give `ss.constant(...)`.
+        """
+        if isinstance(new, dict) and 'type' in new: # A distribution given by its type and parameters, e.g. dict(type='poisson', lam=4)
+            new = ss.distributions.make_dist(new)
 
         # It's a Dist, e.g. dur_inf = ss.normal(6,2); use directly
         if isinstance(new, ss.Dist):
             if isinstance(old, ss.bernoulli) and not isinstance(new, (ss.bernoulli, ss.choose_n)): # Both have filter()
                 errormsg = f"Bernoulli distributions can only be changed to another Bernoulli distribution or ss.choose_n(): {type(new)} is invalid"
                 raise TypeError(errormsg)
-            else:
-                self[key] = new
+            self[key] = new
 
-        # It's a single number, e.g. dur_inf = 6; set parameters, or a time parameter
-        elif isinstance(new, (Number, ss.dur, ss.Rate)):
+        # It's a single value, e.g. dur_inf = 6: its main parameter
+        elif isinstance(new, (Number, ss.dur, ss.Rate)) or sc.isfunc(new):
             old.set(new)
             if isinstance(new, Number):
                 self.note_bare(key, old, new)
 
-        # It's a list of numbers, e.g. dur_inf = [6, 2]; set parameters
-        elif isinstance(new, list):
-            old.set(*new)
-            if all(isinstance(v, Number) for v in new):
-                self.note_bare(key, old, new)
-
-        # It's a dict, figure out what to do
-        elif isinstance(new, dict):
-            newtype = new.get('type')
-            if newtype is None: # Same type of dist, set parameters
-                old.set(**new)
-            else: # We need to create a new distribution
-                if isinstance(old, ss.bernoulli) and newtype not in ['bernoulli', 'choose_n']:
-                    errormsg = f"Bernoulli distributions can only be changed to another Bernoulli distribution or ss.choose_n(): {newtype} is invalid"
-                    raise TypeError(errormsg)
-                else:
-                    dist = ss.distributions.make_dist(new)
-                    self[key] = dist
-
-        # It's a function, treat it like a number
-        elif sc.isfunc(new):
-            old.set(new)
-
         # Give up
         else:
-            errormsg = f'Updating dist from {type(old)} to {type(new)} is not supported'
+            what = f'use pars.{key}.set({", ".join(map(str, new))})' if isinstance(new, (list, tuple)) else f'use pars.{key}.set(**{new})' if isinstance(new, dict) else 'give a distribution'
+            errormsg = f'"{key}" is {old}; a {type(new).__name__} ({new}) is not a value for it. To change its parameters, {what}; to replace it, give a distribution (e.g. {type(old).__name__}(...)) or a single value'
             raise TypeError(errormsg)
-
         return
 
     def check_key_mismatch(self, pars):
@@ -336,7 +325,7 @@ class SimPars(Pars):
 
         # How the model is run; these only apply to modules with declared states and transitions (see ss.Disease)
         self.unit       = None   # The unit for bare numbers, e.g. 'day'; if nothing in the model has a unit, time is in timesteps
-        self.solver     = 'auto' # 'auto', 'ode', 'binomial', 'gillespie' (which switches to tau-leaping for a run of too many events), or 'abm'
+        self.solver     = 'auto' # 'auto', 'ode', 'binomial', 'gillespie' (exact), 'tau' (tau-leaping), or 'abm'
         self.approx     = None   # None prints a note for each approximation; True keeps the note in sim.notes without printing it; False makes it an error
         self.integrator = None   # The ODE integration scheme: 'rk4' (the default) or 'euler'
         self.substeps   = None   # The number of substeps per timestep: for the 'rk4' and 'euler' integrators (default: enough that no compartment turns over, or grows through its inflows, by more than a quarter in one), and the 'binomial' solver (default: 1, so each step is taken whole; the chain-binomial solver moves people through as many stages of a dwell time as they pass in a step)
@@ -671,74 +660,6 @@ def check_verbose(verbose):
     raise ValueError(errormsg)
 
 
-class Requires(sc.prettyobj):
-    """
-    One item of the data a module needs, for `sim.requires()`
-
-    This is metadata only: it says what to supply, and is never enforced.
-
-    Args:
-        name (str): the name of the item; a parameter or attribute of the module with this name supplies it
-        shape (str): its shape, e.g. 'age x age'
-        source (str): where the data usually come from
-        doc (str): a description
-        default (any): the value used if none is supplied
-
-    Examples:
-        ```python
-        class MyNetwork(ss.Network):
-            requires = [
-                ss.Requires('population',     shape='patch',     source='UN WPP 2024'),
-                ss.Requires('contact_matrix', shape='age x age', source='Prem et al. 2021'),
-            ]
-        ```
-    """
-    def __init__(self, name, shape=None, source=None, doc=None, default=None):
-        self.name = name
-        self.shape = shape
-        self.source = source
-        self.doc = doc
-        self.default = default
-        return
-
-
-def load_pars(filename):
-    """
-    Read parameter values by name from a file, for `ss.Sim(pars=...)`
-
-    A CSV file has either a column of names and a column of values (`name,value`), or
-    one row of values with a column per parameter; a TOML or JSON file is a table of
-    values by name.
-
-    Args:
-        filename (str/path): the file
-
-    Examples:
-        ```python
-        sim = ss.Sim(sir, pars='params/kenya_2024.csv', unit='day')
-        ```
-    """
-    path = sc.path(filename)
-    suffix = path.suffix.lower()
-    if suffix == '.json':
-        return dict(sc.loadjson(path))
-    elif suffix == '.toml':
-        import tomllib
-        with open(path, 'rb') as f:
-            return tomllib.load(f)
-    elif suffix == '.csv':
-        df = pd.read_csv(path)
-        cols = [str(col).lower() for col in df.columns]
-        if len(cols) == 2 and cols[1] == 'value':
-            return dict(zip(df.iloc[:, 0].astype(str), df.iloc[:, 1]))
-        elif len(df) == 1:
-            return df.iloc[0].to_dict()
-        errormsg = f'The parameter file {path} should have a column of names and a column named "value", or one row of values with a column per parameter; it has columns {list(df.columns)} and {len(df)} rows'
-        raise ValueError(errormsg)
-    errormsg = f'The parameter file {path} should be a CSV, TOML, or JSON file, not "{suffix}"'
-    raise ValueError(errormsg)
-
-
 #%% Values that vary by level or in time
 
 def isnull(val):
@@ -932,7 +853,7 @@ class by:
         others = [dim for dim in self.dims if dim != 'to']
         def position(n):
             if n != len(labels):
-                raise ss.ShapeError(f'{self} gives {n} values over "to" by position, but the entry of p= it is in covers {len(labels)} destinations ({sc.strjoin(labels)})')
+                raise ss.errors.ShapeError(f'{self} gives {n} values over "to" by position, but the entry of p= it is in covers {len(labels)} destinations ({sc.strjoin(labels)})')
             return labels.index(to)
         if self.array is not None:
             axis = self.dims.index('to')
@@ -961,8 +882,8 @@ class by:
             return 'keys', [str(k) for k in vals]
         return None
 
-    def check(self, sim, note=False):
-        """ Check the values against the sim's dimensions (`ss.ShapeError`), and that a property of people that is not one is given by value (with `note=True`, when the sim is built, also note a table averaged over groups); returns the positions of the sim's dimensions it is by, and those dimensions """
+    def check(self, sim):
+        """ Check the values against the sim's dimensions (`ss.errors.ShapeError`), and that a property of people that is not one is given by value; returns the positions of the sim's dimensions it is by, and those dimensions """
         names = [strat.name for strat in sim.groups.strats]
         if 'to' in self.dims: # Over the destinations of a transition, which is taken a destination at a time (see at())
             return [], []
@@ -974,31 +895,36 @@ class by:
                     fix = 'give a table by age with the lower edge of each bin, e.g. ss.by(dict(age=[0, 15, 50], value=[...])), or add sim.stratify(age=[...])'
                 else:
                     fix = f'give them by value, ss.by({dim}=dict(...)), which is read from people.{dim}, or add sim.stratify({dim}=[...])'
-                raise ss.MissingDimension(f'ss.by({dim}=...) gives a value for each level of "{dim}" by position, but the model is not stratified by "{dim}", so the positions have no order; {fix}.')
+                raise ss.errors.MissingDimension(f'ss.by({dim}=...) gives a value for each level of "{dim}" by position, but the model is not stratified by "{dim}", so the positions have no order; {fix}.')
         ds = [names.index(dim) for dim in self.dims if dim in names]
         strats = [sim.groups.strats[d] for d in ds]
         if self.array is not None:
             shape = tuple(strat.n for strat in strats)
             if self.array.shape != shape:
-                raise ss.ShapeError(f'ss.by() has an array of shape {self.array.shape}, but {sc.strjoin(self.dims)} have {shape} levels.')
+                raise ss.errors.ShapeError(f'ss.by() has an array of shape {self.array.shape}, but {sc.strjoin(self.dims)} have {shape} levels.')
         elif self.table is None:
             for strat in strats:
                 vals = self.given[strat.name]
-                labels = strat.coarse_labels if strat.coarse is not None else strat.labels # A clock's levels as given, when they are steps
+                labels = strat.labels
                 if isinstance(vals, dict):
                     missing = [str(label) for label in labels if str(label) not in [str(k) for k in vals]]
                     if missing:
-                        raise ss.ShapeError(f'ss.by({strat.name}=dict(...)) has no value for {sc.strjoin(missing)} (the levels of "{strat.name}" are {sc.strjoin(labels)}).')
+                        raise ss.errors.ShapeError(f'ss.by({strat.name}=dict(...)) has no value for {sc.strjoin(missing)} (the levels of "{strat.name}" are {sc.strjoin(labels)}).')
                     continue
                 n = len(vals) if isinstance(vals, (list, tuple)) else len(sc.toarray(vals)) if np.ndim(vals) else len(labels) # One value is for every level, e.g. ss.by(subpop=2.2)
                 if n != len(labels):
-                    raise ss.ShapeError(f'ss.by({strat.name}=...) has {len(sc.toarray(vals))} values, but "{strat.name}" has {len(labels)} levels ({sc.strjoin(labels)}).')
-        if note and sim.solver != 'abm':
-            for strat in strats:
-                kind = self.keys(strat.name)
-                if kind is not None and kind[0] == 'edges' and not (strat.edges is not None and np.array_equal(strat.edges, kind[1])):
-                    ss.note(f'{self} gives values by bins of {strat.name} other than the model\'s ({sc.strjoin(strat.labels)}), so a compartmental run averages it over each group, weighting each bin by how much of the group it covers; agents read each person\'s own {strat.name}', sim=sim)
+                    raise ss.errors.ShapeError(f'ss.by({strat.name}=...) has {len(sc.toarray(vals))} values, but "{strat.name}" has {len(labels)} levels ({sc.strjoin(labels)}).')
         return ds, strats
+
+    def split_groups(self, sim):
+        """ The first dimension whose groups a table's bins split (an edge inside a group, e.g. single years of age on 5-year age groups), so that a group has no one value and only agents can read it; None if there is none """
+        names = [strat.name for strat in sim.groups.strats]
+        for dim in self.dims:
+            kind = self.keys(dim) if dim in names else None
+            edges = sim.groups.strats[names.index(dim)].edges if kind is not None else None
+            if kind is not None and kind[0] == 'edges' and edges is not None and any(k > edges[0] and not np.isclose(edges, k).any() for k in kind[1]):
+                return dim
+        return None
 
     def converter(self, sim, convert=None, year=None):
         """ A function that gives a value as a number: a value that varies in time is taken at the sim's current time, or at `year` if given """
@@ -1031,9 +957,7 @@ class by:
             for i,(strat,(dim,vals)) in enumerate(zip(strats, self.given.items())):
                 if isinstance(vals, dict): # By label, in the order of the levels
                     vals = {str(k):v for k,v in vals.items()}
-                    vals = [vals[str(label)] for label in (strat.coarse_labels if strat.coarse is not None else strat.labels)]
-                if strat.coarse is not None and isinstance(vals, (list, tuple)) and len(vals) == len(strat.coarse_labels): # A clock whose levels are steps: each step takes the value of the level as given that it is in
-                    vals = [vals[c] for c in strat.coarse]
+                    vals = [vals[str(label)] for label in strat.labels]
                 if isinstance(vals, (list, tuple)): # The usual case, which NumPy need not inspect (slowly, for typed values)
                     single, items = False, vals
                 else:
@@ -1045,8 +969,8 @@ class by:
                 shape[i] = strat.n
                 out = out*vals.reshape(shape)
             return ds, out
-        if any(self.keys(strat.name)[0] == 'edges' for strat in strats): # Bins of their own: averaged over each group
-            return ds, self.binned_grid(strats, convert)
+        if any(self.keys(strat.name)[0] == 'edges' for strat in strats): # Bins of their own: each group in one of them
+            return ds, self.binned_grid(sim, strats, convert)
         out = np.zeros([strat.n for strat in strats])
         for _,row in self.table.iterrows():
             index = []
@@ -1054,48 +978,35 @@ class by:
                 labels = [str(label) for label in strat.labels]
                 label = str(row[strat.name])
                 if label not in labels:
-                    raise ss.ShapeError(f'the table given to ss.by() has "{label}" for "{strat.name}", which is not one of its levels ({sc.strjoin(labels)}).')
+                    raise ss.errors.ShapeError(f'the table given to ss.by() has "{label}" for "{strat.name}", which is not one of its levels ({sc.strjoin(labels)}).')
                 index.append(labels.index(label))
             out[tuple(index)] += convert(row['value'])
         return ds, out
 
-    def binned_grid(self, strats, convert):
-        """ For a table with a column of bin edges (e.g. single years of age): the value for each group, the mean over the table's bins weighted by how much of the group each covers """
-        num = np.zeros([strat.n for strat in strats])
-        den = np.zeros_like(num)
+    def binned_grid(self, sim, strats, convert):
+        """ For a table with a column of bin edges (e.g. age=[0, 15, 50]), the model's or coarser: the value for each group, that of the bin it is in. Bins that split a group raise, since a group has no one value (see `split_groups()`) """
+        dim = self.split_groups(sim)
+        if dim is not None:
+            raise ss.CapabilityError(f'{self} is by bins of {dim} that split the model\'s groups ({sc.strjoin(strats[[s.name for s in strats].index(dim)].labels)}), so a group has no one value.\n'
+                                     f'     Give it by the model\'s groups, or run with solver="abm" (which reads each person\'s own {dim}).')
+        out = np.zeros([strat.n for strat in strats])
         for _,row in self.table.iterrows():
-            parts = [] # For each dimension: the groups the row is in, and its weight in each
+            index = [] # For each dimension: the groups the row is for
             for strat in strats:
                 kind, keys = self.keys(strat.name)
                 val = row[strat.name]
                 if kind == 'keys':
                     labels = [str(label) for label in strat.labels]
                     if str(val) not in labels:
-                        raise ss.ShapeError(f'the table given to ss.by() has "{val}" for "{strat.name}", which is not one of its levels ({sc.strjoin(labels)}).')
-                    parts.append([(labels.index(str(val)), 1.0)])
-                elif isnull(val) and strat.kind == 'clock': # People who have not had the event: a clock's level none
-                    parts.append([(strat.n - 1, 1.0)])
+                        raise ss.errors.ShapeError(f'the table given to ss.by() has "{val}" for "{strat.name}", which is not one of its levels ({sc.strjoin(labels)}).')
+                    index.append([labels.index(str(val))])
                 elif isnull(val) or strat.edges is None: # People with no value, who are in no group
-                    parts.append([])
-                else:
-                    edges = strat.edges[:-1] if strat.kind == 'clock' else strat.edges # A clock's last level is none, with no time
-                    cap = max(keys[-1], edges[-1]) + 1 # The last bin of each is open-ended
+                    index.append([])
+                else: # The groups whose lower edge is in the row's bin (the last is open-ended)
                     lo = float(val)
-                    hi = keys[keys > lo][0] if np.any(keys > lo) else cap
-                    ends = np.append(edges[1:], cap)
-                    overlap = np.maximum(np.minimum(hi, ends) - np.maximum(lo, edges), 0)
-                    parts.append([(i, w) for i,w in enumerate(overlap) if w > 0])
-            value = float(convert(row['value']))
-            for combo in itertools.product(*parts):
-                index = tuple(i for i,w in combo)
-                weight = np.prod([w for i,w in combo])
-                num[index] += weight*value
-                den[index] += weight
-        out = np.divide(num, den, out=np.zeros_like(num), where=den > 0)
-        for i,strat in enumerate(strats): # A clock with no row for none: the mean over its other levels, as agents take it (weighted by the people at each)
-            if strat.kind == 'clock' and not np.take(den, [strat.n - 1], axis=i).any():
-                inner = np.take(out, range(strat.n - 1), axis=i)
-                np.put_along_axis(out, np.full([1 if j == i else s.n for j,s in enumerate(strats)], strat.n - 1), inner.mean(axis=i, keepdims=True), axis=i)
+                    hi = keys[keys > lo][0] if np.any(keys > lo) else np.inf
+                    index.append(np.flatnonzero((strat.edges >= lo) & (strat.edges < hi)))
+            out[np.ix_(*index)] = float(convert(row['value']))
         return out
 
     def on_people(self, sim):
@@ -1136,7 +1047,7 @@ class by:
             try:
                 raw = people[dim].raw
             except AttributeError:
-                raise ss.UnknownState(f'ss.by() is by "{dim}", which is neither a dimension of the sim nor a property of people{ss.expressions.did_you_mean(dim, list(people.states.keys()))}') from None
+                raise ss.errors.UnknownState(f'ss.by() is by "{dim}", which is neither a dimension of the sim nor a property of people{ss.expressions.did_you_mean(dim, list(people.states.keys()))}') from None
         n = len(keys)
         if kind == 'edges':
             pos = np.digitize(raw, keys) - 1
@@ -1267,14 +1178,15 @@ class timeseries(TimeValue):
             as the second argument (`ss.timeseries(times, values)`). A time is a date, or a number, which is
             a time in the sim's unit (in a sim with dates, that long after the start)
         values (list): the values, if `data` is the times
-        mode (str): how to interpolate: 'constant' (each value holds until the next), 'linear', 'cosine' (a smooth S-shaped change between each value and the next, as MEmilio's dampings), or 'spline'
+        mode (str): how to interpolate: 'constant' (each value holds until the next), 'linear', or 'cosine' (a smooth S-shaped change between each value and the next, as MEmilio's dampings)
         period (dur): if given, the series repeats with this period, measured from its first time (e.g. `ss.years(1)` for a yearly pattern given over one year)
 
     Examples:
         ```python
         beta = ss.timeseries({'2020-01-01': 0.3, '2020-03-15': 0.1, '2020-06-01': 0.2})
         decay = ss.timeseries({0: 0.1, 91: 0.2, 183: 0.15, 274: 0.1}, period=ss.days(365)) # The same each year
-        sir = ss.Disease(infection=ss.transmission('S -> I', beta=beta), recovery=ss.progression('I -> R', dur=10), init_prev=0.01)
+        S, I, R = ss.states(3)
+        sir = ss.Disease(infection=S >> I @ beta*I, recovery=ss.Transition(I, R, dur=10), init_prev=0.01)
         sim = ss.Sim(sir, start='2020-01-01', stop='2020-09-01').run()
         ```
     """
@@ -1290,8 +1202,8 @@ class timeseries(TimeValue):
             data = sc.dataframe.read_csv(data) if data.endswith('.csv') else sc.dataframe.read_excel(data)
         if not isinstance(data, dict):
             data = dict(zip(data.iloc[:, 0].tolist(), data.iloc[:, 1].tolist()))
-        if mode not in ['constant', 'linear', 'cosine', 'spline']:
-            errormsg = f'The mode of ss.timeseries() is "constant", "linear", "cosine", or "spline", not "{mode}"'
+        if mode not in ['constant', 'linear', 'cosine']:
+            errormsg = f'The mode of ss.timeseries() is "constant", "linear", or "cosine", not "{mode}"'
             raise ValueError(errormsg)
         self.times = list(data.keys())
         self.values = list(data.values())
@@ -1346,22 +1258,11 @@ class timeseries(TimeValue):
         i, j, w = int(i), int(j), float(w)
         if w == 0: # At or outside the times given, or with mode 'constant'
             return vals[i]
-        elif self.mode == 'spline':
-            import scipy.interpolate as spi
-            typed = isinstance(vals[0], ss.TimePar)
-            if typed: # Interpolate the values in the units of the first, and give a value of that type
-                vals = [v.to(type(vals[0])) for v in vals]
-            value = float(spi.CubicSpline(self.years(sim), np.array([v.value if typed else v for v in vals], dtype=float))(year))
-            if typed:
-                out = sc.dcp(vals[0])
-                out.value = value
-                return out
-            return value
         return vals[i]*(1 - w) + vals[j]*w
 
     def series(self, years, sim, convert):
         vals = [const_value(v) for v in self.values]
-        if self.mode == 'spline' or any(isinstance(v, ss.prob) for v in vals): # A probability is not converted in proportion to its value
+        if any(isinstance(v, ss.prob) for v in vals): # A probability is not converted in proportion to its value
             return super().series(years, sim, convert)
         vals = np.array([convert(v) for v in vals], dtype=float) # Converted once, rather than at each time
         year, i, j, w = self.weights(np.asarray(years, dtype=float), sim)
@@ -1394,7 +1295,8 @@ class seasonal(TimeValue):
     Examples:
         ```python
         beta = ss.seasonal(mean=0.3, amplitude=0.4, peak='January')
-        sis = ss.Disease(infection=ss.transmission('S -> I', beta=beta), recovery=ss.progression('I -> S', dur=10), init_prev=0.01)
+        S, I = ss.states(2)
+        sis = ss.Disease(infection=S >> I @ beta*I, recovery=ss.Transition(I, S, dur=10), init_prev=0.01)
         sim = ss.Sim(sis, start='2020-01-01', stop='2023-01-01').run()
         ```
     """

@@ -45,6 +45,7 @@ In Starsim, the compartments are states, each parameter is an `ss.par`, and each
 
 ```{python}
 import starsim as ss
+import starsim.interop
 ss.options(jupyter=True)
 
 transpercontact = ss.par(0.008, doc='Transmission probability per contact')
@@ -73,7 +74,7 @@ Or the workbooks can be imported as they are:
 ```{python}
 #| eval: false
 #| label: starsim-import
-sim = ss.load('sir_framework.xlsx', format='atomica', databook='sir_databook.xlsx', dt=1, start=2000, stop=2023)
+sim = ss.interop.load('sir_framework.xlsx', format='atomica', databook='sir_databook.xlsx', dt=1, start=2000, stop=2023)
 sim.run()
 ```
 
@@ -83,7 +84,7 @@ sim.run()
 |---|---|
 | The SIR demo (above) | Identical: every compartment, to rounding error |
 | The HIV demo (a cascade by sex, 7 programs, 3 budgets), written by hand | Identical: a largest difference of 2 in 10<sup>14</sup>, in every compartment and every level of the cascade of both sexes, without programs and with the default, doubled, and zero budgets |
-| Atomica's library workbooks, imported with `ss.load()` | `sir`, `hiv_dyn`, and `udt` agree with Atomica 1.32.4's own runs to within 1e-9 (checked by the switching demo). The review that the demo is built from found 9 of Atomica's 16 library demos imported and agreed to 1e-12 or better. `sir_vaccine` and `tb` fail today (below) |
+| Atomica's library workbooks, imported with `ss.interop.load()` | `sir`, `hiv_dyn`, and `udt` agree with Atomica 1.32.4's own runs to within 1e-9 (checked by the switching demo). The review that the demo is built from found 9 of Atomica's 16 library demos imported and agreed to 1e-12 or better. `sir_vaccine` and `tb` fail today (below) |
 
 ## Timings
 
@@ -107,7 +108,7 @@ These are from Starsim's switching demo for Atomica users (`tests/switching/test
 | Import `sir_vaccine` | **Fails**: the import gives the vaccinated compartment an initial value of -3e-17, and the run stops with `OutOfBounds` |
 | Import `tb`, Atomica's flagship TB demo | **Fails**: it imports, but lists 81 parts as not translated (junctions, references to flows such as `life_expectancy*:ddis`, `SRC_POP_AVG()`, and interactions), and the run stops when a compartment stops being a number |
 | Calibrate an imported workbook to its databook's data | **Works**: bounds on two parameters (`sim.new(pars=dict(transpercontact=ss.par(0.008, bounds=[0.0008, 0.024]), ...))`) and `sim.calibrate(data=...)`; the mean error is 0.01% of the data, against 4.5% for Atomica's own calibration of the same demo |
-| Import a program book and optimize the budget: reallocate the HIV demo's $164 million across its seven programs to maximize the number virally suppressed in 2030 | **Works**: `ss.load(..., progbook='hiv_dyn_progbook.xlsx', programs_start=2020)` gives Atomica's baseline exactly, and `ss.optimize(sim, total=..., start=2020, maximize='all_vs', at=2030)` finds 1,066,910 suppressed, against 1,067,056 for Atomica's optimizer (from 374,830 at the current allocation), in 2.3 s against 1.3 s |
+| Import a program book and optimize the budget: reallocate the HIV demo's $164 million across its seven programs to maximize the number virally suppressed in 2030 | **Works**: `ss.interop.load(..., progbook='hiv_dyn_progbook.xlsx', programs_start=2020)` gives Atomica's baseline exactly, and `ss.fit.optimize(sim, total=..., start=2020, maximize='all_vs', at=2030)` finds 1,066,910 suppressed, against 1,067,056 for Atomica's optimizer (from 374,830 at the current allocation), in 2.3 s against 1.3 s |
 | Programs declared for a model written by hand (spending to coverage to effect) | **Not yet**: the importer writes programs as expressions; there is no `ss.program()` |
 | A databook generated from the model and read back | **Not yet** |
 | Costs of deliveries, by population | **Works**: products have `cost=`, and deliveries report `delivered`, `coverage`, and `cost` |
@@ -116,4 +117,4 @@ These are from Starsim's switching demo for Atomica users (`tests/switching/test
 
 ## Bringing your model in
 
-`ss.load('framework.xlsx', format='atomica', databook='databook.xlsx')` reads an Atomica framework and databook, and `progbook=` adds a program book. Compartments become states, characteristics become results, and each parameter on the transition matrix a transition; parameters with functions become expressions of the counts. Atomica moves `value × dt` of a compartment each step for a rate or probability, `dt/value` for a duration, and `value × dt` people for a number, which is the Euler step, so the sim is stepped as Atomica steps it. Several populations become a stratification by population, and a program book's programs become parameters of spending, whose coverage changes the parameters they affect. Junctions, transfers, and interactions are not translated; what is not translated is listed (`sim.imported.incomplete`), and `sim.imported.prompt` is a prompt for an AI assistant with Starsim's import-model skill to finish the job. `sim.to_code()` writes the imported model as a Python file.
+`ss.interop.load('framework.xlsx', format='atomica', databook='databook.xlsx')` reads an Atomica framework and databook, and `progbook=` adds a program book. Compartments become states, characteristics become results, and each parameter on the transition matrix a transition; parameters with functions become expressions of the counts. Atomica moves `value × dt` of a compartment each step for a rate or probability, `dt/value` for a duration, and `value × dt` people for a number, which is the Euler step, so the sim is stepped as Atomica steps it. Several populations become a stratification by population, and a program book's programs become parameters of spending, whose coverage changes the parameters they affect. Junctions, transfers, and interactions are not translated; what is not translated is listed (`sim.imported.incomplete`), and `sim.imported.prompt` is a prompt for an AI assistant with Starsim's import-model skill to finish the job. `sim.to_code()` writes the imported model as a Python file.

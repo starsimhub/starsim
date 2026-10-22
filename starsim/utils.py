@@ -16,6 +16,11 @@ import starsim as ss
 
 # %% Helper functions
 
+class NoDists:
+    """ A base for objects that never hold a distribution (or a time parameter), so are not searched for them (see `ss.distributions.no_dists()`) """
+    pass
+
+
 class ndict(sc.objdict):
     """
     A dictionary-like class that provides additional functionalities for handling named items.
@@ -28,9 +33,9 @@ class ndict(sc.objdict):
 
     Examples:
         ```python
-        networks = ss.ndict(ss.MFNet(), ss.PrenatalNet())
-        networks = ss.ndict([ss.MFNet(), ss.PrenatalNet()])
-        networks = ss.ndict({'mf':ss.MFNet(), 'prenatal':ss.PrenatalNet()})
+        networks = ss.ndict(ss.SexualNet(), ss.PrenatalNet())
+        networks = ss.ndict([ss.SexualNet(), ss.PrenatalNet()])
+        networks = ss.ndict({'sexual':ss.SexualNet(), 'prenatal':ss.PrenatalNet()})
         ```
     """
     def __init__(self, *args, nameattr='name', type=None, strict=True, overwrite=False, **kwargs):
@@ -147,8 +152,6 @@ class ndict(sc.objdict):
             errormsg = f'Key must be a str or type, not {key}'
             raise TypeError(errormsg)
 
-        return # Unreachable
-
     def extend(self, *args, **kwargs):
         """ Add new items to the ndict, by item, list, or dict """
         args = sc.mergelists(*args)
@@ -245,6 +248,26 @@ def getframe(depth=1):
         return None
 
 
+def caller_names(depth=1):
+    """
+    The names of the variables in the code that called the caller (`depth` levels above it), as a dict of the name of
+    each object by its id: its local variables, else its global ones, and only for an object bound to exactly one of
+    them. A declared disease (`ss.Disease(infection, recovery)`) and a sim (`ss.Sim(diseases=sir)`) look up the names of
+    what they are given once, here; nothing else does. Empty if the stack is not that deep (e.g. from R via reticulate)
+    """
+    frame = getframe(depth + 1)
+    if frame is None:
+        return {}
+    out = {}
+    for space in [frame.f_globals, frame.f_locals]: # The local ones win
+        found = {}
+        for key,val in space.items():
+            if not key.startswith('_'):
+                found.setdefault(id(val), set()).add(key)
+        out.update({i:(keys.pop() if len(keys) == 1 else None) for i,keys in found.items()})
+    return out
+
+
 def n_args(func):
     """ The number of positional arguments a function needs: `fn(sim)` is 1 and `fn(sim, uids)` is 2, and arguments with defaults (`fn(sim, years=5)`) do not count """
     import inspect
@@ -253,8 +276,21 @@ def n_args(func):
 
 
 def short_hash(obj, n=6):
-    """ A short hash of a JSON-compatible object, e.g. for telling model specs apart """
-    string = json.dumps(sc.jsonify(obj), sort_keys=True)
+    """
+    A short hash of a JSON-compatible object, e.g. for telling model specs apart
+
+    The keys of a dict whose value is None are left out, so that a key a new feature
+    writes as None when it is not used does not change the hash of any other object.
+    The hash is SHA-256 of the canonical JSON (keys sorted), so it is the same in every
+    process and on every machine.
+    """
+    def drop(item):
+        if isinstance(item, dict):
+            return {k:drop(v) for k,v in item.items() if v is not None}
+        elif isinstance(item, (list, tuple)):
+            return [drop(v) for v in item]
+        return item
+    string = json.dumps(drop(sc.jsonify(obj)), sort_keys=True)
     return hashlib.sha256(string.encode()).hexdigest()[:n]
 
 
@@ -466,7 +502,7 @@ def route_beta(betas, route):
     The value of a beta for each route (a dict by route name) on one route, or None if it has none
 
     The dict may give `default`, the value of every route it does not name, e.g.
-    `dict(mfnet=ss.peract(0.01), msm=ss.peract(0.1), default=0)`.
+    `dict(sexualnet=ss.peract(0.01), msm=ss.peract(0.1), default=0)`.
     """
     keys = {standardize_netkey(k):v for k,v in betas.items() if k != 'default'}
     return keys.get(standardize_netkey(route), betas.get('default'))
@@ -632,33 +668,23 @@ def combine_rands(a, b):
 
 #%% Other helper functions
 
-def load(filename, format=None, **kwargs):
+def load(filename, **kwargs):
     """
-    Alias to Sciris `sc.loadany()`, which also reads other frameworks' models
+    Alias to Sciris `sc.loadany()`, for Starsim's own objects
 
     Since Starsim uses Sciris for saving objects, they can be loaded back using
-    this function, e.g. a sim saved with `ss.save('run.sim', sim)`. A model from
-    another framework is built into a sim, given its format or one that can be told
-    from the file (see `ss.interop`). A model saved as code (`ss.save('model.py', sim)`)
-    is a script: run or import it.
+    this function, e.g. a sim saved with `ss.save('run.sim', sim)`. A model saved as
+    code (`ss.save('model.py', sim)`) is a script: run or import it. Another
+    framework's model is read with `ss.interop.load()`.
 
     Args:
-        filename (str/path/any): the name of the file to load, or another framework's model object
-        format (str): the framework the model is from (e.g. 'emulsion'); see `ss.interop.formats`
-        kwargs (dict): passed to the importer, or to `sc.loadany()`
-
-    Returns:
-        The loaded object; another framework's model is returned as an `ss.Sim`
+        filename (str/path): the name of the file to load
+        kwargs (dict): passed to `sc.loadany()`
 
     **Examples**:
 
         sim = ss.load('run.sim') # A sim saved with ss.save()
-        sim = ss.load('compart_SIR.yaml', format='emulsion')
     """
-    if format is None:
-        format = ss.interop.sniff(filename)
-    if format is not None:
-        return ss.interop.load(filename, format=format, **kwargs)
     if str(filename).endswith('.json'):
         spec = sc.loadjson(filename)
         if isinstance(spec, dict) and str(spec.get('schema', '')).startswith('lingua-franca/'):
@@ -668,33 +694,25 @@ def load(filename, format=None, **kwargs):
     return sc.loadany(filename, **kwargs)
 
 
-def save(filename, obj, format=None, **kwargs):
+def save(filename, obj, **kwargs):
     """
-    Alias to Sciris `sc.save()`, which also writes a sim in another framework's format
+    Alias to Sciris `sc.save()`
 
     While some Starsim objects have their own save methods, this function can be
-    used to save any arbitrary object. It can then be loaded with ss.load().
-
-    A sim saved to a `.py` file is written as code that builds it again (`sim.to_code()`).
-    With `format`, a sim is exported instead (see `ss.interop.export()`), and what
-    the format cannot carry is listed as `ss.LossyExport`.
+    used to save any arbitrary object. It can then be loaded with ss.load(). A sim
+    saved to a `.py` file is written as code that builds it again (`sim.to_code()`).
+    To write a sim in another framework's format, use `ss.interop.export()`.
 
     Args:
         filename (str/path): the name of the file to save
         obj (any): the object to save
-        format (str): the format to export a sim to: 'mermaid', 'sbml', or 'odin'
-        kwargs (dict): passed to `sc.save()`, or to `ss.interop.export()`
+        kwargs (dict): passed to `sc.save()`, or to `sim.to_code()`
 
     **Examples**:
 
         ss.save('model.py', sim) # The model, as code
         ss.save('run.sim', sim) # The sim, with its results
-        ss.save('sir.xml', sim, format='sbml')
-        ss.save('sir.md', sim, format='mermaid')
     """
-    if format is not None:
-        ss.interop.export(obj, format, filename=filename, **kwargs)
-        return sc.path(filename)
     if str(filename).endswith('.py') and isinstance(obj, ss.Sim):
         obj.to_code(filename, **kwargs)
         return sc.path(filename)
@@ -780,7 +798,7 @@ def shrink(obj=None, attrs=None, verbose=False):
 # Specify known/common keywords
 plotting_kw = sc.objdict()
 plotting_kw.fig = ['figsize', 'nrows', 'ncols', 'ratio', 'num', 'dpi', 'facecolor'] # For sc.getrowscols()
-plotting_kw.plot = ['alpha', 'c', 'lw', 'linewidth', 'marker', 'markersize', 'ms'] # For plt.plot()
+plotting_kw.plot = ['alpha', 'c', 'color', 'lw', 'linewidth', 'ls', 'linestyle', 'marker', 'markersize', 'ms'] # For plt.plot()
 plotting_kw.data = {'data_alpha':'alpha', 'data_color':'color', 'data_size':'markersize'} # For plt.scatter()
 plotting_kw.fill = {'fill_alpha':'alpha', 'fill_color':'color', 'fill_hatch':'hatch', 'fill_lw':'lw'}
 plotting_kw.legend = ['loc', 'bbox_to_anchor', 'ncols', 'reverse', 'frameon']
@@ -813,7 +831,7 @@ def plot_args(kwargs=None, _debug=False, **defaults):
     Valid kwarg arguments are:
 
         - fig: 'figsize', 'nrows', 'ncols', 'ratio', 'num', 'dpi', 'facecolor'
-        - plot: 'alpha', 'c', 'lw', 'linewidth', 'marker', 'markersize', 'ms'
+        - plot: 'alpha', 'c', 'color', 'lw', 'linewidth', 'ls', 'linestyle', 'marker', 'markersize', 'ms'
         - data: 'data_alpha', 'data_color', 'data_size'
         - fill: 'fill_alpha', 'fill_color', 'fill_hatch', 'fill_lw'
         - style: 'font', 'fontsize', 'interactive'

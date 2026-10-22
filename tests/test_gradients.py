@@ -10,6 +10,7 @@ import numpy as np
 import pandas as pd
 import sciris as sc
 import starsim as ss
+import starsim.fit
 from test_kernels import models, largest_diff
 
 pytest.importorskip('jax')
@@ -78,7 +79,8 @@ def test_fit():
     print(fit.table)
     assert fit.method == 'l-bfgs-b'
     assert np.allclose(fit.table.best, [0.5, 6, 0.002], rtol=1e-2)
-    assert ss.calibration.default_method(fit.sim, False, n_pars=2)[0] == 'nelder-mead' # Faster than gradients for one or two parameters
+    assert ss.fit.default_method(fit.sim, False, n_pars=2)[0] == 'nelder-mead' # Faster than gradients for one or two parameters
+    assert ss.fit.default_method(fit.sim, True)[0] == 'l-bfgs-b' # A best fit, with a likelihood too: a posterior is asked for by name
     return fit
 
 
@@ -108,23 +110,23 @@ def test_posterior():
     truth = make_sir(beta=0.5, dur=6).run().results.sir
     weekly = np.add.reduceat(truth.cases.values[1:], np.arange(0, len(truth.cases) - 1, 7))[:-1] # A flow is compared with its total since the last data point
     data = pd.DataFrame(dict(cases=np.random.default_rng(1).poisson(weekly)), index=truth.timevec[7::7][:len(weekly)])
-    fit = make_sir(dur=6, data=data).calibrate(pars=['beta'], likelihood=dict(cases=ss.poisson()), draws=100, warmup=100, chains=2, rand_seed=1, verbose=True) # NUTS, the default when every series has a likelihood
+    fit = make_sir(dur=6, data=data).calibrate(pars=['beta'], likelihood=dict(cases=ss.poisson()), method='nuts', draws=100, warmup=100, chains=2, rand_seed=1, verbose=True)
     fit.summarize()
     table = fit.table.set_index('par')
     assert fit.method == 'nuts'
     assert len(fit.samples) == 200 and list(fit.samples.columns) == ['chain', 'draw', 'beta']
     assert table.lower.beta < 0.5 < table.upper.beta # The posterior covers the value that made the data
     assert np.all(table.rhat < 1.1)
-    assert np.isnan(ss.calibration.diagnose(np.random.default_rng(1).random((2, 3, 1)))[1]).all() # Chains too short for an effective sample size
+    assert np.isnan(ss.fit.diagnose(np.random.default_rng(1).random((2, 3, 1)))[1]).all() # Chains too short for an effective sample size
     chains = np.zeros((4, 4000)) # Four AR(1) chains with a lag-1 correlation of 0.5, whose effective sample size is a third of the draws
     noise = np.random.default_rng(1).standard_normal(chains.shape)
     for t in range(1, chains.shape[1]):
         chains[:, t] = 0.5*chains[:, t-1] + noise[:, t]
-    rhat, ess = ss.calibration.diagnose(chains[:, :, None])
+    rhat, ess = ss.fit.diagnose(chains[:, :, None])
     assert rhat[0] < 1.01 and np.isclose(ess[0], chains.size/3, rtol=0.05)
-    assert ss.calibration.diagnose(chains[:, :, None] + np.array([0, 0, 0, 1.0])[:, None, None])[0][0] > 1.05 # One chain apart from the others
+    assert ss.fit.diagnose(chains[:, :, None] + np.array([0, 0, 0, 1.0])[:, None, None])[0][0] > 1.05 # One chain apart from the others
     assert fit.diagnostics.band['cases'].shape == (2, len(truth.cases))
-    with pytest.raises(ss.NoPosterior): # A posterior needs a likelihood
+    with pytest.raises(ss.errors.NoPosterior): # A posterior needs a likelihood
         make_sir(data=data).calibrate(pars=['beta'], method='nuts')
     return fit
 
@@ -132,9 +134,11 @@ def test_posterior():
 def make_coinfection(beta=0.15, data=None, dt=0.25, **kwargs):
     """ Two diseases that modify each other, so whose states are tracked jointly (see ss.solvers.Crossing), one with a transfer at a constant rate """
     beta = ss.par(beta, bounds=[0.05, 0.5], name='beta')
-    hiv = ss.Disease(infection=ss.transmission('S -> I', beta=beta), death=ss.death('I ->', rate=0.05), init_prev=0.05, name='hiv')
+    S, I = ss.states('S I')
+    hiv = ss.Disease(infection=ss.Transition(S, I, rate=beta * I), death=ss.death(I, rate=0.05), init_prev=0.05, name='hiv')
     hiv.stratify(art=[False, True], states=['I'], adjust=dict(death=[1.0, 0.2]), move=ss.transfer(art=True, rate=ss.peryear(0.1)))
-    syph = ss.Disease(infection=ss.transmission('S -> I', beta=1.0), cure=ss.progression('I -> S', dur=ss.years(1)), init_prev=0.05, name='syph')
+    S, I = ss.states('S I')
+    syph = ss.Disease(infection=ss.Transition(S, I, rate=1.0 * I), cure=ss.Transition(I, S, dur=ss.years(1)), init_prev=0.05, name='syph')
     coinfection = [
         ss.modify(hiv.rel_trans, multiply=3.0, where=syph.I, name='hiv_trans'),
         ss.modify(syph.rel_sus, multiply=2.0, where=hiv.I, name='syph_sus'),
@@ -157,7 +161,8 @@ def test_crossing():
     assert sim.results.hiv.move[1:].sum() > 0 # The transfer's flow is recorded
 
     # Each flow of three diseases tracked jointly takes the exposure summed over the others' compartments as one number, worked out once (adding it up in each flow took 513 operations here, and three HPV genotypes 383 s instead of 9 s)
-    ds = [ss.Disease(infection=ss.transmission('S -> I', beta=0.3), recovery=ss.progression('I -> R', dur=5), waning=ss.progression('R -> S', dur=20), init_prev=0.01, name=f'd{i}') for i in range(3)]
+    S, I, R = ss.states('S I R')
+    ds = [ss.Disease(infection=ss.Transition(S, I, rate=0.3 * I), recovery=ss.Transition(I, R, dur=5), waning=ss.Transition(R, S, dur=20), init_prev=0.01, name=f'd{i}') for i in range(3)]
     mods = [ss.modify(ds[i].rel_sus, multiply=0.5, where=ds[(i+1) % 3].R, name=f'm{i}') for i in range(3)]
     three = ss.Sim(diseases=ds, connectors=mods, unit='day', stop=100, total_pop=10_000, solver='ode', **kw).run()
     assert len(three.crossings[0].program.ops) == 81 and np.isclose(three.results.d0.n_I[50], 656.392, rtol=1e-6) # One operation for each of the 81 flows; the same run
@@ -172,7 +177,8 @@ def test_crossing():
 
     # Restarted with other values, as a fresh sim
     restarted = make_coinfection().init().restart(pars={'hiv.beta':0.2}).run()
-    assert np.allclose(restarted.results.hiv.n_I, make_coinfection(beta=0.2).run().results.hiv.n_I, rtol=1e-12)
+    fresh = make_coinfection(beta=0.2).run().results
+    assert np.allclose(restarted.results.hiv.n_I, fresh.hiv.n_I, rtol=1e-12)
 
     # The gradient of each disease's results, through the other
     grad = make_coinfection().gradient(results=['n_I'], pars=['hiv.beta'])
@@ -186,16 +192,15 @@ def test_crossing():
     large = make_coinfection(beta=0.2, total_pop=1e7).run().results # Large, so that runs differ little
     data = pd.DataFrame({'hiv.n_I':large.hiv.n_I.values, 'syph.n_I':large.syph.n_I.values}, index=large.hiv.timevec)[::8]
     lik = {'hiv.n_I':ss.nbinom(n=20), 'syph.n_I':ss.nbinom(n=20)}
-    pf = np.mean([ss.ParticleFilter(make_coinfection(beta=0.2, data=data, solver='binomial', total_pop=1e7).init(), likelihood=lik)(n_particles=20, seed=seed) for seed in range(3)])
-    direct = np.mean([ss.loglik(make_coinfection(beta=0.2, data=data, solver='binomial', total_pop=1e7, rand_seed=seed).run(), likelihood=lik) for seed in range(3)])
+    pf = np.mean([ss.fit.ParticleFilter(make_coinfection(beta=0.2, data=data, solver='binomial', total_pop=1e7).init(), likelihood=lik)(n_particles=20, seed=seed) for seed in range(3)])
+    direct = np.mean([ss.fit.loglik(make_coinfection(beta=0.2, data=data, solver='binomial', total_pop=1e7, rand_seed=seed).run(), likelihood=lik) for seed in range(3)])
     print(f'Particle filter {pf:.2f}, direct runs {direct:.2f}')
     assert abs(pf - direct) < 1 # The filter estimates the likelihood of runs of the sim
 
     # NUTS, with the log-density in JAX
     if importlib.util.find_spec('blackjax') is not None:
-        truth = make_coinfection(beta=0.2).run().results
-        data = pd.DataFrame({'hiv.n_I':truth.hiv.n_I.values, 'syph.n_I':truth.syph.n_I.values}, index=truth.hiv.timevec)[::8]
-        fit = make_coinfection(data=data).calibrate(likelihood={'hiv.n_I':ss.normal(scale=50), 'syph.n_I':ss.normal(scale=50)}, draws=50, warmup=50, chains=2, rand_seed=1, verbose=True)
+        data = pd.DataFrame({'hiv.n_I':fresh.hiv.n_I.values, 'syph.n_I':fresh.syph.n_I.values}, index=fresh.hiv.timevec)[::8]
+        fit = make_coinfection(data=data).calibrate(likelihood={'hiv.n_I':ss.normal(scale=50), 'syph.n_I':ss.normal(scale=50)}, method='nuts', draws=50, warmup=50, chains=2, rand_seed=1, verbose=True)
         table = fit.table.set_index('par')
         assert fit.method == 'nuts'
         assert table.lower['hiv.beta'] < 0.2 < table.upper['hiv.beta']
@@ -220,13 +225,13 @@ def test_posterior_data():
     rows = [dict(t=t, age=age, n_I=n, n_hosp=h) for age in ['0-14', '15-64', '65+'] for t,n,h in zip(truth.timevec[::10], truth.n_I.select(age=age).values[::10], truth.n_hosp.select(age=age).values[::10])]
     sim = make(data=pd.DataFrame(rows)).init()
     assert 'n_I[age=15-64]' in sim.data.columns
-    with pytest.raises(ss.UnknownDataColumn): # Not a level of age
+    with pytest.raises(ss.errors.UnknownDataColumn): # Not a level of age
         make(data=pd.DataFrame([dict(t=10, age='0-4', n_I=1)])).init()
 
     # Fitted with the log-density in JAX: it is checked against runs of the sim, and sampled again with Python in the loop if they differ
     with sc.capture() as txt, warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter('always')
-        fit = make(data=pd.DataFrame(rows)).calibrate(likelihood=dict(n_I=ss.normal(scale=50), n_hosp=ss.normal(scale=5)), draws=50, warmup=50, chains=2, rand_seed=1, verbose=True)
+        fit = make(data=pd.DataFrame(rows)).calibrate(likelihood=dict(n_I=ss.normal(scale=50), n_hosp=ss.normal(scale=5)), method='nuts', draws=50, warmup=50, chains=2, rand_seed=1, verbose=True)
     assert 'Python in the loop' not in txt and not any('differs' in str(w.message) for w in caught)
     table = fit.table.set_index('par')
     assert table.lower.beta < 0.5 < table.upper.beta

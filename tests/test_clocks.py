@@ -111,13 +111,13 @@ def test_clocks():
 
     # Errors: outside the domain (E212), and no scheduled dwell (E213); as compartments, see test_conveyor.py
     S, A, B, C = ss.states('S A B C')
-    with pytest.raises(ss.ClockOutsideDomain):
+    with pytest.raises(ss.errors.ClockOutsideDomain):
         ss.Disease(S, A, B, C, ab=A >> B @ ss.days(4), sc_=ss.Transition(S, C, rate=ss.perday(1)*(B.time > 1)))
     d, ab = make()
-    with pytest.raises(ss.ClockOutsideDomain):
+    with pytest.raises(ss.errors.ClockOutsideDomain):
         ss.Sim(d, connectors=ss.modify(d.bc, multiply=ab.time/ss.days(1)), n_agents=100, **kw).init()
     S, A, B, C = ss.states('S A B C')
-    with pytest.raises(ss.NoScheduledDwell):
+    with pytest.raises(ss.errors.NoScheduledDwell):
         ss.Disease(S, A, B, C, ab=A >> B @ ss.perday(0.2), bc=ss.Transition(A, C, rate=ss.perday(1)*A.progress))
     d, ab = make()
     with pytest.raises(ss.CapabilityError):
@@ -159,28 +159,29 @@ def test_syphilis_latent():
     late = s.LL.uids[s.ti_EL[s.LL.uids] > 0]
     latent = s.graph.states.EL | s.graph.states.LL
     assert np.allclose(s.engine.eval_for(latent.time, late), (s.ti - s.ti_EL[late])/12) # From latent onset, as the workaround meant
-    with pytest.raises(ss.ClockOutsideDomain): # The workaround with seeds in LL is NaN for them
+    with pytest.raises(ss.errors.ClockOutsideDomain): # The workaround with seeds in LL is NaN for them
         make('old').run()
     return sim
+
+
+class BV(ss.Disease):
+    CST1, CST4, P = ss.states('CST1 CST4 P')
+    recur0, recur_tau = ss.par(ss.permonth(0.06)), ss.par(ss.months(3))
+    onset  = CST1 >> CST4 @ ss.permonth(0.05)
+    tx     = CST4 >> P @ ss.months(2) # Treated after two months, on average: a dwell time, which ends in the state-change row
+    recur  = ss.Transition(P, CST4, rate=recur0*np.exp(-P.time/recur_tau)) # Largest on entry
+    settle = ss.Transition(P, CST1, dur=ss.months(6))
 
 
 @sc.timer()
 def test_bv_recurrence():
     sc.heading('Port: BV recurrence hazard decays with time since treatment, P.time')
-    class BV(ss.Disease):
-        CST1, CST4, P = ss.states('CST1 CST4 P')
-        recur0, recur_tau = ss.par(ss.permonth(0.06)), ss.par(ss.months(3))
-        onset  = CST1 >> CST4 @ ss.permonth(0.05)
-        tx     = CST4 >> P @ ss.months(2) # Treated after two months, on average
-        recur  = ss.progression('P -> CST4', rate=recur0*np.exp(-P.time/recur_tau))
-        settle = ss.progression('P -> CST1', dur=ss.months(6))
-
     def recur_rate(sim, uids): # The workaround (bv_gud_connectors/port.py)
         bv = sim.diseases.bv
         months = (sim.ti - bv.ti_P[uids]) * sim.t.dt.months
         return ss.permonth(0.06 * np.exp(-months / 3))
     class Old(BV):
-        recur = ss.progression('P -> CST4', rate=recur_rate)
+        recur = ss.Transition(BV.P, BV.CST4, rate=recur_rate)
 
     kw2 = dict(n_agents=10_000, start=2000, stop=2005, dt=ss.months(1), unit='year', **kw)
     new = ss.Sim(BV(name='bv'), **kw2).run().results.bv
@@ -193,12 +194,6 @@ def test_bv_recurrence():
 @sc.timer()
 def test_entry_hazard():
     sc.heading('As agents, people entering a state in the state-change row face half a step of its hazards then')
-    class BV(ss.Disease):
-        CST1, CST4, P = ss.states('CST1 CST4 P')
-        onset  = CST1 >> CST4 @ ss.permonth(0.05)
-        tx     = CST4 >> P @ ss.months(2) # A dwell time, which ends in the state-change row
-        recur  = ss.progression('P -> CST4', rate=ss.permonth(0.06)*np.exp(-P.time/ss.months(3))) # Largest on entry
-        settle = ss.progression('P -> CST1', dur=ss.months(6))
     kw2 = dict(n_agents=50_000, start=2000, stop=2005, unit='year', **kw)
     weekly, monthly = [ss.Sim(BV(name='bv'), dt=dt, **kw2).run().results.bv.recur.sum() for dt in [ss.weeks(1), ss.months(1)]]
     assert np.isclose(weekly, monthly, rtol=0.03), f'weekly {weekly:n}, monthly {monthly:n}' # Without the hazard on entry, monthly steps were about 20% lower

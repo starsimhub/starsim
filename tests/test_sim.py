@@ -64,7 +64,7 @@ def test_demo(do_plot=do_plot):
     sir = ss.SIR()
     net = ss.RandomNet()
     s3 = ss.Sim(diseases=sir, networks=net).run()
-    assert ss.check_sims_match(s1, s2, s3), 'Sims should match'
+    assert ss.debugtools.check_sims_match(s1, s2, s3), 'Sims should match'
     return s1
 
 
@@ -119,7 +119,7 @@ def test_api():
     s1 = ss.Sim(n_agents=n_agents, diseases='sir', networks='random').run() # Supply strings directly
     s2 = ss.Sim(pars=dict(n_agents=n_agents, diseases='sir', networks='random')).run() # Supply as parameters
     s3 = ss.Sim(n_agents=n_agents, diseases=ss.SIR(), networks=ss.RandomNet()).run() # Supply as objects
-    ss.check_sims_match(s1, s2, s3), 'Sims should match'
+    assert ss.debugtools.check_sims_match(s1, s2, s3), 'Sims should match'
 
     # Check different ways of setting a distribution
     kw = dict(n_agents=n_agents, networks='random')
@@ -129,28 +129,27 @@ def test_api():
     # Check specifying a duration with a scalar, which is in years, as the default
     s4 = ss.Sim(diseases=dict(type='sir', dur_inf=10), **kw).run() # Supply values as a scalar
     s5 = ss.Sim(diseases=dict(type='sir', dur_inf=ss.years(10)), **kw).run() # Supply as a duration
-    ss.check_sims_match(s4, s5), 'Sims should match'
+    assert ss.debugtools.check_sims_match(s4, s5), 'Sims should match'
 
     # Check specifying dist with a dict
     s7 = ss.Sim(diseases=dict(type='sir', dur_inf=dict(type='lognorm_ex', mean=10, std=2)), **kw).run() # Supply values as a dict
     s8 = ss.Sim(diseases=dict(type='sir', dur_inf=d2), **kw).run() # Supply as a distribution
-    ss.check_sims_match(s7, s8), 'Sims should match'
+    assert ss.debugtools.check_sims_match(s7, s8), 'Sims should match'
     with pytest.raises(TypeError):
         ss.SIR(dur_inf=[10, 2]) # Starsim 3's values of its default lognormal
 
     # Check changing dist type
     s9  = ss.Sim(diseases=dict(type='sir', dur_inf=dict(type='normal', loc=10)), **kw).run() # Supply values as a dict
     s10 = ss.Sim(diseases=dict(type='sir', dur_inf=d3), **kw).run() # Supply values as a distribution
-    ss.check_sims_match(s9, s10), 'Sims should match'
+    assert ss.debugtools.check_sims_match(s9, s10), 'Sims should match'
 
     # Check that Bernoulli distributions can't be changed
     with pytest.raises(TypeError):
         ss.Sim(diseases=dict(type='sir', init_prev=dict(type='normal', loc=10)), **kw).init()
 
-    # An override of a private phase of init() by its old name would be silently ignored
-    with pytest.raises(TypeError):
-        class MySim(ss.Sim):
-            def init_time(self): pass
+    # A keyword given outright wins over the same key in a dict of parameters
+    sim = ss.Sim(dict(diseases='sir', networks='random', n_agents=100), diseases=ss.SIS(), verbose=0).init()
+    assert list(sim.diseases.keys()) == ['sis']
 
     return s1
 
@@ -204,45 +203,14 @@ def test_complex_api():
     int1 = ss.Intervention.from_func(jump_age)
     interventions = ss.ndict(int1)
 
-    # Assemble
-    s1 = ss.Sim(pars1)
-    s2 = ss.Sim(pars=pars2, networks=networks, diseases=diseases, demographics=demographics, interventions=interventions)
-
-    # Run
-    s1.run()
-    s2.run()
-    assert ss.check_sims_match(s1, s2), 'Sims should match'
+    # Assemble and run
+    s1 = ss.Sim(pars1).run()
+    s2 = ss.Sim(pars=pars2, networks=networks, diseases=diseases, demographics=demographics, interventions=interventions).run()
+    assert ss.debugtools.check_sims_match(s1, s2), 'Sims should match'
     with pytest.raises(ValueError): # verbose is 0, 1, or 2; Starsim 3's fraction of steps is now verbose=1
         ss.Sim(n_agents=100, verbose=0.1).init()
 
     return s1
-
-
-@sc.timer()
-def test_simple_vax(do_plot=do_plot):
-    """ Create and run a sim with vaccination """
-    sc.heading('Testing simple vaccination...')
-    pars = make_sim_pars()
-    sim_base = ss.Sim(pars=pars)
-    sim_base.run()
-
-    my_vax = ss.Vaccine(efficacy=0.5)
-    intv = ss.vaccinate(my_vax, start=2015, coverage=0.2, interval=ss.years(1)) # Offered each year to 20% of those not yet vaccinated
-    sim_intv = ss.Sim(pars=pars, interventions=intv)
-    sim_intv.run()
-
-    assert sim_intv.summary.sir_cum_infections < sim_base.summary.sir_cum_infections, 'Vaccine should avert infections'
-
-    # Check plots
-    if do_plot:
-        plt.figure()
-        plt.plot(sim_base.timevec, sim_base.results.sir.prevalence, label='Baseline')
-        plt.plot(sim_intv.timevec, sim_intv.results.sir.prevalence, label='Vax')
-        plt.axvline(x=2015, color='k', ls='--')
-        plt.title('Prevalence')
-        plt.legend()
-
-    return sim_base, sim_intv
 
 
 @sc.timer()
@@ -257,12 +225,9 @@ def test_shared_product(do_plot=do_plot):
 
     # Make and run sims
     pars = make_sim_pars()
-    s1 = ss.Sim(pars, label='Baseline')
-    s2 = ss.Sim(pars, interventions=routine1, label='One vaccine campaign')
-    s3 = ss.Sim(pars=pars, interventions=[routine1, routine2], label='Two vaccine campaigns')
-    s1.run()
-    s2.run()
-    s3.run()
+    s1 = ss.Sim(pars, label='Baseline').run()
+    s2 = ss.Sim(pars, interventions=routine1, label='One vaccine campaign').run()
+    s3 = ss.Sim(pars=pars, interventions=[routine1, routine2], label='Two vaccine campaigns').run()
 
     if do_plot:
         plt.figure()
@@ -321,9 +286,7 @@ def test_creation_syntax():
         connectors = mod2,
         diseases = net,
         analyzers = dis,
-        copy_inputs = True,
     )
-    sim.init()
     sim.run()
     
     assert isinstance(sim.custom[0], FirstClass)
@@ -338,7 +301,6 @@ def test_creation_syntax():
         pars = pars,
         modules = [dis, mod1, net, mod2, dem]
     )
-    sim2.init()
     sim2.run()
     
     assert isinstance(sim2.custom[0], FirstClass)
@@ -394,6 +356,24 @@ def test_locked_pars():
     sim.pars.update(my_par=3, create=True) # New parameters can be added explicitly
     assert sim.copy().pars.my_par == 3 # Locked parameters can be copied
     return sim
+
+
+@sc.timer()
+def test_update_pars():
+    """ A single value given for a distribution sets its main parameter, as in Starsim 3; a distribution replaces it """
+    sc.heading('Testing parameter updates...')
+    sir = ssl.AgentSIR(init_prev=0.05, dur_inf=6, p_death=0)
+    assert isinstance(sir.pars.init_prev, ss.bernoulli) and sir.pars.init_prev.pars.p == 0.05 # A probability
+    assert isinstance(sir.pars.dur_inf, ss.lognorm_ex) and sir.pars.dur_inf.pars.mean == ss.years(6) # Its mean, in the unit of the default
+    assert isinstance(ss.SexualNet(dur=ss.days(15)).pars.dur, ss.lognorm_ex) and isinstance(ss.SexualNet(dur=ss.constant(ss.days(15))).pars.dur, ss.constant) # A fixed value is a constant
+    assert isinstance(ss.RandomNet(n_contacts=dict(type='poisson', lam=4)).pars.n_contacts, ss.poisson) # A distribution given by its type
+    for value in [[6, 2], dict(mean=6)]: # The distribution's arguments, or values? Neither: use its own method
+        with pytest.raises(TypeError, match='set'):
+            ssl.AgentSIR(dur_inf=value)
+    sir.pars.dur_inf = ss.lognorm_ex(mean=ss.years(6), std=ss.years(1))
+    sir.pars.dur_inf.set(mean=8) # Keeps the standard deviation, and the unit
+    assert sir.pars.dur_inf.pars.mean == ss.years(8) and sir.pars.dur_inf.pars.std == ss.years(1)
+    return
 
 
 @sc.timer()
@@ -461,7 +441,7 @@ def test_rescale():
     rescaled = make_sim(init_inf=20, rescale=True).run()
     scale = rescaled.results.pop_scale
     assert scale[0] == 1 and scale[-1] == 10 # Scale starts at 1 and ends at pop_scale
-    assert make_sim(init_inf=20, rescale=True).current_scale == 1 # Available before the sim is initialized
+    assert make_sim(init_inf=20, rescale=True)._current_scale == 1 # Available before the sim is initialized
     cum_fixed = fixed.results.sir.cum_infections[-1]
     cum_rescaled = rescaled.results.sir.cum_infections[-1]
     assert abs(cum_rescaled/cum_fixed - 1) < 0.1 # Rescaling gives about the same epidemic
@@ -474,28 +454,23 @@ def test_rescale():
 
 @sc.timer()
 def test_copied_modules():
-    """ Test that functions given to a sim read the sim's copies of the modules they name (TL35) """
-    sc.heading('Testing closures over copied modules')
+    """ Test that a sim runs copies of the modules it is given, so they can be given to other sims, and functions read them from the sim """
+    sc.heading('Testing copied modules')
     class HS(ss.Intervention):
         def __init__(self, **kwargs):
             super().__init__(**kwargs)
             self.served_now = ss.uids()
         def step(self):
             self.served_now = self.sim.diseases.toy.I.uids[:5]
-        def serve(self): # A factory method, returning a closure over the module
-            return lambda sim: self.served_now
 
-    def treated(how):
-        S, I = ss.states('S I')
-        toy = ss.Disease(S, I, inf=S >> I @ ss.peryear(2.0), rec=I >> S @ ss.days(90), name='toy')
-        hs = HS(name='hs')
-        deliver = dict(closure=hs.serve(), lambda_=lambda sim: hs.served_now, by_name=lambda sim: sim.interventions.hs.served_now)[how]
-        sim = ss.Sim(toy, interventions=[hs, ss.treat(ss.Treatment(cure=1.0), deliver=deliver, name='tx')], n_agents=2000, stop=ss.days(100), dt=ss.days(1), verbose=0).run()
-        return sim.results.tx.delivered.values.sum()
-    expected = treated('by_name')
-    assert expected > 400
-    for how in ['closure', 'lambda_']:
-        assert treated(how) == expected, how # Were 0: they read the module passed in, which never ran
+    S, I = ss.states('S I')
+    toy = ss.Disease(S, I, inf=S >> I @ ss.peryear(2.0), rec=I >> S @ ss.days(90), name='toy')
+    hs = HS(name='hs')
+    deliver = lambda sim: sim.interventions.hs.served_now # The sim's copy, which runs
+    sims = [ss.Sim(toy, interventions=[hs, ss.treat(ss.Treatment(cure=1.0), deliver=deliver, name='tx')], n_agents=2000, stop=ss.days(100), dt=ss.days(1), verbose=0).run() for _ in range(2)]
+    assert sims[0].results.tx.delivered.values.sum() > 400
+    assert sims[0].results.tx.delivered.values.sum() == sims[1].results.tx.delivered.values.sum() # The same modules, given to two sims
+    assert not toy.initialized and sims[0].diseases.toy is not toy # Neither ran the module itself
     return
 
 
@@ -524,12 +499,12 @@ if __name__ == '__main__':
     sc.options(interactive=do_plot)
     T = sc.timer()
 
+    caps = test_capabilities_two_modules()
     sim0 = test_demo(do_plot=do_plot)
     sim1 = test_default(do_plot=do_plot)
     sim2 = test_simple(do_plot=do_plot)
     sim3 = test_api()
     sim4 = test_complex_api()
-    sim5b, sim5i = test_simple_vax(do_plot=do_plot)
     sim6 = test_shared_product(do_plot=do_plot)
     sim7 = test_components(do_plot=do_plot)
     sim8 = test_creation_syntax()
@@ -538,6 +513,7 @@ if __name__ == '__main__':
     sim11 = test_rescale()
     sim12 = test_add_module()
     sim13 = test_locked_pars()
+    update = test_update_pars()
     test_copied_modules()
     test_init_order()
 

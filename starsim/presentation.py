@@ -1,22 +1,19 @@
 """
-How a model is shown: `describe()`, `diagram()`, `equations()`, and its part of the model spec (`to_json()`)
+How a model is shown: `describe()`, `diagram()`, `equations()`, and its part of the model spec (`to_spec()`)
 """
 import inspect
 import textwrap
-import types
 import numpy as np
 import sciris as sc
-import matplotlib.pyplot as plt
 import starsim as ss
-from .expressions import BinOp, Count, Expr, format_expr, par, value_str
+from .expressions import BinOp, Expr, format_expr, par, value_str
 from .parameters import by, TimeValue
-from .transitions import State
 
 __all__ = ['Presentation']
 
 
 class Presentation:
-    """ How a graph (`ss.transitions.Graph`) is shown: `describe()`, `diagram()`, `equations()`, and `to_json()`, which the graph inherits """
+    """ How a graph (`ss.transitions.Graph`) is shown: `describe()`, `diagram()`, `equations()`, and `to_spec()`, which the graph inherits """
     def describe(self, sim=None):
         """ The resolved model as text, with every guessed default marked; see `ss.Disease.describe()` """
         mod = self.module
@@ -32,14 +29,12 @@ class Presentation:
 
         lines.append(f"{type(mod).__bases__[0].__name__ if type(mod).__bases__[0] is not ss.Module else type(mod).__name__} '{mod.name}': {len(self.states)} states, {len(self.transitions)} transitions")
         people = ', '.join(s.name for s in self.people_states)
-        add('states', people, self.guessed.get('states'))
+        add('states', people)
         for state in self.count_states:
             guess = state.guessed.get('people')
             add('', f'{state.name} a count, not people', f'guessed: {guess}' if guess else None)
         for state in self.infectious:
-            sources = [name for name,tr in self.transitions.items() if state in tr.terms]
-            guessed = 'infectious' in state.guessed
-            add('', f'{state.name} infectious', f"guessed: source of {sc.strjoin(repr(s) for s in sources)}" if guessed else None)
+            add('', f'{state.name} infectious')
         infected = [s.name for s in self.infected if s.people]
         if infected and not self.transmissions: # With a transmission, they are its destination and its source, as above
             add('', f'infected: {", ".join(infected)}', 'counted in prevalence, and cured by ss.treat')
@@ -57,9 +52,9 @@ class Presentation:
         for name,tr in self.transitions.items():
             if tr.contact:
                 leaf = beta_leaf(tr)
-                weight = lambda coef: format_expr(coef.b) + ' ' if isinstance(coef, BinOp) and coef.op == '*' and coef.a is leaf else '' # A weight on a source (source=dict(...))
+                weight = lambda coef: format_expr(coef.b) + ' ' if isinstance(coef, BinOp) and coef.op == '*' and coef.a is leaf else '' # A weight on a source (beta * (I + 0.5*A))
                 source = ' + '.join(f'{weight(coef)}{s.name}' for s,coef in tr.terms.items())
-                guess = sc.strjoin(([f'name {tr.guessed["name"]}'] if 'name' in tr.guessed else []) + ([tr.guessed['source']] if 'source' in tr.guessed else []), sep='; ')
+                guess = f'name {tr.guessed["name"]}' if 'name' in tr.guessed else None
                 add(name, f'{tr.arrow}   contact-mediated, source {source}', f'guessed: {guess}' if guess else None)
                 for leaf in tr.rate.leaves:
                     if isinstance(leaf, par) and not leaf.literal:
@@ -115,12 +110,10 @@ class Presentation:
                 elif tr.p is not None:
                     add('', 'happens immediately on entry')
             if tr.p is not None:
-                slots = getattr(engine, 'n_slots', {}).get(tr.src[0].name) if name in self.dwell_trs else None # Under compartments, followed by the time in the state
-                at_exit = f'decided as people leave, from their time in {tr.src[0].name}' + (f'; {slots + 2} compartments by time in state' if slots else '') if name in self.dwell_trs else None
-                ps = getattr(tr, 'p_given', None) or tr.p # As given: an entry with a to axis, or a function giving a row, is one entry
+                at_exit = f'decided as people leave, from their time in {tr.src[0].name}' if name in self.dwell_trs else None
+                ps = getattr(tr, 'p_given', None) or tr.p # As given: an entry with a to axis is one entry
                 rows = {id(p.row):p.row for p in tr.p if isinstance(p, ss.expressions.Share)}
                 how = [f'{format_expr(row.row)} normalized over {sc.strjoin(row.labels)}' for row in rows.values()]
-                how += [f'a row, one column for each of {sc.strjoin(d.name for d in tr.dst)}, normalized'] if any(isinstance(p, ss.expressions.Column) for p in tr.p) else []
                 stays = [f'{label}: ' + ('the rest' if p is None else format_expr(p, values=True)) for label,p,given in [('null', tr.p_die, tr.dies), ('stay', tr.p_stay, tr.stays)] if given]
                 add('', f'p = {", ".join(["the rest" if p is None else format_expr(p, values=True) for p in ps] + stays)}', '; '.join(how) or at_exit)
             elif 'p' in tr.guessed:
@@ -132,11 +125,6 @@ class Presentation:
                     add('', f'{what} {quantity_str(getattr(tr, key), "dur", unit)} in {sc.strjoin(s.name for s in tr.src)}')
             if tr.guessed.get('import'):
                 add('', f'imported as {tr.guessed["import"]}', 'guessed')
-        for name,exits in self.exits.items():
-            if exits.stay:
-                add(name, f'the other {exits.stay:.0%} stay', 'guessed')
-        for name,upd in self.updates.items():
-            add(name, f'{upd.state.name} = {format_expr(upd.value, values="number", unit=unit, mul="×")}, set at the end of each step')
         for p in self.all_pars(): # A parameter given only its bounds starts from their middle
             midpoint = getattr(p, 'midpoint', None)
             if midpoint is not None and sc.isnumber(p.raw) and p.raw == midpoint:
@@ -153,96 +141,31 @@ class Presentation:
                     out.append((src, dst, name, kind))
         return out
 
-    def influences(self, tr):
-        """ The states a transition's rate depends on, apart from the states it moves people out of: the source of an infection, or a count """
-        out = []
-        everyone = len(self.people_states)
-        for leaf in [] if tr.rate is None else tr.rate.leaves:
-            states = [leaf] if isinstance(leaf, State) else (leaf.states if isinstance(leaf, Count) and len(leaf.states) < everyone else [])
-            out += [state for state in states if not any(state is src for src in tr.src or []) and not any(state is o for o in out)]
-        return out
+    def diagram(self, prefix='', indent='    '):
+        """
+        The state-transition diagram, as the lines of a Mermaid flowchart (without its first line); see `ss.Disease.diagram()`
 
-    def layout(self):
-        """ A position for each state: a column for each step from the first state, and counts (states that are not people) in a row below """
-        depth = {id(self.first): 0}
-        todo = [self.first]
-        while todo:
-            state = todo.pop(0)
-            for src,dst,name,kind in self.edges():
-                if src is state and dst is not None and id(dst) not in depth:
-                    depth[id(dst)] = depth[id(state)] + 1
-                    todo.append(dst)
-        pos = {}
-        rows = sc.ddict(int)
-        for state in self.people_states:
-            col = depth.get(id(state), max(depth.values()) + 1)
-            pos[id(state)] = (col, -rows[col])
-            rows[col] += 1
-        bottom = -max(rows.values()) - 0.5 if rows else 0
-        for i,state in enumerate(self.count_states): # Below the people it is linked to
-            cols = []
-            for tr in self.transitions.values():
-                ends = [pos[id(s)][0] for s in (tr.src or []) + (tr.dst or []) if id(s) in pos]
-                if any(state is s for s in self.influences(tr)):
-                    cols += ends
-                if any(state is s for s in (tr.src or []) + (tr.dst or [])):
-                    cols += [pos[id(s)][0] for s in self.influences(tr) if id(s) in pos]
-            pos[id(state)] = (np.mean(cols) if cols else i, bottom)
-        return pos
-
-    def diagram(self, format='plot', **kwargs):
-        """ The state-transition diagram; see `ss.Disease.diagram()` """
-        edges = self.edges()
-        if format == 'mermaid':
-            lines = ['flowchart LR']
-            nulls = 0
-            for src,dst,name,kind in edges:
-                ends = []
-                for state in [src, dst]:
-                    if state is None:
-                        nulls += 1
-                        ends.append(f'null{nulls}(( ))')
-                    else:
-                        ends.append(state.label_name)
-                arrow = '-.->' if kind == 'contact' else '-->'
-                lines.append(f'    {ends[0]} {arrow}|{name}| {ends[1]}')
-            return '\n'.join(lines)
-        elif format != 'plot':
-            errormsg = f'The format of a diagram is "plot" or "mermaid", not "{format}"'
-            raise ValueError(errormsg)
-
-        pos = self.layout()
-        fig = plt.figure(**sc.mergedicts(dict(figsize=(2 + 2*len(set(x for x,y in pos.values())), 2 + 1.5*len(set(y for x,y in pos.values())))), kwargs))
-        ax = plt.gca()
-        colors = dict(spontaneous='k', contact='tab:red')
-        for src,dst,name,kind in edges:
-            if src is None and dst is None:
-                continue
-            a = pos[id(src)] if src is not None else (pos[id(dst)][0] - 0.6, pos[id(dst)][1] + 0.5) # An inflow comes from nowhere, above and to the left
-            b = pos[id(dst)] if dst is not None else (pos[id(src)][0] + 0.6, pos[id(src)][1] - 0.5) # An outflow goes nowhere
-            back = b[0] < a[0] or (b[0] == a[0] and b[1] > a[1]) # Curve the other way going back, so a pair of arrows does not overlap
-            rad = -0.3 if back else (0.3 if src is not None and dst is not None and any(e[0] is dst and e[1] is src for e in edges) else 0)
-            ax.annotate('', xy=b, xytext=a, arrowprops=dict(arrowstyle='-|>', color=colors[kind], lw=1.5, shrinkA=22 if src is not None else 0, shrinkB=22 if dst is not None else 0,
-                                                            connectionstyle=f'arc3,rad={rad}', ls='--' if kind == 'contact' else '-'))
-            mid = ((a[0] + b[0])/2, (a[1] + b[1])/2 + (0.12 if not rad else 0.25*np.sign(rad)*(1 if back else -1)))
-            ax.text(*mid, name, ha='center', va='center', fontsize=9, color=colors[kind], bbox=dict(fc='w', ec='none', alpha=0.8, pad=1))
-        for tr in self.transitions.values(): # What a rate depends on, as a dotted line to the middle of the arrow
-            ends = [pos[id(s)] for s in (tr.src or []) + (tr.dst or []) if id(s) in pos]
-            for state in self.influences(tr):
-                if ends:
-                    mid = tuple(np.mean(ends, axis=0)) if len(ends) > 1 else (ends[0][0] + (0.3 if tr.src else -0.3), ends[0][1] + (-0.25 if tr.src else 0.25))
-                    ax.annotate('', xy=mid, xytext=pos[id(state)], arrowprops=dict(arrowstyle='-|>', color='0.6', lw=1, ls=':', shrinkA=18, shrinkB=8, connectionstyle='arc3,rad=0.2'))
+        Args:
+            prefix (str): put before each node's name, so that several diseases can be drawn in one chart (`ss.interop.to_mermaid()`)
+            indent (str): put before each line
+        """
+        lines = []
+        nulls = 0
         for state in self.states.values():
-            x, y = pos[id(state)]
-            ax.text(x, y, state.label_name, ha='center', va='center', fontsize=12, fontweight='bold',
-                    bbox=dict(boxstyle='round,pad=0.5' if state.people else 'square,pad=0.5', fc='tab:red' if state.infectious else ('w' if state.people else '0.9'), alpha=0.3 if state.infectious else 1, ec='k'))
-        xs = [x for x,y in pos.values()]
-        ys = [y for x,y in pos.values()]
-        ax.set_xlim(min(xs) - 0.8, max(xs) + 0.8)
-        ax.set_ylim(min(ys) - 0.8, max(ys) + 0.8)
-        ax.set_axis_off()
-        ax.set_title(self.module.name)
-        return ss.return_fig(fig)
+            shape = ('(["', '"])') if state.people else ('[/"', '"/]')
+            lines.append(f'{indent}{prefix}{state.name}{shape[0]}{state.label_name}{shape[1]}')
+        for src,dst,name,kind in self.edges():
+            ends = []
+            for state in [src, dst]:
+                if state is None:
+                    nulls += 1
+                    ends.append(f'{prefix}null{nulls}(( ))')
+                else:
+                    ends.append(prefix + state.name)
+            arrow = '-.->' if kind == 'contact' else '-->'
+            text = edge_label(self.transitions[name]).replace('"', '#quot;')
+            lines.append(f'{indent}{ends[0]} {arrow}|"{text}"| {ends[1]}')
+        return lines
 
     def equations(self, engine=None):
         """ The ODE system, with symbolic parameter names; see `ss.Disease.equations()` """
@@ -341,8 +264,8 @@ class Presentation:
         names = [comp_name(i) for i in range(len(engine.comps))]
         return names, out
 
-    def to_json(self, sim=None):
-        """ The model spec of one module: its states, parameters, and transitions as plain data; see `ss.Disease.to_json()` """
+    def to_spec(self, sim=None):
+        """ The model spec of one module: its states, parameters, and transitions as plain data; see `ss.Disease.to_spec()` """
         mod = self.module
         unit = sim.unit if sim is not None else None
         out = sc.objdict()
@@ -374,29 +297,25 @@ class Presentation:
             elif tr.rate is not None:
                 entry.rate = format_expr(tr.rate, exact=True)
             ps = getattr(tr, 'p_given', None) or tr.p # As given: an entry with a to axis is one entry (see Graph.expand_rows())
-            ends = [(name, p) for name,p,given in [('ss.null', tr.p_die, tr.dies), ('ss.stay', tr.p_stay, tr.stays)] if given] # Written after the states, as ss.Transition() takes them, only when given (so that other specs are unchanged)
+            ends = [(name, p) for name,p,given in [('ss.null', tr.p_die, tr.dies), ('ss.stay', tr.p_stay, tr.stays)] if given] # Written after the states, as ss.Transition() takes them, when given
             if ends:
                 entry.dst = (entry.dst or []) + [name for name,_ in ends]
                 ps = None if ps is None else list(ps) + [p for _,p in ends]
             entry.p = None if ps is None else [None if p is None else format_expr(p, exact=True) for p in ps]
             entry.stages = tr.stages
             entry.label = tr.label
-            if tr.migration: # Only when set, so that other specs are unchanged
-                entry.migration = True
-            for key in ['after', 'before']: # Likewise
-                if getattr(tr, key, None) is not None:
-                    entry[key] = quantity_json(getattr(tr, key), 'dur', unit)
-            if getattr(tr, 'acquisition_given', None) is not None: # Likewise
-                entry.acquisition = bool(tr.acquisition_given)
-            if getattr(tr, 'move_given', None): # Likewise
-                entry.move = {k:quantity_json(v, None, unit) for k,v in tr.move_given.items()}
-            if getattr(tr, 'increment', None):
-                entry.increment = dict(tr.increment)
+            entry.migration = tr.migration or None # None when not used, which sim.hash() leaves out (see ss.utils.short_hash()), so that other specs hash as they did
+            for key in ['after', 'before']:
+                entry[key] = quantity_json(getattr(tr, key, None), 'dur', unit)
+            acquisition = getattr(tr, 'acquisition_given', None)
+            entry.acquisition = None if acquisition is None else bool(acquisition)
+            entry.move = {k:quantity_json(v, None, unit) for k,v in (getattr(tr, 'move_given', None) or {}).items()} or None
+            entry.increment = dict(getattr(tr, 'increment', None) or {}) or None
             transitions.append(entry)
         out.pars = [par_json(self.pars[name], self.pars[name].slot) for name in sorted(self.pars.keys())] # Only the factor of a rate that carries its unit is a rate: R0 in R0 * gamma * I is a number (see set_slots())
         per_act = [] # Betas read as probabilities per act, which the spec says were guessed
-        nets = {ss.standardize_netkey(k):net for k,net in sim.all_networks().items()} if sim is not None and hasattr(sim, 'all_networks') else {}
-        acts = lambda key: getattr(nets.get(ss.standardize_netkey(key)), 'has_acts', False)
+        nets = {ss.utils.standardize_netkey(k):net for k,net in sim.all_networks().items()} if sim is not None and hasattr(sim, 'all_networks') else {}
+        acts = lambda key: getattr(nets.get(ss.utils.standardize_netkey(key)), 'has_acts', False)
         for name,tr in self.transitions.items(): # A bare number on a network with acts is a probability per act, written as one, so the spec is read the same without the network
             leaf = beta_leaf(tr) if tr.contact else None
             spec = next((p for p in out.pars if leaf is not None and p['name'] == leaf.name), None)
@@ -412,14 +331,11 @@ class Presentation:
         out.transitions = transitions
         out.stratifications = [sc.dcp(s.spec) for s in self.strats]
         results = [dict(name=name, type='result', source=format_expr(expr, exact=True)) for name,expr in self.exprs.items()]
-        results += [oc.to_json(unit) for oc in self.outcomes.values()]
+        results += [oc.to_spec(unit) for oc in self.outcomes.values()]
         out.results = sorted(results, key=lambda r: r['name'])
-        out.functions = sorted([dict(name=name, source=func_source(func)) for name,func in self.funcs.items()], key=lambda f: f['name'])
-        if self.transfers: # Likewise
-            expr = lambda e: None if e is None else format_expr(e, exact=True)
-            out.transfers = [dict(name=name, dim=tf.dim, src=tf.src, dst=tf.dst, rate=expr(tf.rate), dur=expr(tf.dur), states=tf.states, label=tf.label, **({} if tf.increment is None else dict(increment=tf.increment)), **({} if tf.p is None else dict(p=[expr(v) for v in tf.p]))) for name,tf in self.transfers.items()]
-        if self.updates: # Only when there are any, so that other specs are unchanged
-            out.updates = [dict(name=name, state=self.updates[name].state.name, value=format_expr(self.updates[name].value, exact=True)) for name in sorted(self.updates.keys())]
+        out.functions = sorted([dict(name=name, **func_json(func)) for name,func in self.funcs.items()], key=lambda f: f['name'])
+        expr = lambda e: None if e is None else format_expr(e, exact=True)
+        out.transfers = [dict(name=name, dim=tf.dim, src=tf.src, dst=tf.dst, rate=expr(tf.rate), dur=expr(tf.dur), states=tf.states, label=tf.label, increment=tf.increment, p=None if tf.p is None else [expr(v) for v in tf.p]) for name,tf in self.transfers.items()] or None
         guessed = list(self.guessed.keys())
         for name,state in self.states.items():
             guessed += [f'states.{name}.{key}' for key in state.guessed.keys()]
@@ -430,6 +346,19 @@ class Presentation:
 
 
 #%% Helpers for the text and the model spec
+
+def edge_label(tr):
+    """ A transition's rate as text, for a diagram, e.g. "infection: beta * I" """
+    if tr.dur is not None:
+        text = f'dur = {format_expr(tr.dur)}'
+    elif tr.rate is not None:
+        text = format_expr(tr.rate)
+    else:
+        text = ''
+    if tr.p is not None and len(tr.dst) > 1:
+        text += ' (p = ' + ', '.join('rest' if p is None else format_expr(p) for p in tr.p) + ')'
+    return f'{tr.name}: {text}' if text else tr.name
+
 
 def quantity_str(raw, kind, unit):
     """ Write a rate or a duration with its unit, e.g. "0.05 per day" or "10 days" """
@@ -487,9 +416,7 @@ def route_lines(mod, tr, sim):
             sides = f" ({net.name}'s {net.sides_str()})" if dirs else ''
             lines.append(f'beta on {name}: per act, {values}{sides}')
             acts = net.pars.get('acts')
-            if getattr(net, 'one_off', False):
-                lines.append(f'    acts {value_str(acts) if acts is not None else 1} per contact; contacts are one-off')
-            elif isinstance(acts, ss.Rate):
+            if isinstance(acts, ss.Rate):
                 lines.append(f'    acts {quantity_str(acts, None, unit)} in each partnership')
             elif acts is not None:
                 lines.append(f'    acts per unit time in each partnership ~ {acts}, drawn once for each')
@@ -507,7 +434,7 @@ def route_lines(mod, tr, sim):
 
 
 def partnership_lines(mod, tr, sim, name):
-    """ For describe(), under the partnership approximation (see `ss.solvers.Mixing.partnerships()`): how often partnerships form, and the chance one transmits in each direction, from each source state """
+    """ For describe(), under the partner-change model (see `ss.solvers.Mixing.partnerships()`): how often partnerships form, and the chance one transmits in each direction, from each source state """
     engine = getattr(mod, 'engine', None)
     terms = [term for term in getattr(getattr(sim, 'mixing', None), 'terms', []) if term.name == name and 'partnership' in term]
     if not terms or not hasattr(engine, 'partnership_info'):
@@ -525,7 +452,7 @@ def partnership_lines(mod, tr, sim, name):
                 key = f'{sides[src]}2{sides[pt.group_side[g]]}' if sides else 'each'
                 chances[f'{key} from {state}' if len(tr.terms) > 1 else key] = out[g]
     chances = ', '.join(f'{k} {v:.2g}' for k,v in chances.items())
-    return [f'    partnership approximation (approx): partnerships formed at {pt.formed:.2g} a {sim.unit_name}; chance over a partnership {chances}']
+    return [f'    partner-change model (approx): partnerships formed at {pt.formed:.2g} a {sim.unit_name}; chance over a partnership {chances}']
 
 
 def seasonal_str(raw, mean):
@@ -609,8 +536,32 @@ def func_source(func):
 
 
 def func_json(func):
-    """ A function in the model spec: its name, source, and the values it uses, so that the hash changes with what the function does """
-    return dict(fn=getattr(func, '__name__', 'function'), source=func_source(func), values=func_values(func))
+    """
+    A function in the model spec: its name, source, and the values it uses, so that the hash changes with what the function does
+
+    A function whose source is not available (e.g. NumPy's `np.exp`) is known by where
+    it can be imported from (`ref`, e.g. "numpy.exp"); one that has neither source nor
+    such a name (a lambda typed at a prompt, a `functools.partial`) cannot be told apart
+    from another, and `sim.hash()` says so. `version` is what the user code gives as the
+    function's identity (e.g. `fn.version = '2'`), which is used in place of its source.
+    """
+    version = getattr(func, 'version', None)
+    source = func_source(func) if version is None else None
+    name = getattr(func, '__qualname__', '')
+    module = getattr(func, '__module__', None)
+    ref = f'{module}.{name}' if source is None and module and name and '<' not in name else None
+    return dict(fn=getattr(func, '__name__', type(func).__name__), source=source, values=func_values(func), ref=ref, version=version)
+
+
+def unknown_funcs(obj, where=''):
+    """ The functions in a model spec that cannot be told apart from another function: no source, no name to import them by, and no version """
+    if isinstance(obj, dict):
+        if 'fn' in obj and 'source' in obj:
+            return [] if obj['source'] or obj.get('ref') or obj.get('version') is not None else [f'{obj["fn"]} (in {where})']
+        return [f for k,v in obj.items() for f in unknown_funcs(v, f'{where}.{k}' if where else k)]
+    elif isinstance(obj, list):
+        return [f for i,v in enumerate(obj) for f in unknown_funcs(v, f'{where}[{v["name"]}]' if isinstance(v, dict) and 'name' in v else f'{where}[{i}]')]
+    return []
 
 
 def func_values(func):

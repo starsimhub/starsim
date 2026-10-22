@@ -1,5 +1,5 @@
 """
-Test exporting a sim to other formats (ss.save(..., format=...)): Mermaid, SBML, and odin, read back with ss.load()
+Test exporting a sim to other formats (ss.interop.export()): Mermaid, SBML, and odin, read back with ss.interop.load()
 """
 import tempfile
 import warnings
@@ -7,12 +7,14 @@ import pytest
 import numpy as np
 import sciris as sc
 import starsim as ss
+import starsim.interop
 
 kw = dict(verbose=0)
 
 
 def sir(name='sir'):
-    return ss.Disease(infection=ss.transmission('S -> I', beta=ss.perday(0.3)), recovery=ss.progression('I -> R', dur=ss.days(7)), init_prev=0.01, name=name)
+    S, I, R = ss.states('S I R')
+    return ss.Disease(infection=ss.Transition(S, I, rate=ss.perday(0.3) * I), recovery=ss.Transition(I, R, dur=ss.days(7)), init_prev=0.01, name=name)
 
 
 def make_sir():
@@ -21,12 +23,13 @@ def make_sir():
 
 def make_seird():
     """ Births, deaths from every state, a branch, and a lognormal dwell time, which is written as Erlang stages """
+    S, E, I, R, D = ss.states('S E I R D')
     seird = ss.Disease(
-        births    = ss.birth('-> S', rate=ss.peryear(0.02)),
-        infection = ss.transmission('S -> E', beta=ss.perday(0.4), source='I'),
-        onset     = ss.progression('E -> I', dur=ss.days(4)),
-        outcome   = ss.progression('I -> R | D', dur=ss.lognorm_ex(ss.days(8), ss.days(3)), p=[None, 0.1]),
-        deaths    = ss.death('S | E | I | R ->', rate=ss.peryear(0.01)),
+        births    = ss.birth(S, rate=ss.peryear(0.02)),
+        infection = ss.Transition(S, E, rate=ss.perday(0.4) * I),
+        onset     = ss.Transition(E, I, dur=ss.days(4)),
+        outcome   = ss.Transition(I, [R, D], dur=ss.lognorm_ex(ss.days(8), ss.days(3)), p=[None, 0.1]),
+        deaths    = ss.death([S, E, I, R], rate=ss.peryear(0.01)),
         init_prev = 0.01, name='seird')
     return ss.Sim(seird, total_pop=1e5, unit='day', stop=120, **kw)
 
@@ -39,7 +42,7 @@ def test_mermaid(tmp_path):
     assert text.startswith('flowchart LR')
     assert 'S -.->|"infection: beta * I"| I' in text # A transmission is dashed, and labelled with its rate
     assert 'I -->|"recovery: dur = dur"| R' in text
-    ss.save(tmp_path/'sir.md', sim, format='mermaid', verbose=False)
+    ss.interop.export(sim, 'mermaid', filename=tmp_path/'sir.md', verbose=False)
     assert sc.loadtext(tmp_path/'sir.md').startswith('```mermaid\nflowchart LR') # A Markdown file has the diagram in a fenced block
 
     # Two diseases are a subgraph each; a stratification is in the title
@@ -57,8 +60,8 @@ def test_sbml(tmp_path):
         sim = make()
         with warnings.catch_warnings(): # What is lost is tested below
             warnings.simplefilter('ignore')
-            ss.save(tmp_path/file, sim, format='sbml', verbose=False)
-        back = ss.load(tmp_path/file, stop=sim.pars.stop, **kw) # The unit is read from the file
+            ss.interop.export(sim, 'sbml', filename=tmp_path/file, verbose=False)
+        back = ss.interop.load(tmp_path/file, stop=sim.pars.stop, **kw) # The unit is read from the file
         sim.run(); back.run()
         assert back.unit == sim.unit
         a, b = sim.results[sim.diseases[0].name], back.results[back.diseases[0].name]
@@ -67,11 +70,11 @@ def test_sbml(tmp_path):
         out.append(back)
 
     # The stages are listed as a change, and what SBML cannot carry as not exported
-    with pytest.warns(ss.LossyExport) as record:
+    with pytest.warns(ss.errors.LossyExport) as record:
         ss.interop.export(make_seird(), 'sbml')
     assert '7 exponential stages' in str(record[0].message)
     sim = ss.Sim(sir(), networks='random', n_agents=500, stratify=dict(age=[0, 18]), unit='day', stop=10, **kw)
-    with pytest.warns(ss.LossyExport) as record:
+    with pytest.warns(ss.errors.LossyExport) as record:
         ss.interop.export(sim, 'sbml')
     msg = str(record[0].message)
     assert 'agent-based' in msg and 'network "randomnet"' in msg and 'stratified (age' in msg
@@ -82,11 +85,11 @@ def test_sbml(tmp_path):
 def test_odin(tmp_path):
     sc.heading('Testing export to odin and back')
     sim = make_seird()
-    with pytest.warns(ss.LossyExport):
-        ss.save(tmp_path/'seird.R', sim, format='odin')
+    with pytest.warns(ss.errors.LossyExport):
+        ss.interop.export(sim, 'odin', filename=tmp_path/'seird.R')
     text = sc.loadtext(tmp_path/'seird.R')
     assert 'deriv(S) <- births - deaths_1 - infection' in text and 'beta <- user(0.4)' in text
-    back = ss.load(tmp_path/'seird.R', unit='day', stop=120, **kw)
+    back = ss.interop.load(tmp_path/'seird.R', unit='day', stop=120, **kw)
     sim.run(); back.run()
     assert {'infection', 'onset', 'births'} <= set(back.diseases[0].graph.transitions) # Each flow is named after its transition
     a, b = sim.results.seird, back.results[back.diseases[0].name]
@@ -97,8 +100,9 @@ def test_odin(tmp_path):
 
 if __name__ == '__main__':
     T = sc.timer()
-    folder = sc.path(tempfile.mkdtemp())
-    test_mermaid(folder)
-    test_sbml(folder)
-    test_odin(folder)
+    with tempfile.TemporaryDirectory() as tmp:
+        folder = sc.path(tmp)
+        test_mermaid(folder)
+        test_sbml(folder)
+        test_odin(folder)
     T.toc()

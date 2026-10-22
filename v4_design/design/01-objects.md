@@ -11,9 +11,9 @@ ss.Sim                      modules, a population, a timeline, and a solver; one
 ss.MultiSim                 many runs of a sim, or several sims; made by ss.parallel
 ss.People                   the population: size, demography, per-agent attributes
 ss.Module                   lifecycle: init → step → finalize; owns states, transitions, parameters, results
- ├── ss.Disease             states that people are in, and the transitions between them
- │    └── ss.Infection      a disease written as code, as in Starsim 3
- ├── ss.Network             who contacts whom: ss.RandomNet, ss.MFNet, ss.StaticNet, ss.PartnerNet, ...
+ ├── ss.Disease             states that people are in, and the transitions between them (declared)
+ ├── ss.Infection           a disease written as code, as in Starsim 3
+ ├── ss.Network             who contacts whom: ss.RandomNet, ss.SexualNet, ...
  ├── ss.MixingPool          group-level mixing; also ss.MixingPools, which ss.contacts makes
  ├── ss.Demographics        births, deaths, pregnancy, migration
  ├── ss.Product             ss.Vaccine, ss.Diagnostic, ss.Treatment (08-interventions.md)
@@ -25,7 +25,7 @@ ss.Transition               a movement between states; built by >> and @, or by
                             ss.transmission, ss.progression, ss.birth, ss.death, ss.transfer
 ss.par                      a named parameter with bounds, prior, and provenance
 ss.dur, ss.per, ss.prob      time types (base classes ss.TimePar, ss.Rate); 02-types.md
-ss.Mobility                 movement between the places of a stratification (06-routes.md)
+ss.geo.Mobility                 movement between the places of a stratification (06-routes.md)
 ss.Dist                     distributions: ss.normal, ss.lognorm_ex, ...
 ss.Result                   a named time series, with a dimension per stratification and, for many runs, a run axis
 ```
@@ -34,14 +34,14 @@ ss.Result                   a named time series, with a dimension per stratifica
 
 ## Naming conventions
 
-**Modules, containers, and base classes are CamelCase; the concrete pieces you put inside a module are lowercase.** This is Starsim's existing rule (`ss.Dist` versus `ss.normal`, `ss.Rate` versus `ss.perday`, `ss.RandomNet` versus `ss.bernoulli`), applied to the new names. Products (`ss.Vaccine`, `ss.Diagnostic`, `ss.Treatment`) are CamelCase because they are modules, as Starsim's `ss.Product` is; the deliveries that hand them out (`ss.vaccinate`, `ss.screen`, `ss.treat`, and `ss.visit`, which hands out nothing), and `ss.cascade`, which groups them, are pieces and are lowercase. No product and delivery differ only by case.
+**Modules, containers, and base classes are CamelCase; the concrete pieces you put inside a module are lowercase.** This is Starsim's existing rule (`ss.Dist` versus `ss.normal`, `ss.Rate` versus `ss.perday`, `ss.RandomNet` versus `ss.bernoulli`), applied to the new names. Products (`ss.Vaccine`, `ss.Diagnostic`, `ss.Treatment`) are CamelCase because they are modules, as Starsim's `ss.Product` is; the deliveries that hand them out (`ss.vaccinate`, `ss.screen`, `ss.treat`) are pieces and are lowercase. No product and delivery differ only by case.
 
 | | Examples |
 |---|---|
-| CamelCase | `ss.Sim`, `ss.MultiSim`, `ss.People`, `ss.Module`, `ss.Disease`, `ss.Network`, `ss.RandomNet`, `ss.MixingPool`, `ss.Mobility`, `ss.Intervention`, `ss.Connector`, `ss.Analyzer`, `ss.Calibration`; the two graph classes `ss.State` and `ss.Transition`; the products `ss.Vaccine`, `ss.Diagnostic`, `ss.Treatment` |
-| lowercase | time (`ss.days`, `ss.perday`), distributions (`ss.normal`, `ss.lognorm_ex`), `ss.par`, `ss.states`, `ss.null`, `ss.transmission`, `ss.progression`, `ss.birth`, `ss.death`, `ss.transfer`, `ss.modify`, `ss.outcome`, `ss.by`, `ss.timeseries`, `ss.seasonal`; deliveries `ss.vaccinate`, `ss.screen`, `ss.treat`, `ss.change`; loaders `ss.people`, `ss.contacts`, `ss.data`; functions `ss.parallel`, `ss.compare_models` |
+| CamelCase | `ss.Sim`, `ss.MultiSim`, `ss.People`, `ss.Module`, `ss.Disease`, `ss.Network`, `ss.RandomNet`, `ss.MixingPool`, `ss.geo.Mobility`, `ss.Intervention`, `ss.Connector`, `ss.Analyzer`, `ss.fit.Fit`; the two graph classes `ss.State` and `ss.Transition`; the products `ss.Vaccine`, `ss.Diagnostic`, `ss.Treatment` |
+| lowercase | time (`ss.days`, `ss.perday`), distributions (`ss.normal`, `ss.lognorm_ex`), `ss.par`, `ss.states`, `ss.null`, `ss.transmission`, `ss.progression`, `ss.birth`, `ss.death`, `ss.transfer`, `ss.modify`, `ss.outcome`, `ss.by`, `ss.timeseries`, `ss.seasonal`; deliveries `ss.vaccinate`, `ss.screen`, `ss.treat`, `ss.change`; loaders `ss.people`, `ss.contacts`, `ss.data`; functions `ss.parallel`, `ss.fit.compare_models` |
 
-Methods that describe the model are `describe()`, `diagram()`, `equations()`, and `solvers()`. Methods about results keep their Starsim names: `plot()`, `summarize()`, `to_df()`.
+Methods that describe the model are `describe()`, `diagram()`, and `equations()`. Methods about results keep their Starsim names: `plot()`, `summarize()`, `to_df()`.
 
 ## Constructing a model
 
@@ -64,17 +64,7 @@ ss.Disease(
 )
 ```
 
-The short form is two lines, with states inferred from the arrows:
-
-```python
-sir = ss.Disease(
-    infection = ss.transmission('S -> I', beta=0.3),
-    recovery  = ss.progression('I -> R', dur=10),
-    init_prev = 0.01,
-)
-```
-
-The operator form declares the ingredients first and then passes the transitions positionally:
+The operator form declares the ingredients first and then passes the transitions positionally (or as keywords, which name them):
 
 ```python
 beta = 0.3
@@ -122,7 +112,7 @@ The keyword is the name. When there is no keyword, a transition's name is looked
 3. the name of the variable it is bound to in the code that called the constructor (`infection = S >> I @ beta * I` then `ss.Disease(infection, recovery)`);
 4. a fallback built from its endpoints: `S_to_I`.
 
-Rule 3 is found by looking for the object among the caller's local and global variables when the module is constructed. It is a convenience and it can miss: a transition written inline (`ss.Disease(S >> I @ beta * I)`) or built in a loop has no variable, so it gets the fallback name, and `describe()` shows the names that were used. If two fallback names collide, the later ones get a numeric suffix (`S_to_I_2`). An object bound to two variables takes the fallback name too.
+Rule 3 is found by looking for the object among the caller's local and global variables, once, when `ss.Disease(...)` (or `ss.Sim(...)`, for modules) is called; nothing else looks, and a string does not name a variable. It is a convenience and it can miss: a transition written inline (`ss.Disease(S >> I @ beta * I)`) or built in a loop has no variable, so it gets the fallback name, and `describe()` shows the names that were used. If two fallback names collide, the later ones get a numeric suffix (`S_to_I_2`). An object bound to two variables takes the fallback name too.
 
 States and `ss.par` objects are named by the same lookup, with one difference for states: there is no fallback. A state from `S, I, R = ss.states(3)` or `S = ss.State()` has no name until the module is built, and gets it from rules 1 to 3; one that cannot be matched to a keyword, a `name=`, or exactly one variable raises `UnnamedState`, which says to use `ss.states('S I R')` or `ss.State('S')`. A state from `ss.states('S I R')`, or declared in a class body, already has its name. A module's name is its `name=`, else the variable it is bound to where it is passed to `ss.Sim`, else the lowercased class name as in Starsim; this is why `sir = ss.Disease(...)` gives `sim.diseases.sir` and `sim.results.sir`.
 
@@ -151,13 +141,15 @@ class SEIR(ss.Disease):
 
 Use the class form when there is behavior that is not a transition, or when the model is going into a library. A module that only has states, transitions, parameters, and results never needs to define a method.
 
-A disease written entirely as code (per-agent arrays from `define_states()`, updated in `step_state()` and `set_prognoses()`, as in Starsim 3) subclasses `ss.Infection` if it is transmitted between agents (it has the susceptible and infected states, `rel_sus`, `rel_trans`, and transmission over networks), or `ss.Disease` itself (as Starsim 3's `ss.Disease`, with no states of its own): a subclass of `ss.Disease` whose class body (or a base's) and arguments declare no states, transitions, or outcomes is written as code, and one with no states and no `step()` or `step_state()` raises an error when the sim is initialized. The verbs that act on arrays reach it (`ss.modify` of its `rel_sus` and `rel_trans`, conditions on its arrays, fitting its parameters given as `ss.par` with bounds, `sim.new()`); those that need structure (`equations()`, `R0()`, the compartmental solvers) raise `ss.CapabilityError`.
+A disease written entirely as code (per-agent arrays from `define_states()`, updated in `step_state()` and `set_prognoses()`, as in Starsim 3) subclasses `ss.Infection`, a module of its own (not an `ss.Disease`), so that its code reads without the declared machinery: it has the susceptible and infected states, `rel_sus`, `rel_trans`, and transmission over the networks for its `beta`; with no `beta` it is not transmitted (as `ssl.NCD`, or Starsim 3's `ss.Disease` written as code). `ss.Disease` is declared only: one that declares no states, transitions, or outcomes raises an error that points to `ss.Infection`, and `python -m starsim.migrate` rewrites Starsim 3's coded subclasses of `ss.Disease` to `ss.Infection`. Both are diseases to the sim (`sim.diseases`, the infection log, deaths, `sim.rescale()`) through a small shared base, `ss.diseases.DiseaseBase`. What needs structure (`describe()` in full, `equations()`, `diagram()`, `R0()`, `move_to()`, `current_state()`, `stratify()`) is a method of `ss.Disease` only, and the compartmental solvers raise `ss.CapabilityError` for an `ss.Infection`. The verbs that act on arrays reach it (`ss.modify` of its `rel_sus` and `rel_trans`, conditions on its arrays, fitting its parameters given as `ss.par` with bounds, `sim.new()`).
+
+Code can also read and write the states of a declared disease run as agents, as Starsim 3 code does: indexing (`sir.I[uids] = True`), `set()`, and in-place operators (`sir.I |= ...`) are tracked, so the counts (`sir.I.n`), the results, and other modules later in the same step see the change. Writes through the NumPy array behind a state (`sir.I.raw`) are not tracked, and the counts and results do not see them; `STARSIM_CHECK_COUNTS=1` checks the counts at every step. The time each agent entered a state (`ti_X`) is kept only where the engine needs it, unless `ss.options.keep_times = True`; reading another raises `ss.errors.TimeNotKept`. A disease written as code takes declared products and deliveries that act on the states it has (e.g. `ss.vaccinate()` on `rel_sus`).
 
 ### Library models
 
 Starsim's `dict(type='sir', beta=0.1)` and `ss.SIR(beta=0.1)` are kept as the way to ask for a model from the library. A library model is an ordinary module: `ss.SIR`, `ss.SIS`, and `ss.SEIR` are declared in the class form, with Starsim 3's keywords, so `describe()` prints them in full and `equations()` works on them. Starsim 3's versions written as code are `ssl.AgentSIR`, `ssl.AgentSIS`, and `ssl.AgentSEIR`.
 
-The dict *tuple* shorthand from the first draft, `dict(infection=('S -> I', 0.05))`, is not part of the language. Guessing the kind of transition from the type of a bare value was ambiguous (it misclassifies SIRS, for example), and the two-line constructor form is as short.
+The dict *tuple* shorthand from the first draft, `dict(infection=('S -> I', 0.05))`, is not part of the language. Guessing the kind of transition from the type of a bare value was ambiguous (it misclassifies SIRS, for example), and the operator form is as short.
 
 ### The equivalence rule
 
@@ -225,7 +217,7 @@ Defaults, all printed by `describe()`:
 
 `solver='auto'` picks the simplest, fastest representation that runs the model faithfully: if every piece has a compartmental form the model runs as a deterministic ODE, otherwise as agents. The choice and the reason are printed. A model becomes agent-based by containing something agent-based (an individual-level network, `n_agents=`, a per-agent function or attribute) or by asking (`solver='abm'`). `'auto'` never approximates the mixing and never drops individual-level structure. The one thing it does unasked is represent a non-exponential dwell time by Erlang sub-stages, so a lognormal duration does not by itself force an agent-based run, and it says so. When a solver is asked for explicitly and the model does not natively fit it, the library uses the standard approximation where there is one and says so in one line.
 
-The names are `'ode'`, `'binomial'` (chain-binomial), `'gillespie'` (the exact continuous-time stochastic solver, which takes tau leaps instead, and says so, when the events an ODE run estimates would take more than about a second one at a time, though never by place; `approx=False` keeps it exact), and `'abm'`. The solvers of earlier drafts (`'tau'`, `'sde'`, `'stochastic'`, `'ctmc'`) raise an error that names what to use. `solver=` may also be given to `sim.run()`, before the sim is initialized; once it is, the solver is fixed, and `sim.new(solver=...)` makes a fresh copy with another. `sim.solvers()` (and `sir.solvers()` for one module) prints which solvers can run the model, before anything runs. See [12-backends.md](12-backends.md).
+The names are `'ode'`, `'binomial'` (chain-binomial), `'gillespie'` (the exact continuous-time stochastic solver, which stays exact however many events a run takes), `'tau'` (tau-leaping: close to exact, and much faster for a run of many events), and `'abm'`. Any other name raises an error that lists them. `solver=` may also be given to `sim.run()`, before the sim is initialized; once it is, the solver is fixed, and `sim.new(solver=...)` makes a fresh copy with another. `sim.solvers()` (and `sir.solvers()` for one module) prints which solvers can run the model, before anything runs. See [12-backends.md](12-backends.md).
 
 `approx=` controls what happens when something is approximated: by default a one-line note is printed (and kept in `sim.notes`), `approx=True` says the approximation is intended and keeps the note without printing it, and `approx=False` makes any approximation an error (`CapabilityError`); under `solver='auto'` it means a model with a non-Erlang dwell time runs as agents instead ([12-backends.md](12-backends.md#approximations)).
 
@@ -255,10 +247,8 @@ There is no replicate count on `ss.Sim`: `sim.run(n_runs=100)` is a shortcut for
 | `sim.run(solver=None, n_runs=None)` | runs it, calling `init()` first if needed; returns the sim, or with `n_runs=` a MultiSim of that many runs |
 | `sim.new(**kwargs)` | a fresh, uninitialized copy, with any keywords changed (`sim.new(solver='abm')`) |
 | `sim.describe()` | prints the resolved model, with every guess marked ([below](#describe)) |
-| `sim.solvers()` | prints which solvers can run the model ([12-backends.md](12-backends.md)) |
 | `sim.stratify(age=..., ...)` | stratifies every module by a property of people; the same as `stratify=` ([05-dimensions.md](05-dimensions.md)) |
 | `sim.what_modifies(x)` | lists what changes a quantity ([below](#the-module-contract)) |
-| `sim.requires()` | prints the data the modules say they require ([04-parameters.md](04-parameters.md#requirements)) |
 | `sim.hash()` | the run's identity, as an `sc.objdict` ([below](#equality-copying-and-identity)) |
 | `sim.to_spec()`, `sim.to_code()` | the model spec ([14-model-spec.md](14-model-spec.md)), and a Python file that builds the sim again ([16-interop.md](16-interop.md)) |
 | `sim.plot()`, `sim.summarize()`, `sim.to_df()` | results, as in Starsim ([09-results.md](09-results.md)) |
@@ -296,24 +286,13 @@ sim.what_modifies(hiv.rel_trans)     # the ss.modify() modifiers on it
 
 Modifiers made with `ss.modify` are always listed, because they are declared; direct writes by code are not tracked. Modules may read and write other modules' state directly. Scaling a quantity through `ss.modify` rather than overwriting it SHOULD be preferred, because modifiers combine by a stated rule and the base value is never lost ([07-effects.md](07-effects.md)); this is guidance, not something the library enforces.
 
-A module MAY list the data it needs, as optional metadata:
-
-```python
-class MyNetwork(ss.Network):
-    requires = [ss.Requires('contact_matrix', shape='age x age', source='Prem et al. 2021')]   # optional metadata
-
-sim.requires()     # what the modules in this sim require, as a table
-```
-
-`requires` is the one word for the list on the module, the entries in it, and the table. This is never an enforced view of the data: a module with `requires` can still read anything in the sim. Generating a data-entry form from the table (`sim.requires(to='form.csv')`) is deferred from v1. See [04-parameters.md](04-parameters.md#requirements).
-
 ## `describe()`
 
 `describe()` prints the resolved model as text. It is what makes guessing defaults safe: every guess is shown, and marked as a guess. It replaces the first draft's model-level `summary()`; `sim.summarize()` is Starsim's results summary and stays about results.
 
 Every module implements `describe()`, and `sim.describe()` covers the whole sim. For a model it prints:
 
-1. every state, with its properties and whether it was declared or inferred, and which states are counts and not people;
+1. every state, with its properties, and which states are counts and not people;
 2. every transition, with its name, its kind, and its rate or dwell-time distribution as resolved (`dwell ~ exponential(mean = 10 days)`, not `dur=10`), its source of infection where there is one, and its rate with bare states expanded (`0.3 × I.n / N` under homogeneous mixing);
 3. every stratification, with its levels;
 4. the mixing: each network or pool, and how a state in a rate is read through it (homogeneous mixing is frequency-dependent: `I` is `I.n / N`);
@@ -333,11 +312,11 @@ solver       ode                                             [guessed: every par
 unit         none: time is in timesteps                      [nothing in the model has a unit]
 
 Disease 'sir': 3 states, 2 transitions
-states       S, I, R                                         [inferred from the arrows]
-             I infectious                                    [guessed: source of 'infection']
+states       S, I, R
+             I infectious
              init: init_prev = 0.01; the rest in S
 
-infection    S -> I   contact-mediated, source I             [guessed: source is the destination]
+infection    S -> I   contact-mediated, source I
              beta = 0.3 per step
              rate = 0.3 × I.n / N                            [homogeneous mixing]
 recovery     I -> R   spontaneous
@@ -355,13 +334,13 @@ Give the sim a unit (`unit='day'`, a typed `dt`, or dates) and the same lines re
 - Two models are **the same model** if their model specs are identical ([14-model-spec.md](14-model-spec.md)), which does not depend on which form was used to write the model or on the order of keywords. The `model` part of `sim.hash()` says whether they are, and `ss.diff(a, b)` says how two sims differ; `==` on two modules is Python's identity, not this.
 - `copy()` is deep for the model and shallow for data references, so a copied model that fetched `ss.people('Kenya')` does not fetch it again.
 - `stratify()` changes the model in place and returns it, so it can be chained or passed straight to `ss.Sim`. `sir.stratify(age=..., inplace=False)` returns a stratified copy and leaves `sir` alone, for comparing the two side by side. Stratifying twice by the same dimension is an error ([05-dimensions.md](05-dimensions.md)).
-- `sim.hash()` returns an `sc.objdict(model=, pars=, config=, scenario=, data=, seed=)`: five short hashes and the seed, computed from the model spec, the resolved parameter values, the execution configuration, the scenario (interventions and modifiers), and the data (`None` without data). It is a cheap by-product of the model being data. Its uses are telling apart the many runs that come from one commit (a sweep, a calibration) and testing whether two models written differently are the same model. The git hash or tag remains the main record of what was run. See [11-random.md](11-random.md).
+- `sim.hash()` returns an `sc.objdict(model=, pars=, config=, scenario=, data=, seed=)`: five short hashes and the seed, computed from the model spec, the resolved parameter values, the execution configuration, the scenario (interventions and modifiers), and the data (`None` without data). It is a cheap by-product of the model being data, and is the same in every process. Its uses are telling apart the many runs that come from one commit (a sweep, a calibration) and testing whether two models written differently are the same model. The git hash or tag remains the main record of what was run. See [11-random.md](11-random.md).
 
 ## Not included
 
 - **The dict tuple shorthand** and its coercion rules (above).
 - **Builder methods that change structure after construction** (`m.add_transition_flow(...)`). A model's states and transitions are given once, at construction; `stratify()` is the one operator applied afterwards.
-- **Positional values after an arrow.** `ss.transmission('S -> I', 0.3)` is not accepted; write `beta=0.3`. The arrow is the only positional argument of the shorthand constructors.
+- **States named in strings** (arrow strings, `ss.transmission('S -> I', beta=0.3)` and `ss.progression('I -> R', dur=10)`). A transition takes the states themselves, so nothing is inferred from a name, including the source of infection, which is in the rate (`S >> I @ beta * I`).
 - **Required `reads`/`writes` declarations, read-only views, and queued updates.** See the module contract and lifecycle above.
 - **A separate `Model` and `ModelBuilder`.** One class, constructed once.
 - **A module class for states that are not people** (the earlier `ss.Compartments`). A reservoir or a vector population is ordinary states in the disease ([03-states-and-transitions.md](03-states-and-transitions.md#states-that-are-not-people)).

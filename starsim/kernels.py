@@ -13,12 +13,14 @@ value per group. Everything else is a number per group that Python sets once a s
 
 import os
 import sys
+import importlib
 import ctypes
 import contextlib
 import collections
 import multiprocessing as mp
 import numpy as np
 import numba as nb
+import sciris as sc
 import starsim as ss
 from .distributions import _GOLDEN, _MIX1, _MIX2, _U30, _U27, _U31, _U11, _U40, _INV53, _INV24
 
@@ -26,7 +28,7 @@ __all__ = ['Program', 'Register', 'Shifts', 'opcodes']
 
 # The operations a rate can be made of
 CONST, COUNT, FRAC, EXPOSURE, ADD, SUB, MUL, DIV, POW, MIN, MAX, LT, LE, GT, GE, EXP, LOG, SQRT, ABS, SIN, COS, TOTAL = range(22) # TOTAL is a count in the whole population, every place (I.total)
-CONVEY, ASSIGN = 22, 23 # Not in a rate: a conveyor (its flow, then its slots), and the compartment an update sets (see convey() and update_values()); kept out of the program's fields, since every field adds to the cost of each call that is passed it
+CONVEY = 22 # Not in a rate: a conveyor (its flow, then its slots; see convey()); kept out of the program's fields, since every field adds to the cost of each call that is passed it
 opcodes = {'+':ADD, '-':SUB, '*':MUL, '/':DIV, '**':POW, 'minimum':MIN, 'maximum':MAX, 'exp':EXP, 'log':LOG, 'sqrt':SQRT, 'absolute':ABS, 'sin':SIN, 'cos':COS,
            'less':LT, 'less_equal':LE, 'greater':GT, 'greater_equal':GE}
 
@@ -42,7 +44,7 @@ fields = [
     'mult',       # The multiplier on each flow whose rate does, by group
     # The rates that change within a step
     'depth',      # The largest stack any of them needs
-    'starts',     # Where each flow's operations start and end (the same, if it has none); and after the flows', those of each conveyor and each update (see convey() and update_values())
+    'starts',     # Where each flow's operations start and end (the same, if it has none); and after the flows', those of each conveyor (see convey())
     'ops',        # The operations
     'args',       # What each one acts on
     'consts',     # The parameter values, by group
@@ -96,7 +98,7 @@ fields = [
 
 Program = collections.namedtuple('Program', fields)
 
-# A movement register (see ss.Mobility), as the kernels apply it
+# A movement register (see ss.geo.Mobility), as the kernels apply it
 register_fields = [
     'starts',     # Where each step's events start and end
     'src',        # The place each event takes people from (-1 if it adds them)
@@ -116,7 +118,7 @@ register_fields = [
 
 Register = collections.namedtuple('Register', register_fields)
 
-# The deliveries of a whole run (see ss.Delivery.shifts()), as the kernels apply them: each moves some of the people in each compartment and group to another group
+# The deliveries of a whole run (see ss.solvers.CompartmentalDelivery.shifts()), as the kernels apply them: each moves some of the people in each compartment and group to another group
 shift_fields = [
     'due',  # Whether each delivery happens at each time point (deliveries by time points)
     'sel',  # The share of the people in each compartment and group who are eligible (deliveries by compartments by groups)
@@ -127,21 +129,141 @@ shift_fields = [
 
 Shifts = collections.namedtuple('Shifts', shift_fields)
 
-jit = nb.jit(nopython=True, cache=True, error_model='numpy')
+plain = __name__ == 'starsim.plain_kernels' # Whether this is the copy of the kernels that runs as plain Python: see uncompiled()
+
+def kernel(error_model='numpy', **kwargs):
+    """ Compile a kernel with Numba (cached on disk), or leave it as plain Python in the copy that `uncompiled()` gives """
+    return (lambda func: func) if plain else nb.jit(nopython=True, cache=True, error_model=error_model, **kwargs)
+
+jit = kernel()
 pieces = 4 # The stochastic solvers that take steps of their own length hold values that vary in time for a quarter of a step at a time: see step()
-announced = False # Whether a cold cache has been checked for, so it is said only once
 golden = np.uint64(0x9e3779b97f4a7c15) # The step between the counters of a random stream: see uniform()
-per_chunk = 256 # The places with events that make it worth a thread for the exact solver by place: see gillespie_places()
 sparse_flows = 256 # The flows above which the exact solver by place follows only the compartments that hold anyone: see sparse_events()
 
 
-def announce(verbose=True):
-    """ Say when the kernels are about to be built, since the first use after installing (or changing this file) takes one or two minutes """
-    global announced
-    if verbose and not announced:
-        announced = True
-        if not run._cache._cache_file._load_index(): # Empty if there is no cache, or it is out of date
-            print('Building the solver kernels for first use (one or two minutes; once per install)')
+compile_after = 20 # The seconds that runs would take as plain Python, in a session, above which the kernels are compiled (by default: see choose())
+plain_total = 0.0 # The seconds that the runs taken as plain Python in this session would have taken, as estimated: see choose()
+plain_copy = None # The copy of the kernels that runs as plain Python, once made: see uncompiled()
+on_disk = None # Whether the compiled kernels were found in Numba's cache, once looked for: see is_compiled()
+entries = ['run', 'run_many', 'one_step', 'advance', 'advance_threads', 'apply_events', 'apply_shifts', 'settle_places'] # What the engines call
+
+
+def uncompiled():
+    """
+    The kernels as plain Python: this module's code, run without compiling it, which gives the same results with the
+    same random numbers (Numba follows NumPy's algorithms for its draws). Much slower for a large model, but there is
+    nothing to wait for. Its entry points ignore the overflow of the random streams' integer arithmetic, as compiled
+    code does.
+    """
+    global plain_copy
+    if plain_copy is None:
+        spec = importlib.util.spec_from_file_location('starsim.plain_kernels', __file__)
+        copy = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(copy)
+        for name in entries:
+            setattr(copy, name, quiet(getattr(copy, name)))
+        plain_copy = copy
+    return plain_copy
+
+
+def quiet(func):
+    """ A kernel run as plain Python, with NumPy's warnings about integer overflow off (see `uncompiled()`) """
+    def wrapper(*args, **kwargs):
+        with np.errstate(over='ignore'):
+            return func(*args, **kwargs)
+    return wrapper
+
+
+def is_compiled():
+    """ Whether the kernels are compiled already: in this session, or in Numba's cache from an earlier one (an index that is out of date reads as empty) """
+    global on_disk
+    if on_disk is None:
+        on_disk = bool(step._cache._cache_file._load_index())
+    return on_disk or bool(step.signatures)
+
+
+def plain_seconds(p, y, npts, solver):
+    """
+    About how long a run would take as plain Python, in seconds: about 20 µs a step (or, for the exact solver, an
+    event), and 0.4 µs for each group times each flow, operation, and compartment, and each pair of levels or places
+    that mix; RK4 and tau-leaping take about four times as many steps, and the exact solver about one event for
+    each person and flow. Fitted to declared SIRs with 1 to 50 groups, to within about 2×, which is enough to
+    choose whether to compile.
+    """
+    nc, ng = y.shape
+    size = ng*(len(p.src) + len(p.ops) + nc) + len(p.exp_set)*(3*len(p.sh_val) + (p.sizes**2).sum())
+    if solver == solvers['gillespie']:
+        return y.sum()*len(p.src)*(1e-5 + 3e-7*size)
+    stages = 4 if solver in [solvers['rk4'], solvers['tau']] else 1
+    return npts*stages*(2e-5 + 4e-7*size)
+
+
+def choose(seconds=0.0, verbose=True):
+    """
+    The kernels to take a run with: these, compiled by Numba, or the same code as plain Python (see `uncompiled()`)
+
+    Compiling them takes about a minute, once per install (or ahead of time, with `ss.compile()`), so by default
+    (`ss.options.compile = 'auto'`) a run is taken as plain Python, unless the kernels are compiled already, or the
+    runs taken that way in this session, with this one, would take longer than `compile_after` seconds (as a
+    calibration's many small runs would).
+
+    Args:
+        seconds (float): about how long the run (or runs) would take as plain Python: see `plain_seconds()`
+        verbose (bool): whether to say when the kernels are compiled for a run
+    """
+    mode = ss.options.compile
+    if mode not in ['auto', 'always', 'never']:
+        raise ValueError(f'ss.options.compile must be "auto", "always", or "never", not {mode!r}')
+    if mode == 'never':
+        return uncompiled()
+    if mode == 'always' or is_compiled():
+        return sys.modules[__name__]
+    global plain_total
+    if plain_total + seconds < compile_after:
+        plain_total += seconds
+        return uncompiled()
+    if verbose:
+        which = f'this run would take about {seconds:.0f} s' if seconds >= compile_after else f'the runs so far would take more than {compile_after} s'
+        print(f'Compiling the solver kernels, since {which} uncompiled (about a minute, once per install; ss.compile() does it ahead of time)')
+    return sys.modules[__name__]
+
+
+def compile(verbose=True):
+    """
+    Compile the kernels now (those of the compartmental solvers, and the passes over the agents), so that no run waits for them: e.g. in a Docker image, in CI, or before a calibration
+
+    Compiling takes about a minute, once per install (and after an upgrade); the result is kept in Numba's cache,
+    beside the package (or, if that cannot be written to, in the user's cache folder, or in `NUMBA_CACHE_DIR` if it
+    is set). Until the kernels are compiled, small runs are taken as plain Python: see `ss.options.compile`.
+
+    **Example**:
+
+        ss.compile()
+    """
+    T = sc.timer()
+    if verbose:
+        print('Compiling the solver kernels (about a minute)...')
+    def make(solver='binomial'):
+        S, I, R = ss.states(3)
+        sir = ss.Disease(S >> I @ 0.3*I, I >> R @ ss.days(10), init=dict(I=0.1), name='sir')
+        return ss.Sim(sir, total_pop=100, unit='day', stop=3, solver=solver, verbose=0)
+    with ss.options.context(compile='always'):
+        make().run() # A whole run, in one call: run(), which has every solver's code
+        make().run(until=1) # A run taken a step at a time: one_step()
+        sim = make().init()
+        engine = sim.diseases[0].engine
+        engine.init_program()
+        engine.run_many([0, 1]) # An ensemble: run_many()
+        for n in [1, 2]: # The particles of a particle filter: advance(), and advance_threads()
+            engine.restart()
+            ss.solvers.Particles(engine, n, np.random.default_rng()).advance(2)
+        y, p = engine.y.copy(), engine.program # And those called on their own
+        apply_events(engine.make_rng(), y, engine.register, 0, True)
+        apply_shifts(engine.make_rng(), y, engine.shifts, 0, True, np.zeros((0, 2, y.shape[1])))
+        settle_places(y, p, engine.dt, np.zeros((p.n_trans + p.n_movers, y.shape[1])))
+    make('abm').run() # The passes over the agents, which are kept in the same cache (so they are compiled again whenever this file changes)
+    if verbose:
+        print(f'Compiled the solver kernels in {T.toc(output=True):.0f} s')
     return
 
 
@@ -154,7 +276,7 @@ def workspace(y, p):
     rates     = np.empty(p.fixed.shape)         # The rate of each flow, by group
     exposures = np.empty((len(p.exp_set), ng))  # Exposure to each infectious state
     stack     = np.empty((p.depth, ng))         # For working out a rate
-    groups    = np.empty((7 + len(p.starts) - len(p.src) - 1, ng)) # Scratch, by group; and after it, the value of each update (see update_values())
+    groups    = np.empty((7, ng))               # Scratch, by group
     cells     = np.zeros((6, size))             # Scratch, by cell of a mixing term or by place; the last row is, for the exact solver by place, whether each place can have no event until something changes it (see gillespie_places()), kept here since another array to pass would slow every step
     dy        = np.empty((4, nc, ng))           # The stages of the integrator
     df        = np.empty((4, nflows, ng))
@@ -474,13 +596,52 @@ def draw(rng, y, p, w, dt, flows, tau):
     return
 
 
-@nb.jit(nopython=True, cache=True, inline='always')
+@kernel(error_model='python', inline='always')
 def sum_exposures(expo, e, s):
     """ The sum of the -s exposures before exposure e, added in order (an exposure whose set is negative, see `Program`) """
     v = expo[e+s]
     for x in range(e+s+1, e):
         v += expo[x]
     return v
+
+
+def check_ops(ops):
+    """ Check that a program has only operations the kernels know, which they then need not check (see `unary()`) """
+    ops = np.asarray(ops, dtype=int)
+    unknown = sorted(set(ops[(ops < CONST) | (ops > CONVEY)].tolist()))
+    if unknown:
+        errormsg = f'The program of a rate has unknown operations {unknown}; the kernels know {CONST} to {CONVEY}'
+        raise ValueError(errormsg)
+    return ops
+
+
+@kernel(inline='always')
+def unary(op, x):
+    """ A function of one value, as an operation on the stack of a rate (see `step()`) """
+    if   op == EXP:  return np.exp(x)
+    elif op == LOG:  return np.log(x)
+    elif op == SQRT: return np.sqrt(x)
+    elif op == ABS:  return abs(x)
+    elif op == SIN:  return np.sin(x)
+    elif op == COS:  return np.cos(x)
+    return np.nan # Never reached: every program's operations are checked when it is made (see check_ops()); a raise here would make the exact solver 5x slower
+
+
+@kernel(inline='always')
+def binary(op, a, b):
+    """ A function of two values, as an operation on the stack of a rate (see `step()`) """
+    if   op == ADD: return a + b
+    elif op == SUB: return a - b
+    elif op == MUL: return a * b
+    elif op == DIV: return a / b if a != 0 else 0.0 # Nothing divided by anything is nothing, e.g. the share of an empty group
+    elif op == POW: return a ** b
+    elif op == MIN: return min(a, b)
+    elif op == MAX: return max(a, b)
+    elif op == LT:  return 1.0 if a < b else 0.0
+    elif op == LE:  return 1.0 if a <= b else 0.0
+    elif op == GT:  return 1.0 if a > b else 0.0
+    elif op == GE:  return 1.0 if a >= b else 0.0
+    return np.nan # Never reached: see unary()
 
 
 @jit
@@ -542,34 +703,16 @@ def place_rates(ys, p, a, b, rates, stack, expo):
                             v += ys[p.set_comps[i], p.pl_groups[jj]]
                     stack[top, 0] = v/n if (op == FRAC and n > 0) else (0.0 if op == FRAC else v)
                 elif op >= EXP:
-                    x = stack[top, 0]
-                    if   op == EXP:  stack[top, 0] = np.exp(x)
-                    elif op == LOG:  stack[top, 0] = np.log(x)
-                    elif op == SQRT: stack[top, 0] = np.sqrt(x)
-                    elif op == ABS:  stack[top, 0] = abs(x)
-                    elif op == SIN:  stack[top, 0] = np.sin(x)
-                    else:            stack[top, 0] = np.cos(x)
+                    stack[top, 0] = unary(op, stack[top, 0])
                 else:
                     top -= 1
-                    x = stack[top, 0]
-                    z = stack[top+1, 0]
-                    if   op == ADD: stack[top, 0] = x + z
-                    elif op == SUB: stack[top, 0] = x - z
-                    elif op == MUL: stack[top, 0] = x * z
-                    elif op == DIV: stack[top, 0] = x / z if x != 0 else 0.0 # Nothing divided by anything is nothing, e.g. the share of an empty group
-                    elif op == POW: stack[top, 0] = x ** z
-                    elif op == MIN: stack[top, 0] = min(x, z)
-                    elif op == MAX: stack[top, 0] = max(x, z)
-                    elif op == LT:  stack[top, 0] = 1.0 if x < z else 0.0
-                    elif op == LE:  stack[top, 0] = 1.0 if x <= z else 0.0
-                    elif op == GT:  stack[top, 0] = 1.0 if x > z else 0.0
-                    else:           stack[top, 0] = 1.0 if x >= z else 0.0
+                    stack[top, 0] = binary(op, stack[top, 0], stack[top+1, 0])
             if top >= 0:
                 rates[f, g] = stack[0, 0]*p.mult[f, g]
     return
 
 
-@nb.jit(nopython=True, cache=True, inline='always') # Inlined, as it is called for every event of the exact solver by place
+@kernel(error_model='python', inline='always') # Inlined, as it is called for every event of the exact solver by place
 def splitmix(z):
     """ The mixing function of SplitMix64, which turns a counter into random bits (as `ss.distributions.hash_uniforms()` does for agents) """
     z = (z ^ (z >> np.uint64(30)))*np.uint64(0xbf58476d1ce4e5b9)
@@ -577,7 +720,7 @@ def splitmix(z):
     return z ^ (z >> np.uint64(31))
 
 
-@nb.jit(nopython=True, cache=True, inline='always')
+@kernel(error_model='python', inline='always')
 def uniform(z):
     """ A number uniform on (0, 1) from the counter of a random stream (SplitMix64), which the caller moves on by `golden` before each number """
     return (float(splitmix(z) >> np.uint64(11)) + 0.5)/9007199254740992.0
@@ -589,7 +732,7 @@ def place_events(y, p, w, active, first, last, dt, flows, seed):
     rates, idle = w[0], w[4][5]
     nf = len(p.src)
     src, det, inflow, pl_groups = p.src, p.det, p.inflow, p.pl_groups
-    stack = np.empty((p.depth, 1)) # Scratch of its own, so that chunks of places can be stepped at once
+    stack = np.empty((p.depth, 1)) # Scratch of its own
     expo = np.empty(max(len(p.exp_set), 1))
     for m in range(first, last):
         i = active[m]
@@ -729,7 +872,7 @@ def sparse_maps(p, nc):
     return cs_starts, cs_sets, se_starts, se_exps, cf_starts, cf_flows, inflows, people, has_total
 
 
-@nb.jit(nopython=True, cache=True, inline='always')
+@kernel(error_model='python', inline='always')
 def add_key(keys, n, key):
     """ Put a key into the first n of a sorted array, in order; returns the new number of keys """
     m = n
@@ -740,7 +883,7 @@ def add_key(keys, n, key):
     return n + 1
 
 
-@nb.jit(nopython=True, cache=True, inline='always')
+@kernel(error_model='python', inline='always')
 def drop_key(keys, n, key):
     """ Take a key out of the first n of a sorted array; returns the new number of keys """
     m = np.searchsorted(keys[:n], key)
@@ -882,28 +1025,10 @@ def sparse_events(y, p, w, active, first, last, dt, flows, seed, maps):
                             v = counts[arg]
                             stack[top, 0] = v/n if (op == FRAC and n > 0) else (0.0 if op == FRAC else v)
                         elif op >= EXP:
-                            x = stack[top, 0]
-                            if   op == EXP:  stack[top, 0] = np.exp(x)
-                            elif op == LOG:  stack[top, 0] = np.log(x)
-                            elif op == SQRT: stack[top, 0] = np.sqrt(x)
-                            elif op == ABS:  stack[top, 0] = abs(x)
-                            elif op == SIN:  stack[top, 0] = np.sin(x)
-                            else:            stack[top, 0] = np.cos(x)
+                            stack[top, 0] = unary(op, stack[top, 0])
                         else:
                             top -= 1
-                            x = stack[top, 0]
-                            u = stack[top+1, 0]
-                            if   op == ADD: stack[top, 0] = x + u
-                            elif op == SUB: stack[top, 0] = x - u
-                            elif op == MUL: stack[top, 0] = x * u
-                            elif op == DIV: stack[top, 0] = x / u if x != 0 else 0.0
-                            elif op == POW: stack[top, 0] = x ** u
-                            elif op == MIN: stack[top, 0] = min(x, u)
-                            elif op == MAX: stack[top, 0] = max(x, u)
-                            elif op == LT:  stack[top, 0] = 1.0 if x < u else 0.0
-                            elif op == LE:  stack[top, 0] = 1.0 if x <= u else 0.0
-                            elif op == GT:  stack[top, 0] = 1.0 if x > u else 0.0
-                            else:           stack[top, 0] = 1.0 if x >= u else 0.0
+                            stack[top, 0] = binary(op, stack[top, 0], stack[top+1, 0])
                     if top >= 0:
                         rate = stack[0, 0]*p.mult[f, g]
                     kept[key] = rate
@@ -977,19 +1102,6 @@ def sparse_events(y, p, w, active, first, last, dt, flows, seed, maps):
     return
 
 
-@nb.jit(nopython=True, cache=True, error_model='numpy', parallel=True)
-def threaded_places(y, p, w, active, n_active, chunks, dt, flows, seed, sparse):
-    """ The places to step, in chunks on Numba's threads: see `gillespie_places()` """
-    if sparse: # The maps are made here, since a tuple passed through object mode breaks Numba's compiler
-        maps = sparse_maps(p, y.shape[0])
-        for c in nb.prange(chunks):
-            sparse_events(y, p, w, active, c*n_active//chunks, (c + 1)*n_active//chunks, dt, flows, seed, maps)
-    else:
-        for c in nb.prange(chunks):
-            place_events(y, p, w, active, c*n_active//chunks, (c + 1)*n_active//chunks, dt, flows, seed)
-    return
-
-
 @jit
 def gillespie_places(rng, y, p, w, dt, flows, fresh):
     """
@@ -1001,33 +1113,21 @@ def gillespie_places(rng, y, p, w, dt, flows, fresh):
     the register's events (see `touch()`), the deliveries, movers, or rates that change over
     time (`fresh`, which steps every place). A large program (e.g. diseases tracked jointly) is
     stepped by the compartments that hold anyone (see `sparse_events()`), with the same events.
-
     Each place draws from its own random numbers in each step, seeded by one number from the
-    engine's generator, so that when many places have events, they are stepped on the threads
-    Numba has (`nb.set_num_threads()`), with the same results as on one. The threads are started
-    from Python (`threaded_places()`, through object mode), since a cached kernel that calls a
-    parallel one segfaults when it is loaded from the cache in a later process (Numba 0.68).
+    engine's generator.
     """
     idle = w[4][5]
     active = np.empty(len(p.pl_starts) - 1, dtype=np.int64) # The places to step
-    chunks = 1
     for k in range(len(p.ops)):
-        if p.ops[k] == TOTAL: # A count in every place, which any place can change: every place is stepped, in turn
+        if p.ops[k] == TOTAL: # A count in every place, which any place can change: every place is stepped
             fresh = True
-            chunks = 0
     n_active = 0
     for i in range(len(active)):
         if fresh or not idle[i]:
             active[n_active] = i
             n_active += 1
-    if chunks:
-        chunks = max(min(n_active//per_chunk, 64), 1) # Each chunk is a call that is passed the program, which costs as much as stepping a few places with nothing to do
     seed = np.uint64(rng.integers(0, 2**62))
-    sparse = len(p.src) > sparse_flows # A large program, most of whose compartments are empty: see sparse_events()
-    if chunks > 1:
-        with nb.objmode():
-            threaded_places(y, p, w, active, n_active, chunks, dt, flows, np.uint64(seed), sparse) # As a NumPy number, which Python would make an int
-    elif sparse:
+    if len(p.src) > sparse_flows: # A large program, most of whose compartments are empty: see sparse_events()
         sparse_events(y, p, w, active, 0, n_active, dt, flows, seed, sparse_maps(p, y.shape[0]))
     else:
         place_events(y, p, w, active, 0, n_active, dt, flows, seed)
@@ -1145,7 +1245,7 @@ def move(rng, y, mov_starts, mov_comps, mov_pair, mov_rate, n_trans, dt, flows, 
     return
 
 
-@nb.jit(nopython=True, cache=True, error_model='numpy', inline='always') # Inlined, and given the program's src, det, and inflow rather than the program, since it is called for every flow and group at each event, and passing the program costs (even inlined) far more than the arithmetic
+@kernel(inline='always') # Inlined, and given the program's src, det, and inflow rather than the program, since it is called for every flow and group at each event, and passing the program costs (even inlined) far more than the arithmetic
 def propensity(y, src, det, inflow, rates, f, g):
     """ The rate at which events of a flow happen in a group: per member of its source compartment, or in total for an inflow """
     s = src[f]
@@ -1200,578 +1300,6 @@ def event(rng, y, p, w, dt, flows):
     split(rng, n, p.tgt_starts[which], p.tgt_starts[which+1], p.tgt_w, False, y, p.tgt_comp, p.tgt_map, p.maps, groups, p.tgt_rec, flows)
     credit(rng, n, p.crd_starts[which], p.crd_starts[which+1], p, w[9], flows)
     return wait
-
-
-#%% The exact solver for groups that affect each other: see gillespie_groups()
-
-min_coupled = 8 # The fewest groups for which the exact solver follows only what each event changes; with fewer, working out every rate again after each event costs less
-
-
-@jit
-def coupled(p, ng):
-    """ Whether the exact solver can step a program by `gillespie_groups()`: enough groups, events that stay in their group, and rates worked out from counts by place and exposures by cell (no reservoir, conveyor, update, count in every place, contacts by group, or sum of exposures) """
-    if ng < min_coupled or p.has_det or len(p.starts) - len(p.src) - 1 > 0:
-        return False
-    if p.contacts.shape[0] > 1 or p.contacts.shape[2] > 1:
-        return False
-    for k in range(len(p.ops)):
-        if p.ops[k] == TOTAL:
-            return False
-    for f in range(len(p.src)):
-        if p.record[f] >= 0:
-            return False
-        if p.src[f] < 0:
-            for g in range(ng):
-                if p.inflow[f, g] < 0:
-                    return False
-    for k in range(len(p.tgt_map)):
-        if p.tgt_map[k] >= 0:
-            return False
-    for e in range(len(p.exp_set)):
-        if p.exp_set[e] < 0:
-            return False
-    return True
-
-
-@nb.jit(nopython=True, cache=True, inline='always')
-def group_order(p, g, h, counts):
-    """ -1, 0, or 1 as the numbers that group g's rates are worked out from sort before, are the same as, or sort after group h's: the cells they are in, their place (if a rate has a count in it), and the program's values for them """
-    for t in range(len(p.sizes)):
-        if p.levels[t, g] != p.levels[t, h]:
-            return -1 if p.levels[t, g] < p.levels[t, h] else 1
-    if counts and p.places[g] != p.places[h]:
-        return -1 if p.places[g] < p.places[h] else 1
-    for f in range(len(p.src)):
-        if p.fixed[f, g] != p.fixed[f, h]:
-            return -1 if p.fixed[f, g] < p.fixed[f, h] else 1
-        if p.mult[f, g] != p.mult[f, h]:
-            return -1 if p.mult[f, g] < p.mult[f, h] else 1
-    for k in range(len(p.consts)):
-        if p.consts[k, g] != p.consts[k, h]:
-            return -1 if p.consts[k, g] < p.consts[k, h] else 1
-    return 0
-
-
-@jit
-def sort_groups(p, ng, counts):
-    """ The groups in the order of `group_order()`, keeping their own order where it is the same (a merge sort) """
-    order = np.arange(ng)
-    tmp = np.empty(ng, dtype=np.int64)
-    width = 1
-    while width < ng:
-        for a in range(0, ng, 2*width):
-            m, b = min(a + width, ng), min(a + 2*width, ng)
-            i, j, k = a, m, a
-            while i < m and j < b:
-                if group_order(p, order[j], order[i], counts) < 0:
-                    tmp[k] = order[j]
-                    j += 1
-                else:
-                    tmp[k] = order[i]
-                    i += 1
-                k += 1
-            while i < m:
-                tmp[k] = order[i]
-                i += 1
-                k += 1
-            while j < b:
-                tmp[k] = order[j]
-                j += 1
-                k += 1
-        order, tmp = tmp, order
-        width *= 2
-    return order
-
-
-@nb.jit(nopython=True, cache=True, inline='always')
-def fen_add(tree, c, i, d):
-    """ Add d to entry i of row c of a Fenwick tree, which keeps sums of the entries before each position, each in log steps """
-    i += 1
-    while i < tree.shape[1]:
-        tree[c, i] += d
-        i += i & (-i)
-    return
-
-
-@nb.jit(nopython=True, cache=True, inline='always')
-def fen_sum(tree, c, i):
-    """ The sum of entries 0 to i-1 of row c of a Fenwick tree """
-    out = 0.0
-    while i > 0:
-        out += tree[c, i]
-        i -= i & (-i)
-    return out
-
-
-@nb.jit(nopython=True, cache=True, inline='always')
-def fen_find(tree, c, v, top):
-    """ The first entry of row c of a Fenwick tree at which the sum up to and including it is more than v (`top`: the largest power of 2 not over the number of entries) """
-    pos = 0
-    while top > 0:
-        if pos + top < tree.shape[1] and tree[c, pos + top] <= v:
-            pos += top
-            v -= tree[c, pos]
-        top >>= 1
-    return pos
-
-
-@nb.jit(nopython=True, cache=True, inline='always')
-def seg_set(tree, size, i, v):
-    """ Set leaf i of a tree of sums (`size` leaves, a power of 2), and the sums above it """
-    j = size + i
-    tree[j] = v
-    j >>= 1
-    while j >= 1:
-        tree[j] = tree[2*j] + tree[2*j+1]
-        j >>= 1
-    return
-
-
-@nb.jit(nopython=True, cache=True, inline='always')
-def pick(rng, a, b, weights, g, whole):
-    """ Which target (or transition also counted) of a flow one event in group g goes to, as `split()` shares one: -1 for none (`whole`: whether the weights add up to 1 in every group, so rounding goes to the last) """
-    total = 0.0
-    for k in range(a, b):
-        total += weights[k, g]
-    for k in range(a, b):
-        prob = weights[k, g]/total if total > 0 else 0.0
-        if prob >= 1 or (prob > 0 and rng.random() < prob):
-            return k
-        total -= weights[k, g]
-    return b - 1 if whole and b > a else -1
-
-
-@nb.jit(nopython=True, cache=True, inline='always')
-def class_values(p, C, g, expo, rate, post, cnt, npl, stack):
-    """ The exposures of class C (whose first group is g), from the exposure of each cell (`post`), and the rate of each flow, as `step()` works them out """
-    for e in range(len(p.exp_set)):
-        expo[e, C] = 0.0
-        for t in range(len(p.sizes)):
-            expo[e, C] += p.contacts[0, t, 0]*post[e, t, p.levels[t, g]]
-    pl = p.places[g]
-    for f in range(len(p.src)):
-        rate[f, C] = p.fixed[f, g]
-        top = -1
-        for k in range(p.starts[f], p.starts[f+1]):
-            op = p.ops[k]
-            arg = p.args[k]
-            if op == CONST:
-                top += 1
-                stack[top] = p.consts[arg, g]
-            elif op == EXPOSURE:
-                top += 1
-                stack[top] = expo[arg, C]
-            elif op == COUNT or op == FRAC:
-                top += 1
-                stack[top] = cnt[arg, pl]/npl[pl] if op == FRAC else cnt[arg, pl]
-            elif op >= EXP:
-                a = stack[top]
-                if   op == EXP:  stack[top] = np.exp(a)
-                elif op == LOG:  stack[top] = np.log(a)
-                elif op == SQRT: stack[top] = np.sqrt(a)
-                elif op == ABS:  stack[top] = abs(a)
-                elif op == SIN:  stack[top] = np.sin(a)
-                else:            stack[top] = np.cos(a)
-            else:
-                top -= 1
-                a = stack[top]
-                b = stack[top+1]
-                if   op == ADD: stack[top] = a + b
-                elif op == SUB: stack[top] = a - b
-                elif op == MUL: stack[top] = a * b
-                elif op == DIV: stack[top] = a / b if a != 0 else 0.0
-                elif op == POW: stack[top] = a ** b
-                elif op == MIN: stack[top] = min(a, b)
-                elif op == MAX: stack[top] = max(a, b)
-                elif op == LT:  stack[top] = 1.0 if a < b else 0.0
-                elif op == LE:  stack[top] = 1.0 if a <= b else 0.0
-                elif op == GT:  stack[top] = 1.0 if a > b else 0.0
-                else:           stack[top] = 1.0 if a >= b else 0.0
-        if top >= 0:
-            rate[f, C] = stack[0]*p.mult[f, g]
-    return
-
-
-@nb.jit(nopython=True, cache=True, inline='always')
-def pair_rate(src, f, C, rate, ysum, isum):
-    """ The rate at which events of flow f happen in class C: its rate per member of the source compartment times their number in the class, or in total for an inflow """
-    r = max(rate[f, C], 0.0)
-    return r*ysum[src[f], C] if src[f] >= 0 else r*isum[f, C]
-
-
-@jit
-def gillespie_groups(rng, y, p, dt, flows):
-    """
-    The exact solver over a time dt, for groups that affect each other (strata that mix, or places that people commute between), following only what each event changes
-
-    Groups whose rates are always the same (they are in the same cells of each mixing term, and the same
-    place if a rate has a count in it, with the same values; e.g. strata that differ only in who is in them)
-    are a class, whose rates are worked out once, and whose events happen in proportion to the number in
-    each flow's source compartment summed over the class. An event changes the people of one group, so the
-    exposures are worked out again only for the cells that the mixing takes the change to (through the time
-    share between places and the matrix of each place), and the rates only for the classes in those cells.
-    The flow and class of each event are drawn from a tree of their rates, and the group from a tree of the
-    counts in the source compartment by group, so the cost of an event grows with how far the mixing takes
-    it rather than with the number of groups. The events are those of `event()` in distribution, though not
-    draw for draw. See `coupled()` for the programs it takes.
-    """
-    nc, ng = y.shape
-    nf, nt, ne = len(p.src), len(p.sizes), len(p.exp_set)
-    counts = False
-    for k in range(len(p.ops)):
-        counts = counts or p.ops[k] == COUNT or p.ops[k] == FRAC
-
-    # The classes, and the groups in each (in a row, in `order`)
-    order = sort_groups(p, ng, counts)
-    cls = np.empty(ng, dtype=np.int64)
-    pos_of = np.empty(ng, dtype=np.int64)
-    cstart = np.empty(ng + 1, dtype=np.int64)
-    nC = 0
-    for i in range(ng):
-        if i == 0 or group_order(p, order[i-1], order[i], counts) != 0:
-            cstart[nC] = i
-            nC += 1
-        cls[order[i]] = nC - 1
-        pos_of[order[i]] = i
-    cstart[nC] = ng
-    rep = np.empty(nC, dtype=np.int64)
-    for C in range(nC):
-        rep[C] = order[cstart[C]]
-
-    # The number in each compartment by class, and by group (a Fenwick tree in class order); the inflows, likewise
-    top = 1
-    while 2*top <= ng:
-        top *= 2
-    fen = np.zeros((nc, ng + 1))
-    ysum = np.zeros((nc, nC))
-    for c in range(nc):
-        for i in range(ng):
-            ysum[c, cls[order[i]]] += y[c, order[i]]
-            fen[c, i+1] = y[c, order[i]]
-        for i in range(1, ng + 1): # Each entry adds its sum to the next that covers it
-            j = i + (i & (-i))
-            if j <= ng:
-                fen[c, j] += fen[c, i]
-    isum = np.zeros((nf, nC))
-    icum = np.zeros((nf, ng + 1))
-    whole = np.zeros(nf, dtype=np.bool_)
-    for f in range(nf):
-        if p.src[f] < 0:
-            for i in range(ng):
-                isum[f, cls[order[i]]] += p.inflow[f, order[i]]
-                icum[f, i+1] = icum[f, i] + p.inflow[f, order[i]]
-        whole[f] = True
-        for g in range(ng):
-            total = 0.0
-            for k in range(p.tgt_starts[f], p.tgt_starts[f+1]):
-                total += p.tgt_w[k, g]
-            whole[f] = whole[f] and abs(total - 1) < 1e-9
-
-    # The counts by place, and the people
-    cs_starts, cs_sets, se_starts, se_exps, cf_starts, cf_flows, inflows, people, has_total = sparse_maps(p, nc)
-    npl = np.zeros(p.n_places)
-    cnt = np.zeros((len(p.set_starts) - 1, p.n_places))
-    for g in range(ng):
-        for c in range(nc):
-            if people[c]:
-                npl[p.places[g]] += y[c, g]
-            for k in range(cs_starts[c], cs_starts[c+1]):
-                cnt[cs_sets[k], p.places[g]] += y[c, g]
-
-    # The exposure of each cell of each mixing term, by its stages (see step()): the infectious (and how many, so that none is exactly none) and the people in it, those present after the time share, prevalence, mixed by the matrix, and shared between places
-    S = p.sizes.max()
-    num, icnt, an, prev, mx, post = np.zeros((ne, nt, S)), np.zeros((ne, nt, S)), np.zeros((ne, nt, S)), np.zeros((ne, nt, S)), np.zeros((ne, nt, S)), np.zeros((ne, nt, S))
-    den, ad = np.zeros((nt, S)), np.zeros((nt, S))
-    for g in range(ng):
-        n = 0.0
-        for c in p.people:
-            n += y[c, g]
-        for t in range(nt):
-            den[t, p.levels[t, g]] += n
-        for e in range(ne):
-            s = p.exp_set[e]
-            v, m = 0.0, 0.0
-            for k in range(p.set_starts[s], p.set_starts[s+1]):
-                v += y[p.set_comps[k], g]*p.rel_trans[e, g]
-                m += y[p.set_comps[k], g]
-            for t in range(nt):
-                num[e, t, p.levels[t, g]] += v
-                icnt[e, t, p.levels[t, g]] += m
-    for t in range(nt):
-        size, block = p.sizes[t], p.block[t]
-        if p.use[0, t]:
-            share(p.sh_pair, p.sh_val, den[t], size, block, ad[t], True)
-        else:
-            ad[t, :size] = den[t, :size]
-        for e in range(ne):
-            if p.use[0, t]:
-                share(p.sh_pair, p.sh_val, num[e, t], size, block, an[e, t], True)
-            else:
-                an[e, t, :size] = num[e, t, :size]
-            for i in range(size):
-                prev[e, t, i] = an[e, t, i]/ad[t, i] if ad[t, i] > 0 else 0.0
-            if p.use[1, t] and block == size:
-                mix(p.mat[t], prev[e, t], size, mx[e, t])
-            elif p.use[1, t]:
-                by_block(p.mat[t], prev[e, t], size, block, mx[e, t])
-            else:
-                mx[e, t, :size] = prev[e, t, :size]
-            if p.use[2, t]:
-                share(p.sh_pair, p.sh_val, mx[e, t], size, block, post[e, t], False)
-            else:
-                post[e, t, :size] = mx[e, t, :size]
-
-    # The entries of the time share by the place they are from (rows) and to (columns), the classes in each cell of each term, and in each place
-    nnz = len(p.sh_val)
-    n_rows = p.n_places
-    for k in range(nnz):
-        n_rows = max(n_rows, p.sh_pair[0, k] + 1, p.sh_pair[1, k] + 1)
-    rstart, cstart_sh = np.zeros(n_rows + 1, dtype=np.int64), np.zeros(n_rows + 1, dtype=np.int64)
-    for k in range(nnz):
-        rstart[p.sh_pair[0, k] + 1] += 1
-        cstart_sh[p.sh_pair[1, k] + 1] += 1
-    rstart, cstart_sh = np.cumsum(rstart), np.cumsum(cstart_sh)
-    rk, ck = np.empty(nnz, dtype=np.int64), np.empty(nnz, dtype=np.int64)
-    rfill, cfill = rstart[:-1].copy(), cstart_sh[:-1].copy()
-    for k in range(nnz):
-        rk[rfill[p.sh_pair[0, k]]] = k
-        rfill[p.sh_pair[0, k]] += 1
-        ck[cfill[p.sh_pair[1, k]]] = k
-        cfill[p.sh_pair[1, k]] += 1
-    ccs_start = np.zeros((nt, S + 1), dtype=np.int64)
-    ccs = np.empty((nt, nC), dtype=np.int64)
-    for t in range(nt):
-        for C in range(nC):
-            ccs_start[t, p.levels[t, rep[C]] + 1] += 1
-        for i in range(S):
-            ccs_start[t, i+1] += ccs_start[t, i]
-        fill = ccs_start[t, :-1].copy()
-        for C in range(nC):
-            cell = p.levels[t, rep[C]]
-            ccs[t, fill[cell]] = C
-            fill[cell] += 1
-    pcs_start = np.zeros(p.n_places + 1, dtype=np.int64)
-    pcs = np.empty(nC, dtype=np.int64)
-    for C in range(nC):
-        pcs_start[p.places[rep[C]] + 1] += 1
-    pcs_start = np.cumsum(pcs_start)
-    fill = pcs_start[:-1].copy()
-    for C in range(nC):
-        pcs[fill[p.places[rep[C]]]] = C
-        fill[p.places[rep[C]]] += 1
-
-    # The rates of each class, and the tree of the rate of each flow in each class
-    expo = np.zeros((max(ne, 1), nC))
-    rate = np.zeros((nf, nC))
-    stack = np.empty(max(p.depth, 1))
-    for C in range(nC):
-        class_values(p, C, rep[C], expo, rate, post, cnt, npl, stack)
-    n_pairs = nf*nC
-    size = 1
-    while size < n_pairs:
-        size *= 2
-    tree = np.zeros(2*size)
-    for f in range(nf):
-        for C in range(nC):
-            tree[size + f*nC + C] = pair_rate(p.src, f, C, rate, ysum, isum)
-    for j in range(size - 1, 0, -1):
-        tree[j] = tree[2*j] + tree[2*j+1]
-
-    # The events
-    stamp = np.zeros(nC, dtype=np.int64) # The last event that marked each class to be worked out again, and each cell and place
-    cell_stamp = np.zeros((nt, S), dtype=np.int64)
-    place_stamp = np.zeros((nt, n_rows), dtype=np.int64)
-    marked = np.empty(nC, dtype=np.int64)
-    d1, d2, d3 = np.empty(S, dtype=np.int64), np.empty(S, dtype=np.int64), np.empty(S, dtype=np.int64)
-    chc, chd = np.empty(2, dtype=np.int64), np.empty(2)
-    elapsed = 0.0
-    tick = 0
-    while True:
-        total = tree[1]
-        if total <= 0:
-            break
-        elapsed += rng.exponential(1/total)
-        if elapsed > dt:
-            break
-        tick += 1
-
-        # Which flow and class, then which group
-        v = rng.random()*total
-        j = 1
-        while j < size:
-            if v < tree[2*j]:
-                j = 2*j
-            else:
-                v -= tree[2*j]
-                j = 2*j + 1
-        leaf = j - size
-        while leaf >= n_pairs or tree[size + leaf] <= 0: # Rounding at the end: the last with any chance
-            leaf -= 1
-        f, C = leaf//nC, leaf % nC
-        s = p.src[f]
-        a, b = cstart[C], cstart[C+1]
-        if s >= 0:
-            i = min(max(fen_find(fen, s, fen_sum(fen, s, a) + rng.random()*ysum[s, C], top), a), b - 1)
-            while y[s, order[i]] <= 0 and i > a:
-                i -= 1
-        else:
-            i = min(a + np.searchsorted(icum[f, a+1:b+1], icum[f, a] + rng.random()*isum[f, C], side='right'), b - 1)
-            while p.inflow[f, order[i]] <= 0 and i > a:
-                i -= 1
-        g = order[i]
-
-        # The event, as event() takes it
-        nch = 0
-        if s >= 0:
-            chc[nch], chd[nch] = s, -1.0
-            nch += 1
-        if p.named[f]:
-            flows[p.index[f], g] += 1
-        k = pick(rng, p.tgt_starts[f], p.tgt_starts[f+1], p.tgt_w, g, whole[f])
-        if k >= 0:
-            chc[nch], chd[nch] = p.tgt_comp[k], 1.0
-            nch += 1
-            if p.tgt_rec[k] >= 0:
-                flows[p.tgt_rec[k], g] += 1
-        ca, cb = p.crd_starts[f], p.crd_starts[f+1]
-        if cb > ca:
-            credit_one(np.array([rng.random() for k in range(cb - ca)]), ca, cb, p, g, flows)
-
-        # What it changes: the counts of its group, and its class, place, and cells
-        C0, pl = cls[g], p.places[g]
-        dn = 0.0
-        moved = False
-        counted = False
-        for q in range(nch):
-            c, d = chc[q], chd[q]
-            y[c, g] += d
-            ysum[c, C0] += d
-            fen_add(fen, c, pos_of[g], d)
-            if people[c]:
-                dn += d
-            for kk in range(cs_starts[c], cs_starts[c+1]):
-                st = cs_sets[kk]
-                cnt[st, pl] += d
-                counted = True
-                for qq in range(se_starts[st], se_starts[st+1]):
-                    e = se_exps[qq]
-                    moved = True
-                    for t in range(nt):
-                        cell = p.levels[t, g]
-                        icnt[e, t, cell] += d
-                        num[e, t, cell] = num[e, t, cell] + d*p.rel_trans[e, g] if icnt[e, t, cell] != 0 else 0.0
-        if dn != 0:
-            npl[pl] += dn
-            counted = True
-            moved = True
-            for t in range(nt):
-                den[t, p.levels[t, g]] += dn
-        nm = 0
-        stamp[C0] = tick
-        marked[nm] = C0
-        nm += 1
-        if counted and counts:
-            for kk in range(pcs_start[pl], pcs_start[pl+1]):
-                if stamp[pcs[kk]] != tick:
-                    stamp[pcs[kk]] = tick
-                    marked[nm] = pcs[kk]
-                    nm += 1
-        for t in range(nt if moved else 0):
-            size_t, block = p.sizes[t], p.block[t]
-            i0 = p.levels[t, g]
-            n1 = 0 # The cells where who is present changes
-            if p.use[0, t]:
-                l = i0 % block
-                for kk in range(rstart[i0//block], rstart[i0//block + 1]):
-                    pb = p.sh_pair[1, rk[kk]]
-                    cell = pb*block + l
-                    d1[n1] = cell
-                    n1 += 1
-                    ad[t, cell] = 0.0
-                    for e in range(ne):
-                        an[e, t, cell] = 0.0
-                    for q in range(cstart_sh[pb], cstart_sh[pb+1]):
-                        x = ck[q]
-                        src_cell = p.sh_pair[0, x]*block + l
-                        ad[t, cell] += p.sh_val[x]*den[t, src_cell]
-                        for e in range(ne):
-                            an[e, t, cell] += p.sh_val[x]*num[e, t, src_cell]
-            else:
-                d1[0] = i0
-                n1 = 1
-                ad[t, i0] = den[t, i0]
-                for e in range(ne):
-                    an[e, t, i0] = num[e, t, i0]
-            for q in range(n1):
-                cell = d1[q]
-                for e in range(ne):
-                    prev[e, t, cell] = an[e, t, cell]/ad[t, cell] if ad[t, cell] > 0 else 0.0
-            n2 = 0 # The cells whose mixed prevalence changes
-            if p.use[1, t] and block == size_t:
-                for e in range(ne):
-                    mix(p.mat[t], prev[e, t], size_t, mx[e, t])
-                for cell in range(size_t):
-                    d2[cell] = cell
-                n2 = size_t
-            elif p.use[1, t]:
-                for q in range(n1):
-                    pb = d1[q]//block
-                    if place_stamp[t, pb] == tick:
-                        continue
-                    place_stamp[t, pb] = tick
-                    for ii in range(block):
-                        for e in range(ne):
-                            acc = 0.0
-                            for jj in range(block):
-                                acc += p.mat[t, ii, jj]*prev[e, t, pb*block + jj]
-                            mx[e, t, pb*block + ii] = acc
-                        d2[n2] = pb*block + ii
-                        n2 += 1
-            else:
-                for q in range(n1):
-                    d2[q] = d1[q]
-                    for e in range(ne):
-                        mx[e, t, d1[q]] = prev[e, t, d1[q]]
-                n2 = n1
-            n3 = 0 # The cells whose exposure changes
-            if p.use[2, t]:
-                for q in range(n2):
-                    pb, l = d2[q]//block, d2[q] % block
-                    for kk in range(cstart_sh[pb], cstart_sh[pb+1]):
-                        pa = p.sh_pair[0, ck[kk]]
-                        cell = pa*block + l
-                        if cell_stamp[t, cell] == tick:
-                            continue
-                        cell_stamp[t, cell] = tick
-                        for e in range(ne):
-                            acc = 0.0
-                            for r in range(rstart[pa], rstart[pa+1]):
-                                x = rk[r]
-                                acc += p.sh_val[x]*mx[e, t, p.sh_pair[1, x]*block + l]
-                            post[e, t, cell] = acc
-                        d3[n3] = cell
-                        n3 += 1
-            else:
-                for q in range(n2):
-                    d3[q] = d2[q]
-                    for e in range(ne):
-                        post[e, t, d2[q]] = mx[e, t, d2[q]]
-                n3 = n2
-            for q in range(n3):
-                cell = d3[q]
-                for kk in range(ccs_start[t, cell], ccs_start[t, cell+1]):
-                    if stamp[ccs[t, kk]] != tick:
-                        stamp[ccs[t, kk]] = tick
-                        marked[nm] = ccs[t, kk]
-                        nm += 1
-
-        # The rates of the classes it changes
-        for q in range(nm):
-            C = marked[q]
-            class_values(p, C, rep[C], expo, rate, post, cnt, npl, stack)
-            for ff in range(nf):
-                seg_set(tree, size, ff*nC + C, pair_rate(p.src, ff, C, rate, ysum, isum))
-    return
 
 
 @jit
@@ -1882,94 +1410,9 @@ def convey(rng, y, p, w, flows, release):
 
 
 @jit
-def update_values(y, p, stack, groups, cells):
+def step_start(y, p, dt, solver):
     """
-    The values that counts are set to at the end of a step (`ss.update()`), from the compartments at its start, into the rows of `groups` after the scratch
-
-    Worked out as the rates in `step()` are, for the operations an update can have (any but
-    exposure, which is contact): called once a step, and only if the program has conveyors or
-    updates. Each update is a set of operations after the flows' (see `Program.starts`), the
-    last of which is ASSIGN, whose argument is the compartment it sets.
-    """
-    ng = y.shape[1]
-    nf = len(p.src)
-    n, local_n, vals = groups[0], groups[1], groups[2]
-    num = cells[0]
-    for g in range(ng): # The people in each group, and in the same place as each group
-        n[g] = 0
-        for c in p.people:
-            n[g] += y[c, g]
-    for i in range(p.n_places):
-        num[i] = 0
-    for g in range(ng):
-        num[p.places[g]] += n[g]
-    for g in range(ng):
-        local_n[g] = num[p.places[g]]
-    for u in range(len(p.starts) - nf - 1):
-        a, b = p.starts[nf+u], p.starts[nf+u+1]
-        if p.ops[b-1] != ASSIGN:
-            continue
-        top = -1
-        for k in range(a, b-1):
-            op = p.ops[k]
-            arg = p.args[k]
-            if op == CONST:
-                top += 1
-                for g in range(ng):
-                    stack[top, g] = p.consts[arg, g]
-            elif op == TOTAL or op == COUNT or op == FRAC:
-                top += 1
-                for i in range(p.n_places):
-                    num[i] = 0
-                for g in range(ng):
-                    vals[g] = 0
-                    for i in range(p.set_starts[arg], p.set_starts[arg+1]):
-                        vals[g] += y[p.set_comps[i], g]
-                    num[p.places[g]] += vals[g]
-                total = 0.0
-                for i in range(p.n_places):
-                    total += num[i]
-                for g in range(ng):
-                    if op == TOTAL:
-                        stack[top, g] = total
-                    elif op == FRAC:
-                        stack[top, g] = num[p.places[g]]/local_n[g] if local_n[g] > 0 else 0.0
-                    else:
-                        stack[top, g] = num[p.places[g]]
-            elif op >= EXP:
-                for g in range(ng):
-                    x = stack[top, g]
-                    if   op == EXP:  stack[top, g] = np.exp(x)
-                    elif op == LOG:  stack[top, g] = np.log(x)
-                    elif op == SQRT: stack[top, g] = np.sqrt(x)
-                    elif op == ABS:  stack[top, g] = abs(x)
-                    elif op == SIN:  stack[top, g] = np.sin(x)
-                    else:            stack[top, g] = np.cos(x)
-            else:
-                top -= 1
-                for g in range(ng):
-                    x = stack[top, g]
-                    z = stack[top+1, g]
-                    if   op == ADD: stack[top, g] = x + z
-                    elif op == SUB: stack[top, g] = x - z
-                    elif op == MUL: stack[top, g] = x * z
-                    elif op == DIV: stack[top, g] = x / z if x != 0 else 0.0
-                    elif op == POW: stack[top, g] = x ** z
-                    elif op == MIN: stack[top, g] = min(x, z)
-                    elif op == MAX: stack[top, g] = max(x, z)
-                    elif op == LT:  stack[top, g] = 1.0 if x < z else 0.0
-                    elif op == LE:  stack[top, g] = 1.0 if x <= z else 0.0
-                    elif op == GT:  stack[top, g] = 1.0 if x > z else 0.0
-                    else:           stack[top, g] = 1.0 if x >= z else 0.0
-        for g in range(ng):
-            groups[7+u, g] = stack[0, g]
-    return
-
-
-@jit
-def step_start(y, p, w, dt, solver):
-    """
-    For `step()`, in a program with conveyors or updates: the values of the updates, from the compartments at the start of the step, and for the ODE, the people due to leave each conveyor over it
+    For `step()`, in a program with conveyors: for the ODE, the people due to leave each conveyor over it
 
     Returns whether a stochastic solver has people to release from a conveyor in the step. Kept
     out of `step()` (as is `step_end()`), since code there, even if a model never runs it, slows
@@ -1977,7 +1420,6 @@ def step_start(y, p, w, dt, solver):
     """
     nf = len(p.src)
     ng = y.shape[1]
-    update_values(y, p, w[2], w[3], w[4])
     pending = False
     for i in range(len(p.starts) - nf - 1):
         a, b = p.starts[nf+i], p.starts[nf+i+1]
@@ -2021,16 +1463,8 @@ def release_rates(y, p, rates, dt):
 
 @jit
 def step_end(rng, y, p, w, flows):
-    """ For `step()`, in a program with conveyors or updates: everyone in a conveyor moves along one slot, and the counts that are updated are set (see `step_start()`) """
-    nf = len(p.src)
-    ng = y.shape[1]
-    groups = w[3]
+    """ For `step()`, in a program with conveyors: everyone in a conveyor moves along one slot (see `step_start()`) """
     convey(rng, y, p, w, flows, False)
-    for i in range(len(p.starts) - nf - 1):
-        b = p.starts[nf+i+1]
-        if p.ops[b-1] == ASSIGN:
-            for g in range(ng):
-                y[p.args[b-1], g] = groups[7+i, g]
     return
 
 
@@ -2065,14 +1499,13 @@ def step(rng, y, p, w, dt, n_sub, solver, flows, tables, row):
     stages = 4 if solver == 0 else 1
     h = dt
     timed = solver == 3 or solver == 4 # Tau-leaping and the exact solver take steps of their own length
-    by_groups = solver == 4 and (not p.local or p.n_places == 1) and coupled(p, ng) # The exact solver for groups that affect each other (or are all in one place), following only what each event changes (see gillespie_groups())
-    by_place = solver == 4 and p.local and not by_groups # The exact solver by place, where each place works out its own rates (see gillespie_places())
+    by_place = solver == 4 and p.local # The exact solver by place, where each place works out its own rates (see gillespie_places())
     auto = solver < 2 and n_sub <= 0 # The ODE, with as many substeps as the step needs
     elapsed = 0.0 # For these: how much of the timestep has been taken
     fastest = 0.0
     sub = 0
-    extra = len(p.starts) - nf - 1 # Conveyors and updates, whose operations follow the flows'
-    pending = step_start(y, p, w, dt, solver) if extra else False # Whether the people due to leave a conveyor have yet to leave
+    extra = len(p.starts) - nf - 1 # Conveyors, whose operations follow the flows'
+    pending = step_start(y, p, dt, solver) if extra else False # Whether the people due to leave a conveyor have yet to leave
     while True:
         for stage in range(stages):
             ys = y if stage == 0 else yt # Where the rates are worked out
@@ -2186,29 +1619,11 @@ def step(rng, y, p, w, dt, n_sub, solver, flows, tables, row):
                                 stack[top, g] = num[p.places[g]]/local_n[g] if op == FRAC else num[p.places[g]]
                         elif op >= EXP: # A function of one value
                             for g in range(ng):
-                                a = stack[top, g]
-                                if   op == EXP:  stack[top, g] = np.exp(a)
-                                elif op == LOG:  stack[top, g] = np.log(a)
-                                elif op == SQRT: stack[top, g] = np.sqrt(a)
-                                elif op == ABS:  stack[top, g] = abs(a)
-                                elif op == SIN:  stack[top, g] = np.sin(a)
-                                else:            stack[top, g] = np.cos(a)
+                                stack[top, g] = unary(op, stack[top, g])
                         else:
                             top -= 1
                             for g in range(ng):
-                                a = stack[top, g]
-                                b = stack[top+1, g]
-                                if   op == ADD: stack[top, g] = a + b
-                                elif op == SUB: stack[top, g] = a - b
-                                elif op == MUL: stack[top, g] = a * b
-                                elif op == DIV: stack[top, g] = a / b if a != 0 else 0.0
-                                elif op == POW: stack[top, g] = a ** b
-                                elif op == MIN: stack[top, g] = min(a, b)
-                                elif op == MAX: stack[top, g] = max(a, b)
-                                elif op == LT:  stack[top, g] = 1.0 if a < b else 0.0
-                                elif op == LE:  stack[top, g] = 1.0 if a <= b else 0.0
-                                elif op == GT:  stack[top, g] = 1.0 if a > b else 0.0
-                                else:           stack[top, g] = 1.0 if a >= b else 0.0
+                                stack[top, g] = binary(op, stack[top, g], stack[top+1, g])
                     if top >= 0:
                         for g in range(ng):
                             rates[f, g] = stack[0, g]*p.mult[f, g]
@@ -2249,9 +1664,6 @@ def step(rng, y, p, w, dt, n_sub, solver, flows, tables, row):
                     for k in range(4):
                         varying = varying or len(tables[k]) > 1
                     gillespie_places(rng, y, p, w, end - elapsed, flows, varying)
-                    h = end - elapsed
-                elif by_groups: # The same for groups that affect each other
-                    gillespie_groups(rng, y, p, end - elapsed, flows)
                     h = end - elapsed
                 elif solver == 4: # The exact solver: up to the next event
                     h = event(rng, y, p, w, end - elapsed, flows)
@@ -2516,7 +1928,7 @@ def set_step(parts, ti, tables):
 
 
 @jit
-def run(rng, y, p, dt, npts, solver, n_sub, fixed, mult, consts, rel_trans, reg, sh, tally, per_step=1, start=0):
+def run(rng, y, p, dt, npts, solver, n_sub, fixed, mult, consts, rel_trans, reg, sh, tally, per_step, start):
     """
     Take every step of a run, or the steps from time point `start` on
 
@@ -2639,7 +2051,7 @@ def run_many(rngs, ys, p, dt, start, npts, solver, n_sub, fixed, mult, consts, r
     return
 
 
-inline_step = nb.jit(nopython=True, cache=True, error_model='numpy', inline='always')(step.py_func) # step(), compiled into advance() rather than called from it, since a call that is passed the program costs as much as a small step
+inline_step = step if plain else kernel(inline='always')(step.py_func) # step(), compiled into advance() rather than called from it, since a call that is passed the program costs as much as a small step
 
 
 @jit
@@ -2708,7 +2120,7 @@ def advance(rngs, p, ys, first, last, dt, start, end, solver, n_sub, fixed, mult
     return
 
 
-@nb.jit(nopython=True, cache=True, error_model='numpy', parallel=True)
+@kernel(parallel=True)
 def advance_threads(rngs, progs, ys, dt, start, end, solver, n_sub, fixed, mult, consts, rel_trans, sh_vals, reg, sh, state_of, stocks, flows, per_step=1, row0=0):
     """ `advance()` for every run, with the runs shared between threads: one program for each thread (progs, a typed list of copies), since a step changes the parts of it that vary in time """
     k = len(progs)
@@ -2782,7 +2194,7 @@ def infection_probs(susceptible, auids, groups, rate, rel_sus, state_sus, adjust
 # (in ss.parallel() or a calibration's workers, which run with one thread) never starts Numba's threads. Counts are
 # whole numbers and lists of agents are kept in order, so the results do not depend on the number of threads.
 
-pjit = nb.jit(nopython=True, cache=True, error_model='numpy', parallel=True)
+pjit = kernel(parallel=True)
 min_threaded = 200_000 # The smallest population whose passes are threaded: below it, starting the threads costs more than they save
 chunk_size = 65_536 # The fewest agents a thread takes at a time
 

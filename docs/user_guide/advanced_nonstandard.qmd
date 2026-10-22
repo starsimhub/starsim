@@ -33,7 +33,7 @@ csim.run()
 csim.plot()
 ```
 
-The sim prints the solver it chose, and why. `csim.solvers()` shows which solvers can run the model.
+The sim prints the solver it chose, and why. `csim.describe()` shows which solvers can run the model.
 
 Let's compare to the same model run as agents. Nothing in the model changes: only the solver, and the number of agents:
 
@@ -188,10 +188,11 @@ pars = dict(
 )
 
 # Run the model
-sim = ss.Sim(pars, copy_inputs=False) # copy_inputs=False lets us reuse the "wealth" object from above
+sim = ss.Sim(pars)
 sim.run()
 
-# Plot the results
+# Plot the results of the sim's copy of the wealth model
+wealth = sim.demographics[0]
 wealth.plot()
 wealth.plot3d()
 ```

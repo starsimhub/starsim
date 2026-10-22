@@ -1,13 +1,15 @@
 """
-Test importing models from other frameworks (ss.load(..., format=...)), writing a sim as code, and comparing two models
+Test importing models from other frameworks (ss.interop.load()), writing a sim as code, and comparing two models
 """
 
 # %% Imports and settings
 import runpy
+import tempfile
 import pytest
 import numpy as np
 import sciris as sc
 import starsim as ss
+import starsim.interop
 import paths
 import corpus
 
@@ -117,8 +119,8 @@ def test_rates():
 def test_emulsion(tmp_path):
     sc.heading('Testing an EMULSION import')
     filename = emulsion_file(tmp_path)
-    with pytest.warns(ss.ImportIncomplete):
-        sim = ss.load(filename, **kw) # The format is told from the file
+    with pytest.warns(ss.errors.ImportIncomplete):
+        sim = ss.interop.load(filename, **kw) # The format is told from the file
     imp = sim.imported
     assert imp.format == 'EMULSION'
     assert any('when' in name for name,why in imp.incomplete), 'The calendar condition should be listed as not translated'
@@ -135,16 +137,16 @@ def test_emulsion(tmp_path):
     assert np.isclose(res.prevalence_pct[10], 100*(res.n_E[10] + res.n_I[10])/(res.n_S[10] + res.n_E[10] + res.n_I[10] + res.n_Q[10] + res.n_R[10]))
 
     # The same model as an ODE agrees with the stochastic one on average
-    ode = ss.load(filename, format='emulsion', **kw)
+    ode = ss.interop.load(filename, format='emulsion', **kw)
     ode.pars.solver = 'ode'
     ode.run()
-    runs = ss.load(filename, format='emulsion', **kw).run(n_runs=50).results.seirq.n_R.values[:, -1].mean()
+    runs = ss.interop.load(filename, format='emulsion', **kw).run(n_runs=50).results.seirq.n_R.values[:, -1].mean()
     assert np.isclose(runs, ode.results.seirq.n_R[-1], rtol=0.1)
 
     # A probability is per time unit, as EMULSION reads it, not per step
     sc.savetext(tmp_path/'weekly.yaml', emulsion_weekly)
-    with pytest.warns(ss.ImportIncomplete):
-        weekly = ss.load(tmp_path/'weekly.yaml', format='emulsion', **kw)
+    with pytest.warns(ss.errors.ImportIncomplete):
+        weekly = ss.interop.load(tmp_path/'weekly.yaml', format='emulsion', **kw)
     listed = [name for name,why in weekly.imported.incomplete]
     assert 'levels: metapop' in listed and 'health_state: production R -> S' in listed # Listed, not dropped
     assert 'import-model' in weekly.imported.prompt # What to ask an AI assistant to finish it
@@ -156,7 +158,7 @@ def test_emulsion(tmp_path):
         folder = paths.lfd/'examples/emulsion/sir'
         ref = sc.dataframe.read_csv(folder/'reference/results.csv')
         for kind in ['compart', 'IBM', 'hybrid']:
-            sir = ss.load(folder/f'original/{kind}_SIR.yaml', **kw)
+            sir = ss.interop.load(folder/f'original/{kind}_SIR.yaml', **kw)
             assert not sir.imported.incomplete and 'n=100;' in repr(sir) # 100 animals, not the default number of agents
             final = sir.run(n_runs=200).results[f'{kind}_SIR'].n_R.values[:, -1].mean() # With one infected at the start, many runs die out, so the mean needs many
             series = dict(compart='compartment', IBM='ibm', hybrid='hybrid')[kind] + '_R'
@@ -189,8 +191,8 @@ def test_to_code(tmp_path):
     same(ss.Sim(sir, total_pop=1000, stop=ss.days(50), unit='day', **kw))
 
     # An imported model: the code says how it was read and what was not translated
-    with pytest.warns(ss.ImportIncomplete):
-        sim = ss.load(emulsion_file(tmp_path), **kw)
+    with pytest.warns(ss.errors.ImportIncomplete):
+        sim = ss.interop.load(emulsion_file(tmp_path), **kw)
     code = same(sim)
     assert 'Imported from EMULSION' in code and '# Not translated (ImportIncomplete):' in code
 
@@ -212,7 +214,7 @@ def test_to_code(tmp_path):
     assert np.isclose(peak(ns['sim'].new(unit='week', dt=ss.days(1))), peak(sim), rtol=1e-3)
 
     # What cannot be written is listed in the code and in a warning
-    with pytest.warns(ss.LossyExport):
+    with pytest.warns(ss.errors.LossyExport):
         code = ss.Sim(make(beta=0.05), networks=ss.RandomNet(), n_agents=100, **kw).to_code()
     assert 'network "randomnet"' in code
     return code
@@ -239,7 +241,7 @@ def test_round_trip(tmp_path):
     lossy = ['coinfection', 'network', 'threshold', 'starsim3', 'poisson_weekly'] # Networks of agents, a lambda, and data
     for name,make in corpus.models.items():
         if name in lossy:
-            with pytest.warns(ss.LossyExport):
+            with pytest.warns(ss.errors.LossyExport):
                 make().to_code()
         else:
             check(name, make())
@@ -251,7 +253,7 @@ def test_round_trip(tmp_path):
     sir = ss.Disease(infection=S >> I @ beta * I, recovery=I >> R @ dur, init=dict(I=50), name='sir').stratify(risk=['lo', 'hi'])
     mixing = ss.contacts([[3, 1], [1, 2]], bands=[0, 15])
     distancing = ss.modify(sir.pars.beta, multiply=0.5, start=12.5, stop=30, where=sir.risk == 'hi')
-    vaccine = ss.vaccinate(efficacy=0.8, waning=ss.days(50), coverage=0.3, interval=ss.days(7), start=5, where=ss.ppl.age < 15)
+    vaccine = ss.vaccinate(ss.Vaccine(efficacy=0.8, waning=ss.days(50), name='vx'), coverage=0.3, interval=ss.days(7), start=5, where=ss.ppl.age < 15)
     check('fuzzed', ss.Sim(sir, networks=mixing, interventions=[distancing, vaccine], stratify=dict(age=[0, 15]), unit='day', stop=60, total_pop=10_000, **kw))
     check('years', ss.Sim(corpus.make_sir(beta=ss.perday(0.3), dur=ss.days(10)), start=2000, stop=2001, total_pop=10_000, **kw)) # Rates per day, so the unit is days and 2000 is in years
     return
@@ -265,8 +267,8 @@ def clearance(sim):
 
 def test_diff(tmp_path):
     sc.heading('Testing ss.diff(): an import and a hand translation are the same model')
-    with pytest.warns(ss.ImportIncomplete):
-        sim = ss.load(emulsion_file(tmp_path), **kw)
+    with pytest.warns(ss.errors.ImportIncomplete):
+        sim = ss.interop.load(emulsion_file(tmp_path), **kw)
     def hand(beta=0.5):
         S, E, I, Q, R = ss.states('S E I Q R')
         seirq = ss.Disease(
@@ -295,19 +297,19 @@ def test_no_disease():
     S = ss.State(init=100) # A disease with no transitions, as an import of a fully custom model may give, runs and stays as it is
     sim = ss.Sim(ss.Disease(S, name='d'), solver='binomial', total_pop=100, stop=10, verbose=0).run()
     assert np.ptp(sim.results.d.n_S.values) == 0
-    sim = ss.Sim(networks=ss.PartnerNet(), n_agents=100, unit='week', stop=10, verbose=0) # A sim of networks only keeps its unit in code
+    sim = ss.Sim(networks=ss.SexualNet(), n_agents=100, unit='week', stop=10, verbose=0) # A sim of networks only keeps its unit in code
     assert "unit='week'" in sim.to_code()
     return sim
 
 
 if __name__ == '__main__':
     T = sc.timer()
-    folder = sc.path(sc.thisdir()) / 'temp'
-    folder.mkdir(exist_ok=True)
-    test_rates()
-    test_emulsion(folder)
-    test_to_code(folder)
-    test_round_trip(folder)
-    test_diff(folder)
-    test_no_disease()
+    with tempfile.TemporaryDirectory() as tmp:
+        folder = sc.path(tmp)
+        test_rates()
+        test_emulsion(folder)
+        test_to_code(folder)
+        test_round_trip(folder)
+        test_diff(folder)
+        test_no_disease()
     T.toc()

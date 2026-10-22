@@ -27,4 +27,4 @@ jobs:
         run: Rscript -e 'install.packages("reticulate")'
       - name: Run the R tests
         working-directory: ./tests
-        run: pytest test_r.py
+        run: pytest interop/test_r.py

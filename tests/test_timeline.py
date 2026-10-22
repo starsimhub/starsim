@@ -286,11 +286,11 @@ def test_mixed_timesteps():
     SIS = ssl.AgentSIS # Written as code, since a declared disease cannot yet have a timestep of its own
 
     siskw = dict(dur_inf=ss.datedur(days=50), beta=ss.perday(0.01), waning=ss.perday(0.005))
-    kw = dict(n_agents=medium, start='2001-01-01', stop='2001-07-01', networks='random', copy_inputs=False, verbose=0)
+    kw = dict(n_agents=medium, start='2001-01-01', stop='2001-07-01', networks='random', verbose=0)
 
     print('Year-year')
-    sis1 = SIS(name='sis', dt=1/365, **sc.dcp(siskw))
-    sim1 = ss.Sim(dt=1/365, diseases=sis1, label='year-year', **kw)
+    sis1 = SIS(name='sis', dt=ss.years(1/365), **sc.dcp(siskw))
+    sim1 = ss.Sim(dt=ss.years(1/365), diseases=sis1, label='year-year', **kw)
 
     print('Day-day')
     sis2 = SIS(name='sis', dt=ss.days(1), **sc.dcp(siskw))
@@ -298,13 +298,13 @@ def test_mixed_timesteps():
 
     print('Day-year')
     sis3 = SIS(name='sis', dt=ss.days(1), **sc.dcp(siskw))
-    sim3 = ss.Sim(dt=1/365, diseases=sis3, label='day-year', **kw)
+    sim3 = ss.Sim(dt=ss.years(1/365), diseases=sis3, label='day-year', **kw)
 
     print('Year-day')
-    sis4 = SIS(name='sis', dt=1/365, **sc.dcp(siskw))
+    sis4 = SIS(name='sis', dt=ss.years(1/365), **sc.dcp(siskw))
     sim4 = ss.Sim(dt=ss.days(1), diseases=sis4, label='year-day', **kw)
 
-    msim = ss.parallel(sim1, sim2, sim3, sim4)
+    msim = ss.parallel(sim1, sim2, sim3, sim4, parallel=False) # Serially, since starting processes takes longer than these short runs
 
     # Check that all results are close
     threshold = 0.02
@@ -388,6 +388,23 @@ def test_step_count():
     return sim
 
 
+@sc.timer()
+def test_coded_unit():
+    sc.heading('Test that the unit of a sim with only coded modules is honored')
+
+    class Step(ss.Module): # A module written as code, with no declared states or transitions
+        def step(self):
+            pass
+
+    sim = ss.Sim(connectors=Step(), unit='day', dt=1, start=0, stop=30, verbose=0).init()
+    assert sim.unit == 'day' and sim.t.dt == ss.days(1) and len(sim.t) == 31
+    sim = ss.Sim(connectors=Step(), unit='week', stop=10, verbose=0).init()
+    assert sim.t.dt == ss.weeks(1) and len(sim.t) == 11
+    sim = ss.Sim(connectors=Step(), verbose=0).init() # Nothing has a unit: time is in timesteps
+    assert sim.unit is None and sim.t.start == 0 and len(sim.t) == 51
+    return sim
+
+
 # Run as a script
 if __name__ == '__main__':
     do_plot = True
@@ -403,5 +420,6 @@ if __name__ == '__main__':
     o6 = test_mixed_timesteps()
     o7 = test_units(do_plot)
     o8 = test_step_count()
+    o9 = test_coded_unit()
 
     T.toc()

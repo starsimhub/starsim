@@ -5,7 +5,7 @@ import numpy as np
 import sciris as sc
 import starsim as ss
 
-__all__ = ['Expr', 'par', 'mother', 'attr', 'func', 'spread']
+__all__ = ['Expr', 'par', 'mother', 'attr']
 
 
 #%% Helpers
@@ -45,8 +45,8 @@ def as_expr(obj):
             errormsg = 'A condition on states alone cannot be used in a rate: | on states is a condition, for where=; the people in several states are their sum, e.g. 0.3*(Ia + Is)'
             raise TypeError(errormsg)
         return Prop(obj)
-    elif isinstance(obj, ss.transitions.Transition) and obj.src is None: # Part of a weighted destination, e.g. 0.5*I + 0.5*R @ 0.1, where @ binds before +
-        errormsg = f'"@" binds before "+", so in a weighted destination the destination needs parentheses: S >> (0.5*I + 0.5*R) @ rate, not S >> 0.5*I + 0.5*R @ rate'
+    elif isinstance(obj, ss.transitions.Transition) and obj.src is None: # e.g. S >> I + R @ 0.1, where @ binds before +
+        errormsg = f'"@" binds before "+", so the destination of a transition is not a sum: several destinations are a list, with p= for the share of each, e.g. ss.Transition(I, [R, D], dur=10, p=[0.9, 0.1])'
         raise TypeError(errormsg)
     elif isinstance(obj, ss.transitions.Transition):
         errormsg = f'A transition ({obj}) cannot be used inside a rate; did you mean one of its states?'
@@ -110,10 +110,6 @@ class Expr:
     def __le__(self, other):       return Func('less_equal', self, other)
     def __gt__(self, other):       return Func('greater', self, other)
     def __ge__(self, other):       return Func('greater_equal', self, other)
-
-    def __matmul__(self, driver):
-        """ A weighted destination: (p*A + (1-p)*B) @ rate """
-        return ss.transitions.Transition(dst=self) @ driver
 
     def __bool__(self):
         errormsg = f'Cannot use the expression "{self}" where Python needs a single True or False; it has no value until the model runs'
@@ -202,7 +198,7 @@ class par(Nameable, Expr):
         self.slot = None # The kind of slot it fills: 'rate', 'dur', or None (a plain number)
         self.module = None # Set by the graph when the parameter is registered
         self.midpoint = None # The value it starts from, if it was given only bounds (a guess, which describe() marks)
-        if value is None and bounds is not None: # Start a fitted parameter from the middle of its bounds, on the scale they are searched on (see ss.fit())
+        if value is None and bounds is not None: # Start a fitted parameter from the middle of its bounds, on the scale they are searched on (see sim.calibrate())
             low, high = bounds
             self.value = self.midpoint = float(np.sqrt(low*high) if low > 0 and high >= 10*low else (low + high)/2)
         return
@@ -215,12 +211,20 @@ class par(Nameable, Expr):
         raise AttributeError(f"'par' object has no attribute '{attr}'")
 
     def __float__(self):
-        """ A parameter that holds a number is that number, e.g. float(sir.pars.beta); during a run, with the modifiers on it applied (e.g. ss.change), so a function that reads it sees the change """
+        """
+        A parameter that holds a number is that number, e.g. float(sir.pars.beta); during a run, with the modifiers on it applied (e.g. ss.change),
+        so a function that reads it sees the change. If the modifiers give it a different value for different people or groups, it is not one number,
+        so this raises: use `mod.value(name)`, the value in the current context (one for each group or agent)
+        """
         raw = self.raw
         if sc.isnumber(raw):
             engine = getattr(self.module, 'engine', None)
             if engine is not None and self.name and not self.literal and engine.sim.modifiers.get((self.module.name, 'par', self.name)):
-                return float(np.mean(engine.modified(self, raw)))
+                vals = np.asarray(engine.modified(self, raw), dtype=float)
+                if np.any(vals != vals.flat[0]):
+                    errormsg = f'The parameter {self.name} of "{self.module.name}" has modifiers that give it a value for each group or agent, so it is not one number; use {self.module.name}.value("{self.name}") for its values'
+                    raise ValueError(errormsg)
+                return float(vals.flat[0])
             return float(raw)
         errormsg = f'The parameter {self.name or ""} is {value_str(raw)}, which is not a plain number; use its value, e.g. .raw'
         raise TypeError(errormsg)
@@ -264,6 +268,34 @@ class Count(Expr):
         self.states = states
         self.kind = kind
         return
+
+
+class Stock(Expr):
+    """
+    The number in a state, kept by group: what a bare state means in a result (`prevalence = I/N`)
+
+    A bare state means something else in each place it can be written, and each is told apart when the
+    model is made: in a rate, exposure to the people in it (`beta * I`); in a result, this; in a condition
+    (`where=I`), being in it; and its number over every group is `I.n` (a `Count`).
+    """
+    def __init__(self, state):
+        self.state = state
+        return
+
+    @property
+    def name(self):
+        return self.state.name
+
+
+def as_stocks(expr):
+    """ A result with each bare state in it read as the number in that state, by group (see `Stock`) """
+    if isinstance(expr, ss.transitions.State):
+        return Stock(expr)
+    elif isinstance(expr, BinOp):
+        return BinOp(expr.op, as_stocks(expr.a), as_stocks(expr.b))
+    elif isinstance(expr, Func):
+        return Func(expr.name, *[as_stocks(arg) for arg in expr.args])
+    return expr
 
 
 def count_power(expr):
@@ -311,13 +343,6 @@ class Prop(Expr):
             return
         walk(self.cond)
         return out
-
-
-class Dwell(Expr):
-    """ The time each person has spent in a state (`P.dwell`), in the sim's unit: in `p=` of a transition with several destinations out of it, when they leave; or in the rate of a transition out of it """
-    def __init__(self, state):
-        self.state = state
-        return
 
 
 class Flow(Expr):
@@ -403,38 +428,16 @@ class Share(Expr):
         num = evaluate(parts[self.label], ctx)
         den = sum(evaluate(part, ctx) for part in parts.values())
         if np.any(np.asarray(den) <= 0):
-            raise ss.BadBranchSplit(f'the row {self.row} sums to 0 for some people or groups, so it has no shares to normalize')
+            raise ss.errors.BadBranchSplit(f'the row {self.row} sums to 0 for some people or groups, so it has no shares to normalize')
         out = num/den
         return out if self.row.scalar is None else evaluate(self.row.scalar, ctx)*out
-
-
-class Column(Expr):
-    """ One destination's column of a function given as the single `p=` of a transition with several (`p=fn`, returning a row of probabilities or weights for each person or group, one column per destination), normalized over the row """
-    def __init__(self, p, i, n):
-        self.p = p
-        self.i = i
-        self.n_dst = n
-        return
-
-    @property
-    def leaves(self):
-        return self.p.leaves
-
-    def evaluate(self, ctx):
-        row = np.asarray(evaluate(self.p, ctx), dtype=float)
-        if row.shape[-1:] != (self.n_dst,):
-            raise ss.BadBranchSplit(f'the function {format_expr(self.p)} given as p= returns a row of {row.shape[-1] if row.ndim else 1} values, but the transition has {self.n_dst} destinations; return one column per destination')
-        total = row.sum(axis=-1)
-        if np.any(total <= 0):
-            raise ss.BadBranchSplit(f'the function {format_expr(self.p)} given as p= returns a row that sums to 0, so it has no shares')
-        return row[..., self.i]/total
 
 
 def to_pars(expr):
     """ The parameters in an expression whose value is an `ss.by` with a `to` axis (over the destinations of a transition) """
     if not isinstance(expr, Expr):
         return []
-    leaves = expr.leaves if not isinstance(expr, (Share, Column)) else []
+    leaves = expr.leaves if not isinstance(expr, Share) else []
     return [leaf for leaf in leaves if isinstance(leaf, par) and isinstance(leaf.raw, ss.by) and 'to' in leaf.raw.dims]
 
 
@@ -474,7 +477,7 @@ class Clock(Expr):
     of the scheduled dwell time in a state that has elapsed (`X.progress`, from 0 to 1)
 
     A duration in the sim's unit, so `X.time / ss.years(1)` is a number of years. It is NaN for anyone
-    outside the states. As agents only, for now.
+    outside the states. As agents only.
 
     Args:
         states (list): the states, as `ss.State`s or (module, name) pairs (from a condition, `A | B`)
@@ -482,10 +485,9 @@ class Clock(Expr):
     """
     sets = [] # The names of the sets of states that clocks have been made for: their engines keep the time each person entered the set (see `ss.solvers.Agents.define()`)
 
-    def __init__(self, states, kind='time', bins=None):
+    def __init__(self, states, kind='time'):
         self.states = list(states)
         self.kind = kind
-        self.bins = bins # In a compartmental run, the width of each level of elapsed time
         names = tuple(self.names)
         if len(set(names)) > 1 and names not in Clock.sets:
             Clock.sets.append(names)
@@ -494,10 +496,6 @@ class Clock(Expr):
     @property
     def names(self):
         return [s[1] if isinstance(s, tuple) else s.name for s in self.states]
-
-    def own(self, state):
-        """ Whether this is the time in one state (`X.time`), which for the people leaving it is `X.dwell` (see `ss.graph.Graph.check_dwell()`) """
-        return state is not None and self.kind == 'time' and len(self.states) == 1 and self.states[0] is state
 
     @property
     def module(self):
@@ -510,34 +508,11 @@ class Clock(Expr):
         return f'{inner}.{self.kind}'
 
 
-class Mother(Expr):
-    """
-    `ss.mother(x)`: a condition or expression evaluated on each unborn agent's mother (or, with `born=True`, each agent's), and 0 for everyone else
-
-    Args:
-        x (Cond/State/Expr): what to evaluate on the mother, e.g. `syph.Pv | syph.S2`, or `preg.P.time`
-        born (bool): also for agents already born, not only the unborn
-    """
-    def __init__(self, x, born=False):
-        if isinstance(x, Mother):
-            errormsg = 'ss.mother(ss.mother(...)) is not supported: an unborn agent has no unborn mother'
-            raise ValueError(errormsg)
-        self.x = ss.conditions.as_cond(x) if isinstance(x, ss.transitions.State) else x # A state means being in it, not exposure to it
-        self.born = born
-        return
-
-    def to_str(self, parent=False):
-        return f'mother({self.x}{", born=True" if self.born else ""})'
-
-    def __copy__(self): return self
-    def __deepcopy__(self, memo): return self
-
-
-def mother(x, born=False):
+class mother(Expr):
     """
     A condition or expression evaluated on each unborn agent's mother (1/0 for a condition, or its value), and 0 for anyone born, unless born=True
 
-    Usable in rates, `p=`, `where=`, `who=`, `ss.on()`, and modifier conditions. Agents only for now.
+    Usable in rates, `p=`, `where=`, `who=`, `ss.on()`, and modifier conditions. Agents only: `solver='auto'` chooses them, and a compartmental solver stops with a `CapabilityError`.
 
     With `born=True` it is evaluated on the mother of anyone who has one, born or not, e.g. to reach the newborns
     of mothers who tested positive. An agent with no mother in the sim gets 0. A mother who has died or left is in
@@ -554,7 +529,19 @@ def mother(x, born=False):
         newborn = ss.screen(test, who=preg.birth & ss.mother(anc.positive.since <= ss.years(1), born=True))
         ```
     """
-    return Mother(x, born=born)
+    def __init__(self, x, born=False):
+        if isinstance(x, mother):
+            errormsg = 'ss.mother(ss.mother(...)) is not supported: an unborn agent has no unborn mother'
+            raise ValueError(errormsg)
+        self.x = ss.conditions.as_cond(x) if isinstance(x, ss.transitions.State) else x # A state means being in it, not exposure to it
+        self.born = born
+        return
+
+    def to_str(self, parent=False):
+        return f'mother({self.x}{", born=True" if self.born else ""})'
+
+    def __copy__(self): return self
+    def __deepcopy__(self, memo): return self
 
 
 class Since(Expr):
@@ -579,34 +566,41 @@ class Since(Expr):
     names = [] # As a clock (see clocks_in()), of no state
     kind = 'since'
 
-    def own(self, state):
-        return False
-
     def __copy__(self): return self
     def __deepcopy__(self, memo): return self
 
 
-def mothers_in(obj, seen=None):
-    """ Whether an expression, a condition, or a list or dict of them reads `ss.mother()` """
+def nodes(obj, seen=None):
+    """ Every part of an expression, a condition, or a list or dict of them, each once: e.g. the clocks a model reads are the parts that are clocks (see `clocks_in()`) """
     seen = set() if seen is None else seen
     if id(obj) in seen:
-        return False
+        return
     seen.add(id(obj))
-    if isinstance(obj, Mother):
-        return not obj.born # Only the unborn need fetuses as agents
-    elif isinstance(obj, par):
-        return mothers_in(obj.value, seen) if isinstance(obj.value, (Expr, ss.conditions.Cond)) else False
+    yield obj
+    if isinstance(obj, par):
+        parts = [obj.value] if isinstance(obj.value, (Expr, ss.conditions.Cond)) else []
+    elif isinstance(obj, attr): # What a derived one is worked out from (one set at an event has the value it had then)
+        parts = ([expr for names,expr in obj.cases] if obj.cases is not None else [obj.value]) if obj.kind == 'derived' else []
     elif isinstance(obj, Expr):
-        return any(mothers_in(leaf, seen) for leaf in obj.leaves if leaf is not obj) or any(mothers_in(arg, seen) for arg in getattr(obj, 'args', [])) or any(mothers_in(getattr(obj, key, None), seen) for key in ['a', 'b'])
+        parts = [leaf for leaf in obj.leaves if leaf is not obj] + list(getattr(obj, 'args', [])) + [getattr(obj, key, None) for key in ['a', 'b']] # E.g. a clock inside a comparison (Func)
     elif isinstance(obj, ss.transitions.on):
-        return mothers_in(obj.x, seen)
+        parts = [obj.x]
     elif isinstance(obj, ss.conditions.Cond) and obj.op not in ss.conditions.leaves:
-        return any(mothers_in(arg, seen) for arg in obj.args)
+        parts = obj.args
     elif isinstance(obj, (list, tuple)):
-        return any(mothers_in(item, seen) for item in obj)
+        parts = obj
     elif isinstance(obj, dict):
-        return any(mothers_in(item, seen) for item in obj.values())
-    return False
+        parts = obj.values()
+    else:
+        parts = []
+    for part in parts:
+        yield from nodes(part, seen)
+    return
+
+
+def mothers_in(obj):
+    """ Whether an expression, a condition, or a list or dict of them reads `ss.mother()` of the unborn (who need fetuses as agents) """
+    return any(isinstance(part, mother) and not part.born for part in nodes(obj))
 
 
 combines = dict(last=lambda old, new: new, first=lambda old, new: np.where(np.isnan(old), new, old), max=np.fmax, min=np.fmin, sum=lambda old, new: old + new)
@@ -620,27 +614,26 @@ class attr(Expr):
     someone; an expression (or the name of another attribute) with `on=` is recorded then, as it was just
     before the move; a distribution with no `on=` is a trait; and an expression, or a dict of one by state
     (states not listed give NaN), with no `on=` is derived, worked out when it is read. Attributes set on
-    the same event are set in the order they are declared, and each sees the ones before it. As agents only, for now.
+    the same event are set in the order they are declared, and each sees the ones before it. As agents only.
 
     Args:
         value (Dist/Expr/str/dict): the distribution, the expression, the name of another attribute, or a dict of expressions by state (or by a sum of states)
         on (Event/Transition): the event(s) that set it, joined with `|`; none for a trait or a derived attribute
         combine (str/func): how a new value is combined with the one already held: 'last' (the default), 'first', 'max', 'min', 'sum', or `fn(old, new)`
         init (float): the value before any event (default NaN, or 0 for `combine='sum'`)
-        bins (int/list): in a compartmental run, the number of equal-probability bins of a distribution, or the bin edges of a recorded value
         name (str): the name; if not given, taken from the keyword or class attribute it is assigned to
         label (str): a human-readable name
 
     Examples:
         ```python
-        cd4_latent = ss.attr(ss.normal(500, 50), on=infection, bins=3)          # Drawn
+        cd4_latent = ss.attr(ss.normal(500, 50), on=infection)                  # Drawn
         cd4_preart = ss.attr('cd4', on=start_art)                               # Recorded, just before starting
         rel_sev    = ss.attr(ss.normal(1, 0.2))                                 # A trait
         cd4        = ss.attr({latent: cd4_latent, falling: cd4_latent*(1 - falling.progress)}) # Derived
         nab        = ss.attr(ss.uniform(0.5, 0.95), on=clearance, combine='max', init=0)
         ```
     """
-    def __init__(self, value, on=None, combine='last', init=None, bins=None, name=None, label=None):
+    def __init__(self, value, on=None, combine='last', init=None, name=None, label=None):
         if not (callable(combine) or combine in combines):
             errormsg = f'combine= is one of {sc.strjoin(combines)}, or a function of (old, new); not {combine!r}'
             raise ValueError(errormsg)
@@ -648,7 +641,6 @@ class attr(Expr):
         self.on = on
         self.combine = combine
         self.init = init
-        self.bins = bins
         self.name = name
         self.label = label
         self.module = None # Set by the graph
@@ -699,46 +691,6 @@ class attr(Expr):
         return new
 
 
-class spread:
-    """
-    Initial people who are part way through their natural history: back-dated, and run forward to the start
-
-    As `init_prev=`, the share (or number) infected at the start, infected at times uniform over `over` before it;
-    as a value of `init=`, the share in that state, having entered it then. Their declared natural history (only
-    this disease's spontaneous transitions: no transmission, demography, or interventions, and ages as at the
-    start) runs from then to the start, so they arrive spread over the stages, clocks, and attributes, and some
-    progress soon after the start. Those no longer in the target at the start are not counted: as many more are
-    back-dated. With no `over=`, they entered long enough ago that the people still there are as many as would
-    be at a constant inflow (the stationary distribution within the state).
-
-    Args:
-        value (float): the share of people (below 1) or the number (above 1)
-        over (dur/tuple): how long before the start they entered: up to a duration, or between two
-
-    Examples:
-        ```python
-        hiv = HIV(init_prev=ss.spread(0.05, over=(ss.months(5), ss.years(10))))
-        syph = Syphilis(init=dict(EL=ss.spread(0.01), LL=ss.spread(0.01)))
-        ```
-    """
-    def __init__(self, value, over=None):
-        self.value = value
-        if over is not None and not isinstance(over, (tuple, list)):
-            over = (0.0, over)
-        self.over = over
-        return
-
-    def window(self, convert):
-        """ The earliest and latest times before the start, in the sim's unit, or None """
-        if self.over is None:
-            return None
-        lo, hi = [convert(v) if isinstance(v, ss.TimePar) else float(v) for v in self.over]
-        return lo, hi
-
-    def __repr__(self):
-        return f'ss.spread({self.value}{f", over={self.over}" if self.over is not None else ""})'
-
-
 def dists_in(expr):
     """ The distributions in an expression, as the parameters that hold them, e.g. `ss.uniform(0.5, 0.95)*ss.bernoulli(0.6)` """
     if isinstance(expr, ss.Dist):
@@ -764,50 +716,6 @@ def events_in(on, graph=None):
     raise TypeError(errormsg)
 
 
-class func:
-    """
-    A function called with the agents an event happens to, at the moment they move: `fn(sim, uids)`
-
-    As agents only (a compartmental run has no agents to call it with). It runs inside the move, after the
-    people are in their new state and the attributes the event sets are set, and before anything reads them.
-
-    Args:
-        fn (func): the function, of `(sim, uids)`
-        on (Event/Transition): the event(s), as for `ss.attr`
-        name (str): the name; if not given, taken from the keyword or class attribute it is assigned to
-
-    Examples:
-        ```python
-        def diagnose(sim, uids):
-            sim.diseases.hiv.diagnosed[uids] = True
-        hook = ss.func(diagnose, on=hiv.start_art)
-        ```
-    """
-    def __init__(self, fn, on=None, name=None):
-        if not callable(fn):
-            errormsg = f'ss.func() takes a function of (sim, uids), not {fn!r}'
-            raise TypeError(errormsg)
-        if on is None:
-            errormsg = 'ss.func() needs on=, the event that calls it'
-            raise ValueError(errormsg)
-        self.fn = fn
-        self.on = on
-        self.name = name or getattr(fn, '__name__', None)
-        self.events = []
-        return
-
-    def __set_name__(self, owner, name):
-        if self.name is None or self.name == '<lambda>':
-            self.name = name
-        return
-
-    def __call__(self, sim, uids):
-        return self.fn(sim, uids)
-
-    def __repr__(self):
-        return f'ss.func({getattr(self.fn, "__name__", "function")}, on={sc.strjoin(e.label for e in self.events) or self.on})'
-
-
 def rebind(expr, memo):
     """ The expression with the states and transitions it reads replaced by their copies in `memo`, e.g. `SIR(n=SIR.I + SIR.R)` reads the instance's copies of the class's states; parameters are kept, not copied """
     if isinstance(expr, (ss.transitions.State, ss.transitions.Transition)):
@@ -826,36 +734,9 @@ def rebind(expr, memo):
     return new
 
 
-def clocks_in(obj, out=None, seen=None):
-    """ The clocks an expression, a condition, or a list or dict of them reads """
-    out = [] if out is None else out
-    seen = set() if seen is None else seen
-    if id(obj) in seen:
-        return out
-    seen.add(id(obj))
-    if isinstance(obj, (Clock, Since)): # The time since an event is kept per agent too
-        out.append(obj)
-    elif isinstance(obj, attr): # What a derived one is worked out from (one set at an event has the value it had then)
-        if obj.kind == 'derived':
-            clocks_in([expr for names,expr in obj.cases] if obj.cases is not None else obj.value, out, seen)
-    elif isinstance(obj, Expr):
-        for leaf in obj.leaves:
-            if leaf is not obj:
-                clocks_in(leaf, out, seen)
-        for arg in getattr(obj, 'args', []): # E.g. a clock inside a comparison (Func)
-            clocks_in(arg, out, seen)
-        for key in ['a', 'b']:
-            clocks_in(getattr(obj, key, None), out, seen)
-    elif isinstance(obj, ss.conditions.Cond) and obj.op not in ss.conditions.leaves:
-        for arg in obj.args:
-            clocks_in(arg, out, seen)
-    elif isinstance(obj, (list, tuple)):
-        for item in obj:
-            clocks_in(item, out, seen)
-    elif isinstance(obj, dict):
-        for item in obj.values():
-            clocks_in(item, out, seen)
-    return out
+def clocks_in(obj):
+    """ The clocks an expression, a condition, or a list or dict of them reads (the time since an event is kept per agent too) """
+    return [part for part in nodes(obj) if isinstance(part, (Clock, Since))]
 
 
 class BinOp(Expr):
@@ -896,11 +777,11 @@ def linear(expr):
     Split an expression into a constant part and a coefficient for each bare state
 
     Returns `(const, terms)`, where `const` is an expression with no bare states
-    (or None) and `terms` is a dict of `{state: coefficient}`. Raises `ss.NonlinearExposure` if
+    (or None) and `terms` is a dict of `{state: coefficient}`. Raises `ss.errors.NonlinearExposure` if
     the expression is not linear in its bare states.
     """
     def nonlinear():
-        raise ss.NonlinearExposure(f'the expression "{expr}" is not linear in its states. A bare state means contact with people in that state; write e.g. I.n if the number itself was meant.')
+        raise ss.errors.NonlinearExposure(f'the expression "{expr}" is not linear in its states. A bare state means contact with people in that state; write e.g. I.n if the number itself was meant.')
 
     if isinstance(expr, ss.transitions.State):
         return None, {expr: par(1, literal=True)}
@@ -980,17 +861,17 @@ def evaluate(expr, ctx):
         return ctx.local_count(expr.states) if expr.kind == 'n' else ctx.total_count(expr.states) if expr.kind == 'total' else ctx.local_frac(expr.states)
     elif isinstance(expr, ss.transitions.State):
         return ctx.exposure(expr)
-    elif isinstance(expr, Dwell):
-        return ctx.dwell(expr.state)
+    elif isinstance(expr, Stock):
+        return ctx.stock(expr.state)
     elif isinstance(expr, Flow):
         return ctx.flow(expr)
-    elif isinstance(expr, (Share, Column)):
+    elif isinstance(expr, Share):
         return expr.evaluate(ctx)
     elif isinstance(expr, Clock):
         return ctx.clock(expr)
     elif isinstance(expr, attr):
         return ctx.attr(expr)
-    elif isinstance(expr, Mother):
+    elif isinstance(expr, mother):
         return ctx.mother(expr)
     elif isinstance(expr, Since):
         return ctx.since(expr)
@@ -1082,20 +963,18 @@ def format_expr(expr, values=False, bare=None, mul='*', exact=False, unit=None):
             return text
         elif isinstance(e, ss.transitions.State):
             return e.label_name if bare is None else bare(e)
+        elif isinstance(e, Stock):
+            return fmt(e.state)
         elif isinstance(e, Prop):
             return repr(e.cond)
         elif isinstance(e, Count):
             names = [s.label_name for s in e.states]
             inner = names[0] if len(names) == 1 else '(' + ' + '.join(names) + ')'
             return f'{inner}.{e.kind}'
-        elif isinstance(e, Dwell):
-            return f'{e.state.label_name}.dwell'
         elif isinstance(e, Share):
             share = f'share({fmt(e.row.row)}, to={e.label})' # Its row's value at this destination, over the row's sum
             return share if e.row.scalar is None else f'{fmt(e.row.scalar)} {mul} {share}'
-        elif isinstance(e, Column):
-            return f'{fmt(e.p)}[{e.i}]'
-        elif isinstance(e, (Clock, Mother, Since)):
+        elif isinstance(e, (Clock, mother, Since)):
             return e.to_str()
         return str(e.name) # A flow
     return fmt(expr)

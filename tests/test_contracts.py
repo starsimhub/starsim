@@ -14,36 +14,32 @@ import corpus
 stochastic = ['binomial', 'gillespie', 'abm']
 
 
-def people_states(sim, mod):
-    """ The names of the states of a declared module that are people """
-    return [state.name for state in mod.graph.people_states]
-
-
 # %% The guesses are marked
 
 def guessed(text):
     """ The lines of describe() marked as guesses """
-    return [line for line in text.splitlines() if '[guessed' in line or 'inferred from' in line or 'nothing in the model has a unit' in line]
+    return [line for line in text.splitlines() if '[guessed' in line or 'nothing in the model has a unit' in line]
 
 
-def string_sir(**kwargs):
-    return ss.Disease(infection=ss.transmission('S -> I', beta=0.3), recovery=ss.progression('I -> R', dur=10), name='sir', **kwargs)
+def plain_sir(**kwargs):
+    S, I, R = ss.states('S I R')
+    return ss.Disease(infection=ss.Transition(S, I, rate=0.3 * I), recovery=ss.Transition(I, R, dur=10), name='sir', **kwargs)
 
 
 def declared_sir(**kwargs):
-    S, I, R = ss.State(name='S'), ss.State(name='I', infectious=True), ss.State(name='R')
-    return ss.Disease(S, I, R, infection=S >> I @ 0.3*I, recovery=I >> R @ ss.erlang(mean=10, k=3, unit='days'), init_prev=0.01, name='sir', **kwargs)
-
-
-def water(declared):
     S, I, R = ss.states('S I R')
-    W = ss.State(name='W', people=False) if declared else ss.State(name='W')
-    return ss.Disease(S >> I @ ss.perday(0.5)*W.n/(W.n + 1e5), I >> R @ ss.days(5), ss.null >> W @ 10*I.n, W >> ss.null @ ss.days(30), init=dict(I=0.001), name='cholera')
+    return ss.Disease(S, I, R, infection=S >> I @ 0.3*I, recovery=I >> R @ ss.erlang(mean=10, k=3, unit='days'), init_prev=0.01, name='sir', **kwargs)
 
 
 def lognormal(stages):
     dur = ss.lognorm_ex(mean=10, std=4, unit='days')
-    return ss.Disease(infection=ss.transmission('S -> I', beta=0.3), recovery=ss.progression('I -> R', dur=dur, stages=stages), init_prev=0.01, name='sir')
+    S, I, R = ss.states('S I R')
+    return ss.Disease(infection=ss.Transition(S, I, rate=0.3 * I), recovery=ss.Transition(I, R, dur=dur, stages=stages), init_prev=0.01, name='sir')
+
+
+def fitted_sir(beta):
+    S, I = ss.states('S I')
+    return ss.Disease(infection=ss.Transition(S, I, rate=beta * I), name='sir')
 
 
 def unnamed(named):
@@ -56,21 +52,15 @@ def unnamed(named):
 
 # Each row of the "what is guessed" table in 03-states-and-transitions.md: a sim that makes the guess, one that does not, and what describe() says
 guesses = dict(
-    states     = (lambda: ss.Sim(string_sir()),                      lambda: ss.Sim(declared_sir()),                       'inferred from the arrows'),
-    source     = (lambda: ss.Sim(string_sir()),                      lambda: ss.Sim(declared_sir()),                       'source is the destination'),
-    infectious = (lambda: ss.Sim(string_sir()),                      lambda: ss.Sim(declared_sir()),                       'I infectious'),
-    init       = (lambda: ss.Sim(string_sir()),                      lambda: ss.Sim(string_sir(init_prev=0.01)),           'init:'),
-    people     = (lambda: ss.Sim(water(False)),                      lambda: ss.Sim(water(True)),                          'a count, not people'),
-    dwell      = (lambda: ss.Sim(string_sir()),                      lambda: ss.Sim(declared_sir()),                       'dwell ~'),
+    dwell      = (lambda: ss.Sim(plain_sir()),                      lambda: ss.Sim(declared_sir()),                       'dwell ~'),
     stages     = (lambda: ss.Sim(lognormal(None), solver='ode'),     lambda: ss.Sim(lognormal(4), solver='ode'),           'stages'),
-    unit       = (lambda: ss.Sim(string_sir()),                      lambda: ss.Sim(string_sir(), unit='day'),             'unit'),
-    mixing     = (lambda: ss.Sim(string_sir()),                      lambda: ss.Sim(string_sir(), networks=ss.RandomNet(), n_agents=1000), 'mixing'),
+    unit       = (lambda: ss.Sim(plain_sir()),                      lambda: ss.Sim(plain_sir(), unit='day'),             'unit'),
+    mixing     = (lambda: ss.Sim(plain_sir()),                      lambda: ss.Sim(plain_sir(), networks=ss.RandomNet(), n_agents=1000), 'mixing'),
     names      = (lambda: ss.Sim(unnamed(False)),                    lambda: ss.Sim(unnamed(True)),                        'name built from'),
-    pop        = (lambda: ss.Sim(string_sir(), stop=50),             lambda: ss.Sim(string_sir(), total_pop=1000, stop=50), 'people'),
-    stop       = (lambda: ss.Sim(string_sir(), total_pop=1000),      lambda: ss.Sim(string_sir(), total_pop=1000, stop=50), 'to 50'),
-    acquisition = (lambda: corpus.malaria(),                         lambda: ss.Sim(string_sir()),                         'acquisition'),
-    midpoint   = (lambda: ss.Sim(ss.Disease(infection=ss.transmission('S -> I', beta=ss.par(bounds=[0.1, 0.5])), name='sir')),
-                  lambda: ss.Sim(ss.Disease(infection=ss.transmission('S -> I', beta=ss.par(0.3, bounds=[0.1, 0.5])), name='sir')), 'middle of its bounds'),
+    pop        = (lambda: ss.Sim(plain_sir(), stop=50),             lambda: ss.Sim(plain_sir(), total_pop=1000, stop=50), 'people'),
+    stop       = (lambda: ss.Sim(plain_sir(), total_pop=1000),      lambda: ss.Sim(plain_sir(), total_pop=1000, stop=50), 'to 50'),
+    acquisition = (lambda: corpus.malaria(),                         lambda: ss.Sim(plain_sir()),                         'acquisition'),
+    midpoint   = (lambda: ss.Sim(fitted_sir(ss.par(bounds=[0.1, 0.5]))), lambda: ss.Sim(fitted_sir(ss.par(0.3, bounds=[0.1, 0.5]))), 'middle of its bounds'),
 )
 not_marked = dict() # Guesses that describe() does not mark yet, with the reason
 
@@ -88,12 +78,6 @@ def test_guesses_marked(row):
 
 # %% Streams are independent
 
-def two_sirs(names=('a', 'b'), solver='binomial', **kwargs):
-    """ Two SIRs that share no states, in one sim """
-    mods = [corpus.make_sir(name=name) for name in names]
-    return ss.Sim(mods, solver=solver, total_pop=10_000, unit='day', stop=100, verbose=0, **kwargs)
-
-
 class Counter(ss.Analyzer):
     """ An analyzer that changes nothing """
     compartmental = True
@@ -106,18 +90,18 @@ class Counter(ss.Analyzer):
 def test_streams(solver):
     sc.heading(f'Testing that random streams are independent under {solver}')
     agents = dict(n_agents=2000) if solver == 'abm' else {}
+    two_sirs = lambda *names: ss.Sim([corpus.make_sir(name=name) for name in names], solver=solver, unit='day', stop=100, total_pop=10_000, verbose=0, **agents) # Two SIRs that share no states
     alone = corpus.sir(solver=solver, unit='day', **agents).run().results.sir.n_I.values
 
     # An analyzer, or an unrelated disease, does not change the draws of a disease, whether the run is whole or stepped
     withan = corpus.sir(solver=solver, unit='day', analyzers=Counter(), **agents).run().results.sir.n_I.values
     assert np.array_equal(alone, withan), 'An analyzer changed the draws'
     for profile in [False, True]: # Profiling makes the run step from Python
-        both = ss.Sim([corpus.make_sir(), corpus.make_sir(name='other')], solver=solver, unit='day', stop=100, total_pop=10_000, verbose=0, **agents)
-        both = both.run(profile=profile).results.sir.n_I.values
+        both = two_sirs('sir', 'other').run(profile=profile).results.sir.n_I.values
         assert np.array_equal(alone, both), f'Another disease changed the draws (profile={profile}): max difference {np.abs(alone - both).max():n}'
 
     # Two identical diseases whose names are anagrams have their own streams
-    ab = two_sirs(('ab', 'ba'), solver=solver, **agents).run().results
+    ab = two_sirs('ab', 'ba').run().results
     assert not np.array_equal(ab.ab.n_I.values, ab.ba.n_I.values), 'Two modules got the same stream'
 
     if solver != 'abm':
@@ -214,8 +198,7 @@ def test_exit_order(solver):
         exits = {key:I >> dests[key] @ ss.perday(1.0) for key in order} # Three equal exits, fast compared with the step
         dis = ss.Disease(I, *dests.values(), **exits, name='exits')
         agents = dict(n_agents=20_000) if solver == 'abm' else {}
-        pars = dict(solver='gillespie', total_pop=1e8) if solver == 'tau' else dict(solver=solver, total_pop=100_000) # Tau-leaping is gillespie's way with a run of too many events
-        sim = ss.Sim(dis, unit='day', stop=5, verbose=0, **pars, **agents).run()
+        sim = ss.Sim(dis, unit='day', stop=5, solver=solver, total_pop=100_000, verbose=0, **agents).run()
         assert sim.solver == solver
         res = sim.results.exits
         left = np.array([res[f'n_{k.upper()}'][-1] for k in 'abc'])
@@ -278,7 +261,7 @@ def test_conservation(name):
             continue
         sim = corpus.models[name](solver=solver, total_pop=10_000).run()
         for mod in sim.declared:
-            total = sum(mod.results[f'n_{state}'].values for state in people_states(sim, mod))
+            total = sum(mod.results[f'n_{state.name}'].values for state in mod.graph.people_states)
             assert np.allclose(total, total[0], rtol=1e-9), f'{name} under {solver}: the population of {mod.name} goes from {total[0]:n} to {total[-1]:n}'
     return
 
@@ -287,14 +270,16 @@ def test_identities():
     sc.heading('Testing constant-rate decay and a fixed branch share against their exact values')
 
     # Constant-rate decay is exponential
-    decay = ss.Disease(recovery=ss.progression('I -> R', rate=ss.perday(0.1)), name='decay')
+    I, R = ss.states('I R')
+    decay = ss.Disease(recovery=ss.Transition(I, R, rate=ss.perday(0.1)), name='decay')
     res = ss.Sim(decay, total_pop=1e6, unit='day', stop=50, solver='ode', verbose=0).run().results.decay
     t = np.arange(51)
     assert np.allclose(res.n_I.values, 1e6*np.exp(-0.1*t), rtol=1e-5) # RK4's error is about 1e-7 a step at this rate
 
     # A fixed branch share is the share that leaves by each branch
     for solver in ['ode', 'binomial', 'abm']:
-        branch = ss.Disease(course=ss.progression('I -> R | D', dur=5, p=[None, 0.2]), name='branch')
+        I, R, D = ss.states('I R D')
+        branch = ss.Disease(course=ss.Transition(I, [R, D], dur=5, p=[None, 0.2]), name='branch')
         agents = dict(n_agents=50_000) if solver == 'abm' else {}
         res = ss.Sim(branch, total_pop=1e6, unit='day', stop=100, solver=solver, verbose=0, **agents).run().results.branch
         share = res.n_D[-1]/(res.n_R[-1] + res.n_D[-1])
@@ -340,30 +325,27 @@ def test_acquisition():
     return
 
 
-# %% Behavior: a regression, a counter, a table over the destinations, and a clock
+# %% Behavior: a regression, a counter, and a table over the destinations
 
-def behavior(solver, seed=1, n=5000):
-    """ A choice of method: a regression over two boolean dimensions and a counter, a switching row by age and destination, and a clock since the last birth """
+def behavior(solver, seed=1, n=2000):
+    """ A choice of method: a regression over two boolean dimensions and a counter, and a switching row by age and destination (a clock since the last birth is agents only: see test_dimensions.py::test_clocks) """
     from scipy.special import expit
     none, pill, iud, P = ss.states('none pill iud P')
     p_use = expit(-1.0 + 0.5*ss.ppl.urban + 0.3*ss.ppl.edu + 0.4*ss.ppl.parity) # Parity is a counter, so is exact as compartments
     mix = ss.par(ss.by(dict(age=[0, 0, 30, 30], to=['pill', 'iud', 'pill', 'iud'], value=[0.7, 0.3, 0.4, 0.6]))) # A row of the switching matrix by age, over the destinations
-    pp = ss.par(ss.by(dict(since_birth=[None, 0, 6], value=[1.0, 2.0, 1.0]))) # More start in the six months after a birth
-    act = ss.par(ss.by(dict(since_birth=[None, 0, 3, 12], value=[1.0, 0.0, 0.5, 1.0]))) # And conceive less
     contra = ss.Disease(none, pill, iud, P,
-        start    = ss.Transition(none, [pill, iud], rate=ss.peryear(0.3)*p_use*pp, p=[mix]),
+        start    = ss.Transition(none, [pill, iud], rate=ss.peryear(0.3)*p_use, p=[mix]),
         stop     = ss.Transition(pill, none, rate=ss.peryear(0.2)),
         remove   = ss.Transition(iud, none, rate=ss.peryear(0.1)),
-        conceive = ss.Transition(none, P, rate=ss.peryear(0.2)*act),
-        deliver  = ss.Transition(P, none, dur=ss.months(9), increment='parity', move=dict(since_birth=0)),
-        mix=mix, pp=pp, act=act, name='contra')
+        conceive = ss.Transition(none, P, rate=ss.peryear(0.2)),
+        deliver  = ss.Transition(P, none, dur=ss.months(9), increment='parity'),
+        mix=mix, name='contra')
     size = dict(n_agents=n) if solver == 'abm' else dict(total_pop=n)
     sim = ss.Sim(contra, solver=solver, rand_seed=seed, start=2000, stop=2006, dt=ss.months(1), use_aging=False, verbose=0, **size)
     sim.stratify(age=[0, 30])
     sim.stratify(urban=[False, True], split=[0.4, 0.6])
     sim.stratify(edu=[False, True], split=[0.5, 0.5])
     sim.stratify(parity=[0, 1, 2, 3])
-    sim.stratify(since_birth=ss.months([0, 3, 6, 12]), kind='clock')
     return sim
 
 
@@ -376,7 +358,7 @@ def behavior_shares(sim):
 
 @sc.timer()
 def test_behavior_solvers():
-    sc.heading('Testing that a module of behavior (a regression, a counter, a table over the destinations, and a clock) has the same shares by method and age under every solver')
+    sc.heading('Testing that a module of behavior (a regression, a counter, and a table over the destinations) has the same shares by method and age under every solver')
     ode = behavior_shares(behavior('ode').run())
     sim = behavior('binomial', n=1_000_000)
     sim.pars.substeps = 10 # Whole steps of the chain binomial would lengthen the 9 months pregnant by half a step (6% more pregnant)
@@ -389,6 +371,105 @@ def test_behavior_solvers():
     return ode
 
 
+# %% Code beside a declared model
+
+class Watch(ss.Analyzer):
+    """ An analyzer that only reads a count, saying nothing about solvers """
+    def init_post(self):
+        super().init_post()
+        self.seen = []
+        return
+
+    def step(self):
+        self.seen.append(self.sim.diseases.sir.I.n)
+        return
+
+
+class NumpySIS(ss.Module):
+    """ An ODE of its own, in plain NumPy, with Euler steps of a day """
+    def init_post(self):
+        super().init_post()
+        self.y = np.array([0.99, 0.01])
+        return
+
+    def step(self):
+        S, I = self.y
+        flow = (0.3*S*I - 0.1*I)*self.t.dt.days
+        self.y = np.array([S - flow, I + flow])
+        return
+
+
+class Tagger(ss.Intervention):
+    """ An intervention written as code, which works on agents """
+    def step(self):
+        return self.sim.diseases.sir.S.uids
+
+
+def test_coded_beside():
+    sc.heading('Testing that code beside a declared model does not change its solver unless it needs agents')
+    alone = corpus.sir(unit='day').run()
+    assert alone.solver == 'ode'
+
+    # An analyzer that reads counts, or a NumPy ODE of its own, runs beside the compartments, and the declared model's results are unchanged
+    watched = corpus.sir(unit='day', analyzers=Watch()).run()
+    assert watched.solver == 'ode', f'An analyzer changed the solver to {watched.solver}'
+    assert np.array_equal(watched.results.sir.n_I.values, alone.results.sir.n_I.values)
+    assert np.allclose(watched.analyzers.watch.seen, alone.results.sir.n_I.values[:len(watched.analyzers.watch.seen)])
+    numpy = corpus.sir(unit='day', connectors=NumpySIS()).run()
+    assert numpy.solver == 'ode' and np.array_equal(numpy.results.sir.n_I.values, alone.results.sir.n_I.values)
+    assert numpy.connectors.numpysis.y[1] > 0.5 # Its own model ran (to near 1 - 0.1/0.3)
+
+    # Code that says it needs agents, and an intervention written as code, make the model run as agents
+    class Agentish(Watch):
+        compartmental = False
+    for mod in [Agentish(), Tagger()]:
+        sim = corpus.sir(unit='day', n_agents=2000, **{'analyzers' if isinstance(mod, ss.Analyzer) else 'interventions':mod}).init()
+        assert sim.solver == 'abm', f'{type(mod).__name__} should need agents'
+    with pytest.raises(ss.CapabilityError):
+        corpus.sir(unit='day', interventions=Tagger(), solver='ode').init()
+    return numpy
+
+
+def test_joint_population():
+    sc.heading('Testing diseases tracked jointly: the same people in each, as a joint model written by hand, within a budget')
+    def pair(solver='auto', **kwargs):
+        S, I = ss.states(2)
+        a = ss.Disease(S, I, infection=S >> I @ ss.peryear(0.5)*I, death=ss.Transition(I, ss.null, dur=2), init_prev=0.1, name='a')
+        S, I = ss.states(2)
+        b = ss.Disease(S, I, infection=S >> I @ ss.peryear(0.3)*I, recovery=ss.Transition(I, S, dur=3), init_prev=0.1, name='b')
+        return ss.Sim([a, b], total_pop=20_000, stop=2030, solver=solver, verbose=0, **kwargs)
+
+    # Dying of one disease leaves the other too, though neither refers to the other (b kept all 20,000 people, with 1,642 left in a)
+    for solver in ['ode', 'binomial']:
+        sim = pair(solver).run()
+        res = sim.results
+        assert sim.crossings and np.allclose(res.a.n_S + res.a.n_I, res.b.n_S + res.b.n_I)
+
+    # The same as the joint model written as one disease, whose states are the combinations
+    SS, SI, IS, II = ss.states('SS SI IS II')
+    ba, bb = ss.peryear(0.5), ss.peryear(0.3)
+    joint = ss.Disease(SS, SI, IS, II, a1=SS >> IS @ ba*(IS + II), a2=SI >> II @ ba*(IS + II), b1=SS >> SI @ bb*(SI + II), b2=IS >> II @ bb*(SI + II),
+                       r1=SI >> SS @ ss.years(3), r2=II >> IS @ ss.years(3), d1=ss.Transition(IS, ss.null, dur=2), d2=ss.Transition(II, ss.null, dur=2),
+                       init=dict(SS=0.81, SI=0.09, IS=0.09, II=0.01), name='ab')
+    j = ss.Sim(joint, total_pop=20_000, stop=2030, verbose=0).run().results.ab
+    res = pair().run().results
+    assert np.allclose(res.a.n_I.values, j.n_IS.values + j.n_II.values, rtol=1e-9) and np.allclose(res.b.n_I.values, j.n_SI.values + j.n_II.values, rtol=1e-9)
+
+    # Above the budget, auto runs agents, and a compartmental solver that was asked for stops before anything is made
+    with ss.options.context(max_joint=3):
+        sim = pair().init()
+        assert sim.solver == 'abm' and 'max_joint' in sim.solver_reason
+        with pytest.raises(ss.CapabilityError, match='max_joint=4'):
+            pair('ode').init()
+    S, A, B, I = ss.states('S A B I') # A first state that splits on entry has no joint form yet: auto runs agents rather than stopping
+    split = ss.Disease(S, A, B, I, split=ss.Transition(S, [A, B], p=[0.5, None], dur=0), inf=A >> I @ ss.peryear(0.5)*I, init=dict(I=0.1), name='a')
+    assert ss.Sim([split, ss.SIS(name='b')], demographics=ss.death(rate=ss.peryear(0.01)), total_pop=1000, stop=2010, verbose=0).init().solver == 'abm'
+    text = pair().init().describe(output=True)
+    assert 'a × b: 2 × 2 = 4 joint states of people' in text and 'people die of a' in text and 'start independent' in text
+    assert 'plan         a, b: in the kernels, the whole run in one call; a × b as one program' in text
+    return j
+
+
 if __name__ == '__main__':
     T = sc.timer()
     for row in guesses:
@@ -399,4 +480,5 @@ if __name__ == '__main__':
     for name in corpus.compartmental:
         test_solvers_agree(name)
     behavior = test_behavior_solvers()
+    joint = test_joint_population()
     T.toc()

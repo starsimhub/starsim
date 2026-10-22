@@ -18,12 +18,12 @@ def make_sim_pars(beta=0.1, **kwargs):
     pars = sc.objdict(
         n_agents = n_agents,
         start = 2000,
+        dur = 10,
         demographics = True,
         networks = 'random',
         diseases = sc.objdict(type='sis', beta=beta), # To allow for modification later
-        **kwargs,
     )
-    return pars
+    return sc.objdict(pars, **kwargs)
 
 
 class BySex(ss.Analyzer):
@@ -33,7 +33,7 @@ class BySex(ss.Analyzer):
         self.define_results(ss.Result('n_infected', columns=['female', 'male'], label='Infected'))
 
     def step(self):
-        infected = self.sim.diseases.sis.infected
+        infected = self.sim.diseases.sis.I
         female = self.sim.people.female
         self.results.n_infected[self.ti] = [np.count_nonzero(infected & female), np.count_nonzero(infected & ~female)]
 
@@ -48,15 +48,7 @@ def test_parallel():
     msim = ss.MultiSim([ss.Sim(pars, label='Sim1'), ss.Sim(pars, label='Sim2')])
     msim.run(shrink=False)
     s1, s2 = msim.sims
-    assert np.allclose(s1.summary[:], s2.summary[:], rtol=0, atol=0, equal_nan=True), "Sims don't match and should"
-
-    # Check that two non-identical sims don't match
-    pars2 = sc.dcp(pars)
-    pars2.diseases.beta *= 2
-    sims = ss.MultiSim([ss.Sim(pars, label='Sim1'), ss.Sim(pars2, label='Sim2')])
-    sims.run(shrink=False)
-    s1, s2 = sims.sims
-    assert not np.allclose(s1.summary[:], s2.summary[:], rtol=0, atol=0, equal_nan=True), "Sims do match and shouldn't"
+    assert np.allclose(s1.summary[:], s2.summary[:], rtol=0, atol=0, equal_nan=True), "Sims don't match and should" # That non-identical sims don't is checked in test_other()
 
     # Workers started by forkserver, as they are once Numba's or JAX's threads have started here, give the same runs, with a lambda in the sim
     make = lambda: [ss.Sim(make_sim_pars(interventions=lambda sim: None), rand_seed=i) for i in range(2)]
@@ -125,7 +117,7 @@ def test_multisim_construction(do_plot=False):
     def make_sims(n=2):
         sims = sc.autolist()
         for beta in 0.1*np.random.rand(n):
-            pars = make_sim_pars(beta=beta, dur=20, rand_seed=np.random.randint(999))
+            pars = make_sim_pars(beta=beta, rand_seed=np.random.randint(999))
             sims += ss.Sim(pars=pars, label=f'{beta=}')
         return sims
     
@@ -137,7 +129,7 @@ def test_multisim_construction(do_plot=False):
     
     # Check that run works
     for msim in [m1, m2, m3, m4]:
-        msim.run()
+        msim.run(parallel=msim is m4) # Only one in parallel, to save starting workers
         if do_plot:
             msim.plot()
     
@@ -148,7 +140,7 @@ def test_multisim_construction(do_plot=False):
 def test_combine_merge():
     """ Test MultiSim combine(), compare(), merge() and split() """
     sc.heading('Testing MultiSim combine, compare, merge, and split')
-    msim = ss.MultiSim(ss.Sim(make_sim_pars(analyzers=BySex(), dur=10)), n_runs=3)
+    msim = ss.MultiSim(ss.Sim(make_sim_pars(analyzers=BySex())), n_runs=3)
     msim.run(parallel=False)
     sims = msim.sims
 
@@ -165,7 +157,7 @@ def test_combine_merge():
     df = msim.compare(output=True)
     assert df.shape[1] == 3 and 'bysex_n_infected_male' in df.index # One column per sim, one row per result
     assert msim.compare(t=-1, output=True).loc['sis_cum_infections'].tolist() == [s.results.sis.cum_infections[-1] for s in sims]
-    msim.plot_compare(t='2005-01-01')
+    msim.compare(t='2005-01-01', do_plot=True)
 
     # Merge and split
     m1, m2 = msim.split(chunks=[1,2])
@@ -190,15 +182,7 @@ def test_other():
     assert not s1.initialized
     ss.parallel(s1, s2, inplace=True)
     assert not np.allclose(s1.summary[:], s2.summary[:], rtol=0, atol=0, equal_nan=True), "Sims do match and shouldn't"
-
-    # Check single run
-    s3 = ss.Sim(pars)
-    s4 = ss.Sim(pars)
-    s3 = ss.single_run(s3)
-    s4 = ss.single_run(s4, n_agents=2000)
-    assert not np.allclose(s3.summary[:], s4.summary[:], rtol=0, atol=0, equal_nan=True), "Sims do match and shouldn't"
-
-    return s3,s4
+    return s1,s2
 
 
 if __name__ == '__main__':

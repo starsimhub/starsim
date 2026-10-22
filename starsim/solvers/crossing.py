@@ -31,14 +31,18 @@ class Crossing:
     those rates, so each disease's moves (e.g. through the stages of a dwell time) are drawn as they
     would be for it alone. The program's compartments (`y`) are the one copy of the people: each engine
     takes its view of them again after each step, and after anything in Python changes them (`put()`).
+    Its size is counted before it is made (see `ss.solvers.choose.joint_layout()`), and kept within
+    `ss.options.max_joint`; `sim.describe()` shows it, with the memory a whole run takes.
 
     Args:
         sim (`ss.Sim`): the sim
         names (list): the names of the diseases
+        reasons (list): why they are tracked jointly (see `ss.solvers.choose.crossing_groups()`)
     """
-    def __init__(self, sim, names):
+    def __init__(self, sim, names, reasons=None):
         self.sim = sim
         self.names = names
+        self.reasons = reasons or []
         self.engines = []
         self.layout = None # Where each engine's compartments and flows are in the program: see init_layout()
         self.program = None # The program of the diseases together: see build()
@@ -46,6 +50,7 @@ class Crossing:
         self.y = None # Its compartments, by group
         self.pending = dict() # The tables of each engine that has worked out its rates for the current step: see step()
         self.outs = None # The output of a whole run, for each engine that has not taken it yet: see whole_run()
+        self.compiled = None # Whether the run is taken by the compiled kernels or as plain Python, once chosen: see kernels()
         self.jax_run = None # The run in JAX, if one has been made: see ss.gradients
         self._lead = None
         return
@@ -69,12 +74,25 @@ class Crossing:
         """ Forget any step half taken, and any whole run not yet handed out, before the run starts again """
         self.pending.clear()
         self.outs = None
+        self.compiled = None
         return
 
     def shrink(self):
         """ Drop the arrays the run worked in, for saving """
         ss.shrink(self, ['sim', 'program', 'y', 'layout', 'pieces', 'register', 'shifts', 'jax_run', 'outs'])
         return
+
+    def describe(self):
+        """ For `sim.describe()`: the size of the program, the memory a whole run of it takes, and what is assumed """
+        npts = self.engines[0].mod.t.npts
+        flows = sum(len(e.flows)*L.O for e,L in zip(self.engines, self.layout)) # The program's
+        rates = sum(len(e.flows)*e.n_groups for e in self.engines) + flows*self.n_cols # The rate and multiplier of each flow, in each engine's groups and in the program's
+        kept = npts*(2*rates + (self.n_rows + self.n_trans + self.n_movers)*self.n_cols)*8 # Those at each step, and the compartments and flows at each time point
+        budget = ss.options.max_joint
+        size = f'{self.n_rows:,} compartments in each of {self.n_cols:,} group{"s" if self.n_cols != 1 else ""} ({self.n_rows*self.n_cols:,} in all)'
+        return [size + (f', within ss.options.max_joint ({budget:,})' if budget else ''),
+                f'a whole run takes about {f"{kept/1e9:.2g} GB" if kept >= 1e9 else f"{kept/1e6:.2g} MB"} for its rates and its results by group',
+                'assumed: the diseases start independent of each other (the share in each state of one is the same in every state of the others), and step together, at one timestep']
 
     #%% The people
 
@@ -124,7 +142,7 @@ class Crossing:
         if sim.mixing.register is not None: # The events dated at the start, for everyone
             lead = sim.get_declared(self.lead).engine
             self.register = self.join_register(lead.init_register())
-            lead.check_short(ss.kernels.apply_events(lead.make_rng(stream=2), self.y, self.register, 0, lead.integer))
+            lead.check_short(self.kernels().apply_events(lead.make_rng(stream=2), self.y, self.register, 0, lead.integer))
         for engine in self.engines:
             engine.y = self.gather(engine)
             engine.record_stocks()
@@ -416,9 +434,6 @@ class Crossing:
                 chain.append((0, -1, -1))
             for i in range(len(p.starts) - len(p.src) - 1): # Each conveyor, for each combination of the others' compartments (see ss.kernels.convey())
                 a, b = p.starts[len(p.src)+i], p.starts[len(p.src)+i+1]
-                if p.ops[a] != kn.CONVEY:
-                    raise ss.CapabilityError(f'"{self.names[k]}" sets a count each step (ss.update), which cannot run with solver="{self.sim.solver}" in diseases tracked jointly yet.\n'
-                                             f'     Run with solver="abm".')
                 for o in range(O):
                     conveyors.append([n_flows + p.args[a]*O + o] + list(L.rowmap[p.args[a+1:b], o]))
             self.pieces.flows.append(pairs(F, FC))
@@ -467,7 +482,7 @@ class Crossing:
             mult       = np.ones((nf, R)),
             depth      = max(p.depth for p in progs) + 1,
             starts     = arr(starts),
-            ops        = arr(ops),
+            ops        = kn.check_ops(arr(ops)),
             args       = arr(args),
             consts     = np.zeros((n_consts, R)),
             set_starts = ends(setlist),
@@ -666,11 +681,24 @@ class Crossing:
         J = self.numbers([dict(zip(['fixed', 'mult', 'consts', 'rel_trans'], engine.tables(start, stop))) for engine in self.engines], reps=reps)
         return [np.ascontiguousarray(J[key]) for key in ['fixed', 'mult', 'consts', 'rel_trans']]
 
+    def kernels(self, runs=1):
+        """ The kernels to take the run (or `runs` runs) with, compiled or as plain Python, chosen once for a run: see `ss.kernels.choose()` """
+        if runs == 1 and self.compiled is not None:
+            return ss.kernels if self.compiled else ss.kernels.uncompiled()
+        sim = self.sim
+        if self.program is None: # Before the program is made (the events of a register at the start), as the kernels are now
+            return ss.kernels.choose(verbose=False)
+        solver = ss.kernels.solvers[sim.integrator if sim.solver == 'ode' else sim.solver]
+        kn = ss.kernels.choose(runs*ss.kernels.plain_seconds(self.program, self.y, self.engines[0].mod.t.npts, solver), verbose=sim.pars.get('verbose', 0))
+        if runs == 1:
+            self.compiled = kn is ss.kernels
+        return kn
+
     def run(self):
         """ A whole run of the diseases together, in one call to the kernels: returns, for each engine, what `ss.kernels.run()` does """
         args, tables, per_step = self.run_args()
         tally = np.zeros((args[3], 0, 2, self.n_cols))
-        y, stocks, flows, short = ss.kernels.run(self.engines[0].make_rng(stream=1), *args, *tables, self.register, self.shifts, tally, per_step)
+        y, stocks, flows, short = self.kernels().run(self.engines[0].make_rng(stream=1), *args, *tables, self.register, self.shifts, tally, per_step, 0)
         self.y = y
         return [self.split(k, y, stocks, flows) + (short if k == 0 else 0.0,) for k in range(len(self.engines))]
 
@@ -721,11 +749,12 @@ class Crossing:
         else:
             tables = tuple(np.ascontiguousarray(J[key]) for key in ['fixed', 'mult', 'consts', 'rel_trans'])
         first = self.engines[0]
-        self.y, flows = ss.kernels.one_step(self.rng, self.y, p, first.dt, ss.kernels.solvers[solver], first.substeps(), tables, row)
+        kn = self.kernels()
+        self.y, flows = kn.one_step(self.rng, self.y, p, first.dt, ss.kernels.solvers[solver], first.substeps(), tables, row)
         if sim.mixing.register is not None: # The events dated at the end of the step
-            sim.get_declared(self.lead).engine.check_short(ss.kernels.apply_events(self.rng, self.y, self.register, first.mod.ti + 1, first.integer))
+            sim.get_declared(self.lead).engine.check_short(kn.apply_events(self.rng, self.y, self.register, first.mod.ti + 1, first.integer))
         if solver == 'gillespie' and p.local and p.has_det: # By place, the counts are settled after the events, as in SimInf
-            ss.kernels.settle_places(self.y, p, first.dt, flows)
+            kn.settle_places(self.y, p, first.dt, flows)
         recorded = []
         for k,e in enumerate(self.engines):
             L = self.layout[k]
@@ -760,9 +789,10 @@ class Crossing:
         ys = np.repeat(y0[None], n_runs, axis=0)
         length = max(int(50e6//((len(program.fixed) + len(program.mult) + len(program.consts) + len(program.rel_trans))*per_step*R*8)), 1) # Steps per part, as in ss.solvers.Compartmental.run_many()
         start = 0
+        kn = self.kernels(runs=n_runs)
         while True:
             end = min(start + length, npts - 1)
-            ss.kernels.run_many(rngs, ys, program, dt, start, end + 1, solver, n_sub, *self.tables(start, end), self.register, self.shifts, stocks, flows, stocks_g, flows_g,
+            kn.run_many(rngs, ys, program, dt, start, end + 1, solver, n_sub, *self.tables(start, end), self.register, self.shifts, stocks, flows, stocks_g, flows_g,
                                 tally, tally_g, np.arange(nc), np.zeros(0, dtype=int) if rows is None else rows, grp_state, grp_flow, per_step)
             if end >= npts - 1:
                 break

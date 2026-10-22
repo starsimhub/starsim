@@ -77,8 +77,8 @@ There is no switching demo for NumPy users, since a NumPy model is whatever its 
 | A chain binomial, an ODE, or agents from one model | **Works**: `solver='binomial'`, `'ode'`, `'gillespie'`, or `'abm'`, above |
 | An array axis for age or place, with a contact matrix or mixing between places | **Works**: `seir.stratify(age=[0, 5, 18, 65])` and `ss.contacts()`, or `ss.geo()` and `ss.Mobility()` for places; see [Coming from odin](odin.qmd) and [Coming from LASER](laser.qmd) |
 | Many runs over seeds, with ranges | **Works**: `sim.run(n_runs=)` runs them in parallel; `msim.results` has a run axis first, and `res.quantiles()` gives the ranges |
-| Fitting to data | **Works**: `sim.calibrate()` chooses the method from the model (by gradients for an ODE, by particle MCMC or by simulation for a stochastic model) |
-| Anything the loop does that is not a flow between states (a running maximum, a rule in Python) | **Works** for a count set each step from the model (`ss.update()`); anything else is a module written as code, with a `step()` in Python |
+| Fitting to data | **Works**: `sim.calibrate()` chooses the method from the model (by gradients for an ODE, by simulation for a stochastic model), and gives a posterior when one is asked for (`method='nuts'`, `'pmcmc'`, or `'abc-smc'`) |
+| Anything the loop does that is not a flow between states (a running maximum, a rule in Python) | **Works**: a module written as code, with a `step()` in Python; a value it keeps can be read by a function in a rate, which runs as agents |
 | Speed for a small model run once | **Slower**: 13 ms against 0.7 ms (above), which is under the north star's limit but 18 times slower |
 
 ## Bringing your model in

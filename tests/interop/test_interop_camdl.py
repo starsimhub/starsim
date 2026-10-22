@@ -92,7 +92,7 @@ def test_camdl_flat():
     m['observations'] = []
     m['initial_conditions'] = {'S_a': {'deterministic': {'const': 990.0}}, 'S_b': {'deterministic': {'const': 1000.0}}, 'I_a': {'deterministic': {'const': 10.0}}}
     m['interventions'] = [{'name': 'seed', 'kind': 'event', 'fire': {'scheduled': {'at_times': [10.0]}}, 'actions': [{'add': {'compartment': 'I_b', 'count': {'const': 5.0}}}]}]
-    with pytest.warns(ss.ImportIncomplete):
+    with pytest.warns(ss.errors.ImportIncomplete):
         sim = load_camdl(ir, pars=dict(rho=0.5, k=1), **kw)
     skipped = [name for name,why in sim.imported.incomplete]
     assert 'season' in skipped and 'seed' in skipped, 'the time function and the event should be listed'
@@ -107,7 +107,7 @@ def test_camdl_flat():
         terms[1] = {'cond': {'pred': op('gt', {'binding_ref': 'N_b'}, {'const': 0.0}), 'then': terms[1], 'else': {'const': 0.0}}}
     m['initial_conditions'].pop('S_b')
     m['interventions'] = []
-    with pytest.warns(ss.ImportIncomplete): # The time function is still there
+    with pytest.warns(ss.errors.ImportIncomplete): # The time function is still there
         sim = load_camdl(ir, pars=dict(rho=0.5, k=1), **kw)
     sim.run()
     assert np.isfinite(sim.results.sir.n_I_a.values).all() and sim.results.sir.n_R_a.values[-1] > 100, 'the empty group should not stop the epidemic'
@@ -138,7 +138,7 @@ def test_camdl_golden():
     sc.heading('Testing camdl\'s golden models')
     for path in sorted(golden.glob('*.ir.json')):
         with warnings.catch_warnings():
-            warnings.simplefilter('ignore') # Most list something in ss.ImportIncomplete
+            warnings.simplefilter('ignore') # Most list something in ss.errors.ImportIncomplete
             sim = load_camdl(str(path), **kw)
             sim.pars.verbose = 0
             if path.name == 'phenom_mixing_unchecked.ir.json': # camdl's example of a count used for a share, with its unit check turned off: far too fast for the step, so the run stops rather than give numbers that are not
@@ -180,5 +180,6 @@ if __name__ == '__main__':
     sim2 = test_camdl_flat()
     sim3 = test_camdl_file()
     sim5 = test_camdl_golden()
-    sim4 = test_pycamdl(sc.path(tempfile.mkdtemp()))
+    with tempfile.TemporaryDirectory() as tmp:
+        sim4 = test_pycamdl(sc.path(tmp))
     T.toc()

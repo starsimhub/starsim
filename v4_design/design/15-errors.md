@@ -14,7 +14,7 @@ A message is read once, by an epidemiologist or by an AI writing a model for one
 
 Every named error SHOULD have:
 
-1. **A name**, the exception class, such as `ss.UnknownParameter`. Names are stable across versions so they can be searched for and documented, and caught: `except ss.UnknownParameter`, or `except ss.CodedError` for any of them. (Drafts of this specification numbered them, e.g. `E602 UnknownParameter`; the numbers were dropped.)
+1. **A name**, the exception class, such as `ss.errors.UnknownParameter`. Names are stable across versions so they can be searched for and documented, and caught: `except ss.errors.UnknownParameter`, or `except ss.CodedError` for any of them. (Drafts of this specification numbered them, e.g. `E602 UnknownParameter`; the numbers were dropped.)
 2. **One line saying what is wrong**, using the names the user gave things.
 3. **What to do about it**, as code the user could paste where possible, with the closest matching names for anything misspelled (and none when nothing is close).
 
@@ -44,28 +44,27 @@ The table below is made from the code (`ss.errors.catalog()`, from the docstring
 
 <!-- catalog start -->
 
-61 names: 44 errors, 7 warnings, and 10 notes. Each is `ss.<Name>`; the errors are subclasses of `ss.CodedError` (itself a `ValueError`), and the warnings and notes of `ss.StarsimWarning` (itself a `RuntimeWarning`).
+59 names: 43 errors, 7 warnings, and 9 notes. Each is `ss.errors.<Name>` (and `ss.CapabilityError` is also at the root, as `ss.CapabilityError`); the errors are subclasses of `ss.CodedError` (itself a `ValueError`), and the warnings and notes of `ss.StarsimWarning` (itself a `RuntimeWarning`).
 
 | Name | Kind | When |
 |---|---|---|
 | `IncompatibleTypes` | error (also a `TypeError`) | Typed quantities are combined in a way that has no meaning, such as adding an `ss.per` to an `ss.prob` or `ss.freq`, or a number to a rate; names both types |
 | `WrongDimension` | error (also a `TypeError`) | Typed arithmetic whose result has no type (a rate times a rate, a duration times a duration), or typed values that give a slot the wrong dimension: a rate times a duration, or a duration, in `rate=` or after `@`; a rate in `dur=`; both `beta` and `n_contacts` carry a time unit; or a typed rate as `beta` on a network with acts (acts per unit time times a rate per unit time is not a hazard), or inside `ss.peract` |
 | `ReservedName` | error | A state, transition, parameter, or result is named like an attribute of `ss.Module` (`step`, `results`, `pars`, `describe`, `stratify`, `name`, `dt`, ...) |
-| `UnknownState` | error (also a `KeyError`) | States were declared explicitly and an arrow string or `source=` names one that was not. Lists the closest declared names. Not raised when states are inferred |
+| `UnknownState` | error (also a `KeyError`) | A state is named (in `init=`, `first=`, `states=`, a product, or a delivery) that the module does not have. Lists the closest names |
 | `BadBranchSplit` | error | Constant branch probabilities out of one state do not sum to 1, or `ss.null` is one of several destinations (a branch out of the model is a transition of its own) |
 | `DuplicateDeclaration` | error | Two members of a module are given the same explicit name, or a state is an endpoint of transitions in two modules |
 | `NonlinearExposure` | error | A rate is not linear in its bare states (`I ** 2`, `I / (I + K)`, or a term containing two bare states). Says to use `I.n` if a literal count was meant |
 | `UndrivenTransition` | error | A transition reaches build time with no rate, no duration, and no `p=` |
 | `UnnamedState` | error | A state made by `ss.states(3)` or `ss.State()` cannot be matched to a variable name when the module is built (two names for one object, a state built inline). Suggests `ss.states('S I R')` or `ss.State('S')` |
 | `ExposureToCount` | error | A bare state that does not hold people appears in a rate (`beta * W`). There is no contact with a reservoir to work out. Suggests `W.n` |
-| `SourceNeeded` | error | The string form of a transmission has no `source=`, and its destination leads on to a state that people then leave, as in an SEIR (`'S -> E'` then `'E -> I'` and `'I -> R'`), so the source cannot be guessed. Suggests `source='I'` |
 | `UnknownTransition` | error (also a `KeyError`) | `adjust=` names a transition that does not exist. Lists the ones that do |
 | `BadSplit` | error | `split=` has the wrong number of entries. (A split that does not sum to 1 is normalized, and `describe()` says so) |
 | `DuplicateStructuralDimension` | error | A model or sim is stratified by a dimension it already has, in another way. `stratify` works in place, so a notebook cell that is run twice stratifies it in the same way again, which does nothing (with a note) and is not this error. (Stratifying a disease by a people property the sim already has, with the same levels, only adds the adjustments and is not an error) |
 | `InvalidAdjustment` | error | A negative multiplier in `adjust=`. (A multiplier that pushes a probability above 1 is clipped, with a note) |
 | `PartialStratificationMixing` | error | Contacts are given by a dimension that some of the people who mix do not have: a state the dimension does not apply to (`states=`) is the origin or the source of a transmission, or the dimension has `where=`. There is no coordinate for those people to mix as |
 | `InconsistentDimension` | error | Two modules in one sim are stratified by the same people property (age, sex, place) with different groups. Names both modules and their groups, and suggests stratifying the sim: `sim.stratify(age=[...])` |
-| `NoGeography` | error | A movement model such as `ss.gravity()` is used on a dimension with no geography to supply distances |
+| `NoGeography` | error | A movement model such as `ss.geo.gravity()` is used on a dimension with no geography to supply distances |
 | `RouteMismatch` | error | A key of a per-layer `beta` dict matches no network or layer, or a network or layer has no key; a route has a `beta` of its own in a declared model; a `beta` is a positional pair (directions are named: `ss.peract(m2f=..., f2m=...)`); `ss.peract` is used on a route without acts, or names a direction the network does not have (or leaves one out, or has keys on a network with no sides), listing its directions; or a modifier's `route=` names no route |
 | `UnmodifiableTarget` | error | The target of `ss.modify` or `ss.change` cannot be resolved to a named numeric quantity (a plain number, a boolean state, a name that does not exist). Lists the closest names |
 | `UnknownEffect` | error (also a `KeyError`) | A product names something it cannot act on: a key of a product's `efficacy` that is not something it can act on in the disease, a `transition=` of a treatment that the disease does not have (or a cure with no single transition to leave by), or a sensitivity of a test for a state the disease does not have. Lists the valid names |
@@ -83,10 +82,10 @@ The table below is made from the code (`ss.errors.catalog()`, from the docstring
 | `TriggerLoop` | error | Moves with no wait (branches nobody waits in) lead back to a state they started from, so people passed through at once would never settle; names the loop |
 | `ClockOutsideDomain` | error | A clock (`X.time`, `(A | B).time`, `X.progress`) is read where it has no value: by a transition out of a state outside its states, or by a modifier whose `where=` is not inside them (at build; a `where=` that is a function is checked when it runs, where a NaN amount is an error) |
 | `NoScheduledDwell` | error | `X.progress` is read, but `X` has only rates out of it, so no dwell time is scheduled when people enter it |
-| `PeopleAndCounts` | error | A transition moves between states of people and states that are counts (not people); names them, and suggests `ss.State(people=True)` |
+| `PeopleAndCounts` | error | A transition moves between states of people and states that are counts (not people); names them, and says to leave out `people=False` if they are people |
 | `InitWhereNobodyIs` | error | `init=` gives people a state only at levels of the stratifications where the split puts nobody, so nobody would start there (given at some such levels only, it is a note) |
 | `CapabilityError` | error | The requested solver cannot run part of the model. Three cases: there is no sensible approximation (contact tracing, transmission trees, agent-only custom code); a function or condition asked for something that exists only per agent in a compartmental run; or an approximation would be needed and `approx=False`. Names the part, what it asked for, and what would fix it |
-| `TimeNotKept` | error | A declared disease run as agents keeps the time each agent entered a state (`ti_X`) only for the states whose times something reads: the engine (for scheduled exits and `after=`/`before=`), or code in the sim's modules (see `ss.Disease.times_read()`). Raised when code that was not found reads one of the others, e.g. a script after the run; names the array and says to set `ss.options.keep_times = True` |
+| `TimeNotKept` | error | A declared disease run as agents keeps the time each agent entered a state (`ti_X`) only for the states whose times the engine reads (for scheduled exits, clocks, and `after=`/`before=`), unless `ss.options.keep_times = True`. Raised when code reads one of the others, e.g. an analyzer or a script after the run; names the array and says to set the option |
 | `TimeOutsideSim` | error | A time given to a delivery (`start=`, a round in `at=`), `ss.modify` (`start=`), or `ss.change` (`at=`) is before the start of the sim or after its end. A `stop=` after the end is allowed, and means it never stops. A number is a time in the sim's unit (in a sim with dates, that long after the start), so the message says to write a calendar year as a date (`'2030'`) |
 | `MissingDimension` | error (also a `KeyError`) | An `ss.transfer` names a stratification the model does not have (a boolean coordinate that does not exist yet is created instead); or a transition uses a value by level of a dimension (`ss.by()`) that the states it moves have no level of |
 | `NothingToFit` | error | `calibrate()` or `sensitivity()` is called and no parameter has `bounds` |
@@ -101,7 +100,6 @@ The table below is made from the code (`ss.errors.catalog()`, from the docstring
 | `ImportIncomplete` | warning | An import could not translate something in the source. Lists each item by name, says what to ask an AI assistant with the `import-model` skill to finish it, and warns again when the sim is first run |
 | `UnitInferred` | note | The sim's unit was not given with `unit=` and was taken from `dt`, from `start` and `stop`, or from the typed values. Says which unit and where it came from (`unit='day' (from start and stop dates)`). Not said when nothing has a unit: time is then in timesteps and nothing was inferred |
 | `LargeStep` | note | `rate × dt > 0.1` for a converted rate, or a mean dwell time shorter than the step; says how far `rate × dt` is from `1 − exp(−rate × dt)` and points to `sim.check_dt()` |
-| `StateNotPeople` | note | A state was inferred to hold a count and not people, because no transition connects it to the module's first state (`state 'W' treated as a count, not people (no transition connects it to 'S')`). `ss.State(people=False)` confirms it and `ss.State(people=True)` overrides it; either silences the note |
 | `MatrixAggregated` | note | In a compartmental run, a contact matrix whose age groups are not the model's was aggregated to the model's groups, weighted by population. Names the matrix and both sets of groups. Agents use the matrix's own groups and get no note |
 | `OverlappingSet` | note | Two `set=` modifiers are active for the same people at once; the one later in the loop is used. Names both |
 | `ClippedToRange` | note | The modifiers of a rate, duration, or multiplier made it negative, so it was set to 0 where it was; or made the probabilities of the branches out of a state come to more than 1, so they were scaled to sum to 1. Said once per quantity |
@@ -117,7 +115,7 @@ The table below is made from the code (`ss.errors.catalog()`, from the docstring
 Some mistakes are ordinary Python usage errors and raise a plain `TypeError` or `ValueError` with a message in the same shape. They can be given names later if they turn out to be common:
 
 - giving both `rate=` and `dur=` to a transition, or more than one of `multiply=`, `add=`, `set=` to `ss.modify`;
-- a positional value after an arrow string (`ss.transmission('S -> I', 0.05)`);
+- a state's name where the state is meant (`ss.Transition(I, 'R', dur=10)`), which says to declare the states;
 - a set of sources without parentheses (`S | I | R >> D @ mu`);
 - using a lazy condition where Python needs a single truth value (`if`, `and`, `or`, `not`); the message says to use `&`, `|`, `~`.
 
@@ -131,4 +129,4 @@ Since the review of October 2026: the numbers were dropped, and each error, warn
 
 ## Documentation and tests
 
-The catalog above is the documentation of each name: the docstring of its class, which `help(ss.UnknownState)` also shows. A page per name with a minimal example that triggers it is not written yet. Every name SHOULD have a test that triggers exactly it ([18-conformance.md](18-conformance.md)); most errors have one, but about twenty names (most of the notes and warnings) are not yet triggered by name in any test ([deferred.md](../admin/deferred.md)).
+The catalog above is the documentation of each name: the docstring of its class, which `help(ss.errors.UnknownState)` also shows. A page per name with a minimal example that triggers it is not written yet. Every name SHOULD have a test that triggers exactly it ([18-conformance.md](18-conformance.md)); most errors have one, but about twenty names (most of the notes and warnings) are not yet triggered by name in any test ([deferred.md](../admin/deferred.md)).

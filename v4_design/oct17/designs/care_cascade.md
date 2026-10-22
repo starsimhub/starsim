@@ -399,6 +399,8 @@ A loop of immediate moves (a state whose immediate exit leads back to it with no
 
 ## Semantics under every solver
 
+**Update 2026-10-20 (S3.4 of [simplify_plan.md](../../oct20/simplify_plan.md)).** These became agents only, as Cliff decided: `|` and `&` of events, `.count`, `.since`, `delay=` (fixed or drawn), a test's `delay=`, `queue=` (both rows of the shared resource's table below), a product whose protection fades by a function of the time since delivery, and `disease=[...]`. Under `'auto'` a model with any of them runs as agents; an explicit compartmental solver raises one `CapabilityError` before the run, naming it. `.ever` keeps its two-level property; a test across several diseases' states keeps its exact form in their crossing. The rows below are the design as it was.
+
 | Feature | ODE | Binomial | Gillespie | Agents |
 |---|---|---|---|---|
 | an event | the expected number in each compartment and group | whole numbers, drawn | as binomial (deliveries happen at the time points) | UIDs |

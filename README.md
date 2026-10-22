@@ -131,13 +131,13 @@ The submodules of the Starsim folder are as follows:
 
 - `analyzers.py`: The Analyzers class (for performing analyses on the sim while it's running), and other classes and functions for analyzing simulations.
 - `arrays.py`: Classes to handle, store, and update states for people in networks in the simulation including living, mother, child, susceptible, infected, inoculated, recovered, etc.
-- `calibration.py`: Class to handle automated calibration of the model to data.
 - `connectors.py`: Classes for modulating interactions between modules (e.g. between two diseases).
 - `dates.py`: Dates and calendar durations.
 - `debugtools.py`: Helper functions and classes to aid with debugging model results and performance.
 - `demographics.py`: Classes to transform initial condition input parameters for use in building and utilizing networks.
 - `diseases.py`: Classes to manage infection rate of spread, prevalence, waning effects, and other parameters for specific diseases.
 - `distributions.py`: Classes that handle statistical distributions used throughout Starsim to produce random numbers.
+- `fit.py`: Fitting the model to data (`sim.calibrate()`), as the submodule `ss.fit`.
 - `interventions.py`: The Intervention class, for adding interventions and dynamically modifying parameters, and classes for each of the specific interventions derived from it. 
 - `loop.py`: The logic for the main simulation integration loop.
 - `modules.py`: Class to handle "module" logic, such as updates (diseases, networks, etc). 

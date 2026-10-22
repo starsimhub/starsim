@@ -7,7 +7,7 @@ Disease models typically require contextualization to a relevant setting of inte
 
 In Starsim, calibration needs two things, each stated where it belongs: **bounds** on the parameters to fit, given with the parameter (`ss.par(0.075, bounds=[0.01, 0.30])`), and **data** attached to the sim, in columns named like the results they measure (`ss.Sim(..., data=df)`). Then `sim.calibrate()` fits every parameter that has bounds to every result that has data. There is no function to write that puts each value back into the sim, and no function that extracts the results to compare: the model already knows where each parameter lives and what each result is.
 
-`sim.calibrate()` chooses a fitting method that suits the sim, and says which. For a stochastic sim, such as an agent-based one, that is the [Optuna](https://optuna.org) library, a Bayesian hyperparameter optimization framework: it iteratively chooses new parameter values to evaluate, runs the model with them, scores the mismatch between the model and the data, and uses the scores to choose where to look next. For a deterministic model it uses gradients, and when every data series has a likelihood it can give a posterior rather than a best fit (see [below](#a-deterministic-model-gradients-and-a-posterior)).
+`sim.calibrate()` chooses a fitting method that suits the sim, and says which. For a stochastic sim, such as an agent-based one, that is the [Optuna](https://optuna.org) library, a Bayesian hyperparameter optimization framework: it iteratively chooses new parameter values to evaluate, runs the model with them, scores the mismatch between the model and the data, and uses the scores to choose where to look next. For a deterministic model it uses gradients. By default a fit is a best fit; when every data series has a likelihood, a posterior can be asked for by name (see [below](#a-deterministic-model-gradients-and-a-posterior)).
 
 We will use a simple susceptible-infected-recovered (SIR) model as an example, and tune three input parameters: the infectivity parameter, `beta`, the initial prevalence, `init_prev`, and the mean number of contacts in the network, `n_contacts`, so as to match prevalence at three time points. For a comparison of optimization-based and Bayesian approaches to calibration, see [Parameter identification](workflows_sir_calibration.qmd).
 
@@ -203,25 +203,24 @@ data = pd.DataFrame(dict(date=weekly.index, cases=rng.negative_binomial(10, 10/(
 data.head()
 ```
 
-With a deterministic model whose data series all have a likelihood, `sim.calibrate()` draws from the posterior with the No-U-Turn sampler (NUTS), using gradients from automatic differentiation. The priors are each parameter's `prior=`, or uniform over its bounds:
+With a deterministic model whose data series all have a likelihood, `sim.calibrate(method='nuts')` draws from the posterior with the No-U-Turn sampler (NUTS), using gradients from automatic differentiation. The priors are each parameter's `prior=`, or uniform over its bounds:
 
 ```{python}
 sim = ss.Sim(sir, data=data, **kw)
-fit = sim.calibrate()
+fit = sim.calibrate(method='nuts')
 fit.summarize()
 fit.plot() # With 95% of the posterior as a band
 ```
 
-The draws are in `fit.samples`, one row per draw. The fitting method can be chosen with `method=`; the defaults are:
+The draws are in `fit.samples`, one row per draw. Without `method=`, a fit is a best fit (the maximum likelihood, or the most probable values if there are priors), by the method that suits the sim; a posterior is always asked for by name:
 
-| The sim | The default method | It gives |
+| The sim | The default method (a best fit) | A posterior, by name |
 |---|---|---|
-| Deterministic (an ODE), every data series with a likelihood | `'nuts'` (the No-U-Turn sampler) | a posterior |
-| Deterministic, otherwise | `'l-bfgs-b'`, with gradients from JAX (`'nelder-mead'` if JAX cannot run the model, or for one or two fitted parameters, where it is faster) | a best fit |
-| Stochastic compartmental (`solver='binomial'` or `'gillespie'`), every data series with a likelihood | `'pmcmc'` (particle MCMC) | a posterior |
-| Stochastic, otherwise, including agent-based sims | `'optuna'` (`trials=` sets how many) | a best fit |
+| Deterministic (an ODE) | `'l-bfgs-b'`, with gradients from JAX (`'nelder-mead'` if JAX cannot run the model, or for one or two fitted parameters, where it is faster) | `'nuts'` (the No-U-Turn sampler), with a likelihood for every data series |
+| Stochastic compartmental (`solver='binomial'`, `'gillespie'`, or `'tau'`) | `'optuna'` (`trials=` sets how many) | `'pmcmc'` (particle MCMC), with a likelihood for every data series |
+| Agent-based | `'optuna'` | `'abc-smc'` (approximate Bayesian computation), which needs no likelihood |
 
-Any other `scipy.optimize.minimize` method, and `'asd'` (adaptive stochastic descent), can be given too.
+Any other `scipy.optimize.minimize` method, `'asd'` (adaptive stochastic descent), and `'if2'` (iterated filtering, for a stochastic compartmental sim) can be given too.
 
 Finally, `fit.project()` runs the fitted model forward under scenarios, with one run per draw from the posterior and the same draws in every scenario, so the projections carry the uncertainty in the fitted values:
 
@@ -233,4 +232,4 @@ proj.results.sir.cases.plot()
 
 ## Existing code using `ss.Calibration`
 
-Starsim 3's `ss.Calibration` class, with its `build_fn`, `CalibComponent`s (`ss.Normal`, `ss.BetaBinomial`, and so on), and `eval_fn`, still exists so that existing code runs. For new work, `sim.calibrate()` replaces it: the bounds of `calib_pars` go on the parameters, the `expected` data of each component goes in `data=`, a component's likelihood becomes `likelihood=`, and an `eval_fn` becomes `gof=`. The [migration guide](../migration/v3_v4.md) maps one to the other.
+Starsim 3's `ss.Calibration` class, with its `build_fn`, `CalibComponent`s (`ss.Normal`, `ss.BetaBinomial`, and so on), and `eval_fn`, has been removed. `sim.calibrate()` replaces it: the bounds of `calib_pars` go on the parameters, the `expected` data of each component goes in `data=`, a component's likelihood becomes `likelihood=`, and an `eval_fn` becomes `gof=`. The [migration guide](../migration/v3_v4.md) maps one to the other.

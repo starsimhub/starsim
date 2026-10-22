@@ -144,7 +144,7 @@ class dynamics_by_age(Analyzer):
 
         sim = ss.Sim(diseases='sis', networks='random', analyzers=by_age)
         sim.run()
-        sim.analyzers[0].plot() # Note: if Sim(copy_inputs=False), we can also use by_age.plot()
+        sim.analyzers[0].plot() # by_age.plot() works too, since the sim runs the analyzer it is given
         ```
     """
     def __init__(self, state, age_bins=(0, 20, 40, 100)):

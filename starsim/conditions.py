@@ -8,12 +8,11 @@ agents in an agent-based run and on groups in a compartmental one. A function of
 the sim does the same job, for anything the operators cannot say.
 """
 import operator
-import functools
 import numpy as np
 import sciris as sc
 import starsim as ss
 
-__all__ = ['Cond', 'Event', 'clock', 'state', 'any_', 'child']
+__all__ = ['Cond', 'Event', 'state', 'child']
 
 ops = {
     '>':operator.gt, '<':operator.lt, '>=':operator.ge, '<=':operator.le, '==':operator.eq, '!=':operator.ne,
@@ -40,7 +39,8 @@ class Cond:
     Examples:
         ```python
         ppl = ss.People(n_agents=10_000)
-        sir = ss.Disease(infection=ss.transmission('S -> I', beta=0.3), recovery=ss.progression('I -> R', dur=10))
+        S, I, R = ss.states(3)
+        sir = ss.Disease(infection=S >> I @ 0.3*I, recovery=ss.Transition(I, R, dur=10))
         eligible = (ppl.age > 65) & sir.S
         ```
     """
@@ -61,8 +61,15 @@ class Cond:
 
     def __init__(self, op, *args):
         self.op = op
-        self.args = args if op in leaves else tuple(as_cond(arg) for arg in args) # So e.g. a declared state can be an operand
+        self._args = args if op in leaves else tuple(as_cond(arg) for arg in args) # So e.g. a declared state can be an operand
         return
+
+    @property
+    def args(self):
+        """ The operands; a dimension given as a product (`vx.held`) is named when it is read, since a product can be named after the condition is written """
+        if self.op == 'dim' and not isinstance(self._args[0], str):
+            return (self._args[0].dim,)
+        return self._args
 
     def __repr__(self):
         op, args = self.op, self.args
@@ -163,8 +170,8 @@ class Cond:
 
     @staticmethod
     def arith(op, a, b):
-        """ Arithmetic on a condition: with an expression (a parameter, a state's count) or a value by level or in time (ss.by, ss.timeseries), it is an expression for a rate, e.g. b*ss.ppl.age; otherwise a condition """
-        if any(isinstance(x, (ss.expressions.Expr, ss.by, ss.parameters.TimeValue)) for x in (a, b)):
+        """ Arithmetic on a condition: with an expression (a parameter, a state's count), a typed value (ss.peryear(0.02)), or a value by level or in time (ss.by, ss.timeseries), it is an expression for a rate, e.g. b*ss.ppl.age; otherwise a condition """
+        if any(isinstance(x, (ss.expressions.Expr, ss.TimePar, ss.by, ss.parameters.TimeValue)) for x in (a, b)):
             return ss.expressions.BinOp(op, a, b) # A value by level or in time is a parameter in it, as when it is the whole rate
         elif op == '**':
             return ss.expressions.BinOp(op, a, b) # A power has no condition of its own
@@ -199,8 +206,9 @@ class Cond:
             a, b = a_val, b_val
         a, b = evaluate(a, ctx), evaluate(b, ctx)
         if op in ['&', '|']:
-            if not getattr(ctx, 'abm', True) and (has_event(args[0]) or has_event(args[1])): # In a compartmental run, the people an event happened to are a share of each state and group
-                return ctx.combine(op, args[0], args[1], np.asarray(a, dtype=float), np.asarray(b, dtype=float))
+            if not getattr(ctx, 'abm', True) and (has_event(args[0]) or has_event(args[1])): # In a compartmental run, the people an event happened to are a share of each state and group, and the other side is a condition, which holds for all of a group or none (two events together are agents only: see group_reasons())
+                a, b = np.asarray(a, dtype=float), np.asarray(b, dtype=float)
+                return np.clip(a*b if op == '&' else a + b - a*b, 0, 1)
             a, b = as_bool(a), as_bool(b)
         return ops[op](a, b)
 
@@ -295,9 +303,9 @@ class Named:
     def __deepcopy__(self, memo): return self
 
 
-class Child(Event):
+class child(Event):
     """
-    `ss.child(event)`: an event on the mother, when one of her children goes through `event` (e.g. `preg.birth`), as agents
+    An event on a mother, when one of her children goes through an event (e.g. `ss.child(preg.birth)`); agents only
 
     Args:
         event (Event/Transition): the event that happens to the child
@@ -338,17 +346,6 @@ class Child(Event):
         return self.mothers(self.module.sim, self.args[1].uids)
 
 
-def child(event, under=None):
-    """
-    An event on a mother, when one of her children goes through an event (e.g. `ss.child(preg.birth)`); agents only
-
-    Args:
-        event (Event/Transition): the event that happens to the child
-        under (dur): only children younger than this
-    """
-    return Child(event, under=under)
-
-
 def set_states(cond):
     """ The states a condition is a set of (`A | B`, or one state), as (module, name) pairs; None if it is anything else """
     if cond.op == 'state':
@@ -357,27 +354,6 @@ def set_states(cond):
         parts = [set_states(as_cond(arg)) for arg in cond.args]
         return None if any(p is None for p in parts) else [s for p in parts for s in p]
     return None
-
-
-def clock(within, bins=None):
-    """
-    Time since entering some states from outside them: the longhand of `X.time` and `(A | B).time`, with options
-
-    Args:
-        within (State/Cond): the state, or a set of states (`A | B`)
-        bins (dur): in a compartmental run, the width of each level of elapsed time
-
-    Examples:
-        ```python
-        latent = ss.clock(syph.EL | syph.LL, bins=ss.months(3))
-        decay = ss.modify(syph.rel_trans, multiply=0.5**(latent/ss.years(1)), where=syph.EL | syph.LL)
-        ```
-    """
-    states = [within] if isinstance(within, ss.State) else set_states(as_cond(within))
-    if states is None:
-        errormsg = f'ss.clock() takes a state or a set of states (A | B), not {within!r}'
-        raise TypeError(errormsg)
-    return ss.expressions.Clock(states, bins=bins)
 
 
 class StatePath(Cond):
@@ -407,7 +383,7 @@ def state(path):
 
     Examples:
         ```python
-        cancelled = (S | P | C | L) >> Z @ ss.on(ss.any(ss.state(f'{g}.X') for g in others))
+        cancelled = (S + P + C + L) >> Z @ ss.on(ss.state('hpv18.X') | ss.state('hpv31.X'))
         seek = ss.treat(drug, on=ss.state('ng.C').enter) # For a module made from a string
         ```
     """
@@ -416,15 +392,6 @@ def state(path):
         errormsg = f'ss.state() takes a path "module.state", e.g. "hpv18.X", not {path!r}'
         raise ValueError(errormsg)
     return StatePath('state', *parts)
-
-
-def any_(items):
-    """ `ss.any()`: true for anyone any of some conditions (or states) hold for, e.g. `ss.any(ss.state(f'{g}.X') for g in others)` """
-    items = [as_cond(item) for item in items]
-    if not items:
-        errormsg = 'ss.any() needs at least one condition'
-        raise ValueError(errormsg)
-    return functools.reduce(operator.or_, items)
 
 
 def module_refs(cond):
@@ -458,14 +425,14 @@ def bounding_states(cond):
 
 
 def check_clocks(amount, where, what):
-    """ A modifier whose amount reads a clock needs a where= inside the clock's states, where the clock has a value (`ss.ClockOutsideDomain`) """
+    """ A modifier whose amount reads a clock needs a where= inside the clock's states, where the clock has a value (`ss.errors.ClockOutsideDomain`) """
     for clock in ss.expressions.clocks_in(amount):
         names = set(clock.names)
         if where is not None and callable(where) and not isinstance(where, Cond): # Checked when it runs instead: see ss.modify.apply()
             continue
         inside = bounding_states(where)
         if inside is None or not inside <= names:
-            raise ss.ClockOutsideDomain(f'{what} reads {clock}, which has a value only for people in {sc.strjoin(sorted(names))}, but applies to {"everyone" if where is None else where}.\n'
+            raise ss.errors.ClockOutsideDomain(f'{what} reads {clock}, which has a value only for people in {sc.strjoin(sorted(names))}, but applies to {"everyone" if where is None else where}.\n'
                                         f'     Add where={clock.to_str().rsplit(".", 1)[0]} (or a condition inside it).')
     return
 
@@ -491,7 +458,7 @@ def state_refs(obj):
         if cond.op == 'state':
             if modname(cond.args[0]) is not None:
                 out.append((modname(cond.args[0]), cond.args[1]))
-        elif isinstance(cond, Event) and not isinstance(cond, Child): # The transition, or the states entered or left
+        elif isinstance(cond, Event) and not isinstance(cond, child): # The transition, or the states entered or left
             kind, obj, dst = cond.args
             name = modname(cond.module)
             if name is not None:
@@ -560,6 +527,8 @@ def as_cond(obj):
         return Cond('event', obj, None)
     elif isinstance(obj, ss.Event):
         return Cond('event', obj.mod, obj.name)
+    elif isinstance(obj, ss.solvers.CountState): # A declared state after a compartmental run (e.g. sir.S once sir has run): the state it counts
+        return as_cond(obj.state)
     elif isinstance(obj, (ss.State, ss.Transition, ss.transitions.Transfer)): # Looked up by name when the sim runs, since the sim works on copies
         out = Cond('state', getattr(obj, 'module', None), obj.name)
         if not isinstance(obj, ss.State):
@@ -595,9 +564,35 @@ def has_event(cond):
     return any(has_event(arg) for arg in cond.args)
 
 
+def group_reasons(cond, sim):
+    """
+    What in a condition only agents can evaluate, found from its structure without evaluating it: a mother's
+    state, a function of uids, events combined (`a.positive | b.positive`), or a binned property (e.g. an age)
+    compared with a number inside a bin
+    """
+    if isinstance(cond, ss.expressions.mother):
+        return [f'{cond} reads each person\'s mother, which only agents know']
+    if callable(cond) and not isinstance(cond, (Cond, ss.expressions.Expr)):
+        return [f'the function "{getattr(cond, "__name__", "function")}" takes uids'] if ss.utils.n_args(cond) >= 2 else []
+    if not isinstance(cond, Cond) or cond.op in leaves:
+        return []
+    out = []
+    if cond.op in ['&', '|'] and has_event(cond.args[0]) and has_event(cond.args[1]):
+        out.append(f'{cond} combines events, whose shared people only agents follow')
+    if cond.op in comparisons:
+        for x,v in [cond.args, cond.args[::-1]]:
+            if isinstance(x, Cond) and x.op == 'people' and sc.isnumber(v) and not isinstance(v, (bool, np.bool_)):
+                strat = next((strat for strat in sim.groups.strats if strat.name == x.args[0]), None)
+                if strat is not None and strat.edges is not None and v not in strat.edges and strat.edges[0] < v:
+                    out.append(f'a condition uses people.{x.args[0]} and {v:n}, which falls inside a bin of {x.args[0]}')
+    for arg in cond.args:
+        out += group_reasons(arg, sim)
+    return out
+
+
 def event_leaves(cond):
     """ The event leaves of a condition, including those that its memory is read from """
-    if isinstance(cond, ss.expressions.Mother): # Read on the mother
+    if isinstance(cond, ss.expressions.mother): # Read on the mother
         return event_leaves(cond.x)
     if not isinstance(cond, Cond):
         return []
@@ -609,17 +604,14 @@ def event_leaves(cond):
 
 
 def memory_leaves(cond, out=None):
-    """ The memory leaves of a condition (e.g. `cytology.since`), each with the values it is compared with """
+    """ The memory leaves of a condition (e.g. `cytology.since`) """
     out = [] if out is None else out
-    if isinstance(cond, ss.expressions.Mother): # Read on the mother
+    if isinstance(cond, ss.expressions.mother): # Read on the mother
         return memory_leaves(cond.x, out)
     if not isinstance(cond, Cond) or (cond.op in leaves and cond.op != 'memory'):
         return out
     if cond.op == 'memory':
-        out.append((cond, []))
-    elif cond.op in comparisons and any(isinstance(arg, Cond) and arg.op == 'memory' for arg in cond.args):
-        mem, other = cond.args if isinstance(cond.args[0], Cond) and cond.args[0].op == 'memory' else cond.args[::-1]
-        out.append((mem, [other]))
+        out.append(cond)
     else:
         for arg in cond.args:
             memory_leaves(arg, out)
@@ -886,20 +878,6 @@ class Selector:
                                      f'the people who went through a transition of "{mod.name}" are in. Run with solver="abm", or use an event of "{self.mod.name}".')
         return engine.event_frac(name)
 
-    def combine(self, op, ca, cb, a, b):
-        """
-        In a compartmental run: `|` or `&` of two selections of which at least one is an event, a share of each state and group
-
-        Two outcomes of one step (or events that follow from them) are disjoint; an event that follows from another is
-        within it (`triage.positive` within `screening.ascus`); otherwise they are taken as independent within each state and group.
-        """
-        rel = self.relation(ca, cb)
-        if op == '|':
-            out = a + b if rel == 'disjoint' else b if rel == 'a_in_b' else a if rel == 'b_in_a' else a + b - a*b
-        else:
-            out = 0*(a + b) if rel == 'disjoint' else a*np.ones_like(b) if rel == 'a_in_b' else b*np.ones_like(a) if rel == 'b_in_a' else a*b
-        return np.clip(out, 0, 1)
-
     def lineage(self, cond, depth=0):
         """ The events that the people of an event are all within: itself, the delivery it is an outcome of, the product, and what triggered the delivery, as (module name, outcome) """
         if not isinstance(cond, Cond) or depth > 50:
@@ -915,11 +893,7 @@ class Selector:
             return out
         elif cond.op in leaves:
             return {(modname(cond.args[0]), cond.args[1])} if is_event(cond) else set()
-        elif cond.op == '&':
-            return self.lineage(cond.args[0], depth + 1) | self.lineage(cond.args[1], depth + 1)
-        elif cond.op == '|':
-            return self.lineage(cond.args[0], depth + 1) & self.lineage(cond.args[1], depth + 1)
-        return set()
+        return set() # Events combined are agents only (see group_reasons())
 
     def relation(self, ca, cb):
         """ How the people of two events are related: 'disjoint', 'a_in_b', 'b_in_a', or None if not known """
@@ -941,10 +915,10 @@ class Selector:
         if self.abm:
             out = np.zeros(self.shape, dtype=bool)
             uids = engine.event_uids(**event.spec())
-            out[event.mothers(self.sim, uids) if isinstance(event, Child) else uids] = True
+            out[event.mothers(self.sim, uids) if isinstance(event, child) else uids] = True
             return out
         spec = event.spec()
-        if isinstance(event, Child) or ('tr' in spec and (not isinstance(spec['tr'], str) or spec['tr'] not in mod.graph.transitions)):
+        if isinstance(event, child) or ('tr' in spec and (not isinstance(spec['tr'], str) or spec['tr'] not in mod.graph.transitions)):
             raise ss.CapabilityError(f'the condition {event} cannot run with solver="{self.sim.solver}" yet: it is an event that only agents record. Run with solver="abm".')
         if 'tr' in spec:
             return engine.event_frac(spec['tr'], to=spec.get('to'))

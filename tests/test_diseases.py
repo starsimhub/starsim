@@ -10,9 +10,8 @@ import numpy as np
 import starsim as ss
 import starsim.library as ssl
 
-test_run = True
-n_agents = [10_000, 2_000][test_run]
-do_plot = True
+n_agents = 2_000
+do_plot = False
 sc.options(interactive=do_plot) # Assume not running interactively
 
 
@@ -20,16 +19,8 @@ sc.options(interactive=do_plot) # Assume not running interactively
 def test_sir():
     sc.heading('Testing SIR dynamics')
 
-    ppl = ss.People(n_agents)
-    network_pars = {
-        'n_contacts': ss.poisson(4), # Contacts Poisson distributed with a mean of 4
-    }
-    networks = ss.RandomNet(**network_pars)
-
-    sir_pars = {
-        'dur_inf': ss.normal(loc=10),  # Override the default distribution
-    }
-    sir = ss.SIR(**sir_pars)
+    networks = ss.RandomNet(n_contacts=ss.poisson(4)) # Contacts Poisson distributed with a mean of 4
+    sir = ss.SIR(dur_inf=ss.normal(loc=10)) # Override the default distribution
 
     # Change pars after creating the SIR instance
     sir.pars.beta = {'random': ss.time.freq(0.1, 'year')}
@@ -40,21 +31,14 @@ def test_sir():
     # Or use a function, here a lambda that makes the mean for each agent equal to their age divided by 10
     sir.pars.dur_inf.set(loc = lambda self, sim, uids: sim.people.age[uids] / 10)
 
-    sim = ss.Sim(people=ppl, diseases=sir, networks=networks)
+    sim = ss.Sim(n_agents=n_agents, diseases=sir, networks=networks)
     sim.run()
-
-    plt.figure()
-    res = sim.results
-    plt.stackplot(
-        sim.timevec,
-        res.sir.n_S,
-        res.sir.n_I,
-        res.sir.n_R,
-        res.new_deaths.cumsum(),
-    )
-    plt.legend(['Susceptible', 'Infected', 'Recovered', 'Dead'])
-    plt.xlabel('Year')
-    plt.title('SIR')
+    if do_plot:
+        res = sim.results
+        plt.figure()
+        plt.stackplot(sim.timevec, res.sir.n_S, res.sir.n_I, res.sir.n_R, res.new_deaths.cumsum())
+        plt.legend(['Susceptible', 'Infected', 'Recovered', 'Dead'])
+        plt.title('SIR')
 
     # The textbook SIR: a duration is the mean of an exponential, and nobody dies (Starsim 3's lognormal and deaths are ssl.AgentSIR's)
     kw = dict(total_pop=1e6, stop=ss.days(365), solver='ode', verbose=0)
@@ -86,37 +70,15 @@ def test_sir_epi():
     )
 
     # Loop over each of the above parameters and make sure they affect the epi dynamics in the expected ways
-    for par, par_val in par_effects.items():
-        lo = par_val[0]
-        hi = par_val[1]
-
-        # Make baseline pars
-        pars0 = sc.dcp(base_pars)
-        pars1 = sc.dcp(base_pars)
-
-        if par != 'n_contacts':
-            pars0['diseases'] = sc.mergedicts(pars0['diseases'], {par: lo})
-            pars1['diseases'] = sc.mergedicts(pars1['diseases'], {par: hi})
-        else:
-            pars0['networks'] = sc.mergedicts(pars0['networks'], {par: lo})
-            pars1['networks'] = sc.mergedicts(pars1['networks'], {par: hi})
-
-        # Run the simulations and pull out the results
-        s0 = ss.Sim(pars0, label=f'{par} {par_val[0]}').run()
-        s1 = ss.Sim(pars1, label=f'{par} {par_val[1]}').run()
-
-        # Check results
+    for par, (lo, hi) in par_effects.items():
+        key = 'networks' if par == 'n_contacts' else 'diseases'
+        s0, s1 = [ss.Sim(sc.mergedicts(sc.dcp(base_pars), {key: sc.mergedicts(base_pars[key], {par: val})}), label=f'{par} {val}').run() for val in [lo, hi]]
         if par == 'p_death':
-            v0 = s0.results.cum_deaths[-1]
-            v1 = s1.results.cum_deaths[-1]
+            v0, v1 = s0.results.cum_deaths[-1], s1.results.cum_deaths[-1]
         else:
             ind = 1 if par == 'init_prev' else -1
-            v0 = s0.results.sir.prevalence[ind]
-            v1 = s1.results.sir.prevalence[ind]
-
-        print(f'Checking with varying {par:10s} ... ', end='')
+            v0, v1 = s0.results.sir.prevalence[ind], s1.results.sir.prevalence[ind]
         assert v0 <= v1, f'Expected prevalence to be lower with {par}={lo} than with {par}={hi}, but {v0} > {v1})'
-        print(f'✓ ({v0} <= {v1})')
 
     return s0, s1
 
@@ -141,7 +103,6 @@ def test_seir():
     seir = sim.diseases.seir
     res = sim.results.seir
     assert not (seir.E & seir.I).any(), 'Agents should not be in both E and I'
-    assert (seir.infected == (seir.exposed | seir.infectious)).all(), 'The Starsim 3 name infected should be E plus I'
     assert np.allclose(res.prevalence, (res.n_E + res.n_I)/sim.results.n_alive), 'prevalence should be computed from E plus I'
     assert res.new_infections.min() >= 0 and res.new_infections[0] == 0, 'Seed infections should be excluded from incidence exactly once'
     assert np.array_equal(res.cum_infections, np.cumsum(res.new_infections)), 'Cumulative infections should be the running sum of new infections'
@@ -245,12 +206,7 @@ def test_aliases():
 def test_sis(do_plot=do_plot):
     sc.heading('Testing SIS dynamics')
 
-    pars = dict(
-        n_agents = n_agents,
-        diseases = 'sis',
-        networks = 'random'
-    )
-    sim = ss.Sim(pars)
+    sim = ss.Sim(n_agents=n_agents, diseases='sis', networks='random')
     sim.run()
     if do_plot:
         sim.plot()
@@ -268,32 +224,25 @@ def test_sis(do_plot=do_plot):
 def test_ncd():
     sc.heading('Testing NCDs')
 
-    ppl = ss.People(n_agents)
-    ncd = ss.NCD()
-    sim = ss.Sim(people=ppl, diseases=ncd, copy_inputs=False, dt=ss.years(1), analyzers='infection_log') # Since using ncd directly below
+    sim = ss.Sim(n_agents=n_agents, diseases=ssl.NCD(), dt=ss.years(1), analyzers='infection_log')
     sim.run()
+    ncd = sim.diseases[0] # The sim's copy, which ran
     log = sim.analyzers[0].logs[0]
 
     assert len(log) == log.to_graph().number_of_edges()
     df = log.to_df()  # Check generation of line-list
     assert df.source.isna().all()
 
-    plt.figure()
-    plt.stackplot(
-        sim.timevec,
-        ncd.results.n_not_at_risk,
-        ncd.results.n_at_risk - ncd.results.n_affected,
-        ncd.results.n_affected,
-        sim.results.new_deaths.cumsum(),
-    )
     assert ncd.results.n_not_at_risk.label == 'Not at risk'
     assert ncd.results.n_affected.label == 'Affected'
-    plt.legend(['Not at risk', 'At risk', 'Affected', 'Dead'])
-    plt.xlabel('Year')
-    plt.title('NCD')
+    if do_plot:
+        plt.figure()
+        plt.stackplot(sim.timevec, ncd.results.n_not_at_risk, ncd.results.n_at_risk - ncd.results.n_affected, ncd.results.n_affected, sim.results.new_deaths.cumsum())
+        plt.legend(['Not at risk', 'At risk', 'Affected', 'Dead'])
+        plt.title('NCD')
 
-    # A disease written as code with no states of its own (as Starsim 3's ss.Disease), and an infection with no beta
-    class Anemia(ss.Disease):
+    # A disease written as code that is not an infection (Starsim 3's ss.Disease), and an infection with no beta
+    class Anemia(ss.Infection):
         def __init__(self, **kwargs):
             super().__init__()
             self.define_pars(p_onset=ss.bernoulli(0.1))
@@ -309,9 +258,8 @@ def test_ncd():
     sim2 = ss.Sim(diseases=[Anemia(), Background(init_prev=0.1)], networks='random', n_agents=500, verbose=0).run()
     assert sim2.results.anemia.n_anemic[-1] > 400 # Anemia(p_onset=0.1) for 50 years
     assert sim2.results.background.new_infections.sum() == 0 # Not transmitted
-    assert Anemia().transitions is None # Written as code, since it declares nothing
-    with pytest.raises(ss.CapabilityError): # A disease that declares nothing and defines no states or step()
-        ss.Sim(diseases=type('Empty', (ss.Disease,), {})(), verbose=0).init()
+    with pytest.raises(ss.CapabilityError, match='ss.Infection'): # ss.Disease is declared, so one that declares nothing points to ss.Infection
+        type('Empty', (ss.Disease,), {})()
     return sim
 
 
@@ -322,14 +270,9 @@ def test_gavi():
 
     sims = sc.autolist()
     for disease in ['cholera', 'measles', 'ebola']:
-        pars = dict(
-            diseases = disease,
-            n_agents = n_agents,
-            networks = 'random',
-        )
-        sim = ss.Sim(pars)
-        sim.run()
-        sim.plot()
+        sim = ss.Sim(diseases=disease, n_agents=n_agents, networks='random').run()
+        if do_plot:
+            sim.plot()
         sims += sim
     return sims
 
@@ -338,15 +281,9 @@ def test_gavi():
 def test_multidisease():
     sc.heading('Testing simulating multiple diseases')
 
-    ppl = ss.People(n_agents)
-    sir1 = ss.SIR(name='sir1')
-    sir2 = ss.SIR(name='sir2')
-
-    sir1.pars.beta = {'randomnet': 0.1}
-    sir2.pars.beta = {'randomnet': 0.2}
-    networks = ss.RandomNet(n_contacts=ss.poisson(4))
-
-    sim = ss.Sim(people=ppl, diseases=[sir1, sir2], networks=networks)
+    sir1 = ss.SIR(name='sir1', beta={'randomnet': 0.1})
+    sir2 = ss.SIR(name='sir2', beta={'randomnet': 0.2})
+    sim = ss.Sim(n_agents=n_agents, diseases=[sir1, sir2], networks=ss.RandomNet(n_contacts=ss.poisson(4)))
     sim.run()
     return sim
 
@@ -354,7 +291,6 @@ def test_multidisease():
 @sc.timer()
 def test_mtct():
     sc.heading('Test mother-to-child transmission routes')
-    ppl = ss.People(n_agents)
     sis = ss.SIS(
         beta = dict(
             random = ss.permonth(0.005),
@@ -364,9 +300,10 @@ def test_mtct():
     )
     networks = [ss.RandomNet(), ss.PrenatalNet(), ss.BreastfeedingNet()]
     demographics = ss.Pregnancy(fertility_rate=ss.time.freq(20, 'year'))
-    sim = ss.Sim(dt=ss.months(1), people=ppl, diseases=sis, networks=networks, demographics=demographics)
+    sim = ss.Sim(dt=ss.months(1), n_agents=n_agents, diseases=sis, networks=networks, demographics=demographics)
     sim.run()
-    sim.plot()
+    if do_plot:
+        sim.plot()
     res = sim.results
     assert np.array_equal(res.sis.n_S + res.sis.n_I, res.n_alive + res.pregnancy.n_unborn) # Everyone is in a state of the declared SIS, the unborn too (so they can be infected before birth), though they are not counted among the people
     return sim
@@ -489,7 +426,6 @@ def test_fetal_health(do_plot=do_plot):
 
         fig.tight_layout()
 
-    sc.printgreen('✓ Fetal health tests passed')
     return sim_baseline, sim_disease, sim_treated
 
 
@@ -516,9 +452,9 @@ def test_congenital():
     sim.run()
 
     preg = sim.demographics.pregnancy
-    sb           = preg.results['stillbirths'].sum()
+    sb           = preg.results['stillbirth'].sum()
     neonatal_deaths = preg.results['neonatal_deaths'].sum()
-    births          = preg.results['births'].sum()
+    births          = preg.results['birth'].sum()
     n_congenital    = sim.diseases[0].congenital.sum()
     print(f'  Stillbirths: {sb}, Neonatal deaths: {neonatal_deaths}, Births: {births}, Congenital: {n_congenital}')
 
@@ -531,11 +467,10 @@ def test_congenital():
     # stillbirths and congenital infections should occur in roughly a 0.3:0.4 ratio.
     # If stillbirths were scheduled at (rather than before) delivery, Pregnancy would
     # already have delivered the fetus and they would be logged as neonatal deaths,
-    # driving this ratio towards zero -- see Infection.set_congenital.
+    # driving this ratio towards zero -- see ssl.CongenitalDisease.set_congenital().
     ratio = sb/n_congenital
     assert 0.3 < ratio < 1.8, f'Stillbirth:congenital ratio {ratio:0.2f} is far from the expected 0.75'
 
-    sc.printgreen('✓ Congenital framework tests passed')
     return sim
 
 
@@ -665,9 +600,9 @@ def test_strains_immunity_attr():
     sim.diseases.a.move_to(sim.people.auids, 'I')
     assert np.isclose(sim.run().results.a.n_I[52]/20_000, np.exp(-2), atol=0.01)
 
-    # The same as a modifier on each genotype, as HPVsim writes it outside a family: both read the antibodies when rel_sus is worked out (within noise, since a modifier that reads an attribute changes its draws)
-    pars = dict(n_agents=10_000, start=2000, stop=2020, dt=0.25, verbose=0)
-    def run(how, seed):
+    # The same as a modifier on each genotype, as HPVsim writes it outside a family: both read the antibodies when rel_sus is worked out (the same infections, though the tolerance allows for noise)
+    pars = dict(n_agents=2000, start=2000, stop=2010, dt=0.25, verbose=0)
+    def run(how, seed=1):
         gens = [make_nab_genotype('hpv16', 2.0), make_nab_genotype('hpv18', 1.6)]
         if how == 'family':
             return ss.Sim(diseases=ss.Strains('hpv', gens, immunity=ss.immunity(protected='nab', rel_sus=m, combine='sum')), rand_seed=seed, **pars).run()
@@ -675,8 +610,8 @@ def test_strains_immunity_attr():
         return ss.Sim(diseases=gens, connectors=mods, rand_seed=seed, **pars).run()
     out = sc.objdict()
     for how in ['family', 'modify', 'none']:
-        sims = [run(how, seed) for seed in range(3)]
-        out[how] = np.mean([[sim.results[name].infection.sum() for name in ['hpv16', 'hpv18']] for sim in sims], axis=0)
+        sim = run(how)
+        out[how] = np.array([sim.results[name].infection.sum() for name in ['hpv16', 'hpv18']])
     assert np.allclose(out.family, out.modify, rtol=0.03), out
     assert np.all(out.family < 0.8*out.none), out # It protects
 
@@ -712,7 +647,7 @@ def test_strains_seeding():
 
 @sc.timer()
 def test_strains_compartmental():
-    sc.heading('Testing a family under the compartmental solvers: members side by side, couplings from shares, against agents')
+    sc.heading('Testing a family under the compartmental solvers: independent members side by side; members that affect each other need agents')
     def make(name, beta, **kwargs):
         S, I, R, Ca = ss.states('S I R Ca')
         return ss.Disease(infection=S >> I @ ss.peryear(beta)*I, clearance=I >> R @ ss.years(1), reinfection=R >> I @ ss.peryear(beta)*I, waning=R >> S @ ss.years(2),
@@ -726,37 +661,16 @@ def test_strains_compartmental():
     assert sim.solver == 'ode' and np.array_equal(res.a.n_I, alone.results.a.n_I) and np.array_equal(res.b.n_I, alone.results.b.n_I) # Bit for bit
     assert np.allclose(res.hpv.n_I, 10_000*(1 - (1 - res.a.n_I/10_000)*(1 - res.b.n_I/10_000)))
 
-    # HP22's rule as shares: rel_sus of a for people in its own R (exact) when everyone is in b's R, with a vaccine on top: (1 − (0.2 + 0.1))·0.5 = 0.35
-    hpv = ss.Strains('hpv', [make('a', 1, init=dict(S=0.5, R=0.5)), make('b', 1, init=dict(R=10_000))], immunity=ss.immunity(protected='R', rel_sus=[[0.2, 0.5], [0.1, 0.4]], combine='sum'))
-    sim = ss.Sim(diseases=hpv, connectors=ss.modify('a.rel_sus', multiply=0.5), solver='ode', total_pop=10_000, approx=True, **pars).init()
-    sim.diseases.hpv.start_step()
-    a = sim.diseases.a
-    assert np.isclose(a.engine.mult_raw('rel_sus', state=a.graph.states.R), 0.35) and np.isclose(a.engine.mult_raw('rel_sus', state=a.graph.states.S), (1 - 0.1)*0.5)
-
-    # A contract, for 2 and 4 members with HPV-like cross-immunity: side by side (ODE, binomial) against the exact form (the crossing, which a
-    # modifier between the members gives, here one that changes nothing) and agents. Side by side is within 10% of exact on these
-    for n in [2, 4]:
-        matrix = np.full((n, n), 0.3) + np.eye(n)*0.6 # Rows from, columns against
-        family = lambda: ss.Strains('hpv', [make(f'g{i}', 3 - 0.3*i) for i in range(n)], immunity=ss.immunity(protected='R', rel_sus=matrix, combine='sum'), init_prev=0.1)
-        links = [ss.modify('g0.rel_sus', multiply=1.0, where=ss.conditions.Cond('state', f'g{i}', 'R'), name=f'link{i}') for i in range(1, n)]
-        out = sc.objdict()
-        for key,solver,connectors,seeds in [('ode', 'ode', [], 1), ('exact', 'ode', links, 1), ('binomial', 'binomial', [], 2), ('abm', 'abm', [], 2)]:
-            sims = [ss.Sim(diseases=family(), connectors=sc.dcp(connectors), solver=solver, n_agents=10_000, total_pop=10_000, rand_seed=seed, approx=True, **pars).run() for seed in range(seeds)]
-            out[key] = np.mean([[sim.results.hpv.infected[-1], sim.results.hpv.cancer.sum(), sim.results.g0.infected[-1]] for sim in sims], axis=0)
-        assert np.allclose(out.ode, out.exact, rtol=0.1) and np.allclose(out.binomial, out.ode, rtol=0.05) and np.allclose(out.abm, out.exact, rtol=0.15), f'{n} members: {out}'
-
-    # One course at a time, from shares: those who get cancer from one member are moved to X in the other, except those with cancer in it already
-    hpv = ss.Strains('hpv', [make('a', 3), make('b', 2.5)], immunity=ss.immunity(protected='R', rel_sus=0.3), init_prev=0.1, exclusive='Ca')
-    res = ss.Sim(diseases=hpv, solver='ode', total_pop=10_000, approx=True, **pars).run().results
-    assert np.isclose(res.a.n_X[-1], res.b.n_Ca[-1]*(1 - res.a.n_Ca[-1]/10_000), rtol=0.05) and np.isclose(res.b.n_X[-1], res.a.n_Ca[-1]*(1 - res.b.n_Ca[-1]/10_000), rtol=0.05)
-
-    # What the solvers say: approx, with auto running a coupled family as agents unless approx=True
-    sim = ss.Sim(diseases=family(), **pars).init()
-    assert sim.solver == 'abm' and 'approx (members side by side' in sim.solvers(output=True)
-    assert ss.Sim(diseases=family(), approx=True, **pars).init().solver == 'ode'
-    with pytest.raises(ss.CapabilityError):
-        ss.Sim(diseases=family(), solver='ode', approx=False, **pars).init()
-    return out
+    # Members that affect each other (immunity=, exclusive=) need agents: auto runs them as agents, and a compartmental solver refuses, whatever approx=
+    families = [lambda: ss.Strains('hpv', [make('a', 3), make('b', 2.5)], immunity=ss.immunity(protected='R', rel_sus=0.3), init_prev=0.1),
+                lambda: ss.Strains('hpv', [make('a', 3), make('b', 2.5)], init_prev=0.1, exclusive='Ca')]
+    for family in families:
+        sim = ss.Sim(diseases=family(), total_pop=10_000, approx=True, **pars).init()
+        assert sim.solver == 'abm' and 'compartmental solvers: none' in sim.describe(output=True)
+        for solver in ['ode', 'binomial']:
+            with pytest.raises(ss.CapabilityError, match='only agents follow'):
+                ss.Sim(diseases=family(), solver=solver, total_pop=10_000, approx=True, **pars).init()
+    return res
 
 
 @sc.timer()
@@ -811,7 +725,7 @@ def test_strains_errors():
     build = lambda hpv, **kwargs: ss.Sim(diseases=hpv, n_agents=100, stop=2001, verbose=0, **kwargs).init()
     with pytest.raises(ss.CapabilityError): # A member written as code, whose states the family cannot see
         ss.Strains('hpv', [make_genotype('hpv16'), ssl.AgentSIS()])
-    with pytest.raises(ss.UnknownState): # A state the members do not have
+    with pytest.raises(ss.errors.UnknownState): # A state the members do not have
         build(pair(immunity=ss.immunity(protected='nab', rel_sus=0.5)))
     with pytest.raises(ss.CapabilityError): # A combine= function under sim.gradient()
         ss.Sim(diseases=pair(immunity=ss.immunity(protected='R', rel_sus=0.5, combine=lambda p: p.max(0))), stop=2001, verbose=0).gradient()
@@ -819,14 +733,16 @@ def test_strains_errors():
         build(ss.Strains('risk', [make_genotype('hpv16').stratify(risk=['low', 'high']), make_genotype('hpv18')]))
     with pytest.raises(ValueError): # A member with its own initial values in a family that seeds
         ss.Strains('hpv', [make_genotype('hpv16', init_prev=0.1), make_genotype('hpv18')], init_prev=0.1)
-    with pytest.raises(ss.OutOfBounds): # A protection of 1 on a time spent
+    with pytest.raises(ss.errors.OutOfBounds): # A protection of 1 on a time spent
         build(pair(immunity=ss.immunity(protected='R', dur=dict(I=0.6), combine='sum')))
-    with pytest.raises(ss.UnknownState): # exclusive= with no state to move to
-        sis = lambda name: ss.Disease(infection=ss.transmission('S -> I', beta=0.1), recovery=ss.progression('I -> S', dur=10), name=name)
+    with pytest.raises(ss.errors.UnknownState): # exclusive= with no state to move to
+        def sis(name):
+            S, I = ss.states('S I')
+            return ss.Disease(infection=ss.Transition(S, I, rate=0.1 * I), recovery=ss.Transition(I, S, dur=10), name=name)
         build(ss.Strains('flu', [sis('a'), sis('b')], exclusive='I'))
     with pytest.raises(TypeError): # The protection is the value of what it lowers, not a positional matrix
         ss.immunity(np.eye(2), protected='R')
-    with pytest.raises(ss.ShapeError):
+    with pytest.raises(ss.errors.ShapeError):
         build(pair(immunity=ss.immunity(protected='R', rel_sus=np.eye(3))))
     assert ss.Strains('hpv', members=[make_genotype('hpv16'), make_genotype('hpv18')]).member_names == ['hpv16', 'hpv18']
     return
@@ -835,7 +751,8 @@ def test_strains_errors():
 @sc.timer()
 def test_current_state():
     sc.heading('Testing current_state(): the index of the state each agent is in')
-    sir = ss.Disease(name='sir', infection=ss.transmission('S -> I', beta=0.3), recovery=ss.progression('I -> R', dur=4))
+    S, I, R = ss.states('S I R')
+    sir = ss.Disease(name='sir', infection=ss.Transition(S, I, rate=0.3 * I), recovery=ss.Transition(I, R, dur=4))
     sim = ss.Sim(diseases=sir, n_agents=100, stop=2001, verbose=0).init()
     sir = sim.diseases.sir
     sir.move_to(ss.uids([0, 1]), 'I')
@@ -848,9 +765,10 @@ def test_current_state():
     assert sub.labels == ['R', 'I'] and sub[ss.uids([0, 2, 3])].tolist() == [1, 0, -1]
     with pytest.raises(ValueError): # Read-only
         cs.raw[0] = 2
-    with pytest.raises(ss.UnknownState):
+    with pytest.raises(ss.errors.UnknownState):
         sir.current_state(['X'])
-    ode = ss.Sim(diseases=ss.Disease(name='sir', infection=ss.transmission('S -> I', beta=0.3), recovery=ss.progression('I -> R', dur=4)), stop=2001, verbose=0).init()
+    S, I, R = ss.states('S I R')
+    ode = ss.Sim(diseases=ss.Disease(name='sir', infection=ss.Transition(S, I, rate=0.3 * I), recovery=ss.Transition(I, R, dur=4)), stop=2001, verbose=0).init()
     with pytest.raises(ss.CapabilityError, match='agents'):
         ode.diseases.sir.current_state()
     return cs

@@ -6,7 +6,7 @@ import numpy as np
 import starsim as ss
 
 
-class Timeline:
+class Timeline(ss.utils.NoDists):
     """
     Handle time vectors and sequencing ("timelines") for both simulations and modules.
 
@@ -60,6 +60,8 @@ class Timeline:
     time_args = ['start', 'stop', 'dt']
     _time_vecs = ['tvec', 'tivec', 'timevec', 'yearvec', 'datevec', 'relvec']
 
+    keywords = ['start', 'stop', 'dt', 'dur', 'name', 'init', 'sim'] # Those of __init__(), which a module passes on
+
     def __init__(self, start=None, stop=None, dt=None, dur=None, name=None, init=None, sim=None):
         # Store inputs
         self.name = name
@@ -89,7 +91,6 @@ class Timeline:
         self._relvec  = None # Backing store for the lazy relvec property (relative time in sim units)
         self._rel_start = None # Reference start for relvec, captured at init (None => use this timeline's own start)
         self._rel_dur_class = None # Duration class for relvec, captured at init
-        self.is_numeric = False # Whether all inputs provided are numeric (e.g. start=2000, stop=2010, dt=0.1)
         self.unitless = False # Whether time is counted in steps, with no unit or calendar (a declared model in which nothing has a unit); then there are no dates
         self.initialized = False # Call self.init(sim) to initialize the object
 
@@ -370,16 +371,10 @@ class Timeline:
         # Set the default start based on whether we have datelike inputs
         self.default_start = self.default_year_start if cal_year_like else self.default_rel_start # Sets to the start to 2000 or 0
 
-        # Check to see if all inputs are numeric
-        self.is_numeric = all(arg is None or sc.isnumber(arg) for arg in args) # All inputs are either None or a number # Note: not currently used, although could be for setting timevec defaults
-
         # Ensure dur is valid; use dur_type (from dt) so e.g. dt='month', dur=50 → 50 months
         self.default_dur = dur_type(self.default_dur)
         if sc.isnumber(self.dur):
             self.dur = dur_type(self.dur)
-        if not (self.dur is None or isinstance(self.dur, ss.dur)):
-            errormsg = f'Timeline.dur must be a number, a dur object or None, not {self.dur}'
-            raise TypeError(errormsg)
 
         # Ensure dt is valid; use dur_type so e.g. dur=ss.days(50), dt=1.0 → ss.days(1)
         if not isinstance(self.dt, ss.dur):
@@ -457,13 +452,10 @@ class Timeline:
                 errormsg = f'Failed to match {self.start = }, {self.stop = }, and {self.dur = } to any known pattern. You can use numbers, strings, ss.date, or ss.dur objects.'
                 raise ValueError(errormsg)
 
-        # Additional validation
-        start_type = type(start)
-        stop_type = type(stop)
-        assert isinstance(start, (ss.date, ss.dur)), f'Start must be ss.date or ss.dur, not {start_type}'
-        assert isinstance(stop, (ss.date, ss.dur)), f'Stop must be ss.date or ss.dur, not {stop_type}'
-        assert isinstance(dur, ss.dur), f'Duration must be ss.dur, not {type(dur)}'
-        assert start <= stop, f'Start must be before stop, not {start} and {stop}'
+        # Additional validation (the types were checked above)
+        if start > stop:
+            errormsg = f'Start must be before stop, not {start} and {stop}'
+            raise ValueError(errormsg)
         if (stop - start) < self.dt:
             warnmsg = f'The difference between {start = } and {stop = } is less than dt = {self.dt}; no timesteps will be run.'
             ss.warn(warnmsg)

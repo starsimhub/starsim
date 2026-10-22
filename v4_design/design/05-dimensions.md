@@ -163,7 +163,7 @@ sir.stratify(age=[0, 15, 65])                  # bin edges: 0-14, 15-64, 65+
 sir.stratify(risk=['low', 'high'])             # labels
 sir.stratify(vaccinated=[False, True])         # a boolean property
 hiv.stratify(cd4=[0, 200, 350, 500])           # bin edges on a continuous property
-sir.stratify(patch=ss.geo('Kenya', level=1))          # a named source: Kenya's 47 counties
+sir.stratify(patch=ss.geo.location('Kenya', level=1))          # a named source: Kenya's 47 counties
 ```
 
 A list of numbers is bin edges when the property is continuous and labels otherwise; `kind=` settles any ambiguity. The last bin is open-ended. Levels can be referred to by label (`'15-64'`, `'500+'`) or by position.
@@ -177,7 +177,7 @@ Some dimensions carry structure. The kind comes from the value, not the name: a 
 | Kind | From the value | What is generated |
 |---|---|---|
 | `age` | a dimension called `age`, with bin edges | Aging between adjacent levels, if people are born or die |
-| `space` | an `ss.geo` value, or `mobility=` | Nothing by default; movement if `mobility=` is given |
+| `space` | an `ss.geo.location` value, or `mobility=` | Nothing by default; movement if `mobility=` is given |
 | `strain` | `immunity=` | A force of infection per strain; cross-immunity |
 | `clock` | `kind='clock'`, with levels that are times | The time since an event, which advances with time; a level `none` for people who have not had it |
 | `plain` | anything else | Nothing |
@@ -199,7 +199,7 @@ campaign = ss.Delivery(increment='doses', coverage=0.6, at=[2025, 2026, 2027])
 waning   = ss.transfer(increment=dict(immunity=-1), rate=ss.peryear(0.5))
 ```
 
-A **clock** (`kind='clock'`) holds the time since an event, and advances with time as age does. Its levels are the lower edges of bins of time, as durations (`ss.months([0, 1, 2, 3, 6, 12, 24])`) or numbers in the sim's unit, followed by a level `none` for the people who have not had the event, where everyone starts; it takes no `split=`. An event sets it with `move=` (`move=dict(since_birth=0)`, a time in the clock's unit), and a value by it is an `ss.by` table whose row with key `None` is for the people at `none` ([04](04-parameters.md)). As agents, each person holds the time since it was set (NaN at `none`), advanced by a step at the end of each step. In a compartmental run the levels are whole steps from 0 to the last edge (the last open-ended, then `none`), and everyone moves up one at the start of each step, which is exact; edges that are not whole steps are rounded, with a note, and results by group are by step. Age is the clock that birth sets; `after=` and `before=` stay the time in the source state, which needs no clock.
+A **clock** (`kind='clock'`) holds the time since an event, and advances with time as age does. Its levels are the lower edges of bins of time, as durations (`ss.months([0, 1, 2, 3, 6, 12, 24])`) or numbers in the sim's unit, followed by a level `none` for the people who have not had the event, where everyone starts; it takes no `split=`. An event sets it with `move=` (`move=dict(since_birth=0)`, a time in the clock's unit), and a value by it is an `ss.by` table whose row with key `None` is for the people at `none` ([04](04-parameters.md)). Each person holds the time since it was set (NaN at `none`), advanced by a step at the end of each step, so a clock is kept by agents only: `solver='auto'` runs a model with one as agents, and a compartmental solver raises `CapabilityError` (decided 2026-10-20; its compartmental form, levels of whole steps, is gone). Age is the clock that birth sets; `after=` and `before=` stay the time in the source state, which needs no clock.
 
 ### Space
 
@@ -207,10 +207,10 @@ Space is a dimension, not a separate kind of model. It is valid with or without 
 
 <!-- fragment -->
 ```python
-kenya = ss.geo('Kenya', level=1)
+kenya = ss.geo.location('Kenya', level=1)
 
 sir.stratify(patch=kenya)                                # patches; nobody moves
-sir.stratify(patch=kenya, mobility=ss.gravity(away=0.1, a=1.0, b=1.0, c=2.0))    # or: patches coupled by travel
+sir.stratify(patch=kenya, mobility=ss.geo.gravity(away=0.1, a=1.0, b=1.0, c=2.0))    # or: patches coupled by travel
 ```
 
 Patches without mobility are an ordinary model (wastewater catchments, malaria driven by local rainfall, the same disease with per-patch parameters) and produce no warning. `describe()` lists the mobility, or "none". Mobility itself is specified in [06-routes.md](06-routes.md#mobility).
@@ -273,7 +273,8 @@ superinfection = latent >> latent @ ss.peryear(3) * active
 A transition can change a person's level as well as their state with `move=`, an arrow between two levels (which also limits the transition to people at the first) or the level people move to (for a clock, the time it is set to), and move them up a counter with `increment=` ([counters](#counters-and-clocks)). This is how one of two strains progresses alone, or resistance is acquired on progression:
 
 ```python
-ss.progression('latent -> active', rate=ss.peryear(0.1), move=dict(strain='A+B -> A'))
+latent, active = ss.states('latent active')
+ss.Transition(latent, active, rate=ss.peryear(0.1), move=dict(strain='A+B -> A'))
 ```
 
 tbsim's drug resistance (`tbsim.TB(drugs=['RIF', 'INH'])`) is built this way: the levels are the sets of strains people can carry, and treatment that fails is a transition that moves people to the strains that were not cured, with any resistance they acquired.
@@ -297,7 +298,7 @@ sim.results.hpv.cancer       # new cancers, any genotype: a sum of flows
 sim.results.hpv.infected.by('hpv')   # each member's own
 ```
 
-The members are in `sim.diseases` under their own names, beside the family. The family's names (`protected=`, the states of `dur=`, `exclusive=`) name states or named sums of states of each member and are resolved when the sim is built, so no member needs another to exist when it is written; a member that lacks one raises, unless it has a row of zeros in that matrix. A stock that every member has (a state, or a named sum of states such as `infected`) is a union over the members, and a flow (a transition) a sum. The family's attributes are the same unions as conditions: `where=hpv.infected` is the people infected with any member, and `hpv.infected.count() >= 2` the co-infected. With `init_prev=`, each person seeded gets one member, entering it as a new infection would (through its first transmission, in its shares), on the family's own random numbers; a member may not then have initial values of its own. The family is exact as agents, over networks too. It runs as agents for now: a compartmental solver raises `CapabilityError`, and `solver='auto'` chooses agents. Members that run side by side under the compartmental solvers, coupled through their shares, are the next step ([19-open-questions.md](19-open-questions.md)). A family named like a dimension raises.
+The members are in `sim.diseases` under their own names, beside the family. The family's names (`protected=`, the states of `dur=`, `exclusive=`) name states or named sums of states of each member and are resolved when the sim is built, so no member needs another to exist when it is written; a member that lacks one raises, unless it has a row of zeros in that matrix. A stock that every member has (a state, or a named sum of states such as `infected`) is a union over the members, and a flow (a transition) a sum. The family's attributes are the same unions as conditions: `where=hpv.infected` is the people infected with any member, and `hpv.infected.count() >= 2` the co-infected. With `init_prev=`, each person seeded gets one member, entering it as a new infection would (through its first transmission, in its shares), on the family's own random numbers; a member may not then have initial values of its own. The family is exact as agents, over networks too. Members that affect each other (`immunity=`, `exclusive=`) run as agents only: a compartmental solver raises `CapabilityError`, whatever `approx=`, and `solver='auto'` chooses agents (decided 2026-10-20). Members that do not run side by side under the compartmental solvers ([12-backends.md](12-backends.md#a-family-of-diseases-side-by-side)). A family named like a dimension raises.
 
 **As a second disease**, when the pathogens are unrelated (HIV and syphilis): write two `ss.Disease` modules and connect them with `ss.modify` ([07-effects.md](07-effects.md)).
 
@@ -343,7 +344,7 @@ A negative multiplier raises `InvalidAdjustment`. A multiplier that makes the br
 
 Parameters that differ by level can also be given directly in the base model with `ss.by(age=[...])` ([04-parameters.md](04-parameters.md)); `adjust` is for when the base model should not know about the dimension.
 
-A population that is not the product of a split by each dimension (more children in one patch than another) is given as one split over several dimensions: `sir.stratify(patch=ss.geo(names=['north', 'south']), split=ss.by(pop, dims=['age', 'patch']))`, where `pop` has a row for each age group and a column for each patch. Each dimension's own split is then the total over the others. A split given to one of them as well must agree with that total, or `InconsistentDimension` is raised (rows of shares given one dimension, as in a table of P(wealth | urban), are multiplied by that dimension's split first). A split over age and other dimensions whose row for each age group sums to 1 (`ss.by([[0, 1], [1, 0], [1, 0]], dims=['age', 'wealth'])`) is instead the share within each age group: people keep their ages, and the age groups their own split (noted as guessed). People born into the model (as agents, from `ss.Births` or `ss.Pregnancy`) take the youngest age group's share of the other dimensions, and the place of their parent for a dimension of places.
+A population that is not the product of a split by each dimension (more children in one patch than another) is given as one split over several dimensions: `sir.stratify(patch=ss.geo.location(names=['north', 'south']), split=ss.by(pop, dims=['age', 'patch']))`, where `pop` has a row for each age group and a column for each patch. Each dimension's own split is then the total over the others. A split given to one of them as well must agree with that total, or `InconsistentDimension` is raised (rows of shares given one dimension, as in a table of P(wealth | urban), are multiplied by that dimension's split first). A split over age and other dimensions whose row for each age group sums to 1 (`ss.by([[0, 1], [1, 0], [1, 0]], dims=['age', 'wealth'])`) is instead the share within each age group: people keep their ages, and the age groups their own split (noted as guessed). People born into the model (as agents, from `ss.Births` or `ss.Pregnancy`) take the youngest age group's share of the other dimensions, and the place of their parent for a dimension of places.
 
 ## Mixing over a dimension
 
@@ -359,7 +360,8 @@ ss.Sim(sir, networks=ss.contacts('Kenya'))
 
 - **In a compartmental run** the matrix is aggregated to the model's groups, weighted by population. Where a model group cuts through a matrix band, the band is split in proportion to population. A one-line note says the matrix was aggregated (`MatrixAggregated`).
 - **In an agent-based run** the matrix is used with its own groups: each agent has an exact age and is counted in whichever band the matrix uses.
-- **With places**, a contact matrix acts within each place, under every solver ([06-routes.md](06-routes.md#mobility)).
+- **With places**, a contact matrix acts within each place, under every solver ([06-routes.md](06-routes.md#mobility)); a matrix over the places themselves (`ss.contacts(patch=...)`) says who meets whom across them, and is how a force of infection shared between places (LASER's coupling) is written.
+- **The data is optional.** A matrix given as numbers needs nothing else: only a country's matrix by name (and `ss.geo.location` and `ss.people` by name) reads `starsim_data`, the optional `data` extra, and a model with no named data never imports it.
 
 With no mixing given, people mix homogeneously across the levels of every dimension except space, where the default is to mix within the patch ([06-routes.md](06-routes.md)).
 

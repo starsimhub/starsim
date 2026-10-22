@@ -10,6 +10,7 @@ import pandas as pd
 import pytest
 import sciris as sc
 import starsim as ss
+import starsim.fit
 
 ref_peak = 0.5446 # switching/epydemix.md, "The second week" §1: epydemix's peak share infected in the Kenya tutorial (v4: 0.5448)
 ref_peak_day = 40 # Same section: epydemix's day of the peak (v4: 39)
@@ -21,7 +22,8 @@ kenya = dict(start='2019-12-01', stop='2020-04-02', use_aging=False, verbose=0)
 
 def make_kenya(beta=0.04):
     """ The epydemix tutorial's SIR, by age, from v4's bundled data """
-    sir = ss.Disease(infection=ss.transmission('S -> I', beta=beta), recovery=ss.progression('I -> R', rate=0.1), init=dict(I=10), name='sir')
+    S, I, R = ss.states('S I R')
+    sir = ss.Disease(infection=ss.Transition(S, I, rate=beta * I), recovery=ss.Transition(I, R, rate=0.1), init=dict(I=10), name='sir')
     sir.stratify(age=[0, 5, 20, 50, 65])
     return sir
 
@@ -32,7 +34,8 @@ def make_seasonal(data=None):
     mobility = ss.timeseries(dict(zip(days.strftime('%Y-%m-%d'), np.linspace(1.0, 0.3, len(days)))))
     b = ss.par(true_b, bounds=[0.1, 1])
     season = ss.seasonal(mean=0.9, amplitude=0.1/0.9, peak=14/365)
-    sir = ss.Disease(infection=ss.transmission('S -> I', beta=b*season*mobility), recovery=ss.progression('I -> R', rate=ss.perday(0.25)), init=dict(I=100), name='sir')
+    S, I, R = ss.states('S I R')
+    sir = ss.Disease(infection=ss.Transition(S, I, rate=b*season*mobility * I), recovery=ss.Transition(I, R, rate=ss.perday(0.25)), init=dict(I=100), name='sir')
     return ss.Sim(sir, total_pop=1e6, unit='day', start='2020-02-23', stop='2020-05-31', solver='binomial', data=data, verbose=0)
 
 
@@ -40,7 +43,7 @@ def weekly_data():
     """ Weekly new infections from one run at the true value """
     dates = pd.date_range('2020-03-01', periods=13, freq='W')
     truth = make_seasonal(data=ss.data(pd.DataFrame({'new_infections': 0.0}, index=dates))).run()
-    weekly = ss.calibration.compare(truth)['new_infections'][1]
+    weekly = ss.results.compare(truth)['new_infections'][1]
     return ss.data(pd.DataFrame({'new_infections': np.round(weekly)}, index=dates))
 
 
@@ -73,7 +76,7 @@ def test_epydemix_vaccine_by_age():
 def test_epydemix_filter():
     sc.heading('epydemix: the particle filter peaks at the true value for a seasonal × mobility beta')
     sim = make_seasonal(data=weekly_data()).init()
-    filt = ss.ParticleFilter(sim, likelihood=dict(new_infections=ss.poisson()))
+    filt = ss.fit.ParticleFilter(sim, likelihood=dict(new_infections=ss.poisson()))
     loglik = {}
     for b in [0.4, true_b, 0.6]:
         sim.restart(pars=dict(b=b), rand_seed=0)

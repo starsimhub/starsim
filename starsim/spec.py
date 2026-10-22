@@ -1,5 +1,5 @@
 """
-The model spec (written by `sim.to_spec()`, for `sim.hash()` and `ss.diff()`) as code (`ss.to_code()`), and the parser of expressions in it
+The model spec (written by `sim.to_spec()`, for `sim.hash()` and `ss.diff()`) as code (`ss.to_code()`, for the declared parts of a model), and the parser of expressions in it
 """
 import ast
 import keyword
@@ -19,50 +19,9 @@ func_names = ['exp', 'log', 'sqrt', 'absolute', 'sin', 'cos', 'expit', 'minimum'
 comparisons = {ast.Lt:'<', ast.LtE:'<=', ast.Gt:'>', ast.GtE:'>='}
 
 
-def quantity(val, kind=None):
-    """ A value from the model spec: a typed quantity, a distribution, a value by stratum, or a plain number """
-    if isinstance(val, dict):
-        if val.get('type') == 'peract': # A probability per act: one value, or one for each direction
-            items = {k:quantity(v) for k,v in val.items() if k != 'type'}
-            return ss.peract(items['value']) if 'value' in items else ss.peract(**items)
-        elif 'type' in val:
-            unit = val['unit']
-            if unit is None:
-                return val['value']
-            if val['type'] == 'dur':
-                return getattr(ss, f'{unit}s')(val['value'])
-            prefix = '' if val['type'] == 'per' else val['type']
-            return getattr(ss, f'{prefix}per{unit}')(val['value'])
-        elif 'dist' in val:
-            pars = {k:quantity(v) for k,v in val.items() if k != 'dist'}
-            return getattr(ss, val['dist'])(**pars)
-        elif 'timeseries' in val:
-            times = list(val['timeseries'].keys())
-            values = [quantity(v) for v in val['timeseries'].values()]
-            kw = dict(period=quantity(val['period'])) if 'period' in val else {}
-            return ss.timeseries(dict(zip(times, values)), mode=val['mode'], **kw)
-        elif 'by' in val:
-            dims = val['by']
-            if 'array' in val:
-                return ss.by(val['array'], dims=dims)
-            elif 'table' in val:
-                return ss.by({col:quantity(v) for col,v in val['table'].items()})
-            elif 'values' in val:
-                return ss.by(**{dims[0]:quantity(val['values'])})
-            return ss.by(**{dim:quantity(v) for dim,v in val['product'].items()})
-        elif 'keyed' in val: # Values by label, e.g. ss.by(sex=dict(female=..., male=...))
-            return {k:quantity(v) for k,v in val['keyed'].items()}
-        elif 'seasonal' in val:
-            fields = val['seasonal']
-            return ss.seasonal(mean=quantity(fields['mean']), amplitude=fields['amplitude'], peak=fields['peak'])
-        unknown(f'the value {val}')
-    elif isinstance(val, list):
-        return [quantity(v) for v in val]
-    return val
-
-
 def unknown(what):
-    errormsg = f'ss.load() cannot yet read {what} from a model spec'
+    """ Refuse to write a part of a declared module that to_code() does not write, rather than write a different model """
+    errormsg = f'ss.to_code() cannot write {what}: only the declared parts of a model are written as code. Save the sim with ss.save("run.sim", sim) instead'
     raise NotImplementedError(errormsg)
 
 
@@ -133,7 +92,7 @@ def strat_kwargs(strat):
         split = joint_split(split)
     levels = strat['levels']
     if strat.get('geo'): # A named geography, looked up again; the split is as the spec has it
-        levels = ss.geo(strat['geo']['place'], **named_args(strat['geo'], geo_keys))
+        levels = ss.geo.location(strat['geo']['place'], **named_args(strat['geo'], geo_keys))
     if strat['kind'] == 'clock' and strat.get('unit'): # Durations
         levels = Code(f"ss.{strat['unit']}s({levels})")
     out = {strat['name']:levels, 'split':split, 'adjust':strat['adjust'] or None, 'kind':strat['kind']}
@@ -162,7 +121,7 @@ class Code(str):
 
 
 def code_value(val):
-    """ The Python for a value in the model spec: the inverse of quantity() """
+    """ The Python for a value in the model spec """
     if isinstance(val, Code):
         return str(val)
     elif isinstance(val, ss.by) and val.array is not None:
@@ -256,7 +215,7 @@ def func_code(fn, funcs, left):
 def with_functions(obj, funcs, left):
     """ The model spec with each function written as the name of its definition; see `func_code()` """
     if isinstance(obj, dict):
-        if 'fn' in obj and set(obj) <= {'fn', 'source', 'values'}:
+        if 'fn' in obj and set(obj) <= {'fn', 'source', 'values', 'ref', 'version'}:
             return func_code(obj, funcs, left)
         return {k:with_functions(v, funcs, left) for k,v in obj.items()}
     elif isinstance(obj, list):
@@ -281,8 +240,6 @@ def unitless_dur(val):
 
 def disease_code(spec, lines, left):
     """ The Python for one declared disease; returns the name of its variable """
-    if spec['type'] != 'Disease':
-        unknown(f'a module of type {spec["type"]}')
     if spec['functions']:
         unknown(f'functions ({sc.strjoin(f["name"] for f in spec["functions"])})')
     name = spec['name']
@@ -311,17 +268,8 @@ def disease_code(spec, lines, left):
         elif plain:
             add(f"{plain[0]} = ss.State('{plain[0]}')")
         plain.clear()
-    linked = {spec.get('first') or spec['states'][0]['name']} if spec['states'] else set() # The states Starsim takes to be people: those connected by transitions to the first
-    for i in range(len(spec['states'])):
-        for t in spec['transitions']:
-            ends = set(t['src'] or []) | set(t['dst'] or [])
-            if t['src'] and t['dst'] and ends & linked:
-                linked |= ends
     for s in spec['states']:
-        guessed = f'states.{s["name"]}.people' in spec['guessed']
-        extra = dict(people=False) if not s['people'] and not guessed else {}
-        if s['people'] and not guessed and s['name'] not in linked: # People that Starsim would not otherwise take to be
-            extra['people'] = True
+        extra = dict(people=False) if not s['people'] else {} # A state is people unless declared a count
         extra.update({k:s[k] for k in ['rel_sus', 'rel_trans'] if s[k] != 1.0})
         if s['label'] is not None:
             extra['label'] = s['label']
@@ -398,9 +346,6 @@ def disease_code(spec, lines, left):
             source = r['source']
             members.append((r['name'], f'ss.outcome({code_expr(source)}{extra})'))
 
-    for u in spec.get('updates', []): # Counts set each step
-        members.append((u['name'], f"ss.update({u['state']}, {code_expr(u['value'])})"))
-
     # Initial values
     inits = {s['name']:s['init'] for s in spec['states'] if s['init'] is not None and not isinstance(s['init'], str)}
     if inits:
@@ -431,7 +376,7 @@ def disease_code(spec, lines, left):
     for k,v in kwargs:
         add(f'    {k:{width}s} = {v},')
     add(')')
-    transfers = spec.get('transfers', [])
+    transfers = spec.get('transfers') or []
     dims = [strat['name'] for strat in spec['stratifications']]
     for strat in spec['stratifications']: # Each with the transfers along it
         own = {tf['name']:Code(transfer_code(tf)) for tf in transfers if tf['dim'] == strat['name']}
@@ -499,23 +444,23 @@ def contacts_code(net):
 
 
 def movable(strat, left):
-    """ The arguments to stratify(), with the movement between places written as ss.Mobility() where it is a matrix """
+    """ The arguments to stratify(), with the movement between places written as ss.geo.Mobility() where it is a matrix """
     mob = strat['mobility']
     plain = {k:v for k,v in strat.items() if k not in ['geo', 'split_from']}
     out = strat_kwargs({**plain, 'mobility':None})
     if strat.get('geo'): # A named geography as the call that looks it up, with its own split
         ref = strat['geo']
-        out[strat['name']] = Code(f"ss.geo({ref['place']!r}{''.join(f', {k}={v!r}' for k,v in named_args(ref, geo_keys).items())})")
+        out[strat['name']] = Code(f"ss.geo.location({ref['place']!r}{''.join(f', {k}={v!r}' for k,v in named_args(ref, geo_keys).items())})")
         out.pop('split')
     if strat.get('split_from'):
         out.pop('split', None)
     if mob is None:
         return out
     if isinstance(mob, dict) and mob.get('matrix') is not None and not mob.get('data'):
-        args = ', '.join(f'{k}={v if k in ["away", "back"] and isinstance(v, str) else repr(v)}' for k,v in mob.items() if v is not None) # A fitted share of time away by its parameter's name, and a typed rate of coming back as written
-        out['mobility'] = Code(f'ss.Mobility({args})')
+        args = ', '.join(f'{k}={v if k == "away" and isinstance(v, str) else repr(v)}' for k,v in mob.items() if v is not None) # A fitted share of time away by its parameter's name
+        out['mobility'] = Code(f'ss.geo.Mobility({args})')
     else:
-        left.append(f'the movement between places of "{strat["name"]}": give it with mobility=ss.Mobility(...) in stratify()')
+        left.append(f'the movement between places of "{strat["name"]}": give it with mobility=ss.geo.Mobility(...) in stratify()')
     return out
 
 
@@ -550,8 +495,8 @@ def modify_code(mod, mods):
     return f"ss.modify({', '.join(args)}, name={mod['name']!r})"
 
 
-delivery_types = ['Delivery', 'vaccinate', 'treat', 'screen', 'visit']
-delivery_keys = ['at_age', 'start', 'stop', 'at', 'interval', 'where', 'coverage', 'capacity', 'on', 'delay', 'when', 'deliver', 'trace', 'disease', 'cost', 'count_events']
+delivery_types = ['Delivery', 'vaccinate', 'treat', 'screen']
+delivery_keys = ['at_age', 'start', 'stop', 'at', 'interval', 'where', 'coverage', 'capacity', 'on', 'delay', 'when', 'deliver', 'trace', 'disease']
 cond_keys = ['where', 'on', 'detects']
 
 
@@ -601,8 +546,6 @@ def delivery_code(iv, mods):
     def value(key, val):
         if key in cond_keys and isinstance(val, str) and not isinstance(val, Code):
             return cond_code(val, mods)
-        elif key == 'count_events' and isinstance(val, list):
-            return '[' + ', '.join(cond_code(v, mods) for v in val) + ']'
         return code_value(val)
     args = []
     prod = iv.get('product_spec')
@@ -619,7 +562,7 @@ def delivery_code(iv, mods):
 
 def interventions_code(mods, diseases, lines):
     """
-    The deliveries, cascades, and modifiers of the model spec as Python: each product and delivery as a variable (so that a step can be
+    The deliveries and modifiers of the model spec as Python: each product and delivery as a variable (so that a step can be
     triggered by another's event, e.g. `who=screening.positive`), defined before the steps that refer to them; returns what goes in
     `interventions=`, and the lines that define them are added to `lines`
     """
@@ -634,7 +577,7 @@ def interventions_code(mods, diseases, lines):
     deliveries = [m for m in mods if m.get('type') in delivery_types]
     for prod in {iv['product_spec']['name']:iv['product_spec'] for iv in deliveries if iv.get('product_spec') is not None}.values():
         names[prod['name']] = (var(prod['name']), set())
-    for m in deliveries + [m for m in mods if m.get('type') == 'cascade']:
+    for m in deliveries:
         names[m['name']] = (var(m['name']), set())
     refs = sc.mergedicts(diseases, names)
     defined = set()
@@ -649,19 +592,13 @@ def interventions_code(mods, diseases, lines):
         lines.append(f"{names[iv['name']][0]} = {delivery_code(iv, refs)}")
         defined.add(iv['name'])
         todo.remove(iv)
-    in_cascade = set()
-    for m in mods:
-        if m.get('type') == 'cascade':
-            kwargs = f", count_events={code_value(m['count_events'])}" if m.get('count_events') is not None else ''
-            lines.append(f"{names[m['name']][0]} = ss.cascade({', '.join(names[s][0] for s in m['steps'])}{kwargs}, name={m['name']!r})")
-            in_cascade |= set(m['steps'])
     out = []
     for m in mods: # In the order given (anything else is listed as not written: see to_code())
         if m.get('type') == 'modify':
             out.append(modify_code(m, diseases))
         elif contacts_code(m):
             out.append(contacts_code(m))
-        elif m.get('type') in delivery_types + ['cascade'] and m['name'] not in in_cascade:
+        elif m.get('type') in delivery_types:
             out.append(names[m['name']][0])
     return out
 
@@ -670,13 +607,17 @@ def to_code(spec, filename=None, header=None, footer=None, code=None, missing=No
     """
     Write a model spec as a Python file that builds the same sim
 
-    The diseases are written in the operator form (`S >> I @ beta * I`), with each
-    parameter and state declared first, and each function used in the model defined
-    before them (from its source). What cannot be written (networks other than contact
-    matrices, interventions other than `ss.modify` and the deliveries, movement between places
-    from data, likelihoods other than a distribution, and functions whose source is not a plain definition) is listed
-    in comments at the end, and in a warning (`ss.LossyExport`), since the code then
-    builds a different model until it is added by hand.
+    Only the declared parts of a model are written: the declared diseases, in the operator
+    form (`S >> I @ beta * I`), with each parameter and state declared first, and each
+    function used in the model defined before them (from its source); contact matrices;
+    `ss.modify`; and the deliveries. Everything else is not reconstructed: modules and
+    networks written as code (named by the class that makes them, `factory`, with their
+    parameters in the spec), other interventions, movement between places from data,
+    likelihoods other than a distribution, and functions whose source is not a plain
+    definition are listed in comments at the end, and in a warning (`ss.errors.LossyExport`),
+    since the code then builds a different model until they are added by hand. A part of
+    a declared disease that cannot be written (the migration of a transition, custom
+    functions of the disease) raises `NotImplementedError` rather than write a different model.
 
     Args:
         spec (dict/str): the spec (from `sim.to_spec()`), or a JSON file holding one
@@ -703,9 +644,9 @@ def to_code(spec, filename=None, header=None, footer=None, code=None, missing=No
             continue
         mods = with_functions(spec.get(key) or [], funcs, left)
         for mod in mods:
-            if mod.get('type') not in ['modify'] + delivery_types + ['cascade'] and not contacts_code(mod):
+            if mod.get('type') not in ['modify'] + delivery_types and not contacts_code(mod):
                 left.append(f'{key[:-1]} "{mod.get("name", "?")}" ({mod.get("type", "?")}): add it to ss.Sim({simkey}=...)')
-        written = interventions_code(mods, owners(spec), prelude) # Deliveries and cascades as variables, defined before the sim
+        written = interventions_code(mods, owners(spec), prelude) # Deliveries as variables, defined before the sim
         if written:
             extra[simkey] = '[' + ', '.join(written) + ']'
     lines = []
@@ -714,7 +655,12 @@ def to_code(spec, filename=None, header=None, footer=None, code=None, missing=No
     lines += ['import starsim as ss', '']
     if funcs:
         lines += ['# Functions'] + [line for block in funcs for line in block.splitlines() + ['']]
-    names = [disease_code(mod, lines, left) for mod in spec['modules'] if mod['type'] != 'Strains']
+    names = []
+    for mod in [mod for mod in spec['modules'] if mod['type'] != 'Strains']:
+        if mod['type'] == 'Disease':
+            names.append(disease_code(mod, lines, left))
+        else: # Written as code (or declared, but not a disease): by the class that makes it, with its parameters, which the user can add
+            left.append(f'module "{mod["name"]}" ({mod.get("factory") or mod["type"]}): make it and add it to ss.Sim(...)')
     for fam in [mod for mod in spec['modules'] if mod['type'] == 'Strains']: # A family after its members, in their place among the sim's diseases
         names = strains_code(fam, names, lines)
     if prelude:
@@ -744,13 +690,15 @@ def to_code(spec, filename=None, header=None, footer=None, code=None, missing=No
     footer = list(footer or [])
     if left:
         footer += ['Not written as code (LossyExport; add by hand):'] + [f'  {item}' for item in left]
-        ss.warn(f'the code builds a different model until these are added by hand: {"; ".join(left)}', ss.LossyExport)
+        ss.warn(f'the code builds a different model until these are added by hand: {"; ".join(left)}', ss.errors.LossyExport)
     if footer:
         lines += [''] + [f'# {line}' for line in footer]
     lines += ['', "if __name__ == '__main__':", '    sim.run()', '    sim.plot()', '']
     code = '\n'.join(lines)
     if any('np.' in line for line in lines if not line.startswith('#')):
         code = code.replace('import starsim as ss\n', 'import numpy as np\nimport starsim as ss\n', 1)
+    if any('ssl.' in line for line in lines if not line.startswith('#')): # A module from the library, e.g. ssl.DegreeNet from an import
+        code = code.replace('import starsim as ss\n', 'import starsim as ss\nimport starsim.library as ssl\n', 1)
     if any('expit(' in line for line in lines if not line.startswith('#')):
         code = code.replace('import starsim as ss\n', 'import starsim as ss\nfrom scipy.special import expit\n', 1)
     if filename is not None:

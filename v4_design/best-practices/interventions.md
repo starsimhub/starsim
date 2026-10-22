@@ -8,7 +8,7 @@
 4. **Many interventions are an `ss.transfer` between strata or an `ss.modify` on a named quantity.** Do not build a class for what is already one of those.
 5. **The simple case stays a one-liner.** Covasim's `days`/`changes` form was simpler than what replaced it, and it comes back as `ss.change(..., at=, by=)`.
 6. **Coverage as a fraction and capacity as a number are different things**, and both are needed: `coverage=0.7` and `capacity=50_000`.
-7. **Interventions carry a cost.** Nothing else in the review except Atomica does this, and it is what the policy audience needs. With a cost, total cost is a result, and `ss.optimize()` can reallocate spending between programs (as the Atomica importer's program books do).
+7. **Interventions carry a cost.** Nothing else in the review except Atomica does this, and it is what the policy audience needs. With a cost, total cost is a result, and `ss.fit.optimize()` can reallocate spending between programs (as the Atomica importer's program books do).
 8. **Scenarios live in the model file**, not in a shell script, and a baseline contains whatever is really in place.
 
 ## Why
@@ -61,7 +61,7 @@ The aim is to get eligibility that reads like the `individual` version, can be s
 
 ## The specification
 
-[08-interventions.md](../design/08-interventions.md) specifies products (`ss.Vaccine`, `ss.Diagnostic`, `ss.Treatment`, with `efficacy=`, `waning=`, and `cost=`), the deliveries (`ss.vaccinate`, `ss.screen`, `ss.treat`, `ss.visit`) with their keywords (`who=` a condition or an event) or one `deliver=` function, cascades of steps triggered by each other's events and grouped by `ss.cascade`, the memory of events (`.ever`, `.count`, `.since`), `ss.change`, triggers (`when=`, and `hold=` on `ss.modify`), scenarios (`ss.parallel(baseline=..., vaccine=...)`), and how each solver realizes an intervention. Eligibility as conditions on the real attributes, and `ss.modify` for a change to a named quantity, are in [07-effects.md](../design/07-effects.md); vaccination as an `ss.transfer` between strata is in [05-dimensions.md](../design/05-dimensions.md).
+[08-interventions.md](../design/08-interventions.md) specifies products (`ss.Vaccine`, `ss.Diagnostic`, `ss.Treatment`, with `efficacy=`, `waning=`, and `cost=`), the deliveries (`ss.vaccinate`, `ss.screen`, `ss.treat`) with their keywords (`who=` a condition or an event) or one `deliver=` function, cascades of steps triggered by each other's events, the memory of events (`.ever`, `.count`, `.since`), `ss.change`, triggers (`when=`, and `hold=` on `ss.modify`), scenarios (`ss.parallel(baseline=..., vaccine=...)`), and how each solver realizes an intervention. Eligibility as conditions on the real attributes, and `ss.modify` for a change to a named quantity, are in [07-effects.md](../design/07-effects.md); vaccination as an `ss.transfer` between strata is in [05-dimensions.md](../design/05-dimensions.md).
 
 ## Trade-offs
 
@@ -84,7 +84,7 @@ The aim is to get eligibility that reads like the `individual` version, can be s
 - **A separate rule language** (EpiHiper's variables/sets/triggers/operations). The semantics are the best in the review; the syntax is 200 lines of JSON for one Friday.
 - **Edge-level eligibility** (EpiHiper's edge predicates). Networks are enough: to change school contacts, modify the school network.
 - **Interventions that are inactive unless a scenario enables them** (camdl). Baselines usually contain real interventions; each scenario lists what it contains.
-- **Budget optimization in v1** (Atomica, PyRoss). Do not rule it out; do not build it yet. (Since built for programs with spending, `ss.optimize()`, to match Atomica; optimal control is still out.)
+- **Budget optimization in v1** (Atomica, PyRoss). Do not rule it out; do not build it yet. (Since built for programs with spending, `ss.fit.optimize()`, to match Atomica; optimal control is still out.)
 
 ## Open questions
 

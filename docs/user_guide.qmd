@@ -52,7 +52,6 @@ To run these user guides locally:
 - [SIR Calibration](user_guide/workflows_sir_calibration.qmd)
 - [Calibration](user_guide/workflows_calibration.qmd)
 - [Deployment](user_guide/workflows_deploy.qmd)
-- [Working with samples](user_guide/workflows_samples.qmd)
 
 ## Advanced topics
 

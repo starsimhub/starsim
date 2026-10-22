@@ -34,19 +34,22 @@ control <- control.net(type = "SIS", nsims = 5, nsteps = 500, verbose = FALSE)
 sim <- netsim(est, param, init, control)
 ```
 
-In Starsim, `ss.PartnerNet` takes the same targets: a mean of 0.7 partners each (175 partnerships among 500 people), 22% with two or more, at most three, lasting 50 steps on average. With `acts=2`, the disease's `beta` is per act, as EpiModel's `inf.prob`:
+In Starsim, `ssl.DegreeNet` (from the library, `import starsim.library as ssl`) takes the same targets: a mean of 0.7 partners each (175 partnerships among 500 people), 22% with two or more, at most three, lasting 50 steps on average. With `acts=2`, the disease's `beta` is per act, as EpiModel's `inf.prob`:
 
 ```{python}
 import numpy as np
 import starsim as ss
+import starsim.library as ssl
+import starsim.interop
 ss.options(jupyter=True)
 
+S, I = ss.states('S I')
 sis = ss.Disease(
-    infection = ss.transmission('S -> I', beta=ss.prob(0.4)), # Per act
-    recovery  = ss.progression('I -> S', rate=ss.prob(0.05)),
+    infection = ss.Transition(S, I, rate=ss.prob(0.4) * I), # Per act
+    recovery  = ss.Transition(I, S, rate=ss.prob(0.05)),
     init      = dict(I=10),
 )
-partners = ss.PartnerNet(n_contacts=0.7, concurrency=0.22, max_contacts=3, dur=50, acts=2)
+partners = ssl.DegreeNet(n_contacts=0.7, concurrency=0.22, max_contacts=3, dur=50, acts=2)
 sim = ss.Sim(sis, networks=partners, n_agents=500, stop=500, verbose=0)
 
 msim = sim.run(n_runs=10)
@@ -87,20 +90,21 @@ These are from Starsim's switching demo for EpiModel users (`tests/switching/tes
 | Degree by risk group, with most partnerships within a group (EpiModel's `nodefactor` and `nodematch`) | **Works**: `n_contacts=ss.by(...)` and `match=`, below. Prevalence by group is within 6 points of EpiModel's 20.7% and 77.4% |
 | Several `match=` properties at once | **Works**: `match=dict(risk=0.9, region=0.7)`, a target for each |
 | A mixing matrix (`nodemix`), age differences (`absdiff`), degree in one network conditioning another | **Not yet** |
-| Triangles and other terms that need an ERGM (`gwesp`) | **Not planned**: `ss.PartnerNet` is not an ERGM |
-| Acts per partnership | **Works**: `acts=` on `ss.PartnerNet`, with `beta` per act |
+| Triangles and other terms that need an ERGM (`gwesp`) | **Not planned**: `ssl.DegreeNet` is not an ERGM |
+| Acts per partnership | **Works**: `acts=` on `ssl.DegreeNet`, with `beta` per act |
 | Network diagnostics (`netdx`) | **Works**: `net.check(n_runs=)` gives the target, the realized value, and its spread for the mean degree, concurrency, maximum degree, and duration |
 | Fit the transmission probability to observed prevalence with `sim.calibrate()` | **Fails**: the fit runs, but fresh runs at the fitted value give 33.8% prevalence against the 30% it was fitted to (300 agents; the default method, Optuna, uses one run per trial). `method='abc-smc'` is available for stochastic models |
-| Build and run a model from R | **Works**: through reticulate, with arrow strings and `name=` (the operators `>>` and `@` have no R spelling); R-Starsim's `transition()` and `disease()` wrap this |
+| Build and run a model from R | **Works**: through reticulate, with `ss$Transition()`, states named with `ss$states()`, and `name=` (the operators `>>` and `@` have no R spelling); R-Starsim's `transition()` and `disease()` wrap this |
 | Scenarios | **Works**: `sim.new(pars=..., interventions=...)` and `ss.parallel(baseline=..., prep=...)` |
 
 Degree by risk group: 80% of people have a mean of 0.4 partners and 20% a mean of 1.6, and 80% of partnerships are within a group (EpiModel's target statistics of 320 edges, 320 high-risk ends, and 256 within a group):
 
 ```{python}
-net = ss.PartnerNet(n_contacts=ss.by(risk=[0.4, 1.6]), match=dict(risk=0.8), dur=50)
+net = ssl.DegreeNet(n_contacts=ss.by(risk=[0.4, 1.6]), match=dict(risk=0.8), dur=50)
+S, I = ss.states('S I')
 sis = ss.Disease(
-    infection = ss.transmission('S -> I', beta=ss.prob(1 - 0.6**2)), # Two acts at 0.4
-    recovery  = ss.progression('I -> S', rate=ss.prob(0.05)),
+    infection = ss.Transition(S, I, rate=ss.prob(1 - 0.6**2) * I), # Two acts at 0.4
+    recovery  = ss.Transition(I, S, rate=ss.prob(0.05)),
     init      = dict(I=10),
 )
 sim = ss.Sim(sis, networks=net, n_agents=1000, stop=300, verbose=0)
@@ -115,4 +119,4 @@ print(f'Prevalence: {low:.1%} low risk, {high:.1%} high risk (EpiModel: 20.7%, 7
 
 ## Bringing your model in
 
-`ss.load('model.R', format='epimodel')` reads an EpiModel model. Since EpiModel models are R scripts, the script is first run in EpiModel's own environment by `dump_epimodel.R` (in `starsim/interop/`), with EpiModel's fitting and simulating functions replaced by ones that record their arguments, and that writes a JSON file for `ss.load()`. A model of a built-in type (`"SI"`, `"SIS"`, `"SIR"`) becomes a disease with its transitions, and a network fitted by `netest()` becomes an `ss.PartnerNet` with the same targets. Modules written in R (`infection.FUN = ...`) are listed as not translated, with their source in `sim.imported.modules`, to be written by hand; `sim.imported.prompt` is a prompt for an AI assistant with Starsim's import-model skill to finish the job. `sim.describe()` shows how each part was read.
+`ss.interop.load('model.R', format='epimodel')` reads an EpiModel model. Since EpiModel models are R scripts, the script is first run in EpiModel's own environment by `dump_epimodel.R` (in `starsim/interop/`), with EpiModel's fitting and simulating functions replaced by ones that record their arguments, and that writes a JSON file for `ss.interop.load()`. A model of a built-in type (`"SI"`, `"SIS"`, `"SIR"`) becomes a disease with its transitions, and a network fitted by `netest()` becomes an `ssl.DegreeNet` with the same targets. Modules written in R (`infection.FUN = ...`) are listed as not translated, with their source in `sim.imported.modules`, to be written by hand; `sim.imported.prompt` is a prompt for an AI assistant with Starsim's import-model skill to finish the job. `sim.describe()` shows how each part was read.

@@ -21,6 +21,7 @@ import numpy as np
 import pandas as pd
 import sciris as sc
 import starsim as ss
+import starsim.fit
 import matplotlib.pyplot as plt
 
 plt.switch_backend('agg')
@@ -48,7 +49,7 @@ def write_data():
     pd.DataFrame({'Week ending': weeks, 'Reported Cases (weekly)': cases, 'District': 'Nairobi'}).to_csv('kenya_moh_2020.csv', index=False)
     pd.DataFrame(dict(year=[2020, 2021], beta=[0.05, 0.02])).to_csv('beta.csv', index=False)
     os.makedirs('params', exist_ok=True)
-    pd.DataFrame(dict(name=['beta'], value=[0.3])).to_csv('params/kenya_2024.csv', index=False)
+    sc.savejson('params/kenya_2024.json', dict(beta=0.3))
     survey = pd.date_range('2020-01-08', '2020-02-12', freq='W') # Weekly prevalence of an SIR with beta = 0.25 per day, 10 days infectious, and 1% infected at the start (13-inference.md)
     pd.DataFrame(dict(date=survey, prevalence=[0.0474, 0.1088, 0.1914, 0.2368, 0.2163])).to_csv('prevalence.csv', index=False)
     return
@@ -114,48 +115,46 @@ def test_error_catalog():
     """ The catalog of errors, warnings, and notes in 15-errors.md is the one the code makes """
     assert ss.errors.check_catalog(design / '15-errors.md'), "15-errors.md does not match the code: run ss.errors.check_catalog('v4_design/design/15-errors.md', write=True)"
     for cls in ss.errors.classes():
-        assert getattr(ss, cls.__name__) is cls and cls.__doc__, f'{cls.__name__} should be ss.{cls.__name__}, with a docstring saying when it is raised'
+        assert getattr(ss.errors, cls.__name__) is cls and cls.__doc__, f'{cls.__name__} should be ss.errors.{cls.__name__}, with a docstring saying when it is raised'
     return
 
 
 # The counted vocabulary of 17-vocabulary.md: for each group, its names in `ss.`, and which of them the specification adds to Starsim ('all' for every one)
 vocabulary = {
     'Sim and modules': ('Sim People people ppl Module Disease Strains Infection Demographics Intervention Connector Analyzer', 'people ppl Strains'),
-    'States, transitions, parameters, results': ('State states null Transition transmission progression birth death immigration emigration lifetable transfer par outcome update data', 'all'),
+    'States, transitions, parameters, results': ('State states null Transition birth death immigration emigration lifetable transfer par outcome data', 'all'),
     'Time': ('dur days weeks months years day week month year datedur per perday perweek permonth peryear prob probperday probperweek probpermonth probperyear freq freqperday freqperweek freqpermonth freqperyear date peract', 'peract'),
     'Distributions': ('Dist normal lognorm_ex lognorm_im expon gamma weibull poisson nbinom binom uniform bernoulli constant choice erlang truncnorm', 'binom erlang truncnorm'),
     'Parameter forms': ('by timeseries seasonal', 'all'),
-    'Mixing and space': ('Network RandomNet MFNet StaticNet MixingPool MixingPools PartnerNet contacts geo Mobility gravity', 'PartnerNet contacts geo Mobility gravity'),
-    'Interactions and interventions': ('modify change immunity Vaccine Diagnostic Treatment vaccinate screen treat visit cascade', 'all'),
-    'Running, comparing, saving': ('MultiSim parallel options compare_models optimize diff load save', 'compare_models optimize diff'),
-    'Optional metadata': ('Requires', 'all'),
-    'Types you get back or subclass': ('Result Loop Timeline Rate TimePar Fit', 'Fit'),
+    'Mixing and space': ('Network RandomNet SexualNet MixingPool MixingPools contacts geo.location geo.Mobility geo.gravity', 'contacts geo.location geo.Mobility geo.gravity'),
+    'Interactions and interventions': ('modify change immunity Vaccine Diagnostic Treatment vaccinate screen treat', 'all'),
+    'Running, comparing, saving': ('MultiSim parallel options diff load save compile', 'diff compile'),
+    'Types you get back or subclass': ('Result Loop Timeline Rate TimePar', ''),
 }
 
 # The second tier of the namespace: names not counted in the vocabulary that modules written as code, and Starsim 3 code, use (the third tier is internal, reached through its submodule: ss.solvers.Compartmental, ss.transitions.Expr, ss.distributions.link_dists)
 code_names = """
-AgeGroup AlreadyRunError Arr Base BaseArr BaseScreening BaseTest BaseTreatment BaseTriage BaseVaccination BetaBinomial Binomial Births BoolArr
-BoolState BreastfeedingNet CalibComponent Calibration CampaignDelivery Dataset DateArray Deaths Debugger Delivery Diagnostics DirichletMultinomial Dx
-DynamicNetwork Event FloatArr GammaPoisson IndexArr IntArr MaternalNet ModelComparison ModifiableArr NCD Normal Optimization Pars ParticleFilter Person PostnatalNet
-Pregnancy Lactation PregnancyPars PrenatalNet Product Profile Results RoutineDelivery SEIR SIR SIS Samples SexualNetwork SimPars Tx Vx beta_dist beta_mean
-check_requires check_sims_match check_version choose_n compare demo diff_sims dtypes dynamics_by_age fit histogram infection_log loglik mismatch
-mock_module mock_people mock_sim mock_time multi_random ndict note parse_age_range plot_args randint random register_modules required return_fig root
-show shrink single_run standardize_data standardize_netkey state any child mother attr func spread on Resource share stay clock style to_code treat_num uids warn
+AgeGroup AlreadyRunError Arr Base BaseArr Births BoolArr
+BoolState BreastfeedingNet DateArray Deaths Delivery
+DynamicNetwork Event FloatArr IndexArr IntArr MaternalNet ModifiableArr Pars Person PostnatalNet
+Pregnancy Lactation PregnancyPars PrenatalNet Product Results SEIR SIR SIS SimPars beta_dist beta_mean
+check_requires choose_n demo dtypes dynamics_by_age histogram infection_log
+multi_random ndict note parse_age_range plot_args randint random register_modules required return_fig root
+show shrink state child mother attr on stay style to_code uids warn
 """.split()
 
 
 # The counted methods and attributes, by the class they are on, and which of them the specification adds
 methods = {
-    'Disease': ('describe diagram equations solvers transitions stratify to_spec to_json copy pars R0', 'describe diagram equations solvers transitions stratify to_spec R0'),
+    'Disease': ('describe diagram equations transitions stratify to_spec copy pars R0', 'describe diagram equations transitions stratify to_spec R0'),
     'State': ('n frac total', 'all'),
     'ModifiableArr': ('effective', 'all'),
-    'Sim': ('init run plot summarize to_df loop results describe solvers stratify requires to_spec to_code to_json hash calibrate sensitivity check_dt what_modifies new R0 gradient', 'describe solvers stratify requires to_spec to_code hash calibrate sensitivity check_dt what_modifies new R0 gradient'),
+    'Sim': ('init run plot summarize to_df loop results describe stratify to_spec to_code to_json hash calibrate sensitivity check_dt what_modifies new gradient', 'describe stratify to_spec to_code hash calibrate sensitivity check_dt what_modifies new gradient'),
     'Loop': ('insert to_df plot plot_step_order', ''),
     'Result': ('select by sum resample cum quantiles values', 'select by cum quantiles'),
-    'PartnerNet': ('check', 'all'),
-    'MultiSim': ('run plot summarize to_df results diff extinction outbreaks to_hub', 'diff extinction outbreaks to_hub'),
-    'Fit': ('sim pars plot summarize to_df project samples', 'sim project samples'),
-    'ModelComparison': ('fits plot summarize to_df', 'fits'),
+    'MultiSim': ('run plot summarize to_df results diff', 'diff'),
+    'fit.Fit': ('sim pars plot summarize to_df project samples', 'sim project samples'),
+    'fit.ModelComparison': ('fits plot summarize to_df', 'fits'),
 }
 
 
@@ -168,15 +167,10 @@ def split_names(names, new):
 
 def vocabulary_counts():
     """ The counts of 17-vocabulary.md: the headings of the groups and the table of totals, made from the lists above """
-    headings = {group:len(names.split()) for group,(names,new) in vocabulary.items()}
-    rows = []
-    for group,(names,new) in vocabulary.items():
-        names, new = split_names(names, new)
-        rows.append((group, len(names), len(new)))
-    n_names = sum(r[1] for r in rows)
-    n_new = sum(r[2] for r in rows)
-    method_names = set()
-    method_new = set()
+    rows = [(group, *map(len, split_names(names, new))) for group,(names,new) in vocabulary.items()]
+    headings = {group:n for group,n,_ in rows}
+    n_names, n_new = sum(r[1] for r in rows), sum(r[2] for r in rows)
+    method_names, method_new = set(), set()
     for names,new in methods.values():
         names, new = split_names(names, new)
         method_names.update(names)
@@ -235,13 +229,17 @@ def test_vocabulary():
     for group,(names,new) in vocabulary.items():
         names, new = split_names(names, new)
         for name in names:
-            obj = getattr(ss, name, None)
+            obj = ss
+            for part in name.split('.'): # E.g. ss.geo.location
+                obj = getattr(obj, part, None)
             assert obj is not None and not isinstance(obj, types.ModuleType), f'17-vocabulary.md counts ss.{name}, which Starsim does not export'
             assert f'ss.{name}`' in sections[group], f'ss.{name} is counted in "{group}" but not listed there in 17-vocabulary.md'
             bold = f'**`ss.{name}`**' in sections[group]
             assert bold == (name in new), f'ss.{name} should {"" if name in new else "not "}be in bold in "{group}" in 17-vocabulary.md, since it is {"" if name in new else "not "}new'
     for clsname,(names,new) in methods.items():
-        cls = getattr(ss, clsname)
+        cls = ss
+        for part in clsname.split('.'): # E.g. ss.fit.Fit
+            cls = getattr(cls, part)
         for name in names.split():
             assert has_attr(cls, name), f'17-vocabulary.md counts the method or attribute "{name}" on ss.{clsname}, which it does not have'
             assert f'`{name}`' in sections['Methods and attributes'], f'"{name}" (on ss.{clsname}) is counted but not listed in the methods of 17-vocabulary.md'
@@ -249,21 +247,16 @@ def test_vocabulary():
     return
 
 
-
 def test_namespace():
     """ Every name exported at ss. is in the vocabulary (17-vocabulary.md), the second tier (code_names), or an error class; the rest are in submodules """
     counted = set(' '.join(names for names,_ in vocabulary.values()).split())
-    errors = {name for name in ss.errors.__all__} if hasattr(ss.errors, '__all__') else {name for name,obj in vars(ss.errors).items() if isinstance(obj, type) and issubclass(obj, BaseException)}
+    errors = set(ss.errors.__all__) if hasattr(ss.errors, '__all__') else {name for name,obj in vars(ss.errors).items() if isinstance(obj, type) and issubclass(obj, BaseException)}
     exported = {name for name in dir(ss) if not name.startswith('_') and not isinstance(getattr(ss, name), types.ModuleType)}
     unplaced = exported - counted - set(code_names) - errors
     assert not unplaced, f'Exported at ss. but in no tier: {sorted(unplaced)}; add each to the vocabulary or code_names in test_spec.py, or move it to its submodule'
     assert not set(code_names) & counted, f'In both tiers: {sorted(set(code_names) & counted)}'
     gone = set(code_names) - exported
     assert not gone, f'In code_names but not exported: {sorted(gone)}'
-    for name in ss._removed: # Removed names say what to write instead
-        assert name not in exported
-        with pytest.raises(AttributeError, match='Instead'):
-            getattr(ss, name)
     return
 
 if __name__ == '__main__':

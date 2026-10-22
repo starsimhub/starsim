@@ -12,7 +12,6 @@ sc.options.interactive = False # Assume not running interactively
 # ss.options.warnings = 'error' # Uncomment for additional debugging
 
 small = 100
-medium = 1000
 
 debug_pars = dict(
     n_agents = small,
@@ -28,9 +27,7 @@ debug_pars = dict(
 def test_profile():
     sc.heading('Testing sim.profile()')
 
-    # Based on advanced_profiling.ipynb
-    sim = ss.Sim(**debug_pars)
-    prof = sim.profile()
+    prof = ss.Sim(**debug_pars).profile() # Based on advanced_profiling.ipynb
     return prof
 
 
@@ -63,7 +60,7 @@ def test_diagnostics_states():
 @sc.timer()
 def test_check_requires():
     sc.heading('Testing check_requires')
-    s1 = ss.Sim(diseases='sis', networks='random', n_agents=medium).init()
+    s1 = ss.Sim(diseases='sis', networks='random', n_agents=small).init()
     ss.check_requires(s1, 'sis')
     ss.check_requires(s1, ss.SIS)
     with pytest.raises(AttributeError):

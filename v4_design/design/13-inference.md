@@ -27,7 +27,9 @@ fit = sim.calibrate()
 fit.plot()
 ```
 
-`calibrate()` fits **every parameter that has `bounds`** to **every result that has data**, and returns an `ss.Fit`. Both were already stated where they belong: the bounds on the parameter, the data on the sim. Nothing is said twice. A parameter of a module written as code, given as an `ss.par` with bounds (`ssl.HIV(beta=ss.par(0.01, bounds=[0.001, 0.1]))`), is fitted too. A parameter with a value for each level of a stratification (`ss.par(ss.by(patch=[0.2, 0.3]), bounds=[0.1, 1])`) is fitted level by level, with the same bounds and prior, as `beta[a]`, `beta[b]`, and so on, and a typed value takes typed bounds (`ss.par(ss.days(8), bounds=[ss.days(3), ss.weeks(4)])`).
+`calibrate()` fits **every parameter that has `bounds`** to **every result that has data**, and returns an `ss.fit.Fit`. Both were already stated where they belong: the bounds on the parameter, the data on the sim. Nothing is said twice. A parameter of a module written as code, given as an `ss.par` with bounds (`ssl.HIV(beta=ss.par(0.01, bounds=[0.001, 0.1]))`), is fitted too. A parameter with a value for each level of a stratification (`ss.par(ss.by(patch=[0.2, 0.3]), bounds=[0.1, 1])`) is fitted level by level, with the same bounds and prior, as `beta[a]`, `beta[b]`, and so on, and a typed value takes typed bounds (`ss.par(ss.days(8), bounds=[ss.days(3), ss.weeks(4)])`).
+
+The fitting itself is the submodule `ss.fit`, which an ordinary run never imports: it is imported the first time it is used, by `sim.calibrate()` or by any of its parts (`ss.fit.loglik()`, `ss.fit.ParticleFilter`, `ss.fit.compare_models()`, and so on).
 
 ### Compared with Starsim 3
 
@@ -161,16 +163,16 @@ or, for any result, at calibration time: `sim.calibrate(likelihood=dict(prevalen
 
 ## Choosing the method
 
-The right fitting method follows from the model, so the library picks it and prints the choice with the reason. `method=` overrides it.
+By default a fit is a best fit (a point estimate), by the method that suits the sim, which the library picks and prints with the reason; `method=` overrides it. A posterior is always asked for by name, so that what a fit answers does not depend on what is installed: the same call asks the same question on every machine.
 
-| The sim | Without a likelihood for every series (default) | With a likelihood for every series |
+| The sim | The default: a best fit | A posterior, by name |
 |---|---|---|
-| `solver='ode'`, with gradients (JAX installed, and the kernels run the sim whole) | L-BFGS-B, with gradients by automatic differentiation | NUTS, a posterior (L-BFGS-B, the maximum, if BlackJAX is not installed) |
-| `solver='ode'`, without gradients | Nelder-Mead | Nelder-Mead |
-| Stochastic compartmental, run whole by the kernels | Optuna; a best fit | particle MCMC, a posterior |
-| Agent-based, or a stochastic run stepped from Python | Optuna; a best fit | Optuna; a best fit |
+| `solver='ode'`, with gradients (the kernels run the sim whole) | L-BFGS-B, with gradients by automatic differentiation (Nelder-Mead for one or two parameters, where it is faster) | `'nuts'`, with a likelihood for every series |
+| `solver='ode'`, without gradients | Nelder-Mead | `'abc-smc'` |
+| Stochastic compartmental, run whole by the kernels | Optuna | `'pmcmc'` (particle MCMC), with a likelihood for every series |
+| Agent-based, or a stochastic run stepped from Python | Optuna | `'abc-smc'` |
 
-The other methods are chosen by name: `'abc-smc'` (approximate Bayesian computation by sequential Monte Carlo: a posterior without a likelihood, for any sim, with `generations=`, `quantile=`, `tolerance=`, and `particles=`), `'asd'` (adaptive stochastic descent, `sc.asd()`), and any method of `scipy.optimize.minimize`. Settings for a method are keywords of `calibrate()`: `trials=` for Optuna (100 by default), `draws=`, `warmup=`, and `chains=` for NUTS (500, 500, and 4) and particle MCMC (1,000, 1,000, and 4), `particles=` for particle MCMC (chosen by each chain in its warm-up by default). An unknown `method=` is an error that lists the methods. For the SciPy methods, a search starts from each of the best three points (`restarts=3`) of a spread of points over the bounds (`scan=`, 10 per parameter by default, with the initial values) that are at least a tenth of the bounds apart, and the best result is kept; NUTS starts each chain from one of the best of the same points, so that chains caught in different modes disagree and R-hat sees it.
+With a likelihood for every series, the best fit is the maximum likelihood (or, with priors, the most probable values), and the printed reason names the posterior method the sim allows. The other methods are chosen by name: `'abc-smc'` (approximate Bayesian computation by sequential Monte Carlo: a posterior without a likelihood, for any sim, with `generations=`, `quantile=`, `tolerance=`, and `particles=`), `'if2'` (iterated filtering, as pomp's and camdl's: the maximum likelihood of a stochastic compartmental sim, from passes of a particle filter in which each particle's values follow a shrinking random walk, with `particles=`, `iterations=`, `cooling=`, `sd=`, and `chains=`), `'asd'` (adaptive stochastic descent, `sc.asd()`), and any method of `scipy.optimize.minimize`. Settings for a method are keywords of `calibrate()`: `trials=` for Optuna (100 by default), `draws=`, `warmup=`, and `chains=` for NUTS (500, 500, and 4) and particle MCMC (1,000, 1,000, and 4), `particles=` for particle MCMC (chosen by each chain in its warm-up by default). An unknown `method=` is an error that lists the methods. For the SciPy methods, a search starts from each of the best three points (`restarts=3`) of a spread of points over the bounds (`scan=`, 10 per parameter by default, with the initial values) that are at least a tenth of the bounds apart, and the best result is kept; NUTS starts each chain from one of the best of the same points, so that chains caught in different modes disagree and R-hat sees it.
 
 The same model with no network, run as an ODE:
 
@@ -190,7 +192,7 @@ fit = sim.calibrate()
 
 ```text
 Searching on a log scale: init_prev, beta
-Fitting by l-bfgs-b (gradients by automatic differentiation; override with method=)
+Fitting by nelder-mead (2 fitted parameters, for which it is faster than gradients; override with method=)
 Converged: the best two of 3 searches, from points of the scan that are apart, ended within 0.1 of each other (1342, 1342, 1388; 287 evaluations)
 ```
 
@@ -208,7 +210,7 @@ Parameters that the data cannot tell apart are noted when the fit ends (`Unident
 
 ### Gradients
 
-For a sim with `solver='ode'`, the fit has gradients. The ODE is run by the kernels (RK4 in Numba); for a gradient, the same RK4 steps are taken in JAX and differentiated by automatic differentiation, and the steps either side of the run (from the parameters to the numbers in the program, and from the run to the results and the goodness of fit) by central differences, so a gradient is exact to about 1e-10 ([12-backends.md](12-backends.md)). For NUTS, the whole log-density (the run, the results with data, the likelihood, and the priors) is one function in JAX, differentiated in forward mode, so the sampling is compiled and the chains run on cores of their own; a model it does not cover yet is sampled with Python in the loop, which is much slower, and the fit says so. This is what camdl gets by symbolic differentiation, without anything symbolic. Two things follow:
+For a sim with `solver='ode'`, the fit has gradients. The ODE is run by the kernels (RK4, as plain Python or compiled by Numba); for a gradient, the same RK4 steps are taken in JAX and differentiated by automatic differentiation, and the steps either side of the run (from the parameters to the numbers in the program, and from the run to the results and the goodness of fit) by central differences, so a gradient is exact to about 1e-10 ([12-backends.md](12-backends.md)). For NUTS, the whole log-density (the run, the results with data, the likelihood, and the priors) is one function in JAX, differentiated in forward mode, so the sampling is compiled and the chains run on cores of their own; a model it does not cover yet is sampled with Python in the loop, which is much slower, and the fit says so. This is what camdl gets by symbolic differentiation, without anything symbolic. Two things follow:
 
 - **Gradient-based optimizers** (L-BFGS-B) are the default for ODE models, and converge in far fewer runs than a simplex or a trial-based search when there are more than a few parameters.
 - **HMC/NUTS** is available for ODE models that have a likelihood, which gives a posterior at a cost that does not grow badly with the number of parameters.
@@ -216,7 +218,6 @@ For a sim with `solver='ode'`, the fit has gradients. The ODE is run by the kern
 Conditions and limits:
 
 - Gradients need a sim that the kernels run from start to finish: no interventions other than the deliveries the kernels take, no modifier with `when=`, no transfer whose rate varies, and no movement register. A rate written with NumPy functions of counts has gradients; a rate that is a Python function of the sim has none. Without gradients the fit uses Nelder-Mead, and the printed reason says why.
-- Without JAX installed, ODE models are fitted by Nelder-Mead; NUTS also needs BlackJAX.
 - Gradients exist for `solver='ode'` only. Stochastic compartmental and agent-based sims are fitted by the methods in the table that need none.
 - The same machinery is available directly: `sim.gradient()` gives the derivatives of results with respect to parameters, and `sim.log_density()` the log-density as a function in JAX, with its gradient by reverse mode.
 - Symbolic Jacobians, fixed points, and eigenvalues are not part of this and stay out of v1.
@@ -326,20 +327,20 @@ Which of two models is better supported by the data? "Does this model need an ex
 
 <!-- fragment -->
 ```python
-comp = ss.compare_models([sim_sir, sim_seir], data=df)
+comp = ss.fit.compare_models([sim_sir, sim_seir], data=df)
 comp.plot()
 ```
 
-`ss.compare_models` judges models by how well they predict data they were not fitted to:
+`ss.fit.compare_models` judges models by how well they predict data they were not fitted to:
 
 1. Hold out the last part of each data series (the final 25% of its time points by default; `holdout=` takes a fraction or a date).
-2. Fit each model to the rest with `sim.calibrate()`, by the method chosen for that model, but always a best fit (an optimizer, not a sampler).
+2. Fit each model to the rest with `sim.calibrate()`, by its default method, which is a best fit (an optimizer, not a sampler).
 3. Run each fitted model forward over the held-out period.
 4. Score the predictions against the held-out data, the same way for every model: with the default goodness of fit, or, if every series of every model has a likelihood, with the negative log-likelihood of the held-out data at the best fit.
 5. Report a table.
 
 ```text
->>> comp = ss.compare_models([sim_sir, sim_seir], data=df)
+>>> comp = ss.fit.compare_models([sim_sir, sim_seir], data=df)
 >>> comp.summarize()
 held out: the last 25% of each series (cases: 2020.10.04 to 2020.12.27)
        fitted_pars  fit_error  prediction_error  rank
@@ -362,8 +363,9 @@ The models can differ in any way (structure, stratification, solver), since each
 - **A separate calibration vocabulary** (Starsim's `calib_pars`, `build_fn`, `CalibComponent`). Bounds belong on parameters and data belongs with results; restating them elsewhere is verbose and drifts.
 - **Requiring a likelihood.** Most users want the model to go through the data. A likelihood is available when the question needs one.
 - **A squared error as the default goodness of fit.** One bad reporting week dominates it. It is available as `gof='rmse'`.
-- **One method for every model.** Optuna on a three-equation ODE is slow and gives no uncertainty; NUTS on an agent-based model is not possible. The model determines the method.
+- **One method for every model.** Optuna on a three-equation ODE is slow and gives no uncertainty; NUTS on an agent-based model is not possible. The model determines the default method, and whether the answer is a best fit or a posterior is asked with `method=`.
+- **A posterior by default when it is possible.** A deterministic sim with a likelihood for every series used to be sampled by NUTS where BlackJAX was installed and fitted by L-BFGS-B where it was not, so the same call gave a posterior on one machine and a best fit on another. The default is a best fit everywhere.
 - **Presenting the spread of optimizer trials as an interval.**
 - **`fit.apply(sim)`.** The calibrated sim is `fit.sim`.
-- **Writing the inference methods from scratch.** Wrap existing optimizers and samplers (SciPy, Optuna, BlackJAX's NUTS); the library's job is to connect the model to them. (Particle MCMC and ABC-SMC are short samplers written in Starsim, `ss.calibration.pmmh()` and `ss.calibration.abc_smc()`, since they need the sim's own particle filter and runs.)
+- **Writing the inference methods from scratch.** Wrap existing optimizers and samplers (SciPy, Optuna, BlackJAX's NUTS); the library's job is to connect the model to them. (Particle MCMC and ABC-SMC are short samplers written in Starsim, `ss.fit.pmmh()` and `ss.fit.abc_smc()`, since they need the sim's own particle filter and runs.)
 - **Information criteria as the comparison.** They need a likelihood and a parameter count that means something; out-of-sample prediction needs neither.

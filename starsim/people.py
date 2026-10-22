@@ -81,6 +81,7 @@ class People:
         # a selection of the states e.g., module states could be added in there, while intervention states might not.
         self._states = {}
         self.version = ss.__version__  # Store version info
+        self.has_unborn = False # Whether a module makes agents before they are born, with a negative age (e.g. ss.Pregnancy's fetuses), who are not counted among the people: see unborn_uids()
         self.initialized = False
         self.n_agents_init = n_agents
         self.named = None # For a named population (ss.people('Kenya')), where it came from: see ss.people()
@@ -301,15 +302,15 @@ class People:
 
         Note: `age_data` can also be provided as a string (interpreted as a filename).
 
-        If no value is provided, uniform ages from 0-60 are created (to match the
-        global mean age of ~30 years).
+        If no value is provided, the ages are the world's (`ss.named.world`), as for a sim
+        with no named population.
 
         Returns:
             An [`ss.Dist`](`starsim.distributions.Dist`) instance that returns an age for newly created agents
         """
         if age_data is None:
-            dist = ss.uniform(low=0, high=60, name='Age distribution')
-        elif isinstance(age_data, ss.Dist): # A distribution of ages, used as is
+            age_data = ss.named.age_data(ss.named.world.ages, ss.named.world.counts)
+        if isinstance(age_data, ss.Dist): # A distribution of ages, used as is
             dist = age_data
         else:
             # Try loading from file
@@ -434,7 +435,7 @@ class People:
 
     def init_mock(self):
         """ Initialize with a mock simulation (for debugging purposes only) """
-        sim = ss.mock_sim(n_agents=self.n_agents)
+        sim = ss.debugtools.mock_sim(n_agents=self.n_agents)
         self.link_sim(sim, init=True)
         self.init_vals()
         return
@@ -677,7 +678,7 @@ class People:
 
         # Execute deaths that took place this timestep (i.e., changing the `alive` state of the agents). This is executed
         # before analyzers have run so that analyzers are able to inspect and record outcomes for agents that died this timestep
-        diseases = [disease for disease in self.sim.diseases() if isinstance(disease, ss.Disease)]
+        diseases = [disease for disease in self.sim.diseases() if isinstance(disease, ss.diseases.DiseaseBase)]
         diseases += [mod for mod in getattr(self.sim, 'declared', []) if all(mod is not disease for disease in diseases)] # A declared disease given as another kind of module: its agents leave its states as well
         for disease in diseases:
             disease.step_die(death_uids)
@@ -767,9 +768,8 @@ class People:
         return
 
     def unborn_uids(self):
-        """ The active agents not yet born: those made at conception by `ss.Pregnancy`, with a negative age, who are not counted among the people (e.g. in `n_alive`) """
-        sim = self.sim
-        if sim.solver != 'abm' or not any(getattr(mod, 'fetus', False) is True for mod in sim.demographics()): # Made at conception by ss.Pregnancy, with fetuses as agents
+        """ The active agents not yet born, with a negative age (e.g. made at conception by `ss.Pregnancy`), who are not counted among the people (e.g. in `n_alive`) """
+        if not self.has_unborn:
             return ss.uids()
         auids = self.auids
         return auids[self.age.raw[auids] < 0]

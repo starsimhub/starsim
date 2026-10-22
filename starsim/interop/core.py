@@ -42,7 +42,7 @@ class Source:
         self.config = sc.objdict() # Arguments to ss.Sim
         self.choices = [] # How each flow was read, as printed
         self.incomplete = [] # What could not be translated, as (name, why)
-        self.declared = False # Whether the states of people are declared to be, rather than worked out by Starsim (as those connected by transitions to the first state)
+        self.declared = False # Whether the format says which states are people; if not, they are worked out here (see linked_states())
         return
 
     def add_state(self, name, init=None, people=True, label=None):
@@ -319,12 +319,28 @@ class Rates:
 
 #%% Building the sim
 
+def linked_states(source):
+    """
+    For a format that does not say which states are people: those joined by flows to the first state, in either
+    direction (a person moves only along flows), and those that no flow touches; the rest are counts (a reservoir, a vector)
+    """
+    flows = [set(sc.tolist(f.src)) | set(sc.tolist(f.dst)) for f in source.flows if f.src and f.dst]
+    touched = {name for f in source.flows for name in sc.tolist(f.src) + sc.tolist(f.dst) if name}
+    linked = set(list(source.states)[:1])
+    for _ in source.states:
+        for ends in flows:
+            if ends & linked:
+                linked |= ends
+    return linked | (set(source.states) - touched)
+
+
 def disease(source, total=None):
     """ The disease for one source, and how each of its flows was read (total is the number of people, for initial numbers of people below one) """
     rates = Rates(source)
     states = sc.objdict()
+    people = set(source.states) if source.declared else linked_states(source)
     for name,s in source.states.items():
-        states[name] = ss.State(name=name, people=(True if source.declared else None) if s.people else False, label=s.label)
+        states[name] = ss.State(name=name, people=bool(s.people) and name in people, label=s.label)
     pars = sc.objdict({name:ss.par(p.value, doc=p.doc, bounds=p.get('bounds'), prior=p.get('prior'), name=name) for name,p in source.pars.items()})
     taken = set(states) | set(pars)
     parse = ss.spec.Parser({**states, **pars})
@@ -437,7 +453,7 @@ def build(sources, verbose=None, **kwargs):
     Build a sim from one or more models read from another framework
 
     Each source becomes a disease. Prints how each flow was read and, as
-    `ss.ImportIncomplete`, what could not be translated; both are kept in
+    `ss.errors.ImportIncomplete`, what could not be translated; both are kept in
     `sim.imported`.
 
     Args:
@@ -485,7 +501,7 @@ def build(sources, verbose=None, **kwargs):
         sim.imported.prompt = handoff(sim.imported)
         items = '\n'.join(f'  {name}: {why}' for name,why in incomplete)
         ss.warn(f'{len(incomplete)} part(s) of the model were not translated:\n{items}\n'
-                f'The sim runs without them. {sim.imported.prompt}', ss.ImportIncomplete)
+                f'The sim runs without them. {sim.imported.prompt}', ss.errors.ImportIncomplete)
     return sim
 
 

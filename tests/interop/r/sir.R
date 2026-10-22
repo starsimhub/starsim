@@ -2,9 +2,11 @@
 library(reticulate)
 ss <- import("starsim")
 
+st <- ss$states("S I R") # Named up front: there is no Python variable to name them from
+S <- st[[1]]; I <- st[[2]]; R <- st[[3]]
 sir <- ss$Disease(
-    infection = ss$transmission("S -> I", beta = 0.3),
-    recovery  = ss$progression("I -> R", dur = 10),
+    infection = ss$Transition(S, I, rate = 0.3 * I),
+    recovery  = ss$Transition(I, R, dur = 10),
     init_prev = 0.01,
     name = "sir"
 )

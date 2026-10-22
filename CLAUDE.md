@@ -69,22 +69,23 @@ uv add starsim[dev]  # With dev dependencies
 ### Core modules (`starsim/`)
 - `analyzers.py`: Analyzers for custom results (e.g. `ss.infection_log`, `ss.dynamics_by_age`)
 - `arrays.py`: State management arrays for people/networks
-- `calibration.py`: Model calibration to data
 - `conditions.py`: Conditions on states and people, for `where=` (`ss.conditions.Cond`)
 - `connectors.py`: Connectors between modules (e.g. `ss.modify`)
 - `dates.py`: Dates and calendar durations (`ss.date`, `ss.DateArray`, `ss.datedur`)
 - `debugtools.py`: Profiling, debugging, and mock objects for testing
 - `dimensions.py`: Stratifications (`ss.dimensions.Strat`, `ss.transfer`) and the groups they give (`sim.groups`, an `ss.dimensions.Groups`)
 - `distributions.py`: Statistical distributions and random number generation
-- `errors.py`: Errors, warnings, and notes, as classes (e.g. `ss.UnknownState`)
+- `errors.py`: Errors, warnings, and notes, as classes (e.g. `ss.errors.UnknownState`; the base classes and `ss.CapabilityError` are also at the root)
 - `expressions.py`: Expressions in rates and results (`ss.par`, `ss.transitions.Expr`), and how they are evaluated and printed
+- `fit.py`: Fitting to data, as `ss.fit` (imported when first used; `sim.calibrate()` is the entry point)
+- `geo.py`: Places and the movement between them (`ss.geo.location`, `ss.geo.Mobility`, `ss.geo.gravity`)
 - `gradients.py`: Gradients and log-densities in JAX (`sim.gradient()`, `sim.log_density()`)
 - `graph.py`: The graph of a declared module: its states, transitions, and parameters, completed with defaults and checked (`ss.transitions.Graph`)
 - `kernels.py`: The Numba kernels that run compartmental models
 - `loop.py`: Main simulation integration loop
 - `modules.py`: Base module classes and update logic
 - `named.py`: Places and contact matrices by name (`ss.people('Kenya')`, `ss.contacts('Kenya')`)
-- `networks.py`: Networks, mixing pools, and places and movement between them (`ss.geo`, `ss.Mobility`)
+- `networks.py`: Networks and mixing pools
 - `parameters.py`: Parameter containers (`ss.Pars`, `ss.SimPars`) and values that vary by level or in time (`ss.by`, `ss.timeseries`, `ss.seasonal`)
 - `presentation.py`: How a declared model is shown: `describe()`, `diagram()`, `equations()`, and its model spec
 - `products.py`: Vaccine and treatment deployment

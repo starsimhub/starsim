@@ -19,7 +19,7 @@ There are three products, one for each kind of delivery:
 | `ss.Diagnostic` | Diagnostics | `ss.screen()` | `sensitivity`, `specificity`, `delay`, `detects`, `cost` |
 | `ss.Treatment` | Treatments | `ss.treat()` | `cure`, `efficacy`, `transition`, `cost` |
 
-They work with every solver: in an agent-based run the sim records who holds a product and since when, and in a compartmental run holding it becomes a stratification of the model. Starsim 3's product classes, `ss.Vx`, `ss.Dx`, and `ss.Tx`, remain as base classes for products written as code ([below](#products-written-as-code)).
+They work with every solver: in an agent-based run the sim records who holds a product and since when, and in a compartmental run holding it becomes a stratification of the model. What follows each person's own history is agents only: waning given as a function of the time since delivery, a test's `delay=`, `queue=` and `delay=` on a delivery, and the memory `.since` and `.count` (`.ever` works with every solver); with `solver='auto'` such a model runs as agents.
 
 ## Vaccines
 
@@ -95,84 +95,22 @@ res = sim.results.vaccination
 print(f'Doses: {res.delivered.sum():n}; total cost: ${res.cost.sum():,.2f}')
 ```
 
-## Products written as code
+## Tests with several results, and treatment queues
 
-If the built-in products don't do what you need, you can write your own by subclassing `ss.Vx`, `ss.Dx`, `ss.Tx`, or `ss.Product` directly and implementing `administer()`. These are Starsim 3's product classes; they run as agents, and are delivered by interventions written as code (see [Interventions](modules_interventions.qmd#base-classes)). Vaccine products receive `(people, uids)`; diagnostics and treatments receive `(uids)` and return their outcomes.
-
-### Products from tables
-
-`ss.Dx` is a diagnostic defined by a dataframe giving the probability of each test result, conditional on an agent's true disease state. The results are returned in priority order (the `hierarchy`), with the first listed result taking precedence when an agent could match more than one. `ss.Tx` is a treatment that moves agents from one disease state to another with a given efficacy, defined by a dataframe with `disease`, `state`, `post_state`, and `efficacy` columns. These are useful for products with more than two results, or that act differently in each disease state:
+A test can have more than two results: `results=` gives them most severe first, each with its probability for people in each state (`None` for people in none of the states), and the last result is `None`, everyone the others do not take. Each result is a result of the delivery and an event that can trigger what follows; `positive` is any result but the last. A treatment can have a capacity, and with `queue=True` those not served wait, longest first, until they are served or are no longer eligible (a duration, e.g. `queue=ss.months(6)`, limits the wait; agents only):
 
 ```{python}
-import sciris as sc
-
-# Probability of each result given the agent's true state
-dx_data = sc.dataframe(
-    columns = ['disease', 'state', 'result', 'probability'],
-    data = [
-        ['sis', 'susceptible', 'positive', 0.01],  # False positive rate
-        ['sis', 'susceptible', 'negative', 0.99],
-        ['sis', 'infected',    'positive', 0.95],  # Sensitivity
-        ['sis', 'infected',    'negative', 0.05],
-    ]
-)
-
-# Treatment clears infection with 80% efficacy
-tx_data = sc.dataframe(
-    columns = ['disease', 'state', 'post_state', 'efficacy'],
-    data = [['sis', 'infected', 'susceptible', 0.8]],
-)
-
-# Screening by routine delivery, composed from the base classes
-class routine_screening(ss.BaseScreening, ss.RoutineDelivery):
-    pass
-
-screening = routine_screening(product=ss.Dx(df=dx_data), prob=0.5, start_year=2010)
-treatment = ss.treat_num(
-    product = ss.Tx(df=tx_data),
-    eligibility = lambda sim: sim.interventions.routine_screening.outcomes['positive'],
-    max_capacity = 50, # Treat at most 50 agents per timestep
-)
+cytology = ss.Diagnostic(results=dict(high=dict(I=0.9), low={'I': 0.05, None: 0.02}, normal=None)) # Low grade for 2% of those not infected
+screening = ss.screen(cytology, coverage=0.5, start='2010', interval=ss.years(1))
+treatment = ss.treat(ss.Treatment(cure=0.8), who=screening.high, capacity=50, queue=True) # At most 50 treated each step
 
 sim = ss.Sim(**pars, interventions=[screening, treatment])
 sim.run()
-sim.plot('sis')
-print('Tested positive on the final step:', len(sim.interventions.routine_screening.outcomes['positive']))
+res = sim.results
+print(f'High grade: {res.screening.high.sum():n}; low grade: {res.screening.low.sum():n}; treated: {res.treatment.delivered.sum():n}')
 ```
 
-### A custom vaccine
-
-The example below is a vaccine whose efficacy is higher for younger agents, delivered by a vaccination program composed from the base classes:
-
-```{python}
-import numpy as np
-
-class AgeTargetedVx(ss.Vx):
-    """ A vaccine that is more effective in younger agents """
-    def __init__(self, efficacy=0.9, **kwargs):
-        super().__init__()
-        self.define_pars(efficacy=efficacy)
-        self.update_pars(**kwargs)
-        return
-
-    def administer(self, people, uids):
-        # Efficacy declines linearly with age, to a floor of 0
-        age_factor = np.clip(1 - people.age[uids]/80, 0, 1)
-        protection = 1 - self.pars.efficacy*age_factor
-        for disease in self.sim.diseases.values():
-            disease.rel_sus[uids] *= protection
-        return
-
-class routine_vx(ss.BaseVaccination, ss.RoutineDelivery):
-    pass
-
-vaccination = routine_vx(product=AgeTargetedVx(efficacy=0.9), start_year=2010, prob=0.5)
-sim = ss.Sim(**pars, interventions=vaccination)
-sim.run()
-sim.plot('sis')
-```
-
-Note that `prob=0.5` here is a probability per year for each eligible person, Starsim 3's meaning of "routine"; see [rounds and routine delivery](modules_interventions.qmd#rounds-and-routine-delivery).
+A product whose effect needs code of its own, such as a protection computed for each agent, is an intervention written as code (see [Interventions](modules_interventions.qmd#writing-an-intervention-as-code)); an effect on the people who hold a product can also be a modifier whose `where=` is the product's memory, e.g. `ss.modify(sis.rel_sus, multiply=0.5, where=vaccine.since > ss.years(5))`.
 
 :::{.callout-tip}
 Because products are modules, they can define their own parameters (with `define_pars()`), states, and results, just like any other Starsim module. See [Adding new modules](modules_adding.qmd) for the general pattern.

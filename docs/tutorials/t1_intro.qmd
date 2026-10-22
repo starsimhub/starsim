@@ -30,17 +30,18 @@ Let's start with the simplest version of a Starsim model. We'll make a version o
 import starsim as ss
 ss.options(jupyter=True) # This makes the plotting nicer
 
+S, I, R = ss.states('S I R')
 sir = ss.Disease(
-    infection = ss.transmission('S -> I', beta=0.3),  # Susceptible people are infected...
-    recovery = ss.progression('I -> R', dur=10),      # ...and infectious people recover
-    init_prev = 0.01,                                 # 1% of people start infected
+    infection = ss.Transition(S, I, rate=0.3 * I), # Susceptible people are infected...
+    recovery  = ss.Transition(I, R, dur=10),       # ...and infectious people recover
+    init_prev = 0.01,                              # 1% of people start infected
 )
 sim = ss.Sim(sir, stop=100) # Make the sim
 sim.run()                   # Run it
 sim.plot()                  # Plot the results
 ```
 
-A model in Starsim is a set of states (here `S`, `I`, and `R`, read from the arrow strings) and the transitions between them. Nothing here has a unit, so time is counted in steps: the sim runs for 100 steps, and `beta` is per step. When the sim runs, it prints the solver it chose: since nothing in this model needs individual people, it is solved as an ODE.
+A model in Starsim is a set of states (here `S`, `I`, and `R`, declared first) and the transitions between them. Nothing here has a unit, so time is counted in steps: the sim runs for 100 steps, and `beta` is per step. When the sim runs, it prints the solver it chose: since nothing in this model needs individual people, it is solved as an ODE.
 
 ## The same model with agents
 

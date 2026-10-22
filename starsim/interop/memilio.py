@@ -12,7 +12,7 @@ an age stratification with a contact matrix, a damping a factor on the force of
 infection (smoothed over the day before it, as MEmilio does), and those who die
 leave the model, as they leave MEmilio's denominator. A graph (`MobilityGraph`, or
 the `ModelGraph` of a `GraphParameterStudy`) becomes a stratification by place, one
-level per node, with its edges as commuting (`ss.Mobility`); the distributions of a
+level per node, with its edges as commuting (`ss.geo.Mobility`); the distributions of a
 parameter study become the parameters' priors, for `ss.parallel(sim, n_runs=,
 priors=True)`.
 """
@@ -234,8 +234,8 @@ def nodes_of(src, d, places, totals):
         return
     away = 0.5*M # The share of their time that people spend in each other place
     split = ss.by(totals/totals.sum(), dims=['age', 'patch']) if n > 1 else (totals[0]/totals.sum()).tolist()
-    src.stratify(patch=places, split=split, mobility=ss.Mobility(matrix=away.tolist(), kind='commute'))
-    src.notes.append(f'places        the {len(nodes)} nodes as the places "{places[0]}" to "{places[-1]}", and the {len(edges)} edges as commuting: MEmilio moves an edge\'s share of a node\'s people to the other node for every other step and back, so they spend half their time there (ss.Mobility(kind="commute") with half the share); '
+    src.stratify(patch=places, split=split, mobility=ss.geo.Mobility(matrix=away.tolist(), kind='commute'))
+    src.notes.append(f'places        the {len(nodes)} nodes as the places "{places[0]}" to "{places[-1]}", and the {len(edges)} edges as commuting: MEmilio moves an edge\'s share of a node\'s people to the other node for every other step and back, so they spend half their time there (ss.geo.Mobility(kind="commute") with half the share); '
                      f'MEmilio integrates the commuters in the other node, where Starsim weights each place\'s exposure by the time spent there, so counties whose epidemic starts from commuters can differ (switching/memilio.md)')
     if d['model'] == 'osecir':
         src.notes.append('commuting     MEmilio\'s commuters with symptoms commute less (by RiskOfInfectionFromSymptomatic, get_mobility_factors()); here everyone commutes alike, which carries infection between places faster '

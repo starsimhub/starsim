@@ -21,29 +21,29 @@ def test_lazy():
     ppl = new.sim.people
     assert np.all(ppl.female[new.I.uids]) and np.all(ppl.age[new.I.uids] >= 15)
 
-    # A state by path, for a module made before its siblings exist, and a union of several
+    # A state by path, for a module made before its siblings exist
     def pair(where):
-        a = ss.Disease(sa=ss.progression('S -> I', rate=ss.peryear(0.3)), name='a')
-        b = ss.Disease(sb=ss.progression('S -> I', rate=ss.peryear(1.0), where=where), name='b')
+        S, I = ss.states('S I')
+        a = ss.Disease(sa=ss.Transition(S, I, rate=ss.peryear(0.3)), name='a')
+        S, I = ss.states('S I')
+        b = ss.Disease(sb=ss.Transition(S, I, rate=ss.peryear(1.0), where=where), name='b')
         return ss.Sim([a, b], n_agents=2000, start=2000, stop=2005, unit='year', **kw).run()
-    sim = pair(ss.any(ss.state(f'{g}.I') for g in ['a']))
+    sim = pair(ss.state('a.I'))
     a, b = sim.diseases.a, sim.diseases.b
     assert np.all(a.I[b.I.uids]) and b.I.count() > 100
     with pytest.raises(ValueError):
         ss.state('X')
-    with pytest.raises(ValueError):
-        ss.any([])
     return sim
 
 
 @sc.timer()
 def test_bv_debut():
-    sc.heading('Port: BV debut as soon as women turn 15, with ss.on()')
+    sc.heading('Port: BV debut as soon as women turn 15, with ss.on(), as agents and as compartments')
     adult_f = ss.ppl.female & (ss.ppl.age >= 15)
     def make():
         U, CST1, CST4 = ss.states('U CST1 CST4')
         return ss.Disease(U, CST1, CST4,
-            debut = ss.progression('U -> CST1 | CST4', on=adult_f, p=[0.8, None]), # Was rate=ss.perday(1), where=adult_f
+            debut = ss.Transition(U, [CST1, CST4], on=adult_f, p=[0.8, None]), # Was rate=ss.perday(1), where=adult_f
             onset = CST1 >> CST4 @ ss.peryear(0.2),
             clear = CST4 >> CST1 @ ss.months(6),
             name='bv')
@@ -63,44 +63,35 @@ def test_bv_debut():
 
     # A trigger has no rate to modify
     bv = make()
-    with pytest.raises(ss.UnmodifiableTarget):
+    with pytest.raises(ss.errors.UnmodifiableTarget):
         ss.Sim(bv, connectors=ss.modify(bv.debut, multiply=2), n_agents=100, **kw).init()
-    return sim
 
-
-def test_bv_debut_ode():
-    """ As compartments: the compartments of women 15+ in U are empty at the start, and aging into them is moved on at each step """
-    adult_f = ss.ppl.female & (ss.ppl.age >= 15)
-    U, CST1, CST4 = ss.states('U CST1 CST4')
-    bv = ss.Disease(U, CST1, CST4, debut=ss.progression('U -> CST1 | CST4', on=adult_f, p=[0.8, None]), onset=CST1 >> CST4 @ ss.peryear(0.2), clear=CST4 >> CST1 @ ss.months(6), name='bv')
+    # As compartments: the compartments of women 15+ in U are empty at the start, and aging into them is moved on at each step
     strat = [dict(sex=['female', 'male']), dict(age=[0, 10, 15, 50, 100])]
-    ode = ss.Sim(bv, solver='ode', total_pop=10_000, stratify=strat, use_aging=True, start=2000, stop=2010, dt=ss.months(1), unit='year', **kw).run() # v4 ages people only with births or deaths, unless asked
+    ode = ss.Sim(make(), solver='ode', total_pop=10_000, stratify=strat, use_aging=True, start=2000, stop=2010, dt=ss.months(1), unit='year', **kw).run() # v4 ages people only with births or deaths, unless asked
     r = ode.results.bv
     waiting = r.n_U.select(sex='female', age='15-49')
     assert waiting[0] == 0 and waiting.max() < 10 and r.debut[2:].sum() > 50 # Only those who aged in during the step
     assert any('arrivals where it holds go straight' in note for note in ode.notes)
-    return ode
+    return sim
 
 
 @sc.timer()
 def test_on_event():
-    sc.heading('Testing ss.on() with an event: edge-triggered, in the same step, whatever the module order')
-    def make(order):
-        a = ss.Disease(sa=ss.progression('S -> I', rate=ss.peryear(0.5)), ia=ss.progression('I -> S', dur=ss.years(1)), name='a')
-        S, F, G = ss.states('S F G')
-        b = ss.Disease(S, F, G, flag=S >> F @ ss.on(a.sa), unflag=F >> S @ ss.years(0.2), name='b') # Flagged when infected with a; level semantics would flag them again on return
-        mods = [a, b] if order else [b, a]
-        return ss.Sim(mods, n_agents=3000, start=2000, stop=2005, dt=ss.months(1), unit='year', **kw).run()
+    sc.heading('Testing ss.on() with an event: edge-triggered, in the same step, whatever the module order, as agents and as compartments')
     for order in [True, False]:
-        sim = make(order)
+        sim = make_on_event(order)
         res = sim.results
         assert res.b.flag.sum() > 100
         assert res.b.flag.sum() <= res.a.sa.sum() # Only those infected (and in S of b at the time)
         assert np.isclose(res.b.flag[1:].sum(), res.a.sa[1:].sum(), rtol=0.25)
+        r = make_on_event(order, solver='ode').results
+        assert np.isclose(r.b.flag.sum(), res.b.flag.sum(), rtol=0.05), f'{r.b.flag.sum():.0f} as an ODE, {res.b.flag.sum():.0f} as agents'
+        assert np.isclose(r.b.flag.sum(), r.b.unflag.sum() + r.b.n_F[-1], rtol=1e-6) # The flow is the move
 
     # The events of a state by path, for modules made from strings: the same as the state's own
     def by_path(path):
-        a = ss.Disease(sa=ss.progression('S -> I', rate=ss.peryear(0.5)), ia=ss.progression('I -> S', dur=ss.years(1)), name='a')
+        a = make_a()
         S, F, G = ss.states('S F G')
         b = ss.Disease(S, F, G, flag=S >> F @ ss.on(ss.state('a.I').enter if path else a.I.enter), unflag=F >> S @ ss.years(0.2), name='b')
         on = [ss.state('a.I').exit] if path else [a.I.exit] # A transition by path (ss.state('a.sa')) is not known to be an event when the delivery is made, so is not an on=
@@ -143,13 +134,20 @@ def test_join_events():
     return sim
 
 
+def check_cancel(sim, names=('hpv16', 'hpv18')):
+    """ An analyzer: nobody progresses in one genotype beside cancer of the other """
+    d = sim.diseases
+    for g,o in [names, names[::-1]]:
+        assert not np.any(d[o].X.raw & (d[g].S.raw | d[g].P.raw | d[g].C.raw)), f'step {sim.ti}: {g} progresses beside {o} cancer'
+
+
 @sc.timer()
 def test_hpv_cancel():
-    sc.heading('Port: HPV, cancelling the other genotypes when one reaches cancer, with ss.on()')
+    sc.heading('Port: HPV, cancelling the other genotypes when one reaches cancer, with ss.on(), as agents and as compartments')
     names = ['hpv16', 'hpv18']
     def make(g):
         S, P, C, X, Z = ss.states('S P C X Z')
-        other = ss.any(ss.state(f'{o}.X') for o in names if o != g) # The siblings do not exist yet
+        [other] = [ss.state(f'{o}.X') for o in names if o != g] # The sibling does not exist yet
         return ss.Disease(S, P, C, X, Z,
             infection = S >> P @ ss.peryear(0.3),
             precin    = P >> C @ ss.years(2),
@@ -157,28 +155,13 @@ def test_hpv_cancel():
             cancer    = C >> X @ ss.years(4),
             cancelled = (S + P + C) >> Z @ ss.on(other), # Was rate=ss.peryear(1e3), where=other_cancer
             name = g)
-    def check(sim):
-        d = sim.diseases
-        for g,o in [names, names[::-1]]:
-            assert not np.any(d[o].X.raw & (d[g].S.raw | d[g].P.raw | d[g].C.raw)), f'step {sim.ti}: {g} progresses beside {o} cancer'
-    for order in [names, names[::-1]]:
-        sim = ss.Sim([make(g) for g in order], analyzers=check, n_agents=5000, start=2000, stop=2020, unit='year', **kw).run()
-        res = sim.results
-        assert res.hpv16.cancelled.sum() > 50 and res.hpv18.cancelled.sum() > 50
-    return sim
+    sims = [ss.Sim([make(g) for g in order], analyzers=check_cancel, n_agents=5000, start=2000, stop=2020, unit='year', **kw).run() for order in [names, names[::-1]]]
+    for sim in sims:
+        assert sim.results.hpv16.cancelled.sum() > 50 and sim.results.hpv18.cancelled.sum() > 50
 
-
-def test_hpv_cancel_ode():
-    """ As compartments, tracked jointly; arrivals by the other's move are cancelled at the next loop time """
-    names = ['hpv16', 'hpv18']
-    def make(g):
-        S, P, C, X, Z = ss.states('S P C X Z')
-        other = ss.any(ss.state(f'{o}.X') for o in names if o != g)
-        return ss.Disease(S, P, C, X, Z, infection=S >> P @ ss.peryear(0.3), precin=P >> C @ ss.years(2), clear=C >> S @ ss.years(4),
-                          cancer=C >> X @ ss.years(4), cancelled=(S + P + C) >> Z @ ss.on(other), name=g)
-    sim = ss.Sim([make(g) for g in names], n_agents=5000, start=2000, stop=2020, unit='year', **kw).run()
+    # As compartments, tracked jointly; arrivals by the other's move are cancelled at the next loop time
     ode = ss.Sim([make(g) for g in names], solver='ode', total_pop=5000, start=2000, stop=2020, unit='year', **kw).run()
-    assert ode.crossings and np.isclose(ode.results.hpv16.cancelled.sum(), sim.results.hpv16.cancelled.sum(), rtol=0.25)
+    assert ode.crossings and np.isclose(ode.results.hpv16.cancelled.sum(), sims[0].results.hpv16.cancelled.sum(), rtol=0.25)
     return ode
 
 
@@ -194,22 +177,15 @@ def test_syphilis_stay():
             tertiary = ss.Transition(LL, [T, ss.stay], p=[0.35, None], dur=dur)
         return ss.Disease(LL, T, Sp, tertiary=tertiary, cure=(LL + T) >> Sp, name='syph') # Everyone starts in LL; cure is undriven, so not the remainder
     out = sc.objdict()
-    with pytest.raises(ss.BadBranchSplit, match='ss.stay'): # The rest stay only if asked to (pending a decision: ss.transitions.rest_stay)
+    with pytest.raises(ss.errors.BadBranchSplit, match='ss.stay'): # The rest stay only if asked to, with ss.stay
         make('implicit')
-    for form in ['implicit', 'explicit']:
-        for solver in ['abm', 'ode']:
-            size = dict(n_agents=10_000) if solver == 'abm' else dict(total_pop=10_000)
-            ss.transitions.rest_stay = form == 'implicit'
-            try:
-                sim = ss.Sim(make(form), solver=solver, start=2000, stop=2006, unit='year', **size, **kw).run()
-            finally:
-                ss.transitions.rest_stay = False
-            res = sim.results.syph
-            assert np.isclose(res.n_T[-1]/1e4, 0.35, atol=0.02), f'{form} ({solver}): {res.n_T[-1]/1e4:.3f} in T'
-            assert np.isclose(res.tertiary.sum(), res.n_T[-1], rtol=1e-6) # Staying is not a flow
-            out[f'{form}_{solver}'] = sim
-    desc = out.implicit_abm.diseases.syph.describe(output=True)
-    assert 'the other 65% stay' in desc and '[guessed]' in desc
+    for solver in ['abm', 'ode']:
+        size = dict(n_agents=10_000) if solver == 'abm' else dict(total_pop=10_000)
+        sim = ss.Sim(make('explicit'), solver=solver, start=2000, stop=2006, unit='year', **size, **kw).run()
+        res = sim.results.syph
+        assert np.isclose(res.n_T[-1]/1e4, 0.35, atol=0.02), f'{solver}: {res.n_T[-1]/1e4:.3f} in T'
+        assert np.isclose(res.tertiary.sum(), res.n_T[-1], rtol=1e-6) # Staying is not a flow
+        out[f'explicit_{solver}'] = sim
     assert 'states.LL.stay' not in out.explicit_abm.diseases.syph.graph.guessed
     s = out.explicit_abm.diseases.syph # Those who stayed: no new dwell time, and LL.time keeps running
     u = s.LL.uids
@@ -223,7 +199,7 @@ def test_syphilis_stay():
         size = dict(n_agents=10_000) if solver == 'abm' else dict(total_pop=10_000)
         ns = [ss.Sim(branches(p), solver=solver, start=2000, stop=2010, unit='year', **size, **kw).run().results.d.n_H[-1] for p in [0.3, lambda sim: 0.3]]
         assert np.isclose(ns[1]/1e4, 0.3, atol=0.02) and np.isclose(ns[0], ns[1], rtol=0.05), f'{solver}: {ns}'
-    with pytest.raises(ss.BadBranchSplit):
+    with pytest.raises(ss.errors.BadBranchSplit):
         S, A = ss.states('S A')
         ss.Disease(S, A, x=ss.Transition(S, ss.stay, p=0.5))
     return out
@@ -286,27 +262,27 @@ def test_ct_by_sex():
 
 
 @sc.timer()
-def test_with_conveyor(solvers=('abm',)):
-    sc.heading('ss.stay and ss.on out of a fixed dwell (a conveyor), and a clock in a crossing made by a trigger')
+def test_with_conveyor():
+    sc.heading('ss.stay and ss.on out of a fixed dwell (a conveyor), in a crossing made by a trigger; a clock there needs agents')
     size = lambda solver: dict(n_agents=10_000) if solver == 'abm' else dict(total_pop=10_000)
-    for solver in solvers: # Those who stay at the end of a fixed dwell are not in the flow
+    for solver in ['abm', 'ode']: # Those who stay at the end of a fixed dwell are not in the flow
         LL, T, Sp = ss.states('LL T Sp')
         d = ss.Disease(LL, T, Sp, tertiary=ss.Transition(LL, [T, ss.stay], p=[0.35, None], dur=ss.constant(ss.years(2))), cure=(LL + T) >> Sp, init=dict(LL=10_000), name='syph') # Everyone (1 or more is people)
         res = ss.Sim(d, solver=solver, start=2000, stop=2004, unit='year', **size(solver), **kw).run().results.syph
         assert res.n_T[1] == 0 and np.isclose(res.n_T[-1]/1e4, 0.35, atol=0.02), f'{solver}: {res.n_T}'
         assert np.isclose(res.tertiary.sum(), res.n_T[-1], rtol=1e-6), f'{solver}: {res.tertiary.sum()} in the flow, {res.n_T[-1]} in T'
-    if 'ode' not in solvers:
-        return
 
     def make(clock):
-        a = ss.Disease(sa=ss.progression('S -> I', rate=ss.peryear(0.5)), name='a')
+        S, I = ss.states('S I')
+        a = ss.Disease(sa=ss.Transition(S, I, rate=ss.peryear(0.5)), name='a')
         E, I, Z = ss.states('E I Z')
         latent = E >> I @ (ss.peryear(1)*(E.time > ss.years(1))) if clock else ss.Transition(E, I, dur=ss.constant(ss.years(2)))
         return [a, ss.Disease(E, I, Z, latent=latent, flag=ss.Transition(E, Z, on=a.I), init=dict(E=10_000), name='b')] # The trigger tracks a and b jointly
-    for clock in [False, True]:
-        out = [ss.Sim(make(clock), solver=solver, start=2000, stop=2004, dt=ss.months(1), unit='year', **size(solver), **kw).run().results.b for solver in ['abm', 'ode']]
-        for key in ['n_I', 'n_Z']:
-            assert np.allclose(out[0][key], out[1][key], atol=300), f'clock={clock}, {key}: {out[0][key][::12]} as agents, {out[1][key][::12]} as compartments'
+    out = [ss.Sim(make(False), solver=solver, start=2000, stop=2004, dt=ss.months(1), unit='year', **size(solver), **kw).run().results.b for solver in ['abm', 'ode']]
+    for key in ['n_I', 'n_Z']:
+        assert np.allclose(out[0][key], out[1][key], atol=300), f'{key}: {out[0][key][::12]} as agents, {out[1][key][::12]} as compartments'
+    with pytest.raises(ss.CapabilityError, match='E.time is a clock'):
+        ss.Sim(make(True), solver='ode', start=2000, stop=2004, dt=ss.months(1), unit='year', **size('ode'), **kw).init()
     return
 
 
@@ -315,32 +291,34 @@ def test_after_event():
     sc.heading('Testing an exact dwell until an event of another module, and a time after it (ST18)')
     A, B = ss.states('A B')
     def make(**kw):
-        a = ss.Disease(A, B, go=ss.progression('A -> B', dur=ss.uniform(ss.days(5), ss.days(15))), name='a')
+        a = ss.Disease(A, B, go=ss.Transition(A, B, dur=ss.uniform(ss.days(5), ss.days(15))), name='a')
         X, Y = ss.states('X Y')
-        return [a, ss.Disease(X, Y, end=ss.Transition(X, Y, after=a.go, **kw), name='b')]
+        return [a, ss.Disease(X, Y, end=ss.Transition(X, Y, on=a.go, **kw), name='b')]
     for delay,lag in [(None, 0), (ss.constant(ss.days(5)), 5)]:
         res = ss.Sim(diseases=make(**({} if delay is None else dict(dur=delay))), n_agents=2000, unit='day', stop=30, verbose=0).run().results
         assert np.array_equal(res.b.end.values[lag:], res.a.go.values[:len(res.a.go) - lag]) # Each person leaves X when a.go happens to them, or exactly 5 days after
     with pytest.warns(RuntimeWarning, match='ss.constant'): # A function as dur= is the mean of an exponential
-        ss.Sim(ss.Disease(A, B, go=ss.progression('A -> B', dur=lambda sim: 10.0), name='a'), n_agents=100, verbose=0).init()
+        ss.Sim(ss.Disease(A, B, go=ss.Transition(A, B, dur=lambda sim: 10.0), name='a'), n_agents=100, verbose=0).init()
     return
 
 
-def test_with_conveyor_ode():
-    return test_with_conveyor(solvers=('abm', 'ode'))
+def make_a():
+    S, I = ss.states('S I')
+    return ss.Disease(sa=ss.Transition(S, I, rate=ss.peryear(0.5)), ia=ss.Transition(I, S, dur=ss.years(1)), name='a')
 
 
 def make_on_event(order, solver='abm'):
-    a = ss.Disease(sa=ss.progression('S -> I', rate=ss.peryear(0.5)), ia=ss.progression('I -> S', dur=ss.years(1)), name='a')
+    a = make_a()
     S, F, G = ss.states('S F G')
-    b = ss.Disease(S, F, G, flag=S >> F @ ss.on(a.sa), unflag=F >> S @ ss.years(0.2), name='b')
+    b = ss.Disease(S, F, G, flag=S >> F @ ss.on(a.sa), unflag=F >> S @ ss.years(0.2), name='b') # Flagged when infected with a; level semantics would flag them again on return
     mods = [a, b] if order else [b, a]
     size = dict(n_agents=3000) if solver == 'abm' else dict(total_pop=3000)
     return ss.Sim(mods, solver=solver, start=2000, stop=2005, dt=ss.months(1), unit='year', **size, **kw).run()
 
 
 def treated_event(solver):
-    a = ss.Disease(inf=ss.progression('S -> I', rate=ss.peryear(0.5)), cure=ss.progression('I -> S'), name='a')
+    S, I = ss.states('S I')
+    a = ss.Disease(inf=ss.Transition(S, I, rate=ss.peryear(0.5)), cure=ss.Transition(I, S), name='a')
     S, F = ss.states('S F')
     b = ss.Disease(S, F, flag=S >> F @ ss.on(a.cure), unflag=F >> S @ ss.years(0.5), name='b')
     tx = ss.treat(ss.Treatment(moves=a.cure), where=a.I, coverage=ss.peryear(1.0), name="tx")
@@ -349,21 +327,11 @@ def treated_event(solver):
 
 
 def test_treated_event():
-    sc.heading('A move by a treatment is the event of its transition, for ss.on() in another module')
-    r = treated_event('abm')
+    sc.heading('A move by a treatment is the event of its transition, for ss.on() in another module, as agents and as compartments')
+    r, ro = treated_event('abm'), treated_event('ode')
     assert r.b.flag.sum() > 1000 and r.b.flag.sum() <= r.a.cure.sum()
+    assert np.isclose(r.b.flag.sum(), ro.b.flag.sum(), rtol=0.1)
     return r
-
-
-def test_on_event_ode():
-    for order in [True, False]:
-        ode = make_on_event(order, solver='ode') # First, so that it fails fast until B3
-        res = make_on_event(order).results
-        r = ode.results
-        assert np.isclose(r.b.flag.sum(), res.b.flag.sum(), rtol=0.05), f'{r.b.flag.sum():.0f} as an ODE, {res.b.flag.sum():.0f} as agents'
-        assert np.isclose(r.b.flag.sum(), r.b.unflag.sum() + r.b.n_F[-1], rtol=1e-6) # The flow is the move
-    ro, ra = treated_event('ode'), treated_event('abm')
-    assert np.isclose(ra.b.flag.sum(), ro.b.flag.sum(), rtol=0.1)
 
 
 def make_hpv_cancel(order, names=('hpv16', 'hpv18')):
@@ -383,28 +351,19 @@ def make_hpv_cancel(order, names=('hpv16', 'hpv18')):
 
 
 def test_hpv_cancel_event():
-    sc.heading('HPV: cancelling the other genotypes on the event of one reaching cancer, ss.on(other.cin.to(X)), as agents')
-    names = ['hpv16', 'hpv18']
-    def check(sim):
-        d = sim.diseases
-        for g,o in [names, names[::-1]]:
-            assert not np.any(d[o].X.raw & (d[g].S.raw | d[g].P.raw | d[g].C.raw)), f'step {sim.ti}: {g} progresses beside {o} cancer'
-    abm = ss.Sim(make_hpv_cancel(names), analyzers=check, n_agents=20_000, start=2000, stop=2020, unit='year', **kw).run()
-    assert all(abm.results[g].cancelled.sum() > 0 for g in names)
-    return abm
-
-
-def test_hpv_cancel_event_ode():
+    sc.heading('HPV: cancelling the other genotypes on the event of one reaching cancer, ss.on(other.cin.to(X)), as agents and as compartments')
     names = ['hpv16', 'hpv18']
     common = dict(start=2000, stop=2020, unit='year', **kw)
-    odes = [ss.Sim(make_hpv_cancel(order), solver='ode', total_pop=20_000, **common).run() for order in [names, names[::-1]]] # First, so that it fails fast until B3
-    abm = ss.Sim(make_hpv_cancel(names), n_agents=20_000, **common).run()
+    abm = ss.Sim(make_hpv_cancel(names), analyzers=check_cancel, n_agents=20_000, **common).run()
+    assert all(abm.results[g].cancelled.sum() > 0 for g in names)
+    odes = [ss.Sim(make_hpv_cancel(order), solver='ode', total_pop=20_000, **common).run() for order in [names, names[::-1]]]
     for ode in odes:
         for g in names:
             a, o = abm.results[g], ode.results[g]
             assert np.isclose(o.cancelled.sum(), a.cancelled.sum(), rtol=0.05), f'{g}: {o.cancelled.sum():.0f} cancelled as an ODE, {a.cancelled.sum():.0f} as agents'
             other = ode.results[next(n for n in names if n != g)]
             assert np.isclose(o.n_Z[-1], other.n_X[-1], rtol=1e-6)
+    return abm
 
 
 if __name__ == '__main__':
@@ -418,3 +377,5 @@ if __name__ == '__main__':
     test_ct_by_sex()
     test_with_conveyor()
     test_after_event()
+    test_treated_event()
+    test_hpv_cancel_event()

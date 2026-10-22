@@ -108,9 +108,18 @@ def hash_uniforms(seed, ind, slots, dtype=None):
     return out
 
 
+def timepar_of(val):
+    """ The time parameter that a distribution's parameter is, or holds in an array of them (which is slow, but allowed); else None """
+    if isinstance(val, ss.TimePar):
+        return val
+    elif isinstance(val, np.ndarray) and val.size and isinstance(val.flat[0], ss.TimePar):
+        return val.flat[0]
+    return None
+
+
 def no_dists():
     """ The classes of objects that never hold a distribution (or a time parameter), so are not searched for them """
-    return (ss.Result, ss.Results, ss.Timeline, ss.arrays.Watch, np.dtype, type)
+    return (ss.utils.NoDists, np.dtype, type)
 
 
 def link_dists(obj, sim, module=None, overwrite=False, init=False, skip=None, **kwargs): # TODO: actually link the distributions to the modules! Currently this only does the opposite, but should have mod.dists as well
@@ -187,7 +196,7 @@ class Dists(sc.prettyobj):
             skip_ids.add(id(sim.people._states))
             skip_ids.add(id(sim.people)) # Skip checking people on the first round
             # Also skip Dists containers (the sim's and the modules'), otherwise re-initializing finds the dists again via them
-            skip = dict(keys=['module', 'inputs', '_call', '_made', '_set_after', 'declared'], subclasses=(Dists, ss.solvers.Compartmental) + no_dists()) # A compartmental engine draws from its own generator, and the distributions in the model are found through its graph; the inputs (and a subclass's call) are only for building the sim again; the declared modules are found by their type (e.g. diseases), so their streams do not depend on what else is declared
+            skip = dict(keys=['module', 'inputs', '_call', '_made', '_set_after', 'declared'], subclasses=(Dists,) + no_dists()) # The inputs (and a subclass's call) are only for building the sim again; the declared modules are found by their type (e.g. diseases), so their streams do not depend on what else is declared
             dists = sc.search(sim, type=Dist, skip=dict(ids=list(skip_ids), **skip), flatten=True)
             skip_ids.update(id(x) for x in sim.__dict__.values()) # Exclude things we've already searched
             skip_ids.update(id(x) for x in dists.values()) # Exclude dists we've already found
@@ -375,7 +384,6 @@ class Dist:
 
         # Create a normal distribution that's also a timepar
         dur_infection = ss.normal(loc=12, scale=2, unit='years')
-        dur_infection = ss.years(ss.normal(loc=12, scale=2)) # Same as above
         dur_infection = ss.normal(loc=ss.years(12), scale=2) # Same as above
         dur_infection = ss.normal(loc=ss.years(12), scale=ss.months(24)) # Same as above, perform time unit conversion internally
         dur_infection.init(force=True).plot_hist() # Show results
@@ -418,7 +426,7 @@ class Dist:
         self.distname = distname
         self.name = name
         self.pars = sc.objdict(kwargs) # The user-defined kwargs
-        self.unit = ss.time.get_timepar_class(unit) # The timepar class -- can be None
+        self.unit = ss.time.get_unit_class('full', unit) # The timepar class -- can be None
         self.round = self.validate_round(round) # Whether and how to round the values
         self.seed = seed # Usually determined once added to the container
         self.user_seed = seed # Stored separately so re-initializing doesn't add the offset twice
@@ -466,8 +474,8 @@ class Dist:
             if mock is True: # Convert from boolean to a reasonable int
                 mock = 100
             strict = False
-            self.sim = ss.mock_sim(mock)
-            self.module = ss.mock_module()
+            self.sim = ss.debugtools.mock_sim(mock)
+            self.module = ss.debugtools.mock_module()
             self.trace = 'mock_dist'
 
         if not strict: # Otherwise, wait for a sim
@@ -741,7 +749,7 @@ class Dist:
 
         Args:
             trace (str): the "trace" of the distribution (normally, where it would be located in the sim)
-            **kwargs (dict): passed to `ss.mock_sim()` as well as `ss.mock_module()` (typically time args, e.g. dt)
+            **kwargs (dict): passed to `ss.debugtools.mock_sim()` as well as `ss.debugtools.mock_module()` (typically time args, e.g. dt)
 
         Examples:
             ```python
@@ -749,8 +757,8 @@ class Dist:
             dist.rvs(10)
             ```
         """
-        mock_sim = ss.mock_sim(**kwargs)
-        mock_mod = ss.mock_module(**kwargs)
+        mock_sim = ss.debugtools.mock_sim(**kwargs)
+        mock_mod = ss.debugtools.mock_module(**kwargs)
         self.init(trace=trace, module=mock_mod, sim=mock_sim)
         return self
 
@@ -895,14 +903,7 @@ class Dist:
         - Rates are multiplied by `dt` (so the result will be a number of events, or else the equivalent multiplicate value for the timestep)
         """
         # Check through and see if anything is a timepar
-        timepar_dict = dict()
-        for key,val in self._pars.items():
-            if isinstance(val, ss.TimePar):
-                timepar_type = type(val)
-                timepar_dict[key] = timepar_type
-            elif isinstance(val, np.ndarray) and val.size and isinstance(val.flat[0], ss.TimePar):
-                timepar_type = type(val.flat[0])
-                timepar_dict[key] = timepar_type
+        timepar_dict = {key:type(timepar_of(val)) for key,val in self._pars.items() if timepar_of(val) is not None}
 
         # Check for e.g. ss.normal(ss.years(3), ss.years(2), unit=ss.days)
         if self.unit is not None and len(timepar_dict):
@@ -930,26 +931,22 @@ class Dist:
 
         # Do predraw scaling
         for key, v in self._pars.items():
-            is_timepar = False
-            if isinstance(v, ss.TimePar):
-                is_timepar = True
-                timepar_type = type(v)
-            elif isinstance(v, np.ndarray) and v.size and isinstance(v.flat[0], ss.TimePar):
-                is_timepar = True
-                timepar_type = type(v.flat[0])
-                if v.size == 1:
-                    v = v.flat[0] # Case where we have an array wrapping a dur wrapping an array # TODO: refactor
-                else:
-                    warnmsg = f'Operating on an array of timepars is very slow; timepars should wrap arrays, not vice versa. Values:\n{v}'
-                    ss.warn(warnmsg)
+            tp = timepar_of(v)
+            if tp is not None:
+                timepar_type = type(tp)
+                if isinstance(v, np.ndarray):
+                    if v.size == 1:
+                        v = tp # Case where we have an array wrapping a dur wrapping an array
+                    else:
+                        warnmsg = f'Operating on an array of timepars is very slow; timepars should wrap arrays, not vice versa. Values:\n{v}'
+                        ss.warn(warnmsg)
 
-            if is_timepar:
                 if self.module is not None:
                     dt = self.module.dt
                 elif self.sim is not None:
                     dt = self.sim.dt
                 else:
-                    errormsg = 'Cannot do predraw scaling of timepar {v} when both module and sim are None. Consider e.g. ss.normal(3, 2, unit="year") instead of ss.normal(ss.years(3), ss.years(2))'
+                    errormsg = f'Cannot do predraw scaling of timepar {v} when both module and sim are None. Consider e.g. ss.normal(3, 2, unit="year") instead of ss.normal(ss.years(3), ss.years(2))'
                     raise RuntimeError(errormsg)
 
                 if issubclass(timepar_type, ss.dur):
@@ -978,13 +975,7 @@ class Dist:
         if self.unitless_pars is None: # Nothing to check
             return
 
-        invalid = sc.objdict()
-        for key in self.unitless_pars:
-            val = self._pars.get(key)
-            if isinstance(val, ss.TimePar):
-                invalid[key] = val
-            elif isinstance(val, np.ndarray) and val.size and isinstance(val.flat[0], ss.TimePar):
-                invalid[key] = val.flat[0]
+        invalid = sc.objdict({key:timepar_of(self._pars.get(key)) for key in self.unitless_pars if timepar_of(self._pars.get(key)) is not None})
 
         if len(invalid):
             errormsg = f'Cannot use timepars for parameter(s) {sc.strjoin(invalid.keys())} of {self}: {dict(invalid)}.\n'
@@ -1018,10 +1009,8 @@ class Dist:
         plain = sc.objdict()
         for key in self.unit_pars:
             val = self._pars.get(key)
-            if isinstance(val, ss.TimePar):
-                timepars[key] = val
-            elif isinstance(val, np.ndarray) and val.size and isinstance(val.flat[0], ss.TimePar):
-                timepars[key] = val.flat[0]
+            if timepar_of(val) is not None:
+                timepars[key] = timepar_of(val)
             elif sc.isnumber(val) or (isinstance(val, np.ndarray) and val.size):
                 plain[key] = val
 
@@ -1724,7 +1713,7 @@ class nbinom(Dist):
 
 class binom(Dist):
     """
-    Binomial distribution: the number of successes in n trials; as a likelihood (see `ss.fit()`), the model's value is the probability, e.g. the positives among n tested
+    Binomial distribution: the number of successes in n trials; as a likelihood (see `sim.calibrate()`), the model's value is the probability, e.g. the positives among n tested
 
     Args:
         n (int): the number of trials (default 1)
