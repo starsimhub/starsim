@@ -1257,6 +1257,11 @@ class Results(ss.utils.NoDists, ss.ndict):
             kwargs (dict): known arguments (e.g. figsize, font) split between the plotting dicts; see `ss.plot_args()`
         """
         flat = match_result_keys(self, key, show_skipped=(show_skipped or key)) # Always show skipped with a custom key
+        if not flat: # Nothing to plot by default, e.g. a sim with no modules, whose results never change: show the skipped results instead
+            flat = match_result_keys(self, key, show_skipped=True)
+        if not flat:
+            errormsg = 'There are no results to plot'
+            raise ValueError(errormsg)
         if annualize:
             flat = sc.objdict({k: res.resample('year') if isinstance(res, Result) else res for k, res in flat.items()})
         n_cols,_ = sc.getrowscols(len(flat)) # Number of columns of axes

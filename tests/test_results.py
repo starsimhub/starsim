@@ -313,6 +313,18 @@ def test_compare_data():
     return compared
 
 
+@sc.timer()
+def test_plot_empty():
+    """ A sim with no modules can be plotted: its results never change, so they are all skipped by default (#1070) """
+    sc.heading('Testing plotting a sim with no modules')
+    sim = ss.Sim(n_agents=small, verbose=0).run()
+    assert not any(res.auto_plot for res in sim.results.flatten().values()), 'Expected every result to be skipped by default'
+    fig = sim.plot()
+    assert len(fig.axes) == len(sim.results.flatten()), 'Expected the skipped results to be plotted instead'
+    plt.close(fig)
+    return sim
+
+
 # %% Run as a script
 if __name__ == '__main__':
     do_plot = True
@@ -331,6 +343,7 @@ if __name__ == '__main__':
     res7 = test_result_exprs()
     res8 = test_standard_prevalence()
     res9 = test_compare_data()
+    sim10 = test_plot_empty()
 
     sc.toc(T)
     plt.show()

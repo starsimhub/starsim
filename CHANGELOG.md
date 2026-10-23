@@ -42,6 +42,7 @@ This version adds a way to write a model as declared states and transitions, whi
 - A modifier that reads an attribute with `init=` no longer raises `ClockOutsideDomain` in a sim with births: the check for a NaN amount looked at the spare slots in the arrays, for people not yet born, as well as at the people alive. The error now says what has no value (a clock, or an attribute with no `init=`), and how to give it one.
 - A newborn's level of a dimension called sex now follows the sex drawn at birth by `ss.birth()` (they could disagree).
 - `ss.Pregnancy` and `ss.Lactation` no longer set the unit of a model's bare numbers from their own typed defaults (weeks and years), which made a model with a bare `beta` and a pregnancy raise `IncompatibleTypes`.
+- `sim.plot()` of a sim with no modules (e.g. `ss.Sim(n_agents=1000).run().plot()`) no longer raises `ZeroDivisionError`: when no result would be plotted by default (results that never change are skipped), the skipped results are plotted instead (#1070).
 
 ### New features
 - `ss.pars()`, `Disease.strats`, `Disease.count()` (under every solver), `Disease.add_callback()`, `.ever`/`.count`/`.since` on declared transitions, a product class's `.held` (e.g. `where=ss.Vaccine.held`), and `sim.groups.level()`; a compartmental sim has `n_alive`, `new_deaths`, `new_emigrants` and `cum_deaths`. `compile='auto'` decides from a timed plain step. `ss.Births`/`ss.Deaths` note when data's years are more than 5 apart during the run.
