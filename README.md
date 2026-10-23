@@ -181,3 +181,7 @@ Starsim-AI includes AI agents, skills, plugins, and MCP servers that ensure your
 ## Contributing
 
 We welcome contributions of all kinds! Questions or comments can be directed to [info@starsim.org](mailto:info@starsim.org) , or on this project's [GitHub](https://github.com/starsimhub/starsim) page. Full information about Starsim is provided in the [documentation](https://docs.starsim.org).
+
+Note: we believe in being transparent about AI use. Each page comes with a little note estimating the human vs. AI contribution; hover to get more info. For this page:
+
+[*Authorship*: 🧠90%, 🤖10%](# "Humans wrote everything, except some of the code examples were AI-generated")
