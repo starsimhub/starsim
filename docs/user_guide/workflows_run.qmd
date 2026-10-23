@@ -75,7 +75,7 @@ A result across scenarios can be selected by scenario, e.g. `msim.results.sis.pr
 
 ## Parameter sweeps
 
-`ss.parallel()` also takes sets of parameter values to run a sim with: a dict with a list of values for each parameter. Each value is run `n_runs` times, and the values become coordinates of the runs, so they can be selected:
+`ss.parallel()` also takes sets of parameter values to run a sim with: a dict with a list of values for each parameter. Each value is a scenario of its own (labeled e.g. `beta=0.08`), whether the sim runs as agents or as compartments; it is run `n_runs` times, and the values become coordinates of the runs, so they can be selected:
 
 ```{python}
 sim = ss.Sim(n_agents=2000, diseases=ss.SIR(beta=0.05), networks='random', verbose=0)
@@ -85,6 +85,18 @@ msim.results.sir.n_I.select(beta=0.08).quantiles().plot()
 ```
 
 When there is more than one module, give the parameter with the module's name, e.g. `pars={'sir.beta': [0.03, 0.05]}`.
+
+A parameter of the model takes precedence over a setting of the sim with the same name: for a declared disease whose recovery takes `dur=`, `pars=dict(dur=...)` is that duration, not the length of the sim.
+
+To carry the uncertainty in parameter values into the results, give draws rather than a sweep: `priors=True` draws `n_runs` sets of values from each parameter's `prior=` (or uniformly over its `bounds=`), and `priors=df` runs draws you supply (e.g. from a posterior, as `fit.project()` does; see [Calibration](workflows_calibration.qmd)). Draws are runs of the sim's own scenario, not scenarios of their own, so quantiles over the runs include them:
+
+```{python}
+sir = ss.SIR(beta=ss.par(ss.peryear(0.05), bounds=[0.03, 0.08]))
+sim = ss.Sim(n_agents=2000, diseases=sir, networks='random', verbose=0)
+msim = ss.parallel(sim, priors=True, n_runs=10)
+print(msim.runs.head()) # One draw of beta per run
+msim.plot()
+```
 
 ## Comparing sims
 

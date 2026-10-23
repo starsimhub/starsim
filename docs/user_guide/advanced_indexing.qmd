@@ -64,8 +64,9 @@ This is a crucial distinction in Starsim:
 
 - **Statistical operations** (like `.mean()`, `.sum()`, `.std()`) operate on **active agents only**
 - **Indexing operations** depend on what type of index you use:
-  - `int` or `slice`: operates on active agents (`values`)
-  - `ss.uids()`: operates on all agents (`raw`)
+  - an `int` or `ss.uids()`: a UID, so any agent, alive or dead (`raw`)
+  - the full slice `[:]` or a boolean state: active agents (`values`)
+  - any other slice (e.g. `[1:3]`) raises an error, since it is ambiguous; use `arr.values[1:3]` or `arr.raw[1:3]`
 
 Let's demonstrate this:
 
@@ -104,11 +105,14 @@ female_uids = sim.people.female.uids  # This gets UIDs of female agents
 female_ages = sim.people.age[female_uids]
 print(f"Ages of female agents: {female_ages}")
 
-# ✅ Using .true() and .false() methods
-alive_uids = sim.people.alive.true()
-dead_uids = sim.people.alive.false()
-print(f"Alive UIDs: {alive_uids}")
-print(f"Dead UIDs: {dead_uids}")
+# ✅ Using .true() and .false() methods (on active agents)
+infected_uids = sim.diseases.sir.I.true()
+uninfected_uids = sim.diseases.sir.I.false()
+print(f"Infected UIDs: {infected_uids}")
+print(f"Uninfected UIDs: {uninfected_uids}")
+
+# ✅ The dead are not active, so find them with the dead state
+print(f"Dead UIDs: {sim.people.dead.uids}")
 ```
 
 ### Incorrect indexing patterns
@@ -151,7 +155,7 @@ print((imm.mutant > 0.5).uids) # Convert a single column to UIDs
 2. **Use statistical methods (`.mean()`, `.sum()`, etc.) directly on arrays** - they automatically work on active agents
 3. **Use `.uids` property of boolean arrays** to get UIDs of agents matching criteria
 4. **Use `.true()` and `.false()` methods** for cleaner boolean array handling
-5. **Remember that integer indexing works on active agents**, not UIDs
+5. **Remember that an integer index is a UID**, not a position among the active agents (use `arr.values[i]` for that)
 6. **Use `ti_*` arrays for "who just changed state"** - e.g. in an intervention's `step()`, agents infected during the previous step are `(sir.ti_I == self.ti - 1).uids`, since an infection is dated at the end of the step in which it happened and `self.ti` is the end of the current step (in an analyzer, which runs after the diseases, those infected during this step are `(sir.ti_I == self.ti).uids`; in a disease written as code from the library, likewise with `ti_infected`), rather than tracking the previous set by hand
 
 ### Don't:

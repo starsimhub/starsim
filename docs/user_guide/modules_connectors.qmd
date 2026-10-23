@@ -14,18 +14,21 @@ There are two ways to write an interaction, and both are first-class:
 ## Modifiers: `ss.modify()`
 
 ```python
-ss.modify(target, multiply=None, add=None, set=None, where=None, start=None, stop=None, when=None)
+ss.modify(target, multiply=None, add=None, set=None, efficacy=None, share=None, route=None, where=None, start=None, stop=None, when=None, hold=None)
 ```
 
 `ss.modify(hiv.rel_trans, multiply=2.7, where=sis.I)` reads as "for people infected with SIS, multiply HIV transmissibility by 2.7". A modifier is passed to the sim in `connectors=` (interactions that are part of the biology) or `interventions=` (policy); the two lists differ only in where the modifier runs in the loop.
 
 | Argument | Meaning |
 |---|---|
-| `target` | the quantity to change: a per-agent float array (`hiv.rel_sus`, `sis.rel_trans`), a parameter (`sir.pars.beta`, `school.pars.n_contacts`), or the same as a string (`'sir.pars.beta'`) |
-| `multiply=`, `add=`, `set=` | what to do to it; exactly one. Each takes a number or anything a parameter takes, such as `ss.seasonal(...)` or `ss.timeseries(...)` |
+| `target` | the quantity to change: a per-agent float array (`hiv.rel_sus`, `sis.rel_trans`), a parameter (`sir.pars.beta`), a transition (`sir.recovery`, which scales its rate, or its probability if it is a branch with `p=`), the contacts of a network or contact matrix (the route itself, e.g. `ss.modify(school, multiply=0)` for one layer of `ss.contacts('Kenya', layer=[...])`, or a path such as `'school.pars.n_contacts'`), or any of these as a string (`'sir.pars.beta'`) |
+| `multiply=`, `add=`, `set=`, `efficacy=` | what to do to it; exactly one. Each takes a number or anything a parameter takes, such as `ss.seasonal(...)` or `ss.timeseries(...)`; `efficacy=e` is the same as `multiply=1 - e`, for protection such as condoms |
+| `share=` | with `multiply=` or `efficacy=`, the share of acts (or contacts) it acts on, e.g. condom use in 30% of acts |
+| `route=` | for a modifier of a transmission, the network or networks (by name) it applies on; by default, every route |
 | `where=` | who it applies to: a condition (below). Omitted means everyone |
 | `start=`, `stop=` | the period it applies in. Omitted means always |
 | `when=` | a function of the sim returning `True` or `False`, for anything `start`/`stop` cannot say |
+| `hold=` | once `where=` (or `when=`) selects someone, the modifier stays on for them for at least this long, e.g. `hold=ss.days(14)` |
 
 On a per-person quantity (`rel_sus`, `rel_trans`) only `multiply=` is accepted; `add=` and `set=` are for parameters.
 

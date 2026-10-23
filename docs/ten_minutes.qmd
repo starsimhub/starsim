@@ -172,9 +172,10 @@ cat("Peak infected:", max(n_I), "\n")
 msim <- sim$new(solver = "binomial")$run(n_runs = 20L) # A count is an integer: 20L, not 20
 ```
 
-Everything else on this page works the same way from R, with `$` in place of `.`. This code is run by Starsim's tests (`tests/r/sir.R`).
+Everything else on this page works the same way from R, with `$` in place of `.`. This code is run by Starsim's tests (`tests/interop/r/sir.R`).
 
 ## Next steps
 
-- The [tutorials](tutorials.qmd) and the [user guide](user_guide.qmd) cover modules written as code (`ss.SIR`, networks, demographics, custom `step()` methods), which work alongside declared diseases.
+- The [tutorials](tutorials.qmd) and the [user guide](user_guide.qmd) cover the rest of Starsim, including networks, demographics, and modules written as code (custom `step()` methods), which work alongside declared diseases.
+- [Coming from another framework](coming_from/index.qmd) shows the same models in Starsim and in other frameworks, and how to import them.
 - The [migration guide](migration/v3_v4.md) maps Starsim 3 code to Starsim 4, and lists what changed meaning.

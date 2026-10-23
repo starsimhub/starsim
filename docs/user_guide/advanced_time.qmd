@@ -44,7 +44,7 @@ Starsim has four types of time quantity, each with a short constructor per unit:
 | `ss.prob` | the chance of an event within a period | `ss.prob(0.1, 'day')`, and `'week'`, `'month'`, `'year'` |
 | `ss.time.freq` | an expected number of events per unit time, for modules written as code | `ss.time.freq(80, 'year')` |
 
-Converting to a timestep is the type's job, not yours. For a step of length `dt`, a hazard `ss.per(r)` becomes the probability `1 − exp(−r·dt)`, a probability `p` per period `T` becomes `1 − (1 − p)^(dt/T)`, a frequency `f` becomes the expected count `f·dt`, and a duration `d` is used through its rate `1/d`. The continuous-time solvers (`'ode'` and `'gillespie'`) do no conversion at all.
+Converting to a timestep is the type's job, not yours. For a step of length `dt`, a hazard `ss.per(r)` becomes the probability `1 − exp(−r·dt)`, a probability `p` per period `T` becomes `1 − (1 − p)^(dt/T)`, a frequency `f` becomes the expected count `f·dt`, and a duration `d` is used through its rate `1/d`. The continuous-time solvers (`'ode'`, `'gillespie'`, and tau-leaping, `'tau'`) use the rates themselves, and do no conversion at all.
 
 ### Bare numbers and the sim's unit
 

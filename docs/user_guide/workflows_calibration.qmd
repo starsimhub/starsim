@@ -222,6 +222,24 @@ The draws are in `fit.samples`, one row per draw. Without `method=`, a fit is a 
 
 Any other `scipy.optimize.minimize` method, `'asd'` (adaptive stochastic descent), and `'if2'` (iterated filtering, for a stochastic compartmental sim) can be given too.
 
+The SciPy methods, NUTS, and particle MCMC start from the best points of a scan over the bounds: 10 points per parameter, but at most 100, since a random scan of many parameters costs more runs than it finds (a note says when the cap applies). `scan=` sets the number.
+
+### Profile likelihoods
+
+For a deterministic model whose data series all have a likelihood, `ss.fit.profile()` gives the profile likelihood of one parameter: at each of its values, the other parameters are refitted, and the values whose negative log-likelihood is within 1.92 of the lowest form the 95% confidence interval. A profile that stays flat up to a bound shows that the data do not determine the parameter:
+
+```{python}
+prof = ss.fit.profile(sim, 'beta') # Refits the dispersion at each value of beta
+print(f'beta = {prof.best:.3f}, 95% confidence interval {prof.interval[0]:.3f} to {prof.interval[1]:.3f}')
+near = prof.table[prof.table.nll < prof.table.nll.min() + 10] # The values near the best
+fig, ax = plt.subplots()
+ax.plot(near.beta, near.nll - near.nll.min(), 'o-')
+ax.axhline(prof.threshold, color='k', ls='--', label='95% threshold')
+ax.set_xlabel('beta (per day)')
+ax.set_ylabel('Negative log-likelihood, above the lowest')
+ax.legend();
+```
+
 Finally, `fit.project()` runs the fitted model forward under scenarios, with one run per draw from the posterior and the same draws in every scenario, so the projections carry the uncertainty in the fitted values:
 
 ```{python}
@@ -229,6 +247,39 @@ masks = ss.modify(sir.pars.beta, multiply=0.6, start='2025-03-01')
 proj = fit.project(dict(baseline=None, masks=masks), n=50, stop='2025-07-01')
 proj.results.sir.cases.plot()
 ```
+
+The draws are runs of each scenario, not scenarios of their own, so quantiles over a scenario's runs are over the posterior. `proj.to_df(quantiles=...)` gives them as a table, with one row per scenario, time, and quantile:
+
+```{python}
+df = proj.to_df(quantiles=[0.05, 0.5, 0.95])
+df[(df.result == 'cases') & (df.time == '2025-06-01')]
+```
+
+## Allocating a budget
+
+`ss.fit.optimize()` uses the same machinery for a different question: given the spending on each program as parameters of the model, how should a fixed total be divided between them to make a result as small (or as large) as possible? Here, testing cuts transmission twice as much as bed nets for the same money, until everyone is covered:
+
+```{python}
+S, I, R = ss.states(3)
+tests = ss.par(50e3, name='tests') # Spending on testing
+nets  = ss.par(50e3, name='nets')  # Spending on bed nets
+coverage = lambda spend, cost: np.minimum(spend/cost/(S + I + R).total, 1) # The share of people covered, at a cost per person
+beta = ss.perday(0.3)*(1 - 0.5*coverage(tests, 10) - 0.25*coverage(nets, 10))
+sir = ss.Disease(S >> I @ beta*I.frac, I >> R @ ss.days(10), init_prev=0.001, name='sir')
+sim = ss.Sim(sir, total_pop=10_000, start='2025-01-01', stop='2025-06-01', verbose=0)
+
+best = ss.fit.optimize(sim, spend=['tests', 'nets'], minimize='sir.n_R', verbose=False)
+best.summarize()
+```
+
+`bounds=` limits what each program can have, by name (e.g. `bounds=dict(tests=(None, 60e3))`, with `None` for no limit), and `target=` asks instead for the least total that reaches a value of the result:
+
+```{python}
+least = ss.fit.optimize(sim, spend=['tests', 'nets'], minimize='sir.n_R', target=best.value_before, verbose=False)
+least.summarize()
+```
+
+With a program book imported from Atomica, the programs are found from it, so `spend=` is not needed (see [Coming from Atomica](../coming_from/atomica.qmd)).
 
 ## Existing code using `ss.Calibration`
 

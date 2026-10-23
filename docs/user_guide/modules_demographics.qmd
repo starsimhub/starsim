@@ -6,7 +6,7 @@ jupyter: python3
 
 Starsim can include detailed population dynamics through its demographics modules. These modules handle births, deaths, and pregnancy to model realistic population changes over time. By default, Starsim simulations have a fixed population size, but adding demographics allows the population to grow, shrink, and change age structure naturally.
 
-Demographics are essential for modeling disease transmission over longer time periods, understanding generational effects, and capturing realistic population dynamics. There are two ways to add them:
+Demographics are essential for modeling disease transmission over longer time periods, understanding generational effects, and capturing realistic population dynamics. There are three ways to add them:
 
 - **Births and deaths declared for the population** (`ss.Sim(demographics=[ss.birth(...), ss.death(...)])`), at per-person rates. They run under every solver, including as an ODE, and add and remove the same people from every disease. `demographics=True` declares them at default rates.
 - **Demographics modules** (`ss.Births`, `ss.Deaths`), written as code, with rates per 1,000 people if they are above 1 and per person otherwise (`rate_units=1000` or `rate_units=1` says which, and a rate that could be either gives a warning). They support rates that vary by age, sex, and year, and run as agents.
@@ -54,7 +54,7 @@ import matplotlib.pyplot as plt
 
 birth_data = pd.DataFrame({
     'Year': [2000, 2005, 2010, 2015, 2020, 2025, 2030],
-    'CBR': [40, 35, 30, 31, 32, 30, 28]  # Age-specific birth rates
+    'CBR': [40, 35, 30, 31, 32, 30, 28]  # Crude birth rates, per 1,000 people per year
 })
 
 fertility_data = pd.DataFrame({
@@ -105,6 +105,19 @@ sc.SIticks()
 # Run and plot simulations
 msim = ss.parallel(sim1, sim2)
 msim.plot()
+```
+
+### Pregnancy's parameters and events
+
+`ss.Pregnancy` takes the parameters of Starsim 3's pregnancy module, with the same names and meanings (`fertility_rate`, `rel_fertility`, `min_age`, `max_age`, `p_maternal_death`, `dur_breastfeed`, and so on), plus `p_abortion`, given as keywords as above; `preg.pars` lists them all. Since it is declared, its transitions are events that other modules can use, as for a disease: `preg.conception`, `preg.delivery` (which happens to the mother), and `preg.birth` (which happens to the newborns), along with the state `preg.P` (pregnant). Each transition is also a result (`sim.results.pregnancy.conception`, `.birth`, `.miscarriage`, `.stillbirth`, `.abortion`). For example, contraception is a modifier of conception, and the events can trigger deliveries, such as antenatal testing (`where=preg.P`) or testing of newborns (`who=preg.birth`: see [Interventions](modules_interventions.qmd)):
+
+```{python}
+preg = ss.Pregnancy(fertility_rate=ss.freqperyear(80))
+contraception = ss.modify(preg.conception, multiply=0.5, start='2005') # Halves conception from 2005
+kw = dict(demographics=preg, n_agents=5000, start='2000', stop='2010', dt=ss.months(1), verbose=0)
+for label, intv in dict(baseline=None, contraception=contraception).items():
+    sim = ss.Sim(**kw, interventions=intv).run()
+    print(f'{label:13s} births: {sim.results.pregnancy.birth.sum():n}')
 ```
 
 ## Declared births and deaths

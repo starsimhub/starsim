@@ -120,7 +120,7 @@ msim = ss.parallel(compartment=compartment, ibm=ibm, n_runs=20)
 msim.plot()
 ```
 
-Descriptions can be kept with `doc=` on an `ss.par`, and `sim.describe()` prints the model as Starsim has read it, with every default it filled in marked as a guess.
+Descriptions and sources can be kept with `doc=` and `source=` on an `ss.par`, and `sim.describe()` prints them with the model as Starsim has read it, with every default it filled in marked as a guess.
 
 ## How the results agree
 

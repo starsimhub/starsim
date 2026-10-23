@@ -123,6 +123,8 @@ sim.diseases.sirs.plot()
 
 Unlike the SIR model, the SIRS model sustains transmission indefinitely, because the pool of susceptible agents is continually replenished as immunity wanes. The disease is called `sirs`, after its class.
 
+A parameter can also say what it is and where its value comes from, e.g. `dur_imm = ss.par(ss.years(10), doc='How long immunity lasts', source='Smith et al. 2020')`; `describe()` shows both under the parameter.
+
 The other classic extension is to add an "exposed" state, for agents who are infected but not yet infectious. That one is built into Starsim as `ss.SEIR`, but it is just as quick to write down. Note that the source of infection is `I`, not `E`: an exposed agent doesn't transmit:
 
 ```{python}

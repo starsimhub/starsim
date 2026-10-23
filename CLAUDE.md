@@ -73,6 +73,7 @@ uv add starsim[dev]  # With dev dependencies
 - `arrays.py`: State management arrays for people/networks
 - `conditions.py`: Conditions on states and people, for `where=` (`ss.conditions.Cond`)
 - `connectors.py`: Connectors between modules (e.g. `ss.modify`)
+- `data.py`: Data by place (`ss.data.population('Kenya')`, `ss.data.contacts(...)`), read by `ss.people('Kenya')`, `ss.contacts('Kenya')`, and `ss.geo.geography('Kenya')`
 - `dates.py`: Dates and calendar durations (`ss.date`, `ss.DateArray`, `ss.datedur`)
 - `debugtools.py`: Profiling, debugging, and mock objects for testing
 - `dimensions.py`: Stratifications (`ss.dimensions.Strat`, `ss.transfer`) and the groups they give (`sim.groups`, an `ss.dimensions.Groups`)
@@ -86,7 +87,6 @@ uv add starsim[dev]  # With dev dependencies
 - `kernels.py`: The Numba kernels that run compartmental models
 - `loop.py`: Main simulation integration loop
 - `modules.py`: Base module classes and update logic
-- `named.py`: Places and contact matrices by name (`ss.people('Kenya')`, `ss.contacts('Kenya')`)
 - `networks.py`: Networks and mixing pools
 - `parameters.py`: Parameter containers (`ss.Pars`, `ss.SimPars`) and values that vary by level or in time (`ss.by`, `ss.timeseries`, `ss.seasonal`)
 - `presentation.py`: How a declared model is shown: `describe()`, `diagram()`, `equations()`, and its model spec
@@ -99,7 +99,7 @@ uv add starsim[dev]  # With dev dependencies
 - `time.py`: Durations and rates (`ss.dur`, `ss.days`, `ss.peryear`, `ss.probperyear`, etc.)
 - `timeline.py`: Time coordination between modules (`ss.Timeline`)
 - `timeplot.py`: Plotting dates and durations with Matplotlib
-- `transitions.py`: States and transitions (`ss.State`, `ss.transmission()`, `ss.progression()`, ...); the names of the modules above that it builds on are also `ss.transitions.X`
+- `transitions.py`: States and transitions (`ss.State`, `ss.states()`, `ss.Transition` and its `S >> I @ rate` spelling, ...); the names of the modules above that it builds on are also `ss.transitions.X`
 - `utils.py`: Helper functions
 - `interop/`: Importers and exporters for other modeling frameworks
 

@@ -111,7 +111,7 @@ ax.set_title('Population')
 plt.show()
 ```
 
-If you want to use realistic demographics for your model, you can adapt the data files and code snippet above to read in the relevant demographic data files for your country/setting.
+If you want to use realistic demographics for your model, you can adapt the data files and code snippet above to read in the relevant demographic data files for your country/setting. For a country's population size, age structure, and sex ratio, you can also use the data that come with Starsim: `ss.people('Nigeria', year=1995, n_agents=5_000)` in place of `ss.People(...)` (the sim then takes `total_pop` from it too).
 
 *Note*: In the code block above, the mortality data are per person, which we say with `rate_units=1`: the oldest ages have rates above 0.1, which could otherwise be read either way. If your data come in the form of deaths per 1,000 people, set `rate_units=1000`. Note also that as per standard definitions, `fertility_rate` is defined per *woman*, whereas `birth_rate` is defined per *person*.
 

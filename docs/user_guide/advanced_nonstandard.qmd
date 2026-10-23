@@ -9,7 +9,7 @@ Although Starsim is primarily intended as an agent-based disease model, due to i
 
 ## Compartmental modeling
 
-Much of Starsim's power comes from how it handles agents. However, agent-based modeling may be too slow or too complex for some problems. In Starsim 4, a disease declared from states and transitions can be run as a compartmental model as well as agents: as a deterministic ODE (`solver='ode'`), or as a stochastic compartmental model (`solver='binomial'` or `solver='gillespie'`). Under `solver='auto'` (the default), a model in which every part has a compartmental form runs as an ODE.
+Much of Starsim's power comes from how it handles agents. However, agent-based modeling may be too slow or too complex for some problems. In Starsim 4, a disease declared from states and transitions can be run as a compartmental model as well as agents: as a deterministic ODE (`solver='ode'`), or as a stochastic compartmental model (`solver='binomial'` for a chain binomial, `'gillespie'` for one event at a time, or `'tau'` for tau-leaping, which is close to Gillespie's exact answer and much faster when there are many events). Under `solver='auto'` (the default), a model in which every part has a compartmental form runs as an ODE.
 
 ### Setting up the model
 
@@ -33,7 +33,7 @@ csim.run()
 csim.plot()
 ```
 
-The sim prints the solver it chose, and why. `csim.describe()` shows which solvers can run the model.
+The sim prints the solver it chose, and why. `csim.describe()` shows it too, along with anything in the model that cannot run as compartments.
 
 Let's compare to the same model run as agents. Nothing in the model changes: only the solver, and the number of agents:
 
@@ -116,7 +116,7 @@ This tutorial is adapted from the following example:
 
 ### Setting up the model
 
-We could define the wealth model as any type of module, since they all can store states and update them. Here we will define it as a plain `ss.Module` (though it could equally well be a subclass of `ss.Intervention` or `ss.Demographics`, if you are so inclined), passed to the sim as a demographics module. All we need to do is update the `wealth` state (which we can store inside the "intervention"), and we can also use this class to track the wealth distribution over time and plot it. The full model looks like this:
+We could define the wealth model as any type of module, since they all can store states and update them. Here we will define it as a plain `ss.Module` (though it could equally well be a subclass of `ss.Intervention` or `ss.Demographics`, if you are so inclined), passed to the sim as a demographics module. All we need to do is update the `wealth` state (which we can store inside the module), and we can also use this class to track the wealth distribution over time and plot it. The full model looks like this:
 
 ```{python}
 """

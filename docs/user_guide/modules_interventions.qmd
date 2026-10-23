@@ -74,6 +74,7 @@ A modifier never overwrites the quantity it changes, so nothing has to be restor
 | `at_age=` | routine delivery to people as they reach an age, e.g. `at_age=ss.months(9)` |
 | `deliver=` | a function of the sim returning who receives it this step, instead of `where=`, `coverage=`, and the rounds |
 | `who=` | the people to deliver to on this step, e.g. `who=screening.positive` for those who tested positive |
+| `trace=` | contact tracing: deliver to the contacts, on this network, of the people `who=` selects, instead of to them (agents only); a network with `memory=` also gives recent past partners (see [Networks](modules_networks.qmd#past-partners)) |
 | `disease=` | the disease the product acts on, if there is more than one |
 
 ### Rounds and routine delivery
@@ -185,7 +186,7 @@ sim.run()
 sim.plot('sis')
 ```
 
-`when=` has no memory: the intervention is active on exactly the steps where the function returns `True`, so a bare threshold switches on and off as the quantity crosses it. A rule that remembers what it did (stay on for a year once triggered, say) is a module with a `step()` method, described [below](#writing-an-intervention-as-code).
+`when=` has no memory: the intervention is active on exactly the steps where the function returns `True`, so a bare threshold switches on and off as the quantity crosses it. For a modifier, `hold=` adds the simplest memory: once triggered, it stays on for at least that long (`ss.modify(sis.pars.beta, multiply=0.3, when=high_prevalence, hold=ss.years(1))`). Any other rule that remembers what it did is a module with a `step()` method, described [below](#writing-an-intervention-as-code).
 
 ## Eligibility
 
