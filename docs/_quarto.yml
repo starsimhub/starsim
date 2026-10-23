@@ -85,7 +85,7 @@ website:
           text: "**Home**"
         - href: ten_minutes.qmd
           text: "**Starsim 4 in ten minutes**"
-        - section: "**Coming from another framework**"
+        - section: "Coming from another framework"
           href: coming_from/index.qmd
           contents:
             - coming_from/epimodel.qmd
@@ -151,7 +151,7 @@ website:
             - user_guide/advanced_rescaling.qmd
             - user_guide/advanced_profiling.qmd
             - user_guide/advanced_nonstandard.qmd
-        - section: "**Architecture**"
+        - section: "Architecture"
           href: architecture/index.qmd
           contents:
             - architecture/model.qmd

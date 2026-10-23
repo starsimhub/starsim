@@ -28,6 +28,7 @@ You'll see these principles in specific choices throughout this section. For exa
 Starsim has five layers. Broadly, each builds on the ones before it, and a contributor can usually work in one layer at a time.
 
 ```{mermaid}
+%%| echo: false
 flowchart TD
     D["<b>1. Declaration</b><br/>states, transitions, rates,<br/>parameters, dimensions"]
     G["<b>The graph</b><br/>resolved, completed, checked"]

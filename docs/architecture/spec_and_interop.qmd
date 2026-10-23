@@ -88,6 +88,7 @@ Each named message is a class in `ss.errors` (67 of them: 50 errors, 7 warnings,
 Every importer reads another framework's model into one intermediate object, `ss.interop.Source` (its states, parameters, flows as rate expressions, stratifications, outcomes, and what it couldn't translate), and one function, `ss.interop.build()`, turns that into a sim by the same rules for every format. So each framework needs only a reader, and there are no framework-to-framework converters.
 
 ```{mermaid}
+%%| echo: false
 flowchart LR
   F["odin, SBML, EMULSION, SimInf,<br>flepiMoP, summer2, Atomica, camdl,<br>EpiModel, epydemix, MEmilio"] --> R[reader] --> S["ss.interop.Source"] --> B["ss.interop.build()"] --> Sim[sim]
   Sim --> E["SBML, odin, Mermaid"]
