@@ -153,7 +153,8 @@ def memory_needs(sim):
         if isinstance(val, ss.conditions.Cond):
             for mem in ss.conditions.memory_leaves(val):
                 event, kind = mem.args
-                out.setdefault((ss.conditions.modname(event.args[0]), event.args[1]), set()).add(kind)
+                key = (ss.conditions.modname(event.module), event.args[1].name) if isinstance(event, ss.conditions.Event) else (ss.conditions.modname(event.args[0]), event.args[1]) # A declared transition (tb.diagnosis.since), or an event of a delivery or product
+                out.setdefault(key, set()).add(kind)
         return
     mods = modules_of(sim, 'interventions') + modules_of(sim, 'connectors')
     for mod in mods:
@@ -200,10 +201,19 @@ def remembered(selector, cond):
     """ The memory of an event for each agent or group: whether (`ever`), how often (`count`), or how long ago (`since`, in the sim's unit) it happened """
     sim = selector.sim
     event, kind = cond.args
-    owner = selector.module(ss.conditions.modname(event.args[0]))
-    outcome = event.args[1]
     flush_memory(sim)
-    if isinstance(owner, Event) or isinstance(getattr(owner, str(outcome), None), Event):
+    if isinstance(event, ss.conditions.Event): # A declared transition, e.g. tb.diagnosis.since (see ss.Disease.init_pre())
+        mod, name = selector.module(ss.conditions.modname(event.module)), event.args[1].name
+        if not selector.abm:
+            raise ss.CapabilityError(f'{cond} is the memory of a transition for each person, which exists only with solver="abm"; with solver="{sim.solver}", use a state that people enter by it.')
+        last, count = mod[f'last_{name}'].raw, mod[f'count_{name}'].raw
+        owner = outcome = None
+    else:
+        owner = selector.module(ss.conditions.modname(event.args[0]))
+        outcome = event.args[1]
+    if owner is None:
+        pass
+    elif isinstance(owner, Event) or isinstance(getattr(owner, str(outcome), None), Event):
         arr = getattr(owner, outcome)
         if not selector.abm:
             raise ss.CapabilityError(f'{cond} is the memory of an event of "{owner.name}", a module written as code, which cannot run with solver="{sim.solver}". Run with solver="abm".')
@@ -369,6 +379,7 @@ class Delivery(ss.products.EventSource, Intervention):
             or a list, joined by `operator=`; or a function of the sim
         operator (str): for a list in who=: 'any' (the default, the same as `|`) or 'all' (the same as `&`)
         move (Transition/dict/StrainMove): instead of a product, a move between two states for the people reached, written with the states, e.g. `move=S >> V` (a one-off campaign), or from any of several (`move=U + P + W >> P`: a re-dose, which restarts the time in `P` of those already there); or the level of a stratification they move to, e.g. `move=dict(vaccinated=True)`, or from one level to another, `move=dict(risk=('low', 'high'))`; or a change of strains, e.g. `move=DS >> RIF`
+        strain (str/Strain): with `move=` into a state where people carry a strain (e.g. `move=S >> E`), the strain they arrive with: the import of a strain on a date, e.g. `ss.Delivery(move=S >> E, strain='alpha', at=['2021-01-01'], capacity=20)`
         increment (str/dict): instead of a product, a counter that goes up for the people reached: its name, which adds 1 (`increment='doses'`), or a dict of the amount for each (`dict(doses=2)`)
         at_age (dur/float): routine delivery to people as they reach this age (a bare number is in years), e.g. `at_age=ss.months(9)`
         start (date/float): when delivery starts, within the sim (default: the start of the sim); a number is a time in the sim's unit (in a sim with dates, that long after the start)
@@ -382,7 +393,8 @@ class Delivery(ss.products.EventSource, Intervention):
             which routine delivery needs; a rate in rounds gives what accrues between them
         priority (Cond/list/Expr/func): who is served first when not everyone can be (under `capacity=`): a condition, or a list of them
             served in order (all of the first, then the second); a score, highest first: an expression (e.g. `-hiv.cd4`, the lowest CD4
-            first) or a function of the sim (or of `(sim, uids)`, agents only); ties are broken at random
+            first) or a function of the sim (or of `(sim, uids)`, agents only); or a list of conditions and scores, each breaking the ties
+            of the ones before (e.g. `[due, ss.ppl.age]`, those due first, and among them the oldest); other ties are broken at random
         queue (bool/dur): what happens to people not served for lack of capacity (agents only): None (the default), they are lost; True, they wait until
             served; a duration, they wait at most that long, and those still waiting then are the outcome `never_ran`. Those waiting are served
             before anyone newly reached in their class (longest first), and leave the queue if they stop being eligible (`left`)
@@ -421,11 +433,12 @@ class Delivery(ss.products.EventSource, Intervention):
 
     def __init__(self, what=None, who=None, move=None, increment=None, start=None, stop=None, at=None, interval=None, where=None, coverage=None,
                  capacity=None, on=None, operator='any', when=None, deliver=None, trace=None, priority=None, queue=None,
-                 delay=None, disease=None, at_age=None, name=None, label=None, **kwargs):
+                 delay=None, disease=None, at_age=None, strain=None, name=None, label=None, **kwargs):
         product = what
         trigger, eligible = ss.conditions.split_who(who, operator=operator, where=where, on=on)
         super().__init__(name=name, label=label, **kwargs)
         self.move_states = None # With move=S >> V: the names of the states people move from (a list), and the one they move to
+        self.move_module = None # And the module of those states (as an object until named), which the delivery acts on
         if isinstance(move, ss.strains.StrainMove): # A change of the strains people carry, e.g. move=DS >> RIF
             move = {move.strains.name: move}
         if isinstance(move, str):
@@ -437,10 +450,15 @@ class Delivery(ss.products.EventSource, Intervention):
                 errormsg = f'move= of "{name or type(self).__name__}" is a move from one state (or several) to another for the people reached, e.g. move=S >> V, instead of a product; not {move!r}' + (' with a product' if product is not None else '')
                 raise ValueError(errormsg)
             self.move_states = ([st.name for st in src], dst[0].name)
+            self.move_module = getattr(dst[0], 'module', None)
             move = None
         if self.kind is not None and not isinstance(product, self.kind) and self.move_states is None:
             errormsg = f'ss.{type(self).__name__}() delivers an ss.{self.kind.__name__}, not {type(product).__name__}'
             raise TypeError(errormsg)
+        if strain is not None and self.move_states is None:
+            errormsg = f'strain= of "{name or type(self).__name__}" is the strain people arrive with in a move between states, e.g. move=S >> E, strain="alpha"; give move= too'
+            raise ValueError(errormsg)
+        self.strain = getattr(strain, 'name', strain) # The strain people arrive with, by name
         self.product = product
         self.move = move # For a transfer: the level people move to, by dimension
         self.increment = ss.transitions.parse_increment(increment, f'"{name or type(self).__name__}"') # Or the amount they move up a counter
@@ -534,16 +552,19 @@ class Delivery(ss.products.EventSource, Intervention):
 
     @property
     def disease(self):
-        """ The disease whose engine evaluates the conditions: as given, else the first that the product names, else the first declared disease its conditions name """
+        """ The disease whose engine evaluates the conditions: as given, else the one whose states move= names, else the first that the product names, else the first declared disease its conditions name """
         given = self.__dict__.get('_disease')
         if given is not None:
             return given
+        moved = ss.conditions.modname(self.__dict__.get('move_module'))
+        if moved is not None:
+            return moved
         named = getattr(self.__dict__.get('product'), 'diseases', None)
         if named:
             return named[0]
         sim = self.__dict__.get('sim')
-        declared = [mod.name for mod in sim.declared] if sim is not None and getattr(sim, 'declared', None) is not None else None # Before the sim is initialized, any module the conditions name
-        return next((mod for mod,_ in ss.conditions.state_refs(self) if declared is None or mod in declared), None)
+        diseases = [mod.name for mod in sim.declared] + list(sim.diseases.keys()) if sim is not None and getattr(sim, 'declared', None) is not None else None # Declared modules and diseases written as code; before the sim is initialized, any module the conditions name
+        return next((mod for mod,_ in ss.conditions.state_refs(self) if diseases is None or mod in diseases), None)
 
     @disease.setter
     def disease(self, value):
@@ -679,7 +700,11 @@ class Delivery(ss.products.EventSource, Intervention):
         names = [m for n in names for m in (sim.diseases[n].member_names if isinstance(sim.diseases.get(n), ss.strains.Family) else [n])] # Strains with courses of their own, by the disease's name
         missing = [n for n in names if n not in declared]
         if missing:
-            raise ss.errors.UnknownDisease(f'disease= of "{self.name}" names {sc.strjoin(missing)}, which {"is not a declared disease" if len(missing) == 1 else "are not declared diseases"} in the sim; these are {sc.strjoin(declared)}.')
+            coded = [n for n in missing if n in sim.diseases]
+            if coded: # A delivery for several diseases is keyed by their declared states
+                raise ss.errors.UnknownDisease(f'disease= of "{self.name}" names {sc.strjoin(coded)}, written as code; a delivery for several diseases is for declared ones only, so give one delivery for each (e.g. disease="{coded[0]}")')
+            known = f'the declared diseases are {sc.strjoin(declared)}' if declared else 'it has no declared diseases'
+            raise ss.errors.UnknownDisease(f'disease= of "{self.name}" names {sc.strjoin(missing)}, which {"is not a disease" if len(missing) == 1 else "are not diseases"} in the sim; {known}.')
         self.disease_list = names
         self.disease = names[0]
         self.product.key_by([sim.get_declared(n) for n in names])
@@ -688,6 +713,11 @@ class Delivery(ss.products.EventSource, Intervention):
     def init_pre(self, sim):
         declared = [mod.name for mod in sim.declared]
         ss.conditions.check_path_events(sim, self.on, self.name)
+        if self.disease_list is None and isinstance(self.disease, str) and isinstance(sim.diseases.get(self.disease), ss.strains.Family): # A disease whose strains have courses of their own, by name: as when given as the disease (see __init__())
+            if self.product is None:
+                errormsg = f'disease="{self.disease}" of "{self.name}" has strains with courses of their own, which a delivery acts on with its product; it has none'
+                raise TypeError(errormsg)
+            self.disease_list = [self.disease]
         for other in [self] + [iv for iv in sim.interventions() if isinstance(iv, Delivery) and iv is not self and iv.product is not None and iv.product is self.product]:
             other.key_product(sim) # A product shared with a delivery for several diseases is keyed by them before any delivery initializes it, whatever the order (HP38)
         if isinstance(self.delay, ss.Dist) and not getattr(self.delay, '_numeric', False): # Durations in the sim's unit, however they are given
@@ -766,6 +796,16 @@ class Delivery(ss.products.EventSource, Intervention):
             for name in self.move_names:
                 if name not in states or not states[name].people:
                     raise ss.errors.UnknownState(f'move= of "{self.name}" names "{name}", which is not a state of people of "{self.dis.name}"; its states are {sc.strjoin(k for k,v in states.items() if v.people)}')
+        self.strain_move = None # With strain=: the level of the disease's strain dimension that people arrive at, as (dimension index, level)
+        if self.strain is not None:
+            dst = self.move_states[1]
+            strat = next((strat for strat in self.dis.graph.strats if strat.kind == 'strain' and getattr(strat, 'strains', None) is not None), None)
+            if strat is None or dst not in (strat.states or []):
+                raise ss.CapabilityError(f'strain= of "{self.name}" is "{self.strain}", but people in {dst} of "{self.dis.name}" carry no strain; move them to a state of an infection, e.g. move=S >> E')
+            strains = strat.strains
+            if self.strain not in strains.names:
+                raise ss.errors.UnknownState(f'strain= of "{self.name}" is "{self.strain}", which is not a strain of "{self.dis.name}"; its strains are {sc.strjoin(strains.names)}')
+            self.strain_move = (sim.groups.dim_index(strat.name), strains.level_of([strains.names.index(self.strain)]))
         self.changes = {} # For a transfer: the level in each dimension that people move to, and the one they move from (if given)
         self.sources = {}
         self.carriers = None # For a change of strains: the states that carry them
@@ -1019,7 +1059,7 @@ class Delivery(ss.products.EventSource, Intervention):
             self.ti_due[uids] = ti + np.maximum(steps, 0)
         now = uids[self.ti_due[uids] <= ti] # A delay drawn as less than a step: now
         self.ti_due[now] = np.nan
-        return selector.to_selection(due.concat(now) if len(now) else due)
+        return selector.to_selection(due.concatenate(now) if len(now) else due)
 
     def skip_past(self):
         """
@@ -1279,16 +1319,19 @@ class Delivery(ss.products.EventSource, Intervention):
         if pr is None:
             return None
         selector = self.selector
+        bools = list(ss.conditions.comparisons) + ['&', '|', '~', 'isin', 'state', 'event', 'move', 'incidence'] # A condition, as opposed to a quantity such as ss.ppl.age
+        is_cond = lambda item: isinstance(item, ss.State) or (isinstance(item, ss.conditions.Cond) and (item.op in bools or (item.op == 'memory' and item.args[1] == 'ever')))
         try:
-            bools = list(ss.conditions.comparisons) + ['&', '|', '~', 'isin', 'state', 'event', 'move', 'incidence'] # A condition, as opposed to a quantity such as ss.ppl.age
-            tiered = isinstance(pr, (list, ss.State)) or (isinstance(pr, ss.conditions.Cond) and (pr.op in bools or (pr.op == 'memory' and pr.args[1] == 'ever')))
-            if tiered: # Tiers: the first condition, then the next, then everyone else
-                tiers = pr if isinstance(pr, list) else [pr]
-                key = len(tiers)
-                for i,cond in reversed(list(enumerate(tiers))):
+            items = pr if isinstance(pr, list) else [pr]
+            if all(is_cond(item) for item in items): # Tiers: the first condition, then the next, then everyone else
+                key = len(items)
+                for i,cond in reversed(list(enumerate(items))):
                     key = np.where(selector.select(cond) > 0, i, key)
-            else:
-                key = -self.score(pr)
+            elif len(items) == 1:
+                key = -self.score(items[0])
+            else: # Conditions and scores in turn, e.g. [due, ss.ppl.age]: those due first, and among them the oldest first
+                keys = [np.broadcast_to(np.where(selector.select(item) > 0, 0.0, 1.0) if is_cond(item) else -np.asarray(self.score(item), dtype=float), selector.shape).ravel() for item in items]
+                key = np.unique(np.column_stack(keys), axis=0, return_inverse=True)[1].reshape(selector.shape) # The rank of each, item by item
         except ss.CapabilityError:
             if selector.abm or strict or self.sim.pars.approx is False:
                 raise
@@ -1338,7 +1381,11 @@ class Delivery(ss.products.EventSource, Intervention):
 
         if self.move_states is not None: # A one-off move between states
             states = self.dis.graph.states
-            self.fire(None, self.eng.move_states(self.uids(chosen), [states[name] for name in self.move_states[0]], states[self.move_states[1]]))
+            uids = self.uids(chosen)
+            if self.strain_move is not None: # Arriving with a strain: given before they enter, so their course is that strain's
+                srcs = uids[np.logical_or.reduce([self.dis[name].raw[uids] for name in self.move_states[0]])]
+                self.eng.set_strain(srcs, np.full(len(srcs), self.strain_move[1]))
+            self.fire(None, self.eng.move_states(uids, [states[name] for name in self.move_states[0]], states[self.move_states[1]]))
             return
         if product is None: # A transfer, or a step with neither (a visit)
             self.fire(None, self.follow(chosen, chosen, self.changes) if self.changes else chosen)
@@ -1513,7 +1560,7 @@ class Delivery(ss.products.EventSource, Intervention):
 
     def describe(self):
         """ A line saying what is delivered and how """
-        what = f'move {self.move_arrow}' if self.move_states is not None else f'increment {sc.strjoin(f"{k}{v:+d}" for k,v in self.increment.items())}' if self.increment else ('visit' if not self.move else 'transfer') if self.product is None else self.product.describe()
+        what = f'move {self.move_arrow}' + (f', arriving with {self.strain}' if self.strain is not None else '') if self.move_states is not None else f'increment {sc.strjoin(f"{k}{v:+d}" for k,v in self.increment.items())}' if self.increment else ('visit' if not self.move else 'transfer') if self.product is None else self.product.describe()
         routine = 'routine (each person is offered it once in each spell of being eligible)' if self.remembers else 'routine'
         how = 'in rounds' if self.in_rounds else 'by a function' if self.deliver is not None else f'on {self.on}' if self.on is not None else routine
         if isinstance(self.eligible, ss.conditions.Cond):
@@ -1544,6 +1591,8 @@ class Delivery(ss.products.EventSource, Intervention):
         move = self.move_arrow if self.move_states is not None else None if self.move is None else {k:ss.presentation.move_json(v) for k,v in self.move.items()}
         names = [d if isinstance(d, str) else d.name for d in self.disease_list] if self.disease_list else None
         out.update(type=type(self).__name__, product=None if self.product is None else self.product.describe(), move=move, disease=names or self.disease)
+        if self.strain is not None:
+            out['strain'] = self.strain
         if self.increment:
             out['increment'] = dict(self.increment)
         if self.product is not None: # What makes it, so that ss.to_code() can write it

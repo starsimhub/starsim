@@ -11,7 +11,7 @@ A flepiMoP model is a configuration YAML plus CSV files beside it: `compartments
 | `compartments` | One state for each combination, named as flepiMoP names them (`S_unvaccinated`) | yes |
 | `subpop_setup.geodata` | A stratification `subpop` (kind `'space'`), split by the initial numbers | yes |
 | `subpop_setup.mobility` | `ss.geo.Mobility(matrix=0.5*amount/pop, kind='visit')` (travelers spend half the day away: gempyor's `percent_day_away`) | yes |
-| `initial_conditions` (`SetInitialConditions`, `Default`) | `init=dict(...)`, by place as `ss.by(subpop=[...])` | yes |
+| `initial_conditions` (`SetInitialConditions`, `Default`) | `init_n=dict(...)` (numbers of people), by place as `ss.by(subpop=[...])` | yes |
 | `seir.parameters` (numbers, arithmetic) | Parameters | yes |
 | A parameter drawn from a distribution | Its mean (listed); a prior, and a draw for each run, by hand | no |
 | A transition | One flow per combination of levels, written as flepiMoP's total, `rate × source^e × Π (group^e / N)`, then classified (so the force of infection is exposure, `beta * I`) | yes |

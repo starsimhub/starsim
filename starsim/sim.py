@@ -19,6 +19,16 @@ def same_value(a, b):
         return False
 
 
+
+def given_modules(*inputs):
+    """ The modules among a sim's inputs, alone or in lists or dicts (e.g. `diseases=[sir, sis]`) """
+    mods = []
+    for inp in inputs:
+        for val in (inp or {}).values():
+            vals = val.values() if isinstance(val, dict) else sc.tolist(val) if isinstance(val, (list, tuple, ss.Module)) else []
+            mods += [v for v in vals if isinstance(v, ss.Module)]
+    return mods
+
 class Sim(ss.Base):
     """
     The Sim object
@@ -107,7 +117,11 @@ class Sim(ss.Base):
                     networks=networks, interventions=interventions, diseases=diseases, 
                     analyzers=analyzers, custom=custom, modules=modules)
         args = {key:val for key,val in args.items() if val is not None} # Remove None inputs
+        for mod in given_modules(pars, args, kwargs): # Marked, so that what is added to them later, which this sim would never see, raises (see ss.Module.check_not_given())
+            mod.setattribute('_given', True)
         input_pars = sc.mergedicts(pars, args, kwargs, _copy=True) # Copied together, so the modules given are never run themselves and can be given to other sims, and refer to each other as given
+        for mod in given_modules(input_pars): # The sim's own copies are its to change
+            mod.setattribute('_given', False)
         self.pars.update(input_pars)  # Update the parameters
         self.inputs = sc.dcp(input_pars) # Kept so the sim can be rebuilt (see sim.new()), e.g. with other parameter values for calibration
         self.given = [key for key,val in input_pars.items() if val is not None] # Which parameters were supplied, as opposed to defaults
@@ -132,6 +146,8 @@ class Sim(ss.Base):
         self.diagnostics = None # Store diagnostics results
         self._made = self._settings() # The settings as made, to find the ones set afterwards (see set_after())
         self._set_after = {}
+        self._made_pars = self._module_pars() # The same for the modules' parameters (see pars_after())
+        self._pars_after = {}
         return
 
     def _settings(self):
@@ -147,6 +163,27 @@ class Sim(ss.Base):
                 if val is not made.get(key):
                     self._set_after[key] = sc.dcp(val)
         return self.__dict__.get('_set_after', {})
+
+    def _module_pars(self):
+        """ The parameters of the modules given, by module type and name, as they are now """
+        out = {}
+        for key in ss.modules.module_types() + ['custom']:
+            val = self.pars.get(key)
+            mods = val.values() if isinstance(val, dict) else sc.tolist(val)
+            for mod in mods:
+                if isinstance(mod, ss.Module):
+                    out[(key, mod.name)] = (mod, {k:(v, repr(v)) for k,v in mod.pars.items()}) # A value set in place (e.g. an ss.par given a new value) keeps its identity, so its repr is kept too
+        return out
+
+    def pars_after(self):
+        """ The parameters of modules set after the sim was made and before it was initialized (e.g. `sim.pars.diseases.pars.init_prev = 0.5`), which `sim.new()` keeps """
+        made = self.__dict__.get('_made_pars')
+        if made is not None:
+            for key,(mod,before) in made.items():
+                changed = {k:sc.dcp(v) for k,v in mod.pars.items() if k not in before or v is not before[k][0] or repr(v) != before[k][1]}
+                if changed:
+                    self._pars_after[key] = changed
+        return self.__dict__.get('_pars_after', {})
 
     @staticmethod
     def _name_modules(names, *args):
@@ -286,7 +323,8 @@ class Sim(ss.Base):
         for key,val in self.set_after().items(): # Before the settings are converted
             if val is not None and key not in self.given and not same_value(val, made.get(key)): # A setting set before init() was given too, e.g. sim.pars.use_aging = True (but not one made a float, e.g. n_agents)
                 self.given.append(key)
-        self._made = None # And only then
+        self.pars_after()
+        self._made = self._made_pars = None # And only then
         np.random.seed(self.pars.rand_seed) # Reset the seed before the population is created -- shouldn't matter if only using Dist objects
         self.pars.lock(False) # Allow parameters to be added during initialization
         self.pars.validate() # Validate parameters
@@ -362,10 +400,16 @@ class Sim(ss.Base):
         for mod in coded: # A setting of a module written as code kept as an attribute rather than a parameter, given as ss.par (e.g. test_prob(symp_prob=ss.par(0.1, bounds=[0.01, 0.5]))): its code uses the value, and it is fitted and set by name as a parameter is
             if type(mod).__module__.partition('.')[0] == 'starsim': # Starsim's own modules (e.g. ss.modify(multiply=ss.par(...))) use the parameter itself
                 continue
+            held = sc.ddict(list) # The attributes holding each ss.par, so that one held by two (e.g. symp_quar_prob copied from symp_prob) is one parameter
             for key,val in list(vars(mod).items()):
                 if isinstance(val, ss.par) and key not in mod.pars:
                     val.name = val.name or key
-                    object.__setattr__(mod.pars, '_bounded', (mod.pars._bounded or {}) | {key:val})
+                    held[id(val)].append(key)
+            for keys in held.values():
+                val = getattr(mod, keys[0])
+                object.__setattr__(mod.pars, '_bounded', (mod.pars._bounded or {}) | {keys[0]:val})
+                object.__setattr__(mod, '_par_attrs', getattr(mod, '_par_attrs', {}) | {keys[0]:keys})
+                for key in keys:
                     mod.setattribute(key, val.value)
         values = {}
         levels = sc.ddict(dict)
@@ -391,8 +435,9 @@ class Sim(ss.Base):
                                           f'Parameters are {sc.strjoin(options)}{ss.transitions.did_you_mean(key, options)}')
             if name in mods[0].pars:
                 mods[0].pars.update({name:val})
-            else: # A setting kept as an attribute (see above)
-                mods[0].setattribute(name, val)
+            else: # A setting kept as an attribute, or several holding the same ss.par (see above)
+                for attr in getattr(mods[0], '_par_attrs', {}).get(name, [name]):
+                    mods[0].setattribute(attr, val)
         return
 
     def by_levels(self, key, given, whole=None):
@@ -474,11 +519,13 @@ class Sim(ss.Base):
 
         Args:
             pars (dict): values of model parameters by name, e.g. `dict(beta=0.1)`
-            kwargs (dict): sim arguments to change, e.g. `rand_seed=2` or `solver='abm'`; `None` goes back to the default, e.g. `n_agents=None` for a compartmental run of an agent-based sim; also `data=`
+            kwargs (dict): sim arguments to change, e.g. `rand_seed=2` or `solver='abm'`; `None` goes back to the default, e.g. `n_agents=None` for a compartmental run of an agent-based sim; also `data=`. A new `solver=` puts `substeps=` back to that solver's default unless it is given too, since substeps mean a different thing to each (e.g. an importer's `substeps=1`, whole steps for the chain binomial, would be one Runge-Kutta step of the whole timestep for the ODE)
         """
         if not hasattr(self, 'inputs'):
             errormsg = 'sim.new() needs the inputs the sim was built from, which this sim (e.g. one saved by an earlier version) does not have'
             raise ValueError(errormsg)
+        if kwargs.get('solver') is not None and kwargs['solver'] != self.pars.solver and 'substeps' not in kwargs:
+            kwargs['substeps'] = None
         data = kwargs.pop('data', self.data) # Data is not a sim parameter, so it is passed on separately
         if type(self) is Sim:
             inputs = sc.mergedicts(sc.dcp(self.inputs), kwargs)
@@ -497,6 +544,10 @@ class Sim(ss.Base):
         for key,val in self.set_after().items(): # Settings changed after the sim was made, e.g. sim.pars.stop = 30
             if key not in kwargs:
                 sim.pars[key] = sc.dcp(val)
+        for (key,name),changed in self.pars_after().items(): # Parameters of modules changed after the sim was made
+            target = sim._module_pars().get((key, name))
+            if target is not None:
+                target[0].pars.update(sc.dcp(changed))
         sim.par_values = sc.mergedicts(self.par_values, pars)
         sim.jax = self.jax
         if hasattr(self, 'imported'): # The same import, with what it did not translate
@@ -1883,6 +1934,7 @@ class Sim(ss.Base):
         for mod in self.modules:
             mod.finalize()
         self.check_finite()
+        self.compartmental_people_results()
 
         # Resets verbose if needed
         if hasattr(self, '_orig_verbose'):
@@ -1891,6 +1943,28 @@ class Sim(ss.Base):
 
         # Generate the summary and finish up
         self.summarize() # Create summary
+        return
+
+    def compartmental_people_results(self):
+        """ In a compartmental run, the results that agents give the sim (n_alive, new_deaths, new_emigrants, cum_deaths), from the declared states and flows """
+        mods = [mod for mod in self.declared if mod.graph.people_states]
+        if self.solver in [None, 'abm'] or 'n_alive' in self.results or not mods:
+            return
+        first = mods[0] # Each disease's states hold everyone
+        kw = dict(module='People', timevec=self.t.timevec, scale=False)
+        alive = sum(np.asarray(first.results[f'n_{state.name}'].values, dtype=float) for state in first.graph.people_states)
+        gone = dict(deaths=0, emigrants=0)
+        for mod in mods:
+            for tr in mod.graph.transitions.values():
+                if tr.deaths is not None and tr.deaths in mod.results:
+                    gone['emigrants' if getattr(tr, 'migration', False) else 'deaths'] += np.asarray(mod.results[tr.deaths].values, dtype=float)
+        deaths, emigrants = [np.broadcast_to(gone[key], alive.shape).copy() for key in ['deaths', 'emigrants']]
+        self.results += [
+            ss.Result('n_alive', label='Number alive', values=alive, **kw),
+            ss.Result('new_deaths', label='Deaths', values=deaths, **kw),
+            ss.Result('new_emigrants', label='Emigrants', values=emigrants, **kw),
+            ss.Result('cum_deaths', label='Cumulative deaths', values=np.cumsum(deaths), **kw),
+        ]
         return
 
     def check_finite(self):

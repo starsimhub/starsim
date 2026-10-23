@@ -188,6 +188,21 @@ def test_solvers_agree(name):
     return ode
 
 
+def test_binomial_short_stay():
+    sc.heading('Testing that the chain binomial follows the ODE when a stay is one step')
+    def make(solver, seed=0):
+        S, I, R = ss.states('S I R')
+        dis = ss.Disease(S, I, R, infection=S >> I @ ss.permonth(2)*I.frac, recovery=I >> R @ ss.months(1), init=dict(I=0.001), name='sir')
+        return ss.Sim(dis, solver=solver, unit='month', stop=24, total_pop=1e6, rand_seed=seed, verbose=0).run().results.sir
+    ode = make('ode')
+    runs = [make('binomial', seed) for seed in range(3)]
+    final = np.mean([res.n_R[-1] for res in runs])
+    curve = np.mean([res.n_I.values for res in runs], axis=0)
+    assert np.isclose(final, ode.n_R[-1], rtol=0.05), f'The chain binomial ends with {final:n} recovered, against {ode.n_R[-1]:n} for the ODE' # 950,577 against 797,129 with whole steps (ST55)
+    assert np.abs(curve - ode.n_I.values).max() < 0.2*ode.n_I.max(), 'The chain binomial\'s infected are far from the ODE\'s' # 1.33 of the peak with whole steps
+    return
+
+
 def test_agents_match_ode():
     sc.heading('Testing that agents match the ODE on the spec\'s models, and that R0() is the analytic value')
     analytic = dict( # From the corpus's parameters

@@ -122,7 +122,7 @@ def test_error_catalog():
 # The counted vocabulary of 17-vocabulary.md: for each group, its names in `ss.`, and which of them the specification adds to Starsim ('all' for every one)
 vocabulary = {
     'Sim and modules': ('Sim People people ppl Module Disease Strains Infection Demographics Intervention Connector Analyzer', 'people ppl Strains'),
-    'States, transitions, parameters, results': ('State states null Transition birth death immigration emigration lifetable transfer par outcome simdata', 'all'),
+    'States, transitions, parameters, results': ('State states null Transition birth death immigration emigration lifetable transfer par pars outcome simdata', 'all'),
     'Time': ('dur days weeks months years day week month year datedur per perday perweek permonth peryear prob probperday probperweek probpermonth probperyear freq freqperday freqperweek freqpermonth freqperyear date peract', 'peract'),
     'Distributions': ('Dist normal lognorm_ex lognorm_im expon gamma weibull poisson nbinom binom uniform bernoulli constant choice erlang truncnorm', 'binom erlang truncnorm'),
     'Parameter forms': ('by timeseries seasonal', 'all'),

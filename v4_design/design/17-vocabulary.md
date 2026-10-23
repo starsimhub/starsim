@@ -37,7 +37,7 @@ The names below are checked against the code: each one is exported by `starsim`,
 
 Starsim's library modules (`ss.SIR`, `ss.SIS`, `ss.SEIR`, `ss.Births`, `ss.Deaths`, `ss.LegacyPregnancy`, the `ss.infection_log` analyzer, and the rest) remain available and are not counted here; they are models written in the language, not part of it. Nor are the error, warning, and note classes (`ss.errors.UnknownState`, `ss.errors.ImportIncomplete`, and the rest), which are listed in [15-errors.md](15-errors.md): they are what the library says, not what a user writes.
 
-### States, transitions, parameters, results: 13
+### States, transitions, parameters, results: 14
 
 | Name | What it is |
 |---|---|
@@ -52,6 +52,7 @@ Starsim's library modules (`ss.SIR`, `ss.SIS`, `ss.SEIR`, `ss.Births`, `ss.Death
 | **`ss.lifetable`** | A life table (ages and deaths) for `ss.death(lifetable=...)`, or by year and sex for `ss.Deaths(lifetable=...)` |
 | **`ss.transfer`** | Movement between levels of a stratification |
 | **`ss.par`** | A named parameter with `bounds`, `prior`, `source`, `doc` |
+| **`ss.pars`** | Several parameters at once, from defaults and the values given, for a disease whose transitions are made in `__init__()`: `p = ss.pars(defaults, **kwargs)` |
 | **`ss.outcome`** | A reported quantity: a weighted sum of flows that is delayed, given a duration, or totaled by reporting period |
 | **`ss.simdata`** | A data file or data frame with its columns matched to result names: `ss.simdata(df, aliases=..., ignore_extra=True)` |
 
@@ -138,7 +139,7 @@ Names that repeat across rows (`plot`, `summarize`, `to_df`, `describe`, `strati
 | Group | Names | Of which new |
 |---|---|---|
 | Sim and modules | 12 | 3 |
-| States, transitions, parameters, results | 13 | 13 |
+| States, transitions, parameters, results | 14 | 14 |
 | Time | 27 | 1 |
 | Distributions | 16 | 3 |
 | Parameter forms | 3 | 3 |
@@ -146,9 +147,9 @@ Names that repeat across rows (`plot`, `summarize`, `to_df`, `describe`, `strati
 | Interactions and interventions | 9 | 9 |
 | Running, comparing, saving | 7 | 2 |
 | Types you get back or subclass | 5 | 0 |
-| **`ss.` names** | **101** | **38** |
+| **`ss.` names** | **102** | **39** |
 | Methods and attributes | 43 | 28 |
-| **Total** | **144** | **66** |
+| **Total** | **145** | **67** |
 
 <!-- counts end -->
 

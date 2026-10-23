@@ -67,6 +67,11 @@ def test_people():
     ppl.scale[ppl.auids[:10]] = 2 # Code that sets one (as a Starsim 3 module does) gives it its own values
     assert ppl.scale.weighted and ppl.scale.shared is None and ppl.scale[ppl.auids[:11]].sum() == 21
 
+    class Strict(ss.People): # A subclass with a __getattr__ of its own (as Covasim's) still gets the arrays made on first use
+        def __getattr__(self, attr):
+            raise AttributeError(attr)
+    assert len(Strict(small).auids) == small
+
     return ppl
 
 

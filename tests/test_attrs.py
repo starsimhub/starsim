@@ -162,6 +162,22 @@ def test_hpv_nab_ode():
     assert sim.solver == 'abm' and sim.results.hpv.infection.sum() > 0
 
 
+@sc.timer()
+def test_trait_ode():
+    sc.heading('A trait (a distribution drawn once for each person) under a compartmental solver: run at its mean, with a note; auto runs agents')
+    def make(trait=True, **opts):
+        S, I, R = ss.states('S I R')
+        sus = ss.attr(ss.gamma(a=2, scale=0.5)) # Mean 1
+        dis = ss.Disease(infection=S >> I @ ss.perday(0.3)*(sus if trait else 1)*I, recovery=I >> R @ ss.perday(0.1), init=dict(I=0.001), sus=sus, name='sir')
+        return ss.Sim(dis, unit='day', stop=200, total_pop=10_000, **opts, **kw)
+    sim = make(solver='ode').run()
+    assert np.allclose(sim.results.sir.n_I, make(trait=False, solver='ode').run().results.sir.n_I) and any('uses its mean' in note for note in sim.notes)
+    assert make().init().solver == 'abm'
+    with pytest.raises(ss.CapabilityError, match='approx=False'):
+        make(solver='ode', approx=False).init()
+    return
+
+
 class FirstNab(ss.Analyzer):
     """ The step each person first gets antibodies in, and the value drawn for them then """
     def init_post(self):
@@ -335,15 +351,32 @@ def test_attr_births():
     return
 
 
+
+@sc.timer()
+def test_attr_grown_by_code():
+    """ A trait of people made by code that sets their age afterwards (people.grow() then people.age[...] = ..., as Starsim 3's pregnancy did) is drawn from the age it set (FP91: from a default adult age) """
+    class Maker(ss.Demographics):
+        def step(self):
+            new = self.sim.people.grow(20)
+            self.sim.people.age[new] = -0.5
+    S, I = ss.states('S I')
+    d = ss.Disease(S, I, inf=S >> I @ ss.peryear(0), age0=ss.attr(ss.constant(v=lambda sim, uids: sim.people.age[uids])), name='d')
+    sim = ss.Sim(d, demographics=Maker(), n_agents=1000, start=2000, stop=2002, unit='year', **kw).run()
+    new = sim.people.auids[sim.people.auids >= 1000]
+    assert len(new) and np.all(sim.diseases.d.age0.raw[new] == -0.5)
+    return
+
 if __name__ == '__main__':
     sc.options(interactive=False)
     test_hiv_cd4()
     test_hiv_cd4_ode()
     test_hpv_nab()
     test_hpv_nab_ode()
+    test_trait_ode()
     test_attr_crn()
     test_attr_rules()
     test_burnin()
     test_attr_errors()
     test_attr_dist_par()
     test_attr_births()
+    test_attr_grown_by_code()

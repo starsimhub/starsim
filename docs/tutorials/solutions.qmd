@@ -25,7 +25,7 @@ An interactive version of this notebook is available on [Google Colab](https://c
 
 **Q: To simulate a susceptible-infectious-susceptible (SIS) model instead of SIR, what would we change in the examples above?**
 
-A: In the first example, recovered people go back to `S` instead of to `R`, so we change the recovery transition from `'I -> R'` to `'I -> S'`:
+A: In the first example, recovered people go back to `S` instead of to `R`, so we change the recovery transition from `ss.Transition(I, R, ...)` to `ss.Transition(I, S, ...)`:
 
 ```{python}
 import starsim as ss
@@ -182,8 +182,8 @@ import starsim as ss
 import sciris as sc
 
 pars = sc.objdict(
-    start = '2020',
-    stop = '2040',
+    start = 2020,
+    stop = 2040,
     total_pop = 24e6,
     demographics = [ss.birth(rate=ss.peryear(0.045)), ss.death(rate=ss.peryear(0.009))],
 )
@@ -280,7 +280,7 @@ sim.plot('strain1')
 
 Higher values of `protection` make it harder for the second strain to spread through people who have already recovered from the first.
 
-Another way is to split one disease into strains with `stratify()`, giving the protection that infection with each strain gives against each other strain as a matrix. Strains with partial cross-immunity can't run over a network yet, so this version uses homogeneous mixing (and runs as an ODE):
+Another way is to give one disease its strains with `ss.Strains()`, each with a course of its own (`shared=False`), and with the protection that having recovered from each strain gives against each other strain as a matrix (`ss.immunity()`). Protection between strains is followed only as agents, so this version runs as agents (here with homogeneous mixing), and each strain has its own results:
 
 ```{python}
 S, I, R = ss.states('S I R')
@@ -289,11 +289,11 @@ flu = ss.Disease(
     recovery = ss.Transition(I, R, dur=ss.years(4)),
     waning = ss.Transition(R, S, dur=ss.years(10)),
     init_prev = 0.01,
+    strains = ss.Strains(['A', 'B'], shared=False, immunity=ss.immunity(due_to=R, rel_sus=[[1.0, 0.5], [0.5, 1.0]])),
 )
-flu.stratify(strain=['A', 'B'], immunity=[[1.0, 0.5], [0.5, 1.0]])
 sim = ss.Sim(flu, stop=100, verbose=0)
 sim.run()
-sim.results.flu.n_I.by('strain').plot()
+sim.plot(['A.n_I', 'B.n_I'])
 ```
 
 ## T5 Solutions
@@ -302,18 +302,18 @@ sim.results.flu.n_I.by('strain').plot()
 
 **Q: Adapt the HIV example to include both MF and MSM transmission.**
 
-A: We add an `ssl.MSMNet` alongside the `ss.MFNet`, and specify a `beta` for each network in the disease's `beta` dictionary:
+A: We add a second `ss.SexualNet`, between men (`between='mm'`), alongside the heterosexual one, and specify a `beta` for each network in the disease's `beta` dictionary:
 
 ```{python}
 import starsim as ss
 import starsim.library as ssl
 
 # HIV transmitting on both networks
-hiv = ssl.diseases.HIV(beta={'mf': [0.05, 0.025], 'msm': [0.08, 0.08]})
+hiv = ssl.diseases.HIV(beta={'sexualnet': ss.peract(m2f=0.05, f2m=0.025), 'msm': ss.peract(0.08)})
 
 # Heterosexual and MSM networks
-mf  = ss.MFNet(dur=ss.days(15), acts=ss.time.freq(80, 'year'))
-msm = ssl.MSMNet(dur=ss.days(15), acts=ss.time.freq(80, 'year'))
+mf  = ss.SexualNet(dur=ss.days(15), acts=ss.freqperyear(80))
+msm = ss.SexualNet(name='msm', between='mm', dur=ss.days(15), acts=ss.freqperyear(80))
 
 pars = dict(start='2000', stop='2020', dt=ss.months(1), verbose=0)
 sim = ss.Sim(pars=pars, diseases=hiv, networks=[mf, msm])
@@ -325,24 +325,24 @@ sim.plot('hiv')
 
 **Q: Modify the `age_mf` network to have different age bins and mixing probabilities.**
 
-A: This exercise is open-ended and depends on the assortativity you want to model. The general approach is to override `add_pairs()` in a subclass of `ss.MFNet` (as sketched in the tutorial), and within it, choose partners using your own age-bin logic — for example, by binning agents by age and drawing partners preferentially from nearby bins. The [Networks user guide](../user_guide/modules_networks.qmd) shows worked examples of age-structured mixing, which is the most robust starting point.
+A: This exercise is open-ended and depends on the assortativity you want to model. The general approach is to override `add_pairs()` in a subclass of `ss.SexualNet` (as sketched in the tutorial), and within it, choose partners using your own age-bin logic — for example, by binning agents by age and drawing partners preferentially from nearby bins. The [Networks user guide](../user_guide/modules_networks.qmd) shows worked examples of age-structured mixing, which is the most robust starting point.
 
 ### Question 3
 
 **Q: Compare random vs age-structured networks — how do they affect epidemic dynamics?**
 
-A: We can run the same SIR disease on a structureless `RandomNet` and on the age-structured `MFNet`, and compare the infection trajectories:
+A: We can run the same SIR disease on a structureless `RandomNet` and on the age-structured `SexualNet`, and compare the infection trajectories:
 
 ```{python}
 s_rand = ss.Sim(diseases=ss.SIR(beta=ss.peryear(0.1)), networks=ss.RandomNet(n_contacts=10),
                 n_agents=5000, verbose=0, label='Random')
-s_age  = ss.Sim(diseases=ss.SIR(beta=ss.peryear(0.1)), networks=ss.MFNet(),
-                n_agents=5000, verbose=0, label='Age-structured (MF)')
+s_age  = ss.Sim(diseases=ss.SIR(beta=ss.peract(0.1)), networks=ss.SexualNet(), # On a sexual network, beta is a probability per act
+                n_agents=5000, verbose=0, label='Age-structured (sexual)')
 msim = ss.parallel(s_rand, s_age)
 msim.plot('sir.n_I')
 ```
 
-The age-structured network restricts who can contact whom (and the `MFNet` only connects agents in partnerships), so it typically produces slower, smaller epidemics than a random network where every agent can mix freely.
+The age-structured network restricts who can contact whom (and the `SexualNet` only connects agents in partnerships), so it typically produces slower, smaller epidemics than a random network where every agent can mix freely.
 
 ## T6 Solutions
 

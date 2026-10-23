@@ -13,8 +13,8 @@ Rather than subclassing `ss.Module` directly, you almost always want to subclass
 
 | Base class | Use for | Added to `Sim` via |
 |------------|---------|--------------------|
-| `ss.Disease` | A disease declared from states and transitions (see [Diseases](modules_diseases.qmd)) | `diseases=` |
-| `ss.Infection` | A disease written as code: natural history and transmission | `diseases=` |
+| `ss.Disease` | A disease: declared from states and transitions, written as code, or both (see [Diseases](modules_diseases.qmd)) | `diseases=` |
+| `ss.Infection` | A disease with transmission written as code | `diseases=` |
 | `ss.Network` | Who contacts whom | `networks=` |
 | `ss.Demographics` | Births, deaths, pregnancy | `demographics=` |
 | `ss.Intervention` | Actions that change the simulation | `interventions=` |
@@ -109,17 +109,17 @@ Set `scale=True` for extensive quantities (counts that should scale with populat
 
 ### The work: `step()`
 
-`step()` is called once per timestep and is where the module does its job. Inside it, `self.sim` gives access to the whole simulation, `self.ti` is the index of the time point the step starts from, and `self.t.dt` is the module's timestep. A result has one value for each time point, and what happens during a step is recorded at its end, `self.ti + 1`:
+`step()` is called once per timestep and is where the module does its job. Inside it, `self.sim` gives access to the whole simulation, `self.ti` is the index of the time point at the step's end (`self.now` is the date the step starts from), and `self.t.dt` is the module's timestep. A result has one value for each time point, and what happens during a step is recorded at `self.ti`:
 
 ```python
 def step(self):
     disease = self.sim.diseases.sis
     ...                          # Do something to the simulation
-    self.results.n_treated[self.ti + 1] += ... # At the end of the step
+    self.results.n_treated[self.ti] += ... # At the end of the step
     return
 ```
 
-In `update_results()`, which runs after the step, `self.ti` is already the time point at the step's end, so results are written at `self.ti`; an event dated during the step (with `self.ti` in `step()`) has a time of `self.ti - 1` there. The same holds in analyzers (see [Analyzers](modules_analyzers.qmd)).
+`self.ti` is the same in every phase of a step, so in `update_results()`, which runs after the step, results are also written at `self.ti`, and an event dated during the step (with `self.ti` in `step()`) has a time of `self.ti` there too. The same holds in analyzers (see [Analyzers](modules_analyzers.qmd)).
 
 ## The module lifecycle
 
@@ -159,7 +159,7 @@ class SimpleVaccination(ss.Intervention):
         sis = self.sim.diseases.sis
 
         # Eligible agents: susceptible and not yet vaccinated
-        eligible = (sis.susceptible & ~self.vaccinated).uids
+        eligible = (sis.S & ~self.vaccinated).uids
 
         # Select a fraction of them, scaled by the timestep
         self.coverage.set(p=self.pars.rate * self.t.dt)

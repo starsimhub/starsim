@@ -1,6 +1,6 @@
 # Starsim forms for the pieces importers leave out
 
-What to write for the pieces that `ss.load()` lists as not translated (`ImportIncomplete`), and for the same constructs when translating by hand. Prefer the first form that says what the source says; use a function or custom code only when no declared form does, and mark it with a `Workaround:` comment.
+What to write for the pieces that `ss.interop.load()` lists as not translated (`ImportIncomplete`), and for the same constructs when translating by hand. Prefer the first form that says what the source says; use a function or custom code only when no declared form does, and mark it with a `Workaround:` comment.
 
 ## Rates and times
 
@@ -36,11 +36,11 @@ What to write for the pieces that `ss.load()` lists as not translated (`ImportIn
 | In the source | In Starsim |
 |---|---|
 | Births into a state | `ss.birth(S, rate=mu)` (per person, by the population), or `ss.null >> S @ mu * (S + I + R).n` |
-| Deaths from some states, or from all | `(S \| R) >> ss.null @ mu`, `ss.death(rate=mu)` (from every state) |
+| Deaths from some states, or from all | `S + R >> ss.null @ mu`, `ss.death(rate=mu)` (from every state) |
 | An absorbing dead state that is removed (`autoremove`) | An outflow to `ss.null` |
 | Immigration and emigration | `ss.immigration(S, rate=)`, `ss.emigration(rate=)` |
 | Aging between age groups | `use_aging=True` on the sim with an age stratification; or `ss.transfer` between levels |
-| Offspring produced on a transition (EMULSION's `produce_offspring`) | Into one state: a birth driven by the transition, `ss.birth(NB, per=farrowing, n=10)` (agents); by prototype across several machines: custom code on the transition's events, see below |
+| Offspring produced on a transition (EMULSION's `produce_offspring`) | Into one state: a birth driven by the transition, `ss.birth(NB, per=farrowing, n=10)` (under every solver); by prototype across several machines: custom code on the transition's events, see below |
 | Scheduled moves, entries, and exits (SimInf's events) | `ss.geo.Mobility(data=df)` with columns for the time, `from`, `to`, the number, and the states chosen from |
 
 Actions on crossing a transition, such as offspring or a counter, as agents:

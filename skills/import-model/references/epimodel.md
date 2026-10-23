@@ -12,7 +12,7 @@ The script is run in EpiModel's environment by `starsim/interop/dump_epimodel.R`
 Rscript dump_epimodel.R intro_sis.R model.json
 ```
 
-Then, in Starsim, `sim = ss.load('model.json')`, or `ss.load('intro_sis.R', rscript='.../bin/Rscript')` to dump and load in one step. Choose a run with `run=` (a number, or a scenario's `.scenario.id`); the others are in `sim.imported.scenarios` as the parameters that differ. The script runs as `Rscript` would run it, so `interactive()` is false: the Gallery's HIV model dumps its small test size (300 people, 100 steps), not the 1,500 and 1,040 of an interactive run.
+Then, in Starsim, `sim = ss.interop.load('model.json')`, or `ss.interop.load('intro_sis.R', rscript='.../bin/Rscript')` to dump and load in one step. Choose a run with `run=` (a number, or a scenario's `.scenario.id`); the others are in `sim.imported.scenarios` as the parameters that differ. The script runs as `Rscript` would run it, so `interactive()` is false: the Gallery's HIV model dumps its small test size (300 people, 100 steps), not the 1,500 and 1,040 of an interactive run.
 
 ## Mapping
 
@@ -21,7 +21,7 @@ Then, in Starsim, `sim = ss.load('model.json')`, or `ss.load('intro_sis.R', rscr
 | `netsim()` with `type = "SI"`, `"SIS"`, `"SIR"` | States `S`, `I` (and `R`); `infection = S >> I @ beta * I` with `beta = 1 - (1 - inf.prob)^act.rate` per partnership per step; `rec.rate` to `S` or `R` | yes |
 | Probabilities per step | `ss.prob(..., 'day')` (or the `unit=` given: a step is only a name, so `unit='week'` gives the same numbers) | yes |
 | `a.rate`, `ds.rate`, `di.rate`, `dr.rate` | An inflow `a_rate * (S + I + R).n` and an outflow from each state | yes |
-| `i.num`, `r.num`; the network's size | `init=dict(S=..., I=..., R=...)`, `n_agents=n`, `solver='abm'` | yes |
+| `i.num`, `r.num`; the network's size | `init_n=dict(S=..., I=..., R=...)` (numbers of people), `n_agents=n`, `solver='abm'` | yes |
 | `nsteps` | `stop=nsteps - 1` (EpiModel's time 1 is the start) | yes |
 | `edges`, `concurrent`, `degrange(from = k)` with target 0 | `ssl.DegreeNet(n_contacts=2*edges/n, concurrency=concurrent/n, max_contacts=k - 1, dur=duration)` | yes (the same targets, not an ERGM fit; marked guessed) |
 | `nodematch("attr")` | `match=dict(attr=target/edges)`, and a stratification `attr` split as the attribute is on the network | yes (guessed) |
@@ -35,7 +35,7 @@ Then, in Starsim, `sim = ss.load('model.json')`, or `ss.load('intro_sis.R', rscr
 | Two groups (parameters ending in `.g2`) | Listed: `stratify(group=[1, 2])` with rates by group, by hand | no |
 | A parameter by time since infection (`inf.prob` as a vector), `inter.eff`, `inter.start` | Listed; the first value is used | no |
 | A custom module (`infection.FUN = infect`, `type = NULL`) | Listed, with its R source in `sim.imported.modules` (and other functions in `sim.imported.functions`); a model of custom modules only imports its networks, with the parameters in `sim.imported.pars` | no |
-| A node attribute that changes (stage, care state) | A state, or a dimension: `hiv.stratify(care=[...], states=[A, C, D])` with `ss.transfer(care='undx -> dx', rate=...)` | no |
+| A node attribute that changes (stage, care state) | A state, or a dimension: `hiv.stratify(care=[...], states=[A, C, D])` with `ss.transfer(care=('undx', 'dx'), rate=...)` | no |
 | An attribute's effect on a rate (`rel_trans` on ART) | `adjust=dict(rel_trans=[...], aids=[...])` on the stratification, or `rel_trans=` on a state | no |
 | A custom module that delivers something (PrEP, testing) | A product and a delivery: `ss.vaccinate(ss.Vaccine(...), coverage=..., where=...)`, `ss.treat(...)`; a function for eligibility on the network (below) | no |
 | `dcm()` with a custom derivative function (`new.mod`) | Listed with its source; pair the outflow of one compartment with the inflow of another into a transition, and classify each by the import rules | no |
@@ -52,13 +52,13 @@ Then, in Starsim, `sim = ss.load('model.json')`, or `ss.load('intro_sis.R', rscr
 
 ## Worked example
 
-`lingua_franca_design/vignettes/epimodel/sis-network/model.py` (the introduction), which `ss.load()` imports completely (against 100 EpiModel runs: new infections agree statistically, prevalence is 3% higher for the reason above, and the network has 174 partnerships against 177 and 110 people with two or more against 111; a `dcm()` SIR with arrivals and departures agrees with EpiModel's LSODA run to 3e-7 of the largest value), and `lingua_franca_design/vignettes/epimodel/hiv/model.py` (the Gallery HIV model, with the cascade and PrEP), of which only the two networks and the parameters import mechanically: its six modules are R (`infect`, `progress`, `cascade`, `prep`, `dfunc`, `afunc`), listed with their source. The hand translation of those modules:
+`lingua_franca_design/vignettes/epimodel/sis-network/model.py` (the introduction), which `ss.interop.load()` imports completely (against 100 EpiModel runs: new infections agree statistically, prevalence is 3% higher for the reason above, and the network has 174 partnerships against 177 and 110 people with two or more against 111; a `dcm()` SIR with arrivals and departures agrees with EpiModel's LSODA run to 3e-7 of the largest value), and `lingua_franca_design/vignettes/epimodel/hiv/model.py` (the Gallery HIV model, with the cascade and PrEP), of which only the two networks and the parameters import mechanically: its six modules are R (`infect`, `progress`, `cascade`, `prep`, `dfunc`, `afunc`), listed with their source. The hand translation of those modules:
 
 ```python
 week = ss.prob # EpiModel uses each rate as the probability of an event in a week (a step)
 acts = dict(main=3, casual=1)
 cascade = ss.par(0, doc='Whether the care cascade runs')
-care = lambda arrow, rate, **kw: ss.transfer(care=arrow, rate=cascade*week(rate), **kw)
+care = lambda move, rate, **kw: ss.transfer(care=move, rate=cascade*week(rate), **kw)
 S = ss.State()
 A = ss.State(rel_trans=5, label='Acute')
 C = ss.State(label='Chronic')
@@ -70,9 +70,9 @@ hiv = ss.Disease(
     aids_death = D >> ss.null @ week(1/104),
     departure  = S + A + C >> ss.null @ week(0.0005),
     arrival    = ss.birth(S, rate=0.00065),
-    test       = care('undx -> dx', 0.015, states=['A', 'C']),
-    link       = care('dx -> art', 0.1),
-    init       = dict(A=2, C=98, D=20),
+    test       = care(('undx', 'dx'), 0.015, states=['A', 'C']),
+    linkage    = care(('dx', 'art'), 0.1), # Not link, which is a method of every module
+    init_n     = dict(A=2, C=98, D=20),
 )
 hiv.stratify(care=['undx', 'dx', 'art', 'supp', 'off'], states=[A, C, D], split=[1, 0, 0, 0, 0],
              adjust=dict(rel_trans=[1, 1, 0.3, 0.01, 1], aids_death=[1, 1, 1, 0.1, 1]))

@@ -11,6 +11,7 @@ import starsim as ss
 
 
 run_options = ['parallel', 'n_cpus', 'par_args', 'shrink', 'verbose', 'run_args'] # How to run the sims, as opposed to which runs to take
+removed_methods = ['reduce', 'mean', 'median'] # Starsim 3's, which reduced the sims in place
 
 
 class MultiSim:
@@ -41,6 +42,9 @@ class MultiSim:
 
     `len(msim)` is the number of runs.
 
+    A subclass changes the sim of each run by overriding `make_run()`, and can take options of its own for it by adding
+    them to `run_options` (see the last example).
+
     Examples:
         ```python
         import starsim as ss
@@ -50,8 +54,19 @@ class MultiSim:
         msim = ss.parallel(s1, s2, n_runs=5)
         msim.plot() # The median and a 95% interval of each scenario
         msim.results.sis.prevalence.select(scenario='Low transmission').median()
+
+        class NoisyMultiSim(ss.MultiSim): # Each run with its own beta, drawn around 0.05
+            run_options = ss.MultiSim.run_options + ['noise']
+
+            def make_run(self, sim, values, seed, noise=0.1):
+                beta = 0.05*np.exp(noise*np.random.default_rng(seed).normal())
+                return super().make_run(sim, dict(values or {}, beta=beta), seed)
+
+        msim = NoisyMultiSim(s1, n_runs=10, noise=0.2).run()
         ```
     """
+    run_options = run_options # Those of a subclass go to its make_run()
+
     def __init__(self, sims=None, base_sim=None, label=None, n_runs=None, pars=None, priors=False, initialize=False,
                  inplace=True, debug=False, **kwargs):
 
@@ -91,9 +106,9 @@ class MultiSim:
                 errormsg += f'(treated as base_sim) or a list/tuple of sims, not {type(sims)}'
                 raise TypeError(errormsg)
 
-        unknown = set(kwargs) - set(run_options)
+        unknown = set(kwargs) - set(self.run_options)
         if unknown:
-            errormsg = f'Unknown argument{"s" if len(unknown) > 1 else ""} {sc.strjoin(sorted(unknown))} for running many sims; the options are n_runs, pars, priors, inplace, debug, and {sc.strjoin(run_options)}'
+            errormsg = f'Unknown argument{"s" if len(unknown) > 1 else ""} {sc.strjoin(sorted(unknown))} for running many sims; the options are n_runs, pars, priors, inplace, debug, and {sc.strjoin(self.run_options)}'
             if 'iterpars' in unknown:
                 errormsg += ' (iterpars is now pars, e.g. pars=dict(rand_seed=[1, 2, 3]))'
             raise TypeError(errormsg)
@@ -205,9 +220,8 @@ class MultiSim:
             n_runs = sc.ifelse(n_runs, 1)
         return sims, n_runs, pars
 
-    @staticmethod
-    def expand(sims, n_runs=None, pars=None):
-        """ The sim of each run, each with its own seed (seed, seed + 1, ...) and set of values, and a dataframe of the runs """
+    def expand(self, sims, n_runs=None, pars=None, **opts):
+        """ The sim of each run, each with its own seed (seed, seed + 1, ...) and set of values (see `make_run()`), and a dataframe of the runs """
         sets = par_sets(pars)
         out = []
         rows = []
@@ -217,16 +231,51 @@ class MultiSim:
                 raise ValueError(errormsg)
             for p in sets:
                 for i in range(sc.ifelse(n_runs, 1)):
-                    out.append(sim if n_runs is None and p is None else make_run(sim, p, sim.pars.rand_seed + i)) # A sim run once as it is is run itself
+                    out.append(sim if n_runs is None and p is None else self.make_run(sim, p, sim.pars.rand_seed + i, **opts)) # A sim run once as it is is run itself
                     tag = ', '.join(f'{k}={v:n}' if sc.isnumber(v) else f'{k}={v}' for k,v in (p or {}).items()) # A set of swept values is a scenario of its own
                     rows.append(dict(scenario=f'{sim.label}: {tag}' if sim.label and tag else (sim.label or tag), **(p or {})))
         return out, pd.DataFrame(rows)
+
+    def make_run(self, sim, values, seed):
+        """
+        The sim of one run: a copy of a sim that has not been initialized, otherwise one built again (see `sim.new()`), with a seed and values of model parameters
+
+        A subclass can override this to change the sim of each run, e.g. to add noise to a parameter; the options it adds to
+        `run_options` are passed to it as keywords.
+
+        Args:
+            sim (Sim): the sim of the scenario
+            values (dict): the values of parameters for this run (from `pars=`), or None; `rand_seed` among them is the seed
+            seed (int): the seed of this run
+        """
+        values = dict(values or {})
+        seed = values.pop('rand_seed', seed)
+        if sim.initialized:
+            new = sim.new(pars=values or None, rand_seed=seed)
+        else: # A copy, which keeps any changes made to the sim after it was made
+            new = sim.copy()
+            new.pars.rand_seed = seed
+            if values:
+                new.par_values = sc.mergedicts(new.par_values, values)
+        new.label = sim.label
+        return new
+
+    def own_options(self, kwargs):
+        """ Take the options a subclass added to `run_options` out of kwargs, for its `make_run()` """
+        return {key:kwargs.pop(key) for key in self.run_options if key not in run_options and key in kwargs}
+
+    def __getattr__(self, attr):
+        """ Called only if the attribute isn't found: what replaced Starsim 3's methods that reduced the sims """
+        if attr in removed_methods:
+            errormsg = f'msim.{attr}() was removed: the results of a MultiSim have a run axis first, e.g. res = msim.results.sis.prevalence, then res.{attr}() (by scenario), or low, mid, high = res.quantiles([0.1, 0.5, 0.9])'
+            raise AttributeError(errormsg)
+        raise AttributeError(f"'{type(self).__name__}' object has no attribute '{attr}'")
 
     def init_sims(self, **kwargs):
         """ Make the sim of each run, and initialize them without running them """
         kwargs = sc.mergedicts(self.run_args, kwargs)
         sims, n_runs, pars = self.resolve(kwargs.get('n_runs'), kwargs.get('pars'), kwargs.get('priors'))
-        self.sims, self.runs = self.expand(sims, n_runs, pars)
+        self.sims, self.runs = self.expand(sims, n_runs, pars, **self.own_options(kwargs))
         for sim in self.sims:
             if not sim.initialized:
                 sim.init()
@@ -246,6 +295,7 @@ class MultiSim:
         kwargs = sc.mergedicts(self.run_args, kwargs)
         n_runs, pars, priors = [kwargs.pop(key, None) for key in ['n_runs', 'pars', 'priors']]
         inplace = kwargs.pop('inplace', True)
+        opts = self.own_options(kwargs)
         if kwargs.pop('debug', False):
             kwargs['parallel'] = False # Run in serial
         self.timer.start()
@@ -253,14 +303,15 @@ class MultiSim:
             sims = self.sims
         else:
             base, n_runs, pars = self.resolve(n_runs, pars, priors)
-            if n_runs is not None and set(kwargs) <= {'verbose', 'n_cpus', 'parallel'}: # Built once and restarted for each run, where the sims allow, which is many times faster
+            plain = not opts and type(self).make_run is MultiSim.make_run # No changes to the sim of each run
+            if n_runs is not None and plain and set(kwargs) <= {'verbose', 'n_cpus', 'parallel'}: # Built once and restarted for each run, where the sims allow, which is many times faster
                 restarted = restart_runs(base, n_runs, pars=pars)
                 if restarted is not None:
                     self.sims, self.results, self.runs = restarted
                     self.ready = False
                     self.timer.stop()
                     return self
-            sims, self.runs = self.expand(base, n_runs, pars)
+            sims, self.runs = self.expand(base, n_runs, pars, **opts)
 
         run_sims = run_each(sims, **kwargs) # This does all the work! Output sims are copies due to the pickling during parallelization
         if inplace:
@@ -562,21 +613,6 @@ class MultiSim:
                 del msim.chunks
             out.append(msim)
         return out
-
-
-def make_run(sim, values, seed):
-    """ The sim of one run: a copy of a sim that has not been initialized, otherwise one built again (see `sim.new()`), with a seed and values of model parameters (`rand_seed` among them is the seed) """
-    values = dict(values or {})
-    seed = values.pop('rand_seed', seed)
-    if sim.initialized:
-        new = sim.new(pars=values or None, rand_seed=seed)
-    else: # A copy, which keeps any changes made to the sim after it was made
-        new = sim.copy()
-        new.pars.rand_seed = seed
-        if values:
-            new.par_values = sc.mergedicts(new.par_values, values)
-    new.label = sim.label
-    return new
 
 
 def single_run(sim, ind=0, shrink=True, run_args=None, verbose=None, copy_sim=False):

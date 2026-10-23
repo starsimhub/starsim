@@ -23,7 +23,7 @@ import starsim as ss
 from .expressions import as_expr, BinOp, closest, dists_in, Count, count_power, did_you_mean, dimension, evaluate, Expr, Flow, format_expr, Func, is_one, linear, Nameable, par, value_str
 from .parameters import by, seasonal, Static, timeseries, TimeValue
 
-__all__ = ['Expr', 'par', 'State', 'states', 'null',
+__all__ = ['Expr', 'par', 'pars', 'State', 'states', 'null',
            'Transition', 'birth', 'death', 'lifetable', 'immigration', 'emigration', 'outcome', 'Graph',
            'by', 'timeseries', 'seasonal', 'Strat', 'Transfer', 'transfer']
 
@@ -164,6 +164,55 @@ def states(arg, **kwargs):
         out = [State(name, **kwargs) for name in arg.replace(',', ' ').split()]
     else:
         out = [State(**kwargs) for i in range(arg)]
+    return out
+
+
+def pars(defaults, **kwargs):
+    """
+    Create several parameters at once, from defaults and the values given, as a class's declared parameters are made
+
+    For a disease whose states and transitions depend on its options, and so are made in `__init__()`
+    rather than declared on the class (e.g. `beta = ss.par(...)`, as `ss.SIR` does). Each parameter is an
+    `ss.par` named after its key, so it can be fitted or set by name (`ss.Sim(pars=...)`). A value given
+    takes the default's bounds and description unless it has its own; a bare number for a typed default
+    keeps its unit (e.g. 2 for a default of `ss.peryear(1)` is 2 per year); a default of None is an
+    optional parameter, None unless given. A name that is not a default is an error.
+
+    Args:
+        defaults (dict): the default of each parameter: a value, or an `ss.par` (with bounds, say)
+        kwargs (dict): the values given, e.g. the keywords of the disease's `__init__()`
+
+    Returns an `sc.objdict` of the parameters, by name.
+
+    Examples:
+        ```python
+        defaults = dict(beta=ss.par(ss.peryear(2), bounds=[ss.peryear(0.5), ss.peryear(5)]), dur=ss.years(2), relapse=None)
+        p = ss.pars(defaults, beta=3) # beta is 3 per year, with the default's bounds
+        S, I, R = ss.states('S I R')
+        transitions = [S >> I @ p.beta*I, I >> R @ p.dur] + ([R >> I @ p.relapse] if p.relapse is not None else [])
+        ```
+    """
+    unknown = [key for key in kwargs if key not in defaults]
+    if unknown:
+        errormsg = f'Unknown parameter(s) {sc.strjoin(unknown)}; the parameters are {sc.strjoin(defaults.keys())}{did_you_mean(unknown[0], list(defaults))}'
+        raise ss.errors.UnknownParameter(errormsg)
+    out = sc.objdict()
+    for key,default in defaults.items():
+        given = kwargs.get(key)
+        default = sc.dcp(default) if isinstance(default, par) else par(sc.dcp(default)) if default is not None else None
+        if default is None or default.raw is None:
+            out[key] = None if given is None else given if isinstance(given, par) else par(given)
+        elif isinstance(given, par):
+            out[key] = default.merge(given)
+        elif given is not None: # As a declared parameter takes a value (a bare number keeps the default's unit)
+            values = ss.Pars({key:default.raw})
+            values.update({key:given})
+            default.value = values[key]
+            out[key] = default
+        else:
+            out[key] = default
+        if out[key] is not None:
+            out[key].name = out[key].name or key
     return out
 
 
@@ -450,6 +499,21 @@ class Transition(Nameable):
     def uids(self):
         """ The agents who went through this transition, from the moment they moved until the same point in the next step """
         return ss.conditions.Event('tr', self).uids
+
+    @property
+    def ever(self):
+        """ Whether each person has gone through this transition, as a condition (agents only), e.g. `where=~tb.diagnosis.ever` """
+        return ss.conditions.Event('tr', self).ever
+
+    @property
+    def count(self):
+        """ How many times each person has gone through this transition (agents only), e.g. `where=tb.relapse.count >= 2` """
+        return ss.conditions.Event('tr', self).count
+
+    @property
+    def since(self):
+        """ The time since each person last went through this transition (infinite if never; agents only), e.g. `where=tb.diagnosis.since <= ss.years(2)` """
+        return ss.conditions.Event('tr', self).since
 
     @property
     def split(self):
@@ -1161,9 +1225,18 @@ def person_func(expr):
 def numeric_dist(dist, convert, per_agent=None):
     """ A copy of a distribution with its parameters as plain numbers in the sim's unit, so it samples durations in that unit """
     if isinstance(dist, ss.histogram): # Its values and bins are not parameters
-        values, bins, density = dist.hist
-        bins = bins if dist.unit is None else np.asarray(convert(dist.unit(np.asarray(bins, dtype=float))), dtype=float)
-        return ss.histogram(values=values, bins=bins, density=density)
+        def rebuild(values, bins, density):
+            bins = bins if dist.unit is None else np.asarray(convert(dist.unit(np.asarray(bins, dtype=float))), dtype=float)
+            return ss.histogram(values=values, bins=bins, density=density)
+        if dist.parts is None:
+            return rebuild(*dist.hist)
+        group = dist.pars['group']
+        if isinstance(group, by): # Each person's group, read for the agents drawn for
+            if per_agent is None:
+                errormsg = f'{dist} has a histogram for each group ({group}), so has no single value here'
+                raise ValueError(errormsg)
+            group = per_agent(group)
+        return ss.histogram.by_group([rebuild(*part) for part in dist.parts], group)
     cls = ss.beta_dist if isinstance(dist, ss.beta_mean) else type(dist) # Whose parameters are those of a beta distribution
     return cls(**numeric_pars(dist, convert, per_agent))
 
@@ -1182,6 +1255,12 @@ def by_dist(raw):
         raise ss.CapabilityError(f'{raw} has distributions of {"several families" if raw.dim is not None else "several dimensions"}, which is not supported yet; give one family over one dimension, or its parameters as ss.by() values.')
     unit = lambda d,v: d.unit(v) if (d.unit is not None and sc.isnumber(v)) else v
     given = raw.given.get(raw.dim)
+    if isinstance(dists[0], ss.histogram): # Whose values and bins are not parameters: a histogram for each group, chosen by each person's group
+        if len({d.unit for d in dists}) > 1:
+            raise ss.CapabilityError(f'{raw} has histograms in different units; give them all in one unit.')
+        parts = list(given.values()) if isinstance(given, dict) else dists
+        index = {k:i for i,k in enumerate(given)} if isinstance(given, dict) else list(range(len(dists)))
+        return ss.histogram.by_group(parts, by(**{raw.dim:index}), unit=dists[0].unit)
     if isinstance(given, dict): # By name, e.g. ss.by(sex=dict(female=..., male=...)), which is read from each person
         pars = {key:by(**{raw.dim:{k:unit(d, d.pars[key]) for k,d in given.items()}}) for key in dists[0].pars.keys()}
     else:

@@ -5,10 +5,10 @@ jupyter: python3
 
 Starsim models capture disease dynamics within a population, which typically represents people (but may represent animals or other things). The basic ingredients of a Starsim model are the `People`, which store the attributes of each person; a collection of `Modules`, which determine what happens on each time step; and the `Sim`, which pulls all the components together, runs the simulation, and stores the `Results`.
 
-A disease module can be written in two ways, and both can be used in the same sim:
+A disease module can be written in two ways, and both can be used in the same sim, or even in the same disease:
 
-- **Declared**, as states and the transitions between them (`ss.Disease`, and the library's `ss.SIR`, `ss.SIS`, and `ss.SEIR`). Because the model is data, Starsim can describe it, print its equations, and run it with any solver: as an ODE, as a stochastic compartmental model, or as agents.
-- **Written as code**, as a module with per-agent arrays and a `step()` method (`ss.Infection`, and networks, demographics, interventions, connectors, and analyzers). Code modules run as agents.
+- **Declared**, as states and the transitions between them (`ss.Disease` given its states and transitions, and the library's `ss.SIR`, `ss.SIS`, and `ss.SEIR`). Because the model is data, Starsim can describe it, print its equations, and run it with any solver: as an ODE, as a stochastic compartmental model, or as agents.
+- **Written as code**, as a module with per-agent arrays and a `step()` method (a subclass of `ss.Disease`, or of `ss.Infection` for a disease that transmits, and networks, demographics, interventions, connectors, and analyzers). Code modules run as agents, except analyzers, which run beside any solver.
 
 ## Overview of a model
 

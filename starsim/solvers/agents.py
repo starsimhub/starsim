@@ -61,6 +61,7 @@ class Agents(Engine):
         self._leaving = None # The people leaving a state and the states they leave, while clocks (see clock_values()) are read for them
         self._uids = None # The agents being evaluated: see eval_for()
         self._for_uids = False
+        self.memo = None # Values kept while the shares of one transition are worked out: see branch_probs_for()
         arrs = [ss.ModifiableArr('rel_sus', default=1.0, label='Relative susceptibility', shared=True), # No memory until something sets them
                 ss.ModifiableArr('rel_trans', default=1.0, label='Relative transmission', shared=True)]
         self.scheduled = [state.name for state in graph.people_states if graph.exits[state.name].branches or graph.exits[state.name].timed or graph.exits[state.name].remainder] # The states with exits that are scheduled when people enter them
@@ -80,6 +81,7 @@ class Agents(Engine):
             arrs += [ss.BoolState(name, label=state.label or name)]
             if name not in unkept: # Only if something reads it, to save memory
                 arrs.append(ss.arrays.StepArr(f'ti_{name}', label=f'Time of entering {name}')) # Step numbers, as 16-bit integers if the run fits
+                arrs.append(ss.Arr(f'shift_{name}', dtype=np.int8, nan=0, default=0, label=f'Steps from the engine\'s time of entering {name} to the step\'s index')) # See stamp()
             if name in self.scheduled: # Only for a state with scheduled exits, to save memory
                 arrs += [ss.arrays.StepArr(f'ti_exit_{name}', wide=rescalable, label=f'Scheduled time of leaving {name}'), # 32-bit if it can be rescaled, since a slow exit (e.g. adjust=1e-4) can be far beyond the run (ST29)
                          ss.Arr(f'exit_{name}', dtype=np.int8, nan=-1, label=f'Scheduled exit from {name}')] # Which of the exits, as 8-bit integers
@@ -121,6 +123,11 @@ class Agents(Engine):
         for name in self.tf_dists:
             arrs.append(ss.arrays.StepArr(f'ti_move_{name}', label=f'Scheduled time of the transfer {name}'))
         mod.define_states(*arrs, overwrite=True) # Overwrite, since in the class form the declarations are class attributes
+        for state in graph.people_states:
+            if state.name not in unkept:
+                mod[f'ti_{state.name}'].shift = mod[f'shift_{state.name}']
+            if state.name in self.scheduled:
+                mod[f'ti_exit_{state.name}'].shift = 1 # Read as the step the exit is taken in (exits are taken at a step's start)
         for name in unkept: # Setting it does nothing, and reading it says how to keep it
             mod.setattribute(f'ti_{name}', ss.arrays.Unkept(f'ti_{name}', mod))
         for state in graph.people_states: # Each change to who is in a state is counted: see wrote()
@@ -230,11 +237,6 @@ class Agents(Engine):
             if getattr(tr, 'after', None) is not None or getattr(tr, 'before', None) is not None:
                 raise ss.CapabilityError(f'"{tr.name}" has a minimum stay (after=) or a limit (before=), which a transmission cannot have yet; put it on the transition out of the state before, or out of the state infected people enter')
         self.init_immunity()
-        strains = None if self.strain is None else self.sim.groups.strats[self.strain].strains
-        for imm in (strains.immunity if strains is not None else []): # Protection on the course of an infection, from what people remember of the strains before it (see ss.strains.MemoryProtection)
-            if isinstance(imm.due_to, ss.strains.Memory):
-                for key in [key for key in imm.values if key != 'rel_sus']:
-                    ss.strains.MemoryProtection.add(self, imm, key)
         self.init_adjust()
         self.init_results()
         self.note_steps()
@@ -385,7 +387,6 @@ class Agents(Engine):
                 uids = uids[people.age.raw[uids] >= 0]
             rvs = self.dists.init.rvs(uids)
             names = list(fracs.keys())
-            infected_dsts = {state.name for tr in self.graph.acquisitions for state in tr.dst} # Where an infection puts people
             groups = self.groups(uids) if any(np.ndim(frac) for frac in fracs.values()) else np.zeros(len(uids), dtype=int) # Fractions can differ between groups
             wanted, placed = np.zeros(len(names)), np.zeros(len(names))
             for g in np.unique(groups):
@@ -398,7 +399,7 @@ class Agents(Engine):
                 for i,name in enumerate(names):
                     chosen = inds[edges[i]:edges[i+1]]
                     mod[name][chosen] = True
-                    mod[f'ti_{name}'][chosen] = -1 if name in infected_dsts else 0 # Someone infectious at the start has been so for the first step, as if infected in the step before: an infection is dated at the end of its step
+                    self.stamp(name, chosen, self.seed_ti(name))
             for state in self.graph.people_states: # A share given for each person's own properties (e.g. init=dict(I=ss.by(dict(age=[0, 15], value=[0, 0.1])))): drawn for each agent of the first state
                 init = state.init.raw if isinstance(state.init, ss.par) else state.init
                 if isinstance(init, ss.by) and init.on_people(self.sim):
@@ -406,7 +407,7 @@ class Agents(Engine):
                     chosen = first[self.dists[f'init_{state.name}'].rvs(first) < init.lookup(self.sim, self.convert)[first]]
                     mod[self.graph.first.name][chosen] = False
                     mod[state.name][chosen] = True
-                    mod[f'ti_{state.name}'][chosen] = -1 if state.name in infected_dsts else 0
+                    self.stamp(state.name, chosen, self.seed_ti(state.name))
             seed = self.seed_dist()
             if seed is not None:
                 first = self.members(self.graph.first)
@@ -423,7 +424,7 @@ class Agents(Engine):
                 self.seed(chosen, log=False)
             if len(unborn):
                 mod[self.graph.first.name][unborn] = True
-                mod[f'ti_{self.graph.first.name}'][unborn] = 0
+                self.stamp(self.graph.first.name, unborn, 0)
             if mod.infection_log is not None: # Whoever starts where a new infection goes is a seed
                 infected = [name for name in names if any(state.name == name for tr in self.graph.transmissions for state in tr.dst)]
                 for name in infected:
@@ -459,14 +460,41 @@ class Agents(Engine):
         if not len(trs):
             return None
         elif isinstance(init_prev, ss.choose_n): # With several destinations, a number of people shared between them as a fraction is
-            return init_prev if len(trs[0].dst) == 1 else None
+            return init_prev if len(trs[0].dst) == 1 and len(self.seed_transmissions()) == 1 else None
         elif isinstance(init_prev, ss.bernoulli) and callable(init_prev.pars.p):
             return init_prev
         elif isinstance(init_prev, ss.by) and init_prev.on_people(self.sim):
             return init_prev
         elif callable(init_prev) and not isinstance(init_prev, (ss.Dist, ss.by)):
             return init_prev
+        elif sc.isnumber(init_prev) and init_prev > 0 and len(self.seed_transmissions()) > 1: # Through several transmissions, each to those it can infect (see seed()): agent by agent
+            share = init_prev if init_prev <= 1 else init_prev/self.total_pop
+            return lambda sim: share
         return None
+
+    def can_infect(self, tr, uids=None):
+        """ Whether a transmission can infect each agent (or the people of each group, without `uids`): over its routes, a coefficient above 0 in a direction whose susceptible side is theirs """
+        if uids is None:
+            return super().can_infect(tr)
+        routes = list(self.sim.networks.items())
+        if not routes:
+            return np.logical_or.reduce([np.broadcast_to(np.asarray(self.eval_for(coef, uids), dtype=float) > 0, len(uids)) for coef in tr.terms.values()])
+        out = np.zeros(len(uids), dtype=bool)
+        for coef in tr.terms.values():
+            for nkey,route in routes:
+                if isinstance(route, ss.Network) and route.has_acts: # A value for each direction
+                    h = np.atleast_1d(np.asarray(self.route_beta(coef, nkey, route), dtype=float))
+                    h = h.reshape(len(h), -1).max(axis=1)
+                    if route.sides and not route.one_way:
+                        side, names = route.side_raw()[uids], list(route.sides)
+                        for d,key in enumerate(route.directions):
+                            if h[d] > 0:
+                                out |= side == names.index(key.split('2')[1])
+                    elif h.max() > 0:
+                        out[:] = True
+                else:
+                    out |= np.broadcast_to(np.asarray(self.route_beta(coef, nkey, route, uids), dtype=float) > 0, len(uids))
+        return out
 
     def varying_dwell(self, name, tr, raw, dw, to_unit):
         """ A dwell time whose distribution has parameters with a value for each group (`ss.by`): the parameters are looked up for each agent, and one draw is made (see `Compartmental.varying_dwell()`) """
@@ -499,6 +527,23 @@ class Agents(Engine):
             self.log_infections(uids, seeds=True)
         return uids
 
+    def seed_ti(self, name):
+        """
+        The time of entering a state for someone put in it at the start: as if they had entered it in the step before the
+        first, so that a seed with a dwell of d steps is a source for d steps, as anyone who enters later is (HP62).
+        Contacts (a network, a mixing pool, or `beta*I` well mixed) are made after the step's state changes, and a rate
+        (`beta*I.n`) reads the people at its start, so a source by contact entered at 0 (in the first step's contacts,
+        leaving at the start of the second), and anyone else at -1 if they are where an infection puts people (in the first
+        step's rates, then counted at the start only, as under the ODE: CR4), else at 0
+        """
+        state = self.graph.states[name]
+        counted = any(s is state for tr in self.graph.transitions.values() if tr.rate is not None
+                      for leaf in tr.rate.leaves if isinstance(leaf, ss.expressions.Count) for s in leaf.states) # This module's own state, not another's of the same name (syph.I.n)
+        if state.infectious and not counted:
+            return 0
+        acquired = any(dst.name == name for tr in self.graph.acquisitions for dst in tr.dst)
+        return -1 if acquired or counted else 0
+
     def seed(self, uids, log=True):
         """
         Seed some agents who are in the first state: put them where a new infection puts them, the destinations of the first
@@ -512,20 +557,23 @@ class Agents(Engine):
         first = self.graph.first.name
         uids = ss.uids(uids)
         uids = uids[mod[first][uids]]
-        tr = self.graph.transmissions[0]
-        if len(tr.dst) == 1:
-            dsts = [(tr.dst[0], uids)]
-        else:
+        trs = self.seed_transmissions()
+        if not trs:
+            errormsg = f'"{mod.name}" has no transmission or acquisition to seed through (init_prev=); use init= on a state instead'
+            raise ValueError(errormsg)
+        if len(trs) == 1 and len(trs[0].dst) == 1:
+            dsts = [(trs[0].dst[0], uids)]
+        else: # Each seed to a destination of a transmission that can infect them, in the shares of its destinations
             self._uids = uids
-            ps = [np.broadcast_to(p, len(uids)) for p in self.branch_probs_for(tr, uids)]
+            ps = [np.broadcast_to(w*p, len(uids)) for tr,w in zip(trs, self.seed_reach(trs, uids)) for p in (self.branch_probs_for(tr, uids) if len(tr.dst) > 1 else [1.0])]
             edges = np.cumsum([np.zeros(len(uids))] + ps, axis=0)
             rvs = self.dists.seed_where.rvs(uids)
-            dsts = [(dst, uids[(rvs >= edges[i]) & (rvs < edges[i+1])]) for i,dst in enumerate(tr.dst)]
+            dsts = [(dst, uids[(rvs >= edges[i]) & (rvs < edges[i+1])]) for i,dst in enumerate(dst for tr in trs for dst in tr.dst)]
         mod[first][uids] = False
         self.clear_exit(first, uids)
         for dst,inds in dsts:
             mod[dst.name][inds] = True
-            mod[f'ti_{dst.name}'][inds] = -1 # As for anyone infected at the start: see init_post()
+            self.stamp(dst.name, inds, self.seed_ti(dst.name))
         if log and mod.infection_log is not None:
             self.log_infections(uids, seeds=True)
         return uids
@@ -540,7 +588,7 @@ class Agents(Engine):
             self.clear_exit(state.name, uids)
         first = self.graph.first.name
         mod[first][uids] = True
-        mod[f'ti_{first}'][uids] = self.ti
+        self.stamp(first, uids, self.ti)
         return
 
     def place_newcomers(self):
@@ -550,7 +598,15 @@ class Agents(Engine):
             return
         mod = self.mod
         new = ss.uids(np.arange(self.n_seen, n))
+        for start,stop in self.sim.people.untraited: # Made by code that set their properties after making them: their traits now (see ss.People.grow())
+            later = new[(new >= start) & (new < stop)]
+            later = later[self.sim.people.alive.raw[later]]
+            if len(later):
+                self.draw_traits(later)
         self.n_seen = n
+        if self.sim.people.untraited: # Forget the ranges every declared module has seen
+            seen = min(getattr(m.engine, 'n_seen', 0) for m in self.sim.declared)
+            self.sim.people.untraited = [r for r in self.sim.people.untraited if r[1] > seen]
         placed = np.zeros(len(new), dtype=bool)
         for state in self.graph.people_states:
             placed |= mod[state.name].raw[new]
@@ -560,7 +616,7 @@ class Agents(Engine):
                 self.sim.groups.groups_changed(new) # Before they enter the state, so they are counted in their groups: see wrote()
             first = self.graph.first.name
             mod[first][new] = True
-            mod[f'ti_{first}'][new] = self.ti
+            self.stamp(first, new, self.ti)
             self.fire(None, new, -1, self.state_index[first]) # Placement is entering the state (spec 03)
         return
 
@@ -860,8 +916,10 @@ class Agents(Engine):
             return np.ones(np.size(uids))
         key = ('by_people', id(by))
         if key not in self.cache:
-            self.cache[key] = by.lookup(self.sim, self.convert, year=self.year, cache=self.cache)
-        return self.cache[key][self._uids if uids is None else uids]
+            self.cache[key] = by.lookup_grid(self.sim, self.convert, year=self.year, cache=self.cache)
+        grid, index = self.cache[key]
+        uids = self._uids if uids is None else uids
+        return grid[tuple(ind[uids] for ind in index)] # Only the agents asked for, since often few are (e.g. those entering a state)
 
     def value(self, p):
         if self._drawing and id(p.raw) in self.attr_dists: # A distribution an attribute is drawn from: see draw_attr()
@@ -948,9 +1006,9 @@ class Agents(Engine):
         """ The time since a module last recorded an event for each agent (by UID), in the sim's unit; inf if never """
         name = ss.conditions.modname(expr.module)
         mod = self.mod if name in [None, self.mod.name] else self.sim.get_declared(name)
-        start = mod[f'ti_{expr.event}'].raw
+        start = mod[f'ti_{expr.event}'].raw # The index of the step it happened in (see index_of())
         with np.errstate(invalid='ignore'):
-            return np.where(np.isnan(start), np.inf, (self.ti - start)*self.dt)
+            return np.where(np.isnan(start), np.inf, (self.ti + 1 - start)*self.dt)
 
     def clock_values(self, clock, uids):
         """ Time in some states (or the share of the dwell time elapsed), for some agents; NaN for those not in them """
@@ -975,7 +1033,7 @@ class Agents(Engine):
         if isinstance(arr, ss.arrays.Unkept):
             errormsg = f'{clock} reads the time of entering {names[0]}, which was not kept since no clock of it was known when the sim was built; make the clock before the sim, or set ss.options.keep_times = True'
             raise ValueError(errormsg)
-        start = np.asarray(arr[uids], dtype=float)
+        start = np.asarray(arr.internal(uids), dtype=float)
         ti = self.ti
         if clock.kind == 'time':
             out = np.maximum(ti - start, 0)*self.dt # In the sim's unit; someone who entered at the end of this step (by transmission) has had none of it
@@ -984,7 +1042,7 @@ class Agents(Engine):
             exits = self.graph.exits[name]
             if not (exits.branches or exits.remainder or exits.timed):
                 raise ss.errors.NoScheduledDwell(f'{clock} needs a dwell time scheduled when people enter {name}, and {name} has only rates out of it.')
-            end = np.asarray(mod[f'ti_exit_{name}'][uids], dtype=float) # The step the exit is due in
+            end = np.asarray(mod[f'ti_exit_{name}'].internal(uids), dtype=float) # The step the exit is due in (from its start)
             if isinstance(leaving, tuple) and 'left_exit' in mod.__dict__: # Leaving it now: the exit they had
                 end = np.where(np.isnan(end), mod.left_exit.raw[uids], end)
             with np.errstate(divide='ignore', invalid='ignore'):
@@ -1072,10 +1130,19 @@ class Agents(Engine):
             self._drawing = False
 
     def draw_traits(self, uids):
-        """ The traits of agents who have just been made (or placed at the start) """
+        """ The traits of agents who have just been made (or placed at the start), and their derived attributes from them """
+        if not len(uids):
+            return
         for a in getattr(self, 'traits', []):
-            if len(uids):
-                self.mod[a.name][uids] = self.draw_attr(a, uids)
+            self.mod[a.name][uids] = self.draw_attr(a, uids)
+        self.write_derived(uids)
+        return
+
+    def write_derived(self, uids):
+        """ Derived attributes as they are now, for code that reads them (they are worked out again when the engine reads them) """
+        for a in self.attrs.values():
+            if a.kind == 'derived':
+                self.mod[a.name][uids] = self.attr_values(a, uids)
         return
 
     def event_mask(self, events, tr, srcs, dst):
@@ -1534,7 +1601,7 @@ class Agents(Engine):
         With `unique=False`, an agent appears once for each time, e.g. a woman who conceived, had an abortion at once, and conceived again in a step
         """
         seen = self._seen.get(key, {})
-        fresh = [b for b in self.batches if id(b) not in seen and not b.get('also', False)] # Those the event happened to themselves
+        fresh = [b for b in self.batches if id(b) not in seen and not b.also] # Those the event happened to themselves
         self._seen[key] = {id(b):b for b in self.batches}
         return self.event_uids(tr, batches=fresh, unique=unique) if fresh else ss.uids()
 
@@ -1582,7 +1649,7 @@ class Agents(Engine):
             for name in key:
                 uids = self.members(self.graph.states[name])
                 uids = uids[np.isnan(np.asarray(mod[arr][uids], dtype=float))]
-                mod[arr][uids] = mod[f'ti_{name}'][uids]
+                mod[arr][uids] = mod[f'ti_{name}'].internal(uids)
         if self.on_event:
             self.fire_placed()
         moved = False
@@ -1679,7 +1746,11 @@ class Agents(Engine):
         return
 
     def branch_probs_for(self, tr, uids):
-        ps = [None if p is None else self.eval_for(p, uids) for p in tr.p]
+        self.memo = {} # A row of p= over the destinations is evaluated once for all of them (see ss.expressions.Share)
+        try:
+            ps = [None if p is None else self.eval_for(p, uids) for p in tr.p]
+        finally:
+            self.memo = None
         if any(np.ndim(p) > 1 for p in ps): # e.g. a function giving a row of shares for each person (a switching matrix): not supported yet
             raise ss.CapabilityError(f'p= of "{tr.name}" gave a row of probabilities for each person, but each entry of p= is one destination\'s probability (one value per person); '
                                      f'give one per destination, e.g. p=[f_{tr.dst[0].name}, None], where each function returns one value per person')
@@ -1714,6 +1785,33 @@ class Agents(Engine):
             dist.jump()
         return dist.rvs(uids)
 
+    def stamp(self, name, uids, ti):
+        """
+        Date some agents' entering a state, at the engine's time `ti` (the start of the step for a move made then, `ti`
+        of the loop less 1; its end for an infection by contact), and record the steps from it to the loop's index, so
+        that `ti_X` reads as the step the move happened in (see `ss.arrays.StepArr.internal()`)
+        """
+        arr = self.mod[f'ti_{name}']
+        if isinstance(arr, ss.arrays.Unkept):
+            return
+        arr.set_internal(uids, ti)
+        arr.shift.raw[uids] = self.index_of(ti) - ti if ti == ti else 0
+        return
+
+    def index_of(self, ti):
+        """
+        The index of the step a move that the engine dates `ti` happens in, which is what `ti_X` reads: during a step,
+        the loop's `ti`, both for a move at its start (dated `ti - 1`) and for an infection by contact at its end (dated
+        `ti`); 0 for anyone placed at the start, however the engine dates them (see `seed_ti()`); and before the start
+        (see `backfill()`), the step after `ti`, since every move there is taken at the start of its step
+        """
+        if self._backfill is not None:
+            return ti + 1
+        ti_loop = self.mod.t.ti
+        if ti_loop == 0: # Placed at the start
+            return 0
+        return ti if ti == ti_loop else ti + 1
+
     def enter(self, state, uids, ti, tr=None, srcs=-1):
         """
         Put agents in a state, and schedule their exit from it, at the moment they enter (so `p=` is read then, and code after the step sees the exit)
@@ -1734,7 +1832,7 @@ class Agents(Engine):
         mod = self.mod
         name = state.name
         mod[name][uids] = True
-        mod[f'ti_{name}'][uids] = ti
+        self.stamp(name, uids, ti)
         for key,arr in self.sets.items(): # Entering a set from outside it starts its clock
             if name in key:
                 outside = ~np.isin(srcs, [self.state_index[k] for k in key])
@@ -1758,13 +1856,17 @@ class Agents(Engine):
         """ Record who entered a state, from where (the index of the state each came from, or -1 for none), as an event: true from the moment of the move until the same point in the next step """
         ti = self.ti
         phase = self._phase[1] if self._phase[0] == ti else -1 # Moved by another module before this one's step: see start_phase()
-        self.batches.append(sc.objdict(tr=None if tr is None else tr.name, uids=uids, src=srcs, dst=dst, key=(ti, phase)))
+        self.batches.append(Bunch(tr=None if tr is None else tr.name, uids=uids, src=srcs, dst=dst, key=(ti, phase), also=False))
         self._news = True
+        if tr is not None and tr.name in self.mod.__dict__.get('remembered', ()): # Its memory, e.g. for tb.diagnosis.since
+            self.mod[f'last_{tr.name}'][uids] = ti
+            count = self.mod[f'count_{tr.name}']
+            np.add.at(count.raw, uids, 1)
         also = getattr(self.mod, 'also_happened', None) # Others an event also happens to, e.g. the fetuses of a mother at a delivery
         if tr is not None and also is not None:
             others = also(tr.name, uids)
             if others is not None and len(others):
-                self.batches.append(sc.objdict(tr=tr.name, uids=others, src=-1, dst=-1, key=(ti, phase), also=True))
+                self.batches.append(Bunch(tr=tr.name, uids=others, src=-1, dst=-1, key=(ti, phase), also=True))
         return
 
     def event_uids(self, tr=None, to=None, enter=None, exit=None, batches=None, unique=True):
@@ -1816,7 +1918,7 @@ class Agents(Engine):
         new = members[is_new]
         if not len(new):
             return None
-        entered = mod[f'ti_{name}'][new]
+        entered = mod[f'ti_{name}'].internal(new)
         missed = None
         if self.competing[name]:
             late = entered < self.ti # NaN (undated) is not
@@ -1826,7 +1928,7 @@ class Agents(Engine):
         undated = np.isnan(entered) # Put in the state directly (e.g. sir.I[uids] = True), with no time of entering: they entered it now
         if undated.any():
             entered[undated] = self.ti
-            mod[f'ti_{name}'][new[undated]] = self.ti
+            self.stamp(name, new[undated], self.ti)
         best = np.full(len(new), np.inf)
         which = np.full(len(new), -1, dtype=np.int8)
 
@@ -1850,7 +1952,12 @@ class Agents(Engine):
             best[earlier] = dur[earlier]
             which[earlier] = i
 
-        ti_exit[new] = entered + self.whole_steps(name, new, best) # Exits happen at the start of a step
+        steps = self.whole_steps(name, new, best)
+        loops = np.array([any(getattr(dst, 'name', None) == name for dst in (tr.dst or [])) for tr in candidates]) # Back to this state: a decision taken again, e.g. FPsim's choice of method
+        if loops.any(): # Taken again no sooner than the next step, so a dwell shorter than a step does not go round within one
+            again = (which >= 0) & loops[np.maximum(which, 0)] & (best > 0)
+            steps[again] = np.maximum(steps[again], 1)
+        ti_exit.set_internal(new, entered + steps) # Exits happen at the start of a step
         mod[f'exit_{name}'][new] = which
         modified = [i for i,tr in enumerate(candidates) if self.rescaled(tr)]
         if modified and f'mult_{name}' in mod.__dict__: # How fast each exit ran when its dwell time was drawn, so a later change can rescale what is left of it: see rescale_exits()
@@ -1929,7 +2036,7 @@ class Agents(Engine):
                 changed = np.where(stalled, raw > 0, changed)
             if changed.any():
                 sel, now, before, stalled = sel[changed], now[changed], before[changed], stalled[changed]
-                ti_exit = mod[f'ti_exit_{name}'][sel]
+                ti_exit = mod[f'ti_exit_{name}'].internal(sel)
                 new_exit = np.empty(len(sel))
                 ok = ~stalled
                 new_exit[ok] = ti + np.maximum(ti_exit[ok] - 0.5 - ti, 0)*before[ok]/now[ok] # A scheduled exit is a whole step, rounded up (see ss.arrays.StepArr), so what is left is taken from the middle of it
@@ -1937,9 +2044,9 @@ class Agents(Engine):
                     new_exit[stalled] = ti + self.whole_steps(name, sel[stalled], self.sample_dwell(candidates[i], sel[stalled]))
                 lost = ok & np.isinf(ti_exit) # Scheduled beyond even 32-bit steps (e.g. adjust=1e-9), so the dwell time is gone: drawn again from now, less what has passed of it since entering (as if it had stalled)
                 if lost.any():
-                    passed = (ti - mod[f'ti_{name}'][sel[lost]])*before[lost]/now[lost]
+                    passed = (ti - mod[f'ti_{name}'].internal(sel[lost]))*before[lost]/now[lost]
                     new_exit[lost] = ti + self.whole_steps(name, sel[lost], np.maximum(self.sample_dwell(candidates[i], sel[lost]) - passed*self.dt, 0))
-                mod[f'ti_exit_{name}'][sel] = new_exit
+                mod[f'ti_exit_{name}'].set_internal(sel, new_exit)
                 mod[f'mult_{name}'][sel] = now
         return
 
@@ -2049,7 +2156,7 @@ class Agents(Engine):
             if a.kind not in ['derived', 'trait']:
                 mod[a.name][uids] = a.default
         mod[first][uids] = True
-        mod[f'ti_{first}'][uids] = 0
+        self.stamp(first, uids, 0)
         return
 
     def backfill(self, seeds, entry, t0):
@@ -2203,17 +2310,32 @@ class Agents(Engine):
         competing = [tr for tr,rate in rates]
         stays = [self.stayed(tr, state, uids) for tr,rate in rates]
         same = key is None and len(uids) and np.ndim(dt) == 0 and all(np.ndim(rate) == 0 for tr,rate in rates) and all(np.ndim(s) == 0 for s in stays) # The same chances for everyone: worked out once
-        n = 1 if same else len(uids)
-        hazards = [np.broadcast_to(np.maximum(rate, 0), n)*stay for (tr,rate),stay in zip(rates, stays)]
-        total = np.sum(hazards, axis=0) if hazards else np.zeros(n)
+        if same: # As numbers rather than arrays, since this is most calls, and each is small
+            hazards = [(max(float(rate), 0.0)*float(stay) if stay > 0 else 0.0) for (tr,rate),stay in zip(rates, stays)] # (Not a product with stay, which would make an infinite rate NaN for those who can't take it yet)
+            total = sum(hazards)
+            if np.isinf(total): # An infinite rate (e.g. -log(1 - p) of a probability of 1) is certain within the step, shared among the infinite rates
+                hazards = [float(np.isinf(h)) for h in hazards]
+                total, p_exit = sum(hazards), 1.0
+            else:
+                p_exit = -np.expm1(-total*dt)
+            edges = np.cumsum([0.0] + hazards)*(p_exit/total if total > 0 else 0.0)
+        else:
+            n = len(uids)
+            hazards = [np.broadcast_to(np.maximum(rate, 0), n)*stay if np.ndim(stay) == 0 else np.where(stay > 0, np.maximum(rate, 0), 0.0) for (tr,rate),stay in zip(rates, stays)] # (Not a product with stay, which would make an infinite rate NaN for those who can't take it yet)
+            total = np.sum(hazards, axis=0) if hazards else np.zeros(n)
+            p_exit = -np.expm1(-total*dt)
+            certain = np.isinf(total)
+            if certain.any(): # An infinite rate is certain within the step, shared among the infinite rates
+                hazards = [np.where(certain, np.isinf(h), h) for h in hazards]
+                total = np.sum(hazards, axis=0)
+                p_exit = np.where(certain, 1.0, p_exit)
+            edges = np.cumsum([np.zeros(n)] + hazards, axis=0)*np.divide(p_exit, total, out=np.zeros(n), where=total>0)
         if np.isnan(total).any():
             bad = [tr.name for tr,h in zip(competing, hazards) if np.isnan(h).any()]
             raise ss.errors.ClockOutsideDomain(f'the rate of {sc.strjoin(bad)} out of {state.name} is NaN for some people: it reads a clock or an attribute where it has no value.')
-        p_exit = -np.expm1(-total*dt)
-        edges = np.cumsum([np.zeros(n)] + hazards, axis=0)*np.divide(p_exit, total, out=np.zeros(n), where=total>0)
         crn = self.dists[f'exit_{state.name}'].crn_key() if same else None
         if crn is not None: # The usual case: each agent's draw is made in one compiled pass, as rvs() would make it, so only those who leave are listed
-            pos, which = ss.perflib._passes.competing_exits(uids, self.sim.people.slot_raw(), *crn, p_exit[0], edges[:, 0])
+            pos, which = ss.perflib._passes.competing_exits(uids, self.sim.people.slot_raw(), *crn, p_exit, edges)
             leaving = np.zeros(len(uids), dtype=bool)
             leaving[pos] = True
             for i,tr in enumerate(competing):
@@ -2235,7 +2357,7 @@ class Agents(Engine):
         before = None if getattr(tr, 'before', None) is None else float(self.convert(tr.before))
         if not after and before is None:
             return 1.0
-        stay = (self.ti - self.mod[f'ti_{state.name}'][uids])*self.dt
+        stay = (self.ti - self.mod[f'ti_{state.name}'].internal(uids))*self.dt
         out = stay >= after - 1e-9
         if before is not None:
             out &= stay < before - 1e-9
@@ -2566,18 +2688,16 @@ class Agents(Engine):
         self.cache.clear() # The interventions have run since the step started
         for tr in self.graph.transmissions:
             self.events.pop(tr.name, None)
-        for tr in self.graph.transmissions:
-            for src in tr.src + (self.immune_states if not getattr(tr, 'generated', False) else []): # With protection due to a state or memory: people who have had one strain can be infected by another
-                uids = self.infect(tr, src)
-                if mod.infection_log is not None:
-                    self.log_infections(uids)
-                self.move(tr, src, uids)
+        pairs = [(tr, src) for tr in self.graph.transmissions for src in tr.src + (self.immune_states if not getattr(tr, 'generated', False) else [])] # With protection due to a state or memory: people who have had one strain can be infected by another
+        together = self.infect_together(pairs) if len(pairs) > 1 else None
+        for i,(tr,src) in enumerate(pairs):
+            uids = self.infect(tr, src) if together is None else together[i]
+            if mod.infection_log is not None:
+                self.log_infections(uids)
+            self.move(tr, src, uids)
         self.finish_moves(mod.ti) # Infections are dated at the step's index, its end
         self.step_per(mod.ti)
-        for a in self.attrs.values(): # Derived attributes as they are now, for code that reads them
-            if a.kind == 'derived':
-                uids = self.sim.people.auids
-                mod[a.name][uids] = self.attr_values(a, uids)
+        self.write_derived(self.sim.people.auids)
         self.cache.clear() # Who is in each state has changed (including by the same-step cascade), so values read after the step (e.g. rel_sus.effective) are worked out again
         if self.sim.mixing.register is not None and mod is self.sim.declared[-1]: # The events dated at the end of the step, after every module's transmissions; the people are the same for every module, so it is done once
             self.step_register(mod.ti)
@@ -2731,7 +2851,7 @@ class Agents(Engine):
         if not len(sus):
             return ss.uids()
         protects = self.strain is not None and (src.name in self.protect or bool(self.sim.modifiers.get((mod.name, 'strain_sus', None))) or (self.memory and src.name in self.remembering)) # Protected in part against some strains (see Engine.init_immunity(), and products by strain)
-        carried = self.carriage is not None and self.applies[src.name][self.strain] # People who carry strains already, and can carry another as well
+        carried = self.carriage is not None and self.applies[src.name][self.strain] and src.name in (self.carriage.carried or [src.name]) # People infected with strains already, who can carry another as well
         superinfects = carried and self.superinfects(tr, src) # ... and stay in the same state, so are only changed if they do not carry it already
         if not routes: # Homogeneous mixing: the same hazard for everyone, scaled by their susceptibility
             adjust = self.adjusted(tr.name, sus)
@@ -2836,6 +2956,60 @@ class Agents(Engine):
             return ss.uids()
         return ss.uids.concatenate(new_cases).unique()
 
+    def infect_together(self, pairs):
+        """
+        Who is infected by each transmission (and source state) in `pairs`, in one pass over each network rather than one for each (TS5),
+        when that gives the same result: the transmissions take people from different states, which none of them transmits from, and have
+        the same source states with coefficients in proportion (as tbsim's reinfections are, at a relative risk), with no strains and nothing
+        that differs by transmission on a route. Each edge's chance is then the transmission's, and its random number is the same in every
+        pass, so who is infected is as if each were worked out alone. None if they cannot be worked out together.
+        """
+        mod = self.mod
+        sim = self.sim
+        routes = list(sim.networks.items())
+        if self.strain is not None or mod.infection_log is not None or not routes:
+            return None
+        srcs = [src.name for tr,src in pairs]
+        sources = {state.name for tr,src in pairs for state in tr.terms}
+        if len(set(srcs)) < len(srcs) or sources & set(srcs) or any(len(tr.terms) != len(pairs[0][0].terms) for tr,src in pairs):
+            return None
+        for nkey,route in routes:
+            if not isinstance(route, ss.Network) or route.has_acts or route.custom_beta or any(sim.modifiers.get((mod.name, 'route', f'{tr.name}@{route.name}')) for tr,src in pairs):
+                return None
+        sus = [] # Each pair's susceptibility, by UID, as infect() works it out
+        for tr,src in pairs:
+            raw = times(mod[src.name].raw*mod.rel_sus.raw, src.rel_sus, self.mult_raw('rel_sus'), self.mult_raw('transition', tr.name))
+            sus.append(raw if self.adjust[tr.name] is None else raw*self.adjust[tr.name][sim.groups.group_raw()])
+        everyone = ss.uids(np.arange(len(sus[0])))
+        dt = self.dt
+        new = [[] for pair in pairs]
+        for nkey,route in routes:
+            coefs = []
+            for tr,src in pairs:
+                c, target = self.by_target({state.name: self.route_beta(coef, nkey, route, everyone) for state,coef in tr.terms.items()}, route)
+                if target is not None or any(np.ndim(v) for v in c.values()) or set(c) != set(coefs[0][0] if coefs else c):
+                    return None
+                coefs.append((c, max(list(c.values()) + [0])))
+            first, ref = coefs[0]
+            for c,r in coefs[1:]: # In proportion to the first, so the infectious weigh the same in each
+                if (r > 0) != (ref > 0) or (ref > 0 and not all(abs(c[k]/r - first[k]/ref) <= 1e-12*abs(first[k]/ref) for k in c)):
+                    return None
+            betas = [-np.expm1(-r*dt) for c,r in coefs]
+            top = max(betas)
+            if top <= 0:
+                continue
+            weights = mod.rel_trans.raw*0
+            for state in pairs[0][0].terms:
+                weights = weights + mod[state.name].raw*(first[state.name]/ref)*state.rel_trans
+            rel_trans = times(weights*mod.rel_trans.raw, self.mult_raw('rel_trans'), 1.0)
+            route_sus = sum(s*(b/top) for s,b in zip(sus, betas)) # Each transmission's chance, as a share of the largest
+            edge_beta = lambda d, inds, src, trg: route.edge_net_beta(inds, disease_beta=top, disease=mod)*ss.connectors.route_mult(self, None, route, inds, trg)
+            for _, trgs in route.transmit(rel_trans, route_sus, edge_beta, mod.trans_rng):
+                for i,(tr,src) in enumerate(pairs):
+                    new[i].append(trgs[mod[src.name].raw[trgs]])
+        self._pairs = []
+        return [ss.uids.concatenate(cases).unique() if cases else ss.uids() for cases in new]
+
     def log_infections(self, uids, seeds=False):
         """ Record new infections for an `ss.infection_log` analyzer: with who infected them and the network, where known; seeds have a source of -1 """
         n = len(uids)
@@ -2919,8 +3093,6 @@ class Agents(Engine):
         if carried:
             strain = self.carriage.adds[self.strain_raw()[uids], strain]
         sim.people[sim.groups.strats[self.strain].attr][uids] = sim.groups.strats[self.strain].value(strain)
-        if self.memory: # Every strain each person has had, so that each protects them
-            self.mod.strains_had[uids] = self.mod.strains_had[uids] | self.level_bits()[np.asarray(strain, dtype=int)]
         sim.groups.groups_changed(uids)
         return
 

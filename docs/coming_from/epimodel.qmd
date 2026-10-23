@@ -34,7 +34,7 @@ control <- control.net(type = "SIS", nsims = 5, nsteps = 500, verbose = FALSE)
 sim <- netsim(est, param, init, control)
 ```
 
-In Starsim, `ssl.DegreeNet` (from the library, `import starsim.library as ssl`) takes the same targets: a mean of 0.7 partners each (175 partnerships among 500 people), 22% with two or more, at most three, lasting 50 steps on average. With `acts=2`, the disease's `beta` is per act, as EpiModel's `inf.prob`:
+In Starsim, `ssl.DegreeNet` (from the library, `import starsim.library as ssl`) takes the same targets: a mean of 0.7 partners each (175 partnerships among 500 people), 22% with two or more, at most three, lasting 50 steps on average. With `acts=ss.freqperday(2)` (two acts a step, a day here), the disease's `beta` is per act, as EpiModel's `inf.prob`:
 
 ```{python}
 import numpy as np
@@ -47,9 +47,9 @@ S, I = ss.states('S I')
 sis = ss.Disease(
     infection = ss.Transition(S, I, rate=ss.prob(0.4) * I), # Per act
     recovery  = ss.Transition(I, S, rate=ss.prob(0.05)),
-    init      = dict(I=10),
+    init_n    = dict(I=10),
 )
-partners = ssl.DegreeNet(n_contacts=0.7, concurrency=0.22, max_contacts=3, dur=50, acts=2)
+partners = ssl.DegreeNet(n_contacts=0.7, concurrency=0.22, max_contacts=3, dur=50, acts=ss.freqperday(2))
 sim = ss.Sim(sis, networks=partners, n_agents=500, stop=500, verbose=0)
 
 msim = sim.run(n_runs=10)
@@ -66,7 +66,7 @@ These are from the translations of two EpiModel examples, each run many times an
 
 | Model | Agreement |
 |---|---|
-| The introduction's SIS (above, as translated with `beta` per partnership rather than `acts=`; the version above gives 233 in 10 runs) | Agree once the order within a step is allowed for: 11.8 new infections a step at equilibrium against 12.0, and 115 infected after step 50 against 113 (means of 100 runs each). Over the last 200 steps, 237 of 500 are infected against EpiModel's 227.5, since EpiModel lets people recover in the step in which they are infected and counts them after that, which makes its count about 5% lower for the same epidemic. The network has 173 partnerships, 109 people with two or more, against EpiModel's 177 and 111 |
+| The introduction's SIS (above, as translated with `beta` per partnership rather than `acts=`; the version above gives 242 in 10 runs) | Agree once the order within a step is allowed for: 11.8 new infections a step at equilibrium against 12.0, and 115 infected after step 50 against 113 (means of 100 runs each). Over the last 200 steps, 237 of 500 are infected against EpiModel's 227.5, since EpiModel lets people recover in the step in which they are infected and counts them after that, which makes its count about 5% lower for the same epidemic. The network has 173 partnerships, 109 people with two or more, against EpiModel's 177 and 111 |
 | The Gallery's HIV model (two networks, acute, chronic, and AIDS stages, a care cascade, PrEP, four scenarios) | Agree within the noise of the runs with the cascade, and with the cascade and PrEP; with PrEP alone, final prevalence is 7.4% against 7.3%. With no intervention, it is 16.4% against 14.4%, about two standard errors. The likely cause is the casual network: Starsim's meets its targets (a mean degree of 0.30, and 10.2% with two or more casual partners), while EpiModel's undershoots them (0.28 and 8.9%) |
 
 ## Timings
@@ -105,7 +105,7 @@ S, I = ss.states('S I')
 sis = ss.Disease(
     infection = ss.Transition(S, I, rate=ss.prob(1 - 0.6**2) * I), # Two acts at 0.4
     recovery  = ss.Transition(I, S, rate=ss.prob(0.05)),
-    init      = dict(I=10),
+    init_n    = dict(I=10),
 )
 sim = ss.Sim(sis, networks=net, n_agents=1000, stop=300, verbose=0)
 sim.stratify(risk=['low', 'high'], split=[0.8, 0.2])

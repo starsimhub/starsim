@@ -36,7 +36,7 @@ import starsim as ss
 ss.options(jupyter=True)
 
 S, E, I, R = ss.states(4)
-seir = ss.Disease(S >> E @ ss.perday(0.3)*I, E >> I @ ss.perday(0.2), I >> R @ ss.perday(0.1), init=dict(I=10))
+seir = ss.Disease(S >> E @ ss.perday(0.3)*I, E >> I @ ss.perday(0.2), I >> R @ ss.perday(0.1), init_n=dict(I=10))
 sim = ss.Sim(seir, total_pop=1_000_000, unit='day', stop=365, solver='binomial', verbose=0)
 
 msim = sim.run(n_runs=200)
@@ -52,11 +52,11 @@ The same model runs as an ODE with `sim.new(solver='ode')`, and as agents with `
 
 | Model | Agreement |
 |---|---|
-| The SEIR above, as a chain binomial | Agree: over 200 runs each, the mean peak of `I` is 205,513 in Starsim against 205,568 in NumPy (0.03%), and the mean final `R` is 949,921 against 949,914 (within one standard error, about 22); the mean of `I` peaks on day 128 in both |
+| The SEIR above, as a chain binomial | Agree: over 200 runs each, the mean peak of `I` is 205,517 in Starsim against 205,568 in NumPy (0.02%), and the mean final `R` is 949,944 against 949,914 (within one standard error of the difference, about 30); the mean of `I` peaks on day 128 in both |
 | The same model as an ODE (`solver='ode'`) | As expected: a peak of 196,388 on day 120 and a final `R` of 940,480, the deterministic counterpart of the chain binomial (which has a higher peak since its steps are a day long) |
-| The same model as 100,000 agents (`solver='abm'`), each standing for 10 people | Agree when the epidemic takes off: peaks of 216,760 and 216,570 and final sizes of 950,530 and 948,720 in two seeds. The 10 initial infections are one agent, so in two of four seeds the epidemic dies out at once, as it should for one case with R0 = 3 |
+| The same model as 100,000 agents (`solver='abm'`), each standing for 10 people | Agree when the epidemic takes off: peaks of 195,780 and 194,990 and final sizes of 942,370 and 938,490 in two seeds, close to the ODE's. The 10 initial infections are one agent, so in two of four seeds the epidemic dies out at once, as it should for one case with R0 = 3 |
 
-These numbers are from runs on 18 October 2026, on a 20-core x86-64 Linux machine shared with other work.
+These numbers are from runs on 22 October 2026, on a 20-core x86-64 Linux machine shared with other work.
 
 ## Timings
 
@@ -75,7 +75,7 @@ There is no switching demo for NumPy users, since a NumPy model is whatever its 
 | Task | Today |
 |---|---|
 | A chain binomial, an ODE, or agents from one model | **Works**: `solver='binomial'`, `'ode'`, `'gillespie'`, or `'abm'`, above |
-| An array axis for age or place, with a contact matrix or mixing between places | **Works**: `seir.stratify(age=[0, 5, 18, 65])` and `ss.contacts()`, or `ss.geo()` and `ss.Mobility()` for places; see [Coming from odin](odin.qmd) and [Coming from LASER](laser.qmd) |
+| An array axis for age or place, with a contact matrix or mixing between places | **Works**: `seir.stratify(age=[0, 5, 18, 65])` and `ss.contacts()`, or `ss.geo.geography()` and `ss.geo.Mobility()` for places; see [Coming from odin](odin.qmd) and [Coming from LASER](laser.qmd) |
 | Many runs over seeds, with ranges | **Works**: `sim.run(n_runs=)` runs them in parallel; `msim.results` has a run axis first, and `res.quantiles()` gives the ranges |
 | Fitting to data | **Works**: `sim.calibrate()` chooses the method from the model (by gradients for an ODE, by simulation for a stochastic model), and gives a posterior when one is asked for (`method='nuts'`, `'pmcmc'`, or `'abc-smc'`) |
 | Anything the loop does that is not a flow between states (a running maximum, a rule in Python) | **Works**: a module written as code, with a `step()` in Python; a value it keeps can be read by a function in a rate, which runs as agents |

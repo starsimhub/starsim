@@ -112,6 +112,7 @@ def test_fit_inputs(tmp_path):
         def __init__(self, p=0.1, **kwargs):
             super().__init__(**kwargs)
             self.p = p # A setting kept as an attribute, as Covasim's are
+            self.p_retest = p # Held by two attributes, as Covasim's symp_quar_prob copies symp_prob: one parameter
             return
         def step(self):
             sis = self.sim.diseases.sis
@@ -121,16 +122,17 @@ def test_fit_inputs(tmp_path):
             return
     defaults = sc.dcp(ss.RandomNet().pars) # As a package builds a module's parameters
     defaults.update(n_contacts=ss.par(4, bounds=[2, 10]))
-    net = ss.RandomNet()
-    net.pars.update(defaults)
+    net = ss.RandomNet(pars=defaults)
     data = pd.DataFrame(dict(year=np.arange(2002, 2010), sis_prevalence=0.1, notes=1))
     sim = ss.Sim(diseases=ss.SIS(dt=ss.years(1)), networks=net, interventions=cure(p=ss.par(0.1, bounds=[0.01, 0.5])), n_agents=300, start=2000, stop=2010, data=data, verbose=0)
+    sim.pars.diseases.pars.init_prev = 0.2 # Changed after the sim was built: the fit's runs use it too
     with pytest.raises(ss.errors.UnknownDataColumn): # Compared with the results, the column must match one
         sim.calibrate()
     loss = lambda sim: abs(sim.results.sis.prevalence[-1] - 0.1)
     path = tmp_path/'fit.log'
     fit = sim.calibrate(gof=loss, trials=6, n_workers=2, storage=path, verbose=0)
     assert list(fit.pars.keys()) == ['n_contacts', 'p'] and len(fit.trials) == 6
+    assert fit.sim.diseases.sis.pars.init_prev.value == 0.2 and fit.sim.interventions.cure.p == fit.sim.interventions.cure.p_retest
     assert np.isfinite(ss.fit.mismatch(fit.sim, fit.sim.data[['sis_prevalence']])) # Before, a broadcast error
     again = sim.calibrate(gof=loss, trials=8, storage=path, verbose=0) # Resumed: two more trials
     assert len(again.trials) == 8 and np.allclose(again.trials.objective[:6], fit.trials.objective)

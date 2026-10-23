@@ -527,9 +527,9 @@ class fetal_infection(ss.Connector):
         if not preg.P.any():
             return
 
-        # Find pregnant women infected on the previous timestep (since transmission happens after connectors), excluding new pregnancies (handled at conception; dated at the start of the step, see ss.solvers.Engine.ti)
+        # Find pregnant women infected on the previous timestep (since transmission happens after connectors), excluding new pregnancies (handled at conception)
         pregnant_uids  = preg.P.uids
-        newly_infected = (sim.diseases.sir.ti_infected == self.ti - 1) & (preg.ti_P < preg.engine.ti)
+        newly_infected = (sim.diseases.sir.ti_infected == self.ti - 1) & (preg.ti_P < self.ti)
         affected = pregnant_uids[newly_infected[pregnant_uids]]
         if len(affected):
             self.fh.n_exposures[affected] += 1

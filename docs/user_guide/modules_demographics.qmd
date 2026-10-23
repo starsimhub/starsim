@@ -10,7 +10,7 @@ Demographics are essential for modeling disease transmission over longer time pe
 
 - **Births and deaths declared for the population** (`ss.Sim(demographics=[ss.birth(...), ss.death(...)])`), at per-person rates. They run under every solver, including as an ODE, and add and remove the same people from every disease. `demographics=True` declares them at default rates.
 - **Demographics modules** (`ss.Births`, `ss.Deaths`), written as code, with rates per 1,000 people if they are above 1 and per person otherwise (`rate_units=1000` or `rate_units=1` says which, and a rate that could be either gives a warning). They support rates that vary by age, sex, and year, and run as agents.
-- **Pregnancy** (`ss.Pregnancy`), declared (states `NP` and `P`, with conception, losses, and delivery), with age-specific fertility in the same units, fetuses as agents when something reads them, and maternal transmission over `ss.MaternalNet` and `ss.BreastfeedingNet`; as agents for now.
+- **Pregnancy** (`ss.Pregnancy`), declared (states `NP` and `P`, with conception, losses, and delivery), with age-specific fertility in the same units, fetuses as agents when something reads them, and maternal transmission over `ss.MaternalNet` and `ss.BreastfeedingNet`. It runs as agents under `solver='auto'`, and a compartmental solver named explicitly runs an approximate form of it.
 
 ## Simple usage
 

@@ -2,7 +2,7 @@
 Switching demo for the EMULSION seat: the published herd model with minimum stays, offspring, and births between stages.
 
 Passes when: matches EMULSION's published output.
-Blocked today by: `after=`, `offspring=`, N11.
+Blocked today by: offspring by prototype (SW2) and N11; `after=` and `ss.birth(per=)` exist.
 The published model is EMULSION's quickstart (100 animals, 105 weekly steps); the means are compared over 10 runs rather than EMULSION's 200.
 """
 import sys
@@ -34,7 +34,7 @@ def check_quickstart(msim, age='growth', health='health'):
 
 
 @pytest.mark.skipif(not paths.lfd.exists(), reason=paths.no_lfd)
-@pytest.mark.xfail(reason='The import lists the untranslated parts (cond, when, on_cross, statevars, the calendar; minimum stays are now after=), and warns and hands them to the import-model skill when run (15 animals at the end against 66); a complete import needs after=/before= and offspring=, as test_emulsion_quickstart', strict=False)
+@pytest.mark.xfail(reason='The import lists the untranslated parts (cond, when, on_cross, statevars, the calendar; minimum stays are now after=), and warns and hands them to the import-model skill when run (15 animals at the end against 66); a complete import needs after=/before= and offspring by prototype, as test_emulsion_quickstart', strict=False)
 def test_emulsion_import():
     sc.heading('Testing importing EMULSION\'s quickstart and matching its published output')
     sim = ss.interop.load(paths.lfd/'examples/emulsion/quickstart/original/quickstart.yaml', format='emulsion', verbose=False)
@@ -61,12 +61,14 @@ initial_conditions: {population: [{prototype: infected, amount: 1000}]}
     assert np.isclose(left, ref_proba_left, rtol=1e-3), f'{left:.1%} still infectious after one step, against {ref_proba_left:.1%} in EMULSION'
 
 
-@pytest.mark.xfail(reason='offspring= by prototype (a newborn in a state of each of several diseases, with probabilities from the mother\'s state) does not exist; offspring= takes one state and a number (after= and before= exist)', strict=False)
+@pytest.mark.xfail(reason='Offspring by prototype (a newborn in a state of each of several diseases, with probabilities from the mother\'s state; SW2 in deferred.md) does not exist: ss.birth(per=) puts every newborn in one state of each disease, so none is born infectious (after= and before= exist)', strict=False)
 def test_emulsion_quickstart():
     sc.heading('Testing the quickstart written in v4 with minimum stays and offspring declared')
     ppl = ss.People(100, age_data=ss.uniform(low=dt/365, high=(adult_age + dt)/365))
+    NG, G = ss.states('NG G')
+    farrowing = ss.Transition(G, NG, dur=ss.constant(ss.days(240))) # EMULSION's produce_offspring is by prototype, (J, NG, I) with chance 0.3*(E | I | Q) and (J, NG, M) otherwise; ss.birth(per=) can say only the second
     J, A = ss.states('J A')
-    growth = ss.Disease(maturity=ss.Transition(J, A, rate=ss.perday(1e9), where=ppl.age >= adult_age/365))
+    growth = ss.Disease(maturity=ss.Transition(J, A, rate=ss.perday(1e9), where=ppl.age >= adult_age/365), newborns=ss.birth(J, per=farrowing), first='J')
     S, E, I, R, Q, M = ss.states('S E I R Q M')
     quarantine = ss.par(ss.timeseries({'2021-01-01': 0, '2021-04-01': 1, '2021-09-02': 0, '2022-04-01': 1, '2022-09-02': 0}))
     health = ss.Disease(
@@ -81,13 +83,15 @@ def test_emulsion_quickstart():
         sick_deaths = I + Q >> ss.null @ ss.perday(0.004),
         M_deaths    = ss.Transition(M, ss.null, rate=ss.perday(0.002), before=ss.days(adult_age)), # EMULSION's escape
         E_deaths    = ss.Transition(E, ss.null, rate=ss.perday(0.004), before=ss.days(10)),
+        newborns    = ss.birth(M, per=farrowing),
         init_n      = dict(I=10),
     )
-    NG, G = ss.states('NG G')
     life = ss.Disease(
         conception = ss.Transition(NG, G, rate=ss.perday(0.05), after=ss.days(90), where=growth.A),
-        farrowing  = ss.Transition(G, NG, dur=ss.constant(ss.days(240)), offspring={(J, NG, I): 0.3*(E | I | Q), (J, NG, M): 1 - 0.3*(E | I | Q)}), # EMULSION's produce_offspring, by prototype
+        farrowing  = farrowing,
         abortion   = ss.Transition(G, NG, rate=ss.perday(-np.log(0.8)/240), where=health.I),
+        newborns   = ss.birth(NG, per=farrowing),
+        first      = 'NG',
     )
     sim = ss.Sim([growth, life, health], people=ppl, unit='day', dt=dt, start='2021-01-01', stop=ss.days(735), use_aging=True, solver='abm', verbose=0)
     check_quickstart(sim.run(n_runs=n_runs))

@@ -92,6 +92,7 @@ class Strat:
                 raise ValueError(errormsg)
             self.female = women[0]
         self.carries = None # For a strain with levels for people who carry several strains at once ('A+B'): see init_carriage()
+        self.carried = None # For a strain: the states people carry it in as an infection, so a new infection adds to it (see ss.Strains.carriers()); in its other states (e.g. R, for its protection), a new infection replaces it
         if self.kind == 'age' and self.edges is None and kind is None: # Age groups given as labels have no ages, so nobody ages between them
             self.kind = 'plain'
             self.guessed['kind'] = 'plain, since the age groups are labels and not ages'
@@ -592,6 +593,9 @@ class Groups:
                         raise ss.errors.MissingDimension(f'the transfer "{mod.name}" moves people along "{dim}", but the model is not stratified by it. Add e.g. sim.stratify({dim}=[...]).')
         if sim.solver not in [None, 'abm']: # In a compartmental run, a transfer whose dur= is a distribution passes people through Erlang stages: a dimension of the people at the levels it moves from (see ss.solvers.Compartmental.init_movers())
             for mod in sim.declared:
+                strat = ss.strains.memory_strat(mod) # And what people remember of a disease's strains, for an ss.immunity due to it
+                if strat is not None:
+                    strats[strat.name] = strat
                 for tf in mod.graph.transfers.values():
                     strat = transfer_stages(sim, mod, tf, strats[tf.dim])
                     if strat is not None:
@@ -638,6 +642,12 @@ class Groups:
             errormsg = 'Only one split= can cover several dimensions at once'
             raise ValueError(errormsg)
         self.joint = None # For a split over several dimensions at once: their positions, and the share of people at each combination of their levels
+        for strat in [strat for strat in self.strats if strat.joint is not None and strat.name not in strat.joint.dims]: # E.g. split=ss.by(sex=dict(female=[...], male=[...]))
+            others = sc.strjoin(strat.joint.dims)
+            errormsg = (f'The split of "{strat.name}" is given by {others} only; a split over several dimensions is over all of them, including "{strat.name}" itself: '
+                        f'ss.by(table, dims=[{", ".join(repr(d) for d in strat.joint.dims)}, {strat.name!r}]), whose table has one row for each level of {others} and one column for each level of "{strat.name}", '
+                        f'and is the share of people at each combination (e.g. the share in each level of "{strat.name}" within each row, times the share of the row)')
+            raise ss.errors.ShapeError(errormsg)
         if joints:
             ds, grid = joints[0].joint.grid(sim)
             ages = [i for i,d in enumerate(ds) if self.strats[d].kind == 'age']
@@ -937,9 +947,27 @@ class Groups:
         return groups if self.group_fold is None else self.group_fold[groups]
 
     def level_raw(self, d):
-        """ In an agent-based run: the level of every agent in one dimension (by its position), as an array indexed by UID """
+        """ In an agent-based run: the level of every agent in one dimension (by its position), as an array indexed by UID; people outside the dimension's `where=` have a level too, which counts nothing (see `level()`) """
         self.group_raw()
         return self._group_cache[2][d]
+
+    def level(self, dim):
+        """
+        In an agent-based run: the level of every agent in one dimension, as an array indexed by UID, with -1 for people outside its `where=`
+
+        Args:
+            dim (str/int): the dimension, by name or position
+
+        **Example**:
+
+            sim.groups.level('risk') # 0, 1, 2 for each risk group; -1 for people the risk groups don't apply to
+        """
+        d = self.dim_index(dim) if isinstance(dim, str) else dim
+        levels = self.level_raw(d)
+        if self.group_fold is None or self.group_inside[:, d].all():
+            return levels
+        inside = self.group_inside[self.group_raw(), d]
+        return np.where(inside, levels, -1)
 
     def init_vals(self):
         """ In an agent-based run: assign each agent a level of every property they do not already have """

@@ -90,14 +90,11 @@ Set aside while building [oct22/plan.md](../oct22/plan.md), each with what it wo
 **Performance**
 - FP58: declared rate exits under a changing modifier are redrawn (C17's correctness fix), so the declared method × pregnancy toy as agents is 2.1× slower (3.09 vs 1.44 s). Fix: redraw only the exits whose rate changed, or per-step hazards for rate exits under modifiers. M.
 - Counts through the compartmental kernels under every solver (MA28): after D1, RK4 on counts in agent runs is still 4 Python derivative calls a step (about 0.15 ms each). Fix: a program for the count states with people counts as per-step inputs, run by `ss.kernels.one_step()`. M+.
-- CV11's remaining 1.4×: `ss.by.lookup()` works over every agent, per table, per step; working out only the agents being scheduled would close most of it. S.
 - `sim.current_scale` lookups and `distributions.jump` show in agent profiles. S.
 
 **Accuracy**
 - A pair-formation ODE (Kretzschmar and Dietz: singles plus pairs by state, by sex) for `ss.SexualNet` under compartmental solvers, so a curable STI with fast transmission within partnerships runs right (question 17 of the oct22 plan, option b). M.
-- Date a declared progression at the step's index rather than its start (`ti - 1`), so every `ti_X` compares with `sim.ti` the same way (A2). Needs per-person knowledge of how a state was entered, or changes every declared dwell by a step. M.
-- Compartmental conveyors for a fixed delay that is not a whole number of steps: split the inflow between floor and ceiling slots so the mean matches agents' stochastic rounding (FP55). S.
-- FP53's guard for transfers and dwells by group (`dwell_cv()` on `graph.transfers` and each group's stats). S.
+- CB-2: a fixed delay that is not a whole number of steps as a conveyor whose inflow is split between the floor and ceiling slots, keeping agents' mean (S–M: the targets of a state's entry become two compartments); a delay under one step still needs a step, since compartments move people once a step (plan_b C1: the split fixes 1.5 steps, not CB-2's case under one).
 - An automatic hyperexponential fit for a dwell with a CV above 1 (FP53's alternative); users can write the mixture as states today (A3). M.
 - ST29: exact rescaling of exits beyond 32-bit steps (adjust ≤ 1e-9) would need the drawn dwell stored as a float. Not worth it now.
 - `ssl.NCD` prevalence divides by the unweighted `people.n_alive`: one line if weighted NCD runs matter.
@@ -107,16 +104,68 @@ Set aside while building [oct22/plan.md](../oct22/plan.md), each with what it wo
 **Features**
 - FP52, implemented rather than refused: `ss.change`/`ss.modify` on a value over `to` in a `p=` table (FPsim's method switching). M.
 - Sugar for a product whose holding is a user-declared state module (`ss.Vaccine(waning=prot)`), about 40–60 lines; wait until a downstream package asks (A3).
-- `.since` (and `.ever`, `.count`) on transitions (TB §4.2): declared diseases would record the transitions conditions read, as `EventSource` does for deliveries. About 40 lines.
 - A module given to a sim and never run raises on `.results`, pointing to `sim.analyzers.<name>` (TB §4.4): small, but touches every module's attribute access.
 - `ss.SexualNet`: `n_contacts=ss.by(risk=...)`, several `match=` properties (as `ssl.DegreeNet` has), and one-off contacts between two groups.
 - ST49 under the compartmental solvers (one beta per route per source state). S.
 - A family's result with strata (HP50's second half). S.
 - `0.275*ss.peract(...)` (a number times a per-act value directly) is a `TypeError`; it could scale the per-act hazard. S.
 - ST42's `preg.redraw(uids)` and a modifier of the preterm chance, for BV's preterm link: needs a design for modifying `preterm_risk()`.
-- Strains: a declared form for introducing a strain on a date (today `dis.infect(uids, strain=)`), about 30 lines with a compartmental form; waning cross-immunity and Covasim's antibody kinetics (need CV13); enhancement (protection above 1, dengue); an exact compartmental form for interacting own courses (KI15) and for `strains.last`/`.ever` under the ODE; within-host abundance and several lineages of one type; correlated transmission of several strains in one contact; `per='strain'` on a rate without `p=`; own-course members whose structure differs, as a supported form; HP43 (a trait shared across own courses) and HP56 (`cap=` for summed severity protection); `ss.Strains` for diseases written as code.
+- Strains: waning cross-immunity and Covasim's antibody kinetics (need CV13); enhancement (protection above 1, dengue); an exact compartmental form for interacting own courses (KI15); within-host abundance and several lineages of one type; correlated transmission of several strains in one contact; `per='strain'` on a rate without `p=`; own-course members whose structure differs, as a supported form; HP43 (a trait shared across own courses) and HP56 (`cap=` for summed severity protection); `ss.Strains` for diseases written as code.
 - A helper for "the steps so far" (`res.x[:sim.ti]`) remains open (spec 19).
 - ST44's closest-name hint includes non-result keys such as `restart`. S.
+
+## From the October 22 plan_b
+
+Set aside while building [oct22/plan_b.md](../oct22/plan_b.md), each with what it would take. The worklogs in [oct22/worklogs_b/](../oct22/worklogs_b/) have the details.
+
+**Performance**
+- F1, the rest of an agent step's fixed cost: tbsim-shaped TB at 1k agents is about 3.5 ms a step, spread over `eval_for` of each competing rate (most are constants, so could be worked out once per step per state), `adjusted()`, `move()`, `Dist.jump()` reading `ss.options.crn` 112 times a step, and `arrays.__setitem__`'s `wrote()` bookkeeping; each 3–8%. S each; best together with a per-state cache of constant hazards.
+- F3, Starsim's side of build time: each declared disease's `link_dists()` and `link_timepars()` walk its engine (1,750 nodes for one HPV genotype) and graph (830), which hold nothing they need, and a strain family walks its members again (13,330 nodes for four genotypes); skipping them would roughly halve what is walked, keeping `Dists.init()`'s traces (the seeds) unchanged. S–M; best after the proposed Sciris change to `sc.search()` (in [stale_other_repos.md](../oct22/stale_other_repos.md)).
+- F4, the expression tree: FPsim's declared contraception still interprets its regression per evaluation (37 nodes, about 70 evaluations a step); compiling a row once to a NumPy closure would remove most of it. M.
+- F6, the rest: post-draw unit scaling (`self.unit(rvs)/self.module.dt`) could be one multiplication by a cached factor for durations, but changes the last bit of every drawn dwell. S.
+- CV26, the JAX choice: `kernel_seconds()` now times one compiled step (plan_b, the switching fixes), but without the step's real tables (`step_tables()` needs engine state that `init()` hasn't made yet), so values that vary in time aren't counted and it errs low by up to 10× for models with tables; a long run of such a model may stay on the kernels when JAX would be faster. Time with the real tables, or calibrate by whether the run is whole or stepped. S.
+- Tabulate `ss.strains.MemoryProtection` in compartmental runs (its value by group is constant), so a model with protection on the course by memory of strains runs as one compiled whole run rather than step by step. S.
+
+**Accuracy**
+- The chain binomial's substeps by the cycle, not the fastest rate: a chain of states each adds about h/2 to the time around it, so tbsim at weekly steps (rate × dt 0.04) is still +5% (TC1); a rule on the sum of h/mean over a cycle's states, or a lower threshold, would cover it. S.
+- A self-loop's dwell under a step is at least one step as agents (FP86); compartmental solvers take the mean as given, so they move people several times faster (39% at the first monthly step, against 10%). Fix: floor such a dwell's mean at `dt` in the compartmental layout. S.
+- Coded diseases' seeds transmit a step less than Starsim 3's (HP5): `init_post()` seeding dates them at `self.ti` (0), and the first step is `ti == 1`; restoring Starsim 3's would date seeds `self.ti - 1` in the library's coded diseases (a few lines), or come with question 15's split of a coded step (plan.md). S.
+- A state that is a source both by contact and by a rate is dated −1 at the start, as for the rate, so its network part still loses the first step (plan_b HP62, question 2). Rare.
+- HP64: in a family, `dur=` protection is applied as it changes during the stay, where HPVsim fixes it once at infection; applying it at entry closes about half of the cross-immunity gap (prevalence 0.034 → 0.048, against HPVsim's 0.063). Waits for Cliff (plan_b question 8).
+- Events recorded at a step's end (an `ss.Pregnancy` delivery cascading from a contact infection in the same step) are read by `since` from the step's start, a step early, now that stamps read as the step's index (plan_b A2); exact would need the phase per agent for `ti_<event>`. No test or benchmark has one. S.
+- The chain binomial for raced dwell times (ST61): each compartment of the race moves one stage per substep, 4% long on the time in the state at a quarter-day step (0.7% at a twentieth); a pass through several stages of each clock in a substep, as `draw_chain()` does for one, would make it exact. S–M.
+- A fixed delay (`ss.constant`) or a minimum stay racing another non-exponential dwell out of one state, under compartmental solvers: a conveyor for each stage of the other clock (plan_b ST61 refuses it clearly). M.
+- Race dwell times whose `where=` overlap in some groups, rather than refusing them (`apart_shares()` decides apart-or-not at run time). S.
+- FPsim's port: infant deaths −4.4% (z −2.0) and TFR +5.6% (z 2.6) against v3, not diagnosed (FP91's cause, traits drawn before a coded caller sets ages, doesn't reach the declared pregnancy). S to bisect.
+- Strain memory scaled by an attribute (`scale='nab'`, Covasim's waning antibodies), clocks as Erlang stages (Covasim's viral load), and `ss.attr` of an expression with distributions in it or of `ss.by` of distributions stay agents only under compartmental solvers (plan_b C7 takes only a plain distribution at its mean). M each.
+- A module given to a sim is copied, so `mod.pars.x = ...` (or any change) on the original afterwards is silently lost; `_given` (FP80) marks the originals, so `Pars.__setitem__` could raise for a module so marked (the `Pars` would need to know its module). S.
+- `ss.transfer()` on a dimension with `where=`: use `sim.groups.level()` and skip people outside it (found with CB-6; not reproduced). S.
+- FP22: a function returning a bare time is read in the sim's unit, with a note shown only at `verbose>=1`, so it is silent by default. S.
+- FP2: `finish_step()` results never reach `update_results()` (100 per step where 105 is expected); documented in the skill and listed by the script. S.
+
+**Features**
+- Maps between groups as sparse matrices (or Kronecker factors) in the program and the three kernels, so a crossing with tens of thousands of groups fits in memory (FP84: 25.7 GB dense). M; refused clearly above 2 GB meanwhile.
+- TR5: `per='strain'` composed with a change of the strains left (acquiring resistance at the end of treatment) and with a split of the first destination (cured → treated or relapsing); tbsim writes 16 set-to-set transitions for two drugs. Would take a per-strain outcome table on the transition (e.g. `p=dict(cured='cure', RIF='q_rif')`) built into `prepare()`'s matrix. M.
+- TR6: several strain moves on one transition, and a move with chances (`move={DS >> RIF: q, DS >> INH: q2}`), folded into one level-to-level matrix as `prepare()` does. S–M.
+- TR7: `ss.par` and values above 1 in `ss.immunity` matrices (fitting `rr_superinfection`): immunity values as expressions evaluated each step in `level_protection()` and under the ODE. M. Meanwhile superinfection at a fitted rate is written `L >> L @ rr*foi`.
+- TR8: values for carrying several strains (tbsim's `rr_prog_super`, `rr_clear_super`, `p_multi`), today `ss.by(strain=[f(s) for s in strains.sets])`: a function of the set in `ss.Strains` values. S.
+- TR9: unordered sets when a full set never takes another strain (tbsim: 16 levels instead of 10 for two drugs); needs a rule for a full set other than D4's "replace the oldest" (plan_b B5).
+- HP52: `disease=[a, b]` over diseases written as code is refused clearly; supporting it needs the product keyed by coded diseases (`Product.key_by()` keys declared states), since one delivery per disease reaches different people. S–M.
+- Values by network as an object that scales (`ss.by(network=dict(...))*0.9`), for per-genotype betas built outside the rate (`{net: beta}*0.9` is a plain dict; inside a rate, `0.9*{net: beta}*I` already works). S.
+- HPVsim's family results omit members' transfers, so there is no any-genotype `detection` result. S.
+- CB-4: one-step partnerships on `ss.SexualNet` reach 40% of their target (`TargetStatsNotRecovered` warns), and there is no other spelling for one-off contacts (STIsim's sex work: FSWs have 0.72 sex-work partners against 5.06). S–M.
+- CB-7: no age preference on `ss.SexualNet` (STIsim's age gap: 0.4 ± 21.7 years against 7.8 ± 3.0). S–M.
+- CB-11: BV's ODE (192 groups, 1,152 compartments) takes 23 s compiled, 10× its 20,000 agents. Measure where the time goes. S.
+- FP9: `to_spec()`, `hash()` and `diff()` on an array duration: `ss.normal(loc=ss.months(np.array([3, 6])))` raises `only 0-dimensional arrays ...`. S.
+- FP12: `msim.reduce()`'s replacement, `low, mid, high = res.quantiles([...])`, raises `too many values to unpack` when the scenarios are labeled, since `quantiles()` is per scenario; Starsim 3's pooled band has no spelling. S.
+- FP23: with no declared module, every `ss.change`/`ss.modify` crashes with `min() iterable argument is empty` (in `sc.suggest` with an empty list); a coded module's parameters can't be modified. S for the crash.
+- FP28: no delivery to a mix (`Delivery(move=dict(to=[...], p=...))` gives a misleading `MissingDimension`), and no modifier over several transitions (`ss.modify([tr1, tr2])` is refused clearly). S–M.
+- FP32: an `ss.par` in a modifier amount can be changed only when it is also given to a module by keyword; by object it says "does not belong to a module yet", by name "not found". S.
+- FP39's rest: `ever='True -> False'` (`'"True" is not a level'`; arrow strings are gone, so recheck); `Delivery` without `disease=` beside a second declared module (`UnknownDisease`, about 3 lines); `diff()` and `msim.results` silently drop results the baseline lacks. S.
+- FP64 (spec drift): a `p=` row over `to` must name every destination (`BadBranchSplit`), where spec 03 says an unnamed one gets 0, and a table naming a label that isn't a destination raises `UnknownState`, so one availability table can't be shared by rows with different destinations. Follow the spec. S.
+- FP67: `to_df(resample=...)` no longer puts the times in the index, and `use_years=True` is ignored; the script doesn't flag it (the skill has the row), so FPsim's `Experiment` crashes far away with `IndexError`. S.
+- FP70: `ss.Delivery(move=)` took only an arrow string of names; with arrow strings gone and FP90 fixed (plan_b D2), `move=m.none >> m.pill` should work: recheck. S.
+- FP72: `ss.diff()` prints and returns None unless `output=True`, easily read as "no difference"; `ss.choice(a=ss.weeks(array)).pars.a` loses its unit after `init()`; a note on an empty age group is printed only when the sim, not the module, is stratified. S.
 
 ## Won't do
 

@@ -606,6 +606,17 @@ def test_engine_copy():
         copy.init(seed=1, module=year, force=True)
         a, b = np.asarray(dist.rvs(m), dtype=float), np.asarray(copy.rvs(m), dtype=float)
         assert np.allclose(a, b), f'{dist}: the engine draws {b}, the distribution {a}'
+
+    # A histogram for each group, as a dwell and as a trait, draws from each person's own (FP87: it drew uniform(0, 1))
+    h0, h1 = ss.histogram(values=[1], bins=[0, 1], unit='year'), ss.histogram(values=[1], bins=[10, 11], unit='year')
+    A, B = ss.states('A B')
+    d = ss.Disease(A, B, go=ss.Transition(A, B, dur=ss.by(urban={False: h0, True: h1})), obj=ss.attr(ss.by(urban={False: h0, True: h1})), name='m', first='A')
+    ppl = ss.People(1000, extra_states=[ss.BoolState('urban', default=ss.bernoulli(p=0.5))])
+    sim = ss.Sim(d, people=ppl, start=2000, stop=2003, verbose=0).run()
+    u = sim.people.auids
+    urban, obj, went = sim.people.urban[u], sim.diseases.m.obj[u], sim.diseases.m.B[u]
+    assert np.all(obj[urban] >= 10) and np.all(obj[~urban] <= 1)
+    assert went[~urban].all() and not went[urban].any()
     return copy
 
 

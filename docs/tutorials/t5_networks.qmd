@@ -76,27 +76,27 @@ net.plot()
 
 
 ## Sexual networks
-Starsim contains a few basic sexual networks, including an `mf` network for modeling heterosexual partnerships (and, in the library, `ssl.MSMNet` for men having sex with men). Modeling STIs is a straightforward extension of the SIR example we looked at previously. Here's an example modeling HIV:
+Starsim contains a basic sexual network, `ss.SexualNet`, for modeling heterosexual partnerships (and, with `between='mm'`, men having sex with men). Modeling STIs is a straightforward extension of the SIR example we looked at previously. Here's an example modeling HIV:
 
 ```{python}
 # Create the disease
 hiv = ssl.diseases.HIV(
-    beta = {'mf': [0.05, 0.025]},    # See notes below
+    beta = {'sexualnet': ss.peract(m2f=0.05, f2m=0.025)}, # See notes below
 )
 
 # Create a heterosexual network
-mf = ss.MFNet(
-    dur = ss.days(15),                # Using very short relationships so that we get more transmission
-    acts = ss.time.freq(80, 'year'),       # Number of coital acts per year
+mf = ss.SexualNet(
+    dur = ss.days(15),            # Using very short relationships so that we get more transmission
+    acts = ss.freqperyear(80),    # Number of coital acts per year
 )
 
 pars = dict(start='2000', stop='2020', dt=ss.months(1))
 sim = ss.Sim(pars=pars, diseases=hiv, networks=mf)
 ```
 
-The main difference here is that we've given `beta` as a dictionary, `{'mf': [0.05, 0.025]}`, with one entry per network. Because STIs are generally more transmissible from males to females than vice versa, we can specify `beta` as a list, and we can also allow it to vary between networks. For instance, if we also had an MSM network here, we could set
+The main difference here is that we've given `beta` as a dictionary, `{'sexualnet': ss.peract(m2f=0.05, f2m=0.025)}`, with one entry per network. Because STIs are generally more transmissible from males to females than vice versa, we can give `beta` for each direction, as a probability per act (`ss.peract`), and we can also allow it to vary between networks. For instance, if we also had an MSM network here (`ss.SexualNet(name='msm', between='mm')`), we could set
 ```
-hiv.pars.update(beta = {'mf': [0.05, 0.025], 'msm': [0.08, 0.08]})
+hiv.pars.update(beta = {'sexualnet': ss.peract(m2f=0.05, f2m=0.025), 'msm': ss.peract(0.08)})
 ```
 The sexual network itself is structurally similar to the `random` network that we looked at previously, and can be customized by changing the `pars` dictionary that's used to construct it.
  
@@ -105,7 +105,7 @@ Maternal networks are useful for capturing mother-to-child transmission. If you 
 
 ```{python}
 hiv = ssl.diseases.HIV(
-    beta = {'mf': [0.05, 0.025], 'prenatal': [0.5, 0]}
+    beta = {'sexualnet': ss.peract(m2f=0.05, f2m=0.025), 'prenatal': 0.5}
 )
 
 # Make demographic modules
@@ -121,16 +121,16 @@ sim.run().plot(show_module=False)
 ```
 
 ## Making your own contact network
-If you want to make your own network, a good place to start is by inheriting from one of the templates in networks.py. For example, if you wanted to make an `mf` network that has more age structure, you could do something like this:
+If you want to make your own network, a good place to start is by inheriting from one of the templates in networks.py. For example, if you wanted to make a sexual network that has more age structure, you could do something like this:
 
 ```{python}
-class age_mf(ss.MFNet):
-    def add_pairs(self, people, ti=None):
+class age_mf(ss.SexualNet):
+    def add_pairs(self):
         # Custom code to select pairs based on age
         return 
 ```
 
-This network would operate exactly like the existing `mf` network, but you could control how new pairs were added.
+This network would operate exactly like the existing `ss.SexualNet`, but you could control how new pairs were added.
 
 ## Introduction to mixing pools
 
@@ -154,7 +154,7 @@ msim = ss.parallel(sim_mp, sim_net)
 msim.plot()
 ```
 
-Both approaches model similar transmission patterns, but mixing pools work with groups rather than individual contacts. Since a mixing pool on its own needs no individual contacts, the first sim runs as an ODE, while the sim with the contact network runs as agents.
+Both approaches model similar transmission patterns, but mixing pools work with groups rather than individual contacts. Here both sims run as agents, since the number of contacts differs between people (`ss.poisson`); with a fixed number (`n_contacts=3`), a mixing pool on its own needs no individual contacts, and the first sim would run as an ODE.
 
 ## Age mixing with a contact matrix
 

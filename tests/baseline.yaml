@@ -17,10 +17,10 @@ sir_n_S: 1196.0
 sir_new_infections: 12520.0
 sir_prevalence: 0.29381667140828666
 sir_recovery: 10513.0
-sis_cum_infections: 22500.0
-sis_infection: 22500.0
-sis_n_I: 10384.0
-sis_n_S: 1807.0
-sis_new_infections: 22500.0
-sis_prevalence: 0.5104726499341734
-sis_recovery: 11035.0
+sis_cum_infections: 22526.0
+sis_infection: 22526.0
+sis_n_I: 10394.0
+sis_n_S: 1797.0
+sis_new_infections: 22526.0
+sis_prevalence: 0.5129816975795882
+sis_recovery: 11044.0

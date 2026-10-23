@@ -96,14 +96,14 @@ def test_siminf_scale():
     return sim
 
 
-@pytest.mark.xfail(reason='N21: ss.perday(ss.by(herd=b)) raises "TypeError: Value must be a scalar number or array, not <class \'starsim.transitions.by\'>"', strict=False)
+@pytest.mark.xfail(reason='N21: ss.perday(ss.by(herd=b)) is accepted, then raises a misleading ShapeError at init ("ss.by(herd=...) has 1 values, but herd has 100 levels")', strict=False)
 def test_siminf_ldata():
     sc.heading('A rate for each herd, as mparse() with ldata')
     n_herds = 100
     b = np.random.default_rng(2).uniform(0.08, 0.24, n_herds)
     S, I, R = ss.states('S I R')
     sir = ss.Disease(infection=ss.Transition(S, I, rate=ss.perday(ss.by(herd=b)) * I), recovery=ss.Transition(I, R, rate=ss.perday(0.01)),
-                     init=dict(I=ss.by(herd=[1] + [0]*(n_herds - 1))), name='sir')
+                     init_n=dict(I=ss.by(herd=[1] + [0]*(n_herds - 1))), name='sir')
     sir.stratify(herd=np.arange(n_herds).astype(str), kind='space', mobility=ss.geo.Mobility(data=make_register(n_herds, 365)))
     sim = ss.Sim(sir, solver='gillespie', unit='day', start=0, stop=365, total_pop=50*n_herds, verbose=0).run()
     herds = (np.asarray(sim.results.sir.n_I.strata)[-1] > 0).sum()

@@ -21,7 +21,7 @@ Starsim is available for both Python and R, and is fully open-source under the M
 
 ## Types of disease modeling
 
-Starsim models can be compartmental or agent-based (ABM). A disease written as states and transitions (a *declared* disease) can be run either way: Starsim runs it as an ODE when every part of the model has a compartmental form, and as agents when something in it needs individuals (such as a contact network), and it can be asked for either. Modules written as code (custom diseases, networks, interventions, and analyzers with their own `step()` method) run as agents, alongside declared diseases. ABMs are most suitable for questions that are moderately complex, and have medium to large amounts of data available:
+Starsim models can be compartmental or agent-based (ABM). A disease written as states and transitions (a *declared* disease) can be run either way: Starsim runs it as an ODE when every part of the model has a compartmental form, and as agents when something in it needs individuals (such as a contact network), and it can be asked for either. Modules written as code (custom diseases, networks, and interventions with their own `step()` method) run as agents, alongside declared diseases; analyzers run beside either. ABMs are most suitable for questions that are moderately complex, and have medium to large amounts of data available:
 
 ![Types of Model](assets/types_of_model.png)
 

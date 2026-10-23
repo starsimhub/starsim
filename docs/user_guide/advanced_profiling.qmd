@@ -80,7 +80,7 @@ sim.loop.insert(check_pop_size, label='people.finish_step')
 sim.run()
 ```
 
-In this case, you get the same output as using an analyzer:
+In this case, you get nearly the same output as using an analyzer (an analyzer also runs at the start of the sim, and runs before `people.finish_step` removes the people who died, so its counts differ slightly):
 
 ```{python}
 def check_pop_size(sim):

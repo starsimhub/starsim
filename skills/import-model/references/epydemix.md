@@ -13,7 +13,7 @@ python dump_epydemix.py my_model.py model.json               # a script that mak
 python dump_epydemix.py my_model.py:build model.json         # a function that returns the model, or dict(model=..., start_date=..., **run arguments)
 ```
 
-Then, in Starsim, `sim = ss.load('model.json')`. The dump records the last `simulate()` or `run_simulations()` call made with the model, which gives the dates, the step, the initial numbers by age group (worked out from `percentage_in_agents` as epydemix does), and any parameters passed to the run rather than set on the model. That matters: scripts often pass `beta` (or an `R0`-derived array) only to the run, as the COVID tutorial's `simulate_wrapper` does. If the script runs a calibration (ABC-SMC can take an hour), write a short script that builds the model and returns it with the run's arguments at fixed values, and dump that.
+Then, in Starsim, `sim = ss.interop.load('model.json')`. The dump records the last `simulate()` or `run_simulations()` call made with the model, which gives the dates, the step, the initial numbers by age group (worked out from `percentage_in_agents` as epydemix does), and any parameters passed to the run rather than set on the model. That matters: scripts often pass `beta` (or an `R0`-derived array) only to the run, as the COVID tutorial's `simulate_wrapper` does. If the script runs a calibration (ABC-SMC can take an hour), write a short script that builds the model and returns it with the run's arguments at fixed values, and dump that.
 
 ## Mapping
 
@@ -32,7 +32,7 @@ Then, in Starsim, `sim = ss.load('model.json')`. The dump records the last `simu
 | Age groups (`"0-4"`, `"65+"`) and `Nk` | `stratify(age=[0, 5, ...], split=Nk)`, `use_aging=False` (epydemix does not age people) | yes |
 | Groups that are not ages | `stratify(group=[...])` | yes |
 | Contact matrices by setting | `networks=ss.contacts(age=sum of the settings)` | yes |
-| Initial numbers by group (recorded run) | `init=dict(I=ss.by([...], dims=['age']))`, the state with most people taking the rest | yes |
+| Initial numbers by group (recorded run) | `init_n=dict(I=ss.by([...], dims=['age']))`, the state with most people taking the rest (it is made the first state, `first=`) | yes |
 | Daily steps of a chain binomial | `solver='binomial'`, `substeps=1`, `unit='day'`, stop a day after `end_date` | yes |
 | `add_intervention()` on one setting | Listed; by hand (`ss.modify(dis.S_to_E, multiply=..., start=..., stop=...)` if every setting is reduced alike, or the contacts as two networks) | no |
 | A custom transition kind (`register_transition_kind`) | Listed; by hand | no |

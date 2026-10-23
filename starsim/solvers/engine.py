@@ -12,7 +12,7 @@ from types import SimpleNamespace as Bunch # A plain object with attributes; muc
 __all__ = ['Engine', 'CountState', 'StockCtx', 'convert', 'add_rows', 'at_ends', 'by_level', 'no_tables']
 
 
-no_tables = (np.zeros((0, 0, 0)),)*4 # For a step whose program holds for the whole step: see ss.kernels.step()
+no_tables = ss.kernels.no_tables # For a step whose program holds for the whole step: see ss.kernels.step()
 
 
 def convert(val, unit):
@@ -119,11 +119,29 @@ class CountState:
         """ The number in this state in each group """
         return self.engine.count([self.state], total=False)
 
+    def no_agents(self, what):
+        """ A read of agents, which a compartmental run does not have (TC3: a module that reads each person's state, run beside the compartments) """
+        raise ss.CapabilityError(f'{self.engine.mod.name}.{self.name}{what} was asked for, but a compartmental run has the number in each state ({self.engine.mod.name}.{self.name}.n), not agents.\n'
+                                 f'     Run with solver="abm"; a module written as code that reads agents can say so with compartmental = False, so that solver="auto" runs them.')
+
     @property
     def uids(self):
         """ Agents, which a compartmental run does not have """
-        raise ss.CapabilityError(f'{self.engine.mod.name}.{self.name}.uids was asked for, but a compartmental run has the number in each state ({self.engine.mod.name}.{self.name}.n), not agents.\n'
-                                 f'     Run with solver="abm".')
+        self.no_agents('.uids')
+
+    @property
+    def raw(self):
+        """ Each agent's value, which a compartmental run does not have """
+        self.no_agents('.raw')
+
+    def __getitem__(self, key):
+        self.no_agents('[...]')
+
+    def true(self):
+        self.no_agents('.true()')
+
+    def false(self):
+        self.no_agents('.false()')
 
 
 class Engine:
@@ -134,6 +152,7 @@ class Engine:
         module (`ss.Module`): the module whose graph is run
         sim (`ss.Sim`): the sim
     """
+    max_map_bytes = 2e9 # The most memory a map between groups may take in a compartmental run (see dim_map())
     group_bytes = 100e6 # The most memory that a module's results may take by group in one run; above it, they are kept every few steps (see ss.Sim.group_rows())
 
     def __init__(self, module, sim):
@@ -226,6 +245,8 @@ class Engine:
                 names = own[strat.name].states if strat.name in own else ([] if strat.states is not None else None)
                 if getattr(strat, 'stages_of', None) is not None: # The stages of a transfer: for its own module's states only
                     names = (strat.states or [s.name for s in graph.people_states]) if strat.stages_of[0] == self.mod.name else []
+                if getattr(strat, 'memory_of', None) is not None: # What people remember of a disease's strains: for its own states only
+                    names = strat.states if strat.memory_of == self.mod.name else []
                 flag = bool(state.people or strat.kind == 'space') if names is None else state.name in names # A place applies to everything; other properties of people, to people
                 if strat.kind == 'disease': # The compartments of another disease, tracked jointly with this one: see ss.solvers.Crossing
                     flag = bool(state.people) and self.mod.name in strat.holders
@@ -259,6 +280,8 @@ class Engine:
             errormsg = f'"{self.mod.name}" has more than one strain dimension ({sc.strjoin(sim.groups.strats[d].name for d in strains)}); a person carries one strain of a disease at a time, so combine them into one'
             raise ValueError(errormsg)
         self.strain = strains[0] if strains else None
+        mems = [d for d,strat in enumerate(sim.groups.strats) if getattr(strat, 'memory_of', None) == self.mod.name]
+        self.memory_dim = mems[0] if mems else None # In a compartmental run: what people remember of the strains (see ss.Strains.memory_strat())
         self.foreign = set() # In a crossing: the dimensions that only another disease's states have, whose level this one's people keep
         if self.cross is not None:
             people = [state.name for state in graph.people_states]
@@ -315,7 +338,13 @@ class Engine:
             b = self.applies[dst]
             moved = dict(move or ())
             out = None
-            if strain is not None or moved or not np.array_equal(a, b):
+            m = getattr(self, 'memory_dim', None)
+            remember = m is not None and src is not None and b[m] and self.remembers(src, dst) # Leaving the states they carry strains in: they remember the strains they carried
+            if strain is not None or moved or remember or not np.array_equal(a, b):
+                ng = self.sim.groups.n_groups
+                if self.sim.solver != 'abm' and 8*ng**2 > self.max_map_bytes: # A dense matrix of groups by groups (FP84: 25.7 GB for 3,264 × 18 groups)
+                    raise ss.CapabilityError(f'"{self.mod.name}" cannot run with solver="{self.sim.solver}": people moving from {src or "outside"} to {dst} change group, and the map between its {ng:,} groups would take {8*ng**2/1e9:.3g} GB (a dense matrix of groups by groups).\n'
+                                             f'     Run with solver="abm", or with fewer groups (fewer dimensions, or fewer diseases tracked jointly).')
                 out = np.ones((1, 1))
                 for d,strat in enumerate(self.sim.groups.strats):
                     n = strat.n
@@ -327,10 +356,12 @@ class Engine:
                     elif d in moved and not isinstance(moved[d], tuple):
                         factor[:, moved[d]] = 1
                     elif d == self.strain and strain is not None and (b[d] or record):
-                        if a[d] and not record and strat.carries is not None: # Someone who carries other strains carries this one as well
+                        if a[d] and not record and strat.carries is not None and (strat.carried is None or src in strat.carried): # Someone infected with other strains carries this one as well
                             factor[np.arange(n), strat.adds[:, strain]] = 1
                         else:
                             factor[:, strain] = 1
+                    elif remember and d == m: # Set from the strains carried, below
+                        factor = np.ones((n, n))
                     elif d in self.foreign:
                         factor = np.eye(n)
                     elif not b[d]:
@@ -341,6 +372,9 @@ class Engine:
                         factor[:] = strat.split
                     out = np.kron(out, factor)
                 coords = self.sim.groups.group_coords
+                if remember:
+                    after = self.sim.groups.strats[m].after[coords[:, m], coords[:, self.strain]] # The level each group's people remember, from what they remembered and the strains they carried
+                    out = out*(coords[None, :, m] == after[:, None])
                 for d,strat in enumerate(self.sim.groups.strats): # Entering a dimension whose split depends on the levels of others: by the row for the group people come from
                     if strat.cond is not None and b[d] and not a[d]:
                         ng = len(coords)
@@ -391,14 +425,16 @@ class Engine:
         if reason and self.sim.solver != 'abm':
             raise ss.CapabilityError(f'the strains of "{self.mod.name}" need agents: {reason}. Run with solver="abm" (or "auto").')
         sources = {id(src) for tr in graph.transmissions for src in tr.src}
-        infected = {id(s) for s in graph.infected}
-        recovered = [s for s in graph.people_states if self.applies[s.name][self.strain] and id(s) not in infected and id(s) not in sources] # Carry a strain, but are not infected, and cannot be infected again by a transmission of their own
+        infected = {id(s) for s in graph.people_states if s.name in (strat.carried or [])} # Carrying strains as an infection (see ss.Strains.carriers())
+        recovered = [s for s in graph.people_states if s.name not in graph.uninfected and id(s) not in infected and id(s) not in sources] # Have been infected, but are not now, and cannot be infected again by a transmission of their own
         self.remembering = {s.name for s in graph.people_states if id(s) not in infected}
         for imm in strains.immunity:
             if isinstance(imm.due_to, ss.strains.Memory):
                 if 'rel_sus' in imm.values and not strains.trivial(imm, graph):
                     self.memory.append(imm)
                     self.immune_states += [s for s in recovered if s not in self.immune_states]
+                for key in [key for key in imm.values if key != 'rel_sus']: # Protection on the course of an infection, from what people remember of the strains before it (see ss.strains.MemoryProtection)
+                    ss.strains.MemoryProtection.add(self, imm, key)
                 continue
             for name in imm.names:
                 state = graph.states[name]
@@ -406,6 +442,26 @@ class Engine:
                 if id(state) not in infected and id(state) not in sources and state not in self.immune_states:
                     self.immune_states.append(state)
         return
+
+    def remembers(self, src, dst):
+        """ Whether people moving from one state to another remember the strains they carried: they leave the states they carry strains in for one they don't """
+        carried = self.sim.groups.strats[self.strain].carried or []
+        return src in carried and dst is not None and dst not in carried and self.graph.states[dst].people
+
+    def memory_mult(self, state, strain, key='rel_sus'):
+        """ In a compartmental run: the share of the force of infection of a strain that reaches each group of people in a state, by what they remember of the strains (`ss.immunity(due_to=strains.last)` or `.ever`): with those they carry there too, as agents """
+        m = getattr(self, 'memory_dim', None)
+        if m is None or not self.memory or state.name not in self.remembering:
+            return 1.0
+        mem = self.sim.groups.strats[m]
+        strains = mem.memory
+        levels = self.sim.groups.group_coords[:, m]
+        if self.applies[state.name][self.strain]:
+            levels = mem.after[levels, self.sim.groups.group_coords[:, self.strain]]
+        out = 1.0
+        for imm in self.memory:
+            out = out*(1 - strains.memory_protection(imm, key, mem, levels)[:, strain])
+        return out
 
     def protection(self, state, levels, strain):
         """ The share of the force of infection of a strain that reaches people in a state at some levels of the strain dimension, by the strains they carry there (see `init_immunity()`) """
@@ -444,8 +500,7 @@ class Engine:
         The share of the infectiousness of the people at each level of the strain dimension that goes to each strain (levels by strains)
 
         Someone who carries one strain passes it on; someone who carries several passes on
-        each in proportion to its infectiousness (its `rel_trans`), or only the most infectious
-        (`ss.Strains(transmit='fittest')`); their own infectiousness is that of their level.
+        each in proportion to its infectiousness (its `rel_trans`); their own infectiousness is that of their level.
         """
         self.strain_weights = None
         if self.strain is None:
@@ -459,8 +514,6 @@ class Engine:
             if d == self.strain:
                 rel = rel*vals
         w = strat.carries*rel[None, :]
-        if strat.strains is not None and strat.strains.transmit == 'fittest': # Only the most infectious of the strains carried (the first, if several are as infectious)
-            w = (np.arange(w.shape[1])[None, :] == np.argmax(w, axis=1)[:, None])*strat.carries
         self.strain_weights = np.divide(w, w.sum(axis=1, keepdims=True), out=np.zeros_like(w), where=w.sum(axis=1, keepdims=True)>0)
         return
 
@@ -478,7 +531,8 @@ class Engine:
         """
         The time point the engine takes people's state at: the start of the step being taken (`self.mod.ti - 1`,
         since the step's own time point, the loop's `ti`, is its end), and the start of the run before the first step.
-        So people who move at the start of a step (as all but infections do) are dated then, and infections at its end.
+        So people who move at the start of a step (as all but infections do) are timed from then, and infections from its end;
+        either way their time of entering (`ti_X`) reads as the step's index (see `ss.solvers.Agents.index_of()`).
         """
         ti = self.__dict__.get('_ti') # Set while people are back-dated: see Agents.backfill()
         return max(self.mod.t.ti - 1, 0) if ti is None else ti
@@ -697,7 +751,12 @@ class Engine:
         if mods:
             key = (kind, name, state.name if state is not None else None)
             if key not in self.cache:
-                self.cache[key] = self.clip(self.reduce(ss.connectors.combine(mods, 1.0, self), state=state, what=name or kind), f'{self.mod.name}.{name or kind}')
+                for_uids = self.__dict__.get('_for_uids', False)
+                self._for_uids = False # For everyone, even when asked while a rate is evaluated for some agents (CV23)
+                try:
+                    self.cache[key] = self.clip(self.reduce(ss.connectors.combine(mods, 1.0, self), state=state, what=name or kind), f'{self.mod.name}.{name or kind}')
+                finally:
+                    self._for_uids = for_uids
             out = self.cache[key]
         if getattr(self, 'rel_adjust', None) and self.rel_adjust.get(kind):
             out = out*self.adjusted_rel(kind, state)
@@ -720,9 +779,31 @@ class Engine:
             self.cache[key] = by.per_group(self.sim, self.convert, year=None if ss.solvers.Compartmental.held(by) else self.year) # A step function at the start of the step, as in call()
         return self.cache[key]
 
+    def check_counted_strains(self):
+        """
+        With strains, an acquisition whose rate counts the disease's own states (`beta*I.frac`, `beta*I.n`) would give each new
+        case a strain from the strain set's split, not from who infected them, since a count carries no strain: refused, with
+        the transmission that says the same (`beta*I` is the same force under homogeneous mixing, weighted by infectiousness)
+        """
+        if self.strain is None:
+            return
+        for tr in self.graph.acquisitions:
+            if tr.contact or not isinstance(tr.rate, ss.transitions.Expr):
+                continue
+            for leaf in tr.rate.leaves:
+                states = getattr(leaf, 'states', None) if isinstance(leaf, ss.expressions.Count) else None
+                own = [s for s in (states or []) if isinstance(s, ss.transitions.State) and self.graph.states.get(s.name) is s]
+                if own:
+                    names = sc.strjoin(s.name for s in own)
+                    errormsg = (f'the rate of "{tr.name}" counts {names} of "{self.mod.name}" ({leaf}), which has strains: a count carries no strain, so each new case would take a strain from the split rather than from who infected them.\n'
+                                f'     Write it as a transmission, which has the same force under homogeneous mixing and passes on the strain: beta*I for beta*I.frac (and for beta*I.n, beta times the population size, times I).')
+                    raise ss.errors.StrainsByCount(errormsg)
+        return
+
     def init_adjust(self):
         """ The multiplier on each transition in each group, from the adjust= of every stratification """
         sim = self.sim
+        self.check_counted_strains()
         self.adjust = sc.objdict({name:None for name in self.graph.transitions})
         self.branch_adjust = dict() # For a branch chosen with p=: a multiplier on its probability, as for a modifier on it (TL16: the dwell time was divided instead)
         self.adjust_dims = sc.objdict({name:set() for name in self.graph.transitions}) # The dimensions each transition's multiplier is by
@@ -1094,7 +1175,9 @@ class Engine:
                     if np.ndim(mean) == 0 and 0 < mean < self.dt:
                         ss.note(f'{name} has a mean dwell of {mean:.2g} {unit}{"s" if mean != 1 else ""}, shorter than the step; a duration is written dur=, or ss.days(10)', ss.errors.LargeStep, sim=sim)
             return
-        dt = self.dt/(sim.pars.substeps if euler else 1)
+        if sim.solver == 'binomial' and sim.pars.substeps is None: # It takes enough substeps (see ss.solvers.Compartmental.substeps())
+            return
+        dt = self.dt/(sim.pars.substeps if euler or sim.solver == 'binomial' else 1)
         for name,dw in self.dwells.items():
             if name in inflows:
                 continue
@@ -1104,7 +1187,8 @@ class Engine:
             if mean is not None and np.ndim(mean) == 0 and mean > 0 and dt/mean > 0.1: # The chain-binomial solver moves people through the stages exactly (see ss.kernels.draw_chain()), and agents draw the whole dwell time, so it is the mean that matters
                 x = dt/mean
                 share = min(x, 1) if euler else -np.expm1(-x)
-                msg = f'{name} has rate × dt = {x:.2g} ({1/mean:.3g} per {unit} × {dt:n} {unit}{"s" if dt != 1 else ""}), so {"almost everyone leaves" if share > 0.99 else f"{share:.2g} of people leave"} in a step'
+                step = 'step' if dt == self.dt else 'substep'
+                msg = f'{name} has rate × dt = {x:.2g} ({1/mean:.3g} per {unit} × {dt:n} {unit}{"s" if dt != 1 else ""}), so {"almost everyone leaves" if share > 0.99 else f"{share:.2g} of people leave"} in a {step}'
                 if euler:
                     msg += ' (Euler scales outflows that would take more than everyone down together)' if x > 1 else ''
                 else: # Whole steps are off the ODE by an amount of order rate × dt, which can be large: about 15% in the prevalence of a seasonal SIRS at 0.12
@@ -1147,6 +1231,10 @@ class Engine:
                 init = float(self.eval(init))
             if callable(init) and not isinstance(init, (ss.by, ss.Dist)): # A function of the sim, as for init_prev
                 init = self.call(init)
+            if isinstance(init, ss.by) and self.strain is not None and self.sim.groups.strats[self.strain].name in init.dims: # A share by strain would be of the people at a level of the strains, where nobody is before they are infected
+                strat = self.sim.groups.strats[self.strain]
+                errormsg = f'init= of "{state.name}" in "{self.mod.name}" is given by "{strat.name}", the strains people carry; give how many start infected in init= (e.g. init=dict({state.name}=0.1)), and the share of each strain, or set of strains carried together, in ss.Strains(split=...), e.g. split={{"{strat.labels[0]}": 0.5, "{strat.labels[-1]}": 0.5}}'
+                raise ss.errors.BadSplit(errormsg)
             if isinstance(init, ss.by) and state.people and not is_n and self.sim.solver == 'abm' and init.on_people(self.sim): # Read from each person's own properties, as agents: see Agents.init_post()
                 continue
             if isinstance(init, ss.by): # A value for each level of one or more dimensions: a number of people, or a fraction of the people at that level
@@ -1208,22 +1296,23 @@ class Engine:
             elif np.ndim(init_prev) == 0 and init_prev > 1: # More than 1 is a number of people, and up to 1 a share (1.0 is everyone)
                 init_prev = init_prev/self.total_pop
             init_prev = init_prev*share
-            trs = graph.transmissions
+            trs = self.seed_transmissions()
             if not trs:
-                errormsg = f'"{self.mod.name}" has no contact-mediated transition to seed init_prev through; use init= on a state instead'
+                errormsg = f'"{self.mod.name}" has no transmission or acquisition to seed init_prev through; use init= on a state instead'
                 raise ValueError(errormsg)
-            dst = trs[0].dst
+            dst = [state for tr in trs for state in tr.dst]
             if graph.infectious and not any(state.infectious for state in dst): # e.g. E in an SEIR
-                seeded = sc.strjoin(state.name for state in dst)
+                seeded = sc.strjoin(dict.fromkeys(state.name for state in dst))
                 ss.note(f'init_prev seeds {seeded} of "{self.mod.name}", where a new infection starts, so nobody is infectious at the start; to seed infectious people, use init=dict({graph.infectious[0].name}=...) (a share) or init_n= (a number)', sim=self.sim)
             by_group = getattr(self, '_by_group', None)
             self._by_group = True # The share of each destination in each group, before there are agents to evaluate it for
             try:
-                ps = self.branch_probs(trs[0])
+                reach = self.seed_reach(trs)
+                for tr,w in zip(trs, reach):
+                    for state,p in zip(tr.dst, self.branch_probs(tr)):
+                        fracs[state.name] = fracs[state.name] + init_prev*w*np.asarray(p, dtype=float)
             finally:
                 self._by_group = by_group
-            for state,p in zip(dst, ps):
-                fracs[state.name] = fracs[state.name] + init_prev*np.asarray(p, dtype=float)
 
         for name,val in list(fracs.items()) + list(counts.items()):
             if not np.all(np.isfinite(val)) or np.any(np.asarray(val) < 0):
@@ -1265,6 +1354,30 @@ class Engine:
     def seed_dist(self):
         """ An init_prev that chooses who starts infected one by one, which only agents have (see `Agents.seed_dist()`) """
         return None
+
+    def seed_transmissions(self):
+        """ The transmissions that init_prev seeds through: those out of the first state (e.g. one for each sex), or the first transmission if none is, or if they all lead to the same states; with none, the first acquisition """
+        trs = [tr for tr in self.graph.transmissions if not getattr(tr, 'generated', False)] or [tr for tr in self.graph.acquisitions if tr.dst] # With no transmission (a cohort), where an infection puts people
+        own = [tr for tr in trs if any(src is self.graph.first for src in tr.src)]
+        if len(own) > 1 and len({tuple(s.name for s in tr.dst) for tr in own}) > 1:
+            return own
+        return trs[:1]
+
+    def seed_reach(self, trs, uids=None):
+        """
+        For seeding through several transmissions (see `seed_transmissions()`): the share of the seeds of each group (or of each agent, with `uids`)
+        that each takes, equal among those that can infect them (a coefficient above 0 for them), e.g. a transmission to women only seeds women
+        """
+        if len(trs) == 1:
+            return [1.0]
+        n = self.sim.groups.n_groups if uids is None else len(uids)
+        reach = [np.broadcast_to(self.can_infect(tr, uids), (n,)).astype(float) for tr in trs]
+        total = np.sum(reach, axis=0)
+        return [np.divide(r, total, out=np.full(n, 1.0 if i == 0 else 0.0), where=total>0) for i,r in enumerate(reach)] # Nobody it can infect: the first, as before
+
+    def can_infect(self, tr, uids=None):
+        """ Whether a transmission can infect the people of each group (with a coefficient above 0 for them) """
+        return np.logical_or.reduce([np.asarray(self.eval(coef), dtype=float) > 0 for coef in tr.terms.values()] or [True])
 
     def branch_probs(self, tr, ps=None):
         """ The probability of each destination of a transition (1 if there is only one), from its p= or the expressions given for them """
@@ -1637,6 +1750,9 @@ class Engine:
         if scale != 1:
             for r in people: # The values written this step
                 r[ti] = r[ti]*scale
+        coded = [state.name for state in mod.auto_state_list if state.name not in graph.states] + mod.derived_state_names
+        if coded: # The module's own ss.BoolStates (and derived states), counted as for a module written as code
+            ss.Module.update_results(mod, names=coded)
         return
 
     def register_sets(self):

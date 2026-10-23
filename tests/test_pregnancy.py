@@ -26,8 +26,9 @@ def test_states():
             key = (b.tr, b.key, tuple(b.uids))
             if b.tr in ['miscarriage', 'stillbirth'] and key not in ga.seen:
                 ga.seen.add(key)
-                uids = b.uids[preg.ti_P[b.uids] < b.key[0]] # Not those who conceived again in the same step, whose time of entering P is now that of the new pregnancy
-                ga[b.tr] += list((b.key[0] - preg.ti_P[uids])*preg.t.dt.weeks) # At the step it happened
+                step = b.key[0] + 1 # The index of the step it happened in (the batch is dated at the step's start)
+                uids = b.uids[preg.ti_P[b.uids] < step] # Not those who conceived again in the same step, whose time of entering P is now that of the new pregnancy
+                ga[b.tr] += list((step - preg.ti_P[uids])*preg.t.dt.weeks) # At the step it happened
         assert not np.any(preg.P & ~sim.people.female), 'only women are pregnant'
 
     abm = ss.Sim(demographics=make(), analyzers=check, n_agents=20_000, stratify=strat, use_aging=False, **kw).run()
@@ -319,6 +320,13 @@ def test_fetus():
     # Nothing reads fetuses: children are made at delivery
     plain = ss.Sim(demographics=ss.Pregnancy(fertility_rate=ss.freqperyear(100)), n_agents=2000, **kw).init()
     assert not plain.demographics.pregnancy.fetus
+
+    # A mother who dies of another cause loses her pregnancy, whether or not fetuses are agents, and fetuses don't face background deaths (FP75)
+    losses = []
+    for fetus in [False, True]:
+        r = ss.Sim(demographics=[ss.Pregnancy(fertility_rate=ss.freqperyear(150), fetus=fetus), ss.Deaths(death_rate=ss.freqperyear(100))], n_agents=5000, rand_seed=1, **kw).run().results.pregnancy
+        losses.append(r.miscarriage.sum() + r.stillbirth.sum())
+    assert losses[0] > 50 and losses[0] == losses[1]
     return sim # Agents only: test_fetus_ode
 
 

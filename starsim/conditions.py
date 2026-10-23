@@ -20,7 +20,7 @@ ops = {
 }
 comparisons = ['>', '<', '>=', '<=', '==', '!=']
 ufunc_ops = dict(add='+', subtract='-', multiply='*', divide='/', true_divide='/', greater='>', less='<', greater_equal='>=', less_equal='<=', equal='==', not_equal='!=', bitwise_and='&', bitwise_or='|') # NumPy's names for the operators, as when a NumPy number comes first (np.float64(65) < ss.ppl.age)
-leaves = ['people', 'state', 'dim', 'array', 'incidence', 'event', 'memory', 'move']
+leaves = ['people', 'state', 'dim', 'kind', 'array', 'incidence', 'event', 'memory', 'move']
 memory_kinds = ['ever', 'count', 'since']
 
 
@@ -33,7 +33,7 @@ class Cond:
     states, and on stratifications.
 
     Args:
-        op (str): the operation: a leaf ('people', 'state', 'dim', 'array', 'incidence', 'event', 'memory', 'move'), an operator, '~', or 'isin'
+        op (str): the operation: a leaf ('people', 'state', 'dim', 'kind', 'array', 'incidence', 'event', 'memory', 'move'), an operator, '~', or 'isin'
         args (list): the operands
 
     Examples:
@@ -76,6 +76,7 @@ class Cond:
         if op == 'people': return f'people.{args[0]}'
         elif op in ['state', 'array']: return f'{modname(args[0])}.{args[1]}' if args[0] is not None else f'{args[1]}'
         elif op == 'dim':  return f'{args[0]}'
+        elif op == 'kind': return f'{args[0].__name__}.held'
         elif op == 'move': return self.label
         elif op == 'incidence': return f'{args[0].name}.incidence(over={args[1]}, by={args[2]!r})'
         elif op == 'event': return modname(args[0]) + (f'.{args[1]}' if args[1] is not None else '')
@@ -149,8 +150,8 @@ class Cond:
         return self.memory('since')
 
     def memory(self, kind):
-        if self.op != 'event':
-            errormsg = f'.{kind} is the memory of an event (a delivery, an outcome of one such as screening.positive, a product, or an ss.Event), not of {self}'
+        if self.op != 'event' and not (isinstance(self, Event) and self.args[0] == 'tr'):
+            errormsg = f'.{kind} is the memory of an event (a delivery, an outcome of one such as screening.positive, a product, a declared transition such as tb.diagnosis, or an ss.Event), not of {self!r}'
             raise TypeError(errormsg)
         return Cond('memory', self, kind)
 
@@ -472,6 +473,10 @@ def state_refs(obj):
         for val in (vars(holder).values() if holder is not None else []):
             if isinstance(val, (Cond, ss.State)):
                 walk(as_cond(val))
+            elif isinstance(val, ss.expressions.Expr): # e.g. a modifier's amount, multiply=1 - 0.9*m.on (FP89)
+                for leaf in val.leaves:
+                    if isinstance(leaf, ss.State):
+                        walk(as_cond(leaf))
         if hasattr(holder, 'refs'): # The sources of the transitions a treatment moves people along, and the states a test is keyed by
             out += holder.refs()
     return out
@@ -488,7 +493,7 @@ def is_static(cond, sim):
         return True
     op, args = cond.op, cond.args
     dims = [strat.name for strat in sim.groups.strats]
-    if op == 'dim':
+    if op in ['dim', 'kind']:
         return True
     elif op == 'people':
         return args[0] in dims or (args[0] == 'female' and any(getattr(strat, 'female', None) is not None for strat in sim.groups.strats)) # people.female is the level of women of a sex stratification
@@ -580,13 +585,16 @@ def has_event(cond):
 def group_reasons(cond, sim):
     """
     What in a condition only agents can evaluate, found from its structure without evaluating it: a mother's
-    state, a function of uids, events combined (`a.positive | b.positive`), or a binned property (e.g. an age)
-    compared with a number inside a bin
+    state, a function of uids, events combined (`a.positive | b.positive`), a property of people that is not a
+    dimension (`people.age` with no age groups, TC2), or a binned property compared with a number inside a bin
     """
     if isinstance(cond, ss.expressions.mother):
         return [f'{cond} reads each person\'s mother, which only agents know']
     if callable(cond) and not isinstance(cond, (Cond, ss.expressions.Expr)):
         return [f'the function "{getattr(cond, "__name__", "function")}" takes uids'] if ss.utils.n_args(cond) >= 2 else []
+    if isinstance(cond, Cond) and cond.op == 'people' and not is_static(cond, sim):
+        prop = cond.args[0]
+        return [f'a condition uses people.{prop}, which is not a dimension; stratify by it (sim.stratify({"sex=[\'female\', \'male\']" if prop == "female" else f"{prop}=[...]"})) to run as compartments']
     if not isinstance(cond, Cond) or cond.op in leaves:
         return []
     out = []
@@ -812,6 +820,12 @@ class Selector:
         dims = [strat.name for strat in sim.groups.strats]
         if op == 'dim':
             return self.dim(args[0])
+        elif op == 'kind': # Holds any product of this kind (`ss.Vaccine.held`)
+            out = self.nobody()
+            for product in sim.products():
+                if isinstance(product, args[0]) and product.holds:
+                    out = np.logical_or(out, self.dim(product.dim) > 0)
+            return out
         elif op == 'incidence':
             return self.incidence(cond)
         elif op == 'event':
@@ -832,6 +846,8 @@ class Selector:
             return arr.raw if self.abm else np.asarray(arr.raw)[None, :sim.groups.n_groups]
         name = args[1]
         mod = self.module(modname(args[0]))
+        if isinstance(mod, ss.strains.Family): # A state of a disease whose strains have courses of their own: the people in it in any of them (e.g. ss.state('hpv.Ca'))
+            return as_cond(getattr(mod, name)).eval(self)
         if args[0] is None: # A state or transition given without its module: look in this module first, then the others
             for other in [self.mod] + [m for m in sim.declared if m is not self.mod]:
                 if getattr(other, 'graph', None) is not None and (name in other.graph.states or name in other.graph.transitions):

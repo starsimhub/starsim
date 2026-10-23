@@ -382,8 +382,13 @@ class Run:
                 if len(self.p.mov_rate):
                     fastest = jnp.maximum(fastest, jnp.max(X['mov_rate']))
                 dy0 = self.derivs(y, rates0, Xs, dt/jnp.maximum(jnp.ceil(fastest*dt/0.25), 1))[0]
-                filling = (dy0 > 0) & (y > 1e-12*y.sum(axis=0)) # Not a compartment that is only starting to fill
+                least = 1e-9*y.sum() # Not a compartment that is only starting to fill: of everyone, not of its group (see ss.kernels.step())
+                filling = (dy0 > 0) & (y > least)
                 growing = jnp.max(jnp.where(filling, dy0/jnp.where(filling, y, 1.0), 0.0))
+                for comps in self.sets: # Nor a count that a rate reads, over all its compartments (see ss.kernels.step())
+                    tot, grow = y[comps].sum(axis=0), dy0[comps].sum(axis=0)
+                    rising = (grow > 0) & (tot > least)
+                    growing = jnp.maximum(growing, jnp.max(jnp.where(rising, grow/jnp.where(rising, tot, 1.0), 0.0)))
                 n = jnp.maximum(jnp.ceil(lax.stop_gradient(jnp.maximum(fastest, growing))*dt/0.25), 1)
                 if clamp:
                     n = jnp.minimum(n, n_max)

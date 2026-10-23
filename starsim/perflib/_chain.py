@@ -841,6 +841,12 @@ class ChainRun(ss.gradients.Run):
 compiled = {} # The compiled runs, by what they depend on apart from the numbers in them (see `ss.gradients.Run.key()`), so a new sim of the same model is not compiled again
 
 
+def on_cpu():
+    """ Where the runs are taken: on the CPU, since the draws' handler is registered with XLA for the CPU only (see `register()`), also where JAX's default device is a GPU (CV24) """
+    jx = ss.gradients.jax()
+    return jx.default_device(jx.devices('cpu')[0])
+
+
 def runner(program, how, many=False):
     """ The `ChainRun` of a program, and its compiled run: for one, or for a batch over seeds (all with the same numbers), reduced (see `ChainRun.function()`) """
     key = (many,) + ss.gradients.Run.key(program, *how)
@@ -881,7 +887,7 @@ def run(engine):
     jx = ss.gradients.jax()
     program, how, X = numbers(engine)
     chain, func = runner(program, how)
-    with jx.enable_x64(True):
+    with jx.enable_x64(True), on_cpu():
         y, stocks, flows, tally, short = func(chain.tables(X), seed_of(engine))
     return np.asarray(y), np.asarray(stocks), np.asarray(flows), float(short), np.asarray(tally)
 
@@ -919,7 +925,7 @@ def run_many(engine, seeds, state_of, kept_s, kept_f, rows, max_bytes=200e6):
     keys = np.array([seed_of(engine, seed) for seed in seeds])
     keys = np.concatenate([keys, np.zeros(-len(keys) % batch, dtype=keys.dtype)]) # The last batch filled out, so every batch is the same shape (compiled once)
     parts = []
-    with jx.enable_x64(True):
+    with jx.enable_x64(True), on_cpu():
         for i in range(0, len(keys), batch):
             out = func(X, keys[i:i+batch])
             parts.append([np.asarray(v) for v in out[1:6]])

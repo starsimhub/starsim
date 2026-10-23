@@ -1114,6 +1114,26 @@ def test_transmit_candidates():
     return
 
 
+@sc.timer()
+def test_shared_pass():
+    sc.heading('Testing that transmissions from different states over one network, worked out in one pass, infect whom each would alone')
+    S, I, R = ss.states('S I R')
+    foi = ss.peryear(3)*I
+    sir = ss.Disease(infection=S >> I @ foi, reinfection=R >> I @ 0.4*foi, recovery=I >> R @ ss.peryear(2), init=dict(I=0.05, R=0.3), name='sir')
+    sim = ss.Sim(diseases=sir, networks=ss.RandomNet(n_contacts=5), n_agents=medium, start=2000, stop=2002, dt=ss.years(0.1), verbose=0)
+    sim.run(until='2001-01-01')
+    eng = sim.diseases.sir.engine
+    pairs = [(tr, src) for tr in eng.graph.transmissions for src in tr.src]
+    rng = sim.diseases.sir.trans_rng
+    ind = rng.dists[0].ind
+    together = eng.infect_together(pairs)
+    assert together is not None and sum(map(len, together)) > 0, 'Expected the two transmissions to be worked out together, and to infect someone'
+    for (tr,src),uids in zip(pairs, together):
+        rng.jump(to=ind, force=True) # The draws the pass had, for each transmission alone
+        assert np.array_equal(uids, eng.infect(tr, src)), f'Expected {tr.name} to infect the same people in the shared pass as alone'
+    return together
+
+
 # %% Run as a script
 if __name__ == '__main__':
     do_plot = True
@@ -1154,5 +1174,6 @@ if __name__ == '__main__':
     spec = test_peract_spec()
     default = test_beta_default()
     cand = test_transmit_candidates()
+    shared = test_shared_pass()
 
     T.toc()

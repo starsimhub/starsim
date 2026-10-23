@@ -317,6 +317,9 @@ class Options(sc.objdict):
             else:
                 if value in [None, 'default']:
                     value = self.orig_options[key]
+                if key == 'compile' and value not in ['auto', 'always', 'never']: # Checked here rather than at the first run (CB-9)
+                    errormsg = f'ss.options.compile must be "auto", "always", or "never", not {value!r}'
+                    raise ValueError(errormsg)
                 super().__setitem__(key, value) # Needed since we overwrite __setitem__ to call this
 
                 # Handle special cases

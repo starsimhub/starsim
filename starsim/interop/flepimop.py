@@ -281,7 +281,7 @@ def load_flepimop(filename, scenario=None, verbose=None, **kwargs):
     if method == 'euler':
         notes.append('integration: flepiMoP\'s "euler" moves 1 - exp(-rate*dt) of each compartment a step; run as an ODE')
     cfg_sim = dict(solver=solver, unit='day', total_pop=float(sizes.sum()))
-    if method in ['rk4', 'rk4jit', 'bestcurrent']: # flepiMoP takes one RK4 step a step, so the numbers are its own
+    if method in ['rk4', 'rk4jit', 'bestcurrent', 'stochastic']: # flepiMoP takes one RK4 step a step, or one chain-binomial step, so the numbers are its own
         cfg_sim['substeps'] = 1
     if cfg.get('start_date'): # flepiMoP's output includes what happens during its end date, so the sim stops a day later
         cfg_sim.update(start=str(cfg['start_date']), stop=str(sc.date(str(cfg['end_date'])) + pd.Timedelta(days=1))[:10])

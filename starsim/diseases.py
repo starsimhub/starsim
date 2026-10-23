@@ -108,6 +108,7 @@ class Disease(ss.Module):
         super().__init__()
         self.strains = None # Its ss.Strains, if it has strains
         self.family = None # For strains with courses of their own: the module that runs them (see ss.strains.Family)
+        self.callbacks = [] # Functions called with the agents an event happened to: see add_callback()
         if len(args) and (args[0] is None or isinstance(args[0], dict)): # Parameters can also be the first argument
             pars, args = args[0], args[1:]
         if strains is not None and getattr(strains, 'members', None) is not None: # Strains written as diseases of their own
@@ -297,6 +298,30 @@ class Disease(ss.Module):
         """ The table of declared transitions; printing it also shows the matrix of sources by destinations """
         return self.graph.transitions
 
+    def count(self, where=None):
+        """
+        The number of people now for whom a condition holds, under every solver (as agents, each counted by their weight and the sim's scale)
+
+        For a function of the sim that needs a current number, e.g. a delivery's capacity toward a target:
+        `capacity=lambda sim: max(0.3*hiv.count(hiv.infected) - hiv.count(hiv.care == 'art'), 0)`.
+
+        Args:
+            where (Cond/State): the condition, e.g. `hiv.L | hiv.A` or `hiv.care == 'art'` (default: everyone)
+        """
+        selector = self.engine.selector
+        sel = selector.select(where)
+        if selector.abm:
+            sel = np.asarray(sel, dtype=bool) & self.sim.people.alive.raw
+            weights = ss.results.agent_weights(self.sim)
+            n = np.sum(weights[sel]) if weights is not None else np.count_nonzero(sel)
+            return float(n*self.sim.current_scale)
+        return float(np.sum(sel*self.engine.state_counts()))
+
+    @property
+    def strats(self):
+        """ Its stratifications by name, e.g. `tb.strats.age.edges` or `tb.strats.risk.labels` (as a condition, a level is `tb.age`) """
+        return sc.objdict({strat.name:strat for strat in self.graph.strats}) if self.graph is not None else sc.objdict()
+
     def describe(self, output=False):
         """
         Print the resolved model as text, with every guessed default marked
@@ -400,6 +425,10 @@ class Disease(ss.Module):
             raise ss.errors.UnknownParameter(f'"{self.name}" has no parameter named {sc.strjoin(unknown)}, so nothing would read it. Its parameters are {sc.strjoin(self.graph.pars.keys())}.{hint}')
         self.engine = ss.solvers.make_engine(self, sim)
         self.engine.define()
+        needs = ss.interventions.memory_needs(sim) if isinstance(sim, ss.Sim) and self.graph is not None and self.graph.transitions else {} # Not a mock sim
+        self.remembered = [name for mod,name in needs if mod == self.name and name in self.graph.transitions] # Transitions whose memory something reads, e.g. tb.diagnosis.since
+        for name in self.remembered:
+            self.define_states(ss.FloatArr(f'last_{name}', label=f'Time index of the last {name}'), ss.FloatArr(f'count_{name}', default=0, label=f'Number of times: {name}'))
         super().init_pre(sim)
         if any(isinstance(a, ss.infection_log) for a in sim.analyzers.values()):
             self.infection_log = InfectionLog(disease=self.name, networks=sim.networks.keys())
@@ -410,6 +439,42 @@ class Disease(ss.Module):
         """ Initialize the values of the states, and set the initial conditions of the declared states """
         super().init_post()
         self.engine.init_post()
+        if self.callbacks and not isinstance(self.engine, ss.solvers.Agents):
+            raise ss.CapabilityError(f'"{self.name}" has callbacks (add_callback()), which are called with the agents an event happened to, so it cannot run with solver="{self.sim.solver}". Run with solver="abm", or use ss.on() in a declared module.')
+        return
+
+    def add_callback(self, event, fn):
+        """
+        Call `fn(uids)` at the end of each step with the agents who went through a declared transition or event of this disease in it, from a module written as code (agents only)
+
+        A declared module reacts to the same events with `ss.on()` instead.
+
+        Args:
+            event (Transition/str): the transition or event, e.g. `preg.stillbirth`, `preg.loss`, or its name
+            fn (func): called with the agents' UIDs (once for each time, so an agent can appear twice), only on a step when there are some
+
+        **Example**:
+
+            preg.add_callback(preg.stillbirth, lambda uids: self.n_stillbirths.__setitem__(uids, self.n_stillbirths[uids] + 1))
+        """
+        if isinstance(event, ss.Transition):
+            name = event.name
+        elif isinstance(event, ss.conditions.Event) and event.args[0] == 'tr': # E.g. preg.loss, several events
+            name = event.args[1].name
+        elif isinstance(event, (str, tuple)):
+            name = event
+        else:
+            errormsg = f'add_callback() takes a transition or event of "{self.name}" (e.g. {self.name}.{next(iter(self.graph.transitions), "infection") if self.graph else "infection"}) or its name, not {event!r}; for entering or leaving states, use ss.on() in a declared module'
+            raise TypeError(errormsg)
+        self.callbacks.append((name, fn))
+        return
+
+    def run_callbacks(self):
+        """ Call each function of add_callback() with the agents its event happened to since it was last called """
+        for i,(name,fn) in enumerate(self.callbacks):
+            uids = self.engine.fresh(f'callback{i}', name, unique=False)
+            if len(uids):
+                fn(uids)
         return
 
     def start_step(self):
@@ -565,6 +630,8 @@ class Disease(ss.Module):
         self.engine.step_state()
         self.engine.step()
         self.engine.step_funcs()
+        if self.callbacks:
+            self.run_callbacks()
         return
 
     def update_results(self):

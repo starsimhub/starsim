@@ -361,6 +361,15 @@ class Module(Base):
         """ Method for setting an attribute that does not perform checking against immutable attributes """
         return super().__setattr__(attr, value)
 
+    def check_not_given(self, action):
+        """ Raise if this module was given to a sim, which runs its own copy, so that `action` on this one would never be seen """
+        if getattr(self, '_given', False):
+            kind = next((key for key,cls in module_map().items() if isinstance(self, cls)), 'custom')
+            errormsg = (f'{action} on "{self.name}", which was given to a sim: the sim runs its own copy, so it would never be used. '
+                        f'Do it before making the sim, or on the sim\'s copy, sim.{kind}.{self.name}, after sim.init()')
+            raise RuntimeError(errormsg)
+        return
+
     def brief(self, output=False):
         """ Show a brief representation of the module; used by __repr__ """
         name = self.name # e.g. 'sir'
@@ -541,6 +550,8 @@ class Module(Base):
         Pull out recognized parameters and update them; raises on unrecognized keys
         """
         # Merge pars and kwargs
+        if isinstance(pars, ss.Pars): # E.g. a package's full set of defaults for the module: those given as ss.par keep their bounds
+            pars = dict(pars) | {k:p for k,p in pars.bounded().items() if k in pars}
         pars = sc.mergedicts(pars, kwargs)
 
         # Pull out the named arguments of this module's nearest __init__ (found by identity, so a wrapper or an overriding update_pars() doesn't hide it)
@@ -569,7 +580,7 @@ class Module(Base):
         # Should be no remaining pars
         remaining = set(pars.keys()) - set(module_args) - set(ss.Timeline.time_args)
         if len(remaining):
-            errormsg = f'{len(pars)} unrecognized arguments for {self.name}: {sc.strjoin(remaining)}'
+            errormsg = f'{len(remaining)} unrecognized argument{"s" if len(remaining) > 1 else ""} for {self.name}: {sc.strjoin(sorted(remaining))}'
             raise ValueError(errormsg)
         return
 
@@ -905,16 +916,21 @@ class Module(Base):
         self.t.ti += 1
         return
 
-    def update_results(self):
+    def update_results(self, names=None):
         """
         Update results; by default, compute counts of each state at each point in time
 
         This function is executed after transmission in all modules has been resolved.
         This allows result updates at this point to capture outcomes dependent on multiple
         modules, where relevant.
+
+        Args:
+            names (list): the states to count (default: every `ss.BoolState` and derived state)
         """
         weights = ss.results.agent_weights(self.sim) # Agents of different weights (people.scale) are each counted by their weight, as in n_alive
-        for name in [state.name for state in self.auto_state_list] + self.derived_state_names:
+        if names is None:
+            names = [state.name for state in self.auto_state_list] + self.derived_state_names
+        for name in names:
             res = self.results[f'n_{name}']
             if weights is None:
                 res[self.ti] = self[name].sum()

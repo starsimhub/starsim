@@ -193,12 +193,12 @@ An Erlang distribution can also be given directly, as `ss.erlang(k=3, mean=ss.da
 
 ### Choosing a fixed number of agents
 
-Sometimes you need exactly *n* agents rather than a probability per agent, for example to seed exactly 20 infections. For this, use `ss.choose_n(n)`, which can be used anywhere an `ss.bernoulli` is expected (note that `init_prev` must be a probability, so e.g. `init_prev=20` raises an error):
+Sometimes you need exactly *n* agents rather than a probability per agent, for example to seed exactly 20 infections. For this, use `ss.choose_n(n)`, which can be used anywhere an `ss.bernoulli` is expected (in a declared disease such as `ss.SIR`, a number above 1, e.g. `init_prev=20`, is also read as a count; in a disease written as code, `init_prev` must be a probability, so a count raises an error):
 
 ```{python}
 sir = ss.SIR(init_prev=ss.choose_n(20)) # Seed exactly 20 infections
 sim = ss.Sim(n_agents=1000, diseases=sir, networks='random').init()
-print(f"Initial infections: {sim.diseases.sir.infected.sum()}")
+print(f"Initial infections: {sim.diseases.sir.I.sum()}")
 ```
 
 Like `ss.bernoulli`, `filter()` returns the chosen UIDs, `split()` returns both the chosen and not-chosen UIDs, and `rvs()` returns a boolean array. You can also supply `weights` (including as a callable), in which case agents are chosen with probability proportional to their weight. Unlike `ss.choice(replace=False)`, `ss.choose_n()` is CRN-safe: if the candidates change slightly (e.g. between two scenarios), most of the same agents are still chosen:
@@ -294,7 +294,7 @@ class MyVx(ss.Intervention):
         self.sim.diseases.sir.rel_sus[vx_uids] = 0.0  # Set susceptibility to 0 for vaccinated agents
 
         # Store the results, at the end of the step
-        self.results.new_vx[self.ti + 1] = len(vx_uids)
+        self.results.new_vx[self.ti] = len(vx_uids)
 ```
 
 Now that we have created the intervention, we can configure it with a custom `p_vx_func` in "user space" and run the simulation.
@@ -322,8 +322,8 @@ sim = ss.Sim(n_agents=1000, start=0, stop=10,
     interventions=[vx_intv],
     networks=ss.RandomNet()
 )
-sim.run().plot('myvx') # Verify vaccinations only on the 5th time step (recorded at its end, time 6)
+sim.run().plot('myvx') # Verify vaccinations only on the 5th time step (recorded at its end, time 5)
 ```
 
-See how vaccines were delivered only on time step 5? (Results are recorded at the end of each step, so the step from time 5 to time 6 is plotted at 6.) If we were to look at which agents received the vaccine, we would see probability increasing with age.
+See how vaccines were delivered only on time step 5? (`sim.ti` is the same throughout a step, and is the index of its end, so the step from time 4 to time 5 is plotted at 5.) If we were to look at which agents received the vaccine, we would see probability increasing with age.
 

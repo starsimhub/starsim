@@ -139,7 +139,7 @@ with_data = ss.Sim(model, data=data, start='2020-01-01', stop='2020-07-01', verb
 with_data.plot()
 ```
 
-A column that matches no result is an error that lists the closest result names. Data attached this way is also what [calibration](workflows_calibration.qmd) fits to.
+A column that matches no result gets a note that lists the closest result names (and is an error when a fit compares the data with the results). Data attached this way is also what [calibration](workflows_calibration.qmd) fits to.
 
 ## Plotting results
 
@@ -196,7 +196,7 @@ res.plot() # The median and a 95% interval (lines=True for every run)
 
 ## Results with multiple columns
 
-Sometimes a result in a module written as code naturally has several values per timestep, such as new infections by variant or by age group. (For a declared disease, [stratifying](#results-by-group) does this.) Rather than defining one result per group, you can pass `columns` to `ss.Result`, which makes a 2D result of shape `(npts, ncols)`. In an analyzer, `self.ti` is the time point at the end of the step, where the step's results go, and a declared disease records when each agent entered a state (`ti_I`) as the time point at the end of the step in which they entered it:
+Sometimes a result in a module written as code naturally has several values per timestep, such as new infections by variant or by age group. (For a declared disease, [stratifying](#results-by-group) does this.) Rather than defining one result per group, you can pass `columns` to `ss.Result`, which makes a 2D result of shape `(npts, ncols)`. In an analyzer, `self.ti` is the time point at the end of the step, where the step's results go, and a declared disease records when each agent was infected (`ti_I`) as the time point at the end of the step in which they were infected:
 
 ```{python}
 import numpy as np

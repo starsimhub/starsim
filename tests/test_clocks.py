@@ -73,9 +73,10 @@ def test_clocks():
     def check(sim):
         d = sim.diseases.d
         st = d.graph.states # The declarations, in the sim; a clock of a set is made before the sim, so it is kept
-        ti, dt = d.ti - 1, d.t.dt.to('day').value # The start of the step, which clocks are worked out at
+        ti, dt = d.ti, d.t.dt.to('day').value
         u = d.B.uids
-        assert np.allclose(d.engine.eval_for(st.B.time, u), (ti - d.ti_B[u])*dt)
+        placed = d.ti_B[u] == 0 # At the start, which is a step before the first step's index
+        assert np.allclose(d.engine.eval_for(st.B.time, u), (ti - d.ti_B[u] - placed)*dt) # The steps since the step they entered in, by a move at its start
         both = d.engine.eval_for(seen.ab, u)
         came = u[~np.isnan(d.ti_A[u])] # From A; the others were placed in B, so entered the set then
         assert np.allclose(both[np.isin(u, came)], np.maximum(ti - d.ti_A[came], 0)*dt) # Moving from A to B did not reset it
@@ -142,7 +143,7 @@ def test_syphilis_latent():
         if form == 'old': # The workaround: relies on ti_EL being kept after people leave EL for LL, and is NaN for seeds in LL
             def latent_decay(sim):
                 s = sim.diseases.syph
-                return np.exp(-np.log(2)/hl*(sim.ti - 1 - s.ti_EL.floats().raw)*sim.t.dt.years) # Step numbers as floats, NaN if never in EL; from the start of the step
+                return np.exp(-np.log(2)/hl*(sim.ti - 1 - s.ti_EL.internal(slice(None)))*sim.t.dt.years) # The engine's own times (NaN if never in EL), from the start of the step, as the clock reads them; ti_EL itself reads as the step of entering, a step later for a move at a step's end
             amount = latent_decay
         else:
             amount = 0.5**((EL | LL).time/ss.years(hl))
@@ -158,7 +159,7 @@ def test_syphilis_latent():
     assert not np.isnan(eff).any() and eff.min() < 0.3
     late = s.LL.uids[s.ti_EL[s.LL.uids] > 0]
     latent = s.graph.states.EL | s.graph.states.LL
-    assert np.allclose(s.engine.eval_for(latent.time, late), (s.ti - 1 - s.ti_EL[late])/12) # From latent onset to the start of the last step, as the workaround meant
+    assert np.allclose(s.engine.eval_for(latent.time, late), (s.ti - 1 - s.ti_EL.internal(late))/12) # From latent onset to the start of the last step, as the workaround meant
     with pytest.raises(ss.errors.ClockOutsideDomain): # The workaround with seeds in LL is NaN for them
         make('old').run()
     return sim
@@ -179,7 +180,7 @@ def test_bv_recurrence():
     sc.heading('Port: BV recurrence hazard decays with time since treatment, P.time')
     def recur_rate(sim, uids): # The workaround (bv_gud_connectors/port.py)
         bv = sim.diseases.bv
-        months = (sim.ti - 1 - bv.ti_P[uids]) * sim.t.dt.months # From the start of the step
+        months = (sim.ti - bv.ti_P[uids]) * sim.t.dt.months # The steps since the step of entering P
         return ss.permonth(0.06 * np.exp(-months / 3))
     class Old(BV):
         recur = ss.Transition(BV.P, BV.CST4, rate=recur_rate)
@@ -201,6 +202,20 @@ def test_entry_hazard():
     return
 
 
+@sc.timer()
+def test_stamps():
+    sc.heading('A time of entering reads as the step it happened in: ti_X == sim.ti for a move at the start of the step and an infection at its end')
+    S, E, I, R = ss.states('S E I R')
+    d = ss.Disease(inf=S >> E @ ss.perday(0.4)*I, lat=E >> I @ ss.days(2), rec=I >> R @ ss.days(3), init=dict(E=0.01), name='d')
+    def check(sim):
+        d, ti = sim.diseases.d, sim.ti
+        if ti > 0:
+            assert (d.ti_E == ti).count() == d.results.inf[ti] and (d.ti_I == ti).count() == d.results.lat[ti] # Infected, then moved on, in this step
+    sim = ss.Sim(d, networks=ss.RandomNet(), analyzers=check, n_agents=5000, unit='day', stop=30, **kw).run()
+    assert sim.results.d.inf.sum() > 100 and sim.results.d.lat.sum() > 100
+    return
+
+
 if __name__ == '__main__':
     sc.options(interactive=False)
     test_events()
@@ -208,3 +223,4 @@ if __name__ == '__main__':
     test_syphilis_latent()
     test_bv_recurrence()
     test_entry_hazard()
+    test_stamps()
