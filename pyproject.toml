@@ -7,7 +7,7 @@ name = "starsim"
 dynamic = ["version"]
 description = "A fast, flexible agent-based disease modeling framework"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 license = "MIT"
 keywords = ["agent-based model", "simulation", "disease", "epidemiology"]
 
@@ -40,25 +40,10 @@ dependencies = [
     "optuna",
     "jax",
     "blackjax",
+    "starsim_data>=2.0.0",
 ]
 
 [project.optional-dependencies]
-
-# Accelerates numerical performance on some systems
-fastmath = [
-  "mkl",
-  "intel-cmplr-lib-rt"
-]
-
-# Named data: populations, places, and contact matrices by country (ss.people(), ss.geo(), ss.contacts())
-data = [
-  "starsim_data",
-]
-
-# For reading other frameworks' models that need more than the core (Atomica's workbooks)
-interop = [
-  "openpyxl",
-]
 
 # For running the tests
 test = [
@@ -75,7 +60,6 @@ doc = [
     "jupyter",
     "jupyter-cache",
     "jupytext",
-    "dask[complete]",
 ]
 
 # Everything needed for development (tests + docs)
@@ -83,7 +67,13 @@ dev = [
     "starsim[test,doc]",
 ]
 
-# For exactly reproducible results (replaces uv.lock)
+# Accelerates numerical performance on some Intel systems
+fastmath = [
+  "mkl",
+  "intel-cmplr-lib-rt"
+]
+
+# For exactly reproducible results (equivalent to uv.lock)
 lock = [
     "absl-py==2.5.1",
     "alembic==1.20.0",
