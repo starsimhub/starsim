@@ -49,7 +49,7 @@ class MyModule(ss.Intervention):
 
 ### States: `define_states()`
 
-States are per-agent arrays that persist across timesteps. Declare them with `self.define_states()`, passing `ss.Arr` objects such as `ss.BoolState`, `ss.FloatArr`, or `ss.State`:
+States are per-agent arrays that persist across timesteps. Declare them with `self.define_states()`, passing `ss.Arr` objects such as `ss.BoolState`, `ss.FloatArr`, or `ss.IntArr` (not `ss.State`, which is a state of a declared disease):
 
 ```python
 self.define_states(

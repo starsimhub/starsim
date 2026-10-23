@@ -143,27 +143,29 @@ def memory_needs(sim):
     """
     The events whose memory something in the sim reads, by (module name, outcome): the kinds read (`ever`, `count`, `since`)
 
-    Found by walking the conditions of the interventions and connectors, and the `where=` of the transitions.
+    Found by walking every expression of the interventions, connectors, diseases, and demographics: conditions, rates, `p=`, `dur=`, attributes, results, and modifier amounts.
     """
     out = sim.__dict__.get('_memory_needs')
     if out is not None:
         return out
     out = {}
     def walk(val):
-        if isinstance(val, ss.conditions.Cond):
-            for mem in ss.conditions.memory_leaves(val):
-                event, kind = mem.args
+        for part in ss.expressions.nodes(val):
+            if isinstance(part, (ss.expressions.Prop, ss.expressions.mother)): # A condition in a rate, or one read on the mother
+                walk(part.cond if isinstance(part, ss.expressions.Prop) else part.x)
+            elif isinstance(part, ss.conditions.Cond) and part.op == 'memory':
+                event, kind = part.args
                 key = (ss.conditions.modname(event.module), event.args[1].name) if isinstance(event, ss.conditions.Event) else (ss.conditions.modname(event.args[0]), event.args[1]) # A declared transition (tb.diagnosis.since), or an event of a delivery or product
                 out.setdefault(key, set()).add(kind)
         return
     mods = modules_of(sim, 'interventions') + modules_of(sim, 'connectors')
     for mod in mods:
         for holder in [mod, getattr(mod, 'product', None)]:
-            for val in (vars(holder).values() if holder is not None else []):
-                walk(val)
-    for mod in modules_of(sim, 'diseases'):
-        for tr in (mod.graph.transitions.values() if getattr(mod, 'graph', None) is not None else []):
-            walk(tr.where)
+            walk(list(vars(holder).values()) if holder is not None else [])
+    for mod in modules_of(sim, 'diseases') + modules_of(sim, 'demographics'):
+        graph = getattr(mod, 'graph', None)
+        if graph is not None:
+            walk([vars(tr) for tr in graph.transitions.values()] + [graph.attrs, graph.exprs, graph.outcomes])
     sim.__dict__['_memory_needs'] = out
     return out
 
@@ -206,8 +208,14 @@ def remembered(selector, cond):
         mod, name = selector.module(ss.conditions.modname(event.module)), event.args[1].name
         if not selector.abm:
             raise ss.CapabilityError(f'{cond} is the memory of a transition for each person, which exists only with solver="abm"; with solver="{sim.solver}", use a state that people enter by it.')
-        last, count = mod[f'last_{name}'].raw, mod[f'count_{name}'].raw
         owner = outcome = None
+        if name in mod.graph.transitions:
+            last, count = mod[f'last_{name}'].raw, mod[f'count_{name}'].raw
+        elif kind != 'count' and isinstance(getattr(mod, f'ti_{name}', None), ss.Arr): # An event the module records with its time (the index of its step), e.g. preg.live_birth.since
+            last = mod[f'ti_{name}'].raw
+            count = ~np.isnan(last)
+        else:
+            raise ss.CapabilityError(f'{cond} cannot be read: "{mod.name}" does not keep the {"number" if kind == "count" else "time"} of {event.args[1]} for each person')
     else:
         owner = selector.module(ss.conditions.modname(event.args[0]))
         outcome = event.args[1]
@@ -405,7 +413,8 @@ class Delivery(ss.products.EventSource, Intervention):
             eligible then (who='s condition, and coverage=, are applied when it is due); someone waiting is not triggered again
         trace (str/Network/list): contact tracing: deliver to the contacts, in this network (or these), of the people that the event in
             who= selects, instead of to them; the condition and `coverage=` then apply to the contacts. Agents only, since only networks
-            know who someone's contacts are
+            know who someone's contacts are. A network with `memory=` also gives the partnerships of that long ago that have ended
+            (e.g. `ssl.DegreeNet(..., memory=ss.months(12))`, to notify the partners of the past year)
         when (func): deliver only on the steps where this function of the sim returns True
         deliver (func): a function of the sim returning who receives it this step (UIDs, or a number per group in a compartmental
             run); replaces `where`, `coverage`, and the rounds
@@ -873,21 +882,21 @@ class Delivery(ss.products.EventSource, Intervention):
         super().init_results()
         abm = self.sim.solver == 'abm'
         results = [
-            ss.Result('delivered', dtype=float, scale=abm, label='Number delivered', summarize_by='sum'),
+            ss.Result('delivered', dtype=float, scale=abm, label='Number delivered', kind='flow'),
             ss.Result('eligible', dtype=float, scale=abm, label='Number eligible', auto_plot=False),
             ss.Result('coverage', dtype=float, scale=False, label='Coverage of those eligible', auto_plot=False),
         ]
         if self.cost is not None:
-            results += [ss.Result('cost', dtype=float, scale=abm, label='Cost', summarize_by='sum')]
+            results += [ss.Result('cost', dtype=float, scale=abm, label='Cost', kind='flow')]
         if self.capacity is not None:
-            results += [ss.Result('lost_capacity', dtype=float, scale=abm, label='Number not reached for lack of capacity', summarize_by='sum', auto_plot=False)]
+            results += [ss.Result('lost_capacity', dtype=float, scale=abm, label='Number not reached for lack of capacity', kind='flow', auto_plot=False)]
         labels = dict(positive='Number testing positive', negative='Number testing negative', cured='Number cured', failed='Number treated and not cured', unneeded='Number treated who were not infected', never_ran='Number who left the queue unserved')
-        results += [ss.Result(o, dtype=float, scale=abm, label=labels.get(o, f'Number with result {o}'), summarize_by='sum', auto_plot=o in ['positive', 'cured']) for o in self.outcome_names()]
+        results += [ss.Result(o, dtype=float, scale=abm, label=labels.get(o, f'Number with result {o}'), kind='flow', auto_plot=o in ['positive', 'cured']) for o in self.outcome_names()]
         if self.queue is not None:
             results += [
                 ss.Result('waiting', dtype=float, scale=abm, label='Number waiting'),
                 ss.Result('waited', dtype=float, scale=False, label='Mean time waited, of those served', auto_plot=False),
-                ss.Result('left', dtype=float, scale=abm, label='Number who left the queue when no longer eligible', summarize_by='sum', auto_plot=False),
+                ss.Result('left', dtype=float, scale=abm, label='Number who left the queue when no longer eligible', kind='flow', auto_plot=False),
             ]
         self.by_edge = dict() # For a treatment that moves people along several transitions: the results for each, as {key: {(disease, transition): result}}
         if len(self.edges) > 1:
@@ -895,7 +904,7 @@ class Delivery(ss.products.EventSource, Intervention):
             diseases = list(dict.fromkeys(e.dis for e in self.edges))
             for key in ['cured', 'failed', 'unneeded']:
                 keys = (pairs if len(pairs) > 1 else []) if key != 'unneeded' else [(dis, None) for dis in diseases] if len(diseases) > 1 else []
-                parts = {k:ss.Result(f'{key}_{"_".join(n for n in k if n)}', dtype=float, scale=abm, label=f'{labels[key]} ({".".join(n for n in k if n)})', summarize_by='sum', auto_plot=False) for k in keys}
+                parts = {k:ss.Result(f'{key}_{"_".join(n for n in k if n)}', dtype=float, scale=abm, label=f'{labels[key]} ({".".join(n for n in k if n)})', kind='flow', auto_plot=False) for k in keys}
                 results += list(parts.values())
                 self.by_edge[key] = parts
         self.define_results(*results)

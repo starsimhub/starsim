@@ -198,7 +198,8 @@ def load_atomica(framework, databook=None, progbook=None, start=None, stop=None,
 
     **Example**:
 
-        sim = ss.load('sir_framework.xlsx', format='atomica', databook='sir_databook.xlsx', dt=1)
+        import starsim.interop
+        sim = ss.interop.load('sir_framework.xlsx', format='atomica', databook='sir_databook.xlsx', dt=1)
     """
     sheets = pd.read_excel(framework, sheet_name=None, header=None)
     comps = table(sheets, 'Compartments')

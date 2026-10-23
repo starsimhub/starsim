@@ -58,7 +58,7 @@ def in_people(*results):
     return
 
 
-class Result(ss.utils.NoDists, ss.BaseArr):
+class Result(ss.utils.NoDists, ss.arrays.BaseArr):
     """
     Array-like container for holding sim results.
 
@@ -74,7 +74,7 @@ class Result(ss.utils.NoDists, ss.BaseArr):
         low (array): values for the lower bound
         high (array): values for the upper bound
         kind (str): 'flow' (a number of events in each step, e.g. new infections), 'stock' (a quantity at each time point, e.g. the number infected), or 'ratio' (one quantity divided by another, e.g. prevalence); it decides how the result is summarized, resampled, and compared with data. If not given, it is guessed from the name (`new_...` is a flow; `n_...`, `cum_...`, and `cumulative` are stocks; anything else is treated as a ratio)
-        summarize_by (str): deprecated, use `kind`: 'sum' for a flow, 'last' for a stock, 'mean' for a ratio
+        summarize_by (str): Starsim 3's spelling of `kind`: 'sum' for a flow, 'last' for a stock, 'mean' for a ratio
         columns (list): if provided, make a 2D result of shape `(npts, len(columns))`, with these names for the columns, e.g. `['wild', 'alpha']`
         runs (dataframe): for a result across the runs of a MultiSim: one row per run, with its `scenario` (and the values of any parameters swept); the values then have a run axis first, of shape `(n_runs, npts)`
 
@@ -108,7 +108,7 @@ class Result(ss.utils.NoDists, ss.BaseArr):
     """
     runs = None # For a result across the runs of a MultiSim: one row per run (see above)
     def __getattr__(self, attr):
-        """ The flow to one destination of a transition with several (`res.cin.X`); otherwise, as `ss.BaseArr` """
+        """ The flow to one destination of a transition with several (`res.cin.X`); otherwise, as `ss.arrays.BaseArr` """
         dests = self.__dict__.get('dests')
         if dests and attr in dests:
             return dests[attr]
@@ -672,7 +672,7 @@ class Result(ss.utils.NoDists, ss.BaseArr):
 
     @classmethod
     def get_kind(cls, name, kind=None, summarize_by=None):
-        """ The kind of a result: as given, or from `summarize_by` (deprecated), or else guessed from its name, for results that do not give it (as in Starsim 3) """
+        """ The kind of a result: as given, or from `summarize_by` (Starsim 3's spelling), or else guessed from its name, for results that do not give it (as in Starsim 3) """
         if kind is None and summarize_by is not None:
             kind = {v:k for k,v in cls.kinds.items()}.get(summarize_by)
             if kind is None:
@@ -693,7 +693,7 @@ class Result(ss.utils.NoDists, ss.BaseArr):
 
     @property
     def summarize_by(self):
-        """ Deprecated: how the result is summarized over time, from its kind ('sum' for a flow, 'last' for a stock, 'mean' for a ratio) """
+        """ Starsim 3's spelling of the kind: how the result is summarized over time ('sum' for a flow, 'last' for a stock, 'mean' for a ratio) """
         return self.kinds[self.kind]
 
     @summarize_by.setter
@@ -1138,25 +1138,9 @@ class Results(ss.utils.NoDists, ss.ndict):
         return
 
     @property
-    def is_msim(self):
-        """ Check if this is a MultiSim """
-        return self._module == 'MultiSim'
-
-    @property
     def all_results(self):
         """ Iterator over all results, skipping any nested values """
         return iter(res for res in self.values() if isinstance(res, Result))
-
-    @property
-    def all_results_dict(self):
-        """ Dictionary of all results, skipping any nested values """
-        return {rname: res for rname, res in self.items() if isinstance(res, Result)}
-
-    @property
-    def equal_len(self):
-        """ Check if all results are equal length """
-        lengths = [len(res) for res in self.flatten().values()]
-        return len(set(lengths)) == 1
 
     def flatten(self, sep='_', only_results=True, only_auto=False, columns=False, **kwargs):
         """
@@ -1414,10 +1398,14 @@ class simdata:
                 raise KeyError(errormsg)
             df = df.rename(columns={col:name})
         if sim is not None and self.ignore_extra:
-            dims = [strat.name for strat in getattr(getattr(sim, 'groups', None), 'strats', [])] + [mod.dim for mod in sim.modules if isinstance(mod, ss.strains.Family)] # Columns that say which stratum or strain a row is for
-            keep = [col for col in df.columns if col in self.time_cols or col in dims or match_column(sim, col) is not None]
-            df = df[keep]
+            df = self.drop_extra(sim, df)
         return df
+
+    def drop_extra(self, sim, df):
+        """ Drop the columns that match no result of the sim """
+        dims = [strat.name for strat in getattr(getattr(sim, 'groups', None), 'strats', [])] + [mod.dim for mod in sim.modules if isinstance(mod, ss.strains.Family)] # Columns that say which stratum or strain a row is for
+        keep = [col for col in df.columns if col in self.time_cols or col in dims or match_column(sim, col) is not None]
+        return df[keep]
 
     time_cols = ['t', 'timevec', 'tvec', 'time', 'day', 'date', 'year']
 

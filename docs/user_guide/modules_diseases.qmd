@@ -65,7 +65,7 @@ Every declared disease gets a result for each state (`n_S`, `n_I`, `n_R`) and a 
 
 ### Looking at the model
 
-Because the model is made of objects, its description, equations, and transition table are derived from it:
+Because the model is made of objects, its description, equations, and transition table are derived from it (and `sir.states` gives its states by name):
 
 ```{python}
 sir = sir1
@@ -186,7 +186,7 @@ A disease can also be written as a class, with its states, parameters, and trans
 ```{python}
 class SEIR(ss.Disease):
     S, E, I, R = ss.states(4)
-    beta     = ss.par(ss.perday(0.3), bounds=[0.1, 1]) # Bounds make it fittable with sim.calibrate()
+    beta     = ss.par(ss.perday(0.3), bounds=[0.1, 1], doc='Transmission rate per contact', source='Assumed') # Bounds make it fittable with sim.calibrate(); doc= and source= are shown by describe()
     exposure = S >> E @ beta * I
     onset    = E >> I @ ss.days(5)
     recovery = I >> R @ ss.days(10)

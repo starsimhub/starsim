@@ -132,6 +132,52 @@ args <- commandArgs(TRUE)
 mod <- odin::odin_(args[1])$new(S0 = c(29990, 50000, 20000), I0 = c(10, 0, 0), m = matrix(c(10, 1, 4, 2, 6, 1, 1, 3, 2), 3, 3, byrow = TRUE))
 write.csv(mod$run(0:200), args[2], row.names = FALSE)
 '''
+# odin2's syntax (as in the odin & monty book), with a weekly count and data with a likelihood
+odin2_sir = '''
+p_IR <- 1 - exp(-gamma * dt)
+N <- parameter(1000)
+p_SI <- 1 - exp(-(beta * I / N * dt))
+n_SI <- Binomial(S, p_SI)
+n_IR <- Binomial(I, p_IR)
+update(S) <- S - n_SI
+update(I) <- I + n_SI - n_IR
+update(R) <- R + n_IR
+initial(S) <- N - I0
+initial(I) <- I0
+initial(R) <- 0
+initial(incidence, zero_every = 7) <- 0
+update(incidence) <- incidence + n_SI
+beta <- parameter(0.2)
+gamma <- parameter(0.1)
+I0 <- parameter(10)
+rho <- parameter(0.5)
+k <- parameter(4)
+cases <- data()
+cases ~ Poisson(incidence)
+deaths <- data()
+deaths ~ NegativeBinomial(size = k, mu = rho * incidence)
+'''
+
+# The same in odin1's syntax
+odin1_sir = '''
+N <- user(1000)
+p_SI <- 1 - exp(-beta * I / N)
+p_IR <- 1 - exp(-gamma)
+n_SI <- rbinom(S, p_SI)
+n_IR <- rbinom(I, p_IR)
+update(S) <- S - n_SI
+update(I) <- I + n_SI - n_IR
+update(R) <- R + n_IR
+initial(S) <- N - I0
+initial(I) <- I0
+initial(R) <- 0
+initial(incidence) <- 0
+update(incidence) <- if (step %% 7 == 0) n_SI else incidence + n_SI
+beta <- user(0.2)
+gamma <- user(0.1)
+I0 <- user(10)
+'''
+
 rscript = lfd / '_envs/odin/bin/Rscript' # odin's environment
 
 sbml_sir = '''<?xml version="1.0" encoding="UTF-8"?>
@@ -270,6 +316,34 @@ def test_odin_discrete():
     return sim
 
 
+def test_odin2(tmp_path):
+    sc.heading('Testing an odin model in odin2\'s syntax against the same in odin1\'s')
+    sims = {}
+    for key,text in dict(odin1=odin1_sir, odin2=odin2_sir).items():
+        path = tmp_path/key/'sir.R' # The same name, so the same random numbers
+        path.parent.mkdir()
+        path.write_text(text)
+        sims[key] = load_odin(path, stop=100, **kw)
+    one, two = sims['odin1'], sims['odin2']
+    assert not two.imported.incomplete, two.imported.incomplete
+    assert two.pars.solver == 'binomial'
+
+    # The same run: Binomial() is rbinom(), dt is built in, and zero_every is a count over a period
+    a, b = one.run().results.sir, two.run().results.sir
+    for key in ['n_S', 'n_I', 'n_R', 'incidence']:
+        assert np.array_equal(a[key].values, b[key].values), f'Expected {key} to be the same in both'
+    assert 'dt' not in two.diseases[0].pars # The built-in step is the sim's
+    assert b.incidence.values.sum() > 0.5*b.n_R.values[-1]
+
+    # Data with ~ are outcomes with their likelihoods: cases is the weekly count, and deaths a share rho of it with a negative binomial
+    weekly = a.incidence.values[1:99].reshape(14, 7).sum(axis=1)
+    data = pd.DataFrame(dict(cases=np.round(weekly), deaths=np.round(0.5*weekly)), index=a.timevec[7:99:7])
+    lik = ss.fit.loglik(two, df=data, by_series=True)
+    assert np.isclose(lik.cases, ss.fit.loglik(one, df=data[['cases']].rename(columns=dict(cases='incidence')), likelihood=dict(incidence=ss.poisson())))
+    assert np.isfinite(lik.deaths) and two.diseases[0].value("rho") == 0.5
+    return two
+
+
 @pytest.mark.skipif(not rscript.exists(), reason='needs the odin environment')
 def test_odin_contacts(tmp_path):
     sc.heading('Testing an odin model with a contact matrix against odin itself')
@@ -346,6 +420,7 @@ if __name__ == '__main__':
     T = sc.timer()
     test_odin_ode()
     test_odin_discrete()
+    test_odin2(sc.path(tempfile.mkdtemp()))
     test_odin_contacts(sc.path(tmpdir.name))
     test_odin_examples()
     test_sbml()

@@ -94,7 +94,7 @@ These are from Starsim's switching demo for SimInf users (`tests/switching/test_
 |---|---|
 | Herds linked by a register of births, deaths, and movements | **Works**: on SimInf's 1,600 herds for 100 days, the susceptible total and the number of herds infected are inside SimInf's 5% to 95% range |
 | Selective movements by state (`states=`), and movements that change state (`to_states=`) | **Works**: columns of the register |
-| A rate for each herd, written `ss.perday(ss.by(herd=b))` | **Fails**: it is accepted, but the sim raises a `ShapeError` that says the `ss.by()` has 1 value; with the unit inside, `ss.by(herd=[ss.perday(x) for x in b])`, it works |
+| A rate for each herd, written `ss.perday(ss.by(herd=b))` | **Fails** when `b` is a NumPy array: the sim raises a `ShapeError` that says the `ss.by()` has 1 value. With a list, `ss.perday(ss.by(herd=list(b)))`, or with the unit inside, `ss.by(herd=[ss.perday(x) for x in b])`, it works |
 | A model with a continuous state per herd (SISe's `phi`) | **Works**: declared, with no C |
 | Fit by particle MCMC (`pmcmc()`) | **Works**: `sim.calibrate(method='pmcmc')`, for a stochastic model with a likelihood, runs four chains, and reports R-hat; on SimInf's `?pmcmc` example the 95% intervals (beta 0.123 to 0.186, gamma 0.066 to 0.089) cover the true values (0.16 and 0.077) |
 | The speed of the particle filter | **Works**: 0.57 ms per particle run on one thread, the same as SimInf's 0.57 ms (the demo asks for within 3 times), and 0.23 ms on four threads |

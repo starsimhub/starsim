@@ -97,11 +97,16 @@ for sim in msim.sims:
 | Class | Base | Description |
 | --- | --- | --- |
 | `ssl.HouseholdNet` | `ss.Network` | Households built from DHS-style survey data, optionally evolving over time |
+| `ssl.ClusterNet` | `ss.Network` | Fully connected clusters, such as households |
+| `ssl.HybridNet` | `ss.Network` | Covasim's household, school, work, and community networks |
+| `ssl.DegreeNet` | `ss.DynamicNetwork` | Partnerships with a target number of partners at a time (e.g. needle sharing) |
+| `ssl.StaticNet` | `ss.Network` | A fixed network from a NetworkX graph |
+| `ssl.RandomSafeNet` | `ss.DynamicNetwork` | Random connections that are random-number safe, for scenario comparisons |
 | `ssl.DiskNet` | `ss.Network` | Agents move within a unit square and connect to others within a given radius |
 | `ssl.ErdosRenyiNet` | `ss.DynamicNetwork` | Every possible edge is created with probability `p` each timestep |
 | `ssl.NullNet` | `ss.Network` | Self-connections only, with zero transmission |
 
-`DiskNet` is a spatial network: each agent has an `x`, `y` position and a heading, moves at speed `v` each timestep, bounces off the walls of the unit square, and is connected to every agent within radius `r`. Because contacts are determined by position, epidemics spread as a wave rather than uniformly:
+The first five are described on the [Networks](modules_networks.qmd) page. `DiskNet` is a spatial network: each agent has an `x`, `y` position and a heading, moves at speed `v` each timestep, bounces off the walls of the unit square, and is connected to every agent within radius `r`. Because contacts are determined by position, epidemics spread as a wave rather than uniformly:
 
 ```{python}
 sim = ss.Sim(diseases=ss.SIS(beta=ss.perday(0.2)), networks=ssl.DiskNet(r=0.05), **outbreak)

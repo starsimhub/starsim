@@ -84,6 +84,20 @@ res = sim.results.sis.n_I
 print(f'Infected at the end: {res.select(risk="low")[-1]:,.0f} at low risk, {res.select(risk="high")[-1]:,.0f} at high risk')
 ```
 
+A country's matrix can also be split by setting: `ss.contacts('Kenya', layer=['home', 'school', 'work', 'community'])` gives one route per setting, each named after it, which together make up the whole matrix. A route can then be changed on its own with `ss.modify()`, e.g. to close schools from day 20 (see [Connectors](modules_connectors.qmd)):
+
+```{python}
+home, school, work, community = ss.contacts('Kenya', layer=['home', 'school', 'work', 'community'])
+closure = ss.modify(school, multiply=0, start=ss.days(20)) # The school contacts, matched by the route's name
+S, I, R = ss.states(3)
+sir_kenya = ss.Disease(infection=S >> I @ 0.01 * I, recovery=I >> R @ ss.days(7), init_prev=0.001, name='sir')
+sir_kenya.stratify(age=[0, 15, 65])
+kw = dict(networks=[home, school, work, community], total_pop=1e6, stop=ss.days(300), verbose=0)
+for label, intv in dict(open=None, closed=closure).items():
+    sim = ss.Sim(sir_kenya, interventions=intv, **kw).run()
+    print(f'Schools {label}: {sim.results.sir.infection.sum():,.0f} infections')
+```
+
 `split=` works for ages too, e.g. `sir_age.stratify(age=[0, 15, 65], split=[0.3, 0.6, 0.1])`, and so does a matrix over the model's age groups, `ss.contacts(age=[[10, 4, 1], [4, 8, 2], [1, 2, 3]])`. Shares of people by age give a compartmental model its age groups; to give agents ages from data, use `ss.People(n_agents, age_data=df)`, with columns `age` (the lower edge of each bin) and `value`.
 
 ### Beta by network
@@ -148,15 +162,16 @@ Starsim provides different network types for different transmission scenarios:
 |-------|---------|--------------|-------------|
 | `networks.Route` | Base for all transmission pathways | Defines transmission interface | Never directly - inherit from this |
 | `Network` | Base contact network | Edge management, validation | Rarely - use concrete classes |
-| `DynamicNetwork` | Time-varying connections | Adds/removes edges over time | When relationships form/dissolve |
+| `DynamicNetwork` | Time-varying connections | Adds/removes edges over time; `memory=` keeps past partners | When relationships form/dissolve |
 
 ### Contact network implementations
 | Class | Purpose | Parameters | Use Case |
 |-------|---------|------------|----------|
 | `RandomNet` | Random connections | `n_contacts`, `dur`, `dynamic`, `age_range`, `method` | General infectious diseases |
 | `SexualNet` | Sexual partnerships between two groups: men and women (the default), men (`between='mm'`), or e.g. sex workers and clients | `between`, `dur`, `acts`, `debut`, `participation`, `n_contacts`, `concurrency`, `max_contacts`, `match` | STI transmission |
-| `PrenatalNet` | Prenatal transmission | `dur`, `start`, `end` | In-utero (vertical) transmission |
-| `PostnatalNet` | Postnatal transmission | Inherits from `DynamicNetwork` | Breastfeeding, birth canal |
+| `PrenatalNet` | Prenatal transmission | None: its edges are added and removed by `ss.Pregnancy` | In-utero (vertical) transmission |
+| `PostnatalNet` | Postnatal transmission | `dur` (the postpartum period) | Transmission after birth |
+| `BreastfeedingNet` | Breastfeeding transmission | None: its edges last while the mother breastfeeds (from `ss.Pregnancy`) | Breastfeeding |
 
 ### Additional example contact networks
 *Note: these are available in the `starsim.library` module, accessed as e.g. `ssl.networks.DiskNet` after `import starsim.library as ssl`.*
@@ -170,7 +185,7 @@ Starsim provides different network types for different transmission scenarios:
 | `RandomSafeNet` | Random connections that are random-number safe | `n_edges`, `dur` | Scenario comparisons that need common random numbers |
 | `ErdosRenyiNet` | Probabilistic edges | `p` (edge probability), `dur` | Theoretical network studies |
 | `DiskNet` | Spatial proximity | `r` (radius), `v` (velocity) | Geographic transmission |
-| `NullNet` | Self-connections only | `n_people` | Debugging, placeholders |
+| `NullNet` | Self-connections only | None | Debugging, placeholders |
 
 ### Mixing pool classes
 | Class | Purpose | Parameters | Use Case |
@@ -425,4 +440,26 @@ print(f'Eligible school-age agents: {eligible.sum()}')
 # Create a network from a dictionary of arrays; beta defaults to 1
 custom = ss.Network(name='custom').from_df(dict(p1=[0, 1, 2], p2=[1, 2, 3]))
 print(custom.to_df())
+```
+
+## Past partners
+
+A dynamic network forgets a partnership when it ends. With `memory=`, it keeps those that ended within that time, so `net.find_contacts()`, and so contact tracing (`trace=` of a delivery: see [Interventions](modules_interventions.qmd)), also reaches recent past partners, e.g. for partner notification of the last year's partners:
+
+```{python}
+net = ss.SexualNet(dur=ss.lognorm_ex(mean=ss.years(1), std=ss.years(1)), memory=ss.years(1))
+sim = ss.Sim(n_agents=2000, networks=net, start=2000, stop=2005, dt=ss.months(1), verbose=0).run()
+net = sim.networks.sexualnet
+uids = ss.uids(range(200))
+print(f'Current partners of 200 people: {len(ss.Network.find_contacts(net, uids))}; including those of the last year: {len(net.find_contacts(uids))}')
+```
+
+## Checking a network against its targets
+
+A partnership network given targets (`n_contacts=`, `concurrency=`, `max_contacts=`, `match=`) looks for partners at the rates that make those targets its stable state. `net.check()` reruns the sim a few times (`n_runs=3` by default) and compares the network it makes with the targets, with a warning for any target missed by more than the spread across runs:
+
+```{python}
+net = ss.SexualNet(n_contacts=1.2, concurrency=0.1)
+sim = ss.Sim(n_agents=2000, networks=net, start=2000, stop=2010, dt=ss.months(1), verbose=0).run()
+sim.networks.sexualnet.check(output=True) # A dataframe; without output=True, it is also printed
 ```

@@ -16,6 +16,18 @@ An interactive tour of Starsim's key features.
 :::
 
 ::: {.g-col-4}
+[**User guide**](user_guide.qmd)
+
+Each topic in more depth than the tutorials.
+:::
+
+::: {.g-col-4}
+[**Architecture**](architecture/index.qmd)
+
+How Starsim works inside, for the curious and for contributors.
+:::
+
+::: {.g-col-4}
 [**API reference**](api/index.qmd)
 
 Full details on all classes and functions.

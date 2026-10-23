@@ -1,0 +1,137 @@
+---
+title: The model spec, errors, and interop
+jupyter: python3
+---
+
+Because a Starsim 4 model is made of objects (states, transitions, parameters) rather than a block of code, it can be written out as plain data. That data is the *model spec*, and it is what makes several other things cheap: hashing a model, comparing two models, writing a model as code, and moving models to and from other frameworks. This page covers the spec, the messages Starsim gives when something is wrong, the importers and exporters, and how the size of the language is kept in check.
+
+## Three forms, three jobs
+
+| What | Method | Holds | Read back? |
+|---|---|---|---|
+| The model spec | `sim.to_spec()`, `sir.to_spec()` | the model as plain data, with no results | no: it is hashed, compared, and written as code |
+| Results as JSON | `sim.to_json()` | parameters, summary, and results, for use elsewhere | no |
+| A saved sim | `ss.save('run.sim', sim)` | the sim itself (a pickle), including partway through a run | yes, with `ss.load()` |
+
+A model is shared as Python: `ss.save('model.py', sim)` writes `sim.to_code()`, a script that builds it again. Nothing reads a spec back into a sim, deliberately: models are written in Python, nothing outside Python consumes the spec, and a format that is only written can't drift out of step with a reader.
+
+## The model spec
+
+The spec is the resolved model: every guessed default written out as a value, every bare number given its unit, and every spelling of a transition reduced to one object. Here is one transition:
+
+```{python}
+import json
+import starsim as ss
+
+S, I, R = ss.states('S I R')
+sir = ss.Disease(infection=S >> I @ 0.05 * I, recovery=I >> R @ ss.days(7), init_prev=0.01, name='sir')
+sim = ss.Sim(sir, unit='day', verbose=0)
+spec = sim.to_spec()
+print(list(spec.keys()))
+print(json.dumps(spec['modules'][0]['transitions'][0]))
+```
+
+The rate is kept as the text it was written in (`"beta * I"`), with the inline 0.05 turned into a named parameter, `beta`. Every field of each kind of object is always written, in the same order, with `null` for anything not used. A fixed shape makes two specs easy to compare; and since the hash leaves out `null` fields, a field added for a new feature changes no existing model's hash.
+
+**Normalization** is what lets different spellings produce the same document. The operator form, the explicit `ss.Transition(...)`, and a class with the same members are one model, and so are `ss.days(7)` and `ss.weeks(1)` (values are converted to one unit before hashing):
+
+```{python}
+S, I, R = ss.states('S I R')
+b = ss.Disease(infection=ss.Transition(S, I, rate=0.05 * I), recovery=ss.Transition(I, R, dur=ss.weeks(1)), init_prev=0.01, name='sir')
+
+class SIR(ss.Disease):
+    S, I, R = ss.states(3)
+    infection = S >> I @ 0.05 * I
+    recovery  = I >> R @ ss.days(7)
+
+c = SIR(init_prev=0.01, name='sir')
+hashes = [ss.Sim(d, unit='day', verbose=0).hash() for d in (sir, b, c)]
+print('All three spellings hash the same:', hashes[0] == hashes[1] == hashes[2])
+```
+
+**Hashing** splits the spec into parts (`model`, `pars`, `config`, `scenario`, `data`, and the seed; see [Randomness and fitting](randomness_and_fitting.qmd#run-identity)). The `model` hash replaces every number by a placeholder, so changing `beta` changes `pars` but not `model`. Labels, docs, and which values were guessed don't contribute. A function in a slot is identified by its source text (or where it can be imported from, or a `version` you give it); one with none of these, such as a `functools.partial`, makes `sim.hash()` raise rather than risk hashing two different models the same. A module written as code is identified by its class and parameters, not its code.
+
+**Comparing** two models is then mechanical, and `ss.diff()` reports in the model's own terms, not as a diff of JSON:
+
+```{python}
+S, I, R = ss.states('S I R')
+d = ss.Disease(infection=S >> I @ 0.08 * I, recovery=I >> R @ ss.gamma(a=3, scale=ss.days(7/3)), init_prev=0.01, name='sir')
+ss.diff(ss.Sim(sir, unit='day', verbose=0), ss.Sim(d, unit='day', verbose=0))
+```
+
+**Writing as code**: `sim.to_code()` writes the declared parts (diseases, products and deliveries, modifiers, contact matrices, stratifications), and running that code gives a model with an identical spec, so the same hash. What it can't write, such as a network or a module written as code, it lists in the file and in an `ss.errors.LossyExport` warning, rather than writing a different model silently.
+
+## Errors, warnings, and notes
+
+The policy is: **prefer guessing a default and printing it to raising an error.** An error is for when there is no sensible guess: a name that doesn't exist, lengths that don't match, a request the solver can't meet. Every message is meant to be read once, by an epidemiologist or by an AI writing a model for one, so it uses the user's own names, says what exists instead, and says what to do:
+
+```{python}
+sim = ss.Sim(sir, pars=dict(betta=0.2), verbose=0)
+try:
+    sim.init()
+except ss.errors.UnknownParameter as e:
+    print(f'{type(e).__name__}: {e}')
+```
+
+There are three levels:
+
+| Level | Base class | What happens |
+|---|---|---|
+| Error | `ss.CodedError` (a `ValueError`) | raises; caught by name, e.g. `except ss.errors.UnknownParameter` |
+| Warning | `ss.StarsimWarning` | issued through Python's warnings, so filters (and `ss.options.warnings='error'`) apply; the run continues |
+| Note | `ss.Note` | kept in `sim.notes` whatever the verbosity, and printed as one line when `verbose` is 1 or more |
+
+Each named message is a class in `ss.errors` (67 of them: 50 errors, 7 warnings, and 10 notes), with a docstring that says when it is raised. The catalog in the design record is generated from those docstrings by `ss.errors.catalog()`, and `tests/test_spec.py` checks that the two match, so the documentation can't fall behind the code.
+
+## Importers and exporters
+
+Every importer reads another framework's model into one intermediate object, `ss.interop.Source` (its states, parameters, flows as rate expressions, stratifications, outcomes, and what it couldn't translate), and one function, `ss.interop.build()`, turns that into a sim by the same rules for every format. So each framework needs only a reader, and there are no framework-to-framework converters.
+
+```{mermaid}
+%%| echo: false
+flowchart LR
+  F["odin, SBML, EMULSION, SimInf,<br>flepiMoP, summer2, Atomica, camdl,<br>EpiModel, epydemix, MEmilio"] --> R[reader] --> S["ss.interop.Source"] --> B["ss.interop.build()"] --> Sim[sim]
+  Sim --> E["SBML, odin, Mermaid"]
+  Sim --> C["Python: sim.to_code()"]
+```
+
+The hardest part of importing is reading rates. Most frameworks write a flow as a total, such as `beta * S * I / N`; the importer turns it into a per-person rate on a transition, and says how it read each one. A rate divided by the population total is exposure through the routes (`beta * I`); one without the division is density-dependent and is kept as a count (`beta * I.n`); anything else is kept literally, as an expression of counts, which is exact under every solver. A `Source` can also be filled in by hand:
+
+```{python}
+import starsim.interop # Not imported by import starsim
+
+src = ss.interop.Source('sir', format='by hand')
+for name, n in dict(S=990, I=10, R=0).items():
+    src.add_state(name, init=n)
+src.add_par('beta', 0.3)
+src.add_par('gamma', 0.1)
+src.add_flow('S', 'I', rate='beta * S * I / (S + I + R)', per='total', name='infection')
+src.add_flow('I', 'R', rate='gamma * I', per='total', name='recovery')
+sim = ss.interop.build(src, stop=100)
+print(ss.interop.export(sim, 'odin'))
+```
+
+An importer keeps the source's names, marks what it guessed (as `[guessed]` in `describe()`, like a hand-written model), keeps going when something doesn't map onto a built-in piece, and lists what it couldn't translate by name (`ss.errors.ImportIncomplete`, also in `sim.imported.incomplete`). An incomplete import still runs, without the listed parts, and the warning says how to finish it with the `import-model` skill. Exporters work the same way in reverse: SBML and odin are written from the model's compartmental form, and each export lists what it left out or changed (`LossyExport`), one line per declaration. `ss.interop.to_hub()` writes the runs of a MultiSim as a forecast-hub submission.
+
+Each importer is tested against its framework's own examples (`tests/interop/`) and in a scaled-down demo per framework (`tests/switching/`). The [Coming from](../coming_from/index.qmd) pages show the translations side by side.
+
+## The vocabulary
+
+A language nobody can hold in their head is one nobody uses correctly, so Starsim's is counted: the design record lists every public name (109 at `ss.`, plus 56 methods and attributes), marking those Starsim 4 adds. `tests/test_spec.py` checks that each exists, that everything exported at `ss.` is counted or in a named second tier (the classes for writing modules as code), and that the counts match.
+
+The capitalization rule is Starsim's existing one: modules, containers, and base classes are CamelCase (`ss.Sim`, `ss.Disease`, `ss.Vaccine`); the pieces you put inside them are lowercase (`ss.days`, `ss.normal`, `ss.modify`, `ss.vaccinate`). Before a name is added: does Starsim already have one; can it be written with what exists (a bednet is an `ss.modify`, a metapopulation a stratification by patch); would more than one kind of model use it; is a keyword enough?
+
+The code is in `starsim/spec.py` (the spec, hashing, `ss.diff()`, and `to_code()`), `starsim/errors.py`, and `starsim/interop/` (`core.py` holds `Source` and `build()`, with one file per framework).
+
+## Limits
+
+- A spec with functions in it can be hashed and compared, but only run by Python, and a function's hash covers its source and the plain values it closes over, not everything it depends on.
+- Two models that are the same mathematically but declared differently (two transitions out of a state, or one branching transition) may hash differently. A spurious difference is the safe direction to fail in.
+- A network other than a contact matrix is in the spec only as its class and parameters, and `to_code()` lists it for adding by hand rather than writing it. Exports to other formats carry less than the code does.
+
+## In the design record
+
+- [The model spec](https://github.com/starsimhub/starsim/blob/v4/v4_design/design/14-model-spec.md): its structure, rate expressions, normalization, hashing, and saved forms
+- [Errors, warnings, and notes](https://github.com/starsimhub/starsim/blob/v4/v4_design/design/15-errors.md): the policy, message shape, and the full catalog
+- [Working with other frameworks](https://github.com/starsimhub/starsim/blob/v4/v4_design/design/16-interop.md): importers, classifying rates, exports, and the vignette test
+- [The complete vocabulary](https://github.com/starsimhub/starsim/blob/v4/v4_design/design/17-vocabulary.md): every public name, counted, with keywords and slot types

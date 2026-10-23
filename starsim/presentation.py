@@ -26,6 +26,15 @@ class Presentation:
                 line = f'{line:60s} [{guess}]'
             lines.append(line.rstrip())
             return
+        shown = set() # The parameters whose doc= and source= are shown already
+        def provenance(p):
+            """ A parameter's doc= and source=, under it """
+            if id(p) not in shown:
+                shown.add(id(p))
+                for text in [p.doc, p.source and f'source: {p.source}']:
+                    if text:
+                        add('', f'  {text}')
+            return
 
         lines.append(f"{type(mod).__bases__[0].__name__ if type(mod).__bases__[0] is not ss.Module else type(mod).__name__} '{mod.name}': {len(self.states)} states, {len(self.transitions)} transitions")
         people = ', '.join(s.name for s in self.people_states)
@@ -59,6 +68,7 @@ class Presentation:
                 for leaf in tr.rate.leaves:
                     if isinstance(leaf, par) and not leaf.literal:
                         add('', f'{leaf.name} = {quantity_str(leaf.raw, "rate" if leaf.slot == "rate" else None, unit)}') # A factor of the rate, such as R0 in R0 × gamma × I, has no unit of its own
+                        provenance(leaf)
                 terms = getattr(getattr(sim, 'mixing', None), 'terms', [])
                 if sim is None or (not len(sim.pars.networks) and all(term.kind == 'homogeneous' for term in terms)):
                     expanded = format_expr(tr.rate, values='number', unit=unit, bare=lambda s: f'{s.name}.n / N', mul='×')
@@ -128,6 +138,11 @@ class Presentation:
                     add('', f'{what} {quantity_str(getattr(tr, key), "dur", unit)} in {sc.strjoin(s.name for s in tr.src)}')
             if tr.guessed.get('import'):
                 add('', f'imported as {tr.guessed["import"]}', 'guessed')
+            for expr in [tr.rate, tr.dur] + sc.tolist(tr.p): # The other documented parameters of the transition, each with its value
+                for leaf in (expr.leaves if isinstance(expr, Expr) else []):
+                    if isinstance(leaf, par) and (leaf.doc or leaf.source) and id(leaf) not in shown:
+                        add('', f'{leaf.name} = {quantity_str(leaf.raw, leaf.slot if leaf.slot in ["rate", "dur"] else None, unit)}')
+                        provenance(leaf)
         if self.transmissions: # The timing contract of spec 02, where modelers look (CV5, ST4)
             add('timing', 'an infection is dated at the end of its step, so what follows it starts then')
             add('', 'a state\'s count (n_X) includes the step people enter it; they stay for their whole dwell')
@@ -190,7 +205,37 @@ class Presentation:
             for i,(sign,term) in enumerate(items):
                 rhs += (f'{"-" if sign == "-" else " "}{term}' if i == 0 else f' {sign} {term}')
             lines.append(f'd{names[ind]}/dt{" "*(width-len(names[ind]))} = {rhs or " 0"}')
-        return lines
+        return lines + self.equation_symbols(engine)
+
+    def equation_symbols(self, engine=None):
+        """ The lines of `equations()` that say what its symbols stand for: the contacts in `I / N` (a contact matrix, or a contact rate), and a parameter that varies in time """
+        lines = []
+        sim = getattr(engine, 'sim', None)
+        mixing = getattr(sim, 'mixing', None)
+        if self.transmissions and mixing is not None and getattr(mixing, 'terms', None):
+            unit = sim.unit_name
+            for term in mixing.terms:
+                net = f' of "{term.name}"' if term.name else ''
+                if term.kind == 'matrix' and 'cells' not in term and term.matrix.shape[0] == sim.groups.strats[term.dim].n:
+                    strat = sim.groups.strats[term.dim]
+                    labels = [str(l) for l in strat.labels]
+                    w = max(len(l) for l in labels)
+                    lines += [f'In each equation, a state is its number in each group of {strat.name} ({", ".join(labels)}), and in a transmission, I / N in group i is',
+                              f'  the sum over groups j of C[i, j] * I[j] / N[j], with C the contacts per {unit}{net} (row i, people in group i; column j, their contacts in group j):']
+                    lines += [f'  {l:>{w}s}  ' + '  '.join(f'{v:8.4g}' for v in row) for l,row in zip(labels, np.asarray(term.matrix, dtype=float))]
+                elif term.kind == 'matrix':
+                    lines.append(f'In a transmission, I / N in each group is weighted by the contact matrix{net}')
+                elif term.kind == 'homogeneous' and term.contacts != 1:
+                    lines.append(f'In a transmission, I / N is {term.contacts:n} * I / N: {term.contacts:n} contacts per {unit}{net}')
+        for name,p in self.pars.items():
+            raw = p.raw
+            if isinstance(raw, ss.parameters.seasonal):
+                lines.append(f'{name} = {seasonal_str(raw, value_str(raw.mean))}, with t in years')
+            elif isinstance(raw, TimeValue):
+                lines.append(f'{name} = {value_str(raw)}, which varies in time')
+            elif isinstance(raw, by):
+                lines.append(f'{name} = {value_str(raw)}, a value for each group')
+        return ([''] if lines else []) + lines
 
     def flow_terms(self, engine=None):
         """

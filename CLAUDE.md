@@ -8,6 +8,8 @@ Starsim is an agent-based modeling framework for simulating disease spread among
 
 For a compact index of the whole public API (signatures, summaries, and default parameters), see https://docs.starsim.org/llms.txt (or `llms-full.txt`, which adds an example for each entry). These are generated when the docs are built and are not committed; to generate them locally for the current branch (as `docs/llms.txt` etc.), run `cd docs && python make_api.py`. The equivalent for Sciris is at https://docs.sciris.org/llms.txt.
 
+The design record of v4 (the constitution, the spec, the current plan, and what was deferred or decided against) is in `v4_design/`; start at `v4_design/README.md`.
+
 ## Core architecture
 
 The framework follows a modular design with these key components:
@@ -71,6 +73,7 @@ uv add starsim[dev]  # With dev dependencies
 - `arrays.py`: State management arrays for people/networks
 - `conditions.py`: Conditions on states and people, for `where=` (`ss.conditions.Cond`)
 - `connectors.py`: Connectors between modules (e.g. `ss.modify`)
+- `data.py`: Data by place (`ss.data.population('Kenya')`, `ss.data.contacts(...)`), read by `ss.people('Kenya')`, `ss.contacts('Kenya')`, and `ss.geo.geography('Kenya')`
 - `dates.py`: Dates and calendar durations (`ss.date`, `ss.DateArray`, `ss.datedur`)
 - `debugtools.py`: Profiling, debugging, and mock objects for testing
 - `dimensions.py`: Stratifications (`ss.dimensions.Strat`, `ss.transfer`) and the groups they give (`sim.groups`, an `ss.dimensions.Groups`)
@@ -84,21 +87,19 @@ uv add starsim[dev]  # With dev dependencies
 - `kernels.py`: The Numba kernels that run compartmental models
 - `loop.py`: Main simulation integration loop
 - `modules.py`: Base module classes and update logic
-- `named.py`: Places and contact matrices by name (`ss.people('Kenya')`, `ss.contacts('Kenya')`)
 - `networks.py`: Networks and mixing pools
 - `parameters.py`: Parameter containers (`ss.Pars`, `ss.SimPars`) and values that vary by level or in time (`ss.by`, `ss.timeseries`, `ss.seasonal`)
 - `presentation.py`: How a declared model is shown: `describe()`, `diagram()`, `equations()`, and its model spec
 - `products.py`: Vaccine and treatment deployment
 - `pregnancy.py`: Pregnancy as declared states and transitions; provides events (`conception`, `delivery`) and states (`P`) for other modules
 - `run.py`: Running multiple simulations (`ss.MultiSim`, `ss.parallel`)
-- `samples.py`: Storage for large-scale simulation results
 - `settings.py`: Global options (`ss.options`) and plotting style
 - `solvers/`: The engines that run declared models: `engine.py` (what they share), `mixing.py` (who meets whom in a compartmental run), `compartmental.py`, `agents.py`, `crossing.py` (diseases tracked jointly), and `choose.py` (which solver, and why: `ss.solvers.choose_solver()`); every name is also `ss.solvers.X`
 - `spec.py`: The model spec, and models written as code (`ss.to_code()`, `ss.diff()`)
 - `time.py`: Durations and rates (`ss.dur`, `ss.days`, `ss.peryear`, `ss.probperyear`, etc.)
 - `timeline.py`: Time coordination between modules (`ss.Timeline`)
 - `timeplot.py`: Plotting dates and durations with Matplotlib
-- `transitions.py`: States and transitions (`ss.State`, `ss.transmission()`, `ss.progression()`, ...); the names of the modules above that it builds on are also `ss.transitions.X`
+- `transitions.py`: States and transitions (`ss.State`, `ss.states()`, `ss.Transition` and its `S >> I @ rate` spelling, ...); the names of the modules above that it builds on are also `ss.transitions.X`
 - `utils.py`: Helper functions
 - `interop/`: Importers and exporters for other modeling frameworks
 

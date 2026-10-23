@@ -5,6 +5,7 @@ Contract tests: properties every model and solver must have, checked on the mode
 
 # %% Imports and settings
 import os
+import runpy
 import pytest
 import numpy as np
 import sciris as sc
@@ -96,6 +97,10 @@ def test_streams(solver):
     # An analyzer, or an unrelated disease, does not change the draws of a disease, whether the run is whole or stepped
     withan = corpus.sir(solver=solver, unit='day', analyzers=Counter(), **agents).run().results.sir.n_I.values
     assert np.array_equal(alone, withan), 'An analyzer changed the draws'
+    if solver != 'abm': # Nor those of its outcomes (cases, hospitalizations, deaths), which a compartmental run draws after its states
+        plain, counted = [corpus.outcomes(solver=solver, rand_seed=5, **kw).run().results.sir for kw in [{}, dict(analyzers=Counter())]]
+        for key in ['cases', 'hosp', 'n_hosp', 'deaths']:
+            assert np.array_equal(plain[key].values, counted[key].values), f'An analyzer changed the draws of the outcome "{key}" by up to {np.abs(plain[key].values - counted[key].values).max():n}'
     for profile in [False, True]: # Profiling makes the run step from Python
         both = two_sirs('sir', 'other').run(profile=profile).results.sir.n_I.values
         assert np.array_equal(alone, both), f'Another disease changed the draws (profile={profile}): max difference {np.abs(alone - both).max():n}'
@@ -105,7 +110,7 @@ def test_streams(solver):
     assert not np.array_equal(ab.ab.n_I.values, ab.ba.n_I.values), 'Two modules got the same stream'
 
     if solver != 'abm':
-        # The order the states are declared in does not change the draws (C12a)
+        # The order the states are declared in does not change the draws
         def declared(order):
             states = dict(zip(order.split(), ss.states(order)))
             S, I, R, V = [states[name] for name in 'SIRV']
@@ -114,7 +119,7 @@ def test_streams(solver):
         siv, svi = declared('S I R V'), declared('S V I R')
         assert np.array_equal(siv, svi), f'Declaring the states in another order changed n_I by up to {np.abs(siv - svi).max():n}' # 155 under binomial before
 
-        # A rate that varies in time takes the same values in a run stepped from Python as in a whole one, so the same draws (C12c)
+        # A rate that varies in time takes the same values in a run stepped from Python as in a whole one, so the same draws
         def seasonal(solver):
             S, I, R, V = ss.states('S I R V')
             sir = ss.Disease(infection=S >> I @ ss.seasonal(mean=0.421, amplitude=0.46, peak=0.92) * I, recovery=I >> R @ ss.perday(0.0909), vax=S >> V @ ss.perday(0.011), init_n=dict(I=25), name='sir')
@@ -126,7 +131,7 @@ def test_streams(solver):
             else:
                 assert np.array_equal(whole, stepped), f'{s}: stepping changed the vaccinated by up to {np.abs(whole - stepped).max():n}' # 61 under binomial before
 
-        # Each run of several draws its outcomes from its own seed, as it would on its own (C19)
+        # Each run of several draws its outcomes from its own seed, as it would on its own
         sim = corpus.outcomes(solver=solver, rand_seed=5)
         runs = sim.run(n_runs=3).results.sir.cases.values
         for i in range(3):
@@ -144,6 +149,32 @@ def test_streams_across_sims():
     a2 = a.run().results.sir.n_I.values
     assert np.array_equal(a1, a2), f'Running another sim in between changed the results by up to {np.abs(a1 - a2).max():n}'
     return a2
+
+
+def test_crn_pairing():
+    sc.heading('Testing that common random numbers pair the runs of a scenario and its baseline, for a declared disease as agents')
+    def infections(seed, campaign):
+        intv = ss.Delivery(move=dict(vaccinated=True), coverage=0.05, at=[10], name='campaign') if campaign else None # A small change
+        return corpus.vaccination(solver='abm', interventions=intv, n_agents=2000, rand_seed=seed).run().results.sir.infection.values.sum()
+    base, alt = [np.array([infections(seed, campaign) for seed in range(20)]) for campaign in [False, True]]
+    ratio = np.var(alt - base)/(np.var(alt) + np.var(base)) # 1 for independent runs
+    assert ratio < 0.5, f'The difference between the scenarios varies {ratio:.2f} times as much as for independent runs' # 0.14 to 0.32 over four sets of 20 seeds
+    return ratio
+
+
+# %% The code of a model builds it again
+
+@pytest.mark.parametrize('name', corpus.models.keys())
+def test_code_round_trip(name, tmp_path):
+    sc.heading(f'Testing that the code written for the corpus model "{name}" builds the same model, or says what it leaves out')
+    sim = corpus.models[name]()
+    path = tmp_path/'model.py'
+    sim.to_code(path)
+    if 'Not written as code' in path.read_text(): # A network, a function, data, or a module written as code, listed to add by hand
+        return
+    rebuilt = runpy.run_path(str(path))['sim'] # From a file, as a user runs it, so the source of a function in it can be read
+    assert rebuilt.hash() == sim.hash(), f'{name}: the code builds a different model'
+    return
 
 
 # %% The solvers agree
@@ -198,7 +229,7 @@ def test_binomial_short_stay():
     runs = [make('binomial', seed) for seed in range(3)]
     final = np.mean([res.n_R[-1] for res in runs])
     curve = np.mean([res.n_I.values for res in runs], axis=0)
-    assert np.isclose(final, ode.n_R[-1], rtol=0.05), f'The chain binomial ends with {final:n} recovered, against {ode.n_R[-1]:n} for the ODE' # 950,577 against 797,129 with whole steps (ST55)
+    assert np.isclose(final, ode.n_R[-1], rtol=0.05), f'The chain binomial ends with {final:n} recovered, against {ode.n_R[-1]:n} for the ODE' # 950,577 against 797,129 with whole steps
     assert np.abs(curve - ode.n_I.values).max() < 0.2*ode.n_I.max(), 'The chain binomial\'s infected are far from the ODE\'s' # 1.33 of the peak with whole steps
     return
 
@@ -255,6 +286,7 @@ def test_dwell_forms():
         branches     = lambda I, R, D: dict(a=ss.Transition(I, R, p=0.7, dur=ss.days(4)), b=ss.Transition(I, D, p=0.3, dur=ss.days(2))), # Decided on entry
         destinations = lambda I, R, D: dict(out=ss.Transition(I, [R, D], p=[0.7, 0.3], dur=ss.days(4))), # Decided at exit
         competing    = lambda I, R, D: dict(out=ss.Transition(I, R, dur=ss.constant(ss.days(4))), die=ss.Transition(I, D, rate=ss.perday(0.1))),
+        after        = lambda I, R, D: dict(out=ss.Transition(I, R, rate=ss.perday(0.5), after=ss.days(2))), # A minimum stay, then a rate
     )
     def run(form, solver):
         I, R, D = ss.states('I R D')
@@ -275,7 +307,7 @@ def test_wide_dwell():
         dis = ss.Disease(A, B, go=A >> B @ ss.peryear(1), back=ss.Transition(B, A, dur=ss.weibull(c=c, scale=ss.years(1))), first='A', name='m')
         return ss.Sim(dis, total_pop=1000, stop=2010, solver=solver, verbose=0).init()
     assert make(0.5).solver == 'ode' # A coefficient of variation of 2.2
-    assert make(0.3).solver == 'abm' # Of 5.4: one exponential stage at its mean of 9.3 years kept nearly everyone in B (FP53)
+    assert make(0.3).solver == 'abm' # Of 5.4: one exponential stage at its mean of 9.3 years kept nearly everyone in B
     with pytest.warns(RuntimeWarning, match='coefficient of variation'):
         make(0.3, 'ode')
     return
@@ -310,7 +342,7 @@ def test_conservation(name):
             continue
         sim = corpus.models[name](solver=solver, total_pop=10_000).run()
         for mod in sim.declared:
-            total = sum(mod.results[f'n_{state.name}'].values for state in mod.graph.people_states)
+            total = sum(mod.results[f'n_{state.name}'].values for state in mod.states.values() if state.people)
             assert np.allclose(total, total[0], rtol=1e-9), f'{name} under {solver}: the population of {mod.name} goes from {total[0]:n} to {total[-1]:n}'
     return
 
@@ -320,7 +352,7 @@ def test_crossing_conservation(dwell):
     sc.heading(f'Testing that diseases tracked jointly keep their people under every solver, with a dwell that is {dwell}')
     dwells = dict(
         exponential = lambda P, NP: ss.Transition(P, NP, dur=ss.months(9)),
-        fixed       = lambda P, NP: ss.Transition(P, NP, dur=ss.constant(ss.months(9))), # A conveyor: the ODE lost 9% of people (FP51)
+        fixed       = lambda P, NP: ss.Transition(P, NP, dur=ss.constant(ss.months(9))), # A conveyor: the ODE lost 9% of people
         erlang      = lambda P, NP: ss.Transition(P, NP, dur=ss.months(9), stages=3),
         lognormal   = lambda P, NP: ss.Transition(P, NP, dur=ss.lognorm_ex(ss.months(9), ss.months(3))),
         after       = lambda P, NP: ss.Transition(P, NP, rate=ss.peryear(2), after=ss.months(3)),
@@ -335,8 +367,27 @@ def test_crossing_conservation(dwell):
         sim = ss.Sim([m, p], connectors=mod, start=2000, stop=2010, dt=ss.months(1), solver=solver, verbose=0, **size).run()
         assert solver == 'abm' or sim.crossings
         for mod in sim.declared:
-            total = sum(mod.results[f'n_{state.name}'].values for state in mod.graph.people_states)
+            total = sum(mod.results[f'n_{state.name}'].values for state in mod.states.values() if state.people)
             assert np.allclose(total, 2000, rtol=1e-9), f'{dwell} under {solver}: the population of {mod.name} goes from {total[0]:n} to {total[-1]:n}'
+    return
+
+
+def test_empty_place():
+    sc.heading('Testing that a place with no one in it changes nothing, under every solver that runs by group')
+    def make(solver, places=True):
+        S, I, R = ss.states('S I R')
+        sir = ss.Disease(infection=ss.Transition(S, I, rate=ss.perday(0.2)*I.frac + ss.perday(1e-5)*I.n + ss.perday(1e-6)*I.total), recovery=ss.Transition(I, R, dur=10), init_prev=0.01, name='sir')
+        if places:
+            sir.stratify(place=['a', 'b'], kind='space', split=[1.0, 0.0])
+        return ss.Sim(sir, solver=solver, total_pop=10_000, unit='day', stop=60, verbose=0)
+    one = make('ode', places=False).run().results.sir.n_R.values
+    for solver in ['ode', 'jax', 'binomial', 'tau', 'gillespie']:
+        sim = make('ode' if solver == 'jax' else solver).init()
+        sim.jax = solver == 'jax'
+        res = sim.run().results.sir
+        assert np.all(np.isfinite(res.n_I.values)) and res.n_I.select(place='b').values.max() == 0, solver
+        if solver in ['ode', 'jax']:
+            assert np.allclose(res.n_R.values, one, rtol=1e-9), f'{solver}: an empty place changes the epidemic'
     return
 
 

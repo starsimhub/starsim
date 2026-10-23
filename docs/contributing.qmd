@@ -3,3 +3,6 @@ pagetitle: "Contributing"
 ---
 
 {{< include ../CONTRIBUTING.md >}}
+
+## Understanding the codebase
+To understand how the codebase fits together before you change it, see the [architecture](architecture/index.qmd) section.

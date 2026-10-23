@@ -5,7 +5,6 @@ Test the ODE run in JAX: that it matches the kernels, its gradients, gradient-ba
 # %% Imports and settings
 import warnings
 import importlib
-import importlib.util
 import pytest
 import numpy as np
 import pandas as pd
@@ -14,7 +13,6 @@ import starsim as ss
 import starsim.fit
 from test_kernels import models, largest_diff
 
-pytest.importorskip('jax')
 kw = dict(verbose=0)
 
 
@@ -190,7 +188,6 @@ def test_identifiability():
 @sc.timer()
 def test_posterior():
     sc.heading('Testing a posterior from NUTS')
-    pytest.importorskip('blackjax')
     truth = make_sir(beta=0.5, dur=6).run().results.sir
     weekly = np.add.reduceat(truth.cases.values[1:], np.arange(0, len(truth.cases) - 1, 7))[:-1] # A flow is compared with its total since the last data point
     data = pd.DataFrame(dict(cases=np.random.default_rng(1).poisson(weekly)), index=truth.timevec[7::7][:len(weekly)])
@@ -282,19 +279,17 @@ def test_crossing():
     assert abs(pf - direct) < 1 # The filter estimates the likelihood of runs of the sim
 
     # NUTS, with the log-density in JAX
-    if importlib.util.find_spec('blackjax') is not None:
-        data = pd.DataFrame({'hiv.n_I':fresh.hiv.n_I.values, 'syph.n_I':fresh.syph.n_I.values}, index=fresh.hiv.timevec)[::8]
-        fit = make_coinfection(data=data).calibrate(likelihood={'hiv.n_I':ss.normal(scale=50), 'syph.n_I':ss.normal(scale=50)}, method='nuts', draws=50, warmup=50, chains=2, rand_seed=1, verbose=True)
-        table = fit.table.set_index('par')
-        assert fit.method == 'nuts'
-        assert table.lower['hiv.beta'] < 0.2 < table.upper['hiv.beta']
+    data = pd.DataFrame({'hiv.n_I':fresh.hiv.n_I.values, 'syph.n_I':fresh.syph.n_I.values}, index=fresh.hiv.timevec)[::8]
+    fit = make_coinfection(data=data).calibrate(likelihood={'hiv.n_I':ss.normal(scale=50), 'syph.n_I':ss.normal(scale=50)}, method='nuts', draws=50, warmup=50, chains=2, rand_seed=1, verbose=True)
+    table = fit.table.set_index('par')
+    assert fit.method == 'nuts'
+    assert table.lower['hiv.beta'] < 0.2 < table.upper['hiv.beta']
     return sim
 
 
 @sc.timer()
 def test_posterior_data():
     sc.heading('Testing a posterior from data by stratum, and from the number in an outcome')
-    pytest.importorskip('blackjax')
     def make(beta=0.4, data=None):
         beta = ss.par(beta, bounds=[0.1, 1], name='beta')
         S, I, R = ss.states(3)

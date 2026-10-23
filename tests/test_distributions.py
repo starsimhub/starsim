@@ -142,13 +142,13 @@ def test_exceptions(m=m):
 
     # Create a strict distribution
     dist = ss.random(strict=True, auto=False)
-    with pytest.raises(ss.distributions.DistNotInitializedError):
+    with pytest.raises(ss.errors.DistNotInitializedError):
         dist(m) # Check that we can't call an uninitialized
 
     # Initialize and check we can't call repeatedly
     dist.init(trace='test', sim=make_sim())
     rvs = dist(m)
-    with pytest.raises(ss.distributions.DistNotReadyError):
+    with pytest.raises(ss.errors.DistNotReadyError):
         dist(m) # Check that we can't call an already-used distribution
 
     # Check that we can with a non-strict Dist
@@ -607,7 +607,7 @@ def test_engine_copy():
         a, b = np.asarray(dist.rvs(m), dtype=float), np.asarray(copy.rvs(m), dtype=float)
         assert np.allclose(a, b), f'{dist}: the engine draws {b}, the distribution {a}'
 
-    # A histogram for each group, as a dwell and as a trait, draws from each person's own (FP87: it drew uniform(0, 1))
+    # A histogram for each group, as a dwell and as a trait, draws from each person's own (it drew uniform(0, 1))
     h0, h1 = ss.histogram(values=[1], bins=[0, 1], unit='year'), ss.histogram(values=[1], bins=[10, 11], unit='year')
     A, B = ss.states('A B')
     d = ss.Disease(A, B, go=ss.Transition(A, B, dur=ss.by(urban={False: h0, True: h1})), obj=ss.attr(ss.by(urban={False: h0, True: h1})), name='m', first='A')

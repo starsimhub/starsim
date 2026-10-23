@@ -76,31 +76,6 @@ def test_people():
 
 
 @sc.timer()
-def test_filtering():
-    """ Test people filtering """
-    sim = ss.Sim(n_agents=medium, dur=10, networks='random', diseases='sir', verbose=0)
-    sim.run()
-    ppl = sim.people
-
-    # Traditional filtering
-    with sc.timer('Array filtering'):
-        f1 = ppl.female == True
-        f2 = f1 * (ppl.age>5)
-        f3 = f2 * (~ppl.sir.I)
-        af_res = f3.uids.to_numpy()
-
-    # Equivalent using filter
-    with sc.timer('Custom filtering'):
-        f1 = ppl.filter('female')
-        f2 = f1('age')>5
-        f3 = ~f2('sir.I')
-        cf_res = f3.uids.to_numpy()
-
-    assert np.array_equal(af_res, cf_res), 'Filtered arrays do not match'
-    return f3
-
-
-@sc.timer()
 def test_ppl_construction(do_plot=False):
     sc.heading('Test making people and providing them to a sim')
 
@@ -132,7 +107,6 @@ if __name__ == '__main__':
 
     # Run tests
     ppl   = test_people()
-    filt  = test_filtering()
     sim   = test_ppl_construction(do_plot)
 
     sc.toc(T)

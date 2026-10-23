@@ -82,11 +82,12 @@ These are from Starsim's switching demo for epydemix users (`tests/switching/tes
 |---|---|
 | The Kenya tutorial from Starsim's bundled data | **Works**: peak, its day, and the final size as above |
 | A vaccine by age, written on the disease's age groups (`where=sir.age < 5`) | **Works**: 6.9 million under-5s are vaccinated, the number in Kenya in 2020 |
+| Closing one contact setting from a date (schools) | **Works**: `ss.contacts('Kenya', layer=['home', 'school', 'work', 'community'])` gives a layer for each setting, and `ss.modify(school, multiply=0, start='2020-03-15')` closes one |
 | Vaccination, testing, and treatment without copying compartments | **Works**: a product and a delivery (`ss.vaccinate(ss.Vaccine(efficacy=0.9), where=...)`), with the disease unchanged |
 | A particle filter on a model whose transmission is a fitted value times a season times a mobility series | **Works**: the log-likelihood peaks at the true value |
 | A posterior with no likelihood (ABC-SMC, with `wmape` as the distance), then projections from it under scenarios, as quantile tables | **Works**: `sim.calibrate(method='abc-smc')`, `fit.project(scenarios, n=)`, and `.to_df(quantiles=)`, below |
 | A posterior with a likelihood | **Works**: particle MCMC for a stochastic model, NUTS for an ODE, with R-hat and ESS |
-| Populations and contact matrices for US states (`load_epydemix_population("United_States__Massachusetts")`) | **Fails**: Starsim's data have 177 countries and no subnational places, so `ss.people('United States:Massachusetts')` raises `UnknownLocation` |
+| Populations and contact matrices for US states (`load_epydemix_population("United_States__Massachusetts")`) | **Fails** until `starsim_data` publishes them: `ss.people('United States:Massachusetts')` (US Census, 2023) and `ss.contacts('United States:Massachusetts', layer='school')` (Mistry et al. 2021) read the 50 states and DC, but the files cannot be downloaded yet |
 | Other solvers: the same model as an ODE, by Gillespie's method, or as agents | **Works**: `solver='ode'`, `'gillespie'`, or `'abm'` |
 
 A posterior with no likelihood, then projections from it. Here the model is an SIR in a million people whose transmission is a fitted value `b` times a season times a mobility series, fitted to weekly infections drawn from a run at `b = 0.5`:

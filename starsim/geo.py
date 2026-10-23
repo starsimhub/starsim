@@ -1,5 +1,5 @@
 """
-Places and the movement between them: a geography (`ss.geo.geography`), and movement between its places (`ss.geo.Mobility`, from a matrix, a data file of moves, or a movement model such as `ss.geo.gravity`)
+Places and the movement between them: a geography (`ss.geo.geography`), and movement between its places (`ss.geo.Mobility`, from a matrix, a data file of moves, or a movement model: `ss.geo.gravity` or `ss.geo.radiation`)
 """
 import numpy as np
 import pandas as pd
@@ -7,7 +7,9 @@ import scipy.sparse as spsp
 import sciris as sc
 import starsim as ss
 
-__all__ = ['geography', 'gravity', 'Mobility']
+__all__ = ['geography', 'gravity', 'radiation', 'Mobility']
+
+shapefiles = ('.shp', '.geojson', '.gpkg') # Files of shapes, read with geopandas
 
 
 class geography:
@@ -19,7 +21,8 @@ class geography:
     two levels of every country are bundled, so this needs no download.
 
     Args:
-        data (dataframe/str/list): a country (or a list of them) by name or code, e.g. 'Kenya' or 'KE'; or a table (or the name of a file holding one) with a column `name`, and optionally `pop`, and `x` and `y` or `lat` and `lon`
+        data (dataframe/str/list): a country (or a list of them) by name or code, e.g. 'Kenya' or 'KE'; or a table (or the name of a file holding one) with a column `name`, and optionally `pop` (or `population`), and `x` and `y` or `lat` and `lon`;
+            or your own shapes, as a GeoDataFrame or a .shp, .geojson, or .gpkg file (read with geopandas), whose places are at the centroids of their shapes (in degrees, if it has a coordinate reference system)
         level (int/str): for a country, the administrative level: 1 (the default) for its first-level units (counties, provinces, states), 2 for the next (fetched), 0 for the country itself
         year (int): for a country, the year of the populations (default: those bundled, for 2020; another year is fetched)
         places (list): for a country, only these units, by name, `dot_name` ('Kenya:Nairobi'), or p-code
@@ -36,6 +39,7 @@ class geography:
         ```python
         kenya = ss.geo.geography('Kenya', level=1) # Its 47 counties
         towns = ss.geo.geography(names=['north', 'south', 'east'], pop=[50_000, 30_000, 20_000], x=[0, 0, 40], y=[0, 30, 0])
+        districts = ss.geo.geography('districts.shp') # Your own shapes, with columns name and population
         S, I, R = ss.states(3)
         sir = ss.Disease(infection=S >> I @ 0.3*I, recovery=ss.Transition(I, R, dur=10), init_prev=0.01)
         sir.stratify(patch=towns, mobility=ss.geo.gravity(k=0.01))
@@ -45,18 +49,33 @@ class geography:
         self.ref = None # Where a named geography came from, for the model spec
         self.area = None
         self.codes = None
-        named = isinstance(data, str) and not data.endswith(('.csv', '.xlsx')) or (isinstance(data, (list, tuple)) and all(isinstance(d, str) for d in data))
+        named = isinstance(data, str) and not data.endswith(('.csv', '.xlsx') + shapefiles) or (isinstance(data, (list, tuple)) and all(isinstance(d, str) for d in data))
         if named: # A country's administrative units, from starsim_data
             found = ss.data.geography(data, level=level, year=year, places=places)
             names, lat, lon, adjacency = [found[key] for key in ['names', 'lat', 'lon', 'adjacency']]
             pop = found['pop'] if pop is None else pop # Populations given by hand win
             self.area, self.codes, self.ref = found['area'], found['codes'], found['ref']
             data = None
+        elif isinstance(data, str) and data.endswith(shapefiles):
+            try:
+                import geopandas as gpd # Optional, since only files of shapes need it
+            except ImportError as E:
+                errormsg = f'Reading the shapes in "{data}" needs geopandas: pip install geopandas'
+                raise ImportError(errormsg) from E
+            data = gpd.read_file(data)
         elif isinstance(data, str):
             data = sc.dataframe.read_csv(data) if data.endswith('.csv') else sc.dataframe.read_excel(data)
         if data is not None:
-            cols = {key:data[key].tolist() for key in ['name', 'pop', 'x', 'y', 'lat', 'lon'] if key in data.columns}
+            cols = {key:data[key].tolist() for key in ['name', 'pop', 'population', 'x', 'y', 'lat', 'lon'] if key in data.columns}
             names, pop, x, y, lat, lon = [cols.get(key) for key in ['name', 'pop', 'x', 'y', 'lat', 'lon']]
+            pop = sc.ifelse(pop, cols.get('population'))
+            if 'geometry' in data.columns: # Shapes: each place is at the centroid of its shape
+                if getattr(data, 'crs', None) is not None: # Found on an equal-area projection, in degrees
+                    centroids = data.geometry.to_crs('EPSG:6933').centroid.to_crs('EPSG:4326')
+                    lat, lon = centroids.y.tolist(), centroids.x.tolist()
+                else: # Positions in the shapes' own units
+                    centroids = data.geometry.centroid
+                    x, y = centroids.x.tolist(), centroids.y.tolist()
         if names is None:
             errormsg = 'ss.geo.geography() needs the names of the places: names=[...], or a table with a column called "name"'
             raise ValueError(errormsg)
@@ -143,6 +162,60 @@ class gravity:
         return out
 
 
+class radiation:
+    """
+    The radiation model of movement (Simini et al. 2012), which has no parameters to fit: of the people from place `i` who travel,
+    the share who go to place `j` is `pop[i] × pop[j] / ((pop[i] + s) × (pop[i] + pop[j] + s))`, where `s` is the population of the
+    other places nearer to `i` than `j` is
+
+    It is used as `ss.geo.gravity` is, with the populations and distances of the geography of the dimension it is used on
+    (`ss.geo.geography`): the model gives where people go, and `away=` how much they travel. With neither `away` nor `k`,
+    people spend 10% of their time away. The shares are normalized to sum to 1 for each place, so for migration `k` is the
+    rate at which each person moves.
+
+    Args:
+        away (float): for commuting and visiting, the share of their time people spend away from home (default 0.1, unless `k` is given)
+        k (float): the overall amount of movement, instead of `away`: the share of their time away, or for migration the rate of moving (required)
+
+    Examples:
+        ```python
+        sir.stratify(patch=towns, mobility=ss.geo.radiation(away=0.1))
+        sir.stratify(patch=towns, mobility=ss.geo.Mobility(ss.geo.radiation(k=2e-5), kind='migrate')) # 2e-5 moves per person per unit of time
+        ```
+    """
+    def __init__(self, away=None, k=None):
+        if away is not None and k is not None:
+            errormsg = 'ss.geo.radiation() takes away= (the share of time spent away) or k= (the amount of movement), not both'
+            raise ValueError(errormsg)
+        self.away = away
+        self.k = k
+        return
+
+    def __repr__(self):
+        amount = f'away={self.away}' if self.away is not None else f'k={self.k}' if self.k is not None else ''
+        return f'radiation({amount})'
+
+    def matrix(self, strat):
+        """ The movement between each pair of levels of a stratification, from its geography """
+        place = strat.geo
+        if place is None or place.distances is None or place.pop is None:
+            raise ss.errors.NoGeography(f'ss.geo.radiation() is used on "{strat.name}", which has no geography to give the populations and distances it needs.\n'
+                                 f'     Give the places with ss.geo.geography(names=[...], pop=[...], x=[...], y=[...]), or give the movement itself with ss.geo.Mobility(matrix=...).')
+        pop, dist = place.pop, place.distances
+        order = np.argsort(dist, axis=1, kind='stable')
+        nearer = np.zeros((len(pop), len(pop) + 1))
+        nearer[:, 1:] = np.cumsum(pop[order], axis=1) # The population of the n nearest places to each, itself included
+        s = np.empty_like(dist)
+        for i in range(len(pop)): # The population of the places strictly nearer to i than each j, without i itself
+            s[i] = nearer[i, np.searchsorted(dist[i, order[i]], dist[i], side='left')] - pop[i]
+        m, n = pop[:, None], pop[None, :]
+        with np.errstate(divide='ignore', invalid='ignore'):
+            out = m*n/((m + s)*(m + n + s))/(1 - pop[:, None]/pop.sum()) # Normalized for the finite population, so each row sums to 1
+        np.fill_diagonal(out, 0)
+        out = np.nan_to_num(out)
+        return float(sc.ifelse(self.k, 1.0))*out
+
+
 class Mobility:
     """
     Movement between the levels of a spatial stratification
@@ -170,7 +243,7 @@ class Mobility:
     order of the table.
 
     Args:
-        model (gravity): a movement model (instead of `matrix`)
+        model (gravity/radiation): a movement model (instead of `matrix`)
         matrix (array): the movement from each place (rows) to each place: for commuting the share of time spent there, and for migration the rate of moving there (a SciPy sparse array for many places, most pairs of which share no one)
         data (str/df): a movement register: a file name or a dataframe (instead of `model` or `matrix`)
         kind (str): 'commute', 'visit', 'migrate', or 'force'; by default 'migrate' for a register and 'commute' otherwise
@@ -199,10 +272,10 @@ class Mobility:
             errormsg = f'A movement register moves people from one place to another, so its kind is "migrate", not "{kind}"'
             raise ValueError(errormsg)
         self.guessed = None
-        if isinstance(model, gravity): # The amount of movement: away= here, or on the gravity model, or its k
+        if isinstance(model, (gravity, radiation)): # The amount of movement: away= here, or on the movement model, or its k
             away = sc.ifelse(away, model.away)
             if kind == 'migrate' and model.k is None:
-                errormsg = 'ss.geo.gravity() for migration needs k=, the scale of the rates of moving; the share of time away (away=) is for commuting and visiting'
+                errormsg = f'ss.geo.{type(model).__name__}() for migration needs k=, the scale of the rates of moving; the share of time away (away=) is for commuting and visiting'
                 raise ValueError(errormsg)
             if away is None and model.k is None:
                 away = 0.1
@@ -215,8 +288,8 @@ class Mobility:
         return
 
     def fitted(self):
-        """ The parameters (`ss.par`) in the movement, by attribute (`away`, and the gravity model's `k`, `a`, `b`, `c`), which set the mixing when a sim is built """
-        objs = dict(away=self) | ({key:self.model for key in ['k', 'a', 'b', 'c']} if isinstance(self.model, gravity) else {})
+        """ The parameters (`ss.par`) in the movement, by attribute (`away`, and the movement model's `k`, and gravity's `a`, `b`, `c`), which set the mixing when a sim is built """
+        objs = dict(away=self) | {key:self.model for key in ['k', 'a', 'b', 'c'] if hasattr(self.model, key)}
         return {key:getattr(obj, key) for key,obj in objs.items() if isinstance(getattr(obj, key), ss.par)}
 
     def __repr__(self):

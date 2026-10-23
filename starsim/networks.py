@@ -326,6 +326,15 @@ class Network(Route):
         if add_pairs: self.add_pairs()
         return
 
+    def mean_contacts(self, sim):
+        """
+        For a compartmental run: the mean number of contacts per person per unit of the sim's time, which homogeneous mixing approximates
+        this network by, and where it comes from; or None, and why, if it has no such approximation (the default). A network of
+        partnerships has none: its contacts last, so their number per unit time is not its number of partners (it uses the
+        partner-change model instead: see `ss.solvers.Mixing.partnerships()`).
+        """
+        return None, ''
+
     def __len__(self):
         """ The length is the number of edges """
         try:    return len(self.edges.p1)
@@ -687,10 +696,19 @@ class Network(Route):
 
 
 class DynamicNetwork(Network):
-    """ A network where partnerships update dynamically """
-    def __init__(self, pars=None, edges=None, **kwargs):
+    """
+    A network where partnerships update dynamically
+
+    Args:
+        memory (dur): how long it remembers partnerships that have ended (default: not at all); `find_contacts()`, and so
+            contact tracing (`trace=` of a delivery), then also reaches the partners of the last `memory`, e.g. `memory=ss.months(12)`
+            for partner notification of the past year's partners
+    """
+    def __init__(self, pars=None, edges=None, memory=None, **kwargs):
         super().__init__(pars=pars, edges=edges, **kwargs)
+        self.define_pars(memory=memory)
         self.meta.dur = ss_float # Add duration to the meta keys for dynamic networks
+        self.history = None # With memory=: the partnerships that ended, as p1, p2, and the step they ended on
         return
 
     def step(self):
@@ -703,10 +721,29 @@ class DynamicNetwork(Network):
         """ Remove partnerships whose duration has expired or whose members have died. """
         n = len(self)
         k, gone = ss.perflib._passes.ending(self.edges.dur, self.edges.p1, self.edges.p2, self.sim.people.alive.raw) # Those with no steps left after this one, or a partner not alive
+        if self.pars.get('memory') is not None:
+            ended = gone if k < n else slice(None)
+            self.remember(self.edges.p1[ended], self.edges.p2[ended])
         self.drop_edges(k, gone)
         if k < n:
             self.edges.dur = self.edges.dur - 1 # dur is stored in units of self.t.dt (timesteps), so decrement by 1 per step
         return n
+
+    def remember(self, p1, p2):
+        """ With memory=: keep the partnerships that end now, and forget those that ended longer ago than it """
+        m, sim, ti = self.pars.memory, self.sim, self.t.ti
+        steps = (ss.solvers.convert(m, sim.unit_base) if isinstance(m, ss.TimePar) else m)/self.t.dt.to(sim.unit_base).value
+        h = self.history if self.history is not None else sc.objdict(p1=p1[:0], p2=p2[:0], ti=np.zeros(0, dtype=np.int32))
+        keep = h.ti > ti - steps
+        self.history = sc.objdict(p1=np.concatenate([h.p1[keep], p1]), p2=np.concatenate([h.p2[keep], p2]), ti=np.concatenate([h.ti[keep], np.full(len(p1), ti, dtype=np.int32)]))
+        return
+
+    def find_contacts(self, inds, as_array=True):
+        """ Find all contacts of the specified people (see `ss.Network.find_contacts()`), including, with memory=, their partners of the last `memory` """
+        if self.history is None:
+            return super().find_contacts(inds, as_array=as_array)
+        p1, p2 = np.concatenate([self.edges.p1, self.history.p1]), np.concatenate([self.edges.p2, self.history.p2])
+        return ss.utils.find_contacts(p1, p2, sc.toarray(inds), as_array=as_array)
 
 
 def check_acts(net, acts):
@@ -804,6 +841,13 @@ class RandomNet(DynamicNetwork):
             raise ValueError(errormsg)
         self.dist = ss.Dist(distname='RandomNet') # Default RNG; the same name for every method, so results stay reproducible
         return
+
+    def mean_contacts(self, sim):
+        """ Its mean number of contacts (see `ss.Network.mean_contacts()`) """
+        n_contacts = self.pars.get('n_contacts')
+        if n_contacts is None:
+            return super().mean_contacts(sim)
+        return ss.solvers.Mixing.mean(n_contacts, sim.unit_base), 'its mean number of contacts'
 
     def get_edges(self, inds, n_contacts):
         """
@@ -1062,15 +1106,23 @@ class DegreeTargets:
         more, the maximum, and with `match=`, the share of partnerships at the same
         level), the target, the mean over the second half of each run, and the spread
         across runs; a target that is missed by more than the spread is an `ss.errors.TargetStatsNotRecovered` warning.
+        With a number of partners for each level (`n_contacts=ss.by(...)`), each level has
+        a row of its own (e.g. `mean_degree[high]`), and these and the rows for everyone are
+        at the end of each run, with the targets for everyone those of the mix of levels then
+        (which changes if, say, more die at one level).
 
         Args:
             n_runs (int): the number of runs
-            output (bool): return the table instead of printing it
+            output (bool): only return the table, without printing it
+
+        Returns:
+            The table, as a dataframe
         """
         if not hasattr(self.sim, 'inputs'):
             errormsg = f'net.check() reruns the sim, which can only be rebuilt from the inputs it was made with; the network\'s results (mean_degree, concurrency) show how close it is to the targets'
             raise ValueError(errormsg)
         rows = []
+        mixes = [] # With a number of partners for each level, the share of people at each level at the end of each run
         for i in range(n_runs):
             run = self.sim.new(rand_seed=i + 1, verbose=0).run()
             net = run.networks[self.name]
@@ -1081,19 +1133,24 @@ class DegreeTargets:
                 n_alive = len(run.people.alive.uids)
                 row['dur'] = res.mean_degree[half:].mean()*n_alive/2/res.new_partnerships[half:].mean()
             if getattr(net, 'by_level', None) is not None:
-                uids = run.people.alive.uids
+                uids = net.people_seeking(run.people)
                 level = np.asarray(net.levels(net.by_level))[uids].astype(int)
                 degree = net.degrees(uids)
+                names = self.level_names(net.by_level)
                 for lev in range(len(net.dists_degree)):
-                    row[f'mean_degree[{lev}]'] = degree[level == lev].mean() if np.any(level == lev) else np.nan
+                    row[f'mean_degree[{names[lev]}]'] = degree[level == lev].mean() if np.any(level == lev) else np.nan
+                mixes.append(np.bincount(level, minlength=len(net.dists_degree))[:len(net.dists_degree)]/max(len(level), 1))
+                row.update(mean_degree=degree.mean() if len(degree) else 0, concurrency=(degree >= 2).mean() if len(degree) else 0) # At the end, as for each level, so for the same mix
             for key,name in getattr(self, 'match_results', {}).items():
                 row[name] = res[name][half:].mean()
             rows.append(row)
         df = sc.dataframe(rows)
-        k = np.arange(len(self.dist_degree))
-        targets = dict(mean_degree=self.dist_degree @ k, concurrency=self.dist_degree[2:].sum(), max_contacts=self.pars.get('max_contacts'), dur=getattr(self, 'mean_dur', None))
+        dist = self.dist_degree if not mixes else np.mean(mixes, axis=0) @ np.array(self.dists_degree) # For everyone: with levels, for the mix of levels at the end of the runs
+        k = np.arange(len(dist))
+        targets = dict(mean_degree=dist @ k, concurrency=dist[2:].sum(), max_contacts=self.pars.get('max_contacts'), dur=getattr(self, 'mean_dur', None))
         if getattr(self, 'by_level', None) is not None:
-            targets.update({f'mean_degree[{lev}]':d @ np.arange(len(d)) for lev,d in enumerate(self.dists_degree)})
+            names = self.level_names(self.by_level)
+            targets.update({f'mean_degree[{names[lev]}]':d @ np.arange(len(d)) for lev,d in enumerate(self.dists_degree)})
         for key,name in getattr(self, 'match_results', {}).items():
             targets[name] = self.pars.match[key]
         table = sc.dataframe(dict(target=[targets[c] for c in df.columns], realized=df.mean().values, spread=df.std().values), index=df.columns)
@@ -1103,10 +1160,15 @@ class DegreeTargets:
             missed = row.realized > row.target if name == 'max_contacts' else abs(row.realized - row.target) > max(2*row.spread, 0.02*abs(row.target))
             if missed:
                 ss.warn(f'the network "{self.name}" has {name} {row.realized:.3g}, against a target of {row.target:.3g}', ss.errors.TargetStatsNotRecovered)
-        if output:
-            return table
-        print(table)
-        return
+        if not output:
+            print(table)
+        return table
+
+    def level_names(self, name):
+        """ The name of each level of a property of people, for the rows of `check()`: a stratification's labels (e.g. low, high), or else the levels' numbers """
+        strats = {strat.name:strat for strat in self.sim.groups.strats}
+        n = len(self.dists_degree) if getattr(self, 'dists_degree', None) is not None else 0
+        return [str(label) for label in strats[name].labels] if name in strats else [str(lev) for lev in range(n)]
 
 
 class SexualNet(DegreeTargets, DynamicNetwork):
@@ -1981,7 +2043,7 @@ def check_contacts(matrix, dim):
     return
 
 
-def contacts(matrix=None, bands=None, name=None, source='prem2021', layer='all', unit=None, **dims):
+def contacts(matrix=None, bands=None, name=None, source=None, layer='all', unit=None, **dims):
     """
     Mixing between groups from a contact matrix; returns `ss.MixingPools`
 
@@ -1996,11 +2058,11 @@ def contacts(matrix=None, bands=None, name=None, source='prem2021', layer='all',
     when that is not a product, e.g. men mix with women, and by risk differently for each sex.
 
     Args:
-        matrix (array/str): a country, by name or code ('Kenya', 'KE'); or `matrix[i,j]`, the number of contacts per unit time that one person in age band `i` has with people in age band `j`
+        matrix (array/str): a country, by name or code ('Kenya', 'KE'), or a US state ('United States:Massachusetts'); or `matrix[i,j]`, the number of contacts per unit time that one person in age band `i` has with people in age band `j`
         bands (list/array): the lower edge of each age band of `matrix`, e.g. `[0, 15, 65]`
         name (str): the name of the mixing (default: 'contacts', or the layer, e.g. 'home')
-        source (str): for a country, the study: 'prem2021' (the default; bundled, 177 countries), 'prem2017' (152), or 'mistry2021' (36, by single year of age); the last two are downloaded on first use
-        layer (str): for a country, the setting: 'all' (the default), 'home', 'school', 'work', or 'community'
+        source (str): for a country, the study: 'prem2021' (the default; bundled, 177 countries), 'prem2017' (152), or 'mistry2021' (36, by single year of age); for a US state, 'mistry2021_us' (the default; by single year of age); all but the first are downloaded on first use
+        layer (str/list): for a country, the setting: 'all' (the default), 'home', 'school', 'work', or 'community'; or a list of them, for a list of layers, each named by its setting
         unit (str): the unit of time the contacts are counted over, e.g. 'day' for contacts a day; by default 'day' for a country's matrix (as the studies give them), and otherwise the sim's unit, as for any bare number
         dims (list/dict): with `matrix`, the stratifications it is over, e.g. `dims=['sex', 'risk']`: `matrix[i, k, j, l]` is the number of contacts per unit time
             that one person at levels `(i, k)` has with people at levels `(j, l)`, or the same as a square matrix over the combinations of levels, the first stratification slowest;
@@ -2016,7 +2078,7 @@ def contacts(matrix=None, bands=None, name=None, source='prem2021', layer='all',
         sir.stratify(risk=['low', 'high'])
         mixing = ss.contacts(risk=[[2, 1], [1, 8]])
 
-        home, school = ss.contacts('Kenya', layer='home'), ss.contacts('Kenya', layer='school') # Contacts a day, by 5-year age group
+        home, school = ss.contacts('Kenya', layer=['home', 'school']) # Contacts a day, by 5-year age group
         sim = ss.Sim(sir, networks=[home, school], stratify=dict(age=[0, 5, 18, 65]), unit='day', stop=100)
 
         # Men mix with women, and the high-risk with each other more among men than among women: a matrix over sex and risk together
@@ -2026,6 +2088,8 @@ def contacts(matrix=None, bands=None, name=None, source='prem2021', layer='all',
         mixing = ss.contacts(matrix, dims=['sex', 'risk'])
         ```
     """
+    if isinstance(layer, (list, tuple)): # Several settings, e.g. ss.contacts('Kenya', layer=['home', 'school', 'work', 'community'])
+        return [contacts(matrix, bands=bands, source=source, layer=lay, unit=unit, **dims) for lay in layer]
     name = name or (layer if layer != 'all' else 'contacts')
     over = dims.pop('dims', None)
     if over is not None: # One matrix over several of the model's stratifications together

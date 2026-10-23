@@ -1,5 +1,5 @@
 """
-Write a summer2 model to JSON, for `ss.load(..., format='summer2')`
+Write a summer2 model to JSON, for `ss.interop.load(..., format='summer2')`
 
 This runs where summer2 is installed, and needs neither Starsim nor Sciris, so it can
 be copied into any summer2 environment. Run it on a function that builds the model,

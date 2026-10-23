@@ -79,7 +79,8 @@ def load_summer2(source, pars=None, verbose=None):
     **Example**:
 
         # In the summer2 environment: python dump_summer2.py my_model.py:build_model model.json
-        sim = ss.load('model.json', format='summer2')
+        import starsim.interop
+        sim = ss.interop.load('model.json', format='summer2')
     """
     d = read(source, pars=pars)
     values = {**d.get('parameters', {}), **(pars or {})}

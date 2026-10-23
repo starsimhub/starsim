@@ -366,125 +366,6 @@ def find_contacts(p1, p2, inds, as_array=False):
 
 # %% Data cleaning and processing
 
-def parse_age_range(age_string) -> tuple:
-    """
-    Parse an age range string into lower and upper bounds.
-
-    Extracts the numeric bounds from a variety of age range formats. Note that
-    bracket/interval notation (e.g. `[15,25)` vs `(15,25]`) is accepted but
-    the brackets are stripped — all formats return a plain `(lower, upper)`
-    tuple. To get a boolean mask that respects bracket semantics (inclusive vs
-    exclusive bounds), use :func:`apply_age_range` instead.
-
-    Example usage::
-
-        >>> ss.parse_age_range('5-9')
-        (5.0, 9.0)
-        >>> ss.parse_age_range('[15,25)')
-        (15.0, 25.0)
-        >>> ss.parse_age_range('(15,25]')
-        (15.0, 25.0)
-
-    Supported formats:
-        - `'5-9'` or `'5 to 9'`
-        - `'<5'` — returns `(0.0, 5.0)`
-        - `'95+'` — returns `(95.0, np.inf)`
-        - `'>95'` — returns `(95.0, np.inf)`
-        - `'[15,25)'`, `'(15,25]'`, `'[15,25]'`, `'(15,25)'` — bracket
-          notation; brackets are stripped, returns `(15.0, 25.0)` in all cases
-
-    Args:
-        age_string: a string specifying an age range
-
-    Returns:
-        A tuple `(lower, upper)` as floats.
-    """
-    s = str(age_string).strip()
-
-    # Bracket/interval notation: [15,25) or (15,25] etc.
-    if s and s[0] in '([' and s[-1] in ')]' and ',' in s:
-        inner = s[1:-1]
-        parts = inner.split(',', 1)
-        age_lower = float(parts[0].strip())
-        age_upper = float(parts[1].strip())
-    else:
-        s = s.lower()
-        if '+' in s:
-            age_lower = float(s.split('+')[0])
-            age_upper = np.inf
-        elif '-' in s:
-            age_lower = float(s.split('-')[0])
-            age_upper = float(s.split('-')[1])
-        elif s.startswith('<'):
-            age_lower = 0.0
-            age_upper = float(s[1:])
-        elif s.startswith('>'):
-            age_lower = float(s[1:])
-            age_upper = np.inf
-        elif 'to' in s:
-            parts = s.split('to')
-            age_lower = float(parts[0])
-            age_upper = float(parts[1])
-        else:
-            raise ValueError(f'Cannot parse age range: {age_string!r}')
-
-    if age_lower < 0 or age_upper < 0:
-        raise ValueError('Age bounds cannot be negative')
-    if age_lower >= age_upper:
-        raise ValueError(f'Lower bound ({age_lower}) must be less than upper bound ({age_upper}): {age_string!r}')
-
-    return age_lower, age_upper
-
-
-def apply_age_range(age_string, arr):
-    """
-    Return a boolean mask for values in `arr` that fall within the age range.
-
-    For bracket/interval notation, respects inclusive `[` `]` vs exclusive
-    `(` `)` bounds. For other formats, uses standard conventions:
-
-        - `'5-9'`, `'5 to 9'` → `[5, 9)` (inclusive lower, exclusive upper)
-        - `'<5'` → `[0, 5)`
-        - `'>95'` → `(95, inf)`
-        - `'95+'` → `[95, inf)`
-        - `'[15,25)'` → `>= 15` and `< 25`
-        - `'(15,25]'` → `> 15` and `<= 25`
-
-    Example usage::
-
-        >>> import numpy as np
-        >>> ages = np.array([14, 15, 20, 24, 25])
-        >>> ss.utils.apply_age_range('[15,25)', ages)
-        array([False,  True,  True,  True, False])
-
-    Args:
-        age_string: a string specifying an age range
-        arr: a numeric array to filter
-
-    Returns:
-        A boolean array of the same shape as `arr`.
-    """
-    s = str(age_string).strip()
-
-    # Bracket/interval notation — respect the brackets
-    if s and s[0] in '([' and s[-1] in ')]' and ',' in s:
-        lo_inc = s[0] == '['
-        hi_inc = s[-1] == ']'
-        lo, hi = parse_age_range(s)
-        left  = (arr >= lo) if lo_inc else (arr > lo)
-        right = (arr <= hi) if hi_inc else (arr < hi)
-        return left & right
-
-    # Non-bracket formats — use conventional semantics
-    lo, hi = parse_age_range(s)
-    s_lower = s.lower()
-    if s_lower.startswith('>'):
-        return arr > lo  # Exclusive lower, no upper
-    else:
-        # '5-9', '5 to 9', '<5', '95+' all use [lo, hi)
-        return (arr >= lo) & (arr < hi)
-
-
 def standardize_netkey(key):
     """ 
     Standardize network key names
@@ -758,7 +639,7 @@ def shrink(obj=None, attrs=None, verbose=False):
     numbers of sims. It is good practice to write `shrink()` methods for modules to remove
     any temporary arrays or other memory-intensive objects.
 
-    `ss.shrink()` can be used to either manually replace an object, or replace multiple attributes 
+    `ss.utils.shrink()` can be used to either manually replace an object, or replace multiple attributes 
     of an object in-place. It is used rather than simply deleting attributes or setting them to
      `None` to make it clear that the attributes were intentionally removed.
 
@@ -771,17 +652,17 @@ def shrink(obj=None, attrs=None, verbose=False):
         ```python
         # "Shrink" (remove) the People object
         sim = ss.Sim()
-        ss.shrink(sim, 'people')
+        ss.utils.shrink(sim, 'people')
 
         # Equivalent behavior, used manually
-        sim.people = ss.shrink()
+        sim.people = ss.utils.shrink()
         ```
     """
     none_count = sum([x is None for x in [obj, attrs]])
     if none_count == 2:
         return Shrunk()
     elif none_count == 1:
-        errormsg = 'You can call ss.shrink() with both obj and attrs, or with neither, but not one or the other'
+        errormsg = 'You can call ss.utils.shrink() with both obj and attrs, or with neither, but not one or the other'
         raise ValueError(errormsg)
     else:
         for attr in sc.tolist(attrs):

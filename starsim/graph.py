@@ -512,6 +512,7 @@ class Graph(Presentation):
 
         # Name the anonymous ones after their slot, qualified by the transition where two would clash
         anon = [(tr, slot, p) for tr,slot,p in slots if p.literal or getattr(p, 'slot_named', False) or (p.name is None and self.names.get(id(p)) is None)] # Including an ss.par written in the slot itself, e.g. beta=ss.par(0.3, bounds=[0.1, 1]), and one named after its slot before (in a class this one subclasses), which is named again
+        anon = [(tr, slot, p) for i,(tr,slot,p) in enumerate(anon) if not any(q is p for _,_,q in anon[:i])] # One used in several transitions (e.g. beta = ss.seasonal(...)) is one parameter, named after the first
         counts = sc.objdict()
         for tr,slot,p in anon:
             counts[slot] = counts.get(slot, 0) + 1
@@ -646,6 +647,14 @@ class Graph(Presentation):
             if tr.trigger is not None and (tr.contact or tr.inflow or (tr.p is not None and not tr.split and not tr.trigger.outcome)): # On an outcome, p= is the share of its people who move; a split with ss.stay or ss.null is a split, though neither is a state
                 raise ss.errors.BadBranchSplit(f'"{name}" is triggered by {tr.trigger}, so it cannot be {"a transmission" if tr.contact else "an inflow" if tr.inflow else "one branch of several with p="}; '
                                         f'give the destinations of a triggered split together, e.g. "{tr.arrow} | B" with p=[...].')
+            for inc in [c for c in ss.expressions.nodes([tr.rate, tr.dur] + sc.tolist(tr.p)) if isinstance(c, ss.conditions.Cond) and c.op == 'incidence']: # A flow over a window, in a rate, would be a delay equation
+                flow = inc.args[0]
+                mod = ss.conditions.modname(getattr(flow, 'module', None)) or getattr(self.module, 'name', None)
+                path = f'{mod}.{flow.name}' if mod else flow.name
+                dst = (flow.dst or [None])[0]
+                raise ss.CapabilityError(f'"{name}" reads the incidence of "{flow.name}" in its rate, which is not supported yet: a flow over a window, in a rate, needs the history of the flow in every solver.\n'
+                                         f'     Use a count of a state instead, e.g. {getattr(dst, "name", "X")}.n, which is about the flow into it times the time people spend there. '
+                                         f'The incidence can be used in where= of ss.modify(), e.g. ss.modify(..., multiply=0.6, where={path}.incidence(over=ss.days(7)) > 0.001)')
             for clock in ss.expressions.clocks_in([tr.rate, tr.dur] + sc.tolist(tr.p)): # A clock has a value only inside its states, and progress needs a scheduled dwell
                 if clock.module not in [None, self.module] or not all(n in self.states for n in clock.names):
                     continue # Another module's clock: checked when it runs

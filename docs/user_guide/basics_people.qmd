@@ -59,10 +59,11 @@ sim.init()
 
 The `People` that are added to the `Sim` come with the following default states and arrays:
 
-* `alive`, a `State` that records whether each agent is alive
-* `female`, a `State` that records whether each agent is female
+* `alive`, a `BoolState` that records whether each agent is alive
+* `female`, a `BoolState` that records whether each agent is female
 * `age`, a `FloatArr` that records agent ages
-* `ti_dead`, the step on which each agent died (stored as 16-bit integers if the run has fewer than 32,000 steps), NaN by default
+* `ti_dead`, the step on which each agent died (stored as 16-bit integers if the run has fewer than 32,000 steps), NaN by default; `ti_removed` is the same for agents removed for other reasons (e.g. emigration)
+* `cause_of_death`, the cause of each death (its position in `people.causes`, the names of the causes; -1 for none)
 * `scale`, a `FloatArr` that records the number of people that each agent represents; 1 by default, and it takes no memory until one is set (as `parent` and `slot` do not)
 
 ## Creating custom people

@@ -66,6 +66,8 @@ website:
         text: Tutorials
       - href: user_guide.qmd
         text: User guide
+      - href: architecture/index.qmd
+        text: Architecture
       - href: examples.qmd
         text: Examples
       - href: conduct.qmd
@@ -83,7 +85,7 @@ website:
           text: "**Home**"
         - href: ten_minutes.qmd
           text: "**Starsim 4 in ten minutes**"
-        - section: "**Coming from another framework**"
+        - section: "Coming from another framework"
           href: coming_from/index.qmd
           contents:
             - coming_from/epimodel.qmd
@@ -149,6 +151,16 @@ website:
             - user_guide/advanced_rescaling.qmd
             - user_guide/advanced_profiling.qmd
             - user_guide/advanced_nonstandard.qmd
+        - section: "Architecture"
+          href: architecture/index.qmd
+          contents:
+            - architecture/model.qmd
+            - architecture/build_and_run.qmd
+            - architecture/solvers.qmd
+            - architecture/interactions.qmd
+            - architecture/randomness_and_fitting.qmd
+            - architecture/spec_and_interop.qmd
+            - architecture/testing.qmd
         - href: examples.qmd
           text: "**Examples**"
         - href: conduct.qmd
@@ -169,12 +181,23 @@ website:
             - api/people.qmd
             - api/parameters.qmd
             - api/results.qmd
+        - section: "**Models**"
+          contents:
+            - api/transitions.qmd
+            - api/conditions.qmd
+            - api/expressions.qmd
+            - api/dimensions.qmd
+            - api/strains.qmd
+            - api/graph.qmd
+            - api/presentation.qmd
+            - api/spec.qmd
         - section: "**Modules**"
           contents:
             - api/modules.qmd
             - api/diseases.qmd
             - api/networks.qmd
             - api/demographics.qmd
+            - api/pregnancy.qmd
             - api/interventions.qmd
             - api/products.qmd
             - api/analyzers.qmd
@@ -182,7 +205,11 @@ website:
         - section: "**Workflows**"
           contents:
             - api/run.qmd
-            - api/calibration.qmd
+            - api/fit.qmd
+            - api/gradients.qmd
+            - api/geo.qmd
+            - api/data.qmd
+            - api/interop.qmd
         - section: "**Library**"
           contents:
             - api/library.diseases.qmd
@@ -195,6 +222,7 @@ website:
             - api/dates.qmd
             - api/timeline.qmd
             - api/distributions.qmd
+            - api/errors.qmd
             - api/settings.qmd
             - api/debugtools.qmd
             - api/utils.qmd
@@ -210,27 +238,48 @@ quartodoc:
     - contents: # No title/desc here: the page already shows an "API reference" heading from the top-level title above (issue #1330)
         - analyzers
         - arrays
-        - calibration
+        - conditions
         - connectors
+        - data
         - dates
         - debugtools
         - demographics
+        - dimensions
         - diseases
         - distributions
+        - errors
+        - expressions
+        - fit
+        - geo
+        - gradients
+        - graph
         - interventions
         - loop
         - modules
         - networks
         - parameters
         - people
+        - pregnancy
+        - presentation
         - products
         - results
         - run
         - settings
         - sim
+        - spec
+        - strains
         - time
         - timeline
+        - transitions
         - utils
+        - kind: page
+          path: interop
+          package: starsim
+          contents:
+            - kind: auto
+              name: interop
+              include_imports: true
+              children: embedded
     - title: Library
       desc: |
         Example and reference modules that build on core Starsim but are not part of it.
@@ -272,6 +321,7 @@ format:
       light: [cosmo, ./assets/styles-light.scss]
       dark: [cosmo, ./assets/styles-dark.scss]
     css: ./assets/styles.css
+    include-after-body: ./assets/collapse_sections.html
     toc: true
     toc-expand: true
     toc-depth: 5

@@ -7,6 +7,7 @@ import os
 import inspect
 import sys
 import tempfile
+import warnings
 import functools
 import numpy as np
 import pandas as pd
@@ -58,6 +59,10 @@ def series_weight(weights, col):
 def likelihoods(sim, df=None, likelihood=None):
     """ The likelihood of each data series: given at calibration time (by column or result name), else declared on the outcome, else None """
     df = sim.data if df is None else df
+    if likelihood is not None and not isinstance(likelihood, dict):
+        cols = [] if df is None else list(df.columns)
+        errormsg = f'likelihood= takes the likelihood of each data series by name, e.g. likelihood=dict({cols[0] if cols else "cases"}={likelihood}), not one {type(likelihood).__name__}'
+        raise TypeError(errormsg)
     out = sc.objdict()
     for col in ([] if df is None else df.columns): # No data, with a loss that is a function of the sim
         name = parse_column(col)[0] # A stratum of a result has the likelihood of the result
@@ -425,15 +430,10 @@ class Swarm:
             errormsg = 'IF2 fits a sim with one declared disease (not tracked jointly with another); use method="pmcmc"'
             raise ValueError(errormsg)
         self.engine = engine = mods[0].engine
-        self.index = {}
-        for i,(name,par) in enumerate(zip(self.names, self.fitted)): # The parameter objects that stand for each fitted value, as in ss.gradients.Density
-            self.index[id(par)] = i
-            graph_par = engine.mod.graph.pars.get(name.rpartition('.')[2])
-            if graph_par is not None:
-                self.index[id(graph_par)] = i
-            if sim.modifiers.get((engine.mod.name, 'par', name.rpartition('.')[2])):
-                errormsg = f'IF2 cannot fit "{name}", which a modifier changes; use method="pmcmc"'
-                raise ValueError(errormsg)
+        self.index, modified = ss.gradients.fitted_index(self.names, self.fitted, [engine.mod], sim) # The parameter objects that stand for each fitted value, as in ss.gradients.Density
+        if modified:
+            errormsg = f'IF2 cannot fit "{modified[0]}", which a modifier changes; use method="pmcmc"'
+            raise ValueError(errormsg)
         self.consts = {k:self.index[id(par)] for k,par in enumerate(engine.prog_pars) if id(par) in self.index}
         self.flows = []
         for f,flow in enumerate(engine.flows): # The flows whose rate is worked out from fitted values alone, as in ss.gradients.Density
@@ -487,13 +487,7 @@ class Swarm:
 
     def convert(self, i, val):
         """ A fitted value as the engine uses it: in the sim's unit, as `ss.gradients.Density.convert()` """
-        raw = self.fitted[i].raw
-        if isinstance(raw, ss.prob):
-            period = 1.0 if raw.unit is None else raw.unit.to(self.sim.unit_base).value
-            return -np.log1p(-val)/period
-        elif isinstance(raw, ss.TimePar):
-            return val*ss.solvers.convert(type(raw)(1.0), self.sim.unit_base)
-        return val
+        return ss.gradients.convert_fitted(self.fitted[i].raw, val, self.sim.unit_base)
 
     def start(self, z, n):
         """ Start every one of n particles at the same values (on the search scale) """
@@ -525,12 +519,7 @@ class Swarm:
         if self.flows:
             out[0] = np.repeat(out[0], n, axis=0)
             for f,flow,dw,mult in self.flows:
-                if flow.expr is None: # A dwell time: the stages over the mean
-                    val = ctx.value(dw.par)
-                    base = (flow.stages if flow.kind == 'stage' else 1)/(1/val if dw.is_rate else val)
-                else:
-                    base = ss.transitions.evaluate(flow.expr, ctx)
-                out[0][:, :, f, :] = base*mult
+                out[0][:, :, f, :] = ss.gradients.fixed_rate(flow, dw, ctx)*mult
         if self.consts:
             out[2] = np.repeat(out[2], n, axis=0)
             for k,i in self.consts.items():
@@ -943,7 +932,7 @@ class Fit(sc.prettyobj):
 
     def project(self, scenarios=None, n=100, rand_seed=None, **kwargs):
         """
-        Run the fitted model forward under each scenario, with the uncertainty in the fitted values: one run per draw from the posterior (or of the best fit, for a method that gives none), with the same draws in every scenario
+        Run the fitted model forward under each scenario, with the uncertainty in the fitted values: one run per draw from the posterior (or runs of the best fit, each with its own seed, for a method that gives none), with the same draws in every scenario
 
         Args:
             scenarios (dict): for each scenario, what changes: None, an intervention or a list of them, or a dict of arguments for `sim.new()` (default: the fitted sim alone)
@@ -951,7 +940,7 @@ class Fit(sc.prettyobj):
             rand_seed (int): the seed of the draws
             kwargs (dict): passed to `sim.new()` for every scenario, e.g. a later `stop=`
 
-        Returns an `ss.MultiSim`, whose results have a run dimension labelled by scenario (see `msim.to_df(quantiles=...)`).
+        Returns an `ss.MultiSim`, whose results have a run dimension labelled by scenario, with the draws as runs of each scenario (see `msim.to_df(quantiles=...)`, whose quantiles are over the draws).
 
         Examples:
             ```python
@@ -961,19 +950,17 @@ class Fit(sc.prettyobj):
             ```
         """
         names = list(self.table['par']) # With a parameter by level, one name for each level
-        if self.samples is not None:
-            rows = self.samples.sample(n=n, replace=len(self.samples) < n, random_state=rand_seed)[names]
-            sets = rows.to_dict('records')
-        else:
-            sets = [dict(self.pars) for i in range(n)]
         sims = []
         for label,change in (scenarios or dict(fit=None)).items():
             if change is None:
                 change = {}
             elif not isinstance(change, dict):
                 change = dict(interventions=change)
-            sims.append(self.sim.new(label=label, **sc.mergedicts(kwargs, change)))
-        return ss.parallel(*sims, pars=sets)
+            sims.append(self.sim.new(label=label, **sc.mergedicts(dict(pars=dict(self.pars)), kwargs, change)))
+        if self.samples is None:
+            return ss.parallel(*sims, n_runs=n)
+        draws = self.samples.sample(n=n, replace=len(self.samples) < n, random_state=rand_seed)[names]
+        return ss.parallel(*sims, priors=draws) # Draws, not a sweep: runs of each scenario
 
     def summarize(self):
         """ Print the estimates and the goodness of fit before and after """
@@ -1101,6 +1088,7 @@ def correlated_pairs(names, values, threshold):
 
 
 gof_names = ['nae', 'rmse'] # The goodness-of-fit measures that mismatch() knows
+max_scan = 100 # The most points a scan before a search tries by default: 10 per parameter up to 10 parameters
 scipy_methods = ['nelder-mead', 'powell', 'cg', 'bfgs', 'newton-cg', 'l-bfgs-b', 'tnc', 'cobyla', 'cobyqa', 'slsqp', 'trust-constr', 'dogleg', 'trust-ncg', 'trust-exact', 'trust-krylov']
 
 
@@ -1111,6 +1099,7 @@ class Optimization(sc.prettyobj):
     Attributes:
         alloc (dict): the best allocation, by program
         value (float): the result with it
+        total (float): its total (with `target=`, the least that reaches the target)
         alloc_before (dict): the allocation before
         value_before (float): the result with it
         sim (`ss.Sim`): the sim run with the best allocation
@@ -1126,36 +1115,43 @@ class Optimization(sc.prettyobj):
         df = pd.DataFrame(dict(before=self.alloc_before, after=self.alloc))
         print(df.to_string(float_format=lambda v: f'{v:,.0f}'))
         print(f'{self.what}: {self.value_before:,.6g} before, {self.value:,.6g} after ({self.n_runs} runs)')
+        if self.target is not None:
+            print(f'The least total that reaches {self.target:,.6g}: {self.total:,.0f} (from {sum(self.alloc_before.values()):,.0f})')
         return
 
 
-def optimize(sim, total=None, maximize=None, minimize=None, at=None, start=None, spend=None, bounds=None, maxiter=50, verbose=None):
+def optimize(sim, total=None, maximize=None, minimize=None, at=None, start=None, spend=None, bounds=None, target=None, maxiter=50, verbose=None):
     """
-    Allocate spending between programs to maximize (or minimize) a result, keeping the total fixed
+    Allocate spending between programs to maximize (or minimize) a result, keeping the total fixed; or find the least total that reaches a target
 
     The spending of each program is a parameter of the model: one per program of an imported program book
     (`sim.imported.programs`), or any parameters, given by name with `spend=`. The search (SciPy's SLSQP) is
     over the shares of the total, and each point is a run (restarted, if the sim is nothing but compartments).
+    With `target=`, the total is doubled until its best allocation reaches the target, then found by bisection
+    between a total that reaches it and one that does not (to within 1%), assuming that more money never does worse.
 
     Args:
         sim (`ss.Sim`): the sim, not yet run
-        total (float): the total to allocate (default: the current total)
+        total (float): the total to allocate (default: the current total); with `target=`, the total the search starts from
         maximize (str/func): what to make as large as possible: a result of the disease (e.g. `'all_vs'`, or `'hiv.n_vs'`), or a function of the run sim
         minimize (str/func): or what to make as small as possible
         at (float/date): the time of the result (default: the end); without it, a function of the sim decides
         start (float/date): when the new allocation takes effect (default: the start of the sim)
         spend (dict/list): the spending parameters: names, or {program: name} (default: the imported programs)
-        bounds (tuple): the least and most a program can have (default: 0 and the total)
-        maxiter (int): the most iterations of the search
+        bounds (tuple/dict): the least and most a program can have, as amounts (default: 0 and the total); a dict gives them by program, e.g. `dict(testing=(1e5, None))` (None for no limit), and a program not in it has the default
+        target (float): the value of the result to reach (at most this with `minimize=`, at least with `maximize=`) with the least total
+        maxiter (int): the most iterations of the search (of each total's, with `target=`)
         verbose (bool): whether to print progress
 
     Returns an `ss.fit.Optimization`.
 
     Examples:
         ```python
-        sim = ss.load('hiv_framework.xlsx', format='atomica', databook='hiv_databook.xlsx', progbook='hiv_progbook.xlsx', programs_start=2020)
+        import starsim.interop
+        sim = ss.interop.load('hiv_framework.xlsx', format='atomica', databook='hiv_databook.xlsx', progbook='hiv_progbook.xlsx', programs_start=2020)
         best = ss.fit.optimize(sim, start=2020, maximize='all_vs', at=2030)
         best.summarize()
+        least = ss.fit.optimize(sim, start=2020, maximize='all_vs', at=2030, target=1.1*best.value) # The least money that reaches it
         ```
     """
     import scipy.optimize as spo
@@ -1187,12 +1183,21 @@ def optimize(sim, total=None, maximize=None, minimize=None, at=None, start=None,
         return float(raw.value if isinstance(raw, ss.TimePar) else raw)
     before = np.array([level(current[name]) for name in names])
     total = float(sc.ifelse(total, before.sum()))
-    low, high = bounds if bounds is not None else (0.0, total)
+    by_program = bounds if isinstance(bounds, dict) else {}
+    unknown = set(by_program) - set(labels)
+    if unknown:
+        raise ValueError(f'ss.fit.optimize() has bounds for {sc.strjoin(sorted(unknown))}, which {"is not a program" if len(unknown) == 1 else "are not programs"}; the programs are {sc.strjoin(labels)}')
+    def limits(total):
+        """ The least and most each program can have, of a total """
+        pairs = [by_program.get(label, (None, None)) if isinstance(bounds, dict) else (bounds or (None, None)) for label in labels]
+        lo = np.array([0.0 if a is None else float(a) for a,b in pairs])
+        hi = np.array([total if b is None else min(float(b), total) for a,b in pairs])
+        return lo, hi
 
-    def values(x):
+    def values(amounts):
         """ The parameters for an allocation: from the start of the new allocation, if given """
         out = {}
-        for name,val in zip(names, x*total):
+        for name,val in zip(names, amounts):
             raw = current[name]
             if begin is None or begin <= t0:
                 out[name] = float(val)
@@ -1213,30 +1218,71 @@ def optimize(sim, total=None, maximize=None, minimize=None, at=None, start=None,
         i = len(vals) - 1 if at is None else int(np.argmin(abs(np.asarray(run.t.yearvec) - (ss.date(at).years if isinstance(at, (str, ss.date)) else float(at)))))
         return float(vals[i])
 
-    runner = sim.new(pars=values(before/total), verbose=0).init() # Built with the spending as it will be given, so a restart can change it
+    runner = sim.new(pars=values(before), verbose=0).init() # Built with the spending as it will be given, so a restart can change it
     restart = runner.kernel_only()
     n_runs = [0]
-    def run(x):
+    def run(amounts):
         n_runs[0] += 1
         if restart:
-            return runner.restart(pars=values(x)).run()
-        return sim.new(pars=values(x), verbose=0).run()
-    value_before = read(run(before/total))
+            return runner.restart(pars=values(amounts)).run()
+        return sim.new(pars=values(amounts), verbose=0).run()
+    value_before = read(run(before))
     scale = max(abs(value_before), 1e-12)
-    objective = lambda x: sign*read(run(x))/scale
+
+    def allocate(total, x0):
+        """ The best allocation of a total (as amounts), its value, its run, and SciPy's result, from a starting allocation (as shares) """
+        lo, hi = limits(total)
+        if total <= 0:
+            best = run(np.zeros(len(names)))
+            return np.zeros(len(names)), read(best), best, None
+        objective = lambda x: sign*read(run(x*total))/scale
+        res = spo.minimize(objective, x0, method='SLSQP', bounds=list(zip(lo/total, hi/total)),
+                           constraints=[dict(type='eq', fun=lambda x: x.sum() - 1)], options=dict(maxiter=maxiter))
+        x = np.clip(res.x, lo/total, hi/total)
+        x = x/x.sum()
+        best = run(x*total)
+        return x*total, read(best), best, res
+
     T = sc.timer()
-    res = spo.minimize(objective, before/total, method='SLSQP', bounds=[(low/total, high/total)]*len(names),
-                       constraints=[dict(type='eq', fun=lambda x: x.sum() - 1)], options=dict(maxiter=maxiter))
-    x = np.clip(res.x, low/total, high/total)
-    x = x/x.sum()
-    best = run(x)
-    value = read(best)
-    if sign*value > sign*value_before: # The search can end worse than it started
-        x, value, best = before/total, value_before, run(before/total)
+    if target is None:
+        alloc, value, best, res = allocate(total, before/total)
+        if sign*value > sign*value_before: # The search can end worse than it started
+            alloc, value, best = before, value_before, run(before)
+    else:
+        reached = lambda value: sign*value <= sign*target
+        shares = before/before.sum() if before.sum() > 0 else np.full(len(names), 1/len(names))
+        most = limits(np.inf)[1].sum() # The most that can be spent, if every program has an upper bound
+        least = limits(0)[0].sum() # And the least
+        tried = lambda tot, value: print(f'  Total {tot:,.6g}: {what} {value:,.6g} at best ({"reaches" if reached(value) else "does not reach"} {target:,.6g})') if verbose else None
+        high = min(max(total, least), most)
+        out = allocate(high, shares)
+        tried(high, out[1])
+        low = least
+        for i in range(10): # Double the total until it reaches the target
+            if reached(out[1]):
+                break
+            if high >= most:
+                break
+            low, high = high, min(2*high, most)
+            out = allocate(high, out[0]/out[0].sum() if out[0].sum() > 0 else shares)
+            tried(high, out[1])
+        if not reached(out[1]):
+            raise ValueError(f'ss.fit.optimize() could not reach {what} = {target:,.6g}: the best allocation of {high:,.6g} gives {out[1]:,.6g}')
+        for i in range(30): # Halve the interval between a total that does not reach the target and one that does
+            if high - low <= 0.01*high:
+                break
+            mid = (low + high)/2
+            trial = allocate(mid, out[0]/out[0].sum())
+            tried(mid, trial[1])
+            if reached(trial[1]):
+                high, out = mid, trial
+            else:
+                low = mid
+        alloc, value, best, res = out
     if verbose:
-        print(f'Optimized {what}: {value_before:,.6g} to {value:,.6g}, in {n_runs[0]} runs ({T.toc(output=True):.1f} s)')
-    return Optimization(alloc=dict(zip(labels, x*total)), value=value, alloc_before=dict(zip(labels, before)), value_before=value_before,
-                        sim=best, n_runs=n_runs[0], what=str(getattr(what, '__name__', what)), converged=bool(res.success), why=str(res.message))
+        print(f'Optimized {what}: {value_before:,.6g} to {value:,.6g}' + (f', with a total of {alloc.sum():,.6g}' if target is not None else '') + f', in {n_runs[0]} runs ({T.toc(output=True):.1f} s)')
+    return Optimization(alloc=dict(zip(labels, alloc)), value=value, total=float(alloc.sum()), target=target, alloc_before=dict(zip(labels, before)), value_before=value_before,
+                        sim=best, n_runs=n_runs[0], what=str(getattr(what, '__name__', what)), converged=bool(res.success) if res is not None else True, why=str(res.message) if res is not None else 'nothing to allocate')
 
 
 def bound_value(b, raw):
@@ -1335,6 +1381,104 @@ def sensitivity(sim, pars=None, results=None, n=100, rand_seed=None, verbose=Non
         print(f'Partial rank correlations, from {n} samples over the bounds:')
         print(table.round(2).to_string())
     return table
+
+
+def profile(sim, par, values=None, level=0.95, **kwargs):
+    """
+    The profile likelihood of one parameter: at each of its values, the others refitted by maximum likelihood (`sim.calibrate(pars=...)`), and the confidence interval it gives
+
+    The interval is the values whose negative log-likelihood is within half the chi-squared quantile with one
+    degree of freedom (1.92 for 95%) of the lowest. Unlike the spread of a point estimate, it also shows whether
+    the data determine the parameter at all: a profile that stays flat to a bound does not end within it.
+
+    For a deterministic sim (an ODE) whose data series all have a likelihood, and parameters with no priors
+    (so each refit is the maximum likelihood); a stochastic sim's estimates of the likelihood are noisy, and
+    need a smoothed profile, which is not yet supported.
+
+    Args:
+        sim (`ss.Sim`): the sim, with data, which is not changed
+        par (str): the name of the parameter to profile, one with a single value
+        values (list): its values (default: the best fit of every parameter, 10 points spread over the bounds of this one, on the scale it is searched on, then 10 more at a time over the interval and the points next to it, until 5 are within it, at most 4 times)
+        level (float): the confidence level of the interval
+        kwargs (dict): passed to `sim.calibrate()` for each fit, e.g. `likelihood=` or `pars=` (the parameters to refit; default: all that have bounds)
+
+    Returns an objdict with `table` (a dataframe with a row for each value: the value, the refitted values of the
+    others, the negative log-likelihood `nll`, and whether the value is in the interval), `best` (the value with
+    the lowest), `interval` (its low and high ends, where the profile crosses the threshold, interpolated between
+    the values; an end that the values do not reach is the outermost of them, with a warning), and `threshold`.
+
+    Examples:
+        ```python
+        prof = ss.fit.profile(sim, 'beta', likelihood=dict(cases=ss.poisson()))
+        prof.interval # The 95% confidence interval of beta
+        prof.table.plot('beta', 'nll')
+        ```
+    """
+    kwargs.setdefault('verbose', 0)
+    problem = Problem(sim, **{k:kwargs[k] for k in ['pars', 'data', 'weights', 'likelihood', 'gof', 'n_runs', 'rand_seed'] if k in kwargs}, verbose=0)
+    name_of = lambda key: key.rpartition('[')[0] if key in problem.levels else key
+    if par not in problem.names[:problem.n_model] and values is None:
+        errormsg = f'profile() takes a parameter of the model that is fitted (one with bounds), or its values=; "{par}" is not one of {sc.strjoin(dict.fromkeys(map(name_of, problem.names)))}'
+        raise ValueError(errormsg)
+    if par in problem.levels or any(name_of(key) == par for key in problem.levels):
+        errormsg = f'profile() takes a parameter with a single value, but "{par}" has a value for each level'
+        raise ValueError(errormsg)
+    if problem.stochastic:
+        errormsg = f'profile() needs a deterministic sim (solver="ode"), not solver="{problem.runner.solver}": the likelihoods of a stochastic sim are estimates, whose noise a profile would need to smooth over'
+        raise ValueError(errormsg)
+    others = [key for key in dict.fromkeys(map(name_of, problem.names)) if key != par]
+    if not problem.use_lik or any(has for key,has in zip(problem.names, problem.priors) if name_of(key) in others):
+        why = 'not every data series has a likelihood' if not problem.use_lik else 'a parameter refitted has a prior, so a fit would maximize the posterior'
+        raise ValueError(f'profile() maximizes the likelihood, but {why}')
+    calibrate = dict(kwargs, pars=others)
+    cls = problem.types[problem.names.index(par)] if par in problem.names else None # Keep the unit of a typed value
+
+    def point(value):
+        """ The others refitted with the parameter fixed at this value """
+        fixed = sim.new(pars={par:cls(value) if cls is not None else float(value)}, verbose=0)
+        fixed.data = kwargs.get('data', sim.data)
+        if others:
+            with warnings.catch_warnings(): # Far from the best, the others are expected to end at their bounds
+                warnings.simplefilter('ignore', ss.errors.AtBound)
+                fit = fixed.calibrate(**calibrate)
+            return dict({par:float(value)}, **dict(zip(fit.table.par, fit.table.best)), nll=fit.mismatch)
+        return {par:float(value), 'nll':-loglik(fixed.run(), likelihood=kwargs.get('likelihood'), weights=kwargs.get('weights'))}
+
+    threshold = sps.chi2.ppf(level, 1)/2
+    if values is not None:
+        rows = [point(v) for v in values]
+    else:
+        fit = sim.calibrate(**sc.mergedicts(kwargs, dict(pars=others + [par]) if 'pars' in kwargs else {}))
+        best = dict(zip(fit.table.par, fit.table.best))
+        rows = [dict({par:float(best[par])}, **{k:v for k,v in best.items() if k != par}, nll=fit.mismatch)]
+        i = problem.names.index(par)
+        lo, hi = problem.encode(problem.lows)[i], problem.encode(problem.highs)[i]
+        decode = lambda z: float(np.exp(z) if problem.logs[i] else z)
+        rows += [point(decode(z)) for z in np.linspace(lo, hi, 10)]
+        for j in range(4): # Then 10 more over the interval and the points next to it, until there are 5 within it
+            df = pd.DataFrame(rows).sort_values(par)
+            within = np.flatnonzero(df.nll.values - df.nll.min() <= threshold)
+            if len(within) >= 5:
+                break
+            zs = np.log(df[par].values) if problem.logs[i] else df[par].values
+            zlo, zhi = zs[max(within[0] - 1, 0)], zs[min(within[-1] + 1, len(df) - 1)]
+            rows += [point(decode(z)) for z in np.linspace(zlo, zhi, 12)[1:-1]] # Between the points already run
+    table = pd.DataFrame(rows).sort_values(par).drop_duplicates(par).reset_index(drop=True)
+    x, nll = table[par].values, table.nll.values
+    table['within'] = nll - nll.min() <= threshold
+    k = int(np.argmin(nll))
+    ends = []
+    for side in [-1, 1]: # Outward from the best, to where the profile first rises above the threshold
+        j = k
+        while 0 <= j + side < len(x) and nll[j + side] - nll[k] <= threshold:
+            j += side
+        if 0 <= j + side < len(x):
+            a, b = nll[j] - nll[k], nll[j + side] - nll[k]
+            ends.append(float(x[j] + (threshold - a)/(b - a)*(x[j + side] - x[j])))
+        else:
+            ss.warn(f'the profile of "{par}" stays within {threshold:.3g} of its lowest up to {x[j]:n}, the {"lowest" if side < 0 else "highest"} value, so the interval may extend beyond it; consider wider bounds or more values', ss.errors.AtBound)
+            ends.append(float(x[j]))
+    return sc.objdict(table=table, best=float(x[k]), interval=tuple(ends), threshold=float(threshold))
 
 
 def prior_draws(sim, n, seed=None):
@@ -1638,9 +1782,17 @@ class Problem:
         lo, hi = self.encode(self.lows), self.encode(self.highs)
         return self.decode(lo + sampler.random(n)*(hi - lo))
 
+    def scan_size(self, n=None):
+        """ The number of points of a scan: `n`, or by default 10 per parameter, but at most `max_scan`, since a random scan of many parameters costs more runs than it finds (with a note when capped) """
+        if n is None:
+            n = min(10*len(self.names), max_scan)
+            if n < 10*len(self.names):
+                ss.note(f'the scan before the search tries {n} points, not 10 for each of the {len(self.names)} parameters; set scan= to change it', verbose=self.verbose)
+        return n
+
     def scan(self, n=None, top=None):
-        """ The best of the initial values and `n` points spread over the bounds (default: 10 per parameter), since a fit can have several local optima; with `top`, the best few of them that are apart (at least a tenth of the bounds in some parameter), best first """
-        n = 10*len(self.names) if n is None else n
+        """ The best of the initial values and `n` points spread over the bounds (default: see `scan_size()`), since a fit can have several local optima; with `top`, the best few of them that are apart (at least a tenth of the bounds in some parameter), best first """
+        n = self.scan_size(n)
         points = np.vstack([self.x0, self.spread(n)]) if n else self.x0[None]
         values = [self.mismatch_before] + [self.objective(x) for x in points[1:]]
         order = np.argsort(values, kind='stable') # The initial values first among equals
@@ -1962,7 +2114,7 @@ def fit_pmcmc(problem, scan=None, particles=None, draws=1000, warmup=1000, chain
         p.runner.restart(pars=p.to_pars(x), rand_seed=int(rng.integers(2**31))) # Each with its own start, if the start is drawn
         return filt(n_particles=n, seed=int(rng.integers(2**31))) + p.logprior(x) + p.logjac(x, share)
 
-    starts = [p.x0] + list(p.spread(scan or 10*len(p.names)))
+    starts = [p.x0] + list(p.spread(p.scan_size(scan or None)))
     start = starts[int(np.argmax([logpost_pf(p.to_z(x), rng, 100) for x in starts]))]
     zs, logdens, acceptance, n_particles = pmmh(logpost_pf, p.to_z(start), draws=draws, warmup=warmup, chains=chains, particles=particles, seed=p.rand_seed, parallel=parallel, verbose=p.verbose)
     return sc.objdict(zs=zs, logdens=logdens, acceptance=acceptance)

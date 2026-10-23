@@ -77,6 +77,10 @@ def test_classes():
     assert tp0*ss.years(0.5) == -np.expm1(np.log1p(-0.1) * ss.years(0.5)/ss.years(1)) # These should be close, but not match exactly
     assert tp0*ss.years(2) == -np.expm1(np.log1p(-0.1) * ss.years(2)/ss.years(1)) # These should be close, but not match exactly
 
+    # The unit factors survive pickling, as parallel workers unpickle them
+    import pickle
+    assert pickle.loads(pickle.dumps(ss.time.factors)).years.days == 365
+
     return d3, d4, r3, r4, tp0
 
 
@@ -464,17 +468,17 @@ def test_bare_units():
         S, I = ss.states('S I')
         return ss.Disease(inf=S >> I @ ss.permonth(0.0)*I, rec=I >> S @ rec, init_n=dict(I=1000), name='d')
 
-    # A bare dt beside calendar years is in years, with a warning, though the model's unit is months (FP21: 2,881 points instead of 241)
+    # A bare dt beside calendar years is in years, with a warning, though the model's unit is months (before, 2,881 points instead of 241)
     with pytest.warns(ss.errors.UnitInferred):
         sim = ss.Sim(sis(ss.months(6)), start=2000, stop=2020, dt=1/12, n_agents=1000, verbose=0).init()
     assert sim.t.npts == 241
 
-    # A choice of durations as a dwell, typed or with unit= (FP35: crashed, and unit= was refused); seeds infectious by contact are counted to the end of the step they leave in, as infections by contact are (HP62)
+    # A choice of durations as a dwell, typed or with unit= (it crashed, and unit= was refused); seeds infectious by contact are counted to the end of the step they leave in, as infections by contact are
     for rec in [ss.choice(a=[ss.months(9), ss.months(10)]), ss.choice(a=[9, 10], unit='month')]:
         n_I = ss.Sim(sis(rec), start=2000, stop=2002, dt=ss.months(1), n_agents=1000, verbose=0).run().results.d.n_I
         assert n_I[9] == 1000 and 0 < n_I[10] < 1000 and n_I[11] == 0
 
-    # The numbers a function gives a distribution are in its unit= (FP22: read as years, so nobody left)
+    # The numbers a function gives a distribution are in its unit= (they were read as years, so nobody left)
     fn = lambda self, sim, uids: np.full(len(uids), 6.0)
     n_I = ss.Sim(sis(ss.lognorm_ex(mean=fn, std=1, unit='month')), start=2000, stop=2003, dt=ss.months(1), n_agents=1000, verbose=0).run().results.d.n_I
     assert n_I[24] == 0

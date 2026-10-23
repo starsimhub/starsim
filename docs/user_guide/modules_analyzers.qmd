@@ -106,7 +106,7 @@ plt.show()
 
 ## Built-in analyzers
 
-Starsim comes with two built-in analyzers, an infection log and an age analyzer.
+Starsim comes with one built-in analyzer, the infection log; an example analyzer that tracks a state by age follows it.
 
 ### Infection log
 
@@ -161,7 +161,7 @@ df.tail()
 
 ### Dynamics by age
 
-This analyzer illustrates how you could track infections by age. Since it illustrates some additional key principles of building analyzers, here it is in full:
+This analyzer illustrates how you could track infections by age. (It was built into Starsim 3 as `ss.dynamics_by_age`; it is no longer part of core Starsim, so here it is in full, since it illustrates some additional key principles of building analyzers.)
 
 ```{python}
 class dynamics_by_age(ss.Analyzer):

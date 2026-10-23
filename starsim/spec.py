@@ -140,7 +140,8 @@ def code_value(val):
             return f'ss.{prefix}per{unit}({val["value"]!r})'
         elif 'dist' in val:
             args = ', '.join(f'{k}={code_value(v)}' for k,v in val.items() if k != 'dist')
-            return f'ss.{val["dist"]}({args})'
+            prefix = 'ss.' if is_dist(val['dist']) else '' # A distribution of the user's own is written by its name: see with_functions()
+            return f'{prefix}{val["dist"]}({args})'
         elif 'timeseries' in val:
             items = ', '.join(f'{time_code(k)}: {code_value(v)}' for k,v in val['timeseries'].items())
             period = f', period={code_value(val["period"])}' if 'period' in val else ''
@@ -199,10 +200,13 @@ def code_expr(text):
 
 
 def func_code(fn, funcs, left):
-    """ A function in the model spec as the name of its definition, which is added to funcs (with the values it closes over); or None, listed in left, if its source is not a plain definition """
+    """ A function in the model spec as the name of its definition, which is added to funcs (with the values it closes over); listed in left if its source is not a plain definition, and then written by its name (so the code fails until it is defined, rather than run without it), or as None if it has none (a lambda) """
     source = fn.get('source')
     text = textwrap.dedent(source).strip() if source else ''
     if not text.startswith('def '):
+        if fn['fn'].isidentifier():
+            left.append(f'the function {fn["fn"]}, whose source is not a plain definition: define it before the code that uses it')
+            return Code(fn['fn'])
         left.append(f'the function {fn["fn"]} (written as None): define it and pass it in place of None')
         return None
     values = [f'{k} = {v!r}' for k,v in (fn.get('values') or {}).items() if not k.startswith('default_')] # Defaults are in the source
@@ -212,11 +216,21 @@ def func_code(fn, funcs, left):
     return Code(fn['fn'])
 
 
+def is_dist(name):
+    """ Whether a distribution in the model spec is one of Starsim's, e.g. "lognorm_ex" """
+    cls = getattr(ss, name, None)
+    return isinstance(cls, type) and issubclass(cls, ss.Dist)
+
+
 def with_functions(obj, funcs, left):
-    """ The model spec with each function written as the name of its definition; see `func_code()` """
+    """ The model spec with each function written as the name of its definition (see `func_code()`); a distribution that is not Starsim's is listed in left """
     if isinstance(obj, dict):
         if 'fn' in obj and set(obj) <= {'fn', 'source', 'values', 'ref', 'version'}:
             return func_code(obj, funcs, left)
+        if isinstance(obj.get('dist'), str) and not is_dist(obj['dist']):
+            item = f'the distribution {obj["dist"]}, which is not part of Starsim (written as {obj["dist"]}(...)): define or import it before the code that uses it'
+            if item not in left:
+                left.append(item)
         return {k:with_functions(v, funcs, left) for k,v in obj.items()}
     elif isinstance(obj, list):
         return [with_functions(v, funcs, left) for v in obj]

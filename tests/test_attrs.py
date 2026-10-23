@@ -354,7 +354,7 @@ def test_attr_births():
 
 @sc.timer()
 def test_attr_grown_by_code():
-    """ A trait of people made by code that sets their age afterwards (people.grow() then people.age[...] = ..., as Starsim 3's pregnancy did) is drawn from the age it set (FP91: from a default adult age) """
+    """ A trait of people made by code that sets their age afterwards (people.grow() then people.age[...] = ..., as Starsim 3's pregnancy did) is drawn from the age it set (it was drawn from a default adult age) """
     class Maker(ss.Demographics):
         def step(self):
             new = self.sim.people.grow(20)

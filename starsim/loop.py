@@ -696,7 +696,7 @@ class Loop:
     def shrink(self):
         """ Shrink the size of the loop for saving to disk """
         to_shrink = ['sim', 'funcs', '_plan'] # Not the plan property, which would make the plan
-        ss.shrink(self, to_shrink)
+        ss.utils.shrink(self, to_shrink)
         return
 
     def plot(self, simplify=False, max_len=100, fig_kw=None, plot_kw=None, scatter_kw=None):

@@ -22,7 +22,7 @@ import summer2
 from summer2.parameters import Parameter
 from summer2.functions.time import get_sigmoidal_interpolation_function
 
-def build(): # The TB model of v4_design/review_oct17/switching/summer2.md: named Parameters, a sigmoidal scale-up of detection, and ages with a plain-array mixing matrix
+def build(): # The TB model of v4_design/oct17/switching/summer2.md: named Parameters, a sigmoidal scale-up of detection, and ages with a plain-array mixing matrix
     m = summer2.CompartmentalModel(times=[1950.0, 2025.0], compartments=list('SELITR'), infectious_compartments=['I'], timestep=1.0)
     m.set_initial_population(distribution={'S': 1e6 - 1000, 'I': 1000})
     beta = Parameter('contact_rate')
@@ -55,7 +55,7 @@ if __name__ == '__main__': # Write it with dump_summer2.py (from the folder give
     json.dump(dict(comps=comps, notifications=m.get_derived_outputs_df().notifications.tolist()), open(f'{sys.argv[2]}/ref.json', 'w'))
 '''
 atomica_lib = paths.lfd/'_envs/atomica/lib/python3.12/site-packages/atomica/library' # Atomica's library workbooks, in its environment
-atomica_demos = dict( # Atomica 1.32.4's own runs at dt=1 (start, stop, values at the end), from v4_design/review_oct17/switching/atomica.md
+atomica_demos = dict( # Atomica 1.32.4's own runs at dt=1 (start, stop, values at the end), from v4_design/oct17/switching/atomica.md
     udt      = (2016, 2023, dict(n_dx=2450.0, n_tx=3550.0)),
     dt       = (2016, 2024, dict(n_dx=240.0, n_tx=3360.0)),
     diabetes = (2014, 2035, dict(n_sus=1218222.500392, n_sc_uncomp=775.919855)),

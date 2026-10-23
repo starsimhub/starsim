@@ -282,6 +282,16 @@ class StaticNet(ss.Network):
             self.pars.p = n_contacts/self.n_agents
         return
 
+    def mean_contacts(self, sim):
+        """ The mean degree of its graph (see `ss.Network.mean_contacts()`), or for a random graph not yet made, its number of contacts or its chance of each pair """
+        graph = self.nx_graph
+        if graph is not None and not callable(graph):
+            return 2*graph.number_of_edges()/max(graph.number_of_nodes(), 1), 'the mean degree of its graph'
+        elif graph is None or getattr(graph, '__name__', None) in ['fast_gnp_random_graph', 'gnp_random_graph', 'erdos_renyi_graph']: # A random graph: a number of contacts, or a chance of each pair
+            p = self.pars.get('p')
+            return (ss.solvers.Mixing.mean(self.pars.get('n_contacts'), sim.unit_base), 'its mean number of contacts') if p is None else (p*sim.pars.total_pop, 'its chance of each pair, times the population')
+        return None, f' (it is made by {getattr(graph, "__name__", "a function")}, whose mean degree is not known before it runs)'
+
     def init_post(self):
         super().init_post()
         if 'seed' in self.pars and self.pars.seed is True:

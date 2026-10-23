@@ -117,7 +117,7 @@ Lines are lines of model code (not counting blank lines, comments, imports, or p
 | England and Wales, 10 years | 126 | 62 | 3.0 s (4.7 s the first time) | 48 s (45 s the first time) | **Fail** (first run, repeated run) |
 | England and Wales within 150 km of Norwich: 3.3 million agents in 149 places, 2 years | | | 2.75 s on 20 threads, 8.2 s on one; 466 MB | 67.8 s; 1,436 MB | |
 
-The last row was measured on 17 October 2026, on a machine shared with other jobs. At equal size on the hub and spoke (1.75 million agents), LASER took 1.67 s on 20 threads and 5.4 s on one, and Starsim 16.4 s.
+The last row was measured on 17 October 2026, on a machine shared with other jobs. At equal size on the hub and spoke (1.75 million agents), LASER took 1.67 s on 20 threads and 5.4 s on one, and Starsim 16.4 s; on 22 October 2026, after the work on speed, Starsim took 5.9 s on one thread. The times in the table are from before that work.
 
 ## What works and what does not yet
 
@@ -125,16 +125,17 @@ These are from Starsim's switching demo for LASER users (`tests/switching/test_l
 
 | Task | Today |
 |---|---|
-| Speed per agent-step | **Fails**: 30 ns per agent-step on one core, against 1.1 ns for LASER on 20 threads (the demo asks for within 3 times). Starsim makes 10 to 15 passes over the agents each step, on one thread; one fused, threaded pass is planned |
-| Memory per agent | **Passes**: about 51 bytes per agent at the peak, against LASER's 30 (the demo's target is 55). A run of LASER's full England and Wales (30 million agents) would need about 1.5 GB, against LASER's 1.2 GB |
+| Speed per agent-step | **Fails**, narrowly: 3.7 ns per agent-step on one thread (measured by the demo on 22 October 2026), against 1.1 ns for LASER on 20 threads; the demo asks for within 3 times (3.3 ns). For a large population, the passes over the agents are threaded |
+| Memory per agent | **Works**: about 51 to 53 bytes per agent at the peak, against LASER's 30 (the demo's target is 55). A run of LASER's full England and Wales (30 million agents) would need about 1.5 GB, against LASER's 1.2 GB |
 | Life-table deaths | **Works**: `ss.death(lifetable=ss.lifetable(ages, deaths))`, below; as agents each person's age at death is drawn once, and in a compartmental run stratified by age it is a death rate for each age group |
 | Seeding a fixed number of people on a schedule | **Works**: `ss.Delivery(move=S >> I, capacity=3, interval=ss.days(30))`, below |
+| Radiation mobility, as well as gravity | **Works**: `ss.geo.Mobility(ss.geo.radiation(), kind='force', away=...)`, with the same interface as `ss.geo.gravity()` and no parameters to choose |
 | Gravity scaled to a mean share away, with a cap, as LASER scales it | **Works**: the matrix scaled in NumPy, as `ss.geo.Mobility(matrix=..., kind='force')`, below |
-| The demo's check of life tables and seeding, as agents and as compartments | **Fails**: it is written with spellings that do not exist (`ss.death(age=...)`, `ss.seed()`); the spellings above work as agents |
+| Life tables and seeding, as agents and as compartments | **Works**: the same text (with an age stratification, for the life table as compartments) gives the same number of infections within 20% in one run of each |
 | The national model as compartments | **Works**: LASER's full England and Wales (954 places, 30.2 million people, a 40-stage latent period, with a constant death rate and importation as a rate) runs as a chain binomial in 12 s per simulated year |
 | A campaign for children 9 months to 5 years in some regions | **Works**: one `ss.vaccinate(...)` with `where=(ppl.age >= 0.75) & (ppl.age < 5) & measles.district.isin(names)`, which reached exactly those children |
 | Fitting | **Works**: `sim.calibrate()`, with your own loss (`gof=`) if you have one; LASER has no fitting of its own |
-| Places and populations from shapefiles and rasters (`laser-init`) | **Not yet**: `ss.geo.geography()` takes names, populations, and positions or distances |
+| Places and populations from shapefiles and rasters (`laser-init`) | **Works** for shapes: `ss.geo.geography(scenario)` takes a `GeoDataFrame`, or a .shp, .geojson, or .gpkg file (with geopandas installed), with columns `name` and `population` (or `pop`), and puts each place at the centroid of its shape. **Not yet** for rasters: give the populations by hand |
 
 The England and Wales model in miniature, with the life table, the seeding, and the gravity coupling declared: 20 places and 100,000 agents for a year:
 

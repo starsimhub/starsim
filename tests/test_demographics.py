@@ -150,7 +150,7 @@ def test_module_adding():
     demographics = [births, deaths]
     with pytest.raises(ValueError): # Starsim 3's birth_rate= is removed, rather than added to the modules given
         ss.Sim(n_agents=1e3, demographics=demographics, birth_rate=ss.time.freq(10, 'year')).run()
-    sim = ss.Sim(n_agents=1e3, demographics=[ss.Births(), ss.Deaths()], people_results=False, verbose=0).run() # Without people's results (MA32)
+    sim = ss.Sim(n_agents=1e3, demographics=[ss.Births(), ss.Deaths()], people_results=False, verbose=0).run() # Without people's results
     assert sim.results.deaths.new.sum() > 0
     return demographics
 
@@ -448,6 +448,9 @@ def test_birth_data_cols():
     year_deaths = ss.Deaths(death_rate=pd.DataFrame(dict(Year=[1990, 1990], **death_data))) # Via the synonym
     assert time_deaths.death_rate_data.equals(year_deaths.death_rate_data)
 
+    # Or a named place, for its UN rates
+    ss.Sim(demographics=[ss.Births(birth_rate='nigeria'), ss.Deaths(death_rate='nigeria')], diseases=ss.SIS(), n_agents=1000, start=2000, stop=2003, dt=ss.years(0.25), verbose=0).run()
+
     print('✓ (birth/death data column handling)')
     return
 
@@ -457,7 +460,7 @@ def test_period_rates():
     """ Rates labeled by the start of their period hold until the next label, and 5-year fertility data cover the last group whole """
     sc.heading('Testing rates by period...')
 
-    # Death rates for 2010-2014 and from 2015, labeled 2010 and 2015: 2013 and 2014 have the 2010 rate, not the nearest year's (TL24)
+    # Death rates for 2010-2014 and from 2015, labeled 2010 and 2015: 2013 and 2014 have the 2010 rate, not the nearest year's
     assert ss.demographics.period_year([2010, 2010, 2015, 2015], 2014.9) == 2010 and ss.demographics.period_year([2010, 2015], 2015) == 2015
     data = pd.DataFrame(dict(Time=[2010, 2010, 2015, 2015], Sex=['Female', 'Male']*2, AgeGrpStart=0, mx=[0.04, 0.04, 0.0, 0.0]))
     sim = ss.Sim(n_agents=10_000, demographics=ss.Deaths(death_rate=data, rate_units=1), start=2010, stop=2015, dt=ss.months(1), verbose=0).run()
@@ -466,7 +469,7 @@ def test_period_rates():
     expected = 10_000*(1 - np.exp(-0.04*5))
     assert abs(deaths.sum() - expected) < 4*np.sqrt(expected), f'Expected about {expected:.0f} deaths, not {deaths.sum()}'
 
-    # Fertility by 5-year age group: the last group (45) is 45-49, not just 45 (TL25)
+    # Fertility by 5-year age group: the last group (45) is 45-49, not just 45
     data = pd.DataFrame(dict(Time=2010, AgeGrp=[15, 20, 25, 30, 35, 40, 45], ASFR=0.2))
     preg = ss.Sim(n_agents=100, demographics=ss.Pregnancy(fertility_rate=data, rate_units=1), start=2010, stop=2011, verbose=0).init().demographics.pregnancy
     frd = preg.fertility_rate_data
@@ -476,7 +479,7 @@ def test_period_rates():
 
 @sc.timer()
 def test_lifetable_deaths():
-    """ Life tables by year and sex in ss.Deaths (FP33), and a death rate by its own ages, or a function, under both solvers (MA20) """
+    """ Life tables by year and sex in ss.Deaths, and a death rate by its own ages, or a function, under both solvers """
     sc.heading('Testing life tables by year and sex, and death rates by single year of age...')
     ages = np.arange(0, 105, 5)
     table = lambda mx: ss.lifetable(ages, -np.diff(np.append(np.exp(-mx*ages), 0))) # A constant hazard, to age 105
@@ -520,11 +523,11 @@ def test_births_parents():
     ppl = sim.people
     kids = ss.uids(np.flatnonzero(ppl.parent.raw >= 0))
     parents = ppl.parent.raw[kids]
-    assert len(kids) > 300 and ppl.female.raw[parents].all() # TL27: before, about half were men
+    assert len(kids) > 300 and ppl.female.raw[parents].all() # Before, about half were men
     both = ppl.alive.raw[kids] & ppl.alive.raw[parents] # Whose ages have both gone up since
     age_at_birth = ppl.age.raw[parents[both]] - ppl.age.raw[kids[both]]
     assert age_at_birth.min() >= 15 - 0.1 and age_at_birth.max() < 50 + 0.1 # As old as the women who can be mothers (to within a step)
-    assert np.array_equal(ppl.district.raw[kids], ppl.district.raw[parents]) # MA18: born where the parent is
+    assert np.array_equal(ppl.district.raw[kids], ppl.district.raw[parents]) # Born where the parent is
 
     # The same for ss.Pregnancy, including the pregnancies before the start, and a dimension called sex is the newborn's
     sim = ss.Sim(diseases=dis.copy(), n_agents=5000, start=2000, stop=2003, verbose=0, stratify=[dict(district=ss.geo.geography(names=['a', 'b', 'c']), split=[0.4, 0.3, 0.3]), dict(sex=['female', 'male'])],
@@ -547,11 +550,11 @@ def test_unborn():
                  n_agents=5000, start=2010, stop=2011, dt=ss.months(1), verbose=0).init()
     ppl, hiv = sim.people, sim.diseases.hiv
     unborn = ppl.unborn_uids()
-    assert len(unborn) > 50 and not hiv.I.raw[unborn].any() # TL26: before, half of them started infected
+    assert len(unborn) > 50 and not hiv.I.raw[unborn].any() # Before, half of them started infected
     mothers = ss.uids(ppl.parent.raw[unborn])
     I0 = hiv.I.raw.copy()
     sim.run()
-    assert not (hiv.I.raw[mothers] & ~I0[mothers]).any() # TL31: before, mothers were infected by their children
+    assert not (hiv.I.raw[mothers] & ~I0[mothers]).any() # Before, mothers were infected by their children
     r = sim.results
     born = ppl.alive.raw[ppl.auids] & (ppl.age.raw[ppl.auids] >= 0)
     assert r.n_alive[-1] < r.n_alive[-1] + r.pregnancy.n_unborn[-1] and r.pregnancy.n_unborn[-1] > 0
@@ -570,11 +573,11 @@ def test_pregnancy_risks():
         ga = p.gestation_at_birth.raw[~np.isnan(p.gestation_at_birth.raw)]
         return np.mean(ga < 37), 1 - sim.results.pregnancy.birth.sum()/np.nansum(p.n_pregnancies.raw)
 
-    # TL29: before, 0.01 a step lost 44% weekly and 26% monthly
+    # Before, 0.01 a step lost 44% weekly and 26% monthly
     weekly, monthly = [run(dt, p_loss=0.01)[1] for dt in [ss.weeks(1), ss.months(1)]]
     assert abs(weekly - monthly) < 0.04, f'The share lost should not depend on the time step: {weekly:.3f} weekly, {monthly:.3f} monthly'
 
-    # TL30: before, the preterm share was 0.046 whatever the relative risk
+    # Before, the preterm share was 0.046 whatever the relative risk
     base, triple = [run(ss.weeks(1), rr=rr)[0] for rr in [1, 3]]
     p_pre = 0.001 + 0.002 + 0.005 + 0.012 + 0.026 # The default distribution's preterm durations, 32 to 36 weeks
     assert abs(base - p_pre) < 0.02 and abs(triple - 3*p_pre) < 0.03, f'Expected preterm shares of about {p_pre:.3f} and {3*p_pre:.3f}, not {base:.3f} and {triple:.3f}'
@@ -609,7 +612,7 @@ def test_split_by_age():
     dis.stratify(wealth=['poor', 'rich'], split=ss.by([[0, 1], [1, 0], [1, 0]], dims=['age', 'wealth']))
     sim = ss.Sim(diseases=dis, n_agents=5000, start=2000, stop=2002, rand_seed=1, verbose=0, demographics=[ss.Births(birth_rate=ss.peryear(0.04)), ss.Deaths(death_rate=ss.peryear(0.01))]).run()
     n = lambda t, age: (sim.results.dis.n_S.select(age=age).by('wealth').values[t] + sim.results.dis.n_I.select(age=age).by('wealth').values[t])
-    assert n(0, 0).sum() < 0.05*5000 # TL28: before, each age group was a third of the people
+    assert n(0, 0).sum() < 0.05*5000 # Before, each age group was a third of the people
     assert n(0, 1)[1] == 0 and n(0, 2)[1] == 0 # Only those under 1 are rich...
     assert n(-1, 0)[0] == 0 and n(-1, 0)[1] > 0 # ...and newborns too
     return sim

@@ -489,7 +489,7 @@ def test_copied_modules():
 
 @sc.timer()
 def test_init_order():
-    """ Test that a custom module is initialized after the modules it may read (TL54) """
+    """ Test that a custom module is initialized after the modules it may read """
     sc.heading('Testing the order modules are initialized in')
     class Demography(ss.Demographics):
         def __init__(self, **kwargs):

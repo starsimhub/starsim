@@ -302,6 +302,7 @@ def test_disk():
     nw2 = ssl.networks.DiskNet(r=0.15, v=ss.time.freq(0.05, unit=ss.years(1)))
     s2 = ss.Sim(n_agents=small, networks=nw2, diseases='sir').init() # This initializes the network
     s2.run()
+    assert len(s2.networks[0]) > 0 and s2.results.sir.cum_infections[-1] > 0, 'Expected edges, and infections through them'
 
     if sc.options.interactive:
         s2.plot()
@@ -341,6 +342,8 @@ def test_null():
     sir = ss.SIR(dur_inf=10, beta=0.1)
     sim = ss.Sim(diseases=sir, people=people, networks=network)
     sim.run()
+    net = sim.networks.nullnet
+    assert len(net) == small and np.all(net.edges.beta == 0) and (net.edges.p1 == net.edges.p2).all(), 'Expected one zero-weight self-edge per agent'
     return sim
 
 
@@ -378,6 +381,13 @@ def test_household():
     household2 = ssl.networks.HouseholdNet(dhs_data=dhs_data_sex, dynamic=False)
     sim2 = ss.Sim(n_agents=small, diseases='sis', networks=household2)
     sim2.run()
+
+    # With the default household data, households have more than one member
+    sim3 = ss.Sim(n_agents=medium, diseases='sis', networks=ssl.HouseholdNet(dhs_data='default'), demographics=ss.Pregnancy(), start=2000, stop=2010, verbose=0).run()
+    hh_ids = sim3.networks.householdnet.household_ids
+    sizes = np.bincount(hh_ids[hh_ids.notnan].astype(int)) # Unborn agents have no household
+    sizes = sizes[sizes > 0]
+    assert len(sizes) > 1 and sizes.mean() > 1 and len(sim3.networks.householdnet) > 0
 
     return sim
 
@@ -573,6 +583,9 @@ def test_partners():
     level = np.asarray(sim2.networks[0].levels('risk'))[sim2.people.alive.uids]
     degree = sim2.networks[0].degrees(sim2.people.alive.uids)
     assert np.isclose(degree[level == 0].mean(), 0.4, rtol=0.25) and np.isclose(degree[level == 1].mean(), 1.6, rtol=0.25)
+    table = sim2.networks[0].check(n_runs=2, output=True) # A row for each level, by name, and the target for everyone that of the mix of levels
+    assert {'mean_degree[low]', 'mean_degree[high]'} <= set(table.index)
+    assert np.isclose(table.target.mean_degree, 0.8*0.4 + 0.2*1.6, rtol=0.1)
 
     # Targets that cannot be met together are an error; partnerships are approximate under an ODE (see test_partnership_approx()), and a static network is approximated by the mean degree of its graph
     with pytest.raises(ValueError):
@@ -635,7 +648,7 @@ def test_partner_targets():
     sim = ss.Sim(networks=mf, n_agents=2000, start=2000, stop=2005, dt=ss.months(1), verbose=0).run()
     assert sim.networks.mf.results.mean_degree[-1] > 0.95
 
-    # In an open population with long partnerships, newcomers join and the target holds (HP9 to HP11: before, 0.65 against 0.87, and nobody born in the run took part)
+    # In an open population with long partnerships, newcomers join and the target holds (before, 0.65 against 0.87, and nobody born in the run took part)
     mf = ss.SexualNet(n_contacts=0.87, dur=ss.lognorm_ex(mean=ss.years(20), std=ss.years(5)), participation=ss.bernoulli(p=lambda self, sim, uids: np.where(sim.people.age[uids] < 10, 0, 0.9)), name='mf')
     sim = ss.Sim(diseases=ss.SIS(beta=ss.peract(0.01)), networks=mf, demographics=[ss.Births(birth_rate=35), ss.Deaths(death_rate=15)], n_agents=5000, start=2000, stop=2040, verbose=0).run()
     ppl, mf = sim.people, sim.networks.mf
@@ -679,7 +692,7 @@ def chance(beta, acts=ss.constant(ss.freqperyear(1)), dt=ss.years(1), steps=1, c
 def test_per_act():
     sc.heading('Testing a probability per act on a network with acts, which keeps its meaning at any step')
 
-    # A partnership with 80 acts a year transmits with 1 - 0.99**80 = 0.552 a year at per-act 0.01, whatever the step (ST2: 0.531 monthly and 0.465 weekly with whole acts per step, which a rate no longer gives)
+    # A partnership with 80 acts a year transmits with 1 - 0.99**80 = 0.552 a year at per-act 0.01, whatever the step (before, 0.531 monthly and 0.465 weekly with whole acts per step, which a rate no longer gives)
     for dt in [ss.years(1/12), ss.weeks(1)]:
         p = chance(ss.peract(m2f=0.01, f2m=0), acts=ss.constant(ss.freqperyear(80)), dt=dt, steps=round(1/dt.years))
         assert np.isclose(p, 1 - 0.99**80, atol=0.025), f'{dt}: {p:.3f}'
@@ -694,12 +707,12 @@ def test_per_act():
     assert np.isclose(monthly, weekly, atol=0.03), f'{monthly:.3f} against {weekly:.3f}'
     assert prev(ss.years(1/12), 0.01) == monthly # A bare number on a network with acts is per act too (as in Starsim 3)
 
-    # Each direction has its own probability per act (ST3): from women to men at 0.15 per act, 2, 4, and 8 acts in a step give Starsim 3's 0.278, 0.478, and 0.728 (v4 had 0.232, 0.346, and 0.429)
+    # Each direction has its own probability per act: from women to men at 0.15 per act, 2, 4, and 8 acts in a step give Starsim 3's 0.278, 0.478, and 0.728 (v4 had 0.232, 0.346, and 0.429)
     for k,target in zip([2, 4, 8], [0.278, 0.478, 0.728]):
         p = chance(ss.peract(m2f=0.3, f2m=0.15), acts=ss.constant(ss.freqperyear(k)), f2m=True)
         assert np.isclose(p, target, atol=0.02), f'{k} acts: {p:.3f} against {target}'
 
-    # The directions are named, so the order of a network's partners does not matter (HP3: [b, 0] infected only women on ss.SexualNet, and only men on HPVsim's network, which puts women in p1)
+    # The directions are named, so the order of a network's partners does not matter (before, [b, 0] infected only women on ss.SexualNet, and only men on HPVsim's network, which puts women in p1)
     class WomenFirst(ss.SexualNet):
         def append(self, edges=None, **kwargs):
             kwargs['p1'], kwargs['p2'] = kwargs['p2'], kwargs['p1']
@@ -709,7 +722,7 @@ def test_per_act():
         assert chance(ss.peract(m2f=0.5, f2m=0), net=net, n=4000, f2m=True) == 0
     assert ss.Sim(diseases=ss.SIS(beta=ss.peract(0.01)), networks=WomenFirst(), n_agents=200, verbose=0).init().networks[0].edges.p1[:10].tolist() # Women in p1, and it runs
 
-    # rel_trans, rel_sus, and modifiers multiply the hazard per act (D5): beta 0.03 with rel_trans 10 is 1 - 0.97**10 = 0.263 per act
+    # rel_trans, rel_sus, and modifiers multiply the hazard per act: beta 0.03 with rel_trans 10 is 1 - 0.97**10 = 0.263 per act
     tenfold = lambda b: [ss.modify('si.rel_trans', multiply=10)] if b is None else [ss.modify('si.rel_trans', multiply=2), ss.modify('si.pars.beta', multiply=5)]
     p10 = chance(ss.peract(m2f=0.03, f2m=0), connectors=tenfold(None))
     assert np.isclose(p10, 1 - 0.97**10, atol=0.015), p10
@@ -755,11 +768,11 @@ def test_beta_readings():
     with pytest.raises(ss.errors.RouteMismatch, match="between='mf'"):
         ss.Sim(sis(ss.peract(m2f=0.01, f2m=0.01)), networks=ss.SexualNet(between='mm'), **kw).init()
     assert ss.peract({('m', 'f'): 0.3, ('f', 'm'): 0.15}) == ss.peract(m2f=0.3, f2m=0.15) # A direction as a pair of sides, or by name
-    with pytest.raises(ss.errors.WrongDimension, match=r'ss.peract\(0.01\)'): # A rate per unit time times acts per unit time is not a hazard (D2)
+    with pytest.raises(ss.errors.WrongDimension, match=r'ss.peract\(0.01\)'): # A rate per unit time times acts per unit time is not a hazard
         ss.Sim(sis(ss.permonth(0.01)), networks=ss.SexualNet(), **kw).init()
     sim = ss.Sim(diseases='sis', networks=['sexual', 'random'], n_agents=500, verbose=0).init() # But the default of ss.SIS is a probability per act there, as in Starsim 3
     assert sim.diseases.sis.pars.beta.raw['sexualnet'] == ss.peract(0.05) and any('as in Starsim 3' in note for note in sim.notes)
-    with pytest.raises(ss.errors.RouteMismatch, match=r'ss.peract\(m2f=0.3, f2m=0.15\)'): # A pair has no direction names (D3, N7)
+    with pytest.raises(ss.errors.RouteMismatch, match=r'ss.peract\(m2f=0.3, f2m=0.15\)'): # A pair has no direction names
         ss.Sim(sis(dict(sexualnet=[0.3, 0.15])), networks=ss.SexualNet(), **kw).init()
     with pytest.raises(ss.errors.RouteMismatch, match='no acts'): # No act to be per
         ss.Sim(sis(ss.peract(0.01)), networks='random', **kw).init()
@@ -771,7 +784,7 @@ def test_beta_readings():
         ss.Sim(sis(ss.peract(m2f=0.01, f2m=0.01)), networks=ssl.DegreeNet(name='needles', dur=ss.years(1), acts=ss.freqpermonth(20)), **kw).init()
     with pytest.raises(ss.errors.OutOfBounds):
         ss.peract(1.5)
-    with pytest.raises(ValueError, match='step'): # A whole number of acts per step, drawn once, depends on the step (D4)
+    with pytest.raises(ValueError, match='step'): # A whole number of acts per step, drawn once, depends on the step
         ss.Sim(sis(0.01), networks=ss.SexualNet(acts=ss.poisson(lam=ss.freqperyear(80))), **kw).init()
     with pytest.raises(ValueError, match='frequency'): # A hazard is not a number of acts (as agents, it would be the chance of an act in a step)
         ss.Sim(sis(0.01), networks=ss.SexualNet(acts=ss.peryear(80)), **kw).init()
@@ -788,7 +801,7 @@ def test_beta_readings():
 def test_route_modifiers():
     sc.heading('Testing modifiers of a transmission on one route: condoms, needle programs')
 
-    # A condom of efficacy 0.9 in half the acts multiplies the hazard by 1 - 0.5*0.9 (D6): p=0.1, 10 acts gives 1 - exp(-10*0.1054*0.55) = 0.440 (STIsim's split of the acts gives 0.438)
+    # A condom of efficacy 0.9 in half the acts multiplies the hazard by 1 - 0.5*0.9: p=0.1, 10 acts gives 1 - exp(-10*0.1054*0.55) = 0.440 (STIsim's split of the acts gives 0.438)
     condoms = lambda **kw: [ss.modify('si.infection', route='sexualnet', **kw)]
     p = chance(ss.peract(m2f=0.1, f2m=0), acts=ss.constant(ss.freqperyear(10)), connectors=condoms(efficacy=0.9, share=0.5), n=100_000)
     assert np.isclose(p, 1 - np.exp(10*np.log(0.9)*0.55), atol=0.01), p
@@ -1061,7 +1074,7 @@ def test_between():
     kw = dict(n_agents=5000, start=2000, stop=2015, dt=ss.months(1), verbose=0)
     everyone = dict(debut=ss.constant(0), participation=ss.bernoulli(1.0))
 
-    # Sex workers and clients (ST22), each with their own number of partners at a time
+    # Sex workers and clients, each with their own number of partners at a time
     sw = ss.SexualNet(name='sexwork', between=('fsw', 'client'), n_contacts=dict(fsw=4, client=0.8), dur=ss.months(6), **everyone)
     assert sw.directions == ['fsw2client', 'client2fsw']
     sim = ss.Sim(diseases=ss.SIS(beta=dict(sexwork=ss.peract(fsw2client=0.02, client2fsw=0.01))), networks=sw, **kw)
@@ -1075,13 +1088,13 @@ def test_between():
     with pytest.raises(ValueError, match='each group of between'):
         ss.Sim(diseases='sis', networks=ss.SexualNet(n_contacts=dict(male=1, fsw=2), dur=ss.years(1)), n_agents=200, verbose=0).init()
 
-    # Risk matching between men and women (ST52)
+    # Risk matching between men and women
     net = ss.SexualNet(n_contacts=0.8, dur=ss.years(2), match=dict(risk=0.8), **everyone)
     sim = ss.Sim(diseases=ss.SIS(beta=ss.peract(0.01)), networks=net, **kw).stratify(risk=['low', 'high'], split=[0.7, 0.3]).run()
     res = sim.networks[0].results
     assert np.isclose(res.match[-24:].mean(), 0.8, atol=0.05) and np.isclose(res.mean_degree[-1], 0.8, rtol=0.1), (res.match[-24:].mean(), res.mean_degree[-1])
 
-    # A subclass that forms its own partnerships gets none from the base, and only between= of its parameters (HP45); between men, its error suggests between='mm' (ST45)
+    # A subclass that forms its own partnerships gets none from the base, and only between= of its parameters; between men, its error suggests between='mm'
     class OwnMSM(ss.SexualNet):
         def step(self):
             self.end_pairs()
@@ -1089,7 +1102,7 @@ def test_between():
                 men = self.sim.people.male.uids
                 n = len(men)//2
                 self.append(p1=men[:n], p2=men[n:2*n], beta=np.ones(n), dur=np.full(n, 100.0), acts=np.ones(n))
-    assert list(OwnMSM().pars.keys()) == ['between']
+    assert list(OwnMSM().pars.keys()) == ['memory', 'between'] # And memory=, of every dynamic network
     sim = ss.Sim(diseases=ss.SIS(beta=ss.peract(0.01)), networks=OwnMSM(name='msm'), n_agents=500, verbose=0).init()
     assert len(sim.networks.msm) == 0
     with pytest.raises(ss.errors.RouteMismatch, match="between='mm'"):

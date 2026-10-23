@@ -49,7 +49,8 @@ def load_memilio(source, verbose=None, **kwargs):
     **Example**:
 
         # In the MEmilio environment: python dump_memilio.py ode_secir_simple.py model.json
-        sim = ss.load('model.json', format='memilio')
+        import starsim.interop
+        sim = ss.interop.load('model.json', format='memilio')
     """
     d = source if isinstance(source, dict) else sc.loadjson(source)
     kind = d['model']

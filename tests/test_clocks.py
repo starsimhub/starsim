@@ -25,7 +25,7 @@ def test_events():
     checked = sc.objdict(n=0)
     def check(sim): # After the transmission, every event of the step is visible
         d = sim.diseases.d
-        st = d.graph.states
+        st = d.states
         infected = st.E | st.I
         inf, onset = d.infection.uids, d.onset.uids
         assert np.array_equal(infected.enter.uids, inf) # Entering the set from outside; E -> I is within it
@@ -72,7 +72,7 @@ def test_clocks():
     seen = sc.objdict(n=0)
     def check(sim):
         d = sim.diseases.d
-        st = d.graph.states # The declarations, in the sim; a clock of a set is made before the sim, so it is kept
+        st = d.states # The declarations, in the sim; a clock of a set is made before the sim, so it is kept
         ti, dt = d.ti, d.t.dt.to('day').value
         u = d.B.uids
         placed = d.ti_B[u] == 0 # At the start, which is a step before the first step's index
@@ -110,7 +110,7 @@ def test_clocks():
     sim = ss.Sim(d, interventions=vx, connectors=halve, n_agents=2000, unit='day', stop=40, **kw).run()
     assert sim.results.vx.delivered.sum() > 0 and sim.solver == 'abm'
 
-    # Errors: outside the domain (E212), and no scheduled dwell (E213); as compartments, see test_conveyor.py
+    # Errors: outside the domain, and no scheduled dwell; as compartments, see test_conveyor.py
     S, A, B, C = ss.states('S A B C')
     with pytest.raises(ss.errors.ClockOutsideDomain):
         ss.Disease(S, A, B, C, ab=A >> B @ ss.days(4), sc_=ss.Transition(S, C, rate=ss.perday(1)*(B.time > 1)))
@@ -158,7 +158,7 @@ def test_syphilis_latent():
     eff = s.rel_trans.effective[s.LL.uids]
     assert not np.isnan(eff).any() and eff.min() < 0.3
     late = s.LL.uids[s.ti_EL[s.LL.uids] > 0]
-    latent = s.graph.states.EL | s.graph.states.LL
+    latent = s.states.EL | s.states.LL
     assert np.allclose(s.engine.eval_for(latent.time, late), (s.ti - 1 - s.ti_EL.internal(late))/12) # From latent onset to the start of the last step, as the workaround meant
     with pytest.raises(ss.errors.ClockOutsideDomain): # The workaround with seeds in LL is NaN for them
         make('old').run()

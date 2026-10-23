@@ -588,14 +588,6 @@ class date(pd.Timestamp):
         out = {'ss.date': str(self)}
         return out
 
-    @staticmethod
-    def from_json(json):
-        """ Reconstruct a date from a JSON; reverse of `to_json()` """
-        if not (isinstance(json, dict) and len(json) == 1 and list(json.keys())[0] == 'ss.date'):
-            errormsg = f'Expecting a dict with a single key "ss.date", not {json}'
-            raise ValueError(errormsg)
-        return date(json['ss.date'])
-
 
 class datedur(dur):
     """ Date based duration e.g., if requiring a week to be 7 calendar days later """

@@ -227,6 +227,26 @@ def _(): ode(sir(beta=ss.par(0.3, bounds=[0.1, 0.5]))).calibrate()
 @trigger(ss.errors.NoPosterior)
 def _(): fittable().calibrate(method='nuts')
 
+@trigger(ss.AlreadyRunError)
+def _(): ode(sir(), stop=5).run().run()
+
+@trigger(ss.errors.DistNotInitializedError)
+def _(): ss.random(strict=True, auto=False)(5)
+
+@trigger(ss.errors.DistNotReadyError)
+def _():
+    dist = ss.random(strict=True, auto=False).init(trace='x', sim=ss.Sim(n_agents=100, **kw).init())
+    dist(5), dist(5)
+
+@trigger(ss.errors.DistSeedRepeatError)
+def _():
+    dist = ss.random().init(trace='x', sim=ss.Sim(n_agents=100, **kw).init())
+    dist.jump(to=10)
+    dist.jump(to=3) # Back to a state it has passed
+
+@trigger(ss.errors.BooleanOperationError)
+def _(): ss.Sim(n_agents=100, **kw).init().people.age & True
+
 
 # %% Warnings
 

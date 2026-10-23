@@ -2,7 +2,7 @@
 Switching demo for the EMULSION seat: the published herd model with minimum stays, offspring, and births between stages.
 
 Passes when: matches EMULSION's published output.
-Blocked today by: offspring by prototype (SW2) and N11; `after=` and `ss.birth(per=)` exist.
+Blocked today by: N11, and a quickstart herd that is too small; `after=`, `ss.birth(per=)`, and offspring by the mother's state (a split on the birth) exist.
 The published model is EMULSION's quickstart (100 animals, 105 weekly steps); the means are compared over 10 runs rather than EMULSION's 200.
 """
 import sys
@@ -61,15 +61,16 @@ initial_conditions: {population: [{prototype: infected, amount: 1000}]}
     assert np.isclose(left, ref_proba_left, rtol=1e-3), f'{left:.1%} still infectious after one step, against {ref_proba_left:.1%} in EMULSION'
 
 
-@pytest.mark.xfail(reason='Offspring by prototype (a newborn in a state of each of several diseases, with probabilities from the mother\'s state; SW2 in deferred.md) does not exist: ss.birth(per=) puts every newborn in one state of each disease, so none is born infectious (after= and before= exist)', strict=False)
+@pytest.mark.xfail(reason='Offspring by the mother\'s state is declared (a split on the birth with ss.mother()), but the herd is still too small (66 animals after 53 steps against 77)', strict=False)
 def test_emulsion_quickstart():
     sc.heading('Testing the quickstart written in v4 with minimum stays and offspring declared')
     ppl = ss.People(100, age_data=ss.uniform(low=dt/365, high=(adult_age + dt)/365))
     NG, G = ss.states('NG G')
-    farrowing = ss.Transition(G, NG, dur=ss.constant(ss.days(240))) # EMULSION's produce_offspring is by prototype, (J, NG, I) with chance 0.3*(E | I | Q) and (J, NG, M) otherwise; ss.birth(per=) can say only the second
+    farrowing = ss.Transition(G, NG, dur=ss.constant(ss.days(240)))
     J, A = ss.states('J A')
     growth = ss.Disease(maturity=ss.Transition(J, A, rate=ss.perday(1e9), where=ppl.age >= adult_age/365), newborns=ss.birth(J, per=farrowing), first='J')
     S, E, I, R, Q, M = ss.states('S E I R Q M')
+    newborns = ss.birth(M, per=farrowing)
     quarantine = ss.par(ss.timeseries({'2021-01-01': 0, '2021-04-01': 1, '2021-09-02': 0, '2022-04-01': 1, '2022-09-02': 0}))
     health = ss.Disease(
         infection   = S >> E @ ss.perday(0.1)*I.n/(S + E + I + R + Q + M).n,
@@ -83,7 +84,8 @@ def test_emulsion_quickstart():
         sick_deaths = I + Q >> ss.null @ ss.perday(0.004),
         M_deaths    = ss.Transition(M, ss.null, rate=ss.perday(0.002), before=ss.days(adult_age)), # EMULSION's escape
         E_deaths    = ss.Transition(E, ss.null, rate=ss.perday(0.004), before=ss.days(10)),
-        newborns    = ss.birth(M, per=farrowing),
+        newborns    = newborns,
+        vertical    = ss.Transition(M, [I, M], on=newborns, p=[0.3, 0.7], where=ss.mother(E | I | Q, born=True)), # EMULSION's produce_offspring: (J, NG, I) with chance 0.3 from an infected mother
         init_n      = dict(I=10),
     )
     life = ss.Disease(

@@ -1,5 +1,5 @@
 """
-Test exporting a sim to other formats (ss.interop.export()): Mermaid, SBML, and odin, read back with ss.interop.load()
+Test exporting a sim to other formats (ss.interop.export()): Mermaid, SBML, and odin, read back with ss.interop.load(); and runs as a hub submission (ss.interop.to_hub())
 """
 import tempfile
 import warnings
@@ -95,7 +95,34 @@ def test_odin(tmp_path):
     a, b = sim.results.seird, back.results[back.diseases[0].name]
     I = sum(b[k] for k in b.keys() if k.startswith('n_I'))
     assert np.allclose(a.n_I, I, rtol=1e-9, atol=1e-9) and np.allclose(a.n_D, b.n_D, rtol=1e-9, atol=1e-9)
+    with pytest.warns(ss.errors.LossyExport): # A sim that has run is written with its initial state, not its last
+        assert ss.interop.export(sim, 'odin', verbose=False) == text
     return back
+
+
+def test_hub():
+    sc.heading('Testing runs of two scenarios as a hub submission')
+    def make(beta, label):
+        S, I, R = ss.states('S I R')
+        sir = ss.Disease(infection=S >> I @ ss.par(0.4, prior=ss.uniform(0.3, 0.5))*I, recovery=I >> R @ 0.2, init_n=dict(I=10), name='sir')
+        return ss.Sim(sir, interventions=ss.modify(sir.infection, multiply=beta), total_pop=1e5, start='2020-02-01', stop='2020-05-01', unit='day', label=label, **kw)
+    msim = ss.parallel(make(1.0, 'base'), make(0.5, 'lockdown'), n_runs=4, priors=True, parallel=False)
+    hub = ss.interop.to_hub(msim, targets=dict(infection=['inc inf', 'cum inf', 'peak size inf']), origin_date='2020-03-01', output_type=['quantile', 'sample'], location='US')
+    assert list(hub.columns) == ['origin_date', 'scenario_id', 'location', 'target', 'horizon', 'output_type', 'output_type_id', 'value']
+    assert set(hub.scenario_id) == {'base', 'lockdown'} and set(hub.origin_date) == {'2020-03-01'}
+    inc = hub[(hub.target == 'inc inf') & (hub.output_type == 'sample')]
+    cum = hub[(hub.target == 'cum inf') & (hub.output_type == 'sample')]
+    peak = hub[(hub.target == 'peak size inf') & (hub.output_type == 'sample')]
+    assert inc.horizon.max() == 8 and len(hub[(hub.target == 'inc inf') & (hub.output_type == 'quantile')]) == 2*8*23 # 23 quantiles
+    for scenario,group in inc.groupby('scenario_id'): # Each scenario's runs are its own: the samples match its runs' weekly totals
+        res = msim.results.sir.infection.select(scenario=scenario)
+        weekly = res.values[:, 30:30+56].reshape(4, 8, 7).sum(axis=2) # The 8 whole weeks after 1 March (index 29)
+        assert np.allclose(group.pivot(index='output_type_id', columns='horizon', values='value').values, weekly)
+    assert np.allclose(cum.groupby(['scenario_id', 'output_type_id']).value.last().values, inc.groupby(['scenario_id', 'output_type_id']).value.sum().values)
+    assert peak.horizon.isna().all() and np.allclose(peak.value.values, inc.groupby(['scenario_id', 'output_type_id']).value.max().values)
+    med = hub[(hub.target == 'inc inf') & (hub.output_type_id == 0.5)].groupby('scenario_id').value.sum()
+    assert med['lockdown'] < med['base'], 'The scenarios should not be pooled'
+    return hub
 
 
 if __name__ == '__main__':
@@ -105,4 +132,5 @@ if __name__ == '__main__':
         test_mermaid(folder)
         test_sbml(folder)
         test_odin(folder)
+    test_hub()
     T.toc()

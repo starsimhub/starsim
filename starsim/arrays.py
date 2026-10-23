@@ -517,10 +517,10 @@ class Arr(BaseArr):
     def __eq__(self, other): return self._boolmath('==', other)
     def __ne__(self, other): return self._boolmath('!=', other)
 
-    def __and__(self, other): raise BooleanOperationError(self)
-    def __or__(self, other):  raise BooleanOperationError(self)
-    def __xor__(self, other): raise BooleanOperationError(self)
-    def __invert__(self):     raise BooleanOperationError(self)
+    def __and__(self, other): raise ss.errors.BooleanOperationError(self)
+    def __or__(self, other):  raise ss.errors.BooleanOperationError(self)
+    def __xor__(self, other): raise ss.errors.BooleanOperationError(self)
+    def __invert__(self):     raise ss.errors.BooleanOperationError(self)
 
     def isin(self, values):
         """
@@ -781,7 +781,7 @@ class Arr(BaseArr):
             new_empty = np.empty((n_grow, *self.item_shape), dtype=self.dtype) # 10x faster than np.zeros()
             self.raw = np.concatenate([self.raw, new_empty], axis=0)
             self.len_tot = len(self.raw)
-            if n_grow > n_new: # We added extra space at the end, set to NaN
+            if self.len_tot > self.len_used: # There is space at the end beyond the new agents (including when they fill only part of what was added), set to NaN
                 nan_uids = np.arange(self.len_used, self.len_tot)
                 self.set_nan(nan_uids)
 
@@ -827,26 +827,6 @@ class Arr(BaseArr):
             new.nan = nan
             new.nan_eq = (nan == nan)
             return new
-        else:
-            self._type_error(obj)
-        return obj
-
-    def _to_raw(self, obj):
-        """ Convert an Arr object to raw values, leaving NumPy arrays unchanged (for argument normalization) """
-        if isinstance(obj, np.ndarray):
-            return obj
-        elif isinstance(obj, Arr):
-            return obj.raw
-        else:
-            self._type_error()
-        return obj
-
-    def _to_values(self, obj):
-        """ Convert an Arr object to indexed values, leaving NumPy arrays unchanged (for argument normalization) """
-        if isinstance(obj, np.ndarray):
-            return obj
-        elif isinstance(obj, Arr):
-            return obj.values
         else:
             self._type_error(obj)
         return obj
@@ -1716,10 +1696,3 @@ class uids(np.ndarray):
     def __ior__(self, other) : return self.__or__(other)
     def __isub__(self, other): return self.__sub__(other)
     def __ixor__(self, other): return self.__xor__(other)
-
-
-class BooleanOperationError(NotImplementedError):
-    """ Raised when a logical operation is performed on a non-logical array """
-    def __init__(self, arr):
-        msg = f'Logical operations are only valid on Boolean arrays, not {arr.dtype}'
-        super().__init__(msg)

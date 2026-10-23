@@ -2,6 +2,7 @@
 Expressions: the parameters (`ss.par`), counts, and arithmetic that rates, results, and conditions are made of, and how they are evaluated and printed
 """
 import operator
+import weakref
 import numpy as np
 import sciris as sc
 import starsim as ss
@@ -52,7 +53,14 @@ def as_expr(obj):
     elif isinstance(obj, ss.transitions.Transition):
         errormsg = f'A transition ({obj}) cannot be used inside a rate; did you mean one of its states?'
         raise TypeError(errormsg)
-    return par(obj, literal=True)
+    elif obj is None or isinstance(obj, (int, float, complex, str, tuple, np.generic)): # A number cannot be told apart from an equal one, so each use is its own
+        return par(obj, literal=True)
+    wrapped = _wrapped.get(id(obj))
+    if wrapped is None or wrapped.value is not obj: # The same object (e.g. beta = ss.seasonal(...)) used in several rates is one parameter, as if it were an ss.par
+        wrapped = _wrapped[id(obj)] = par(obj, literal=True)
+    return wrapped
+
+_wrapped = weakref.WeakValueDictionary() # The parameter each object has been wrapped in, by id; the parameter holds the object, so the id is not reused while it lives
 
 
 def states_or(cond):
@@ -199,8 +207,8 @@ class par(Nameable, Expr):
         value (any): a number, typed quantity (e.g. `ss.perday(0.1)`), distribution, or function
         bounds (list): the lower and upper bounds; a parameter with bounds can be calibrated
         prior (`ss.Dist`): the prior distribution, for calibration
-        source (str): where the value came from
-        doc (str): a description of the parameter
+        source (str): where the value came from (shown under the parameter by `describe()`, and kept in the model spec)
+        doc (str): a description of the parameter (likewise)
         name (str): the name; if not given, taken from the keyword or variable it is assigned to
         label (str): a human-readable name
 
@@ -590,32 +598,6 @@ class mother(Expr):
     def __deepcopy__(self, memo): return self
 
 
-class Since(Expr):
-    """
-    Time since a module last recorded an event for each agent (e.g. `preg.since_birth`), in the sim's unit: inf if never
-
-    Unlike a clock of a state, it survives later moves: a miscarriage does not reset the time since the last live birth.
-    Agents only for now.
-
-    Args:
-        module (Module/str): the module that records the event
-        event (str): the event's name; the module keeps the time of it in `ti_<event>`
-    """
-    def __init__(self, module, event):
-        self.module = module
-        self.event = event
-        return
-
-    def to_str(self, parent=False):
-        return f'{ss.conditions.modname(self.module)}.since_{self.event}'
-
-    names = [] # As a clock (see clocks_in()), of no state
-    kind = 'since'
-
-    def __copy__(self): return self
-    def __deepcopy__(self, memo): return self
-
-
 def nodes(obj, seen=None):
     """ Every part of an expression, a condition, or a list or dict of them, each once: e.g. the clocks a model reads are the parts that are clocks (see `clocks_in()`) """
     seen = set() if seen is None else seen
@@ -627,6 +609,8 @@ def nodes(obj, seen=None):
         parts = [obj.value] if isinstance(obj.value, (Expr, ss.conditions.Cond)) else []
     elif isinstance(obj, attr): # What a derived one is worked out from (one set at an event has the value it had then)
         parts = ([expr for names,expr in obj.cases] if obj.cases is not None else [obj.value]) if obj.kind == 'derived' else []
+    elif isinstance(obj, Prop): # A condition in a rate
+        parts = [obj.cond]
     elif isinstance(obj, Expr):
         parts = [leaf for leaf in obj.leaves if leaf is not obj] + list(getattr(obj, 'args', [])) + [getattr(obj, key, None) for key in ['a', 'b']] # E.g. a clock inside a comparison (Func)
     elif isinstance(obj, ss.transitions.on):
@@ -781,8 +765,8 @@ def rebind(expr, memo):
 
 
 def clocks_in(obj):
-    """ The clocks an expression, a condition, or a list or dict of them reads (the time since an event is kept per agent too) """
-    return [part for part in nodes(obj) if isinstance(part, (Clock, Since))]
+    """ The clocks an expression, a condition, or a list or dict of them reads """
+    return [part for part in nodes(obj) if isinstance(part, Clock)]
 
 
 class BinOp(Expr):
@@ -900,8 +884,8 @@ def evaluate(expr, ctx):
         if expr.name == 'expit': # The logistic function, 1/(1 + exp(-x)), which NumPy does not have
             return 1/(1 + xp.exp(-args[0]))
         return 1.0*getattr(xp, expr.name)(*args) # A comparison is 1 or 0
-    elif isinstance(expr, Prop):
-        return ctx.prop(expr.cond)
+    elif isinstance(expr, (Prop, ss.conditions.Cond)): # A condition is 1 or 0 for each person, as in a rate: its leaves are evaluated as where= evaluates them (see ss.conditions.Selector.leaf())
+        return ctx.prop(expr.cond if isinstance(expr, Prop) else expr)
     elif isinstance(expr, par):
         return ctx.value(expr)
     elif isinstance(expr, Count):
@@ -922,8 +906,6 @@ def evaluate(expr, ctx):
         return ctx.attr(expr)
     elif isinstance(expr, mother):
         return ctx.mother(expr)
-    elif isinstance(expr, Since):
-        return ctx.since(expr)
     errormsg = f'Cannot evaluate {expr} ({type(expr)})'
     raise TypeError(errormsg)
 
@@ -1023,7 +1005,7 @@ def format_expr(expr, values=False, bare=None, mul='*', exact=False, unit=None):
         elif isinstance(e, Share):
             share = f'share({fmt(e.row.row)}, to={e.label})' # Its row's value at this destination, over the row's sum
             return share if e.row.scalar is None else f'{fmt(e.row.scalar)} {mul} {share}'
-        elif isinstance(e, (Clock, mother, Since)):
+        elif isinstance(e, (Clock, mother)):
             return e.to_str()
         return str(e.name) # A flow
     return fmt(expr)

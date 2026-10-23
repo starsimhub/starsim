@@ -105,12 +105,6 @@ class Options(sc.objdict):
         optdesc.check_method_calls = 'How to handle missing required method calls: options are "warn" (default), "die", and "" (False)'
         options.check_method_calls = sc.parse_env('STARSIM_CHECK_METHOD_CALLS', 'warn', str)
 
-        optdesc.time_eps = 'Set size of smallest possible time unit (in units of sim time, e.g. "year" or "day")'
-        options.time_eps = sc.parse_env('STARSIM_TIME_EPS', 1e-6, float) # If unit = 'year', corresponds to ~30 seconds
-
-        optdesc.sep = 'Set thousands separator for text output'
-        options.sep = sc.parse_env('STARSIM_SEP', ',', str)
-
         optdesc.date_sep = 'Set separator for dates'
         options.date_sep = sc.parse_env('STARSIM_DATE_SEP', '.', str)
 
@@ -138,7 +132,7 @@ class Options(sc.objdict):
         optdesc.threads = 'The number of threads that the passes over the agents of a large sim, and the particles of a particle filter, take: 0 (default) for as many as Numba has (by default, one per core), 1 for none. Each worker of ss.parallel() and of a calibration takes one, since the workers share the cores already'
         options.threads = sc.parse_env('STARSIM_THREADS', 0, int)
 
-        optdesc.compile = 'Whether the compartmental solvers run compiled (by Numba) or as plain Python, which gives the same results: "auto" (default) for compiled if they are compiled already (see ss.compile()), or if the runs in a session would take longer uncompiled than compiling takes (about a minute, once per install), with a note either way; "always" to always compile them first; "never" for plain Python'
+        optdesc.compile = 'Whether the compartmental solvers run compiled (by Numba) or as plain Python, which gives the same results: "auto" (default) for compiled if they are compiled already (see ss.compile()), or if the runs in a session would take longer uncompiled than compiling takes (about a minute, once per install), with a note either way; "always" to always compile them first; "never" for plain Python (and the kernels, not JAX, for the chain binomial, whose draws in JAX are compiled by Numba)'
         options.compile = sc.parse_env('STARSIM_COMPILE', 'auto', str)
 
         optdesc.crn = 'If True (default), use common random numbers (CRN) for reproducibility across scenarios. Set False for faster draws (one plain uniform per agent/edge, skipping the slot machinery); statistically valid but not CRN-safe across scenarios.'

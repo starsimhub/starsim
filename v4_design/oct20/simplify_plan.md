@@ -1,5 +1,7 @@
 # Simplifying Starsim v4: work plan
 
+**Superseded (2026-10-21)** by [oct21/plan.md](../oct21/plan.md), and in turn by the current plan (see the [README](../README.md)). Its "Won't do" list is carried in [admin/deferred.md](../admin/deferred.md). Kept as history.
+
 Written 2026-10-20 on `v4-simplify`, merging [simplify_codex.md](simplify_codex.md) (the framing, which Cliff prefers) and [simplify_claude.md](simplify_claude.md) (the item list, with locations in [simplify_claude/](simplify_claude/)), with Cliff's [CK:] notes on both taken as decisions. References in brackets point back to them: [Cx §2.5] is section 2.5 of the Codex survey, [Cl 13] is item 13 of the Claude survey (and [Cl A1] etc. its sub-surveys). Where the two notes disagree, the later or more specific one wins, and the plan says so.
 
 Sizes as in [implementation.md](implementation.md): S is under a day of agent work, M a few days, L more. **SWA** marks a silent wrong answer.

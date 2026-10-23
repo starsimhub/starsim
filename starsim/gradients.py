@@ -265,7 +265,7 @@ class Run:
                 local = ys[self.sets[arg]].sum(axis=0)
                 if not self.simple:
                     local = self.place.local(local)
-                stack.append(local/local_n if op == kn.FRAC else local)
+                stack.append(jnp.where(local_n > 0, local/jnp.where(local_n > 0, local_n, 1.0), 0.0) if op == kn.FRAC else local) # As ss.kernels.leaf_share(): the share of an empty place is 0
             elif op >= kn.EXP:
                 x = stack.pop()
                 func = {kn.EXP:jnp.exp, kn.LOG:jnp.log, kn.SQRT:jnp.sqrt, kn.ABS:jnp.abs, kn.SIN:jnp.sin, kn.COS:jnp.cos}[op]
@@ -857,6 +857,74 @@ class Unsupported(Exception):
     pass
 
 
+def fitted_index(names, fitted, mods, sim, external=None):
+    """
+    The position among the fitted parameters of each parameter object that stands for one (by id: the fitted parameter, and
+    the parameter of a module's graph that its name gives), and the names of those that a modifier changes, which neither the
+    log-density (`Density`) nor IF2 (`ss.fit.Swarm`) covers. A parameter that belongs to a likelihood (`external`) stands for itself only.
+    """
+    index, modified = {}, []
+    for i,(name,p) in enumerate(zip(names, fitted)):
+        index[id(p)] = i
+        if external is None or not external[i]:
+            modname, _, key = name.rpartition('.')
+            for mod in mods:
+                if modname and mod.name != modname:
+                    continue
+                graph_par = mod.graph.pars.get(key)
+                if graph_par is not None:
+                    index[id(graph_par)] = i
+                if sim.modifiers.get((mod.name, 'par', key)):
+                    modified.append(name)
+    return index, modified
+
+
+def convert_fitted(raw, val, unit_base, xp=np):
+    """ A fitted value as the engine uses it, in the sim's unit (`unit_base`): a probability as a rate, and a duration or rate in that unit; xp is the array namespace (NumPy, or JAX's) """
+    if isinstance(raw, ss.prob):
+        period = 1.0 if raw.unit is None else raw.unit.to(unit_base).value
+        return -xp.log1p(-val)/period
+    elif isinstance(raw, ss.TimePar):
+        return val*ss.solvers.convert(type(raw)(1.0), unit_base)
+    return val
+
+
+def fixed_rate(flow, dw, ctx):
+    """ The rate of a flow before its multipliers, from the values in ctx (as `ss.solvers.Compartmental.flow_base()`): for a dwell time `dw`, its stages (each group's own, if ragged) over its mean; otherwise its expression """
+    if flow.expr is not None:
+        return ss.transitions.evaluate(flow.expr, ctx)
+    val = ctx.value(dw.par)
+    kg = dw.kg if flow.kind == 'stage' else None
+    return ((flow.stages if kg is None else kg) if flow.kind == 'stage' else 1)/(1/val if dw.is_rate else val)
+
+
+def table_years(engine, raw):
+    """ The year of each row of an engine's tables, for a value that varies in time, as `ss.solvers.Compartmental.tables()` works them out """
+    t = engine.mod.t
+    npts = t.npts
+    years = np.array(t.yearvec[:npts], dtype=float)
+    if engine.per_step() == 3: # The start, middle, and end of each step, or the start for a held value
+        ends = np.append(years[1:], years[-1] + (years[-1] - years[-2] if npts > 1 else 0))
+        times = np.ravel(np.column_stack([years, (years + ends)/2, ends]))
+        return times[np.arange(len(times)) // 3 * 3] if engine.held(raw) else times
+    return years[np.minimum(np.arange(npts) + 1, npts - 1)] # The values for the step from ti, which is step ti+1
+
+
+def time_value(raw, ctx, years):
+    """ A value that varies in time (`ss.seasonal()` or `ss.timeseries()`), at each of the years, with the parameters inside it from ctx (as its series() works it out) """
+    jnp = ctx.xp
+    val = lambda v: ss.transitions.evaluate(v, ctx) if isinstance(v, ss.transitions.Expr) else ctx.engine.convert(v)
+    if any(isinstance(ss.parameters.const_value(v), ss.prob) for name in raw.fields for v in sc.tolist(getattr(raw, name))):
+        raise Unsupported(f'a fitted parameter inside {raw}, which is a probability')
+    if isinstance(raw, ss.seasonal):
+        return val(raw.mean)*jnp.maximum(0.0, 1 + val(raw.amplitude)*jnp.cos(2*np.pi*(years - raw.peak_frac)))
+    elif isinstance(raw, ss.timeseries):
+        _, i, j, w = raw.weights(years, ctx.engine.sim)
+        vals = jnp.stack([jnp.asarray(val(v), dtype=float) for v in raw.values])
+        return vals[i]*(1 - w) + vals[j]*w
+    raise Unsupported(f'a fitted parameter inside {raw}')
+
+
 class Context:
     """ What expressions are evaluated with in JAX: the fitted parameters as JAX values, the others as the engine has them, and (for results) the number in each state """
     def __init__(self, density, engine, x, n=None, series=False):
@@ -872,6 +940,10 @@ class Context:
         i = self.density.index.get(id(p))
         if i is not None:
             return self.density.convert(i, self.x[i])
+        years = self.density.timed.get((id(self.engine), id(p)))
+        if years is not None: # A value that varies in time with fitted parameters inside it: at every row of the tables, or at every step for a result
+            val = time_value(p.raw, self, years)
+            return val[:, None] if self.series else val[::self.engine.per_step()]
         kept = self.engine.series.get(id(p)) if self.series else None
         if kept is not None: # Rows by groups, as in the engine's tables
             return kept[1]
@@ -940,40 +1012,21 @@ class Density:
         self.mods = list(sim.declared)
         self.engines = [mod.engine for mod in self.mods]
         self.units = units(sim)
-        self.index = self.par_index()
+        self.index, modified = fitted_index(self.names, self.fitted, self.mods, sim, self.external)
+        if modified:
+            raise Unsupported(f'a modifier of the fitted parameter "{modified[0]}"')
         self.init_program()
         self.init_outputs()
+        for p,val in zip(self.fitted, self.x0): # A prior that is not covered says so now, not when the density is first traced
+            ss.fit.logprior(p, val, xp=jax().numpy)
         return
 
-    def par_index(self):
-        """ The position among the fitted parameters of each parameter object that stands for one """
-        out = {}
-        for i,(name,p) in enumerate(zip(self.names, self.fitted)):
-            out[id(p)] = i
-            if not self.external[i]:
-                modname, _, key = name.rpartition('.')
-                for mod in self.mods:
-                    if modname and mod.name != modname:
-                        continue
-                    graph_par = mod.graph.pars.get(key)
-                    if graph_par is not None:
-                        out[id(graph_par)] = i
-                    if self.sim.modifiers.get((mod.name, 'par', key)):
-                        raise Unsupported(f'a modifier of the fitted parameter "{name}"')
-        return out
-
     def convert(self, i, val):
-        """ A fitted value as the engine uses it: in the sim's unit """
-        jnp = jax().numpy
+        """ A fitted value as the engine uses it: in the sim's unit (see `convert_fitted()`) """
         raw = self.fitted[i].raw
-        if isinstance(raw, ss.prob):
-            period = 1.0 if raw.unit is None else raw.unit.to(self.sim.unit_base).value
-            return -jnp.log1p(-val)/period
-        elif isinstance(raw, ss.TimePar):
-            return val*ss.solvers.convert(type(raw)(1.0), self.sim.unit_base)
-        elif self.external[i] or sc.isnumber(raw):
-            return val
-        raise Unsupported(f'the fitted parameter "{self.names[i]}" is a {type(raw).__name__}')
+        if not (isinstance(raw, ss.TimePar) or self.external[i] or sc.isnumber(raw)):
+            raise Unsupported(f'the fitted parameter "{self.names[i]}" is a {type(raw).__name__}')
+        return convert_fitted(raw, val, self.sim.unit_base, jax().numpy)
 
     def corners(self):
         """ The points where the substeps a step needs are worked out: the corners of the bounds (or with more than 4 parameters, each parameter at each of its bounds, the others at their initial values) """
@@ -1003,6 +1056,15 @@ class Density:
     def init_program(self):
         """ Work out which numbers in the run depend on which parameters, and how """
         captured = self.capture(self.x0)
+        self.timed = {} # The values that vary in time with fitted parameters inside them (e.g. the mean and amplitude of ss.seasonal()), which are not linear in them, so are worked out in JAX, by engine and parameter: the year of each row of the tables
+        for engine in self.engines:
+            for p in engine.time_pars:
+                if isinstance(p.raw, ss.transitions.TimeValue) and any(id(q) in self.index for q in p.raw.pars):
+                    years = self.timed[(id(engine), id(p))] = table_years(engine, p.raw)
+                    with jax().enable_x64(True):
+                        same = np.allclose(np.asarray(Context(self, engine, self.x0, series=True).value(p)), engine.series[id(p)][1], rtol=1e-12, atol=0)
+                    if not same:
+                        raise Unsupported(f'how {p.raw} varies in time')
         self.programs = [c[0] for c in captured]
         self.hows = [c[1] for c in captured]
         self.X0 = [c[2] for c in captured]
@@ -1040,16 +1102,17 @@ class Density:
         self.consts = []
         self.fixed = []
         for engine in self.engines:
-            self.consts.append({k:self.index[id(p)] for k,p in enumerate(engine.prog_pars) if id(p) in self.index})
+            self.consts.append({k:p for k,p in enumerate(engine.prog_pars) if id(p) in self.index or (id(engine), id(p)) in self.timed})
+            fitted = lambda leaf: id(leaf) in self.index or (id(engine), id(leaf)) in self.timed
             fixed = []
             for f,flow in enumerate(engine.flows):
                 if flow.dynamic or flow.kind == 'conveyor': # The flow out of a conveyor has no rate of its own (see ss.kernels.convey())
                     continue
                 dw = engine.dwells.get(flow.tr.name) if flow.expr is None else None
                 leaves = flow.expr.leaves if flow.expr is not None else [dw.par] if dw is not None and dw.dist is None else []
-                if dw is not None and dw.dist is not None and any(id(leaf) in self.index for leaf in dw.par.leaves):
+                if dw is not None and dw.dist is not None and any(fitted(leaf) for leaf in dw.par.leaves):
                     raise Unsupported(f'a fitted parameter of the distribution of a dwell time ("{flow.tr.name}")')
-                if any(id(leaf) in self.index for leaf in leaves):
+                if any(fitted(leaf) for leaf in leaves):
                     mult = np.reshape(engine.flow_mult(flow), -1).astype(float) # For each group, or once for all (as the table is then kept: see capture())
                     fixed.append((f, flow, dw, mult))
             self.fixed.append(fixed)
@@ -1085,17 +1148,11 @@ class Density:
                 for i,slope in self.slopes[j].get(key, {}).items(): # Linear in each parameter (checked in sim.calibrate()); the values in the rates are replaced below by what they exactly are
                     val = val + slope*(x[i] - self.x0[i])
                 X[key] = val
-            for k,i in self.consts[j].items():
-                X['consts'] = X['consts'].at[:, k, :].set(self.convert(i, x[i]))
             ctx = Context(self, engine, x, series=True)
+            for k,p in self.consts[j].items():
+                X['consts'] = X['consts'].at[:, k, :].set(ctx.value(p))
             for f,flow,dw,mult in self.fixed[j]:
-                if flow.expr is None: # A dwell time: the stages over the mean
-                    val = ctx.value(dw.par)
-                    mean = 1/val if dw.is_rate else val
-                    base = (flow.stages if flow.kind == 'stage' else 1)/mean
-                else:
-                    base = ss.transitions.evaluate(flow.expr, ctx)
-                X['fixed'] = X['fixed'].at[:, f, :].set(base*mult)
+                X['fixed'] = X['fixed'].at[:, f, :].set(fixed_rate(flow, dw, ctx)*mult)
             out.append(X)
         return out
 
@@ -1258,7 +1315,11 @@ class LogDensity:
         types = [type(p.raw) if isinstance(p.raw, ss.TimePar) else None for p in fitted.values()]
         def set_pars(x):
             sim.restart(pars={key:(cls(val) if cls is not None else float(val)) for key,val,cls in zip(self.names, x, types)})
-        self.density = Density(sim, fitted, self.x0, set_pars, likelihood=likelihood).reverse()
+        try:
+            self.density = Density(sim, fitted, self.x0, set_pars, likelihood=likelihood).reverse()
+        except Unsupported as E:
+            errormsg = f'The log-density in JAX does not cover {E} yet'
+            raise ss.CapabilityError(errormsg) from E
         self.fn = self.density
         jx = jax()
         with jx.enable_x64(True):

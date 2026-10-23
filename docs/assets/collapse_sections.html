@@ -1,0 +1,15 @@
+<script>
+// Sidebar sections listed here start collapsed, unless the current page is in them (Quarto can only set this for all sections at once, via collapse-level)
+document.addEventListener('DOMContentLoaded', () => {
+  const collapsed = ['Architecture'];
+  for (const section of document.querySelectorAll('#quarto-sidebar .sidebar-item-section')) {
+    const title = section.querySelector('.menu-text');
+    if (!title || !collapsed.includes(title.textContent.trim()) || section.querySelector('.sidebar-link.active')) continue;
+    section.querySelector(':scope > ul.collapse')?.classList.remove('show');
+    for (const toggle of section.querySelectorAll(':scope > .sidebar-item-container [data-bs-toggle="collapse"]')) {
+      toggle.classList.add('collapsed');
+      toggle.setAttribute('aria-expanded', 'false');
+    }
+  }
+});
+</script>

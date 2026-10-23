@@ -6,17 +6,17 @@ These pages are for people who already model with another framework and want to 
 
 | Framework | Lines of model code | Time for one run | The switching demo's checks | Where Starsim is furthest behind today |
 |---|---|---|---|---|
-| [EpiModel](epimodel.qmd) | Fewer in both models | Faster in both | 2 of 3 pass | No ERGM terms beyond degree by group and one `match=` property; a stochastic fit by default keeps a lucky draw |
-| [SimInf](siminf.qmd) | **More** in both models | **Slower** in both | 3 of 4 pass | Speed on a national register |
-| [odin](odin.qmd) | Fewer in both | Faster in one, slower in the other, under the limit | 3 of 4 pass | A fixed delay is many Erlang stages |
-| [epydemix](epydemix.qmd) | **More** in one of two | The same in one, slower in the other, under the limit | 4 of 5 pass | No subnational data (US states) |
+| [EpiModel](epimodel.qmd) | Fewer in both models | Faster in both | 3 of 3 pass | No ERGM terms beyond degree by group and `match=` properties (no `nodemix`, `absdiff`, or `gwesp`) |
+| [SimInf](siminf.qmd) | **More** in both models | **Slower** in both | 4 of 5 pass | The time to build and run a small model (SISe3: 5.2 s against 1.6 to 1.9 s) |
+| [odin](odin.qmd) | Fewer in both | Faster in one, slower in the other, under the limit | 4 of 5 pass | Many small stochastic runs (1,000 runs in 11.2 s against 1.98 s); no filtered trajectories from particle MCMC |
+| [epydemix](epydemix.qmd) | **More** in one of two | The same in one, slower in the other, under the limit | 4 of 5 pass | The US states' data are read, but not yet published for download |
 | [MEmilio](memilio.qmd) | Fewer in both | Faster | 4 of 4 pass | No German county data; no `osecirvvs` importer |
 | [flepiMoP](flepimop.qmd) | Fewer in both | Faster | 3 of 3 pass | No cluster batch jobs or R post-processing |
 | [summer2](summer2.qmd) | Fewer in both | Slower per run once summer2 has compiled, faster the first time; under the limit | 2 of 2 pass (1 not run) | No sigmoidal scale-up; a live model cannot be imported in the same process |
-| [Atomica](atomica.qmd) | Fewer in both | Slower per run, but under the limit | 5 of 7 pass | Two library workbooks fail to import; no spreadsheet interface |
+| [Atomica](atomica.qmd) | Fewer in both | Slower per run, but under the limit | 6 of 7 pass | The `tb` library workbook fails to import; no spreadsheet interface |
 | [camdl](camdl.qmd) | Fewer in both | Faster in one, slower in the other, under the limit | 3 of 3 pass | The interventions (SIAs) of an imported model are not translated |
-| [EMULSION](emulsion.qmd) | Fewer in both | Faster | 2 of 5 pass | Newborns by prototype, births between strata, and minimum stays as compartments |
-| [LASER](laser.qmd) | Fewer in both | **Slower** (the other model passes only with a tenth of the agents) | 0 of 3 pass | Speed and memory per agent at national scale |
+| [EMULSION](emulsion.qmd) | Fewer in both | Faster | 2 of 5 pass | Importing the quickstart; newborns by prototype give too few animals; births between strata as compartments |
+| [LASER](laser.qmd) | Fewer in both | **Slower** (the other model passes only with a tenth of the agents) | 2 of 3 pass | Speed per agent at national scale |
 | [NumPy](numpy.qmd) | Fewer | **Slower**, under the limit | No demo | Speed for a small model run once |
 | [Starsim 3](starsim3.qmd) | | | 4 of 4 pass | Declared diseases as agents are slower than code |
 
@@ -26,7 +26,7 @@ These pages are for people who already model with another framework and want to 
 
 **Lines and times.** Starsim's north-star script, `tests/north_star.py`, reads every translation and writes a table of lines of model code and run time, the original against Starsim, with the rows that fail. Starsim's lines are counted from the translation: not counting blank lines, comments, docstrings, imports, or the `if __name__ == '__main__'` block, and counting a line over 100 characters twice. The original's lines are those of its model file (rows of spreadsheets for Atomica, lines of YAML for flepiMoP and EMULSION). Starsim fails on lines if it has more than the original. Time is two numbers: the first run in a new process, and the best of 5 repeated runs, each building and running the sim. A time fails if Starsim is more than 2 times slower and more than 1 s slower. The originals were timed in their own environments (what each time includes, such as starting R or compiling, is said on each page). The script was run twice on 18 October 2026, on a 20-core x86-64 Linux machine shared with other work: once with the originals' recorded times, and once with the originals run again where that could be done.
 
-**What works and what does not yet.** Starsim's switching demos (`tests/switching/`) take each task that a user of that framework does every week, written in that field's terms and scaled down to run in seconds, and check it against the original framework's numbers. Of their 51 checks, 34 pass today, 16 fail, and one needs a framework that cannot be installed alongside Starsim. Each failing check names what blocks it. The demos were built from a review in which an experienced user of each framework tried their routine work in Starsim at their real scale (on 17 October 2026). Numbers on the pages that are not from the demos or the north star are from the translations' own comparisons (13 and 14 October 2026) or from that review; a time from the review is given with its date. The NumPy page has no translation or demo: its numbers are from its own code, which is run when the docs are built. Starsim's numbers are for the development version of Starsim 4.
+**What works and what does not yet.** Starsim's switching demos (`tests/switching/`) take each task that a user of that framework does every week, written in that field's terms and scaled down to run in seconds, and check it against the original framework's numbers. Of their 50 checks, 41 pass today, 8 fail, and one needs a framework that cannot be installed alongside Starsim. Each failing check names what blocks it. The demos were built from a review in which an experienced user of each framework tried their routine work in Starsim at their real scale (on 17 October 2026). Numbers on the pages that are not from the demos or the north star are from the translations' own comparisons (13 and 14 October 2026) or from that review; a time from the review is given with its date. The NumPy page has no translation or demo: its numbers are from its own code, which is run when the docs are built. Starsim's numbers are for the development version of Starsim 4.
 
 ## The north-star table
 
@@ -57,4 +57,4 @@ The second run of the north-star script, with the originals timed again where th
 | summer2/seir-age-clinical | 134 | 15 | 0.0012 | 0.13 | 0.00099 | 0.041 | pass | pass | pass |
 | summer2/sir-age-location | 35 | 11 | 0.00099 | 0.12 | 0.00038 | 0.02 | pass | pass | pass |
 
-Lines: 19 of 22 pass. First run: 16 of 19 pass (three originals have no first-run time). Repeated run: 19 of 22 pass. The hub-and-spoke row passes with a tenth of LASER's agents (each Starsim agent stands for ten people); at equal size, Starsim is about 10 times slower than LASER on its threads.
+Lines: 19 of 22 pass. First run: 16 of 19 pass (three originals have no first-run time). Repeated run: 19 of 22 pass. The hub-and-spoke row passes with a tenth of LASER's agents (each Starsim agent stands for ten people); at equal size, Starsim was about 10 times slower than LASER on its threads. After the work on speed of 22 October 2026, which is after these runs, Starsim on one thread took 5.9 s against LASER's 5.4 s on one thread.

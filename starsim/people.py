@@ -131,7 +131,6 @@ class People:
             self.states.append(state, overwrite=False)
             setattr(self, state.name, state)
             state.link_people(self)
-        self._linked_modules = []
         self.causes = [] # The causes of death, by name (see request_death()), in the order first seen: people.cause_of_death is the position in this list
         self._claims = [] # The deaths requested in this step, with their causes: see step_die()
         self._died_of = {} # Who died of each cause in this step
@@ -441,7 +440,6 @@ class People:
             setattr(self, module.name, module)
 
         if len(module.state_list):
-            self._linked_modules.append(module.name)
             for state in module.state_list:
                 state.link_people(self)
                 combined_name = module.name + '.' + state.name  # We will have to resolve how this works with multiple instances of the same module (e.g., for strains). The underlying machinery should be fine though, with People._states being flat and keyed by ID
@@ -578,22 +576,6 @@ class People:
         self.auids = self._auids_view = room[:n+k].view(ss.uids)
         return
 
-    def filter(self, criteria=None, uids=None, split=False):
-        """
-        Store indices to allow for easy filtering of the People object.
-
-        Args:
-            criteria (bool array): a boolean array for the filtering critria
-            uids (array): alternatively, explicitly filter by these indices
-            split (bool): if True, return separate People objects matching both True and False
-
-        Returns:
-            A filtered People object, which works just like a normal People object
-            except only operates on a subset of indices.
-        """
-        filt = Filter(self)
-        return filt.filter(criteria=criteria, uids=uids, split=split)
-
     def scale_flows(self, inds):
         """
         Return the scaled versions of the flows -- replacement for len(inds)
@@ -686,20 +668,12 @@ class People:
         self.ti_removed[uids] = self.sim.ti
         return
 
-    def find_children(self, target_parent_uids):
-        """ Find children whose parents are in the target set"""
-        all_uids = self.auids
-        parent_uids = self.parent
-        mask = np.isin(parent_uids, target_parent_uids)
-        children = all_uids[mask]
-        return ss.uids(children)
-
     def step_die(self):
         """ Carry out any deaths or removals that took place this timestep """
         ti = self.sim.ti
-        deaths, n_alive = ss.kernels.due_alive(self.alive.raw[:self.uid.len_used], self.ti_dead.raw, self.ti_removed.raw, ti) # As ((self.ti_dead <= ti) | (self.ti_removed <= ti)).uids, in one pass by UID, since the active agents are those alive...
+        deaths, n_alive = ss.perflib._passes.due_alive(self.alive.raw[:self.uid.len_used], self.ti_dead.raw, self.ti_removed.raw, ti) # As ((self.ti_dead <= ti) | (self.ti_removed <= ti)).uids, in one pass by UID, since the active agents are those alive...
         if n_alive != len(self.auids): # ...unless something else has changed who is alive: then from the active agents themselves
-            deaths = ss.kernels.due(self.auids.view(np.ndarray), self.ti_dead.raw, self.ti_removed.raw, ti)
+            deaths = ss.perflib._passes.due(self.auids.view(np.ndarray), self.ti_dead.raw, self.ti_removed.raw, ti)
         death_uids = ss.uids(deaths)
         self.resolve_causes(death_uids[self.ti_dead.raw[death_uids] <= ti])
         self.alive[death_uids] = False  # Whilst not dead, removed agents should not be included in alive totals
@@ -731,12 +705,12 @@ class People:
             room = self._auids_room
         else:
             room = np.empty(expected + max(1000, expected//10), dtype=ss.dtypes.uid) # With room for births: see add_active()
-        n_kept = ss.kernels.keep_raw(self.alive.raw[:self.uid.len_used], age, dt, aging, room, expected) # By UID, if the active agents are those alive and those who died in this step...
+        n_kept = ss.perflib._passes.keep_raw(self.alive.raw[:self.uid.len_used], age, dt, aging, room, expected) # By UID, if the active agents are those alive and those who died in this step...
         if n_kept >= 0:
             gone = dying.view(np.ndarray)
         else: # ...or else from the active agents themselves
             room = np.empty(len(auids) + max(1000, len(auids)//10), dtype=ss.dtypes.uid)
-            n_kept, gone = ss.kernels.keep_alive(auids.view(np.ndarray), self.alive.raw, age, dt, aging, room)
+            n_kept, gone = ss.perflib._passes.keep_alive(auids.view(np.ndarray), self.alive.raw, age, dt, aging, room)
         if len(gone): # Agents who are still active but no longer alive
 
             # Remove the UIDs from the networks too
@@ -768,11 +742,11 @@ class People:
             gone = dying[self.ti_dead.raw[dying] <= ti], dying[self.ti_removed.raw[dying] <= ti]
             counts = [float(w[state.raw[auids]].sum()) for state in states] + [float(self.scale.raw[uids].sum()) for uids in gone]
         elif all(state.raw.ndim == 1 for state in states):
-            counts = ss.kernels.count_alive(tuple(state.raw for state in states), self.alive.raw[:self.uid.len_used]) # In one pass by UID, if the active agents are those alive and those who died in this step
+            counts = ss.perflib._passes.count_alive(tuple(state.raw for state in states), self.alive.raw[:self.uid.len_used]) # In one pass by UID, if the active agents are those alive and those who died in this step
             if counts[-1] + len(dying) == len(self.auids):
                 counts = [count + np.count_nonzero(state.raw[dying]) for state,count in zip(states, counts)] + [np.count_nonzero(self.ti_dead.raw[dying] <= ti), np.count_nonzero(self.ti_removed.raw[dying] <= ti)]
             else: # From the active agents themselves
-                counts = ss.kernels.count_people(self.auids.view(np.ndarray), tuple(state.raw for state in states), self.alive.raw, self.ti_dead.raw, self.ti_removed.raw, ti)
+                counts = ss.perflib._passes.count_people(self.auids.view(np.ndarray), tuple(state.raw for state in states), self.alive.raw, self.ti_dead.raw, self.ti_removed.raw, ti)
         if self.scale.weighted: # Agents of different weights make fractions of people
             for key in [f'n_{state.name}' for state in states] + ['new_deaths', 'new_emigrants', 'cum_deaths']:
                 if res[key].values.dtype.kind in 'iu':
@@ -980,16 +954,16 @@ class People:
 
 def people(place, year=None, n_agents=None, revision=None):
     """
-    A named population: the size, age structure, and sex ratio of a country
+    A named population: the size, age structure, and sex ratio of a country or a US state
 
-    The data are the UN World Population Prospects, bundled with `starsim_data`. The
+    The data are the UN World Population Prospects, bundled with `starsim_data` (for a US state, the US Census for 2023, downloaded on first use: see `ss.data.population()`). The
     sim takes its population size (`total_pop`) from them, unless it is given one, and
     the split of an age stratification that is not given one, so a compartmental model
     can use a named population as well as agents can. Where the population came from is
     written in the model spec, so `sim.to_code()` looks it up again.
 
     Args:
-        place (str): a country, by name or code ('Kenya', 'KE', 'KEN')
+        place (str): a country, by name or code ('Kenya', 'KE', 'KEN'), or a US state ('United States:Massachusetts')
         year (int): the year (default: the year the sim starts, if it has dates; otherwise the year of the WPP revision, e.g. 2024); years between the decadal values are interpolated
         n_agents (int): the number of agents (default: the sim's); giving it makes the model agent-based, as `ss.People(n_agents)` does
         revision (str): the WPP revision (default: the latest bundled)
@@ -1024,174 +998,6 @@ class Person(sc.objdict):
         df = sc.dataframe.from_dict(self, orient='index', columns=['value'])
         df.index.name = 'key'
         return df
-
-
-class Filter(sc.prettyobj):
-    """
-    A filter on states; see `ss.People.filter()` for details.
-    """
-    def __init__(self, people, uids=None):
-        self.people = people
-        self._uids = uids if uids is not None else people.auids
-        self.orig_uids = people.auids
-        self.states = ss.ndict(type=ss.Arr)
-        self.is_filtered = False
-        self._key = None
-        self._stale = False
-        self._linked_modules = people._linked_modules
-
-        # Copy states
-        for key,state in self.people.states.items():
-            new_state = object.__new__(state.__class__)
-            new_state.__dict__ = state.__dict__.copy() # Shallow copy
-            new_state.people = self
-            self.states[key] = new_state
-
-        for mod in self._linked_modules:
-            setattr(self, mod, sc.dictobj())
-            if isinstance(people, People):
-                states = getattr(people, mod).state_list
-            elif isinstance(people, Filter):
-                states = getattr(people, mod).values()
-            else:
-                errormsg = f'Expecting People or Filter object, not {people}'
-                raise TypeError(errormsg)
-            for state in states:
-                getattr(self, mod)[state.name] = self.states[f'{mod}.{state.name}']
-        return
-
-    def __getitem__(self, key):
-        return self.states[key]
-
-    def __getattr__(self, key):
-        if key.startswith('__'):
-            raise AttributeError(key)
-        return self.states[key]
-
-    def __setitem__(self, key, value):
-        self.states[key] = value
-        return
-
-    def __call__(self, key):
-        self._key = key
-        self._stale = True
-        return self
-
-    @property
-    def stale(self):
-        return self._key is not None
-
-    @property
-    def auids(self):
-        """ Rename for use as a "people" object """
-        return self._uids
-
-    @property
-    def uids(self):
-        """ Get the UIDs, computing if necessary """
-        if self._stale:
-            return self.filter(self._key, new=False)._uids
-        else:
-            return self._uids
-
-    def _func(self, obj, op):
-        """ Apply a comparison operator to the stale filter's state array and return a filtered result """
-        if not self.stale:
-            errormsg = "To use logical operations on a Filter object, call first, e.g. filt('age') > 5"
-            raise RuntimeError(errormsg)
-        else:
-            arr = self.states[self._key]
-            self._key = None
-            self._stale = False
-
-        match op:
-            case '==': criteria = arr == obj
-            case '!=': criteria = arr != obj
-            case '<':  criteria = arr <  obj
-            case '<=': criteria = arr <= obj
-            case '>':  criteria = arr >  obj
-            case '>=': criteria = arr >= obj
-            case '~': criteria = ~arr
-            case _: raise ValueError(f'Unsupported operator: {op}')
-
-        return self.filter(criteria=criteria)
-
-    def __eq__(self, obj): return self._func(obj, '==')
-    def __ne__(self, obj): return self._func(obj, '!=')
-    def __lt__(self, obj): return self._func(obj, '<')
-    def __le__(self, obj): return self._func(obj, '<=')
-    def __gt__(self, obj): return self._func(obj, '>')
-    def __ge__(self, obj): return self._func(obj, '>=')
-    def __invert__(self): return self._func(None, '~')
-
-    def filter(self, criteria=None, uids=None, split=False, new=None):
-        """
-        Store indices to allow for easy filtering of the People object.
-
-        Args:
-            criteria (bool array): a boolean array for the filtering critria
-            uids (array): alternatively, explicitly filter by these indices
-            split (bool): if True, return separate filter objects matching both True and False
-
-        Examples:
-            ```python
-            sim = ss.Sim(n_agents=100e3, dur=10, networks='random', diseases='sir', verbose=0)
-            sim.run()
-            ppl = sim.people
-
-            # Traditional filtering
-            f1 = ppl.female == True
-            f2 = f1 * (ppl.age>5)
-            f3 = f2 * (~ppl.sir.infected)
-
-            # Equivalent using filter
-            f1 = ppl.filter('female')
-            f2 = f1('age')>5
-            f3 = ~f2('sir.infected')
-            ```
-        """
-        if new is True:
-            filtered = Filter(self)
-        elif new is False:
-            filtered = self
-        else:
-            filtered = Filter(self) if (self.is_filtered and not split) else self
-
-        # Perform the filtering
-        if uids is not None: # Unless indices are supplied directly, in which case use them
-            new_uids = np.intersect1d(self._uids, uids)
-            if split:
-                inv_uids = np.setdiff1d(self._uids, uids)
-                f1 = Filter(self, uids=new_uids)
-                f2 = Filter(self, uids=inv_uids)
-                return f1, f2
-            else:
-                filtered._uids = new_uids
-
-        if criteria is not None: # Main use case: perform filtering
-            if isinstance(criteria, str): # Allow e.g. filter('female')
-                if criteria[0] == '~': # Allow e.g. filter('~female') # TODO: may not be working
-                    key = criteria[1:]
-                    criteria = ~self.states[key]
-                else:
-                    self._key = criteria
-                    criteria = self.states[criteria]
-            len_criteria = len(criteria)
-            if len_criteria == len(filtered._uids): # Main use case: a new filter applied on an already filtered object, e.g. filtered.filter(filtered.age > 5)
-                new_uids = filtered._uids[criteria] # Criteria is already filtered, just get the indices
-                if split:
-                    inv_uids = filtered._uids[~criteria]
-                    f1 = Filter(self, uids=new_uids)
-                    f2 = Filter(self, uids=inv_uids)
-                    return f1, f2
-            else:
-                errormsg = f'"criteria" must be boolean array matching either current filter length ({len(self)}) or else the total number of people ({self.n_uids}), not {len(criteria)}'
-                raise ValueError(errormsg)
-            filtered._uids = new_uids
-
-        filtered.is_filtered = True
-
-        return filtered
 
 
 @nb.jit(cache=True)

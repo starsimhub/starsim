@@ -134,7 +134,7 @@ def test_function():
 
 def test_jax():
     sc.heading('Testing a function traced by JAX, and its gradient')
-    jax = pytest.importorskip('jax')
+    import jax
     jnp = jax.numpy
     x = np.random.default_rng(1).normal(size=100)
     with jax.enable_x64(True):

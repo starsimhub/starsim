@@ -42,7 +42,9 @@ from numba.core.errors import NumbaError
 from numba.extending import overload, typeof_impl
 from numba.np.random.distributions import random_loggam
 import starsim as ss
-from . import _draws as draws
+from . import _draws as draws, _cache
+
+_cache.depends(__file__, draws.__file__) # The cached helpers below call into the draws
 
 __all__ = ['jit']
 
@@ -560,7 +562,7 @@ def kind_of(obj):
         return 'timepar'
     elif isinstance(obj, (bool, numbers.Number, np.number, np.bool_)):
         return 'scalar'
-    elif isinstance(obj, (np.ndarray, ss.BaseArr)): # E.g. a result, passed as its values
+    elif isinstance(obj, (np.ndarray, ss.arrays.BaseArr)): # E.g. a result, passed as its values
         return 'array'
     return None
 
@@ -747,7 +749,7 @@ class Reads:
             elif kind == 'dist':
                 out.append(dist_input(val, '.'.join(attrs)))
             else:
-                out.append(plain(val.values if isinstance(val, ss.BaseArr) else val))
+                out.append(plain(val.values if isinstance(val, ss.arrays.BaseArr) else val))
         out.append(obj.sim.people.auids.view(np.ndarray) if self.has_arrs else np.empty(0, dtype=np.int64))
         return out
 
@@ -758,7 +760,7 @@ class Reads:
             if kind == 'dist':
                 d = out[i][0]
                 seed, ind, dtype = d.crn_key()
-                out[i] = (np.uint64(ss.kernels.crn_key(seed, ind)),) + out[i][1:]
+                out[i] = (np.int64(draws.key(seed, ind)).view(np.uint64),) + out[i][1:]
         return out
 
 
@@ -1252,7 +1254,7 @@ def udtype_of(d):
 
 def shift_scale(d):
     """ How a distribution's uniforms are made from its hashes """
-    return ss.kernels.crn_bits(udtype_of(d))
+    return draws.crn_bits(udtype_of(d))
 
 
 def slots_of(d):
@@ -2062,7 +2064,7 @@ def _uniform(d, uid):
     """ An agent's uniform for this call, as hash_uniforms() gives it (at the distribution's dtype) """
     slots = d[4]
     slot = uid if slots.size == 0 else slots[uid]
-    return _like(ss.kernels.crn_uniform(d[0], slot, d[1], d[2]), d[3])
+    return _like(draws.crn_uniform(d[0], slot, d[1], d[2]), d[3])
 
 
 def _like(x, proto):

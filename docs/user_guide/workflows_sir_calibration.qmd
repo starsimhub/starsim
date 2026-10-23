@@ -159,7 +159,7 @@ def beta_binomial_loglik(sim_prev, obs_x, obs_n, kappa=10.0):
     return loglik.sum(axis=1) # Sum over the surveys
 ```
 
-`ss.parallel()` runs the sim once for each set of values, given as a list of dicts; each sample also gets a random seed of its own. The results of the runs come back with a run axis first, with the values of each run in `res.runs`:
+`ss.parallel(sim, priors=...)` runs the sim once for each draw, given as a dataframe (or a list of dicts) with a column for each parameter; each sample here also gets a random seed of its own. Draws are runs of one scenario, unlike a sweep with `pars=`, in which each set of values is a scenario of its own. (`priors=True, n_runs=N` would make the draws itself, from each parameter's `prior=`, or uniformly over its bounds as here.) The results of the runs come back with a run axis first, with the values of each run in `res.runs`:
 
 ```{python}
 N = 300 # Number of prior samples (more is better, but slower)
@@ -170,7 +170,7 @@ prior_samples = pd.DataFrame(dict(
     rand_seed = np.arange(N) + 1,
 ))
 
-msim = ss.parallel(make_sim(), pars=prior_samples.to_dict('records'))
+msim = ss.parallel(make_sim(), priors=prior_samples)
 res = msim.results.sir
 print(res.prevalence.runs.head())
 ```
@@ -288,4 +288,4 @@ plt.tight_layout()
 
 The next step would be scenario analysis using these $K$ resampled parameters and latent trajectories. Each of these $K$ samples represents a different possible future trajectory of the epidemic, and the ensemble of these $K$ trajectories can be used to quantify uncertainty in future projections. Each of these $K$ trajectories should be simulated forward $M$ times for each scenario, using common random numbers, to produce final results.
 
-For a deterministic or stochastic compartmental model (`solver='ode'`, `'binomial'`, or `'gillespie'`), `sim.calibrate()` can also give a posterior directly, from the No-U-Turn sampler or particle MCMC; see [Calibration](workflows_calibration.qmd).
+For a deterministic or stochastic compartmental model (`solver='ode'`, `'binomial'`, `'gillespie'`, or `'tau'`), `sim.calibrate()` can also give a posterior directly, from the No-U-Turn sampler or particle MCMC; see [Calibration](workflows_calibration.qmd).

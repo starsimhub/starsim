@@ -12,7 +12,7 @@ import re
 import sciris as sc
 import starsim as ss
 
-__all__ = ['CodedError', 'StarsimWarning', 'Note', 'note', 'CapabilityError'] # The base classes, and the error for what a solver cannot run, are also ss.<Name>; the rest are ss.errors.<Name>
+__all__ = ['CodedError', 'StarsimWarning', 'Note', 'note', 'CapabilityError', 'AlreadyRunError'] # The base classes, the error for what a solver cannot run, and Starsim 3's error for running a sim twice are also ss.<Name>; the rest are ss.errors.<Name>
 
 
 #%% Base classes
@@ -247,6 +247,39 @@ class TimeOutsideSim(CodedError):
 class MissingDimension(CodedError, KeyError):
     """ An `ss.transfer` names a stratification the model does not have (a boolean coordinate that does not exist yet is created instead); or a transition uses a value by level of a dimension (`ss.by()`) that the states it moves have no level of; or a value by position along a dimension (`ss.by(age=[...])`) that the sim is not stratified by """
 
+class AlreadyRunError(CodedError, RuntimeError):
+    """ A sim that has already run (or been finalized) is run, stepped, or finalized again; says to make a new sim with `sim.new()`, or to copy the sim before running it """
+    def __init__(self, *args):
+        default = 'To run it again, make a new sim with sim.new(), or copy the sim before running it'
+        args = (f'{args[0]}\n{default}',) + args[1:] if args else (default,)
+        super().__init__(*args)
+
+class DistNotInitializedError(CodedError, RuntimeError):
+    """ A distribution made with `strict=True` is sampled before it is initialized (by the sim, or with `dist.init()` or `dist.mock()`) """
+    def __init__(self, dist=None, msg=None):
+        if msg is None:
+            msg = f'{dist} has not been initialized; please set strict=False when creating the distribution, or call dist.mock() or dist.init().'
+        super().__init__(msg)
+
+class DistNotReadyError(CodedError, RuntimeError):
+    """ A distribution made with `strict=True` is sampled twice in one step, which would reuse its random numbers; `dist.jump()` resets it """
+    def __init__(self, dist=None, msg=None):
+        if msg is None:
+            msg = f'{dist} is not ready. This is likely caused by calling a distribution multiple times in a single step. Call dist.jump() to reset.'
+        super().__init__(msg)
+
+class DistSeedRepeatError(CodedError, RuntimeError):
+    """ Two distributions of a sim have the same seed, or a distribution is jumped back to a state it has passed, so that it would draw the same random numbers twice """
+    def __init__(self, dist1=None, dist2=None, msg=None):
+        if msg is None:
+            msg = f'A common seed was found between {dist1} and {dist2}. This is likely caused by incorrect initialization of the parent Dists object.'
+        super().__init__(msg)
+
+class BooleanOperationError(CodedError, NotImplementedError):
+    """ A logical operation (and, or, xor, not) is applied to an array of people's values that is not Boolean, e.g. `ppl.age & ppl.female` """
+    def __init__(self, arr):
+        super().__init__(f'Logical operations are only valid on Boolean arrays, not {arr.dtype}')
+
 class NothingToFit(CodedError):
     """ `calibrate()` or `sensitivity()` is called and no parameter has `bounds` """
 
@@ -365,7 +398,7 @@ def catalog():
 
     found = classes()
     counts = {k:sum(kind(cls).startswith(k) for cls in found) for k in ['error', 'warning', 'note']}
-    lines = [f'{len(found)} names: {counts["error"]} errors, {counts["warning"]} warnings, and {counts["note"]} notes. Each is `ss.errors.<Name>` (and `ss.CapabilityError` is also at the root, as `ss.CapabilityError`); the errors are subclasses of `ss.CodedError` (itself a `ValueError`), and the warnings and notes of `ss.StarsimWarning` (itself a `RuntimeWarning`).', '']
+    lines = [f'{len(found)} names: {counts["error"]} errors, {counts["warning"]} warnings, and {counts["note"]} notes. Each is `ss.errors.<Name>` (and `ss.CapabilityError` and `ss.AlreadyRunError` are also at the root); the errors are subclasses of `ss.CodedError` (itself a `ValueError`), and the warnings and notes of `ss.StarsimWarning` (itself a `RuntimeWarning`).', '']
     lines += ['| Name | Kind | When |', '|---|---|---|']
     lines += [f'| `{cls.__name__}` | {kind(cls)} | {when(cls)} |' for cls in found]
     return '\n'.join(lines) + '\n'

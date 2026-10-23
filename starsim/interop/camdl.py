@@ -169,7 +169,8 @@ def load_camdl(filename, pars=None, scenario=None, solver='ode', camdlc=None, ve
 
     **Example**:
 
-        sim = ss.load('sir.camdl', pars=dict(beta=0.4, gamma=0.15, rho=0.6, k=10))
+        import starsim.interop
+        sim = ss.interop.load('sir.camdl', pars=dict(beta=0.4, gamma=0.15, rho=0.6, k=10))
     """
     ir = read(filename, camdlc=camdlc)
     m = ir['model']

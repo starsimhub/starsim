@@ -18,7 +18,7 @@ Then, in Starsim, `sim = ss.interop.load('model.json')`, or `ss.interop.load('in
 
 | EpiModel | Starsim | Mechanical |
 |---|---|---|
-| `netsim()` with `type = "SI"`, `"SIS"`, `"SIR"` | States `S`, `I` (and `R`); `infection = S >> I @ beta * I` with `beta = 1 - (1 - inf.prob)^act.rate` per partnership per step; `rec.rate` to `S` or `R` | yes |
+| `netsim()` with `type = "SI"`, `"SIS"`, `"SIR"` | States `S`, `I` (and `R`); `infection = S >> I @ beta * I` with `beta = ss.peract(inf.prob)`, and `act.rate` as `acts=` of the network (e.g. `ss.freqperday(2)`), so the chance per partnership per step is `1 - (1 - inf.prob)^act.rate`; `rec.rate` to `S` or `R` | yes |
 | Probabilities per step | `ss.prob(..., 'day')` (or the `unit=` given: a step is only a name, so `unit='week'` gives the same numbers) | yes |
 | `a.rate`, `ds.rate`, `di.rate`, `dr.rate` | An inflow `a_rate * (S + I + R).n` and an outflow from each state | yes |
 | `i.num`, `r.num`; the network's size | `init_n=dict(S=..., I=..., R=...)` (numbers of people), `n_agents=n`, `solver='abm'` | yes |
@@ -30,7 +30,8 @@ Then, in Starsim, `sim = ss.interop.load('model.json')`, or `ss.interop.load('in
 | `dcm()` with `type = "SI"`, `"SIS"`, `"SIR"` | The same states with rates, `inf_prob * act_rate * I` (frequency-dependent), `solver='ode'`, `dt` from `control.dcm(dt=)` | yes |
 | `icm()` with `type = "SI"`, `"SIS"`, `"SIR"` | The same, with `solver='binomial'`: acts between random pairs as a rate of infection (marked guessed) | yes |
 | Scenarios (several calls of `netsim()`, `use_scenario()`) | The chosen one as the sim; the others in `sim.imported.scenarios`, for `sim.new(pars=...)` | yes |
-| Other ERGM terms (`nodefactor`, `absdiff`, `gwesp`, `degree`, `offset(...)`, `nodematch(diff = TRUE)`) | Listed; triangles and the like have no counterpart, so note it as a finding | no |
+| `nodefactor("risk")` | `n_contacts=ss.by(risk=[...])`, the mean degree of each level (the first level, which has no statistic, takes the rest of `2*edges`), with the disease stratified by the attribute as on the network | yes |
+| Other ERGM terms (`absdiff`, `gwesp`, `degree`, `offset(...)`, `nodematch(diff = TRUE)`) | Listed; triangles and the like have no counterpart, so note it as a finding | no |
 | Partnerships that last longer within a group (`~offset(edges) + offset(nodematch(...))`) | Listed; the first duration is used | no |
 | Two groups (parameters ending in `.g2`) | Listed: `stratify(group=[1, 2])` with rates by group, by hand | no |
 | A parameter by time since infection (`inf.prob` as a vector), `inter.eff`, `inter.start` | Listed; the first value is used | no |
@@ -43,7 +44,7 @@ Then, in Starsim, `sim = ss.interop.load('model.json')`, or `ss.interop.load('in
 ## What needs care
 
 - **Order within a step.** EpiModel lets people recover in the step in which they are infected and counts after that, so its prevalence is about 5% lower for the same epidemic, and it grows a little more slowly (`icm()` SIS: 460 infected at equilibrium against 487; `netsim()` SIS: 227.5 against 234). Compare new infections a step, which agree (the introduction: 12.0 against 11.7 a step at equilibrium, and the statistical comparison passes; `icm()`: 24.1 against 24.7), or allow for it.
-- **Acts per partnership.** EpiModel's chance over a partnership in a step is `1 - (1 - inf.prob*m)^act.rate`, with `m` the infectiousness multiplier of the infected partner. Starsim multiplies `1 - (1 - inf.prob)^act.rate` by `rel_trans`; the difference is small (0.0374 against 0.0370 for an acute partner). `ssl.DegreeNet` has no `acts=`.
+- **Acts per partnership.** EpiModel's chance over a partnership in a step is `1 - (1 - inf.prob*m)^act.rate`, with `m` the infectiousness multiplier of the infected partner. Starsim multiplies `1 - (1 - inf.prob)^act.rate` by `rel_trans`; the difference is small (0.0374 against 0.0370 for an acute partner).
 - **The network matches the targets better than EpiModel's own.** EpiModel's simulated network can undershoot its targets (casual mean degree 0.28 against 0.30), so agreement on the targets does not imply agreement on the network. Compare the simulated network's diagnostics (edges, mean degree, concurrency) as series too.
 - **Conditions on the network are a function.** Eligibility such as "two or more partners across both networks, or a partner with HIV" has no declared form; write a `where=` function that reads `net.edges.p1`/`p2` and mark it as a workaround.
 - **Stopping a product at a rate** is written as waning: `ss.Vaccine(efficacy=0.95, waning=-1/np.log(1 - p_stop))`, a mean duration of protection in steps.

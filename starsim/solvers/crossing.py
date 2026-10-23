@@ -7,7 +7,7 @@ import numba as nb
 import sciris as sc
 import starsim as ss
 from .engine import by_level, no_tables
-from .compartmental import Compartmental
+from .compartmental import Compartmental, choose_kernels, step_seconds, step_program, run_many_parts
 
 __all__ = ['Crossing']
 
@@ -81,7 +81,7 @@ class Crossing:
 
     def shrink(self):
         """ Drop the arrays the run worked in, for saving """
-        ss.shrink(self, ['sim', 'program', 'y', 'layout', 'pieces', 'register', 'shifts', 'jax_run', 'outs'])
+        ss.utils.shrink(self, ['sim', 'program', 'y', 'layout', 'pieces', 'register', 'shifts', 'jax_run', 'outs'])
         return
 
     def describe(self):
@@ -284,10 +284,12 @@ class Crossing:
 
         The layout is worked out here, and again only if an engine's program is made again (e.g. when a branch
         probability changes); the numbers, which can change from step to step or run to run, are taken from the
-        engines' by `numbers()`, from where each is in an engine's program (`self.pieces`).
+        engines' by `numbers()`, from where each is in an engine's program (`self.pieces`). Returns the program.
         """
         kn = ss.kernels
         progs = programs or [engine.program for engine in self.engines]
+        if self.program is not None and self.built == [id(p) for p in progs]: # Built from these already
+            return self.program
         R = self.n_cols
         p0 = progs[0]
         L0 = self.layout[0]
@@ -669,9 +671,7 @@ class Crossing:
     def run_args(self, tables=True):
         """ What the kernels need for a whole run of the program, as `ss.solvers.Compartmental.run_args()` gives it for one engine, and the rows of its tables for each step """
         setups = [engine.run_args(tables=tables) for engine in self.engines]
-        progs = [args[1] for args,_ in setups]
-        if self.program is None or self.built != [id(p) for p in progs]:
-            self.build(progs)
+        self.build([args[1] for args,_ in setups])
         per_step, reps = self.per_step()
         J = self.numbers([self.engine_numbers(args, tabs) for args,tabs in setups], reps=reps)
         program = self.program._replace(**{key:J[key] for key in ['inflow', 'contacts', 'tgt_w', 'crd_w', 'maps', 'mov_rate']})
@@ -685,32 +685,19 @@ class Crossing:
         return [np.ascontiguousarray(J[key]) for key in ['fixed', 'mult', 'consts', 'rel_trans']]
 
     def kernels(self, runs=1, tables=None):
-        """ The kernels to take the run (or `runs` runs) with, compiled or as plain Python, chosen once for a run (from the tables of a whole run, if given): see `ss.kernels.choose()` and `ss.solvers.Compartmental.plain_seconds()` """
-        if runs == 1 and self.compiled is not None:
-            return ss.kernels if self.compiled else ss.kernels.uncompiled()
+        """ The kernels to take the run (or `runs` runs) with, compiled or as plain Python, chosen once for a run (from the tables of a whole run, if given): see `ss.solvers.compartmental.choose_kernels()` """
+        return choose_kernels(self, runs, lambda: self.plain_seconds(tables))
+
+    def plain_seconds(self, tables=None):
+        """ About how long the run would take as plain Python, as `ss.solvers.Compartmental.plain_seconds()` works it out for one engine """
         sim = self.sim
-        if self.program is None: # Before the program is made (the events of a register at the start), as the kernels are now
-            return ss.kernels.choose()
         solver = ss.kernels.solvers[sim.integrator if sim.solver == 'ode' else sim.solver]
         first = self.engines[0]
         p = self.program
-        if not ss.kernels.deciding():
-            seconds = 0.0
-        elif tables is None and not self.stepped: # Before a step or a whole run: from the size of the program, with the rates of the step last refreshed
+        if tables is None and not self.stepped: # Before a step or a whole run: from the size of the program, with the rates of the step last refreshed
             n_sub = ss.kernels.substeps(np.append(p.fixed[p.src >= 0], p.mov_rate), first.dt, first.substeps(), solver)
-            seconds = ss.kernels.plain_seconds(p, self.y, first.mod.t.npts, solver, n_sub)
-        else: # A step taken as plain Python, at the first row of the tables, or as the step left the program
-            parts = (p.fixed, p.mult, p.consts, p.rel_trans)
-            kept = [part.copy() for part in parts]
-            if tables is not None:
-                ss.kernels.set_step(parts, 0, tables)
-            seconds = ss.kernels.timed_seconds(p, self.y, first.mod.t.npts, first.dt, solver, first.substeps())
-            for part,old in zip(parts, kept):
-                part[:] = old
-        kn = ss.kernels.choose(runs*seconds)
-        if runs == 1:
-            self.compiled = kn is ss.kernels
-        return kn
+            return ss.kernels.plain_seconds(p, self.y, first.mod.t.npts, solver, n_sub)
+        return step_seconds(p, self.y, first.mod.t.npts, first.dt, solver, first.substeps(), tables) # A step taken as plain Python, at the first row of the tables, or as the step left the program
 
     def run(self):
         """ A whole run of the diseases together, in one call to the kernels: returns, for each engine, what `ss.kernels.run()` does """
@@ -737,11 +724,7 @@ class Crossing:
         """
         sim = self.sim
         solver = sim.integrator if sim.solver == 'ode' else sim.solver
-        engine.cache.clear() # The interventions have run since the step started
-        engine.update_targets()
-        engine._mover_rates = engine.mover_rates()
-        if engine.program is None:
-            engine.init_program()
+        engine.step_rates()
         ti = engine.mod.ti
         stale = [t for t,tables in self.pending.values() if t != ti]
         if stale:
@@ -752,9 +735,7 @@ class Crossing:
             return
         steps = [self.pending.pop(name)[1] for name in self.names]
         progs = [e.program for e in self.engines]
-        if self.program is None or self.built != [id(p) for p in progs]:
-            self.build(progs)
-        p = self.program
+        p = self.build(progs)
         row = 0 if any(r >= 0 for tables,r in steps) else -1
         Xs = []
         for q,(tables,r) in zip(progs, steps): # The values at the start, middle, and end of the step, if any vary smoothly in time, and otherwise as they are now
@@ -771,12 +752,7 @@ class Crossing:
             tables = tuple(np.ascontiguousarray(J[key]) for key in ['fixed', 'mult', 'consts', 'rel_trans'])
         first = self.engines[0]
         self.stepped = True
-        kn = self.kernels(tables=tables if row >= 0 else None)
-        self.y, flows = kn.one_step(self.rng, self.y, p, first.dt, ss.kernels.solvers[solver], first.substeps(), tables, row)
-        if sim.mixing.register is not None: # The events dated at the end of the step
-            sim.get_declared(self.lead).engine.check_short(kn.apply_events(self.rng, self.y, self.register, first.mod.ti, first.integer))
-        if solver == 'gillespie' and p.local and p.has_det: # By place, the counts are settled after the events, as in SimInf
-            kn.settle_places(self.y, p, first.dt, flows)
+        self.y, flows = step_program(self, self.kernels(tables=tables if row >= 0 else None), self.rng, self.y, tables, row, first, sim.get_declared(self.lead).engine.check_short)
         recorded = []
         for k,e in enumerate(self.engines):
             L = self.layout[k]
@@ -795,7 +771,7 @@ class Crossing:
             engine.restart()
         self.init()
         args, _, per_step = self.run_args(tables=False)
-        y0, program, dt, npts, solver, n_sub = args
+        y0, npts = args[0], args[3]
         rngs = nb.typed.List([engines[0].make_rng(stream=1, seed=seed) for seed in seeds]) # The random numbers that each run would have
         R, nc, nflows, n_runs = self.n_cols, self.n_rows, self.n_trans + self.n_movers, len(seeds)
         grouped = self.sim.groups.n_groups > 1 and any(s or f for s,f in [engine.group_needs() for engine in engines])
@@ -809,20 +785,11 @@ class Crossing:
         tally, tally_g = np.zeros((n_runs, npts, 0, 2, 1)), np.zeros((n_runs, n_rows, 0, 2, R))
         grp_state, grp_flow = (np.arange(nc), np.arange(nflows)) if grouped else (np.full(nc, -1), np.full(nflows, -1))
         ys = np.repeat(y0[None], n_runs, axis=0)
-        length = max(int(50e6//((len(program.fixed) + len(program.mult) + len(program.consts) + len(program.rel_trans))*per_step*R*8)), 1) # Steps per part, as in ss.solvers.Compartmental.run_many()
-        start = 0
         if self.sim.solver in ['binomial', 'tau'] and ss.solvers.choose_engine(self.sim)[0]: # In JAX, as a single run would be (see ss.solvers.choose_engine())
             kept = (range(nc), range(nflows)) if grouped else ([], [])
             stocks, flows, stocks_g, flows_g = importlib.import_module('starsim.perflib._chain').run_many(self, seeds, np.arange(nc), *kept, rows)[:4]
         else:
-            kn = self.kernels(runs=n_runs, tables=self.tables(start, start + 1))
-            while True: # A part at a time
-                end = min(start + length, npts - 1)
-                kn.run_many(rngs, ys, program, dt, start, end + 1, solver, n_sub, *self.tables(start, end), self.register, self.shifts, stocks, flows, stocks_g, flows_g,
-                                    tally, tally_g, np.arange(nc), np.zeros(0, dtype=int) if rows is None else rows, grp_state, grp_flow, per_step)
-                if end >= npts - 1:
-                    break
-                start = end
+            run_many_parts(self, rngs, ys, args, per_step, R, (stocks, flows, stocks_g, flows_g, tally, tally_g), np.arange(nc), rows, grp_state, grp_flow)
         outs = []
         for k,engine in enumerate(engines):
             states = range(len(engine.graph.states))

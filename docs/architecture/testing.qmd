@@ -1,0 +1,87 @@
+---
+title: How the design is tested
+---
+
+Starsim makes a lot of promises: that the three ways of writing a transition give the same model, that every solver keeps the population constant, that the stochastic solvers agree with the ODE on simple models, that every guess is marked in `describe()`. The rule behind the test suite is that a claim with no test is a hope. This page describes the suites, what each one guards, and which ones to run when you change something.
+
+Tests come in three kinds:
+
+- **Asserted:** the test fails if the behavior is wrong (a modifier restores the base value when it ends; reordering competing exits changes nothing).
+- **Recorded:** the result is a number or a table rather than a pass or fail (how far an ODE approximation of a network model is from the agents).
+- **Measured against the original:** lines of code and run time for a model translated from another framework, compared with that framework.
+
+## The suites
+
+All of the tests are in `tests/`. Most of them run on a shared set of small models, the *corpus* in `tests/corpus.py`: 23 functions, each returning an unrun sim that runs in seconds, with the solver as a keyword (`corpus.sir(solver='binomial')`). They range from a plain SIR to cholera with a water reservoir, Ross-Macdonald malaria, two diseases that modify each other, and a TB model with drug resistance.
+
+| Suite | What it guards |
+|---|---|
+| `test_contracts.py` | Properties every model and solver must have, over the corpus: people are conserved, the order of competing exits doesn't matter, the chain binomial, Gillespie and agents agree with the ODE on simple models, random streams are independent, `to_code()` rebuilds the same model, and every guess is marked in `describe()`. A failure here usually means a silent wrong answer somewhere else. |
+| `test_contracts_inference.py` | The same for fitting: the JAX log-density equals the sim's log-likelihood, the particle filter matches direct runs, and each fitting method recovers known values from simulated data. |
+| `test_kernels.py`, `test_gradients.py` | The compartmental engine's paths agree with each other: a whole run with a stepped run, compiled kernels with plain Python, and JAX with the kernels. Gradients agree with finite differences. |
+| `test_fast_draws.py`, `test_jit.py` | The exact random draws match their distributions, and the same uniforms give the same draws compiled or not; `ss.jit` gives the same results as the code run as Python. |
+| `test_spec.py` | The design record itself: every Python block in the spec runs, the error catalog matches the error classes, and the vocabulary counts match what `ss` exports. |
+| `test_baselines.py` | A standard agent-based sim (two diseases, three networks, births and deaths) gives exactly its recorded results (`baseline.yaml`); and `test_performance_guard` fails if any of a set of timed cases is more than 1.5 times slower than its record (`perf_guard.yaml`). |
+| Feature tests | One file per area (`test_transitions.py`, `test_deliveries.py`, `test_dimensions.py`, ...), and `test_composition.py` for plain NumPy modules beside declared ones. |
+| `interop/` | Each importer and exporter against the framework it reads or writes. Tests that need R, or the repository of translated examples, are skipped when it isn't available. |
+| `switching/` | Thirteen acceptance demos, each in the terms of a framework Starsim is compared with (Starsim 3 among them): bring the model in, describe it, fit it, ask a policy question, and run it another way. Each asserts the original's reference numbers; one that doesn't pass yet is marked `xfail`, with the reason. |
+| `north_star.py` | The north star: a model should never be easier to write without Starsim than with it. For each translated example (kept in a separate repository), a table of lines of model code and run time, original against Starsim, published on the [Coming from](../coming_from/index.qmd) pages. |
+
+The agreement between solvers is layered from exact to statistical. Conservation is checked to 1e-9; the ODE is checked against SciPy and the analytic final size of an SIR; the JAX ODE against the kernels to 1e-9; and the chain binomial, Gillespie and agents against the ODE, as the mean over a few runs at a quarter-day step, within 5% (or a wider tolerance, given with its reason in the test). [Solvers](solvers.qmd) has the table of execution paths and the test that pins each one.
+
+### Running them
+
+```bash
+cd tests
+./run_tests                                         # Everything in test_*.py and interop/, in parallel
+pytest test_contracts.py                            # One suite
+STARSIM_SLOW=1 pytest test_contracts.py             # The agreement test over every compartmental corpus model, not just the simple ones
+pytest switching -rxX                               # The switching demos, with the reason for each xfail
+pytest test_baselines.py::test_performance_guard    # The performance guard, which is skipped in parallel runs
+```
+
+The performance guard is timing-sensitive, so run it on its own on a quiet machine. After an intended change to results or speed, `./update_baseline.py` and `./update_benchmarks.py` record the new values, and the change shows up in review as a diff of the `.yaml` files.
+
+## If you change X
+
+| If you change | These parts see it | Run at least |
+|---|---|---|
+| How states, transitions or rates are declared (`transitions.py`, `expressions.py`, `graph.py`) | Every engine, `describe()`, the model spec and hash, `to_code()`, and the exporters | `test_transitions.py`, `test_contracts.py`, `test_spec.py` |
+| Parameters, time or units (`parameters.py`, `time.py`, `dates.py`) | Every engine, fitting (which reads bounds and priors), and the spec | `test_time.py`, `test_transitions.py`, `test_contracts_inference.py` |
+| Stratification or strains (`dimensions.py`, `strains.py`) | The compartment layout, mixing, agents' properties, and results by group | `test_dimensions.py`, `test_contracts.py` |
+| The compartmental engine or the kernels (`solvers/compartmental.py`, `kernels.py`) | All four compartmental solvers, the JAX runs that follow the kernels step for step, and the particle filter | `test_kernels.py`, `test_gradients.py`, `test_contracts.py` |
+| The agent engine or the passes (`solvers/agents.py`, `perflib/_passes.py`) | Declared models as agents, networks, and births | `test_contracts.py`, `test_baselines.py`, `test_networks.py` |
+| Random draws (`distributions.py`, `perflib/_draws.py`) | Every stochastic solver, common random numbers, and every recorded result | `test_fast_draws.py`, `test_randomness.py`, `test_contracts.py::test_streams`, `test_baselines.py` |
+| Solver choice (`solvers/choose.py`) | What `'auto'` picks, the notes, and `describe()` | `test_transitions.py::test_auto`, `test_contracts.py`, `test_sim.py` |
+| Interventions and modifiers (`interventions.py`, `products.py`, `connectors.py`, `solvers/deliveries.py`) | Both engines, the loop order, and whether a whole compartmental run is possible | `test_deliveries.py`, `test_interventions.py`, `test_products.py` |
+| The loop or module lifecycle (`loop.py`, `modules.py`, `sim.py`) | Every sim, including modules written as code | `test_loop.py`, `test_sim.py`, `test_baselines.py` |
+| Fitting (`fit.py`, `gradients.py`) | `sim.calibrate()` and every fitting method | `test_contracts_inference.py`, `test_calibration.py`, `test_gradients.py` |
+| The model spec or code writer (`spec.py`, `presentation.py`) | Hashes, `diff()`, `to_code()`, and the exporters | `test_contracts.py::test_code_round_trip`, `test_transitions.py`, `interop/` |
+| An importer or exporter (`interop/`) | That framework's users, and its switching demo | its file in `interop/`, and its demo in `switching/` |
+| An error, warning or note (`errors.py`) | The catalog in the spec | `test_errors.py`, `test_spec.py::test_error_catalog` |
+| Anything on a hot path | Run time | `test_baselines.py::test_performance_guard` |
+
+When in doubt, run the whole suite with `./run_tests`.
+
+## Where the design record lives
+
+The design record is in `v4_design/` in the repository. It has three parts that matter today:
+
+- **The constitution** (`constitution.md`): the principles every choice is checked against, summarized on [the first page of this section](index.qmd).
+- **The spec** (`design/`, files 00 to 19): what the language is and how each part behaves, with a reason for each choice and a list of what was rejected. This section of the docs is a short translation of it.
+- **What was set aside** (`admin/deferred.md`): ideas deferred or decided against, so they aren't proposed again without new reasons.
+
+The spec is kept in line with the code by the tests, not by good intentions. `test_spec.py` runs every Python block in every chapter, in order, as if each chapter were a notebook, and checks that the disease examples actually spread. It also checks that the error catalog in `15-errors.md` matches the classes in `starsim/errors.py` (each with a docstring saying when it is raised), and that the counts of the vocabulary in `17-vocabulary.md` match the names `ss` exports. Where the spec and the code still disagree, the code is the truth and the spec is fixed. The user documentation is executed when it is built, so its examples run against the current code too.
+
+## What the tests don't show
+
+- That a model is a good model. Nothing here checks the epidemiology.
+- That a fit converged. Each fit reports whether it did (`fit.converged`), and why not.
+- That an approximation is good enough for your question. Starsim says what was approximated; the judgment is the modeler's.
+- That complex models agree across solvers. Only simple ones are asserted to; for the rest, the differences are expected.
+
+## In the design record
+
+- [18-conformance.md](https://github.com/starsimhub/starsim/blob/v4/v4_design/design/18-conformance.md): every claim of the spec and the test that checks it, and the corpus
+- [12-backends.md](https://github.com/starsimhub/starsim/blob/v4/v4_design/design/12-backends.md#agreement-between-solvers): how closely the solvers agree, and why
+- [constitution.md](https://github.com/starsimhub/starsim/blob/v4/v4_design/constitution.md): the principles the tests ultimately serve
