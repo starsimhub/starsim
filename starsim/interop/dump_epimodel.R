@@ -1,4 +1,4 @@
-# Write an EpiModel model to JSON, for ss.load() in Starsim
+# Write an EpiModel model to JSON, for ss.interop.load() in Starsim
 #
 #     Rscript dump_epimodel.R model.R model.json    # an R script that calls netsim(), dcm(), or icm()
 #     Rscript dump_epimodel.R sim.rds model.json    # a saved result of netsim(), or a saved netest()

@@ -37,14 +37,16 @@ The names below are checked against the code: each one is exported by `starsim`,
 
 Starsim's library modules (`ss.SIR`, `ss.SIS`, `ss.SEIR`, `ss.Births`, `ss.Deaths`, `ss.LegacyPregnancy`, the `ss.infection_log` analyzer, and the rest) remain available and are not counted here; they are models written in the language, not part of it. Nor are the error, warning, and note classes (`ss.errors.UnknownState`, `ss.errors.ImportIncomplete`, and the rest), which are listed in [15-errors.md](15-errors.md): they are what the library says, not what a user writes.
 
-### States, transitions, parameters, results: 14
+### States, transitions, parameters, results: 20
 
 | Name | What it is |
 |---|---|
 | **`ss.State`** | A state, with `people`, `init`, `rel_sus`, `rel_trans`, `label` |
 | **`ss.states`** | Several states at once, named from the variables they are assigned to: `S, I, R = ss.states(3)`. `ss.states('S I R')` when the names are wanted up front |
 | **`ss.null`** | Outside the model: the source of an inflow and the destination of an outflow (`ss.null >> W @ rate`, `I >> ss.null @ 0.1`) |
+| **`ss.stay`** | Staying where one is, as a destination of a split: `ss.Transition(N, [L, ss.stay], p=[p, None], on=...)` |
 | **`ss.Transition`** | The one transition class; also built by `a >> b @ x` |
+| **`ss.on`** | A transition taken when a condition starts to hold or an event happens: `S >> V @ ss.on(ss.ppl.female & (ss.ppl.age >= 9))` |
 | **`ss.birth`** | Shorthand: an inflow of newborns, at a rate per person |
 | **`ss.death`** | Shorthand: an outflow; `lifetable=` draws each person's age at death from a life table |
 | **`ss.immigration`** | Shorthand: an inflow of a number of people per unit time, at ages like the population's |
@@ -53,8 +55,12 @@ Starsim's library modules (`ss.SIR`, `ss.SIS`, `ss.SEIR`, `ss.Births`, `ss.Death
 | **`ss.transfer`** | Movement between levels of a stratification |
 | **`ss.par`** | A named parameter with `bounds`, `prior`, `source`, `doc` |
 | **`ss.pars`** | Several parameters at once, from defaults and the values given, for a disease whose transitions are made in `__init__()`: `p = ss.pars(defaults, **kwargs)` |
+| **`ss.attr`** | A value for each person: drawn or recorded at an event (`on=`), drawn once (a trait), or derived from others |
 | **`ss.outcome`** | A reported quantity: a weighted sum of flows that is delayed, given a duration, or totaled by reporting period |
 | **`ss.simdata`** | A data file or data frame with its columns matched to result names: `ss.simdata(df, aliases=..., ignore_extra=True)` |
+| **`ss.state`** | A state named by its module and name, as a condition, before the module is made: `ss.state('hiv.I')` |
+| **`ss.child`** | An event on a mother, when one of her children goes through an event: `ss.child(preg.birth)` (agents) |
+| **`ss.mother`** | A condition or value read on each unborn agent's mother (`born=True`: on anyone's mother), e.g. `ss.mother(syph.I)` (agents) |
 
 The operators `>>`, `@`, `|`, and arithmetic on states are part of this group and add no names. A custom per-step function needs no name of its own: a plain function is given as a keyword, or written in `step()`.
 
@@ -81,7 +87,7 @@ Starsim's, with Starsim's names: `ss.Dist` (the base class, which also wraps any
 
 **`ss.by`** (one value per stratum), **`ss.timeseries`** (varies in time), **`ss.seasonal`** (a yearly cycle). The other forms a parameter can take (a number, a typed quantity, a distribution, a function) need no names of their own.
 
-### Mixing and space: 9
+### Mixing and space: 10
 
 Everything spatial is in the submodule `ss.geo`.
 
@@ -93,7 +99,8 @@ Everything spatial is in the submodule `ss.geo`.
 | **`ss.contacts`** | A contact matrix as mixing pools: a named one, `ss.contacts('Kenya')`, or one given as a matrix (over several dimensions together with `dims=`) |
 | **`ss.geo.geography`** | A geography: names, populations, centroids, distances; named (`ss.geo.geography('Kenya', level=1)`) or given directly |
 | **`ss.geo.Mobility`** | Movement between places from a matrix, a data file of moves, or a movement model |
-| **`ss.geo.gravity`** | Movement model (radiation, Stouffer, and competing destinations are deferred; a matrix covers them) |
+| **`ss.geo.gravity`** | Movement model, with parameters to fit or guess |
+| **`ss.geo.radiation`** | Movement model with no parameters (Stouffer and competing destinations are deferred; a matrix covers them) |
 
 ### Interactions and interventions: 9
 
@@ -115,12 +122,13 @@ Everything spatial is in the submodule `ss.geo`.
 
 Fitting is the submodule `ss.fit`, which `import starsim` does not import (its first use does), so its names are not counted here: `ss.fit.Fit`, what `sim.calibrate()` returns (called `fit` below), `ss.fit.compare_models` (fit and compare by out-of-sample prediction), and `ss.fit.optimize` (reallocate spending between programs to maximize or minimize a result). (Starsim 3's `ss.Calibration` is removed.)
 
-### Methods and attributes: 43 distinct names
+### Methods and attributes: 56 distinct names
 
 | On | Names |
 |---|---|
-| A model (`ss.Disease`, any module) | **`describe`** **`diagram`** **`equations`** **`transitions`** **`stratify`** **`to_spec`** `copy` `pars` **`R0`** |
-| A state or a sum of states | **`n`** **`frac`** **`total`** |
+| A model (`ss.Disease`, any module) | **`describe`** **`diagram`** **`equations`** **`transitions`** **`states`** **`strats`** **`count`** **`add_callback`** **`stratify`** **`to_spec`** `copy` `pars` **`R0`** |
+| A state or a sum of states | **`n`** **`frac`** **`total`** **`time`** **`progress`** **`enter`** **`exit`** |
+| A transition | **`to`** **`incidence`** **`uids`** **`ever`** **`count`** **`since`** |
 | A modifiable array (`sir.rel_sus`) | **`effective`** |
 | `ss.Sim` | `init` `run` `plot` `summarize` `to_df` `loop` `results` **`describe`** **`stratify`** **`to_spec`** **`to_code`** `to_json` **`hash`** **`calibrate`** **`sensitivity`** **`check_dt`** **`what_modifies`** **`new`** **`gradient`** |
 | `sim.loop` | `insert` `to_df` `plot` `plot_step_order` |
@@ -130,7 +138,7 @@ Fitting is the submodule `ss.fit`, which `import starsim` does not import (its f
 | `fit` | **`sim`** `pars` `plot` `summarize` `to_df` **`project`** **`samples`** |
 | What `ss.fit.compare_models` returns | **`fits`** `plot` `summarize` `to_df` |
 
-Names that repeat across rows (`plot`, `summarize`, `to_df`, `describe`, `stratify`, `to_spec`, `pars`, `run`, `results`) are counted once. The split is deliberate: `describe`, `diagram`, `equations` are about the model; `plot`, `summarize`, `to_df` are about results, as in Starsim. `values` is Starsim's name for the array behind a result; on a MultiSim result it is the full runs-by-time array. `.n` is the number in a state in each place, and `.total` in the whole population; `.frac` is the share; `.dwell` is the time each person has spent in it (in `p=` and rates out of it). On a transition with several destinations, `.X` is the flow to its destination `X` (`cin.X`, read `res.cin.X`), not a new name. Reading `sir.rel_sus` gives the base value; `.effective` gives it with the active modifiers applied (agents only). `msim.check_runs()` is deferred and not counted.
+Names that repeat across rows (`plot`, `summarize`, `to_df`, `describe`, `stratify`, `to_spec`, `pars`, `run`, `results`, `count`) are counted once. The split is deliberate: `describe`, `diagram`, `equations` are about the model; `plot`, `summarize`, `to_df` are about results, as in Starsim. `values` is Starsim's name for the array behind a result; on a MultiSim result it is the full runs-by-time array. `.n` is the number in a state in each place, and `.total` in the whole population; `.frac` is the share; `.dwell` is the time each person has spent in it (in `p=` and rates out of it). On a transition with several destinations, `.X` is the flow to its destination `X` (`cin.X`, read `res.cin.X`), not a new name. Reading `sir.rel_sus` gives the base value; `.effective` gives it with the active modifiers applied (agents only). `msim.check_runs()` is deferred and not counted.
 
 ## The total
 
@@ -139,17 +147,17 @@ Names that repeat across rows (`plot`, `summarize`, `to_df`, `describe`, `strati
 | Group | Names | Of which new |
 |---|---|---|
 | Sim and modules | 12 | 3 |
-| States, transitions, parameters, results | 14 | 14 |
+| States, transitions, parameters, results | 20 | 20 |
 | Time | 27 | 1 |
 | Distributions | 16 | 3 |
 | Parameter forms | 3 | 3 |
-| Mixing and space | 9 | 4 |
+| Mixing and space | 10 | 5 |
 | Interactions and interventions | 9 | 9 |
 | Running, comparing, saving | 7 | 2 |
 | Types you get back or subclass | 5 | 0 |
-| **`ss.` names** | **102** | **39** |
-| Methods and attributes | 43 | 28 |
-| **Total** | **145** | **67** |
+| **`ss.` names** | **109** | **46** |
+| Methods and attributes | 56 | 41 |
+| **Total** | **165** | **87** |
 
 <!-- counts end -->
 
@@ -167,7 +175,7 @@ Keywords are not counted above, but they are vocabulary too, so the main sets ar
 | `ss.MultiSim`, `ss.parallel` | `n_runs` `pars` `priors`, and one keyword per scenario |
 | `ss.Disease` | `name` `dt` `init_prev` `init` `init_n` `first` `transitions` `results` `outcomes`, and one keyword per member |
 | `ss.State` | `name` `people` `init` `rel_sus` `rel_trans` `label` |
-| `ss.Transition` | `rate` `dur` `p` `stages` `where` `move` `increment` `after` `before` `name` `label` |
+| `ss.Transition` | `rate` `dur` `p` `stages` `where` `on` `acquisition` `per` `alone` `move` `increment` `after` `before` `name` `label` |
 | `ss.birth`, `ss.immigration` | `rate` |
 | `ss.death`, `ss.emigration` | `rate` `dur`; `lifetable` (`ss.death`) |
 | `ss.transfer` | the stratification's name (or `increment`, for a counter), `rate` `dur` `p` `states`, and the delivery keywords |
@@ -225,7 +233,7 @@ A bare number in any of these slots takes the slot's type and the sim's unit ([0
 | `ss.Effect` | Renamed and split: scaling a quantity is one thing, complex logic another | `ss.modify`, or Python in `step()` |
 | `ss.Expr`, and `ss.age`, `ss.sex`, `ss.uid`, `ss.time`, `ss.year`, `ss.weekday`, `ss.has`, `ss.scheduled` | A second set of names for things the sim already has | Conditions on the real attributes: `(ppl.age > 65) & ~sir.vaccinated`, or a function of the sim |
 | `ss.Continuous` | A special kind of state and route for reservoirs | An ordinary `ss.State` that is not people, with counts (`W.n`) in rates |
-| `ss.radiation`/`ss.stouffer`/`ss.competing_destinations`, `msim.check_runs()` | Deferred from v1: one use case each, and the vocabulary is smaller without them ([19-open-questions.md](19-open-questions.md#c-deferred-not-in-v1)) | A mobility matrix; `check_dt` |
+| `ss.stouffer`/`ss.competing_destinations`, `msim.check_runs()` | Deferred from v1: one use case each, and the vocabulary is smaller without them ([19-open-questions.md](19-open-questions.md#c-deferred-not-in-v1)) | A mobility matrix; `check_dt` |
 | `ss.process` | A penalty-box name for custom code | A plain function as a keyword, or `step()` |
 | `ss.Homogeneous` | Not needed | No network given, or `ss.MixingPool(n_contacts=10)` |
 | `ss.Network(edges=)` | Starsim already has names | Starsim's networks; `ssl.StaticNet(graph=...)`, with a NetworkX graph or a function that makes one |

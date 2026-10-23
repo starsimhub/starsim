@@ -109,7 +109,7 @@ def test_examples():
     sim.run()
     res = sim.results.events_SISe3
     assert res.n_phi.values[-1] > 0 # The infected shed into phi
-    assert all(sim.diseases[0].graph.states[s].people for s in ['S_2', 'I_3']) # People, though only aging joins them to S_1
+    assert all(sim.diseases[0].states[s].people for s in ['S_2', 'I_3']) # People, though only aging joins them to S_1
     return sim
 
 

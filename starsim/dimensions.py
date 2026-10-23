@@ -6,7 +6,7 @@ import sciris as sc
 import starsim as ss
 from .expressions import as_expr, did_you_mean
 from .parameters import by
-from .geo import geography, gravity, Mobility
+from .geo import geography, gravity, radiation, Mobility
 from .transitions import level_pair, parse_increment
 
 __all__ = ['Strat', 'Transfer', 'transfer', 'Groups']
@@ -32,7 +32,7 @@ class Strat:
             (a strain dimension, kind 'strain', is made by `ss.Strains`: see `strains`)
         states (list): the names of the states it applies to (default: every state that is people)
         where (dict): the groups it applies to, as a dimension and a level (or list of levels), e.g. `dict(sex='female')`; people in other groups have no level of it (default: every group)
-        mobility (gravity/Mobility/array): for a spatial stratification, the movement between its levels
+        mobility (gravity/radiation/Mobility/array): for a spatial stratification, the movement between its levels
 
     A dimension of kind 'clock' holds the time since an event, which advances with time as age does: its levels are
     the lower edges of bins of time (e.g. `ss.months([0, 1, 2, 3, 6, 12, 24])`), and a last level `none` holds the
@@ -59,7 +59,7 @@ class Strat:
             if split is None and self.geo.pop is not None:
                 split = self.geo.pop/self.geo.pop.sum()
         if mobility is not None and not isinstance(mobility, Mobility): # A movement model or a matrix on its own is commuting
-            mobility = Mobility(mobility) if isinstance(mobility, gravity) else Mobility(matrix=mobility)
+            mobility = Mobility(mobility) if isinstance(mobility, (gravity, radiation)) else Mobility(matrix=mobility)
             self.guessed['mobility'] = 'commuting, since kind= was not given'
         if mobility is not None and mobility.guessed:
             self.guessed['mobility'] = sc.strjoin([self.guessed['mobility'], mobility.guessed]) if 'mobility' in self.guessed else mobility.guessed
@@ -92,7 +92,7 @@ class Strat:
                 raise ValueError(errormsg)
             self.female = women[0]
         self.carries = None # For a strain with levels for people who carry several strains at once ('A+B'): see init_carriage()
-        self.carried = None # For a strain: the states people carry it in as an infection, so a new infection adds to it (see ss.Strains.carriers()); in its other states (e.g. R, for its protection), a new infection replaces it
+        self.carried = None # For a strain: the states people carry it in as an infection, so a new infection adds to it (see ss.Strains._carriers()); in its other states (e.g. R, for its protection), a new infection replaces it
         if self.kind == 'age' and self.edges is None and kind is None: # Age groups given as labels have no ages, so nobody ages between them
             self.kind = 'plain'
             self.guessed['kind'] = 'plain, since the age groups are labels and not ages'
@@ -171,14 +171,14 @@ class Strat:
 
         The first levels are the strains alone. Someone who carries several strains passes on one of them
         (see `ss.Strains(transmit=)`), and someone infected with a strain they do not carry moves to the
-        level that adds it (once full, the level that replaces the oldest: see `ss.Strains.adds()`).
+        level that adds it (once full, the level that replaces the oldest: see `ss.Strains._adds()`).
         """
         n = len(strains.names)
         self.base = np.arange(n) # The levels of a single strain
         self.carries = np.zeros((self.n, self.n), dtype=bool) # carries[l, j]: people at level l carry strain j
         for l,s in enumerate(strains.sets):
             self.carries[l, list(s)] = True
-        self.adds = strains.adds() # adds[l, j]: the level of people at level l once infected with strain j as well (l itself if they carry it already)
+        self.adds = strains._adds() # adds[l, j]: the level of people at level l once infected with strain j as well (l itself if they carry it already)
         return
 
     def __repr__(self):
@@ -881,7 +881,7 @@ class Groups:
                     return self.group_raw()
                 if len(uids):
                     before = old_level[uids]
-                    after = np.clip(np.digitize(raw[uids], strat.edges) - 1, 0, strat.n - 1) if strat.edges is not None else ss.kernels.levels(raw[uids])
+                    after = np.clip(np.digitize(raw[uids], strat.edges) - 1, 0, strat.n - 1) if strat.edges is not None else ss.perflib._passes.levels(raw[uids])
                     old_level[uids] = after
                     old_raw[uids] = raw[uids]
                     if not shared:
@@ -897,7 +897,7 @@ class Groups:
         levels = []
         changed = False
         def level_of(strat, raw): # As 16-bit integers if they fit, to save memory
-            return (np.clip(np.digitize(raw, strat.edges) - 1, 0, strat.n - 1) if strat.edges is not None else ss.kernels.levels(raw)).astype(level_dtype(strat.n), copy=False)
+            return (np.clip(np.digitize(raw, strat.edges) - 1, 0, strat.n - 1) if strat.edges is not None else ss.perflib._passes.levels(raw)).astype(level_dtype(strat.n), copy=False)
         dtype = level_dtype(self.n_groups)
         mults = np.cumprod((self.group_shape + (1,))[::-1])[::-1][1:]
         n = people.uid.len_tot

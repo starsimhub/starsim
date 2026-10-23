@@ -271,7 +271,7 @@ class Disease(ss.Module):
             kind (str): 'age', 'space', 'clock' (the time since an event, e.g. `since_birth=ss.months([0, 3, 12]), kind='clock'`), or 'plain'; if not given, from the value: 'space' for an `ss.geo.geography` or with `mobility=`, 'age' for `age=`, and otherwise 'plain' (whatever the name); strains are `strains=ss.Strains(...)` on the disease
             states (list): the states the dimension applies to (default: every state that is people)
             where (dict): the groups the dimension applies to, e.g. `dict(sex='female')`; people in other groups have no level of it, so selecting a level of it leaves them out (default: every group)
-            mobility (gravity/Mobility/array): for a place (e.g. `patch=`), the movement between its levels: `ss.geo.gravity()`, `ss.geo.Mobility()`, or a matrix
+            mobility (gravity/radiation/Mobility/array): for a place (e.g. `patch=`), the movement between its levels: `ss.geo.gravity()`, `ss.geo.radiation()`, `ss.geo.Mobility()`, or a matrix
             inplace (bool): if False, return a stratified copy and leave this disease unchanged
             kwargs (dict): the dimension and its levels (bin edges or labels), e.g. `age=[0, 15, 65]`;
                 an `ss.transfer` passed as a keyword is added under that name
@@ -297,6 +297,11 @@ class Disease(ss.Module):
     def transitions(self):
         """ The table of declared transitions; printing it also shows the matrix of sources by destinations """
         return self.graph.transitions
+
+    @property
+    def states(self):
+        """ Its declared states (`ss.State`) by name, e.g. `'second_line' in tb.states` or `[s for s in tb.states.values() if s.people]`; empty for a disease written as code. (The arrays behind them are `state_dict`.) """
+        return sc.objdict(self.graph.states) if self.graph is not None else sc.objdict()
 
     def count(self, where=None):
         """
@@ -443,11 +448,29 @@ class Disease(ss.Module):
             raise ss.CapabilityError(f'"{self.name}" has callbacks (add_callback()), which are called with the agents an event happened to, so it cannot run with solver="{self.sim.solver}". Run with solver="abm", or use ss.on() in a declared module.')
         return
 
+    # The hooks the solvers call on a declared module, for one that needs more than its states and transitions (e.g. ss.Pregnancy)
+    def compartmental_form(self, sim):
+        """ A module that runs only as agents unless it defines this: make its small compartmental form, used only when a compartmental solver is named, and return the note that says what it leaves out """
+        return None
+
+    def burnin_plan(self, engine):
+        """ People part way through at the start: None for none (the default), or the plan for them (see `ss.Pregnancy.burnin_plan()` and `ss.solvers.Agents.backfill_burnin()`) """
+        return None
+
+    def make_children(self, tr, parents, ti):
+        """ As agents, the children of the parents who went through a transition with births (`ss.birth(per=)`); returns their UIDs """
+        return self.engine.grow_children(tr, parents, ti)
+
+    def also_happened(self, name, uids):
+        """ As agents, others an event (a transition, by name) also happens to, as UIDs (e.g. the fetuses of a mother at a delivery); None for nobody else """
+        return None
+
     def add_callback(self, event, fn):
         """
         Call `fn(uids)` at the end of each step with the agents who went through a declared transition or event of this disease in it, from a module written as code (agents only)
 
-        A declared module reacts to the same events with `ss.on()` instead.
+        A declared module reacts to the same events with `ss.on()` instead. Pass a bound method (e.g. `self.on_delivery`), or register
+        from `init_pre()`: the sim runs its own copy of each module, and a lambda made in `__init__()` would still refer to the original.
 
         Args:
             event (Transition/str): the transition or event, e.g. `preg.stillbirth`, `preg.loss`, or its name
@@ -457,6 +480,7 @@ class Disease(ss.Module):
 
             preg.add_callback(preg.stillbirth, lambda uids: self.n_stillbirths.__setitem__(uids, self.n_stillbirths[uids] + 1))
         """
+        self.check_not_given('add_callback()')
         if isinstance(event, ss.Transition):
             name = event.name
         elif isinstance(event, ss.conditions.Event) and event.args[0] == 'tr': # E.g. preg.loss, several events
@@ -902,7 +926,7 @@ class Infection(Disease):
     def modified(self, vals, key):
         """ Values for `rel_sus` or `rel_trans` (`key`), e.g. those passed to `infect_route()`, times the modifiers active on it, including products (see `ss.modify()`) """
         arr = self[key]
-        if isinstance(arr, ss.ModifiableArr) and arr.engine is not None:
+        if isinstance(arr, ss.arrays.ModifiableArr) and arr.engine is not None:
             return vals.asnew(vals.raw*arr.engine.mult_raw(key), copy=False)
         return vals
 

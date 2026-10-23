@@ -93,7 +93,8 @@ def load_epydemix(source, start=None, stop=None, verbose=None, **kwargs):
     **Example**:
 
         # In the epydemix environment: python dump_epydemix.py my_model.py model.json
-        sim = ss.load('model.json', format='epydemix')
+        import starsim.interop
+        sim = ss.interop.load('model.json', format='epydemix')
     """
     d = read(source)
     file = source if isinstance(source, str) else None

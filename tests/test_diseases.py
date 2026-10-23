@@ -379,7 +379,7 @@ def test_fetal_health(do_plot=do_plot):
     ptb_disease = sim_disease.results.pregnancy.n_preterm.sum()
     ptb_baseline = sim_baseline.results.pregnancy.n_preterm.sum()
     print(f'Preterm births — baseline: {ptb_baseline}, disease: {ptb_disease}')
-    assert ptb_disease > ptb_baseline, 'Disease scenario should have more preterm births'
+    assert ptb_disease > 3*ptb_baseline, f'Disease scenario should have several times the preterm births ({ptb_disease} against {ptb_baseline})' # About 5×; about 1.7× if the infection's shift of delivery is lost
 
     # -- 3. Disease + treatment --
     sim_treated = ss.Sim(
@@ -548,7 +548,7 @@ def test_strains_immunity():
         sim.diseases.hpv18.move_to(ss.uids([0]), 'R')
         sim.diseases.hpv.start_step()
         return sim.diseases.hpv16.engine.mult_raw('rel_sus')[:3]
-    assert np.allclose(rel_sus('sum'), [(1 - (0.2 + 0.1))*0.5, 0.4, 0.5]) # HP22: (1 − min(1, Σ))·(1 − vaccine) = 0.35, as HPVsim
+    assert np.allclose(rel_sus('sum'), [(1 - (0.2 + 0.1))*0.5, 0.4, 0.5]) # (1 − min(1, Σ))·(1 − vaccine) = 0.35, as HPVsim
     assert np.allclose(rel_sus('sum')[0], 0.35)
     assert np.allclose(rel_sus('max'), [0.4, 0.4, 0.5])
     assert np.allclose(rel_sus('multiply'), [(1 - (1 - 0.8*0.9))*0.5, 0.4, 0.5])
@@ -809,6 +809,8 @@ def test_current_state():
         cs.raw[0] = 2
     with pytest.raises(ss.errors.UnknownState):
         sir.current_state(['X'])
+    res = sim.run().results.sir
+    assert (res.n_I[0], res.n_R[0]) == (2, 1) # The start counts the agents moved before the first step
     S, I, R = ss.states('S I R')
     ode = ss.Sim(diseases=ss.Disease(name='sir', infection=ss.Transition(S, I, rate=0.3 * I), recovery=ss.Transition(I, R, dur=4)), stop=2001, verbose=0).init()
     with pytest.raises(ss.CapabilityError, match='agents'):

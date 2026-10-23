@@ -730,6 +730,10 @@ class Module(Base):
             self.results += result
         return
 
+    def link(self, sim):
+        """ Before the sim's modules are gathered: add any other modules this one needs, or find the ones it works with (e.g. `ss.Pregnancy` adds an `ss.Lactation`); called by `ss.solvers.choose_solver()`. Does nothing by default """
+        return
+
     @required()
     def init_pre(self, sim, force=False):
         """
@@ -978,13 +982,13 @@ class Module(Base):
 
     def shrink(self):
         """ Shrink the size of the module for saving to disk """
-        shrunk = ss.shrink()
+        shrunk = ss.utils.shrink()
         self.setattribute('sim', shrunk) # Use setattribute since locked otherwise
         self.setattribute('dists', shrunk)
         for state in self.state_list:
             with sc.tryexcept():
                 to_shrink = ['people', 'raw']
-                ss.shrink(state, to_shrink)
+                ss.utils.shrink(state, to_shrink)
         return
 
     def plot(self):

@@ -357,6 +357,14 @@ def test_plain_estimate():
     return seconds
 
 
+@sc.timer()
+def test_compile():
+    sc.heading('Testing that the kernels can be compiled ahead of time')
+    ss.compile(verbose=False)
+    assert not ss.kernels.compiling
+    return
+
+
 # %% Run as a script
 if __name__ == '__main__':
     do_plot = True
@@ -372,5 +380,6 @@ if __name__ == '__main__':
     msim = test_restart()
     res = test_plain()
     plain = test_plain_estimate()
+    test_compile()
 
     T.toc()

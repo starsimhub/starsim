@@ -1,5 +1,5 @@
 """
-Write a MEmilio model to JSON, for `ss.load(..., format='memilio')`
+Write a MEmilio model to JSON, for `ss.interop.load(..., format='memilio')`
 
 This runs where MEmilio's Python bindings (`memilio-simulation`) are installed, and
 needs neither Starsim nor Sciris, so it can be copied into any MEmilio environment.

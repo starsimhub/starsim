@@ -23,7 +23,6 @@ import numpy as np
 import numba as nb
 import sciris as sc
 import starsim as ss
-from .distributions import _GOLDEN, _MIX1, _MIX2, _U30, _U27, _U31, _U11, _U40, _INV53, _INV24
 from .perflib import _draws as draws, _cache
 
 __all__ = ['Program', 'Register', 'Shifts', 'opcodes']
@@ -99,6 +98,13 @@ fields = [
 ]
 
 Program = collections.namedtuple('Program', fields)
+Program.__doc__ = """
+The flows of a compartmental model, as the kernels take them (see `fields`)
+
+A new field must reach every engine that takes a program, or be refused by its `reason()`: the ODE (`step()`), the
+stochastic solvers (`draw()`, `place_rates()` and `sparse_events()`), the ODE in JAX (`ss.gradients.Run`, and
+`ss.gradients.reason()`), and the chain binomial in JAX (`ss.perflib._chain`, and its `reason()`).
+"""
 
 # A movement register (see ss.geo.Mobility), as the kernels apply it
 register_fields = [
@@ -143,7 +149,7 @@ def kernel(error_model='numpy', **kwargs):
 
 jit = kernel()
 pieces = 4 # The stochastic solvers that take steps of their own length hold values that vary in time for a quarter of a step at a time: see step()
-golden = np.uint64(0x9e3779b97f4a7c15) # The step between the counters of a random stream: see uniform()
+golden = draws.GOLDEN # The step between the counters of a random stream: see uniform()
 sparse_flows = 256 # The flows above which the exact solver by place follows only the compartments that hold anyone: see sparse_events()
 row_groups = 50 # The groups from which a draw for every group is made as a vectorized row, which is faster for many groups (and slower for a few): measured for 1, 16, 50, and 260 groups, see v4_design/oct22/jax/draws.md
 
@@ -303,7 +309,7 @@ def choose(seconds=0.0):
 
 def compile(verbose=True):
     """
-    Compile the kernels now (those of the compartmental solvers, and the passes over the agents), so that no run waits for them: e.g. in a Docker image, in CI, or before a calibration
+    Compile the kernels now (those of the compartmental solvers, the passes over the agents, and the draws of the chain binomial in JAX), so that no run waits for them: e.g. in a Docker image, in CI, or before a calibration
 
     Compiling takes about a minute, once per install (and after an upgrade); the result is kept in Numba's cache,
     beside the package (or, if that cannot be written to, in the user's cache folder, or in `NUMBA_CACHE_DIR` if it
@@ -336,7 +342,9 @@ def compile(verbose=True):
         apply_events(engine.make_rng(), y, engine.register, 0, True)
         apply_shifts(engine.make_rng(), y, engine.shifts, 0, True, np.zeros((0, 2, y.shape[1])))
         settle_places(y, p, engine.dt, np.zeros((p.n_trans + p.n_movers, y.shape[1])))
-    make('abm').run() # The passes over the agents, which are kept in the same cache (so they are compiled again whenever this file changes)
+        if importlib.util.find_spec('jax') is not None: # The draws of the chain binomial in JAX
+            importlib.import_module('starsim.perflib._chain').check()
+    make('abm').run() # The passes over the agents (ss.perflib._passes), which are cached apart from the kernels
     compiling = False
     if verbose:
         print(f'Compiled the solver kernels in {T.toc(output=True):.0f} s')
@@ -764,6 +772,14 @@ def unary(op, x):
 
 
 @kernel(inline='always')
+def leaf_share(op, v, n):
+    """ A count on the stack of a rate (see `step()`): the number v in some compartments (COUNT), or its share of the n people there (FRAC), which is 0 where there is no one """
+    if op == FRAC:
+        return v/n if n > 0 else 0.0
+    return v
+
+
+@kernel(inline='always')
 def binary(op, a, b):
     """ A function of two values, as an operation on the stack of a rate (see `step()`) """
     if   op == ADD: return a + b
@@ -837,7 +853,7 @@ def place_rates(ys, p, a, b, rates, stack, expo):
                     for jj in range(a, b):
                         for i in range(p.set_starts[arg], p.set_starts[arg+1]):
                             v += ys[p.set_comps[i], p.pl_groups[jj]]
-                    stack[top, 0] = v/n if (op == FRAC and n > 0) else (0.0 if op == FRAC else v)
+                    stack[top, 0] = leaf_share(op, v, n)
                 elif op >= EXP:
                     stack[top, 0] = unary(op, stack[top, 0])
                 else:
@@ -849,17 +865,9 @@ def place_rates(ys, p, a, b, rates, stack, expo):
 
 
 @kernel(error_model='python', inline='always') # Inlined, as it is called for every event of the exact solver by place
-def splitmix(z):
-    """ The mixing function of SplitMix64, which turns a counter into random bits (as `ss.distributions.hash_uniforms()` does for agents) """
-    z = (z ^ (z >> np.uint64(30)))*np.uint64(0xbf58476d1ce4e5b9)
-    z = (z ^ (z >> np.uint64(27)))*np.uint64(0x94d049bb133111eb)
-    return z ^ (z >> np.uint64(31))
-
-
-@kernel(error_model='python', inline='always')
 def uniform(z):
-    """ A number uniform on (0, 1) from the counter of a random stream (SplitMix64), which the caller moves on by `golden` before each number """
-    return (float(splitmix(z) >> np.uint64(11)) + 0.5)/9007199254740992.0
+    """ A number uniform on (0, 1) from the counter of a random stream, which the caller moves on by `golden` before each number: Starsim's hash (`draws.mix()`), with the bits taken to the middle of their step rather than as `draws.uniform()` takes them, so the exact solver's streams are as they were """
+    return (float(draws.mix(z) >> np.uint64(11)) + 0.5)/9007199254740992.0
 
 
 @jit
@@ -890,7 +898,7 @@ def place_events(y, p, w, active, first, last, dt, flows, seed):
                 idle[i] = 1
                 break
             if t == 0.0: # The first event in this step: the counter of the place's random numbers in this step
-                z = splitmix(seed + splitmix(np.uint64(i + 1)*golden))
+                z = draws.mix(seed + draws.mix(np.uint64(i + 1)*golden))
             z += golden
             t -= np.log(uniform(z))/total
             if t > dt:
@@ -1159,7 +1167,7 @@ def sparse_events(y, p, w, active, first, last, dt, flows, seed, maps):
                         elif op == COUNT or op == FRAC:
                             top += 1
                             v = counts[arg]
-                            stack[top, 0] = v/n if (op == FRAC and n > 0) else (0.0 if op == FRAC else v)
+                            stack[top, 0] = leaf_share(op, v, n)
                         elif op >= EXP:
                             stack[top, 0] = unary(op, stack[top, 0])
                         else:
@@ -1176,7 +1184,7 @@ def sparse_events(y, p, w, active, first, last, dt, flows, seed, maps):
                 idle[i] = 1
                 break
             if t == 0.0: # As in place_events()
-                z = splitmix(seed + splitmix(np.uint64(i + 1)*golden))
+                z = draws.mix(seed + draws.mix(np.uint64(i + 1)*golden))
             z += golden
             t -= np.log(uniform(z))/total
             if t > dt:
@@ -1637,7 +1645,12 @@ def step_end(rng, y, p, w, flows):
     return
 
 
-@jit
+def into_advance(expr, caller, callee):
+    """ Whether Numba compiles step() into its caller rather than calling it: only into advance(), since there a call that is passed the program costs as much as a small step, whereas compiling it into run() and run_many() too adds about 20 s to compiling the kernels """
+    return caller.func_id.func_name == 'advance'
+
+
+@kernel(inline=into_advance)
 def step(rng, y, p, w, dt, n_sub, solver, flows, tables, row):
     """
     Take one timestep
@@ -1785,7 +1798,7 @@ def step(rng, y, p, w, dt, n_sub, solver, flows, tables, row):
                                     vals[g] += ys[p.set_comps[i], g]
                                 num[p.places[g]] += vals[g]
                             for g in range(ng):
-                                stack[top, g] = num[p.places[g]]/local_n[g] if op == FRAC else num[p.places[g]]
+                                stack[top, g] = leaf_share(op, num[p.places[g]], local_n[g])
                         elif op >= EXP: # A function of one value
                             for g in range(ng):
                                 stack[top, g] = unary(op, stack[top, g])
@@ -2106,6 +2119,32 @@ def set_step(parts, ti, tables):
     return
 
 
+@kernel(inline='always')
+def time_point(rng, y, p, w, ti, row, per_step, dt, n_sub, solver, flows, tables, reg, sh, tally):
+    """
+    Step ti of a run, from time point ti-1 to ti, as `run()`, `run_many()` and `advance()` take it, in this order: the
+    deliveries at its start (added to `tally`), the values of the step (row `row` of the tables), the step, the events
+    of the register dated at its end, and (for the exact solver by place) the places' fixed delays. Returns the number
+    of people that events of the register could not find. `advance()` takes the same steps in a loop of its own, since
+    going through this costs a small particle filter about 15% (with step() compiled into it either way).
+    """
+    whole = solver >= 2
+    if len(sh.to):
+        apply_shifts(rng, y, sh, ti-1, whole, tally)
+        if sh.due[:, ti-1].any():
+            wake(w)
+    set_step((p.fixed, p.mult, p.consts, p.rel_trans), row, tables)
+    step(rng, y, p, w, dt, n_sub, solver, flows, tables, row if per_step == 3 else -1)
+    short = 0.0
+    if len(reg.src): # The events dated at its end (not called if there are none, since passing the register costs as much as a small step)
+        short = apply_events(rng, y, reg, ti, whole)
+        if solver == 4 and p.local:
+            touch(reg, ti, p.places, w)
+    if solver == 4 and p.local and p.has_det:
+        settle_places(y, p, dt, flows)
+    return short
+
+
 @jit
 def run(rng, y, p, dt, npts, solver, n_sub, fixed, mult, consts, rel_trans, reg, sh, tally, per_step, start):
     """
@@ -2135,7 +2174,6 @@ def run(rng, y, p, dt, npts, solver, n_sub, fixed, mult, consts, rel_trans, reg,
     """
     y = y.copy()
     w = workspace(y, p)
-    whole = solver >= 2
     stocks = np.empty((npts - start, y.shape[0], y.shape[1]))
     flows = np.zeros((npts - start, p.n_trans + p.n_movers, y.shape[1]))
     short = 0.0
@@ -2143,18 +2181,7 @@ def run(rng, y, p, dt, npts, solver, n_sub, fixed, mult, consts, rel_trans, reg,
     stocks[0] = y
     for ti in range(start + 1, npts): # Step ti goes from time point ti-1 to ti, with the values at the start of it
         k = ti - start
-        if len(sh.to):
-            apply_shifts(rng, y, sh, ti-1, whole, tally[k])
-            if sh.due[:, ti-1].any():
-                wake(w)
-        set_step((p.fixed, p.mult, p.consts, p.rel_trans), (k-1)*per_step, tables)
-        step(rng, y, p, w, dt, n_sub, solver, flows[k], tables, (k-1)*per_step if per_step == 3 else -1)
-        if len(reg.src): # The events dated at its end (not called if there are none, since passing the register costs as much as a small step)
-            short += apply_events(rng, y, reg, ti, whole)
-            if solver == 4 and p.local:
-                touch(reg, ti, p.places, w)
-        if solver == 4 and p.local and p.has_det:
-            settle_places(y, p, dt, flows[k])
+        short += time_point(rng, y, p, w, ti, (k-1)*per_step, per_step, dt, n_sub, solver, flows[k], tables, reg, sh, tally[k])
         stocks[k] = y
     return y, stocks, flows, short
 
@@ -2182,7 +2209,6 @@ def run_many(rngs, ys, p, dt, start, npts, solver, n_sub, fixed, mult, consts, r
     nflows = p.n_trans + p.n_movers
     n_rows = len(stocks_g[0]) if len(rows) else 0
     w = workspace(ys[0], p)
-    whole = solver >= 2
     now = np.empty((nflows, ng))
     tables = (fixed, mult, consts, rel_trans)
     now_sh = np.zeros((len(sh.to), 2, ng))
@@ -2193,11 +2219,9 @@ def run_many(rngs, ys, p, dt, start, npts, solver, n_sub, fixed, mult, consts, r
         for ti in range(start, npts):
             if ti > start:
                 k = ti - start
+                now_sh[:] = 0
+                time_point(rng, y, p, w, ti, (k-1)*per_step, per_step, dt, n_sub, solver, now, tables, reg, sh, now_sh)
                 if len(sh.to):
-                    now_sh[:] = 0
-                    apply_shifts(rng, y, sh, ti-1, whole, now_sh)
-                    if sh.due[:, ti-1].any():
-                        wake(w)
                     for d in range(len(sh.to)):
                         for g in range(ng):
                             tally[r, ti, d, 0, 0] += now_sh[d, 0, g]
@@ -2205,14 +2229,6 @@ def run_many(rngs, ys, p, dt, start, npts, solver, n_sub, fixed, mult, consts, r
                             if n_rows:
                                 tally_g[r, rows[ti], d, 0, g] += now_sh[d, 0, g]
                                 tally_g[r, rows[ti], d, 1, g] += now_sh[d, 1, g]
-                set_step((p.fixed, p.mult, p.consts, p.rel_trans), (k-1)*per_step, tables)
-                step(rng, y, p, w, dt, n_sub, solver, now, tables, (k-1)*per_step if per_step == 3 else -1)
-                if len(reg.src):
-                    apply_events(rng, y, reg, ti, whole)
-                    if solver == 4 and p.local:
-                        touch(reg, ti, p.places, w)
-                if solver == 4 and p.local and p.has_det:
-                    settle_places(y, p, dt, now)
                 for f in range(nflows):
                     for g in range(ng):
                         flows[r, ti, f, 0] += now[f, g]
@@ -2228,9 +2244,6 @@ def run_many(rngs, ys, p, dt, start, npts, solver, n_sub, fixed, mult, consts, r
                     if end and grp_state[s] >= 0:
                         stocks_g[r, rows[ti], grp_state[s], g] += y[c, g]
     return
-
-
-inline_step = step if plain else kernel(inline='always')(step.py_func) # step(), compiled into advance() rather than called from it, since a call that is passed the program costs as much as a small step
 
 
 @jit
@@ -2256,7 +2269,6 @@ def advance(rngs, p, ys, first, last, dt, start, end, solver, n_sub, fixed, mult
     nflows = p.n_trans + p.n_movers
     by_group = stocks.shape[3] == ng
     w = workspace(ys[0], p)
-    whole = solver >= 2
     now = np.empty((nflows, ng))
     tally = np.zeros((len(sh.to), 2, ng)) # Not kept
     parts = (p.fixed, p.mult, p.consts, p.rel_trans)
@@ -2271,14 +2283,14 @@ def advance(rngs, p, ys, first, last, dt, start, end, solver, n_sub, fixed, mult
             p.sh_val[:] = sh_vals[r]
         wake(w) # Each run steps every place first
         for ti in range(start + 1, end + 1):
-            if len(sh.to):
-                apply_shifts(rng, y, sh, ti-1, whole, tally)
+            if len(sh.to): # As time_point() does, written out here: see its docstring
+                apply_shifts(rng, y, sh, ti-1, solver >= 2, tally)
                 if sh.due[:, ti-1].any():
                     wake(w)
             set_step(parts, (ti-1)*per_step - row0, tables)
-            inline_step(rng, y, p, w, dt, n_sub, solver, now, tables, (ti-1)*per_step - row0 if per_step == 3 else -1)
+            step(rng, y, p, w, dt, n_sub, solver, now, tables, (ti-1)*per_step - row0 if per_step == 3 else -1) # Compiled into advance(): see into_advance()
             if len(reg.src):
-                apply_events(rng, y, reg, ti, whole)
+                apply_events(rng, y, reg, ti, solver >= 2)
                 if solver == 4 and p.local:
                     touch(reg, ti, p.places, w)
             if solver == 4 and p.local and p.has_det:
@@ -2320,77 +2332,7 @@ def one_step(rng, y, p, dt, solver, n_sub, tables, row):
     return y, flows
 
 
-#%% For agents
-
-@jit
-def levels(raw):
-    """ The level of each agent in a dimension, as whole numbers (0 for an agent with none) """
-    out = np.zeros(len(raw), dtype=np.int32) # 32-bit, as the groups are kept
-    for i in range(len(raw)):
-        if raw[i] == raw[i]: # Not NaN
-            out[i] = int(raw[i])
-    return out
-
-
-@jit
-def infection_probs(susceptible, auids, groups, rate, rel_sus, state_sus, adjust, mult, dt):
-    """
-    The agents who could be infected this step, and the probability for each: one pass over the agents
-
-    Args:
-        susceptible (array): whether each agent is in the state, by UID
-        auids (array): the agents to consider
-        groups (array): the group of each agent, by UID
-        rate (array): the rate of infection for a person of average susceptibility, by group
-        rel_sus (array): the susceptibility of each agent, by UID
-        state_sus (float): the susceptibility of the state
-        adjust (array): the multiplier on the transition, by group
-        mult (float): any other multiplier on susceptibility
-        dt (float): the timestep
-
-    Returns the UIDs of the agents with some chance of infection, and that chance.
-    """
-    uids = np.empty(len(auids), dtype=np.int64)
-    probs = np.empty(len(auids))
-    usual = np.empty(len(rate)) # The probability for someone of average susceptibility, which is most people
-    for g in range(len(rate)):
-        usual[g] = -np.expm1(-max(rate[g]*1.0*state_sus*adjust[g]*mult, 0.0)*dt)
-    n = 0
-    for uid in auids: # Written every time and kept only if n advances, since a branch on who is susceptible cannot be predicted
-        g = groups[uid]
-        if rel_sus[uid] == 1:
-            prob = usual[g]
-        else:
-            prob = -np.expm1(-max(rate[g]*rel_sus[uid]*state_sus*adjust[g]*mult, 0.0)*dt) # In this order, to match the arithmetic of the general case
-        uids[n] = uid
-        probs[n] = prob
-        n += susceptible[uid] & (prob > 0)
-    return uids[:n], probs[:n]
-
-
-#%% For agents: passes over the whole population, in chunks taken by several threads when it is large
-# Each pass has a serial and a threaded driver around the same work on one chunk, so a sim that is one of many
-# (in ss.parallel() or a calibration's workers, which run with one thread) never starts Numba's threads. Counts are
-# whole numbers and lists of agents are kept in order, so the results do not depend on the number of threads.
-
-pjit = kernel(parallel=True)
-min_threaded = 200_000 # The smallest population whose passes are threaded: below it, starting the threads costs more than they save
-chunk_size = 65_536 # The fewest agents a thread takes at a time
-
-def n_chunks(n, width=1):
-    """ The number of chunks to split a pass over `n` agents into (1, unless there are threads to share it: see `ss.options.threads`), keeping the per-chunk counts (`width` numbers each) small """
-    if n < min_threaded:
-        return 1
-    threads = ss.options.threads
-    if threads == 1:
-        return 1
-    if threads > 1 and threads != nb.get_num_threads():
-        nb.set_num_threads(min(threads, nb.config.NUMBA_NUM_THREADS))
-    threads = nb.get_num_threads()
-    if threads < 2:
-        return 1
-    return int(max(1, min(2*threads, n//chunk_size, 4_000_000//max(width, 1))))
-
+#%% Threads, for the workers of ss.parallel() and of a calibration
 
 def one_thread(func, *args, **kwargs):
     """ Run a function with one thread for the kernels (the passes over the agents, see `ss.options.threads`, and the places of a Gillespie run): for the workers of `ss.parallel()` and of a calibration, which share the cores already """
@@ -2456,586 +2398,3 @@ def start_method():
     except ValueError:
         pass
     return 'forkserver' if threads else None
-
-
-def compile_drivers(make):
-    """ Compile the serial and the threaded version of a pass (`make(threaded)` gives the function), each cached under a name of its own """
-    out = []
-    for threaded,decorator in [(False, jit), (True, pjit)]:
-        func = make(threaded)
-        func.__qualname__ = f'{func.__name__}_{"threaded" if threaded else "serial"}' # Otherwise both would be cached as the same function, and either could be loaded for the other
-        out.append(decorator(func))
-    return out
-
-
-@jit
-def bounds(c, n, nchunks):
-    """ The agents that chunk c of n chunks covers """
-    size = (n + nchunks - 1)//nchunks
-    a = min(c*size, n)
-    return a, min(a + size, n)
-
-
-@jit
-def census_chunk(members, alive, groups, a, b, counts):
-    """ For agents a to b (by UID): the number in each state by group, and (in the last row) the number alive """
-    ns = len(members)
-    whole = len(groups) == 0
-    for uid in range(a, b):
-        if not alive[uid]: # Nobody who has died is in a state: see ss.solvers.Agents.die()
-            continue
-        g = 0 if whole else groups[uid]
-        r = uid & 3 # Four running counts, taken in turn: adding to one each time would wait on the last addition when neighbors are in the same group
-        counts[r, ns, g] += 1
-        k = 0
-        last = 0
-        for s in range(ns):
-            if members[s][uid]:
-                k += 1
-                last = s
-        if k == 1: # The usual case: in one state
-            counts[r, last, g] += 1
-        elif k > 1:
-            for s in range(ns):
-                if members[s][uid]:
-                    counts[r, s, g] += 1
-    return
-
-
-@jit
-def census_fill(members, want, a, b, out, pos):
-    """ List the agents a to b who are in each state whose agents are listed, from the positions given """
-    ns = len(members)
-    for s in range(ns):
-        k = want[s]
-        if k >= 0:
-            p = list_true(members[s], a, b, out, pos[k])
-            pos[k] = p
-    return
-
-
-@jit
-def list_true(raw, a, b, out, p):
-    """ Write the indices of the true values of a boolean array from a to b into out, from position p; eight at a time where they are all false """
-    i = a
-    while i < b and i % 8:
-        if raw[i]:
-            out[p] = i
-            p += 1
-        i += 1
-    end = i + (b - i)//8*8
-    if end > i:
-        words = raw[i:end].view(np.uint64)
-        for w in range(len(words)):
-            if words[w]:
-                for j in range(i + 8*w, i + 8*w + 8):
-                    if raw[j]:
-                        out[p] = j
-                        p += 1
-    for j in range(end if end > i else i, b):
-        if raw[j]:
-            out[p] = j
-            p += 1
-    return p
-
-
-def census_driver(threaded):
-    """ Make the serial or threaded census (see census()) """
-    loop = nb.prange if threaded else range
-    def census(members, alive, groups, n_groups, want, n_want, nchunks):
-        ns = len(members)
-        n = len(alive)
-        counts = np.zeros((nchunks, 4, ns + 1, n_groups), dtype=np.int64)
-        for c in loop(nchunks):
-            a, b = bounds(c, n, nchunks)
-            census_chunk(members, alive, groups, a, b, counts[c])
-        found = np.zeros((nchunks, max(n_want, 1)), dtype=np.int64) # The number in each state that is listed, in each chunk
-        for s in range(ns):
-            if want[s] >= 0:
-                for c in range(nchunks):
-                    found[c, want[s]] = counts[c, :, s, :].sum()
-        starts = np.zeros((nchunks, max(n_want, 1)), dtype=np.int64) # Where each chunk's agents in each state go in the output
-        offsets = np.zeros(n_want + 1, dtype=np.int64)
-        pos = 0
-        for k in range(n_want):
-            offsets[k] = pos
-            for c in range(nchunks):
-                starts[c, k] = pos
-                pos += found[c, k]
-        offsets[n_want] = pos
-        out = np.empty(pos, dtype=np.int64)
-        if pos:
-            for c in loop(nchunks):
-                a, b = bounds(c, n, nchunks)
-                census_fill(members, want, a, b, out, starts[c])
-        total = np.zeros((ns + 1, n_groups), dtype=np.int64)
-        for c in range(nchunks):
-            for r in range(4):
-                total += counts[c, r]
-        return total, out, offsets
-    return census
-
-census_serial, census_threaded = compile_drivers(census_driver)
-
-def census(members, alive, groups, n_groups, want):
-    """
-    Count the agents in each of several states by group, and list those in some of them: one pass over the agents for all the states
-
-    Args:
-        members (tuple): for each state, whether each agent (by UID) is in it
-        alive (array): whether each agent is alive (by UID), which also gives the number of agents
-        groups (array): the group of each agent (by UID), or an empty array if there is one group
-        n_groups (int): the number of groups
-        want (array): for each state, its position among the states whose agents are listed, or -1
-
-    Returns the counts (states plus one, by groups: the last row is everyone alive), the agents in the
-    states listed (in order, one state after another), and where each state's agents start and end in them.
-    """
-    n_want = int((want >= 0).sum())
-    nchunks = n_chunks(len(alive), 4*(len(members) + 1)*n_groups)
-    func = census_threaded if nchunks > 1 else census_serial
-    return func(members, alive, groups, n_groups, want, n_want, nchunks)
-
-
-@jit
-def true_count(raw, a, b):
-    """ The number of true values of a boolean array from a to b, eight at a time """
-    m = 0
-    i = a
-    while i < b and i % 8:
-        m += raw[i]
-        i += 1
-    end = i + (b - i)//8*8
-    if end > i:
-        words = raw[i:end].view(np.uint64)
-        for w in range(len(words)):
-            v = words[w]
-            if v: # Each byte is 0 or 1, so their sum is the top byte of this product
-                m += (v*np.uint64(0x0101010101010101)) >> np.uint64(56)
-    for j in range(end if end > i else i, b):
-        m += raw[j]
-    return m
-
-
-@jit
-def true_fill(raw, a, b, out, pos):
-    """ Write the indices of the true values from a to b, from a position """
-    list_true(raw, a, b, out, pos)
-    return
-
-
-def flatnonzero_driver(threaded):
-    loop = nb.prange if threaded else range
-    def flatnonzero(raw, nchunks):
-        n = len(raw)
-        found = np.zeros(nchunks + 1, dtype=np.int64)
-        for c in loop(nchunks):
-            a, b = bounds(c, n, nchunks)
-            found[c+1] = true_count(raw, a, b)
-        starts = np.cumsum(found)
-        out = np.empty(starts[-1], dtype=np.int64)
-        for c in loop(nchunks):
-            a, b = bounds(c, n, nchunks)
-            true_fill(raw, a, b, out, starts[c])
-        return out
-    return flatnonzero
-
-flatnonzero_serial, flatnonzero_threaded = compile_drivers(flatnonzero_driver)
-
-def flatnonzero(raw):
-    """ The indices of the true values of an array, as `np.flatnonzero()`, threaded for a large one """
-    nchunks = n_chunks(len(raw))
-    if nchunks == 1:
-        return np.flatnonzero(raw)
-    return flatnonzero_threaded(raw, nchunks)
-
-
-@jit
-def crn_key(seed, ind):
-    """ The key that one call's uniforms are hashed with, as in `distributions._hash_uniforms_fill()` """
-    x = (np.uint64(seed) ^ (np.uint64(ind)*_GOLDEN)) + _GOLDEN
-    x = (x ^ (x >> _U30))*_MIX1
-    x = (x ^ (x >> _U27))*_MIX2
-    return x ^ (x >> _U31)
-
-
-@jit
-def crn_uniform(key, slot, shift, scale):
-    """ An agent's uniform for one call, from its slot: the same number as `hash_uniforms(seed, ind, slots)` gives it (exact as a float64) """
-    z = (np.uint64(slot) + key)*_GOLDEN
-    z = (z ^ (z >> _U30))*_MIX1
-    z = (z ^ (z >> _U27))*_MIX2
-    z = z ^ (z >> _U31)
-    return max(z >> shift, 0.5)*scale
-
-
-def crn_bits(dtype):
-    """ How many bits of each hash a uniform of a dtype keeps, as the shift and scale that `crn_uniform()` takes """
-    return (_U40, _INV24) if np.dtype(dtype).itemsize <= 4 else (_U11, _INV53)
-
-
-@jit
-def infect_chunk(susceptible, groups, usual, rate, rel_sus, state_sus, adjust, mult, dt, slots, key, shift, scale, a, b, hit):
-    """ For agents a to b: whether each is infected (see infect()), and how many are """
-    sus = susceptible[a:b] # Slices, so the loop's indices are known not to be negative
-    gs = groups[a:b]
-    rs = rel_sus[a:b]
-    sl = slots[a:b]
-    by_uid = len(slots) == 0 # The slots are the UIDs
-    hs = hit[a:b]
-    m = 0
-    for i in range(len(sus)):
-        got = False
-        if sus[i]:
-            g = gs[i]
-            if rs[i] == 1:
-                prob = usual[g]
-            else:
-                prob = -np.expm1(-max(rate[g]*rs[i]*state_sus*adjust[g]*mult, 0.0)*dt) # As in infection_probs()
-            if prob > 0:
-                got = crn_uniform(key, a + i if by_uid else sl[i], shift, scale) < prob
-        hs[i] = got
-        m += got
-    return m
-
-
-def infect_driver(threaded):
-    loop = nb.prange if threaded else range
-    def infect(susceptible, groups, rate, rel_sus, state_sus, adjust, mult, dt, slots, seed, ind, shift, scale, nchunks):
-        n = len(susceptible)
-        usual = np.empty(len(rate)) # The probability for someone of average susceptibility, which is most people
-        for g in range(len(rate)):
-            usual[g] = -np.expm1(-max(rate[g]*1.0*state_sus*adjust[g]*mult, 0.0)*dt)
-        key = crn_key(seed, ind)
-        hit = np.empty(n, dtype=np.bool_)
-        found = np.zeros(nchunks + 1, dtype=np.int64)
-        for c in loop(nchunks):
-            a, b = bounds(c, n, nchunks)
-            found[c+1] = infect_chunk(susceptible, groups, usual, rate, rel_sus, state_sus, adjust, mult, dt, slots, key, shift, scale, a, b, hit)
-        starts = np.cumsum(found)
-        out = np.empty(starts[-1], dtype=np.int64)
-        if starts[-1]:
-            for c in loop(nchunks):
-                a, b = bounds(c, n, nchunks)
-                if found[c+1]:
-                    list_true(hit, a, b, out, starts[c])
-        return out
-    return infect
-
-infect_serial, infect_threaded = compile_drivers(infect_driver)
-
-def infect(susceptible, groups, rate, rel_sus, state_sus, adjust, mult, dt, slots, seed, ind, dtype):
-    """
-    The agents infected this step under homogeneous mixing, when the rate is the same for everyone in a group: one pass over the agents, which works out each
-    one's chance (as `infection_probs()`) and draws whether they are infected from their uniform for the call (as `hash_uniforms()` gives it: see `ss.random.crn_key()`)
-
-    Args:
-        susceptible (array): whether each agent is in the state, by UID
-        groups (array): the group of each agent, by UID (or an empty array if there is one group)
-        rate, rel_sus, state_sus, adjust, mult, dt: as for `infection_probs()`
-        slots (array): the slot of each agent, by UID, or None if they are the UIDs (see `ss.People.slot_raw()`)
-        seed, ind (int): the seed and index of the distribution's call
-        dtype (dtype): the dtype of its uniforms
-
-    Returns the UIDs of the agents infected, in order.
-    """
-    shift, scale = crn_bits(dtype)
-    nchunks = n_chunks(len(susceptible))
-    if slots is None:
-        slots = np.empty(0, dtype=np.int32)
-    func = infect_threaded if nchunks > 1 else infect_serial
-    return func(susceptible, groups, rate, rel_sus, state_sus, adjust, mult, dt, slots, seed, ind, shift, scale, nchunks)
-
-
-#%% For people: the passes over the active agents at the end of each step
-
-@jit
-def due_chunk(auids, ti_dead, ti_removed, ti, a, b, hit):
-    """ Whether each of the active agents a to b has died or left by step ti, and how many have """
-    m = 0
-    for i in range(a, b):
-        uid = auids[i]
-        got = (ti_dead[uid] <= ti) | (ti_removed[uid] <= ti)
-        hit[i] = got
-        m += got
-    return m
-
-
-def due_driver(threaded):
-    loop = nb.prange if threaded else range
-    def due(auids, ti_dead, ti_removed, ti, nchunks):
-        n = len(auids)
-        hit = np.empty(n, dtype=np.bool_)
-        found = np.zeros(nchunks + 1, dtype=np.int64)
-        for c in loop(nchunks):
-            a, b = bounds(c, n, nchunks)
-            found[c+1] = due_chunk(auids, ti_dead, ti_removed, ti, a, b, hit)
-        starts = np.cumsum(found)
-        out = np.empty(starts[-1], dtype=np.int64)
-        if starts[-1]:
-            for c in loop(nchunks):
-                a, b = bounds(c, n, nchunks)
-                if found[c+1]:
-                    p = starts[c]
-                    for i in range(a, b):
-                        if hit[i]:
-                            out[p] = auids[i]
-                            p += 1
-        return out
-    return due
-
-due_serial, due_threaded = compile_drivers(due_driver)
-
-def due(auids, ti_dead, ti_removed, ti):
-    """ The active agents who have died or left by step ti (as `((ti_dead <= ti) | (ti_removed <= ti)).uids`), in one pass """
-    nchunks = n_chunks(len(auids))
-    func = due_threaded if nchunks > 1 else due_serial
-    return func(auids, ti_dead, ti_removed, ti, nchunks)
-
-
-@jit
-def count_chunk(auids, states, alive, ti_dead, ti_removed, ti, a, b, out):
-    """ For the active agents a to b: the number in each state, then the number who died and who left (who are no longer alive) """
-    ns = len(states)
-    for i in range(a, b):
-        uid = auids[i]
-        for s in range(ns):
-            out[s] += states[s][uid] != 0
-        if not alive[uid]:
-            out[ns] += ti_dead[uid] <= ti
-            out[ns+1] += ti_removed[uid] <= ti
-    return
-
-
-def count_driver(threaded):
-    loop = nb.prange if threaded else range
-    def count_people(auids, states, alive, ti_dead, ti_removed, ti, nchunks):
-        n = len(auids)
-        out = np.zeros((nchunks, len(states) + 2), dtype=np.int64)
-        for c in loop(nchunks):
-            a, b = bounds(c, n, nchunks)
-            count_chunk(auids, states, alive, ti_dead, ti_removed, ti, a, b, out[c])
-        return out.sum(axis=0)
-    return count_people
-
-count_people_serial, count_people_threaded = compile_drivers(count_driver)
-
-def count_people(auids, states, alive, ti_dead, ti_removed, ti):
-    """ The number of active agents in each of some states (as `state.count()`), then the number who died and who left by step ti (as `count_gone()`), in one pass """
-    nchunks = n_chunks(len(auids))
-    func = count_people_threaded if nchunks > 1 else count_people_serial
-    return func(auids, states, alive, ti_dead, ti_removed, ti, nchunks)
-
-
-@jit
-def keep_chunk(auids, alive, a, b):
-    """ The number of the active agents a to b who are still alive """
-    m = 0
-    for i in range(a, b):
-        m += alive[auids[i]]
-    return m
-
-
-@jit
-def keep_fill(auids, alive, age, dt, aging, a, b, kept, k, gone, g):
-    """ List the active agents a to b who are still alive (from position k), and those who are not (from g); the age of those alive goes up by dt """
-    for i in range(a, b):
-        uid = auids[i]
-        if alive[uid]:
-            kept[k] = uid
-            k += 1
-            if aging:
-                age[uid] += dt
-        else:
-            gone[g] = uid
-            g += 1
-    return
-
-
-def keep_driver(threaded):
-    loop = nb.prange if threaded else range
-    def keep_alive(auids, alive, age, dt, aging, kept, nchunks):
-        n = len(auids)
-        found = np.zeros(nchunks + 1, dtype=np.int64)
-        for c in loop(nchunks):
-            a, b = bounds(c, n, nchunks)
-            found[c+1] = keep_chunk(auids, alive, a, b)
-        starts = np.cumsum(found)
-        n_kept = starts[-1]
-        gone = np.empty(n - n_kept, dtype=np.int64)
-        for c in loop(nchunks):
-            a, b = bounds(c, n, nchunks)
-            keep_fill(auids, alive, age, dt, aging, a, b, kept, starts[c], gone, a - starts[c])
-        return n_kept, gone
-    return keep_alive
-
-keep_alive_serial, keep_alive_threaded = compile_drivers(keep_driver)
-
-def keep_alive(auids, alive, age, dt, aging, kept):
-    """
-    Take the agents who are no longer alive out of the active agents, and age those who are: one pass
-
-    Args:
-        auids (array): the active agents
-        alive (array): whether each agent is alive, by UID
-        age (array): the age of each agent, by UID (changed in place)
-        dt (float32): how much they age
-        aging (bool): whether they age
-        kept (array): where to write the agents still alive, in order (at least as long as `auids`)
-
-    Returns the number still alive, and the agents who are not.
-    """
-    nchunks = n_chunks(len(auids))
-    func = keep_alive_threaded if nchunks > 1 else keep_alive_serial
-    return func(auids, alive, age, dt, aging, kept, nchunks)
-
-
-# The same passes, over every agent by UID rather than over the list of active agents, which People uses when the
-# active agents are those alive (and those who died in this step), as they are unless something else changes who is alive
-
-@jit
-def due_alive_chunk(alive, ti_dead, ti_removed, ti, a, b, hit):
-    """ For agents a to b (by UID): whether each is alive and has died or left by step ti; returns how many have, and how many are alive """
-    al = alive[a:b].view(np.uint8) # Slices, so the loop's indices are known not to be negative, and it is vectorized
-    td = ti_dead[a:b]
-    tr = ti_removed[a:b]
-    hs = hit[a:b].view(np.uint8)
-    m = 0
-    k = 0
-    for i in range(len(al)):
-        y = al[i]
-        x = (np.uint8(td[i] <= ti) | np.uint8(tr[i] <= ti)) & y
-        hs[i] = x
-        m += x
-        k += y
-    return m, k
-
-
-def due_alive_driver(threaded):
-    loop = nb.prange if threaded else range
-    def due_alive(alive, ti_dead, ti_removed, ti, nchunks):
-        n = len(alive)
-        hit = np.empty(n, dtype=np.bool_)
-        found = np.zeros(nchunks + 1, dtype=np.int64)
-        n_alive = np.zeros(nchunks, dtype=np.int64)
-        for c in loop(nchunks):
-            a, b = bounds(c, n, nchunks)
-            m, k = due_alive_chunk(alive, ti_dead, ti_removed, ti, a, b, hit)
-            found[c+1] = m
-            n_alive[c] = k
-        starts = np.cumsum(found)
-        out = np.empty(starts[-1], dtype=np.int64)
-        if starts[-1]:
-            for c in loop(nchunks):
-                if found[c+1]:
-                    a, b = bounds(c, n, nchunks)
-                    list_true(hit, a, b, out, starts[c])
-        return out, n_alive.sum()
-    return due_alive
-
-due_alive_serial, due_alive_threaded = compile_drivers(due_alive_driver)
-
-def due_alive(alive, ti_dead, ti_removed, ti):
-    """ The agents alive who have died or left by step ti (as `due()`, but by UID), and the number alive """
-    nchunks = n_chunks(len(alive))
-    func = due_alive_threaded if nchunks > 1 else due_alive_serial
-    return func(alive, ti_dead, ti_removed, ti, nchunks)
-
-
-@jit
-def count_alive_chunk(states, alive, a, b, out):
-    """ For agents a to b (by UID): the number of those alive in each state, then the number alive """
-    ns = len(states)
-    for s in range(ns):
-        out[s] += both_count(states[s], alive, a, b)
-    out[ns] += true_count(alive, a, b)
-    return
-
-
-@jit
-def both_count(x, y, a, b):
-    """ The number of agents from a to b for whom two boolean arrays are both true, eight at a time """
-    m = 0
-    i = a
-    while i < b and i % 8:
-        m += x[i] & y[i]
-        i += 1
-    end = i + (b - i)//8*8
-    if end > i:
-        xw = x[i:end].view(np.uint64)
-        yw = y[i:end].view(np.uint64)
-        for w in range(len(xw)):
-            v = xw[w] & yw[w]
-            m += (v*np.uint64(0x0101010101010101)) >> np.uint64(56) # Each byte is 0 or 1: see true_count()
-    for j in range(end if end > i else i, b):
-        m += x[j] & y[j]
-    return m
-
-
-def count_alive_driver(threaded):
-    loop = nb.prange if threaded else range
-    def count_alive(states, alive, nchunks):
-        n = len(alive)
-        out = np.zeros((nchunks, len(states) + 1), dtype=np.int64)
-        for c in loop(nchunks):
-            a, b = bounds(c, n, nchunks)
-            count_alive_chunk(states, alive, a, b, out[c])
-        return out.sum(axis=0)
-    return count_alive
-
-count_alive_serial, count_alive_threaded = compile_drivers(count_alive_driver)
-
-def count_alive(states, alive):
-    """ The number of agents alive in each of some states, then the number alive, in one pass by UID """
-    nchunks = n_chunks(len(alive))
-    func = count_alive_threaded if nchunks > 1 else count_alive_serial
-    return func(states, alive, nchunks)
-
-
-@jit
-def keep_alive_fill(alive, age, dt, aging, a, b, kept, k):
-    """ List the agents a to b (by UID) who are alive, from position k, and age them by dt """
-    al = alive[a:b]
-    if aging:
-        ages = age[a:b]
-        for i in range(len(al)):
-            if al[i]:
-                kept[k] = a + i
-                k += 1
-                ages[i] += dt
-    else:
-        for i in range(len(al)):
-            if al[i]:
-                kept[k] = a + i
-                k += 1
-    return
-
-
-def keep_raw_driver(threaded):
-    loop = nb.prange if threaded else range
-    def keep_raw(alive, age, dt, aging, kept, expected, nchunks):
-        n = len(alive)
-        found = np.zeros(nchunks + 1, dtype=np.int64)
-        for c in loop(nchunks):
-            a, b = bounds(c, n, nchunks)
-            found[c+1] = true_count(alive, a, b)
-        starts = np.cumsum(found)
-        if starts[-1] != expected: # Not the agents expected: nothing is changed
-            return -1
-        for c in loop(nchunks):
-            a, b = bounds(c, n, nchunks)
-            keep_alive_fill(alive, age, dt, aging, a, b, kept, starts[c])
-        return starts[-1]
-    return keep_raw
-
-keep_raw_serial, keep_raw_threaded = compile_drivers(keep_raw_driver)
-
-def keep_raw(alive, age, dt, aging, kept, expected):
-    """
-    As `keep_alive()`, but by UID: list the agents alive (in order), and age them, in one pass, if there are as many as expected
-
-    Returns the number alive, or -1 (having changed nothing) if that is not the number expected.
-    """
-    nchunks = n_chunks(len(alive))
-    func = keep_raw_threaded if nchunks > 1 else keep_raw_serial
-    return func(alive, age, dt, aging, kept, expected, nchunks)

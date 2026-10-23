@@ -114,6 +114,11 @@ def test_change():
             stopped = ss.modify(sir.pars.beta, multiply=0.0)
             sim = ss.Sim(sir, interventions=stopped, solver=solver, stop=50, **kw).run()
             assert sim.results.sir.infection.sum() == 0, f'{key} under {solver}'
+
+    # On a beta for each route, with a pair of directions on one (it crashed)
+    S, I = ss.states('S I')
+    d = ss.Disease(infection=ss.Transition(S, I, rate=dict(random=ss.peryear(0.3), sexualnet=ss.peract(m2f=0.1, f2m=0.2)) * I), init_prev=0.05, name='d')
+    ss.Sim(d, networks=['random', ss.SexualNet()], interventions=ss.change('d.pars.beta', at=2001, by=0.5), n_agents=1000, start=2000, stop=2003, dt=ss.years(0.25), verbose=0).run()
     return sims
 
 
@@ -439,6 +444,17 @@ def test_treat():
     for bad in [lambda: ss.Treatment(efficacy=0.9), lambda: ss.Vaccine()]:
         with pytest.raises(ValueError):
             bad()
+
+    # Efficacy against a transition given as a duration acts as agents, as a modifier does (there were 2,252 AIDS onsets with and without it; the ODE gave 0)
+    def onsets(how):
+        I, A = ss.states('I A')
+        hiv = ss.Disease(I, A, aids=I >> A @ ss.years(2.66), init=dict(I=0.5), first='I', name='hiv')
+        art = ss.treat(ss.Treatment(efficacy=dict(aids=1.0), name='art'), at=[2011], coverage=1.0, where=hiv.I, name='art_delivery') if how == 'product' else None
+        con = ss.modify(hiv.aids, multiply=0, start=2011) if how == 'modify' else None
+        sim = ss.Sim(hiv, interventions=art, connectors=con, n_agents=5000, start=2010, stop=2013, dt=ss.months(1), verbose=0).run()
+        return sim.results.hiv.aids[13:].sum()
+    none, product, modify = [onsets(how) for how in ['none', 'product', 'modify']]
+    assert product == modify < 0.1*none
     return sims
 
 
@@ -505,6 +521,31 @@ def test_screen():
     daily = ss.screen(ss.Diagnostic(sensitivity=1.0, specificity=1.0, delay=ss.days(3)), interval=1, name='daily')
     res = ss.Sim(sir, interventions=daily, total_pop=100, n_agents=100, unit='day', stop=20, verbose=0).run().results.daily
     assert np.isclose(res.delivered.sum(), 700) and np.isclose(res.positive.sum(), 600, rtol=1e-3) # Each person every 3 days, the last result after the end; not 2,000 tests and 0 positive
+
+    # In a staged condition with no transmission, every stage is infected, so a test with no detects= finds them all (it found stage 1 only, 649 of 1,637)
+    def staged(**kwargs):
+        none, s1, s2, s3 = ss.states('none s1 s2 s3')
+        cancer = ss.Disease(none, s1, s2, s3, onset=ss.Transition(none, s1, rate=0.02, **kwargs), p2=s1 >> s2 @ 0.3, p3=s2 >> s3 @ 0.3, first='none', name='cancer')
+        scr = ss.screen(ss.Diagnostic(sensitivity=1.0, specificity=1.0), at=[9], coverage=1.0, name='scr')
+        return ss.Sim(cancer, interventions=scr, n_agents=5000, start=0, stop=10, dt=1, verbose=0).run()
+    sim = staged()
+    r = sim.results.cancer
+    assert [s.name for s in sim.diseases.cancer.graph.infected] == ['s1', 's2', 's3']
+    assert sim.results.scr.positive.sum() == r.n_s1[9] + r.n_s2[9] + r.n_s3[9]
+    with pytest.raises(ValueError, match='no infected states'): # Not 0 positives with no message
+        staged(acquisition=False)
+
+    # A test on one disease's event detecting another's state runs as agents, and is refused clearly as an ODE (it was a broadcasting error)
+    def on_symptom(solver):
+        c0, c1, c2 = ss.states('c0 c1 c2')
+        cancer = ss.Disease(c0, c1, c2, p1=c0 >> c1 @ 0.05, p2=c1 >> c2 @ 0.05, first='c0', name='cancer')
+        no, yes = ss.states('no yes')
+        symptom = ss.Disease(no, yes, onset=no >> yes @ 0.2, first='no', name='symptom')
+        test = ss.screen(ss.Diagnostic(sensitivity=1, specificity=1, detects=cancer.c1), on=symptom.onset, coverage=0.8, disease='cancer', name='scr')
+        return ss.Sim(diseases=[cancer, symptom], interventions=test, n_agents=1000, total_pop=1000, solver=solver, start=2000, stop=2010, dt=0.25, verbose=0)
+    assert on_symptom('abm').run().results.scr.positive.sum() > 0
+    with pytest.raises(ss.CapabilityError, match='symptom.onset'):
+        on_symptom('ode').run()
     return sims
 
 
@@ -557,7 +598,7 @@ def test_triggered():
     sub = SubSim(interventions=make_cascade()[::-1], diseases=make_sis(), solver='abm', stop=120, **kw).run()
     assert np.array_equal(sub.results.sis.n_I, sim.results.sis.n_I)
 
-    # The errors: a cycle of triggers, an event outside the sim, an event | a condition, a misspelled outcome, and capacity by stratum (TL47)
+    # The errors: a cycle of triggers, an event outside the sim, an event | a condition, a misspelled outcome, and capacity by stratum
     a = ss.screen(ss.Diagnostic(), interval=7, name='a')
     b = ss.screen(ss.Diagnostic(), who=a.positive, name='b')
     a.on = b.positive # A retest triggered by the test it follows
@@ -610,7 +651,7 @@ def test_memory():
     assert sim.solver == 'abm' and res.anc_visit.delivered.sum() > 0 and res.newborn.delivered.sum() > 0
     assert np.array_equal(res.anc_a.delivered.values, res.anc_visit.delivered.values) and np.array_equal(res.anc_b.delivered.values, res.anc_visit.delivered.values)
 
-    # A transfer triggers a delivery, as agents (TL43); a state that only a delivery moves people into is not where they start (TL38)
+    # A transfer triggers a delivery, as agents; a state that only a delivery moves people into is not where they start
     S, I = ss.states('S I')
     d = ss.Disease(name='d', infection=S >> I @ 0.1)
     d.stratify(sym=[False, True], onset=ss.transfer(sym=True, rate=0.2, states=['I']))
@@ -934,6 +975,12 @@ def test_hold_by_place():
     local = run('ode')
     assert not np.allclose(run('ode', by=None), local) # Unlike one rule for the whole population
     assert np.all(run('ode', hold=None) > local) # And the hold keeps it down longer
+
+    # In a rate, the incidence is not supported yet, and the error says what to write instead
+    S, I, R = ss.states('S I R')
+    infection = S >> I @ 0.3*I
+    with pytest.raises(ss.CapabilityError, match=r'I\.n'): # When the disease is built, whatever the solver
+        ss.Disease(infection=infection, recovery=I >> R @ (0.1 + 0.5*infection.incidence(over=ss.days(7))), init_prev=0.01, name='sir')
     return local
 
 
@@ -992,6 +1039,18 @@ def test_trace():
     ever = (sir.I | sir.R).uids
     vaccinated = ss.uids(np.isfinite(sim.interventions.ring.product.ti_delivered.raw).nonzero()[0])
     assert len(vaccinated) and set(vaccinated) <= set(sim.networks.net.find_contacts(ever))
+
+    # Partner notification reaches the partners of the past year with memory= on the network, not only the current ones: about 0.7 + 0.7 × 52/10 ≈ 4.3 for 10-week partnerships
+    def notified(memory):
+        S, I, D = ss.states('S I D')
+        hiv = ss.Disease(infection=ss.Transition(S, I, rate=ss.prob(0.02)*(I + D)), diagnosis=ss.Transition(I, D, rate=ss.peryear(1.0)), init_prev=0.1, name='hiv')
+        net = ssl.DegreeNet(n_contacts=0.7, dur=ss.weeks(10), acts=ss.freqperweek(2), memory=memory)
+        pn = ss.screen(ss.Diagnostic(sensitivity=1.0), who=hiv.diagnosis, trace='degreenet', name='pn')
+        sim = ss.Sim(hiv, networks=net, interventions=pn, n_agents=2000, unit='week', stop=ss.years(3), rand_seed=1, verbose=0).run()
+        return sim.results.pn.delivered.sum()/sim.results.hiv.diagnosis.sum()
+    current, past_year = notified(None), notified(ss.months(12))
+    print(f'Partners notified per diagnosis: {current:.2f} current, {past_year:.2f} in the past year')
+    assert current < 1 and np.isclose(past_year, 0.7 + 0.7*52/10, rtol=0.15)
 
     # Only agents keep contacts, and it needs to know whose
     S, I, R = ss.states('S I R')
@@ -1082,6 +1141,8 @@ def test_network_contacts():
         assert np.isclose(halved, set5)
         assert halved < young < base
         assert np.isclose(halved, 0.8*base, rtol=0.1) # Agents differ from the ODE by an amount of order dt
+    assert make('ode', ss.modify(ss.MixingPool(name='school'), multiply=0.5, start=20)) == make('ode', halve()) # The network itself means its contacts, as the path does
+    assert [net.name for net in ss.contacts('Kenya', layer=['home', 'school'])] == ['home', 'school'] # A layer for each setting
 
     # Only a network's contacts can be targeted
     with pytest.raises(ss.errors.UnmodifiableTarget):
@@ -1170,7 +1231,7 @@ def test_delay():
 
 
 def test_coded_disease():
-    sc.heading('Testing deliveries for a disease written as code (PL2): screen, treat, and vaccinate on ssl.AgentSIR')
+    sc.heading('Testing deliveries for a disease written as code: screen, treat, and vaccinate on ssl.AgentSIR')
     def make(interventions, **kwargs):
         sir = ssl.AgentSIR(beta=ss.peryear(0.5), init_prev=0.1, dur_inf=ss.years(5), p_death=0.0, **kwargs)
         return ss.Sim(n_agents=5000, diseases=sir, networks='random', interventions=interventions, start=2000, stop=2010, verbose=0).run()
@@ -1298,7 +1359,7 @@ def test_waning_as_states():
     prev = {k:sim.results.mal.n_I[2*t]/20_000 for k,sim in sims.items()}
     assert np.allclose(prev['abm'], prev['ode'], rtol=0.05), prev
 
-    # A product that fades by a function is given again to those who hold it, which restarts it (MA15; agents only)
+    # A product that fades by a function is given again to those who hold it, which restarts it (agents only)
     S, I = ss.states('S I')
     mal = ss.Disease(infection=S >> I @ ss.peryear(2.0), recovery=I >> S @ ss.days(20), name='mal')
     vax = ss.Vaccine(efficacy=dict(infection=1.0), waning=lambda t: (np.asarray(t) < 100).astype(float))

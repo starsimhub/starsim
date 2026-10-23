@@ -76,37 +76,60 @@ def value(par):
     return None
 
 
-def network(net, src, name):
-    """ An ssl.DegreeNet with the targets of a network fitted by netest(), and its code """
+def network(net, src, name, acts=None):
+    """ An ssl.DegreeNet with the targets of a network fitted by netest(), and its code; acts= is act.rate, the acts in each partnership per step """
     import starsim.library as ssl # Lazily, since the library builds on the rest of Starsim
     n = net['n']
     targets = sc.tolist(net['target_stats'])
+    stats = sc.tolist(net.get('stats') or [])
     terms = [t for t in net['terms'] if t['term'] != 'offset']
     for t in net['terms']:
         if t['term'] == 'offset':
             src.skip(f'{name}: {t["text"]}', 'a term with a fixed coefficient (e.g. no partnerships within a group) has no declared form; restrict partners with a custom network')
     kw = sc.objdict()
-    one = len(terms) == len(targets) # One statistic for each term, in order
-    edges = targets[[t['term'] for t in terms].index('edges')] if one and 'edges' in [t['term'] for t in terms] else None
+    arglist = lambda t: {j:a for j,a in enumerate(t['args'])} if isinstance(t['args'], list) else t['args'] or {} # Positional arguments only, or by name
+    attr_of = lambda args: str(args.get(0, args.get('attr'))).strip('"')
+    sizes = [1]*len(terms) # The number of statistics of each term: one, except nodefactor's, one for each level but the first
     for i,t in enumerate(terms):
-        term, args = t['term'], t['args'] or {}
-        if isinstance(args, list): # Positional arguments only
-            args = {j:a for j,a in enumerate(args)}
-        val = targets[i] if one else None
-        if term == 'edges' and val is not None:
+        if t['term'] == 'nodefactor' and len(stats) == len(targets):
+            sizes[i] = sum(stat.startswith(f'nodefactor.{attr_of(arglist(t))}.') for stat in stats)
+    one = sum(sizes) == len(targets) # The statistics of each term, in order
+    starts = np.cumsum([0] + sizes[:-1])
+    edges = targets[starts[[t['term'] for t in terms].index('edges')]] if one and 'edges' in [t['term'] for t in terms] else None
+    stratified = set()
+    def stratify(attr):
+        """ The levels of an attribute, and their counts, stratifying the disease by it (once) as on the network """
+        levels, counts = np.unique(mapping(net['attributes'])[attr], return_counts=True)
+        if attr not in stratified:
+            src.stratify(**{attr: [str(l) for l in levels]}, split=(counts/counts.sum()).round(10).tolist())
+            stratified.add(attr)
+        return levels, counts
+    for i,t in enumerate(terms):
+        term, args = t['term'], arglist(t)
+        val = targets[starts[i]] if one else None
+        if term == 'nodefactor' and val is not None and edges and len(args) == 1 and sizes[i]:
+            attr = attr_of(args)
+            if mapping(net['attributes']).get(attr) is None:
+                src.skip(f'{name}: {t["text"]}', f'the attribute "{attr}" is not set on the network')
+                continue
+            levels, counts = stratify(attr)
+            given = {stat.split('.', 2)[2]:targets[starts[i] + j] for j,stat in enumerate(stats[starts[i]:starts[i] + sizes[i]])} # The total degree of each level with a statistic
+            rest = [str(l) not in given for l in levels] # The levels without one (the first) share the rest of the degree
+            other = (2*edges - sum(given.values()))/counts[rest].sum() if any(rest) else None
+            kw.degrees = (attr, [round(given[str(l)]/c if str(l) in given else other, 10) for l,c in zip(levels, counts)])
+            src.notes.append(f'{name}: nodefactor("{attr}") is the mean number of partners at each level of a stratification "{attr}", split as on the network [guessed: matches the degrees, not an ERGM fit]')
+        elif term == 'edges' and val is not None:
             kw.n_contacts = round(2*val/n, 10)
         elif term == 'concurrent' and val is not None and not args:
             kw.concurrency = round(val/n, 10)
         elif term == 'degrange' and val == 0 and 'to' not in args:
             kw.max_contacts = int(args.get('from', args.get(0))) - 1
         elif term == 'nodematch' and val is not None and edges and not args.get('diff') and len(args) == 1:
-            attr = str(args.get(0, args.get('attr'))).strip('"')
-            values = mapping(net['attributes']).get(attr)
-            if values is None:
+            attr = attr_of(args)
+            if mapping(net['attributes']).get(attr) is None:
                 src.skip(f'{name}: {t["text"]}', f'the attribute "{attr}" is not set on the network')
                 continue
-            levels, counts = np.unique(values, return_counts=True)
-            src.stratify(**{attr: [str(l) for l in levels]}, split=(counts/counts.sum()).round(10).tolist())
+            stratify(attr)
             kw.match = {attr: round(val/edges, 10)}
             src.notes.append(f'{name}: nodematch("{attr}") is the share of partnerships within a level of a stratification "{attr}", split as on the network [guessed: matches the share, not an ERGM fit]')
         else:
@@ -116,7 +139,16 @@ def network(net, src, name):
     kw.dur = float(sc.tolist(net['duration'])[0])
     if kw.dur.is_integer():
         kw.dur = int(kw.dur)
-    code = 'ssl.DegreeNet(' + ', '.join(f'{k}={v!r}' for k,v in kw.items()) + ')'
+    codes = {k:repr(v) for k,v in kw.items()}
+    if 'degrees' in kw: # A mean number of partners for each level, in place of the one from edges
+        attr, degrees = kw.pop('degrees')
+        kw.n_contacts = ss.by(**{attr:degrees})
+        codes.pop('degrees')
+        codes['n_contacts'] = f'ss.by({attr}={degrees!r})'
+    if acts is not None:
+        kw.acts = acts
+        codes['acts'] = f'ss.{acts!r}'
+    code = 'ssl.DegreeNet(' + ', '.join(f'{k}={v}' for k,v in codes.items()) + ')'
     src.notes.append(f'{name}: {net["formation"]} with targets {targets} and partnerships lasting {kw.dur} steps => {code} [guessed: the same targets, not an ERGM fit]')
     return ssl.DegreeNet(**kw, name=name), code
 
@@ -139,7 +171,8 @@ def load_epimodel(source, run=0, unit='day', rscript=None, verbose=None, **kwarg
     **Example**:
 
         # In EpiModel's environment: Rscript dump_epimodel.R intro_sis.R model.json
-        sim = ss.load('model.json', format='epimodel')
+        import starsim.interop
+        sim = ss.interop.load('model.json', format='epimodel')
     """
     d = read(source, rscript=rscript)
     file = source if isinstance(source, str) else d.get('file')
@@ -182,8 +215,8 @@ def load_epimodel(source, run=0, unit='day', rscript=None, verbose=None, **kwarg
                 src.skip(f'param {k}', 'a parameter that varies (by time since infection, or several values for a sensitivity analysis): its first value is used')
                 vals[k] = sc.tolist(param[k])[0]
         inf_prob, act_rate = vals.get('inf.prob'), vals.get('act.rate', 1)
-        if kind == 'netsim': # The chance per partnership per step, over act.rate acts
-            src.add_par('beta', prob(round(1 - (1 - inf_prob)**act_rate, 12)), doc=f'1 - (1 - inf.prob)^act.rate per partnership per step, with inf.prob = {inf_prob} and act.rate = {act_rate}')
+        if kind == 'netsim': # The chance per act, with act.rate acts in each partnership per step (acts= of the network)
+            src.add_par('beta', ss.peract(inf_prob), doc='chance of infection per act')
             src.add_flow('S', 'I', 'beta * S * I / N', per='total', name='infection')
         else: # A rate of acts with random people, each with a chance of infection
             src.add_par('inf_prob', inf_prob, doc='chance of infection per act')
@@ -226,7 +259,7 @@ def load_epimodel(source, run=0, unit='day', rscript=None, verbose=None, **kwarg
         codes = []
         for i,net in enumerate(r['networks']):
             name = 'net' if len(r['networks']) == 1 else f'net{i+1}'
-            nets[name], code = network(net, src, name)
+            nets[name], code = network(net, src, name, acts=getattr(ss, f'freqper{unit}')(act_rate) if builtin else None)
             codes.append(f'{name}={code}')
             if net['d_rate']:
                 src.notes.append(f'{name}: d.rate = {net["d_rate"]} needs nothing: ssl.DegreeNet allows for partnerships ended by departures')

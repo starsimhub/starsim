@@ -8,6 +8,8 @@ Starsim is an agent-based modeling framework for simulating disease spread among
 
 For a compact index of the whole public API (signatures, summaries, and default parameters), see https://docs.starsim.org/llms.txt (or `llms-full.txt`, which adds an example for each entry). These are generated when the docs are built and are not committed; to generate them locally for the current branch (as `docs/llms.txt` etc.), run `cd docs && python make_api.py`. The equivalent for Sciris is at https://docs.sciris.org/llms.txt.
 
+The design record of v4 (the constitution, the spec, the current plan, and what was deferred or decided against) is in `v4_design/`; start at `v4_design/README.md`.
+
 ## Core architecture
 
 The framework follows a modular design with these key components:
@@ -91,7 +93,6 @@ uv add starsim[dev]  # With dev dependencies
 - `products.py`: Vaccine and treatment deployment
 - `pregnancy.py`: Pregnancy as declared states and transitions; provides events (`conception`, `delivery`) and states (`P`) for other modules
 - `run.py`: Running multiple simulations (`ss.MultiSim`, `ss.parallel`)
-- `samples.py`: Storage for large-scale simulation results
 - `settings.py`: Global options (`ss.options`) and plotting style
 - `solvers/`: The engines that run declared models: `engine.py` (what they share), `mixing.py` (who meets whom in a compartmental run), `compartmental.py`, `agents.py`, `crossing.py` (diseases tracked jointly), and `choose.py` (which solver, and why: `ss.solvers.choose_solver()`); every name is also `ss.solvers.X`
 - `spec.py`: The model spec, and models written as code (`ss.to_code()`, `ss.diff()`)

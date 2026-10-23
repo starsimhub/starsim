@@ -109,7 +109,7 @@ def test_dimensions(tmp_path):
     pd.DataFrame(dict(mc_name=['S_unvaccinated', 'I_unvaccinated'], amount=[990, 10])).to_csv(folder / 'ic.csv', index=False)
     sim = load_flepimop(folder / 'config.yml', **kw)
     res = sim.run().results.sir_vax
-    assert len(sim.diseases[0].graph.states) == 6
+    assert len(sim.diseases[0].states) == 6
 
     # The same ODE, written out and solved independently
     def deriv(t, y):

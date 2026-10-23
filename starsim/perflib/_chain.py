@@ -16,7 +16,8 @@ seeds or parameter sets) give the same draws as runs taken one at a time.
 
 `reason()` says what a model has that this does not cover (then the kernels run it).
 Everything here is CPU only, and is imported only when used (it imports JAX; Numba caches the
-handler, so it compiles once per install, in about 10 s).
+handler, so it compiles once per install, in about 20 s, with a note, or ahead of time with
+`ss.compile()`; under `ss.options.compile = 'never'`, the kernels take the run instead).
 """
 import os
 import re
@@ -25,8 +26,12 @@ import numpy as np
 import numba as nb
 from numba import types
 from numba.extending import intrinsic
+from numba.core.caching import FunctionCache
+from numba.core.ccallback import CFunc
 import starsim as ss
-from . import _draws as draws
+from . import _draws as draws, _cache
+
+_cache.depends(__file__, draws.__file__) # The handler compiles in the draws
 
 __all__ = []
 
@@ -39,6 +44,7 @@ reg_fields = ['starts', 'src', 'dst', 'sel', 'sel_starts', 'sel_comps', 'sel_to'
 TAU, RELEASE, RELEASE_END, SHIFT, REGISTER, DELIVER = 1, 2, 4, 8, 16, 32 # What a call does: tau-leaping, release the conveyors' last slots before the draws or after them, move the conveyors along, apply the register's events, or only the deliveries
 leap_bits = 20 # The step's number, shifted by this many bits, plus the substep or leap, counts the calls (for the key of each one's uniforms)
 pieces = ss.kernels.pieces
+compile_seconds = 20 # About how long compiling the handler takes, once per install (23 s measured, with nothing in Numba's cache): see register()
 
 
 def reason(sim):
@@ -49,6 +55,8 @@ def reason(sim):
         return 'the model is written as code, with no declared states and transitions'
     elif not sim.kernel_only():
         return sim.kernel_reason()
+    elif ss.options.compile == 'never':
+        return 'its draws are compiled by Numba, and ss.options.compile is "never"'
     try:
         check()
     except RuntimeError as e:
@@ -652,15 +660,29 @@ def api_version():
 version = None
 
 
-def make_handler(major, minor):
-    """ The C function XLA calls (see `handle()`), reporting API version major.minor; Numba caches it by the version (the values a closure holds are part of the key of its cache), so a JAX with another version gets a handler of its own """
-    @nb.cfunc(types.int64(types.int64), cache=True)
+def handler_func(major, minor):
+    """ The function XLA calls (see `handle()`), reporting API version major.minor, as Python; Numba caches it by the version (the values a closure holds are part of the key of its cache), so a JAX with another version gets a handler of its own """
     def handler(frame):
         return handle(frame, major, minor)
     return handler
 
 
+def make_handler(major, minor):
+    """ The C function XLA calls: `handler_func()`, compiled """
+    return nb.cfunc(types.int64(types.int64), cache=True)(handler_func(major, minor))
+
+
+def is_compiled():
+    """ Whether the handler for the installed JAX is compiled already: in this session, or in Numba's cache from an earlier one (as `ss.kernels.is_compiled()`) """
+    v = api_version()
+    if v in handlers:
+        return True
+    cache = FunctionCache(handler_func(*v))
+    return cache._index_key(types.int64(types.int64), CFunc._targetdescr.target_context.codegen()) in cache._cache_file._load_index()
+
+
 handlers = {} # The handler registered with XLA, and its name there, by the API version it reports
+registered = {} # Every handler registered with XLA this session, by its name there
 
 
 def register():
@@ -668,10 +690,13 @@ def register():
     v = api_version()
     if v not in handlers:
         jx = ss.gradients.jax()
-        handler = make_handler(*v)
+        if not ss.kernels.compiling and not is_compiled(): # ss.compile() says so itself
+            print(f'Note: compiling the draws of the chain binomial in JAX (about {compile_seconds} s, once per install)')
         name = f'starsim_chain_step_{v[0]}_{v[1]}'
-        jx.ffi.register_ffi_target(name, jx.ffi.pycapsule(handler.address), platform='cpu')
-        handlers[v] = (handler, name)
+        if name not in registered: # XLA refuses a second handler under a name, so one dropped by check() is reused
+            registered[name] = make_handler(*v)
+            jx.ffi.register_ffi_target(name, jx.ffi.pycapsule(registered[name].address), platform='cpu')
+        handlers[v] = (registered[name], name)
     return handlers[v][1]
 
 

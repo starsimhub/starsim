@@ -3,13 +3,14 @@ Exact random draws in Numba, from one uniform each where possible
 
 Every draw here is a function of a uniform u in (0, 1): by inversion of the CDF where
 that is cheap (binomial and Poisson up to a mean of 30, negative binomial, exponential,
-Weibull, normal, lognormal, uniform, discrete choices), so the draw is monotone in u,
-which suits common random numbers; otherwise (binomial and Poisson above a mean of 30,
-gamma, beta) by a rejection sampler (BTPE, PTRS, Marsaglia and Tsang) that takes its
-own uniforms from a stream seeded by the bits of u, so the same u still gives the same
-draw. The uniforms themselves are counter-based: `uniform(key, i)` is a SplitMix64 hash
-of a key and an index, the same hash as `ss.distributions.hash_uniforms()`, so a stream
-does not depend on how the work is split.
+Weibull), so the draw is monotone in u, which suits common random numbers; otherwise
+(binomial and Poisson above a mean of 30, and the gamma mean of a large negative binomial)
+by a rejection sampler (BTPE, PTRS, Marsaglia and Tsang) that takes its own uniforms from a
+stream seeded by the bits of u, so the same u still gives the same draw. The uniforms
+themselves are counter-based: `uniform(key, i)` is a SplitMix64 hash of a key and an index,
+the hash of `ss.distributions.hash_uniforms()` (which calls `key()` and `crn_uniform()`, as
+the passes over agents and the kernels do), so a stream does not depend on how the work is
+split. Other distributions are drawn by SciPy (see v4_design/oct22/jax/README.md, decision 2).
 
 The tricks that make them cheap (see v4_design/oct21/jax_plan.md):
 
@@ -48,7 +49,9 @@ GOLDEN = U64(0x9e3779b97f4a7c15)
 MIX1 = U64(0xbf58476d1ce4e5b9)
 MIX2 = U64(0x94d049bb133111eb)
 U30, U27, U31, U11, U52 = U64(30), U64(27), U64(31), U64(11), U64(52)
+U40 = U64(40) # 64 - 24: the top 24 bits, for a uniform that is a float32 (see crn_uniform())
 INV53 = 1.0/9007199254740992.0 # 2^-53
+INV24 = 1.0/16777216.0 # 2^-24
 TWO53 = 9007199254740992.0
 SALT = U64(0x5851f42d4c957f2d) # Seeds a rejection sampler's stream from its uniform: see stream()
 INV_MAX = 30.0 # The mean up to which binomial and Poisson draws are by inversion (as NumPy's)
@@ -130,6 +133,15 @@ def key(seed, ind):
 def uniform(k, i):
     """ Uniform i in (0, 1) of the stream with key k (as `ss.distributions.hash_uniforms()` gives for slot i) """
     return max(mix((U64(i) + U64(k))*GOLDEN) >> U11, 0.5)*INV53
+
+@jit(inline='always')
+def crn_uniform(k, slot, shift, scale):
+    """ Uniform `slot` in (0, 1) of the stream with key k, from the hash's top bits: (shift, scale) are (11, 2^-53) for a float64, as `uniform()`, or (40, 2^-24) for a float32, so every value is exact at that width (as `ss.distributions.hash_uniforms()` gives for an agent's slot) """
+    return max(mix((U64(slot) + U64(k))*GOLDEN) >> shift, 0.5)*scale
+
+def crn_bits(dtype):
+    """ How many bits of each hash a uniform of a dtype keeps, as the shift and scale that `crn_uniform()` takes """
+    return (U40, INV24) if np.dtype(dtype).itemsize <= 4 else (U11, INV53)
 
 @jit()
 def uniforms(k, start, out):
@@ -530,15 +542,6 @@ def ndtri(u):
     return -x if q < 0.0 else x
 
 @jit(inline='always')
-def normal(loc, scale, u):
-    return loc + scale*ndtri(u)
-
-@jit(inline='always')
-def lognormal(mean, sigma, u):
-    """ Lognormal with the mean and sigma of the underlying normal (as NumPy's) """
-    return exp(mean + sigma*ndtri(u))
-
-@jit(inline='always')
 def expon(scale, u):
     return -scale*log1p(-u)
 
@@ -546,15 +549,6 @@ def expon(scale, u):
 def weibull(c, scale, u):
     """ Weibull with shape c and a scale (as SciPy's weibull_min) """
     return scale*exp(log(-log1p(-u))/c)
-
-@jit(inline='always')
-def uniform_range(low, high, u):
-    return low + (high - low)*u
-
-@jit(inline='always')
-def randint(low, high, u):
-    """ A whole number in [low, high) """
-    return min(low + math.floor(u*(high - low)), high - 1)
 
 @jit()
 def _gamma(a, st):
@@ -577,20 +571,6 @@ def _gamma(a, st):
         u, st = next_u(st)
         return exp(log(d*v) + log(u)/a), st
     return d*v, st
-
-@jit(inline='always')
-def gamma(a, scale, u):
-    """ Gamma with shape a and a scale, from a stream seeded by u """
-    if a <= 0.0:
-        return 0.0
-    return scale*_gamma(a, stream(u))[0]
-
-@jit(inline='always')
-def beta(a, b, u):
-    """ Beta(a, b), as X/(X + Y) for X ~ Gamma(a) and Y ~ Gamma(b), from a stream seeded by u """
-    x, st = _gamma(a, stream(u))
-    y, st = _gamma(b, st)
-    return x/(x + y)
 
 @jit()
 def nbinom(n, p, u):
@@ -617,25 +597,6 @@ def nbinom(n, p, u):
         px *= (X + n - 1.0)*(1.0 - p)*(1.0/X)
         cdf += px
     return X
-
-@jit()
-def choice(cdf, u):
-    """ The index of a category, from the cumulative sums of their probabilities (the last 1) """
-    return min(np.searchsorted(cdf, u, side='right'), cdf.size - 1)
-
-@jit()
-def choices(cdf, u, out):
-    """ choice() for each uniform """
-    for i in range(out.size):
-        out[i] = choice(cdf, u[i])
-    return out
-
-@jit()
-def histogram(cdf, bins, u, out):
-    """ Values from a histogram, for each uniform: the inverse of its piecewise linear CDF (cdf from 0 at bins[0] to 1 at bins[-1]) """
-    out[:] = np.interp(u, cdf, bins)
-    return out
-
 
 #%% Many draws at once, with parameters that are numbers or arrays (one per draw)
 
@@ -671,5 +632,4 @@ def arrays(f, npars):
     return Arrays(from_u, from_key)
 
 many = sc.objdict({name: arrays(f, n) for name, f, n in [ # E.g. many.weibull.from_key(c, scale, k, out)
-    ('uniform', uniform_range, 2), ('randint', randint, 2), ('normal', normal, 2), ('lognormal', lognormal, 2), ('expon', expon, 1),
-    ('weibull', weibull, 2), ('gamma', gamma, 2), ('beta', beta, 2), ('binomial', binomial, 2), ('poisson', poisson, 1), ('nbinom', nbinom, 2)]})
+    ('expon', expon, 1), ('weibull', weibull, 2), ('binomial', binomial, 2), ('poisson', poisson, 1), ('nbinom', nbinom, 2)]})

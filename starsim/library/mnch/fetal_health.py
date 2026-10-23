@@ -54,11 +54,11 @@ class FetalHealth(ss.Module):
     Preterm classification is handled by the Pregnancy module (based on
     gestational age at birth). This module focuses on the weight/growth axis.
 
-    Integrates with Pregnancy via callbacks: Pregnancy calls `on_conception`
-    when new pregnancies begin and `on_delivery` when births occur. External
-    modules (e.g. disease connectors) can register their own callbacks via
-    `add_conception_callback` to act on new pregnancies after baseline
-    initialization.
+    Integrates with Pregnancy via its callbacks (`add_callback()`): Pregnancy
+    calls `on_conception` when new pregnancies begin and `on_delivery` when
+    births occur. External modules (e.g. disease connectors) can register their
+    own on `preg.conception`, after this module's, to act on new pregnancies
+    after baseline initialization.
 
     During pregnancy, `weight_percentile`, `growth_restriction`,
     `timing_shift`, and `n_exposures` are tracked on the mother. At
@@ -131,8 +131,6 @@ class FetalHealth(ss.Module):
             ss.BoolArr('sga',  label='Small for gestational age'),
             ss.BoolArr('svn',  label='Small vulnerable newborn'),
         )
-
-        self._conception_callbacks = []
         return
 
     def init_pre(self, sim):
@@ -141,16 +139,8 @@ class FetalHealth(ss.Module):
         if not hasattr(sim.demographics, 'pregnancy'):
             raise ValueError('FetalHealth requires a Pregnancy module. Add ss.Pregnancy() to demographics.')
         preg = sim.demographics.pregnancy
-        preg.add_conception_callback(self.on_conception)
-        preg.add_delivery_callback(self.on_delivery)
-        return
-
-    def add_conception_callback(self, fn):
-        """
-        Register a function to be called when new pregnancies are detected.
-        The function receives `(uids,)` after baseline initialization.
-        """
-        self._conception_callbacks.append(fn)
+        preg.add_callback(preg.conception, self.on_conception)
+        preg.add_callback(preg.birth, self.on_delivery)
         return
 
     def init_results(self):
@@ -176,11 +166,9 @@ class FetalHealth(ss.Module):
         self.growth_restriction[uids] = 0.0
         self.timing_shift[uids] = 0.0
         self.n_exposures[uids] = 0
-        for cb in self._conception_callbacks:
-            cb(uids)
         return
 
-    def on_delivery(self, mother_uids, newborn_uids):
+    def on_delivery(self, newborn_uids):
         """
         Classify birth outcomes (called by Pregnancy).
 
@@ -440,7 +428,7 @@ class fetal_infection(ss.Connector):
 
     Damage is applied at two points:
     1. At conception, if the mother is already infected (via a conception callback
-       registered with FetalHealth).
+       registered with the pregnancy, after FetalHealth's).
     2. During pregnancy, when a new infection occurs (detected in `step()`
        by checking `ti_infected == self.ti`: an infection in the previous step is dated at its end, which is this step's start).
 
@@ -491,14 +479,17 @@ class fetal_infection(ss.Connector):
             raise ValueError('fetal_infection requires a FetalHealth module. Add ssl.mnch.FetalHealth() to custom.')
         if 'sir' not in sim.diseases:
             raise ValueError('fetal_infection requires an SIR disease module.')
+        return
 
-        # Register a callback so we can apply damage at conception for
-        # women who are already infected when they become pregnant
-        self.fh.add_conception_callback(self._on_conception)
+    def init_post(self):
+        """ Register a callback so we can apply damage at conception for women who are already infected when they become pregnant: after FetalHealth's (registered in its init_pre()), which sets the baseline """
+        super().init_post()
+        preg = self.sim.demographics.pregnancy
+        preg.add_callback(preg.conception, self._on_conception)
         return
 
     def _on_conception(self, uids):
-        """ Called by FetalHealth when new pregnancies begin — damage if already infected """
+        """ Called by Pregnancy when new pregnancies begin, after FetalHealth's baseline — damage if already infected """
         infected = self.sim.diseases.sir.infected[uids]
         infected_uids = uids[infected]
         if len(infected_uids):

@@ -54,7 +54,7 @@ def test_epimodel_netsim():
     prev = res.n_I[-200:].mean() # EpiModel: 227.5, against 234 over 200 runs (its recovery in the step of infection makes it lower)
     assert 180 < prev < 290, f'the equilibrium should be near EpiModel\'s, not {prev}'
     code = sim.to_code()
-    assert 'ssl.DegreeNet(n_contacts=0.7, concurrency=0.22, max_contacts=3, dur=50)' in code
+    assert 'ssl.DegreeNet(n_contacts=0.7, concurrency=0.22, max_contacts=3, dur=50, acts=ss.freqperday(2))' in code
     return sim
 
 
@@ -87,8 +87,9 @@ def test_epimodel_listed():
     d = copy.deepcopy(sis)
     run = d['runs'][0]
     net = run['networks'][0]
-    net['terms'] += [dict(term='nodematch', args=['risk'], text='nodematch("risk")'), dict(term='gwesp', args=dict(decay=0.5, fixed=True), text='gwesp(0.5, fixed = TRUE)')]
-    net['target_stats'] += [140, 20]
+    net['terms'] += [dict(term='nodefactor', args=['risk'], text='nodefactor("risk")'), dict(term='nodematch', args=['risk'], text='nodematch("risk")'), dict(term='gwesp', args=dict(decay=0.5, fixed=True), text='gwesp(0.5, fixed = TRUE)')]
+    net['stats'] += ['nodefactor.risk.1', 'nodematch.risk', 'gwesp.fixed.0.5']
+    net['target_stats'] += [150, 140, 20]
     net['attributes'] = dict(risk=[1]*100 + [0]*400)
     run['modules']['recovery.FUN'] = dict(builtin=False, name='recover', source='recover <- function(dat, at) {\n  dat\n}')
     run['param']['inter.eff'] = 0.8
@@ -100,8 +101,9 @@ def test_epimodel_listed():
     listed = sc.strjoin([k for k,why in sim.imported.incomplete])
     for key in ['gwesp', 'recovery.FUN', 'inter.eff']:
         assert key in listed, f'{key} should be listed as not translated'
-    assert 'nodematch' not in listed, 'nodematch should be imported'
+    assert 'nodematch' not in listed and 'nodefactor' not in listed, 'nodematch and nodefactor should be imported'
     assert sim.pars.networks.pars.match == dict(risk=0.8)
+    assert sc.tolist(sim.pars.networks.pars.n_contacts.values) == [0.5, 1.5], 'nodefactor should give the mean degree of each level: the 100 at risk 1 have 150 of the 350'
     assert 'function(dat, at)' in sim.imported.modules.recover
     assert sim.imported.scenarios.run1 == {'inf.prob': 0.2}, 'the other call of netsim() should be a scenario'
     return sim

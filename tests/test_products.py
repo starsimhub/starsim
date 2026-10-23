@@ -269,7 +269,7 @@ def test_strain_efficacy():
 
 
 def test_disease_list():
-    sc.heading('Testing disease= as a list or strains with courses of their own (HP7, agents only): a bivalent vaccine, a test and a cure of each, and their counts')
+    sc.heading('Testing disease= as a list or strains with courses of their own (agents only): a bivalent vaccine, a test and a cure of each, and their counts')
     def make(dis=None, vx=True, **kwargs):
         g16, g18 = make_geno('hpv16'), make_geno('hpv18')
         given = ss.Disease(name='hpv', strains=ss.Strains([g16, g18])) if dis == 'strains' else [g16, g18]

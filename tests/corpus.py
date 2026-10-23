@@ -1,6 +1,6 @@
 """
 The model corpus: the conformance models of `design/18-conformance.md`, and a small
-model of each standard pattern of the users in the switching review (`review_oct17/switching/`)
+model of each standard pattern of the users in the switching review (`v4_design/oct17/switching/`)
 
 Each model is a function that returns an unrun sim, sized to run in seconds; keyword
 arguments go to `ss.Sim`, e.g. `corpus.sir(solver='binomial')`. Under `solver='abm'`,

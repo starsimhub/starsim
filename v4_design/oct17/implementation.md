@@ -1,5 +1,7 @@
 # Implementation plan
 
+**Superseded** by [oct19/implementation.md](../oct19/implementation.md), and in turn by the current plan (see the [README](../README.md)). Kept as history.
+
 This file turns the review into work. [README.md](README.md) says what is wrong and why it matters; this file says what to change, where, in what order, and how each change is checked. Finding numbers point to the merged registers in [findings/](findings/) (L, D, X, R, P) and to [new-findings.md](new-findings.md) (N), where each has its repro, the reviewers' positions, and the cost and breakage in full. Code locations are at `a20c4f7e`. When an item is done, check it off here and record it in [../admin/implementation.md](../admin/implementation.md). When one is looked at and set aside, move it to [../admin/deferred.md](../admin/deferred.md) with what it would take and why it waits.
 
 ## How to work through it

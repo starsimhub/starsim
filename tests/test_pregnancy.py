@@ -321,7 +321,7 @@ def test_fetus():
     plain = ss.Sim(demographics=ss.Pregnancy(fertility_rate=ss.freqperyear(100)), n_agents=2000, **kw).init()
     assert not plain.demographics.pregnancy.fetus
 
-    # A mother who dies of another cause loses her pregnancy, whether or not fetuses are agents, and fetuses don't face background deaths (FP75)
+    # A mother who dies of another cause loses her pregnancy, whether or not fetuses are agents, and fetuses don't face background deaths
     losses = []
     for fetus in [False, True]:
         r = ss.Sim(demographics=[ss.Pregnancy(fertility_rate=ss.freqperyear(150), fetus=fetus), ss.Deaths(death_rate=ss.freqperyear(100))], n_agents=5000, rand_seed=1, **kw).run().results.pregnancy
@@ -468,10 +468,10 @@ def test_starsim3():
         unflag    = F >> S @ ss.on(preg.delivery), name='d')
     seen = sc.objdict(conceived=0, delivered=0)
     def count(sim):
-        if sim.ti == 0: # Starsim 3 callbacks, for modules written as code
+        if sim.ti == 0: # Callbacks, for modules written as code
             p = sim.demographics.pregnancy
-            p.add_conception_callback(lambda uids: seen.__setitem__('conceived', seen.conceived + len(uids)))
-            p.add_delivery_callback(lambda moms, kids: seen.__setitem__('delivered', seen.delivered + len(kids)))
+            p.add_callback(p.conception, lambda uids: seen.__setitem__('conceived', seen.conceived + len(uids)))
+            p.add_callback(p.birth, lambda kids: seen.__setitem__('delivered', seen.delivered + len(kids)))
     sim = ss.Sim(demographics=preg, diseases=d, networks=ss.MaternalNet(), analyzers=count, n_agents=5000, **kw).run()
     r, p = sim.results, sim.demographics.pregnancy
     assert r.d.flag.sum() > 0.5*r.pregnancy.conception.sum() and r.d.unflag.sum() > 0.5*r.d.flag.sum()

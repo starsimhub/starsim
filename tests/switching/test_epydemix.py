@@ -94,11 +94,13 @@ def test_epydemix_posterior_projection():
     vaccine = ss.vaccinate(ss.Vaccine(efficacy=0.9), capacity=ss.perday(20_000), start='2020-04-01')
     proj = fit.project(dict(baseline=None, vaccine=vaccine), n=20) # One run per posterior draw
     df = proj.to_df(quantiles=[0.05, 0.5, 0.95])
-    assert {'scenario', 'quantile'} <= set(df.columns)
+    assert set(df.scenario) == {'baseline', 'vaccine'}, f'The draws should be runs of each scenario, not scenarios: {df.scenario.unique()[:4]}'
+    peak = df[(df.result == 'n_I') & (df.scenario == 'baseline')].groupby('quantile').value.max()
+    assert peak[0.05] < peak[0.95], f'The quantiles should be over the draws: {peak.to_dict()}'
     return proj
 
 
-@pytest.mark.xfail(reason='No subnational data: ss.people("United States:Massachusetts") raises UnknownLocation (starsim_data has no US states)', strict=False)
+@pytest.mark.xfail(reason='The US states\' data are not published by starsim_data yet, so they cannot be downloaded (tests/test_data.py tests them from a copy of its repository)', strict=False)
 def test_epydemix_us_state():
     sc.heading('epydemix: Massachusetts by name, as load_epydemix_population() gives it')
     people = ss.people('United States:Massachusetts', year=2020)

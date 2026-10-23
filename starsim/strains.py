@@ -386,7 +386,7 @@ class Strains:
         self.immunity = immunity
         if cross_immunity is not None:
             self.immunity = self.immunity + [immunity_class(due_to=self.last, rel_sus=self.covasim_matrix(cross_immunity))]
-        self.init_sets()
+        self._init_sets()
         return
 
     @property
@@ -418,7 +418,7 @@ class Strains:
             raise ss.errors.ShapeError(f'cross_immunity= has shape {M.shape}, but there are {n} strains ({sc.strjoin(self.names)})')
         return M.T
 
-    def init_sets(self):
+    def _init_sets(self):
         """ The sets of strains people can carry, which are the levels of the strain dimension: each strain alone, then the sets of up to max_strains; ordered by when each strain was acquired if a full set can take another (so the oldest is known) """
         n, m = len(self.names), self.max_strains
         self.ordered = m < n and m > 1
@@ -438,7 +438,7 @@ class Strains:
             raise ValueError(errormsg)
         return self.index[key]
 
-    def adds(self):
+    def _adds(self):
         """ For each level and strain, the level of people at it once infected with the strain as well: the same level if they carry it already; with a full set, the oldest replaced """
         out = np.zeros((len(self.sets), len(self.sets)), dtype=int)
         for l,s in enumerate(self.sets):
@@ -476,7 +476,7 @@ class Strains:
         """ Every strain each person has had, for `ss.immunity(due_to=strains.ever)` """
         return Memory(self, 'ever')
 
-    def level_values(self, key):
+    def _level_values(self, key):
         """ A value for each level of the strain dimension: a strain's own, and for a set, the largest of its strains' (the worst strain sets the course) """
         vals = self.values[key]
         return np.array([vals[list(s)].max() for s in self.sets])
@@ -491,7 +491,7 @@ class Strains:
         return imm.protect(np.array([combine_protection(M[:, g][:, None]*held, imm.combine) for g in range(n)]).T)
 
     @staticmethod
-    def carriers(graph):
+    def _carriers(graph):
         """
         The names of the states people carry their strains in as an infection: the infected states (`graph.infected`), and every
         state that leads back to one without a new infection (e.g. treated people who can relapse, or a non-infectious stage
@@ -525,15 +525,15 @@ class Strains:
                 return f'its protection is combined with a function ({getattr(imm.combine, "__name__", "function")}), which has no compartmental form or gradient'
             if isinstance(imm.due_to, Memory) and not self.trivial(imm, graph) and imm.scale is not None:
                 return f'its protection is due to {imm.due_to!r} scaled by "{imm.scale}", an attribute that each agent keeps'
-        if len(self.memory_kinds(graph)) > 1:
+        if len(self._memory_kinds(graph)) > 1:
             return 'its protection is due to both the last strain and every strain had, which a compartmental run cannot keep at once'
         return None
 
-    def memory_kinds(self, graph):
+    def _memory_kinds(self, graph):
         """ What an `ss.immunity` needs people to remember of the strains: 'last', 'ever', both, or neither """
         return {imm.due_to.kind for imm in self.immunity if isinstance(imm.due_to, Memory) and not self.trivial(imm, graph)}
 
-    def memory_strat(self, mod):
+    def _memory_strat(self, mod):
         """
         In a compartmental run: a dimension of the people of the disease that keeps what they remember of its strains, for
         `ss.immunity(due_to=strains.last)` or `strains.ever`; None if nothing needs it. Its levels are none and each strain
@@ -541,7 +541,7 @@ class Strains:
         carry strains in, to the strain they carried (last) or adding it to those they had (ever), as agents remember them
         (see `ss.solvers.Engine.dim_map()`). Made once, so the sim's groups and the engine share it.
         """
-        kinds = self.memory_kinds(mod.graph)
+        kinds = self._memory_kinds(mod.graph)
         if len(kinds) != 1:
             return None
         kind = kinds.pop()
@@ -571,7 +571,7 @@ class Strains:
         held = held[:, levels]
         return imm.protect(np.array([combine_protection(M[:, g][:, None]*held, imm.combine) for g in range(n)]).T)
 
-    def strat(self):
+    def _strat(self):
         """ The strain dimension that runs strains with shared states (see `ss.dimensions.Strat`) """
         n = len(self.sets)
         split = np.zeros(n)
@@ -584,7 +584,7 @@ class Strains:
                 split[self.level_of([self.names.index(p) for p in parts], what=f'split= of "{self.name}" at "{label}"')] += share
         else:
             split[:len(self.names)] = self.split if self.split is not None else 1/len(self.names)
-        adjust = {key:self.level_values(key) for key in self.values}
+        adjust = {key:self._level_values(key) for key in self.values}
         if self.transmit == 'each' and self.max_strains > 1: # Each strain at its own rate: a set is as infectious as all of its strains
             rel = self.values.rel_trans if 'rel_trans' in self.values else np.ones(len(self.names))
             adjust['rel_trans'] = np.array([rel[list(s)].sum() for s in self.sets])
@@ -597,7 +597,7 @@ class Strains:
     def describe(self, graph):
         """ The strains of a disease with shared states, as lines of its description: how they are run, their values, and the protection between them """
         sets = f'sets of up to {self.max_strains} carried at once ({sc.strjoin(self.labels)}), a new strain replacing the oldest once full' if self.max_strains > 1 else 'one carried at a time'
-        lines = [f'{"strains":12s} {sc.strjoin(self.names)} ("{self.name}"): states shared, one course; {sets}; carried in {sc.strjoin(self.carriers(graph))}']
+        lines = [f'{"strains":12s} {sc.strjoin(self.names)} ("{self.name}"): states shared, one course; {sets}; carried in {sc.strjoin(self._carriers(graph))}']
         per = {tr.name:tr.per_given for tr in graph.transitions.values() if getattr(tr, 'per_given', None)}
         chances = {p['p']:name for name,p in per.items() if isinstance(p.get('p'), str)}
         for key,vals in self.values.items():
@@ -607,7 +607,7 @@ class Strains:
         lines.append(f'{"":12s} transmit: {how[self.transmit]}' + (' (from a set)' if self.max_strains > 1 else ''))
         for imm in self.immunity:
             what = sc.strjoin(f'time in {k[4:]}' if k.startswith('dur.') else f'p of {k[2:]}' if k.startswith('p.') else k for k in imm.values)
-            extra = '; the rest is superinfection' if not isinstance(imm.due_to, Memory) and any(n in self.carriers(graph) for n in imm.names) else ''
+            extra = '; the rest is superinfection' if not isinstance(imm.due_to, Memory) and any(n in self._carriers(graph) for n in imm.names) else ''
             lines.append(f'{"":12s} immunity: {what} × (1 − protection), due to {imm.source}, {imm.rule()} over the strains{" through a curve" if imm.curve is not None else ""}{extra}')
         reason = self.needs_agents(graph)
         lines.append(f'{"":12s} solvers: ' + (f'agents only ({reason})' if reason else 'all'))
@@ -709,17 +709,17 @@ def prepare(strains, trs):
             tr.per_given = dict(p=given)
             tr.p = [ss.by(**{strains.name:none.tolist()}), None]
             named = isinstance(given, str) and name in strains.values # Values by the transition's name multiply its rate when the chances are named values; with a number, they multiply the chances instead
-            tr.strain_adjust = strains.level_values(name) if named else np.ones(L)
+            tr.strain_adjust = strains._level_values(name) if named else np.ones(L)
         tr.move = sc.objdict({strains.name:('matrix', tuple(map(tuple, Q.tolist())))})
     return
 
 
 def memory_strat(mod):
-    """ In a compartmental run: the dimension that keeps what the people of a declared disease remember of its strains, if an `ss.immunity` needs it (see `ss.Strains.memory_strat()`), or None """
+    """ In a compartmental run: the dimension that keeps what the people of a declared disease remember of its strains, if an `ss.immunity` needs it (see `ss.Strains._memory_strat()`), or None """
     for strat in mod.graph.strats:
         strains = getattr(strat, 'strains', None)
         if strat.kind == 'strain' and strains is not None:
-            return strains.memory_strat(mod)
+            return strains._memory_strat(mod)
     return None
 
 
@@ -728,12 +728,14 @@ def attach_shared(dis, strains):
     graph = dis.graph
     if any(strat.kind == 'strain' for strat in graph.strats):
         raise ss.errors.DuplicateStructuralDimension(f'"{dis.name}" has strains already')
-    strat = strains.strat()
-    strat.carried = strains.carriers(graph) # A strain belongs to an infection: people carry it while infected, and in the states that lead back to infection without a new one
+    strat = strains._strat()
+    strat.carried = strains._carriers(graph) # A strain belongs to an infection: people carry it while infected, and in the states that lead back to infection without a new one
     protecting = [name for imm in strains.immunity if not isinstance(imm.due_to, Memory) for name in imm.names] # States whose people are protected by the strains they had there (due_to=R)
     strat.states = [s.name for s in graph.people_states if s.name in strat.carried or (s.name in protecting and s.name not in graph.uninfected)]
     strat.guessed['states'] = f'the states of an infection, and those leading back to one ({sc.strjoin(strat.carried)})' + (f', and {sc.strjoin(n for n in strat.states if n not in strat.carried)} for its protection' if len(strat.states) > len(strat.carried) else '')
     infected = set(strat.carried)
+    for tr in graph.transmissions:
+        refuse_by_strain(strat, tr, tr.rate, f'the rate of "{tr.name}"')
     primary = [tr for tr in graph.transmissions if all(s.name in graph.uninfected for s in tr.src)] # The transmissions to people who carry no strain
     super_states = []
     for imm in strains.immunity:
@@ -768,6 +770,18 @@ def attach_shared(dis, strains):
     graph.strats.append(strat)
     if not hasattr(dis, strains.name): # So the strains can be used in a condition, e.g. where=tb.strain == 'RIF'
         dis.setattribute(strains.name, ss.conditions.Cond('dim', strains.name))
+    return
+
+
+def refuse_by_strain(strat, tr, val, what):
+    """ A value by strain in a transmission (its rate, or a modifier's amount on it) would be read for the people it infects, who carry no strain yet, so it would change nothing: refused """
+    if strat is None or not tr.contact:
+        return
+    for part in ss.expressions.nodes(val):
+        by = part.value if isinstance(part, ss.par) else part
+        if isinstance(by, ss.by) and strat.name in by.dims:
+            raise ss.errors.InvalidAdjustment(f'{what} is by "{strat.name}", but a transmission is worked out for the people it infects, who carry no strain yet, so it would apply to none.\n'
+                                              f'     Give how much more one strain transmits with the strains, e.g. ss.Strains(..., {tr.name}=[...]) (or rel_trans=[...]).')
     return
 
 
@@ -919,7 +933,7 @@ class MemoryProtection:
 
     def apply(self, value, engine):
         strains = engine.sim.groups.strats[engine.strain].strains
-        if not engine.selector.abm: # In a compartmental run: for each group, by the level of the memory dimension and the strains carried (see ss.Strains.memory_strat())
+        if not engine.selector.abm: # In a compartmental run: for each group, by the level of the memory dimension and the strains carried (see ss.Strains._memory_strat())
             groups = engine.sim.groups
             mem = groups.strats[engine.memory_dim]
             prot = strains.memory_protection(self.imm, self.key, mem, groups.group_coords[:, engine.memory_dim]) # Groups by strains

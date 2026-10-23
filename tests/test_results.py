@@ -163,7 +163,7 @@ def test_flow_ratios():
     return sim
 
 
-def test_groups_kept(monkeypatch):
+def test_groups_kept(monkeypatch, tmp_path):
     sc.heading('Testing results kept by group: only those named, and every few steps if every step would take too much memory')
     S, I, R = ss.states(3)
     sir = ss.Disease(infection=S >> I @ 0.3 * I, recovery=I >> R @ ss.days(10), share=I / (S + I + R), init=dict(I=0.01), name='sir')
@@ -185,6 +185,12 @@ def test_groups_kept(monkeypatch):
         assert np.isclose(res.n_I.select(age='50+')[2], full.n_I.select(age='50+')[2*k]) # A state by group: at the end of a row
         assert np.isclose(res.share.select(age='0-49')[-1], full.share.select(age='0-49')[-1]) # A ratio by group: of its parts at the end
         assert np.allclose(res.infection.resample(ss.days(2*k)).select(age='0-49'), full.infection.resample(ss.days(2*k)).select(age='0-49'))
+
+    # Data by group, even from a file, keeps them by group at every step, since it is compared with each one
+    sc.dataframe(t=[30.0, 60.0], **{'n_I[age=0-49]': [10.0, 20.0]}).to_csv(tmp_path/'data.csv', index=False)
+    monkeypatch.setattr(ss.solvers.Engine, 'group_bytes', 1000)
+    assert make('ode', data=tmp_path/'data.csv').run().results.sir.n_I.group_ti is None
+    monkeypatch.undo()
 
     # Many runs: a ratio by group is the ratio of its parts in each run, as in one sim (before: the numerator, or an error)
     for solver in ['binomial', 'abm']:
@@ -224,7 +230,7 @@ def test_result_exprs():
 
 
 def test_standard_prevalence():
-    sc.heading('Testing the standard prevalence by group, as a ratio (ST20)')
+    sc.heading('Testing the standard prevalence by group, as a ratio')
     for solver in ['ode', 'binomial', 'abm']:
         sis = ss.SIS(beta=ss.peryear(0.3), init_prev=0.05)
         sis.stratify(risk=['low', 'high'], split=[0.8, 0.2], adjust=dict(infection=[0.5, 3]))

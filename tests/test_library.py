@@ -20,11 +20,6 @@ outbreak_pars = dict(start=2000, dur=ss.years(1), dt=ss.days(1), n_agents=n_agen
 endemic_pars  = dict(start=2000, stop=2030, n_agents=n_agents, rand_seed=1, verbose=0)
 mnch_pars     = dict(start=2000, dur=ss.years(3), dt=ss.weeks(1), n_agents=n_agents, rand_seed=1, verbose=0)
 
-# DiskNet and ErdosRenyiNet compare every pair of agents on every timestep, so their cost grows
-# as the square of the population; cap the agents and shorten the run to keep the test fast
-net_agents = min(n_agents, 500)
-network_pars  = dict(start=2000, dur=ss.days(90), dt=ss.days(1), n_agents=net_agents, rand_seed=1, verbose=0)
-
 
 @sc.timer()
 def test_exports():
@@ -130,55 +125,6 @@ def test_hiv():
 
 
 @sc.timer()
-def test_networks():
-    """ Check that each library network runs and forms the expected edges """
-    sc.heading('Testing library networks...')
-
-    sims = sc.objdict()
-    nets = dict(disk=ssl.DiskNet(r=0.1), er=ssl.ErdosRenyiNet(p=0.01)) # DiskNet radius is scaled up to keep the contact density similar with fewer agents
-    for name, net in nets.items():
-        sim = ss.Sim(diseases=ss.SIS(beta=ss.perday(0.2)), networks=net, **network_pars)
-        sim.run()
-        n_edges = len(sim.networks[0])
-        print(f'  {name}: {n_edges:n} edges, {sim.results.sis.cum_infections[-1]:n} cumulative infections')
-        assert n_edges > 0, f'Expected edges in {name} network'
-        assert sim.results.sis.cum_infections[-1] > 0, f'Expected infections via {name} network'
-        sims[name] = sim
-
-    # NullNet has one zero-weight self-edge per agent, so nothing should transmit
-    sim = ss.Sim(diseases=ss.SIS(beta=ss.perday(0.2)), networks=ssl.NullNet(), **network_pars)
-    sim.run()
-    net = sim.networks.nullnet
-    assert len(net) == net_agents, 'Expected one self-edge per agent in NullNet'
-    assert np.all(net.edges.beta == 0), 'Expected zero transmission weight in NullNet'
-    assert (net.edges.p1 == net.edges.p2).all(), 'Expected only self-edges in NullNet'
-    sims.null = sim
-
-    return sims
-
-
-@sc.timer()
-def test_households():
-    """ Check that HouseholdNet assigns plausible households """
-    sc.heading('Testing HouseholdNet...')
-
-    sim = ss.Sim(diseases='sis', networks=ssl.HouseholdNet(dhs_data='default'),
-                 demographics=ss.Pregnancy(), **endemic_pars)
-    sim.run()
-
-    net = sim.networks.householdnet
-    hh_ids = net.household_ids[net.household_ids.notnan] # Unborn agents have no household
-    sizes = np.bincount(hh_ids.astype(int))
-    sizes = sizes[sizes > 0]
-    print(f'  Households: {len(sizes):n}; mean size: {sizes.mean():0.2f}; max size: {sizes.max():n}')
-    assert len(sizes) > 1, 'Expected more than one household'
-    assert sizes.min() >= 1 and sizes.mean() > 1, 'Expected households with more than one member'
-    assert len(net) > 0, 'Expected household edges'
-
-    return sim
-
-
-@sc.timer()
 def test_mnch():
     """ Check that the MNCH modules run and produce their headline outcomes """
     sc.heading('Testing MNCH modules...')
@@ -228,6 +174,4 @@ if __name__ == '__main__':
     exports  = test_exports()
     diseases = test_diseases()
     hiv      = test_hiv()
-    networks = test_networks()
-    hh       = test_households()
     mnch     = test_mnch()

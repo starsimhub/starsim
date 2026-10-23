@@ -98,8 +98,8 @@ def test_flepimop_hub(tmp_path):
     peaks = list(msim.results.values())[0].incidHosp.values.max(axis=1) # Each run's peak
     assert len(set(np.round(peaks, 6))) > 1, 'Expected runs with different draws of Ro to differ'
     hub = ss.interop.to_hub(msim, targets=dict(incidHosp='inc hosp'), by='subpop', every='week')
-    assert {'quantile', 'target_end_date', 'location', 'value', 'target'} <= set(hub.columns)
-    assert hub['quantile'].nunique() == ref_n_quantiles
+    assert {'origin_date', 'scenario_id', 'location', 'target', 'horizon', 'output_type', 'output_type_id', 'value'} == set(hub.columns)
+    assert hub['output_type_id'].nunique() == ref_n_quantiles
     assert hub['location'].nunique() == len(places)
     return hub
 

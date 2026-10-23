@@ -96,16 +96,9 @@ def test_binomial_poisson():
 def test_others():
     sc.heading('Testing the other distributions against their laws')
     cases = [
-        ('normal', (1.0, 2.0), sps.norm(1, 2)),
-        ('lognormal', (0.5, 0.8), sps.lognorm(0.8, scale=np.exp(0.5))),
         ('expon', (3.0,), sps.expon(scale=3)),
         ('weibull', (1.7, 2.0), sps.weibull_min(1.7, scale=2)),
         ('weibull', (0.4, 1.0), sps.weibull_min(0.4)),
-        ('uniform', (-1.0, 4.0), sps.uniform(-1, 5)),
-        ('gamma', (0.3, 2.0), sps.gamma(0.3, scale=2)),
-        ('gamma', (4.5, 1.0), sps.gamma(4.5)),
-        ('beta', (0.5, 2.0), sps.beta(0.5, 2)),
-        ('beta', (3.0, 3.0), sps.beta(3, 3)),
     ]
     for i, (f, pars, law) in enumerate(cases):
         k = D.key(3, i)
@@ -120,13 +113,6 @@ def test_others():
         d, noise = tv(x, lambda j: sps.nbinom.pmf(j, n, p))
         print(f'Negative binomial n={n}, p={p}: TV {d:.4f} (noise ~{noise:.4f})')
         assert d < 3*noise + 1e-3, (n, p)
-
-    x = D.many.randint.from_key(2.0, 9.0, k, np.empty(N))
-    assert tv(x, lambda j: np.full(len(j), 1/7))[0] < 0.01
-    probs = np.array([0.1, 0.0, 0.6, 0.3])
-    u = rng.random(N)
-    x = D.choices(np.cumsum(probs), u, np.empty(N))
-    assert np.allclose(np.bincount(x.astype(int), minlength=4)/N, probs, atol=0.005)
     return
 
 

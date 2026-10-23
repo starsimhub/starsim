@@ -624,21 +624,6 @@ def event_leaves(cond):
     return [leaf for arg in cond.args for leaf in event_leaves(arg)]
 
 
-def memory_leaves(cond, out=None):
-    """ The memory leaves of a condition (e.g. `cytology.since`) """
-    out = [] if out is None else out
-    if isinstance(cond, ss.expressions.mother): # Read on the mother
-        return memory_leaves(cond.x, out)
-    if not isinstance(cond, Cond) or (cond.op in leaves and cond.op != 'memory'):
-        return out
-    if cond.op == 'memory':
-        out.append(cond)
-    else:
-        for arg in cond.args:
-            memory_leaves(arg, out)
-    return out
-
-
 def join(op, conds):
     """ Several conditions joined by an operator, or None if there are none """
     conds = [c for c in conds if c is not None]

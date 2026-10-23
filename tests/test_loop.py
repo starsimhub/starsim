@@ -174,7 +174,7 @@ def test_loop_plan_views_and_insert():
     calls = []
     sim.loop.insert(lambda sim: calls.append(sim.ti), label='sim.finish_step', before=True)
     sim.run()
-    assert len(calls) == sim.t.npts - 1, 'Label-based insertion did not run once per step' # Once, not twice (FP6)
+    assert len(calls) == sim.t.npts - 1, 'Label-based insertion did not run once per step' # Once, not twice
 
     calls = []
     sim = ss.Sim(small_pars).init()

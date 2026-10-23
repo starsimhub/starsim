@@ -202,7 +202,7 @@ The open questions of the [best-practices](../best-practices) documents that are
 | **Preallocated agent arrays** | An optimization to benchmark before building; it would not change what the user writes |
 | **Result caching** | With the hashes in place, an identical re-run could be a cache hit. It surprises people who expect a re-run to run, and nobody has asked for it |
 | **`msim.check_runs()`** | Estimating how many runs a comparison needs. `check_dt()` stays |
-| **Movement models beyond gravity** (`ss.radiation`, `ss.stouffer`, `ss.competing_destinations`) | A matrix or a movement register covers them until a vignette needs one by name |
+| **Movement models beyond gravity and radiation** (`ss.stouffer`, `ss.competing_destinations`) | A matrix or a movement register covers them until a vignette needs one by name. Radiation (`ss.geo.radiation`) is built, since it has no parameters to fit: it gives movement between places with no data to calibrate it to |
 
 ## D. Risks
 

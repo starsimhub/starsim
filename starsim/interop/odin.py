@@ -3,6 +3,9 @@ Import an odin model (an R file in odin's DSL)
 
 odin (https://mrc-ide.github.io/odin) writes a model as equations: `deriv(X) <- ...`
 for an ODE, or `update(X) <- ...` with `rbinom()` draws for a model in discrete time.
+odin2's syntax is read too: its draws (`Binomial()`, `Poisson()`, ...), its built-in
+`dt` and `time`, a count over a period (`initial(x, zero_every = k)`), and data with
+their likelihoods (`cases <- data()` and `cases ~ Poisson(x)`).
 Each equation is split into its signed terms, and a term that leaves one state and
 enters another is a flow between them; a term with no partner is an inflow or an
 outflow. The file is parsed here, so importing needs neither R nor odin.
@@ -26,8 +29,8 @@ from .core import Source, build, factors, product
 
 __all__ = ['load_odin']
 
-lhs_pattern = re.compile(r'^(?:(deriv|update|initial|dim|output|config)\s*\()?\s*([A-Za-z_][\w.]*)\s*(?:\[([^\]]*)\])?\s*\)?$')
-draws = ['rbinom', 'rpois', 'rmultinom', 'rnorm', 'runif', 'rexp', 'rgamma', 'rnbinom', 'rhyper', 'rgeom']
+lhs_pattern = re.compile(r'^(?:(deriv|update|initial|dim|output|config)\s*\()?\s*([A-Za-z_][\w.]*)\s*(?:\[([^\]]*)\])?\s*(?:,\s*zero_every\s*=\s*([^)]+?))?\s*\)?$')
+draws = dict(Binomial='rbinom', Poisson='rpois', Multinomial='rmultinom', Normal='rnorm', Uniform='runif', Exponential='rexp', Gamma='rgamma', NegativeBinomial='rnbinom', Hypergeometric='rhyper') # odin2's draws, as odin1's
 years = dict(day=365, week=365/7, month=12, year=1) # Units in a year, for age bands
 reserved = sorted(set(keyword.kwlist) - {'if', 'else', 'for', 'while', 'break', 'in', 'True', 'False', 'None'}) # Names R allows and Python does not (lambda, is, ...)
 
@@ -35,7 +38,7 @@ reserved = sorted(set(keyword.kwlist) - {'if', 'else', 'for', 'while', 'break', 
 #%% Reading the file
 
 def statements(text):
-    """ The statements of an odin file as (left, right), joining lines that continue, with names Python reserves renamed (lambda is lambda_) """
+    """ The statements of an odin file as (left, sign, right), with sign '<-' or '~', joining lines that continue, with names Python reserves renamed (lambda is lambda_) """
     out = []
     buf = ''
     for line in text.splitlines():
@@ -45,11 +48,11 @@ def statements(text):
             continue
         buf = f'{buf} {line.strip()}' if buf else line.strip()
         depth = buf.count('(') - buf.count(')') + buf.count('[') - buf.count(']')
-        if depth > 0 or re.search(r'[-+*/^,<]$|<-$', buf) or '<-' not in buf and '=' not in buf:
+        if depth > 0 or re.search(r'[-+*/^,<~]$|<-$', buf) or '<-' not in buf and '=' not in buf and '~' not in buf:
             continue
-        sep = '<-' if '<-' in buf else '='
+        sep = '<-' if '<-' in buf else '~' if '~' in buf else '='
         left, right = buf.split(sep, 1)
-        out.append((left.strip(), right.strip()))
+        out.append((left.strip(), '~' if sep == '~' else '<-', right.strip()))
         buf = ''
     return out
 
@@ -232,6 +235,13 @@ def load_odin(filename, unit='day', stop=None, pars=None, verbose=None, **kwargs
     draw turned into the rate that gives it over a step. odin has no time unit, so
     the numbers are taken to be in `unit`.
 
+    odin2's syntax is read as odin1's: `Binomial()` is `rbinom()`, `dt` is built in
+    (1, unless given in `pars`), a count over a period (`initial(cases, zero_every = 7) <- 0`
+    with `update(cases) <- cases + n_SI`) is an outcome of the flows it adds up, and
+    data with a likelihood (`deaths <- data()` and `deaths ~ Poisson(rho * cases)`) is
+    an outcome named for the data, with that likelihood, which `sim.data` (a column
+    `deaths`) is compared with when calibrating.
+
     Args:
         filename (str): the odin file
         unit (str): the time unit of the model's numbers (odin has none)
@@ -254,13 +264,23 @@ def load_odin(filename, unit='day', stop=None, pars=None, verbose=None, **kwargs
     eqs = dict(deriv={}, update={}, initial={}, dim={}, output={}, config={})
     assign = {} # Name: list of (levels, text)
     order = []
-    for left, right in statements(text):
+    zero_every = {} # odin2's counts over a period: initial(cases, zero_every = 7) <- 0
+    data = [] # odin2's data (cases <- data())
+    compare = [] # And their likelihoods: (name, text) for cases ~ Poisson(incidence)
+    for left, sign, right in statements(text):
         m = lhs_pattern.match(left.strip())
+        if sign == '~':
+            compare.append((left, right))
+            continue
         if not m:
             src.skip(left, f'could not read the left-hand side of "{left} <- {right}"')
             continue
-        kind, var, index = m.groups()
-        if kind:
+        kind, var, index, zero = m.groups()
+        if zero is not None:
+            zero_every[var] = zero.strip()
+        if not kind and re.match(r'^data\s*\(\s*\)$', right):
+            data.append(var)
+        elif kind:
             eqs[kind].setdefault(var, []).append((index, right))
         else:
             assign.setdefault(var, []).append((index, right))
@@ -276,6 +296,8 @@ def load_odin(filename, unit='day', stop=None, pars=None, verbose=None, **kwargs
 
     # Parameters and arrays of numbers: worked out in any order
     env = {k:v for k,v in pars.items()}
+    if 'dt' not in assign: # odin2's built-in step, 1 unless given in pars (odin1 gives it as dt <- user(1))
+        env.setdefault('dt', 1)
     users = {}
     for var,items in assign.items():
         if len(items) == 1 and items[0][0] is None:
@@ -317,12 +339,20 @@ def load_odin(filename, unit='day', stop=None, pars=None, verbose=None, **kwargs
     exprs = {var:items for var,items in assign.items() if var not in env}
     dt = env.get('dt', 1)
 
-    # States that are not stocks: the time (update(time) <- (step + 1) * dt), and a count over a period (update(cases) <- if (step %% 7 == 0) ... else cases + ...)
+    # States that are not stocks: the time (update(time) <- (step + 1) * dt), and a count over a period (update(cases) <- if (step %% 7 == 0) ... else cases + ..., or odin2's zero_every)
     counters = {} # Name: (the flows it counts, the period)
-    for s in list(state_eqs) if discrete else []:
+    for s in list(state_eqs):
         items = state_eqs[s]
         node = ast.parse(r2py(items[0][1]), mode='eval').body
-        if len(items) == 1 and isinstance(node, ast.IfExp):
+        if s in zero_every: # initial(cases, zero_every = 7) <- 0, with update(cases) <- cases + n_SI (or deriv(cases) <- n_SI)
+            terms = [(sign, term) for sign,term in signed_terms(node) if not (discrete and isinstance(term, ast.Name) and term.id == s)]
+            if len(items) == 1 and all(sign > 0 for sign,_ in terms):
+                counters[s] = (' + '.join(ast.unparse(term) for _,term in terms), zero_every[s])
+            else:
+                src.skip(f'{"update" if discrete else "deriv"}({s})', f'"{items[0][1]}" is a count over a period (zero_every) that is not a sum of flows, so it was not translated')
+        elif not discrete:
+            continue
+        elif len(items) == 1 and isinstance(node, ast.IfExp):
             total = ast.unparse(node.body)
             test = node.test
             period = None
@@ -532,8 +562,18 @@ def load_odin(filename, unit='day', stop=None, pars=None, verbose=None, **kwargs
         else:
             src.skip(f'update({s})', f'a count over a period of {total}, which is not a sum of flows that were translated')
 
-    # Parameters: those the flows and expressions use
+    # odin2's data and their likelihoods: cases ~ Poisson(incidence) is an outcome named for the data, a share of a flow or count, with its likelihood
     used = set()
+    for var,rhs in compare:
+        var = var.strip()
+        why = likelihood(src, var, rhs, data, env, used)
+        if why:
+            src.skip(f'{var} ~ {rhs}', why)
+    for var in data:
+        if var not in src.outcomes:
+            src.skip(f'{var} (data)', 'data with no likelihood (~) that was translated; give it when calibrating (sim.calibrate(likelihood=...))')
+
+    # Parameters: those the flows and expressions use
     for f in src.flows:
         if f.rate is not None:
             used |= {n.id for n in ast.walk(ast.parse(f.rate, mode='eval')) if isinstance(n, ast.Name)}
@@ -642,6 +682,7 @@ def flow(src, frm, to, term, discrete, env, assign, dt, unit, notes):
             return
         call = ast.parse(rhs, mode='eval').body
         fn = call.func.id if isinstance(call, ast.Call) and isinstance(call.func, ast.Name) else None
+        fn = draws.get(fn, fn) # Binomial() is rbinom()
         if fn == 'rbinom' and len(call.args) == 2:
             size, p = call.args
             if isinstance(size, ast.Name) and size.id == frm:
@@ -652,12 +693,50 @@ def flow(src, frm, to, term, discrete, env, assign, dt, unit, notes):
         elif fn == 'rpois' and len(call.args) == 1:
             src.add_flow(frm, to, ast.unparse(call.args[0]) if dt == 1 else f'({ast.unparse(call.args[0])}) / {dt}', per='total', name=name)
         else:
-            src.skip(name, f'the draw "{rhs}" is not translated (only rbinom(state, p) and rpois(rate) are)')
+            src.skip(name, f'the draw "{rhs}" is not translated (only rbinom(state, p) or Binomial(), and rpois(rate) or Poisson(), are)')
         return
 
     # Continuous time: a rate in total, or an inflow
     src.add_flow(frm, to, text, per='total', name=name)
     return
+
+
+def likelihood(src, var, rhs, data, env, used):
+    """ An outcome for odin2's comparison to data, cases ~ Poisson(p * incidence), with its likelihood: returns why not, if it is not one """
+    call = ast.parse(r2py(rhs), mode='eval').body
+    fn = call.func.id if isinstance(call, ast.Call) and isinstance(call.func, ast.Name) else None
+    names = dict(Poisson=['lambda_'], NegativeBinomial=['size', 'mu'], Normal=['mean', 'sd']).get(fn)
+    if var not in data:
+        return f'{var} is not data (data())'
+    elif names is None:
+        return f'the likelihood {fn} is not translated (only Poisson, NegativeBinomial(size, mu), and Normal(mean, sd) are)'
+    args = dict(zip(names, call.args)) | {k.arg:k.value for k in call.keywords}
+    if set(args) != set(names):
+        return f'the arguments are not {sc.strjoin(names)}'
+    def par(node): # A parameter by name, or a number
+        if isinstance(node, ast.Name) and node.id in env:
+            used.add(node.id)
+            return lambda ps: ps[node.id]
+        try:
+            value = float(evaluate(ast.unparse(node), env))
+            return lambda ps: value
+        except KeyError:
+            return None
+    mean = args.pop('lambda_' if fn == 'Poisson' else 'mu' if fn == 'NegativeBinomial' else 'mean')
+    num, den = factors(mean)
+    flows = [fl.name for fl in src.flows]
+    known = [f for f in num if isinstance(f, ast.Name) and (f.id in src.outcomes or f.id in flows)]
+    rest = [f for f in num if f not in known]
+    if len(known) != 1 or den or len(rest) > 1 or (rest and not (isinstance(rest[0], ast.Name) and rest[0].id in env)):
+        return f'its mean ({ast.unparse(mean)}) is not a count over a period or a flow, or a parameter times one'
+    other = {k:par(v) for k,v in args.items()}
+    if None in other.values():
+        return f'{sc.strjoin(ast.unparse(v) for v in args.values())} is not a parameter or a number'
+    if rest:
+        used.add(rest[0].id)
+    lik = dict(Poisson=lambda ps: ss.poisson(), NegativeBinomial=lambda ps: ss.nbinom(n=other['size'](ps)), Normal=lambda ps: ss.normal(scale=other['sd'](ps)))[fn]
+    src.add_outcome(var, known[0].id, p=rest[0].id if rest else None, likelihood=lik)
+    return None
 
 
 def per_step(p, exprs, assign, dt):
@@ -670,8 +749,11 @@ def per_step(p, exprs, assign, dt):
     if isinstance(p, ast.BinOp) and isinstance(p.op, ast.Sub) and isinstance(p.left, ast.Constant) and p.left.value == 1:
         e = p.right
         if isinstance(e, ast.Call) and isinstance(e.func, ast.Name) and e.func.id == 'exp' and len(e.args) == 1:
-            num, den = factors(e.args[0])
-            minus = sum(isinstance(f, ast.UnaryOp) and isinstance(f.op, ast.USub) for f in num + den)
+            x, minus = e.args[0], 0
+            while isinstance(x, ast.UnaryOp) and isinstance(x.op, ast.USub): # 1 - exp(-(X * dt))
+                x, minus = x.operand, minus + 1
+            num, den = factors(x)
+            minus += sum(isinstance(f, ast.UnaryOp) and isinstance(f.op, ast.USub) for f in num + den)
             if minus % 2: # 1 - exp(-X), with the minus on any factor of X
                 num, den = [strip_sign(f) for f in num], [strip_sign(f) for f in den]
                 kept = [f for f in num if not (isinstance(f, ast.Name) and f.id == 'dt')]

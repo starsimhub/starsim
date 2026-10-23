@@ -2,6 +2,9 @@
 Choosing the solver: which engine runs a declared model, and why (`choose_solver()`)
 """
 import inspect
+import warnings
+import contextlib
+import functools
 import importlib
 import importlib.util
 import math
@@ -87,7 +90,7 @@ def choose_solver(sim):
     solvers = ss.solvers
     gather = lambda: [mod for key in ss.modules.module_types() + ['custom'] for mod in pars[key].values()]
     for mod in gather(): # A module may add the others it needs, or find the ones it works with, before they are gathered (e.g. ss.Pregnancy adds an ss.Lactation)
-        if hasattr(mod, 'link'):
+        if isinstance(mod, ss.Module):
             mod.link(sim)
     modules = gather()
     sim.declared = [mod for mod in modules if getattr(mod, 'graph', None) is not None]
@@ -134,21 +137,30 @@ def choose_solver(sim):
     # The solver
     if solver not in ['auto', 'abm']: # A module's own compartmental form, used only when a compartmental solver is named (e.g. ss.Pregnancy's)
         for mod in sim.declared:
-            if hasattr(mod, 'compartmental_form'):
-                ss.note(mod.compartmental_form(sim), sim=sim)
+            note = mod.compartmental_form(sim)
+            if note is not None:
+                ss.note(note, sim=sim)
     init_capabilities(sim, modules)
     layouts = None
-    if solver == 'auto' and not auto_reasons(sim) and len(sim.declared) > 1: # Diseases tracked jointly, counted before anything is made: agents, if they cannot be, or take more than the budget
-        sim.solver = 'ode'
-        layouts = []
-        for group in crossing_groups(sim):
-            try:
-                layouts.append(joint_layout(sim, group))
-                reason, how = over_budget(layouts[-1]), 'more compartments than ss.options.max_joint'
-            except ss.CapabilityError as e:
-                reason, how = str(e).split('\n')[0], 'no joint form yet'
-            if reason:
-                sim.capabilities.append(sc.objdict(ingredient=f'jointly: {" × ".join(sorted(group.names))}', groups='no', how=how, auto=reason, fatal=False))
+    if solver in ['auto', 'abm'] and not auto_reasons(sim): # What the layout of the compartments refuses, found by making it (which runs none of the model's code), so that it is said in one place
+        with trying(sim):
+            tries = {f'module: {mod.name}':functools.partial(layout, sim, mod) for mod in sim.declared}
+            tries['networks'] = lambda: ss.solvers.Mixing(sim).init(approx=pars.approx)
+            for ingredient,make in tries.items():
+                try:
+                    make()
+                except ss.CapabilityError as e:
+                    sim.capabilities.append(sc.objdict(ingredient=ingredient, groups='no', how='no compartmental form yet', auto=str(e).split('\n')[0], fatal=False))
+            if solver == 'auto' and not auto_reasons(sim) and len(sim.declared) > 1: # Diseases tracked jointly, counted before anything is made: agents, if they cannot be, or take more than the budget
+                layouts = []
+                for group in crossing_groups(sim):
+                    try:
+                        layouts.append(joint_layout(sim, group))
+                        reason, how = over_budget(layouts[-1]), 'more compartments than ss.options.max_joint'
+                    except ss.CapabilityError as e:
+                        reason, how = str(e).split('\n')[0], 'no joint form yet'
+                    if reason:
+                        sim.capabilities.append(sc.objdict(ingredient=f'jointly: {" × ".join(sorted(group.names))}', groups='no', how=how, auto=reason, fatal=False))
     if solver == 'auto':
         reasons = auto_reasons(sim)
         if reasons:
@@ -242,13 +254,13 @@ def kernel_seconds(sim):
         for e in cross.engines if cross is not None else [engine]:
             if e.program is None:
                 e.init_program()
-        if cross is not None and (cross.program is None or cross.built != [id(e.program) for e in cross.engines]):
-            cross.build([e.program for e in cross.engines])
+        if cross is not None:
+            cross.build()
         p = cross.program if cross is not None else engine.program
         groups = cross.n_cols if cross is not None else engine.n_groups
         leaps = 1
         if sim.solver in ['tau', 'ode']:
-            rates = np.concatenate([np.ravel(e.flow_base(flow)*e.flow_mult(flow)) for e in (cross.engines if cross is not None else [engine]) for flow in e.flows if flow.src is not None and not flow.dynamic and flow.kind != 'conveyor'] + [p.mov_rate])
+            rates = np.concatenate([rate for e in (cross.engines if cross is not None else [engine]) for rate in e.start_rates()] + [p.mov_rate])
         if sim.solver == 'ode':
             solver = ss.kernels.solvers[sim.integrator]
             y = cross.y if cross is not None else engine.y
@@ -273,7 +285,9 @@ def choose_engine(sim):
     kernels more than `jax_after` seconds (see `kernel_seconds()`). Once started, JAX takes 0.27 to 0.45 times as long
     as the kernels for the chain binomial, and 0.1 to 0.3 times for the ODE over many groups, but starting it takes
     about half a second in a session (0.3 s to import it, and 0.1 to 0.25 s to trace a model; compiled code is kept
-    on disk), which a short run would notice. The choice depends on the model only, not on what has run before, so a
+    on disk), which a short run would notice. The chain binomial in JAX draws with Numba, so it is not used under
+    `ss.options.compile = 'never'`; its draws compile once per install, in about 20 s (or ahead of time, with
+    `ss.compile()`). The choice depends on the model only, not on what has run before, so a
     sim with a seed gives the same results whenever it is run (an ODE run in JAX agrees with the kernels to about
     1e-14). A model JAX does not cover (see `ss.gradients.reason()` and `ss.perflib._chain.reason()`) is taken by the
     kernels, with a note if JAX was asked for.
@@ -494,6 +508,29 @@ def crossing_groups(sim):
     return groups
 
 
+@contextlib.contextmanager
+def trying(sim):
+    """ Lay out the compartments to see whether they can be, before the solver is chosen: as the ODE, keeping none of the notes or warnings, since the model may still run as agents """
+    solver, notes, verbose = getattr(sim, 'solver', None), list(sim.notes), sim.pars.verbose
+    sim.solver, sim.pars.verbose = 'ode', 0
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')
+            yield
+    finally:
+        sim.solver, sim.notes[:], sim.pars.verbose = solver, notes, verbose
+    return
+
+
+def layout(sim, mod):
+    """ The layout of a declared module's compartments, as its engine makes it (see `Compartmental.build_layout()`), which raises a `CapabilityError` for what has no compartmental form yet """
+    engine = ss.solvers.Compartmental(mod, sim) # Only to lay out the compartments; the module's own engine is made later
+    engine.init_dims()
+    engine.init_dwells()
+    engine.build_layout()
+    return engine
+
+
 def joint_layout(sim, group):
     """
     For a group of diseases to track jointly (see `crossing_groups()`): a dimension for each, whose levels are its compartments of people,
@@ -505,11 +542,7 @@ def joint_layout(sim, group):
     members = [mod.name for mod in sim.declared if mod.name in group.names] # In the order of the sim
     strats, people, others = [], [], []
     for name in members:
-        mod = sim.get_declared(name)
-        engine = ss.solvers.Compartmental(mod, sim) # Only to lay out the compartments; the module's own engine is made later
-        engine.init_dims()
-        engine.init_dwells()
-        engine.build_layout()
+        engine = layout(sim, sim.get_declared(name))
         labels = []
         for ind in engine.people_comps: # A state with several compartments (branches, or the stages of a dwell time) has a level for each
             state = engine.comps[ind].state.name
@@ -617,7 +650,9 @@ def init_capabilities(sim, modules):
     was asked for (`fatal`). Code is never run to find out: setting `compartmental = True` or `False` on a module (or its class)
     says whether it works on groups. Without it, an analyzer, a plain `ss.Module`, a function given as a module, and the code
     and functions of a declared module run beside the compartments (and raise a `CapabilityError` if they ask for agents);
-    other modules written as code (diseases, networks, demographics, interventions, connectors) need agents.
+    other modules written as code (diseases, networks, demographics, interventions, connectors) need agents. What the layout of
+    the compartments refuses (a minimum stay it has no form for, a race with a fixed delay, a network's partnerships) is not
+    predicted here: `choose_solver()` makes the layout, which runs none of the model's code, and adds its refusal as a record.
     """
     caps = []
     def add(ingredient, groups, how, auto=None, fatal=False):
@@ -669,12 +704,10 @@ def init_capabilities(sim, modules):
                 add(f'strains: {mod.name}', 'yes', 'courses side by side')
             continue
         if graph is None:
-            if isinstance(mod, ss.SexualNet) and (mod.forms_own or not set(mod.groups) <= {'male', 'female'}): # Partnerships of its own, or between groups other than the sexes
-                add(f'network: {mod.name}', 'no', 'no compartmental form', auto=f'"{mod.name}" ({type(mod).__name__}) has partnerships {"of its own" if mod.forms_own else "between groups other than the sexes"}, which only agents follow', fatal=True)
-            elif isinstance(mod, ss.networks.DegreeTargets): # Lasting partnerships (ss.SexualNet, ssl.DegreeNet): approximate, so 'auto' keeps agents (R4)
+            if isinstance(mod, ss.networks.DegreeTargets): # Lasting partnerships (ss.SexualNet, ssl.DegreeNet): approximate, so 'auto' keeps agents (R4)
                 add(f'network: {mod.name}', 'approx', 'the partner-change model', auto=f'"{mod.name}" ({type(mod).__name__}) has lasting partnerships, which agents follow exactly')
             elif isinstance(mod, ss.Network):
-                contacts = sim.mixing.net_contacts(mod)[0]
+                contacts = mod.mean_contacts(sim)[0]
                 add(f'network: {type(mod).__name__}', 'approx' if contacts is not None else 'no', 'contact rates' if contacts is not None else 'no approximation', auto=f'{type(mod).__name__} is an individual-level network')
             elif isinstance(mod, ss.MixingPool) and (mod.pars.src is not None or mod.pars.dst is not None): # A pool of some people, which has no compartmental form yet
                 add(f'network: {mod.name}', 'no', 'no compartmental form', auto=f'the mixing pool "{mod.name}" is between some people (src= or dst=), which only agents have', fatal=True)
@@ -701,9 +734,10 @@ def init_capabilities(sim, modules):
         elif own and flag is None:
             add(f'code: {mod.name}.{own[0]}()', 'yes', 'runs in Python each step (compartmental = False if it needs agents)')
         arrays = [state.name for state in mod.state_list] # Per-agent arrays of its own beside the declared states (made by its engine later)
-        if arrays and flag is None and not hasattr(mod, 'compartmental_form'):
+        small = type(mod).compartmental_form is not ss.Disease.compartmental_form
+        if arrays and flag is None and not small:
             add(f'arrays: {mod.name}', 'no', 'per-agent arrays', auto=f'"{mod.name}" has per-agent arrays of its own ({sc.strjoin(arrays[:3])}), which only agents have', fatal=True)
-        if hasattr(mod, 'compartmental_form'): # A small form of its own, only when a compartmental solver is named
+        if small: # A small form of its own, only when a compartmental solver is named
             add(f'module: {mod.name}', 'approx', 'its own small compartmental form (see its compartmental_form())', auto=f'"{mod.name}" has only a small approximate compartmental form, used when a compartmental solver is named')
         for name,tr in graph.transitions.items(): # Each person's mother: agents only
             if ss.expressions.mothers_in([tr.rate, tr.dur, getattr(tr, 'where', None), tr.trigger] + sc.tolist(tr.p)):
@@ -769,13 +803,10 @@ def init_capabilities(sim, modules):
                 add(f'dwell time: {name} ({type(raw).__name__})', 'yes' if exact else 'approx', 'a conveyor of whole steps' if fixed else 'Erlang stages', auto=auto)
             changers = [m for m in list(sim.pars.interventions.values()) + list(sim.pars.connectors.values()) if isinstance(m, ss.modify) and getattr(m.target_module, 'name', m.target_module) == mod.name
                         and m.target_kind in ['par', None] and m.target_name == getattr(tr.dur, 'name', None)] if isinstance(ss.transitions.by_dist(raw), ss.Dist) else []
-            if changers: # A distribution laid out once as compartments: see Engine.dwell_mods()
+            if changers: # A distribution laid out once as compartments: see Engine.dwell_mods(), which can only refuse it once the modifiers are found, after the solver is chosen
                 add(f'modifier: {changers[0].name}', 'no', 'laid out once', auto=f'the modifier "{changers[0].name}" changes the dwell time of "{name}", a distribution, which is laid out once as compartments', fatal=True)
-            if getattr(tr, 'after', None) is not None or getattr(tr, 'before', None) is not None:
-                if tr.contact or any(graph.exits[s.name].branches for s in tr.src): # See ss.solvers.Compartmental.stays()
-                    add(f'transition: {name}', 'no', 'a minimum stay on a transmission, or out of a state that splits on entry', auto=f'"{name}" has a minimum stay (after=) or a limit (before=) on a transmission or out of a state that splits on entry (p=), which have no compartmental form yet')
-                else:
-                    add(f'transition: {name}', 'yes', 'a conveyor of whole steps')
+            if getattr(tr, 'after', None) is not None or getattr(tr, 'before', None) is not None: # Those it has no form for yet are refused by the layout: see ss.solvers.Compartmental.stays()
+                add(f'transition: {name}', 'yes', 'a conveyor of whole steps')
             if tr.trigger is not None and tr.trigger.outcome:
                 add(f'transition: {name}', 'yes', 'moved when the outcome of a delivery happens')
             elif tr.trigger is not None and tr.trigger.event and ss.solvers.compartmental.synced_event(tr, sim, mod.name) is not None:
@@ -795,14 +826,11 @@ def init_capabilities(sim, modules):
                 add(f'transition: {name}', 'yes', f'n children for each person through "{tr.per.name}", added at the end of each step')
             if getattr(tr, 'lifetable', None) is not None and not aged:
                 add(f'transition: {name}', 'no', 'needs each person\'s age', auto=f'"{name}" draws ages at death from a life table, which needs each person\'s age (or a stratification by age)')
-        for name,exits in graph.exits.items(): # Several non-exponential dwell times out of one state: a track for each if each is for other people (see ss.solvers.Compartmental.apart_shares(), which the engine checks), or racing as a compartment for each combination of their stages if not
+        for name,exits in graph.exits.items(): # Several non-exponential dwell times out of one state: a track for each if each is for other people (see ss.solvers.Compartmental.apart_shares(), which the engine checks), or racing as a compartment for each combination of their stages if not (one that is a fixed delay is refused by the layout)
             dwells = [tr for tr in exits.timed if isinstance(getattr(tr.dur, 'raw', None), ss.Dist) and not isinstance(tr.dur.raw, ss.expon)]
             if len(dwells) > 1 and not exits.branches:
                 wheres = [repr(getattr(tr, 'where', None)) for tr in dwells]
-                fixed = [tr for tr in dwells if isinstance(tr.dur.raw, ss.constant) and tr.stages is None]
-                if fixed:
-                    add(f'dwell times: out of {name} ({sc.strjoin(tr.name for tr in dwells)})', 'no', 'one a fixed delay', auto=f'"{fixed[0].name}" is a fixed delay out of "{name}" alongside another non-exponential dwell time', fatal=True)
-                elif any(getattr(tr, 'where', None) is None for tr in dwells):
+                if any(getattr(tr, 'where', None) is None for tr in dwells):
                     add(f'dwell times: out of {name} ({sc.strjoin(tr.name for tr in dwells)})', 'yes', 'for the same people: they race, as a compartment for each combination of their Erlang stages')
                 elif len(set(wheres)) < len(wheres): # The same where= for both: the same people
                     add(f'dwell times: out of {name} ({sc.strjoin(tr.name for tr in dwells)})', 'no', 'for the same people, each with a where=', auto=f'"{dwells[0].name}" and "{dwells[1].name}" are non-exponential dwell times out of "{name}" for the same people, each with a where=', fatal=True)

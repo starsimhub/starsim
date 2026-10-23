@@ -71,7 +71,6 @@ pregnancy = ss.Pregnancy(
     fertility_rate = fertility_data,
     rate_units = 1,                                         # The data are per woman (rates up to 0.2 could be either)
     p_maternal_death = ss.bernoulli(0.001),                  # 0.1% maternal mortality
-    p_survive_maternal_death = ss.bernoulli(0.98),           # 98% chance unborn survives if mother dies
     dur_breastfeed = ss.lognorm_ex(mean=ss.years(0.5), std=ss.years(0.25)),  # Breastfeeding duration
     min_age = 15,
     max_age = 50,

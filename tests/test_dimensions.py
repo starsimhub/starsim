@@ -6,6 +6,7 @@ Test dimensions that are more than a property of people: states with dimensions 
 import sys
 import math
 import subprocess
+import tempfile
 import pytest
 import numpy as np
 import pandas as pd
@@ -123,7 +124,7 @@ def test_states():
     sims = sc.objdict()
     for solver in solvers:
         malaria = make_malaria()
-        states = malaria.graph.states
+        states = malaria.states
         malaria.stratify(species=['gambiae', 'funestus'], split=[0.75, 0.25], states=[states.Sv, states.Ev, states.Iv], adjust={'mortality': [1.0, 2.0]})
         sims[solver] = run(malaria, solver, unit='day', stop=365, total_pop=20_000, stratify=dict(age=[0, 5, 15]))
     res = sims.ode.results.malaria
@@ -444,6 +445,10 @@ def test_strain_carriers():
     assert np.isclose(superinfected.n_N[-1], plain.n_N[-1]) and superinfected.n_N.select(strain='A+B')[-1] > 0 # People in N carry another strain as well, and stay in N
     with pytest.raises(ss.errors.BadSplit): # A share by strain would be of people at a level of the strains, where nobody is before they are infected
         run(ss.Disease(S, I, infection=S >> I @ ss.peryear(1)*I, init=dict(I=ss.by(strain=[0.1, 0, 0.1])), name='d', strains=ss.Strains(['A', 'B'], max_strains=2)), 'ode', stop=2001)
+    for way in ['rate', 'modifier']: # A transmission is worked out for the people it infects, who carry no strain yet: ss.Strains(..., infection=[...]) says it
+        with pytest.raises(ss.errors.InvalidAdjustment):
+            d = ss.Disease(S, I, infection=S >> I @ (ss.by(strain=[1, 1.5]) if way == 'rate' else 1)*ss.peryear(1)*I, init=dict(I=0.01), name='d', strains=ss.Strains(['A', 'B']))
+            run(d, 'ode', stop=2001, connectors=ss.modify(d.infection, multiply=ss.by(strain=[1, 1.5])) if way == 'modifier' else None)
 
     # A carrier of A and B: passes on one at a time (the default), or each at its own rate; progresses with one at a time, each at its own rate (alone=True)
     def together(init, transmit='one', **values):
@@ -573,8 +578,8 @@ def test_space():
         assert res.infection.cum.by('patch').values[-1, 0] > 40_000
 
     # The passes over the agents are split between threads for a large population (here, for a small one): the results are those of one thread
-    defaults = ss.kernels.min_threaded, ss.kernels.chunk_size
-    ss.kernels.min_threaded, ss.kernels.chunk_size = 0, 1000
+    defaults = ss.perflib._passes.min_threaded, ss.perflib._passes.chunk_size
+    ss.perflib._passes.min_threaded, ss.perflib._passes.chunk_size = 0, 1000
     try:
         sims = []
         for threads in [1, 0]: # One thread, then as many as Numba has
@@ -583,7 +588,7 @@ def test_space():
                 sim.loop.insert(seed_north, label='sim.start_step')
                 sims.append(sim.run())
     finally:
-        ss.kernels.min_threaded, ss.kernels.chunk_size = defaults
+        ss.perflib._passes.min_threaded, ss.perflib._passes.chunk_size = defaults
     infections = [sim.results.sir.infection.values for sim in sims]
     assert infections[0].sum() > 0 and np.array_equal(*infections) # The same people infected, with threads or without
 
@@ -612,6 +617,37 @@ def test_space():
         I, R = ss.states('I R')
         sir = ss.Disease(recovery=ss.Transition(I, R, dur=3)).stratify(patch=['a', 'b'], mobility=ss.geo.gravity())
         ss.Sim(sir, **kw).init()
+
+    # The radiation model has no parameters: of the people who travel from a place, the share who go to each other place comes from the populations of the places nearer than it
+    line = ss.geo.geography(names=['a', 'b', 'c', 'd'], pop=[4e4, 1e4, 2e4, 3e4], x=[0, 10, 30, 70], y=[0, 0, 0, 0])
+    M = ss.geo.radiation().matrix(ss.dimensions.Strat('patch', line))
+    assert np.allclose(M[0], np.array([0, 4/20, 8/35, 12/70])/(1 - 4/10)) and np.allclose(M.sum(axis=1), 1) # m·n/((m + s)(m + n + s)), for the finite population (with no ties in distance, each row sums to 1)
+    sim = ss.Sim(make_towns(mobility=ss.geo.radiation()), unit='day', **kw).init()
+    assert np.allclose(sim.mixing.time_share.diagonal(), 0.9) # As for gravity, 10% of time away unless away= is given
+    sim = ss.Sim(make_towns(mobility=ss.geo.radiation(away=0.01)), stop=150, unit='day', solver='ode', total_pop=100_000, **kw).init()
+    sim.loop.insert(seed_north, label='sim.start_step')
+    peaks = sim.run().results.sir.n_I.by('patch').values.argmax(axis=0)
+    assert peaks[0] < peaks[1] < peaks[2] # South is nearer to the north than east is, and bigger
+    with pytest.raises(ss.errors.NoGeography):
+        ss.Sim(ss.Disease(recovery=ss.Transition(I, R, dur=3)).stratify(patch=['a', 'b'], mobility=ss.geo.radiation()), **kw).init()
+
+    # Places from your own shapes (a GeoDataFrame, or a file of them), each at the centroid of its shape
+    try:
+        import geopandas as gpd
+        from shapely.geometry import box
+    except ImportError: # Without geopandas, a file of shapes says how to read it
+        with pytest.raises(ImportError, match='pip install geopandas'):
+            ss.geo.geography('districts.shp')
+    else:
+        shapes = gpd.GeoDataFrame(dict(name=['a', 'b', 'c'], population=[1e4, 2e4, 3e4]), geometry=[box(36, -1, 37, 0), box(37, -1, 38, 0), box(36, 0, 37, 1)], crs='EPSG:4326')
+        places = ss.geo.geography(shapes)
+        assert np.allclose(places.lon, [36.5, 37.5, 36.5]) and np.allclose(places.pop, [1e4, 2e4, 3e4])
+        assert np.isclose(places.distances[0, 1], 111.2, rtol=1e-3) # A degree of longitude at the equator, in km
+        with tempfile.TemporaryDirectory() as folder:
+            path = f'{folder}/districts.geojson'
+            shapes.to_file(path)
+            assert np.allclose(ss.geo.geography(path).distances, places.distances)
+        assert np.allclose(ss.geo.geography(shapes.set_crs(None, allow_override=True)).distances[0, 1], 1) # With no coordinate reference system, in the shapes' own units
 
     # Newborns from ss.Births, written as code, are placed by the split, as declared births are (before, all in the first place)
     S, I = ss.states('S I')
@@ -953,7 +989,7 @@ def test_ragged():
 @sc.timer()
 def test_property_values():
     sc.heading('Testing that people hold the values of a numeric dimension, and keep a property they already have')
-    # Numeric levels are lower bin edges, and people hold the value (FP19: they held 0 to 4, binned by the edges 1 to 5, so the top level was empty)
+    # Numeric levels are lower bin edges, and people hold the value (before, they held 0 to 4, binned by the edges 1 to 5, so the top level was empty)
     S, I = ss.states('S I')
     sim = ss.Sim(ss.Disease(inf=S >> I @ ss.peryear(0.0)*I, name='d'), n_agents=5000, start=2000, stop=2001, solver='abm', verbose=0)
     sim.stratify(wealthquintile=[1, 2, 3, 4, 5])
@@ -962,7 +998,7 @@ def test_property_values():
     res = sim.results.d
     assert np.allclose(res.n_S.by('wealthquintile').values[0] + res.n_I.by('wealthquintile').values[0], 1000)
 
-    # A property people already have is kept and binned (FP20: urban at 0.9 became 0.000), and split= for it raises
+    # A property people already have is kept and binned (before, urban at 0.9 became 0.000), and split= for it raises
     def make(**kw):
         ppl = ss.People(5000, extra_states=[ss.BoolState('urban', default=ss.bernoulli(0.9)), ss.FloatArr('wealth', default=ss.uniform(0, 100))])
         S, I = ss.states('S I')
@@ -981,7 +1017,7 @@ def test_property_values():
 def test_properties_in_rates():
     sc.heading('Testing people\'s properties and conditions in rates, as a regression')
 
-    # A probability of use as a regression on a property (FP26), the same as agents and as compartments, and stopped by ss.change on its intercept (FP14: 3,531 starts with and without it)
+    # A probability of use as a regression on a property, the same as agents and as compartments, and stopped by ss.change on its intercept (before, 3,531 starts with and without it)
     def make(solver, change=False):
         b0, b_urban = ss.par(-1.0, bounds=[-3, 1]), ss.par(1.0)
         none, on = ss.states('none on')
@@ -1024,7 +1060,7 @@ def test_properties_in_rates():
 
 @sc.timer()
 def test_by_properties():
-    sc.heading('Testing values by a property of people that is not a dimension (D15), and tables with bin edges')
+    sc.heading('Testing values by a property of people that is not a dimension, and tables with bin edges')
     def make(mu, solver='auto', dims=None, **kw):
         S, D = ss.states('S D')
         sim = ss.Sim(ss.Disease(S, D, death=S >> D @ mu, name='d'), solver=solver, use_aging=False, verbose=0, **sc.mergedicts(dict(stop=10), kw))
@@ -1076,7 +1112,7 @@ def test_by_properties():
     female = sim.people.female.raw[uids]
     assert np.isclose(drawn[female].mean(), 6, rtol=0.05) and np.isclose(drawn[~female].mean(), 12, rtol=0.05)
 
-    # Several non-exponential dwell times out of a state, each for one sex (ST24): a track for each as compartments, as agents as ever
+    # Several non-exponential dwell times out of a state, each for one sex: a track for each as compartments, as agents as ever
     def clearance(where_m=ss.ppl.male):
         S, A, R = ss.states('S A R')
         clear_f = ss.Transition(A, R, dur=ss.lognorm_ex(ss.months(8), ss.months(2)), where=ss.ppl.female)
@@ -1093,7 +1129,7 @@ def test_by_properties():
     with pytest.raises(ss.CapabilityError, match='same people'):
         ss.Sim(clearance(where_m=ss.ppl.female), stop=10, solver='ode', verbose=0).init()
 
-    # For the same people (ST61): the two clocks race, as a compartment for each pair of their Erlang stages, so the share leaving by each is exact
+    # For the same people: the two clocks race, as a compartment for each pair of their Erlang stages, so the share leaving by each is exact
     def race(k=3):
         S, A, B, C = ss.states('S A B C')
         return ss.Disease(S, A, B, C, to_b=ss.Transition(A, B, dur=ss.gamma(k, scale=ss.months(10/k))), to_c=ss.Transition(A, C, dur=ss.gamma(2, scale=ss.months(7))), init=dict(A=1.0), first='S', name='d')
@@ -1108,7 +1144,7 @@ def test_by_properties():
 
 @sc.timer()
 def test_many_groups():
-    sc.heading('Testing more groups than 16-bit integers hold, as agents (TL6)')
+    sc.heading('Testing more groups than 16-bit integers hold, as agents')
     S, D = ss.states(2)
     dis = ss.Disease(onset=S >> D @ ss.peryear(1), back=D >> S @ ss.days(7), name='dis')
     dis.stratify(a=[f'a{i}' for i in range(128)], states=[D])
@@ -1124,8 +1160,8 @@ def test_many_groups():
 
 @sc.timer()
 def test_given_splits():
-    sc.heading('Testing splits given by the people and over several dimensions (TL3, TL4)')
-    # Stratifying by a property the people already have keeps it, and is not described as guessed (TL3: everyone was put at False, the first level)
+    sc.heading('Testing splits given by the people and over several dimensions')
+    # Stratifying by a property the people already have keeps it, and is not described as guessed (everyone was put at False, the first level)
     N = 10_000
     tob = np.random.default_rng(1).random(N) < 0.3
     ppl = ss.People(N, extra_states=[ss.BoolState('tob', default=lambda k: tob[:k] if k == N else np.zeros(k, bool))])
@@ -1137,7 +1173,7 @@ def test_given_splits():
     assert abs(sim.results.d.go.sum() - expected) < 4*np.sqrt(expected)
     assert 'guessed' not in [line for line in sim.describe(output=True).splitlines() if 'tob' in line and 'dimension' in line][0]
 
-    # A split over two dimensions that contradicts one's own split raises (TL4: urban came out at 0.497 where 0.17 was given)
+    # A split over two dimensions that contradicts one's own split raises (before, urban came out at 0.497 where 0.17 was given)
     table = np.array([[0.11, 0.21, 0.22, 0.23, 0.23], [0.75, 0.16, 0.05, 0.02, 0.02]]) # P(wealth | urban)
     def make(table):
         S = ss.State()
@@ -1289,7 +1325,7 @@ def test_contacts_dims():
         sim = ss.Sim(sir, networks=net, stratify=[dict(sex=['female', 'male']), dict(risk=['low', 'high'], split=[0.8, 0.2])], total_pop=20_000, n_agents=20_000, solver=solver, unit='day', stop=120, rand_seed=seed, **kw)
         return sim.run().results.sir.n_R.values
 
-    # A separable matrix given whole is the product of one for each (ST23)
+    # A separable matrix given whole is the product of one for each
     for solver in ['ode', 'abm']:
         assert np.allclose(run(ss.contacts(sex=sex, risk=risk), solver), run(ss.contacts(np.kron(sex, risk), dims=['sex', 'risk']), solver))
 

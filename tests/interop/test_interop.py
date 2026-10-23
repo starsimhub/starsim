@@ -126,7 +126,7 @@ def test_emulsion(tmp_path):
     assert any('when' in name for name,why in imp.incomplete), 'The calendar condition should be listed as not translated'
     sim.init()
     dis = sim.diseases.seirq
-    assert set(dis.graph.states.keys()) == {'S', 'E', 'I', 'Q', 'R'} # D is removed: an outflow
+    assert set(dis.states.keys()) == {'S', 'E', 'I', 'Q', 'R'} # D is removed: an outflow
     assert sim.pars.solver == 'binomial'
     assert 'force_of_infection' in dis.graph.transitions # A rate given by a named expression names its transition
     assert dis.graph.transitions.force_of_infection.contact

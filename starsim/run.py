@@ -28,7 +28,7 @@ class MultiSim:
         label (str): the name of the multisim
         n_runs (int): the number of runs of each sim, each with its own seed (by default, 4 for a single sim given as `sims`, otherwise 1)
         pars (dict/list): sets of values of parameters to run each sim with; see `ss.parallel()`
-        priors (bool): draw `n_runs` sets of values from the priors of the parameters; see `ss.parallel()`
+        priors (bool/dict): draw `n_runs` sets of values from the priors of the parameters, or the draws to run; see `ss.parallel()`
         initialize (bool): whether to make and initialize the sim of each run now (otherwise, when it is run)
         inplace (bool): whether to update sims that are run as they are (with no `n_runs` or `pars`) with their results (default True)
         debug (bool): if True, run in serial
@@ -199,29 +199,36 @@ class MultiSim:
         return self.runs.drop(columns='scenario')
 
     def resolve(self, n_runs=None, pars=None, priors=False):
-        """ The sims to run, how many times to run each, and the sets of values to run them with """
+        """ The sims to run, how many times to run each, the sets of values to run them with, and whether those are draws (runs of each scenario) rather than a sweep (scenarios of their own) """
         sims = [self.base_sim] if self.sims is None else list(getattr(self.sims, 'runners', self.sims)) # Sims restarted for their runs are run again from the sim of each scenario
-        if self.sims is None and n_runs is None and pars is None and not priors:
+        draws = priors is not None and priors is not False
+        if self.sims is None and n_runs is None and pars is None and not draws:
             n_runs = 4 # A single sim given to a MultiSim is run four times by default
         if len(sims) > 1: # Different sims are different scenarios
             for i,sim in enumerate(sims):
                 if not sim.label:
                     sim.label = f'Sim {i}'
-        many = n_runs is not None or pars is not None or priors
+        many = n_runs is not None or pars is not None or draws
         sims = [sim.new(rand_seed=sim.pars.rand_seed, label=sim.label) if hasattr(sim, 'inputs') and (sim.results_ready or (many and sim.initialized)) else sim for sim in sims] # A sim that has been run (e.g. fit.sim), or that would be run more than once after init(), is built again
-        if priors:
+        if draws:
             if pars is not None:
-                errormsg = 'ss.parallel() takes pars= or priors=True, not both'
+                errormsg = 'ss.parallel() takes pars= or priors=, not both'
                 raise ValueError(errormsg)
-            from .fit import prior_draws
-            pars = prior_draws(sims[0], sc.ifelse(n_runs, 100), seed=sims[0].pars.rand_seed)
+            if priors is True:
+                from .fit import prior_draws
+                pars = prior_draws(sims[0], sc.ifelse(n_runs, 100), seed=sims[0].pars.rand_seed)
+            else:
+                if n_runs is not None:
+                    errormsg = 'With the draws given as priors=, each is run once; pass more draws rather than n_runs'
+                    raise ValueError(errormsg)
+                pars = priors.to_dict('records') if isinstance(priors, pd.DataFrame) else priors
             n_runs = 1
         if pars is not None:
             n_runs = sc.ifelse(n_runs, 1)
-        return sims, n_runs, pars
+        return sims, n_runs, pars, draws
 
-    def expand(self, sims, n_runs=None, pars=None, **opts):
-        """ The sim of each run, each with its own seed (seed, seed + 1, ...) and set of values (see `make_run()`), and a dataframe of the runs """
+    def expand(self, sims, n_runs=None, pars=None, draws=False, **opts):
+        """ The sim of each run, each with its own seed (seed, seed + 1, ...) and set of values (see `make_run()`), and a dataframe of the runs; a set of values swept is a scenario of its own, and a draw (`draws=True`) is a run of its sim's scenario """
         sets = par_sets(pars)
         out = []
         rows = []
@@ -232,8 +239,7 @@ class MultiSim:
             for p in sets:
                 for i in range(sc.ifelse(n_runs, 1)):
                     out.append(sim if n_runs is None and p is None else self.make_run(sim, p, sim.pars.rand_seed + i, **opts)) # A sim run once as it is is run itself
-                    tag = ', '.join(f'{k}={v:n}' if sc.isnumber(v) else f'{k}={v}' for k,v in (p or {}).items()) # A set of swept values is a scenario of its own
-                    rows.append(dict(scenario=f'{sim.label}: {tag}' if sim.label and tag else (sim.label or tag), **(p or {})))
+                    rows.append(run_row(sim, p, draws))
         return out, pd.DataFrame(rows)
 
     def make_run(self, sim, values, seed):
@@ -274,8 +280,8 @@ class MultiSim:
     def init_sims(self, **kwargs):
         """ Make the sim of each run, and initialize them without running them """
         kwargs = sc.mergedicts(self.run_args, kwargs)
-        sims, n_runs, pars = self.resolve(kwargs.get('n_runs'), kwargs.get('pars'), kwargs.get('priors'))
-        self.sims, self.runs = self.expand(sims, n_runs, pars, **self.own_options(kwargs))
+        sims, n_runs, pars, draws = self.resolve(kwargs.get('n_runs'), kwargs.get('pars'), kwargs.get('priors'))
+        self.sims, self.runs = self.expand(sims, n_runs, pars, draws, **self.own_options(kwargs))
         for sim in self.sims:
             if not sim.initialized:
                 sim.init()
@@ -302,16 +308,16 @@ class MultiSim:
         if self.ready: # The sim of each run was made by init_sims()
             sims = self.sims
         else:
-            base, n_runs, pars = self.resolve(n_runs, pars, priors)
+            base, n_runs, pars, draws = self.resolve(n_runs, pars, priors)
             plain = not opts and type(self).make_run is MultiSim.make_run # No changes to the sim of each run
             if n_runs is not None and plain and set(kwargs) <= {'verbose', 'n_cpus', 'parallel'}: # Built once and restarted for each run, where the sims allow, which is many times faster
-                restarted = restart_runs(base, n_runs, pars=pars)
+                restarted = restart_runs(base, n_runs, pars=pars, draws=draws)
                 if restarted is not None:
                     self.sims, self.results, self.runs = restarted
                     self.ready = False
                     self.timer.stop()
                     return self
-            sims, self.runs = self.expand(base, n_runs, pars, **opts)
+            sims, self.runs = self.expand(base, n_runs, pars, draws, **opts)
 
         run_sims = run_each(sims, **kwargs) # This does all the work! Output sims are copies due to the pickling during parallelization
         if inplace:
@@ -770,6 +776,12 @@ class MultiResults(ss.Results):
         return cls.build(arrays, runs, timevec=first.get('timevec'))
 
 
+def run_row(sim, p, draws=False):
+    """ The row of a run in `msim.runs`: its scenario, and its values; a set of swept values is a scenario of its own, and a draw is a run of its sim's scenario """
+    tag = '' if draws else ', '.join(f'{k}={v:n}' if sc.isnumber(v) else f'{k}={v}' for k,v in (p or {}).items())
+    return dict(scenario=f'{sim.label}: {tag}' if sim.label and tag else (sim.label or tag), **(p or {}))
+
+
 def par_sets(pars):
     """ A list of sets of parameter values, from a list of dicts or a dict of lists (one value per set) """
     if pars is None:
@@ -827,7 +839,7 @@ class RestartedSims(cabc.Sequence):
         return f'<{len(self)} sims, one per run, made when asked for>'
 
 
-def restart_runs(sims, n_runs, pars=None):
+def restart_runs(sims, n_runs, pars=None, draws=False):
     """
     Run each sim a number of times, each with its own seed, by building it once and restarting it
 
@@ -836,7 +848,7 @@ def restart_runs(sims, n_runs, pars=None):
     Otherwise returns the sim of each run (`RestartedSims`, which makes each one when it is
     asked for), the results of every run (`ss.run.MultiResults`), and a dataframe of the runs.
 
-    With `pars=` (see `ss.parallel()`), each set of values is run `n_runs` times. An ODE
+    With `pars=` (see `ss.parallel()`), each set of values is run `n_runs` times (as runs of their sim's scenario if they are `draws`). An ODE
     with at least `jax_runs` runs (and JAX installed) takes them all in one call to JAX
     (see `ss.gradients`), which is faster than the kernels for that many.
     """
@@ -857,7 +869,7 @@ def restart_runs(sims, n_runs, pars=None):
             if any(key.split('.')[-1] in net.pars and ('.' not in key or key.split('.')[0] == net.name) for key in keys):
                 return None
         runners.append(runner)
-    runs = pd.DataFrame([dict(scenario=sim.label or '', **(p or {})) for sim in runners for p in sets for i in range(n_runs)])
+    runs = pd.DataFrame([run_row(sim, p, draws) for sim in runners for p in sets for i in range(n_runs)])
     values = sc.ddict(list)
     groups = sc.ddict(list)
     denoms = sc.ddict(list)
@@ -911,7 +923,7 @@ def parallel(*args, n_runs=None, pars=None, priors=False, **kwargs):
         args (list): The simulations to run
         n_runs (int): if provided, run each sim this many times, each with its own seed (the sim's seed, plus 1, 2, ...)
         pars (dict/list): sets of values of parameters to run each sim with: a dict with a list of values for each parameter (`dict(beta=[0.2, 0.3])`), or a list of dicts; each set is run `n_runs` times (default 1), and the values are in `msim.runs` (and can be selected, e.g. `res.select(beta=0.2)`); `rand_seed` can be given too, e.g. `pars=dict(rand_seed=[1, 5, 9])`
-        priors (bool): draw `n_runs` sets of values from the priors of the parameters (`ss.par(prior=...)`, or uniform over its bounds), one run each: a projection that carries the uncertainty in the values
+        priors (bool/dict): draw `n_runs` sets of values from the priors of the parameters (`ss.par(prior=...)`, or uniform over its bounds), one run each: a projection that carries the uncertainty in the values; or the draws themselves, as for `pars=` (e.g. from a posterior, as `fit.project()` passes them). Unlike a sweep with `pars=`, the draws are runs of their sim's scenario, so quantiles over a scenario's runs include them
         kwargs (dict): sims passed as keywords are labelled with the keyword, e.g. `ss.parallel(baseline=s1, vaccine=s2)`;
             everything else is passed to `ss.MultiSim()`, e.g. `parallel=False`, `n_cpus`, `shrink`
 

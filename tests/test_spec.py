@@ -122,11 +122,11 @@ def test_error_catalog():
 # The counted vocabulary of 17-vocabulary.md: for each group, its names in `ss.`, and which of them the specification adds to Starsim ('all' for every one)
 vocabulary = {
     'Sim and modules': ('Sim People people ppl Module Disease Strains Infection Demographics Intervention Connector Analyzer', 'people ppl Strains'),
-    'States, transitions, parameters, results': ('State states null Transition birth death immigration emigration lifetable transfer par pars outcome simdata', 'all'),
+    'States, transitions, parameters, results': ('State states null stay Transition on birth death immigration emigration lifetable transfer par pars attr outcome simdata state child mother', 'all'),
     'Time': ('dur days weeks months years day week month year datedur per perday perweek permonth peryear prob probperday probperweek probpermonth probperyear freq freqperday freqperweek freqpermonth freqperyear date peract', 'peract'),
     'Distributions': ('Dist normal lognorm_ex lognorm_im expon gamma weibull poisson nbinom binom uniform bernoulli constant choice erlang truncnorm', 'binom erlang truncnorm'),
     'Parameter forms': ('by timeseries seasonal', 'all'),
-    'Mixing and space': ('Network RandomNet SexualNet MixingPool MixingPools contacts geo.geography geo.Mobility geo.gravity', 'contacts geo.geography geo.Mobility geo.gravity'),
+    'Mixing and space': ('Network RandomNet SexualNet MixingPool MixingPools contacts geo.geography geo.Mobility geo.gravity geo.radiation', 'contacts geo.geography geo.Mobility geo.gravity geo.radiation'),
     'Interactions and interventions': ('modify change immunity Vaccine Diagnostic Treatment vaccinate screen treat', 'all'),
     'Running, comparing, saving': ('MultiSim parallel options diff load save compile', 'diff compile'),
     'Types you get back or subclass': ('Result Loop Timeline Rate TimePar', ''),
@@ -134,21 +134,22 @@ vocabulary = {
 
 # The second tier of the namespace: names not counted in the vocabulary that modules written as code, and Starsim 3 code, use (the third tier is internal, reached through its submodule: ss.solvers.Compartmental, ss.transitions.Expr, ss.distributions.link_dists)
 code_names = """
-AgeGroup AlreadyRunError Arr Base BaseArr Births BoolArr
+AgeGroup Arr Base Births BoolArr
 BoolState BreastfeedingNet DateArray Deaths Delivery
-DynamicNetwork Event FloatArr IndexArr IntArr MaternalNet ModifiableArr Pars Person PostnatalNet
-Pregnancy Lactation PregnancyPars PrenatalNet Product Results SEIR SIR SIS SimPars beta_dist beta_mean
-check_requires choose_n demo dtypes dynamics_by_age histogram infection_log
-multi_random ndict note parse_age_range plot_args randint random register_modules required return_fig root
-show shrink state child mother attr on stay style to_code uids warn jit
+DynamicNetwork Event FloatArr IndexArr IntArr MaternalNet Pars PostnatalNet
+Pregnancy Lactation PrenatalNet Product Results SEIR SIR SIS SimPars beta_dist beta_mean
+check_requires choose_n demo dtypes histogram infection_log
+multi_random ndict note plot_args randint random register_modules required return_fig root
+show style to_code uids warn jit
 """.split()
 
 
 # The counted methods and attributes, by the class they are on, and which of them the specification adds
 methods = {
-    'Disease': ('describe diagram equations transitions stratify to_spec copy pars R0', 'describe diagram equations transitions stratify to_spec R0'),
-    'State': ('n frac total', 'all'),
-    'ModifiableArr': ('effective', 'all'),
+    'Disease': ('describe diagram equations transitions states strats count add_callback stratify to_spec copy pars R0', 'describe diagram equations transitions states strats count add_callback stratify to_spec R0'),
+    'State': ('n frac total time progress enter exit', 'all'),
+    'Transition': ('to incidence uids ever count since', 'all'),
+    'arrays.ModifiableArr': ('effective', 'all'),
     'Sim': ('init run plot summarize to_df loop results describe stratify to_spec to_code to_json hash calibrate sensitivity check_dt what_modifies new gradient', 'describe stratify to_spec to_code hash calibrate sensitivity check_dt what_modifies new gradient'),
     'Loop': ('insert to_df plot plot_step_order', ''),
     'Result': ('select by sum resample cum quantiles values', 'select by cum quantiles'),
@@ -210,7 +211,7 @@ def has_attr(cls, name):
     """ Whether a class has an attribute, or sets it on its instances (self.<name> = ...) """
     if hasattr(cls, name):
         return True
-    if issubclass(cls, ss.BaseArr) and hasattr(np.ndarray, name): # Starsim's arrays pass other attributes to their values
+    if issubclass(cls, ss.arrays.BaseArr) and hasattr(np.ndarray, name): # Starsim's arrays pass other attributes to their values
         return True
     for base in cls.__mro__:
         try:

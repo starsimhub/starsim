@@ -1,5 +1,5 @@
 """
-Write an epydemix model to JSON, for `ss.load(..., format='epydemix')`
+Write an epydemix model to JSON, for `ss.interop.load(..., format='epydemix')`
 
 This runs where epydemix is installed, and needs neither Starsim nor Sciris, so it can
 be copied into any epydemix environment. Run it on a function that builds the model,

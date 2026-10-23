@@ -48,12 +48,14 @@ def parse_target(target):
         return target.module, target.kind, target.name
     elif isinstance(target, ss.expressions.attr) and target.module is not None: # An attribute, wherever it is read
         return target.module, 'attr', target.name
-    elif isinstance(target, ss.ModifiableArr) and target.engine is not None: # The array itself, once the sim exists
+    elif isinstance(target, ss.arrays.ModifiableArr) and target.engine is not None: # The array itself, once the sim exists
         return target.engine.mod, target.name, None
     elif isinstance(target, ss.Arr) and target.name in ['rel_sus', 'rel_trans'] and target.mod is not None: # Of a disease written as code, e.g. hiv.rel_trans
         return target.mod, target.name, None
     elif isinstance(target, (ss.Transition, ss.transitions.Transfer)) and getattr(target, 'module', None) is not None: # A transfer's rate is modified as a transition's is
         return target.module, 'transition', target.name
+    elif isinstance(target, ss.networks.Route) and target.name and 'n_contacts' in target.pars: # A network or a contact layer means its number of contacts, as "school.pars.n_contacts"
+        return target.name, 'par', 'n_contacts'
     elif isinstance(target, str) and '.' in target:
         parts = target.split('.')
         kind = parts[-1] if parts[-1] in ['rel_sus', 'rel_trans'] else 'par' if 'pars' in parts else None # If None, it is whichever the module has
@@ -62,7 +64,7 @@ def parse_target(target):
         return parts[0], kind, None if kind in ['rel_sus', 'rel_trans'] else parts[-1]
     what = 'a value' if isinstance(target, (ss.TimePar, ss.Dist)) else 'a plain number' if sc.isnumber(target) else 'an object'
     raise ss.errors.UnmodifiableTarget(f'the target of ss.modify() must be a named quantity, such as sir.pars.beta, sir.rel_sus, sir.recovery, or "sir.pars.beta", not {target} ({type(target).__name__}), which is {what} with no name to refer to.\n'
-                                f'     (A parameter of a network is named by its path, e.g. ss.modify("randomnet.pars.n_contacts", multiply=0.5). A parameter of a disease written as code is a plain value, read by its own code, so it cannot be modified; its rel_sus and rel_trans can be, e.g. ss.modify(hiv.rel_trans, multiply=0.5).)')
+                                f'     (A parameter of a network is named by its path, e.g. ss.modify("randomnet.pars.n_contacts", multiply=0.5), or its contacts by the network itself. A parameter of a disease written as code is a plain value, read by its own code, so it cannot be modified; its rel_sus and rel_trans can be, e.g. ss.modify(hiv.rel_trans, multiply=0.5).)')
 
 
 def to_time(sim, val):
@@ -257,7 +259,7 @@ class AgentModifiers:
     Applies the modifiers of a disease written as code to its `rel_sus` and `rel_trans`, as agents, as a declared disease's engine does for its own;
     and is what a delivery for it uses as its engine (see `engine()`): its conditions, and a cure as `clear_infection()`
 
-    The array becomes an `ss.ModifiableArr`, whose base values the disease's code sets as before, and
+    The array becomes an `ss.arrays.ModifiableArr`, whose base values the disease's code sets as before, and
     whose `.effective` values (with the modifiers that are active applied) `ss.Infection.infect_route()` uses.
     """
     cross = None # Never tracked jointly with another disease
@@ -319,8 +321,8 @@ class AgentModifiers:
     def attach(mod, kind, sim):
         """ Make the array of a disease written as code one that modifiers act on """
         arr = mod[kind]
-        if not isinstance(arr, ss.ModifiableArr):
-            arr.__class__ = ss.ModifiableArr # The same array and values, with .effective
+        if not isinstance(arr, ss.arrays.ModifiableArr):
+            arr.__class__ = ss.arrays.ModifiableArr # The same array and values, with .effective
         if arr.engine is None:
             arr.engine = AgentModifiers.engine(mod, sim)
         return
@@ -338,7 +340,8 @@ class modify(Connector):
     Args:
         target (par/str): the quantity to change: a parameter (`sir.pars.beta`), a transition (`sir.recovery`, which
             scales its rate, or its probability if it is a branch with `p=`), `sir.rel_sus` or `sir.rel_trans`, or the path of
-            any of these as a string (`'sir.pars.beta'`); or the contacts of a network, as a path (`'school.pars.n_contacts'`)
+            any of these as a string (`'sir.pars.beta'`); or the contacts of a network, as the network (`ss.contacts('Kenya', layer='school')`,
+            matched by its name) or as a path (`'school.pars.n_contacts'`)
         multiply (float): multiply the quantity by this; like `add` and `set`, it can also be `ss.by(...)` or a function of the sim
         add (float): add this to the quantity (a parameter only)
         set (float): replace the quantity with this (a parameter only)
@@ -447,6 +450,8 @@ class modify(Connector):
             raise ss.errors.UnmodifiableTarget(f'the target of the modifier "{self.name}", {self.target}, was not found. Quantities that can be modified: {sc.strjoin(options)}{ss.transitions.did_you_mean(self.target, options)}')
         if kind == 'transition' and getattr(graph.transitions.get(name), 'trigger', None) is not None:
             raise ss.errors.UnmodifiableTarget(f'the modifier "{self.name}" targets {self.target}, which is triggered by {graph.transitions[name].trigger} and has no rate to scale; use where= on the transition, or a p= branch.')
+        if kind == 'transition' and name in graph.transitions:
+            ss.strains.refuse_by_strain(next((s for s in graph.strats if s.kind == 'strain'), None), graph.transitions[name], self.amount, f'the modifier "{self.name}" of {self.target}')
         if kind == 'transition' and not getattr(self, 'on_rate', False):
             kind = graph.modifier_kind(name)
             msg = graph.dwell_not_branch(name, f'the modifier "{self.name}"', modname)

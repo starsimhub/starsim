@@ -128,7 +128,7 @@ class Counter(ss.Module):
     for old in ['ss.demographics.Pregnancy', 'ss.LegacyPregnancy']: # Starsim 3's pregnancy, by its old path or its prerelease name
         assert migrate_text(f'preg = {old}(fertility_rate=20)')[0] == 'preg = ss.Pregnancy(fertility_rate=20)'
     todo = migrate_text('class MyPreg(ss.Pregnancy):\n    def make_embryos(self, conceive_uids):\n        return super().make_embryos(conceive_uids)')[2]
-    assert any('add_conception_callback' in msg for line,msg in todo) and len(todo) >= 2 # The subclass and the removed method are flagged, not rewritten
+    assert any('add_callback' in msg for line,msg in todo) and len(todo) >= 2 # The subclass and the removed method are flagged, not rewritten
     assert not migrate_text('preg = ss.Pregnancy(fertility_rate=20)')[2] # A plain use is left alone
     assert migrate_text('d = ss.Disease(death=ss.Transition(I, ss.null, rate=r, where=ss.people.age < 1))')[0] == 'd = ss.Disease(death=ss.Transition(I, ss.null, rate=r, where=ss.ppl.age < 1))' # Starsim 4 prerelease names
     assert migrate_text('tx = ss.treat(ss.Treatment(), eligible=sis.I)')[0] == 'tx = ss.treat(ss.Treatment(), where=sis.I)'
@@ -141,7 +141,7 @@ class Counter(ss.Module):
     assert migrate_text('ss.Tests(); ss.Testing')[0] == 'ss.Tests(); ss.Testing'
     todo = migrate_text('class screening(ss.BaseScreening, ss.RoutineDelivery): pass\ntx = ss.treat_num(product=ss.Tx(df=df), max_capacity=50)')[2] # Starsim 3's delivery classes and products are flagged
     assert [line for line,msg in todo] == [1, 2, 2] and 'queue=True' in todo[1][1] + todo[2][1]
-    text, changes, todo = migrate_text("hiv = ssl.HIV(beta={'mf': [0.08, 0.04], 'prenatal': [0.2, 0], 'msm': [0.1, 0.1]})") # A beta pair has direction names (N7, HP3)
+    text, changes, todo = migrate_text("hiv = ssl.HIV(beta={'mf': [0.08, 0.04], 'prenatal': [0.2, 0], 'msm': [0.1, 0.1]})") # A beta pair has direction names
     assert text == "hiv = ssl.HIV(beta={'mf': ss.peract(m2f=0.08, f2m=0.04), 'prenatal': 0.2, 'msm': [0.1, 0.1]})" and any('"msm"' in msg for line,msg in todo)
 
     # A test's follow-ups nested in it (Starsim 4's prereleases) become steps of their own, after it in the interventions

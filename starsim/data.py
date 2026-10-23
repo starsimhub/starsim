@@ -2,7 +2,7 @@
 Data by place: ages, populations, birth and death rates, contact matrices, and administrative units
 
     ss.data.age('Kenya')                    # The age_data of ss.People: counts by 5-year age group ('world' needs no download)
-    ss.data.population('Kenya', year=2020)  # By age and sex
+    ss.data.population('Kenya', year=2020)  # By age and sex (also for a US state, e.g. 'United States:Massachusetts')
     ss.data.rates('Kenya', 'deaths')        # Birth or death rates, by year
     ss.data.contacts('Kenya', layer='home') # A contact matrix by age
     ss.data.geography('Kenya', level=1)     # Administrative units, with populations and positions
@@ -90,6 +90,23 @@ def unknown(place, E, what='place'):
     """ Raise `ss.errors.UnknownLocation` for a place that the provider cannot resolve, with its suggestions """
     msg = str(E).strip('"\'')
     raise ss.errors.UnknownLocation(f'the {what} "{place}" was not found in starsim_data: {msg}.')
+
+
+def subnational(ssd, place):
+    """ Whether a place is a unit within a country, such as a US state ('United States:Massachusetts'), whose data are its own datasets """
+    try:
+        return ssd.locations.SEP in ssd.resolve(place)
+    except KeyError as E:
+        unknown(place, E)
+
+
+def fetch(ssd, place, which, **kwargs):
+    """ Data that starsim_data does not bundle, downloaded on first use into its cache; a KeyError (an unknown place) is left to the caller """
+    try:
+        return ssd.fetch(place, which=which, **kwargs)
+    except OSError as E: # No connection, or the file is not where the registry says
+        errormsg = f'The data "{which}" for "{place}" is not bundled with starsim_data, and could not be downloaded into its cache ({ssd.cache_dir()}): {E}'
+        raise ConnectionError(errormsg) from E
 
 
 def ref(ssd, df, **kwargs):
@@ -194,18 +211,36 @@ def population(place, year=None, revision=None):
     """
     The population of a named place by age and sex, for `ss.people('Kenya', year=2024)`
 
-    The UN World Population Prospects give it every ten years (1950 to 2100); a year in
-    between is interpolated linearly, group by group.
+    For a country, the UN World Population Prospects give it every ten years (1950 to 2100); a year in
+    between is interpolated linearly, group by group. For a US state, the US Census gives it for 2023
+    only, by single year of age to 84+, and not by sex: it is grouped by 5 years (the last group, 80+,
+    is taken to end at 85, as `ss.People` reads it), and split evenly between women and men.
 
     Args:
-        place (str): a country, by name or code
-        year (int): the year (default: the year of the WPP revision, e.g. 2024)
-        revision (str): the WPP revision (default: the latest bundled)
+        place (str): a country, by name or code; or a US state, e.g. 'United States:Massachusetts' (downloaded on first use)
+        year (int): the year (default: the year of the WPP revision, e.g. 2024); a US state has only 2023, which is used with a note for any other
+        revision (str): the WPP revision (default: the latest bundled); not for a US state
 
     Returns:
-        The lower edge of each 5-year age group (the last is 100+), the number of women and of men in each, and `ref`
+        The lower edge of each 5-year age group (the last is 100+, or 80+ for a US state), the number of women and of men in each, and `ref`
     """
     ssd = provider()
+    if subnational(ssd, place):
+        if revision is not None:
+            errormsg = f'revision={revision} is a revision of the UN World Population Prospects, which are national; the population of {place} is from the US Census'
+            raise ValueError(errormsg)
+        try:
+            df = fetch(ssd, place, 'population_us')
+        except KeyError as E:
+            unknown(place, E)
+        data_year = int(df.Time.iloc[0])
+        if year is not None and year != data_year:
+            ss.note(f'the population of {place} is that of {data_year}, the only year starsim_data has for it, not {year}')
+        single = df.sort_values('AgeGrp').Value.values.astype(float)
+        ages = np.arange(0, len(single), 5, dtype=float)
+        both = np.add.reduceat(single, ages.astype(int)) # By 5-year age group
+        info = ref(ssd, df, place=place, year=data_year, location=df.attrs.get('location'))
+        return ages, both/2, both/2, info
     try:
         df = ssd.load(place, which='population', revision=revision)
     except KeyError as E:
@@ -225,19 +260,20 @@ def population(place, year=None, revision=None):
     return ages, counts['Female'], counts['Male'], info
 
 
-def contacts(place, source='prem2021', layer='all'):
+def contacts(place, source=None, layer='all'):
     """
     A contact matrix by age for a named place, for `ss.contacts('Kenya')`
 
     Args:
-        place (str): a country, by name or code
-        source (str): the study: 'prem2021' (bundled; 177 places), 'prem2017' (152), or 'mistry2021' (36, by single year of age); the last two are fetched on first use
+        place (str): a country, by name or code; or a US state, e.g. 'United States:Massachusetts'
+        source (str): the study: 'prem2021' (the default for a country; bundled; 177 places), 'prem2017' (152), 'mistry2021' (36, by single year of age), or 'mistry2021_us' (the default for a US state; the 50 states and DC, by single year of age); all but the first are fetched on first use
         layer (str): the setting: 'all', 'home', 'school', 'work', or 'community'
 
     Returns:
         The matrix (contacts a day that a person in each age group has with people in each), the lower edge of each age group, and `ref`
     """
     ssd = provider()
+    source = sc.ifelse(source, 'mistry2021_us' if subnational(ssd, place) else 'prem2021')
     if layer not in layers:
         errormsg = f'layer="{layer}" is not one of the settings of the contact matrices: {sc.strjoin(layers)}'
         raise ValueError(errormsg)
@@ -247,13 +283,13 @@ def contacts(place, source='prem2021', layer='all'):
         errormsg = f'source="{source}" is not a contact matrix in starsim_data: {E}'
         raise ValueError(errormsg) from E
     try:
-        df = ssd.load(place, which=source, kind=layer) if ds.tier == 0 else ssd.fetch(place, which=source, kind=layer)
+        df = ssd.load(place, which=source, kind=layer) if ds.tier == 0 else fetch(ssd, place, source, kind=layer)
     except KeyError as E:
         try:
             key = ssd.resolve(place)
         except KeyError:
             unknown(place, E)
-        others = [s for s in ['prem2021', 'prem2017', 'mistry2021'] if s != source and key in ssd.list_locations(s)]
+        others = [s for s in ['prem2021', 'prem2017', 'mistry2021', 'mistry2021_us'] if s != source and key in ssd.list_locations(s)]
         hint = f'; it is in {sc.strjoin(others)}, e.g. ss.contacts("{place}", source="{others[0]}")' if others else ''
         raise ss.errors.UnknownLocation(f'"{source}" has no contact matrix for {key}{hint}.')
     ages = [float(a) for a in df.index]

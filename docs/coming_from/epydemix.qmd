@@ -86,7 +86,7 @@ These are from Starsim's switching demo for epydemix users (`tests/switching/tes
 | A particle filter on a model whose transmission is a fitted value times a season times a mobility series | **Works**: the log-likelihood peaks at the true value |
 | A posterior with no likelihood (ABC-SMC, with `wmape` as the distance), then projections from it under scenarios, as quantile tables | **Works**: `sim.calibrate(method='abc-smc')`, `fit.project(scenarios, n=)`, and `.to_df(quantiles=)`, below |
 | A posterior with a likelihood | **Works**: particle MCMC for a stochastic model, NUTS for an ODE, with R-hat and ESS |
-| Populations and contact matrices for US states (`load_epydemix_population("United_States__Massachusetts")`) | **Fails**: Starsim's data have 177 countries and no subnational places, so `ss.people('United States:Massachusetts')` raises `UnknownLocation` |
+| Populations and contact matrices for US states (`load_epydemix_population("United_States__Massachusetts")`) | **Fails** until `starsim_data` publishes them: `ss.people('United States:Massachusetts')` (US Census, 2023) and `ss.contacts('United States:Massachusetts', layer='school')` (Mistry et al. 2021) read the 50 states and DC, but the files cannot be downloaded yet |
 | Other solvers: the same model as an ODE, by Gillespie's method, or as agents | **Works**: `solver='ode'`, `'gillespie'`, or `'abm'` |
 
 A posterior with no likelihood, then projections from it. Here the model is an SIR in a million people whose transmission is a fitted value `b` times a season times a mobility series, fitted to weekly infections drawn from a run at `b = 0.5`:

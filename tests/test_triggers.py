@@ -288,7 +288,7 @@ def test_with_conveyor():
 
 @sc.timer()
 def test_after_event():
-    sc.heading('Testing an exact dwell until an event of another module, and a time after it (ST18)')
+    sc.heading('Testing an exact dwell until an event of another module, and a time after it')
     A, B = ss.states('A B')
     def make(**kw):
         a = ss.Disease(A, B, go=ss.Transition(A, B, dur=ss.uniform(ss.days(5), ss.days(15))), first='A', name='a')
@@ -366,6 +366,24 @@ def test_hpv_cancel_event():
     return abm
 
 
+@pytest.mark.parametrize('form', ['since', 'ever', 'count', 'recorded'])
+def test_memory_slots(form):
+    sc.heading(f'Testing the memory of an event ({form}) in a rate, a where=, and a modifier')
+    def run(slot):
+        A, B = ss.states('A B')
+        back = ss.Transition(B, A, rate=ss.peryear(1))
+        preg = ss.Pregnancy(fertility_rate=ss.freqperyear(100)) if form == 'recorded' else None # An event it records that is not a transition
+        cond = dict(since=back.since < ss.years(1), ever=back.ever, count=back.count >= 1, recorded=preg.live_birth.since < ss.years(1) if preg else None)[form]
+        go = ss.Transition(A, B, rate=ss.peryear(2)*cond if slot == 'rate' else ss.peryear(2), where=cond if slot == 'where' else None)
+        d = ss.Disease(A, B, go=go, back=back, init=dict(B=0.5), first='A', name='d')
+        mods = ss.modify(d.go, multiply=cond) if slot == 'modifier' else None
+        sim = ss.Sim(d, demographics=preg, connectors=mods, n_agents=2000, start=2000, stop=2005, dt=ss.months(1), rand_seed=1, **kw).run()
+        return sim.results.d.go.values.sum()
+    out = [run(slot) for slot in ['rate', 'where', 'modifier']]
+    assert out[0] > 0 and out[0] == out[1] == out[2], out # The same people move, whichever slot reads it
+    return out
+
+
 if __name__ == '__main__':
     sc.options(interactive=False)
     test_lazy()
@@ -379,3 +397,5 @@ if __name__ == '__main__':
     test_after_event()
     test_treated_event()
     test_hpv_cancel_event()
+    for form in ['since', 'ever', 'count', 'recorded']:
+        test_memory_slots(form)

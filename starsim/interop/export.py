@@ -10,12 +10,12 @@ as `ss.errors.LossyExport`. An export does not fail because something cannot be 
 - `sbml`: the compartmental form as species and reactions (https://sbml.org), for any SBML tool
 - `odin`: the compartmental form as `deriv()` equations (https://mrc-ide.github.io/odin)
 
-The runs of a MultiSim are written as a submission to a forecast hub by `ss.interop.to_hub()`.
+The runs of a MultiSim are written as a submission to a hub (by scenario, as quantiles or samples) by `ss.interop.to_hub()`.
 
 SBML and odin are written from the compartmental form of the model (what
 `sir.equations()` prints), with the numbers in the sim's unit of time: a dwell time
 that is not exponential is its Erlang stages, and each stratification is summed into
-one group. Both are read back by `ss.load()`.
+one group. Both are read back by `ss.interop.load()`.
 """
 import re
 import ast
@@ -33,9 +33,13 @@ math_funcs = dict(exp='exp', log='ln', sqrt='root', abs='abs', absolute='abs', m
 #%% The compartmental form
 
 def initialized(sim):
-    """ The sim initialized: itself if it is, else a new one from the same inputs """
-    if sim.initialized:
+    """ The sim initialized and not yet run (so its state is the initial one): itself if it is, else a new one from the same inputs """
+    started = sim.initialized and (sim.complete or sim.t.ti > 0)
+    if sim.initialized and not started:
         return sim
+    elif started and not hasattr(sim, 'inputs'):
+        errormsg = 'This sim has been run, so its state is not the initial one, and it does not have the inputs to make it again (e.g. it was saved by an earlier version); export it before running it'
+        raise ValueError(errormsg)
     return sim.new(verbose=0).init() if hasattr(sim, 'inputs') else sc.dcp(sim).init()
 
 
@@ -389,43 +393,73 @@ def export(sim, format, filename=None, verbose=None):
 
 hub_quantiles = [0.01, 0.025] + [round(q, 2) for q in np.arange(0.05, 0.951, 0.05)] + [0.975, 0.99] # The 23 quantiles of the US forecast hubs
 
-def to_hub(msim, targets, by=None, every='week', quantiles=hub_quantiles, location=None):
+def to_hub(msim, targets, origin_date=None, by=None, every='week', output_type='quantile', quantiles=hub_quantiles, location=None):
     """
-    The runs of a MultiSim as a submission to a forecast hub: quantiles of each target, by location and period
+    The runs of a MultiSim as a submission to a hub (in the hubverse format): each target, by scenario, location, and period
+
+    Each scenario (the label of its sim) is its own `scenario_id`, and the periods are counted from
+    `origin_date`. A target's name says what it is: one starting "cum " is the total since the origin
+    date, one starting "peak size " is the largest value of a period (with no horizon), and any other is
+    a flow's total over each period, or a count at its end.
 
     Args:
         msim (`ss.MultiSim`): the runs
-        targets (dict): the hub's name for each result, e.g. `dict(incidHosp='inc hosp')`
+        targets (dict): the hub's name (or a list of names) for each result, e.g. `dict(incidHosp=['inc hosp', 'cum hosp', 'peak size hosp'])`
+        origin_date (date): the date the periods are counted from (default: the start of the runs)
         by (str): the dimension whose levels are the locations (default: one location, the total)
-        every (str): the period: a flow is totaled over it, and a count is taken at its end: 'day' or 'week' (of the sim's steps, which must then be days)
-        quantiles (list): the quantiles (default: the 23 that the US forecast hubs ask for)
+        every (str): the period: 'day' or 'week' (of the sim's steps, which must then be days)
+        output_type (str/list): 'quantile' (of the runs of each scenario), 'sample' (each run, by its position in its scenario), or both
+        quantiles (list): the quantiles (default: the 23 that the US hubs ask for)
         location (str): the name of the single location, if `by` is not given
 
-    Returns a long dataframe with columns `target`, `location`, `target_end_date`, `output_type`, `quantile`, and `value`.
+    Returns a long dataframe with columns `origin_date`, `scenario_id`, `location`, `target`, `horizon`,
+    `output_type`, `output_type_id`, and `value`.
 
     **Example**:
 
-        msim = ss.parallel(sim, n_runs=20)
-        hub = ss.interop.to_hub(msim, targets=dict(infection='inc inf'), by='patch', every='week')
+        msim = ss.parallel(baseline=s1, lockdown=s2, n_runs=20)
+        hub = ss.interop.to_hub(msim, targets=dict(infection=['inc inf', 'cum inf']), origin_date='2020-03-01', by='patch')
     """
     msim.check_run('to_hub')
     steps = dict(day=1, week=7)[every]
+    output_type = sc.tolist(output_type)
+    if not set(output_type) <= {'quantile', 'sample'}:
+        errormsg = f'The output type must be "quantile" or "sample", not {output_type}'
+        raise ValueError(errormsg)
     found = {key:res for modname,key,res in msim.results.walk() if modname is not None}
     rows = []
-    for key,target in targets.items():
+    for key,names in targets.items():
         if key not in found:
             errormsg = f'No result called "{key}"; the results are {sc.strjoin(found)}'
             raise KeyError(errormsg)
         res = found[key]
+        dates = list(res.timevec)
+        origin = dates[0] if origin_date is None else ss.date(origin_date)
+        i0 = next((i for i,d in enumerate(dates) if d >= origin), len(dates)) # The values after the origin
         places = res.by(by) if by is not None else {location or 'total':res}
         for place,sub in places.items():
-            vals = sub.values[:, 1:] # The steps, after the start
+            vals = sub.values[:, i0+1:]
             n = vals.shape[1]//steps
             if sub.kind == 'flow':
                 periods = vals[:, :n*steps].reshape(len(vals), n, steps).sum(axis=2)
             else:
                 periods = vals[:, steps-1:n*steps:steps]
-            ends = np.array(sub.timevec)[1:][steps-1:n*steps:steps]
-            for q,qvals in zip(quantiles, np.quantile(periods, quantiles, axis=0)):
-                rows.append(pd.DataFrame(dict(target=target, location=str(place), target_end_date=ends, output_type='quantile', quantile=q, value=qvals)))
+            for target in sc.tolist(names):
+                if target.startswith('cum '):
+                    if sub.kind != 'flow':
+                        errormsg = f'The target "{target}" is a cumulative total, but "{key}" is a count, not a flow'
+                        raise ValueError(errormsg)
+                    values, horizon = periods.cumsum(axis=1), np.arange(1, n+1)
+                elif target.startswith('peak size '):
+                    values, horizon = periods.max(axis=1, keepdims=True), [pd.NA]
+                else:
+                    values, horizon = periods, np.arange(1, n+1)
+                for scenario,inds in sub.scenarios().items():
+                    common = dict(origin_date=origin.strftime('%Y-%m-%d'), scenario_id=scenario, location=str(place), target=target, horizon=pd.array(horizon, dtype='Int64'))
+                    if 'quantile' in output_type:
+                        for q,qvals in zip(quantiles, np.quantile(values[inds], quantiles, axis=0)):
+                            rows.append(pd.DataFrame(dict(**common, output_type='quantile', output_type_id=q, value=qvals)))
+                    if 'sample' in output_type:
+                        for j,ind in enumerate(inds):
+                            rows.append(pd.DataFrame(dict(**common, output_type='sample', output_type_id=j, value=values[ind])))
     return pd.concat(rows, ignore_index=True)

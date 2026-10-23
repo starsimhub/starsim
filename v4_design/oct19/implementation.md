@@ -1,5 +1,7 @@
 # Remaining work, staged
 
+**Superseded (2026-10-20)** by [oct20/implementation.md](../oct20/implementation.md), and in turn by the current plan (see the [README](../README.md)). Kept as history.
+
 Written 2026-10-19. This plan follows [implementation_oct18.md](../oct17/implementation_oct18.md) (phases A to K, now largely done), Cliff's answers in [decisions_oct19.md](../oct17/decisions_oct19.md), and his `[CK:]` notes on the six Phase H designs in [oct17/designs/](../oct17/designs/README.md). To list what is still open, four agents took the October 18 status tables ([status_oct18/](../oct17/status_oct18/)), the canon and naive reviews, the October 19 worklogs, `admin/deferred.md`, and `admin/implementation.md`. They dropped whatever the October 19 work fixed, judging from the worklogs, the CHANGELOG, and greps of the code. Nothing was re-run, so numbers are from when each item was found. Their full lists, one line per item, are in the session scratchpad and are not kept. This file carries everything they found.
 
 Sizes: S is under a day of agent work, M a few days, L more. **SWA** marks a silent wrong answer.

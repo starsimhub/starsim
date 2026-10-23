@@ -7,7 +7,6 @@ Run the longer simulation-based calibration with STARSIM_SLOW=1.
 
 # %% Imports and settings
 import os
-import importlib.util
 import pytest
 import numpy as np
 import scipy.stats as sps
@@ -18,7 +17,6 @@ import starsim.fit
 import corpus
 
 slow = pytest.mark.skipif(not os.getenv('STARSIM_SLOW'), reason='A longer run; set STARSIM_SLOW=1 to run it')
-has_optuna = importlib.util.find_spec('optuna') is not None
 
 start, stop = '2020-02-23', '2020-05-31' # As corpus.seasonal()
 weeks = pd.date_range('2020-03-01', periods=13, freq='W') # The data of the seasonal models: weekly totals
@@ -54,6 +52,16 @@ def make_detection(d=0.2, init=100, data=None, **kwargs):
     return corpus.make_sim(dis, kwargs, total_pop=1e6, unit='day', start=start, stop=stop, data=data)
 
 
+def make_inside(x, data=None, **kwargs):
+    """ Fitted values inside values that vary in time: the mean and amplitude of a seasonal curve (which the rate is not linear in), and the values of a time series """
+    b, a, g = [ss.par(v, bounds=[0.05, 1]) for v in x]
+    S, I, R = ss.states('S I R')
+    infection = S >> I @ ss.seasonal(mean=b, amplitude=a, peak=14/365)*I
+    recovery = I >> R @ ss.timeseries({start:g, stop:0.5*g + 0.1}, mode='linear')
+    dis = ss.Disease(infection, recovery, init_n=dict(I=100), name='sir')
+    return corpus.make_sim(dis, kwargs, total_pop=1e6, unit='day', start=start, stop=stop, data=data)
+
+
 # Each model with data: how to make it (with the fitted value first), the data series, its dates, and the fitted value that makes the data
 models = sc.objdict(
     outcomes = sc.objdict(build=lambda x, **kw: corpus.outcomes(beta=x, **kw),   col='cases',     dates=outcome_weeks, truth=0.3),
@@ -61,6 +69,7 @@ models = sc.objdict(
     season   = sc.objdict(build=lambda x, **kw: make_beta('season', x, **kw),    col='infection', dates=weeks,         truth=0.5),
     both     = sc.objdict(build=lambda x, **kw: make_beta('both', x, **kw),      col='infection', dates=weeks,         truth=0.5),
     detect   = sc.objdict(build=lambda x, **kw: make_detection(x, **kw),         col='detection', dates=weeks,         truth=0.2),
+    inside   = sc.objdict(build=lambda x, **kw: make_inside(x, **kw),            col='infection', dates=weeks,         truth=np.array([0.5, 0.3, 0.25])),
 )
 
 
@@ -98,9 +107,9 @@ def jax_loglik(sim, points, likelihood=None):
     return out
 
 
-# %% The likelihoods match the run (N1, N2)
+# %% The likelihoods match the run
 
-jax_cases = ['outcomes', 'ts', 'season', 'both', 'detect', 'poisson_weekly']
+jax_cases = ['outcomes', 'ts', 'season', 'both', 'detect', 'poisson_weekly', 'inside']
 
 @pytest.mark.parametrize('key', jax_cases)
 def test_jax_loglik(key):
@@ -163,7 +172,7 @@ def test_particle_filter(key):
     return pf, direct
 
 
-# %% Simulation-based calibration (P10, R5)
+# %% Simulation-based calibration
 
 def sbc_fit(method, truth=0.35, seed=1, quick=True, verbose=False):
     """ Simulate data from corpus.outcomes() at a known beta, and fit beta (starting from 0.25) by a method """
@@ -206,7 +215,7 @@ def check_fit(fit, truth, rtol=None, rhat_max=1.1):
 methods = [
     'nelder-mead',
     'l-bfgs-b',
-    pytest.param('optuna', marks=pytest.mark.skipif(not has_optuna, reason='Optuna is not installed')),
+    'optuna',
     'nuts',
     'pmcmc',
     'abc-smc',
@@ -215,7 +224,7 @@ methods = [
 
 
 def check_converged(fits):
-    """ Each fit says that it converged (R5), and why """
+    """ Each fit says that it converged, and why """
     assert all(fit.converged and fit.why for fit in fits), [fit.why for fit in fits] # Each method says it converged, on a problem where it should
     return
 
@@ -236,11 +245,18 @@ def test_sbc(method):
     else: # Chains this short are not converged by the rule of an R-hat of at most 1.01 (nor is the tolerance of ABC-SMC settled on a deterministic model), and a posterior method should say so
         assert fit.converged is not None and fit.why
     if method == 'if2': # And a rate that varies in time (the summer2 pattern), whose values each particle's rates are worked out from, a data point at a time
-        model = models.detect
-        kw = dict(solver='binomial', total_pop=1e5)
-        detect = model.build(0.7*model.truth, data=simulate(model, **kw), **kw).calibrate(method='if2', likelihood={model.col:ss.nbinom(n=20)}, particles=300, iterations=30, chains=2, verbose=False)
-        assert np.isclose(detect.table.best[0], model.truth, rtol=rtols['if2']) # The detection rate that made the data
+        fit_detect(quick=True)
     return fit
+
+
+def fit_detect(quick=True):
+    """ IF2 recovers the detection rate that made the data, in a rate that varies in time; quick, it is within 10% (the longer run within 5%) """
+    model = models.detect
+    kw = dict(solver='binomial', total_pop=1e5)
+    particles, iterations, rtol = (100, 10, 0.1) if quick else (300, 30, rtols['if2']) # Quick, it was within 5% at 10 of 10 seeds, but by up to 4.8%
+    detect = model.build(0.7*model.truth, data=simulate(model, **kw), **kw).calibrate(method='if2', likelihood={model.col:ss.nbinom(n=20)}, particles=particles, iterations=iterations, chains=2, verbose=False)
+    assert np.isclose(detect.table.best[0], model.truth, rtol=rtol)
+    return detect
 
 
 def test_two_optima():
@@ -305,6 +321,11 @@ def test_log_density():
     slow = corpus.outcomes(beta=0.06, likelihood=ss.poisson(), data=simulate(models.outcomes, 0.35))
     (_, from_jax, from_run), = jax_loglik(slow, [1.0]) # Built where a step needs 1 substep, evaluated where it needs several
     assert np.isclose(from_jax, from_run, rtol=1e-9) # The substeps are worked out over the bounds, not only at the initial values
+    S, I, R = ss.states('S I R')
+    beta = ss.par(0.3, bounds=[0.1, 0.5], prior=ss.weibull(c=2, scale=0.3))
+    odd = ss.Sim(ss.Disease(S >> I @ beta*I, I >> R @ ss.days(10), init=dict(I=0.01), name='sir'), solver='ode', unit='day', stop=30, data=pd.DataFrame(dict(n_I=[0.02, 0.05]), index=[10, 20]), verbose=0)
+    with pytest.raises(ss.CapabilityError, match='weibull'): # A prior that the log-density in JAX does not cover
+        odd.log_density(likelihood=dict(n_I=ss.normal(scale=0.01)))
     return ld
 
 
@@ -326,6 +347,15 @@ def test_value_per_level():
     assert np.allclose(one.init().diseases.sir.pars.beta.raw.values, [fit.pars.beta.values[0], 0.1])
     proj = fit.project(dict(base=None), n=2)
     assert np.shape(proj.results.sir.n_I.values)[0] == 2 # Two runs
+
+    # With a value for each of many places, the scan before the search is capped
+    places = [f'p{i}' for i in range(12)]
+    beta = ss.par(ss.by(patch=[0.3]*12), bounds=[0.1, 0.8])
+    S, I = ss.states('S I')
+    sis = ss.Disease(infection=S >> I @ beta*I, recovery=I >> S @ 0.1, init_n=dict(I=ss.by(patch=[10]*12)), name='sis')
+    sis.stratify(patch=places)
+    problem = ss.fit.Problem(ss.Sim(sis, stop=10, data=pd.DataFrame(dict(n_I=[200]), index=[5]), verbose=0))
+    assert len(problem.names) == 12 and problem.scan_size() == ss.fit.max_scan == 100 and problem.scan_size(500) == 500
     return fit
 
 
@@ -376,7 +406,37 @@ def test_optimize():
     best = ss.fit.optimize(make(), spend=dict(a='spend_a', b='spend_b'), minimize='sir.n_R')
     assert best.alloc['a'] > 95 and np.isclose(sum(best.alloc.values()), 100) # Almost all of it to the better program, keeping the total
     assert best.value < best.value_before
+    capped = ss.fit.optimize(make(), spend=dict(a='spend_a', b='spend_b'), minimize='sir.n_R', bounds=dict(a=(None, 60))) # A limit on one program
+    assert capped.alloc['a'] <= 60 + 1e-6 and np.isclose(sum(capped.alloc.values()), 100) and capped.value < best.value_before
+    least = ss.fit.optimize(make(), spend=dict(a='spend_a', b='spend_b'), minimize='sir.n_R', target=best.value_before) # The least money that does as well as the current allocation
+    assert least.total < 90 and least.value <= best.value_before and np.isclose(sum(least.alloc.values()), least.total)
     return best
+
+
+def test_profile():
+    sc.heading('Testing the profile likelihood of a parameter, with the others refitted')
+    def make(solver='ode'):
+        beta, gamma = ss.par(ss.perday(0.3), bounds=[0.05, 1.0], name='beta'), ss.par(ss.perday(0.15), bounds=[0.01, 0.5], name='gamma')
+        S, I, R = ss.states(3)
+        infection = S >> I @ beta * I
+        cases = ss.outcome(0.6 * infection, likelihood=ss.poisson())
+        return ss.Sim(ss.Disease(infection, I >> R @ gamma, cases, init_n=dict(I=10), name='sir'), total_pop=10_000, unit='day', stop=84, solver=solver, verbose=0)
+    truth = make().new(pars=dict(beta=ss.perday(0.4))).run().results.sir.cases.values
+    rng = np.random.default_rng(1)
+    days = np.arange(7, len(truth), 7)
+    sim = make()
+    sim.data = ss.simdata(pd.DataFrame(dict(time=days, cases=[rng.poisson(truth[t-6:t+1].sum()) for t in days])))
+    prof = ss.fit.profile(sim, 'beta', values=np.linspace(0.37, 0.43, 7))
+    low, high = prof.interval
+    assert low < 0.4 < high and 0.37 < low and high < 0.43, f'Expected a 95% interval around 0.4 within the values, not {prof.interval}'
+    assert {'beta', 'gamma', 'nll', 'within'} <= set(prof.table.columns) and prof.table.gamma.is_monotonic_increasing # Refitted: a faster recovery makes up for a higher beta
+    alone = ss.fit.profile(sim, 'beta', pars=['beta']) # With gamma fixed, on the default grid: narrower
+    assert alone.interval[0] < 0.4 < alone.interval[1] and alone.interval[1] - alone.interval[0] < high - low
+    noisy = make(solver='binomial')
+    noisy.data = sim.data
+    with pytest.raises(ValueError, match='deterministic'):
+        ss.fit.profile(noisy, 'beta')
+    return prof
 
 
 def test_data_files(tmp_path):
@@ -432,6 +492,8 @@ def test_sbc_slow(method):
         print(f'{method}: the 95% interval covered the truth in {covered} of {n}')
         assert covered >= 8 # With 95% intervals, 8 or more of 10 cover the truth with a probability of 0.99
     check_converged(fits)
+    if method == 'if2':
+        fit_detect(quick=False)
     return
 
 

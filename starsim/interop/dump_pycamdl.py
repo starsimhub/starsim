@@ -1,5 +1,5 @@
 """
-Write a pycamdl model to JSON, for `ss.load(..., format='camdl')`
+Write a pycamdl model to JSON, for `ss.interop.load(..., format='camdl')`
 
 pycamdl, camdl's Python front end, builds a model as Python objects and runs it in
 Python, without camdl's compiler, so there is no camdl IR to read. This writes the
@@ -12,7 +12,7 @@ family), with each rate as an expression in Python syntax. It needs only pycamdl
     python dump_pycamdl.py stratified.py model.json
     python dump_pycamdl.py my_model.py:build model.json
 
-or call `dump(model, 'model.json')` from Python; `ss.load(model)` also works on a
+or call `dump(model, 'model.json')` from Python; `ss.interop.load(model)` also works on a
 live pycamdl model, if pycamdl can be imported where Starsim is.
 """
 import re

@@ -1,5 +1,7 @@
 # Remaining work after the merge, staged
 
+**Superseded (2026-10-21)** by [oct21/plan.md](../oct21/plan.md), and in turn by the current plan (see the [README](../README.md)). Kept as history.
+
 Written 2026-10-20, after `v4-rs-port` (Robyn's port of v4-rs onto v4) and `v4-rs-ck3` (Cliff's merge and the October 19 work) were merged into `v4` (PRs #1438 and #1440, `ee7123a1`). This replaces [oct19/implementation.md](../oct19/implementation.md) as the working plan; that file keeps the history of what was done and why. The merge's choices are in [merge_tradeoffs2.md](merge_tradeoffs2.md) and [oct19/merge_tradeoffs.md](../oct19/merge_tradeoffs.md). Robyn's own plan is [review/V4_PORT_PLAN.md](../review/V4_PORT_PLAN.md); its Phase A is done, and what is left of its Phase B is Stage B below.
 
 Sizes: S is under a day of agent work, M a few days, L more. **SWA** marks a silent wrong answer. Progress is logged beside each item, and in [handoff.md](handoff.md) while a session is under way.

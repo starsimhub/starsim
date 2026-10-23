@@ -154,7 +154,7 @@ class Mixing:
                 self.terms.extend(terms)
             elif isinstance(net, ss.Network):
                 kind = type(net).__name__
-                contacts, source = self.net_contacts(net)
+                contacts, source = net.mean_contacts(sim)
                 if contacts is None:
                     raise ss.CapabilityError(f'cannot run with solver="{sim.solver}": {kind} has no compartmental approximation yet{source}. Run with solver="abm".')
                 what = f'{kind} approximated by homogeneous mixing with {contacts:n} contacts per {sim.unit_name} ({source})'
@@ -171,27 +171,6 @@ class Mixing:
                 if term.kind == 'matrix':
                     self.within_places(term)
         return
-
-    def net_contacts(self, net):
-        """
-        The mean number of contacts of a network that has a compartmental approximation (homogeneous mixing with that many contacts), and where it comes from
-
-        A random network has its mean number of contacts, and a network made from a NetworkX graph (`ssl.StaticNet`) the mean degree of its graph. A network of
-        partnerships has none: its contacts last, so their number per unit time is not its number of partners (it uses
-        the partner-change model instead: see `partnerships()`).
-        """
-        n_contacts = net.pars.get('n_contacts')
-        if isinstance(net, ss.RandomNet) and n_contacts is not None:
-            return self.mean(n_contacts, self.sim.unit_base), 'its mean number of contacts'
-        elif hasattr(net, 'nx_graph'): # A network made from a NetworkX graph (ssl.StaticNet)
-            graph = net.nx_graph
-            if graph is not None and not callable(graph):
-                return 2*graph.number_of_edges()/max(graph.number_of_nodes(), 1), 'the mean degree of its graph'
-            elif graph is None or getattr(graph, '__name__', None) in ['fast_gnp_random_graph', 'gnp_random_graph', 'erdos_renyi_graph']: # A random graph: a number of contacts, or a chance of each pair
-                p = net.pars.get('p')
-                return (self.mean(n_contacts, self.sim.unit_base), 'its mean number of contacts') if p is None else (p*self.sim.pars.total_pop, 'its chance of each pair, times the population')
-            return None, f' (it is made by {getattr(graph, "__name__", "a function")}, whose mean degree is not known before it runs)'
-        return None, ''
 
     def partnerships(self, net):
         """

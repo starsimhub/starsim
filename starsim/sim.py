@@ -105,9 +105,9 @@ class Sim(ss.Base):
         interventions = self._order_steps(interventions)
         self.par_values = None # Values of model parameters by name, e.g. pars=dict(beta=0.1) or pars=fit.pars
         self.jax = None # Whether a whole run is taken in JAX: of the ODE (as ss.parallel() does for many runs with different values; see ss.gradients), or of the chain binomial and tau-leaping (see ss.perflib._chain); None to choose (see ss.solvers.choose_engine())
-        if isinstance(pars, dict) and len(pars): # Values of the model's parameters by name; a sim setting only by its own name, if no parameter of the model has it (so pars=fit.pars works with a parameter called dur)
+        if isinstance(pars, dict) and len(pars): # Values of the model's parameters by name; a sim setting only by its own name, if no parameter that could be fitted has it (so pars=fit.pars works with a parameter called dur, and pars=dict(dur=10) with a network that has one)
             given = [mod for arg in [modules, demographics, connectors, networks, interventions, diseases, analyzers, custom] for mod in sc.tolist(arg) if isinstance(mod, ss.Module)]
-            names = {name for mod in given for name in mod.pars.keys()}
+            names = {name for mod in given for name in (mod.pars.keys() if getattr(mod, 'graph', None) is not None else mod.pars.bounded())}
             settings = [key for key in pars if key in self.pars and key not in names]
             values = {key:val for key,val in pars.items() if key not in settings} # A name that is neither raises ss.errors.UnknownParameter when the sim is initialized
             self.par_values, pars = values or None, {key:pars[key] for key in settings} or None
@@ -299,11 +299,6 @@ class Sim(ss.Base):
             ):
             yield module
 
-    @property
-    def label_to_name(self):
-        """ Return a mapping from module labels to module names, e.g. {'HIV': 'hiv', 'Pregnancy': 'pregnancy'} """
-        return {mod.label: mod.name for mod in self.modules}
-
     def init(self, force=False, timer=False, **kwargs):
         """
         Perform all initializations for the sim
@@ -332,6 +327,7 @@ class Sim(ss.Base):
         self._init_time() # Initialize time
         self.init_people(**kwargs) # Initialize the people
         self.init_module_attrs(force=force) # Load specified modules from parameters, initialize them, and move them to the Sim object
+        self.init_data(check=False) # Load the data before the modules, which read it (e.g. data by group keeps their results by group at every step)
         self._init_modules_pre()
         ss.interventions.check_undriven(self)
         ss.connectors.check_applied(self) # Nothing accepted, then ignored
@@ -569,7 +565,7 @@ class Sim(ss.Base):
             likelihood (dict): the likelihood of a data series, by its name (e.g. `dict(prevalence=ss.normal(scale=0.02))`), for series whose outcome does not declare one. If every series has a likelihood, the fit maximizes their sum (plus the log of the priors of the parameters that have one, for the methods that find a best fit: the most probable values)
             gof (str/func): the goodness of fit: 'nae' (normalized absolute error, the default), 'rmse', or a function of the sim; any other name is an error
             method (str/list): by default, a best fit (a point estimate), by the method that suits the sim, which is printed with the reason: 'l-bfgs-b' for a deterministic sim with gradients (from JAX; see `ss.gradients`), 'nelder-mead' for one without them, or with one or two fitted parameters (where it is faster than gradients), and 'optuna' for a stochastic sim, including an agent-based one. A posterior is asked for by name: 'nuts' (the No-U-Turn sampler, for a deterministic sim with gradients whose data series all have a likelihood, with each chain started from one of the best points of a scan over the bounds that are apart), 'pmcmc' (particle MCMC, for a stochastic compartmental sim whose data series all have a likelihood: a random-walk Metropolis sampler on the likelihood estimated by a particle filter; see `ss.fit.ParticleFilter`), or 'abc-smc' (approximate Bayesian computation by sequential Monte Carlo, for any sim, with no likelihood needed); the priors are the parameters' `prior=`, or uniform over their bounds. Also: 'if2' (iterated filtering, for the sims that 'pmcmc' fits: the maximum-likelihood values, from passes of a particle filter in which each particle's values are perturbed by a shrinking random walk; see `ss.fit.Swarm`), 'asd' (adaptive stochastic descent, `sc.asd()`), any other `scipy.optimize.minimize` method, or a list of methods, each started from the best fit of the one before (a stage that does not converge stops the list; see `ss.fit.fit_stages()`)
-            scan (int): for the SciPy methods, NUTS, and particle MCMC, the number of points spread over the bounds to try first (default: 10 per parameter); the search starts from each of the best `restarts=3` of them that are apart (for SciPy; 1 for a single parameter of a deterministic sim), each NUTS chain from one of the best that are apart, and particle MCMC from the best
+            scan (int): for the SciPy methods, NUTS, and particle MCMC, the number of points spread over the bounds to try first (default: 10 per parameter, at most 100); the search starts from each of the best `restarts=3` of them that are apart (for SciPy; 1 for a single parameter of a deterministic sim), each NUTS chain from one of the best that are apart, and particle MCMC from the best
             n_runs (int): runs per evaluation, for a stochastic sim (default 4 for a stochastic compartmental sim, and 1 for agents and for a deterministic one); every point is scored by the mean over the same seeds (common random numbers), except under Optuna, where each point takes fresh seeds so that its search averages over chance; `fit.mismatch` is the score at the best fit over the first seeds
             rand_seed (int): the random seed for the fitting method (default: the sim's, so a fit gives the same answer each time)
             verbose (bool): whether to print progress
@@ -1177,7 +1173,7 @@ class Sim(ss.Base):
         The sim as a Python file that builds it again, from its model spec (see `ss.to_code()`)
 
         Only the declared parts are written; what is not (e.g. a module written as code)
-        is listed in the file and in an `ss.errors.LossyExport` warning. A sim imported from another framework (`ss.load(..., format=...)`) also says
+        is listed in the file and in an `ss.errors.LossyExport` warning. A sim imported from another framework (`ss.interop.load(..., format=...)`) also says
         where it came from, how each rate was read, and what was not translated.
 
         Args:
@@ -1189,7 +1185,7 @@ class Sim(ss.Base):
         if imp is not None:
             code = imp.get('code')
             source = sc.path(imp.file).name if imp.file else 'an object'
-            header = f'Imported from {imp.format} ({source}) by ss.load()\n\nHow each rate was read:\n' + '\n'.join(imp.choices)
+            header = f'Imported from {imp.format} ({source}) by ss.interop.load()\n\nHow each rate was read:\n' + '\n'.join(imp.choices)
             if imp.incomplete:
                 footer = ['Not translated (ImportIncomplete):'] + [f'  {name}: {why}' for name,why in imp.incomplete]
         return ss.to_code(self.to_spec(), filename=filename, header=header, footer=footer, code=code, missing=missing)
@@ -1221,7 +1217,7 @@ class Sim(ss.Base):
             raise RuntimeError(errormsg)
         if self.complete:
             errormsg = f'Cannot add module "{module.name}" to a sim that has finished running'
-            raise AlreadyRunError(errormsg)
+            raise ss.AlreadyRunError(errormsg)
 
         # Figure out the type of module, and make sure the name is unique
         if key is None:
@@ -1480,12 +1476,6 @@ class Sim(ss.Base):
             mod.init_post()
         return
 
-    def reset_time_pars(self, force=True):
-        """ Reset the time parameters in the modules; used for imposing the sim's timestep on the modules """
-        for mod in self.modules:
-            mod.init_time_pars(force=force)
-        return
-
     def init_results(self):
         """ Create initial results that are present in all simulations
 
@@ -1535,7 +1525,7 @@ class Sim(ss.Base):
 
         Returns the row of each time point and the time point each row ends at, or (None, None) for every time point.
         """
-        columns = getattr(self.data, 'columns', self.data.keys() if isinstance(self.data, dict) else [])
+        columns = [] if self.data is None else self.data.columns
         if npts*row_bytes <= budget or npts <= 2 or self.pars.rescale: # With rescaling, the scale differs at each step, and is applied to each one
             return None, None
         elif any('[' in str(col) for col in columns): # Data by group, which are compared with the results at each step
@@ -1617,14 +1607,20 @@ class Sim(ss.Base):
                     disease.make_naive(new_naive)
         return
 
-    def init_data(self, data=None):
-        """ Initialize or add data to the sim """
+    def init_data(self, data=None, check=True):
+        """ Initialize or add data to the sim; with check=False, only load and validate it, since the results it is checked against do not exist yet """
         data = data if data is not None else self.data
+        if isinstance(data, (str, os.PathLike)):
+            data = ss.simdata(data)
         if isinstance(data, ss.simdata):
-            data = data.load(self)
-        elif isinstance(data, (str, os.PathLike)):
-            data = ss.simdata(data).load(self)
+            self._simdata = data # To drop the columns that match no result, if asked, once the results exist
+            data = data.load()
         self.data = ss.results.validate_sim_data(data)
+        if not check:
+            return
+        source = self.__dict__.pop('_simdata', None)
+        if self.data is not None and source is not None and source.ignore_extra:
+            self.data = source.drop_extra(self, self.data)
         if self.data is not None and ss.results.by_year(self.data):
             ss.note('the data has whole years (an integer year column), so each row is compared with the year it names: a flow summed over the year, a stock or ratio averaged over it', sim=self)
         if self.data is not None:
@@ -1682,7 +1678,7 @@ class Sim(ss.Base):
         # Set the time and if we have reached the end of the simulation, then do nothing
         if self.complete:
             errormsg = 'Simulation already complete'
-            raise AlreadyRunError(errormsg)
+            raise ss.AlreadyRunError(errormsg)
 
         # Print out progress if needed
         if self.verbose: # Print progress
@@ -1761,7 +1757,7 @@ class Sim(ss.Base):
         # Check for AlreadyRun errors
         if self.complete:
             errormsg = 'Simulation is already complete'
-            raise AlreadyRunError(errormsg)
+            raise ss.AlreadyRunError(errormsg)
 
         try:
             # Main simulation loop -- just one line!!!
@@ -1984,7 +1980,7 @@ class Sim(ss.Base):
         if self.results_ready:
             # Because the results are rescaled in-place, finalizing the sim cannot be run more than once or
             # otherwise the scale factor will be applied multiple times
-            raise AlreadyRunError('Simulation has already been finalized')
+            raise ss.AlreadyRunError('Simulation has already been finalized')
 
         scale = self.result_scale()
         for reskey, res in self.results.items():
@@ -2063,7 +2059,7 @@ class Sim(ss.Base):
 
         # Shrink the people
         if full:
-            ss.shrink(sim, 'people')
+            ss.utils.shrink(sim, 'people')
         
         # If the sim is not initialized, we're done (ignoring the corner case where initialized modules are passed to an uninitialized sim)
         if sim.initialized:
@@ -2072,7 +2068,7 @@ class Sim(ss.Base):
             sim.loop.shrink()
 
             # Shrink the distributions
-            ss.shrink(sim.dists, attrs=['sim', 'obj'])
+            ss.utils.shrink(sim.dists, attrs=['sim', 'obj'])
             for dist in sim.dists.dists.values():
                 with sc.tryexcept(die=die):
                     dist.shrink() # Important; frees un-collectable sim references
@@ -2381,16 +2377,6 @@ class Sim(ss.Base):
         title = self.label if show_label in ['title', 'suptitle'] else None
         return self.results.plot(key=key, fig=fig, data=data, label=self.label, title=title, show_skipped=show_skipped, show_module=show_module, n_ticks=n_ticks, annualize=annualize, **kwargs)
 
-
-class AlreadyRunError(RuntimeError):
-    """ Raised if trying to re-run an already-run sim without re-initializing """
-    def __init__(self, *args, **kwargs):
-        default = 'To run it again, make a new sim with sim.new(), or copy the sim before running it'
-        if args:
-            args = (f'{args[0]}\n{default}',) + args[1:]
-        else:
-            args = (default,)
-        super().__init__(*args, **kwargs)
 
 
 def demo(run=True, plot=True, summary=True, show=True, **kwargs):

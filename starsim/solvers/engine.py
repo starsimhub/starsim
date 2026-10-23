@@ -144,6 +144,34 @@ class CountState:
         self.no_agents('.false()')
 
 
+class Evaluating:
+    """
+    What an engine is evaluating for, set for a block of code and restored after it, whatever happens in it (see `Engine.evaluating()`)
+
+    The flags are the engine's attributes of the same names with a leading underscore: `by_group` (rates for each group rather than
+    for each agent), `uids` and `for_uids` (the agents, and whether each value is for them), `strain`, `route` and `routes`, `rtr`,
+    `src`, `leaving` and `drawing`; what each means is said where the engine reads it.
+    """
+    __slots__ = ['engine', 'flags', 'saved']
+
+    def __init__(self, engine, flags):
+        self.engine = engine
+        self.flags = flags
+        return
+
+    def __enter__(self):
+        engine = self.engine
+        self.saved = [(key, getattr(engine, key, None)) for key in self.flags]
+        for key,val in self.flags.items():
+            setattr(engine, key, val)
+        return engine
+
+    def __exit__(self, *args):
+        for key,val in self.saved:
+            setattr(self.engine, key, val)
+        return False
+
+
 class Engine:
     """
     Base class for the engines that run a graph
@@ -197,7 +225,7 @@ class Engine:
     def shrink(self):
         """ Drop the sim and the arrays the run worked in, for saving; the results are kept on the module """
         arrays = [key for key,val in vars(self).items() if isinstance(val, np.ndarray) and val.nbytes > 1000]
-        ss.shrink(self, ['sim', '_selector', 'cache', 'series', 'deliveries', 'program', 'register', 'shifts', 'jax_run'] + arrays) # The selector holds the sim, the cache the values per agent, and the series the tables of a compartmental run
+        ss.utils.shrink(self, ['sim', '_selector', 'cache', 'series', 'deliveries', 'program', 'register', 'shifts', 'jax_run'] + arrays) # The selector holds the sim, the cache the values per agent, and the series the tables of a compartmental run
         return
 
     def make_rng(self, stream=0, seed=None):
@@ -281,7 +309,7 @@ class Engine:
             raise ValueError(errormsg)
         self.strain = strains[0] if strains else None
         mems = [d for d,strat in enumerate(sim.groups.strats) if getattr(strat, 'memory_of', None) == self.mod.name]
-        self.memory_dim = mems[0] if mems else None # In a compartmental run: what people remember of the strains (see ss.Strains.memory_strat())
+        self.memory_dim = mems[0] if mems else None # In a compartmental run: what people remember of the strains (see ss.Strains._memory_strat())
         self.foreign = set() # In a crossing: the dimensions that only another disease's states have, whose level this one's people keep
         if self.cross is not None:
             people = [state.name for state in graph.people_states]
@@ -312,10 +340,6 @@ class Engine:
                 out.append((d, level if isinstance(level, tuple) else strat.move_level(level)))
             self.move_levels[tr.name] = tuple(out)
         return self.move_levels[tr.name]
-
-    def note_counter(self, strat, what):
-        """ Say that a counter's levels are not one apart; agents add to each person's own value (see `Compartmental.note_counter()`) """
-        return
 
     def dim_map(self, src, dst, strain=None, record=False, move=None):
         """
@@ -425,7 +449,7 @@ class Engine:
         if reason and self.sim.solver != 'abm':
             raise ss.CapabilityError(f'the strains of "{self.mod.name}" need agents: {reason}. Run with solver="abm" (or "auto").')
         sources = {id(src) for tr in graph.transmissions for src in tr.src}
-        infected = {id(s) for s in graph.people_states if s.name in (strat.carried or [])} # Carrying strains as an infection (see ss.Strains.carriers())
+        infected = {id(s) for s in graph.people_states if s.name in (strat.carried or [])} # Carrying strains as an infection (see ss.Strains._carriers())
         recovered = [s for s in graph.people_states if s.name not in graph.uninfected and id(s) not in infected and id(s) not in sources] # Have been infected, but are not now, and cannot be infected again by a transmission of their own
         self.remembering = {s.name for s in graph.people_states if id(s) not in infected}
         for imm in strains.immunity:
@@ -751,12 +775,8 @@ class Engine:
         if mods:
             key = (kind, name, state.name if state is not None else None)
             if key not in self.cache:
-                for_uids = self.__dict__.get('_for_uids', False)
-                self._for_uids = False # For everyone, even when asked while a rate is evaluated for some agents (CV23)
-                try:
+                with self.evaluating(for_uids=False): # For everyone, even when asked while a rate is evaluated for some agents (CV23)
                     self.cache[key] = self.clip(self.reduce(ss.connectors.combine(mods, 1.0, self), state=state, what=name or kind), f'{self.mod.name}.{name or kind}')
-                finally:
-                    self._for_uids = for_uids
             out = self.cache[key]
         if getattr(self, 'rel_adjust', None) and self.rel_adjust.get(kind):
             out = out*self.adjusted_rel(kind, state)
@@ -982,25 +1002,6 @@ class Engine:
                         f'     Return a typed value, e.g. {example}, or give the sim a unit, e.g. ss.Sim(..., unit=\'{unit}\')')
             raise ss.errors.IncompatibleTypes(errormsg)
         return
-
-    def call_uids(self, func, p=None):
-        name = getattr(func, '__name__', 'function')
-        raise ss.CapabilityError(f'the function "{name}" cannot run with solver="{self.sim.solver}".\n'
-                                 f'     It takes uids, which exist only per agent. Run with solver="abm".')
-
-    def clock(self, clock):
-        raise ss.CapabilityError(f'{clock} cannot run with solver="{self.sim.solver}" yet: a clock is kept per agent, and its compartmental form (levels of elapsed time) is not built yet.\n'
-                                 f'     Run with solver="abm".')
-
-    def mother(self, expr):
-        if expr.born:
-            raise ss.CapabilityError(f'{expr} cannot run with solver="{self.sim.solver}": it reads each agent\'s mother, and compartments do not know who anyone\'s mother is.\n'
-                                     f'     Run with solver="abm", or leave the solver as "auto".')
-        raise ss.CapabilityError(f'{expr} cannot run with solver="{self.sim.solver}": the mother of an unborn person is kept per agent, and compartments have no fetuses.\n'
-                                 f'     Run with solver="abm", or leave the solver as "auto".')
-
-    def since(self, expr):
-        raise ss.CapabilityError(f'{expr} cannot run with solver="{self.sim.solver}" yet: the time since an event is kept per agent. Run with solver="abm".')
 
     def frac(self, states):
         return self.count(states)/self.n_people()
@@ -1304,15 +1305,11 @@ class Engine:
             if graph.infectious and not any(state.infectious for state in dst): # e.g. E in an SEIR
                 seeded = sc.strjoin(dict.fromkeys(state.name for state in dst))
                 ss.note(f'init_prev seeds {seeded} of "{self.mod.name}", where a new infection starts, so nobody is infectious at the start; to seed infectious people, use init=dict({graph.infectious[0].name}=...) (a share) or init_n= (a number)', sim=self.sim)
-            by_group = getattr(self, '_by_group', None)
-            self._by_group = True # The share of each destination in each group, before there are agents to evaluate it for
-            try:
+            with self.evaluating(by_group=True): # The share of each destination in each group, before there are agents to evaluate it for
                 reach = self.seed_reach(trs)
                 for tr,w in zip(trs, reach):
                     for state,p in zip(tr.dst, self.branch_probs(tr)):
                         fracs[state.name] = fracs[state.name] + init_prev*w*np.asarray(p, dtype=float)
-            finally:
-                self._by_group = by_group
 
         for name,val in list(fracs.items()) + list(counts.items()):
             if not np.all(np.isfinite(val)) or np.any(np.asarray(val) < 0):
@@ -1405,6 +1402,10 @@ class Engine:
 
     def eval(self, expr):
         return ss.transitions.evaluate(expr, self)
+
+    def evaluating(self, **flags):
+        """ Evaluate a block with some of the engine's flags set (e.g. `with self.evaluating(by_group=True):`), restored after it: see `Evaluating` """
+        return Evaluating(self, {f'_{key}':val for key,val in flags.items()})
 
     #%% Results
 
@@ -1641,39 +1642,51 @@ class Engine:
                     if own is not None: # Each person's own weight
                         amount += own
                         continue
-                    by_group, self._by_group = self._by_group, True # One weight for each group, as the flows are (TL51: as agents, a weight by age crashed)
-                    try:
+                    with self.evaluating(by_group=True): # One weight for each group, as the flows are (TL51: as agents, a weight by age crashed)
                         weight = self.eval(weight)
-                    finally:
-                        self._by_group = by_group
-                if integer and np.all((0 <= weight) & (weight <= 1)): # A fraction of whole events is a draw
-                    amount += self.rng.binomial(np.round(flow).astype(int), weight)
-                else:
-                    amount += flow*weight
-            slots = (ti + np.arange(len(info.kernel))) % len(info.pending) # This step and the next ones
-            if amount.any():
-                if integer and len(info.kernel) > 1:
-                    for g in np.flatnonzero(amount):
-                        info.pending[slots, g] += self.rng.multinomial(int(round(amount[g])), info.kernel/info.kernel.sum())
-                else:
-                    info.pending[slots] += np.outer(info.kernel, amount)
-            info.now = info.pending[slots[0]].copy()
-            info.pending[slots[0]] = 0
-            if info.stay is not None: # Each arrival leaves after a stay drawn for it
-                slots = (ti + np.arange(len(info.stay))) % len(info.leaving)
-                if integer:
-                    for g in np.flatnonzero(info.now):
-                        info.leaving[slots, g] += self.rng.multinomial(int(round(info.now[g])), info.stay)
-                else:
-                    info.leaving[slots] += np.outer(info.stay, info.now)
-                info.n = info.n + info.now - info.leaving[slots[0]]
-                info.leaving[slots[0]] = 0
-                store(f'n_{name}', info.n, False)
-            elif info.p_leave is not None:
-                info.n = info.n + info.now - info.n*info.p_leave
+                amount += self.outcome_share(flow, weight, integer)
+            info.now = self.report_outcome(info, info, amount, ti, integer)
+            if info.stay is not None or info.p_leave is not None:
                 store(f'n_{name}', info.n, False)
             store(name, info.now, True)
         return
+
+    def outcome_share(self, flow, weight, draw):
+        """ The events of an outcome from those of one of its sources, times its weight: a fraction of whole events is a draw if `draw` """
+        if draw and np.all((0 <= weight) & (weight <= 1)):
+            return self.rng.binomial(np.round(flow).astype(int), weight)
+        return flow*weight
+
+    def report_outcome(self, info, buf, amount, ti, draw):
+        """
+        One step of an outcome: its events in the step (`amount`, for each group, or each run and group) are reported after
+        its delay, and stay in it for its duration, each drawn for each event if `draw`. `buf` keeps the events still to be
+        reported (`pending`) and to leave (`leaving`), each a ring over the next steps, and the number in the outcome (`n`).
+        A step at a time for `step_outcomes()`, and over the steps of a whole run for `Compartmental.derived_outcomes()`,
+        so the two draw the same. Returns the events reported in the step.
+        """
+        kernel = info.kernel
+        slots = (ti + np.arange(len(kernel))) % len(buf.pending) # This step and the next ones
+        if amount.any():
+            if draw and len(kernel) > 1:
+                for g in np.flatnonzero(amount):
+                    buf.pending[slots, g] += self.rng.multinomial(int(round(amount[g])), kernel/kernel.sum())
+            else:
+                buf.pending[slots] += np.outer(kernel, amount)
+        now = buf.pending[slots[0]].copy()
+        buf.pending[slots[0]] = 0
+        if info.stay is not None: # Each arrival leaves after a stay drawn for it
+            slots = (ti + np.arange(len(info.stay))) % len(buf.leaving)
+            if draw:
+                for g in np.flatnonzero(now):
+                    buf.leaving[slots, g] += self.rng.multinomial(int(round(now[g])), info.stay)
+            else:
+                buf.leaving[slots] += np.outer(info.stay, now)
+            buf.n = buf.n + now - buf.leaving[slots[0]]
+            buf.leaving[slots[0]] = 0
+        elif info.p_leave is not None:
+            buf.n = buf.n + now - buf.n*info.p_leave
+        return now
 
     def start_step(self):
         """ Start counting the flows of the step """

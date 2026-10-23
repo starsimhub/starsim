@@ -9,6 +9,7 @@ import scipy.stats as sps
 import scipy.special as sp_special
 import starsim as ss
 import matplotlib.pyplot as plt
+from .perflib import _draws as draws, _cache
 ss_int = ss.dtypes.int
 
 
@@ -26,41 +27,24 @@ def str2int(string, modulo=1_000_000_000):
     return seed
 
 
-# Constants for the splitmix64 hash used by hash_uniforms() (see below)
-# Ugly? Yes. Blazingly fast? Also yes.
-_GOLDEN = np.uint64(0x9e3779b97f4a7c15)
-_MIX1   = np.uint64(0xbf58476d1ce4e5b9)
-_MIX2   = np.uint64(0x94d049bb133111eb)
-_INV53  = np.float64(1.0 / 9007199254740992.0) # 2^-53, to map a 53-bit int to [0, 1) (float64 mantissa)
-_INV24  = np.float64(1.0 / 16777216.0)         # 2^-24, to map a 24-bit int to [0, 1) (float32 mantissa)
-_U30, _U27, _U31, _U11 = np.uint64(30), np.uint64(27), np.uint64(31), np.uint64(11)
-_U40 = np.uint64(40) # 64 - 24: keep the top 24 bits for a float32-representable uniform
 _ROUND_IND = 2**62 # Added to the draw index for the stochastic rounding uniforms, so they're independent of the draw itself
+_cache.depends(__file__, draws.__file__) # So the cached hash below is compiled again when the draws change
 
 @nb.jit([nb.void(nb.int64, nb.int64, nb.uint64[:], nb.float32[:], nb.uint64, nb.float64),
           nb.void(nb.int64, nb.int64, nb.uint64[:], nb.float64[:], nb.uint64, nb.float64)], cache=True)
 def _hash_uniforms_fill(seed, ind, slots, out, shift, scale):
     """
-    Fill `out` with one uniform in [0, 1) per slot via a counter-based (splitmix64) hash keyed
-    by (seed, ind); not for the user. See hash_uniforms() for the algorithm and rationale.
+    Fill `out` with one uniform in (0, 1) per slot via a counter-based (splitmix64) hash keyed
+    by (seed, ind); not for the user. See hash_uniforms() for the algorithm and rationale, and
+    `ss.perflib.draws` for the hash (`key()` and `crn_uniform()`), which the kernels share.
 
     `out` carries the target float dtype (Numba specializes on it), and (shift, scale) select the
     mantissa width: (40, 2^-24) for float32, (11, 2^-53) for float64. Matching the mantissa to the
     float width keeps every value representable and strictly < 1.
     """
-    # Derive a per-draw key by mixing the distribution seed with the draw index
-    x = (np.uint64(seed) ^ (np.uint64(ind) * _GOLDEN)) + _GOLDEN
-    x = (x ^ (x >> _U30)) * _MIX1
-    x = (x ^ (x >> _U27)) * _MIX2
-    key = x ^ (x >> _U31)
-
-    # Hash each slot to a uniform of the requested width
+    key = draws.key(seed, ind) # A per-draw key, from the distribution seed and the draw index
     for i in range(slots.shape[0]):
-        z = (slots[i] + key) * _GOLDEN
-        z = (z ^ (z >> _U30)) * _MIX1
-        z = (z ^ (z >> _U27)) * _MIX2
-        z = z ^ (z >> _U31)
-        out[i] = max(z >> shift, 0.5) * scale # Map 0 to half a step, so the output is strictly in (0, 1) (e.g. ss.normal() never gives -inf)
+        out[i] = draws.crn_uniform(key, slots[i], shift, scale) # Map 0 to half a step, so the output is strictly in (0, 1) (e.g. ss.normal() never gives -inf)
     return
 
 
@@ -121,10 +105,7 @@ def hash_uniforms(seed, ind, slots, dtype=None):
         slots = slots.astype(np.uint64)
 
     out = np.empty(slots.shape[0], dtype=dtype)
-    if dtype.itemsize <= 4: # float32: keep the top 24 bits
-        _hash_uniforms_fill(seed, ind, slots, out, _U40, _INV24)
-    else: # float64: keep the top 53 bits (unchanged from earlier versions)
-        _hash_uniforms_fill(seed, ind, slots, out, _U11, _INV53)
+    _hash_uniforms_fill(seed, ind, slots, out, *draws.crn_bits(dtype)) # The top 24 bits for float32, 53 for float64 (unchanged from earlier versions)
     return out
 
 
@@ -242,7 +223,7 @@ class Dists(sc.prettyobj):
         for dist in self.dists.values():
             seed = dist.seed
             if seed in checked.keys():
-                raise DistSeedRepeatError(checked[seed], dist)
+                raise ss.errors.DistSeedRepeatError(checked[seed], dist)
             else:
                 checked[seed] = dist
         return
@@ -690,7 +671,7 @@ class Dist:
             errormsg = f'You tried to jump the distribution "{self}" to state {jumps}, but the ' \
                        f'RNG state is already at state {self.ind}, meaning you will draw the same ' \
                         'random numbers twice. If you are sure you want to do this, set force=True.'
-            raise DistSeedRepeatError(msg=errormsg)
+            raise ss.errors.DistSeedRepeatError(msg=errormsg)
 
         # Do the jumping: the generator itself is moved when it is next needed (see rng)
         self.ind = jumps
@@ -1172,9 +1153,9 @@ class Dist:
         """
         # Check for readiness
         if not self.initialized:
-            raise DistNotInitializedError(self)
+            raise ss.errors.DistNotInitializedError(self)
         if not self.ready and self.strict:
-            raise DistNotReadyError(self)
+            raise ss.errors.DistNotReadyError(self)
 
         # Figure out size, UIDs, and slots
         size, slots = self.process_size(n)
@@ -1271,7 +1252,7 @@ class Dist:
 
     def crn_key(self):
         """
-        For a compiled loop that draws the uniforms itself (e.g. `ss.kernels.infect()`, or a method compiled by `ss.jit`), in place of `rvs(uids)`: the seed and
+        For a compiled loop that draws the uniforms itself (e.g. `ss.perflib._passes.infect()`, or a method compiled by `ss.jit`), in place of `rvs(uids)`: the seed and
         index of this call's draws, which are `hash_uniforms(seed, ind, slots)` at `dtype`, with the bookkeeping of one call to
         `rvs()`; not for the user. None if they cannot be drawn that way (without common random numbers, or while the draws
         are being recorded or debugged), in which case `rvs()` is called instead.
@@ -1280,7 +1261,7 @@ class Dist:
         if not ss.options.crn or self.initialized is not True or self.slots is None or self.debug or (diagnostics and diagnostics.rvs is not None):
             return None
         if not self.ready and self.strict:
-            raise DistNotReadyError(self)
+            raise ss.errors.DistNotReadyError(self)
         self.make_history()
         key = (self.seed, self.ind, np.dtype(self.hash_dtype or ss.dtypes.float))
         self.called += 1
@@ -1358,10 +1339,10 @@ class Dist:
     def shrink(self, max_arr_size=100):
         """ Shrink the size of the distribution for saving to disk; NB, also clears per-agent parameter values """
         to_shrink = ['slots', '_slots', 'module', 'sim', 'dist', 'rng', '_pars', '_n', '_uids', '_callable_args', '_callable_keys']
-        ss.shrink(self, to_shrink)
+        ss.utils.shrink(self, to_shrink)
         self.history = [] # Clear history explicitly rather than shrinking it
         self._static = None # The cache of processed parameters, which can refer to per-agent arrays
-        shrunk = ss.shrink()
+        shrunk = ss.utils.shrink()
         for key, val in self.pars.items():
             if isinstance(val, np.ndarray) and val.size > max_arr_size:
                 self.pars[key] = shrunk
@@ -2401,32 +2382,3 @@ class multi_random(sc.prettyobj):
             nb_list = nb.typed.List(rvs_list) # See https://numba.readthedocs.io/en/stable/reference/deprecation.html#deprecation-of-reflection-for-list-and-set-types
             rvs = self.combine_rvs(nb_list, int_type, int_max)
         return rvs
-
-
-#%% Dist exceptions
-
-class DistNotInitializedError(RuntimeError):
-    """ Raised when Dist object is called when not initialized. """
-    def __init__(self, dist=None, msg=None):
-        if msg is None:
-            msg = f'{dist} has not been initialized; please set strict=False when creating the distribution, or call dist.mock() or dist.init().'
-        super().__init__(msg)
-        return
-
-
-class DistNotReadyError(RuntimeError):
-    """ Raised when a Dist object is called without being ready. """
-    def __init__(self, dist=None, msg=None):
-        if msg is None:
-            msg = f'{dist} is not ready. This is likely caused by calling a distribution multiple times in a single step. Call dist.jump() to reset.'
-        super().__init__(msg)
-        return
-
-
-class DistSeedRepeatError(RuntimeError):
-    """ Raised when a Dist object shares a seed with another """
-    def __init__(self, dist1=None, dist2=None, msg=None):
-        if msg is None:
-            msg = f'A common seed was found between {dist1} and {dist2}. This is likely caused by incorrect initialization of the parent Dists object.'
-        super().__init__(msg)
-        return
