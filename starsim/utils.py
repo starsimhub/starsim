@@ -2,6 +2,9 @@
 Numerical utilities and other helper functions
 """
 import re
+import sys
+import json
+import hashlib
 import warnings
 import numpy as np
 import numba as nb
@@ -12,6 +15,11 @@ import starsim as ss
 
 
 # %% Helper functions
+
+class NoDists:
+    """ A base for objects that never hold a distribution (or a time parameter), so are not searched for them (see `ss.distributions.no_dists()`) """
+    pass
+
 
 class ndict(sc.objdict):
     """
@@ -25,9 +33,9 @@ class ndict(sc.objdict):
 
     Examples:
         ```python
-        networks = ss.ndict(ss.MFNet(), ss.PrenatalNet())
-        networks = ss.ndict([ss.MFNet(), ss.PrenatalNet()])
-        networks = ss.ndict({'mf':ss.MFNet(), 'prenatal':ss.PrenatalNet()})
+        networks = ss.ndict(ss.SexualNet(), ss.PrenatalNet())
+        networks = ss.ndict([ss.SexualNet(), ss.PrenatalNet()])
+        networks = ss.ndict({'sexual':ss.SexualNet(), 'prenatal':ss.PrenatalNet()})
         ```
     """
     def __init__(self, *args, nameattr='name', type=None, strict=True, overwrite=False, **kwargs):
@@ -144,8 +152,6 @@ class ndict(sc.objdict):
             errormsg = f'Key must be a str or type, not {key}'
             raise TypeError(errormsg)
 
-        return # Unreachable
-
     def extend(self, *args, **kwargs):
         """ Add new items to the ndict, by item, list, or dict """
         args = sc.mergelists(*args)
@@ -234,6 +240,89 @@ def warn(msg, category=None, verbose=None, die=None):
     return
 
 
+def getframe(depth=1):
+    """ The frame `depth` levels above the caller, or None if the stack is not that deep (e.g. when called from R via reticulate) """
+    try:
+        return sys._getframe(depth+1)
+    except ValueError:
+        return None
+
+
+def caller_names(depth=1):
+    """
+    The names of the variables in the code that called the caller (`depth` levels above it), as a dict of the name of
+    each object by its id: its local variables, else its global ones, and only for an object bound to exactly one of
+    them. A declared disease (`ss.Disease(infection, recovery)`) and a sim (`ss.Sim(diseases=sir)`) look up the names of
+    what they are given once, here; nothing else does. Empty if the stack is not that deep (e.g. from R via reticulate)
+    """
+    frame = getframe(depth + 1)
+    if frame is None:
+        return {}
+    out = {}
+    for space in [frame.f_globals, frame.f_locals]: # The local ones win
+        found = {}
+        for key,val in space.items():
+            if not key.startswith('_'):
+                found.setdefault(id(val), set()).add(key)
+        out.update({i:(keys.pop() if len(keys) == 1 else None) for i,keys in found.items()})
+    return out
+
+
+def n_args(func):
+    """ The number of positional arguments a function needs: `fn(sim)` is 1 and `fn(sim, uids)` is 2, and arguments with defaults (`fn(sim, years=5)`) do not count """
+    import inspect
+    kinds = [inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD]
+    return sum(1 for p in inspect.signature(func).parameters.values() if p.kind in kinds and p.default is inspect.Parameter.empty)
+
+
+def short_hash(obj, n=6):
+    """
+    A short hash of a JSON-compatible object, e.g. for telling model specs apart
+
+    The keys of a dict whose value is None are left out, so that a key a new feature
+    writes as None when it is not used does not change the hash of any other object.
+    The hash is SHA-256 of the canonical JSON (keys sorted), so it is the same in every
+    process and on every machine.
+    """
+    def drop(item):
+        if isinstance(item, dict):
+            return {k:drop(v) for k,v in item.items() if v is not None}
+        elif isinstance(item, (list, tuple)):
+            return [drop(v) for v in item]
+        return item
+    string = json.dumps(drop(sc.jsonify(obj)), sort_keys=True)
+    return hashlib.sha256(string.encode()).hexdigest()[:n]
+
+
+def split_numbers(obj, unit=None, skip=None):
+    """
+    Split a JSON-compatible object into its structure (with every number replaced by a placeholder) and a list of its numbers
+
+    Used to hash a model's structure separately from its parameter values.
+
+    Args:
+        obj (dict): the object to split
+        unit (str): if provided, convert typed quantities to this unit, so e.g. 7 days and 1 week give the same number
+        skip (list): keys to leave out, e.g. labels
+    """
+    numbers = []
+    def walk(item):
+        if isinstance(item, dict):
+            if unit and item.get('type') in ['dur', 'per', 'prob', 'freq'] and item.get('unit'): # A typed quantity
+                factor = ss.time.get_dur_class(item['unit'])(1).to(unit).value
+                numbers.append(float(item['value']*factor if item['type'] == 'dur' else item['value']/factor))
+                return dict(type=item['type'], value='#')
+            return {key:walk(val) for key,val in item.items() if key not in sc.tolist(skip)}
+        elif isinstance(item, (list, tuple)):
+            return [walk(val) for val in item]
+        elif sc.isnumber(item) and not isinstance(item, bool):
+            numbers.append(float(item))
+            return '#'
+        return item
+    structure = walk(obj)
+    return structure, numbers
+
+
 @nb.jit(cache=True)
 def _mark_partners(p1, p2, is_ind, is_partner):
     """ Mark the partners of the agents flagged in is_ind, in both directions of each edge; used by find_contacts() """
@@ -277,125 +366,6 @@ def find_contacts(p1, p2, inds, as_array=False):
 
 # %% Data cleaning and processing
 
-def parse_age_range(age_string) -> tuple:
-    """
-    Parse an age range string into lower and upper bounds.
-
-    Extracts the numeric bounds from a variety of age range formats. Note that
-    bracket/interval notation (e.g. `[15,25)` vs `(15,25]`) is accepted but
-    the brackets are stripped — all formats return a plain `(lower, upper)`
-    tuple. To get a boolean mask that respects bracket semantics (inclusive vs
-    exclusive bounds), use :func:`apply_age_range` instead.
-
-    Example usage::
-
-        >>> ss.parse_age_range('5-9')
-        (5.0, 9.0)
-        >>> ss.parse_age_range('[15,25)')
-        (15.0, 25.0)
-        >>> ss.parse_age_range('(15,25]')
-        (15.0, 25.0)
-
-    Supported formats:
-        - `'5-9'` or `'5 to 9'`
-        - `'<5'` — returns `(0.0, 5.0)`
-        - `'95+'` — returns `(95.0, np.inf)`
-        - `'>95'` — returns `(95.0, np.inf)`
-        - `'[15,25)'`, `'(15,25]'`, `'[15,25]'`, `'(15,25)'` — bracket
-          notation; brackets are stripped, returns `(15.0, 25.0)` in all cases
-
-    Args:
-        age_string: a string specifying an age range
-
-    Returns:
-        A tuple `(lower, upper)` as floats.
-    """
-    s = str(age_string).strip()
-
-    # Bracket/interval notation: [15,25) or (15,25] etc.
-    if s and s[0] in '([' and s[-1] in ')]' and ',' in s:
-        inner = s[1:-1]
-        parts = inner.split(',', 1)
-        age_lower = float(parts[0].strip())
-        age_upper = float(parts[1].strip())
-    else:
-        s = s.lower()
-        if '+' in s:
-            age_lower = float(s.split('+')[0])
-            age_upper = np.inf
-        elif '-' in s:
-            age_lower = float(s.split('-')[0])
-            age_upper = float(s.split('-')[1])
-        elif s.startswith('<'):
-            age_lower = 0.0
-            age_upper = float(s[1:])
-        elif s.startswith('>'):
-            age_lower = float(s[1:])
-            age_upper = np.inf
-        elif 'to' in s:
-            parts = s.split('to')
-            age_lower = float(parts[0])
-            age_upper = float(parts[1])
-        else:
-            raise ValueError(f'Cannot parse age range: {age_string!r}')
-
-    if age_lower < 0 or age_upper < 0:
-        raise ValueError('Age bounds cannot be negative')
-    if age_lower >= age_upper:
-        raise ValueError(f'Lower bound ({age_lower}) must be less than upper bound ({age_upper}): {age_string!r}')
-
-    return age_lower, age_upper
-
-
-def apply_age_range(age_string, arr):
-    """
-    Return a boolean mask for values in `arr` that fall within the age range.
-
-    For bracket/interval notation, respects inclusive `[` `]` vs exclusive
-    `(` `)` bounds. For other formats, uses standard conventions:
-
-        - `'5-9'`, `'5 to 9'` → `[5, 9)` (inclusive lower, exclusive upper)
-        - `'<5'` → `[0, 5)`
-        - `'>95'` → `(95, inf)`
-        - `'95+'` → `[95, inf)`
-        - `'[15,25)'` → `>= 15` and `< 25`
-        - `'(15,25]'` → `> 15` and `<= 25`
-
-    Example usage::
-
-        >>> import numpy as np
-        >>> ages = np.array([14, 15, 20, 24, 25])
-        >>> ss.apply_age_range('[15,25)', ages)
-        array([False,  True,  True,  True, False])
-
-    Args:
-        age_string: a string specifying an age range
-        arr: a numeric array to filter
-
-    Returns:
-        A boolean array of the same shape as `arr`.
-    """
-    s = str(age_string).strip()
-
-    # Bracket/interval notation — respect the brackets
-    if s and s[0] in '([' and s[-1] in ')]' and ',' in s:
-        lo_inc = s[0] == '['
-        hi_inc = s[-1] == ']'
-        lo, hi = parse_age_range(s)
-        left  = (arr >= lo) if lo_inc else (arr > lo)
-        right = (arr <= hi) if hi_inc else (arr < hi)
-        return left & right
-
-    # Non-bracket formats — use conventional semantics
-    lo, hi = parse_age_range(s)
-    s_lower = s.lower()
-    if s_lower.startswith('>'):
-        return arr > lo  # Exclusive lower, no upper
-    else:
-        # '5-9', '5 to 9', '<5', '95+' all use [lo, hi)
-        return (arr >= lo) & (arr < hi)
-
-
 def standardize_netkey(key):
     """ 
     Standardize network key names
@@ -406,6 +376,17 @@ def standardize_netkey(key):
     to 'random'.
     """
     return re.sub(r'net(_\d+)?$', r'\1', key.lower())
+
+
+def route_beta(betas, route):
+    """
+    The value of a beta for each route (a dict by route name) on one route, or None if it has none
+
+    The dict may give `default`, the value of every route it does not name, e.g.
+    `dict(sexualnet=ss.peract(0.01), msm=ss.peract(0.1), default=0)`.
+    """
+    keys = {standardize_netkey(k):v for k,v in betas.items() if k != 'default'}
+    return keys.get(standardize_netkey(route), betas.get('default'))
 
 
 # Alternative column names accepted for standard data columns, used only if the configured
@@ -538,47 +519,6 @@ def standardize_data(data=None, metadata=None, min_year=1800, out_of_range=0, de
     return output
 
 
-def validate_sim_data(data=None, die=None):
-    """
-    Validate data intended to be compared to the sim outputs, e.g. for calibration
-
-    Args:
-        data (df/dict): a dataframe (or dict) of data, with a column "time" plus data columns of the form "module.result", e.g. "hiv.new_infections"
-        die (bool): whether to raise an exception if the data cannot be converted (default: die if data is not None but cannot be converted)
-
-    """
-    success = False
-    if data is not None:
-        # Try loading the data
-        try:
-            data = sc.dataframe(data) # Convert it to a dataframe
-            timecols = ['t', 'timevec', 'tvec', 'time', 'day', 'date', 'year'] # If a time column is supplied, use it as the index
-            found = False
-            for timecol in timecols:
-                if timecol in data.cols:
-                    if found:
-                        errormsg = f'Multiple time columns found: please ensure only one of {timecols} is present; you supplied {data.cols}.'
-                        raise ValueError(errormsg)
-                    data.set_index(timecol, inplace=True)
-                    found = True
-            success = True
-
-        # Data loading failed
-        except Exception as E:
-            errormsg = f'Failed to add data "{data}": expecting a dataframe-compatible object. Error:\n{E}'
-            if die == False:
-                print(errormsg)
-            else:
-                raise ValueError(errormsg)
-
-    # Validation
-    if not success and die == True:
-        errormsg = f'Data "{data}" could not be converted and die == True'
-        raise ValueError(errormsg)
-
-    return data
-
-
 def combine_rands(a, b):
     """
     Efficient algorithm for combining two arrays of random integers into an array
@@ -591,7 +531,7 @@ def combine_rands(a, b):
     the array. To reinterpret existing bits for free, use `arr.view(np.uint64)`.
 
     Args:
-        a (array): array of random uint64 integers between 0 and np.iinfo(np.uint64).max, as from ss.rand_raw()
+        a (array): array of random uint64 integers between 0 and np.iinfo(np.uint64).max, as from ss.distributions.rand_raw()
         b (array): ditto, same size as a
 
     Returns:
@@ -600,7 +540,7 @@ def combine_rands(a, b):
     a_dtype = getattr(a, 'dtype', type(a).__name__)
     b_dtype = getattr(b, 'dtype', type(b).__name__)
     if a_dtype != np.uint64 or b_dtype != np.uint64:
-        errormsg = f'combine_rands() requires uint64 arrays, not a={a_dtype} and b={b_dtype}. Signed integers give output in [-0.5, 0.5] instead of [0, 1]. Use ss.rand_raw(), or arr.view(np.uint64) to reinterpret the bits without copying.'
+        errormsg = f'combine_rands() requires uint64 arrays, not a={a_dtype} and b={b_dtype}. Signed integers give output in [-0.5, 0.5] instead of [0, 1]. Use ss.distributions.rand_raw(), or arr.view(np.uint64) to reinterpret the bits without copying.'
         raise TypeError(errormsg)
     c = np.bitwise_xor(a*b, a-b)
     u = c / np.iinfo(np.uint64).max
@@ -611,19 +551,27 @@ def combine_rands(a, b):
 
 def load(filename, **kwargs):
     """
-    Alias to Sciris `sc.loadany()`
+    Alias to Sciris `sc.loadany()`, for Starsim's own objects
 
     Since Starsim uses Sciris for saving objects, they can be loaded back using
-    this function. This can also be used to load other objects of known type
-    (e.g. JSON), although this usage is discouraged.
+    this function, e.g. a sim saved with `ss.save('run.sim', sim)`. A model saved as
+    code (`ss.save('model.py', sim)`) is a script: run or import it. Another
+    framework's model is read with `ss.interop.load()`.
 
     Args:
         filename (str/path): the name of the file to load
         kwargs (dict): passed to `sc.loadany()`
 
-    Returns:
-        The loaded object
+    **Examples**:
+
+        sim = ss.load('run.sim') # A sim saved with ss.save()
     """
+    if str(filename).endswith('.json'):
+        spec = sc.loadjson(filename)
+        if isinstance(spec, dict) and str(spec.get('schema', '')).startswith('lingua-franca/'):
+            errormsg = f'{filename} is a model spec, which is the normalized form of a model for sim.hash() and ss.diff(), and is not read back into a sim. Save a model as code with ss.save("model.py", sim), or a sim with its results with ss.save("run.sim", sim)'
+            raise ValueError(errormsg)
+        return spec
     return sc.loadany(filename, **kwargs)
 
 
@@ -632,13 +580,23 @@ def save(filename, obj, **kwargs):
     Alias to Sciris `sc.save()`
 
     While some Starsim objects have their own save methods, this function can be
-    used to save any arbitrary object. It can then be loaded with ss.load().
+    used to save any arbitrary object. It can then be loaded with ss.load(). A sim
+    saved to a `.py` file is written as code that builds it again (`sim.to_code()`).
+    To write a sim in another framework's format, use `ss.interop.export()`.
 
     Args:
         filename (str/path): the name of the file to save
         obj (any): the object to save
-        kwargs (dict): passed to `sc.save()`
+        kwargs (dict): passed to `sc.save()`, or to `sim.to_code()`
+
+    **Examples**:
+
+        ss.save('model.py', sim) # The model, as code
+        ss.save('run.sim', sim) # The sim, with its results
     """
+    if str(filename).endswith('.py') and isinstance(obj, ss.Sim):
+        obj.to_code(filename, **kwargs)
+        return sc.path(filename)
     return sc.save(filename=filename, obj=obj, **kwargs)
 
 
@@ -681,7 +639,7 @@ def shrink(obj=None, attrs=None, verbose=False):
     numbers of sims. It is good practice to write `shrink()` methods for modules to remove
     any temporary arrays or other memory-intensive objects.
 
-    `ss.shrink()` can be used to either manually replace an object, or replace multiple attributes 
+    `ss.utils.shrink()` can be used to either manually replace an object, or replace multiple attributes 
     of an object in-place. It is used rather than simply deleting attributes or setting them to
      `None` to make it clear that the attributes were intentionally removed.
 
@@ -694,17 +652,17 @@ def shrink(obj=None, attrs=None, verbose=False):
         ```python
         # "Shrink" (remove) the People object
         sim = ss.Sim()
-        ss.shrink(sim, 'people')
+        ss.utils.shrink(sim, 'people')
 
         # Equivalent behavior, used manually
-        sim.people = ss.shrink()
+        sim.people = ss.utils.shrink()
         ```
     """
     none_count = sum([x is None for x in [obj, attrs]])
     if none_count == 2:
         return Shrunk()
     elif none_count == 1:
-        errormsg = 'You can call ss.shrink() with both obj and attrs, or with neither, but not one or the other'
+        errormsg = 'You can call ss.utils.shrink() with both obj and attrs, or with neither, but not one or the other'
         raise ValueError(errormsg)
     else:
         for attr in sc.tolist(attrs):
@@ -721,7 +679,7 @@ def shrink(obj=None, attrs=None, verbose=False):
 # Specify known/common keywords
 plotting_kw = sc.objdict()
 plotting_kw.fig = ['figsize', 'nrows', 'ncols', 'ratio', 'num', 'dpi', 'facecolor'] # For sc.getrowscols()
-plotting_kw.plot = ['alpha', 'c', 'lw', 'linewidth', 'marker', 'markersize', 'ms'] # For plt.plot()
+plotting_kw.plot = ['alpha', 'c', 'color', 'lw', 'linewidth', 'ls', 'linestyle', 'marker', 'markersize', 'ms'] # For plt.plot()
 plotting_kw.data = {'data_alpha':'alpha', 'data_color':'color', 'data_size':'markersize'} # For plt.scatter()
 plotting_kw.fill = {'fill_alpha':'alpha', 'fill_color':'color', 'fill_hatch':'hatch', 'fill_lw':'lw'}
 plotting_kw.legend = ['loc', 'bbox_to_anchor', 'ncols', 'reverse', 'frameon']
@@ -754,7 +712,7 @@ def plot_args(kwargs=None, _debug=False, **defaults):
     Valid kwarg arguments are:
 
         - fig: 'figsize', 'nrows', 'ncols', 'ratio', 'num', 'dpi', 'facecolor'
-        - plot: 'alpha', 'c', 'lw', 'linewidth', 'marker', 'markersize', 'ms'
+        - plot: 'alpha', 'c', 'color', 'lw', 'linewidth', 'ls', 'linestyle', 'marker', 'markersize', 'ms'
         - data: 'data_alpha', 'data_color', 'data_size'
         - fill: 'fill_alpha', 'fill_color', 'fill_hatch', 'fill_lw'
         - style: 'font', 'fontsize', 'interactive'
@@ -806,86 +764,6 @@ def plot_args(kwargs=None, _debug=False, **defaults):
     return kw
 
 
-def match_result_keys(results, key, show_skipped=False, flattened=False):
-    """ Ensure that the user-provided keys match available ones, and raise an exception if not """
-
-    def normkey(key):
-        """ Normalize the key: e.g. 'SIS.prevalence' becomes 'sis_prevalence' """
-        return key.replace('.','_').lower()
-
-    # Handle accessing subdicts
-    if isinstance(key, str) and key in results and isinstance(results[key], dict): # Key matches a subdict, use that directly, e.g. sim.plot('sis')
-        flat = results[key].flatten() # e.g. sim.results['sis']
-        key = None # We've already used the key, so reset it
-    else: # Main use case: flatten the dict, e.g. sim.plot()
-        flat = sc.objdict(results) if flattened else results.flatten() # Copy so the original results aren't modified below
-
-    # Configuration
-    flat_orig = flat # Copy reference before we modify in place
-    if not show_skipped: # Skip plots with auto_plot set to False
-        for k in list(flat.keys()): # NB: can't call it "key", shadows argument
-            res = flat[k]
-            if isinstance(res, ss.Result) and not res.auto_plot:
-                flat.pop(k)
-
-    if key is not None:
-        if isinstance(key, str):
-            if normkey(key) in flat: # Use an exact match if there is one, e.g. 'new_deaths' rather than 'cholera_new_deaths'
-                flat = {normkey(key):flat[normkey(key)]}
-            else:
-                flat = {k:v for k,v in flat.items() if (normkey(key) in k)} # Will match e.g. 'SIS.prevalence' and 'sis_prevalence'
-            if len(flat) != 1:
-                errormsg = f'Key "{key}" not found; valid keys are:\n{sc.newlinejoin(flat_orig.keys())}'
-                raise sc.KeyNotFoundError(errormsg)
-        else:
-            try:
-                flat = {k.lower():flat[normkey(k)] for k in key}
-            except sc.KeyNotFoundError as e:
-                errormsg = f'Not all keys could be matched.\nAvailable keys:\n{sc.newlinejoin(flat_orig.keys())}\n\nYour keys:\n{sc.newlinejoin(key)}'
-                raise sc.KeyNotFoundError(errormsg) from e
-
-    return flat
-
-
-def get_result_plot_label(res, show_module=None):
-    """ Helper function for getting the label to plot for a result; not for the user """
-    # Sanitize
-    if show_module is None:
-        show_module = 26 # Default maximum length
-    elif isinstance(show_module, bool):
-        if show_module is True:
-            show_module = 999
-        else:
-            show_module = 0
-    if not isinstance(show_module, int):
-        errormsg = f'"show_module" must be a bool or int, not {show_module}'
-        raise TypeError(errormsg)
-
-    # Decide how/if to show the module
-    if show_module == -1:
-        label = res.full_label.replace(':', '\n')
-    elif len(res.full_label) > show_module:
-        label = sc.ifelse(res.label, res.name)
-    else:
-        label = res.full_label
-
-    return label
-
-
-def format_axes(ax, res, n_ticks=None, show_module=None):
-    """ Standard formatting for axis results; not for the user """
-    if n_ticks is None:
-        n_ticks = (2,5)
-
-    # Set y axis -- commas
-    sc.commaticks(ax)
-
-    # Set the axes title
-    label = ss.utils.get_result_plot_label(res, show_module)
-    ax.set_title(label)
-    return
-
-
 def show(**kwargs):
     """ Shortcut for matplotlib.pyplot.show() """
     return plt.show(**kwargs)
@@ -905,3 +783,8 @@ def return_fig(fig, **kwargs):
         if do_show:
             plt.show()
         return fig
+
+
+def __getattr__(name):
+    hint = ': for a flat dict of results, use sim.results.flatten()' if name == 'match_result_keys' else ''
+    raise AttributeError(f'module "starsim.utils" has no attribute "{name}"{hint}')

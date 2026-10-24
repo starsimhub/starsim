@@ -1,0 +1,104 @@
+/Users/robynstuart/gf/starsim/starsim/solvers.py:3570: RuntimeWarning: divide by zero encountered in divide
+  return np.asarray(rvs, dtype=float)/self.adjusted(tr.name, uids) # An adjustment multiplies the rate, so divides the duration
+/Users/robynstuart/gf/v4_review/stisim_bacterial/port.py:455: RuntimeWarning: overflow encountered in exp
+  load = np.where(t < 2, np.exp(np.log(1e8)*t/2), 1e8*np.exp(-np.log(2)/0.58*(t - 2)))
+[36m
+
+———————————————————————————————————————————————————
+1. Natural history: CT, NG, TV on an MFNet, no care
+———————————————————————————————————————————————————
+[0m
+solver: abm | n_agents was given
+ng: last-year infections F/M 7275/6625; prevalence F/M 0.129/0.097; cured 0, failed 0, PID 0
+ct: last-year infections F/M 3775/3475; prevalence F/M 0.117/0.081; cured 0, failed 0, PID 5225
+tv: last-year infections F/M 775/1825; prevalence F/M 0.071/0.021; cured 0, failed 0, PID 0
+NG share symptomatic by sex: F 0.35 (0.35), M 0.66 (0.65)
+  latency.select(to="P") fails: 'The result "latency" has no dimension "to"; its dimensions are [\'sex\', \'risk\']'
+CT share symptomatic by sex: F 0.22 (0.20), M 0.57 (0.54)
+[36m
+
+——————————————————————————————————————————————————————————————————————
+2. Treatment that moves people out of any infected state, with failure
+——————————————————————————————————————————————————————————————————————
+[0m
+(a) ss.Treatment(efficacy=0.9) with no transition=:
+    CodedError: E505 UnknownEffect: the treatment "treatment" cures, so it needs a transition out of the infected states of "ng" for cured people to leave by, and there are several: clear_a_f, clear_a_m, clear_y_f, clear_y_m, clear_pid, clear_n_f, clear_n_m, treat, cure_direct.
+     Name it with transition=, or give efficacy as a dict for a treatment that changes rates without curing.
+(b) cure_direct, efficacy=0.9: delivered 6075, cured 5450 (failures = delivered - cured, among the infected; not a result)
+(c) treat -> T -> cure|fail: delivered 3725, treated 3725, cured 3375, failed 275
+    default eligible = the "infected" states; delivered by sex F/M [2200. 1525.]
+    graph.infected: ['E', 'A', 'P', 'Y', 'C', 'N', 'PID'] (T is missing: it is not infectious)
+[36m
+
+———————————————————————————————————————————————
+3. Care seeking, capacity, queues, and priority
+———————————————————————————————————————————————
+[0m
+(a) routine, eligible=C, no cap        : per month: start seeking care 713, treated 533, in queue (n_C) 201, gave up 168
+(b) interval=1 month, no cap           : per month: start seeking care 668, treated 652, in queue (n_C) 0, gave up 0
+(c) interval=1 month, cap 100/week     : per month: start seeking care 1057, treated 418, in queue (n_C) 852, gave up 611
+    on=ng.seek_f | ng.seek_m: TypeError: A set of sources needs parentheses: write (S | I | R) >> D @ rate
+(d) on=seek_*, cap 100/week            : per month: start seeking care 1586, treated 430, in queue (n_C) 1549, gave up 1119
+(e1) deliver= in priority order vs the reverse, cap 25/week: identical results = True (the cap chooses at random)
+(e2) symp first, then leftover, first year: symptomatic treated 31/month, screened 65/month, total 96 (cap 109; max in a month 125)
+[36m
+
+——————————————————————————————————————
+4. Screening, delay, loss to follow-up
+——————————————————————————————————————
+[0m
+ppl.risk == "high": AttributeError: People object has no attribute "risk"
+  ng.risk == "high": AttributeError: Disease object has no attribute "risk"
+screened 47925, positive 2875, treated 2375 (0.83 linked)
+rounds at steps [24, 36, 48, 60, 72, 84], results at [25, 37, 49, 61, 73, 85] (delay of 2 weeks, monthly steps)
+treated who were infected 1400; overtreated (false positives, or cleared while waiting) 975
+screened by sex F/M [29750. 18175.], by risk low/high [11300. 36625.]
+[36m
+
+—————————————————————————————————————————
+5. Syndromic management and overtreatment
+—————————————————————————————————————————
+[0m
+ng: treated F/M 2625/6625; infected F/M 1950/4250; overtreated F/M 675/2375
+ct: treated F/M 750/2525; infected F/M 350/1725; overtreated F/M 400/800
+tv: treated F/M 400/0; infected F/M 400/0; overtreated F/M 0/0
+NG and CT deliveries should see the same visits, but delivered 9250 vs 3275: the first one moves its own C into T, so the second no longer sees them
+ng: last-year infections F/M 1300/1125; prevalence F/M 0.018/0.011; cured 5450, failed 675, PID 0
+ct: last-year infections F/M 125/250; prevalence F/M 0.007/0.003; cured 1975, failed 75, PID 800
+tv: last-year infections F/M 225/625; prevalence F/M 0.028/0.007; cured 375, failed 25, PID 0
+With a Clinic module that flags visits first:
+  ng: treated F/M 2650/6525; overtreated F/M 650/2300
+  ct: treated F/M 2650/6525; overtreated F/M 2275/4800
+  tv: treated F/M 2650/0; overtreated F/M 2225/0
+[36m
+
+——————————————————————————————————————————————————————————————————
+6. Gonorrhea AMR as a strain, with efficacy that changes over time
+——————————————————————————————————————————————————————————————————
+[0m
+share of new infections resistant: 2001 0.02, 2014 0.72; acquired through failure 150
+cure share by strain: sens 0.94 (n=7150), res 0.24 (n=4125; 0.30 expected, 0.29 pooled over 4 seeds)
+cure share overall, first vs last 3 years: 0.947 vs 0.397
+[36m
+
+——————————————————————————————————————————————————————
+7. Chlamydia bacterial load as a modifier of rel_trans
+——————————————————————————————————————————————————————
+[0m
+CT infections 2000-2008: 23225 without the load, 6325 with it
+[36m
+
+——————————————————————————
+8. Headline results by sex
+——————————————————————————
+[0m
+ng: last-year infections F/M 1325/1500; prevalence F/M 0.021/0.011; cured 11450, failed 1275, PID 0
+ct: last-year infections F/M 0/25; prevalence F/M 0.001/0.000; cured 2375, failed 100, PID 900
+tv: last-year infections F/M 750/1875; prevalence F/M 0.069/0.020; cured 1825, failed 175, PID 0
+ng last year: treated F/M 350/1075, overtreated F/M 75/150
+ct last year: treated F/M 125/175, overtreated F/M 125/100
+tv last year: treated F/M 125/150, overtreated F/M 0/0
+Auto results for ng: ['balk', 'clear_a_f', 'clear_a_m', 'clear_n_f', 'clear_n_m', 'clear_pid', 'clear_y_f', 'clear_y_m', 'cure', 'fail', 'infected', 'infection', 'latency', 'latency_a', 'n_A', 'n_C', 'n_E', 'n_N', 'n_P', 'n_PID', 'n_S', 'n_T', 'n_Y', 'new_infections', 'onset_f', 'onset_m', 'pid_a', 'pid_y', 'prev', 'prevalence', 'seek_f', 'seek_m', 'seek_pid', 'timevec', 'treat']
+real 9.51
+user 7.56
+sys 0.47

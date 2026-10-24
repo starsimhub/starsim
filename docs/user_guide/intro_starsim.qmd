@@ -6,7 +6,9 @@ jupyter: python3
 
 ## Introduction
 
-Starsim is a framework for modeling the spread of diseases among agents via dynamic transmission networks. Starsim supports:
+Starsim is a framework for modeling the spread of diseases, as compartmental models or among agents via dynamic transmission networks. Starsim supports:
+
+- Writing a disease as its states and the transitions between them, and running the same model as an ODE, as a stochastic compartmental model, or as agents
 
 - Co-transmission of multiple diseases at once, capturing how they interact biologically and behaviorally
 - Non-infectious diseases, either on their own or as factors affecting the transmission or mortality of infectious diseases
@@ -19,7 +21,7 @@ Starsim is available for both Python and R, and is fully open-source under the M
 
 ## Types of disease modeling
 
-Starsim is primarily an agent-based model (ABM), although it can also be used for compartmental and metapopulation modeling. ABMs are most suitable for questions that are moderately complex, and have medium to large amounts of data available:
+Starsim models can be compartmental or agent-based (ABM). A disease written as states and transitions (a *declared* disease) can be run either way: Starsim runs it as an ODE when every part of the model has a compartmental form, and as agents when something in it needs individuals (such as a contact network), and it can be asked for either. Modules written as code (custom diseases, networks, and interventions with their own `step()` method) run as agents, alongside declared diseases; analyzers run beside either. ABMs are most suitable for questions that are moderately complex, and have medium to large amounts of data available:
 
 ![Types of Model](assets/types_of_model.png)
 
@@ -67,13 +69,13 @@ Starsim is suitable for many use cases, but not all. Some examples of suitable S
 - If you are currently doing agent-based modeling but your model is too slow/inflexible/hard to use for your research questions
     - *Example*: Your model takes 14 hours for a single run, and every year you're worried that your computing grant won't be renewed
 - If you are currently doing compartmental modeling, and want to try out an agent-based model without investing 3-6 months learning how to use it
-    - *Example*: Your compartmental mpox model has so far been very effective, but you've been asked to evaluate an individually-targeted intervention that requires tracking individual agents
+    - *Example*: Your compartmental mpox model has so far been very effective, but you've been asked to evaluate an individually-targeted intervention that requires tracking individual agents. In Starsim, the same model can be run as an ODE and as agents, and the two compared
 - If you want to quickly prototype different diseases or networks before deciding whether to implement them in your full model
     - *Example*: You know and love your HIV model, but you want to see what the impact would be of including syphilis co-transmission or a different type of MSM network
 
 However, there are other cases where Starsim may not be suitable. These include:
 
-- If compartmental models are sufficient for your questions, you should probably stick with them. Starsim can do compartmental modeling, but this is most powerful if used in a hybrid manner with agents (for example, modeling malaria as agent-based humans and compartmental mosquitoes). Other options for compartmental models are [Epidemics](https://epiverse-trace.r-universe.dev/epidemics) for R, and [Atomica](https://atomica.tools) or [Epydemix](https://www.epydemix.org/) for Python. Note that it is relatively easy to switch between modeling frameworks; the user guide includes an example of an [Epidemics school closure model](https://docs.starsim.org/user_guide/advanced_nonstandard.html#epiverse-epidemics-school-closure-model) reimplemented in Starsim. [Starsim-AI](https://ai.starsim.org) includes tools for automatically translating different types of models into Starsim format.
+- If you are doing a very simple modeling task, such as a simple SIR or SEIR model, you might as well use plain Python or R. Starsim is fast and concise, but is unlikely to be faster or significantly more concise than well-written custom code. But if your script starts getting longer than about 100 lines, and if you want to do calibration or handle different time units, there is a good chance that Starsim would be able to make things easier.
 - If your current model is highly specialized to a given context, the switching cost of moving to Starsim may not be worthwhile (though as noted, AI tools have made this much easier than it used to be, so get in touch if this is of interest to you).
 
 

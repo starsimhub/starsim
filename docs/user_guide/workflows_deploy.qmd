@@ -41,7 +41,9 @@ msim = ss.parallel(sims)
 msim.plot(legend=False)
 ```
 
-Note that this example uses `sc.objdict()` rather than `dict()` -- either work, but it means you can use `pars.diseases.beta` rather than `pars['diseases']['beta']`. You could also create full Starsim objects (e.g. `diseases = ss.SIS()` and then modify `pars.diseases.pars.beta`).
+Note that this example uses `sc.objdict()` rather than `dict()` -- either work, but it means you can use `pars.diseases.beta` rather than `pars['diseases']['beta']`. You could also create full Starsim objects (e.g. `diseases = ss.SIS()` and then modify `pars.diseases.pars.beta`). The sims have no labels, so `msim.plot()` shows the median and spread of all 10 runs together; label each sim to plot it as a scenario of its own.
+
+When the sims differ only in their parameter values, `ss.parallel()` can also make them itself, from one sim and a list of values for each parameter, e.g. `ss.parallel(sim, pars=dict(beta=[0.08, 0.1, 0.12]), n_runs=3)` (see [Multiple runs](workflows_run.qmd)).
 
 In some cases, creating the sim is itself a time-consuming step (especially if hundreds or thousands are being generated). In this case, you can write a `make_sim()` function and parallelize that too:
 
@@ -98,7 +100,7 @@ if __name__ == '__main__':
 
     # Run and process the simulations
     sims = list(dask.compute(*queued))
-    msim = ss.MultiSim(sims)
+    msim = ss.MultiSim(sims).run() # The sims have already run, so this collects their results
     msim.plot()
 ```
 
@@ -115,7 +117,7 @@ n_workers = 50
 n = 1000
 
 def run_sim(seed):
-    sim = ss.Sim(n_agents=100e3, dur=100, diseases='sis', networks='random', rand_seed=seed)
+    sim = ss.Sim(n_agents=100e3, stop=100, diseases='sis', networks='random', rand_seed=seed)
     sim.run().shrink()
     return sim
 
@@ -133,7 +135,7 @@ for seed in range(n):
 sims = client.gather(futures)
 
 # Plot
-msim = ss.MultiSim(sims)
+msim = ss.MultiSim(sims).run() # The sims have already run, so this collects their results
 msim.plot()
 ```
 

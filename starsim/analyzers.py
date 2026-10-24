@@ -16,14 +16,16 @@ class Analyzer(ss.Module):
     about a simulation than is available by default -- for example, pulling states
     out of sim.people on a particular timestep before they get updated on the next step.
 
-    The key method of the analyzer is `step()`, which is called with the sim
-    on each timestep.
+    The key method of the analyzer is `step()`, which is called at each time point:
+    at the end of each step, once its results are recorded (with `self.ti` the step's,
+    as in every module), and at the first time point (`self.ti == 0`), before any step,
+    to record the start.
     """
     pass
 
 
 class infection_log(Analyzer):
-    """ Log infections -- see `ss.InfectionLog` for detail
+    """ Log infections -- see `ss.diseases.InfectionLog` for detail
 
     This analyzer activates an infection log running in each disease. This is
     different than other analyzers, but is required since the information required
@@ -43,7 +45,7 @@ class infection_log(Analyzer):
         return
 
     def step(self):
-        """ Handled by ss.InfectionLog() """
+        """ Handled by ss.diseases.InfectionLog() """
         pass
 
     def finalize_results(self):
@@ -127,65 +129,3 @@ class infection_log(Analyzer):
                 plt.ylim(0, side)
                 plt.pause(1/framerate)
         return ss.return_fig(fig, **kw.return_fig)
-
-
-class dynamics_by_age(Analyzer):
-    """
-    Example analyzer: track dynamics of a state by age.
-
-    Args:
-        state (str): the name of the state to analyze
-        age_bins (list): the list of age bins to analyze by
-
-    Examples:
-        ```python
-        by_age = ss.dynamics_by_age('sis.infected')
-
-        sim = ss.Sim(diseases='sis', networks='random', analyzers=by_age)
-        sim.run()
-        sim.analyzers[0].plot() # Note: if Sim(copy_inputs=False), we can also use by_age.plot()
-        ```
-    """
-    def __init__(self, state, age_bins=(0, 20, 40, 100)):
-        super().__init__()
-        self.state = state
-        self.age_bins = age_bins
-        self.mins = age_bins[:-1]
-        self.maxes = age_bins[1:]
-        self.hist = {k: [] for k in self.mins}
-        return
-
-    def init_post(self):
-        """ Validate that the requested state exists """
-        super().init_post()
-        if self.state not in self.sim.people.states:
-            raise ValueError(f'State "{self.state}" not found; available states: {list(self.sim.people.states.keys())}')
-
-    def step(self):
-        """ Record counts of agents in each age bin who have the tracked state active """
-        people = self.sim.people
-        for min_age, max_age in zip(self.mins, self.maxes):
-            mask = (people.age >= min_age) & (people.age < max_age)
-            self.hist[min_age].append(people.states[self.state][mask].sum())
-        return
-
-    def finalize_results(self):
-        """ Convert per-step lists to arrays """
-        super().finalize_results()
-        for k,hist in self.hist.items():
-            self.hist[k] = np.array(hist)
-        return
-
-    def plot(self, **kwargs):
-        """ Plot counts by age bin over time """
-        kw = ss.plot_args(kwargs)
-        with ss.style(**kw.style):
-            fig = plt.figure(**kw.fig)
-            for minage, maxage in zip(self.mins, self.maxes):
-                plt.plot(self.sim.t.timevec, self.hist[minage], label=f'Age {minage}-{maxage}', **kw.plot)
-            plt.legend(**kw.legend)
-            plt.xlabel('Model time')
-            plt.ylabel('Count')
-            plt.ylim(bottom=0)
-        return ss.return_fig(fig, **kw.return_fig)
-

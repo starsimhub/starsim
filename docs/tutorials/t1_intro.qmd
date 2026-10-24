@@ -3,7 +3,7 @@ title: T1 - Getting started
 jupyter: python3
 ---
 
-Starsim is a highly flexible framework for creating agent-based models. Starsim was designed by a team with expertise in infectious diseases, so many of the examples that we'll cover throughout these tutorials are examples of infectious diseases. However, you can also use Starsim for modeling other things, like non-communicable diseases (NCDs) or family planning and maternal health.
+Starsim is a flexible framework for modeling disease and health. Starsim was designed by a team with expertise in infectious diseases, so many of the examples that we'll cover throughout these tutorials are examples of infectious diseases. However, you can also use Starsim for modeling other things, like non-communicable diseases (NCDs) or family planning and maternal health.
 
 Installing and getting started with Starsim is quite simple.
 
@@ -11,7 +11,7 @@ To install, just type `pip install starsim`. If it worked, you should be able to
 
 The basic design philosophy of Starsim is: **common tasks should be simple**. Since Starsim is most commonly used for modeling infectious diseases, everything related to that should be straightforward. The most common tasks that you are likely to do are:
 
--   Defining parameters
+-   Defining a model
 -   Running a simulation
 -   Plotting results
 
@@ -24,22 +24,39 @@ This tutorial walks you through the simplest possible version of how to do these
 
 ## Hello world
 
-Let's start with the simplest version of a Starsim model. We'll make a version of a [classic SIR model](https://en.wikipedia.org/wiki/Compartmental_models_in_epidemiology). Here's how our code would look:
+Let's start with the simplest version of a Starsim model. We'll make a version of a [classic SIR model](https://en.wikipedia.org/wiki/Compartmental_models_in_epidemiology): people are infected at a rate `beta` times the share of people who are infectious, and recover after 10 steps on average. Here's how our code would look:
 
 ```{python}
 import starsim as ss
 ss.options(jupyter=True) # This makes the plotting nicer
 
-# Define the parameters
+S, I, R = ss.states('S I R')
+sir = ss.Disease(
+    infection = ss.Transition(S, I, rate=0.3 * I), # Susceptible people are infected...
+    recovery  = ss.Transition(I, R, dur=10),       # ...and infectious people recover
+    init_prev = 0.01,                              # 1% of people start infected
+)
+sim = ss.Sim(sir, stop=100) # Make the sim
+sim.run()                   # Run it
+sim.plot()                  # Plot the results
+```
+
+A model in Starsim is a set of states (here `S`, `I`, and `R`, declared first) and the transitions between them. Nothing here has a unit, so time is counted in steps: the sim runs for 100 steps, and `beta` is per step. When the sim runs, it prints the solver it chose: since nothing in this model needs individual people, it is solved as an ODE.
+
+## The same model with agents
+
+Starsim is above all an agent-based framework: people can be simulated one by one, meeting each other through contact networks. Here is an SIR epidemic among 10,000 agents, each of whom has on average 10 contacts with other people. `ss.SIR` is the same kind of SIR disease as above, from Starsim's library:
+
+```{python}
 pars = dict(
     n_agents = 10_000,    # Number of agents to simulate
-    networks = dict(      # *Networks* add detail on how the agents interact with each other 
+    networks = dict(      # *Networks* add detail on how the agents interact with each other
         type = 'random',  # Here, we use a 'random' network
         n_contacts = 10   # Each person has an average of 10 contacts with other people
     ),
-    diseases = dict(      # *Diseases* add detail on what diseases to model 
-        type = 'sir',     # Here, we're creating an SIR disease 
-        init_prev = 0.01, # Proportion of the population initially infected 
+    diseases = dict(      # *Diseases* add detail on what diseases to model
+        type = 'sir',     # Here, we're creating an SIR disease
+        init_prev = 0.01, # Proportion of the population initially infected
         beta = 0.05,      # Probability of transmission between contacts
     )
 )
@@ -51,10 +68,12 @@ sim.plot()
 sim.diseases.sir.plot()
 ```
 
-As the tutorials progress we'll show how to extend this different diseases with different transmission pathways, and how to customize the model in lots of different ways.
+Because the model now has a network of individual contacts, it runs as agents, and the sim says so. `beta` now means the probability of transmission per contact (per year: since no times were given, the sim runs for 50 years with a step of one year).
+
+As the tutorials progress we'll show how to build up models with different diseases and transmission pathways, and how to customize them in lots of different ways.
 
 ## Exercises
 
-1.  To simulate a susceptible-infectious-susceptible (SIS) model instead of SIR, what would we change in the example above?
+1.  To simulate a susceptible-infectious-susceptible (SIS) model instead of SIR, what would we change in the examples above?
 2.  How do the results change if we increase/decrease `beta`?
 3.  How do the results change if we reduce the number of agents to 200?

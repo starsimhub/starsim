@@ -1,0 +1,11 @@
+Zero transmission modifier: scalar 0.9048375
+Zero transmission modifier: function 0.9989510838844345
+Zero transmission modifier: timeseries 0.9989510838844345
+Negative initial population: [[110.0], [-10.0], [0.0]]
+Stratification: negative split [-1.  2.]
+Stratification: zero split [nan nan]
+Stratification: unordered edges [-0.25   0.125  1.125]
+Out-of-bounds beta accepted: 0.8
+Truncated grouped arithmetic: [11, 22]
+Uninitialized age arithmetic: IndexError index 0 is out of bounds for axis 0 with size 0
+Uninitialized membership: BoolArr <BoolArr, len=10, []>

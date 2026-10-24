@@ -1,0 +1,181 @@
+---
+title: Starsim 4 in ten minutes
+jupyter: python3
+---
+
+In Starsim 4, a model is written as states and the transitions between them. The same model can then be run as an ODE, as a stochastic compartmental model, or as agents. This page shows the whole workflow in a few short steps. If you are coming from Starsim 3, see also the [migration guide](migration/v3_v4.md).
+
+## A model in two lines
+
+An SIR model: people are infected at rate `beta` times the share infectious, and recover after 10 steps on average. The states (`S`, `I`, `R`) are declared first, and the transitions go between them.
+
+```{python}
+import starsim as ss
+ss.options(jupyter=True) # This makes the plotting nicer
+
+S, I, R = ss.states('S I R')
+sir = ss.Disease(infection=ss.Transition(S, I, rate=0.3 * I), recovery=ss.Transition(I, R, dur=10), init_prev=0.01)
+sim = ss.Sim(sir, stop=100).run()
+sim.plot()
+```
+
+Nothing here has a unit, so time is counted in steps: 100 steps, with `beta` per step. The sim prints the solver it chose (an ODE, since every part of the model has a compartmental form) and R0.
+
+`init_prev=0.01` starts 1% of people in the state a new infection enters: here `I`, but in an SEIR it would be `E`, so nobody would be infectious at the start. To start people in a state by name, give `init=` instead, as a share (`init=dict(I=0.001)`), or `init_n=` as a number of people (`init_n=dict(I=10)`). The population is `total_pop=` (by default 10,000 here); `n_agents=` is for a run as agents, and giving it makes `solver='auto'` choose agents.
+
+## The same model with operators
+
+The same model can be written with its states declared, like the equations. `S >> I @ rate` means "S goes to I at this rate", and a duration after `@` is a mean time in the state. Here `beta` is an `ss.par`, a parameter with bounds, so it can be fitted later. States, transitions, and the disease take their names from the variables they are assigned to.
+
+```{python}
+S, I, R = ss.states(3)
+beta = ss.par(0.3, bounds=[0.05, 1.0])
+
+infection = S >> I @ beta * I
+recovery  = I >> R @ ss.days(10)
+sir = ss.Disease(infection, recovery, init_prev=0.01)
+
+sim = ss.Sim(sir, stop=ss.days(100))
+```
+
+Since `ss.days(10)` has a unit, the sim's unit is a day, and `beta` is per day. A duration alone, like `ss.days(10)`, is the mean of an exponential distribution, as in an ODE. The library diseases `ss.SIR`, `ss.SIS`, and `ss.SEIR` are declared the same way, so `ss.SIR(dur_inf=ss.days(10))` is exponential too, with no deaths from infection unless `p_death` is given. (Starsim 3's lognormal durations and `p_death=0.01` are in `ssl.AgentSIR`; see the [migration guide](migration/v3_v4.md#a-fixed-duration-becomes-exponential).)
+
+## What was guessed
+
+`describe()` shows the model as Starsim has read it, with every default it filled in marked as a guess:
+
+```{python}
+sim.describe()
+```
+
+## Choosing a solver
+
+`solver='auto'` (the default) chooses an ODE when it can, and agents otherwise. `sim.describe()` shows which solvers can run the model, and why, and `sim.new()` makes a copy of the sim with something changed:
+
+```{python}
+sim.describe()
+
+for solver in ['ode', 'binomial', 'gillespie', 'abm']:
+    s = sim.new(solver=solver, verbose=0).run()
+    print(f'{solver:10s} peak infected: {s.results.sir.n_I.max():,.0f}')
+```
+
+The stochastic solvers (`'binomial'`, `'gillespie'`, and agents, `'abm'`) give a different answer on each run, close to the ODE's.
+
+## Age groups and a contact matrix
+
+`sir.stratify()` splits each state by a property of people, here three age groups, with `split=` the share of people in each. `ss.contacts()` gives the mixing between them: here a matrix of daily contacts, where `matrix[i, j]` is the number of contacts a person in group `i` has with people in group `j`. With a contact matrix, `beta` is the chance of infection per contact. Groups can also be named, e.g. `sir.stratify(risk=['low', 'high'], split=[0.8, 0.2])` with `ss.contacts(risk=[[2, 1], [1, 8]])`: see [networks](user_guide/modules_networks.qmd#contact-matrices).
+
+```{python}
+S, I, R = ss.states(3)
+beta = ss.par(0.02, bounds=[0.005, 0.1])
+
+infection = S >> I @ beta * I
+recovery  = I >> R @ ss.days(10)
+cases     = ss.outcome(0.2 * infection) # A fifth of infections are reported
+sir = ss.Disease(infection, recovery, cases, init_prev=0.0001)
+sir.stratify(age=[0, 15, 65], split=[0.3, 0.6, 0.1])
+
+contacts = ss.contacts([[10, 4, 1], [4, 8, 2], [1, 2, 3]], bands=[0, 15, 65])
+kw = dict(networks=contacts, total_pop=1e6, start='2025-01-01', stop='2025-07-01')
+sim = ss.Sim(sir, **kw).run()
+
+res = sim.results.sir
+print(f'Peak infected: {res.n_I.max():,.0f}, of whom aged 65+: {res.n_I.select(age="65+").max():,.0f}')
+res.n_I.by('age').plot()
+```
+
+Every state and transition has a result (`n_S`, `n_I`, `n_R`, `infection`, `recovery`), and `cases` is a result too. `select()` and `by()` read them by group.
+
+## An intervention
+
+A vaccine is a product (`ss.Vaccine`) and a delivery (`ss.vaccinate`); `ss.modify()` changes a parameter while a condition holds (here, from a date on). By default a vaccine is leaky: `efficacy=0.9` cuts the chance of infection of everyone vaccinated by 90%. For an all-or-nothing vaccine, which fully protects 90% of those vaccinated and does nothing for the rest, give `ss.Vaccine(efficacy=0.9, leaky=False)`.
+
+```{python}
+vaccine = ss.vaccinate(ss.Vaccine(efficacy=0.9), where=sir.age >= 65, coverage=0.8, at=['2025-02-01'])
+masks = ss.modify(sir.pars.beta, multiply=0.6, start='2025-02-01')
+
+for name, intervention in dict(none=None, vaccine=vaccine, masks=masks).items():
+    s = ss.Sim(sir, interventions=intervention, verbose=0, **kw).run()
+    print(f'{name:8s} infections: {s.results.sir.infection.sum():,.0f}')
+```
+
+## Data and calibration
+
+Data is attached to results by name: a column called `cases` is compared with the result `cases`. Here the data is made by running the model with `beta = 0.025`, and adding noise to its weekly totals. The data is weekly, so each row is compared with the total of `cases` over its week.
+
+```{python}
+import numpy as np
+import pandas as pd
+
+truth = ss.Sim(sir, pars=dict(beta=0.025), verbose=0, **kw).run()
+weekly = truth.results.sir.cases.to_series(resample='week')
+data = pd.DataFrame(dict(date=weekly.index, cases=np.random.default_rng(1).poisson(weekly.values)))
+data.head()
+```
+
+`sim.calibrate()` fits every parameter that has bounds (here `beta`) to every result that has data:
+
+```{python}
+sim = ss.Sim(sir, data=data, **kw)
+fit = sim.calibrate()
+fit.plot()
+```
+
+## Scenarios and many runs
+
+`ss.parallel()` runs several sims, given by name. Here the calibrated sim is compared with the same sim with masks:
+
+```{python}
+msim = ss.parallel(baseline=fit.sim, masks=fit.sim.new(interventions=masks))
+msim.plot()
+```
+
+A stochastic sim gives a different answer on each run. `sim.run(n_runs=)` runs it many times, with a different seed each time, and plots the median and an interval:
+
+```{python}
+stochastic = fit.sim.new(solver='binomial', verbose=0)
+msim = stochastic.run(n_runs=20)
+msim.plot()
+```
+
+Each result of the runs has a run axis first: `msim.results.sir.infection.values` has one row per run, so the total infections of each run, and a 90% interval of them, are:
+
+```{python}
+totals = msim.results.sir.infection.values.sum(axis=1)
+print(f'Median {np.median(totals):,.0f}, 90% interval {np.quantile(totals, 0.05):,.0f} to {np.quantile(totals, 0.95):,.0f}')
+```
+
+`msim.sims` holds the sim of each run too, but reading the results across runs is quicker.
+
+## From R
+
+Starsim can be used from R through [reticulate](https://rstudio.github.io/reticulate/). R has no `>>` operator, and the names that Python takes from variables are not available from R, so from R a model is written with `ss$Transition()`, the states are named up front with `ss$states("S I R")`, the transitions by their keywords, and the disease with `name=` (without it, the disease is called `disease`):
+
+```r
+library(reticulate)
+ss <- import("starsim")
+
+st <- ss$states("S I R")
+S <- st[[1]]; I <- st[[2]]; R <- st[[3]]
+sir <- ss$Disease(
+    infection = ss$Transition(S, I, rate = 0.3 * I),
+    recovery  = ss$Transition(I, R, dur = 10),
+    init_prev = 0.01,
+    name = "sir"
+)
+sim <- ss$Sim(sir, stop = 100)
+sim$run()
+n_I <- py_to_r(sim$results$sir$n_I$values)
+cat("Peak infected:", max(n_I), "\n")
+
+msim <- sim$new(solver = "binomial")$run(n_runs = 20L) # A count is an integer: 20L, not 20
+```
+
+Everything else on this page works the same way from R, with `$` in place of `.`. This code is run by Starsim's tests (`tests/interop/r/sir.R`).
+
+## Next steps
+
+- The [tutorials](tutorials.qmd) and the [user guide](user_guide.qmd) cover the rest of Starsim, including networks, demographics, and modules written as code (custom `step()` methods), which work alongside declared diseases.
+- [Coming from another framework](coming_from/index.qmd) shows the same models in Starsim and in other frameworks, and how to import them.
+- The [migration guide](migration/v3_v4.md) maps Starsim 3 code to Starsim 4, and lists what changed meaning.

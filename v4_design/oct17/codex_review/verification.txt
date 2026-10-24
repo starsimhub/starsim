@@ -1,0 +1,91 @@
+Verification record — 17 October 2026
+======================================
+
+Repository: /home/cliffk/idm/ssv4
+Commit reviewed: a20c4f7e9ecab351113e9b781b0df3a83be54718
+Scope: v4_design/best-practices, v4_design/design, and the relevant starsim code,
+tests and CI configuration. This review intentionally wrote only codex_review/.
+No tracked source changes were present at the final check. Four untracked tutorial
+outputs appeared during the review (docs/tutorials/example-big.sim, example.df,
+example.sim, example.xlsx); none of this review's commands ran that tutorial, so
+those files were left untouched.
+
+Successful existing tests
+-------------------------
+
+Command, from repository root:
+  MPLCONFIGDIR=/tmp/review-mpl PYTHONPATH=. python -m pytest -q \
+    tests/test_transitions.py::test_forms \
+    tests/test_transitions.py::test_names \
+    tests/test_transitions.py::test_time \
+    tests/test_transitions.py::test_requires \
+    tests/test_transitions.py::test_load \
+    tests/test_deliveries.py::test_conditions \
+    tests/test_deliveries.py::test_change --disable-warnings
+
+Normal Numba enabled: 7 passed in 69.25 seconds. See evidence/focused-tests.txt.
+These are useful positive controls; passing them does not refute the additional
+cross-feature failures reproduced in this review.
+
+Focused defect observations
+----------------------------
+
+The five scripts in reproductions/ ran successfully and their outputs are saved
+under evidence/. They intentionally print current failures rather than failing
+as pytest tests. Exit zero means the observation script completed, not that the
+behavior it exposed is correct.
+
+Execution/RNG observations use normal Numba execution. Model, route and interface
+semantic probes used NUMBA_DISABLE_JIT=1 for fast inspection; the route probes were
+also exercised with JIT enabled earlier. Assertions about compiled execution are
+limited to the execution cases actually checked. A future fix should validate all
+applicable backends.
+
+Finding       Verification
+------------  --------------------------------------------------------------
+F01           model.py: scalar versus callable/time-series zero modifier
+F02           routes.py: empty and complete static graphs both yield contacts=10
+F03           routes.py plus source: rebinning independent of population split
+F04           execution.py: CRN and connector hash changes; source inspection
+F05           execution.py: alone/together/reordered and whole-run seed collision
+F06           interfaces.py: recurring 3-day delayed tests, ABM and ODE
+F07           model.py/routes.py: negative init, invalid splits, bounds, contacts
+F08           model.py: mismatched grouped arithmetic truncates
+F09           execution.py: stop=1800 versus stop=2000 interpretation
+F10           execution.py: module dt=2 in sim dt=1 crashes check_dt
+F11           interfaces.py: resampling keeps old strata/denominator shapes
+F12           model.py: pre-init arithmetic and membership behavior
+F13           source/design comparison; existing contract intentionally differs
+F14           interfaces.py: data omission; source: unsupported round trips
+F15           interfaces.py: maxiter=1 fit lacks optimizer status; source confirms
+F16           source and calibration.py probe; bounded init_prev works correctly
+F17           source inspection and emitted-note logic; no exactness benchmark
+F18           routes.py: density and sexual-network ODE capabilities rejected
+F19           file inventory and CI/source inspection
+F20           static AST inventory of root imports and vocabulary comparison
+F21           calibration.py: optimized ensemble score versus reported single run
+F22           interfaces.py: schema 99.0 accepted
+
+Design recommendations are judgments, not experimentally established user-study
+results. Mathematical objections to the statistical and ordering contracts are
+reasoning about those stated contracts; no external benchmark is implied.
+
+Incomplete broader testing
+----------------------------
+
+An initial bare pytest command imported an installed Starsim instead of this
+checkout and failed collection on contacts. Subsequent commands used python -m
+pytest and verified the local import path.
+
+A broader six-file normal-JIT run was interrupted by a session/server restart.
+It emitted a failure marker before interruption but no diagnostic summary was
+recovered. This is not counted as an identified defect or a completed suite.
+A later four-file run with JIT disabled was stopped because pure-Python large ABM
+tests were slow; it likewise produced no completed suite result. The smaller normal
+JIT run above completed successfully. No claim that the full suite passed is made.
+
+Not performed: the full test suite, all external import/export adapter checks,
+large posterior/gradient benchmarks, external framework speed comparisons,
+Monte Carlo conformance experiments, and user usability studies. No libraries
+were installed, no network access was required, and no implementation fixes were
+made as part of this review.

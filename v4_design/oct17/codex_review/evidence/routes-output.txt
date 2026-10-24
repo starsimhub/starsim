@@ -1,0 +1,34 @@
+/home/cliffk/idm/ssv4/starsim/distributions.py:53: RuntimeWarning: overflow encountered in scalar multiply
+  x = (x ^ (x >> _U30)) * _MIX1
+/home/cliffk/idm/ssv4/starsim/distributions.py:54: RuntimeWarning: overflow encountered in scalar multiply
+  x = (x ^ (x >> _U27)) * _MIX2
+/home/cliffk/idm/ssv4/starsim/distributions.py:59: RuntimeWarning: overflow encountered in scalar multiply
+  z = (slots[i] + key) * _GOLDEN
+/home/cliffk/idm/ssv4/starsim/distributions.py:60: RuntimeWarning: overflow encountered in scalar multiply
+  z = (z ^ (z >> _U30)) * _MIX1
+/home/cliffk/idm/ssv4/starsim/distributions.py:61: RuntimeWarning: overflow encountered in scalar multiply
+  z = (z ^ (z >> _U27)) * _MIX2
+density ValueError 1 unrecognized arguments for mixingpool: dependence
+sexual ODE CodedError E804 CapabilityError: cannot run with solver="ode": MFNet has no compartmental approximation yet. Run with solver="abm".
+static ODE edges=0 [#0. 'kind':     'homogeneous'
+#1. 'contacts': 10.0
+#2. 'name':     'staticnet']
+static ODE edges=4950 [#0. 'kind':     'homogeneous'
+#1. 'contacts': 10.0
+#2. 'name':     'staticnet']
+age aggregation, population 90% young [#0. 'kind':   'matrix'
+#1. 'dim':    0
+#2. 'matrix':
+array([[6.83333333, 2.66666667],
+       [3.44444444, 3.55555556]])
+#3. 'name':   'contacts']
+age aggregation, population 10% young [#0. 'kind':   'matrix'
+#1. 'dim':    0
+#2. 'matrix':
+array([[6.83333333, 2.66666667],
+       [3.44444444, 3.55555556]])
+#3. 'name':   'contacts']
+negative contact matrix [[ss.constant(v=-1.0) ss.constant(v=0.0)]
+ [ss.constant(v=0.0) ss.constant(v=1.0)]]
+unordered contact ages #0. '20-0': age(20-0)
+#1. '0+':   age(0-None)

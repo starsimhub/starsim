@@ -4,6 +4,7 @@ All options should be set using set() or directly, e.g.:
 
     ss.options(verbose=False)
 """
+import os
 import numpy as np
 import numba as nb
 import sciris as sc
@@ -15,6 +16,7 @@ import starsim as ss # Only used to set references
 dtypes = sc.dictobj(
     bool = bool,
     int = np.int64, # np.int32 is actually much slower for indexing arrays
+    uid = np.int64, # The active agents (people.auids): 64-bit, since NumPy converts a 32-bit index array at every use (2-4 times slower), at 4 bytes more per agent; ss.uids keeps either width
     nbint = nb.int64,
     rand_int = np.int32,
     rand_uint = np.uint32,
@@ -85,8 +87,8 @@ class Options(sc.objdict):
         optdesc = sc.objdict()  # Help for the options
         options = sc.objdict()  # The options
 
-        optdesc.verbose = 'Set default level of verbosity (i.e. logging detail): e.g., 0.1 is an update every 10 simulated timesteps.'
-        options.verbose = sc.parse_env('STARSIM_VERBOSE', 0.1, float)
+        optdesc.verbose = 'Set default level of verbosity: 0 prints nothing, 1 the solver, notes, and progress, and 2 everything (e.g. each step).'
+        options.verbose = sc.parse_env('STARSIM_VERBOSE', 1, int)
 
         optdesc.license = 'Whether to print the license on import'
         options.license = sc.parse_env('STARSIM_LICENSE', False, bool)
@@ -97,14 +99,11 @@ class Options(sc.objdict):
         optdesc.warn_convert = 'Whether to warn about automatic time conversions'
         options.warn_convert = sc.parse_env('STARSIM_WARN_CONVERT', True, bool)
 
+        optdesc.max_steps = 'The number of timesteps above which a sim warns that it may be slow (0 to never warn)'
+        options.max_steps = sc.parse_env('STARSIM_MAX_STEPS', 50_000, int) # More than a century at a daily step, which the textbooks' models run
+
         optdesc.check_method_calls = 'How to handle missing required method calls: options are "warn" (default), "die", and "" (False)'
         options.check_method_calls = sc.parse_env('STARSIM_CHECK_METHOD_CALLS', 'warn', str)
-
-        optdesc.time_eps = 'Set size of smallest possible time unit (in units of sim time, e.g. "year" or "day")'
-        options.time_eps = sc.parse_env('STARSIM_TIME_EPS', 1e-6, float) # If unit = 'year', corresponds to ~30 seconds
-
-        optdesc.sep = 'Set thousands separator for text output'
-        options.sep = sc.parse_env('STARSIM_SEP', ',', str)
 
         optdesc.date_sep = 'Set separator for dates'
         options.date_sep = sc.parse_env('STARSIM_DATE_SEP', '.', str)
@@ -130,8 +129,26 @@ class Options(sc.objdict):
         optdesc.numba_indexing = 'Threshold for the number of indices at which to switch to using Numba (rather than NumPy) for indexing arrays'
         options.numba_indexing = sc.parse_env('STARSIM_NUMBA_INDEXING', 2000, int) # Numba wins for both gather and compaction above ~2k; see https://github.com/starsimhub/starsim/issues/1005
 
+        optdesc.threads = 'The number of threads that the passes over the agents of a large sim, and the particles of a particle filter, take: 0 (default) for as many as Numba has (by default, one per core), 1 for none. Each worker of ss.parallel() and of a calibration takes one, since the workers share the cores already'
+        options.threads = sc.parse_env('STARSIM_THREADS', 0, int)
+
+        optdesc.compile = 'Whether the compartmental solvers run compiled (by Numba) or as plain Python, which gives the same results: "auto" (default) for compiled if they are compiled already (see ss.compile()), or if the runs in a session would take longer uncompiled than compiling takes (about a minute, once per install), with a note either way; "always" to always compile them first; "never" for plain Python (and the kernels, not JAX, for the chain binomial, whose draws in JAX are compiled by Numba)'
+        options.compile = sc.parse_env('STARSIM_COMPILE', 'auto', str)
+
         optdesc.crn = 'If True (default), use common random numbers (CRN) for reproducibility across scenarios. Set False for faster draws (one plain uniform per agent/edge, skipping the slot machinery); statistically valid but not CRN-safe across scenarios.'
         options.crn = sc.parse_env('STARSIM_CRN', True, bool)
+
+        optdesc.keep_times = 'If True, a declared disease run as agents keeps the time each agent entered every state (e.g. ti_S); by default (False), only those the engine needs, to save memory (reading another raises ss.errors.TimeNotKept)'
+        options.keep_times = sc.parse_env('STARSIM_KEEP_TIMES', False, bool)
+
+        optdesc.max_joint = 'The most compartments that the diseases tracked jointly in a compartmental run may take (their joint states times the groups of the other dimensions; see ss.solvers.Crossing): above it, solver="auto" runs agents, and a compartmental solver that was asked for stops before anything is made. 0 for no limit'
+        options.max_joint = sc.parse_env('STARSIM_MAX_JOINT', 10_000, int) # 6,912 compartments (three diseases with Erlang stages, by four age groups) take about 2 GB over 400 steps
+
+        optdesc.keep_memory = 'If True (default), large arrays that a sim frees are kept by the process for reuse, rather than given back to the system, which makes sims with networks 15-30% faster, but the process keeps its peak memory until it ends (Linux only). Set False (before importing Starsim, via the environment variable) to give memory back as it is freed; ss.perflib.release_memory() gives back what is free now'
+        options.keep_memory = sc.parse_env('STARSIM_KEEP_MEMORY', True, bool)
+
+        optdesc.jax_cache = 'The folder where JAX keeps what it compiles (e.g. for a posterior from NUTS), so that it need not compile it again in a later session; "" for none. Set before Starsim first uses JAX'
+        options.jax_cache = sc.parse_env('STARSIM_JAX_CACHE', os.path.join(os.path.expanduser('~'), '.cache', 'starsim', 'jax'), str)
 
         return optdesc, options
 
@@ -294,6 +311,9 @@ class Options(sc.objdict):
             else:
                 if value in [None, 'default']:
                     value = self.orig_options[key]
+                if key == 'compile' and value not in ['auto', 'always', 'never']: # Checked here rather than at the first run (CB-9)
+                    errormsg = f'ss.options.compile must be "auto", "always", or "never", not {value!r}'
+                    raise ValueError(errormsg)
                 super().__setitem__(key, value) # Needed since we overwrite __setitem__ to call this
 
                 # Handle special cases

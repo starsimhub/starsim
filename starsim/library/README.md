@@ -23,12 +23,14 @@ Classes can be accessed either at the top level (`ssl.Measles`) or via their sub
 
 | Class | Base | Description |
 | --- | --- | --- |
-| `Cholera` | `ss.Infection` | SEIR-type cholera with symptomatic/asymptomatic infection plus indirect transmission through a decaying environmental (waterborne) reservoir |
-| `Ebola` | `ss.SIR` | Ebola with severe disease and continued transmission from unburied bodies |
+| `Cholera` | `AgentSEIR` | SEIR-type cholera with symptomatic/asymptomatic infection plus indirect transmission through a decaying environmental (waterborne) reservoir |
+| `AgentSIR`, `AgentSEIR`, `AgentSIS` | `ss.Infection` | Starsim 3's SIR, SEIR, and SIS (with waning immunity), written as code: examples of a disease written as code, and base classes for the diseases here (the core `ss.SIR`, `ss.SEIR`, and `ss.SIS` are declared) |
+| `Ebola` | `AgentSEIR` | Ebola with severe disease and continued transmission from unburied bodies |
 | `HIV` | `ss.Infection` | HIV with CD4 count dynamics, CD4-dependent mortality, and vertical transmission |
 | `ART` | `ss.Intervention` | Scales up antiretroviral therapy over time; requires `HIV` |
 | `CD4_analyzer` | `ss.Analyzer` | Records every agent's CD4 count at every timestep |
-| `Measles` | `ss.SIR` | Measles as an SEIR model, with CDC natural history parameters |
+| `Measles` | `AgentSEIR` | Measles as an SEIR model, with CDC natural history parameters |
+| `NCD` | `ss.Disease` | A non-communicable disease: a risk factor, the condition, and death from it; not transmitted |
 
 ### Networks (`networks/`)
 
@@ -38,6 +40,8 @@ Classes can be accessed either at the top level (`ssl.Measles`) or via their sub
 | `DiskNet` | `ss.Network` | Agents move within a unit square and connect to others within a given radius |
 | `ErdosRenyiNet` | `ss.DynamicNetwork` | Every possible edge is created with probability `p` each timestep |
 | `NullNet` | `ss.Network` | Self-connections only, with zero transmission; useful as a placeholder or for debugging |
+| `StaticNet` | `ss.Network` | A fixed network from a NetworkX graph, or a function that makes one |
+| `DegreeNet` | `ss.DynamicNetwork` | Partnerships between anyone (or among some people, `where=`) with a target number of partners at a time (concurrency, a maximum), mixing within a level (`match=`), and a number of partners by level, as EpiModel's networks fitted to target statistics; the EpiModel importer makes these (`ss.SexualNet` takes `n_contacts`, `concurrency` and `max_contacts` too) |
 
 ### MNCH (`mnch/`)
 
@@ -45,8 +49,8 @@ Maternal, newborn, and child health examples, demonstrating patterns that are mo
 
 | Class | Base | Description |
 | --- | --- | --- |
-| `CongenitalDisease` | `ss.SIR` | Congenital outcomes (stillbirth, congenital infection, normal) via the generic `set_congenital()`/`step_congenital()` framework |
-| `NeonatalSepsis` | `ss.SIR` | Infects newborns at birth and kills some within days, exercising the Pregnancy module's passive neonatal death detection |
+| `CongenitalDisease` | `AgentSIR` | Congenital outcomes (stillbirth, congenital infection, normal), scheduled around delivery by its `set_congenital()` and `step_congenital()` |
+| `NeonatalSepsis` | `AgentSIR` | Infects newborns at birth and kills some within days, exercising the Pregnancy module's passive neonatal death detection |
 | `FetalHealth` | `ss.Module` | Tracks fetal growth and birth weight outcomes (LBW, VLBW, SGA); disease-agnostic, modified by other modules via callbacks |
 | `fetal_infection` | `ss.Connector` | Links a disease to fetal health outcomes: preterm risk via delivery timing shifts, low birth weight via growth restriction |
 | `treat_pregnant` | `ss.Intervention` | Treats infected pregnant women and partially reverses accumulated fetal damage |

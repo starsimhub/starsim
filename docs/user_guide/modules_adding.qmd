@@ -13,7 +13,8 @@ Rather than subclassing `ss.Module` directly, you almost always want to subclass
 
 | Base class | Use for | Added to `Sim` via |
 |------------|---------|--------------------|
-| `ss.Disease` / `ss.Infection` | Disease natural history and transmission | `diseases=` |
+| `ss.Disease` | A disease: declared from states and transitions, written as code, or both (see [Diseases](modules_diseases.qmd)) | `diseases=` |
+| `ss.Infection` | A disease with transmission written as code | `diseases=` |
 | `ss.Network` | Who contacts whom | `networks=` |
 | `ss.Demographics` | Births, deaths, pregnancy | `demographics=` |
 | `ss.Intervention` | Actions that change the simulation | `interventions=` |
@@ -21,6 +22,8 @@ Rather than subclassing `ss.Module` directly, you almost always want to subclass
 | `ss.Connector` | Interactions between modules | `connectors=` |
 
 If your module genuinely doesn't fit any of these, you can subclass `ss.Module` directly, but this is rare.
+
+This page is about modules written as code. A disease that can be written as states and transitions is usually declared instead, which needs no methods at all and runs with every solver; and many interventions and interactions need no new class either, since `ss.vaccinate()`, `ss.screen()`, `ss.treat()`, and `ss.modify()` cover them (see [Interventions](modules_interventions.qmd) and [Connectors](modules_connectors.qmd)). Modules written as code run as agents, and can be in the same sim as declared diseases.
 
 ## Anatomy of a module
 
@@ -46,7 +49,7 @@ class MyModule(ss.Intervention):
 
 ### States: `define_states()`
 
-States are per-agent arrays that persist across timesteps. Declare them with `self.define_states()`, passing `ss.Arr` objects such as `ss.BoolState`, `ss.FloatArr`, or `ss.State`:
+States are per-agent arrays that persist across timesteps. Declare them with `self.define_states()`, passing `ss.Arr` objects such as `ss.BoolState`, `ss.FloatArr`, or `ss.IntArr` (not `ss.State`, which is a state of a declared disease):
 
 ```python
 self.define_states(
@@ -106,15 +109,17 @@ Set `scale=True` for extensive quantities (counts that should scale with populat
 
 ### The work: `step()`
 
-`step()` is called once per timestep and is where the module does its job. Inside it, `self.sim` gives access to the whole simulation, `self.ti` is the current timestep index, and `self.t.dt` is the module's timestep:
+`step()` is called once per timestep and is where the module does its job. Inside it, `self.sim` gives access to the whole simulation, `self.ti` is the index of the time point at the step's end (`self.now` is the date the step starts from), and `self.t.dt` is the module's timestep. A result has one value for each time point, and what happens during a step is recorded at `self.ti`:
 
 ```python
 def step(self):
     disease = self.sim.diseases.sis
     ...                          # Do something to the simulation
-    self.results.n_treated[self.ti] = ...
+    self.results.n_treated[self.ti] += ... # At the end of the step
     return
 ```
+
+`self.ti` is the same in every phase of a step, so in `update_results()`, which runs after the step, results are also written at `self.ti`, and an event dated during the step (with `self.ti` in `step()`) has a time of `self.ti` there too. The same holds in analyzers (see [Analyzers](modules_analyzers.qmd)).
 
 ## The module lifecycle
 
@@ -154,7 +159,7 @@ class SimpleVaccination(ss.Intervention):
         sis = self.sim.diseases.sis
 
         # Eligible agents: susceptible and not yet vaccinated
-        eligible = (sis.susceptible & ~self.vaccinated).uids
+        eligible = (sis.S & ~self.vaccinated).uids
 
         # Select a fraction of them, scaled by the timestep
         self.coverage.set(p=self.pars.rate * self.t.dt)
@@ -170,7 +175,7 @@ pars = dict(n_agents=5000, diseases='sis', networks='random', verbose=0)
 s1 = ss.Sim(pars, label='No vaccine')
 s2 = ss.Sim(pars, label='Vaccine', interventions=SimpleVaccination(rate=0.2))
 msim = ss.parallel(s1, s2)
-msim.plot('sis_n_infected')
+msim.plot('sis_n_I')
 ```
 
 Because we defined `vaccinated` as a `ss.BoolState`, the count is automatically available as a result, so we can plot the vaccination rollout without any extra code:
@@ -197,12 +202,12 @@ import starsim as ss
 ss.options(jupyter=True)
 
 def knockdown(sim):
-    """ Halve transmission for one year starting in 2015 """
-    if sim.now == 2015:
+    """ Halve transmission from 2015 on """
+    if sim.now == ss.date(2015):
         sim.diseases.sis.rel_trans[:] *= 0.5
     return
 
-sim = ss.Sim(diseases='sis', networks='random', interventions=knockdown, verbose=0)
+sim = ss.Sim(diseases='sis', networks='random', interventions=knockdown, start='2000', stop='2030', verbose=0)
 sim.run()
 
 print(type(sim.interventions[0]).__name__)  # Intervention
@@ -217,7 +222,7 @@ ana  = ss.Analyzer.from_func(my_recorder)      # An Analyzer
 sim  = ss.Sim(diseases='sis', networks='random', interventions=intv)
 ```
 
-Note that the function is called on **every** timestep, so it must do its own time gating (e.g. `if sim.now == 2015:`). Function modules are deliberately minimal: they have no parameters, states, or results of their own. As soon as you need per-agent state (`define_states()`), tracked results (`define_results()`), or configurable parameters (`define_pars()`), write a proper subclass instead — see the [Interventions](modules_interventions.qmd) and [Analyzers](modules_analyzers.qmd) pages for the function-vs-class tradeoff.
+Note that the function is called on **every** timestep, so it must do its own time gating (e.g. `if sim.now == ss.date(2015):`). (This particular change needs no code at all: `ss.modify('sis.rel_trans', multiply=0.5, start='2015')` does the same, without changing the base values.) Function modules are deliberately minimal: they have no parameters, states, or results of their own. As soon as you need per-agent state (`define_states()`), tracked results (`define_results()`), or configurable parameters (`define_pars()`), write a proper subclass instead — see the [Interventions](modules_interventions.qmd) and [Analyzers](modules_analyzers.qmd) pages for the function-vs-class tradeoff.
 
 ## Tips
 

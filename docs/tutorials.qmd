@@ -8,13 +8,13 @@ These tutorials will guide you through the main features of Starsim. Each tutori
 
 ::: {.grid}
 ::: {.g-col-4}
-[**T1 - Introduction to Starsim**](tutorials/t1_intro.qmd)
+[**T1 - Getting started**](tutorials/t1_intro.qmd)
 
 A quick introduction to the Starsim framework.
 :::
 
 ::: {.g-col-4}
-[**T2 - Building a simulation**](tutorials/t2_model.qmd)
+[**T2 - Building your model**](tutorials/t2_model.qmd)
 
 How to build your first simulation.
 :::
@@ -44,6 +44,7 @@ It's not all doom and gloom: implementing interventions to save lives.
 :::
 :::
 
+The answers to the exercises at the end of each tutorial are in the [solutions](tutorials/solutions.qmd).
 
 :::{.callout-note}
 You can download these tutorials as Jupyter notebooks to run them locally. Look for the download button at the top of each tutorial.
@@ -57,6 +58,6 @@ To run these tutorials locally:
 1. Clone the Starsim repository
 2. Install Starsim and its dependencies
 3. Navigate to the `docs/tutorials` directory
-4. Convert to Jupyter: `./convert_notebooks.sh` (or just open them directly if `jupytext` is installed)
+4. Convert to Jupyter: `./convert_notebooks` (or just open them directly if `jupytext` is installed)
 5. Launch Jupyter: `jupyter lab`
 :::

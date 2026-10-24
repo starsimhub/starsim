@@ -6,7 +6,7 @@ import numpy as np
 import starsim as ss
 
 
-class Timeline:
+class Timeline(ss.utils.NoDists):
     """
     Handle time vectors and sequencing ("timelines") for both simulations and modules.
 
@@ -36,9 +36,9 @@ class Timeline:
 
     The `Timeline` object also has the following attributes/methods:
 
-    - `ti` (int): the current timestep
+    - `ti` (int): the current step, which is also the time point where its results go: step `ti` runs from time point `ti-1` to `ti` (0 before the first step)
     - `npts` (int): the total number of time *points* in the timeline (one more than the number of steps; see note below)
-    - `now()` (`ss.date`/float/str): the current time, based on tvec by default or a different vector if specified
+    - `now()` (`ss.date`/float/str): the current time, the start of the step (time point `ti-1`; the start of the run before the first step), based on tvec by default or a different vector if specified
 
     Note: the time vectors include *both* the start and stop endpoints, so `npts`
     (the number of time points) is one more than the number of steps taken. For
@@ -59,6 +59,8 @@ class Timeline:
     # Allowable time arguments
     time_args = ['start', 'stop', 'dt']
     _time_vecs = ['tvec', 'tivec', 'timevec', 'yearvec', 'datevec', 'relvec']
+
+    keywords = ['start', 'stop', 'dt', 'dur', 'name', 'init', 'sim'] # Those of __init__(), which a module passes on
 
     def __init__(self, start=None, stop=None, dt=None, dur=None, name=None, init=None, sim=None):
         # Store inputs
@@ -89,7 +91,7 @@ class Timeline:
         self._relvec  = None # Backing store for the lazy relvec property (relative time in sim units)
         self._rel_start = None # Reference start for relvec, captured at init (None => use this timeline's own start)
         self._rel_dur_class = None # Duration class for relvec, captured at init
-        self.is_numeric = False # Whether all inputs provided are numeric (e.g. start=2000, stop=2010, dt=0.1)
+        self.unitless = False # Whether time is counted in steps, with no unit or calendar (a declared model in which nothing has a unit); then there are no dates
         self.initialized = False # Call self.init(sim) to initialize the object
 
         # Decide whether to initialize: we're asked, a sim is provided, or arguments are supplied directly
@@ -122,6 +124,9 @@ class Timeline:
     @property
     def datevec(self):
         """ Time vector as `ss.date` objects (derived lazily from tvec/yearvec) """
+        if self.unitless:
+            errormsg = 'The sim has no unit of time (nothing in the model has one), so its times are steps, which have no dates. Give it a unit (e.g. unit="day") or dates (start="2020-01-01").'
+            raise ValueError(errormsg)
         if self._datevec is None and self.tvec is not None:
             if isinstance(self.start, ss.date): # Date-based: tvec already holds dates
                 self._datevec = ss.DateArray(self.tvec)
@@ -228,7 +233,9 @@ class Timeline:
 
     def now(self, key=None):
         """
-        Get the current simulation time
+        Get the current simulation time: the start of the current step, which runs from time point `ti-1` to `ti`
+        (the start of the run before the first step), since that is when the step happens and what it reads its
+        inputs at; its results go at `ti`, its end (see `ss.Loop`)
 
         Args:
             key (str): which type of time to get: "tvec" (default), "time", "year", "date", or "str"
@@ -236,7 +243,7 @@ class Timeline:
         Examples:
             ```python
             t = ss.Timeline(start='2021-01-01', stop='2022-02-02', dt='week')
-            t.ti = 25
+            t.ti = 26 # The step from time point 25 to 26
             t.now() # Returns <2021-06-25>
             t.now('date') # Returns <2021-06-25>
             t.now('year') # Returns 2021.479
@@ -261,10 +268,11 @@ class Timeline:
             errormsg = f'Invalid key "{key}": must be one of {sc.strjoin(self._time_vecs)}'
             raise ValueError(errormsg)
 
-        if 0 <= self.ti < len(vec): # Normal use case, we're in the middle of a sim
-            now = vec[self.ti]
+        ti = self.ti - 1 if self.ti > 0 else self.ti # The start of the step (a negative ti is a step before the start: see ss.solvers.Agents.backfill())
+        if 0 <= ti < len(vec): # Normal use case, we're in the middle of a sim
+            now = vec[ti]
         else: # Special case, we are before or after the sim period
-            now = self.tvec[0] + self.dt*self.ti
+            now = self.tvec[0] + self.dt*ti
             if key == 'yearvec':
                 now = now.years # Not float(), which for a dur gives the magnitude without the unit, e.g. float(ss.days(500)) = 500
 
@@ -366,16 +374,10 @@ class Timeline:
         # Set the default start based on whether we have datelike inputs
         self.default_start = self.default_year_start if cal_year_like else self.default_rel_start # Sets to the start to 2000 or 0
 
-        # Check to see if all inputs are numeric
-        self.is_numeric = all(arg is None or sc.isnumber(arg) for arg in args) # All inputs are either None or a number # Note: not currently used, although could be for setting timevec defaults
-
         # Ensure dur is valid; use dur_type (from dt) so e.g. dt='month', dur=50 → 50 months
         self.default_dur = dur_type(self.default_dur)
         if sc.isnumber(self.dur):
             self.dur = dur_type(self.dur)
-        if not (self.dur is None or isinstance(self.dur, ss.dur)):
-            errormsg = f'Timeline.dur must be a number, a dur object or None, not {self.dur}'
-            raise TypeError(errormsg)
 
         # Ensure dt is valid; use dur_type so e.g. dur=ss.days(50), dt=1.0 → ss.days(1)
         if not isinstance(self.dt, ss.dur):
@@ -387,6 +389,8 @@ class Timeline:
         # Convert start and stop from numbers to either durations or dates
         if use_dates:
             if self.start is not None: self.start = ss.date(self.start)  # Convert numbers, durations, etc. to dates
+            if isinstance(self.stop, ss.dur) and not ss.time.assume_cal_year(self.stop) and self.start is not None: # A duration such as ss.days(735) is the length of the run, not a date
+                self.stop = self.start + self.stop
             if self.stop  is not None: self.stop  = ss.date(self.stop)
             self.default_start = ss.date(self.default_start) # e.g. ss.date('2000.01.01')
         elif cal_year_like:
@@ -451,13 +455,10 @@ class Timeline:
                 errormsg = f'Failed to match {self.start = }, {self.stop = }, and {self.dur = } to any known pattern. You can use numbers, strings, ss.date, or ss.dur objects.'
                 raise ValueError(errormsg)
 
-        # Additional validation
-        start_type = type(start)
-        stop_type = type(stop)
-        assert isinstance(start, (ss.date, ss.dur)), f'Start must be ss.date or ss.dur, not {start_type}'
-        assert isinstance(stop, (ss.date, ss.dur)), f'Stop must be ss.date or ss.dur, not {stop_type}'
-        assert isinstance(dur, ss.dur), f'Duration must be ss.dur, not {type(dur)}'
-        assert start <= stop, f'Start must be before stop, not {start} and {stop}'
+        # Additional validation (the types were checked above)
+        if start > stop:
+            errormsg = f'Start must be before stop, not {start} and {stop}'
+            raise ValueError(errormsg)
         if (stop - start) < self.dt:
             warnmsg = f'The difference between {start = } and {stop = } is less than dt = {self.dt}; no timesteps will be run.'
             ss.warn(warnmsg)
@@ -469,7 +470,7 @@ class Timeline:
 
         return
 
-    def init(self, sim=None, max_steps=20_000, force=False):
+    def init(self, sim=None, max_steps=None, force=False):
         """ Initialize all vectors """
 
         # Don't re-initialize if already initialized
@@ -478,6 +479,7 @@ class Timeline:
 
         # Handle start, stop, dt, dur
         self.reconcile_args(sim)
+        self.unitless = getattr(sim, 'unitless', False) is True # Days underneath, but with no dates: see ss.Sim._init_unit()
 
         # If the sim is provided and matches the current object: copy from the sim
         tvkeys = ['start', 'stop', 'dt']
@@ -532,10 +534,10 @@ class Timeline:
         n_steps = self.npts
 
         # Warn if the number of steps is very large
-        if n_steps > max_steps and ss.options.warn_convert:
-            warnmsg = f'You have specified start={self.start}, stop={self.stop}, and dt={self.dt}, which results in {n_steps:n} timesteps. '
-            warnmsg += f'This is above the recommended maximum of {max_steps:n}, which is valid, but inadvisable. '
-            warnmsg += 'Set ss.options.warn_convert = False to disable this warning.'
+        max_steps = sc.ifelse(max_steps, ss.options.max_steps)
+        if max_steps and n_steps > max_steps:
+            warnmsg = f'start={self.start!r}, stop={self.stop!r}, and dt={self.dt!r} give {n_steps:n} timesteps, more than {max_steps:n}, which is valid but can be slow. '
+            warnmsg += 'Use a larger dt if a step that small is not needed, or set ss.options.max_steps = 0 to turn off this warning.'
             ss.warn(warnmsg)
 
         # Capture the reference start and duration class so the lazy relvec property can be

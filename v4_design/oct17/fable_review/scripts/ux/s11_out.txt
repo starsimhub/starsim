@@ -1,0 +1,60 @@
+
+######## declared disease with a v3 network
+declared disease + RandomNet -> solver abm
+[ok]
+
+######## declared disease with v3 routine_vx
+  File "/home/cliffk/idm/ssv4/starsim/sim.py", line 796, in get_declared
+    raise KeyError(errormsg)
+KeyError: 'No module named "None" with declared transitions was found; these are sir'
+[FAIL]
+
+######## v3 disease with v4 vaccinate
+  File "/home/cliffk/idm/ssv4/starsim/transitions.py", line 55, in error
+    raise CodedError(code, msg)
+starsim.transitions.CodedError: E506 UnknownDisease: "vx" needs to know which disease it is for, and the sim has no declared diseases. Use disease=.
+[FAIL]
+
+######## ss.change vs ss.modify
+ss.change ok, n_I max 1000.0
+ss.modify ok, n_I max 1000.0
+[ok]
+
+######## fix for the overview: sim.new()
+scenarios via sim.new() ok; MultiSim("baseline"; n_sims: 2; base: Sim(baseline; n=1; 2020.01.01—2020.06.01; diseases=sir))
+[ok]
+
+######## E210 unnamed state? (states bound, transitions inline)
+[ok]
+
+######## E210 unnamed state (list of states)
+    raise CodedError(code, msg)
+starsim.transitions.CodedError: E210 UnnamedState: state number 1 of the module has no name. It is used in ['<unnamed state> -> <unnamed state>'], and no variable or keyword holding it was found.
+     Give the names up front: S, I, R = ss.states('S I R').
+[FAIL]
+
+######## E705 unknown data column
+    raise CodedError(code, msg)
+starsim.transitions.CodedError: E705 UnknownDataColumn: the data column "casez" matches no result. The closest results are n_S, n_I, n_R.
+     Rename it with ss.data(..., aliases=dict(result='casez')), or drop it with ss.data(..., ignore_extra=True).
+[FAIL]
+
+######## what run() prints
+--- fresh run() prints:
+solver: ode (every part of the model has a compartmental form)
+  note: unit='day' (from start and stop dates)
+--- run() again prints:
+AlreadyRunError Simulation is already complete
+Did you mean to copy the sim before running it?
+[ok]
+
+######## calibrate + fit.summarize
+Searching on a log scale: beta
+Fitting by l-bfgs-b (gradients by automatic differentiation; override with method=)
+--- fit.summarize():
+Fitted 1 parameter(s) by l-bfgs-b, with 48 evaluations
+ par  initial    best  low  high
+beta     0.05 0.13783 0.01   0.5
+Goodness of fit: 0.9874 before, 0.4155 after
+--- fit.sim is complete: True | original complete: False
+[ok]

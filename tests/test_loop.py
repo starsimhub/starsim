@@ -4,6 +4,8 @@ Test the Loop class
 
 # %% Imports and settings
 import gc
+import pytest
+import numpy as np
 import weakref
 import pandas as pd
 import sciris as sc
@@ -43,6 +45,24 @@ def test_run_options():
 
     assert s1.summary == s2.summary, 'Sims do not match'
 
+    # A non-profiled run should still produce a usable plan DataFrame, just without cpu_time (test_loop_plotting() profiles one)
+    assert not len(s1.loop.cpu_time), 'Default run should not record CPU times'
+    df = s1.loop.to_df()
+    assert 'cpu_time' in df.columns and df['cpu_time'].isna().all(), 'cpu_time should be NaN without profiling'
+
+    # One time index during a step: every module sees the same one, the step's, where its results go (the first step is ti == 1)
+    seen = sc.objdict(rate=[], intv=[])
+    def rate(sim):
+        seen.rate.append(sim.ti)
+        return 0.1
+    def intv(sim):
+        seen.intv.append(sim.ti)
+    S, I, R = ss.states('S I R')
+    sir = ss.Disease(infection=ss.Transition(S, I, rate=0.3 * I), recovery=ss.Transition(I, R, rate=rate), init_prev=0.1, name='sir')
+    sim = ss.Sim(sir, interventions=intv, solver='abm', n_agents=100, unit='day', stop=4, verbose=0).run()
+    assert seen.intv == [1, 2, 3, 4] and set(seen.rate) == {1, 2, 3, 4}
+    assert sim.ti == 4 # At the last time point, after the run
+
     return s2.loop
 
 
@@ -54,12 +74,6 @@ def test_loop_plotting():
     sim.loop.plot()
     sim.loop.plot_cpu()
     sim.loop.plot_step_order()
-
-    # A non-profiled run should still produce a usable plan DataFrame, just without cpu_time
-    sim2 = ss.Sim(pars).run()
-    assert not len(sim2.loop.cpu_time), 'Default run should not record CPU times'
-    df = sim2.loop.to_df()
-    assert 'cpu_time' in df.columns and df['cpu_time'].isna().all(), 'cpu_time should be NaN without profiling'
     return sim.loop
 
 
@@ -128,12 +142,8 @@ def test_callable_cache_cleanup():
         raise RuntimeError('intentional loop failure')
 
     sim.loop.insert(fail_after_cache, label='sim.start_step')
-    try:
+    with pytest.raises(RuntimeError, match='intentional loop failure'):
         sim.run()
-    except RuntimeError as err:
-        assert 'intentional loop failure' in str(err)
-    else:
-        raise AssertionError('Expected loop failure was not raised')
 
     for dist in sim.dists.dists.values():
         assert getattr(dist, '_callable_args', None) is None
@@ -162,28 +172,47 @@ def test_loop_plan_views_and_insert():
     assert sim.loop.cpu_df is not None
 
     calls = []
-
-    def mark_label(sim):
-        calls.append(sim.ti)
-
-    sim.loop.insert(mark_label, label='sim.finish_step', before=True)
+    sim.loop.insert(lambda sim: calls.append(sim.ti), label='sim.finish_step', before=True)
     sim.run()
-    assert len(calls), 'Label-based insertion did not run'
+    assert len(calls) == sim.t.npts - 1, 'Label-based insertion did not run once per step' # Once, not twice
 
     calls = []
     sim = ss.Sim(small_pars).init()
-
-    def mark_match(sim):
-        calls.append(sim.ti)
-
-    def match_fn(plan):
-        return plan.label == 'sim.finish_step'
-
-    sim.loop.insert(mark_match, match_fn=match_fn, before=True)
+    sim.loop.insert(lambda sim: calls.append(sim.ti), match_fn=lambda plan: plan.label == 'sim.finish_step', before=True)
     sim.run()
     assert len(calls), 'Function-based insertion did not run'
 
     return sim.loop
+
+
+@sc.timer()
+def test_loop_without_sim():
+    sc.heading('Testing a loop of ordinary functions, with no sim')
+
+    # An ODE in plain NumPy, stepped by the loop, with its values recorded at every time point
+    y = np.array([0.99, 0.01, 0.0])
+    def step(t, dt):
+        S, I, R = y
+        y[:] = [S - 0.3*S*I*dt, I + (0.3*S*I - 0.1*I)*dt, R + 0.1*I*dt]
+    seen = []
+    loop = ss.Loop(steps=[step], times=np.arange(0, 101), record=lambda t: seen.append((t, y[1]))).init()
+    loop.run()
+    assert len(seen) == 101 and seen[0] == (0, 0.01) # The start is recorded before any step
+    assert np.isclose(y.sum(), 1) and y[2] > 0.9
+
+    # A step with times of its own runs only at those; at a shared time point, the steps run in the order given
+    calls = []
+    fast = lambda t, dt: calls.append(('fast', t, dt))
+    slow = lambda t, dt: calls.append(('slow', t, dt))
+    ss.Loop(steps=dict(fast=fast, slow=(slow, np.arange(0, 11, 5))), times=np.arange(0, 11)).init().run()
+    assert [c for c in calls if c[0] == 'slow'] == [('slow', 0, 5), ('slow', 5, 5)]
+    assert [c[0] for c in calls[3:6]] == ['fast', 'fast', 'slow'] # The steps ending at 5: fast (4 to 5), then slow (0 to 5)
+
+    # A timeline gives its own times and step, with their units
+    dts = []
+    ss.Loop(steps=[lambda t, dt: dts.append(dt)], times=ss.Timeline(start=ss.days(0), stop=ss.days(10), dt=ss.days(1))).init().run()
+    assert len(dts) == 10 and dts[0] == ss.days(1)
+    return loop
 
 
 # %% Run as a script
@@ -198,5 +227,6 @@ if __name__ == '__main__':
     l3 = test_memory_cleanup()
     l4 = test_callable_cache_cleanup()
     l5 = test_loop_plan_views_and_insert()
+    l6 = test_loop_without_sim()
 
     T.toc()

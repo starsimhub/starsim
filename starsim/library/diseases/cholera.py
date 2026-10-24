@@ -7,9 +7,10 @@ Original version by Dom Delport 2024
 
 import numpy as np
 import starsim as ss
+from .agents import AgentSEIR
 
 
-class Cholera(ss.SEIR):
+class Cholera(AgentSEIR):
     """
     Cholera, with both direct and environmental (waterborne) transmission.
 
@@ -80,7 +81,7 @@ class Cholera(ss.SEIR):
             # Environmental parameters
             beta_env = ss.prob(0.5 / 3), # Scaling factor for transmission from environment,
             half_sat_rate = 1_000_000, # Infectious dose in water sufficient to produce infection in 50% of exposed, from Mukandavire et al. (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3102413/)
-            shedding_rate = ss.freqperday(10), # Rate at which infectious people shed bacteria to the environment (per day), from Mukandavire et al. (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3102413/)
+            shedding_rate = ss.time.freq(10, 'day'), # Rate at which infectious people shed bacteria to the environment (per day), from Mukandavire et al. (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3102413/)
             decay_rate = ss.perday(0.033), # Rate at which bacteria in the environment dies (per day), from Chao et al. and Mukandavire et al. citing https://pubmed.ncbi.nlm.nih.gov/8882180/
             p_env_transmit = ss.bernoulli(p=0), # Probability of environmental transmission - filled out later
         )
@@ -198,6 +199,6 @@ class Cholera(ss.SEIR):
         super().update_results()
         res = self.results
         ti = self.ti
-        res.new_deaths[ti] = np.count_nonzero((self.ti_dead > ti - 1) & (self.ti_dead <= ti)) # Deaths requested this step, since ti_dead is fractional
+        res.new_deaths[ti] = np.count_nonzero((self.ti_dead > ti - 1) & (self.ti_dead <= ti)) # Deaths requested in this step, since ti_dead is fractional
         res.cum_deaths[ti] = np.sum(res.new_deaths[:ti+1])
         return

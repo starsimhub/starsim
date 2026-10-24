@@ -1,0 +1,2 @@
+RUNS fit mismatch 0.7200000000000001 recorded evaluated mismatch range [0.7288888888888888, 0.7288888888888888, 0.7288888888888888] best pars #0. 'beta': 0.10000000000000002
+NETWORK bounded TypeError Updating dist from <class 'starsim.distributions.constant'> to <class 'starsim.transitions.par'> is not supported

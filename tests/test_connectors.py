@@ -86,11 +86,10 @@ class TreatSIS(ss.Intervention):
 def make_args():
     """ Make people, HIV, SIS, and network """
     pars = dict(n_agents=2000, verbose=0)
-    mf = ss.MFNet(duration=ss.lognorm_ex(mean=5, std=0.5, unit=ss.years)) # TODO: think about whether these should be ss.dur(); currently they are not since stored in natural units with -self.dt
-    hiv = ssl.diseases.HIV(beta={'mf': [0.0008, 0.0004]}, init_prev=0.2) # TODO: beta should wrap the other way
-    sis = ss.SIS(beta={'mf': [0.1, 0.05]}, init_prev=0.05)
-    args = dict(pars=pars, networks=mf, diseases=[hiv, sis])
-    return args
+    mf = ss.SexualNet(dur=ss.lognorm_ex(mean=5, std=0.5, unit=ss.years)) # TODO: think about whether these should be ss.dur(); currently they are not since stored in natural units with -self.dt
+    hiv = ssl.diseases.HIV(beta={'sexual': [0.0008, 0.0004]}, init_prev=0.2) # TODO: beta should wrap the other way
+    sis = ssl.AgentSIS(name='sis', beta={'sexual': [0.1, 0.05]}, init_prev=0.05) # Written as code, since the connector and TreatSIS set its arrays directly
+    return dict(pars=pars, networks=mf, diseases=[hiv, sis])
 
 
 @sc.timer()
@@ -98,53 +97,24 @@ def test_connectors(do_plot=False):
     """ Test connector example """
     sc.heading('Testing connectors')
 
-    # Make arguments
+    # Sims with a connector, without one, and with a connector and SIS treatment
     args = make_args()
-    sims = sc.objdict() # List of sims
-
-    # Make a sim with a connector, and run
-    sims.con = ss.Sim(label='With connector', connectors=hiv_sis(), **args)
-    sims.con.run()
-
-    # Make a sim without a connector, and run
-    sims.nocon = ss.Sim(label='Without connector', **args)
-    sims.nocon.run()
-
-    # Make a sim with a connector and SIS treatment, and run
-    sims.treat = ss.Sim(label='With treatment', connectors=hiv_sis(), interventions=TreatSIS(), **args)
-    sims.treat.run()
-
-    # Parse results
-    results = sc.odict()
+    sims = sc.objdict()
+    sims.con = ss.Sim(label='With connector', connectors=hiv_sis(), **args).run()
+    sims.nocon = ss.Sim(label='Without connector', **args).run()
+    sims.treat = ss.Sim(label='With treatment', connectors=hiv_sis(), interventions=TreatSIS(), **args).run()
     diseases = ['sis', 'hiv']
-    for sim in sims.values():
-        results[sim.label] = sc.objdict()
-        for disease in diseases:
-            results[sim.label][disease] = sim.results[disease].n_infected
+    results = sc.odict({sim.label: sc.objdict({d: sim.results[d].n_infected for d in diseases}) for sim in sims.values()})
 
-    # Plot
     if do_plot:
         plt.figure()
-
-        plt.subplot(2,1,1)
-        x = sims.con.t.yearvec
-        for label,res in results.items():
-            plt.plot(x, res.sis, label=label)
-        plt.title('SIS infections')
-        plt.xlabel('Year')
-        plt.ylabel('Count')
-        plt.axvline(2020)
-        plt.legend()
-
-        plt.subplot(2,1,2)
-        for label,res in results.items():
-            plt.plot(x, res.hiv, label=label)
-        plt.title('HIV infections')
-        plt.xlabel('Year')
-        plt.ylabel('Count')
-        plt.axvline(2020)
-        plt.legend()
-
+        for i,disease in enumerate(diseases):
+            plt.subplot(2,1,i+1)
+            for label,res in results.items():
+                plt.plot(sims.con.t.yearvec, res[disease], label=label)
+            plt.title(f'{disease.upper()} infections')
+            plt.axvline(2020)
+            plt.legend()
         sc.figlayout()
         plt.show()
 
@@ -153,7 +123,58 @@ def test_connectors(do_plot=False):
         assert results[0][disease].sum() > results[1][disease].sum(), f'{disease.title()} infections should be higher with connector'
         assert results[0][disease].sum() > results[2][disease].sum(), f'{disease.title()} infections should be lower with treatment'
 
+    # The same interaction with v4's modifiers, on the HIV written as code and a declared SIS
+    def run(*connectors):
+        hiv = ssl.diseases.HIV(beta={'sexual': [0.008, 0.004]}, init_prev=0.2)
+        sis = ss.SIS(beta={'sexual': ss.peract(m2f=0.01, f2m=0.005)}, init_prev=0.05)
+        mods = [make(hiv, sis) for make in connectors]
+        return ss.Sim(n_agents=2000, networks=ss.SexualNet(), diseases=[hiv, sis], connectors=mods, start=2000, stop=2020, verbose=0).run().results
+    base = run()
+    stop_hiv = run(lambda hiv, sis: ss.modify(hiv.rel_trans, multiply=0, start=2010)) # A modifier of the rel_trans of a disease written as code
+    no_sis = run(lambda hiv, sis: ss.modify(sis.rel_sus, multiply=0, where=hiv.cd4 < 1e6)) # A condition on an array of a disease written as code (everyone's CD4 is below 1e6)
+    after = stop_hiv.timevec > 2010
+    assert base.hiv.new_infections[after].sum() > 0 and stop_hiv.hiv.new_infections[after].sum() == 0 # No HIV transmission after 2010
+    assert base.sis.new_infections.sum() > 0 and no_sis.sis.new_infections.sum() == 0
     return sims
+
+
+def test_lazy_arrays():
+    """ A lazy condition on another module's array (not a declared state) is resolved in that module """
+    sc.heading('Testing lazy conditions on module arrays')
+    class HIV(ss.Disease):
+        S = ss.State()
+        I = ss.State()
+        infection = S >> I @ 0.0 * I
+        def __init__(self, **kwargs):
+            super().__init__(init_prev=0.2, **kwargs)
+            self.define_states(ss.FloatArr('cd4', default=ss.choice([300, 800])), ss.BoolArr('flag', default=ss.bernoulli(0.5)))
+            return
+
+    class Syph(ss.Disease):
+        S = ss.State()
+        I = ss.State()
+        infection = S >> I @ 0.2 * I
+
+    class Net(ss.RandomNet):
+        def __init__(self, **kwargs):
+            super().__init__(**kwargs)
+            self.define_states(ss.BoolArr('core', default=ss.bernoulli(0.5)))
+            return
+
+    for which in ['cd4', 'flag', 'core']:
+        hiv, syph, net = HIV(name='hiv'), Syph(name='syph', init_prev=0.05), Net(name='net')
+        where = dict(cd4=hiv.cd4 >= 500, flag=~hiv.flag, core=~net.core)[which]
+        protect = ss.modify(syph.rel_sus, multiply=0, where=where)
+        sim = ss.Sim([hiv, syph], connectors=protect, networks=net, n_agents=1000, stop=2005, verbose=0, rand_seed=1).init()
+        syph = sim.diseases.syph
+        seeds = syph.I.uids
+        sim.run()
+        mods = dict(cd4=sim.diseases.hiv, flag=sim.diseases.hiv, core=sim.networks.net)
+        new = syph.I.uids.remove(seeds) # Infected during the run
+        arr = mods[which][which]
+        protected = (arr[new] >= 500) if which == 'cd4' else ~arr[new]
+        assert len(new) and not protected.any(), f'{which}: {protected.sum()} of {len(new)} infected were protected'
+    return
 
 
 if __name__ == '__main__':
@@ -162,5 +183,6 @@ if __name__ == '__main__':
     T = sc.timer()
 
     sims = test_connectors(do_plot=do_plot)
+    lazy = test_lazy_arrays()
 
     T.toc()

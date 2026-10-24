@@ -9,23 +9,39 @@ jupyter: python3
 ```
 
 
-There are a few basic ways to add vital dynamics to your model, e.g.
+There are a few basic ways to add vital dynamics to your model. The simplest is to declare births and deaths for the population, in `demographics=`. `ss.birth(rate=...)` is a crude birth rate (per person per year) of people born into each disease's first state (here `S`), and `ss.death(rate=...)` applies the same death rate to everyone:
 
 ```{python}
 import starsim as ss
 ss.options(jupyter=True)
 
+S, I = ss.states('S I')
+sis = ss.Disease(
+    infection = ss.Transition(S, I, rate=ss.peryear(2) * I),
+    recovery = ss.Transition(I, S, dur=ss.years(1)),
+    init_prev = 0.01,
+)
+demographics = [
+    ss.birth(rate=ss.peryear(0.02)),  # 20 births per 1,000 people per year
+    ss.death(rate=ss.peryear(0.015)), # 15 deaths per 1,000 people per year
+]
+sim = ss.Sim(sis, demographics=demographics, total_pop=10_000, start='2000', stop='2050')
+sim.run()
+sim.plot()
+```
+
+Births and deaths become flows of the disease like any other transition, so they appear in the results (`sim.results.sis.births`) and in `describe()`. Written this way, the model still runs as an ODE, and with several diseases, the same people are born into and die from each of them, under every solver. The same declaration works as agents, e.g. with a network:
+
+```{python}
 pars = dict(
-    birth_rate = ss.peryear(20),      # Annual crude birth rate (per 1000 people)
-    death_rate = ss.peryear(15),      # Annual crude death rate (per 1000 people)
+    demographics = [ss.birth(rate=ss.peryear(0.02)), ss.death(rate=ss.peryear(0.015))],
     networks = 'random',
     diseases = 'sir'
 )
 sim = ss.Sim(pars)
 ```
 
-
-This will apply annual birth and death rates as specified in the `pars` dict. Alternatively, we can make demographic components, which achieves the same thing:
+In an agent-based model, births and deaths can also be demographic modules, which add and remove agents, and which take data by year (and, for deaths, by age and sex; below). A rate above 1 is read as per 1,000 people, as crude birth and death rates usually are, and a rate below 1 as per person, so `ss.Births(birth_rate=20)` and `ss.Births(birth_rate=0.02)` are the same. A rate that could be either (from 0.1 to 1, or above 1,000) gives a warning saying which was assumed; `rate_units=1000` (per 1,000) or `rate_units=1` (per person) says which, and silences it:
 
 ```{python}
 demographics = [
@@ -35,14 +51,13 @@ demographics = [
 sim = ss.Sim(demographics=demographics)
 ```
 
-You can even simply set `demographics=True` to use default rates:
+You can even simply set `demographics=True` to use default rates (20 births and 10 deaths per 1,000 people per year):
 
 ```{python}
 ss.Sim(demographics=True).run().plot();
 ```
 
 By default, agents age if and only if at least one demographics module is included. You can override this behavior by setting `use_aging`, e.g. `ss.Sim(use_aging=False)`
-
 
 ## Scaling results to whole populations
 Even though we've been simulating populations of a few thousand agents, we can also use the `total_pop` parameter to scale our results so that they reflect a much larger population. You can think of this as a kind of statistical sampling approximation. If we want to model the population of Nigeria, for example, it would be much too computationally intensive to simulate 200 million agents. However, we could simulate 50,000 agents and then say that each agent represents 4,000 people. Again, we can do this by passing `total_pop=200e6` to the sim or in the `pars` dictionary. Here's an example:
@@ -79,7 +94,7 @@ age_data = pd.read_csv('test_data/nigeria_age.csv')
 ppl = ss.People(n_agents, age_data=age_data)
 
 # Make the sim, run and plot
-sim = ss.Sim(total_pop=nga_pop_1995, start=1995, people=ppl, demographics=demographics, networks='random', diseases='sir')
+sim = ss.Sim(total_pop=nga_pop_1995, start='1995', stop='2030', people=ppl, demographics=demographics, networks='random', diseases='sir')
 sim.run()
 
 # Read in a file with the actual population size
@@ -96,9 +111,9 @@ ax.set_title('Population')
 plt.show()
 ```
 
-If you want to use realistic demographics for your model, you can adapt the data files and code snippet above to read in the relevant demographic data files for your country/setting.
+If you want to use realistic demographics for your model, you can adapt the data files and code snippet above to read in the relevant demographic data files for your country/setting. For a country's population size, age structure, and sex ratio, you can also use the data that come with Starsim: `ss.people('Nigeria', year=1995, n_agents=5_000)` in place of `ss.People(...)` (the sim then takes `total_pop` from it too).
 
-*Note*: In the code block above, we set the units of the mortality data to 1, as opposed to 1/1000. If your data come in the form of deaths per 1000 people, set units to 1/1000. Note also that as per standard definitions, `fertility_rate` is defined per *woman*, whereas `birth_rate` is defined per *person*.
+*Note*: In the code block above, the mortality data are per person, which we say with `rate_units=1`: the oldest ages have rates above 0.1, which could otherwise be read either way. If your data come in the form of deaths per 1,000 people, set `rate_units=1000`. Note also that as per standard definitions, `fertility_rate` is defined per *woman*, whereas `birth_rate` is defined per *person*.
 
 ## Exercises
 1. In Niger, the crude birth rate is 45 and the crude death rate is 9. Assuming these rates stay constant, and starting with a total population of 24 million in 2020, how many people will there be in 2040? (You do not need to include any diseases in your model.)

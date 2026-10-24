@@ -1,0 +1,65 @@
+---
+title: Coming from Starsim 3
+jupyter: python3
+---
+
+This page is for people with a Starsim 3 model: custom `ss.Infection` subclasses with their own states and step methods, `ss.MFNet` and `ss.RandomNet`, `ss.Births` and `ss.Deaths`, custom interventions and connectors, and `ss.Calibration`. For you Starsim 4 is an upgrade rather than a switch. This page says what you get, what still runs, and what does not yet; the [migration guide](../migration/v3_v4.md) maps Starsim 3 code to Starsim 4 job by job, and lists what changes meaning.
+
+## The same model in both
+
+An SIS on a random network, as Starsim 3 wrote it, with the library disease written as code and a `beta` for each network:
+
+```{python}
+#| eval: false
+import starsim as ss # Starsim 3
+
+sis = ss.SIS(beta=dict(randomnet=0.05), dur_inf=ss.years(1), init_prev=0.01)
+sim = ss.Sim(diseases=sis, networks=ss.RandomNet(n_contacts=4), n_agents=5000, start=2000, stop=2010, dt=1/12)
+sim.run()
+```
+
+In Starsim 4, the same disease is declared as states and transitions. Two things change meaning on the way. A bare number in a Starsim 3 `beta` dict was a probability per step, so here it is written `ss.prob(0.05, 'month')`; copied as a bare number, it would be a rate per year, 12 times too low at monthly steps (Starsim 4 warns when this happens). And a fixed duration in Starsim 3 is exponential with that mean in a declared transition, unless a distribution is given:
+
+```{python}
+import starsim as ss
+ss.options(jupyter=True)
+
+S, I = ss.states('S I')
+sis = ss.Disease(
+    infection = ss.Transition(S, I, rate=dict(randomnet=ss.prob(0.05, 'month')) * I),
+    recovery  = ss.Transition(I, S, dur=ss.years(1)),
+    init_prev = 0.01,
+)
+sim = ss.Sim(sis, networks=ss.RandomNet(n_contacts=4), n_agents=5000, start=2000, stop=2010, dt=ss.years(1/12), verbose=0)
+sim.run()
+print(f'Infections: {sim.results.sis.infection.sum():,.0f}')
+sim.plot()
+```
+
+A declared disease can then be described (`sim.describe()`), run as an ODE or a stochastic compartmental model when nothing in the sim needs agents, swept and compared with `ss.parallel()` and `msim.diff()`, and fitted with `sim.calibrate()`.
+
+## What still runs
+
+Modules written as code are still part of Starsim 4: `ss.Module`, `ss.Disease` and `ss.Infection` subclasses with `define_states()`, `set_prognoses()`, and `step_state()`, custom networks, interventions, analyzers, and connectors. They run as agents, unchanged, and can sit in the same sim as declared diseases. The library `ss.SIR`, `ss.SIS`, and `ss.SEIR` are now declared diseases with the same keywords, and are the textbook models (an exponential `dur_inf`, and no deaths unless `p_death` is given); the Starsim 3 code versions, with Starsim 3's lognormal `dur_inf` and `p_death=0.01`, are in the library as `ssl.AgentSIR` and the like (`import starsim.library as ssl`). The Starsim 3 delivery classes (`ss.routine_vx`, `ss.campaign_vx`, `ss.treat_num`), products (`ss.Vx`, `ss.Dx`, `ss.Tx`), `ss.seasonality`, and `ss.Calibration` are replaced; the migration guide gives each replacement.
+
+Results now follow the convention of other frameworks: `n_<state>[0]` is the number at the start, and a sim with `stop=T` takes one step fewer than in Starsim 3. The same script gives the same answer statistically (over several seeds), not number for number. To reproduce published Starsim 3 numbers exactly, use `pip install starsim==3.7.2`.
+
+## What works and what does not yet
+
+These are from Starsim's switching demo for Starsim 3 users (`tests/switching/test_starsim3.py`), and from the review it was built from. All four of the demo's checks pass today.
+
+| Task | Today |
+|---|---|
+| Run a Starsim 3 model with the disease as code | **Works**: the SIS above as `ssl.AgentSIS` (one changed name) gives the Starsim 3 answer within seed noise (22,555 infections against 21,557, where two seeds differ by about 6%) |
+| Use Starsim 4 verbs on a disease written as code: `ss.modify(hiv.rel_trans, multiply=0.5, start=2005)`, conditions on its arrays (`where=hiv.cd4 < 200`), scenarios with `ss.parallel()` and `msim.diff('baseline')` | **Works**, on the library HIV written as code alongside a declared SIS |
+| Fit with `sim.calibrate()`, with bounds given on a parameter (`ss.SIS(beta=ss.par(ss.peryear(0.1), bounds=[0.05, 1]))`) | **Works**, for the declared `ss.SIS` and for `ssl.AgentSIS` |
+| Port a disease with its `beta` dict copied verbatim | **Warns**: the result is about 12 times too low at monthly steps, and Starsim 4 says why |
+| Port one disease at a time | **Works**: a sim can mix diseases written as code and declared ones, and `ss.parallel()` sweeps and `diff()` work on the whole sim |
+| Speed of a model written as code | **Faster**: an unchanged Starsim 3 model with HIV, an SIS, an SIRS, two networks, demographics, and interventions ran about twice as fast under Starsim 4 (2.2 s against 4.9 s at 3,000 agents) |
+| Speed of a declared disease run as agents | **Slower**: 1.4 to 1.6 times slower than the same model written as code, at 3,000 to 30,000 agents; making them equal is planned |
+| Per-agent quantities that change continuously (a CD4 count, a level of immunity, time since an event) | **No declared form**: keep them as code, which is a supported choice |
+
+## Next steps
+
+- The [migration guide](../migration/v3_v4.md): what changes the numbers, and a table of jobs and their Starsim 4 spellings.
+- [Starsim 4 in ten minutes](../ten_minutes.qmd): the declared language, solvers, calibration, and scenarios.

@@ -13,7 +13,7 @@ After a sim has run, all of its outputs are stored in `sim.results`, which is a 
 import starsim as ss
 ss.options(jupyter=True)
 
-sim = ss.Sim(n_agents=2000, diseases='sir', networks='random', verbose=0).run()
+sim = ss.Sim(n_agents=2000, start='2000', stop='2050', diseases='sir', networks='random', verbose=0).run()
 
 # Top-level groups: one per module, plus sim-level results
 print('Result groups:', list(sim.results.keys()))
@@ -39,7 +39,8 @@ Each result is an `ss.Result` object. It behaves like a NumPy array (so you can 
 | `timevec` | The time points corresponding to each value |
 | `label` | A human-readable label (used in plots) |
 | `scale` | Whether the quantity scales with population size (e.g. a count) |
-| `low`, `high` | Optional uncertainty bounds (populated by `MultiSim.reduce()`) |
+| `kind` | `'flow'` (events in each step), `'stock'` (a number at each time point), or `'ratio'` (one number over another, such as prevalence) |
+| `low`, `high` | Optional uncertainty bounds, which `plot()` shows as a band |
 
 ```{python}
 res = sim.results.sir.new_infections
@@ -53,6 +54,92 @@ print(f'Final timestep:      {res[-1]:.0f}')
 print(f'Label:    {res.label}')
 print(f'First date: {res.timevec[0]}')
 ```
+
+## The results of a declared disease
+
+Every declared disease gets a result for each state and each transition without any being declared: `n_<state>` is the number of people in the state at each time point (a stock), and each transition has a flow named after it, the number of people who made the transition during each step. A flow's running total is `.cum`. The library's `ss.SIR`, `ss.SIS`, and `ss.SEIR` also keep Starsim's standard names, `new_infections`, `cum_infections`, and `prevalence`:
+
+```{python}
+res = sim.results.sir
+print('People infected at the end:', res.n_I[-1])
+print('Infections in the last step:', res.infection[-1])
+print('Infections so far:', res.infection.cum[-1], 'or', res.cum_infections[-1])
+```
+
+Results follow the convention of other modeling frameworks: a result has one value for each time point of the sim, from `start` to `stop`. `n_I[0]` is the number infected at the start, before any step, and a flow at index 0 is 0, since no step has ended yet; `n_I[ti]` and `infection[ti]` are the number infected at time point `ti` and the number of infections during the step that ends there. A sim with `stop=T` therefore ends at `T`. (This is one step later than in Starsim 3, where index 0 was the end of the first step.) A flow is dated at the end of its step: with a daily step from `2025-01-01`, the infections dated `2025-02-23` are those during the day that starts on `2025-02-22`, so the peak day of incidence is the day before the date of the largest flow.
+
+```{python}
+print('Infected at the start:', res.n_I[0])
+print('Infections at the start:', res.infection[0])
+print('Infections in the first step:', res.infection[1])
+```
+
+## Declaring more results
+
+Extra results are declared with the model. A sum or ratio of states, given to the disease, is a result (prevalence here); `ss.outcome()` is a reported quantity worked out from flows, here half of infections reported five days later, and hospital admissions with the number in hospital (`n_hosp`):
+
+```{python}
+S, I, R = ss.states(3)
+N = S + I + R
+infection = S >> I @ 0.3 * I
+recovery  = I >> R @ ss.days(10)
+
+prevalence = I / N
+cases = ss.outcome(0.5 * infection, delay=ss.days(5))
+hosp  = ss.outcome(0.05 * infection, delay=ss.days(7), duration=ss.days(10))
+
+model = ss.Disease(
+    transitions = [infection, recovery],
+    results     = [prevalence],
+    outcomes    = [cases, hosp],
+    init_prev   = 0.01,
+    name        = 'sir',
+)
+dated = ss.Sim(model, start='2020-01-01', stop='2020-07-01', verbose=0).run()
+res = dated.results.sir
+print({key: res[key].kind for key in res.keys() if key != 'timevec'})
+```
+
+## Changing the time step of a result
+
+Because a result knows whether it is a flow, a stock, or a ratio, converting it to a coarser time step does the right thing without being told: a flow is summed over each period, a stock takes its value at the end of the period, and a ratio is recomputed from its summed parts. `to_series()` returns a pandas series indexed by date:
+
+```{python}
+print(res.cases.resample('week').to_series().head())
+print(res.n_I.resample('month').to_series().head())
+```
+
+## Results by group
+
+After a disease is stratified (for example by age), each result is still one result, now with a dimension for each stratification. Used as it is, it is the total; `select()` picks groups, and `by()` gives one series per group:
+
+```{python}
+by_age = ss.Sim(model.stratify(age=[0, 15, 65], inplace=False), start='2020-01-01', stop='2020-07-01', verbose=0).run()
+res_age = by_age.results.sir
+print(f'Peak infected: {res_age.n_I.max():,.0f}, of whom aged 65+: {res_age.n_I.select(age="65+").max():,.0f}')
+print(f'Peak prevalence among children: {res_age.prevalence.select(age="0-14").max():.2f}')
+res_age.n_I.by('age').plot()
+```
+
+A ratio such as prevalence is never averaged over groups: its numerator and denominator are each summed over the groups selected, and then divided.
+
+## Data attached by name
+
+Data is attached to results by name: a column called `cases` in a dataframe (or file) given as `data=` is compared with the result `cases`, and plotted with it. Weekly data is compared with the total of a flow over each week. Here the data is made from the model, with noise:
+
+```{python}
+import numpy as np
+import pandas as pd
+
+weekly = res.cases.to_series(resample='week')
+data = pd.DataFrame(dict(date=weekly.index.strftime('%Y-%m-%d'), cases=np.random.default_rng(1).poisson(weekly.values)))
+print(data.head())
+
+with_data = ss.Sim(model, data=data, start='2020-01-01', stop='2020-07-01', verbose=0).run()
+with_data.plot()
+```
+
+A column that matches no result gets a note that lists the closest result names (and is an error when a fit compares the data with the results). Data attached this way is also what [calibration](workflows_calibration.qmd) fits to.
 
 ## Plotting results
 
@@ -95,24 +182,21 @@ If you'd rather have a flat dictionary of results keyed by `module_result` (rath
 
 ## Results across multiple runs
 
-When you run many sims with [`ss.MultiSim`](workflows_run.qmd), you usually want summary statistics across the runs rather than each run individually. Calling `reduce()` (or the convenience methods `mean()` / `median()`) combines the runs and populates the `low` and `high` uncertainty bounds on each result:
+When you run many sims (with [`ss.parallel()`](workflows_run.qmd), or `sim.run(n_runs=...)` for one sim), each result in `msim.results` is the same result as for one sim, with a run axis first. It is summarized over the runs directly:
 
 ```{python}
-msim = ss.MultiSim(ss.Sim(n_agents=2000, diseases='sir', networks='random', verbose=0), n_runs=5)
-msim.run()
-msim.reduce()
-
-# After reducing, each result carries low/high bounds, which plot() shows as a band
-res = msim.results['sir_new_infections']
-print(f'Bounds available: low={res.low is not None}, high={res.high is not None}')
-res.plot()
+msim = ss.Sim(n_agents=2000, diseases='sir', networks='random', verbose=0).run(n_runs=5)
+res = msim.results.sir.new_infections # Runs by time points
+print(res.shape)
+low, mid, high = res.quantiles([0.1, 0.5, 0.9]) # One series per quantile
+res.median() # The median over the runs, as the result of one run
+res.select(run=0) # One run
+res.plot() # The median and a 95% interval (lines=True for every run)
 ```
-
-Note that across multiple runs the results are stored in a flattened structure keyed by `module_result` (e.g. `sir_new_infections`), so you access them with `msim.results['sir_new_infections']` rather than the nested `msim.results.sir...` form used for a single sim.
 
 ## Results with multiple columns
 
-Sometimes a result naturally has several values per timestep, such as new infections by variant or by age group. Rather than defining one result per group, you can pass `columns` to `ss.Result`, which makes a 2D result of shape `(npts, ncols)`:
+Sometimes a result in a module written as code naturally has several values per timestep, such as new infections by variant or by age group. (For a declared disease, [stratifying](#results-by-group) does this.) Rather than defining one result per group, you can pass `columns` to `ss.Result`, which makes a 2D result of shape `(npts, ncols)`. In an analyzer, `self.ti` is the time point at the end of the step, where the step's results go, and a declared disease records when each agent was infected (`ti_I`) as the time point at the end of the step in which they were infected:
 
 ```{python}
 import numpy as np
@@ -126,7 +210,7 @@ class InfectionsByAge(ss.Analyzer):
         )
 
     def step(self):
-        new = self.sim.diseases.sis.ti_infected == self.ti
+        new = self.sim.diseases.sis.ti_I == self.ti # Agents who entered I during the step that ends at this time point
         children = self.sim.people.age < 15
         self.results.new_infections[self.ti] = [np.count_nonzero(new & children), np.count_nonzero(new & ~children)]
 
@@ -143,10 +227,10 @@ print('Label:', res.adults.label)
 print('Columns:', list(res.by_column().keys()))
 ```
 
-Most operations handle each column separately: results are scaled by `pop_scale`, `to_df()` and `sim.to_df()` give one dataframe column per result column, `sim.summarize()` summarizes each column, and `MultiSim.reduce()` computes bounds for each column. Likewise, `resample()` and `annualize()` resample along time only, inferring how to aggregate from the name of the parent result (e.g. `new_` results are summed):
+Most operations handle each column separately: results are scaled by `pop_scale`, `to_df()` and `sim.to_df()` give one dataframe column per result column, `sim.summarize()` summarizes each column, and the results of many runs keep the columns (`res.median()` is 2D). Likewise, `resample()` resamples along time only, aggregating by the kind of the parent result (a flow such as `new_infections` is summed, and a stock such as `n_I` takes its value at the end of each period):
 
 ```{python}
-annual = res.annualize()
+annual = res.resample('year')
 print('Annual shape:', annual.shape)
 annual.to_df().head()
 ```

@@ -31,7 +31,7 @@ def make_simple_setup():
 def make_complex_30():
     """A shorter run with substantially more model structure."""
     hiv = ssl.diseases.HIV()
-    hiv.pars['beta'] = {'mf': [0.15, 0.10], 'maternal': [0.2, 0], 'random': [0, 0]}
+    hiv.pars['beta'] = {'sexual': [0.15, 0.10], 'maternal': [0.2, 0], 'random': [0, 0]}
 
     return ss.Sim(
         n_agents=80_000,
@@ -40,7 +40,7 @@ def make_complex_30():
         rand_seed=1,
         verbose=0,
         diseases=[ss.SIS(), hiv],
-        networks=[ss.RandomNet(), ss.MFNet(), ss.PrenatalNet()],
+        networks=[ss.RandomNet(), ss.SexualNet(), ss.PrenatalNet()],
         demographics=ss.Pregnancy(),
         label='complex_30',
     )
@@ -55,7 +55,7 @@ def make_moderate():
         rand_seed=1,
         verbose=0,
         diseases=[ss.SIR(), ss.SIS()],
-        networks=[ss.RandomNet(), ss.MFNet()],
+        networks=[ss.RandomNet(), ss.SexualNet()],
         demographics=True,
         label='moderate_300',
     )

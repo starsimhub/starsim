@@ -1,0 +1,129 @@
+---
+title: Coming from summer2
+jupyter: python3
+---
+
+This page is for people who build compartmental models with [summer2](https://github.com/monash-emu/summer2) in Python, often in or near the AuTuMN group: a base model stratified by age, clinical status, immunity, strain, or place, each stratification with flow adjustments, infectiousness adjustments, and a mixing matrix; parameters that vary in time; derived outputs; and calibration through JAX. It shows a summer2 model next to the same model in Starsim, how their results agree, how long each takes, and what works and what does not yet, including what fails.
+
+## The same model in both
+
+summer2's mixing-matrix example: an SIR with deaths, stratified by age and by location, with a mixing matrix for each:
+
+```{python}
+#| eval: false
+import numpy as np
+from summer2 import CompartmentalModel, Stratification, Multiply
+from summer2.parameters import Data
+
+def build_model():
+    """Returns a model for the mixing matrix examples"""
+    model = CompartmentalModel(
+        times=[0, 20],
+        compartments=["S", "I", "R"],
+        infectious_compartments=["I"],
+        timestep=0.1
+    )
+    model.set_initial_population(distribution={"S": 990, "I": 10})
+    model.add_infection_frequency_flow(name="infection", contact_rate=2, source="S", dest="I")
+    model.add_transition_flow(name="recovery", fractional_rate=1/3, source="I", dest="R")
+    model.add_death_flow(name="infection_death", death_rate=0.05, source="I")
+    return model
+
+# Age stratification with young/old mixing
+age_strata = ["young", "old"]
+age_strat = Stratification(name="age", strata=age_strata, compartments=["S", "I", "R"])
+age_mixing_matrix = Data(np.array([
+    [0.2, 0.3],
+    [0.5, 0.7],
+]) )
+age_mixing_matrix.node_name = "age_mixing"
+age_strat.set_mixing_matrix(age_mixing_matrix)
+
+# Location stratification with urban/rural mixing
+loc_strata = ["urban", "rural"]
+loc_strat = Stratification(name="location", strata=loc_strata, compartments=["S", "I", "R"])
+# Rural people have worse health care, higher mortality rates,
+loc_strat.set_flow_adjustments("infection_death", {
+    "urban": None,
+    "rural": Multiply(3),
+})
+loc_strat.set_population_split({"urban": 0.7, "rural": 0.3})
+loc_mixing_matrix = Data(np.array([
+    [0.8, 0.2],
+    [0.2, 0.8],
+]))
+loc_mixing_matrix.node_name = "loc_mixing"
+loc_strat.set_mixing_matrix(loc_mixing_matrix)
+
+model = build_model()
+model.stratify_with(age_strat)
+model.stratify_with(loc_strat)
+model.run()
+model.get_outputs_df().plot()
+```
+
+In Starsim, a stratification is one call, with its split and its adjustments, and the two mixing matrices are one `ss.contacts()`:
+
+```{python}
+import starsim as ss
+import starsim.interop
+ss.options(jupyter=True)
+
+S, I, R = ss.states('S I R')
+sir = ss.Disease(
+    infection       = ss.Transition(S, I, rate=2 * I),
+    recovery        = ss.Transition(I, R, rate=1/3),
+    infection_death = ss.death(I, rate=0.05),
+    init_n          = dict(I=10),
+)
+sir.stratify(age=['young', 'old'])
+sir.stratify(location=['urban', 'rural'], split=[0.7, 0.3], adjust={'infection_death': [1, 3]}) # Rural people have worse health care
+
+mixing = ss.contacts(age=[[0.2, 0.3], [0.5, 0.7]], location=[[0.8, 0.2], [0.2, 0.8]])
+sim = ss.Sim(sir, networks=mixing, total_pop=1000, dt=0.1, stop=20, verbose=0)
+sim.run()
+sim.plot()
+```
+
+Every flow and state is a result, by group, so summer2's output requests are selections: `sim.results.sir.infection.select(age='old', location='rural')` is `request_output_for_flow(..., dest_strata=...)`. The same model runs as a stochastic compartmental model or as agents with `solver='binomial'` or `solver='abm'`, which summer2 cannot do.
+
+## How the results agree
+
+| Model | Agreement |
+|---|---|
+| The mixing-matrix example (above) | Agree: every compartment within 0.08 people of 1,000. The stochastic and agent-based runs give the same number recovered, within 1% (means of 100 runs) |
+| An SEIR with clinical status entered by age, infectiousness and death adjusted by clinical status, and seven derived outputs | Agree: every compartment within 0.0006 people of 1,000, and every derived output within 0.005% of its peak |
+| A TB model in 36 compartments (six ages with aging and a mixing matrix, reinfection, births and deaths, and case detection scaled up over time by summer2's sigmoid times a fitted maximum) | Agree: every compartment within 8 people of 1.24 million (6e-6); active TB within 1 person in 1990, 2010, and 2025, and notifications within 0.5% |
+
+## Timings
+
+Lines are lines of model code (not counting blank lines, comments, imports, or plotting, and counting a line over 100 characters twice); times are for one run. Both are measured by Starsim's north-star script, `tests/north_star.py` (see the [index page](index.qmd#how-these-numbers-were-made)). summer2 1.3.6's times were recorded on the same machine, for `model.run()` on a model that is already built and compiled.
+
+| Model | Lines: summer2 | Lines: Starsim | One run: summer2 | One run: Starsim | |
+|---|---|---|---|---|---|
+| The mixing-matrix example | 35 | 11 | 0.0003 s once compiled; 1.4 s the first time (importing JAX, building, and compiling) | 0.013 s to build and run (0.052 s the first time in a new process); 0.8 ms to rerun a built sim | Pass |
+| The SEIR with clinical status | 134 (55 for the model alone) | 15 | 0.0008 s once compiled; 3.5 s the first time | 0.015 s (0.059 s the first time); 0.2 ms to rerun a built sim | Pass |
+| A COVID model in 384 compartments (16 age groups, five clinical levels, three levels of protection) | | | 3.6 to 4.3 s the first time; 0.23 to 0.41 s after that | 0.2 to 0.56 s the first time; 0.08 to 0.5 s after that | |
+
+The last row was measured on 17 October 2026, on a machine shared with other jobs. Starsim's compiled kernels are the same for every model, and are compiled once, so there is no wait for each new model.
+
+## What works and what does not yet
+
+These are from Starsim's switching demo for summer2 users (`tests/switching/test_summer2.py`), which checks each task against summer2's numbers, and from the review it was built from. "Fails" means the demo's check does not pass today.
+
+| Task | Today |
+|---|---|
+| The TB model above, written by hand in about 25 lines | **Works**: agreement as above |
+| Fit by NUTS when a fitted parameter multiplies a time series (case detection as a fitted maximum times a scale-up) | **Works**: the log-density in JAX equals the sim's, and NUTS runs on the JAX path with no divergences and recovers both values within 5% |
+| The log-density as a JAX function, for a sampler of your own (numpyro, estival) | **Works**: `sim.log_density()`, with `.grad()` by reverse mode |
+| Calibration by optimization | **Works**: `sim.calibrate()` chose L-BFGS-B with JAX gradients for the TB model, and recovered the two values from summer2's output to 0.2% |
+| Import a live summer2 model, with its parameters and its time functions | **Not in the same process**: summer2 1.3.6 needs JAX 0.4, so it cannot be installed with Starsim. The same model, written to JSON by `dump_summer2.py` in summer2's environment, imports with nothing missing and matches the hand-written model to 1e-13 |
+| summer2's sigmoidal scale-up | **Not yet**: `ss.timeseries` has constant, linear, and cosine interpolation, so the sigmoid is sampled into a time series |
+| A plain number times a time series (`1.5 * ss.timeseries(...)`) | **Works**. A parameter with no name inline (`ss.par(1.5) * ss.timeseries(...)`) raises a `ValueError` asking for one: give it as `ss.par(1.5, name='k')`, or assign it to a variable first |
+| The same model as a stochastic model or as agents | **Works**: `solver='binomial'`, `'gillespie'`, or `'abm'`; at a yearly step the stochastic solvers can differ a lot from the ODE, and `sim.check_dt()` shows how much a smaller step changes the results |
+| Interventions with costs (active case finding) | **Works**: `ss.treat(ss.Treatment(efficacy=0.7, transition='detection', cost=5), where=I, coverage=0.5, at=[2026, 2027])` |
+| Contact matrices and populations by country | **Works**: `ss.contacts('Philippines')` and `ss.people('Philippines', year=2021)` are bundled |
+
+## Bringing your model in
+
+`ss.interop.load(model, pars=params)` reads a live summer2 `CompartmentalModel` (if summer2 is installed alongside Starsim), and `ss.interop.load('model.json', format='summer2')` reads the JSON written by `dump_summer2.py` (in `starsim/interop/`), which runs in summer2's own environment. Each flow becomes one transition with the matching kind of rate, and each `stratify_with()` a stratification, with its population split, flow adjustments, infectiousness adjustments, and mixing matrix. `ss.interop.summer2.outputs(sim)` works out summer2's derived outputs from the results. What is not translated is listed (`sim.imported.incomplete`), and `sim.imported.prompt` is a prompt for an AI assistant with Starsim's import-model skill to finish the job.

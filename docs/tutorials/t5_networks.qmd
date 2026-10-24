@@ -13,13 +13,13 @@ Many infectious diseases transmit when people come into contact with one another
 
 Starsim contains two different approaches to disease transmission.
 
-**Contact network:** Disease transmits on individual person-to-person relationships. These are networks in the sense that each agent (person) can be viewed as a node and each contact is an edge. Networks are undirected in the sense that an edge will allow transmission in both directions, however you can make transmission stronger one way (p1-->p2) than the other (p2-->p1). The framework includes several pre-built contact network algorithms, each of which manages a list of edges that can change on each simulation step. In addition to the 'random' network, the framework include algorithms representing basic sexual networks for modeling sexually transmitted infections (STIs) and a 'maternal' network for modeling mother-to-child transmission.
+**Contact network:** Disease transmits on individual person-to-person relationships. These are networks in the sense that each agent (person) can be viewed as a node and each contact is an edge. Networks are undirected in the sense that an edge will allow transmission in both directions, however you can make transmission stronger one way (p1-->p2) than the other (p2-->p1). The framework includes several pre-built contact network algorithms, each of which manages a list of edges that can change on each simulation step. In addition to the 'random' network, the framework includes algorithms representing basic sexual networks for modeling sexually transmitted infections (STIs) and a 'maternal' network for modeling mother-to-child transmission.
 
 **Mixing pools:** Simulate well-mixed transmission from one group of agents to another. Each mixing pool simulates directed transmission from a group of source agents to a group of destination agents. Instead of simulating individual edges like in a contact network, mixing pools first compute the total "contagion" that is shed by the source group. This total contagion value is normalized by the number of agents in the source group to arrive at a value that represents a typical infectious source agent. Then, each destination agent is exposed to this typical (average) infectious agent, likely resulting in new infections in the destination group. Multiple mixing pools can be run simultaneously to simulate heterogeneous transmission between various source and destination groups. Mixing pools could be used with age contact matrices like those developed by Prem et al.
 
-Note that contact networks and mixing pools can be used together in a single simulation.
+Note that contact networks and mixing pools can be used together in a single simulation. With no network or mixing pool at all, everyone mixes with everyone else (homogeneous mixing).
 
-In this tutorial, we'll demonstrate a couple of the built-in contact networks, and give an overview of how you might create your own for your own disease modeling work. We'll also demonstrate how to use mixing pools.
+In this tutorial, we'll demonstrate a couple of the built-in contact networks, and give an overview of how you might create your own for your own disease modeling work. We'll also demonstrate how to use mixing pools and contact matrices.
 
 ## Overview of Starsim's contact network structure
 
@@ -76,27 +76,27 @@ net.plot()
 
 
 ## Sexual networks
-Starsim contains a few basic sexual networks, including an `mf` network for modeling heterosexual partnerships and an `msm` network for men having sex with men. Modeling STIs is a straightforward extension of the SIR example we looked at previously. Here's an example modeling HIV:
+Starsim contains a basic sexual network, `ss.SexualNet`, for modeling heterosexual partnerships (and, with `between='mm'`, men having sex with men). Modeling STIs is a straightforward extension of the SIR example we looked at previously. Here's an example modeling HIV:
 
 ```{python}
 # Create the disease
 hiv = ssl.diseases.HIV(
-    beta = {'mf': [0.05, 0.025]},    # See notes below
+    beta = {'sexualnet': ss.peract(m2f=0.05, f2m=0.025)}, # See notes below
 )
 
 # Create a heterosexual network
-mf = ss.MFNet(
-    duration=1/24,  # Using very short relationships so that we get more transmission
-    acts=80,        # Distribution of the number of coital acts/year
+mf = ss.SexualNet(
+    dur = ss.days(15),            # Using very short relationships so that we get more transmission
+    acts = ss.freqperyear(80),    # Number of coital acts per year
 )
 
-pars = dict(start=2000, dur=20, dt=1/12)
+pars = dict(start='2000', stop='2020', dt=ss.months(1))
 sim = ss.Sim(pars=pars, diseases=hiv, networks=mf)
 ```
 
-The main difference here is that we've added the line `hiv.pars['beta'] = {'mf': [0.05, 0.025]}`. Because STIs are generally more transmissible from males to females than vice versa, we can specify `beta` as a list, and we can also allow it to vary between networks. For instance, if we also had an MSM network here, we could set
+The main difference here is that we've given `beta` as a dictionary, `{'sexualnet': ss.peract(m2f=0.05, f2m=0.025)}`, with one entry per network. Because STIs are generally more transmissible from males to females than vice versa, we can give `beta` for each direction, as a probability per act (`ss.peract`), and we can also allow it to vary between networks. For instance, if we also had an MSM network here (`ss.SexualNet(name='msm', between='mm')`), we could set
 ```
-hiv.pars.update(beta = {'mf': [0.05, 0.025], 'msm': [0.08, 0.08]})
+hiv.pars.update(beta = {'sexualnet': ss.peract(m2f=0.05, f2m=0.025), 'msm': ss.peract(0.08)})
 ```
 The sexual network itself is structurally similar to the `random` network that we looked at previously, and can be customized by changing the `pars` dictionary that's used to construct it.
  
@@ -105,32 +105,32 @@ Maternal networks are useful for capturing mother-to-child transmission. If you 
 
 ```{python}
 hiv = ssl.diseases.HIV(
-    beta = {'mf': [0.05, 0.025], 'prenatal': [0.5, 0]}
+    beta = {'sexualnet': ss.peract(m2f=0.05, f2m=0.025), 'prenatal': 0.5}
 )
 
 # Make demographic modules
-pregnancy = ss.Pregnancy(fertility_rate=20)
-death = ss.Deaths(death_rate=15)
+pregnancy = ss.Pregnancy(fertility_rate=ss.peryear(20))
+death = ss.Deaths(death_rate=ss.peryear(15))
 
 # Make prenatal network
 prenatal = ss.PrenatalNet()
 
 # Make sim
-sim = ss.Sim(pars=pars, diseases=hiv, networks=[mf, prenatal], demographics=[pregnancy, death], dur=10)
+sim = ss.Sim(pars=pars, diseases=hiv, networks=[mf, prenatal], demographics=[pregnancy, death], stop='2010')
 sim.run().plot(show_module=False)
 ```
 
 ## Making your own contact network
-If you want to make your own network, a good place to start is by inheriting from one of the templates in networks.py. For example, if you wanted to make an `mf` network that has more age structure, you could do something like this:
+If you want to make your own network, a good place to start is by inheriting from one of the templates in networks.py. For example, if you wanted to make a sexual network that has more age structure, you could do something like this:
 
 ```{python}
-class age_mf(ss.MFNet):
-    def add_pairs(self, people, ti=None):
+class age_mf(ss.SexualNet):
+    def add_pairs(self):
         # Custom code to select pairs based on age
         return 
 ```
 
-This network would operate exactly like the existing `mf` network, but you could control how new pairs were added.
+This network would operate exactly like the existing `ss.SexualNet`, but you could control how new pairs were added.
 
 ## Introduction to mixing pools
 
@@ -143,20 +143,42 @@ Here's a simple comparison:
 
 ```{python}
 # Simple mixing pool example
-mp = ss.MixingPool(beta=1.0, n_contacts=ss.poisson(lam=3))
-sir_mp = ss.SIR()
-sim_mp = ss.Sim(diseases=sir_mp, networks=mp, verbose=0, label='Mixing Pool')
+mp = ss.MixingPool(n_contacts=ss.poisson(lam=3))
+sim_mp = ss.Sim(diseases=ss.SIR(beta=ss.peryear(0.1)), networks=mp, verbose=0, label='Mixing pool')
 
 # Equivalent contact network
 net = ss.RandomNet(n_contacts=ss.poisson(lam=3))
-sir_net = ss.SIR(beta=ss.peryear(0.1))
-sim_net = ss.Sim(diseases=sir_net, networks=net, verbose=0, label='Contact Network')
+sim_net = ss.Sim(diseases=ss.SIR(beta=ss.peryear(0.1)), networks=net, verbose=0, label='Contact network')
 
-msim = ss.MultiSim([sim_mp, sim_net]).run()
+msim = ss.parallel(sim_mp, sim_net)
 msim.plot()
 ```
 
-Both approaches model similar transmission patterns, but mixing pools work with groups rather than individual contacts.
+Both approaches model similar transmission patterns, but mixing pools work with groups rather than individual contacts. Here both sims run as agents, since the number of contacts differs between people (`ss.poisson`); with a fixed number (`n_contacts=3`), a mixing pool on its own needs no individual contacts, and the first sim would run as an ODE.
+
+## Age mixing with a contact matrix
+
+The most common use of mixing between groups is mixing by age, from a contact matrix. For this, the disease is split into age groups with `stratify()`, and `ss.contacts()` gives the mixing between them: here a matrix of daily contacts, where `matrix[i, j]` is the number of contacts a person in group `i` has with people in group `j` (`ss.contacts('Kenya')` loads a published matrix for a country instead). With a contact matrix, `beta` is the chance of infection per contact:
+
+```{python}
+S, I, R = ss.states('S I R')
+sir = ss.Disease(
+    infection = ss.Transition(S, I, rate=0.02 * I),
+    recovery = ss.Transition(I, R, dur=10),
+    init_prev = 0.001,
+)
+sir.stratify(age=[0, 15, 65]) # Age groups 0-14, 15-64, and 65+
+
+contacts = ss.contacts([[10, 4, 1], [4, 8, 2], [1, 2, 3]], bands=[0, 15, 65])
+sim = ss.Sim(sir, networks=contacts, total_pop=1e6, start='2025-01-01', stop='2025-07-01')
+sim.run()
+
+res = sim.results.sir
+print(f'Peak infected: {res.n_I.max():,.0f}, of whom aged 65+: {res.n_I.select(age="65+").max():,.0f}')
+res.n_I.by('age').plot()
+```
+
+Every result is now split by age: `select()` picks one age group, and `by()` gives one series per group. This model has no individual contacts, so it runs as an ODE; give the sim `n_agents=` to run the same model as agents.
 
 ## What you've learned
 
@@ -165,11 +187,12 @@ Congratulations! You've now learned how to:
 - Model disease-specific networks (sexual, maternal)
 - Create custom networks with your own connection rules
 - Understand the difference between contact networks and mixing pools
+- Model mixing by age with a contact matrix
 
-For more advanced mixing pool techniques (age-structured mixing, contact matrices, multi-group models), see the Networks implementation guide.
+For more advanced mixing pool techniques (age-structured mixing, contact matrices, multi-group models), see [Networks](../user_guide/modules_networks.qmd) in the user guide.
 
 ## Exercises
-1. **Multi-network STI model**: Adapt the syphilis example to include both MF and MSM transmission
-2. **Custom network parameters**: Modify the AgeMFNet to have different age bins and mixing probabilities
+1. **Multi-network STI model**: Adapt the HIV example to include both MF and MSM transmission
+2. **Custom network parameters**: Modify the `age_mf` network to have different age bins and mixing probabilities
 3. **Network comparison**: Compare random vs age-structured networks - how do they affect epidemic dynamics?
 

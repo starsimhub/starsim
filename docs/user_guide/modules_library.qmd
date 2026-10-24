@@ -3,12 +3,12 @@ title: Library modules
 jupyter: python3
 ---
 
-Core Starsim (`import starsim as ss`) provides the framework and its generic building blocks: `ss.SIR`, `ss.RandomNet`, `ss.Pregnancy`, and so on. The **Starsim library** (`import starsim.library as ssl`) is a separate collection of concrete, opinionated modules built on top of those: specific diseases such as measles and cholera, specialized networks such as households, and worked examples of harder modeling patterns such as congenital infection.
+Core Starsim (`import starsim as ss`) provides the framework and its generic building blocks: `ss.Disease`, `ss.SIR`, `ss.RandomNet`, `ss.Pregnancy`, and so on. The **Starsim library** (`import starsim.library as ssl`) is a separate collection of concrete, opinionated modules built on top of those: specific diseases such as measles and cholera, specialized networks such as households, and worked examples of harder modeling patterns such as congenital infection.
 
 The library is shipped with Starsim but is deliberately held to a lower bar than the core package. Library modules are *illustrative rather than validated*: parameter values are indicative, some are placeholders, and the APIs may change between versions. Treat them as starting points to copy and adapt, not as off-the-shelf models for a particular setting.
 
 ::: {.callout-note}
-The library is where most modules that used to live in core Starsim ended up. If you are migrating older code, `ss.Measles` is now `ssl.Measles`, `ss.HIV` is now `ssl.HIV`, and so on.
+The library is where most modules that used to live in core Starsim ended up. If you are migrating older code, `ss.Measles` is now `ssl.Measles`, `ss.HIV` is now `ssl.HIV`, and so on. In Starsim 4, `ss.SIR`, `ss.SIS`, and `ss.SEIR` are declared diseases (states and transitions, which run under any solver); Starsim 3's versions, written as code, are in the library as `ssl.AgentSIR`, `ssl.AgentSIS`, and `ssl.AgentSEIR`, and are what the library's diseases build on.
 :::
 
 ## Importing and using library modules
@@ -26,7 +26,7 @@ print(ssl.Measles is ssl.diseases.Measles)
 Otherwise they behave exactly like core modules, and can be mixed freely with them:
 
 ```{python}
-outbreak = dict(start=2000, dur=ss.years(1), dt=ss.days(1), n_agents=2000)
+outbreak = dict(start='2000', dur=ss.years(1), dt=ss.days(1), n_agents=2000)
 sim = ss.Sim(diseases=ssl.Measles(beta=ss.perday(0.3)), networks=ss.RandomNet(), **outbreak)
 sim.run()
 sim.plot('measles')
@@ -40,16 +40,17 @@ The library's outbreak diseases specify their natural history in days (incubatio
 
 ## Diseases
 
-The library includes four example diseases, spanning a range of complexity:
+The library includes four example diseases, spanning a range of complexity, and Starsim 3's SIR, SIS, and SEIR written as code:
 
 | Class | Base | Description |
 | --- | --- | --- |
-| `ssl.Measles` | `ss.SEIR` | Measles as an SEIR model, with CDC natural history parameters |
-| `ssl.Ebola` | `ss.SEIR` | Ebola with severe disease and continued transmission from unburied bodies |
-| `ssl.Cholera` | `ss.SEIR` | Cholera with symptomatic/asymptomatic infection, plus indirect transmission via a decaying environmental reservoir |
+| `ssl.Measles` | `ssl.AgentSEIR` | Measles as an SEIR model, with CDC natural history parameters |
+| `ssl.Ebola` | `ssl.AgentSEIR` | Ebola with severe disease and continued transmission from unburied bodies |
+| `ssl.Cholera` | `ssl.AgentSEIR` | Cholera with symptomatic/asymptomatic infection, plus indirect transmission via a decaying environmental reservoir |
 | `ssl.HIV` | `ss.Infection` | HIV with CD4 count dynamics, CD4-dependent mortality, and vertical transmission |
+| `ssl.AgentSIR`, `ssl.AgentSIS`, `ssl.AgentSEIR` | `ss.Infection` | Starsim 3's SIR, SIS (with waning immunity), and SEIR, written as code: the classes to subclass for a disease that overrides `set_prognoses()`, `step_state()`, and so on |
 
-All three latent-period models subclass `ss.SEIR`, which owns the S→E→I→R lifecycle. `Measles` supplies only parameter values. `Ebola` and `Cholera` additionally override `set_progression()` for their richer natural histories (severe disease and burial; symptoms and shedding), while inheriting the compartment transitions and incidence accounting. `Cholera` also extends `infect()` to add environmental transmission on top of the usual person-to-person route — the pattern to follow for any waterborne, vector-borne, or otherwise indirectly transmitted disease.
+All three latent-period models subclass `ssl.AgentSEIR`, which owns the S→E→I→R lifecycle as code. `Measles` supplies only parameter values. `Ebola` and `Cholera` additionally override `set_progression()` for their richer natural histories (severe disease and burial; symptoms and shedding), while inheriting the compartment transitions and incidence accounting. `Cholera` also extends `infect()` to add environmental transmission on top of the usual person-to-person route — the pattern to follow for any waterborne, vector-borne, or otherwise indirectly transmitted disease.
 
 ```{python}
 sim = ss.Sim(diseases=ssl.Cholera(beta=ss.perday(0.5)), networks=ss.RandomNet(), **outbreak)
@@ -71,7 +72,7 @@ Since HIV mortality is CD4-dependent, treatment reduces deaths as well as transm
 Unlike the outbreak diseases above, HIV plays out over years, so a yearly timestep and a multi-decade horizon are appropriate:
 
 ```{python}
-endemic = dict(start=2000, stop=2030, n_agents=2000)
+endemic = dict(start='2000', stop='2030', n_agents=2000)
 hiv = lambda: ssl.HIV(beta=ss.peryear(0.05), init_prev=0.05)
 net = lambda: ss.RandomNet(n_contacts=ss.poisson(2))
 
@@ -96,11 +97,16 @@ for sim in msim.sims:
 | Class | Base | Description |
 | --- | --- | --- |
 | `ssl.HouseholdNet` | `ss.Network` | Households built from DHS-style survey data, optionally evolving over time |
+| `ssl.ClusterNet` | `ss.Network` | Fully connected clusters, such as households |
+| `ssl.HybridNet` | `ss.Network` | Covasim's household, school, work, and community networks |
+| `ssl.DegreeNet` | `ss.DynamicNetwork` | Partnerships with a target number of partners at a time (e.g. needle sharing) |
+| `ssl.StaticNet` | `ss.Network` | A fixed network from a NetworkX graph |
+| `ssl.RandomSafeNet` | `ss.DynamicNetwork` | Random connections that are random-number safe, for scenario comparisons |
 | `ssl.DiskNet` | `ss.Network` | Agents move within a unit square and connect to others within a given radius |
 | `ssl.ErdosRenyiNet` | `ss.DynamicNetwork` | Every possible edge is created with probability `p` each timestep |
 | `ssl.NullNet` | `ss.Network` | Self-connections only, with zero transmission |
 
-`DiskNet` is a spatial network: each agent has an `x`, `y` position and a heading, moves at speed `v` each timestep, bounces off the walls of the unit square, and is connected to every agent within radius `r`. Because contacts are determined by position, epidemics spread as a wave rather than uniformly:
+The first five are described on the [Networks](modules_networks.qmd) page. `DiskNet` is a spatial network: each agent has an `x`, `y` position and a heading, moves at speed `v` each timestep, bounces off the walls of the unit square, and is connected to every agent within radius `r`. Because contacts are determined by position, epidemics spread as a wave rather than uniformly:
 
 ```{python}
 sim = ss.Sim(diseases=ss.SIS(beta=ss.perday(0.2)), networks=ssl.DiskNet(r=0.05), **outbreak)
@@ -149,18 +155,18 @@ The `ssl.mnch` submodule contains examples of vertical transmission and birth ou
 
 | Class | Base | Description |
 | --- | --- | --- |
-| `ssl.mnch.CongenitalDisease` | `ss.SIR` | Congenital outcomes (stillbirth, congenital infection, normal) via the generic congenital framework |
-| `ssl.mnch.NeonatalSepsis` | `ss.SIR` | Infects newborns at birth and kills some within days |
+| `ssl.mnch.CongenitalDisease` | `ssl.AgentSIR` | Congenital outcomes (stillbirth, congenital infection, normal) via the generic congenital framework |
+| `ssl.mnch.NeonatalSepsis` | `ssl.AgentSIR` | Infects newborns at birth and kills some within days |
 | `ssl.mnch.FetalHealth` | `ss.Module` | Tracks fetal growth and birth weight outcomes (LBW, VLBW, SGA) |
 | `ssl.mnch.fetal_infection` | `ss.Connector` | Links a disease to fetal health outcomes |
 | `ssl.mnch.treat_pregnant` | `ss.Intervention` | Treats infected pregnant women and partially reverses fetal damage |
 
 ### Congenital outcomes
 
-`CongenitalDisease` demonstrates the generic congenital framework built into `ss.Infection`. When transmission occurs to an unborn agent via `ss.PrenatalNet`, `set_congenital()` samples an outcome from the `birth_outcomes` distribution and schedules it around delivery time; `step_congenital()` then executes it. Lethal outcomes call `request_death()`, while non-lethal outcomes set a boolean state. Fetal losses (`'stillborn'`, `'miscarriage'`) are scheduled one timestep before delivery so that they happen in utero — otherwise `ss.Pregnancy`, which runs earlier in the integration loop, would already have delivered the fetus and the loss would be recorded as a live birth followed by a neonatal death:
+`CongenitalDisease` schedules congenital outcomes (`ss.Infection` calls `set_congenital()` for each person infected before birth, which by default does nothing). When transmission occurs to an unborn agent via `ss.PrenatalNet`, `set_congenital()` samples an outcome from the `birth_outcomes` distribution and schedules it around delivery time; `step_congenital()` then executes it. Lethal outcomes call `request_death()`, while non-lethal outcomes set a boolean state. Fetal losses (`'stillborn'`, `'miscarriage'`) are scheduled one timestep before delivery so that they happen in utero — otherwise `ss.Pregnancy`, which runs earlier in the integration loop, would already have delivered the fetus and the loss would be recorded as a live birth followed by a neonatal death:
 
 ```{python}
-mnch_pars = dict(start=2000, stop=2005, n_agents=2000, dt=ss.weeks(1))
+mnch_pars = dict(start='2000', stop='2005', n_agents=2000, dt=ss.weeks(1))
 sim = ss.Sim(
     diseases      = ssl.mnch.CongenitalDisease(beta=ss.peryear(20), init_prev=0.2),
     demographics  = [ss.Pregnancy(fertility_rate=ss.freqperyear(100), burnin=True), ss.Deaths()],
@@ -169,14 +175,14 @@ sim = ss.Sim(
 )
 sim.run()
 preg = sim.results.pregnancy
-print('Births:', preg.births.sum())
-print('Stillbirths:', preg.stillbirths.sum())
+print('Births:', preg.birth.sum())
+print('Stillbirths:', preg.stillbirth.sum())
 print('Congenital infections:', sim.diseases.congenitaldisease.congenital.sum())
 ```
 
 The stillbirth and congenital-infection counts should track the `birth_outcomes` probabilities (0.3 and 0.4 here).
 
-To use the framework in your own disease, define `birth_outcome_keys` and `birth_outcomes` in your pars, add a matching `ti_<key>` state for each outcome (plus a boolean state for each non-lethal one), and call `self.step_congenital()` from `step_state()`. Outcomes named `'stillborn'`, `'miscarriage'`, or `'neonatal_deaths'` are treated as deaths; the first two fire before delivery and the third after it.
+To use it in your own disease, subclass `ssl.CongenitalDisease` (or copy its `set_congenital()` and `step_congenital()`), define `birth_outcome_keys` and `birth_outcomes` in your pars, add a matching `ti_<key>` state for each outcome (plus a boolean state for each non-lethal one), and call `self.step_congenital()` from `step_state()`. Outcomes named `'stillborn'`, `'miscarriage'`, or `'neonatal_deaths'` are treated as deaths; the first two fire before delivery and the third after it.
 
 ### Neonatal deaths
 
@@ -191,7 +197,7 @@ sim = ss.Sim(
 )
 sim.run()
 print('New infections:', sim.results.neonatalsepsis.new_infections.sum())
-print('Births:', sim.results.pregnancy.births.sum())
+print('Births:', sim.results.pregnancy.birth.sum())
 print('Neonatal deaths:', sim.results.pregnancy.neonatal_deaths.sum())
 ```
 
@@ -199,11 +205,11 @@ print('Neonatal deaths:', sim.results.pregnancy.neonatal_deaths.sum())
 
 `FetalHealth` is deliberately disease-agnostic: it tracks a baseline fetal weight percentile per pregnancy and exposes two levers that other modules pull — bringing delivery forward (preterm risk) and accumulating growth restriction (low birth weight). At delivery it computes `birth_weight` and classifies newborns as LBW, VLBW, or SGA.
 
-The `fetal_infection` connector pulls those levers when a pregnant woman is infected, and the `treat_pregnant` intervention partially reverses the damage when she is treated. Note that `FetalHealth` is passed via `custom`, since it is not a disease, network, demographic, or intervention:
+The `fetal_infection` connector pulls those levers when a pregnant woman is infected, and the `treat_pregnant` intervention partially reverses the damage when she is treated. Both are written as code against an SIR written as code, so the disease here is `ssl.AgentSIR`, named `'sir'`. Note that `FetalHealth` is passed via `custom`, since it is not a disease, network, demographic, or intervention:
 
 ```{python}
 sim = ss.Sim(
-    diseases      = ss.SIR(beta=ss.peryear(20)),
+    diseases      = ssl.AgentSIR(beta=ss.peryear(20), name='sir'),
     demographics  = [ss.Pregnancy(fertility_rate=ss.freqperyear(100), burnin=True), ss.Deaths()],
     connectors    = ssl.mnch.fetal_infection(),
     interventions = ssl.mnch.treat_pregnant(disease='sir', start_year=2005),

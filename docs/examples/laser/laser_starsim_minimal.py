@@ -31,6 +31,9 @@ class SIRModel(ss.Module):
         )
 
     def step(self):
+        pass # Nothing to do in the step itself
+
+    def update_results(self): # Called after each step, and at the start
         tick = self.ti
         susceptible = (self.population.disease_state == 0).sum()
         infected = (self.population.disease_state == 1).sum()
@@ -124,11 +127,11 @@ transmission = Transmission(infection_rate)
 sir_model = SIRModel()
 
 # Initialize the model
-sim = ss.Sim(params, modules=[intrahost, transmission, sir_model], copy_inputs=False)
+sim = ss.Sim(params, modules=[intrahost, transmission, sir_model])
 
 # Run the simulation
 with sc.timer():
     sim.run()
 
 # Plot results
-sir_model.plot_results()
+sim.custom.sirmodel.plot_results() # The sim's copy of sir_model, which ran

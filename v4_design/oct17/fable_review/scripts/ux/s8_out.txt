@@ -1,0 +1,147 @@
+/home/cliffk/idm/ssv4/starsim/time.py:2506: UserWarning: AutoDateLocator was unable to pick an appropriate interval for this date range. It may be necessary to add an interval value to the AutoDateLocator's intervald dictionary. Defaulting to 6.
+  vticks = self._date_locator() # The internal date locator will return the tick positions in matplotlib units
+
+######## what results does a branching transition give?
+    raise exception
+  File "/software/conda/envs/v4/lib/python3.13/site-packages/sciris/sc_odict.py", line 1308, in __getattribute__
+    return object.__getattribute__(self, attr)
+           ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+AttributeError: 'Results' object has no attribute 'seir'
+[FAIL]
+
+######## ODE run
+solver: ode (every part of the model has a compartmental form)
+  note: unit='day' (from start and stop dates)
+--- results.vx: ['timevec', 'delivered', 'eligible', 'coverage']
+--- results.vaccine: ['timevec']
+   timevec <class 'starsim.time.DateArray'> 'DateArray' object has no attribute 'values'
+   delivered: max 2.88e+05, last 0
+   eligible: max 3.6e+05, last 0
+   coverage: max 0.8, last 0
+--- n_S by age and vaccine at end:
+               ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^
+TypeError: Result.by() takes 2 positional arguments but 3 were given
+[ok]
+
+######## ABM run
+solver: abm (requested)
+  note: unit='day' (from start and stop dates)
+Initializing sim with 2000 agents
+  note: latent has rate × dt = 0.2 (0.2 per day × 1 day), so 0.18 of people leave in a step; sim.check_dt() shows how much a smaller step changes the results
+  Running 2020.01.01 ( 0/732) (0.00 s)  ———————————————————— 0%
+  Running 2020.01.11 (10/732) (0.02 s)  ———————————————————— 2%
+  Running 2020.01.21 (20/732) (0.03 s)  ———————————————————— 3%
+  Running 2020.01.31 (30/732) (0.03 s)  ———————————————————— 4%
+  Running 2020.02.10 (40/732) (0.04 s)  •——————————————————— 6%
+  Running 2020.02.20 (50/732) (0.05 s)  •——————————————————— 7%
+  Running 2020.03.01 (60/732) (0.06 s)  •——————————————————— 8%
+  Running 2020.03.11 (70/732) (0.07 s)  •——————————————————— 10%
+  Running 2020.03.21 (80/732) (0.09 s)  ••—————————————————— 11%
+  Running 2020.03.31 (90/732) (0.10 s)  ••—————————————————— 12%
+  Running 2020.04.10 (100/732) (0.11 s)  ••—————————————————— 14%
+  Running 2020.04.20 (110/732) (0.12 s)  •••————————————————— 15%
+  Running 2020.04.30 (120/732) (0.13 s)  •••————————————————— 17%
+  Running 2020.05.10 (130/732) (0.14 s)  •••————————————————— 18%
+  Running 2020.05.20 (140/732) (0.15 s)  •••————————————————— 19%
+  Running 2020.05.30 (150/732) (0.16 s)  ••••———————————————— 21%
+  Running 2020.06.09 (160/732) (0.16 s)  ••••———————————————— 22%
+  Running 2020.06.19 (170/732) (0.17 s)  ••••———————————————— 23%
+  Running 2020.06.29 (180/732) (0.18 s)  ••••———————————————— 25%
+  Running 2020.07.09 (190/732) (0.18 s)  •••••——————————————— 26%
+  Running 2020.07.19 (200/732) (0.19 s)  •••••——————————————— 27%
+  Running 2020.07.29 (210/732) (0.19 s)  •••••——————————————— 29%
+  Running 2020.08.08 (220/732) (0.20 s)  ••••••—————————————— 30%
+  Running 2020.08.18 (230/732) (0.20 s)  ••••••—————————————— 32%
+  Running 2020.08.28 (240/732) (0.21 s)  ••••••—————————————— 33%
+  Running 2020.09.07 (250/732) (0.21 s)  ••••••—————————————— 34%
+  Running 2020.09.17 (260/732) (0.22 s)  •••••••————————————— 36%
+  Running 2020.09.27 (270/732) (0.23 s)  •••••••————————————— 37%
+  Running 2020.10.07 (280/732) (0.23 s)  •••••••————————————— 38%
+  Running 2020.10.17 (290/732) (0.24 s)  •••••••————————————— 40%
+  Running 2020.10.27 (300/732) (0.24 s)  ••••••••———————————— 41%
+  Running 2020.11.06 (310/732) (0.25 s)  ••••••••———————————— 42%
+  Running 2020.11.16 (320/732) (0.25 s)  ••••••••———————————— 44%
+  Running 2020.11.26 (330/732) (0.26 s)  •••••••••——————————— 45%
+  Running 2020.12.06 (340/732) (0.26 s)  •••••••••——————————— 47%
+  Running 2020.12.16 (350/732) (0.27 s)  •••••••••——————————— 48%
+  Running 2020.12.26 (360/732) (0.27 s)  •••••••••——————————— 49%
+  Running 2021.01.05 (370/732) (0.28 s)  ••••••••••—————————— 51%
+  Running 2021.01.15 (380/732) (0.29 s)  ••••••••••—————————— 52%
+  Running 2021.01.25 (390/732) (0.29 s)  ••••••••••—————————— 53%
+  Running 2021.02.04 (400/732) (0.30 s)  ••••••••••—————————— 55%
+  Running 2021.02.14 (410/732) (0.30 s)  •••••••••••————————— 56%
+  Running 2021.02.24 (420/732) (0.31 s)  •••••••••••————————— 58%
+  Running 2021.03.06 (430/732) (0.31 s)  •••••••••••————————— 59%
+  Running 2021.03.16 (440/732) (0.32 s)  ••••••••••••———————— 60%
+  Running 2021.03.26 (450/732) (0.32 s)  ••••••••••••———————— 62%
+  Running 2021.04.05 (460/732) (0.33 s)  ••••••••••••———————— 63%
+  Running 2021.04.15 (470/732) (0.33 s)  ••••••••••••———————— 64%
+  Running 2021.04.25 (480/732) (0.34 s)  •••••••••••••——————— 66%
+  Running 2021.05.05 (490/732) (0.35 s)  •••••••••••••——————— 67%
+  Running 2021.05.15 (500/732) (0.35 s)  •••••••••••••——————— 68%
+  Running 2021.05.25 (510/732) (0.36 s)  •••••••••••••——————— 70%
+  Running 2021.06.04 (520/732) (0.36 s)  ••••••••••••••—————— 71%
+  Running 2021.06.14 (530/732) (0.37 s)  ••••••••••••••—————— 73%
+  Running 2021.06.24 (540/732) (0.37 s)  ••••••••••••••—————— 74%
+  Running 2021.07.04 (550/732) (0.38 s)  •••••••••••••••————— 75%
+  Running 2021.07.14 (560/732) (0.38 s)  •••••••••••••••————— 77%
+  Running 2021.07.24 (570/732) (0.39 s)  •••••••••••••••————— 78%
+  Running 2021.08.03 (580/732) (0.40 s)  •••••••••••••••————— 79%
+  Running 2021.08.13 (590/732) (0.40 s)  ••••••••••••••••———— 81%
+  Running 2021.08.23 (600/732) (0.41 s)  ••••••••••••••••———— 82%
+  Running 2021.09.02 (610/732) (0.41 s)  ••••••••••••••••———— 83%
+  Running 2021.09.12 (620/732) (0.42 s)  ••••••••••••••••———— 85%
+  Running 2021.09.22 (630/732) (0.43 s)  •••••••••••••••••——— 86%
+  Running 2021.10.02 (640/732) (0.43 s)  •••••••••••••••••——— 88%
+  Running 2021.10.12 (650/732) (0.44 s)  •••••••••••••••••——— 89%
+/home/cliffk/idm/ssv4/starsim/time.py:2506: UserWarning: AutoDateLocator was unable to pick an appropriate interval for this date range. It may be necessary to add an interval value to the AutoDateLocator's intervald dictionary. Defaulting to 6.
+  vticks = self._date_locator() # The internal date locator will return the tick positions in matplotlib units
+  Running 2021.10.22 (660/732) (0.44 s)  ••••••••••••••••••—— 90%
+  Running 2021.11.01 (670/732) (0.45 s)  ••••••••••••••••••—— 92%
+  Running 2021.11.11 (680/732) (0.46 s)  ••••••••••••••••••—— 93%
+  Running 2021.11.21 (690/732) (0.46 s)  ••••••••••••••••••—— 94%
+  Running 2021.12.01 (700/732) (0.47 s)  •••••••••••••••••••— 96%
+  Running 2021.12.11 (710/732) (0.47 s)  •••••••••••••••••••— 97%
+  Running 2021.12.21 (720/732) (0.48 s)  •••••••••••••••••••— 98%
+  Running 2021.12.31 (730/732) (0.49 s)  •••••••••••••••••••— 100%
+[ok]
+
+######## compare
+peak I ode 196613.50209931753 abm 199000.0
+deaths ode 94055.22228226103 abm 103500.0
+over-65 vaccinated (abm): ['timevec', 'delivered', 'eligible', 'coverage']
+Keys don't match!
+  Extra sim2 keys: ['cum_deaths', 'n_alive', 'n_female', 'new_deaths', 'new_emigrants']
+
+The following values differ between the two simulations:
+                           sim1        sim2       diff  ratio change
+vx_delivered            393.388     406.421     13.032  1.033      ↑
+vx_eligible             491.736     506.148     14.412  1.029      ↑
+vx_coverage               0.001       0.001      0.000  1.004      ↑
+seir_n_S             145793.162  149674.863   3881.702  1.027      ↑
+seir_n_E               6425.237    8049.863   1624.626  1.253     ↑↑
+seir_n_I              12849.056   13247.268    398.212  1.031      ↑
+seir_n_R             751439.291  739208.333 -12230.957  0.984      ↓
+seir_n_D              83493.255   89819.672   6326.418  1.076      ↑
+seir_infection         1283.541    1302.596     19.054  1.015      ↑
+seir_cum_infection   939552.223  953500.000  13947.777  1.015      ↑
+seir_latent            1284.907    1303.962     19.054  1.015      ↑
+seir_cum_latent      940552.223  954500.000  13947.777  1.015      ↑
+seir_outcome           1284.907    1303.962     19.054  1.015      ↑
+seir_cum_outcome     940552.223  954500.000  13947.777  1.015      ↑
+seir_new_infections    1283.541    1302.596     19.054  1.015      ↑
+seir_cum_infections  939552.223  953500.000  13947.777  1.015      ↑
+seir_prevalence           0.019       0.021      0.002  1.105     ↑↑
+seir_cases              642.454     668.716     26.262  1.041      ↑
+[ok]
+
+######## plot one result
+[ok]
+
+######## V3 initial split of a vaccinated stratification
+                                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/cliffk/idm/ssv4/starsim/arrays.py", line 92, in __getattr__
+    return object.__getattribute__(self, 'values').__getattribute__(attr) # Be explicit to avoid possible recurison
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+AttributeError: 'numpy.ndarray' object has no attribute 'iloc'
+[FAIL]

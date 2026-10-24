@@ -1,0 +1,161 @@
+
+######## B1 operators, weighted destination
+Sim: 1 module, 1,000,000 people, 2020.01.01 to 2022.01.01
+solver       ode                                             [guessed: every part of the model has a compartmental form]
+unit         day                                             [from start and stop dates]
+
+Disease 'seir': 5 states, 3 transitions
+states       S, E, I, R, D
+             I infectious                                    [guessed: source of 'infection']
+             init: init_prev = 0.01; the rest in S
+
+infection    S -> E   contact-mediated, source I
+             beta = 0.3 per day
+             rate = 0.3 × I.n / N                            [homogeneous mixing]
+latent       E -> I   spontaneous
+             dwell ~ exponential(mean = 5 days)              [guessed: scalar duration]
+outcome      I -> R | D   spontaneous
+             dwell ~ exponential(mean = 10 days)             [guessed: scalar duration]
+             p = 0.9, 0.1
+
+mixing       homogeneous, 1 contact per day, frequency-dependent [guessed: no network given]
+results      n_S, n_E, n_I, n_R, n_D, and one flow per transition; also new_infections, prevalence
+schedule     every day: seir
+#0. 'seir_n_S':            115591.98905864648
+#1. 'seir_n_E':            6436.036762913718
+#2. 'seir_n_I':            12857.73352705645
+#3. 'seir_n_R':            778602.8165862451
+#4. 'seir_n_D':            86511.42406513818
+#5. 'seir_infection':      1272.1347355774178
+#6. 'seir_cum_infection':  931202.6264426691
+#7. 'seir_latent':         1285.7959377632103
+#8. 'seir_cum_latent':     941202.6264426677
+#9. 'seir_outcome':        1285.7959377632103
+#10. 'seir_cum_outcome':    941202.6264426684
+#11. 'seir_new_infections': 1272.1347355774178
+#12. 'seir_cum_infections': 931202.6264426691
+#13. 'seir_prevalence':     0.01929377028997017
+[ok]
+
+######## B2 strings, branching
+Sim: 1 module, 1,000,000 people, 2020.01.01 to 2022.01.01
+solver       ode                                             [guessed: every part of the model has a compartmental form]
+unit         day                                             [from start and stop dates]
+
+Disease 'seir': 5 states, 3 transitions
+states       S, E, I, R, D                                   [inferred from the arrows]
+             I infectious                                    [guessed: source of 'infection']
+             init: init_prev = 0.01; the rest in S
+
+infection    S -> E   contact-mediated, source I
+             beta = 0.3 per day
+             rate = 0.3 × I.n / N                            [homogeneous mixing]
+latent       E -> I   spontaneous
+             dwell ~ exponential(mean = 5 days)              [guessed: scalar duration]
+outcome      I -> R | D   spontaneous
+             dwell ~ exponential(mean = 10 days)             [guessed: scalar duration]
+             p = 0.9, 0.1
+
+mixing       homogeneous, 1 contact per day, frequency-dependent [guessed: no network given]
+results      n_S, n_E, n_I, n_R, n_D, and one flow per transition; also new_infections, prevalence
+schedule     every day: seir
+[ok]
+
+######## B3 death to ss.null in a weighted destination
+               ~~^^
+  File "/tmp/claude-1000/-home-cliffk-idm-ssv4/b3102841-11e6-46bf-942c-f372bd4682c4/scratchpad/ux/s7_seir_v4.py", line 36, in b3
+    seir = ss.Disease(S >> E @ 0.3*I, E >> I @ ss.days(5), I >> (0.9*R + 0.1*ss.null) @ ss.days(10), init_prev=0.01)
+                                                                         ~~~^~~~~~~~
+TypeError: unsupported operand type(s) for *: 'float' and 'Null'
+[FAIL]
+
+######## B3b ss.death with p=
+    try: out = fn(); print('[ok]'); return out
+               ~~^^
+  File "/tmp/claude-1000/-home-cliffk-idm-ssv4/b3102841-11e6-46bf-942c-f372bd4682c4/scratchpad/ux/s7_seir_v4.py", line 45, in b3b
+    death     = ss.death('I ->', p=0.1)
+TypeError: death() got an unexpected keyword argument 'p'
+[FAIL]
+
+######## V1 vaccinate with lambda eligibility, no stratification
+Sim: 3 modules, 1,000,000 people, 2020.01.01 to 2022.01.01
+solver       abm                                             [guessed: "vx" does not work on groups (people.age was asked for, but it is a per-agent attribute and not a stratification, so it does not exist in a compartmental run.)]
+             10,000 agents, each standing for 100 people     [guessed]
+unit         day                                             [from start and stop dates]
+dimension    has_vaccine (plain): False, True
+
+Disease 'seir': 5 states, 3 transitions
+states       S, E, I, R, D
+             I infectious                                    [guessed: source of 'infection']
+             init: init_prev = 0.01; the rest in S
+
+infection    S -> E   contact-mediated, source I
+             beta = 0.3 per day
+             rate = 0.3 × I.n / N                            [homogeneous mixing]
+latent       E -> I   spontaneous
+             dwell ~ exponential(mean = 5 days)              [guessed: scalar duration]
+outcome      I -> R | D   spontaneous
+             dwell ~ exponential(mean = 10 days)             [guessed: scalar duration]
+             p = 0.9, 0.1
+
+mixing       homogeneous, 1 contact per day, frequency-dependent [guessed: no network given]
+delivery     vx: vaccine: vaccine with efficacy against acquisition 0.8; delivery in rounds; adds has_vaccine as a property of people
+results      n_S, n_E, n_I, n_R, n_D, and one flow per transition; also new_infections, prevalence
+note         latent has rate × dt = 0.2 (0.2 per day × 1 day), so 0.18 of people leave in a step; sim.check_dt() shows how much a smaller step changes the results
+schedule     every day: vx, vaccine, seir
+[ok]
+
+######## V2 vaccinate with lazy condition and age stratification
+Sim: 3 modules, 1,000,000 people, 2020.01.01 to 2022.01.01
+solver       ode                                             [guessed: every part of the model has a compartmental form]
+unit         day                                             [from start and stop dates]
+dimension    age (age): 0-64, 65+; people age between the groups [guessed: ages uniform from 0 to 100]
+dimension    has_vaccine (plain): False, True
+
+Disease 'seir': 5 states, 3 transitions
+states       S, E, I, R, D
+             I infectious                                    [guessed: source of 'infection']
+             init: init_prev = 0.01; the rest in S
+
+infection    S -> E   contact-mediated, source I
+             beta = 0.3 per day
+             rate = 0.3 × I.n / N                            [homogeneous mixing]
+latent       E -> I   spontaneous
+             dwell ~ exponential(mean = 5 days)              [guessed: scalar duration]
+outcome      I -> R | D   spontaneous
+             dwell ~ exponential(mean = 10 days)             [guessed: scalar duration]
+             p = 0.9, 0.1
+
+mixing       homogeneous, 1 contact per day, frequency-dependent [guessed: no network given]
+delivery     vx: vaccine: vaccine with efficacy against acquisition 0.8; delivery in rounds; adds has_vaccine as a property of people
+results      n_S, n_E, n_I, n_R, n_D, and one flow per transition; also new_infections, prevalence
+schedule     every day: vx, vaccine, seir
+['timevec', 'vx', 'vaccine', 'seir']
+[ok]
+
+######## V3 vaccination as stratification + transfer
+Sim: 2 modules, 1,000,000 people, 2020.01.01 to 2022.01.01
+solver       ode                                             [guessed: every part of the model has a compartmental form]
+unit         day                                             [from start and stop dates]
+dimension    age (age): 0-64, 65+; people age between the groups [guessed: ages uniform from 0 to 100]
+dimension    vaccinated (plain): False, True                 [guessed: equal across levels]
+
+Disease 'seir': 5 states, 3 transitions
+states       S, E, I, R, D
+             I infectious                                    [guessed: source of 'infection']
+             init: init_prev = 0.01; the rest in S
+
+infection    S -> E   contact-mediated, source I
+             beta = 0.3 per day
+             rate = 0.3 × I.n / N                            [homogeneous mixing]
+latent       E -> I   spontaneous
+             dwell ~ exponential(mean = 5 days)              [guessed: scalar duration]
+outcome      I -> R | D   spontaneous
+             dwell ~ exponential(mean = 10 days)             [guessed: scalar duration]
+             p = 0.9, 0.1
+
+mixing       homogeneous, 1 contact per day, frequency-dependent [guessed: no network given]
+delivery     rollout: transfer; delivery in rounds; adds vaccinated as a property of people
+results      n_S, n_E, n_I, n_R, n_D, and one flow per transition; also new_infections, prevalence
+schedule     every day: rollout, seir
+[ok]

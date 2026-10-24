@@ -5,6 +5,7 @@ import numpy as np
 import pytest
 import sciris as sc
 import starsim as ss
+import starsim.library as ssl
 
 small = 100
 medium = 1000
@@ -31,6 +32,8 @@ def test_timeline_lengths():
     t2 = ss.Timeline(ss.date('2000-01-01'), ss.date('2000-01-10'), ss.days(0.25)).init()
     assert len(t2) == 37
     assert np.allclose(t2.tvec.days_since('2000-01-01'), np.arange(37)*0.25)
+    with pytest.warns(RuntimeWarning, match='max_steps'): # More steps than ss.options.max_steps
+        ss.Timeline(ss.years(0), ss.years(200), ss.days(1)).init()
 
     return t
 
@@ -280,27 +283,28 @@ def test_multi_timestep(do_plot=False):
 @sc.timer()
 def test_mixed_timesteps():
     sc.heading('Test behavior of different combinations of timesteps')
+    SIS = ssl.AgentSIS # Written as code, since a declared disease cannot yet have a timestep of its own
 
     siskw = dict(dur_inf=ss.datedur(days=50), beta=ss.perday(0.01), waning=ss.perday(0.005))
-    kw = dict(n_agents=medium, start='2001-01-01', stop='2001-07-01', networks='random', copy_inputs=False, verbose=0)
+    kw = dict(n_agents=medium, start='2001-01-01', stop='2001-07-01', networks='random', verbose=0)
 
     print('Year-year')
-    sis1 = ss.SIS(dt=1/365, **sc.dcp(siskw))
-    sim1 = ss.Sim(dt=1/365, diseases=sis1, label='year-year', **kw)
+    sis1 = SIS(name='sis', dt=ss.years(1/365), **sc.dcp(siskw))
+    sim1 = ss.Sim(dt=ss.years(1/365), diseases=sis1, label='year-year', **kw)
 
     print('Day-day')
-    sis2 = ss.SIS(dt=ss.days(1), **sc.dcp(siskw))
+    sis2 = SIS(name='sis', dt=ss.days(1), **sc.dcp(siskw))
     sim2 = ss.Sim(dt=ss.days(1), diseases=sis2, label='day-day', **kw)
 
     print('Day-year')
-    sis3 = ss.SIS(dt=ss.days(1), **sc.dcp(siskw))
-    sim3 = ss.Sim(dt=1/365, diseases=sis3, label='day-year', **kw)
+    sis3 = SIS(name='sis', dt=ss.days(1), **sc.dcp(siskw))
+    sim3 = ss.Sim(dt=ss.years(1/365), diseases=sis3, label='day-year', **kw)
 
     print('Year-day')
-    sis4 = ss.SIS(dt=1/365, **sc.dcp(siskw))
+    sis4 = SIS(name='sis', dt=ss.years(1/365), **sc.dcp(siskw))
     sim4 = ss.Sim(dt=ss.days(1), diseases=sis4, label='year-day', **kw)
 
-    msim = ss.parallel(sim1, sim2, sim3, sim4)
+    msim = ss.parallel(sim1, sim2, sim3, sim4, parallel=False) # Serially, since starting processes takes longer than these short runs
 
     # Check that all results are close
     threshold = 0.02
@@ -317,8 +321,9 @@ def test_mixed_timesteps():
 def test_units(do_plot=False):
     sc.heading('Test behavior of year vs day units')
 
-    sis = ss.SIS(
-        beta = ss.probperday(0.05),
+    sis = ssl.AgentSIS( # Starsim 3's SIS, with waning immunity
+        name = 'sis',
+        beta = ss.prob(0.05, 'day'),
         init_prev = ss.bernoulli(p=0.1),
         dur_inf = ss.lognorm_ex(mean=ss.datedur(days=10)),
         waning = ss.perday(0.05),
@@ -383,6 +388,23 @@ def test_step_count():
     return sim
 
 
+@sc.timer()
+def test_coded_unit():
+    sc.heading('Test that the unit of a sim with only coded modules is honored')
+
+    class Step(ss.Module): # A module written as code, with no declared states or transitions
+        def step(self):
+            pass
+
+    sim = ss.Sim(connectors=Step(), unit='day', dt=1, start=0, stop=30, verbose=0).init()
+    assert sim.unit == 'day' and sim.t.dt == ss.days(1) and len(sim.t) == 31
+    sim = ss.Sim(connectors=Step(), unit='week', stop=10, verbose=0).init()
+    assert sim.t.dt == ss.weeks(1) and len(sim.t) == 11
+    sim = ss.Sim(connectors=Step(), verbose=0).init() # Nothing has a unit: time is in timesteps
+    assert sim.unit is None and sim.t.start == 0 and len(sim.t) == 51
+    return sim
+
+
 # Run as a script
 if __name__ == '__main__':
     do_plot = True
@@ -398,5 +420,6 @@ if __name__ == '__main__':
     o6 = test_mixed_timesteps()
     o7 = test_units(do_plot)
     o8 = test_step_count()
+    o9 = test_coded_unit()
 
     T.toc()

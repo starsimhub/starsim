@@ -1,0 +1,521 @@
+Starsim v4: design and implementation review
+17 October 2026
+Source: a20c4f7e9ecab351113e9b781b0df3a83be54718
+
+Path convention: bare Python filenames refer to starsim/; design/ and
+best-practices/ refer to their directories under v4_design/.
+
+1. Overall judgment
+===================
+
+Keep the central idea: a model declares states, transitions, parameters, mixing,
+interventions, and observations; execution is chosen separately where that choice
+preserves the intended model. This is a substantial improvement over making users
+rewrite their model for each solver. Named transitions, automatic counts and flows,
+products separate from delivery, named dimensions, ordinary Python callbacks, and
+inspectable execution order are all worth keeping.
+
+The main opportunity is to make the model's meaning more stable. At present the
+design frequently equates fewer declarations with simplicity. But an epidemiologist
+must understand what a declaration means after changing a network, adding a date,
+renaming a variable, changing an initial value's Python type, adding another disease,
+or selecting another solver. Some of these edits currently alter much more than the
+edited quantity. Explaining those effects is part of the user's workload.
+
+My recommendation is a smaller, explicit scientific core with convenient defaults
+around it. Infer spelling and routine bookkeeping; be conservative about population
+identity, physical time, stochastic meaning, and changes of model. Make unsupported
+features visible as unsupported. A precise refusal is often easier to resolve than a
+plausible answer from an unintended model.
+
+There are also concrete correctness defects. Particularly urgent are ignored
+modifiers on callable parameters, incorrect static-network approximations, incomplete
+run identity, stochastic execution paths that do not preserve independent streams,
+and loss of delayed screening results. These deserve attention before expanding the
+surface further. The detailed evidence files distinguish reproduced behavior from
+code inspection and design judgment.
+
+2. Change these design decisions first
+======================================
+
+D1. Replace the universal brevity/speed requirement with a usability contract.
+
+The north star in best-practices/principles.md:5–24 demands no more model lines and
+no more runtime than every originating framework, including compiled specialists.
+This rewards hidden work, overloaded syntax, and benchmark-specific optimizations.
+Counting inside another framework's convenience function also fails to measure the
+actual effort of its user. It is an interesting expressiveness comparison, but it
+is not a fair end-user simplicity measure.
+
+Keep a published comparison corpus, but report dimensions separately: setup effort,
+model statements, assumptions a reader must know, time to first result including
+imports/build/JIT, repeated-run time, peak memory, and numerical agreement. Measure
+whether users can explain and safely change the model. Treat speed regressions
+against Starsim's own baseline as actionable; accept documented tradeoffs against
+specialized software. Do not make every longer or slower vignette a design defect.
+
+D2. Separate changing the model from choosing an execution algorithm.
+
+best-practices/principles.md:23 and design/12-backends.md:112–155 make approximation
+the default when an explicit solver does not fit. But asking for an ODE does not
+uniquely specify which network closure, loss of heterogeneity, or dwell-time shape
+is acceptable. There may be several scientifically reasonable ODE models.
+
+Default to preserving declared semantics. Keep auto selection for compatible
+representations. Make a model-changing approximation an explicit, inspectable
+transformation with its own persistent specification and identity; the existing
+approx argument could initially express that consent without adding a new class.
+Do not silence approximation records when printing is disabled. Distinguish model
+approximation from numerical integration error and stochastic simulation error.
+
+An ODE and a stochastic epidemic are also different scientific models, even when
+their transition declarations are shared. Deterministic versus stochastic intent
+should be visible in the resolved model. An ODE is not universally an exact or
+faithful implementation of a small-population stochastic question.
+
+In particular, a lognormal dwell time represented by Erlang stages is an
+approximation even under auto. Matching its mean and approximately its standard
+deviation does not establish agreement of its tail, hazard, or policy effects.
+The design already acknowledges that CV > 1 cannot be retained by a single Erlang
+chain. Preserve the direct distribution by default, or require an explicit stage
+approximation. A plot/table comparing requested and represented dwell distributions
+would convey the tradeoff better than a one-line note.
+
+D3. Stop making bare values change meaning when unrelated context changes.
+
+The time rules in design/02-types.md and best-practices/time-and-units.md infer the
+unit from dates, typed values, and dt. Adding a dated intervention or a parameter
+in another unit can reinterpret every bare rate. The implementation additionally
+infers years from the magnitude of numeric start/stop values. This is too much
+implicit scientific behavior.
+
+Use one explicit model time basis, defaulting to steps if absent. Typed values
+convert into that basis; attaching observation dates aligns data with it. Ambiguous
+mixes should ask for unit= once. Numeric stop should always be elapsed model time;
+calendar years can use dates. Keep duration, hazard, probability-per-period, and
+frequency distinctions, but teach a small set of common forms and define their
+arithmetic centrally. The many convenience constructors can remain aliases.
+
+D4. Make population identity explicit where the inference is consequential.
+
+Inferring people from connectivity to the first state is convenient for the
+demonstration cholera model but unstable for disconnected initial groups, competing
+species, or a reordered transition list. “Not connected to humans” does not imply
+“continuous and deterministic”: a vector population can itself be small and random.
+Likewise, int(1) meaning one individual while float(1.0) means everyone is an
+avoidable trap (solvers.py:1130–1191).
+
+Retain inferred states from short arrow strings. For multiple disconnected
+populations, require the existing people= declaration or an explicit population
+grouping. Separate what a state counts from how its population is represented and
+whether its events are random. Use distinct count/fraction initializers or one
+documented convention plus an explicit alternative; do not dispatch on int versus
+float. These extra declarations remove more explanation than they add typing.
+
+D5. Teach one explicit construction form; keep operators as optional shorthand.
+
+The three spellings can normalize to one graph without being equally prominent in
+the user journey. Teach named transmission/progression constructors and explicit
+state names. Keep operators for users who find them clearer. Avoid making Python
+frame inspection a semantic dependency: S, I, R = states('S I R') is easy to explain,
+works through helpers, and does not depend on aliasing in the caller's namespace.
+
+The distinction between I (route-mediated exposure) and I.n (literal count) is worth
+preserving internally, but deserves an explicit spelling in teaching examples.
+An exposure helper/property can make normalization visible without requiring users
+to write /N. Do not claim that overloaded arithmetic is simply ordinary Python:
+it constructs a domain expression, with rules that need documentation and checks.
+
+D6. One parameter evaluation pipeline, one expression system, one compiled model.
+
+The current implementation has an authoring graph, lazy Cond trees, parameter
+wrappers, serialized expression text and a separate AST reader, Python engine
+evaluation, Numba opcodes, and JAX lowering. Some diversity is justified for speed;
+independent scientific logic in each path is not. Early returns in value evaluation
+already skip modifiers, and result transformations can detach time from strata.
+
+Normalize input forms once into a typed, named intermediate model: states with
+population identity, expression nodes, parameter references, resolved dimensions,
+events, and observations. Resolve units, validate domains, and attach source paths
+there. Interpret that model with a small reference backend. Lower the same nodes
+to Numba/JAX; serialize the nodes directly instead of printing expressions and
+parsing them back. Use the reference backend as an independent correctness oracle.
+
+Keep the public definition separate from initialized runtime state. Building,
+describing, hashing, and fitting should not require full population/network creation
+or mutate the user's reusable model. Preserve the familiar Module lifecycle for
+custom code through adapters; avoid a wholesale rewrite before equivalence tests
+exist. Extract responsibilities along these boundaries, rather than just splitting
+large files into smaller files.
+
+D7. Make callbacks explicit about capabilities; probing is only a hint.
+
+sim.py:996–1024 tries a callback on a temporary compartmental sim to infer support.
+Success at initialization proves little about a time-conditional branch; failure
+can be a coding error, not a request for agents. Probing can also execute external
+side effects. Counting function arguments is not a reliable declaration of whether
+a function needs UIDs.
+
+Use a documented callback contract: arguments, allowed reads, result shape, units,
+and whether it is pure. Allow an optional capability declaration for group/agent
+evaluation; conservative selection and a clear error should cover the rest. Keep
+the function form first class. Do not add several specialized callback decorators.
+For grouped conditions, report whether a threshold crossing a bin is fractionally
+represented, evaluated at a representative value, or requires finer bins.
+
+D8. Treat specification claims as versioned, executable contracts.
+
+There are 17 best-practices files and 22 design files including indexes, with
+requirements repeated in recommendations, examples, open questions, vocabulary,
+and conformance prose. The repetitions already drift: MFNet ODE conversion is
+specified but rejected, density dependence is specified but absent, and modifier
+read semantics disagree with the implementation. The requested vignette comparison
+corpus currently contains only v4_design/vignettes/README.md.
+
+Keep the rationale in best-practices, one normative rule per topic in design, and a
+short actual-support matrix with links to tests. Mark proposals, implemented
+behavior, and validated behavior separately. Execute the design examples in CI,
+including expected diagnostics. Generate vocabulary and error catalogs from the
+public contract where practical. Open questions should contain unresolved choices,
+not alternative specifications of already implemented behavior.
+
+3. Prioritized implementation findings
+=======================================
+
+Priority meanings: P1 can silently change scientific results or reproducibility;
+P2 blocks a supported workflow or makes its meaning unreliable; P3 is clarity,
+maintenance, or evidence debt. These are remediation priorities, not a claim that
+every issue affects every simulation. Detailed observations and reproduction
+commands appear in the accompanying evidence notes.
+
+F01 [P1] Callable/time-varying parameters bypass modifiers.
+  solvers.py:834–863 returns an evaluated callable before reaching modified().
+  This includes callable parameter forms such as timeseries and seasonal. A policy
+  can exist in the specification while failing to affect the evaluated quantity.
+  Evaluate raw input, convert/align it, then apply modifiers through one common
+  return path. Test the same modifier on a scalar, callback, timeseries, and a
+  stratified parameter in both reference and compiled execution.
+
+F02 [P1] Static-network ODE conversion ignores the actual supplied graph.
+  solvers.py:149–160 uses net.pars.n_contacts, which defaults to 10. StaticNet
+  accepts an actual NetworkX graph (networks.py:563–643). An empty 100-node graph
+  and a complete 100-node graph both compile to 10 contacts per unit time.
+  The diagnostic describes the wrong quantity as the approximation of that graph.
+  Derive rates from actual edges/group populations, or reject this conversion.
+  A supplied graph must take precedence over generator defaults. See routes.py.
+
+F03 [P1] Contact-matrix rebinning is by age-band width, not population.
+  solvers.py:185–216 builds overlap fractions with lengths alone; it does not use
+  the population split or named population. This contradicts the population-weighted
+  aggregation promised in design/06-routes.md. Source ages above the final edge
+  are also cut at an arbitrary 100. Changing age bins can therefore change mixing
+  because of an undocumented age-distribution assumption.
+  Compute overlap populations from a declared age distribution, define the open
+  last band explicitly, and preserve contact totals under aggregation. Test with
+  very unequal population shares, not only symmetric matrices.
+
+F04 [P1] Hashes omit scientifically meaningful configuration.
+  sim.py:1272–1328 serializes connectors in spec.modifiers but hash() includes
+  modules/networks/stratify and interventions only. Changing a connector modifier
+  can leave every hash component unchanged. options.crn is absent from run config.
+  Hash a canonical complete definition and resolved run configuration, including
+  global numerical/randomness options and actual data content/provenance. Preserve
+  separate component hashes if useful, but test that every consequential change
+  changes at least one component. Labels/docstrings should remain nonsemantic.
+
+F05 [P1] Stochastic execution paths do not uphold independent-stream promises.
+  Engine.make_rng (solvers.py:585) uses a character-sum name seed: names ab and ba
+  collide. Compiled stochastic kernels use ambient np.random state. Whole-run and
+  stepwise execution must be checked together: adding an independent disease or
+  enabling profiling can change an existing disease's draws in the stepwise path.
+  Use stable full-path stream identifiers and explicit per-stream random state in
+  every backend. This does not require CRN across different solvers; it requires
+  invariance to unrelated modules within one solver, as design/11-random.md promises.
+
+F06 [P1] Delayed repeated screening can overwrite outstanding results.
+  Delivery stores pending positive/negative outcomes and their due time per person.
+  Re-screening before an earlier result returns overwrites those slots. Where
+  interval < delay, results can continually be postponed or lost.
+  Store result events by specimen, or explicitly exclude pending individuals and
+  report that policy. A specimen records truth at collection; delivery records the
+  result at return. Those are separate events even for the same person.
+
+F07 [P1] Domain/shape validation is incomplete at the scientific boundary.
+  Strat accepts negative split weights and normalizes an all-zero split into NaNs
+  (transitions.py:2788–2795). Numeric edges can be unordered. contacts() accepts
+  negative entries and reversed ages (networks.py:2153 onward). Initial fractions
+  have an upper-total check but can be negative (solvers.py:1130–1191). Bounds are
+  described as build-time checks, but are not consistently enforced.
+  Centralize finite/nonnegative/range/shape validation before compilation. Reject
+  malformed input with the parameter/dimension path and offending value. Keep
+  intentional normalization of positive weights; make that convention explicit.
+
+F08 [P1/P2] ss.by arithmetic can silently discard strata.
+  Arithmetic on matching dimension names uses zip over values without enforcing
+  equal coordinate lengths (transitions.py:2121). A mismatch can truncate instead
+  of raising a shape error. Table-backed forms also need the same path.
+  Align by named coordinates and validate shape first; define scalar broadcasting
+  explicitly. Arithmetic must not invent or discard population categories.
+
+F09 [P2] Numeric stop values can select a different time interpretation by magnitude.
+  A bare stop=1800 remains steps; stop=2000 can resolve to calendar years 1950–2000.
+  This contradicts the unitless-time contract and makes long simulations fragile.
+  Remove numeric year guessing from declarative models. Use explicit dates or
+  unit='year' with a documented start. See execution_repros.py.
+
+F10 [P2] check_dt assumes every module uses the sim's output grid.
+  sim.py:445–491 reshapes fine flows using the simulation-wide number of points
+  and an integer factor. A disease with dt=days(2) in a daily sim raises a reshape
+  error. Periodic outcomes and noninteger factors need equally explicit treatment.
+  Align stocks by actual output times and integrate flows over matching intervals.
+  Halve the numerical steps relevant to the tested module, and state which ones
+  remain fixed. For stochastic runs report sampling uncertainty separately.
+
+F11 [P2] A resampled Result can retain strata and denominators on the old grid.
+  Result transformations need to update values, time coordinates, stratified
+  values, uncertainty, and numerator/denominator together. Otherwise selecting a
+  group after resampling can recover original-frequency values under a shorter
+  time axis. Resampling ratios also needs ratio-of-aggregates semantics where
+  appropriate, rather than averaging ratios without their denominators.
+  Make each transformation return one internally consistent labeled result.
+
+F12 [P2] Uninitialized array operations are only partly lazy.
+  arrays.py:517/554 supports lazy comparisons but ordinary arithmetic on an
+  uninitialized people.age can raise IndexError; isin can eagerly produce an empty
+  BoolArr. A condition that looks declared can therefore be invalid or empty before
+  the population exists. Either support the documented operations consistently in
+  one expression system or reject them immediately with a function-form example.
+
+F13 [P2] Modifier read semantics differ between the design and actual arrays.
+  design/07-effects.md promises ordinary reads return effective values and writes
+  update base values. ModifiableArr instead exposes effective values explicitly.
+  This is especially consequential for custom step code composing with products.
+  Choose and document one rule. My preference is explicit base/effective access
+  for mutable runtime arrays, with the evaluator applying effective values at a
+  single well-defined boundary. Implicit NumPy reads mixed with base writes are
+  harder to make consistent. Keep the declarative user-facing modifier simple.
+
+F14 [P2] Save/load does not yet provide the promised complete-model round trip.
+  spec.py's reader rejects interventions, modifiers, custom functions, priors,
+  likelihoods, and movement; only some network/data forms can be rebuilt. Data
+  used for fitting is not a complete reproducible part of the saved model.
+  Do not describe this as “everything needed to rebuild” without a capability
+  check. Separate a portable declarative specification from a runtime checkpoint;
+  return an explicit unsupported-elements manifest for partial export. A supported
+  file must never imply that an omitted scientific element will be reconstructed.
+
+F15 [P2] Optimizer termination is not fully represented in the fit result.
+  Returning fitted parameters after a SciPy minimize call while dropping success,
+  status, and message makes iteration exhaustion look like convergence. Keep the
+  optimizer outcome, objective, evaluations, and diagnostic message on the returned
+  Fit. “A best point was found” and “the optimizer converged” are different facts.
+
+F16 [P2/P3] Fitting capabilities and parameter discovery need an explicit contract.
+  calibration.py:2145–2157 enumerates declared graph parameters; bounded init_prev
+  is correctly registered and supported. General network/product/delivery
+  parameters need a shared registry rather than separate discovery rules. Direct
+  ss.par on RandomNet.n_contacts currently fails before fitting, so this review
+  does not claim an otherwise accepted network parameter silently disappears.
+  Staged methods described in the guidance are unimplemented: the fitting path
+  expects a method string and calls .lower(), not a sequence of stages.
+  Enumerate parameters using full paths, publish actual fitting support, and keep
+  bounds validation independent of calibration. Prioritize diagnostics over adding
+  more fitting orchestration.
+
+F17 [P2] Gillespie's exactness contract needs a narrower statement or implementation.
+  Smooth time-varying rates are held at quarter-step midpoints (solvers.py:1081–1086,
+  3097; kernels.py's stochastic step). A note is emitted, so this is not an
+  undisclosed approximation. It is nevertheless inconsistent with the broad
+  “exact continuous-time” labels. design/12-backends.md:262 itself mixes a thinning
+  requirement with permission to freeze rates if reported.
+  Either integrate time-dependent hazards correctly or expose this as approximate
+  event simulation with an accuracy control. approx=False must have a coherent
+  meaning for this case. Deterministically evolved reservoirs require the same
+  care: randomness of people alone does not make the coupled system an exact CTMC.
+
+F18 [P2] Specified route capabilities are missing; capability reporting must agree.
+  MixingPool(dependence='density') raises an unrecognized-argument error. MFNet
+  with an explicitly requested ODE raises E804 rather than implementing the
+  specified partner-change approximation. The former is an implementation gap;
+  the latter is also an opportunity to narrow an overambitious design promise.
+  Publish actual support and keep solvers(), validation, and build decisions on
+  the same capability registry. Do not independently hard-code their answers.
+
+F19 [P3] The stated conformance evidence is not yet present in its promised form.
+  design/18-conformance.md requests a published translation/timing corpus, expected
+  describe output, executed design examples, and broad solver agreement. Existing
+  tests are valuable, but the vignettes folder contains only an index and the docs
+  CI renders docs/, not the v4_design specification corpus.
+  Build a small executable scientific corpus first and expand it. A prose list of
+  required tests is not evidence of conformance. Record which tests exist today.
+
+F20 [P3] The vocabulary count understates what users actually encounter.
+  design/17-vocabulary.md counts 94 root names while excluding retained library
+  names, aliases and “the rest” of distributions. __init__.py explicitly imports
+  258 nonunderscore names. This does not mean every root name must be deleted,
+  but the published number measures a chosen subset, not the public namespace.
+  Define a small recommended API, keep advanced APIs under relevant modules, and
+  quarantine compatibility aliases. Count concepts, implicit conventions, and
+  keywords as well as constructors. No immediate mass rename is necessary.
+
+F21 [P1/P2] A stochastic fit reports a different score from the optimized objective.
+  calibration.py:2223–2227 optimizes the mean score across n_runs, but :2390–2396
+  stores the score of a fresh single trajectory as Fit.mismatch. The before score
+  remains an ensemble score. A verified three-replicate fit had every evaluated
+  objective equal to 0.7288889, yet reported an after score of 0.72. This can imply
+  improvement without an improvement in the searched objective.
+  Preserve the chosen ensemble score, replicate scores and seeds. Label a fitted
+  single trajectory as representative and keep it separate from fit quality.
+
+F22 [P2] Future major model-spec versions are accepted as the current schema.
+  spec.py:241 checks the lingua-franca/ prefix only. A file labeled 99.0 is accepted.
+  Validate supported major/minor versions and explicitly migrate older schemas.
+  A portable format needs a compatibility boundary before it needs more adapters.
+
+4. Recommended architecture and user workflow
+==============================================
+
+The user should be able to write a short model, ask what it means, run it, attach
+observations, and compare a policy without discovering execution-specific rules.
+One possible flow using existing vocabulary is:
+
+  sir = ss.Disease(
+      infection=ss.transmission('S -> I', beta=ss.perday(0.3)),
+      recovery=ss.progression('I -> R', dur=ss.days(10)),
+      init={'I': 0.01},
+      name='sir',
+  )
+  sim = ss.Sim(sir, total_pop=100_000, unit='day', stop=180)
+  sim.describe()
+  sim.run()
+
+This is an illustration of the preferred teaching surface, not a proposed new API.
+It deliberately names time and the disease. The literal fraction convention above
+should eventually be explicit rather than relying on initial-value type rules.
+
+Internally, separate these responsibilities:
+
+  Definition/builder -> normalization and validation -> immutable compiled model
+      -> capability/approximation plan -> backend runtime -> labeled results
+
+  Observed data + observation mapping + parameter registry -> fitting problem
+      -> optimization/sampling -> fit diagnostics + run at the fitted values
+
+The simulation remains the user's entry point. These are implementation boundaries,
+not extra public objects users must construct. A portable spec should describe the
+compiled scientific model; a run record adds solver, numerical tolerances, seed,
+randomness settings, data fingerprints, software versions, and approximations.
+
+Avoid having Sim perform every role. sim.py is roughly 2,700 lines, solvers.py over
+4,100, transitions.py nearly 3,000, and calibration.py over 2,500. File length alone
+is not a defect; the consequential issue is that building the model, inferring
+science, creating population state, choosing algorithms, and producing artifacts
+are interleaved. Make validation and serialization usable without running init().
+
+Keep two practical extensions simple:
+
+* Custom modules: ordinary code can read explicit runtime state and emit ordinary
+  events/results. State what capabilities are unavailable; do not pretend a small
+  probe has proven portability or differentiability.
+* Observations: model flows/stocks and the measurement process remain separate.
+  Support delay, aggregation, missingness, and denominators without creating an
+  individual clinical state unless it actually changes individual behavior.
+
+5. Strengthen the scientific verification strategy
+==================================================
+
+Replace broad “every solver agrees” assertions with layered contracts:
+
+* Conservation/nonnegativity: per population, per dimension, with births/deaths,
+  movement, competing hazards, and events accounted for.
+* Exact identities: constant-rate decay, linear birth/death, fixed transition
+  probabilities, and known mixing-matrix calculations.
+* Numerical convergence: refine integration steps while holding the model,
+  observation grid, and approximations fixed. Report tolerances and observed order.
+* Stochastic agreement: compare known event-count laws or distributions at fixed
+  parameters, and compare moment errors to both sampling error and finite-population
+  bias. Use predeclared aggregate metrics or simultaneous bounds.
+* Backend equivalence: the same compiled model through reference, Numba, JAX,
+  stepwise, whole-run, profiling, restart, serial, and parallel paths.
+* Metamorphic behavior: unrelated modules do not perturb streams; aliases do not
+  change scientific identity; permutation of competing transitions preserves the
+  law; resample/select operations preserve aligned coordinates and denominators.
+* Round trip: every claimed portable feature reconstructs the same model and
+  results. Every unsupported feature is identified before export/load.
+
+The ODE versus stochastic criterion in design/18-conformance.md:49–65 is too strong
+as a universal claim. The expectation of a nonlinear finite-population epidemic is
+not exactly the deterministic trajectory; increasing the number of replicates
+shrinks Monte Carlo error without removing that bias. Requiring two standard errors
+at every output time also ignores repeated comparisons. A KS test at alpha=.01 is
+not a deterministic equality oracle and will sometimes reject correct samples.
+Use analytically justified asymptotic tolerances and controlled statistical tests.
+
+Similarly, qualify the universal O(dt) ordering claim in design/10-execution.md:15
+and best-practices/composition-and-effects.md:288–299. It can hold for consistent
+splitting of regular continuous dynamics. Threshold policies and instantaneous,
+noncommuting actions need not converge to the same model when reordered. Define
+their causal/event ordering as model semantics and test those semantics directly.
+
+Keep real models in the corpus: an SIR with uneven age populations, a spatial model
+with zero travel and unequal patches, a vector reservoir, competing branches, two
+interacting diseases, delayed recurrent testing, and a calibration with a failed
+optimizer. Each should have a concise human explanation of what must be preserved.
+
+6. Topic coverage and disposition
+==================================
+
+Best-practices topic                     Principal recommendation/findings
+--------------------------------------  ------------------------------------------
+Principles                              D1, D2, D5, D8: stable meaning over brevity
+Model structure                         D4–D6; explicit populations and one graph
+Time and units                          D3; F09, F10; one fixed time interpretation
+Parameters and distributions            D6; F01, F07, F08, F16; common evaluator
+Stratification                          D4, D6; F03, F07, F08; labeled alignment
+Population and mixing                   D2; F02, F03, F18; correct contact semantics
+Composition and effects                 D6; F01, F04, F13; consistent evaluation
+Interventions                           F06, F13; specimen events and explicit state
+Results and observation                 F11, F14; coherent labeled transformations
+Stochasticity and reproducibility        F04, F05, F17; record all run settings
+Calibration                             F15, F16, F21; registry, diagnostics, scores
+Compartmental                           D2, D6; scientific/numerical error separate
+Stochastic compartmental                F05, F17; precise exactness contract
+Metapopulation                          F03, F07; populations, coupling, conservation
+Agent based                             D4, D7; preserve custom code, explicit state
+Paradigm conversion                     D2, D7; capability plan and explicit changes
+
+The design chapters map onto the same findings: 00–01 (D5–D8), 02 (D3), 03 (D4–D6),
+04 (F01/F07/F08/F16), 05–06 (F02/F03/F07/F18), 07–08 (F01/F06/F13), 09 (F11),
+10–12 (D2/D7/F05/F09/F10/F17), 13 (F15/F16/F21), 14/16 (D6/F04/F14/F22), 15 (F07/D8),
+17 (F20), 18 (F19 and section 5), and 19 (D2–D8 and unresolved-contract drift).
+
+This review covers the supplied guidance as a whole and representative paths across
+the implementation. It is not a claim to have independently verified every network,
+disease library, import adapter, or numerical algorithm. External framework speed
+comparisons and large inference benchmarks were not run. Concrete verification and
+remaining limits are recorded in verification.txt and the evidence files.
+
+7. Suggested order of work
+===========================
+
+First, preserve result correctness: fix F01–F08 with small regression examples;
+freeze the actual support table; make all significant assumptions part of the run
+record. These changes offer the largest improvement without asking users to learn
+another vocabulary.
+
+Second, repair the workflows users depend on: time interpretation, convergence
+checks, result transformations, delayed events, portable save/load, and fit status.
+Update the relevant design rules at the same time. Prefer a precise smaller claim
+over implementing every proposed feature immediately.
+
+Third, introduce the normalized model and reference evaluator behind the existing
+constructors. Migrate one backend at a time under differential tests. Consolidate
+parameter lookup, modifiers, shape/unit validation, and serialization around it.
+Keep old class-based modules working through clear adapters while the declarative
+path matures.
+
+Finally, revisit automatic approximation, naming magic, and API exposure using real
+user tasks and the executable corpus. Delay additional framework adapters and
+automatic conveniences until those tasks are reliably simple to explain and change.
+The most valuable simplification is fewer exceptions in what an existing model
+means, rather than fewer characters in its first example.

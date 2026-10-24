@@ -42,30 +42,69 @@ class Loop:
     Each type of module is called at a different time. Within each module type,
     they are called in the order listed. The default loop order is:
 
-        1. sim:               start_step()     # Initialize the sim, including plotting progress
-        2. all modules:       start_step()     # Initialize the modules, including the random number distribution
-        3. sim.custom:        step()           # Run any custom modules
-        4. sim.demographics:  step()           # Update the demographics, including adding new agents
-        5. sim.diseases:      step_state()     # Update the disease states, e.g. exposed -> infected
-        6. sim.connectors:    step()           # Run the connectors
-        7. sim.networks:      step()           # Run the networks, including adding/removing edges
-        8. sim.interventions: step()           # Run the interventions
-        9. sim.diseases:      step()           # Run the diseases, including transmission
-        10. people:           step_die()       # Figure out who died on this timestep
-        11. people:           update_results() # Update basic state results
-        12. all modules:      update_results() # Update any results
-        13. sim.analyzers:    step()           # Run the analyzers
-        14. all modules:      finish_step()    # Do any final tidying
-        15. people:           finish_step()    # Clean up dead agents
-        16. sim:              finish_step()    # Increment the timestep
+        1. sim:               advance()        # Move the time to this step's time point
+        2. sim:               start_step()     # Initialize the sim, including plotting progress
+        3. all modules:       start_step()     # Initialize the modules, including the random number distribution
+        4. sim.custom:        step()           # Run any custom modules
+        5. sim.demographics:  step()           # Update the demographics, including adding new agents
+        6. sim.diseases:      step_state()     # Update the disease states, e.g. exposed -> infected
+        7. sim.connectors:    step()           # Run the connectors
+        8. sim.networks:      step()           # Run the networks, including adding/removing edges
+        9. sim.interventions: step()           # Run the interventions
+        10. sim.diseases:     step()           # Run the diseases, including transmission
+        11. people:           step_die()       # Figure out who died on this timestep
+        12. people:           update_results() # Update basic state results
+        13. all modules:      update_results() # Update any results
+        14. sim.analyzers:    step()           # Run the analyzers
+        15. all modules:      finish_step()    # Do any final tidying
+        16. people:           finish_step()    # Clean up dead agents
+        17. sim:              finish_step()    # Finish the step
+
+    One time index holds for every function of a step, in every module: the step from time
+    point k-1 to k is step k, and throughout it `sim.ti == k`, where its results go (so the
+    first step has `ti == 1`): `self.results.x[self.ti]` is this step's value, in `step()` as
+    in `update_results()`, and a time recorded as `self.ti` in one is `self.ti` in the other.
+    `sim.now` is when the step starts, time point k-1, which it reads time-varying inputs and
+    dates at. At the first time point (`ti == 0`, `now` the start) there is no step: only the
+    results of the start are recorded (people's and every module's but the interventions',
+    which have done nothing yet), and the analyzers run (`at_start`).
+
+    A loop also runs ordinary functions with no sim. Each step is called as `step(t, dt)` for
+    each step, where `t` is the time at its start; each record function is called as `record(t)`
+    at each time point, including the first, after the steps that end there. At a time point,
+    the steps run in the order given, then the records, so a change made by one step is seen by
+    the steps after it and by the records. A step given as `(step, times)` has times of its own:
+    it runs only at those, and what it sets holds in between.
+
+    Args:
+        sim (Sim): the sim to run (usually made by the sim itself)
+        steps (list/dict): with no sim, the functions to call each step, `step(t, dt)`; a dict gives their labels, and a `(step, times)` pair gives a step times of its own
+        times (array/Timeline): with no sim, the time points
+        record (list/dict): with no sim, the functions to call at each time point, `record(t)`
+
+    **Example**:
+
+        y = np.array([0.99, 0.01, 0.0])
+        def step(t, dt):
+            S, I, R = y
+            y[:] = [S - 0.3*S*I*dt, I + (0.3*S*I - 0.1*I)*dt, R + 0.1*I*dt]
+        loop = ss.Loop(steps=[step], times=np.arange(0, 101))
+        loop.run()
     """
-    def __init__(self, sim):
+    def __init__(self, sim=None, steps=None, times=None, record=None):
+        if sim is None and steps is None:
+            errormsg = 'A loop needs a sim, or steps= (and times=) to run with no sim'
+            raise ValueError(errormsg)
         self.sim = sim
+        self.steps = steps
+        self.times = times
+        self.record = record
         self.funcs = None
-        self.func_list = []
+        self.at_start = None # The functions that also run at the first time point, by function order: those that record the start
+        self.shared_timelines = [] # The timelines of the modules on the sim's timeline, which the sim's advance() moves
         self.abs_tvecs = None
         self.abs_numvecs = None # Canonical numeric (float-year) time arrays, parallel to abs_tvecs, used for sorting/uniformity
-        self.plan = None
+        self._plan = None # Made when it is first needed: see the plan property
         self.insertions = []
         self.index = 0 # The next function to execute
         self.profile = False # If True, record per-entry CPU timing during run() (see Loop.run)
@@ -76,18 +115,86 @@ class Loop:
         return
 
     def init(self):
-        """ Parse the sim into the integration plan """
-        self.collect_funcs()
-        self.collect_abs_tvecs()
-        self.make_plan()
+        """ Parse the sim (or the steps) into the integration plan """
+        if self.sim is None:
+            self.collect_steps()
+        else:
+            self.collect_funcs()
+            self.collect_abs_tvecs()
+        self._plan = None
+        self.index = 0
         self.initialized = True
-        return
+        return self
+
+    def collect_steps(self):
+        """ With no sim: the steps and record functions, each with its time points """
+        def as_times(times):
+            if times is None:
+                errormsg = 'A loop with no sim needs times=, e.g. times=np.arange(0, 101)'
+                raise ValueError(errormsg)
+            if isinstance(times, ss.Timeline): # The functions are given its times (dates or durations) and its dt
+                times = times.init() if not times.initialized else times
+                return times, np.asarray(times.yearvec, dtype=float)
+            times = np.asarray(times, dtype=float)
+            return times, times
+
+        def labeled(funcs):
+            if funcs is None:
+                return []
+            if isinstance(funcs, dict):
+                return list(funcs.items())
+            items = []
+            for func in sc.tolist(funcs):
+                f = func[0] if isinstance(func, tuple) else func
+                items.append((getattr(f, '__name__', type(f).__name__.lower()), func))
+            return items
+
+        def caller(func, times, record):
+            j = [-1 if record else 0] # The time point the function was last called at, in its own times: a step is first called for the step ending at the second
+            timeline = isinstance(times, ss.Timeline)
+            tvec = times.tvec if timeline else times
+            def call():
+                j[0] += 1
+                k = j[0]
+                if record:
+                    return func(tvec[k])
+                return func(tvec[k-1], times.dt if timeline else tvec[k] - tvec[k-1])
+            call.__name__ = getattr(func, '__name__', 'step')
+            return call
+
+        self.funcs = []
+        self.abs_tvecs = sc.objdict()
+        self.abs_numvecs = sc.objdict()
+        sim_times, self.abs_numvecs['sim'] = as_times(self.times)
+        self.abs_tvecs['sim'] = sim_times.tvec if isinstance(sim_times, ss.Timeline) else sim_times
+        rows = [(label, func, False) for label,func in labeled(self.steps)] + [(label, func, True) for label,func in labeled(self.record)]
+        labels = [label for label,_,_ in rows]
+        for label,func,record in rows:
+            func, times = func if isinstance(func, tuple) else (func, None)
+            key = label if labels.count(label) == 1 else f'{label}_{len(self.funcs)}'
+            own, numvec = as_times(times) if times is not None else (sim_times, self.abs_numvecs['sim'])
+            self.abs_tvecs[key] = own.tvec if isinstance(own, ss.Timeline) else own
+            self.abs_numvecs[key] = numvec
+            self.funcs.append(dict(func_order=len(self.funcs), module=key, func_name='record' if record else 'step', func_path=key, func=caller(func, own, record)))
+        self.at_start = {row['func_order'] for row in self.funcs if row['func_name'] == 'record'}
+        return self.funcs
+
+    @property
+    def plan(self):
+        """ The list of `LoopEntry` events in execution order; made the first time it is needed, since a sim run by the kernels in one call never needs it """
+        if self._plan is None and self.initialized:
+            self.make_plan()
+        return self._plan
+
+    @plan.setter
+    def plan(self, value):
+        self._plan = value
 
     def __len__(self):
         if self.initialized:
             return len(self.plan)
         else:
-            return 0 # Or None?
+            return 0
 
     def __iadd__(self, func):
         """ Allow functions to be added to the function list """
@@ -133,8 +240,16 @@ class Loop:
         self.funcs = [] # Reset, just in case
         sim = self.sim
 
+        # Move the time to the step about to be taken, so that it is the same in every function of the step: the sim's time,
+        # with that of the modules on its timeline; a module with a timeline of its own moves its own
+        self.shared_timelines = [mod.t for mod in sim.modules if self._on_sim_time(mod)] # Their timelines, not the modules, so a search of the sim does not find the modules again here
+        self += sim.advance # Note special __iadd__() method above, which appends these to the funcs list
+        for mod in sim.modules:
+            if not self._on_sim_time(mod):
+                self += mod.advance
+
         # Collect the start_steps
-        self += sim.start_step # Note special __iadd__() method above, which appends these to the funcs list
+        self += sim.start_step
         for mod in sim.modules:
             self += mod.start_step
 
@@ -177,6 +292,8 @@ class Loop:
         # Update people who died -- calls disease.step_die() internally
         self += sim.people.step_die
 
+        first = len(self.funcs) # From here to the analyzers, the functions also run at the first time point, to record the start (except the interventions')
+
         # Update results. A module's update_results is skipped only when it is the inherited
         # base method (not overridden anywhere in the MRO) and the module has no auto-generated
         # boolean-state results to count -- i.e. the base loop is provably a no-op. Overrides
@@ -190,14 +307,21 @@ class Loop:
         # Apply analyzers
         for ana in sim.analyzers():
             self += ana.step
+        intvs = {intv.name for intv in sim.interventions()} # Which have done nothing before the first step, so record nothing at the start
+        self.at_start = {i for i in range(first, len(self.funcs)) if self.funcs[i]['module'] not in intvs}
 
-        # Clean up dead agents, increment the time index, and perform other housekeeping tasks
+        # Clean up dead agents, and perform other housekeeping tasks
         for mod in sim.modules:
             self += mod.finish_step
         self += sim.people.finish_step
         self += sim.finish_step
 
         return self.funcs
+
+    def _on_sim_time(self, mod):
+        """ Whether a module shares the sim's timeline (the usual case), so its time moves with the sim's """
+        t, sim_t = mod.t, self.sim.t
+        return len(t.yearvec) == len(sim_t.yearvec) and t.tvec.unit is sim_t.tvec.unit and np.array_equal(t.yearvec, sim_t.yearvec)
 
     @staticmethod
     def _null_update_results(mod):
@@ -264,11 +388,11 @@ class Loop:
     def _timelines_uniform(self):
         """ Check whether every module shares the sim's canonical timeline (numeric values, length, and unit) """
         sim_num = self.abs_numvecs['sim']
-        sim_unit = self.abs_tvecs['sim'].unit
+        sim_unit = getattr(self.abs_tvecs['sim'], 'unit', None) # Plain numbers have no unit
         npts = len(sim_num)
         for key, num in self.abs_numvecs.items():
             # Exact numeric equality plus matching unit: only then is the schedule provably identical
-            if len(num) != npts or self.abs_tvecs[key].unit is not sim_unit or not np.array_equal(num, sim_num):
+            if len(num) != npts or getattr(self.abs_tvecs[key], 'unit', None) is not sim_unit or not np.array_equal(num, sim_num):
                 return False
         return True
 
@@ -279,7 +403,8 @@ class Loop:
 
         Because all entries at a given tick share one time and the times are strictly
         increasing, this is identical to sorting by (time, func_order); and the tick
-        index equals the sim time index, so no separate ti pass is needed.
+        index equals the sim time index, so no separate ti pass is needed. At the first
+        tick there is no step, so only the functions that record the start are emitted.
         """
         tvec = self.abs_tvecs['sim']
         # Precompute the per-function fields once, rather than rebuilding them per entry
@@ -289,7 +414,8 @@ class Loop:
         for ti in range(len(tvec)):
             t = tvec[ti]
             for func_order, func, label, module, func_name in specs:
-                append(LoopEntry(time=t, ti=ti, func_order=func_order, func=func, label=label, module=module, func_name=func_name))
+                if ti or func_order in self.at_start:
+                    append(LoopEntry(time=t, ti=ti, func_order=func_order, func=func, label=label, module=module, func_name=func_name))
         return plan
 
     def _make_plan_sorted(self):
@@ -312,7 +438,7 @@ class Loop:
             label = f'{module}.{func_name}'
             tvec = self.abs_tvecs[module]
             numvec = self.abs_numvecs[module]
-            for j in range(len(tvec)):
+            for j in range(0 if func_order in self.at_start else 1, len(tvec)): # At its first time point, a module has no step, and only records the start
                 r_append(LoopEntry(time=tvec[j], ti=0, func_order=func_order, func=func, label=label, module=module, func_name=func_name))
                 t_append(numvec[j])
                 f_append(func_order)
@@ -323,13 +449,10 @@ class Loop:
         order = np.lexsort((func_orders, times_num)) # Last key (times_num) is primary
         plan = [raw[i] for i in order]
 
-        # Calculate the sim time index (ti) by counting sim.start_step boundaries
-        start_step = 'sim.start_step'
-        ti = -1
-        for entry in plan:
-            if entry.label == start_step:
-                ti += 1
-            entry.ti = ti
+        # Calculate the sim time index (ti): that of the last sim time point at or before each entry
+        tis = np.searchsorted(self.abs_numvecs['sim'], times_num[order], side='right') - 1
+        for entry,ti in zip(plan, tis):
+            entry.ti = int(max(ti, 0))
 
         # Warn if any consecutive time values are close but not identical (likely a floating-point issue)
         self._warn_near_identical(times_num[order])
@@ -381,7 +504,7 @@ class Loop:
         `NaN`. The plan metadata (via `to_df()`) is always available on demand regardless.
 
         Args:
-            until (str/date): if supplied, stop after this date (used by sim.run_one_step)
+            until (str/date): if supplied, stop after the step that starts at this time (used by sim.run_one_step)
             verbose (bool): if True, print each function call as it runs
             profile (bool): if True, record per-entry CPU timing (default: keep the current setting)
         """
@@ -394,8 +517,11 @@ class Loop:
             until = ss.date(until)
 
         # Loop over every function in the integration loop, e.g. disease.step()
-        while self.index < len(self.plan):
-            entry = self.plan[self.index]
+        plan = self.plan
+        while self.index < len(plan):
+            entry = plan[self.index]
+            if until is not None and entry.label == 'sim.advance' and self.sim.t.tvec[entry.ti - 1] > until: # Stop before a step that starts after the time asked for
+                break
             if verbose:
                 now = entry.time if isinstance(entry.time, ss.date) else f'{entry.time:n}' # Dates don't support number formatting
                 print(f'Running t={now}, step={self.index}, {entry.label}()')
@@ -408,8 +534,6 @@ class Loop:
             self.index += 1 # Increment the count
             if self.profile:
                 self.store_time(start)
-            if until is not None and self.sim.now > until: # Terminate if asked to
-                break
 
         # Note: the plan DataFrame is now built lazily by to_df() when requested, not here
         return
@@ -431,6 +555,29 @@ class Loop:
         matches = np.asarray(matches)
         if matches.dtype == bool:
             matches = sc.findinds(matches)
+
+        # A module is moved: its step() runs at the matching place, on each timestep where there is one
+        if isinstance(func, ss.Module):
+            step_label = f'{func.name}.step'
+            own = {repr(entry.time):entry for entry in self.plan if entry.label == step_label}
+            if not own:
+                errormsg = f'Cannot move "{func.name}" in the loop, since its step() is not in the plan; the labels are {sc.strjoin(metadata.label.unique())}'
+                raise ValueError(errormsg)
+            moved = {repr(self.plan[m].time) for m in matches} & set(own.keys())
+            matches = set(matches.tolist())
+            plan = []
+            for i,entry in enumerate(self.plan):
+                key = repr(entry.time)
+                if entry.label == step_label and key in moved:
+                    continue
+                elif i in matches and key in moved:
+                    plan += [own[key], entry] if before else [entry, own[key]]
+                else:
+                    plan.append(entry)
+            self.plan = plan
+            self.df = None
+            self.cpu_df = None
+            return
 
         # Perform the insertion in reverse order
         name = func.__name__
@@ -468,7 +615,7 @@ class Loop:
         Note: the loop must be initialized (`sim.init()`) before you can call this.
 
         Args:
-            func (func): the function to insert; must take a single argument, `sim`
+            func (func/Module): the function to insert, which must take a single argument, `sim`; or a module of the sim, whose `step()` is moved there
             label (str): the label (module.name) of the function to match; see `sim.loop.to_df().label.unique() for choices`
             match_fn (func): if supplied, use this function to perform the matching on the plan dataframe, returning a boolean array or list of indices of matching rows (see example below)
             before (bool): if true, insert the function before rather than after the match
@@ -511,8 +658,8 @@ class Loop:
             raise ValueError(errormsg)
 
         insertion = dict(func=func, label=label, match_fn=match_fn, before=before)
+        self._insert_into_plan(**insertion) # First, since making the plan (it is made when first needed) replays the insertions recorded
         self.insertions.append(insertion)
-        self._insert_into_plan(**insertion)
         return
 
     def to_df(self):
@@ -548,8 +695,8 @@ class Loop:
 
     def shrink(self):
         """ Shrink the size of the loop for saving to disk """
-        to_shrink = ['sim', 'funcs', 'plan']
-        ss.shrink(self, to_shrink)
+        to_shrink = ['sim', 'funcs', '_plan'] # Not the plan property, which would make the plan
+        ss.utils.shrink(self, to_shrink)
         return
 
     def plot(self, simplify=False, max_len=100, fig_kw=None, plot_kw=None, scatter_kw=None):
@@ -557,7 +704,7 @@ class Loop:
         Plot a diagram of all the events
 
         Args:
-            simplify (bool): if True, skip update_results and finish_step events, which are automatically applied
+            simplify (bool): if True, skip advance, update_results, and finish_step events, which are automatically applied
             max_len (int): maximum number of entries to plot
             fig_kw (dict): passed to `plt.figure()`
             plot_kw (dict): passed to `plt.plot()`
@@ -569,7 +716,7 @@ class Loop:
         if df is None:
             df = self.to_df()
         if simplify:
-            filter_out = ['update_results', 'finish_step']
+            filter_out = ['advance', 'update_results', 'finish_step']
             df = df[~df.func_name.isin(filter_out)]
         if max_len:
             df = df[:max_len]
@@ -668,7 +815,8 @@ class Loop:
 
         Examples:
             ```python
-            sis = ss.SIS(dt=0.1)
+            import starsim.library as ssl
+            sis = ssl.AgentSIS(dt=0.1) # A module written as code can have a timestep of its own
             net = ss.RandomNet(dt=0.5)
             births = ss.Births(dt=1)
             sim = ss.Sim(dt=0.1, dur=5, diseases=sis, networks=net, demographics=births)

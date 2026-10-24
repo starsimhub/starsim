@@ -13,19 +13,17 @@ Understanding the impact of interventions is one of the most common reasons to u
 
 ## Products and interventions
 
-Starsim contains _products_, which can be thought of as the actual test, diagnostic, treatment, or vaccine product being used, as well as _interventions_, which are responsible for delivering the products to the population.
+Starsim contains _products_, which can be thought of as the actual test, treatment, or vaccine product being used, as well as _deliveries_, which are responsible for delivering the products to the population. Splitting an intervention into these two parts means that the same vaccine can be delivered in different ways (to infants, in a campaign, to people at a clinic visit), and the same delivery can hand out different products.
 
-Depending on what disease you're modeling, you might need to define your own custom products and interventions, or you might be able to directly use some of the examples provided in Starsim.
+Starsim includes three products:
 
-Starsim includes three basic "types" of products: diagnostics, treatment, and vaccination. There isn't a lot of detail in the templates for each of these, because most of the details about products is specific to a disease. There are also some disease-specific products built in the Starsim's library of diseases - these can generally be found in the `diseases` subfolder (e.g. the cholera interventions are in `cholera.py`.
+- `ss.Vaccine(efficacy=...)`, which protects people from infection (and optionally from transmitting it, or from severe disease); by default it is leaky (everyone vaccinated is partly protected), and `leaky=False` makes it all-or-nothing (a share `efficacy` of those vaccinated are fully protected)
+- `ss.Diagnostic(sensitivity=..., specificity=...)`, which tells infected people apart from uninfected ones, with some errors
+- `ss.Treatment(cure=...)`, which clears an infection with some probability
 
-Starsim also includes several basic types of intervention:
+and one delivery for each: `ss.vaccinate()`, `ss.screen()`, and `ss.treat()`. They all take the same keywords for who gets the product (`where=`, `coverage=`, `capacity=`) and when (`start=`, `stop=`, and either `at=` for one-off campaigns or `interval=` for regular rounds). Interventions that don't hand out a product, such as wearing masks or closing schools, are changes to a parameter: `ss.change()` and `ss.modify()`.
 
-- `routine_vx()` for routine vaccination, `campaign_vx()` for one-off campaigns
-- similarly, `routine_screening()` and `campaign_screening()` for different types of screening program
-- `treat_num()`, which treats a certain number of people each timestep (by default, as many people as need treatment, but you can also set a maximum).
-
-These are sometimes general enough that they don't need to be tailored to a particular disease, and you can just use them directly. That being said, you are always welcome to tailor them as you like to capture particular features of the intervention you're modeling.
+These are general enough that they usually don't need to be tailored to a particular disease, and you can just use them directly. Depending on what you're modeling, you might also need to define your own custom interventions, as shown at the end of this tutorial.
 
 ## Vaccination
 To create an example, let's first create the parameters that we want to use for the simulation:
@@ -36,8 +34,9 @@ ss.options(jupyter=True)
 
 pars = dict(
     n_agents = 5_000,
-    birth_rate = ss.peryear(20),
-    death_rate = 15,
+    start = '2000',
+    stop = '2050',
+    demographics = [ss.birth(rate=ss.peryear(0.02)), ss.death(rate=ss.peryear(0.015))],
     networks = dict(
         type = 'randomnet', # Or 'random'
         n_contacts = 4
@@ -50,63 +49,98 @@ pars = dict(
 )
 ```
 
-Now we'll create a vaccine product and a vaccination intervention:
+Now we'll create a vaccine product and a vaccination intervention to deliver it:
 
 ```{python}
 # Create the product - a vaccine with 50% efficacy
-my_vaccine = ss.simple_vx(efficacy=0.5)
+my_vaccine = ss.Vaccine(efficacy=0.5)
 
 # Create the intervention
-my_intervention = ss.routine_vx(
-    start_year=2015,    # Begin vaccination in 2015
-    prob=0.2,           # 20% coverage
-    product=my_vaccine   # Use the MyVaccine product
+my_intervention = ss.vaccinate(
+    my_vaccine,               # Use the vaccine product
+    start = '2015',           # Begin vaccination in 2015
+    coverage = 0.2,           # Reach 20% of the population...
+    interval = ss.years(1),   # ...every year
 )
 
 # Now create two sims: a baseline sim and one with the intervention
 sim_base = ss.Sim(pars=pars)
-sim_base.run()
 sim_intv = ss.Sim(pars=pars, interventions=my_intervention)
-sim_intv.run()
 ```
 
-If we want to see the impact, we can create a plot:
+The `interval` matters here. With `interval=ss.years(1)`, the vaccine is offered in yearly rounds, and in each round 20% of the population is reached (some of whom will have been vaccinated before). Without `interval` (or `at`), delivery is *routine*: each person is offered the vaccine once, when they first become eligible, which here would mean a single 20% of the population.
+
+To compare the two sims, we can run them together with `ss.parallel()`, giving each a name, and plot the result we're interested in:
 
 ```{python}
-import matplotlib.pyplot as plt
-
-res_base = sim_base.results
-res_intv = sim_intv.results
-
-plt.figure()
-plt.plot(res_base.timevec, res_base.sir.prevalence, label='Baseline')
-plt.plot(res_intv.timevec, res_intv.sir.prevalence, label='Vax')
-plt.axvline(x=ss.date(2015), color='k', ls='--')
-plt.title('Prevalence')
-plt.legend()
-plt.show()
+msim = ss.parallel(baseline=sim_base, vaccine=sim_intv)
+msim.plot('sir.prevalence')
 ```
 
-We can see that from the year of introducing the vaccine, prevalence starts to fall.
+We can see that from the year of introducing the vaccine, prevalence starts to fall faster. The results of both sims are in `msim.results`, with the scenario as a dimension: for example, `msim.results.sir.prevalence.select(scenario='vaccine')`. The vaccination intervention has results of its own, such as the number of doses delivered each year:
+
+```{python}
+sim = msim.sims[1]
+print(f'Doses delivered: {sim.results.my_intervention.delivered.sum():,.0f}')
+```
+
+## Screening and treatment
+
+A test is delivered by `ss.screen()`, and what happens to the people who test positive is another delivery, given them with `who=`: the screening's `positive` are the people who tested positive on that step. Here, 30% of the population is screened each year from 2015, and 80% of those who test positive are treated, with a treatment that cures 95% of them. We use an SIS disease, since screening and treatment are mostly used for infections that people can get again:
+
+```{python}
+test = ss.Diagnostic(sensitivity=0.9, specificity=0.98)
+treatment = ss.Treatment(cure=0.95)
+
+screening = ss.screen(
+    test,
+    start = '2015',
+    coverage = 0.3,
+    interval = ss.years(1),
+)
+treat = ss.treat(treatment, who=screening.positive, coverage=0.8)
+
+sis_pars = dict(pars, diseases=dict(type='sis', dur_inf=10, beta=0.1))
+msim = ss.parallel(baseline=ss.Sim(sis_pars), screening=ss.Sim(sis_pars, interventions=[screening, treat]))
+msim.plot('sis.prevalence')
+```
+
+## Changing parameters
+
+Many interventions don't hand out a product, but change how the disease spreads: masks, distancing, or school closures, for example. `ss.change()` changes a parameter at given times, and `ss.modify()` changes it while a condition holds (here, between two dates). Both say what they change by name; here, the transmission rate of the disease called `sis`:
+
+```{python}
+masks = ss.modify('sis.pars.beta', multiply=0.5, start='2015', stop='2025')     # Halve transmission from 2015 to 2025
+lockdown = ss.change('sis.pars.beta', at=['2015', '2020'], by=[0.2, 0.8])       # 80% lower from 2015, 20% lower from 2020
+
+msim = ss.parallel(
+    baseline = ss.Sim(sis_pars),
+    masks = ss.Sim(sis_pars, interventions=masks),
+    lockdown = ss.Sim(sis_pars, interventions=lockdown),
+)
+msim.plot('sis.prevalence')
+```
+
+A modifier never overwrites the parameter it changes: when it ends, the parameter is back to its own value, with nothing to restore.
 
 ## Custom interventions
 
-The most common way of accessing diseases for modification by interventions is via their names (e.g. `sir`, `sis`). This means that typically, different interventions need to be defined for different diseases. The example below shows how to define a simple vaccine for SIS which is just a function, rather than a class:
+If none of the above does what you need, an intervention can be any function of the sim, called once per step. The most common way of accessing diseases for modification by interventions is via their names (e.g. `sir`, `sis`). This means that typically, different interventions need to be defined for different diseases. The example below shows how to define a simple vaccine for SIS which is just a function, rather than a class:
 
 ```{python}
 import starsim as ss
 
 def simple_sis_vaccine(sim, start=2030, eff=0.9):
     if sim.now == start:
-        sim.diseases.sis.rel_trans[:] *= 1-eff
+        sim.diseases.sis.rel_sus[:] *= 1-eff
     return
 
 pars = dict(
-    start=2000,
-    stop=2050,
-    diseases='sis',
-    networks='random',
-    interventions=simple_sis_vaccine,
+    start = '2000',
+    stop = '2050',
+    diseases = 'sis',
+    networks = 'random',
+    interventions = simple_sis_vaccine,
 )
 
 sim = ss.Sim(pars)
@@ -115,7 +149,8 @@ sim.plot()
 ss.show()
 ```
 
+For anything more complex, an intervention can be written as a class, with a `step()` method that is called every step; see [Interventions](../user_guide/modules_interventions.qmd) in the user guide.
+
 ## Exercises
 
-1. If we change the disease from SIR to SIS and set coverage to 100%, what minimum efficacy of vaccine is required to eradicate the disease by 2050? You will need to implement an `sis_vaccine` class as well (based on `ss.sir_vaccine` -- not the simple vaccine above), but can re-use `ss.routine_vx`.
-
+1. If we change the disease from SIR to SIS and set coverage to 100%, what minimum efficacy of vaccine is required to eradicate the disease by 2050? Use `ss.Vaccine` and `ss.vaccinate`, as in the vaccination example above.

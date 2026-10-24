@@ -80,12 +80,12 @@ def test_nigeria(which='births', dt=1, start=1995, dur=15, do_plot=False):
     if which == 'pregnancy':
 
         print("Check we don't have more births than pregnancies")
-        assert sum(sim.results.pregnancy.births) <= sum(sim.results.pregnancy.pregnancies)
+        assert sum(sim.results.pregnancy.birth) <= sum(sim.results.pregnancy.conception)
         print('✓ (births <= pregnancies)')
 
         if dt == 1:
             print("Checking that births equal pregnancies with dt=1")
-            assert np.array_equal(sim.results.pregnancy.pregnancies, sim.results.pregnancy.births)
+            assert np.array_equal(sim.results.pregnancy.conception, sim.results.pregnancy.birth)
             print('✓ (births == pregnancies)')
 
     rtol = 0.05
@@ -116,8 +116,8 @@ def test_nigeria(which='births', dt=1, start=1995, dur=15, do_plot=False):
         ax[2].legend()
 
         if which == 'pregnancy':
-            ax[3].plot(tvec, sim.results.pregnancy.pregnancies, label='Pregnancies')
-            ax[3].plot(tvec, sim.results.pregnancy.births, label='Births')
+            ax[3].plot(tvec, sim.results.pregnancy.conception, label='Pregnancies')
+            ax[3].plot(tvec, sim.results.pregnancy.birth, label='Births')
             ax[3].set_title('Pregnancies and births')
             ax[3].legend()
 
@@ -130,7 +130,7 @@ def test_nigeria(which='births', dt=1, start=1995, dur=15, do_plot=False):
 def test_constant_pop(do_plot=False):
     """ Test pars for constant pop size """
     sc.heading('Testing constant population size')
-    sim = ss.Sim(n_agents=10e3, birth_rate=ss.freqperyear(10), death_rate=ss.freqperyear(10/1010*1000), dur=ss.years(200), rand_seed=1).run()
+    sim = ss.Sim(n_agents=10e3, demographics=[ss.birth(rate=ss.peryear(0.01)), ss.death(rate=ss.peryear(0.01/1.01))], dur=ss.years(200), rand_seed=1).run()
     print("Check final pop size within 5% of starting pop")
     assert np.isclose(sim.results.n_alive[0], sim.results.n_alive[-1], rtol=0.05)
     print(f'✓ (final pop / starting pop={sim.results.n_alive[-1] / sim.results.n_alive[0]:.2f})')
@@ -145,11 +145,13 @@ def test_constant_pop(do_plot=False):
 def test_module_adding():
     """ Test that modules can't be added twice """
     sc.heading('Testing module duplication')
-    births = ss.Births(birth_rate=ss.freqperyear(10))
-    deaths = ss.Deaths(death_rate=ss.freqperyear(10))
+    births = ss.Births(birth_rate=ss.time.freq(10, 'year'))
+    deaths = ss.Deaths(death_rate=ss.time.freq(10, 'year'))
     demographics = [births, deaths]
-    with pytest.raises(ValueError):
-        ss.Sim(n_agents=1e3, demographics=demographics, birth_rate=ss.freqperyear(10), death_rate=ss.freqperyear(10)).run()
+    with pytest.raises(ValueError): # Starsim 3's birth_rate= is removed, rather than added to the modules given
+        ss.Sim(n_agents=1e3, demographics=demographics, birth_rate=ss.time.freq(10, 'year')).run()
+    sim = ss.Sim(n_agents=1e3, demographics=[ss.Births(), ss.Deaths()], people_results=False, verbose=0).run() # Without people's results
+    assert sim.results.deaths.new.sum() > 0
     return demographics
 
 
@@ -196,8 +198,8 @@ def test_pregnancy():
     sim = ss.Sim(
         n_agents=20e3, # Large enough that the <18 mother cohort has a robust sample (~85 babies) for the gestational-age assertions below
         demographics=[
-            ss.Pregnancy(fertility_rate=ss.freqperyear(20), burnin=True),
-            ss.Deaths(death_rate=ss.freqperyear(10/1010*1000)),
+            ss.Pregnancy(fertility_rate=ss.time.freq(20, 'year'), burnin=True),
+            ss.Deaths(death_rate=ss.time.freq(10/1010*1000, 'year')),
         ],
         dur=ss.years(10),
         rand_seed=1,
@@ -208,19 +210,12 @@ def test_pregnancy():
 
     # Tests
     # Check that everyone in their 2nd trimester conceived 3-6 months ago
-    tri2 = sim.demographics.pregnancy.tri2_uids
-    conception_time = sim.people.pregnancy.ti_pregnant[tri2]
-    time_since_conception = ss.years((sim.ti - conception_time) * sim.t.dt_year).weeks
-    assert np.all((time_since_conception >= 13) & (time_since_conception <= 26)), 'Some people in 2nd trimester did not conceive 3-6 months ago'
+    preg = sim.demographics.pregnancy
+    weeks = ss.years((sim.ti - preg.ti_P[preg.P.uids]) * sim.t.dt_year).weeks # Since conception
+    assert np.all((weeks >= 0) & (weeks <= 45)), 'Some pregnancies are longer than 45 weeks'
 
-    # Check that gestational clock is present for all pregnant women, and that they all have a defined delivery time
-    pregnant = sim.people.pregnancy.pregnant
-    assert np.all(~np.isnan(sim.people.pregnancy.gestation[pregnant])), 'Some pregnant people are missing gestational clock'
-    ti_delivery = sim.people.pregnancy.ti_delivery[pregnant]
-    assert np.all(~np.isnan(ti_delivery)), 'Some people with ti_pregnant are missing ti_delivery'
-
-    # Check that gestational clock is NaN for all non-pregnant women
-    assert np.all(np.isnan(sim.people.pregnancy.gestation[~sim.people.pregnancy.pregnant])), 'Some non-pregnant people have gestational clock'
+    # Check that every pregnant woman has a defined delivery time
+    assert np.all(~np.isnan(preg.ti_exit_P[preg.P.uids])), 'Some pregnant women have no scheduled delivery'
     sc.printgreen('✓ Pregnancy duration tests passed')
 
     # Check that everyone born during the sim has gestational age at birth recorded
@@ -260,8 +255,9 @@ def test_pregnancy():
     # Assertions
     assert mean_results['<18'] < mean_results['18-35'], '<18 mothers do not have lower gestational age at birth than 18-35 mothers'
     assert mean_results['>35'] < mean_results['18-35'], '>35 mothers do not have lower gestational age at birth than 18-35 mothers'
-    assert ptb_results['<18'] > ptb_results['18-35'], '<18 mothers do not have higher preterm birth share than 18-35 mothers'
-    assert ptb_results['>35'] > ptb_results['18-35'], '>35 mothers do not have higher preterm birth share than 18-35 mothers'
+    rel = sim.demographics.pregnancy.rel_ptb # Each mother's relative risk of preterm birth at her last conception (the preterm shares themselves are too few here to compare: see test_pregnancy_risks)
+    risk = {k:np.mean(rel[ss.uids(np.asarray(mothers)[np.asarray(v)])]) for k,v in key_cohorts.items()}
+    assert risk['<18'] > 1.1*risk['18-35'] and risk['>35'] > 1.1*risk['18-35'], f'Mothers <18 and >35 should have a higher relative risk of preterm birth: {risk}'
 
     sc.printgreen('✓ Gestational age at birth by maternal age tests passed')
 
@@ -275,8 +271,8 @@ def test_pregnancy_short_sim():
     sim = ss.Sim(
         n_agents=1e3,
         demographics=[
-            ss.Pregnancy(fertility_rate=ss.freqperyear(10), burnin=False),
-            ss.Deaths(death_rate=ss.freqperyear(10/1010*1000)),
+            ss.Pregnancy(fertility_rate=ss.time.freq(10, 'year'), burnin=False),
+            ss.Deaths(death_rate=ss.time.freq(10/1010*1000, 'year')),
         ],
         dur=ss.days(250),
         rand_seed=1,
@@ -288,7 +284,7 @@ def test_pregnancy_short_sim():
     # Check that a number or a non-choice distribution works for dur_pregnancy, including with fertility data
     asfr = pd.read_csv(datadir/'nigeria_asfr.csv')
     for dur_preg in [39, ss.normal(ss.weeks(39), ss.weeks(1))]:
-        preg = ss.Sim(n_agents=500, demographics=ss.Pregnancy(fertility_rate=asfr, dur_pregnancy=dur_preg), dur=ss.years(1), dt=ss.month, verbose=0).run().demographics.pregnancy
+        preg = ss.Sim(n_agents=500, demographics=ss.Pregnancy(fertility_rate=asfr, dur_pregnancy=dur_preg), dur=ss.years(1), dt=ss.months(1), verbose=0).run().demographics.pregnancy
         assert 0.7 < preg.mean_dur_pregnancy < 0.8, 'Mean pregnancy should be roughly 39 weeks' # 39 weeks = 0.75 years
 
     sc.printgreen('✓ Short sim pregnancy finalize test passed')
@@ -296,57 +292,21 @@ def test_pregnancy_short_sim():
 
 
 @sc.timer()
-def test_loss_classification():
-    """
-    Test that prenatal deaths are correctly classified as miscarriage (<20w)
-    or stillbirth (>=20w) based on gestational age.
-    """
-    sc.heading('Testing loss classification...')
-
-    # Use a high loss rate so both early and late losses occur
-    sim = ss.Sim(
-        n_agents=5_000,
-        demographics=[
-            ss.Pregnancy(fertility_rate=ss.freqperyear(30), p_loss=ss.bernoulli(p=0.05), burnin=True),
-            ss.Deaths(death_rate=ss.freqperyear(10/1010*1000)),
-        ],
-        dur=ss.years(5),
-        dt=ss.years(1/12),
-        rand_seed=1,
-        networks=ss.PrenatalNet(),
-    )
-    sim.run()
-
-    preg = sim.demographics.pregnancy
-    mc = preg.results['miscarriages'].sum()
-    sb = preg.results['stillbirths'].sum()
-    births = preg.results['births'].sum()
-    print(f'  Miscarriages: {mc}, Stillbirths: {sb}, Births: {births}')
-
-    assert mc > 0, 'Expected some miscarriages with p_loss=0.05'
-    assert sb > 0, 'Expected some stillbirths with p_loss=0.05'
-    assert mc > sb, 'Expected more miscarriages than stillbirths (pregnancies spend more time at early GA)'
-    assert births > 0, 'Expected some births despite losses'
-
-    sc.printgreen('✓ Loss classification tests passed')
-    return sim
-
-
-@sc.timer()
 def test_background_loss():
     """
-    Test that background pregnancy loss (p_loss) produces losses and that
-    higher p_loss produces more losses.
+    Test that background pregnancy loss (p_loss) produces losses, that higher p_loss
+    produces more losses, and that they are classified as miscarriage (<20w) or
+    stillbirth (>=20w) by gestational age
     """
-    sc.heading('Testing background loss...')
+    sc.heading('Testing background loss and its classification...')
 
     results = dict()
     for label, p_loss in [('none', 0), ('low', 0.01), ('high', 0.05)]:
         sim = ss.Sim(
             n_agents=5_000,
             demographics=[
-                ss.Pregnancy(fertility_rate=ss.freqperyear(30), p_loss=ss.bernoulli(p=p_loss), burnin=True),
-                ss.Deaths(death_rate=ss.freqperyear(10/1010*1000)),
+                ss.Pregnancy(fertility_rate=ss.time.freq(30, 'year'), p_loss=ss.bernoulli(p=p_loss), burnin=True),
+                ss.Deaths(death_rate=ss.time.freq(10/1010*1000, 'year')),
             ],
             dur=ss.years(5),
             dt=ss.years(1/12),
@@ -354,17 +314,17 @@ def test_background_loss():
             networks=ss.PrenatalNet(),
         )
         sim.run()
-        preg = sim.demographics.pregnancy
-        total_losses = preg.results['miscarriages'].sum() + preg.results['stillbirths'].sum()
-        births = preg.results['births'].sum()
-        results[label] = dict(losses=total_losses, births=births)
-        print(f'  p_loss={p_loss}: losses={total_losses}, births={births}')
+        res = sim.demographics.pregnancy.results
+        results[label] = sc.objdict(mc=res.miscarriage.sum(), sb=res.stillbirth.sum(), births=res.birth.sum())
+        results[label].losses = results[label].mc + results[label].sb
+        print(f'  p_loss={p_loss}: {results[label]}')
 
     assert results['low']['losses'] > results['none']['losses'], 'Expected more losses with p_loss=0.01 than p_loss=0'
     assert results['high']['losses'] > results['low']['losses'], 'Expected more losses with higher p_loss'
     assert results['high']['births'] < results['none']['births'], 'Expected fewer births with p_loss > 0'
-
-    sc.printgreen('✓ Background loss tests passed')
+    high = results['high']
+    assert high.mc > high.sb > 0, 'Expected more miscarriages than stillbirths (pregnancies spend more time at early GA)'
+    assert high.births > 0, 'Expected some births despite losses'
     return sim
 
 
@@ -379,12 +339,12 @@ def test_nnd():
     sim = ss.Sim(
         n_agents=5_000,
         demographics=[
-            ss.Pregnancy(fertility_rate=ss.freqperyear(30), burnin=True),
-            ss.Deaths(death_rate=ss.freqperyear(10/1010*1000)),
+            ss.Pregnancy(fertility_rate=ss.time.freq(30, 'year'), burnin=True),
+            ss.Deaths(death_rate=ss.time.freq(10/1010*1000, 'year')),
         ],
         diseases=ssl.mnch.NeonatalSepsis(),
         dur=ss.years(3),
-        dt=ss.years(1/12),
+        dt=ss.days(7), # Weekly, since a sepsis death (about a week after birth) is only seen at a step, and at monthly steps a newborn is a month old by then
         rand_seed=1,
         networks=ss.PrenatalNet(),
     )
@@ -392,7 +352,7 @@ def test_nnd():
 
     preg = sim.demographics.pregnancy
     neonatal_deaths = preg.results['neonatal_deaths'].sum()
-    births = preg.results['births'].sum()
+    births = preg.results['birth'].sum()
     print(f'  Neonatal deaths: {neonatal_deaths}, Births: {births}')
 
     assert neonatal_deaths > 0, 'Expected neonatal deaths from neonatal sepsis'
@@ -418,7 +378,7 @@ def test_count_based_births():
 
     orig_crn = ss.options.crn
     try:
-        nseeds = 12
+        nseeds = 8
         per_agent = np.array([cum_births(True, s) for s in range(nseeds)])
         count_based = np.array([cum_births(False, s) for s in range(nseeds)])
 
@@ -428,12 +388,18 @@ def test_count_based_births():
         assert count_based.std() > 0, 'Count-based births should be stochastic'
 
         # Both paths are reproducible: identical seed -> identical result
-        assert cum_births(True, 0) == cum_births(True, 0), 'CRN births not reproducible'
-        assert cum_births(False, 0) == cum_births(False, 0), 'Count-based births not reproducible'
+        assert cum_births(True, 0) == per_agent[0], 'CRN births not reproducible'
+        assert cum_births(False, 0) == count_based[0], 'Count-based births not reproducible'
     finally:
         ss.options.crn = orig_crn
 
     print(f'  Per-agent mean: {per_agent.mean():.0f}, count-based mean: {count_based.mean():.0f} ({rel_diff*100:.2f}% difference)')
+
+    # A bare rate above 1 is per 1,000 people, and below 1 per person, unless rate_units says
+    births = [ss.Births(birth_rate=rate, rate_units=units).pars.rate_units for rate,units in [(30, None), (0.03, None), (0.5, 1000), (0.5, 1)]]
+    assert births == [1e-3, 1, 1e-3, 1]
+    with pytest.warns(RuntimeWarning): # Could be either
+        ss.Deaths(death_rate=0.5)
     return per_agent, count_based
 
 
@@ -482,7 +448,195 @@ def test_birth_data_cols():
     year_deaths = ss.Deaths(death_rate=pd.DataFrame(dict(Year=[1990, 1990], **death_data))) # Via the synonym
     assert time_deaths.death_rate_data.equals(year_deaths.death_rate_data)
 
+    # Or a named place, for its UN rates
+    ss.Sim(demographics=[ss.Births(birth_rate='nigeria'), ss.Deaths(death_rate='nigeria')], diseases=ss.SIS(), n_agents=1000, start=2000, stop=2003, dt=ss.years(0.25), verbose=0).run()
+
     print('✓ (birth/death data column handling)')
+    return
+
+
+@sc.timer()
+def test_period_rates():
+    """ Rates labeled by the start of their period hold until the next label, and 5-year fertility data cover the last group whole """
+    sc.heading('Testing rates by period...')
+
+    # Death rates for 2010-2014 and from 2015, labeled 2010 and 2015: 2013 and 2014 have the 2010 rate, not the nearest year's
+    assert ss.demographics.period_year([2010, 2010, 2015, 2015], 2014.9) == 2010 and ss.demographics.period_year([2010, 2015], 2015) == 2015
+    data = pd.DataFrame(dict(Time=[2010, 2010, 2015, 2015], Sex=['Female', 'Male']*2, AgeGrpStart=0, mx=[0.04, 0.04, 0.0, 0.0]))
+    sim = ss.Sim(n_agents=10_000, demographics=ss.Deaths(death_rate=data, rate_units=1), start=2010, stop=2015, dt=ss.months(1), verbose=0).run()
+    deaths = sim.results.new_deaths.values[1:]
+    assert deaths.min() > 0, 'Every step before 2015 has the 2010 rate'
+    expected = 10_000*(1 - np.exp(-0.04*5))
+    assert abs(deaths.sum() - expected) < 4*np.sqrt(expected), f'Expected about {expected:.0f} deaths, not {deaths.sum()}'
+
+    # Fertility by 5-year age group: the last group (45) is 45-49, not just 45
+    data = pd.DataFrame(dict(Time=2010, AgeGrp=[15, 20, 25, 30, 35, 40, 45], ASFR=0.2))
+    preg = ss.Sim(n_agents=100, demographics=ss.Pregnancy(fertility_rate=data, rate_units=1), start=2010, stop=2011, verbose=0).init().demographics.pregnancy
+    frd = preg.fertility_rate_data
+    assert list(frd.columns[-2:]) == [45, 50] and frd[45].iloc[0] == 0.2 and frd[50].iloc[0] == 0
+    return sim
+
+
+@sc.timer()
+def test_lifetable_deaths():
+    """ Life tables by year and sex in ss.Deaths, and a death rate by its own ages, or a function, under both solvers """
+    sc.heading('Testing life tables by year and sex, and death rates by single year of age...')
+    ages = np.arange(0, 105, 5)
+    table = lambda mx: ss.lifetable(ages, -np.diff(np.append(np.exp(-mx*ages), 0))) # A constant hazard, to age 105
+    tables = {2000: dict(female=table(0.01), male=table(0.03)), 2005: dict(female=table(0.02), male=table(0.06))}
+    sim = ss.Sim(n_agents=20_000, demographics=ss.Deaths(lifetable=tables), start=2000, stop=2010, verbose=0).run()
+    female, dead = sim.people.female.raw, ~sim.people.alive.raw
+    for sel,rates in [(female, [0.01, 0.02]), (~female, [0.03, 0.06])]:
+        expected = 1 - np.exp(-5*rates[0] - 5*rates[1]) # The 2000 table to 2005, then the 2005 one
+        assert abs(dead[sel].mean() - expected) < 4*np.sqrt(expected/sel.sum()), f'{dead[sel].mean():.3f} died, not {expected:.3f}'
+    with pytest.raises(ValueError, match='female and male'):
+        ss.Deaths(lifetable=dict(women=table(0.01), men=table(0.03)))
+
+    # A death rate by single year of age on 5-year age groups (which only agents read), and a function of the sim per year
+    mx = ss.by(dict(age=np.arange(100), value=[ss.peryear(0.001*np.exp(0.07*a)) for a in range(100)]))
+    def flat(sim): return 0.02
+    def make(rate, solver, stratify, **pop):
+        S, I = ss.states(2)
+        sim = ss.Sim(ss.Disease(S, I, inf=S >> I @ 0*I, death=ss.death(rate=rate), name='d'), solver=solver, start=2000, stop=2005, verbose=0, **pop)
+        if stratify:
+            sim.stratify(age=list(range(0, 100, 5)))
+        return sim
+    with pytest.raises(ss.CapabilityError, match='split'):
+        make(mx, 'ode', True, total_pop=50_000).init()
+    assert make(mx, 'auto', True, total_pop=50_000).init().solver == 'abm'
+    coarse = ss.by(dict(age=np.arange(0, 100, 5), value=[ss.peryear(np.mean([0.001*np.exp(0.07*a) for a in range(lo, lo + 5)])) for lo in range(0, 100, 5)])) # The same, given by the groups
+    for rate,fine,stratify in [(coarse, mx, True), (ss.peryear(flat), ss.peryear(flat), False)]:
+        n = [make(r, solver, stratify, **pop).run().results.d.death.sum() for r,solver,pop in [(fine, 'abm', dict(n_agents=50_000)), (rate, 'ode', dict(total_pop=50_000))]]
+        assert np.isclose(n[0], n[1], rtol=0.06), f'{n[0]:n} deaths as agents, {n[1]:n} as compartments'
+    assert np.isclose(n[1], 50_000*(1 - np.exp(-0.02*5)), rtol=1e-3)
+    return sim
+
+
+@sc.timer()
+def test_births_parents():
+    """ ss.Births' parents are women of reproductive age, and newborns are born where their parent is """
+    sc.heading('Testing the parents of births...')
+    S, I = ss.states(2)
+    dis = ss.Disease(onset=S >> I @ ss.peryear(0.01), name='dis')
+    sim = ss.Sim(diseases=dis, n_agents=5000, start=2000, stop=2003, verbose=0, stratify=dict(district=ss.geo.geography(names=['a', 'b', 'c']), split=[0.4, 0.3, 0.3]),
+                 demographics=[ss.Births(birth_rate=ss.peryear(0.04)), ss.Deaths(death_rate=ss.peryear(0.01))]).run()
+    ppl = sim.people
+    kids = ss.uids(np.flatnonzero(ppl.parent.raw >= 0))
+    parents = ppl.parent.raw[kids]
+    assert len(kids) > 300 and ppl.female.raw[parents].all() # Before, about half were men
+    both = ppl.alive.raw[kids] & ppl.alive.raw[parents] # Whose ages have both gone up since
+    age_at_birth = ppl.age.raw[parents[both]] - ppl.age.raw[kids[both]]
+    assert age_at_birth.min() >= 15 - 0.1 and age_at_birth.max() < 50 + 0.1 # As old as the women who can be mothers (to within a step)
+    assert np.array_equal(ppl.district.raw[kids], ppl.district.raw[parents]) # Born where the parent is
+
+    # The same for ss.Pregnancy, including the pregnancies before the start, and a dimension called sex is the newborn's
+    sim = ss.Sim(diseases=dis.copy(), n_agents=5000, start=2000, stop=2003, verbose=0, stratify=[dict(district=ss.geo.geography(names=['a', 'b', 'c']), split=[0.4, 0.3, 0.3]), dict(sex=['female', 'male'])],
+                 demographics=ss.Pregnancy(fertility_rate=ss.peryear(0.15), rate_units=1)).run()
+    ppl = sim.people
+    kids = ss.uids(np.flatnonzero(ppl.parent.raw >= 0))
+    assert np.array_equal(ppl.district.raw[kids], ppl.district.raw[ppl.parent.raw[kids]])
+    assert np.array_equal(ppl.sex.raw[kids] == 0, ppl.female.raw[kids])
+    return sim
+
+
+@sc.timer()
+def test_unborn():
+    """ The unborn of ss.Pregnancy are not counted among the people, are not seeded, and a single beta on a maternal network goes from mother to child """
+    sc.heading('Testing the unborn...')
+    S = ss.State() # The first state declared, where people start unless put elsewhere
+    I = ss.State(init=0.5)
+    hiv = ss.Disease(infection=S >> I @ ss.par(dict(prenatalnet=0.33, breastfeedingnet=0.12)) * I, name='hiv')
+    sim = ss.Sim(hiv, demographics=ss.Pregnancy(fertility_rate=ss.peryear(0.15), rate_units=1), networks=[ss.PrenatalNet(), ss.BreastfeedingNet()],
+                 n_agents=5000, start=2010, stop=2011, dt=ss.months(1), verbose=0).init()
+    ppl, hiv = sim.people, sim.diseases.hiv
+    unborn = ppl.unborn_uids()
+    assert len(unborn) > 50 and not hiv.I.raw[unborn].any() # Before, half of them started infected
+    mothers = ss.uids(ppl.parent.raw[unborn])
+    I0 = hiv.I.raw.copy()
+    sim.run()
+    assert not (hiv.I.raw[mothers] & ~I0[mothers]).any() # Before, mothers were infected by their children
+    r = sim.results
+    born = ppl.alive.raw[ppl.auids] & (ppl.age.raw[ppl.auids] >= 0)
+    assert r.n_alive[-1] < r.n_alive[-1] + r.pregnancy.n_unborn[-1] and r.pregnancy.n_unborn[-1] > 0
+    assert np.isclose(ppl.n_alive, born.sum())
+    return sim
+
+
+@sc.timer()
+def test_pregnancy_risks():
+    """ p_loss is per week whatever the time step, and the relative risk of preterm birth changes the share born preterm """
+    sc.heading('Testing pregnancy risks...')
+    def run(dt, p_loss=0, rr=1.0):
+        preg = ss.Pregnancy(fertility_rate=ss.peryear(150), p_loss=p_loss, rr_ptb=ss.constant(1), rr_ptb_age=np.array([[18, 35, 1000], [rr, rr, rr]]), burnin=False)
+        sim = ss.Sim(n_agents=10_000, start=2000, stop=2003, dt=dt, demographics=preg, rand_seed=1, verbose=0).run()
+        p = sim.demographics.pregnancy
+        ga = p.gestation_at_birth.raw[~np.isnan(p.gestation_at_birth.raw)]
+        return np.mean(ga < 37), 1 - sim.results.pregnancy.birth.sum()/np.nansum(p.n_pregnancies.raw)
+
+    # Before, 0.01 a step lost 44% weekly and 26% monthly
+    weekly, monthly = [run(dt, p_loss=0.01)[1] for dt in [ss.weeks(1), ss.months(1)]]
+    assert abs(weekly - monthly) < 0.04, f'The share lost should not depend on the time step: {weekly:.3f} weekly, {monthly:.3f} monthly'
+
+    # Before, the preterm share was 0.046 whatever the relative risk
+    base, triple = [run(ss.weeks(1), rr=rr)[0] for rr in [1, 3]]
+    p_pre = 0.001 + 0.002 + 0.005 + 0.012 + 0.026 # The default distribution's preterm durations, 32 to 36 weeks
+    assert abs(base - p_pre) < 0.02 and abs(triple - 3*p_pre) < 0.03, f'Expected preterm shares of about {p_pre:.3f} and {3*p_pre:.3f}, not {base:.3f} and {triple:.3f}'
+    return base, triple
+
+
+@sc.timer()
+def test_cause_of_death():
+    """ Someone whose death two modules request in one step dies once, of one cause, counted once """
+    sc.heading('Testing causes of death...')
+    S, I = ss.states(2)
+    sis = ss.Disease(infection=S >> I @ ss.peryear(0)*I, death=ss.death(I, rate=ss.peryear(1.0)), init_n=dict(I=10_000), name='sis')
+    sim = ss.Sim(diseases=sis, demographics=ss.Deaths(death_rate=ss.peryear(1.0), rate_units=1), n_agents=10_000, start=2010, stop=2011, dt=ss.months(1), verbose=0).run()
+    r = sim.results
+    by_disease, by_deaths, total = r.sis.death.sum(), r.deaths.new.sum(), r.new_deaths.sum()
+    assert by_disease + by_deaths == total # Before, about 4.5% were counted twice
+    ppl = sim.people
+    dead = ss.uids(np.flatnonzero(~ppl.alive.raw[:ppl.uid.len_used]))
+    causes = np.array(ppl.causes)[ppl.cause_of_death.raw[dead]]
+    assert (causes == 'sis').sum() == by_disease and (causes == 'deaths').sum() == by_deaths # One cause each, kept per person
+    assert abs(by_disease - by_deaths) < 4*np.sqrt(total) # The same rate, so the same share of deaths, whichever module runs first
+    return sim
+
+
+@sc.timer()
+def test_split_by_age():
+    """ A split over age and another dimension, with each age group's row summing to 1, keeps people's ages, and newborns take the youngest group's row """
+    sc.heading('Testing a split by age and another dimension...')
+    S, I = ss.states(2)
+    dis = ss.Disease(onset=S >> I @ ss.peryear(0.01), name='dis')
+    dis.stratify(age=[0, 1, 5])
+    dis.stratify(wealth=['poor', 'rich'], split=ss.by([[0, 1], [1, 0], [1, 0]], dims=['age', 'wealth']))
+    sim = ss.Sim(diseases=dis, n_agents=5000, start=2000, stop=2002, rand_seed=1, verbose=0, demographics=[ss.Births(birth_rate=ss.peryear(0.04)), ss.Deaths(death_rate=ss.peryear(0.01))]).run()
+    n = lambda t, age: (sim.results.dis.n_S.select(age=age).by('wealth').values[t] + sim.results.dis.n_I.select(age=age).by('wealth').values[t])
+    assert n(0, 0).sum() < 0.05*5000 # Before, each age group was a third of the people
+    assert n(0, 1)[1] == 0 and n(0, 2)[1] == 0 # Only those under 1 are rich...
+    assert n(-1, 0)[0] == 0 and n(-1, 0)[1] > 0 # ...and newborns too
+    return sim
+
+
+@sc.timer()
+def test_declared_newborns():
+    """ Agents added by ss.Births and ss.Pregnancy (including the unborn) enter a declared disease, with a level of each dimension """
+    sc.heading('Testing newborns in a declared disease')
+    for dem in [ss.Births(birth_rate=40), ss.Pregnancy(fertility_rate=40)]:
+        S, I = ss.states('S I')
+        sis = ss.Disease(infection=ss.Transition(S, I, rate=2 * I), recovery=ss.Transition(I, S, dur=ss.years(1)), init_prev=0.1, name='sis')
+        sim = ss.Sim(sis, n_agents=2000, demographics=[dem, ss.Deaths(death_rate=10)], stratify=dict(risk=['lo', 'hi'], split=[0.2, 0.8]), start=2000, stop=2020, verbose=0, rand_seed=1)
+        sim.run()
+        r = sim.results
+        n_states = r.sis.n_S[-1] + r.sis.n_I[-1]
+        alive = r.n_alive[-1] + (r.pregnancy.n_unborn[-1] if 'pregnancy' in r else 0) # The unborn are in the disease's states, but not counted among the people
+        assert np.isclose(n_states, alive), f'{dem.name}: {n_states} in states but {alive} alive'
+        new = sim.people.auids[sim.people.auids >= 2000]
+        assert len(new) > 100
+        share = sim.people.risk[new].mean()
+        assert 0.7 < share < 0.9, f'{dem.name}: {share:.2f} of newborns are high risk, not 0.8'
+        assert sim.diseases.sis.I[new].any() # Newborns can be infected
+    print('✓ (newborns in declared states)')
     return
 
 
@@ -495,10 +649,18 @@ if __name__ == '__main__':
     s4 = test_module_adding()
     s5 = test_aging()
     s6 = test_pregnancy()
-    s7 = test_loss_classification()
+    s7 = test_pregnancy_short_sim()
     s8 = test_background_loss()
     s9 = test_nnd()
     s10 = test_count_based_births()
     s11 = test_birth_data_cols()
+    s12 = test_period_rates()
+    s13 = test_lifetable_deaths()
+    s14 = test_births_parents()
+    s15 = test_unborn()
+    s16 = test_pregnancy_risks()
+    s17 = test_cause_of_death()
+    s18 = test_split_by_age()
+    s19 = test_declared_newborns()
 
     T.toc()

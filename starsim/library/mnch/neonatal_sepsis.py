@@ -23,21 +23,22 @@ Usage::
 
     sim = ss.Sim(
         diseases=ssl.mnch.NeonatalSepsis(),
-        demographics=[ss.Pregnancy(fertility_rate=ss.freqperyear(30)), ss.Deaths()],
+        demographics=[ss.Pregnancy(fertility_rate=ss.time.freq(30, 'year')), ss.Deaths()],
         networks=[ss.PrenatalNet(), ss.RandomNet()],
     )
     sim.run()
 
     # NND results are on the Pregnancy module, not the disease
     print('Neonatal deaths:', sim.results.pregnancy.neonatal_deaths.sum())
-    print('Total births:', sim.results.pregnancy.births.sum())
+    print('Total births:', sim.results.pregnancy.birth.sum())
 """
 
 import numpy as np
 import starsim as ss
+from ..diseases.agents import AgentSIR
 
 
-class NeonatalSepsis(ss.SIR):
+class NeonatalSepsis(AgentSIR):
     """
     Minimal neonatal sepsis model.
 

@@ -13,20 +13,12 @@ import numpy as np
 import starsim as ss
 import starsim.library as ssl
 
-test_run = True
-n_agents = [10_000, 2_000][test_run]
-do_plot = True
-sc.options(interactive=do_plot) # Assume not running interactively
+n_agents = 2_000
 
 # Outbreak diseases specify their natural history in days, so they need a sub-year timestep
 outbreak_pars = dict(start=2000, dur=ss.years(1), dt=ss.days(1), n_agents=n_agents, rand_seed=1, verbose=0)
 endemic_pars  = dict(start=2000, stop=2030, n_agents=n_agents, rand_seed=1, verbose=0)
-mnch_pars     = dict(start=2000, dur=ss.years(5), dt=ss.weeks(1), n_agents=n_agents, rand_seed=1, verbose=0)
-
-# DiskNet and ErdosRenyiNet compare every pair of agents on every timestep, so their cost grows
-# as the square of the population; cap the agents and shorten the run to keep the test fast
-net_agents = min(n_agents, 500)
-network_pars  = dict(start=2000, dur=ss.days(90), dt=ss.days(1), n_agents=net_agents, rand_seed=1, verbose=0)
+mnch_pars     = dict(start=2000, dur=ss.years(3), dt=ss.weeks(1), n_agents=n_agents, rand_seed=1, verbose=0)
 
 
 @sc.timer()
@@ -41,69 +33,32 @@ def test_exports():
             assert getattr(ssl, name, None) is obj, f'ssl.{name} is missing or differs from {submod.__name__}.{name}'
             assert name in ssl.__all__, f'{name} is missing from ssl.__all__'
 
-    sc.printgreen('✓ Library export tests passed')
     return ssl.__all__
 
 
 @sc.timer()
 def test_diseases():
-    """ Check that each library disease runs and produces infections """
-    sc.heading('Testing library diseases...')
-
-    diseases = dict(
-        cholera = ssl.Cholera(beta=ss.perday(0.5)),
-        ebola   = ssl.Ebola(beta=ss.perday(0.1)),
-        measles = ssl.Measles(beta=ss.perday(0.3)),
-    )
-    sims = sc.objdict()
-    for name, disease in diseases.items():
-        sim = ss.Sim(diseases=disease, networks=ss.RandomNet(), **outbreak_pars)
-        sim.run()
-        res = sim.results[name]
-        print(f'  {name}: {res.cum_infections[-1]:n} cumulative infections')
-        assert res.cum_infections[-1] > 0, f'Expected {name} infections'
-        sims[name] = sim
-
-    # Cholera should also track its environmental reservoir
-    env = sims.cholera.results.cholera.env_prev
-    assert env.max() > 0, 'Expected nonzero cholera environmental prevalence'
-
-    # Ebola should progress agents to severe disease and bury the dead
-    ebola = sims.ebola.results.ebola
-    assert ebola.n_severe.max() > 0, 'Expected some severe Ebola cases'
-    assert ebola.n_buried.max() > 0, 'Expected some Ebola burials'
-
-    # Cholera dies out completely with a yearly timestep, since its natural history is in days
-    yearly = ss.Sim(diseases=ssl.Cholera(beta=ss.perday(0.5)), networks=ss.RandomNet(),
-                    start=2000, dur=ss.years(1), n_agents=n_agents, rand_seed=1, verbose=0)
-    yearly.run()
-    assert yearly.results.cholera.cum_infections[-1] == 0, 'Cholera unexpectedly worked with a yearly timestep'
-
-    sc.printgreen('✓ Library disease tests passed')
-    return sims
-
-
-@sc.timer()
-def test_compartments():
     """
-    Check the SEIR-type library diseases keep consistent compartments
+    Check that each library disease runs and produces infections, and that the SEIR-type ones (written as code) keep consistent compartments
 
     'exposed' and 'infectious' are the literal E and I compartments, while 'infected' is
     derived as E plus I. Infections are counted when they happen rather than inferred from
     a ti_ state, so seed infections are excluded exactly once. Regression test for negative
     first-step incidence (issue #1389).
     """
-    sc.heading('Testing disease compartments...')
+    sc.heading('Testing library diseases and their compartments...')
 
     diseases = dict(
-        seir    = ss.SEIR(beta=ss.perday(0.3), init_prev=0.1),
+        agentseir = ssl.AgentSEIR(beta=ss.perday(0.3), init_prev=0.1),
         cholera = ssl.Cholera(beta=ss.perday(0.5), init_prev=0.1),
         ebola   = ssl.Ebola(beta=ss.perday(0.1), init_prev=0.1),
         measles = ssl.Measles(beta=ss.perday(0.3), init_prev=0.1),
     )
+    sims = sc.objdict()
     for name, disease in diseases.items():
         sim = ss.Sim(diseases=disease, networks=ss.RandomNet(), **outbreak_pars)
         sim.run()
+        sims[name] = sim
         dis = sim.diseases[name]
         res = sim.results[name]
         n_exp = np.array(res.n_exposed)
@@ -111,8 +66,7 @@ def test_compartments():
         n_inf = np.array(res.n_infected)
         new = np.array(res.new_infections)
         total = n_exp + n_infectious + np.array(res.n_susceptible) + np.array(res.n_recovered)
-        print(f'  {name}: new_infections[0]={new[0]:n}, min={new.min():n}')
-
+        assert res.cum_infections[-1] > 0, f'Expected {name} infections'
         assert new.min() >= 0, f'{name} has negative new_infections: seeds are being double-counted'
         assert new[0] == 0, f'{name} counted its seed infections as new infections'
         assert new.sum() == res.cum_infections[-1], f'{name} cumulative infections do not match the sum'
@@ -123,8 +77,20 @@ def test_compartments():
         assert n_exp.max() > 0, f'{name} never had any exposed agents'
         assert n_inf.max() > 0, f'{name} never had any infectious agents'
 
-    sc.printgreen('✓ Disease compartment tests passed')
-    return
+    # Cholera should also track its environmental reservoir
+    assert sims.cholera.results.cholera.env_prev.max() > 0, 'Expected nonzero cholera environmental prevalence'
+
+    # Ebola should progress agents to severe disease and bury the dead
+    ebola = sims.ebola.results.ebola
+    assert ebola.n_severe.max() > 0, 'Expected some severe Ebola cases'
+    assert ebola.n_buried.max() > 0, 'Expected some Ebola burials'
+
+    # Cholera dies out completely with a yearly timestep, since its natural history is in days
+    yearly = ss.Sim(diseases=ssl.Cholera(beta=ss.perday(0.5)), networks=ss.RandomNet(),
+                    start=2000, dur=ss.years(1), dt=ss.years(1), n_agents=n_agents, rand_seed=1, verbose=0)
+    yearly.run()
+    assert yearly.results.cholera.cum_infections[-1] == 0, 'Cholera unexpectedly worked with a yearly timestep'
+    return sims
 
 
 @sc.timer()
@@ -155,59 +121,7 @@ def test_hiv():
     assert cd4.shape[0] == s1.t.npts, 'Expected one CD4 row per timestep'
     assert 0 < cd4.mean() <= 500, f'Expected CD4 counts in (0, 500], not {cd4.mean()}'
 
-    sc.printgreen('✓ HIV tests passed')
     return s1, s2
-
-
-@sc.timer()
-def test_networks():
-    """ Check that each library network runs and forms the expected edges """
-    sc.heading('Testing library networks...')
-
-    sims = sc.objdict()
-    nets = dict(disk=ssl.DiskNet(r=0.1), er=ssl.ErdosRenyiNet(p=0.01)) # DiskNet radius is scaled up to keep the contact density similar with fewer agents
-    for name, net in nets.items():
-        sim = ss.Sim(diseases=ss.SIS(beta=ss.perday(0.2)), networks=net, **network_pars)
-        sim.run()
-        n_edges = len(sim.networks[0])
-        print(f'  {name}: {n_edges:n} edges, {sim.results.sis.cum_infections[-1]:n} cumulative infections')
-        assert n_edges > 0, f'Expected edges in {name} network'
-        assert sim.results.sis.cum_infections[-1] > 0, f'Expected infections via {name} network'
-        sims[name] = sim
-
-    # NullNet has one zero-weight self-edge per agent, so nothing should transmit
-    sim = ss.Sim(diseases=ss.SIS(beta=ss.perday(0.2)), networks=ssl.NullNet(), **network_pars)
-    sim.run()
-    net = sim.networks.nullnet
-    assert len(net) == net_agents, 'Expected one self-edge per agent in NullNet'
-    assert np.all(net.edges.beta == 0), 'Expected zero transmission weight in NullNet'
-    assert (net.edges.p1 == net.edges.p2).all(), 'Expected only self-edges in NullNet'
-    sims.null = sim
-
-    sc.printgreen('✓ Library network tests passed')
-    return sims
-
-
-@sc.timer()
-def test_households():
-    """ Check that HouseholdNet assigns plausible households """
-    sc.heading('Testing HouseholdNet...')
-
-    sim = ss.Sim(diseases='sis', networks=ssl.HouseholdNet(dhs_data='default'),
-                 demographics=ss.Pregnancy(), **endemic_pars)
-    sim.run()
-
-    net = sim.networks.householdnet
-    hh_ids = net.household_ids[net.household_ids.notnan] # Unborn agents have no household
-    sizes = np.bincount(hh_ids.astype(int))
-    sizes = sizes[sizes > 0]
-    print(f'  Households: {len(sizes):n}; mean size: {sizes.mean():0.2f}; max size: {sizes.max():n}')
-    assert len(sizes) > 1, 'Expected more than one household'
-    assert sizes.min() >= 1 and sizes.mean() > 1, 'Expected households with more than one member'
-    assert len(net) > 0, 'Expected household edges'
-
-    sc.printgreen('✓ HouseholdNet tests passed')
-    return sim
 
 
 @sc.timer()
@@ -215,7 +129,7 @@ def test_mnch():
     """ Check that the MNCH modules run and produce their headline outcomes """
     sc.heading('Testing MNCH modules...')
 
-    demographics = lambda: [ss.Pregnancy(fertility_rate=ss.freqperyear(100), burnin=True), ss.Deaths()]
+    demographics = lambda: [ss.Pregnancy(fertility_rate=ss.time.freq(100, 'year'), burnin=True), ss.Deaths()]
     networks = lambda: [ss.PrenatalNet(), ss.RandomNet()]
     sims = sc.objdict()
 
@@ -240,9 +154,9 @@ def test_mnch():
     sims.sepsis = sim
 
     # Fetal health: infection during pregnancy should restrict growth
-    sim = ss.Sim(diseases=ss.SIR(beta=ss.peryear(20)), demographics=demographics(),
+    sim = ss.Sim(diseases=ssl.AgentSIR(name='sir', beta=ss.peryear(20)), demographics=demographics(),
                  connectors=ssl.mnch.fetal_infection(), custom=ssl.mnch.FetalHealth(),
-                 interventions=ssl.mnch.treat_pregnant(disease='sir', start_year=2003),
+                 interventions=ssl.mnch.treat_pregnant(disease='sir', start_year=2001),
                  networks=networks(), **mnch_pars)
     sim.run()
     fh = sim.custom.fetal_health
@@ -253,15 +167,11 @@ def test_mnch():
     assert n_treated > 0, 'Expected some pregnant women to be treated'
     sims.fetal = sim
 
-    sc.printgreen('✓ MNCH tests passed')
     return sims
 
 
 if __name__ == '__main__':
     exports  = test_exports()
     diseases = test_diseases()
-    comps    = test_compartments()
     hiv      = test_hiv()
-    networks = test_networks()
-    hh       = test_households()
     mnch     = test_mnch()

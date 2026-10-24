@@ -100,7 +100,7 @@ Now we can build and run the two simulations to compare the results:
 ss.options.crn = False
 
 # Shared parameters for both simulations
-pars = dict(n_agents=20, start=ss.days(0), dur=ss.days(1), rand_seed=42)
+pars = dict(n_agents=20, start=ss.days(0), stop=ss.days(3), rand_seed=42, verbose=0)
 
 print('SIMULATION A: WITHOUT BANNED AGENTS', '-'*25)
 simA = ss.Sim(modules=Fishing(), **pars)
@@ -125,8 +125,8 @@ print('SIMULATION A: WITHOUT BANNED AGENTS', '-'*25)
 simA = ss.Sim(modules=Fishing(), **pars)
 simA.run()
 
-print('\nSIMULATION B: WITH AGENT 1 BANNED', '-'*25)
-simB = ss.Sim(modules=Fishing(banned_uids=[1]), **pars)
+print('\nSIMULATION B: WITH AGENT 0 BANNED', '-'*25)
+simB = ss.Sim(modules=Fishing(banned_uids=[0]), **pars)
 simB.run()
 ```
 
@@ -158,7 +158,7 @@ def dynamic_p(self, sim, uids):
     p[sim.people.age[uids] < 18] = 0.1
     return p
 def __init__(self):
-    self.dist = self.bernoulli(p=dynamic_p)
+    self.dist = ss.bernoulli(p=dynamic_p)
 uids = self.dist.filter(mask) # Reminder: filter returns the uids where the bernoulli trial is True
 
 # AVOID calling a distribution with a scalar argument
@@ -169,11 +169,11 @@ values = np.random.rand(len(all_uids))
 
 # AVOID creating a new distribution every time
 def step(self):
-    new_dist_every_time = self.bernoulli(p=0.5)
+    new_dist_every_time = ss.bernoulli(p=0.5)
     values = new_dist_every_time.rvs(all_uids) 
 
 # AVOID using the same distribution for multiple decisions
-my_bernoulli = self.bernoulli(p=0)
+my_bernoulli = ss.bernoulli(p=0)
 my_bernoulli.set(p=p_infection)
 infected_uids = my_bernoulli.filter()
 my_bernoulli.set(p=p_die)

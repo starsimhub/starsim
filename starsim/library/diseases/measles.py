@@ -6,13 +6,14 @@ Original version by @alina-muellenmeister, @domdelport, and @RomeshA
 """
 
 import starsim as ss
+from .agents import AgentSEIR
 
 
-class Measles(ss.SEIR):
+class Measles(AgentSEIR):
     """
     Measles, as an SEIR model.
 
-    Configures `ss.SEIR` with measles natural-history parameters: exposed agents
+    Configures `ssl.AgentSEIR` with measles natural-history parameters: exposed agents
     become infectious after `dur_exp`, then either die (with probability
     `p_death`) or recover after `dur_inf`. Natural history parameters are from
     the US CDC.

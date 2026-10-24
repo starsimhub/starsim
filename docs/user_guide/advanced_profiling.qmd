@@ -37,12 +37,12 @@ This graph (which is a shortcut to `sim.loop.plot_cpu()`) shows us how much time
 prof.disp(maxentries=5)
 ```
 
-(Note that the names of the functions here refer to the *actual* functions called, which may not match the graph above. That's because, for example, `ss.SIS` does not define its own `step()` method, but instead inherits `step()` from `Infection`. In the graph, this is shown as `sis.step()`, but is listed in the table as `Infection.step()`. This is because it's referring to the actual code being run, so refers to where those lines of code exist in the codebase; there is no code corresponding to `SIS.step()` since it's just inherited from `Infection.step()`.)
+(Note that the names of the functions here refer to the *actual* functions called, which may not match the graph above. That's because, for example, `ss.SIS` does not define its own `step()` method, but instead inherits `step()` from `ss.Disease`. In the graph, this is shown as `sis.step()`, but is listed in the table as `Disease.step()`. This is because it's referring to the actual code being run, so refers to where those lines of code exist in the codebase; there is no code corresponding to `SIS.step()` since it's just inherited from `Disease.step()`.)
 
-If you want more detail, you can also define custom functions to follow. For example, we can see that `ss.SIS.infect()` takes the most time in `ss.SIS.step()`, so let's profile that:
+If you want more detail, you can also define custom functions to follow. `ss.SIS` is a declared disease, and since this sim has a network it runs as agents: `Disease.step()` hands its work to the agent-based solver, `ss.solvers.Agents`, whose `step()` (the contact-mediated transitions) takes most of the time, so let's profile that:
 
 ```{python}
-prof = sim.profile(follow=ss.SIS.infect, plot=False)
+prof = sim.profile(follow=ss.solvers.Agents.step, plot=False)
 prof.disp()
 ```
 
@@ -64,10 +64,9 @@ sim = ss.Sim(
 )
 sim.run()
 sim.loop.to_df().disp()
-# %%
 ```
 
-As you can see, it's a lot -- this is only three timesteps and two modules, and it's already 41 steps.
+As you can see, it's a lot -- this is only two timesteps (three time points) and two modules, and it's already 33 steps.
 
 The typical way to do debugging is to insert breakpoints or print statements into your modules for custom debugging (e.g., to print a value), or to use analyzers for heavier-lift debugging. Starsim also lets you manually modify the loop by inserting "probes" or other arbitrary functions. For example, if you wanted to check the population size after each time the `People` object is updated:
 
@@ -75,19 +74,19 @@ The typical way to do debugging is to insert breakpoints or print statements int
 def check_pop_size(sim):
     print(f'Population size is {len(sim.people)}')
 
-sim = ss.Sim(diseases='sir', networks='random', demographics=True, dur=10)
+sim = ss.Sim(diseases='sir', networks='random', demographics=True, stop=10)
 sim.init()
 sim.loop.insert(check_pop_size, label='people.finish_step')
 sim.run()
 ```
 
-In this case, you get the same output as using an analyzer:
+In this case, you get nearly the same output as using an analyzer (an analyzer also runs at the start of the sim, and runs before `people.finish_step` removes the people who died, so its counts differ slightly):
 
 ```{python}
 def check_pop_size(sim):
     print(f'Population size is {len(sim.people)}')
 
-sim = ss.Sim(diseases='sir', networks='random', demographics=True, dur=10, analyzers=check_pop_size)
+sim = ss.Sim(diseases='sir', networks='random', demographics=True, stop=10, analyzers=check_pop_size)
 sim.run()
 ```
 
@@ -108,10 +107,10 @@ sim.loop.plot_step_order()
 This is especially useful if your simulation has modules with different timesteps, e.g.:
 
 ```{python}
-sis = ss.SIS(dt=0.1)
-net = ss.RandomNet(dt=0.5)
-births = ss.Births(dt=1)
-sim = ss.Sim(dt=0.1, dur=5, diseases=sis, networks=net, demographics=births)
+sis = ss.SIS(dt=ss.years(0.1))
+net = ss.RandomNet(dt=ss.years(0.5))
+births = ss.Births(dt=ss.years(1))
+sim = ss.Sim(dt=ss.years(0.1), stop=5, diseases=sis, networks=net, demographics=births)
 sim.init()
 sim.loop.plot_step_order()
 ```

@@ -2,7 +2,6 @@
 Utilities to help with debugging Starsim runs
 """
 import sys
-import types
 import platform
 import numpy as np
 import numba as nb
@@ -29,11 +28,12 @@ class Profile(sc.profile):
     Examples:
         ```python
         import starsim as ss
+        import starsim.library as ssl
 
         net = ss.RandomNet()
-        sis = ss.SIS()
-        sim = ss.Sim(networks=net, diseases=sis)
-        prof = sim.profile(follow=[net.add_pairs, sis.infect])
+        hiv = ssl.HIV() # A disease written as code
+        sim = ss.Sim(networks=net, diseases=hiv)
+        prof = sim.profile(follow=[net.add_pairs, hiv.infect])
         prof.disp()
         ```
     """
@@ -100,189 +100,6 @@ class Profile(sc.profile):
         return
 
 
-class Debugger(sc.prettyobj):
-    """
-    Step through one or more sims and pause or raise an exception when a condition is met
-
-    Args:
-        args (list): the sim or sims to step through
-        func (func/str): the function to run on the sims (or can use a built-in one, e.g. 'equal')
-        skip (list): if provided, additional object names/types to skip (not check)
-        verbose (bool): whether to print progress during the run
-        die (bool): whether to raise an exception if the condition is met; alternatively 'pause' will pause execution, and False will just print
-        run (bool): whether to run immediately
-
-    Examples:
-        ```python
-        ## Example 1: Identical sims are identical
-        import starsim as ss
-
-        s1 = ss.Sim(pars=dict(diseases='sis', networks='random'), n_agents=250)
-        s2 = s1.copy()
-        s3 = s1.copy()
-        db = ss.Debugger(s1, s2, s3, func='equal')
-        db.run()
-
-        ## Example 2: Pause when sim results diverge
-        import sciris as sc
-        import starsim as ss
-
-        # Set up the sims
-        pars = dict(networks='random', n_agents=1000, verbose=0)
-        sis1 = ss.SIS(beta=0.050)
-        sis2 = ss.SIS(beta=0.051) # Very slightly more
-        s1 = ss.Sim(pars, diseases=sis1)
-        s2 = ss.Sim(pars, diseases=sis2)
-
-        # Run the debugger
-        db = ss.Debugger(s1, s2, func='equal_results', die='pause')
-        db.run()
-
-        # Show non-matching results
-        sc.heading('Differing results')
-        df = db.results[-1].df
-        df = df[~df['equal']]
-        df.disp()
-        ```
-    """
-    def __init__(self, *args, func, skip=None, verbose=True, die=True, run=False):
-        default_skip = [
-            ss.Sim, ss.Module, ss.Dist, '_states',
-            types.FunctionType, types.MethodType,
-            types.BuiltinFunctionType, types.BuiltinMethodType,
-            types.WrapperDescriptorType, types.MethodDescriptorType,
-            staticmethod, classmethod
-        ]
-        self.sims = args
-        for sim in self.sims:
-            if not sim.initialized:
-                sim.init()
-        self.verbose = verbose
-        self.die = die
-        self.process_func(func)
-        self.until = self.sims[0].t.npts
-        self.ti = self.sims[0].ti
-        self.results = sc.objdict()
-        self.skip = sc.mergelists(skip, default_skip)
-        self.kw = dict(skip=self.skip, detailed=True, leaf=True)
-        self.pause = False
-        if run:
-            self.run()
-        return
-
-    def process_func(self, func):
-        if callable(func):
-            self.func = func
-        elif isinstance(func, str):
-            if hasattr(self, func):
-                self.func = getattr(self, func)
-            else:
-                errormsg = f'Unrecognized function "{func}"'
-                raise ValueError(errormsg)
-        else:
-            errormsg = f'Unrecognized function type "{type(func)}"'
-            raise ValueError(errormsg)
-
-    def equal_check(self, e, which):
-        """ Check if equality is false, and print a message or die """
-        if not e.eq:
-            msg = f'Found a difference in {which} on ti={self.ti}:\n'
-            msg += f'{e.df}'
-            if self.die == True:
-                raise RuntimeError(msg)
-            elif self.die == 'pause':
-                self.pause = True
-            print(msg)
-        else:
-            msg = f'No differences in {which}'
-        return msg
-
-    def equal_dists(self, *sims):
-        """ Check if the dists are equal """
-        dstates = []
-        for sim in sims:
-            ds = {d.trace:d.show_state(output=True) for d in sim.dists.dists.values()}
-            dstates.append(ds)
-        e = sc.Equal(*dstates, **self.kw)
-        self.equal_check(e, 'dists')
-        return e
-
-    def equal_pars(self, *sims, skip='label'):
-        """ Check if SimPars are equal """
-        skip = sc.tolist(skip)
-        parslist = [s.pars.copy() for s in sims]
-        for key in skip: # Do not need to do on every step, but so fast it doesn't matter
-            for pars in parslist:
-                pars.pop(key, None)
-
-        e = sc.Equal(*parslist, **self.kw)
-        self.equal_check(e, 'pars')
-        return e
-
-    def equal_people(self, *sims):
-        """ Check if people are equal """
-        e = sc.Equal(*[s.people.states for s in sims], **self.kw)
-        self.equal_check(e, 'people')
-        return e
-
-    def equal_networks(self, *sims):
-        """ Check if network edges are equal """
-        ncs = [[n.edges for n in s.networks.values()] for s in sims]
-        e = sc.Equal(*ncs, **self.kw)
-        self.equal_check(e, 'network edges')
-        return e
-
-    def equal_results(self, *sims):
-        """ Check if sim results are equal """
-        e = sc.Equal(*[s.results for s in sims], **self.kw)
-        self.equal_check(e, 'results')
-        return e
-
-    def equal(self, *sims):
-        """ Run all other tests """
-        out = sc.objdict()
-        out.dists    = self.equal_dists(*sims)
-        out.pars     = self.equal_pars(*sims)
-        out.people   = self.equal_people(*sims)
-        out.networks = self.equal_networks(*sims)
-        out.results  = self.equal_results(*sims)
-        if self.verbose:
-            for k,e in out.items():
-                sc.printgreen('—'*80)
-                sc.printgreen(f'{k}:')
-                e.df.disp()
-                print()
-        return out
-
-    def check(self):
-        self.results[f'{self.ti}'] = self.func(*self.sims)
-        return
-
-    def step(self, reseed=True):
-        self.ti += 1
-        if self.verbose: sc.heading(f'Working on step ti={self.ti}')
-        for sim in self.sims:
-            if reseed:
-                np.random.seed(sim.pars.rand_seed + self.ti) # Reset the random seed, in case anything is not CRN-safe
-            sim.run_one_step()
-        self.check()
-        return
-
-    def run(self, reseed=True):
-        self.pause = False # Reset so we can run
-        self.check()
-        while self.ti < self.until:
-            self.step(reseed=reseed)
-            if self.pause: # If we hit a checkpoint, pause and break the loop
-                break
-        if not self.pause:
-            for sim in self.sims:
-                sim.finalize()
-            if len(self.sims) > 1:
-                self.df = ss.diff_sims(self.sims[0], self.sims[1], full=True, output=True)
-        return
-
-
 class Diagnostics(sc.quickobj):
     """ Helper class for storing detailed diagnostic information; see sim.set_diagnostics() for usage; not to be used directly
 
@@ -291,8 +108,6 @@ class Diagnostics(sc.quickobj):
         rvs (bool/str): whether to track random variates; if a string, used as the export filename (default 'debug_rvs.json')
         states (bool/str): whether to track people states; if a string, used as the export filename (default 'debug_states.json')
         detailed (bool): if True, store full arrays; if False, store summary statistics only
-
-    See also ss.Debugger() for a user API for debugging multiple sims.
     """
     def __init__(self, sim, rvs=True, states=True, detailed=False):
         self.sim = sim
@@ -369,43 +184,6 @@ def check_requires(sim, requires, *args):
     return
 
 
-def check_version(expected, die=False, warn=True):
-    """
-    Check the expected Starsim version with the one actually installed. The expected
-    version string may optionally start with '>=' or '<=' (== is implied otherwise),
-    but other operators (e.g. ~=) are not supported. Note that '>' and '<' are interpreted
-    to mean '>=' and '<='; '>' and '<' are not supported.
-
-    Args:
-        expected (str): expected version information
-        die (bool): whether or not to raise an exception if the check fails
-        warn (bool): whether to raise a warning if the check fails
-
-    Examples:
-        ```python
-        ss.check_version('>=3.0.0', die=True) # Will raise an exception if an older version is used
-        ```
-    """
-    if   expected.startswith('>'): valid = [0,1]
-    elif expected.startswith('<'): valid = [0,-1]
-    elif expected.startswith('!'): valid = [1,-1]
-    else: valid = [0] # Assume == is the only valid comparison
-    expected = expected.lstrip('<=>!') # Remove comparator information
-    version = ss.__version__
-    compare = sc.compareversions(version, expected) # Returns -1, 0, or 1
-    relation = ['older', '', 'newer'][compare+1] # Picks the right string
-    if compare not in valid: # Version check failed, print warning or raise error
-        if relation:
-            string = f'Starsim is {relation} than expected ({version} vs. {expected})'
-        else: # Only possible for !=
-            string = f'Starsim version {version} is not allowed'
-        if die:
-            raise ValueError(string)
-        elif warn:
-            ss.warn(string)
-    return compare
-
-
 def metadata(comments=None):
     """ Store metadata; like `sc.metadata()`, but optimized for speed """
     md = sc.objdict(
@@ -440,6 +218,7 @@ def mock_time(dt=1.0, dur=10, start=2000):
         start = start,
         stop = None,
         dur = dur,
+        npts = 1000, # For arrays of step numbers, which are stored as 16-bit integers if the run fits
         is_absolute = True,
         initialized = True,
     )
@@ -452,7 +231,7 @@ def mock_sim(n_agents=100, **kwargs):
 
     Args:
         n_agents (int): the number of agents to create
-        **kwargs (dict): passed to `ss.mock_time()`
+        **kwargs (dict): passed to `ss.debugtools.mock_time()`
     """
     t = mock_time(**kwargs)
     sim = sc.objdict(
@@ -486,10 +265,201 @@ def mock_people(n_agents=100, min_age=0, max_age=70, age_seed=1):
 
 
 def mock_module(dur=10, **kwargs):
-    """ Create a minimal mock "Module" object; kwargs are passed to `ss.mock_time()` """
+    """ Create a minimal mock "Module" object; kwargs are passed to `ss.debugtools.mock_time()` """
     mod = sc.objdict(
         name = 'mock_module',
         t = mock_time(dur=dur, **kwargs),
         dt = kwargs.get('dt', ss.years(1.0)),
     )
     return mod
+
+
+def diff_sims(sim1, sim2, skip_key_diffs=False, skip=None, full=False, output=False, die=False):
+    '''
+    Compute the difference of the summaries of two simulations, and print any
+    values which differ.
+
+    Args:
+        sim1 (Sim/MultiSim/dict): either a simulation/MultiSim object or the sim.summary dictionary
+        sim2 (im/dict): ditto
+        skip_key_diffs (bool): whether to skip keys that don't match between sims
+        skip (list): a list of values to skip
+        full (bool): whether to print out all values (not just those that differ)
+        output (bool): whether to return the output as a string (otherwise print)
+        die (bool): whether to raise an exception if the sims don't match
+
+    Examples:
+        ```python
+        s1 = ss.Sim(rand_seed=1).run()
+        s2 = ss.Sim(rand_seed=2).run()
+        ss.debugtools.diff_sims(s1, s2)
+        ```
+    '''
+
+    # Convert to dict
+    if isinstance(sim1, (ss.Sim, ss.MultiSim)):
+        sim1 = sim1.summarize()
+    if isinstance(sim2, (ss.Sim, ss.MultiSim)):
+        sim2 = sim2.summarize()
+    for sim in [sim1, sim2]:
+        if not isinstance(sim, dict):  # pragma: no cover
+            errormsg = f'Cannot compare object of type {type(sim)}, must be a sim or a sim.summary dict'
+            raise TypeError(errormsg)
+
+
+    # Check if it's a multisim
+    sim1 = sc.objdict(sim1)
+    sim2 = sc.objdict(sim2)
+    multi = isinstance(sim1[0], dict) # If it's a dict, then it's a multisim
+    if multi:
+        for sim in [sim1, sim2]:
+            assert 'mean' in sim[0], f"Can only compare multisims with summarize(method='mean'), but you have keys {sim[0].keys()}"
+
+    # Compare keys
+    keymatchmsg = ''
+    sim1_keys = set(sim1.keys())
+    sim2_keys = set(sim2.keys())
+    if sim1_keys != sim2_keys and not skip_key_diffs:  # pragma: no cover
+        keymatchmsg = "Keys don't match!\n"
+        missing = list(sim1_keys - sim2_keys)
+        extra = list(sim2_keys - sim1_keys)
+        if missing:
+            keymatchmsg += f'  Missing sim1 keys: {missing}\n'
+        if extra:
+            keymatchmsg += f'  Extra sim2 keys: {extra}\n'
+
+    # Compare values
+    valmatchmsg = ''
+    mismatches = {}
+    n_mismatch = 0
+    skip = sc.tolist(skip)
+    for key in sim2.keys():  # To ensure order
+        if key in sim1_keys and key not in skip:  # If a key is missing, don't count it as a mismatch
+            d = sc.objdict()
+            if multi:
+                d.sim1 = sim1[key]['mean']
+                d.sim2 = sim2[key]['mean']
+                d.sim1_sem = sim1[key]['sem']
+                d.sim2_sem = sim2[key]['sem']
+            else:
+                d.sim1 = sim1[key]
+                d.sim2 = sim2[key]
+            mm = not np.isclose(d.sim1, d.sim2, equal_nan=True)
+            n_mismatch += mm
+            if mm or full:
+                mismatches[key] = d
+
+    df = sc.dataframe() # Preallocate in case there were no mismatches
+    if len(mismatches):
+        valmatchmsg = '\nThe following values differ between the two simulations:\n' if not full else ''
+        df = sc.dataframe.from_dict(mismatches).transpose()
+        diff = []
+        ratio = []
+        change = []
+        zscore = []
+        small_change = 1 + 1e-3  # Define a small change, e.g. a rounding error
+        for d in mismatches.values():
+            old = d.sim1
+            new = d.sim2
+            if multi:
+                old_sem = d.sim1_sem
+                new_sem = d.sim2_sem
+                sem = old_sem + new_sem
+                small_change = 1.96 # 95% CI, roughly speaking
+
+            numeric = sc.isnumber(old) and sc.isnumber(new) # Should all be numeric, but just in case
+            if numeric:
+                this_diff = new - old
+                this_ratio = new / old if old else np.nan
+                if multi:
+                    abs_ratio = abs(this_diff)/sem
+                    this_zscore = abs_ratio
+                else:
+                    abs_ratio = max(this_ratio, 1.0/this_ratio) if this_ratio > 0 else np.inf # Ratio is undefined for zero or sign changes
+                    this_zscore = np.nan
+
+                # Set the character to use
+                approx_eq = abs_ratio < small_change
+                if approx_eq:    change_char = '≈'
+                elif new > old:  change_char = '↑'
+                elif new < old:  change_char = '↓'
+                elif new == old: change_char = '='
+                else:
+                    errormsg = f'Could not determine relationship between sim1={old} and sim2={new}'
+                    raise ValueError(errormsg)
+
+                # Set how many repeats it should have
+                repeats = 1
+                if abs_ratio == 0:   repeats = 0
+                if abs_ratio >= 1.1: repeats = 2
+                if abs_ratio >= 2:   repeats = 3
+                if abs_ratio >= 10:  repeats = 4
+                this_change = change_char * repeats
+            else:  # pragma: no cover
+                this_diff =  np.nan
+                this_ratio  = np.nan
+                this_change = 'N/A'
+                this_zscore = np.nan
+
+            diff.append(this_diff)
+            ratio.append(this_ratio)
+            change.append(this_change)
+            zscore.append(this_zscore)
+
+        df['diff'] = diff
+        df['ratio'] = ratio
+        numeric_cols = ['sim1', 'sim2', 'diff', 'ratio']
+        if multi:
+            numeric_cols += ['sim1_sem', 'sim2_sem']
+        for col in numeric_cols:
+            df[col] = df[col].round(decimals=3)
+        df['change'] = change
+        if multi:
+            df['zscore'] = zscore
+            df['statsig'] = df.zscore > small_change
+        valmatchmsg += str(df)
+
+    # Raise an error if mismatches were found
+    mismatchmsg = keymatchmsg + valmatchmsg
+    if mismatchmsg:  # pragma: no cover
+        if die and n_mismatch: # To catch full=True case
+            raise ValueError(mismatchmsg)
+        elif output:
+            return df
+        else:
+            print(mismatchmsg)
+            return True
+    else:
+        if not output:
+            print('Sims match')
+        return False
+
+
+def check_sims_match(*args, full=False):
+    """
+    Shortcut to using `diff_sims()` to check if multiple sims match
+
+    Args:
+        args (list): a list of 2 or more sims to compare
+        full (bool): if True, return whether each sim matches the first
+
+    Examples:
+        ```python
+        s1 = ss.Sim(diseases='sir', networks='random').run()
+        s2 = ss.Sim(pars=dict(diseases='sir', networks='random')).run()
+        s3 = ss.Sim(diseases=ss.SIR(), networks=ss.RandomNet()).run()
+        assert ss.debugtools.check_sims_match(s1, s2, s3)
+        ```
+    """
+    if len(args) < 2:
+        errormsg = 'Must compare at least 2 sims'
+        raise ValueError(errormsg)
+    base = args[0]
+    matches = []
+    for other in args[1:]:
+        diff = diff_sims(base, other, full=False, output=False, die=False)
+        matches.append(not(diff)) # Return the opposite of the diff
+    if full:
+        return matches
+    else:
+        return all(matches)

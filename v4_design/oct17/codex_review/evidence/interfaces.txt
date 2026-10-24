@@ -1,0 +1,60 @@
+# Interfaces review: interventions, results, calibration, model spec
+
+Verified from source and runtime observations, summarized below. The runnable
+scripts are in ../reproductions/ relative to this evidence folder.
+
+## High priority: repeated delayed tests lose pending results
+- starsim/interventions.py:1135-1138: ABM stores one ti_result and one result per person; a new test overwrites an earlier pending result. With interval shorter than delay and full coverage, each day's test pushes result delivery into the future indefinitely.
+- starsim/interventions.py:1143-1149: compartmental implementation similarly moves positive cohorts back to first pending level, resetting their reporting clock when retested.
+- starsim/interventions.py:1170-1174 drains one result/person. Neither default eligibility (940-945) nor receive() excludes pending tests. Existing delayed-test test tests only one screening round (tests/test_deliveries.py:308-320), while recurring tests are tested only without delay.
+- User impact: screening runs appear successful, testing costs accumulate, diagnoses and treatment can vanish. This changes epidemiological conclusions, not just accounting.
+- Simplest improvement: explicitly define pending-test behavior. Default to no retesting while a result is pending; if overlapping specimens are a real requirement, track specimen/result events in a queue instead of one per-person slot. Add one repeated delayed-screening test across solvers and enforce delivered = positive + negative + pending accounting.
+
+## High priority: optimizer failure becomes an apparently ordinary fit
+- starsim/calibration.py:2269-2272 discards scipy OptimizeResult except x. Fit constructor and summarize (1943-1977) have no optimizer success/status/message fields. Fit creation (2395-2398) never conveys status.
+- Contradicts best-practices/calibration.md:7 and :210 and design/13-inference.md convergence reporting and gates.
+- A maxiter=1 optimizer run therefore gives a Fit indistinguishable at the API level from a successful convergence. Preserve success, status, message, evaluations, objective finiteness; include explicit converged flag and reason in summary. Existing R-hat/divergence reporting for posterior methods is useful, but should not substitute for optimizer diagnostics.
+
+## High priority: resampling returns inconsistent stratified results
+- starsim/results.py:324-392 resamples only flattened overall values; from_df at 438-447 deep-copies original object and replaces only timevec/values/low/high. It retains original strata and denominator arrays at original time length.
+- .select() and .by() later read these stale arrays (228-241, 178-190), giving wrong-length data or reporting old daily values under weekly timestamps.
+- Improvement: one operation should transform values and coordinates together. For flow counts sum per group; for stocks choose documented sampling/averaging; preserve ratio numerator/denominator and compute ratio from aggregated components. If a transformation is unsupported, drop stratified metadata explicitly or reject it rather than retain invalid metadata.
+
+## Model spec roundtrip is far narrower than advertised
+- starsim/spec.py:249-251 explicitly rejects any modifiers/interventions. Non-named-contact networks rejected 245-247. from_spec acknowledges its restrictions in docstring.
+- More seriously, Sim.to_spec() (starsim/sim.py:1290-1343) omits top-level data and fit entirely, so attached observational data disappears during save/load. from_spec also has no handling for a data/fit field supplied by a conforming spec.
+- Schema validation 241 only checks 'lingua-franca/' prefix, not supported major version, so arbitrary future versions are interpreted as current schema.
+- design/14-model-spec.md promises identical roundtrip and future-major rejection. This is a capability boundary, not necessarily a reason to implement every export immediately. Default saving should state whether the saved model is runnable/restorable, and loading should fail with a complete list of unsupported declarations and lost attachments. A saved scenario must not imply archival reproducibility until policy, mixing, data references, and schema compatibility are actually supported.
+
+## Calibratable parameter discovery is incomplete
+- starsim/calibration.py:2145-2157 enumerates only mod.graph.pars; likelihood parameters are separately appended. Graph initial prevalence IS registered: runtime test with init_prev=ss.par(.1,bounds=[.01,.5]) successfully fit it. Do not claim initial prevalence is unsupported. Network parameters and delivery coverage/capacity live outside this traversal; general support needs a verified repro before asserting those as specific bugs.
+- Improvement: one parameter registry with stable qualified paths should serve discovery, overrides, fitting, serialization, and hashing. This removes multiple partial recursive traversals and lets user bounds mean the same thing regardless of parameter location.
+
+## Design judgments and simplification opportunities
+- Keep the strong common result vocabulary, automatic state/flow outputs, named data matching, and .select/.by ratio semantics. These reduce manual user work substantially.
+- Reduce solver-dependent intervention vocabulary and implicit hidden-dimensional growth. Delivery currently combines offering, coverage, capacity, duration, conditions, state changes, products, follow-ups, event triggering, and result reporting. Public constructors can remain convenient, but compile into small explicit operations: select -> allocate -> apply -> schedule/report. Prefer explicit specimen events for delayed tests and one shared scheduler for delayed outcomes/follow-ups.
+- The design's fitting surface is too broad to treat each method as equally first-class. Offer a small simple default optimization path and an explicit posterior path; expose advanced/staged methods only when diagnostics and reproducibility are supported. A single .calibrate() should not silently change the scientific meaning of the returned estimate as likelihood availability or solver changes.
+- Separate fit diagnostics from verbosity and display. Store evidence on Fit, emit concise warnings where appropriate, and let callers programmatically decide whether downstream work should proceed.
+- Avoid turning result arithmetic into a second model language unless dimensional/stock-flow/ratio metadata survives every operation. A coordinate-aware internal result representation and an explicit reduction algebra can simplify the current ad hoc propagation of values, strata, denominators, columns, and quantiles.
+- The fixed-shape spec with all-null fields and many equivalent public declaration spellings adds work for both readers and implementers. Distinguish the concise human-authored model form from normalized machine identity if both are needed; keep only one canonical parse/compile path. A readable data-only subset with strict boundaries is more useful than a nominal universal format with silent losses.
+
+
+## Runtime verification (2026-10-17)
+Ran /tmp/interfaces_repro.py with PYTHONPATH=. NUMBA_DISABLE_JIT=1 MPLCONFIGDIR=/tmp/review-mpl python. Output:
+- Daily screen, sensitivity/specificity 1, delay 3 days, 100 initially infected, stop 10: ABM delivers 100/day for 10 days and diagnoses 0 total; ODE also delivers 100/day with diagnoses near 0 (tiny recovered false-negative cohorts leak through). Confirms pending result overwrite/reset in both engines.
+- ss.Result with 14 daily values, strata shape (14,2), denom shape (14,2), .resample('week'): output values shape (3,), retained strata and denom both (14,2).
+- Sim with attached pd.DataFrame({'t':[1,2],'n_I':[10,10]}): to_spec has no data field; from_spec(...).data is None.
+- Changing that spec schema to lingua-franca/99.0 is accepted.
+- calbrate(method='nelder-mead', maxiter=1, scan=0) produces a Fit with 3 recorded evaluations and no success/status/message/converged fields. Source confirms discarded scipy result.
+- Bounded init_prev is supported (contrary to prior lost-session hypothesis).
+
+## Further verified issue: a stochastic fit reports a different objective from the one optimized
+- starsim/calibration.py:2223-2227 averages measure(run(...)) over n_runs (seeds 1..n_runs when n_runs>1), stores this in trials, and optimizes that average.
+- starsim/calibration.py:2390-2396 runs before and after once, fresh, using base seed and stores measure(after) as Fit.mismatch. mismatch_before is the ensemble average from the optimization objective. Thus the displayed before/after comparison mixes different estimands and random seeds.
+- Runtime /tmp/interfaces_more.py: tiny ABM n_agents=100, seed=9, n_runs=3, nelder-mead maxiter=1 scan=0. All evaluated averaged objectives were 0.7288888888888888, but Fit.mismatch was 0.7200000000000001. This can appear as improvement despite no improvement in the objective searched.
+- Fix: preserve the actual selected ensemble score and replicate scores/seeds. The fitted single sim can remain a representative trajectory, but must be labeled and kept separate from optimization objective and uncertainty.
+
+## Calibration scope evidence refinement
+- Bounded RandomNet n_contacts passed directly as ss.par fails at initialization ('Updating dist from constant to par is not supported'), before calibration discovery. Treat generalized parameter-location support as a structural recommendation, not a claim that network parameters otherwise accepted by the model silently disappear at fitting. Init_prev bound support is confirmed.
+- Staged fitting described in best-practices/calibration.md and design/13-inference.md is absent from ss.fit: method is immediately used with .lower() (calibration.py:2210), so lists are unsupported. This is a documented capability gap; prioritize convergence evidence before adding stage orchestration.
+- Best-practices/calibration.md still recommends ABC-SMC for stochastic compartmental models, while the implementation/docstring and current inference design discuss particle MCMC. Align the specification on the intended scientific inference rather than treating backend names as interchangeable.

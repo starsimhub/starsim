@@ -1,0 +1,20 @@
+import starsim as ss, traceback
+seir = ss.SEIR(dur_exp=ss.days(5), dur_inf=ss.days(10), beta=ss.perday(0.1), init_prev=0.01)
+sim = ss.Sim(diseases=seir, start='2020-01-01', stop='2022-01-01', solver='ode', verbose=0)
+sim.init()
+print('pars.solver:', sim.pars.get('solver'), '| sim.solver:', getattr(sim,'solver',None), '| dt:', sim.t.dt, '| engine:', getattr(sim, 'engine', None))
+print('solvers():'); 
+try: print(seir.solvers())
+except Exception: print('\n'.join(traceback.format_exc().splitlines()[-2:]))
+try: print(sim.solvers())
+except Exception: print('\n'.join(traceback.format_exc().splitlines()[-2:]))
+print('--- approx=False')
+try:
+    ss.Sim(diseases=ss.SEIR(), start='2020-01-01', stop='2022-01-01', solver='ode', approx=False, verbose=0).init()
+    print('no error')
+except Exception: print('\n'.join(traceback.format_exc().splitlines()[-2:]))
+print('--- Vx(pars=)')
+try: ss.Vx(pars=dict(efficacy=0.8))
+except Exception: print('\n'.join(traceback.format_exc().splitlines()[-1:]))
+try: print(ss.Vx(efficacy=0.8))
+except Exception: print('\n'.join(traceback.format_exc().splitlines()[-1:]))

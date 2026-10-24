@@ -20,7 +20,7 @@ Why are we telling you all this? Because although time seems intuitive, there ar
 
 1. A month is defined as exactly 1/12th of a year, so there are the same number of infections in 2004 and 2005, and in February vs. March.
 2. A year is equal to 365 days (although some stretching happens to make integer years and calendar dates line up where needed).
-3. Because there is no way to represent year 0 with a date object (e.g. `ss.date()`, which is based on `pd.Timestamp`), for this (important) special case we need to switch to a different object, `ss.datedur()` (more on that below).
+3. A string is a calendar date, and a number in `start=` is read as a year if it looks like one (`2020`) and as a relative time otherwise (`0`). Because there is no way to represent year 0 with a date object (e.g. `ss.date()`, which is based on `pd.Timestamp`), relative time is represented by durations instead (more on that below).
 4. We assume the user means integer days, unless they have _explicitly_ requested otherwise (e.g. `dt=ss.days(0.1)`).
 5. Units are loose when comparing to unitless quantities (`ss.days(5) == 5`), but are strict when comparing with other units (e.g. `ss.years(1) == ss.days(365)`).
 6. In Starsim v2, we chose the former by default. In Starsim v3, we decided we were wrong to do that and now choose the latter.
@@ -28,6 +28,97 @@ Why are we telling you all this? Because although time seems intuitive, there ar
 
 *More information about the philosophy of time is available [here](https://archive.org/details/being-and-time-martin-heidegger-1962).*
 
+
+## Time in a sim
+
+Before the details, here is how time works in a sim, since most models never need more than this.
+
+### The types
+
+Starsim has four types of time quantity, each with a short constructor per unit:
+
+| Type | Means | Constructors |
+|---|---|---|
+| `ss.dur` | an elapsed duration | `ss.days`, `ss.weeks`, `ss.months`, `ss.years`, `ss.datedur` |
+| `ss.per` | a hazard: events per unit time, continuously | `ss.perday`, `ss.perweek`, `ss.permonth`, `ss.peryear` |
+| `ss.prob` | the chance of an event within a period | `ss.prob(0.1, 'day')`, and `'week'`, `'month'`, `'year'` |
+| `ss.time.freq` | an expected number of events per unit time, for modules written as code | `ss.time.freq(80, 'year')` |
+
+Converting to a timestep is the type's job, not yours. For a step of length `dt`, a hazard `ss.per(r)` becomes the probability `1 − exp(−r·dt)`, a probability `p` per period `T` becomes `1 − (1 − p)^(dt/T)`, a frequency `f` becomes the expected count `f·dt`, and a duration `d` is used through its rate `1/d`. The continuous-time solvers (`'ode'`, `'gillespie'`, and tau-leaping, `'tau'`) use the rates themselves, and do no conversion at all.
+
+### Bare numbers and the sim's unit
+
+A bare number is accepted wherever a time quantity is: the slot says what it is (`beta=` is a rate, `dur=` is a duration, and a bare number after `@` is always a rate), and the sim says its unit. The sim's unit is taken from the first of these that applies:
+
+1. `unit='day'` (or any unit);
+2. typed values in the model, such as `dur=ss.days(10)` (if they differ, the smallest unit);
+3. `start=` or `stop=` as a date (`start='2020-01-01'`: days);
+4. a typed `dt`, such as `dt=ss.weeks(1)`;
+5. `start=` or `stop=` as a year (`start=2020`: years);
+6. none of these: time is counted in timesteps.
+
+When the unit comes from rules 2 to 5, it is a guess about what the bare numbers meant, so the sim says where it came from:
+
+```{python}
+import starsim as ss
+ss.options(jupyter=True)
+
+S, I, R = ss.states('S I R')
+sir = ss.Disease(
+    infection = ss.Transition(S, I, rate=0.3 * I),
+    recovery  = ss.Transition(I, R, dur=10),
+    init_prev = 0.01,
+)
+sim = ss.Sim(sir, start='2020-03-01', stop='2020-09-01') # The unit is a day, from the dates
+sim.init();
+```
+
+Here `beta=0.3` is per day and `dur=10` is 10 days. Given `start=2020, stop=2030` instead, the same numbers would be per year and 10 years. The default timestep is one unit.
+
+### Time in timesteps
+
+If nothing has a unit (no `unit=`, no unit on `dt`, no dates, no typed values), time is counted in timesteps: `beta=0.3` is per step, `dur=10` is ten steps, and `stop=100` is 100 steps. This is what a textbook model means, so nothing is guessed and nothing is printed:
+
+```{python}
+sim = ss.Sim(sir, stop=100).run()
+print(sim.t.timevec[:5])
+```
+
+Such a sim has no calendar, so `sim.t.datevec` raises an error, as does a seasonal parameter (which is a yearly cycle). Giving it dated data or a dated intervention supplies a unit, and the bare numbers then become per day.
+
+### Typed values
+
+A typed value keeps its own unit and is converted to the sim's timestep, so a model can mix units freely. Here the values are weekly, so the sim's unit is a week, and the steps are a day:
+
+```{python}
+S, I, R = ss.states('S I R')
+sir = ss.Disease(
+    infection = ss.Transition(S, I, rate=ss.perweek(2.1) * I),
+    recovery  = ss.Transition(I, R, dur=ss.weeks(1.5)),
+    init_prev = 0.01,
+)
+sim = ss.Sim(sir, start='2020-01-01', stop='2020-07-01', dt=ss.days(1)) # Weekly values, daily steps
+sim.run();
+```
+
+### Per-module timesteps
+
+A module may have its own timestep. Modules with different timesteps are interleaved by absolute time:
+
+```{python}
+sim = ss.Sim(
+    diseases = ss.SIR(beta=ss.peryear(10), dur_inf=ss.weeks(2)),
+    demographics = ss.Births(birth_rate=ss.peryear(20), dt=ss.years(1)), # Births once a year
+    networks = 'random',
+    n_agents = 2_000,
+    start = '2020',
+    stop = '2025',
+    dt = ss.weeks(1), # Everything else every week
+    verbose = 0,
+)
+sim.run()
+sim.plot()
+```
 
 ## Dates
 
@@ -81,7 +172,7 @@ import numpy as np
 datearr = ss.date.from_array(np.arange(1990, 2020))
 print('From an array:\n', datearr)
 
-weekarr = ss.date.arange(start='2025-07-01', stop='2025-09-18', step=ss.week)
+weekarr = ss.date.arange(start='2025-07-01', stop='2025-09-18', step=ss.weeks(1))
 print('Using arange:\n', weekarr)
 ```
 
@@ -99,7 +190,7 @@ print(sim.t)
 The `ss.Timeline` object has several different ways of representing (the same) time; each is useful for a different purpose. We can see each of these with the `.to_dict()` method:
 
 ```{python}
-t = ss.Timeline(start=2020, stop=2022, dt=ss.month)
+t = ss.Timeline(start=2020, stop=2022, dt=ss.months(1))
 print(t.to_dict())
 ```
 
@@ -113,7 +204,7 @@ We have four different vectors that represent the time:
 The other two, `tvec` and `timevec`, match one of these four, but which one they match depends on what the user's inputs are. For example, if we use a duration-based timeline, we get different results:
 
 ```{python}
-t = ss.Timeline(start=ss.days(0), stop=ss.days(10), dt=ss.day)
+t = ss.Timeline(start=ss.days(0), stop=ss.days(10), dt=ss.days(1))
 print(t.to_dict())
 ```
 
@@ -145,7 +236,7 @@ Note that, just as with `np.arange`, the step size determines which points fall 
 
 ## Timepars
 
-Dates say _when_ things happen, but disease modeling is really mostly about durations and rates: how may days from infection to recovery? What is the probability of transmission per week? In Starsim, we call these unit-aware quantities *time parameters* (or timepars for short), represented by the class `ss.TimePar`. Timepars are all available in four base units: days, weeks, months, or years (noting that a week is defined as exactly 7 days, and a month is defined as exactly 1/12th of a year). The full class hierarchy of the time parameters is:
+Dates say _when_ things happen, but disease modeling is really mostly about durations and rates: how may days from infection to recovery? What is the probability of transmission per week? In Starsim, we call these unit-aware quantities *time parameters* (or timepars for short), represented by the class `ss.TimePar`. Timepars are all available in four base units: days, weeks, months, or years (noting that a week is defined as exactly 7 days, and a month is defined as exactly 1/12th of a year). A probability is given its unit as a string (`ss.prob(0.1, 'day')`), and a frequency, which is only used inside modules written as code, is `ss.time.freq(80, 'year')`. The full class hierarchy of the time parameters is:
 
 ```
 TimePar  # All time parameters
@@ -161,16 +252,8 @@ TimePar  # All time parameters
     │   ├── perweek
     │   ├── permonth
     │   └── peryear
-    ├── prob  # Unitless probability (e.g., probability of death per infection)
-    │   ├── probperday
-    │   ├── probperweek
-    │   ├── probpermonth
-    │   └── probperyear
-    └── freq  # Number of events (e.g., number of acts per year)
-        ├── freqperday
-        ├── freqperweek
-        ├── freqpermonth
-        └── freqperyear
+    ├── prob  # Probability, unitless or per period (e.g. ss.prob(0.1, 'day'))
+    └── freq  # Number of events (e.g., number of acts per year): ss.time.freq(80, 'year')
 ```
 
 ### Durations
@@ -197,17 +280,16 @@ print(d2)
 
 Note: in almost all cases, you can use either with or without the 's', i.e. `ss.years(1).to('day')` or `ss.years(1).to('days')` both work.
 
-Also, there are shortcut classes for unit values:
+A duration always needs a unit: `ss.dur(3)` raises an error, while `ss.dur(3, 'day')` and `ss.days(3)` both work. A bare number added to a duration takes the duration's unit (`ss.days(3) + 2` is 5 days):
 
 ```{python}
-print(ss.weeks(1))
-print(ss.week)
-assert ss.weeks(1.0) == ss.weeks(1) == ss.week
+print(ss.days(3) + 2)
+print(ss.years(1) == ss.days(365))
 ```
 
 #### Durations and timesteps {#sec-to-dt}
 
-Starsim states such as `ti_infected` or `ti_recovered` store *timestep indices*, not durations: they count timesteps, so their meaning depends on the module's `dt`. A duration therefore has to be resolved against `dt` before it can be used in that arithmetic, and `.to_dt()` is what does it:
+Starsim states such as a declared disease's `ti_I`, or `ti_infected` and `ti_recovered` in a disease written as code, store *timestep indices*, not durations: they count timesteps, so their meaning depends on the module's `dt`. A duration therefore has to be resolved against `dt` before it can be used in that arithmetic, and `.to_dt()` is what does it:
 
 ```{python}
 dur = ss.years(100)
@@ -270,11 +352,10 @@ We define a "frequency", or `ss.freq`, as the "number of events happening in a g
 
 ```{python}
 # Construct directly
-f1 = ss.freqperday(0.5)
+f1 = ss.time.freq(0.5, 'day')
 
-# Construct as the inverse of a duration
-d = ss.days(2)
-f2 = 1/d
+# Frequencies of the same kind can be added
+f2 = ss.time.freq(0.25, 'day') + ss.time.freq(0.25, 'day')
 
 print(f1)
 print(f2)
@@ -288,7 +369,7 @@ print(f1*10)
 
 Probabilities, called `ss.prob()` in Starsim, can either have units or be unitless. A unitless probability is fairly straightforward, with the caveat about multiplication above (i.e., `ss.prob(0.5)*2 == ss.prob(0.75)`).
 
-With a unit, e.g. `ss.probperday(0.5)`, it represents the probability of an event occurring during a specified period of time. This allows the probability of an event over one time period to be converted to the probability of an event over a different time period. To do this, the underlying rate (see "Probability rates" below for more information) is first calculated:
+With a unit, e.g. `ss.prob(0.5, 'day')`, it represents the probability of an event occurring during a specified period of time. This allows the probability of an event over one time period to be converted to the probability of an event over a different time period. To do this, the underlying rate (see "Probability rates" below for more information) is first calculated:
 ```py
 rate = -np.log(1 - prob)
 ```
@@ -320,14 +401,14 @@ p * ss.years(2) == 0.96
 :::{.callout-tip}
 ## `ss.prob` vs `ss.bernoulli`
 
-`ss.prob` (and `ss.probperyear`, etc.) is a *number* — a time-aware scalar you can multiply and convert between time periods. `ss.bernoulli` is a *distribution* you *sample per agent*: `dist.filter(uids)` returns the UIDs for which the trial succeeded. When you need to decide an outcome for each agent ("who gets infected, who dies, who is vaccinated?"), use `ss.bernoulli`, not `ss.prob`. Use `ss.prob` when you need the probability itself as a value — for example, a per-period probability that will be scaled or fed into a distribution. See [Distributions](advanced_distributions.qmd).
+`ss.prob` (e.g. `ss.prob(0.1, 'year')`) is a *number* — a time-aware scalar you can multiply and convert between time periods. `ss.bernoulli` is a *distribution* you *sample per agent*: `dist.filter(uids)` returns the UIDs for which the trial succeeded. When you need to decide an outcome for each agent ("who gets infected, who dies, who is vaccinated?"), use `ss.bernoulli`, not `ss.prob`. Use `ss.prob` when you need the probability itself as a value — for example, a per-period probability that will be scaled or fed into a distribution. See [Distributions](advanced_distributions.qmd).
 :::
 
 #### Probability rates
 
 This quantity is often simply called a "rate", but this is confusing because "rate" as ambiguous. A "probability rate", which in Starsim is simply `ss.per()`, represents the rate at which a _single_ event happens. For example, death rate and birth rates are examples of probability rates, since you can't die (or be born) more than once. Since this is the "normal" definition of the term "rate", it's called `ss.per()` so that its unit-specific versions (`ss.perday`, `ss.peryear`, etc.) are as concise as possible.
 
-Probability rates must be non-negative, but need not be less than 1. Thus, `ss.perday(2)` is a valid rate (whereas `ss.probperday(2)` is not valid).
+Probability rates must be non-negative, but need not be less than 1. Thus, `ss.perday(2)` is a valid rate (whereas `ss.prob(2, 'day')` is not valid).
 
 When a `per` is multiplied by a scalar or array, the rate is simply scaled. Such multiplication occurs frequently in epidemiological models, where the base rate is multiplied by "rate ratio" or "relative rate" to represent agents experiencing higher (multiplier > 1) or lower (multiplier < 1) event rates.
 
@@ -352,6 +433,8 @@ When multiplied by a scalar, the rate is simply scaled.
 ```py
 p*2 == 1.6
 ```
+
+A number divided by a duration is a rate, and a number divided by a rate is a duration: `1/ss.days(2)` is `ss.perday(0.5)`, and `1/ss.perday(0.5)` is `ss.days(2)`, the mean time until the event.
 
 The difference between `ss.prob` and `ss.per` is subtle, but important. `per` works directly with the instantaneous rate of an event occurring. In contrast, `ss.prob` starts with a probability and a duration, and the underlying rate is calculated. On multiplication by a duration:
 
@@ -382,12 +465,29 @@ How does a rate know how to convert itself to a probability? When a sim is initi
 
 Note that a rate cannot be converted to a plain number without saying what timestep to convert it *to*, so `float(death_rate)` raises an exception rather than silently returning the numerator (`ss.peryear(1)`, `ss.permonth(1)` and `ss.perday(1)` would otherwise all give `1.0`, despite differing by a factor of 365). The same applies to single-input NumPy functions such as `np.exp(death_rate)`. Use `.to_dt()`, `.to_prob()`, `.to_events()`, or `.to()` to resolve the units first; if you genuinely want the numerator on its own, use `death_rate.value`.
 
+#### Arithmetic between types
+
+Some combinations of types have a meaning and some do not. Rates of the same kind add (competing hazards), a rate times a duration is a probability over that duration, and a number divided by a duration is a rate. Adding a hazard to a probability, or multiplying two rates, has no meaning, and raises an error naming the two types:
+
+```{python}
+print(ss.perday(0.1) * ss.days(3))              # Probability of at least one event in 3 days
+print(ss.prob(0.1, 'day') + ss.prob(0.1, 'day')) # Competing hazards: 0.19 per day
+print(1 / ss.days(10))                          # A rate
+print(2 / ss.perday(0.1))                       # A duration
+try:
+    ss.perday(0.1) + ss.prob(0.1, 'day')
+except Exception as e:
+    print(f'{type(e).__name__}: {e}')
+```
+
+A rate times a duration is a plain number, so putting one where a rate is expected (in `rate=`, or after `@`) is also an error.
+
 #### Summary
 Here is a quick summary of when you should use each type of quantity:
 
-- `ss.freq`: Use when you want a number of events, e.g. sexual acts per year: `acts = ss.freqperyear(80)`.
+- `ss.freq`: Use when you want a number of events, e.g. sexual acts per year: `acts = ss.time.freq(80, 'year')`.
 - `ss.per`: Use when you want to calculate the probability of an event, e.g. death: `death_rate = ss.peryear(0.01)`.
-- `ss.prob`: Use when you are sure you want to convert a probability from one time period to another, e.g. if after a 1 year period, 10 out of 1000 people had died: `death_prob = ss.probperyear(0.01)`.
+- `ss.prob`: Use when you are sure you want to convert a probability from one time period to another, e.g. if after a 1 year period, 10 out of 1000 people had died: `death_prob = ss.prob(0.01, 'year')`.
 
 Confused? That's OK. As we said, time is complex.
 

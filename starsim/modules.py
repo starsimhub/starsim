@@ -2,9 +2,9 @@
 General module class -- base class for diseases, interventions, etc. Also
 defines Analyzers and Connectors.
 """
-import sys
 import inspect
 import functools as ft
+import numpy as np
 import sciris as sc
 import starsim as ss
 
@@ -12,6 +12,21 @@ import starsim as ss
 module_args = ['name', 'label']  # Define allowable module arguments
 
 custom_modules = []  # Allow the user to register custom modules
+
+
+def par_spec(val):
+    """ A parameter of a module written as code, as plain data: typed values, distributions, and functions as in the rest of the model spec """
+    if isinstance(val, ss.par):
+        val = val.raw
+    if isinstance(val, ss.Dist):
+        return dict(dist=type(val).__name__) | {k:par_spec(v) for k,v in val.pars.items()}
+    elif isinstance(val, (ss.dur, ss.Rate, ss.parameters.TimeValue, ss.by)) or inspect.isroutine(val) or isinstance(val, (ft.partial, np.ufunc)): # A function, but not any object that can be called
+        return ss.presentation.quantity_json(val, None, None)
+    elif isinstance(val, dict):
+        return {k:par_spec(v) for k,v in val.items()}
+    elif isinstance(val, (list, tuple)):
+        return [par_spec(v) for v in val]
+    return sc.jsonify(val)
 
 
 def module_map(key=None):
@@ -23,7 +38,7 @@ def module_map(key=None):
     """
     module_map = sc.objdict(
         demographics  = ss.Demographics,
-        networks      = ss.Route, # NB, not ss.Network!
+        networks      = ss.networks.Route, # NB, not ss.Network!
         diseases      = ss.Disease,
         connectors    = ss.Connector,
         interventions = ss.Intervention,
@@ -140,7 +155,9 @@ def required(val=True):
 
     Examples:
         ```python
-        class CustomSIS(ss.SIS):
+        import starsim.library as ssl
+
+        class CustomSIS(ssl.AgentSIS):
 
             def step(self):
                 super().step()
@@ -267,6 +284,7 @@ class Module(Base):
         ```
     """
     _state_aliases = {} # Default state aliases; defined on the class so it always exists, e.g. while unpickling. See define_aliases()
+    requires = None # Other modules this one needs, by class or name, as in Starsim 3; not checked (see ss.check_requires())
 
     def __init__(self, name=None, label=None, **kwargs):
         # Housekeeping
@@ -277,11 +295,15 @@ class Module(Base):
         self.pars = ss.Pars() # Usually populated via self.define_pars()
         self._default_name = True # Whether the name is the class default, in which case the sim can rename it to make it unique
         self.set_metadata(name, label) # Usually reset as part of self.update_pars()
+        unknown = [key for key in kwargs if key not in ss.Timeline.keywords]
+        if unknown:
+            errormsg = f'{type(self).__name__}() got {"an unexpected keyword" if len(unknown) == 1 else "unexpected keywords"} {sc.strjoin(f"{key}=" for key in unknown)} (see the migrate-starsim3 skill for keywords that have changed)'
+            raise TypeError(errormsg)
         self.t = ss.Timeline(**kwargs, name=self.name, init=False) # Initialized in init_pre(), so the sim's dt is used if not supplied
 
         # Properties to be added by init_pre()
         self.sim = None
-        self.dists = None # Turned into a Dists object by sim.init_dists() if this module has dists
+        self.dists = None # Turned into a Dists object by sim._init_dists() if this module has dists
         self.results = ss.Results(self.label)
 
         # Finish initialization
@@ -303,6 +325,9 @@ class Module(Base):
     def __getattr__(self, attr):
         """ Called only if the attribute isn't found, in which case fall back to the aliases; see define_aliases() """
         if attr not in self._state_aliases:
+            prop = getattr(type(self), attr, None)
+            if isinstance(prop, property): # The property raised an AttributeError of its own (e.g. in a user's function), so let it through rather than reporting the property as missing
+                return prop.fget(self)
             raise AttributeError(f'{type(self).__name__} object has no attribute "{attr}"') # Note: don't use self or self.name here, since both can recurse into __getattr__
         alias = self._state_aliases[attr]
         if not callable(alias):
@@ -335,6 +360,15 @@ class Module(Base):
     def setattribute(self, attr, value):
         """ Method for setting an attribute that does not perform checking against immutable attributes """
         return super().__setattr__(attr, value)
+
+    def check_not_given(self, action):
+        """ Raise if this module was given to a sim, which runs its own copy, so that `action` on this one would never be seen """
+        if getattr(self, '_given', False):
+            kind = next((key for key,cls in module_map().items() if isinstance(self, cls)), 'custom')
+            errormsg = (f'{action} on "{self.name}", which was given to a sim: the sim runs its own copy, so it would never be used. '
+                        f'Do it before making the sim, or on the sim\'s copy, sim.{kind}.{self.name}, after sim.init()')
+            raise RuntimeError(errormsg)
+        return
 
     def brief(self, output=False):
         """ Show a brief representation of the module; used by __repr__ """
@@ -378,7 +412,7 @@ class Module(Base):
                 if req:
                     valid = [True, 'disable']
                     if req not in valid:
-                        errormsg = f'ss.require() must be True or "disable", not "{req}"'
+                        errormsg = f'ss.required() must be True or "disable", not "{req}"'
                         raise ValueError(errormsg)
                     elif req == 'disable':
                         disabled.append(attr)
@@ -433,7 +467,7 @@ class Module(Base):
         Args:
             name (str): A string with the name of the module class in lower case, e.g. 'sir'
         """
-        subcls = ss.find_modules(flat=True).get(name)
+        subcls = ss.modules.find_modules(flat=True).get(name)
         if subcls is not None and issubclass(subcls, cls):
             return subcls(*args, **kwargs)
         else:
@@ -501,7 +535,11 @@ class Module(Base):
         calling function (which is almost always a module's `__init__()` method)
         """
         if inherit: # Merge with existing
-            self.pars.update(**kwargs, create=True)
+            given = {k:v for k,v in kwargs.items() if isinstance(v, ss.par)} if getattr(self, 'graph', None) is None else {} # In a module written as code, a parameter given as ss.par (e.g. with bounds, to be fitted) is kept as one, and its code uses the value, as for update_pars()
+            self.pars.update(**{k:(v.value if k in given else v) for k,v in kwargs.items()}, create=True)
+            if given:
+                self.pars.update(**given)
+            self.pars.forget_bare(kwargs) # A module's own defaults are in the unit it means
         else: # Or overwrite
             self.pars = ss.Pars(**kwargs)
         return self.pars
@@ -512,11 +550,15 @@ class Module(Base):
         Pull out recognized parameters and update them; raises on unrecognized keys
         """
         # Merge pars and kwargs
+        if isinstance(pars, ss.Pars): # E.g. a package's full set of defaults for the module: those given as ss.par keep their bounds
+            pars = dict(pars) | {k:p for k,p in pars.bounded().items() if k in pars}
         pars = sc.mergedicts(pars, kwargs)
 
-        # Inspect the parent frame and pull out any arguments
-        frame = sys._getframe(1)  # Go back 1 frame (to __init__, most likely)
-        if frame.f_code.co_name == '__init__': # If it's not being called from init, don't do this
+        # Pull out the named arguments of this module's nearest __init__ (found by identity, so a wrapper or an overriding update_pars() doesn't hide it)
+        frame = ss.utils.getframe(1)
+        while frame is not None and not (frame.f_code.co_name == '__init__' and frame.f_locals.get('self') is self):
+            frame = frame.f_back
+        if frame is not None: # If it's not being called from init, don't do this
             _, _, _, kw = inspect.getargvalues(frame) # Get the values provided
             for k,v in kw.items():
                 if k in self.pars and v is not None:
@@ -538,7 +580,7 @@ class Module(Base):
         # Should be no remaining pars
         remaining = set(pars.keys()) - set(module_args) - set(ss.Timeline.time_args)
         if len(remaining):
-            errormsg = f'{len(pars)} unrecognized arguments for {self.name}: {sc.strjoin(remaining)}'
+            errormsg = f'{len(remaining)} unrecognized argument{"s" if len(remaining) > 1 else ""} for {self.name}: {sc.strjoin(sorted(remaining))}'
             raise ValueError(errormsg)
         return
 
@@ -596,12 +638,15 @@ class Module(Base):
                 errormsg += f'New states being added:\n{new}\n'
                 raise AttributeError(errormsg)
             setattr(self, attr, state)
+            state.mod = self # So a condition on it, written before the sim exists, refers to this module
             if lock:
                 self._locked_attrs.append(attr)
 
             # Add it to the list of auto states, if needed
             if isinstance(state, ss.BoolState):
                 self._auto_states.append(state)
+            elif isinstance(state, ss.Event): # With the count of how often it happened to each person
+                self.define_states(state.counts, lock=lock, overwrite=overwrite)
 
         # Handle any aliases
         if kwargs:
@@ -685,6 +730,10 @@ class Module(Base):
             self.results += result
         return
 
+    def link(self, sim):
+        """ Before the sim's modules are gathered: add any other modules this one needs, or find the ones it works with (e.g. `ss.Pregnancy` adds an `ss.Lactation`); called by `ss.solvers.choose_solver()`. Does nothing by default """
+        return
+
     @required()
     def init_pre(self, sim, force=False):
         """
@@ -696,9 +745,10 @@ class Module(Base):
         """
         if force or not self.pre_initialized:
             self.setattribute('sim', sim) # Link back to the sim object
-            ss.link_dists(self, sim, skip=[ss.Sim, ss.Module]) # Link the distributions to sim and module, skipping any nested sim or module instances
+            ss.distributions.link_dists(self, sim, skip=[ss.Sim, ss.Module]) # Link the distributions to sim and module, skipping any nested sim or module instances
             self.t.init(sim=self.sim) # Initialize time vector
             self.link_timepars() # Add module dt to the timepars
+            self.check_bare_units(sim)
             if self.name in sim.pars:
                 sim.pars[self.name] = self.pars
             else: # Add a new key, which is allowed even if the sim's parameters are locked
@@ -709,6 +759,18 @@ class Module(Base):
             self.pre_initialized = True
         return
 
+    def check_bare_units(self, sim):
+        """ Warn about parameters given as bare numbers in a unit other than the sim's (see `ss.Pars.bare_units()`) """
+        if getattr(sim, 'declared', None): # In a declared model, bare numbers are in the sim's unit (None for timesteps)
+            unit = sim.unit and ss.time.normalize_unit(sim.unit)
+        else: # Otherwise in its timestep's, if it has one (not in a mock sim)
+            unit = getattr(sim.t.dt, 'base', None)
+            if unit is None:
+                return
+        if isinstance(self.pars, ss.Pars):
+            self.pars.bare_units(unit, label=self.name)
+        return
+
     @required()
     def link_timepars(self, force=False):
         """
@@ -717,7 +779,7 @@ class Module(Base):
         This is what lets a timepar resolve itself against the timestep with no
         argument, e.g. `self.pars.death_rate.to_prob()` or `self.pars.dur_inf.to_dt()`.
         """
-        timepars = sc.search(self, type=ss.TimePar, skip=dict(keys=['sim', 'module', 't'])) # Skip the timeline, else the module's own dt would be linked to itself
+        timepars = sc.search(self, type=ss.TimePar, skip=dict(keys=['sim', 'module', 't'] + list(getattr(self, 'timepar_skip', [])), subclasses=ss.distributions.no_dists())) # Skip the timeline, else the module's own dt would be linked to itself
 
         # Initialize them with the parent module
         dt = self.t.dt
@@ -753,12 +815,17 @@ class Module(Base):
         for state in self.state_list:
             if not state.initialized:
                 state.init_vals()
+        if getattr(self, 'graph', None) is None: # The parameters as they are now, for the model spec, since code can change them as it runs (FP56)
+            try:
+                self._spec_pars = {k:par_spec(v) for k,v in self.pars.items()}
+            except Exception: # A value the spec cannot write (e.g. a calendar duration): to_spec() raises about it, if it is asked for
+                pass
         self.initialized = True
         return
 
     def init_mock(self, n_agents=100, dur=10):
         """ Initialize with a mock simulation -- for debugging purposes only """
-        sim = ss.mock_sim(n_agents=n_agents, dur=dur)
+        sim = ss.debugtools.mock_sim(n_agents=n_agents, dur=dur)
         self.init_pre(sim)
         for state in self.state_list: # Manually link the people
             state.people = self.sim.people
@@ -766,7 +833,7 @@ class Module(Base):
         dists = sc.search(obj, type=ss.Dist)
         for i,dist in dists.enumvals():
             dist.trace = f'dist_{i}'
-        ss.link_dists(obj=obj, sim=sim, module=self, skip=[ss.Sim, ss.Module], init=True)
+        ss.distributions.link_dists(obj=obj, sim=sim, module=self, skip=[ss.Sim, ss.Module], init=True)
         self.init_post()
         return self
 
@@ -817,16 +884,6 @@ class Module(Base):
         """
         return [key for key,alias in self._state_aliases.items() if callable(alias)]
 
-    @property
-    def alias_state_dict(self):
-        """
-        Dictionary of state aliases (see `define_aliases()`)
-
-        Returns a dictionary mapping alias names to the state (including derived states) 
-        that they point to. If an alias is a callable, the result is returned.
-        """
-        return {key:self[key] for key in self._state_aliases.keys()}
-
     def match_time_inds(self, inds=None):
         """ Find the nearest matching sim time indices for the current module """
         self_tvec = self.t.yearvec
@@ -855,30 +912,39 @@ class Module(Base):
 
     @required()
     def finish_step(self):
-        """ Define what should happen at the end of the step; at minimum, increment ti """
+        """ Define what should happen at the end of the step, after the results are recorded """
+        return
+
+    def advance(self):
+        """ For a module with a timeline of its own: move its time to the step about to be taken (the sim moves the time of the modules on its own timeline: see `ss.Sim.advance()`) """
         self.t.ti += 1
         return
 
-    def update_results(self):
+    def update_results(self, names=None):
         """
         Update results; by default, compute counts of each state at each point in time
 
         This function is executed after transmission in all modules has been resolved.
         This allows result updates at this point to capture outcomes dependent on multiple
         modules, where relevant.
+
+        Args:
+            names (list): the states to count (default: every `ss.BoolState` and derived state)
         """
-        for state in self.auto_state_list:
-            self.results[f'n_{state.name}'][self.ti] = state.sum()
-        for name in self.derived_state_names:
-            self.results[f'n_{name}'][self.ti] = self[name].sum()
+        weights = ss.results.agent_weights(self.sim) # Agents of different weights (people.scale) are each counted by their weight, as in n_alive
+        if names is None:
+            names = [state.name for state in self.auto_state_list] + self.derived_state_names
+        for name in names:
+            res = self.results[f'n_{name}']
+            if weights is None:
+                res[self.ti] = self[name].sum()
+            else:
+                ss.results.as_float(res)[self.ti] = weights[self[name].uids].sum()
         return
 
     @required()
     def finalize(self):
         """ Perform any final operations, such as removing unneeded data """
-        # Update the time index (since otherwise pointing to a timepoint that doesn't exist)
-        self.t.ti -= 1
-
         self.finalize_results()
         self.finalized = True
         return
@@ -888,33 +954,48 @@ class Module(Base):
         """ Finalize results """
         # Scale results, including any nested ones
         scale = self.sim.result_scale(self)
-        for res in self.results.flatten(keep_case=True).values():
+        for res in self.results.flatten().values():
             if res.scale:
                 res.apply_scale(scale)
         return
 
-    def to_json(self):
-        """ Export to a JSON-compatible format """
-        out = sc.objdict()
-        out.type = self.__class__.__name__
-        out.name = self.name
-        out.label = self.label
-        out.pars = self.pars.to_json()
+    def to_spec(self):
+        """
+        The module's part of the model spec (`sim.to_spec()`): for a module written as code, its type, the factory that makes it, and its parameters, as plain data
+
+        A module written as code is seen through its parameters and the class that makes
+        it (`factory`, as `module.Class`), not through its code: a value it keeps elsewhere
+        (e.g. a grid set in its `__init__()`) is not seen, and neither is a change to its
+        methods. Give such a value with `define_pars()`, and give the class a `version`
+        (e.g. `version = '2'`) to change when its code does, so that `sim.hash()` tells the
+        two apart. Its parameters are taken as they were at `init()`, so that a module that
+        changes them as it runs has the same spec (and hash) before and after the run. Declared modules (`ss.Disease`), interventions, and modifiers write more.
+        """
+        cls = type(self)
+        out = sc.objdict(type=cls.__name__, name=self.name, label=self.label, factory=f'{cls.__module__}.{cls.__qualname__}', version=getattr(self, 'version', None))
+        out.pars = self.__dict__.get('_spec_pars') or {k:par_spec(v) for k,v in self.pars.items()} # As they were at init, not as the code has changed them since
         return out
+
+    def to_json(self):
+        """ The module as a reference by its type and name, for `sc.jsonify()`: e.g. a module among the parameters in `sim.to_json()`, or in a parameter of another module; its definition is `to_spec()` """
+        return dict(type=type(self).__name__, name=self.name)
 
     def shrink(self):
         """ Shrink the size of the module for saving to disk """
-        shrunk = ss.shrink()
+        shrunk = ss.utils.shrink()
         self.setattribute('sim', shrunk) # Use setattribute since locked otherwise
         self.setattribute('dists', shrunk)
         for state in self.state_list:
             with sc.tryexcept():
                 to_shrink = ['people', 'raw']
-                ss.shrink(state, to_shrink)
+                ss.utils.shrink(state, to_shrink)
         return
 
     def plot(self):
         """ Plot all results in the module """
+        if not len(self.results): # E.g. a module given to a sim, which runs a copy of it
+            errormsg = f'"{self.name}" has no results: a sim runs a copy of each module it is given, so plot the one in the sim, e.g. sim.diseases.{self.name}.plot()'
+            raise ValueError(errormsg)
         with sc.options.with_style('fancy'):
             flat = sc.flattendict(self.results, sep=': ')
             timevec = self.t.timevec

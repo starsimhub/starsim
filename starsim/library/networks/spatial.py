@@ -38,7 +38,7 @@ class DiskNet(ss.Network):
         super().__init__()
         self.define_pars(
             r = 0.1, # Radius
-            v = ss.freq(0.05, unit=ss.day), # Velocity
+            v = ss.time.freq(0.05, 'day'), # Velocity
         )
         self.update_pars(pars, **kwargs)
         self.define_states(

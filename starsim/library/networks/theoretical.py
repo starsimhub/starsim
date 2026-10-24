@@ -1,9 +1,13 @@
 """
 Theoretical networks, useful for comparison against analytic results and for debugging.
 """
+import inspect
 import numpy as np
 import sciris as sc
 import starsim as ss
+
+ss_float = ss.dtypes.float
+_ = None # Sentinel for "not provided" default arguments
 
 class ErdosRenyiNet(ss.DynamicNetwork):
     """
@@ -88,8 +92,9 @@ class NullNet(ss.Network):
 
     For an empty network (ie, no edges) use
     >> import starsim as ss
+    >> import starsim.library as ssl
     >> import networkx as nx
-    >> empty_net_static = ss.StaticNet(nx.empty_graph)
+    >> empty_net_static = ssl.StaticNet(nx.empty_graph)
     >> empty_net_rand = ss.RandomNet(n_contacts=0)
 
     Args:
@@ -120,4 +125,210 @@ class NullNet(ss.Network):
 
     def step(self):
         """ Not used for NullNet """
+        pass
+
+
+class RandomSafeNet(ss.DynamicNetwork):
+    """
+    Create a CRN-safe, O(N) random network
+
+    This network is similar to `ss.RandomNet(method='exact')`, but is random-number safe
+    (i.e., the addition of a single new agent will not perturb the entire rest
+    of the network). However, it is somewhat slower than `ss.RandomNet()`,
+    so should be used where CRN safety is important (e.g., scenario analysis).
+
+    Note: `ss.RandomNet` uses `n_contacts`, which is the total number of contacts
+    per agent. `ssl.RandomSafeNet` uses `n_edges`, which is the total number of
+    *edges* per agent. Since contacts are usually bidirectional, n_contacts = 2*n_edges.
+    For example, `ss.RandomNet(n_contacts=10, method='exact')` will give (nearly) identical results
+    to `ssl.RandomSafeNet(n_edges=5)`. In addition, whereas `n_contacts` can be
+    a distribution, `n_edges` can only be an integer.
+
+    Args:
+        n_edges (int): the average number of (bi-directional) edges between agents
+        dur (int/`ss.dur`): the duration of each contact
+        beta (float): the default beta value for each edge
+    """
+    def __init__(self, pars=None, n_edges=_, dur=_, beta=_, **kwargs):
+        super().__init__()
+        self.define_pars(
+            n_edges = 5,
+            dur = 0, # Note; network edge durations are required to have the same unit as the network
+            beta = 1.0,
+        )
+        self.update_pars(pars, **kwargs)
+        if sc.isnumber(self.pars.dur): self.pars.dur = ss.years(self.pars.dur) # Interpret numbers as years, as for ss.RandomNet (the default isn't ss.years(0) so a Dist is allowed)
+        self.dist = ss.random(name='RandomSafeNet')
+        self.dist.hash_dtype = np.float64 # Since float32 only gives 2^24 distinct values, which would mean many ties (e.g. 25% of edges with a million agents)
+        return
+
+    def rep_rand(self, uids, sort=True):
+        """ Reproducible repeated random numbers """
+        n_agents = len(uids)
+        n_conn = self.pars.n_edges
+        r_list = []
+        for i in range(n_conn): # Necessary loop; not possible to vectorize given the behavior of the random number generator
+            r = self.dist.rvs(uids)
+            r_list.append(r)
+        r_arr = np.array(r_list).flatten()
+        inds = np.tile(np.arange(n_agents), n_conn)
+        rr = np.array([inds, r_arr]).T
+        if sort:
+            order = np.argsort(r_arr)
+            rr = rr[order,:]
+        self.rr = rr
+        self.rr_uids = ss.uids(uids) # Store the UIDs so form_pairs() can map stub positions back to agents
+        return rr
+
+    def form_pairs(self, debug=False):
+        """ From a 2N input array, return 2N-2 nearest-neighbor pairs """
+        rr = self.rr
+        out = []
+        agent = self.rr_uids[rr[:,0].astype(int)] # Map stub positions back to agent UIDs
+        v     = rr[:,1]
+        center = v[1:-1]
+        p1_dist = abs(center - v[:-2])
+        p2_dist = abs(center - v[2:])
+        use_p1 = p1_dist <= p2_dist # Ties (which are common with many agents, since the random numbers are float32) go to the lower neighbor
+        source = agent[1:-1]
+        target = np.where(use_p1, agent[:-2], agent[2:]).view(ss.uids)
+
+        # Store additional information for debugging
+        if debug:
+            dist = np.where(use_p1, p1_dist, p2_dist)
+            out = sc.objdict()
+            out.pairs = sorted(list(zip(source, target)))
+            out.src = source
+            out.trg = target
+            out.dist = dist
+            out.p1dist = p1_dist
+            out.p2dist = p2_dist
+            self.pairs = out
+        return source,target
+
+    def add_pairs(self):
+        """ Generate edges """
+        people = self.sim.people
+        born = people.alive & (people.age > 0)
+
+        # Get the random numbers
+        self.rep_rand(born.uids)
+
+        # Form the pairs
+        p1, p2 = self.form_pairs()
+        beta = np.full(len(p1), self.pars.beta, dtype=ss_float)
+
+        if isinstance(self.pars.dur, ss.Dist):
+            dur = self.pars.dur.rvs(p1)
+        elif self.pars.dur == 0:
+            dur = np.zeros(len(p1))
+        else:
+            dur = np.ones(len(p1))*self.pars.dur/self.t.dt # Other option would be np.full(len(p1), self.pars.dur.x), but this is harder to read
+
+        self.append(p1=p1, p2=p2, beta=beta, dur=dur)
+        return
+
+    def plot_matrix(self, **kwargs):
+        """ Plot the distance matrix used for forming pairs: only ±1 from the diagonal is used """
+        kw = ss.plot_args(kwargs)
+        v = self.rr[:,1]
+        dm = abs(v[:, np.newaxis] - v)**2
+        with ss.style(**kw.style):
+            fig = plt.figure(**kw.fig)
+            plt.imshow(dm)
+        return ss.return_fig(fig)
+
+
+class StaticNet(ss.Network):
+    """
+    A network class of static partnerships converted from a networkx graph. There's no formation of new partnerships
+    and initialized partnerships only end when one of the partners dies. The networkx graph can be created outside Starsim
+    if population size is known. Or the graph can be created by passing a networkx generator function to Starsim.
+
+    If "seed=True" is passed as a keyword argument or a parameter in pars, it is replaced with the built-in RNG.
+    The parameter "n" is supplied automatically to be equal to n_agents.
+
+    Examples:
+        ```python
+        # Generate a networkx graph and pass to Starsim
+        import networkx as nx
+        import starsim as ss
+        import starsim.library as ssl
+        g = nx.scale_free_graph(n=10000)
+        ssl.StaticNet(graph=g)
+
+        # Pass a networkx graph generator to Starsim
+        ssl.StaticNet(graph=nx.erdos_renyi_graph, p=0.0001, seed=True)
+        ```
+    """
+
+    def __init__(self, graph=None, pars=None, **kwargs):
+        super().__init__()
+        self.nx_graph = graph # Not self.graph, which is the graph of states and transitions of a declared model
+        self.define_pars(seed=True, p=None, n_contacts=10)
+        self.graph_kwargs = {k:kwargs.pop(k) for k in list(kwargs) if k not in self.pars and k not in ss.modules.module_args} # Other arguments are passed to the graph generator
+        self.update_pars(pars, **kwargs)
+        self.dist = ss.Dist(name='StaticNet')
+        return
+
+    def init_pre(self, sim):
+        super().init_pre(sim)
+        self.n_agents = sim.pars.n_agents
+        if self.nx_graph is None:
+            import networkx as nx # Lazy import since slow
+            self.nx_graph = nx.fast_gnp_random_graph # Fast random (Erdos-Renyi) graph creator
+        n_contacts = self.pars.pop('n_contacts') # Remove from pars dict, but use only if p is not supplied
+        if self.pars.p is None: # Convert from n_contacts to probability
+            self.pars.p = n_contacts/self.n_agents
+        return
+
+    def mean_contacts(self, sim):
+        """ The mean degree of its graph (see `ss.Network.mean_contacts()`), or for a random graph not yet made, its number of contacts or its chance of each pair """
+        graph = self.nx_graph
+        if graph is not None and not callable(graph):
+            return 2*graph.number_of_edges()/max(graph.number_of_nodes(), 1), 'the mean degree of its graph'
+        elif graph is None or getattr(graph, '__name__', None) in ['fast_gnp_random_graph', 'gnp_random_graph', 'erdos_renyi_graph']: # A random graph: a number of contacts, or a chance of each pair
+            p = self.pars.get('p')
+            return (ss.solvers.Mixing.mean(self.pars.get('n_contacts'), sim.unit_base), 'its mean number of contacts') if p is None else (p*sim.pars.total_pop, 'its chance of each pair, times the population')
+        return None, f' (it is made by {getattr(graph, "__name__", "a function")}, whose mean degree is not known before it runs)'
+
+    def init_post(self):
+        super().init_post()
+        if 'seed' in self.pars and self.pars.seed is True:
+            self.pars.seed = self.dist.rng
+        if callable(self.nx_graph):
+            args = inspect.signature(self.nx_graph).parameters
+            kw = {k:v for k,v in self.pars.items() if k in args} # Only pass p and seed if the generator accepts them
+            try:
+                self.nx_graph = self.nx_graph(n=self.n_agents, **kw, **self.graph_kwargs)
+            except TypeError as e:
+                ss.warn(f"{str(e)}: networkx {self.nx_graph.name} not supported. Try using ssl.StaticNet() instead.")
+                raise e
+        self.validate_pop(self.n_agents)
+        self.get_edges()
+        return
+
+    def validate_pop(self, n_agents):
+        n_nodes = self.nx_graph.number_of_nodes()
+        if n_nodes > n_agents:
+            errmsg = (f"Please ensure the number of nodes in graph ({n_nodes}) is less than "
+                      f"or equal to (<=) the agent population size ({n_agents}).")
+            raise ValueError(errmsg)
+
+        if not self.nx_graph.number_of_edges():
+            errmsg = f"The nx generator {self.nx_graph.name} produced a graph with no edges"
+            raise ValueError(errmsg)
+
+    def get_edges(self):
+        p1s = []
+        p2s = []
+        for edge in self.nx_graph.edges():
+            p1, p2 = edge
+            p1s.append(p1)
+            p2s.append(p2)
+        edges = dict(p1=p1s, p2=p2s, beta=np.ones_like(p1s))
+        self.append(edges)
+        return
+
+    def step(self):
         pass

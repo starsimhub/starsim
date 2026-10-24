@@ -1,13 +1,14 @@
 """
-Run tests of vaccines and products
+Run tests of what Starsim 3's delivery classes did, with the deliveries: routine and campaign delivery by year, products shared between deliveries, tests with several results, and treatment with a capacity and a queue
 """
 import sciris as sc
 import numpy as np
 import starsim as ss
+import starsim.library as ssl
 import pytest
 
 
-def make_delivery_pars(n_agents=2_000, start=2000, stop=2020):
+def make_pars(n_agents=2_000, start=2000, stop=2020):
     """ Lightweight SIS sim params shared across delivery tests """
     return sc.objdict(
         n_agents = n_agents,
@@ -15,388 +16,146 @@ def make_delivery_pars(n_agents=2_000, start=2000, stop=2020):
         stop     = stop,
         diseases = 'sis',
         networks = 'random',
+        verbose  = 0,
     )
 
 
 def make_dx():
-    """ Minimal diagnostic product used by delivery tests """
-    dx_data = sc.dataframe(
-        columns = ['disease', 'state', 'result', 'probability'],
-        data = [
-            ['sis', 'susceptible', 'positive', 0.01],
-            ['sis', 'susceptible', 'negative', 0.99],
-            ['sis', 'infected',    'positive', 0.95],
-            ['sis', 'infected',    'negative', 0.05],
-        ],
-    )
-    return ss.Dx(df=dx_data)
-
-
-def run_sir_vaccine(efficacy, leaky=True):
-    sc.heading(f'Testing SIR vaccine with {efficacy = } and {leaky = }')
-
-    # parameters
-    v_frac      = 0.5    # fraction of population vaccinated
-    total_cases = 500    # total cases at which point we check results
-    tol         = 3      # tolerance in standard deviations for simulated checks
-
-    # create a basic SIR sim
-    sim = ss.Sim(
-        n_agents = 1000,
-        pars = dict(
-          networks = dict(
-                type = 'random',
-                n_contacts = 4
-          ),
-          diseases = dict(
-                type      = 'sir',
-                init_prev = 0.01,
-                dur_inf   = ss.years(10),
-                p_death   = 0,
-                beta      = ss.peryear(0.06),
-          )
-        ),
-        dur = ss.years(10),
-        dt  = ss.years(0.05)
-    )
-    sim.init(verbose=False)
-
-    # work out who to vaccinate
-    in_trial = sim.people.sir.susceptible.uids
-    n_vac = round(len(in_trial) * v_frac)
-    in_vac = np.random.choice(in_trial, n_vac, replace=False)
-    in_pla = np.setdiff1d(in_trial, in_vac)
-    uids = ss.uids(in_vac)
-
-    # create and apply the vaccination
-    vac = ss.simple_vx(efficacy=efficacy, leaky=leaky)
-    vac.init_pre(sim)
-    vac.administer(sim.people, uids)
-
-    # check the relative susceptibility at the start of the simulation
-    rel_susc = sim.people.sir.rel_sus.values
-    assert min(rel_susc[in_pla]) == 1.0, 'Placebo arm is not fully susceptible'
-    if not leaky:
-        assert min(rel_susc[in_vac]) == 0.0, 'Nobody fully vaccinated (all_or_nothing)'
-        assert max(rel_susc[in_vac]) == 1.0, 'Vaccine effective in everyone (all_or_nothing)'
-        mean = n_vac * (1 - efficacy)
-        sd = np.sqrt(n_vac * efficacy * (1 - efficacy))
-        assert (np.mean(rel_susc[in_vac]) - mean) / sd < tol, 'Incorrect mean susceptibility in vaccinated (all_or_nothing)'
-    else:
-        assert max(abs(rel_susc[in_vac] - (1 - efficacy))) < 0.0001, 'Relative susceptibility not 1-efficacy (leaky)'
-
-    # run the simulation until sufficient cases
-    old_cases = []
-    for idx in range(1000):
-        sim.run_one_step()
-        susc = sim.people.sir.susceptible.uids
-        cases = np.setdiff1d(in_trial, susc)
-        if len(cases) > total_cases:
-            break
-        old_cases = cases
-
-    if len(cases) > total_cases:
-        cases = np.concatenate([old_cases, np.random.choice(np.setdiff1d(cases, old_cases), total_cases - len(old_cases), replace=False)])
-    vac_cases = np.intersect1d(cases, in_vac)
-
-    # check to see whether the number of cases are as expected
-    p = v_frac * (1 - efficacy) / (1 - efficacy * v_frac)
-    mean = total_cases * p
-    sd = np.sqrt(total_cases * p * (1 - p))
-    assert (len(vac_cases) - mean) / sd < tol, 'Incorrect proportion of vaccincated infected'
-
-    # for all or nothing check that fully vaccinated did not get infected
-    if not leaky:
-        assert len(np.intersect1d(vac_cases, in_vac[rel_susc[in_vac] == 1.0])) == len(vac_cases), 'Not all vaccine cases amongst vaccine failures (all or nothing)'
-        assert len(np.intersect1d(vac_cases, in_vac[rel_susc[in_vac] == 0.0])) == 0, 'Vaccine cases amongst fully vaccincated (all or nothing)'
-
-    return sim
-
-
-@sc.timer()
-def test_sir_vaccine_leaky():
-    return run_sir_vaccine(0.3, False)
-
-
-@sc.timer()
-def test_sir_vaccine_all_or_nothing():
-    return run_sir_vaccine(0.3, True)
+    """ Minimal diagnostic, as Starsim 3's table of results by state """
+    return ss.Diagnostic(sensitivity=0.95, specificity=0.99)
 
 
 @sc.timer()
 def test_products(do_plot=False):
-    sc.heading('Testing products')
+    sc.heading('Testing products: a vaccine, a test with several results, and treatment with a queue')
 
-    pars = sc.objdict(
-        n_agents = 5e3,
-        start = 2000,
-        stop = 2020,
-        diseases = 'sis',
-        networks = 'random',
-    )
-
-    dx_data = sc.dataframe(
-        columns =
-            ['disease', 'state', 'result', 'probability'],
-        data = [
-            ['sis', 'susceptible', 'positive', 0.01],
-            ['sis', 'susceptible', 'negative', 0.99],
-            ['sis', 'infected', 'positive', 0.95],
-            ['sis', 'infected', 'negative', 0.05],
-        ]
-    )
-
-    # Using built-in products
+    # A vaccine for the SIS, offered each year from 2005 to 80% of those not yet vaccinated
     vx_start = 2005
-    my_vaccine = ss.simple_vx(efficacy=0.9)
-    vaccination = ss.routine_vx(
-        product = my_vaccine,  # Product object
-        prob = 0.8,
-        start_year = vx_start,
-    )
+    vaccination = ss.vaccinate(ss.Vaccine(efficacy=0.9), coverage=0.8, start=vx_start, interval=ss.years(1))
 
-    # Using custom products
+    # A test with three results, most severe first (Starsim 3's ss.Dx table, with its hierarchy)
     dx_start = 2010
-    screening = ss.routine_screening(
-        product = ss.Dx(df=dx_data),
-        prob = 0.9,
-        start_year = dx_start,
-    )
+    cytology = ss.Diagnostic(results=dict(high=dict(I=0.9), low={'I': 0.05, None: 0.02}, normal=None))
+    screening = ss.screen(cytology, coverage=0.9, start=dx_start, interval=ss.years(1))
 
-    # Run the sim
-    sim = ss.Sim(pars, interventions=[screening, vaccination])
+    sim = ss.Sim(make_pars(n_agents=5e3), interventions=[screening, vaccination])
     sim.run()
 
     # Checks
-    dxres = sim.results.routine_screening
+    dxres = sim.results.screening
     sisres = sim.results.sis
     y = sim.t.yearvec
     pre_dx = y < dx_start
     post_dx = y > dx_start
     pre_vx = y < vx_start
     post_vx = y > vx_start
-    assert dxres.n_screened[pre_dx].sum() == 0, 'Expected no one screened before intervention start'
-    assert dxres.n_screened[post_dx].sum() > 0, 'Expected people screened after intervention start'
-    assert dxres.n_dx[pre_dx].sum() == 0, 'Expected no one diagnosed before intervention start'
-    assert dxres.n_dx[post_dx].sum() > 0, 'Expected people diagnosed after intervention start'
+    assert dxres.delivered[pre_dx].sum() == 0, 'Expected no one screened before intervention start'
+    assert dxres.delivered[post_dx].sum() > 0, 'Expected people screened after intervention start'
+    assert dxres.positive[post_dx].sum() == dxres.high[post_dx].sum() + dxres.low[post_dx].sum() > 0, 'Expected positives to be every result but the last'
+    assert dxres.high[post_dx].sum() + dxres.low[post_dx].sum() + dxres.normal[post_dx].sum() == dxres.delivered[post_dx].sum()
     assert sisres.new_infections[pre_vx].mean() > sisres.new_infections[post_vx].mean(), 'Expected vaccine to reduce prevalence'
 
-    # Check the treatment queue
-    tx_data = sc.dataframe(columns=['disease', 'state', 'post_state', 'efficacy'], data=[['sis', 'infected', 'susceptible', 0.8]])
-    treatment = ss.treat_num(product=ss.Tx(df=tx_data), eligibility=lambda sim: sim.diseases.sis.infected.uids, max_capacity=50)
-    queue = ss.Sim(make_delivery_pars(), interventions=treatment).run().interventions.treat_num.queue
-    assert len(queue) == len(set(queue)), 'Expected no one to be queued for treatment twice'
+    # Treatment of a fixed number each step (Starsim 3's treat_num): those not served wait, and leave the queue if no longer infected
+    sis = ss.SIS(beta=ss.peryear(0.5))
+    treatment = ss.treat(ss.Treatment(cure=0.8), on=sis.infection, capacity=50, queue=True)
+    res = ss.Sim(make_pars() | dict(diseases=sis), interventions=treatment).run().results.treatment
+    assert res.delivered.max() == 50 and res.waiting.max() > 0, 'Expected at most 50 treated each step, and a queue'
+
+    # The same for a disease written as code, cured by its clear_infection() (as Starsim 3's ss.Tx moved infected to susceptible)
+    sis = ssl.AgentSIS(init_prev=0.1)
+    treatment = ss.treat(ss.Treatment(cure=0.8), where=sis.infected, capacity=20, queue=True, interval=1)
+    base = ss.Sim(make_pars() | dict(diseases=sis)).run().results.agentsis
+    sim = ss.Sim(make_pars() | dict(diseases=sis), interventions=treatment).run()
+    assert sim.results.treatment.delivered.max() == 20 and sim.results.treatment.waiting.max() > 0 and sim.results.treatment.cured.sum() > 0
+    assert sim.results.agentsis.n_susceptible.mean() > base.n_susceptible.mean(), 'Expected those cured to be susceptible again'
 
     if do_plot:
         sim.plot()
 
     return sim
 
-class StatefulVx(ss.Vx):
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        self.define_states(
-            ss.BoolState('vaccinated'),  # True if a routine vaccine was ever delivered to this agent
-        ),
-        return
-
-    def administer(self, people, uids):
-        self.vaccinated[uids] = True
-        self.results.n_vaccinated[self.ti] = len(uids)
-
 
 @sc.timer()
 def test_two_products():
-
-    pars = sc.objdict(
-        n_agents = 5e3,
-        start = 2000,
-        stop = 2020,
-        diseases = 'sis',
-        networks = 'random',
-    )
-
-    my_vaccine = StatefulVx()
-    vx1 = ss.routine_vx(name='vx1', product = my_vaccine, prob=0.1,start_year = 2005, eligibility=lambda sim: (~sim.people.statefulvx.vaccinated).uids)
-    vx2 = ss.routine_vx(name='vx2', product = my_vaccine, prob=0.2,start_year = 2005, eligibility=lambda sim: (~sim.people.statefulvx.vaccinated).uids)
-    sim = ss.Sim(pars, interventions=[vx1,vx2])
+    sc.heading('Testing one product delivered by two deliveries')
+    vaccine = ss.Vaccine(efficacy=0.9)
+    vx1 = ss.vaccinate(vaccine, who=~vaccine.ever, coverage=0.1, start=2005, interval=ss.years(1))
+    vx2 = ss.vaccinate(vaccine, who=~vaccine.ever, coverage=0.2, start=2005, interval=ss.years(1))
+    sim = ss.Sim(make_pars(n_agents=5e3), interventions=[vx1, vx2])
     sim.run()
 
-    assert (sim.people.vx1.vaccinated.sum()+sim.people.vx2.vaccinated.sum()) == sim.people.statefulvx.vaccinated.sum()
-
+    res = sim.results
+    vaccinated = sim.products()[0].ti_delivered.notnan.sum()
+    assert len(sim.products()) == 1
+    assert res.vx1.delivered.sum() + res.vx2.delivered.sum() == vaccinated > 0, 'Expected each person to be vaccinated by one delivery, once'
     return sim
 
 
-
 @sc.timer()
-def test_routine_delivery_window():
-    """ RoutineDelivery should only deliver between start_year and end_year """
-    sc.heading('Testing RoutineDelivery start/end window...')
+def test_routine_delivery():
+    sc.heading('Testing routine delivery: a window, a coverage that changes by year, and the default years')
+    pars = make_pars()
 
-    pars = make_delivery_pars(start=2000, stop=2020)
-    start_year, end_year = 2008, 2012
-    screening = ss.routine_screening(
-        product    = make_dx(),
-        prob       = 1.0,
-        start_year = start_year,
-        end_year   = end_year,
-    )
+    # Only between the start and the stop (which is not included, so Starsim 3's end_year=2012 is stop=2013)
+    start, stop = 2008, 2013
+    screening = ss.screen(make_dx(), coverage=1.0, start=start, stop=stop, interval=ss.years(1))
     sim = ss.Sim(pars, interventions=screening).run()
+    n_screened = sim.results.screening.delivered
+    years = sim.t.yearvec # A step's results are at its end, so those of the step that starts in a year are at the next
+    assert n_screened[years <= start].sum() == 0, f'Expected zero screenings before {start}'
+    assert n_screened[years > stop].sum() == 0, f'Expected zero screenings from {stop}'
+    assert n_screened[(years > start) & (years <= stop)].min() > 0, f'Expected screenings each year from {start} to {stop}'
 
-    n_screened = sim.results.routine_screening.n_screened
-    years      = sim.t.yearvec
-    pre        = years < start_year
-    post       = years > end_year
+    # A coverage that changes by year (Starsim 3's years= with an array of prob=)
+    coverage = ss.timeseries(np.arange(2005, 2016), np.linspace(0.05, 0.95, 11), mode='linear')
+    sim = ss.Sim(pars, interventions=ss.screen(make_dx(), coverage=coverage, interval=ss.years(1), name='screening')).run()
+    n_screened = sim.results.screening.delivered
+    years = sim.t.yearvec
+    early = n_screened[(years >= 2005) & (years <= 2007)].mean()
+    late = n_screened[(years >= 2013) & (years <= 2015)].mean()
+    assert late > 3*early, f'Expected screening to scale up with the coverage; got early={early}, late={late}'
 
-    assert n_screened[pre].sum() == 0, \
-        f'Expected zero screenings before {start_year}, got {n_screened[pre].sum()}'
-    assert n_screened[post].sum() == 0, \
-        f'Expected zero screenings after {end_year}, got {n_screened[post].sum()}'
-    in_window = (years >= start_year) & (years <= end_year)
-    assert n_screened[in_window].sum() > 0, \
-        f'Expected nonzero screenings inside [{start_year}, {end_year}]'
-
+    # No window: the whole sim, offered at every step with a probability per year (Starsim 3's annual_prob=True)
+    sim = ss.Sim(make_pars(start=2010, stop=2014), dt=0.5, interventions=ss.screen(make_dx(), coverage=ss.probperyear(0.5), name='screening')).run()
+    n_screened = sim.results.screening.delivered
+    assert n_screened[1:].min() > 0, 'Expected screening on every step when no window is given'
+    assert np.isclose(n_screened[1]/2000, 1 - 0.5**0.5, atol=0.05), 'Expected the probability per year to be per step'
     return sim
 
 
 @sc.timer()
-def test_routine_delivery_prob_array():
-    """ RoutineDelivery should accept a per-year prob array matching the year window """
-    sc.heading('Testing RoutineDelivery prob-array scaling...')
+def test_campaign_delivery():
+    sc.heading('Testing campaign delivery: one year, several years with a coverage each, and years outside the sim')
+    pars = make_pars()
 
-    pars = make_delivery_pars(start=2000, stop=2020)
-    years = np.arange(2005, 2016)               # 11 entries: 2005..2015
-    probs = np.linspace(0.05, 0.95, len(years)) # matching ramp 0.05 -> 0.95
-    screening = ss.routine_screening(
-        product = make_dx(),
-        prob    = probs,
-        years   = years,
-    )
-    sim = ss.Sim(pars, interventions=screening).run()
+    # One year only
+    sim = ss.Sim(pars, interventions=ss.screen(make_dx(), coverage=0.5, at=[2010], name='screening')).run()
+    n_screened = sim.results.screening.delivered
+    on_year = np.isclose(sim.t.yearvec, 2011) # The results of the step that starts in 2010
+    assert n_screened[on_year].sum() > 0 and n_screened[~on_year].sum() == 0, 'Expected screenings in 2010 only'
 
-    n_screened = sim.results.routine_screening.n_screened
-    yearvec    = sim.t.yearvec
-    early_mask = (yearvec >= 2005) & (yearvec <= 2007)
-    late_mask  = (yearvec >= 2013) & (yearvec <= 2015)
-    early_mean = n_screened[early_mask].mean()
-    late_mean  = n_screened[late_mask].mean()
+    # Several years, each with its own coverage
+    years = [2005, 2010, 2015]
+    coverage = ss.timeseries(years, [0.3, 0.5, 0.7])
+    sim = ss.Sim(pars, interventions=ss.screen(make_dx(), coverage=coverage, at=years, name='screening')).run()
+    n_screened = sim.results.screening.delivered
+    on = np.isin(sim.t.yearvec, np.array(years) + 1) # The results of the steps that start in those years
+    assert n_screened[~on].sum() == 0, 'Expected no screenings outside campaign years'
+    assert np.all(np.diff(n_screened[on]) > 0), 'Expected each round to reach its own coverage'
 
-    assert late_mean > early_mean, \
-        f'Expected screening to scale up with prob array; got early={early_mean}, late={late_mean}'
-    # Late prob is ~19x early prob; require at least 3x to allow stochastic slack
-    assert late_mean > 3 * early_mean, \
-        f'Expected late screening >> early screening; got early={early_mean}, late={late_mean}'
-
+    # A campaign after the sim ends
+    with pytest.raises(ss.errors.TimeOutsideSim):
+        ss.Sim(pars, interventions=ss.screen(make_dx(), coverage=0.5, at=[2030], name='screening')).init()
     return sim
-
-
-@sc.timer()
-def test_routine_delivery_default_years():
-    """ Omitting start/end_year should default to sim start/stop """
-    sc.heading('Testing RoutineDelivery default year handling...')
-
-    pars = make_delivery_pars(start=2010, stop=2014)
-    screening = ss.routine_screening(product=make_dx(), prob=0.5)
-    sim = ss.Sim(pars, interventions=screening).run()
-
-    n_screened = sim.results.routine_screening.n_screened
-    assert n_screened.sum() > 0, 'Expected screening to occur when no window specified'
-
-    return sim
-
-
-@sc.timer()
-def test_campaign_delivery_single_year():
-    """ CampaignDelivery should only deliver at the specified year """
-    sc.heading('Testing CampaignDelivery single year...')
-
-    pars = make_delivery_pars(start=2000, stop=2020)
-    campaign_year = 2010
-    screening = ss.campaign_screening(
-        product = make_dx(),
-        prob    = 0.5,
-        years   = campaign_year,
-    )
-    sim = ss.Sim(pars, interventions=screening).run()
-
-    n_screened = sim.results.campaign_screening.n_screened
-    yearvec    = sim.t.yearvec
-    on_year    = np.isclose(yearvec, campaign_year)
-    off_year   = ~on_year
-
-    assert n_screened[on_year].sum() > 0, \
-        f'Expected screenings on {campaign_year}, got 0'
-    assert n_screened[off_year].sum() == 0, \
-        f'Expected no screenings off-year, got {n_screened[off_year].sum()}'
-
-    return sim
-
-
-@sc.timer()
-def test_campaign_delivery_multi_year():
-    """ CampaignDelivery should deliver at each specified year and nowhere else """
-    sc.heading('Testing CampaignDelivery multi year...')
-
-    pars = make_delivery_pars(start=2000, stop=2020)
-    campaign_years = [2005, 2010, 2015]
-    probs = [0.3, 0.5, 0.7]
-    screening = ss.campaign_screening(
-        product = make_dx(),
-        prob    = probs,
-        years   = campaign_years,
-    )
-    sim = ss.Sim(pars, interventions=screening).run()
-
-    n_screened = sim.results.campaign_screening.n_screened
-    yearvec    = sim.t.yearvec
-    on_mask    = np.zeros_like(yearvec, dtype=bool)
-    for y in campaign_years:
-        on_mask |= np.isclose(yearvec, y)
-
-    assert n_screened[~on_mask].sum() == 0, \
-        f'Expected no screenings outside campaign years, got {n_screened[~on_mask].sum()}'
-    for y in campaign_years:
-        n_y = n_screened[np.isclose(yearvec, y)].sum()
-        assert n_y > 0, f'Expected screenings in {y}, got {n_y}'
-
-    return sim
-
-
-@sc.timer()
-def test_campaign_delivery_prob_length_mismatch():
-    """ CampaignDelivery should reject prob/years length mismatch """
-    sc.heading('Testing CampaignDelivery prob/years length validation...')
-
-    pars = make_delivery_pars(start=2000, stop=2020)
-    screening = ss.campaign_screening(
-        product = make_dx(),
-        prob    = [0.1, 0.2],  # length 2, but 3 years
-        years   = [2005, 2010, 2015],
-    )
-    with pytest.raises(ValueError):
-        ss.Sim(pars, interventions=screening).init() # Incorrect number of years
-
-    screening = ss.campaign_screening(product=make_dx(), prob=0.5, years=2030)
-    with pytest.raises(ValueError):
-        ss.Sim(pars, interventions=screening).init() # Campaign year is after the sim ends
-
-    return screening
 
 
 if __name__ == '__main__':
     T = sc.timer()
     do_plot = True
 
-    leaky  = test_sir_vaccine_leaky()
-    a_or_n = test_sir_vaccine_all_or_nothing()
-    prod   = test_products(do_plot=do_plot)
-    prod2  = test_two_products()
-
-    s_win    = test_routine_delivery_window()
-    s_parr   = test_routine_delivery_prob_array()
-    s_def    = test_routine_delivery_default_years()
-    s_csing  = test_campaign_delivery_single_year()
-    s_cmulti = test_campaign_delivery_multi_year()
-    s_cmm    = test_campaign_delivery_prob_length_mismatch()
+    prod  = test_products(do_plot=do_plot)
+    prod2 = test_two_products()
+    rout  = test_routine_delivery()
+    camp  = test_campaign_delivery()
 
     T.toc()

@@ -4,365 +4,160 @@ Test calibration
 
 #%% Imports and settings
 import starsim as ss
+import starsim.fit
 import numpy as np
 import pandas as pd
 import sciris as sc
-from functools import partial
 import pytest
-
-debug = False # If true, will run in serial
-total_trials = [20, 10][debug]
-n_agents = 1_000
-do_plot = True
-
-
-#%% Helper functions
-
-def make_sim():
-    sir = ss.SIR(
-        beta = ss.peryear(0.075),
-        init_prev = ss.bernoulli(0.02),
-    )
-    random = ss.RandomNet(n_contacts=ss.poisson(4))
-
-    sim = ss.Sim(
-        n_agents = n_agents,
-        start = ss.date('2020-01-01'),
-        stop = ss.date('2020-02-12'),
-        dt = ss.days(1),
-        diseases = sir,
-        networks = random,
-        verbose = 0,
-    )
-
-    return sim
-
-
-def build_sim(sim, calib_pars, **kwargs):
-    """ Modify the base simulation by applying calib_pars """
-
-    reps = kwargs.get('n_reps', 1)
-
-    sir = sim.pars.diseases # There is only one disease in this simulation and it is a SIR
-    net = sim.pars.networks # There is only one network in this simulation and it is a RandomNet
-
-    for k, pars in calib_pars.items():
-        if k == 'rand_seed':
-            sim.pars.rand_seed = pars
-            continue
-
-        v = pars['value']
-        if k == 'beta':
-            sir.pars.beta = v
-        elif k == 'init_prev':
-            sir.pars.init_prev = ss.bernoulli(v)
-        elif k == 'n_contacts':
-            net.pars.n_contacts = ss.poisson(v)
-        else:
-            raise NotImplementedError(f'Parameter {k} not recognized')
-
-    if reps == 1:
-        return sim
-
-    # Ignoring the random seed if provided via the reseed=True option in Calibration
-    ms = ss.MultiSim(sim, iterpars=dict(rand_seed=np.random.randint(0, 1e6, reps)), initialize=True, debug=True, parallel=False)
-    return ms
 
 
 #%% Define the tests
 
 @sc.timer()
-@pytest.mark.skip(reason="Test requires performance enhancement")
-def test_onepar_normal(do_plot=True):
-    sc.heading('Testing a single parameter (beta) with a normally distributed likelihood')
+def test_particle_mcmc():
+    sc.heading('Testing particle MCMC')
+    def make(beta=0.5, data=None):
+        beta = ss.par(beta, bounds=[0.1, 1], name='beta')
+        S, I, R = ss.states(3)
+        infection = S >> I @ beta * I
+        cases = ss.outcome(0.5 * infection, delay=ss.days(3), likelihood=ss.poisson())
+        sir = ss.Disease(infection, I >> R @ ss.days(6), cases, init=dict(I=0.002), name='sir')
+        return ss.Sim(sir, unit='day', start='2020-01-01', stop='2020-04-01', solver='binomial', total_pop=10_000, data=data, verbose=0, rand_seed=3)
 
-    # Define the calibration parameters
-    calib_pars = dict(
-        beta = dict(low=0.01, high=0.30, guess=0.15, suggest_type='suggest_float', log=True),
-    )
+    truth = make().run().results.sir
+    weekly = np.add.reduceat(truth.cases.values[1:], np.arange(0, len(truth.cases) - 1, 7))[:-1] # A flow is compared with its total since the last data point
+    data = pd.DataFrame(dict(cases=np.random.default_rng(1).poisson(weekly)), index=truth.timevec[7::7][:len(weekly)])
 
-    # Make the sim and data
-    sim = make_sim()
+    # The particle filter's estimate of the likelihood is highest at the value that made the data
+    sim = make(data=data).init()
+    filt = ss.fit.ParticleFilter(sim)
+    assert filt.series[0].spans[-1][0] > 70 # The last weekly point is worked out from its own week, not from the start
+    est = {}
+    for beta in [0.4, 0.5, 0.6]:
+        sim.restart(pars=dict(beta=beta))
+        est[beta] = filt(n_particles=100, seed=1)
+    assert est[0.5] > max(est[0.4], est[0.6])
 
-    prevalence = ss.Normal(
-        name = 'Disease prevalence',
-        conform = 'prevalent',
+    # Particle MCMC, for a stochastic compartmental sim whose data has a likelihood (asked for by name: the default is a best fit)
+    assert ss.fit.default_method(sim, True)[0] == 'optuna'
+    fit = make(beta=0.3, data=data).calibrate(method='pmcmc', draws=100, warmup=100, chains=2, particles=30, parallel=False, rand_seed=1)
+    fit.summarize()
+    table = fit.table.set_index('par')
+    assert fit.method == 'pmcmc'
+    assert len(fit.samples) == 200 and len(fit.diagnostics.acceptance) == 2
+    assert table.lower.beta < 0.5 < table.upper.beta # The posterior covers the value that made the data
+    with pytest.raises(ss.errors.NoPosterior): # A posterior needs a likelihood
+        make(data=data).calibrate(method='pmcmc', gof='nae')
 
-        expected = pd.DataFrame({
-            'x': [0.13, 0.16, 0.06],    # Prevalence of infection
-        }, index=pd.Index([ss.date(d) for d in ['2020-01-12', '2020-01-25', '2020-02-02']], name='t')), # On these dates
-
-        extract_fn = lambda sim: pd.DataFrame({
-            'x': sim.results.sir.n_infected, # Instead of prevalence, let's compute it from infected and n_alive
-            'n': sim.results.n_alive,
-        }, index=pd.Index(sim.results.timevec, name='t')),
-
-        # User can specify sigma2, e.g.:
-        #sigma2 = 0.05, # (num_replicates/sigma2_model + 1/sigma2_data)^-1
-        #sigma2 = np.array([0.05, 0.25, 0.01])
-    )
-
-    # Make the calibration
-    calib = ss.Calibration(
-        calib_pars = calib_pars,
-        sim = sim,
-        build_fn = build_sim,
-        build_kw = dict(n_reps=5), # Reps per point
-        reseed = False,
-        components = [prevalence],
-        total_trials = total_trials,
-        n_workers = None, # None indicates to use all available CPUs
-        die = True,
-        debug = debug,
-        continue_db=False,
-    )
-
-    # Perform the calibration
-    sc.printcyan('\nPeforming calibration...')
-    calib.calibrate()
-
-    # Check
-    assert calib.check_fit(do_plot=False), 'Calibration did not improve the fit'
-
-    # Call plotting to look for exceptions
-    if do_plot:
-        calib.plot_final()
-        calib.plot(bootstrap=False)
-        calib.plot(bootstrap=True)
-        calib.plot_optuna(['plot_param_importances', 'plot_optimization_history'])
-
-    return sim, calib
-
+    # A best fit scores each point by the mean of several runs, with fresh seeds at each point under Optuna, and reports the score of the best values over the first seeds
+    best = make(beta=0.3, data=data).calibrate(method='optuna', trials=8, rand_seed=1)
+    assert len(best.scores) == 4 # The default for a stochastic compartmental sim
+    assert ss.fit.Problem(make(data=data).new(solver='abm', n_agents=2000)).n_runs == 1 # But one for agents, whose runs are slow (Optuna's search learns from nearby points)
+    assert np.isclose(best.mismatch, np.mean(best.scores))
+    assert best.trials.objective.nunique() == len(best.trials) # Fresh seeds, so no two trials share their chance
+    return fit
 
 
 @sc.timer()
-def test_onepar_custom(do_plot=True):
-    sc.heading('Testing a single parameter (beta) with a custom likelihood')
+def test_fitted_mobility():
+    sc.heading('Testing a fitted share of time away from home: restarted, run over values, differentiated, and fitted by IF2')
+    def make(away=0.1, data=None, solver='binomial'):
+        S, I, R = ss.states(3)
+        infection = S >> I @ 0.4 * I
+        cases = ss.outcome(infection, likelihood=ss.poisson())
+        sir = ss.Disease(infection, I >> R @ ss.days(6), cases, init_n=dict(I=ss.by(patch=[20, 0])), name='sir')
+        sir.stratify(patch=ss.geo.geography(names=['a', 'b']), mobility=ss.geo.Mobility(matrix=[[0, 1], [1, 0]], away=ss.par(away, bounds=[0.001, 0.3], name='away')))
+        return ss.Sim(sir, unit='day', start='2020-01-01', stop='2020-04-01', solver=solver, total_pop=20_000, data=data, verbose=0, rand_seed=3)
 
-    # Define the calibration parameters
-    calib_pars = dict(
-        beta = dict(low=0.01, high=0.30, guess=0.15, suggest_type='suggest_float', log=True),
-    )
+    # A restart with a new value works out the movement again, as a new sim does
+    sim = make(solver='ode').init()
+    n_I = lambda away: sim.restart(pars=dict(away=away)).run().results.sir.n_I.values.copy()
+    assert np.allclose(n_I(0.01), make(away=0.01, solver='ode').run().results.sir.n_I.values)
+    msim = ss.parallel(make(solver='ode'), pars=dict(away=[0.01, 0.1]))
+    assert np.allclose(msim.results.sir.n_I.select(away=0.01).values.ravel(), n_I(0.01))
 
-    # Make the sim and data
-    sim = make_sim()
+    # Its gradient is that of the runs
+    h = 1e-5
+    grad = sim.restart(pars=dict(away=0.1)).gradient(results='n_I', pars='away').away.sir.n_I
+    assert np.allclose(grad, (n_I(0.1 + h) - n_I(0.1 - h))/(2*h), rtol=1e-3, atol=1e-2)
 
-    def eval(sim, expected):
-        # Compute the squared error at one point in time
-        date, p = expected
-        if not isinstance(sim, ss.MultiSim):
-            sim = ss.MultiSim(sims=[sim])
+    # IF2 gives each particle its own movement, and finds the value that made the data
+    truth = make(away=0.01, solver='ode').run().results.sir
+    weekly = np.add.reduceat(truth.cases.values[1:], np.arange(0, len(truth.cases) - 1, 7))[:-1]
+    data = pd.DataFrame(dict(cases=np.random.default_rng(1).poisson(weekly)), index=truth.timevec[7::7][:len(weekly)])
+    fit = make(data=data).calibrate(method='if2', particles=100, iterations=10, chains=2, rand_seed=1, verbose=False)
+    assert 0.005 < fit.table.set_index('par').best.away < 0.02, fit.table
+    return fit
 
-        ret = 0
-        for s in sim.sims:
-            ind = np.searchsorted(s.results.timevec, date, side='left')
-            prev = s.results.sir.prevalence[ind]
-            ret += (prev - p)**2
-        return ret
-
-    # Make the calibration
-    calib = ss.Calibration(
-        calib_pars = calib_pars,
-        sim = sim,
-        build_fn = build_sim,
-        build_kw = dict(n_reps=2), # Two reps per point
-        reseed = True,
-        eval_fn = eval, # Will call my_function(msim, eval_kwargs)
-        eval_kw = dict(expected=(ss.date('2020-01-12'), 0.13)), # Will call eval(sim, **eval_kw)
-        total_trials = total_trials,
-        n_workers = None, # None indicates to use all available CPUs
-        die = True,
-        debug = debug,
-    )
-
-    # Perform the calibration
-    sc.printcyan('\nPeforming calibration...')
-    calib.calibrate()
-
-    # Check
-    assert calib.check_fit(), 'Calibration did not improve the fit'
-    return sim, calib
 
 @sc.timer()
-@pytest.mark.skip(reason="Feature requires further debugging")
-def test_twopar_betabin_gammapois(do_plot=True):
-    sc.heading('Testing a two parameters (beta and initial prevalence) with a two likelihoods (BetaBinomial and GammaPoisson)')
+def test_fit_inputs(tmp_path):
+    sc.heading('Testing data by calendar year, results on their own timeline, settings of code, and workers that resume')
 
-    # Define the calibration parameters
-    calib_pars = dict(
-        beta = dict(low=0.01, high=0.30, guess=0.15, suggest_type='suggest_float', log=True), # Float par with log scale
-        init_prev = dict(low=0.01, high=0.25, guess=0.15), # Default type is suggest_float, no need to re-specify
-    )
+    # Data by calendar year (an integer year column) is the year each row names, not 1 January of it; one parameter of a deterministic sim takes one search
+    def make(beta=0.3, data=None):
+        beta = ss.par(beta, bounds=[0.05, 1], name='beta')
+        S, I, R = ss.states(3)
+        sir = ss.Disease(S >> I @ beta*I, I >> R @ ss.years(2), ss.Transition(R, S, dur=ss.years(3)), init_prev=0.01, name='sir')
+        return ss.Sim(sir, start=2000, stop=2020, dt=ss.years(0.05), data=data, verbose=0)
+    res = make().run().results.sir
+    flows, stocks = res.S_to_I.resample('year'), res.n_I.resample('year', kind='ratio') # A flow summed over each year, a stock averaged over it
+    df = pd.DataFrame(dict(year=flows.timevec, S_to_I=flows.values, n_I=stocks.values)).iloc[1:-1]
+    fit = make(beta=0.5, data=df).calibrate(verbose=0)
+    assert np.isclose(fit.pars.beta, 0.3, rtol=1e-3) # Before, 0.279, from data compared a year off
+    assert len(fit.trials) < 60 # Before, 3 searches (131 evaluations)
 
-    # Make the sim and data
-    sim = make_sim()
-
-    num_infectious = ss.BetaBinomial(
-        name = 'Number Infectious',
-        weight = 0.75,
-        conform = 'prevalent',
-
-        n_boot = 1000, # Testing bootstrap
-        combine_reps = 'mean',
-
-        expected = pd.DataFrame({
-            'n': [200, 197, 195], # Number of individuals sampled
-            'x': [30, 35, 10],    # Number of individuals found to be infectious
-        }, index=pd.Index([ss.date(d) for d in ['2020-01-12', '2020-01-25', '2020-02-02']], name='t')), # On these dates
-
-        extract_fn = lambda sim: pd.DataFrame({
-            'n': sim.results.n_alive,
-            'x': sim.results.sir.n_infected,
-        }, index=pd.Index(sim.results.timevec, name='t')),
-    )
-
-    incident_cases = ss.GammaPoisson(
-        name = 'Incident Cases',
-        weight = 1.5,
-        conform = 'incident',
-
-        n_boot = 1000, # Testing bootstrap
-        combine_reps = 'sum',
-
-        expected = pd.DataFrame({
-            'n':  [100, 27, 54],   # Number of person-years
-            'x':  [740, 325, 200], # Number of new infections
-            't':  [ss.date(d) for d in ['2020-01-07', '2020-01-14', '2020-01-27']], # Between t and t1
-            't1': [ss.date(d) for d in ['2020-01-08', '2020-01-15', '2020-01-29']],
-        }).set_index(['t', 't1']),
-
-        extract_fn = lambda sim: pd.DataFrame({
-            'x': sim.results.sir.new_infections, # Events
-            'n': sim.results.n_alive * sim.t.dt_year, # Person-years at risk
-        }, index=pd.Index(sim.results.timevec, name='t'))
-    )
-
-    # Make the calibration
-    calib = ss.Calibration(
-        calib_pars = calib_pars,
-        sim = sim,
-        build_fn = build_sim,
-        build_kw = dict(n_reps=3), # 3 reps per point
-        reseed = True,
-        components = [num_infectious, incident_cases],
-        total_trials = total_trials,
-        n_workers = None, # None indicates to use all available CPUs
-        die = True,
-        debug = debug,
-    )
-
-    # Perform the calibration
-    sc.printcyan('\nPeforming calibration...')
-    calib.calibrate()
-
-    # Check
-    assert calib.check_fit(), 'Calibration did not improve the fit'
-    return sim, calib
+    # A module with a timestep of its own, a setting of an intervention written as code, a bounded parameter passed through a package's Pars, and a column that a loss of its own does not read
+    class cure(ss.Intervention):
+        def __init__(self, p=0.1, **kwargs):
+            super().__init__(**kwargs)
+            self.p = p # A setting kept as an attribute, as Covasim's are
+            self.p_retest = p # Held by two attributes, as Covasim's symp_quar_prob copies symp_prob: one parameter
+            return
+        def step(self):
+            sis = self.sim.diseases.sis
+            cured = sis.I.uids[np.random.default_rng(self.ti).random(sis.I.count()) < self.p]
+            sis.I[cured] = False
+            sis.S[cured] = True
+            return
+    defaults = sc.dcp(ss.RandomNet().pars) # As a package builds a module's parameters
+    defaults.update(n_contacts=ss.par(4, bounds=[2, 10]))
+    net = ss.RandomNet(pars=defaults)
+    data = pd.DataFrame(dict(year=np.arange(2002, 2010), sis_prevalence=0.1, notes=1))
+    sim = ss.Sim(diseases=ss.SIS(dt=ss.years(1)), networks=net, interventions=cure(p=ss.par(0.1, bounds=[0.01, 0.5])), n_agents=300, start=2000, stop=2010, data=data, verbose=0)
+    sim.pars.diseases.pars.init_prev = 0.2 # Changed after the sim was built: the fit's runs use it too
+    with pytest.raises(ss.errors.UnknownDataColumn): # Compared with the results, the column must match one
+        sim.calibrate()
+    loss = lambda sim: abs(sim.results.sis.prevalence[-1] - 0.1)
+    path = tmp_path/'fit.log'
+    fit = sim.calibrate(gof=loss, trials=6, n_workers=2, storage=path, verbose=0)
+    assert list(fit.pars.keys()) == ['n_contacts', 'p'] and len(fit.trials) == 6
+    assert fit.sim.diseases.sis.pars.init_prev.value == 0.2 and fit.sim.interventions.cure.p == fit.sim.interventions.cure.p_retest
+    assert np.isfinite(ss.fit.mismatch(fit.sim, fit.sim.data[['sis_prevalence']])) # Before, a broadcast error
+    again = sim.calibrate(gof=loss, trials=8, storage=path, verbose=0) # Resumed: two more trials
+    assert len(again.trials) == 8 and np.allclose(again.trials.objective[:6], fit.trials.objective)
+    return fit
 
 @sc.timer()
-@pytest.mark.skip(reason="Feature requires further debugging")
-def test_threepar_dirichletmultinomial_10reps(do_plot=True):
-    sc.heading('Testing a three parameters (beta, initial prevalence, and number of contacts) with a DirichletMultinomial likelihood')
-
-    # Define the calibration parameters
-    calib_pars = dict(
-        beta = dict(low=0.01, high=0.30, guess=0.15, suggest_type='suggest_float', log=True),
-        init_prev = dict(low=0.01, high=0.25, guess=0.15),
-        n_contacts = dict(low=2, high=10, guess=3, suggest_type='suggest_int'), # Suggest int just for demo
-    )
-
-    # Make the sim and data
-    sim = make_sim()
-
-    def by_dow(sim):
-        # Extract the number of new infections by day of week
-        ret = pd.DataFrame({
-            'x': sim.results.sir.new_infections, # Events
-        }, index=pd.Index(sim.results.timevec, name='t'))
-        ret['var'] = [f'x_{d.weekday()}' for d in ret.index]
-        ret = ret.reset_index() \
-            .pivot(columns='var', index='t', values='x') \
-            .fillna(0)
-        return ret
-
-    cases_by_dow = ss.DirichletMultinomial(
-        name = 'Cases by day of week',
-        weight = 1,
-        conform = 'incident',
-
-        expected = pd.DataFrame({
-            'x_0': [40, 60], # Monday
-            'x_1': [40, 60], # Tuesday
-            'x_2': [40, 60], # Wednesday
-            'x_3': [40, 60], # Thursday
-            'x_4': [40, 60], # Friday
-            'x_5': [40, 60], # Saturday
-            'x_6': [40, 60], # Sunday
-
-            # incident conform will compute different in comulative counts between the
-            # end of step t1 and the end of step t
-            't': [ss.date(d) for d in ['2020-01-07', '2020-01-21']],
-            't1': [ss.date(d) for d in ['2020-01-21', '2020-02-11']],
-        }).set_index(['t', 't1']),
-
-        extract_fn = by_dow
-    )
-
-    # Make the calibration
-    calib = ss.Calibration(
-        calib_pars = calib_pars,
-        sim = sim,
-        build_fn = partial(build_sim, n_reps=10),
-        reseed = False,
-        components = [cases_by_dow],
-        #eval_fn = my_function, # Will call my_function(msim, eval_kwargs)
-        #eval_kwargs = dict(expected=TRIAL_DATA),
-        total_trials = total_trials,
-        n_workers = None, # None indicates to use all available CPUs
-        die = True,
-        debug = debug,
-    )
-
-    # Perform the calibration
-    sc.printcyan('\nPeforming calibration...')
-    calib.calibrate()
-
-    # Check
-    assert calib.check_fit(), 'Calibration did not improve the fit'
-    return sim, calib
+def test_strain_data():
+    sc.heading('Testing data by strain for strains with courses of their own: long data with a strain column is each strain\'s own result')
+    def genotype(name):
+        S, I, R = ss.states('S I R')
+        return ss.Disease(infection=S >> I @ ss.peryear(3)*I, clearance=I >> R @ ss.years(1), name=name)
+    def make(data):
+        hpv = ss.Disease(name='hpv', init_prev=0.2, strains=ss.Strains([genotype('hpv16'), genotype('hpv18')], name='genotype'))
+        return ss.Sim(hpv, n_agents=500, start=2000, stop=2010, data=data, verbose=0)
+    data = pd.DataFrame(dict(year=[2003, 2006]*2, genotype=['hpv16']*2 + ['hpv18']*2, clearance=[100, 50, 90, 40]))
+    sim = make(data).run()
+    assert sim.data.columns.tolist() == ['hpv16.clearance', 'hpv18.clearance']
+    assert np.isfinite(ss.fit.mismatch(sim))
+    with pytest.raises(ss.errors.UnknownDataColumn): # One spelling: the strain's own result
+        make(pd.DataFrame({'year':[2003], 'hpv.clearance[genotype=hpv16]':[100]})).init()
+    return sim
 
 
 #%% Run as a script
 if __name__ == '__main__':
-    import matplotlib.pyplot as plt
-
-    # Useful for generating fake "expected" data
-    if False:
-        sim = make_sim()
-        pars = {
-            'beta'      : dict(value=0.075),
-            'init_prev' : dict(value=0.02),
-            'n_contacts': dict(value=4),
-        }
-        ms = build_sim(sim, pars, n_reps=25)
-        ms.run().plot()
-
-        dfs = []
-        for sim in ms.sims:
-            df = sim.to_df()
-            df['prevalence'] = df['sir_n_infected']/df['n_alive']
-            df['rand_seed'] = sim.pars.rand_seed
-            dfs.append(df)
-        df = pd.concat(dfs)
-
-        import seaborn as sns
-        sns.relplot(data=df, x='timevec', y='prevalence', hue='rand_seed', kind='line')
-        plt.show()
-
-
-    do_plot = True
-    for f in [test_onepar_normal, test_onepar_custom, test_twopar_betabin_gammapois, test_threepar_dirichletmultinomial_10reps]:
-        T = sc.timer()
-        sim, calib = f(do_plot=do_plot)
-        T.toc()
-    plt.show()
+    test_particle_mcmc()
+    test_fitted_mobility()
+    test_strain_data()
