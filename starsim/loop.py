@@ -673,6 +673,7 @@ class Loop:
         # Compute the main dataframe
         if self.plan is not None:
             df = self.plan_metadata()
+            df['time'] = [float(t.value) if isinstance(t, ss.dur) and not isinstance(t, ss.datedur) else t for t in df['time']] # Plain numbers (on the module's own axis), or dates, rather than durations
         else:
             errormsg = f'Simulation "{self.sim}" needs to be initialized before exporting the Loop dataframe'
             raise RuntimeError(errormsg)

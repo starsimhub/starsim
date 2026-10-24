@@ -15,6 +15,7 @@ All routes are passed with `networks=`, and the disease stays the same object th
 
 ```{python}
 import starsim as ss
+ss.options(jupyter=True)
 
 S, I, R = ss.states('S I R')
 sir = ss.Disease(
@@ -24,16 +25,16 @@ sir = ss.Disease(
     name      = 'sir',
 )
 
-routes = dict(
-    none   = dict(),
-    pool   = dict(networks=ss.MixingPool(n_contacts=10)),
-    matrix = dict(networks=ss.contacts('Kenya'), stratify=dict(age=[0, 15, 65])),
-    random = dict(networks=ss.RandomNet(n_contacts=10)),
-)
+routes = {
+    'No network':     dict(),
+    'Mixing pool':    dict(networks=ss.MixingPool(n_contacts=10)),
+    'Contact matrix': dict(networks=ss.contacts('Kenya'), stratify=dict(age=[0, 15, 65])),
+    'Random network': dict(networks=ss.RandomNet(n_contacts=10)),
+}
 for label, kw in routes.items():
     sim = ss.Sim(sir, unit='day', stop=ss.days(100), verbose=0, **kw)
     sim.init()
-    print(f'{label:7s} {sim.solver}: {sim.solver_reason}')
+    print(f'{label}: {sim.solver}, since {sim.solver_reason}')
 ```
 
 Homogeneous mixing, a mixing pool, and a contact matrix have exact compartmental forms, so `solver='auto'` runs them as an ODE; an individual-level network doesn't, so the sim runs as agents. `auto` never approximates the mixing. Ask for `solver='ode'` on a network and Starsim uses the standard approximation (homogeneous mixing with the same mean contacts for a random network; the Anderson–May partner-change model for lasting partnerships) and prints one line saying so, or raises `CapabilityError` with `approx=False`. See [Solvers](solvers.qmd) for how the choice is made.
@@ -54,36 +55,31 @@ Conditions (`where=`) use the sim's real attributes. Written before the sim exis
 Because modifiers are declared, Starsim can list them all, before anything runs. Products are modifiers too, so a vaccine shows up in the same list:
 
 ```{python}
-masks = ss.modify(sir.rel_sus, multiply=0.6, where=ss.ppl.age > 65, start=ss.days(20))
-vx    = ss.Vaccine(efficacy=0.85)
-kids  = ss.vaccinate(vx, who=ss.ppl.age < 15, coverage=0.7, at=[ss.days(30)])
-sim = ss.Sim(sir, interventions=[masks, kids], stratify=dict(age=[0, 15, 65]), unit='day', stop=ss.days(100), verbose=0)
+masks       = ss.modify(sir.rel_sus, multiply=0.6, where=ss.ppl.age > 65, start=ss.days(20))
+vaccination = ss.vaccinate(efficacy=0.85, who=ss.ppl.age < 15, coverage=0.7, at=[ss.days(30)])
+sim = ss.Sim(sir, interventions=[masks, vaccination], stratify=dict(age=[0, 15, 65]), unit='day', stop=ss.days(100), verbose=0)
 sim.what_modifies(sir.rel_sus)
 ```
 
 Code that writes another module's arrays directly is allowed, but isn't tracked. Nothing is accepted and then ignored: a modifier that no solver would apply raises `ss.errors.Unapplied` when the sim is built. Modules run in Starsim's ordered loop ([From model to run](build_and_run.qmd)), each seeing the current values, so mutual dependence (HIV raising syphilis susceptibility while syphilis raises HIV transmissibility) needs no special handling; any effect of the order is of order `dt`, which `sim.check_dt()` measures.
 
-## Interventions: what, plus delivery
+## Interventions: products and delivery
 
-An intervention has two parts. *What* is a product (`ss.Vaccine`, `ss.Diagnostic`, `ss.Treatment`: nouns) or a change to a quantity (`ss.change`, `ss.modify`). *Delivery* is who gets it, when, and how many (`ss.vaccinate`, `ss.screen`, `ss.treat`: verbs), given by keywords (`who=`, `coverage=`, `capacity=`, `at=`, `interval=`, `at_age=`), or by one `deliver=` function when those depend on each other. Routine versus campaign delivery is a keyword, not a class.
+An intervention has two parts. *What* is a product (`ss.Vaccine`, `ss.Diagnostic`, `ss.Treatment`: nouns) or a change to a quantity (`ss.change`, `ss.modify`). *Delivery* is who gets it, when, and how many (`ss.vaccinate`, `ss.screen`, `ss.treat`: verbs), given by keywords (`who=`, `coverage=`, `capacity=`, `at=`, `interval=`, `at_age=`), or by one `deliver=` function when those depend on each other. Routine versus campaign delivery is a keyword, not a class. A delivery takes its product's keywords and makes the product itself (`ss.vaccinate(efficacy=0.85, ...)` makes an `ss.Vaccine`); a product is made on its own only when several deliveries give the same one.
 
 A cascade of care is a list of ordinary deliveries, each triggered by the outcome of another:
 
 ```python
-rapid = ss.Diagnostic(sensitivity=0.8, specificity=0.95)
-pcr   = ss.Diagnostic(sensitivity=0.95, specificity=0.99)
-drug  = ss.Treatment(cure=0.95)
-
-screening = ss.screen(rapid, coverage=0.1, interval=ss.days(7))
-confirm   = ss.screen(pcr, who=screening.positive, coverage=0.9)     # a follow-up is a step of its own
-treatment = ss.treat(drug, who=confirm.positive, capacity=ss.perday(50))  # while stocks last
+screening = ss.screen(sensitivity=0.8, specificity=0.95, coverage=0.1, interval=ss.days(7))  # a rapid test
+confirm   = ss.screen(sensitivity=0.95, specificity=0.99, who=screening.positive, coverage=0.9) # a follow-up is a step of its own
+treatment = ss.treat(cure=0.95, who=confirm.positive, capacity=ss.perday(50))                # while stocks last
 ```
 
 An outcome such as `screening.positive` is an *event*: the people it happened to this step. Events can be joined (`a | b`), and they remember: `screening.positive.ever`, `.count`, and `.since` work anywhere a condition does. Each step runs after the steps whose events trigger it, whatever order they are listed in, so a follow-up acts on the same step as its trigger. Every delivery has results of its own (`delivered`, `eligible`, `coverage`, ...).
 
 The same declarations run under every solver where they can. This cascade runs as an ODE, with the tests as flows thinned by sensitivity and specificity and capacity as a cap on the total flow. Some things need individuals: a test result that comes after a `delay=`, the joint of two events, `.since`, `trace=` (delivery to contacts), or a product whose effect is your own code. Under `auto` any of these makes the sim run as agents, and the reason it prints names the part.
 
-A rule with memory ("reopen schools only after four weeks below the threshold") is a small intervention class whose `step()` keeps a flag, plus a modifier that reads it. A scenario is just a sim with its interventions; `ss.parallel(baseline=base, masks=masks)` runs several as one `ss.MultiSim`.
+A rule with memory ("reopen schools only after four weeks below the threshold") is a small intervention class whose `step()` keeps a flag, plus a modifier that reads it. A scenario is just a sim with its interventions; `ss.parallel({'Baseline': base, 'Masks': masks})` runs several as one `ss.MultiSim`, labeled by scenario.
 
 ## Results
 
@@ -91,7 +87,7 @@ Every state gets a count (`I`) and every transition a flow of the same name (`in
 
 Each result knows its kind (a flow, a stock, or a ratio), and that one fact does a lot of work: resampling to weeks, or comparing with weekly data, sums a flow but reads a stock at the end of each week, and a ratio is never averaged across groups (its numerator and denominator are summed, then divided). After stratification a result is still one result with extra dimensions, so `res.I.select(age='0-14')` and `res.I.by('age')` replace names like `I_female_high`. Data attaches by column name (`data='cases.csv'` with a column called `cases`), which is also all that calibration needs (see [Randomness and fitting](randomness_and_fitting.qmd)).
 
-A sim is one run. Many runs are an `ss.MultiSim`, whose results are the same `ss.Result` with a run dimension first:
+A sim is one run. Many runs are an `ss.MultiSim`, whose results are the same `ss.Result` objects, each holding every run (an array with a row for each run and a column for each time point), with the scenario and any parameters swept recorded for each run. So the same methods work on one run or many: `res.select(scenario=...)`, `res.median()` and `res.quantiles()` at each time point, and `res.summarize()`, which reduces each run to one value by the result's kind (a flow to its total, a stock to its final value):
 
 ```{python}
 S, I, R = ss.states('S I R')
@@ -99,19 +95,19 @@ small = ss.Disease(infection=S >> I @ 0.2 * I, recovery=I >> R @ ss.days(10), in
 sim = ss.Sim(small, solver='gillespie', total_pop=1000, unit='day', stop=ss.days(120), verbose=0)
 msim = sim.run(n_runs=20)
 
-n_I = msim.results.sir.I
-print('Runs by time points:', n_I.values.shape)
-print('Share of runs with a major outbreak:', (msim.results.sir.infection.values.sum(axis=1) > 100).mean())
+totals = msim.results.sir.infection.summarize() # The total infections of each run
+print('Total infections in each run:', totals)
+print('Share of runs with a major outbreak:', (totals > 100).mean())
 ```
 
-Extinction and bimodality can't be seen in a median, which is why `msim.plot(lines=True)` draws every run.
+Extinction and bimodality can't be seen in a median, which is why `msim.plot(lines=True)` draws every run, and `msim.summarize()` gives an interval as well as the median.
 
 ## Limits
 
 - Modifiers on one quantity combine by the one rule above. Protection from several strains a person holds needs a different rule (the strongest, or a capped sum), which is `ss.immunity`; anything else is `step()` code.
 - `when=` functions and `ss.modify` keep no memory apart from `hold=`; anything that must remember is a class.
 
-The code is in `starsim/networks.py` and `solvers/mixing.py` (routes), `connectors.py` and `conditions.py` (effects), `interventions.py`, `products.py` and `solvers/deliveries.py` (interventions), and `results.py`. For the modeler's view, see the user guide on [networks](../user_guide/modules_networks.qmd), [connectors](../user_guide/modules_connectors.qmd), [interventions](../user_guide/modules_interventions.qmd), [products](../user_guide/modules_products.qmd), [results](../user_guide/basics_results.qmd), and [running many sims](../user_guide/workflows_run.qmd).
+The code is in `starsim/networks.py` and `solvers/mixing.py` (routes), `connectors.py` and `conditions.py` (effects), `interventions.py`, `products.py` and `solvers/deliveries.py` (interventions), and `results.py`. For the modeler's view, see the user guide on [networks](../user_guide/populations_networks.qmd), [contact matrices](../user_guide/populations_contacts.qmd), [connectors](../user_guide/interventions_connectors.qmd), [products and deliveries](../user_guide/interventions_products.qmd), [changing parameters](../user_guide/interventions_changes.qmd), [results](../user_guide/running_results.qmd), and [uncertainty and many runs](../user_guide/running_uncertainty.qmd).
 
 ## In the design record
 

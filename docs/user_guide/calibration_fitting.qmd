@@ -1,0 +1,290 @@
+---
+title: Calibration
+jupyter: python3
+---
+
+Calibration is fitting a model's parameters to data: finding the values for which the model's results match what was observed, so that the model can then be used to ask "what if" questions about that setting. A model of a measles outbreak, for example, may know how long people are infectious from the literature, but not how fast measles spreads in this particular town, or what share of cases were reported. Those are the parameters to estimate from the data.
+
+In Starsim, calibration needs two things, each stated where it belongs:
+
+- **Which parameters are unknown**, and the range of values each could take: a parameter with `bounds`, such as `ss.par(1.5, bounds=[0.5, 4])`.
+- **The data**, attached to the sim, in columns named like the results they measure.
+
+`sim.fit()` then fits every parameter that has bounds to every result that has data. There is no function to write that puts each value into the model, and none that pulls out the results to compare: the model already knows where each parameter is used and what each result is.
+
+This page covers the options. The [calibration tutorial](../tutorials/t7_calibration.qmd) goes through one fit step by step; [Parameter identification](calibration_identification.qmd) is about whether the data can determine the parameters at all; [Gradients and likelihoods](calibration_gradients.qmd) covers posteriors and profile likelihoods; and [Diagnosing a fit](calibration_diagnosing.qmd) covers what to check afterwards.
+
+## The smallest example
+
+The model is a measles outbreak in a town of 100,000 people, 90% of whom are already immune by vaccination. People are infected (S to E), become infectious about 10 days later (E to I), when the rash appears, and recover after about 8 days (I to R). The reported cases are a share of the people whose rash appears, `report`. Two parameters are unknown: the transmission rate `beta` and the share reported, `report`:
+
+```{python}
+import starsim as ss
+ss.options(jupyter=True)
+
+S, E, I, R = ss.states('S E I R')
+beta   = ss.par(1.5, bounds=[0.5, 4])    # Transmission rate per day: unknown
+report = ss.par(0.3, bounds=[0.05, 1])   # Share of cases reported: unknown
+
+infection = S >> E @ beta*I
+onset     = E >> I @ ss.days(10)  # The rash appears about 10 days after infection
+recovery  = I >> R @ ss.days(8)   # Infectious for 8 days on average
+cases     = ss.outcome(report*onset) # Reported cases: a share of the onsets
+measles = ss.Disease(infection, onset, recovery, cases, init=dict(I=0.0001, R=0.9))
+
+pars = dict(total_pop=100_000, start='2025-01-01', stop='2026-01-01')
+```
+
+The value given to each parameter (1.5 and 0.3) is where the search starts, and the bounds are the range it searches.
+
+To check that calibration works, it helps to fit data for which the right answer is known. `to_data()` draws data from a run of the model, as if it had been observed: here, weekly reported cases from a run with `beta = 1.9` and `report = 0.5`, as counts with random (Poisson) noise. The true sim gets its own random seed, `rand_seed=2`, so that its noise is not shared with any run being fitted:
+
+```{python}
+truth = ss.Sim(measles, pars=dict(beta=1.9, report=0.5), rand_seed=2, **pars)
+truth.run()
+data = truth.to_data('cases', resample='week')
+data.head()
+```
+
+With real data, the data would be read from a file instead (see [below](#the-data)). Now attach the data to a sim of the same model, and fit:
+
+```{python}
+sim = ss.Sim(measles, data=data, **pars)
+fit = sim.fit()
+```
+
+The fit prints which method it used and why, and whether it converged. `fit.summarize()` shows the values found, with the goodness of fit before and after:
+
+```{python}
+fit.summarize()
+```
+
+Both values are close to the ones the data was made with (1.9 and 0.5). The fitted model against the data:
+
+```python
+fit.plot()
+```
+
+```{python}
+#| echo: false
+import matplotlib.pyplot as plt
+
+def plot_weekly(result, data, title=None):
+    """ The model's weekly totals against the weekly data (what fit.plot() should show) """
+    fig, ax = plt.subplots()
+    result.resample('week').plot(ax=ax)
+    ax.scatter(data.date, data.cases, color='k', s=15, zorder=10, label='Data')
+    ax.legend(frameon=False)
+    ax.set_title(title or 'Weekly reported cases')
+    return fig
+
+fig = plot_weekly(fit.before.results.measles.cases, data)
+fit.sim.results.measles.cases.resample('week').plot(ax=fig.axes[0])
+fig.axes[0].legend(['Before', 'After', 'Data'], frameon=False);
+```
+
+::: {.callout-warning}
+## [PROPOSAL]
+`fit.plot()` should show what the fit compared: here, the model's cases summed over each week of the data. Today it plots the model's daily cases against the weekly data, so a good fit looks about 7 times too low. The plot above is drawn by resampling the result: `fit.sim.results.measles.cases.resample('week').plot()`, with the data added with Matplotlib. (P11: the common check should be one obvious call.)
+:::
+
+The original sim is not changed. The fit holds:
+
+| Attribute | What it is |
+|---|---|
+| `fit.pars` | The best values, which can be passed to `ss.Sim(pars=...)` |
+| `fit.sim` | The calibrated sim: a copy of the original with the best values, already run |
+| `fit.before` | The sim with the starting values, already run |
+| `fit.table` | Each parameter's starting value, best value, and bounds |
+| `fit.mismatch` | The goodness of fit at the best values (`fit.measure` says what it measures) |
+| `fit.converged`, `fit.why` | Whether the method reached its own stopping rule, and how it decided |
+| `fit.to_df()` | Every evaluation: the values tried, and the objective at each |
+
+```{python}
+fit.pars
+```
+
+## What is fitted
+
+Every parameter with `bounds` is fitted, wherever it is: a rate, a share, a duration, a parameter of a network or an intervention. A duration's bounds are in its own unit, e.g. `ss.par(ss.days(8), bounds=[5, 12])` for between 5 and 12 days.
+
+- `pars=` fits only the parameters named, keeping the others at their values: `sim.fit(pars=['beta'])`.
+- Wide positive bounds (where the high end is 10 or more times the low end) are searched on a log scale, since going from 0.05 to 0.1 matters as much as going from 0.5 to 1. The fit says which parameters it searches this way.
+- A prior, `ss.par(1.5, bounds=[0.5, 4], prior=ss.normal(2, 0.3))`, is used by the methods that use likelihoods: a best fit is then the most probable values rather than the maximum likelihood, and a posterior uses it as its prior. Without one, the prior is uniform over the bounds.
+
+## The data
+
+The data has a time column (`date`, `year`, `t`, or `time`; an integer `year` is a calendar year) and one column for each data series, named like the result it is compared with: here `cases`. With several modules, a column that could match more than one result is named with its module, e.g. `measles.cases`.
+
+The data need not be on the model's time step, and nothing needs to say how to line the two up, since each result knows what kind of quantity it is:
+
+- A **flow**, like reported cases, is summed over each interval of the data: weekly data is compared with each week's total.
+- A **stock** (like the number infectious) or a **ratio** (like prevalence) is compared with the model's value at the data's time.
+- Data by calendar year is compared over the year it names: a flow summed over it, and a stock or ratio averaged over it.
+
+`data=` takes a dataframe or a file name. Real files rarely arrive with matching headers, so `ss.simdata()` renames columns on the way in, and can ignore the columns not needed:
+
+```python
+data = ss.simdata('town_cases.csv', aliases=dict(cases='Reported cases (weekly)', date='Week ending'), ignore_extra=True)
+sim = ss.Sim(measles, data=data, **pars)
+```
+
+A column that matches no result gets a note listing the closest result names when the sim is initialized, and is an error when the fit compares the data with the results, so a typo in a header is caught. `weights=` gives series different weights, e.g. `sim.fit(weights=dict(cases=1, deaths=5))`.
+
+## Measuring the fit
+
+Without a likelihood, the measure of fit is the **normalized absolute error**: for each data series, the mean absolute difference between the model and the data, divided by the mean of the data. It needs no assumptions about the noise in the data, and puts series of different sizes on one scale. `gof='rmse'` uses the root mean squared error instead, and `gof=` can also be a function of the sim that returns the mismatch to minimize (lower is better), e.g. to bring data of its own:
+
+```python
+def peak_error(sim):
+    """ How far the model's peak week is from the observed peak, in weeks """
+    weekly = sim.results.measles.cases.resample('week')
+    return abs(weekly.values.argmax() - data.cases.values.argmax())
+
+fit = sim.fit(gof=peak_error)
+```
+
+A **likelihood** says how the data vary around the model's value: the model's value is the mean of the distribution, and the likelihood supplies the rest. It can be declared on the outcome, where it is used by every fit, or given to the fit by the name of the data series:
+
+```python
+cases = ss.outcome(report*onset, likelihood=ss.poisson()) # On the outcome
+fit = sim.fit(likelihood=dict(cases=ss.nbinom(n=10)))     # Or for one fit
+```
+
+The likelihoods are:
+
+| Likelihood | For data that are |
+|---|---|
+| `ss.poisson()` | Counts, such as reported cases |
+| `ss.nbinom(n=...)` | Counts that vary more than a Poisson, with `n` the dispersion (a smaller `n` is more variable); `n` can itself be an `ss.par` with bounds, and is then fitted too |
+| `ss.normal(scale=...)` | Continuous values, with the standard deviation `scale` |
+| `ss.lognorm_ex(std=...)` | Positive continuous values, with the standard deviation `std` |
+| `ss.binom(n=...)` | The number who test positive out of `n` people surveyed, with the model's value as the probability; see [Parameter identification](calibration_identification.qmd) |
+| `ss.bernoulli()` | Yes or no outcomes |
+
+When every data series has a likelihood, the fit maximizes the sum of their logs (the maximum likelihood estimate), and the methods that give a posterior can be used.
+
+```{python}
+fit_lik = sim.fit(likelihood=dict(cases=ss.poisson()), verbose=False)
+fit_lik.table
+```
+
+## How the fit is found
+
+By default a fit is a best fit (a single set of values), by a method that suits the model, which `sim.fit()` prints with its reason. A posterior (the distribution of values consistent with the data) is always asked for by name:
+
+| The model | The default method (a best fit) | A posterior, by name |
+|---|---|---|
+| Deterministic (an ODE) | `'l-bfgs-b'`, a gradient-based optimizer; `'nelder-mead'` for one or two parameters, or when the model can't be differentiated | `'nuts'` (the No-U-Turn sampler), given a likelihood for every series |
+| Stochastic compartmental | `'optuna'` | `'pmcmc'` (particle MCMC), given a likelihood for every series |
+| Agent-based | `'optuna'` | `'abc-smc'` (approximate Bayesian computation), which needs no likelihood |
+
+Any other method of `scipy.optimize.minimize` can be given, as can `'asd'` (adaptive stochastic descent) and `'if2'` (iterated filtering, for a stochastic compartmental model). A list, such as `method=['optuna', 'nelder-mead']`, runs each method in turn, each starting from the best values the one before found, and stops at a method that doesn't converge.
+
+The gradient-based methods and their posteriors are covered in [Gradients and likelihoods](calibration_gradients.qmd).
+
+## A stochastic model
+
+A stochastic model gives a different result on each run, so each set of values gives a noisy score. Starsim fits a stochastic model with [Optuna](https://optuna.org), a library for searching over parameters, which tries values, scores them by running the model, and uses the scores to choose where to try next. Here is the same model as a stochastic compartmental model (a chain binomial, in which the number of people who move between states each day is random):
+
+```{python}
+sim = ss.Sim(measles, data=data, solver='binomial', **pars)
+fit = sim.fit(trials=100, rand_seed=5)
+fit.summarize()
+```
+
+The estimates are less precise than those of the ODE: each score is noisy, so the search can settle anywhere in a region of similar scores, and a fit with another `rand_seed` gives somewhat different values (in particular of `report`). [Diagnosing a fit](calibration_diagnosing.qmd) shows how to check how much this matters.
+
+The options that matter for a stochastic fit:
+
+- `trials=` is the number of sets of values to try (100 by default). Use more for more parameters.
+- `n_runs=` is the number of runs that each set of values is scored by: 4 by default for a stochastic compartmental model, and 1 for agents. Each trial uses fresh random seeds, so that the search averages over chance rather than fitting one run's luck.
+- `rand_seed=` makes the fit itself reproducible.
+- `n_workers=4` runs the trials in 4 processes at once, and `storage='fit.log'` keeps the trials in a file, so that calling `fit()` again with the same file carries on where it stopped.
+
+Agents are fitted the same way, e.g. `ss.Sim(measles, data=data, n_agents=20_000, **pars).fit(trials=200)`. With agents each run is slower, and with few people in the model the noise is larger, so a fit usually needs more trials.
+
+`fit.sim` is one run with the best values. Since the model is stochastic, it is more useful to run it many times, and see whether the data lie within the range of the runs:
+
+```{python}
+msim = fit.sim.run(n_runs=20)
+```
+
+```python
+msim.plot('measles.cases')
+```
+
+```{python}
+#| echo: false
+plot_weekly(msim.results.measles.cases, data, title='Weekly reported cases: median and 95% of 20 runs');
+```
+
+::: {.callout-warning}
+## [PROPOSAL]
+`msim.plot()` should show the sim's data, as `sim.plot()` does, and over the data's own periods (here, weekly totals); today it shows neither. The plot above is `msim.results.measles.cases.resample('week').plot()`, with the data added with Matplotlib. (P11)
+:::
+
+## Using the fit
+
+The calibrated sim is the starting point for scenarios. `sim.new()` makes a new sim from the same inputs, with whatever is given changed; from `fit.sim`, that includes the fitted values. Here, a vaccination campaign on 1 April that reaches half the town, compared with none:
+
+```{python}
+vaccination = ss.vaccinate(efficacy=0.97, coverage=0.5, at='2025-04-01')
+scenarios = {
+    'No campaign': fit.sim.new(),
+    'Campaign':    fit.sim.new(interventions=vaccination),
+}
+msim = ss.parallel(scenarios, n_runs=20)
+msim.plot('measles.cases')
+```
+
+```{python}
+msim.summarize().loc['measles_cases']
+```
+
+These runs use the best values only, so their spread is chance alone, not the uncertainty in the fitted values. For projections that carry that uncertainty too, fit a posterior and use `fit.project()`; see [Gradients and likelihoods](calibration_gradients.qmd#projecting-from-a-posterior).
+
+## Which parameters matter
+
+Before calibrating, it helps to know which parameters the results depend on at all, since a parameter that does not matter cannot be fitted either. `sim.sensitivity()` needs no data: it samples the parameters over their bounds, runs the model at each sample, and gives the partial rank correlation of each parameter with a summary of each result. Near 1 or -1, the result goes up or down with the parameter (with the others held fixed); near 0, it doesn't depend on it:
+
+```{python}
+sens = sim.sensitivity(n=50, verbose=False)
+sens[['measles.I peak', 'measles.cases total']]
+```
+
+::: {.callout-warning}
+## [PROPOSAL]
+`sim.sensitivity(verbose=False)` still prints a line for the runs it makes, which lists every one of the 50 samples as a scenario. It should print nothing with `verbose=False`, and a header that lists many scenarios should be shortened (e.g. "50 samples of beta and report"). (P6, P10)
+:::
+
+## Allocating a budget
+
+`ss.fit.optimize()` uses the same machinery for a different question: given the spending on each program as parameters of the model, how should a fixed total be divided between them to make a result as small (or as large) as possible? Here, testing cuts transmission twice as much as bed nets for the same money, until everyone is covered:
+
+```{python}
+import numpy as np
+
+S, I, R = ss.states('S I R')
+tests = ss.par(50e3, name='tests') # Spending on testing
+nets  = ss.par(50e3, name='nets')  # Spending on bed nets
+coverage = lambda spend, cost: np.minimum(spend/cost/(S + I + R).total, 1) # The share of people covered, at a cost per person
+beta = ss.perday(0.3)*(1 - 0.5*coverage(tests, 10) - 0.25*coverage(nets, 10))
+sir = ss.Disease(S >> I @ beta*I.frac, I >> R @ ss.days(10), init_prev=0.001, name='sir')
+budget_sim = ss.Sim(sir, total_pop=10_000, start='2025-01-01', stop='2025-06-01', verbose=0)
+
+best = ss.fit.optimize(budget_sim, spend=['tests', 'nets'], minimize='sir.R', verbose=False)
+best.summarize()
+```
+
+`bounds=` limits what each program can have, by name (e.g. `bounds=dict(tests=(None, 60e3))`, with `None` for no limit), and `target=` asks instead for the least total spending that reaches a given value of the result. With a program book imported from Atomica, the programs are found from it, so `spend=` is not needed (see [Coming from Atomica](../coming_from/atomica.qmd)).
+
+## Pitfalls
+
+- **A best value at a bound.** The fit warns (`AtBound`) when a best value is at the edge of its bounds: the best value may lie beyond it, so widen the bounds, or check that the parameter means what you think it does.
+- **Parameters the data can't tell apart.** Two parameters that only ever appear multiplied together (such as a contact rate and a chance of infection per contact) can't be fitted separately; the fit notes this. See [Parameter identification](calibration_identification.qmd).
+- **A lucky trial.** In a stochastic fit, the best trial may simply have been a lucky run. The fit reruns the best values with the same seeds, and says so if they then score worse than the starting values; use more trials, or more runs per trial (`n_runs=`).
+- **A column that matches nothing.** Data columns are matched to results by name; a column that matches no result is an error when fitting, with the closest names suggested.
+- **Too few runs to judge.** One run of a stochastic model, with the best values, says little about whether the model fits; compare the data with many runs, as [above](#a-stochastic-model).
+
+More checks are in [Diagnosing a fit](calibration_diagnosing.qmd). How the fitting works, and how the method is chosen, is explained in [Randomness and fitting](../architecture/randomness_and_fitting.qmd).

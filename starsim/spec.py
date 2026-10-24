@@ -138,11 +138,11 @@ def code_value(val):
         elif 'type' in val:
             unit = val['unit']
             if unit is None:
-                return repr(val['value'])
+                return code_value(val['value'])
             if val['type'] == 'dur':
-                return f'ss.{unit}s({val["value"]!r})'
+                return f'ss.{unit}s({code_value(val["value"])})'
             prefix = '' if val['type'] == 'per' else val['type']
-            return f'ss.{prefix}per{unit}({val["value"]!r})'
+            return f'ss.{prefix}per{unit}({code_value(val["value"])})'
         elif 'dist' in val:
             args = ', '.join(f'{k}={code_value(v)}' for k,v in val.items() if k != 'dist')
             prefix = 'ss.' if is_dist(val['dist']) else '' # A distribution of the user's own is written by its name: see with_functions()
@@ -171,6 +171,8 @@ def code_value(val):
         return '{' + ', '.join(f'{k!r}: {code_value(v)}' for k,v in val.items()) + '}' # A plain dict, e.g. adjust=
     elif isinstance(val, list):
         return '[' + ', '.join(code_value(v) for v in val) + ']'
+    elif isinstance(val, float) and val.is_integer() and abs(val) < 1e15: # A whole number as an integer: 8, not 8.0
+        return repr(int(val))
     return repr(val)
 
 
@@ -384,7 +386,9 @@ def disease_code(spec, lines, left):
         kwargs.append(('init_prev', 'init_prev'))
     elif spec['init_prev']:
         kwargs.append(('init_prev', code_value(spec['init_prev'])))
-    if spec.get('first') and any(s['people'] for s in spec['states']): # Written, so that the model does not depend on the rule that finds it
+    people = [s['name'] for s in spec['states'] if s['people']]
+    default = people and spec.get('first') == people[0] and people[0] in ['S', 'susceptible'] # The first state written, and named as the default is: left out
+    if spec.get('first') and people and not default: # Otherwise written, so that the model does not depend on the rule that finds it
         kwargs.append(('first', repr(spec['first'])))
     kwargs.append(('name', repr(name)))
     if strained:
@@ -487,7 +491,7 @@ def contacts_code(net):
         if pars.get('beta') != 1.0 or pars.get('diseases') is not None: # Not arguments of ss.contacts()
             return None
         mats = net['contacts']
-        args = [f'ages={mats["ages"]!r}, matrix={mats["matrix"]!r}'] if 'ages' in mats else [f'{mats["matrix"]!r}, dims={mats["dims"]!r}'] if 'dims' in mats else [f'{dim}={mat!r}' for dim,mat in mats.items()]
+        args = [f'ages={mats["ages"]!r}, matrix={mats["matrix"]!r}'] + [f'{dim}={mat!r}' for dim,mat in mats.items() if dim not in ['ages', 'matrix']] if 'ages' in mats else [f'{mats["matrix"]!r}, dims={mats["dims"]!r}'] if 'dims' in mats else [f'{dim}={mat!r}' for dim,mat in mats.items()]
         if net.get('name') != 'contacts':
             args.append(f'name={net["name"]!r}')
         if net.get('contacts_unit') is not None:
@@ -599,9 +603,14 @@ def cond_code(text, mods):
 
 def product_code(prod, mods):
     """ A product of a delivery in the model spec as Python """
-    kwargs = [f'{k}={cond_code(v, mods) if k in cond_keys and isinstance(v, str) and not isinstance(v, Code) else code_value(v)}' for k,v in prod.items() if k not in ['type', 'name']]
+    kwargs = product_kwargs(prod, mods)
     kwargs.append(f'name={prod["name"]!r}')
     return f"ss.{prod['type']}({', '.join(kwargs)})"
+
+
+def product_kwargs(prod, mods):
+    """ The keywords that make a product, as Python """
+    return [f'{k}={cond_code(v, mods) if k in cond_keys and isinstance(v, str) and not isinstance(v, Code) else code_value(v)}' for k,v in prod.items() if k not in ['type', 'name', 'made']]
 
 
 def delivery_code(iv, mods):
@@ -612,7 +621,10 @@ def delivery_code(iv, mods):
         return code_value(val)
     args = []
     prod = iv.get('product_spec')
-    if prod is not None:
+    inline = []
+    if prod is not None and prod['name'] not in mods: # Made by the delivery from its own keywords, e.g. ss.vaccinate(efficacy=0.9, ...): see interventions_code()
+        inline = product_kwargs(prod, mods)
+    elif prod is not None:
         args.append(mods[prod['name']][0])
     if isinstance(iv.get('move'), str): # Between states, written with the disease's states
         dis = mods.get(iv.get('disease'), [None])[0]
@@ -623,7 +635,7 @@ def delivery_code(iv, mods):
         args.append(move_code(iv['move'], f"{mods.get(iv.get('disease'), ['disease'])[0]}.strains"))
     if iv.get('increment'):
         args.append(f'increment={increment_code(iv["increment"])}')
-    args += [f'{k}={value(k, iv[k])}' for k in delivery_keys if iv.get(k) is not None]
+    args += inline + [f'{k}={value(k, iv[k])}' for k in delivery_keys if iv.get(k) is not None]
     args.append(f'name={iv["name"]!r}')
     return f"ss.{iv['type']}({', '.join(args)})"
 
@@ -643,18 +655,22 @@ def interventions_code(mods, diseases, lines):
         taken.add(out)
         return out
     deliveries = [m for m in mods if m.get('type') in delivery_types]
-    for prod in {iv['product_spec']['name']:iv['product_spec'] for iv in deliveries if iv.get('product_spec') is not None}.values():
+    used = lambda iv: {n.id for k in cond_keys for v in sc.tolist(iv.get(k)) if isinstance(v, str) and not isinstance(v, Code) for n in ast.walk(ast.parse(v, mode='eval')) if isinstance(n, ast.Name)}
+    held = [iv['product_spec']['name'] for iv in deliveries if iv.get('product_spec') is not None]
+    named = set().union(*[used(iv) for iv in deliveries])
+    prods = {iv['product_spec']['name']:iv['product_spec'] for iv in deliveries if iv.get('product_spec') is not None}
+    prods = {name:prod for name,prod in prods.items() if not (prod.get('made') and held.count(name) == 1 and name not in named)} # A product its delivery made, used nowhere else, is written in the delivery's call
+    for prod in prods.values():
         names[prod['name']] = (var(prod['name']), set())
     for m in deliveries:
         names[m['name']] = (var(m['name']), set())
     refs = sc.mergedicts(diseases, names)
     defined = set()
-    for prod in {iv['product_spec']['name']:iv['product_spec'] for iv in deliveries if iv.get('product_spec') is not None}.values():
+    for prod in prods.values():
         lines.append(f"{names[prod['name']][0]} = {product_code(prod, refs)}")
         defined.add(prod['name'])
     todo = list(deliveries) # Each after the deliveries its conditions name, where it can be
     while todo:
-        used = lambda iv: {n.id for k in cond_keys for v in sc.tolist(iv.get(k)) if isinstance(v, str) and not isinstance(v, Code) for n in ast.walk(ast.parse(v, mode='eval')) if isinstance(n, ast.Name)}
         ready = [iv for iv in todo if not ({n for n in used(iv) if n in names} - defined - {iv['name']})] or todo[:1]
         iv = ready[0]
         lines.append(f"{names[iv['name']][0]} = {delivery_code(iv, refs)}")
@@ -783,14 +799,14 @@ def to_code(spec, filename=None, header=None, footer=None, code=None, missing=No
 #%% Comparing two models
 
 def shown(val, unit=None):
-    """ A value from the model spec, short and in the sim's unit where it has one, e.g. "0.5/day" or "lognorm_ex(mean=10 day, std=3 day)" """
+    """ A value from the model spec, short and in the sim's unit where it has one, e.g. "0.5/day" or "lognorm_ex(mean=10 days, std=3 days)" """
     if isinstance(val, dict) and val.get('type') in ['dur', 'per', 'prob', 'freq'] and val.get('unit'):
         num, u = val['value'], val['unit']
         if unit and u != unit:
             factor = ss.time.get_dur_class(u)(1).to(unit).value
             num, u = (num*factor if val['type'] == 'dur' else num/factor), unit
         num = f'{num:.6g}'
-        return f'{num} {u}' if val['type'] == 'dur' else f'{num}/{u}' if val['type'] == 'per' else f'{val["type"]} {num}/{u}'
+        return f'{num} {u}{"" if num == "1" else "s"}' if val['type'] == 'dur' else f'{num}/{u}' if val['type'] == 'per' else f'{val["type"]} {num}/{u}'
     elif isinstance(val, dict) and 'dist' in val:
         if val['dist'] == 'expon' and isinstance(val.get('mean', val.get('rate')), list):
             return 'exponential'

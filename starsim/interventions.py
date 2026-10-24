@@ -445,8 +445,8 @@ class Delivery(ss.products.EventSource, Intervention):
         campaign = ss.Delivery(increment='doses', coverage=0.6, at=[2025, 2026, 2027])
 
         # A test, and a treatment of those who test positive, as two steps
-        screening = ss.screen(ss.Diagnostic(sensitivity=0.9, specificity=0.95), who=ss.ppl.age > 30, coverage=0.4, interval=7)
-        treatment = ss.treat(ss.Treatment(cure=0.95), who=screening.positive, coverage=0.8)
+        screening = ss.screen(sensitivity=0.9, specificity=0.95, who=ss.ppl.age > 30, coverage=0.4, interval=7)
+        treatment = ss.treat(cure=0.95, who=screening.positive, coverage=0.8)
         ```
     """
     compartmental = True
@@ -463,6 +463,8 @@ class Delivery(ss.products.EventSource, Intervention):
                 errormsg = f'{sc.strjoin(f"{key}=" for key in own)} {"is" if len(own) == 1 else "are"} for the product, which is given already; give {"it" if len(own) == 1 else "them"} to the product, or leave the product out and ss.{type(self).__name__}() makes one'
                 raise ValueError(errormsg)
             product = self.kind(**own)
+            product._from_keywords = True # Named for the delivery if its own name is taken: see ss.SimPars.validate_name()
+            product._assigned = None
         super().__init__(name=name, label=label, **kwargs)
         self.move_states = None # With move=S >> V: the names of the states people move from (a list), and the one they move to
         self.move_module = None # And the module of those states (as an object until named), which the delivery acts on
@@ -901,7 +903,7 @@ class Delivery(ss.products.EventSource, Intervention):
         abm = self.sim.solver == 'abm'
         results = [
             ss.Result('delivered', dtype=float, scale=abm, label='Number delivered', kind='flow'),
-            ss.Result('eligible', dtype=float, scale=abm, label='Number eligible', auto_plot=False),
+            ss.Result('eligible', dtype=float, scale=abm, label='Number eligible', kind='flow', auto_plot=False), # Those offered it in each step, so over the run the offers made, of which coverage is the share delivered (it was summarized as a mean over every step)
             ss.Result('coverage', dtype=float, scale=False, label='Coverage of those eligible', auto_plot=False),
         ]
         if self.cost is not None:
@@ -1624,6 +1626,8 @@ class Delivery(ss.products.EventSource, Intervention):
             out['increment'] = dict(self.increment)
         if self.product is not None: # What makes it, so that ss.to_code() can write it
             out['product_spec'] = self.product.spec()
+            if getattr(self.product, '_from_keywords', False): # Made from the delivery's keywords, so ss.to_code() writes it in one call
+                out['product_spec']['made'] = True
         if self.at_age is not None:
             out['at_age'] = spec_value(self.at_age)
         for key in delivery_keys:

@@ -573,7 +573,7 @@ def test_beta_readings():
     with pytest.raises(ss.errors.WrongDimension, match=r'ss.peract\(0.01\)'): # A rate per unit time times acts per unit time is not a hazard
         ss.Sim(sis(ss.permonth(0.01)), networks=ss.SexualNet(), **kw).init()
     sim = ss.Sim(diseases='sis', networks=['sexual', 'random'], n_agents=500, verbose=0).init() # But the default of ss.SIS is a probability per act there, as in Starsim 3
-    assert sim.diseases.sis.pars.beta.raw['sexualnet'] == ss.peract(0.05) and any('as in Starsim 3' in note for note in sim.notes)
+    assert sim.diseases.sis.pars.beta.raw['sexualnet'] == ss.peract(0.05) and any('which has acts' in note for note in sim.notes)
     with pytest.raises(ss.errors.RouteMismatch, match=r'ss.peract\(m2f=0.3, f2m=0.15\)'): # A pair has no direction names
         ss.Sim(sis(dict(sexualnet=[0.3, 0.15])), networks=ss.SexualNet(), **kw).init()
     with pytest.raises(ss.errors.RouteMismatch, match='no acts'): # No act to be per

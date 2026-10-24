@@ -465,8 +465,12 @@ class SimPars(Pars):
         # Convert any modules that are not already Module objects
         modules = self.convert_modules()
         modules = self.expand_modules(modules)
-        if not any(getattr(mod, 'graph', None) is not None for source,mod in modules): # With no declared disease, births and deaths declared for the population are run as modules of agents
-            modules = [(source, m) for source,mod in modules for m in (mod.as_modules() if isinstance(mod, ss.demographics.Flows) else [mod])]
+        flows = any(isinstance(mod, ss.demographics.Flows) for source,mod in modules)
+        if flows and not any(getattr(mod, 'graph', None) is not None for source,mod in modules): # With no declared disease, births and deaths declared for the population are run as modules of agents, or with a compartmental solver named, as compartments of everyone alive
+            if self.solver not in [None, 'auto', 'abm']:
+                modules.append(('demographics', ss.pregnancy.Population()))
+            else:
+                modules = [(source, m) for source,mod in modules for m in (mod.as_modules() if isinstance(mod, ss.demographics.Flows) else [mod])]
         self._reset_modules()
         products = []
         names = {} # Module names must be unique across all types, since they share namespaces (e.g. sim.people.<name>, sim.results.<name>)
@@ -483,7 +487,7 @@ class SimPars(Pars):
                 modkey = source
             self.validate_name(mod, modkey, names)
             if getattr(mod, 'has_product', False) and not any(mod.product is p for p in products): # Products share the same namespaces; the same product can be used by more than one intervention
-                self.validate_name(mod.product, 'products', names)
+                self.validate_name(mod.product, 'products', names, delivery=mod)
                 products.append(mod.product)
             self[modkey].append(mod)
 
@@ -508,18 +512,25 @@ class SimPars(Pars):
         return out
 
     @staticmethod
-    def validate_name(mod, modkey, names):
+    def validate_name(mod, modkey, names, delivery=None):
         """
         Ensure the module name is unique, renaming it if it is the default name (e.g. "sir" → "sir_1")
+
+        A product that a delivery made from its keywords (`campaign = ss.vaccinate(efficacy=0.9, ...)`) keeps the
+        name of its kind ("vaccine") if it is free, and is otherwise named for its delivery ("campaign_product"),
+        with no warning, since the user did not make it
 
         Args:
             mod (`ss.Module`): the module to validate
             modkey (str): the type of module, e.g. "diseases"
             names (dict): the names used so far, mapped to their module type; updated in place
+            delivery (`ss.Delivery`): for a product, the delivery it was found in
         """
         name = mod.name
         if name in names:
-            if mod._default_name and isinstance(mod, ss.Product) and names[name] == 'interventions': # e.g. vaccine = ss.vaccinate(ss.Vaccine(...)), where the delivery takes the name of its variable: the product is vaccine_vaccine
+            if mod._default_name and getattr(mod, '_from_keywords', False) and delivery is not None:
+                mod.name = mod.label = sc.uniquename(f'{delivery.name}_product', list(names), style='_%d')
+            elif mod._default_name and isinstance(mod, ss.Product) and names[name] == 'interventions': # e.g. treatment = ss.treat(ss.Treatment(...)), where the delivery takes the name of its variable: the product is treatment_treatment
                 mod.name = mod.label = sc.uniquename(f'{name}_{type(mod).__name__.lower()}', list(names), style='_%d')
             elif mod._default_name:
                 mod.name = sc.uniquename(name, list(names), style='_%d')
@@ -756,6 +767,10 @@ class by:
             self.table = None
             self.dims = list(kwargs.keys())
         self.given = kwargs
+        worked = [v for v in self.items if isinstance(v, Expr) and not isinstance(v, ss.par)]
+        if worked: # e.g. ss.by(age=[ss.perday(0.1)*school, ...]), whose values would be worked out per group, which an expression cannot be
+            errormsg = f'the values of ss.by() are numbers, typed values, parameters, or values that vary in time (ss.timeseries, ss.seasonal), not expressions such as {worked[0]}; put the factor outside, e.g. ss.perday(0.1) * ss.by(age=[school, 1, 1])'
+            raise TypeError(errormsg)
         return
 
     def __setattr__(self, name, value):
@@ -803,7 +818,7 @@ class by:
         over different dimensions (each group's value the product); otherwise an expression (e.g. tables by different bins, or a table times a count)
         """
         func = arith[op] if not reflected else (lambda a,b: arith[op](b, a))
-        if sc.isnumber(other) and (self.table is not None or self.array is not None or len(self.dims) == 1):
+        if sc.isnumber(other) and not self.varies and (self.table is not None or self.array is not None or len(self.dims) == 1): # A value that varies in time times a number is an expression, so the whole is (below)
             return self.map(lambda v: func(v, other))
         elif isinstance(other, by) and op == '*' and self.given and other.given and not set(self.dims) & set(other.dims): # A product over different dimensions, given as keywords, e.g. by(age=...) * by(sex=...)
             return by(**self.given, **other.given)

@@ -1,0 +1,134 @@
+---
+title: Analyzers
+jupyter: python3
+---
+
+An analyzer records something during a run that the results don't keep, without changing the model. Most quantities don't need one: every state and transition of a declared disease has a result, ratios and outcomes are declared with the model (see [Results](running_results.qmd)), and results by age or any other group come from [stratifying](models_stratification.qmd) the model. An analyzer is for the rest: something about individual agents (their ages when infected, who infected whom), or a quantity worked out from several modules at once.
+
+## When an analyzer runs
+
+An analyzer runs at the start (time point 0) and then at the end of each step, after the step's results have been recorded. In the analyzer, `sim.ti` (or `self.ti` in a class) is the time point at the end of the step, where the step's results go. A declared disease dates each infection at the end of the step in which it happened, in its state `ti_I`, so the people infected during this step are those with `ti_I == ti`.
+
+## A function as an analyzer
+
+The simplest analyzer is a function of the sim, given in `analyzers=`. This one records the mean age of the people infected in each step, which is a common measure for measles (where vaccination of children raises it). It needs individual ages, so the sim runs as agents:
+
+```{python}
+import numpy as np
+import starsim as ss
+ss.options(jupyter=True)
+
+S, I, R = ss.states('S I R')
+infection = S >> I @ 1.9*I        # β = 1.9 per day
+recovery  = I >> R @ ss.days(8)   # Infectious for 8 days on average
+measles = ss.Disease(infection, recovery, init_prev=0.001)
+
+ages = []
+def age_at_infection(sim):
+    new = sim.diseases.measles.ti_I == sim.ti # People infected during this step
+    ages.append(sim.people.age[new].mean() if new.any() else np.nan)
+
+sim = ss.Sim(measles, n_agents=10_000, stop=ss.days(30), dt=ss.days(0.25), analyzers=age_at_infection, verbose=0)
+sim.run()
+print('Mean age at infection, by step:', np.round(ages[1:9], 1))
+```
+
+Here people mix at random, so the mean age at infection is close to the mean age of the population; with a contact matrix in which children mix most, it would be lower.
+
+A function is quick to write, but what it records lives outside the sim: it is not plotted or exported with the results, and when the sim is run in another process (by `ss.parallel()`), the list in this process stays empty. For anything kept, use a class.
+
+## An analyzer as a class
+
+An analyzer written as a class (a subclass of `ss.Analyzer`) declares results of its own, which are then stored, plotted, and exported with the sim's other results. This one records the mean age at infection, and the new infections among children and adults, as one result with a column for each:
+
+```{python}
+class AgeAtInfection(ss.Analyzer):
+    """ The mean age of the people infected in each step, and the number of them who are children and adults """
+    def init_results(self):
+        super().init_results()
+        self.define_results(
+            ss.Result('mean_age', label='Mean age at infection', scale=False), # An average, so not scaled by the people each agent stands for
+            ss.Result('new_infections', columns=['children', 'adults'], label='New infections'),
+        )
+
+    def step(self):
+        new = self.sim.diseases.measles.ti_I == self.ti
+        if new.any():
+            age = self.sim.people.age
+            self.results.mean_age[self.ti] = age[new].mean()
+            self.results.new_infections[self.ti] = [np.count_nonzero(new & (age < 15)), np.count_nonzero(new & (age >= 15))]
+
+sim = ss.Sim(measles, n_agents=10_000, stop=ss.days(30), dt=ss.days(0.25), analyzers=AgeAtInfection(), verbose=0)
+sim.run()
+sim.results.ageatinfection.new_infections.plot()
+```
+
+The analyzer's results are under its name in lower case, `sim.results.ageatinfection`. A result with columns has each as a result of its own (`res.new_infections.children`), and each is a column of `sim.to_df()`:
+
+```{python}
+sim.to_df().columns.tolist()
+```
+
+A result declared with `scale=True` (the default) is a count, which is multiplied by the number of people each agent stands for when the run ends; an average or a share takes `scale=False`.
+
+## The infection log
+
+The infection log records each infection: when it happened, who was infected, and, where there is a network, by whom. It needs agents and a contact network, since otherwise nobody is the source of a particular infection. Give `analyzers='infection_log'`:
+
+```{python}
+S, I, R = ss.states('S I R')
+flu = ss.Disease(S >> I @ 0.05*I, I >> R @ ss.days(8), init_prev=0.002, name='flu')
+
+sim = ss.Sim(flu, networks=ss.RandomNet(n_contacts=8), n_agents=5_000, stop=ss.days(100), analyzers='infection_log', verbose=0)
+sim.run()
+log = sim.analyzers.infection_log.log
+df = log.to_df()
+df.tail()
+```
+
+Each row is one infection: the time (`t`), the infected agent (`target`), and the agent who infected them (`source`, which is −1 for the people infected at the start). The log also plots who infected whom over time, and `log.to_graph()` gives the chains of transmission as a NetworkX graph:
+
+```{python}
+sim.analyzers.infection_log.plot()
+```
+
+From the log, the generation interval (the time from a person's infection to the infection of each person they infect) is the time of each infection minus the time its source was infected:
+
+```python
+infected_at = df.set_index('target').t        # When each agent was infected
+df['generation'] = df.t - df.source.map(infected_at)
+print('Mean generation interval:', round(df.generation.mean(), 1), 'days')
+```
+
+```{python}
+#| echo: false
+infected_at = df.set_index('target').t.map(lambda t: t.value)
+df['generation'] = df.t.map(lambda t: t.value) - df.source.map(infected_at)
+print('Mean generation interval:', round(df.generation.mean(), 1), 'days')
+```
+
+If a person's contacts all stayed susceptible, the mean would be the mean infectious period, 8 days. It is shorter because they don't: on a network, a person's contacts are soon infected by others or immune, so people infect fewer of them late in their infectious period.
+
+::: {.callout-warning}
+## [PROPOSAL]
+The `t` column of `log.to_df()` should hold plain numbers in the sim's unit (or dates, for a dated sim), so that the log can be used as data: today it holds duration objects (shown as `days(3)`, or `day` for one day), which can't be subtracted in a dataframe (the code above fails), and needs `.map(lambda t: t.value)` first. Also, the `network` column is empty for a declared disease, even when there is one network (P11).
+:::
+
+A disease written as code can add data to each infection, such as the variant (`log.add_entries(uids, sources, time, variant=variants)`), or to each agent's latest infection later on, such as a diagnosis (`log.add_data(uids, diagnosed=True)`). See [Modules written as code](models_code.qmd).
+
+## Analyzers in a compartmental run
+
+An analyzer can be given to a model that runs as compartments (an analyzer is the one kind of module written as code that doesn't make the sim run as agents). There, it sees the number of people in each compartment, not individuals: `sim.diseases.measles.I.n` is the number infectious. The run then goes a step at a time, so it is slower; for a quantity that can be worked out from the results after the run, such as the effective reproduction number R0 × S/N, compute it from the results instead.
+
+## Pitfalls
+
+- **An analyzer must not change the model.** To change something during a run, use an [intervention](interventions_products.qmd).
+- **Results kept outside the sim are lost** when the sim runs in another process (`ss.parallel()`); declare results in a class.
+- **Counts of agents are scaled; averages are not.** Declare an average or a share with `scale=False`.
+- **Check whether a result already exists.** Stratifying the model gives results by age or any other group, under every solver, with no analyzer.
+
+## See also
+
+- [Modules written as code](../tutorials/g6_code.qmd), the tutorial with an analyzer written as code next to a declared disease
+- [Results](running_results.qmd), for the results a sim keeps
+- [Modules written as code](models_code.qmd), for the methods of a module, including `init_results()` and `finalize_results()`

@@ -37,7 +37,6 @@ sim <- netsim(est, param, init, control)
 In Starsim, `ssl.DegreeNet` (from the library, `import starsim.library as ssl`) takes the same targets: a mean of 0.7 partners each (175 partnerships among 500 people), 22% with two or more, at most three, lasting 50 steps on average. With `acts=ss.freqperday(2)` (two acts a step, a day here), the disease's `beta` is per act, as EpiModel's `inf.prob`:
 
 ```{python}
-import numpy as np
 import starsim as ss
 import starsim.library as ssl
 import starsim.interop
@@ -53,8 +52,8 @@ partners = ssl.DegreeNet(n_contacts=0.7, concurrency=0.22, max_contacts=3, dur=5
 sim = ss.Sim(sis, networks=partners, n_agents=500, stop=500, verbose=0)
 
 msim = sim.run(n_runs=10)
-n_I = np.asarray(msim.results.sis.I.values) # One row per run
-print(f'Infected over the last 200 steps: {n_I[:, -200:].mean():.0f} of 500')
+mean_I = msim.results.sis.I.mean() # The mean of the runs, at each step
+print('Infected over the last 200 steps, on average:', round(mean_I[-200:].mean()), 'of 500')
 msim.plot()
 ```
 
@@ -96,7 +95,7 @@ These are from Starsim's switching demo for EpiModel users (`tests/switching/tes
 | Network diagnostics (`netdx`) | **Works**: `net.check(n_runs=)` gives the target, the realized value, and its spread for the mean degree, concurrency, maximum degree, and duration |
 | Fit the transmission probability to observed prevalence with `sim.fit()` | **Works**: fresh runs at the fitted value give 29.2% prevalence against the 30% it was fitted to (300 agents, `trials=40`; 27.7% with the default number of trials, where the default method, Optuna, uses one run per trial). `method='abc-smc'` is available for stochastic models |
 | Build and run a model from R | **Works**: through reticulate, with `ss$Transition()`, states named with `ss$states()`, and `name=` (the operators `>>` and `@` have no R spelling); R-Starsim's `transition()` and `disease()` wrap this |
-| Scenarios | **Works**: `sim.new(pars=..., interventions=...)` and `ss.parallel(baseline=..., prep=...)` |
+| Scenarios | **Works**: `sim.new(pars=..., interventions=...)` makes a copy of the sim with those changed, and `ss.parallel({'Baseline': sim, 'PrEP': prep})` runs the scenarios together |
 
 Degree by risk group: 80% of people have a mean of 0.4 partners and 20% a mean of 1.6, and 80% of partnerships are within a group (EpiModel's target statistics of 320 edges, 320 high-risk ends, and 256 within a group):
 
@@ -113,9 +112,9 @@ sim.stratify(risk=['low', 'high'], split=[0.8, 0.2])
 sim.run()
 
 res = sim.results.sis
-n_I, n_S = np.asarray(res.I.strata)[150:], np.asarray(res.S.strata)[150:] # After a burn-in
-low, high = (n_I/(n_I + n_S)).mean(axis=0)
-print(f'Prevalence: {low:.1%} low risk, {high:.1%} high risk (EpiModel: 20.7%, 77.4%)')
+for risk, epimodel in [('low', 20.7), ('high', 77.4)]:
+    I, S = res.I.select(risk=risk)[150:], res.S.select(risk=risk)[150:] # After a burn-in of 150 steps
+    print(f'Prevalence at {risk} risk:', round(100*(I/(I + S)).mean(), 1), "percent, against EpiModel's", epimodel)
 ```
 
 ## Bringing your model in

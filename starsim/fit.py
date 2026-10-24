@@ -15,7 +15,7 @@ import scipy.stats as sps
 import scipy.special as spsp
 import sciris as sc
 import starsim as ss
-from .results import compare, lineup, match_column, match_name, parse_column, column_levels
+from .results import compare, lineup, match_column, match_name, parse_column, column_levels, flow_at_data
 
 
 #%% Data and fitting for models with declared parameters
@@ -912,7 +912,7 @@ class Fit(sc.prettyobj):
         seeds (list): the random seed of each of those runs; `sim` is the run with the first
         trials (df): every evaluation: the values, and the `objective` that the method minimized (what `measure` says; with `method='if2'`, also each pass of each chain: the middle of the swarm's values, and minus the log-likelihood of the pass, whose values were perturbed)
         samples (df): with `method='nuts'`, `'pmcmc'`, or `'abc-smc'`, the draws from the posterior: one row per draw, with its chain, its number, and a column for each parameter
-        diagnostics (dict): what else the method reports: `divergences` (with `method='nuts'`, the number of draws that followed a divergent trajectory, which suggests the sampler missed part of the posterior), `acceptance` (with `method='pmcmc'`, the share of proposals that each chain accepted after its warm-up), and `band` (with a posterior, for each data series, the 2.5th and 97.5th percentiles of the model's value over draws from it; with `'pmcmc'`, each from a run with a seed of its own, so the band includes chance)
+        diagnostics (dict): what else the method reports: `divergences` (with `method='nuts'`, the number of draws that followed a divergent trajectory, which suggests the sampler missed part of the posterior), `acceptance` (with `method='pmcmc'`, the share of proposals that each chain accepted after its warm-up), and `band` (with a posterior, for each data series, the 2.5th and 97.5th percentiles of the model's value over draws from it, at each step, or for a flow with data at a longer period than the step, of its totals over the data's periods; with `'pmcmc'`, each from a run with a seed of its own, so the band includes chance)
     """
     def __init__(self, sim, before, pars, table, trials, method, mismatch, mismatch_before, measure, samples, diagnostics, converged, why, scores, seeds):
         self.sim = sim
@@ -932,13 +932,13 @@ class Fit(sc.prettyobj):
         self.seeds = seeds
         return
 
-    def project(self, scenarios=None, n=100, rand_seed=None, **kwargs):
+    def project(self, scenarios=None, n=None, rand_seed=None, **kwargs):
         """
         Run the fitted model forward under each scenario, with the uncertainty in the fitted values: one run per draw from the posterior (or runs of the best fit, each with its own seed, for a method that gives none), with the same draws in every scenario
 
         Args:
             scenarios (dict): for each scenario, what changes: None, an intervention or a list of them, or a dict of arguments for `sim.new()` (default: the fitted sim alone)
-            n (int): the number of runs of each scenario
+            n (int): the number of runs of each scenario (default: 100; but one for the best fit of a deterministic sim (an ODE), whose runs would all be the same)
             rand_seed (int): the seed of the draws
             kwargs (dict): passed to `sim.new()` for every scenario, e.g. a later `stop=`
 
@@ -960,17 +960,20 @@ class Fit(sc.prettyobj):
                 change = dict(interventions=change)
             sims.append(self.sim.new(label=label, **sc.mergedicts(dict(pars=dict(self.pars)), kwargs, change)))
         if self.samples is None:
+            n = sc.ifelse(n, 1 if self.sim.solver == 'ode' else 100) # With no posterior, the runs differ only by their seeds
             return ss.parallel(*sims, n_runs=n)
+        n = sc.ifelse(n, 100)
         draws = self.samples.sample(n=n, replace=len(self.samples) < n, random_state=rand_seed)[names]
         return ss.parallel(*sims, priors=draws) # Draws, not a sweep: runs of each scenario
 
     def summarize(self):
-        """ Print the estimates and the goodness of fit before and after """
+        """ Print the goodness of fit before and after, and return the estimates (a dataframe); outside a notebook, which shows what is returned, the estimates are printed too """
         if self.samples is None:
             print(f'Fitted {len(self.pars)} parameter(s) by {self.method}, with {len(self.trials)} evaluations')
         else: # The evaluations in JAX are not recorded
             print(f'Fitted {len(self.pars)} parameter(s) by {self.method}')
-        print(self.table.to_string(index=False))
+        if not sc.isjupyter(): # In a notebook, the table returned shows itself, so printing it too would show it twice
+            print(self.table.to_string(index=False))
         print(f'{self.measure.capitalize()}: {self.mismatch_before:.4g} before, {self.mismatch:.4g} after' + (f' (the mean of {len(self.scores)} runs)' if self.scores is not None and len(self.scores) > 1 else ''))
         if self.converged is not None:
             print(f'{"Converged" if self.converged else "Not converged"}: {self.why}')
@@ -993,18 +996,20 @@ class Fit(sc.prettyobj):
         return self.trials
 
     def plot(self, **kwargs):
-        """ Plot the results that have data against it, before and after fitting """
+        """ Plot the results that have data against it, before and after fitting; a flow with data at a longer period than the step (e.g. weekly cases) is shown as its totals over the data's periods, as the fit compares them """
         import matplotlib.pyplot as plt
         cols = list(self.sim.data.columns)
         fig, axs = sc.getrowscols(len(cols), make=True, squeeze=False, **kwargs)
         for ax,col in zip(axs.flatten(), cols):
             for sim,label in [(self.before, 'Before'), (self.sim, 'After')]:
                 res = match_column(sim, col)
-                ax.plot(res.timevec, res.values, label=label, alpha=0.8)
+                summed = flow_at_data(sim, col, res)
+                x, y = (self.sim.data.index[summed[0]], summed[1]) if summed is not None else (res.timevec, res.values)
+                ax.plot(x, y, label=label, alpha=0.8)
             if self.diagnostics.band is not None:
-                ax.fill_between(res.timevec, *self.diagnostics.band[col], alpha=0.3, label='95% of the posterior')
+                ax.fill_between(x, *self.diagnostics.band[col], alpha=0.3, label='95% of the posterior')
             ax.scatter(self.sim.data.index, self.sim.data[col], c='k', s=15, label='Data', zorder=10)
-            ax.set_title(col)
+            ax.set_title(col + (' (total over each period of the data)' if summed is not None else ''))
             ax.legend(frameon=False)
         sc.figlayout(fig=fig)
         return ss.return_fig(fig)
@@ -1354,7 +1359,7 @@ def sensitivity(sim, pars=None, results=None, n=100, rand_seed=None, verbose=Non
     lo, hi = np.where(logs, np.log(lows), lows), np.where(logs, np.log(highs), highs)
     X = lo + unit*(hi - lo)
     X = np.where(logs, np.exp(X), X)
-    msim = ss.parallel(sim.new(verbose=0), pars={name:X[:, j].tolist() for j,name in enumerate(names)})
+    msim = ss.parallel(sim.new(verbose=0), pars={name:X[:, j].tolist() for j,name in enumerate(names)}, verbose=False) # The samples are not scenarios to list
     summaries = sc.objdict()
     counts = set() # The counts of a state, by module and name
     for mod in probe.modules:
@@ -1842,7 +1847,8 @@ class Problem:
         for k,x in enumerate(picks):
             sim = self.run(x, seed=k + 1 if method == 'pmcmc' else None) # A stochastic run takes a seed of its own, so the band includes chance
             for col in sim.data.columns:
-                values[col].append(np.array(match_column(sim, col).values, dtype=float))
+                summed = flow_at_data(sim, col) # A flow with data at a longer period: its totals over the data's periods, as compared
+                values[col].append(summed[1] if summed is not None else np.array(match_column(sim, col).values, dtype=float))
         out.band = {col:np.percentile(vals, [2.5, 97.5], axis=0) for col,vals in values.items()}
         return out
 
@@ -2374,7 +2380,7 @@ def compare_models(sims, data=None, holdout=0.25, folds=None, **kwargs):
         fit_errors = []
         errors = []
         for train,test in splits:
-            fit = sim.fit(data=train, verbose=False, **sc.mergedicts(dict(method=default_method(probe, use_lik)[0]), kwargs)) # A point estimate, for each fold
+            fit = sim.fit(data=train, **sc.mergedicts(dict(verbose=False), kwargs)) # A point estimate, for each fold, by the method sim.fit() chooses (e.g. Nelder-Mead for one or two parameters)
             fold_fits.append(fit)
             for df_part,out in [(train, fit_errors), (test, errors)]: # Each scored the same way
                 if use_lik:

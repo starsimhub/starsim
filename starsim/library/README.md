@@ -57,7 +57,7 @@ Maternal, newborn, and child health examples, demonstrating patterns that are mo
 
 ## Documentation
 
-- User guide: [Library modules](https://docs.starsim.org/user_guide/modules_library.html)
+- User guide: [Library modules](https://docs.starsim.org/user_guide/interop_library.html)
 - API reference: [starsim.library](https://docs.starsim.org/api/)
 
 ## Contributing

@@ -1,0 +1,157 @@
+---
+title: Repeated runs and uncertainty
+jupyter: python3
+---
+
+So far, each scenario has been run once, and each run has given one answer: the outbreak as it goes on average. But two towns with the same people, contacts, and vaccine coverage don't have the same outbreak. Who happens to meet whom, and when, differs from one to the next, and this matters most when there are few cases, at the start of an outbreak. Then measles brought into a town can die out before it spreads, or spread widely.
+
+This tutorial asks two questions that one run can't answer. How big could the outbreak be? And is the difference between two scenarios real, or could it be chance? By the end, you will be able to:
+
+- run a model as a stochastic model, many times;
+- show the median and the range of the runs, and summarize them in a table;
+- tell the uncertainty in a total (such as the size of the outbreak) from the uncertainty at each point in time;
+- compare scenarios run many times, and make a run that can be repeated exactly.
+
+## The model so far
+
+This is the model from [Vaccination and scenarios](t5_vaccination.qmd): measles in a town of 100,000 people in three age groups, most of them already immune. One thing is changed: the outbreak starts with 2 infectious people, rather than 10, as when measles is brought in by a family coming back from a trip.
+
+```{python}
+import starsim as ss
+import matplotlib.pyplot as plt
+ss.options(jupyter=True) # Plots and tables suited to a notebook
+
+S, E, I, R = ss.states('S E I R')
+beta = ss.par(0.14, bounds=[0.05, 0.5]) # The rate of infection per contact with an infectious person, per day
+
+infection   = S >> E @ beta*I       # Infection, at a rate of β times the contacts with infectious people
+progression = E >> I @ ss.days(10) # Latent for 10 days on average
+recovery    = I >> R @ ss.days(8)  # Infectious for 8 days on average
+measles = ss.Disease(infection, progression, recovery,
+    init = dict(R=ss.by(age=[0.8, 0.92, 0.98])), # The share immune in each age group
+    init_n = dict(I=2),                           # 2 people infectious at the start
+)
+measles.stratify(age={0: 0.3, 15: 0.6, 65: 0.1}) # Ages 0-14, 15-64, and 65+
+
+contacts = ss.contacts(ages=[0, 15, 65], matrix=[[10, 4, 1], [4, 8, 2], [1, 2, 3]]) # Contacts a day, between age groups
+settings = dict(networks=contacts, total_pop=100_000, start='2025-01-01', stop='2026-01-01')
+
+sim = ss.Sim(measles, **settings)
+sim.run()
+sim.plot('measles.I')
+```
+
+Since nothing in this model is about individual people, Starsim runs it as a set of differential equations (an ODE), which give the expected course of the outbreak: about 9,000 infections, with a peak in late May. The sim also notes that with only 2 people infected at the start, whether the outbreak takes off is a matter of chance, which an ODE doesn't show.
+
+## One outbreak, then many
+
+A stochastic model draws at random the number of people who move between states each day: of 100 people exposed, each with a chance of 1 in 10 of becoming infectious that day, about 10 do, but sometimes 7 and sometimes 14. Run as a stochastic model (`solver='binomial'`, a chain-binomial model), this is the same model, with the same states, rates, and contacts; only how it is solved changes. `n_runs=50` runs it 50 times, each with its own random numbers, and returns the runs together (a MultiSim):
+
+```{python}
+msim = sim.run(solver='binomial', n_runs=50)
+msim.plot('measles.I', lines=True)
+```
+
+Each line is one outbreak that could have happened. Most take off, and peak at different times, from April to July, depending on how fast the first few chains of infection grew. Some never take off at all: the 2 people infectious at the start, and the few they infect, recover before measles has spread.
+
+To answer "how big could the outbreak be?", look at the size of each outbreak: the total infections over the year, one for each run. `summarize()` gives a result over the whole of each run, here the total of a flow:
+
+```{python}
+totals = msim.results.measles.infection.summarize() # The total infections in each run
+plt.hist(totals, bins=30)
+plt.xlabel('Infections over the year')
+plt.ylabel('Number of runs');
+```
+
+The answer has two parts. In about one run in five, measles dies out with almost no one infected; otherwise, it infects about 9,000 people, give or take a few hundred. The average of the runs, about 7,000, is a size that no outbreak has. Chance matters at the start, when there are few cases; once thousands of people are infected, the ups and downs average out, and the outbreak's size hardly varies.
+
+::: {.callout-warning}
+## [PROPOSAL]
+`res.summarize()` gives the total infections of each run, but the name doesn't say so: it means "the total of a flow, the final value of a state, or the mean of a ratio". A result should have `res.total()` (and `res.final()`), so that `msim.results.measles.infection.total()` reads as what it gives (P11, P13).
+:::
+
+## The median and the range
+
+`msim.summarize()` gives each result over the whole run as a table: the median of the runs, the range that holds 95% of them (`low` and `high`), the mean, and the standard deviation:
+
+```{python}
+msim.summarize()
+```
+
+For infections, the median is about 9,100, and the 95% range runs from 0 to about 9,300: it holds both the outbreaks that died out and those that didn't. A range like this says that the outcome is uncertain, but not how; the histogram above does.
+
+`msim.plot()` without `lines=True` shows the median and the 95% range at each point in time:
+
+```{python}
+msim.plot('measles.I')
+```
+
+This is a different kind of uncertainty from the one in the table. At each day, the band holds 95% of the runs on that day; but the runs peak on different days, so the band is wide and flat, and the median curve is lower and broader than the curve of any one outbreak. The median at each time isn't the curve of a typical outbreak. To ask about the peak, or the total, summarize each run first (as `summarize()` does), then take the median and range of those.
+
+The same statistics are available for any result, as results themselves: `res.median()` is the median of the runs at each time, and `res.quantiles()` gives the quantiles at each time (by default the 2.5th, 50th, and 97.5th percentiles), each of which can be plotted:
+
+```{python}
+infected = msim.results.measles.I
+infected.quantiles([0.1, 0.5, 0.9]).plot() # The 10th, 50th, and 90th percentiles at each time
+```
+
+## Is a difference real?
+
+[Vaccination and scenarios](t5_vaccination.qmd) compared an outbreak response, which cuts transmission by 30% from 1 March, with no intervention, in one run of each. With chance in the model, a difference between two runs could be due to the intervention or to chance. To tell them apart, run each scenario many times:
+
+```{python}
+response = ss.modify(measles.pars.beta, multiply=0.7, start='2025-03-01')
+
+sims = {
+    'No intervention': ss.Sim(measles, solver='binomial', **settings),
+    'Response':        ss.Sim(measles, interventions=response, solver='binomial', **settings),
+}
+msim = ss.parallel(sims, n_runs=50)
+msim.plot('measles.I')
+```
+
+The two scenarios use the same random numbers: run 1 of each starts with the same draws, run 2 with the same draws, and so on. So until 1 March, each pair of runs is the same outbreak, and the difference between them afterwards is the effect of the response, not of chance. `msim.diff()` gives that difference, run by run, as results like any others:
+
+```{python}
+averted = -msim.diff('No intervention').Response.measles.infection.summarize() # Infections averted in each run
+plt.hist(averted, bins=30)
+plt.xlabel('Infections averted by the response')
+plt.ylabel('Number of runs');
+```
+
+In most runs where the outbreak takes off, the response averts about 2,000 infections, with little spread; where it dies out either way, it averts none; and in a run or two, the outbreak was still small on 1 March, and the response stops it altogether. Compare this with the 95% range of the outbreak's size in each scenario (`msim.summarize()`), which is far wider, since it includes the chance that measles takes off at all. Comparing runs in pairs takes that chance out of the comparison.
+
+::: {.callout-warning}
+## [PROPOSAL]
+The difference between scenarios, run by run, should be one call that gives a table like `msim.summarize()`'s: `msim.summarize(baseline='No intervention')`, with the median, range, mean, and standard deviation of the difference from the baseline for each result and scenario (P15). Today it takes `msim.diff()`, then a result, then `summarize()`, as above.
+:::
+
+## Repeating a run exactly
+
+The random numbers of a run come from its random seed, `rand_seed` (by default 1). The same model with the same seed gives the same result every time, on any computer, so a run can be repeated exactly, and a run that looks odd can be looked at again. `n_runs=50` uses the seeds 1, 2, ..., 50 (or from the sim's own seed up). To get other runs, give the sim another seed:
+
+```{python}
+sim1 = ss.Sim(measles, solver='binomial', rand_seed=7, **settings).run()
+sim2 = ss.Sim(measles, solver='binomial', rand_seed=7, **settings).run()
+print('Infections in each run:', round(sim1.results.measles.infection.sum()), round(sim2.results.measles.infection.sum()))
+```
+
+Changing anything that uses random numbers (another intervention, another parameter value) changes what happens from then on, but not the random numbers of anything else in the model, which is why scenarios can be compared in pairs as above.
+
+## As agents
+
+The same model can be run as agents, one for each person (or, with `n_agents=` less than the population, each agent standing for several people), which is stochastic too:
+
+```{python}
+sim = ss.Sim(measles, n_agents=100_000, **settings) # One agent per person
+msim = sim.run(n_runs=10)
+msim.plot('measles.I', lines=True)
+```
+
+The runs vary in the same way: the outbreaks peak at different times, and, as with the stochastic compartmental model, some die out at the start (here, one of the 10). With fewer agents than people (e.g. `n_agents=10_000`, each agent standing for 10 people), a run is faster, but the start of the outbreak can't be smaller than one agent: the 2 people infectious here would be 0.2 agents, which rounds to none, and the sim notes this. Agents are what a model needs when people differ in ways that compartments can't hold, such as their contacts in a network; the [Networks](g1_networks.qmd) tutorial shows them. For how the solvers differ, and when their answers disagree, see [Solvers and when they disagree](../user_guide/running_solvers.qmd); for more on many runs, seeds, and summaries, see [Uncertainty, seeds, and many runs](../user_guide/running_uncertainty.qmd).
+
+## Exercises
+
+1. Start the outbreak with 1, 2, 5, and 10 infectious people, and run each 50 times. In what share of runs does the outbreak die out? Compare this with 1/R, which is roughly the chance that one case leads to no outbreak in a model like this one, where R is the reproduction number at the start (about 2.4).
+2. Run the model in a town of 5,000 people instead of 100,000 (`total_pop=5_000`), 50 times. How does the 95% range of the outbreak's size, as a share of the town, compare with that of the larger town?
+3. Compare the campaign of [Vaccination and scenarios](t5_vaccination.qmd) (80% of children under 15, on 1 March) with no intervention, 50 times each. In how many runs does the campaign avert no infections, and why?

@@ -38,7 +38,7 @@ Then, in Starsim, `sim = ss.interop.load('model.json')`, or `ss.interop.load('in
 | A custom module (`infection.FUN = infect`, `type = NULL`) | Listed, with its R source in `sim.imported.modules` (and other functions in `sim.imported.functions`); a model of custom modules only imports its networks, with the parameters in `sim.imported.pars` | no |
 | A node attribute that changes (stage, care state) | A state, or a dimension: `hiv.stratify(care=[...], states=[A, C, D])` with `ss.transfer(care=('undx', 'dx'), rate=...)` | no |
 | An attribute's effect on a rate (`rel_trans` on ART) | `adjust=dict(rel_trans=[...], aids=[...])` on the stratification, or `rel_trans=` on a state | no |
-| A custom module that delivers something (PrEP, testing) | A product and a delivery: `ss.vaccinate(ss.Vaccine(...), coverage=..., where=...)`, `ss.treat(...)`; a function for eligibility on the network (below) | no |
+| A custom module that delivers something (PrEP, testing) | A product and a delivery: `ss.vaccinate(efficacy=..., coverage=..., where=...)`, `ss.treat(...)`; a function for eligibility on the network (below) | no |
 | `dcm()` with a custom derivative function (`new.mod`) | Listed with its source; pair the outflow of one compartment with the inflow of another into a transition, and classify each by the import rules | no |
 
 ## What needs care

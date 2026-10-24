@@ -106,7 +106,7 @@ A typed value (`ss.perday(0.05)`) keeps its own unit and is converted to the sim
 | | What is given | The sim's unit |
 |---|---|---|
 | 1 | `unit='day'` | what it says |
-| 2 | typed values in the model's diseases, declared or written as code (`dur=ss.days(10)`, or a disease's typed `dt`) | their unit; if they differ, the finest, with a warning when nothing gives the step; if they differ and the model has bare numbers, an error asking for `unit=` (which unit the bare numbers are in cannot be guessed) |
+| 2 | typed values in the model's diseases, declared or written as code (`dur=ss.days(10)`, or a disease's typed `dt`) | their unit; if they differ, the finest, with a warning when nothing gives the step; if they differ and the model has bare numbers, the unit of the diseases that have them, when those agree (a disease's bare `beta` is in the days of its own durations, beside births per year), else an error asking for `unit=` (which unit the bare numbers are in cannot be guessed). Births and deaths of the whole population (`demographics=`, held by a disease) count only when the disease has no other typed values |
 | 3 | `start=` or `stop=` as a date, such as `start='2020-01-01'` | days |
 | 4 | a typed `dt` or a typed `start`, `stop`, or `dur`, such as `dt=ss.weeks(1)` | its unit |
 | 5 | `start=` or `stop=` as a year, such as `start=2020, stop=2030` | years |

@@ -57,7 +57,7 @@ website:
       - href: index.qmd
         text: Home
       - href: ten_minutes.qmd
-        text: Starsim 4 in ten minutes
+        text: Starsim in ten minutes
       - href: coming_from/index.qmd
         text: Coming from another framework
       - href: whatsnew.qmd
@@ -68,8 +68,8 @@ website:
         text: User guide
       - href: architecture/index.qmd
         text: Architecture
-      - href: examples.qmd
-        text: Examples
+      - href: gallery.qmd
+        text: Gallery
       - href: conduct.qmd
         text: Code of conduct
       - href: contributing.qmd
@@ -84,7 +84,7 @@ website:
         - href: index.qmd
           text: "**Home**"
         - href: ten_minutes.qmd
-          text: "**Starsim 4 in ten minutes**"
+          text: "**Starsim in ten minutes**"
         - section: "Coming from another framework"
           href: coming_from/index.qmd
           contents:
@@ -104,53 +104,84 @@ website:
         - href: whatsnew.qmd
           text: "**What's new**"
         - section: "**Tutorials**"
+          href: tutorials.qmd
           contents:
             - tutorials/t1_intro.qmd
             - tutorials/t2_model.qmd
-            - tutorials/t3_demographics.qmd
-            - tutorials/t4_diseases.qmd
-            - tutorials/t5_networks.qmd
-            - tutorials/t6_interventions.qmd
+            - tutorials/t3_structure.qmd
+            - tutorials/t4_ages.qmd
+            - tutorials/t5_vaccination.qmd
+            - tutorials/t6_uncertainty.qmd
+            - tutorials/t7_calibration.qmd
+            - tutorials/t8_places.qmd
+            - section: "Going further"
+              contents:
+              - tutorials/g1_networks.qmd
+              - tutorials/g2_demographics.qmd
+              - tutorials/g3_strata.qmd
+              - tutorials/g4_time.qmd
+              - tutorials/g5_diseases.qmd
+              - tutorials/g6_code.qmd
+              - tutorials/g7_import.qmd
             - tutorials/solutions.qmd
         - section: "**User guide**"
+          href: user_guide.qmd
           contents:
           - section: "Introduction"
             contents:
             - user_guide/intro_starsim.qmd
             - user_guide/intro_models.qmd
-          - section: "Basic concepts"
+          - section: "Writing models"
             contents:
-            - user_guide/basics_model.qmd
-            - user_guide/basics_sim.qmd
-            - user_guide/basics_people.qmd
-            - user_guide/basics_parameters.qmd
-            - user_guide/basics_results.qmd
-          - section: "Modules"
+            - user_guide/models_building.qmd
+            - user_guide/models_diseases.qmd
+            - user_guide/models_parameters.qmd
+            - user_guide/models_stratification.qmd
+            - user_guide/models_outcomes.qmd
+            - user_guide/models_distributions.qmd
+            - user_guide/models_code.qmd
+            - user_guide/models_indexing.qmd
+            - user_guide/models_random.qmd
+            - user_guide/models_nonstandard.qmd
+          - section: "Populations and contact"
             contents:
-            - user_guide/modules_diseases.qmd
-            - user_guide/modules_networks.qmd
-            - user_guide/modules_demographics.qmd
-            - user_guide/modules_interventions.qmd
-            - user_guide/modules_products.qmd
-            - user_guide/modules_analyzers.qmd
-            - user_guide/modules_connectors.qmd
-            - user_guide/modules_library.qmd
-            - user_guide/modules_adding.qmd
-          - section: "Workflows"
+            - user_guide/populations_people.qmd
+            - user_guide/populations_demographics.qmd
+            - user_guide/populations_networks.qmd
+            - user_guide/populations_contacts.qmd
+            - user_guide/populations_places.qmd
+          - section: "Running"
             contents:
-            - user_guide/workflows_run.qmd
-            - user_guide/workflows_sir_calibration.qmd
-            - user_guide/workflows_calibration.qmd
-            - user_guide/workflows_deploy.qmd
-          - section: "Advanced topics"
+            - user_guide/running_sim.qmd
+            - user_guide/running_time.qmd
+            - user_guide/running_results.qmd
+            - user_guide/running_analyzers.qmd
+            - user_guide/running_solvers.qmd
+            - user_guide/running_uncertainty.qmd
+            - user_guide/running_scenarios.qmd
+            - user_guide/running_rescaling.qmd
+            - user_guide/running_deploy.qmd
+          - section: "Interventions"
             contents:
-            - user_guide/advanced_time.qmd
-            - user_guide/advanced_indexing.qmd
-            - user_guide/advanced_distributions.qmd
-            - user_guide/advanced_random.qmd
-            - user_guide/advanced_rescaling.qmd
-            - user_guide/advanced_profiling.qmd
-            - user_guide/advanced_nonstandard.qmd
+            - user_guide/interventions_products.qmd
+            - user_guide/interventions_changes.qmd
+            - user_guide/interventions_connectors.qmd
+          - section: "Calibration"
+            contents:
+            - user_guide/calibration_fitting.qmd
+            - user_guide/calibration_identification.qmd
+            - user_guide/calibration_gradients.qmd
+            - user_guide/calibration_diagnosing.qmd
+          - section: "Interoperability"
+            contents:
+            - user_guide/interop_spec.qmd
+            - user_guide/interop_import.qmd
+            - user_guide/interop_library.qmd
+          - section: "Troubleshooting"
+            contents:
+            - user_guide/troubleshooting_debugging.qmd
+            - user_guide/troubleshooting_pitfalls.qmd
+            - user_guide/troubleshooting_mre.qmd
         - section: "Architecture"
           href: architecture/index.qmd
           contents:
@@ -161,8 +192,8 @@ website:
             - architecture/randomness_and_fitting.qmd
             - architecture/spec_and_interop.qmd
             - architecture/testing.qmd
-        - href: examples.qmd
-          text: "**Examples**"
+        - href: gallery.qmd
+          text: "**Gallery**"
         - href: conduct.qmd
           text: "**Code of conduct**"
         - href: contributing.qmd
@@ -284,7 +315,7 @@ quartodoc:
       desc: |
         Example and reference modules that build on core Starsim but are not part of it.
         Import as `import starsim.library as ssl`. These modules are illustrative rather
-        than validated; see the [user guide](../user_guide/modules_library.qmd) for details.
+        than validated; see the [user guide](../user_guide/interop_library.qmd) for details.
       contents:
         # One page per library subpackage; contents are picked up automatically from each
         # subpackage's __init__.py, so adding a class to the library does not need any

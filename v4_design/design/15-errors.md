@@ -96,7 +96,7 @@ The table below is made from the code (`ss.errors.catalog()`, from the docstring
 | `DistSeedRepeatError` | error (also a `RuntimeError`) | Two distributions of a sim have the same seed, or a distribution is jumped back to a state it has passed, so that it would draw the same random numbers twice |
 | `BooleanOperationError` | error (also a `NotImplementedError`) | A logical operation (and, or, xor, not) is applied to an array of people's values that is not Boolean, e.g. `ppl.age & ppl.female` |
 | `NothingToFit` | error | `fit()` or `sensitivity()` is called and no parameter has `bounds` |
-| `NoData` | error | `fit()` or `compare_models()` is called and no result has data |
+| `NoData` | error | `fit()`, `compare_models()`, or `log_density()` is called and no result has data |
 | `NoPosterior` | error | `method='nuts'` or `method='pmcmc'` is asked for, and not every data series has a likelihood, or the sim cannot be sampled that way (no gradients, for NUTS; not a stochastic compartmental sim that the kernels run whole, for particle MCMC) |
 | `TargetStatsNotRecovered` | warning | `net.check()` finds that a network does not reproduce a target statistic it was given |
 | `AtBound` | warning | A best-fit value is at or near one of its bounds |

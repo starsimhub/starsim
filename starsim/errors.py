@@ -60,8 +60,9 @@ def note(msg, category=None, sim=None, verbose=None):
         sim.notes.append(msg)
         if verbose == 0: # Kept, but not said
             return
-        if getattr(sim, '_held', None) is not None: # Said after the line that starts the run (see ss.Sim.init())
-            sim._held.append(msg)
+        if getattr(sim, '_held', None) is not None: # Said after the line that starts the run (see ss.Sim.init()), once, though the notes may be kept again as the sim is laid out again
+            if msg not in sim._held:
+                sim._held.append(msg)
             return
         verbose = sc.ifelse(verbose, sim.pars.verbose)
     verbose = sc.ifelse(verbose, ss.options.verbose)
@@ -289,7 +290,7 @@ class NothingToFit(CodedError):
     """ `fit()` or `sensitivity()` is called and no parameter has `bounds` """
 
 class NoData(CodedError):
-    """ `fit()` or `compare_models()` is called and no result has data """
+    """ `fit()`, `compare_models()`, or `log_density()` is called and no result has data """
 
 class NoPosterior(CodedError):
     """
@@ -339,8 +340,8 @@ class LargeStep(Note):
 
 class MatrixAggregated(Note):
     """
-    In a compartmental run, a contact matrix whose age groups are not the model's was aggregated to the model's groups,
-    weighted by population. Names the matrix and both sets of groups. Agents use the matrix's own groups and get no note
+    In a compartmental run, a contact matrix whose age groups are not the model's was aggregated (or split) to the model's groups,
+    weighted by population. Names the matrices (once for all of them, e.g. the layers of a country's) and both sets of groups. Agents use the matrix's own groups and get no note
     """
 
 class OverlappingSet(Note):

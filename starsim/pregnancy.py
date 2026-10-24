@@ -127,6 +127,10 @@ class Pregnancy(ss.Demographics, ss.Disease):
         unknown = [k for k in given if k not in self.pars]
         if unknown:
             raise ss.errors.UnknownParameter(f'"{self.name}" has no parameter named {sc.strjoin(unknown)}. Its parameters are {sc.strjoin(self.pars.keys())}{ss.transitions.did_you_mean(unknown[0], self.pars.keys())}')
+        if isinstance(given.get('fertility_rate'), str): # Not bundled: starsim_data has crude birth rates by place, but not age-specific fertility
+            errormsg = (f'fertility_rate="{given["fertility_rate"]}": age-specific fertility rates by place are not in starsim_data (it has crude birth rates, for ss.Births("{given["fertility_rate"]}")). '
+                        f'Give the rates as a dataframe (e.g. the UN World Population Prospects ASFR, with columns Time, AgeGrp, ASFR) or as one rate, e.g. ss.freqperyear(100)')
+            raise ValueError(errormsg)
         own = self.code_pars
         self.update_pars({k:v for k,v in given.items() if k in own})
         graph = {k:v for k,v in given.items() if k not in own}
@@ -280,7 +284,7 @@ class Pregnancy(ss.Demographics, ss.Disease):
                     if mod is not self and isinstance(getattr(mod, 'engine', None), ss.solvers.Agents):
                         mod.engine.live = None
                         mod.engine.record_stocks()
-        note = f'{self.name}: women pregnant at the start, conceived over the {steps} steps before it (burnin=True)'
+        note = f'{self.name}: women pregnant at the start, conceived over the {"step" if steps == 1 else f"{steps} steps"} before it (burnin=True)'
         return sc.objdict(share=share, steps=steps, tr=self.graph.transitions.conception, target=['P'], note=note, after=after)
 
     def link(self, sim):
@@ -524,7 +528,7 @@ class Pregnancy(ss.Demographics, ss.Disease):
             ss.Result('n_unborn', label='Unborn (fetuses as agents; not counted among the people)', auto_plot=False, **kw),
             ss.Result('neonatal_deaths', label='Neonatal deaths (within 28 days of birth)', kind='flow', auto_plot=False, **kw),
             ss.Result('cbr', label='Crude birth rate', kind='ratio', **kw),
-            ss.Result('tfr', label='Total fertility rate', kind='flow', **kw),
+            ss.Result('tfr', label='Total fertility rate', kind='ratio', **kw), # A rate per year, not a count of events, so averaged rather than summed
             ss.Result('mmr', label='Maternal mortality ratio (per 100,000 births)', kind='ratio', auto_plot=False, **kw),
         )
         self.asfr = np.zeros((len(self.asfr_bins) - 1, self.t.npts))
@@ -570,7 +574,7 @@ class Pregnancy(ss.Demographics, ss.Disease):
             births, women = np.full(len(bins) - 1, np.nan), np.ones(len(bins) - 1)
         self._mothers = []
         self.asfr[:, ti] = np.divide(births, women, out=np.zeros(len(births)), where=women > 0)*1000
-        self.results.tfr[ti] = self.asfr[:, ti].sum()*self.asfr_width/1000
+        self.results.tfr[ti] = self.asfr[:, ti].sum()*self.asfr_width/1000/self.t.dt_year # Per year, whatever the step
         return
 
     def finalize_results(self):
@@ -692,6 +696,22 @@ class Pregnancy(ss.Demographics, ss.Disease):
 def _preg(name):
     """ An event of the sim's pregnancy module, for a module declared before it exists; named "pregnancy" until `Lactation.link()` names the sim's own """
     return ss.conditions.Event('tr', ss.conditions.Named('pregnancy', name))
+
+
+class Population(ss.Demographics, ss.Disease):
+    """
+    Everyone alive, as one declared state (`N`), to hold the births, deaths, and migration declared for the whole population
+    (`ss.Sim(demographics=[ss.birth(...), ss.death(...)])`) when there is no declared disease, so they can run as compartments
+    (with a compartmental solver named; otherwise they run as agents, as `ss.Births` and `ss.Deaths`). Added by the sim.
+    """
+    N = ss.State(label='Alive')
+    first = 'N'
+    sets_unit = False
+
+    def __init__(self, **kwargs):
+        kwargs.setdefault('name', 'population')
+        super().__init__(**kwargs)
+        return
 
 
 class Lactation(ss.Demographics, ss.Disease):

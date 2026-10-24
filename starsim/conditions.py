@@ -871,7 +871,9 @@ class Selector:
         mod = self.mod if getattr(tr, 'module', None) is None else self.module(modname(tr.module))
         name = tr.name
         res = mod.results
-        strata = lambda key: np.asarray(res[key].strata if res[key].strata is not None else np.asarray(res[key].values)[:, None]) # By group
+        def strata(key): # By group; a result of a model without groups has no strata, so it is one group
+            vals = getattr(res[key], 'strata', None)
+            return np.asarray(vals if vals is not None else np.asarray(res[key].values)[:, None])
         ti = min(max(sim.ti - 1, 0), len(res[name]) - 1) # The last time point with results: that of the step before this one
         steps = 1 if over is None else ss.connectors.to_steps(sim, over)
         flows = strata(name)[max(ti - steps + 1, 0):ti + 1].sum(axis=0)

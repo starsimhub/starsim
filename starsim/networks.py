@@ -1730,6 +1730,8 @@ class MixingPools(Route):
             out.data = sc.jsonify(ref)
         if getattr(self, 'dims', None) is not None: # A matrix over each of the model's stratifications
             out.contacts = {dim:mat.tolist() for dim,mat in self.dims.items()}
+            if getattr(self, 'age_edges', None) is not None: # The one by age with its own age groups
+                out.contacts = dict(ages=self.age_edges.tolist(), matrix=out.contacts.pop('age')) | out.contacts
         elif getattr(self, 'full', None) is not None: # One matrix over several stratifications together
             out.contacts = dict(matrix=self.full.matrix.tolist(), dims=self.full.dims)
         elif getattr(self, 'ages', None) is not None: # A matrix with its own age groups
@@ -1798,6 +1800,10 @@ class MixingPools(Route):
         coded = any(isinstance(dis, ss.Infection) for dis in sim.pars.diseases.values()) # A disease written as code transmits through the pools themselves
         if (self.name in sim.mixing.pool_terms or self.edges is not None) and not coded: # Declared diseases use the matrix from the counts in each group or band: see ss.solvers.Mixing.init_pools() and band_exposure()
             return
+        if getattr(self, 'age_edges', None) is not None: # The pools of a disease written as code are by the levels of each dimension, so they need the age matrix over the model's age groups
+            ages = next((strat.edges for strat in sim.groups.strats if strat.kind == 'age'), None)
+            if ages is None or len(ages) != len(self.age_edges) or not np.allclose(ages, self.age_edges):
+                raise ss.CapabilityError(f'the contacts "{self.name}" have age groups of their own ({sc.strjoin(self.age_edges)}) beside other dimensions, which a disease written as code cannot use yet; stratify the sim by the same age groups (stratify=dict(age={self.age_edges.tolist()}))')
         for i,sk,src in p.src.enumitems():
             for j,dk,dst in p.dst.enumitems():
                 n_contacts = p.n_contacts[i,j]
@@ -2053,7 +2059,9 @@ def contacts(matrix=None, ages=None, name=None, source=None, layer='all', unit=N
     need not be the model's. A matrix over each of one or more of the model's
     stratifications (`ss.contacts(age=..., location=...)`) uses the model's own levels,
     and the contacts between two groups are the product of the entries for each dimension;
-    so `age=` is always a matrix over the model's age groups. One matrix over several
+    so `age=` is always a matrix over the model's age groups; a matrix with its own age groups
+    combines with them too (`ss.contacts(ages=[0, 15, 65], matrix=..., area=...)`), regrouped to the
+    model's age groups. One matrix over several
     stratifications together (`ss.contacts(matrix, dims=['sex', 'risk'])`) says how people mix
     when that is not a product, e.g. men mix with women, and by risk differently for each sex.
 
@@ -2117,6 +2125,18 @@ def contacts(matrix=None, ages=None, name=None, source=None, layer='all', unit=N
     if matrix is not None and 'age' in dims: # Easily confused with ages=
         errormsg = 'ss.contacts(matrix=..., age=...) gives two matrices; for a matrix with its own age groups, give their lower edges as ages=, e.g. ss.contacts(ages=[0, 15, 65], matrix=...), and for a matrix over the model\'s own age groups, age= alone, e.g. ss.contacts(age=[[5, 1], [1.5, 2]])'
         raise TypeError(errormsg)
+    age_edges = None
+    if ages is not None and dims: # A matrix with its own age groups, with a matrix for each of other dimensions: by age as over the model's dimensions, regrouped to the model's age groups when the sim is built
+        if matrix is None or isinstance(matrix, str):
+            errormsg = f'ss.contacts(ages=..., {sc.strjoin(f"{dim}=..." for dim in dims)}) needs the matrix of the age groups as matrix=, e.g. ss.contacts(ages=[0, 15, 65], matrix=[[...]], {list(dims)[0]}=[[...]])'
+            raise ValueError(errormsg)
+        matrix = np.array(matrix, dtype=float)
+        if len(ages) != len(matrix) or matrix.ndim != 2 or matrix.shape[0] != matrix.shape[1] or np.any(np.diff(np.array(ages, dtype=float)) <= 0):
+            errormsg = f'ss.contacts() needs a square matrix and the lower edge of each of its age groups, increasing, e.g. ss.contacts(ages=[0, 15, 65], matrix=...); got a matrix of shape {matrix.shape} and ages={list(ages)}'
+            raise ValueError(errormsg)
+        age_edges = np.asarray(ages) # As given (e.g. whole numbers), for the model spec
+        dims = {'age':matrix} | dims
+        matrix = ages = None
     if matrix is None and ages is None and dims: # A matrix for each of the model's own dimensions
         dims = {dim:np.array(mat, dtype=float) for dim,mat in dims.items()}
         for dim,mat in dims.items():
@@ -2133,6 +2153,7 @@ def contacts(matrix=None, ages=None, name=None, source=None, layer='all', unit=N
         out = MixingPools(src=groups, dst=sc.dcp(groups), n_contacts=matrix.T, name=name) # ss.MixingPools is indexed [source, destination]; kept as numbers, since a matrix with many levels would be a million objects to make and copy
         out.constant = True # Everyone in a group has the same number of contacts
         out.dims = dims # So a compartmental run can use the matrices directly
+        out.age_edges = age_edges # The lower edges of the age matrix's own groups, if given with ages= (see ss.solvers.Mixing.dim_matrices())
         out.unit = unit
         return out
     kwargs = dict(dims)

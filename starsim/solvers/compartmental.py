@@ -1781,7 +1781,7 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
                     dy[b] += moved
         return dy
 
-    def next_generation(self):
+    def next_generation(self, start=False):
         """
         The next-generation matrix at the disease-free state, `F V⁻¹`, over the infected compartments of every group
 
@@ -1789,8 +1789,9 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
         infect from, of any count (such as a reservoir, or infectious mosquitoes) that the
         rate of an infection uses, and of the counts that infected people's numbers move
         a count into (mosquitoes biting them). A new infection is a flow from any other
-        compartment into one of these. At the disease-free state, everyone infected is
-        moved to the first state, the infected counts are empty, and the other counts
+        compartment into one of these. At the disease-free state, everyone is in the first
+        state (so R0 is in a population with no immunity; with `start=True`, only the infected
+        are moved there, for the reproduction number at the start), each group keeping its size, the infected counts are empty, and the other counts
         that are filled by an inflow (mosquitoes not infected) are at their equilibrium. The matrices are worked out by perturbing each infected
         compartment in turn. Returns None if nothing moves people into an infected state.
         See `ss.Disease.R0()`.
@@ -1815,10 +1816,11 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
             return None
 
         first = self.state_comps[graph.first.name][0]
-        people = [i for i in infected if self.comps[i].state.people]
+        people = [i for i,comp in enumerate(self.comps) if comp.state.people and i != first and (not start or i in infected)] # At the start, only the infected; otherwise everyone, so immunity at the start is left out
         y_now = self.y # Working out the rates sets the compartments, so they are put back afterwards
         y0 = self.y.copy()
-        y0[first] += y0[people].sum(axis=0)
+        y0[first] += y0[people].sum(axis=0) # Each group keeps its size
+        y0[people] = 0
         y0[infected] = 0
         counts = [i for i,comp in enumerate(self.comps) if not comp.state.people and i not in infected]
         if counts: # Their equilibrium, from the rates at the disease-free state
@@ -1900,7 +1902,10 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
                 name = getattr(funcs[0], 'name', None) or getattr(getattr(funcs[0], 'raw', None), '__name__', 'a value')
                 self.whole = f'"{name}" of "{mod.name}" is a function of the sim, so is called each step'
             elif transfers:
-                self.whole = f'the transfer "{transfers[0]}" of "{mod.name}" has a rate that changes'
+                tf = graph.transfers[transfers[0]]
+                leaves = [leaf for expr in [tf.rate, tf.dur] + sc.tolist(tf.p) if expr is not None for leaf in expr.leaves]
+                how = 'is changed by a modifier' if sim.modifiers.get((mod.name, 'transition', tf.name)) else 'differs between groups' if any(isinstance(getattr(leaf, 'raw', None), ss.by) for leaf in leaves) else 'changes in time'
+                self.whole = f'the rate of the transfer "{transfers[0]}" of "{mod.name}" {how}'
             elif self.triggers or self.event_triggers:
                 trig = (self.triggers + self.event_triggers)[0]
                 self.whole = f'"{trig.name}" of "{mod.name}" is triggered by {trig.trigger}, so moves people between steps'

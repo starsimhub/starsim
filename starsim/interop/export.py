@@ -1,7 +1,7 @@
 """
 Export a sim to other formats
 
-`ss.save(filename, sim, format=...)` writes a sim's declared diseases in another
+`ss.interop.export(sim, format, filename=...)` writes a sim's declared diseases in another
 format; see `v4_design/design/16-interop.md`. Only the model spec (`sim.to_spec()`)
 is complete: the other formats carry less, and what is left out or changed is listed
 as `ss.errors.LossyExport`. An export does not fail because something cannot be carried.
@@ -355,7 +355,7 @@ exporters = dict(
 
 def export(sim, format, filename=None, verbose=None):
     """
-    Write a sim in another format; usually called as `ss.save(filename, sim, format=...)`
+    Write a sim in another format (`ss.save()` writes Starsim's own: a saved sim, or code with a `.py` file)
 
     What the format cannot carry is listed as `ss.errors.LossyExport`; the export still
     writes everything it can.
@@ -371,7 +371,7 @@ def export(sim, format, filename=None, verbose=None):
 
     **Examples**:
 
-        ss.save('sir.xml', sim, format='sbml')
+        ss.interop.export(sim, 'sbml', filename='sir.xml')
         print(ss.interop.export(sim, 'mermaid'))
     """
     key = str(format).lower()
@@ -405,7 +405,7 @@ def to_hub(msim, targets, origin_date=None, by=None, every='week', output_type='
     Args:
         msim (`ss.MultiSim`): the runs
         targets (dict): the hub's name (or a list of names) for each result, e.g. `dict(incidHosp=['inc hosp', 'cum hosp', 'peak size hosp'])`
-        origin_date (date): the date the periods are counted from (default: the start of the runs)
+        origin_date (date): the date the periods are counted from (default: the start of the runs); for runs without dates, a time, which the `origin_date` column then holds
         by (str): the dimension whose levels are the locations (default: one location, the total)
         every (str): the period: 'day' or 'week' (of the sim's steps, which must then be days)
         output_type (str/list): 'quantile' (of the runs of each scenario), 'sample' (each run, by its position in its scenario), or both
@@ -434,7 +434,8 @@ def to_hub(msim, targets, origin_date=None, by=None, every='week', output_type='
             raise KeyError(errormsg)
         res = found[key]
         dates = list(res.timevec)
-        origin = dates[0] if origin_date is None else ss.date(origin_date)
+        dated = isinstance(dates[0], ss.date)
+        origin = dates[0] if origin_date is None else ss.date(origin_date) if dated else float(origin_date) # Without dates, a time in the sim's unit
         i0 = next((i for i,d in enumerate(dates) if d >= origin), len(dates)) # The values after the origin
         places = res.by(by) if by is not None else {location or 'total':res}
         for place,sub in places.items():
@@ -455,7 +456,7 @@ def to_hub(msim, targets, origin_date=None, by=None, every='week', output_type='
                 else:
                     values, horizon = periods, np.arange(1, n+1)
                 for scenario,inds in sub.scenarios().items():
-                    common = dict(origin_date=origin.strftime('%Y-%m-%d'), scenario_id=scenario, location=str(place), target=target, horizon=pd.array(horizon, dtype='Int64'))
+                    common = dict(origin_date=origin.strftime('%Y-%m-%d') if dated else float(origin), scenario_id=scenario, location=str(place), target=target, horizon=pd.array(horizon, dtype='Int64'))
                     if 'quantile' in output_type:
                         for q,qvals in zip(quantiles, np.quantile(values[inds], quantiles, axis=0)):
                             rows.append(pd.DataFrame(dict(**common, output_type='quantile', output_type_id=q, value=qvals)))

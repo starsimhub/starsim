@@ -1,6 +1,7 @@
 """
 Numerical utilities and other helper functions
 """
+import os
 import re
 import sys
 import json
@@ -246,6 +247,28 @@ def getframe(depth=1):
         return sys._getframe(depth+1)
     except ValueError:
         return None
+
+
+def assigned_name(obj):
+    """
+    The name of the variable an object being made is assigned to, e.g. "campaign" in `campaign = ss.vaccinate(...)`,
+    read from the code that made it (the frame above its constructors) as the instruction after the call; None if the
+    result is not stored straight in a variable (e.g. it is returned, put in a list, or passed on). It is read when the
+    object is made, so the name is that of its first variable, whatever variable holds it later (e.g. in a loop)
+    """
+    import dis
+    frame = getframe(1)
+    while frame is not None and frame.f_locals.get('self') is obj: # Out of its constructors (__init__ and super().__init__())
+        frame = frame.f_back
+    if frame is None or frame.f_code.co_filename.startswith(os.path.dirname(ss.__file__)): # Made by Starsim itself (e.g. a disease the sim makes from transitions), not by the user's code
+        return None
+    try:
+        after = next((ins for ins in dis.get_instructions(frame.f_code) if ins.offset > frame.f_lasti), None)
+    except Exception: # Code that cannot be read, e.g. compiled
+        return None
+    if after is not None and after.opname in ['STORE_NAME', 'STORE_FAST', 'STORE_GLOBAL', 'STORE_DEREF'] and not after.argval.startswith('_'):
+        return after.argval
+    return None
 
 
 def caller_names(depth=1):
@@ -594,6 +617,9 @@ def save(filename, obj, **kwargs):
         ss.save('model.py', sim) # The model, as code
         ss.save('run.sim', sim) # The sim, with its results
     """
+    if 'format' in kwargs: # Another framework's format is written by its exporter (sc.save() would pass format= on to pickling, which fails obscurely)
+        errormsg = f'ss.save() writes Starsim\'s own formats; to write a sim as {kwargs["format"]}, use ss.interop.export(sim, {kwargs["format"]!r}, filename={str(filename)!r})'
+        raise ValueError(errormsg)
     if str(filename).endswith('.py') and isinstance(obj, ss.Sim):
         obj.to_code(filename, **kwargs)
         return sc.path(filename)

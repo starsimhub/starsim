@@ -113,6 +113,15 @@ def test_multisim():
     doubled = Doubled(ss.Sim(pars), n_runs=2, beta=0.05).run(parallel=False)
     assert sorted(float(s.diseases.sis.pars.beta.value) for s in doubled.sims) == [0.05, 0.1]
 
+    # The sims by scenario, and the results of a module only one scenario has
+    kw = dict(n_agents=300, stop=30, verbose=0)
+    vx = ss.parallel(ss.Sim(ss.SIR(), label='Base', **kw), ss.Sim(ss.SIR(), interventions=ss.vaccinate(efficacy=0.8, coverage=0.5, at=[10], name='vx'), label='Vaccine', **kw), parallel=False)
+    assert vx.sims['Vaccine'] is vx.sims[1]
+    assert list(vx.results.vx.delivered.runs.scenario) == ['Vaccine'] # It was left out, so msim.plot('vx.delivered') raised KeyNotFoundError
+    vx.plot('vx.delivered')
+    assert ('vx_delivered', 'Vaccine') in vx.summarize().index
+    plt.close('all')
+
     return msim
 
 
@@ -130,6 +139,18 @@ def test_other():
     assert not s1.initialized
     ss.parallel(s1, s2, inplace=True)
     assert not np.allclose(s1.summary[:], s2.summary[:], rtol=0, atol=0, equal_nan=True), "Sims do match and shouldn't"
+
+    # Scenarios of a stratified compartmental model restarted for their runs, one with a delivery that adds groups (it raised a ValueError), compared with the baseline, and plotted with weekly data
+    S, I, R = ss.states('S I R')
+    sir = ss.Disease(infection=S >> I @ 0.3*I, recovery=I >> R @ ss.days(10), init_n=dict(I=5), name='sir').stratify(age={0: 0.3, 15: 0.7})
+    kw = dict(total_pop=10_000, stop=ss.days(100), solver='binomial', verbose=0)
+    weekly = ss.Sim(sir, **kw).run().to_data('sir.infection', resample='week')
+    msim = ss.parallel({'Base': ss.Sim(sir, data=weekly, **kw), 'Vaccine': ss.Sim(sir, interventions=ss.vaccinate(efficacy=0.9, coverage=0.5, at=20), **kw)}, n_runs=3)
+    averted = msim.summarize(baseline='Base').loc[('sir_infection', 'Vaccine')]
+    paired = msim.results.sir.infection.diff('Base').Vaccine.summarize()
+    assert averted['median'] < 0 and np.isclose(float(averted['median']), np.median(paired), rtol=1e-3) # The paired differences, as msim.diff() gives
+    ax = next(ax for ax in msim.plot().axes if 'infection' in ax.get_title())
+    assert len(ax.collections) >= 2 and all(len(line.get_xdata()) == len(weekly) for line in ax.lines) # The data, and the model summed over its weeks
     return s1,s2
 
 

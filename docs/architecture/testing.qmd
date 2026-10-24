@@ -24,7 +24,7 @@ The tests are in `tests/`, in two sets. The core tests (`tests/test_*.py`, about
 | `test_baselines.py` | A standard agent-based sim (two diseases, three networks, births and deaths) gives exactly its recorded results (`baseline.yaml`); and `test_performance_guard` fails if any of a set of timed cases is more than 1.5 times slower than its record (`perf_guard.yaml`). |
 | Feature tests | One file per area (`test_transitions.py`, `test_deliveries.py`, `test_dimensions.py`, ...), and `test_composition.py` for plain NumPy modules beside declared ones. |
 | `devtests/interop/` | Each importer and exporter against the framework it reads or writes. Tests that need R, or the repository of translated examples, are skipped when it isn't available. |
-| `switching/` | Thirteen acceptance demos, each in the terms of a framework Starsim is compared with (Starsim 3 among them): bring the model in, describe it, fit it, ask a policy question, and run it another way. Each asserts the original's reference numbers; one that doesn't pass yet is marked `xfail`, with the reason. |
+| `switching/` | Thirteen acceptance demos, each in the terms of a framework Starsim is compared with: bring the model in, describe it, fit it, ask a policy question, and run it another way. Each asserts the original's reference numbers; one that doesn't pass yet is marked `xfail`, with the reason. |
 | `north_star.py` | The north star: a model should never be easier to write without Starsim than with it. For each translated example (kept in a separate repository), a table of lines of model code and run time, original against Starsim, published on the [Coming from](../coming_from/index.qmd) pages. |
 
 The agreement between solvers is layered from exact to statistical. Conservation is checked to 1e-9; the ODE is checked against SciPy and the analytic final size of an SIR; the JAX ODE against the kernels to 1e-9; and the chain binomial, Gillespie and agents against the ODE, as the mean over a few runs at a quarter-day step, within 5% (or a wider tolerance, given with its reason in the test). [Solvers](solvers.qmd) has the table of execution paths and the test that pins each one.
@@ -43,7 +43,7 @@ pytest test_baselines.py::test_performance_guard    # The performance guard, whi
 
 The performance guard is timing-sensitive, so run it on its own on a quiet machine. After an intended change to results or speed, `./update_baseline.py` and `./update_benchmarks.py` record the new values, and the change shows up in review as a diff of the `.yaml` files.
 
-## If you change X
+## What to run after a change
 
 | If you change | These parts see it | Run at least |
 |---|---|---|

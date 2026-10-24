@@ -1,0 +1,204 @@
+---
+title: Stratification in depth
+jupyter: python3
+---
+
+[Tutorial 4](t4_ages.qmd) split the measles model into age groups. Age is rarely the only way in which people differ that matters for an outbreak. Whether someone is vaccinated decides whether they can be infected, and where they live decides whom they meet. Measles outbreaks in countries with high vaccination coverage happen mostly in communities where coverage is low, and spread from there. This tutorial adds both to the model, as two more dimensions of stratification, and then moves people between groups over time.
+
+By the end of this tutorial, you will be able to:
+
+- stratify a model by several dimensions, and give shares that differ by another dimension;
+- stratify only part of a model, and say why that is worth doing;
+- give the contacts between groups of two dimensions at once;
+- move people between groups at a rate with `ss.transfer()`: vaccination over time, and migration;
+- read results by any combination of groups, as compartments or as agents.
+
+## The model so far
+
+This is the age-structured SEIR model from [Tutorial 4](t4_ages.qmd), with its contact matrix, run for a year. Since each section below stratifies the model in a different way, the model is made by a function, so that each section can start from a new copy:
+
+```{python}
+import starsim as ss
+ss.options(jupyter=True) # Plots and tables suited to a notebook
+
+def make_measles():
+    """ The SEIR model of measles, by age """
+    S, E, I, R = ss.states('S E I R')
+    infection   = S >> E @ 0.14*I       # β = 0.14 per contact per day
+    progression = E >> I @ ss.days(10)  # Latent for 10 days on average
+    recovery    = I >> R @ ss.days(8)   # Infectious for 8 days on average
+    measles = ss.Disease(infection, progression, recovery, init=dict(I=0.001))
+    measles.stratify(age={0: 0.3, 15: 0.6, 65: 0.1}) # Ages 0-14, 15-64, and 65+
+    return measles
+
+age_contacts = [[10, 4, 1], [4, 8, 2], [1, 2, 3]] # Contacts a day, between age groups
+pars = dict(total_pop=100_000, stop=ss.days(365))
+
+measles = make_measles()
+sim = ss.Sim(measles, networks=ss.contacts(ages=[0, 15, 65], matrix=age_contacts), **pars)
+sim.run()
+sim.results.measles.I.by('age').plot()
+```
+
+With nobody immune, R0 is about 15, and almost everyone in the town is infected within a few months.
+
+## Vaccination status as a dimension
+
+In most places, most people are vaccinated against measles, and two doses of the vaccine protect about 97% of people. One way to model this is to stratify by vaccination status: everyone is either vaccinated or not, and the vaccinated are 97% less susceptible. [Tutorial 5](t5_vaccination.qmd) models vaccination as an intervention, given on a date; a dimension is the natural way to give the immunity that a population already has when the model starts, and it lets the results be read for the vaccinated and the unvaccinated separately.
+
+Coverage often differs by age. Here 85% of children are vaccinated, 92% of adults aged 15 to 64, and 95% of people 65 and over. A share that differs by another dimension is given as an `ss.by()` over both: a row for each age group, and a column for each level of vaccination, each row adding up to 1. So each age group keeps its size, and the rows say how it is split:
+
+```{python}
+coverage_by_age = ss.by([[0.15, 0.85],  # 0-14: 15% unvaccinated, 85% vaccinated
+                         [0.08, 0.92],  # 15-64
+                         [0.05, 0.95]], # 65+
+                        dims=['age', 'vaccinated'])
+
+measles = make_measles()
+measles.stratify(vaccinated=[False, True], split=coverage_by_age, states=['S'], adjust={'rel_sus': [1, 0.03]})
+
+sim = ss.Sim(measles, networks=ss.contacts(ages=[0, 15, 65], matrix=age_contacts), **pars)
+sim.run()
+sim.results.measles.infection.by('vaccinated').plot()
+```
+
+`adjust` multiplies a quantity in each level: `rel_sus`, the relative susceptibility, is 1 for the unvaccinated and 0.03 for the vaccinated. The run prints the reproduction number at the start, about 2.3 rather than 15, since most people are protected (as in [Tutorial 2](t2_model.qmd), the run calls this R0). The outbreak is much smaller and slower:
+
+```{python}
+res = sim.results.measles
+print('Infections:', round(res.infection.sum()))
+print('Among the vaccinated:', round(res.infection.select(vaccinated=True).sum()))
+print('Among unvaccinated children:', round(res.infection.select(vaccinated=False, age='0-14').sum()))
+```
+
+Even with a vaccine that protects 97% of people, about two in five of the people infected are vaccinated, because there are so many more of them than of the unvaccinated. This is a common finding in real outbreaks, and doesn't mean that the vaccine is failing: each vaccinated person is still far less likely to be infected.
+
+### Stratifying part of the model
+
+`states=['S']` stratifies only the susceptible state by vaccination. This is *partial stratification*: vaccination matters only for whether someone is infected, and once they are, a vaccinated person is in this model the same as anyone else. People infected from `S` enter `E` with no level of vaccination. Splitting `E`, `I`, and `R` as well would add compartments that behave the same, and the results by vaccination would mix two kinds of immunity: in `R`, people immune from infection, whether or not they were ever vaccinated. With `states=['S']`, the model has 3 × 2 = 6 compartments for `S`, and 3 each for `E`, `I`, and `R`.
+
+Two cautions. Results by a dimension count only the states that have it, so `res.I.by('vaccinated')` raises an error here, since `I` has no level of vaccination; the flow out of `S`, `res.infection.by('vaccinated')`, says who was infected. And a dimension that people mix by (with a contact matrix) can't be partial, since everyone who can infect or be infected needs a level of it to mix as; Starsim raises an error if one is. `where=` narrows a dimension in the other direction, to some groups rather than some states (e.g. pregnancy, for women only); see [Stratification](../user_guide/models_stratification.qmd#stratifying-part-of-a-model).
+
+## Where people live
+
+Suppose that a quarter of the town's people live in the surrounding rural area, where coverage is lower: 70% rather than 92%. People mostly meet others who live where they do. This is a third dimension, `area`, with its own contact matrix. A share of the population is given with each level, as for age, and coverage by area is an `ss.by()` over area and vaccination, as above:
+
+```{python}
+coverage_by_area = ss.by([[0.08, 0.92],  # Urban: 8% unvaccinated, 92% vaccinated
+                          [0.30, 0.70]], # Rural
+                         dims=['area', 'vaccinated'])
+
+measles = make_measles()
+measles.stratify(area={'urban': 0.75, 'rural': 0.25})
+measles.stratify(vaccinated=[False, True], split=coverage_by_area, states=['S'], adjust={'rel_sus': [1, 0.03]})
+```
+
+The contacts are now between groups of two dimensions. With a matrix for each, the contacts between two groups are the product of the entries for each: a child in town has 10 contacts a day with children, and 95% of a person's contacts in town are with others in town, so 9.5 of them are with children in town. Here people in town make 5% of their contacts with people in the rural area, and people in the rural area make 15% of theirs with people in town. (These two are consistent: there are three times as many people in town, so the total contacts each way are the same.)
+
+```python
+contacts = ss.contacts(ages=[0, 15, 65], matrix=age_contacts, area=[[0.95, 0.05], [0.15, 0.85]])
+```
+
+::: {.callout-warning}
+## [PROPOSAL]
+`ss.contacts(ages=..., matrix=..., area=...)` raises "unrecognized argument for contacts: area": the form with the matrix's own age groups (`ages=`) can't be combined with a matrix for another dimension. It should be, as `age=` can (P11). Today, since the matrix's age groups are the model's, `age=age_contacts` does the same; but it checks the matrix in a way that `ages=` does not, and notes that the matrix of Tutorial 4 is not reciprocal, which the same matrix given with `ages=` does not. The two forms should check a matrix in the same way.
+:::
+
+```{python}
+#| echo: false
+contacts = ss.contacts(age=age_contacts, area=[[0.95, 0.05], [0.15, 0.85]])
+```
+
+```{python}
+sim = ss.Sim(measles, networks=contacts, **pars)
+sim.run()
+sim.results.measles.I.by('area').plot()
+```
+
+A quarter of the people live in the rural area, but it has about half of the infections. With 30% of people unprotected there, the reproduction number at the start is about 15 × (0.3 + 0.7 × 0.03) ≈ 4.8; in town it is about 15 × (0.08 + 0.92 × 0.03) ≈ 1.6. So the outbreak grows fast in the rural area and peaks early, and the town's outbreak follows, more slowly, fed by the contacts between them. This is the pattern of many measles outbreaks in places with high coverage overall.
+
+(The run also notes that the contact matrix of Tutorial 4 is not *reciprocal*: in a real population, the total number of contacts that adults have with people 65 and over must equal the total that people 65 and over have with adults, and with six times as many adults, this matrix's 2 contacts a day each way can't both be right. Starsim uses the matrix as given. Contact matrices from surveys are usually corrected for this before they are used.)
+
+`select()` picks out any combination of groups, and leaves the dimensions not named summed over:
+
+```{python}
+res = sim.results.measles
+print('Infections in the rural area:', round(res.infection.select(area='rural').sum()))
+print('Infections of rural children:', round(res.infection.select(area='rural', age='0-14').sum()))
+print('Unvaccinated people infected in town:', round(res.infection.select(area='urban', vaccinated=False).sum()))
+res.infection.select(area='rural').by('age').plot()
+```
+
+## Moving between groups
+
+So far, nobody changes group: each person stays in their area and their vaccination status, and (with no births or deaths) in their age group. `ss.transfer()` moves people from one level of a dimension to another at a rate, without changing their disease state. Two examples:
+
+- **Routine vaccination.** Unvaccinated children are vaccinated at a rate of 30% a year: `ss.transfer(vaccinated=True, rate=...)` moves people to the level `True` from any other. The rate is given for each age group, and is 0 for adults. With `states=['S']`, only susceptible people are vaccinated (which is also all that the dimension holds).
+- **Migration.** 5% of rural people move to town each year, keeping their disease state: someone infectious who moves infects people in town from then on. A pair of levels, `('rural', 'urban')`, gives the direction.
+
+A transfer belongs to the dimension it moves people along, so it is given to that dimension's `stratify()` call, by name:
+
+```{python}
+measles = make_measles()
+measles.stratify(area={'urban': 0.75, 'rural': 0.25},
+                 migration=ss.transfer(area=('rural', 'urban'), rate=ss.peryear(0.05)))
+measles.stratify(vaccinated=[False, True], split=coverage_by_area, states=['S'], adjust={'rel_sus': [1, 0.03]},
+                 routine=ss.transfer(vaccinated=True, rate=ss.peryear(ss.by(age=[0.3, 0, 0])), states=['S']))
+
+sim = ss.Sim(measles, networks=contacts, **pars)
+sim.run()
+res = sim.results.measles
+print('Infections:', round(res.infection.sum()))
+print('Children vaccinated during the year:', round(res.routine.sum()))
+print('People who moved to town:', round(res.migration.sum()))
+```
+
+::: {.callout-warning}
+## [PROPOSAL]
+This run prints "Run step by step, since the transfer "routine" of "measles" has a rate that changes", but the rate doesn't change: it is a fixed rate for each age group. The line describes how the solver runs the model, and should not be printed at the default verbosity (P4, P14); where it is printed, it should be accurate (P1).
+:::
+
+A transfer is a transition, so it has a result of its own, by its name (`routine`, `migration`), and can be changed by an intervention like any other. With both transfers, there are about 300 fewer infections than in the run above without them. Routine vaccination at this pace reaches only about 200 children before the outbreak is over, within a few months. Stopping an outbreak needs a campaign that reaches people quickly, which is a delivery on a date ([Tutorial 5](t5_vaccination.qmd)); a transfer is for what happens steadily over time.
+
+Three kinds of movement between groups are easy to confuse:
+
+| Movement | What it is | How it is given |
+|---|---|---|
+| A transfer | People move steadily, at a rate (routine vaccination, migration, a change of risk group) | `ss.transfer()`, in `stratify()` |
+| A delivery | People move at given times, with a coverage (a vaccination campaign) | `ss.vaccinate()` or `ss.Delivery(move=...)`, as an intervention |
+| Aging | People move up the age groups as they get older | Automatic, when people are born or die |
+
+Migration here is a permanent move. People who travel to another place and come back, and so spread infection between places without moving there, are a model of places and movement: see [Tutorial 8](t8_places.qmd).
+
+## The same model as agents
+
+Every stratification works the same way when the model is run as agents. Each agent then has a value of each dimension (an age, an area, and whether they are vaccinated), the transfers change those values, and the results are counted by group in the same way. `sim.new()` makes a new sim from the same inputs, with whatever is given changed, here the number of agents:
+
+```{python}
+agents = sim.new(n_agents=10_000)
+agents.run()
+for label, s in {'Compartments': sim, 'Agents': agents}.items():
+    res = s.results.measles
+    print(label, ': infections in town', round(res.infection.select(area='urban').sum()), ', rural', round(res.infection.select(area='rural').sum()))
+```
+
+The two agree to within about 10%. They needn't agree exactly: the agents are one run of a random process, and they move between states in whole steps of a day, as the run notes. As agents, partial stratification makes no difference to how the model runs (each agent has a vaccination status whatever their disease state), but the results by vaccination still count only susceptible people, as above.
+
+## How big the model gets
+
+As compartments, each state has a compartment for each combination of levels, so the dimensions multiply: here `S` has 3 age groups × 2 areas × 2 levels of vaccination = 12 compartments, and `E`, `I`, and `R` have 6 each, 30 in all. Sixteen age groups, five areas, and two levels of vaccination in every state would be 640. Large models can still run quickly, but are hard to check; `describe()` lists each dimension, its levels, and the states it applies to:
+
+```{python}
+sim.describe()
+```
+
+::: {.callout-warning}
+## [PROPOSAL]
+`describe()` gives the mixing as "contact matrix by age", though the contacts are by age and by area, and it doesn't give the shares or adjustments of each dimension (see the proposal in [Stratification](../user_guide/models_stratification.qmd)). Its line `plan` ("as compiled code, one step at a time, since it has been stepped already, or has functions inserted into its loop") is about how the solver runs, in terms a modeler can't act on. The mixing line should name every dimension of the contacts, and the plan should be left out at the default verbosity (P2, P4, P14).
+:::
+
+## Exercises
+
+1. Raise coverage in the rural area from 70% to 90%. How many fewer infections are there in town, where coverage hasn't changed? Why?
+2. Suppose the rural area is more connected to town: rural people make 40% of their contacts with people in town (and so, to stay reciprocal, people in town make about 13% of theirs with rural people). How does this change the timing of the outbreak in town, and its size?
+3. Add a catch-up program that vaccinates unvaccinated rural people of every age at 50% a year (a second transfer, with a rate by area). How many infections does it prevent over the year? What if the rate were 500% a year (that is, most people reached within a few months)?

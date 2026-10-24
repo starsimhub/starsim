@@ -1,0 +1,66 @@
+---
+title: A minimal reproducible example
+jupyter: python3
+---
+
+A minimal reproducible example is the shortest complete script that shows a problem: anyone can copy it, run it as it is, and see the same thing. It is the most useful thing to include when asking for help or reporting a bug, and making one often finds the cause on the way, since each part removed either matters or doesn't.
+
+## How to make one
+
+1. **Start from what fails, in a fresh session.** Restart the notebook's kernel (or run the script from the command line) and check that the problem is still there. A notebook can hold values from cells that were changed or deleted since, and a disease that was stratified twice.
+2. **Remove what doesn't matter, one thing at a time.** Take out interventions, analyzers, extra diseases, networks, and data, and after each removal check that the problem is still there. Put back the last thing removed if it goes away: that is part of the cause.
+3. **Make it small and quick.** Use fewer agents (or none: if the problem shows in an ODE, use that), a shorter run, and plain numbers in place of values read from files.
+4. **Replace private data with made-up data.** A few rows typed in, or data drawn from a run of the model with `sim.to_data()`, show the same problem without sharing anything.
+5. **Fix the random seed** (`rand_seed=` in `ss.Sim`), so that a stochastic run gives the same numbers every time.
+6. **Say what you expected, and what you got.** Print the numbers, or include the plot, and give the reason you expected something else (a known result, another model, a calculation by hand).
+
+## An example
+
+A report that a vaccine works less well than expected might come down to this script, which runs in a second:
+
+```{python}
+import starsim as ss
+ss.options(jupyter=True)
+
+S, I, R = ss.states('S I R')
+infection = S >> I @ 1.9*I
+recovery  = I >> R @ ss.days(8)
+measles = ss.Disease(infection, recovery, init_prev=0.001)
+
+vaccination = ss.vaccinate(efficacy=0.9, coverage=0.9, at=ss.days(0))
+sim = ss.Sim(measles, interventions=vaccination, total_pop=100_000, stop=ss.days(100), rand_seed=1)
+sim.run()
+
+# Expected: at most 19,000 infections (the 10% not vaccinated, plus the 10% of the vaccinated whom the vaccine doesn't protect)
+print('Infections:', round(sim.results.measles.infection.sum()))
+```
+
+It has the model, the intervention, and the numbers, and nothing else. (The answer, in this case, is that the vaccine is leaky: see [Common pitfalls](troubleshooting_pitfalls.qmd#interventions).)
+
+## Writing a model out as code
+
+When a model is built by several functions, read from files, or imported from another framework, `sim.to_code()` writes it out as one plain script that builds the same model, which is a quick start on an example:
+
+```{python}
+print(sim.to_code())
+```
+
+::: {.callout-warning}
+## [PROPOSAL]
+`to_code()` should write code as a person would: a delivery that is the only one of its product in one call (`ss.vaccinate(efficacy=0.9, coverage=0.9, at=ss.days(0))`, not a separate `ss.Vaccine` passed to `ss.vaccinate`), whole numbers as whole numbers (`ss.days(8)`, not `ss.days(8.0)`; `100_000`, not `100000`), and no settings that are the default (`first='S'`). Today's output builds the same model, but is longer and less familiar than the code it came from (P8).
+:::
+
+Only the declared parts of a model are written as code (its diseases, contact matrices, modifiers, and deliveries); anything written as code, such as a custom intervention or network, is listed in comments at the end, to be added by hand. See [The model spec, `to_code()`, and `diff()`](interop_spec.qmd).
+
+## What to include
+
+When reporting a problem, for example as an issue at [github.com/starsimhub/starsim/issues](https://github.com/starsimhub/starsim/issues), include:
+
+- the script;
+- what it printed, including any notes, and the whole error message if there is one;
+- what you expected, and why;
+- the versions of Starsim, Python, and the main libraries, which this prints:
+
+```{python}
+ss.debugtools.metadata().versions
+```

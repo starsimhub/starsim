@@ -79,7 +79,10 @@ def to_time(sim, val):
     if val is None:
         return None
     elif isinstance(val, (str, ss.date)):
-        return ss.date(val)
+        date = ss.date(val)
+        if not t.is_absolute and isinstance(t.tvec[0], ss.years) and ss.time.assume_cal_year(t.tvec[0]): # A timeline in calendar years (start=2000): the date's year, as the timeline holds it
+            return ss.years(date.to_year())
+        return date
     elif t.is_absolute:
         if sc.isnumber(val):
             val = ss.time.get_dur_class(sim.unit_base)(val)

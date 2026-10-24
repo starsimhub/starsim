@@ -298,7 +298,9 @@ def test_staged_and_sensitivity():
     beta, dur, unused = ss.par(0.3, bounds=[0.1, 0.5]), ss.par(10, bounds=[5, 15]), ss.par(1.0, bounds=[0.5, 2])
     S, I, R = ss.states('S I R')
     sir = ss.Disease(infection=S >> I @ beta*I, recovery=ss.Transition(I, R, dur=dur), waning=R >> S @ unused*1e-9, init_prev=0.01, name='sir')
-    table = ss.Sim(sir, stop=150, verbose=0).sensitivity(results=['infection'], n=40, verbose=False)
+    with sc.capture() as printed:
+        table = ss.Sim(sir, stop=150, verbose=0).sensitivity(results=['infection'], n=40, verbose=False)
+    assert not printed # Nor the runs of the samples
     total = table['sir.infection total']
     assert total.beta > 0.8 and total.dur > 0.8 and abs(total.unused) < 0.3 # The parameters that matter, and the one that does not
 
@@ -326,6 +328,8 @@ def test_log_density():
     odd = ss.Sim(ss.Disease(S >> I @ beta*I, I >> R @ ss.days(10), init=dict(I=0.01), name='sir'), solver='ode', unit='day', stop=30, data=pd.DataFrame(dict(I=[0.02, 0.05]), index=[10, 20]), verbose=0)
     with pytest.raises(ss.CapabilityError, match='weibull'): # A prior that the log-density in JAX does not cover
         odd.log_density(likelihood=dict(I=ss.normal(scale=0.01)))
+    with pytest.raises(ss.errors.NoData): # It was an AttributeError
+        odd.new(data=None).log_density()
     return ld
 
 
@@ -347,6 +351,7 @@ def test_value_per_level():
     assert np.allclose(one.init().diseases.sir.pars.beta.raw.values, [fit.pars.beta.values[0], 0.1])
     proj = fit.project(dict(base=None), n=2)
     assert np.shape(proj.results.sir.I.values)[0] == 2 # Two runs
+    assert np.shape(fit.project(dict(base=None)).results.sir.I.values)[0] == 1 # By default, one: the runs of a deterministic best fit would all be the same
 
     # With a value for each of many places, the scan before the search is capped
     places = [f'p{i}' for i in range(12)]

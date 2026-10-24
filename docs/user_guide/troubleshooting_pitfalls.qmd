@@ -1,0 +1,181 @@
+---
+title: Common pitfalls
+jupyter: python3
+---
+
+These are mistakes that have actually caught people out, collected from questions, reviews, and tests in which modelers new to Starsim wrote models for tasks with known answers. Most of them don't raise an error: the model runs and gives a wrong answer. Starsim prints a note for many of them, which is one more reason to read what a run prints (see [Debugging and profiling](troubleshooting_debugging.qmd)).
+
+The examples use the measles model from the [tutorials](../tutorials/t1_intro.qmd): β = 1.9 per day and an infectious period of 8 days, so R0 ≈ 15.
+
+```{python}
+import starsim as ss
+ss.options(jupyter=True)
+
+def make_measles(beta=1.9):
+    """ The measles SIR of the tutorials, with weekly reported cases (half of infections) """
+    S, I, R = ss.states('S I R')
+    infection = S >> I @ beta*I
+    recovery  = I >> R @ ss.days(8)
+    cases     = ss.outcome(0.5*infection)
+    return ss.Disease(infection, recovery, cases, init_prev=0.001, name='measles')
+```
+
+## Rates, durations, and units
+
+**A number after `@` is a rate, not a duration.** `I >> R @ ss.days(8)` means that people stay in I for 8 days on average, but `I >> R @ 8` means that they leave at a rate of 8 per unit of time, so after an eighth of a day. Starsim notes when a duration comes out shorter than the time step, which is almost always this mistake:
+
+```{python}
+S, I, R = ss.states('S I R')
+infection = S >> I @ 1.9*I
+recovery  = I >> R @ 8   # Meant: 8 days
+wrong = ss.Disease(infection, recovery, init_prev=0.001, name='measles')
+ss.Sim(wrong, total_pop=100_000, stop=ss.days(50)).run()
+```
+
+R0 comes out at 0.24 instead of 15, and the outbreak never starts. Give a duration with its unit (`ss.days(8)`), or as `dur=` in `ss.Transition(I, R, dur=ss.days(8))`.
+
+**A plain number is in the sim's unit of time.** The unit is taken from the values that have one (here, `ss.days(8)`), and `describe()` says where it came from. Every plain number is then in that unit: β = 1.9 is per day, and so is `stop`. So `stop=2`, meant as two years, is two days:
+
+```{python}
+ss.Sim(make_measles(), total_pop=100_000, stop=2).run()
+```
+
+Give times with their units (`stop=ss.years(2)`), or as dates (`start='2025-01-01', stop='2027-01-01'`). If nothing in a model has a unit, time is counted in steps, and the run says "steps" where it would say "days".
+
+**A year written as a number is not a date.** In a sim with dates, a number is a time since the start, in the sim's unit, so `at=2025` means 2,025 days after the start. Starsim stops with an error when such a time falls outside the sim:
+
+```{python}
+vaccination = ss.vaccinate(efficacy=0.9, coverage=0.5, at=2025)
+try:
+    ss.Sim(make_measles(), interventions=vaccination, start='2025-01-01', stop='2025-07-01').run()
+except ss.errors.TimeOutsideSim as error:
+    print(error)
+```
+
+Write a date as a string: `at='2025'`, or `at='2025-02-01'`.
+
+**A rate times a duration is not a rate.** A rate of 0.1 per year times 3 days is the chance of an event over those 3 days, a plain number, not a rate. Starsim raises an error rather than guess what was meant:
+
+```{python}
+S, I, R = ss.states('S I R')
+try:
+    ss.Disease(S >> I @ 1.9*I, I >> R @ ss.peryear(0.1)*ss.days(3))
+except ss.errors.WrongDimension as error:
+    print(error)
+```
+
+## Starting the epidemic
+
+**`init_prev` puts people where an infection starts, not where they are infectious.** In an SIR model that is I, but in an SEIR model it is E, so nobody is infectious at the start and the epidemic starts a latent period late. The run says so:
+
+```{python}
+S, E, I, R = ss.states('S E I R')
+infection = S >> E @ 1.9*I
+latency   = E >> I @ ss.days(10)
+recovery  = I >> R @ ss.days(8)
+seir = ss.Disease(infection, latency, recovery, init_prev=0.001, name='measles')
+ss.Sim(seir, total_pop=100_000, stop=ss.days(100)).run()
+```
+
+To start people infectious, give the share in each state with `init` (`init=dict(I=0.001)`), or the number with `init_n` (`init_n=dict(I=100)`).
+
+**An ODE always takes off.** An ODE is the average course of an epidemic, so if R0 is above 1 it takes off from any number of infected people, even a fraction of one. A real outbreak that starts with one or two cases dies out by chance quite often: with R0 = 3, a third of the chains of infection started by one case end without a major outbreak. Starsim notes this when a model starts with only a few infected:
+
+```{python}
+S, I, R = ss.states('S I R')
+infection = S >> I @ 0.3*I
+recovery  = I >> R @ ss.days(10)
+sir = ss.Disease(infection, recovery, init_n=dict(I=2), name='sir')
+ss.Sim(sir, total_pop=100_000, stop=ss.days(200)).run()
+```
+
+To see how likely an outbreak is, run the model stochastically, many times (see [the next section](#runs-and-chance)).
+
+## Runs and chance
+
+**The median of many runs can hide that some died out.** When some runs die out early and the rest have a large outbreak, the results are split in two, and a median or mean describes neither group. Here 20 runs of the model above, as agents, each start with two infected:
+
+```{python}
+msim = ss.Sim(sir, n_agents=5_000, stop=ss.days(200), verbose=0).run(n_runs=20)
+msim.summarize()
+```
+
+The median of `sir_infection` (the number of new infections over the run) is a large outbreak, but the low end of its interval is 0, and the mean is between the two: some runs died out before the two people infected at the start infected anyone. The infections in each run show the split directly:
+
+```{python}
+msim.results.sir.infection.summarize()
+```
+
+When the question is whether there is an outbreak at all, count the runs with one, and summarize the size of the outbreak over those runs only. A single stochastic run is one possible outcome, and two scenarios compared with one run each can differ by chance alone; see [Uncertainty, seeds, and many runs](running_uncertainty.qmd).
+
+**`n_agents=` runs the model as agents.** Giving a number of agents asks for agents, so a model that would run as an ODE is run as agents instead, with the chance and time steps that come with them. To set the size of the population in a compartmental model, use `total_pop=`. With both, each agent stands for several people (`total_pop=100_000, n_agents=10_000` makes each agent ten people), and the results are scaled to the whole population. `describe()` says which solver was chosen and why.
+
+**A time step can be too long for a fast disease.** Agents and stochastic compartmental models take whole steps, and someone infected during a step can only infect others from the next one. For a disease that spreads as fast as measles, steps of a day slow the epidemic down by a few days. Starsim notes when people are likely to leave a state within one step, and `sim.check_dt()` shows how much a smaller step changes the results; see [Checking the time step](troubleshooting_debugging.qmd#checking-the-time-step).
+
+## Mixing and stratification
+
+**With contacts, β is per contact.** Without a network or contact matrix, everyone mixes with everyone, and β is the rate at which a susceptible person is infected per unit of the share infectious (as if each person had one contact a day). With a contact matrix, β is the chance of infection per contact, so R0 is multiplied by the number of contacts. Adding a contact matrix with about 15 contacts a day to the measles model, with β left at 1.9, gives an R0 of about 200:
+
+```{python}
+measles = make_measles()
+measles.stratify(age={0: 0.3, 15: 0.6, 65: 0.1})
+contacts = ss.contacts(ages=[0, 15, 65], matrix=[[10, 4, 1], [4, 8, 2], [1, 2, 3]])
+ss.Sim(measles, networks=contacts, total_pop=100_000, stop=ss.days(50)).run()
+```
+
+When contacts are added to a model, scale β down to keep the same R0; here, β = 0.12 per contact gives R0 ≈ 13. `describe()` says what β is per (`beta on contacts: 1.9 per day per contact`).
+
+**`stratify()` changes the disease itself.** It works in place, and returns the disease too. Run the same notebook cell twice and the second `stratify()` does nothing (with a note); stratify the same disease again by the same property in a different way, and it raises an error, since its states are already split:
+
+```{python}
+measles = make_measles()
+measles.stratify(age={0: 0.3, 15: 0.6, 65: 0.1})
+try:
+    measles.stratify(age={0: 0.5, 20: 0.5})
+except ss.errors.DuplicateStructuralDimension as error:
+    print(error)
+```
+
+To try several stratifications, build the disease again each time, as `make_measles()` does here.
+
+## Interventions
+
+**Vaccines are leaky unless told otherwise.** A vaccine with `efficacy=0.9` reduces each vaccinated person's chance of infection by 90% (a leaky vaccine). A vaccine that fully protects 90% of those vaccinated and does nothing for the rest (all or nothing) is `leaky=False`. For a disease that spreads as fast as measles, the difference is large: a leaky vaccine only slows infection, and with an R0 of 15, many vaccinated people are infected in the end. Here 90% of people are vaccinated at the start with each kind:
+
+```{python}
+leaky = ss.vaccinate(efficacy=0.9, coverage=0.9, at=ss.days(0))
+all_or_nothing = ss.vaccinate(efficacy=0.9, leaky=False, coverage=0.9, at=ss.days(0))
+sims = {}
+for label, vaccination in {'Leaky': leaky, 'All or nothing': all_or_nothing}.items():
+    sims[label] = ss.Sim(make_measles(), interventions=vaccination, total_pop=100_000, stop=ss.days(100), verbose=0)
+msim = ss.parallel(sims)
+msim.summarize().loc['measles_infection']
+```
+
+Measles vaccine protection is close to all or nothing, as are many live vaccines; choose the kind that matches the evidence for the vaccine being modeled.
+
+## Data
+
+**Data is matched to results by name.** A column of data is compared with the result of the same name, so a column called `reported` is not compared with the result `cases`. When a sim is built, Starsim notes a column that matches no result, and `sim.fit()` stops with an error:
+
+```{python}
+truth = ss.Sim(make_measles(), total_pop=100_000, stop=ss.days(50), rand_seed=2, verbose=0).run()
+data = truth.to_data('cases', resample='week')
+data = data.rename(columns={'cases': 'reported'}) # As it might come from elsewhere
+ss.Sim(make_measles(), data=data, total_pop=100_000, stop=ss.days(50)).init()
+```
+
+Rename the column to match the result (`data.rename(columns={'reported': 'cases'})`), or say which result it is: `data=ss.simdata(data, aliases=dict(cases='reported'))`.
+
+::: {.callout-warning}
+## [PROPOSAL]
+The message suggests `aliases=dict(result='reported')`, with `result` standing for the name of the result. It should give the code with the closest result filled in, `aliases=dict(cases='reported')`, so it can be pasted as it is (P11).
+:::
+
+**Counts over a period are compared with totals over the same period.** A result that counts events, such as infections or reported cases, is compared with the data as its total since the previous data point, so weekly data is compared with weekly totals, whatever the model's time step. A result that counts people at a time, such as the number infectious, is compared at the time of each data point. Data on prevalence (people infectious at a time) given as a count of events, or the other way round, fits the wrong thing; check which kind each column is. [Calibration](calibration_fitting.qmd) has more on data.
+
+## See also
+
+- [Debugging and profiling](troubleshooting_debugging.qmd): the tools for finding what went wrong.
+- [A minimal reproducible example](troubleshooting_mre.qmd): how to cut a problem down to share it.
+- [Time](running_time.qmd), for units, dates, and steps, and [Products and deliveries](interventions_products.qmd), for vaccines.

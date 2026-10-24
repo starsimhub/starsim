@@ -565,7 +565,7 @@ def test_likelihood():
     assert np.isclose(fit2.pars.beta.value, 0.4, rtol=0.01)
 
     # The model that made the data predicts the held-out weeks better
-    comp = ss.fit.compare_models([make(), make(exposed=True)], data=df)
+    comp = ss.fit.compare_models([make(), make(exposed=True)], data=df, verbose=0) # verbose= is passed to each fit (it was given twice)
     assert comp.table.index[0] == 'SEIR'
     assert list(comp.fits.keys()) == ['SIR', 'SEIR']
     mixed = ss.fit.compare_models(dict(lik=make(), nolik=make(lik=False)), data=df).table # One measure for both, although only one has a likelihood
@@ -991,7 +991,7 @@ def test_time_values():
     assert any('starts with 3 infected' in note for note in few.notes)
     S, I, R = ss.states('S I R')
     rounded = ss.Sim(ss.Disease(infection=ss.Transition(S, I, rate=0.3 * I), recovery=ss.Transition(I, R, dur=10), init_n=dict(I=10), name='few'), total_pop=1e6, n_agents=10_000, unit='day', stop=5, **kw).run()
-    assert rounded.results.few.I[0] == 0 and any('rounds to 0' in note for note in rounded.notes) # As agents, 10 people are a tenth of an agent, which is said
+    assert rounded.results.few.I[0] == 100 and any('rounds to 0' in note for note in rounded.notes) # As agents, 10 people are a tenth of an agent, so one agent (100 people) is seeded, which is said
     S, I = ss.states('S I')
     dip = ss.Disease(infection=ss.Transition(S, I, rate=ss.timeseries({0: 0.05, 60: 0.4}) * I), recovery=ss.Transition(I, S, dur=10), init_n=dict(I=20), name='dip')
     assert any('would usually die out' in note for note in ss.Sim(dip, unit='day', stop=200, **kw).run().notes)
@@ -1001,8 +1001,13 @@ def test_time_values():
     fast = ss.Disease(infection=ss.Transition(S, I, rate=0.6 * I), recovery=ss.Transition(I, R, dur=4), init_prev=0.01, name='fast')
     stepped = ss.Sim(fast, solver='binomial', substeps=1, unit='day', stop=60, total_pop=1e6, **kw) # Whole steps (by default, the chain binomial takes enough substeps)
     df = stepped.check_dt(output=True)
-    assert any('rate × dt = 0.25' in note for note in stepped.new().init().notes)
+    assert any('22% leave in a step' in note for note in stepped.new().init().notes) # 1 - exp(-1/4)
     assert 0.05 < df.change[df.result == 'I'].iloc[0] < 0.2
+    with sc.capture() as txt: # With its default substeps, the chain binomial takes substeps of the same size whatever the step, so says so (it printed a table of zeros)
+        S, E, I, R = ss.states('S E I R')
+        measles = ss.Disease(S >> E @ 1.9*I, E >> I @ ss.days(10), I >> R @ ss.days(8), init_n=dict(I=10), name='measles') # Substeps of half a day, at either step
+        ss.Sim(measles, solver='binomial', stop=ss.days(60), total_pop=1e5, **kw).check_dt()
+    assert 'does not change its results' in txt
     S, I, R = ss.states('S I R')
     slow = ss.Disease(infection=ss.Transition(S, I, rate=0.6 * I), recovery=ss.Transition(I, R, dur=4), init_prev=0.01, name='slow', dt=ss.days(2))
     own = ss.Sim(slow, solver='binomial', substeps=1, unit='day', dt=1, stop=60, total_pop=1e6, **kw).check_dt(output=True)

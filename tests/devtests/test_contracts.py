@@ -551,6 +551,11 @@ def test_coded_beside():
         assert sim.solver == 'abm', f'{type(mod).__name__} should need agents'
     with pytest.raises(ss.CapabilityError):
         corpus.sir(unit='day', interventions=Tagger(), solver='ode').init()
+    class Level(ss.Module): # A plain module that keeps a value for each person needs agents (it ran as an ODE and failed partway)
+        def __init__(self):
+            super().__init__()
+            self.define_states(ss.FloatArr('level', default=0.0))
+    assert corpus.sir(unit='day', connectors=Level()).init().solver == 'abm'
     return numpy
 
 
@@ -590,7 +595,7 @@ def test_joint_population():
     assert ss.Sim([split, ss.SIS(name='b')], demographics=ss.death(rate=ss.peryear(0.01)), total_pop=1000, stop=2010, verbose=0).init().solver == 'abm'
     text = pair().init().describe(output=True)
     assert 'a × b: 2 × 2 = 4 joint states of people' in text and 'people die of a' in text and 'start independent' in text
-    assert 'plan         a, b: in the kernels, the whole run in one call; a × b as one program' in text
+    assert 'plan         a, b: as compiled code, the whole run in one call; a × b as one program' in text
     return j
 
 

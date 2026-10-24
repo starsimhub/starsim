@@ -1,0 +1,170 @@
+---
+title: Demographics
+jupyter: python3
+---
+
+Over a single outbreak of a few months, the population barely changes, and most models leave out births and deaths. Over years it does change, and that matters for transmission: births bring in people who have never been infected, deaths remove people (including those who are immune), and the population ages. For measles, the rate at which births replenish the susceptible population sets how soon it can spread again after an epidemic.
+
+This page covers births and deaths declared for a population, which work however the model is run; rates from data by country, by age, sex, and year; life tables; migration; pregnancy; and aging. The [demographics tutorial](../tutorials/g2_demographics.qmd) uses them on a whole country, and [Population rescaling](running_rescaling.qmd) covers modeling a large population with fewer agents.
+
+## Births and deaths
+
+Births and deaths for the whole population go in `demographics=`. `ss.birth(rate=r)` adds people at a crude birth rate `r` (per person per unit time), into the first state of each disease (here `S`); `ss.death(rate=r)` removes people from every state at rate `r`. Here is the measles model of the tutorials over 30 years, with 30 births and 10 deaths per 1,000 people a year:
+
+```{python}
+import starsim as ss
+ss.options(jupyter=True)
+
+S, I, R = ss.states('S I R')
+infection = S >> I @ ss.perday(1.9)*I # β = 1.9 per day
+recovery  = I >> R @ ss.days(8)       # Infectious for 8 days on average
+measles = ss.Disease(infection, recovery, init_prev=0.001)
+
+demographics = [
+    ss.birth(rate=ss.peryear(0.03)), # 30 births per 1,000 people per year
+    ss.death(rate=ss.peryear(0.01)), # 10 deaths per 1,000 people per year
+]
+pars = dict(demographics=demographics, total_pop=100_000, start='2000', stop='2030', dt=ss.days(1))
+sim = ss.Sim(measles, **pars)
+sim.run()
+sim.results.measles.I.plot()
+```
+
+::: {.callout-warning}
+## [PROPOSAL]
+The tutorials write measles' transmission rate as a bare number, `S >> I @ 1.9*I`, whose unit (per day) is taken from the model's typed values (here `ss.days(8)`). Adding births or deaths per year to that model raises an error, since the model's typed values are then in days and in years, and the unit of the bare 1.9 is no longer known; `demographics=True` does the same. A bare number in a disease should take the unit of that disease's own typed values, so that the model of the tutorials keeps working when demographics are added (P11, P13). Today, give the rate a unit, `ss.perday(1.9)`, as above, or give the sim `unit='day'`.
+:::
+
+The births and deaths are transitions of the disease, so they are among its results (`sim.results.measles.births`, `sim.results.measles.deaths`) and in `describe()`. With several diseases, the same people are born into and die from each of them.
+
+After the first epidemic, almost everyone is immune, and measles all but disappears. Births then add susceptible children until there are enough for measles to spread again. In the ODE, a fraction of an infectious person is enough for it to come back, as the note above says: the number infectious falls below one person within a few months. In a real town of 100,000 people, measles would have died out by then. A stochastic model, in which people are whole numbers and chance matters, shows this:
+
+```{python}
+sim = ss.Sim(measles, solver='binomial', demographics=demographics, total_pop=100_000, start='2000', stop='2005', dt=ss.days(1), rand_seed=1)
+sim.run()
+sim.results.measles.I.plot()
+```
+
+Measles dies out after the first epidemic, and only comes back if it is brought in from outside. This is why measles persists without reintroduction only in large populations (above a "critical community size" of a few hundred thousand people). See [Solvers and when they disagree](running_solvers.qmd) for more on when an ODE and a stochastic model differ.
+
+A death from a disease, rather than from every state, is a transition of the disease: `ss.death(I, rate=ss.peryear(0.1))` (see [Diseases](models_diseases.qmd)). `demographics=True` adds births and deaths at default rates (20 births and 10 deaths per 1,000 people a year).
+
+### Rates that change over time
+
+A birth or death rate can change over time, with `ss.timeseries()`. Values between the years given are interpolated:
+
+```python
+births = ss.birth(rate=ss.timeseries({2000: ss.peryear(0.04), 2030: ss.peryear(0.025)}))
+```
+
+See [Parameters](models_parameters.qmd) for `ss.timeseries()` and other parameters that vary over time.
+
+## Rates from data
+
+Birth and death rates usually come as data: crude birth rates by year, and death rates by year, sex, and age. The demographics modules `ss.Births` and `ss.Deaths` take these, and the rates of the UN World Population Prospects for a country by name, which come with Starsim. With `ss.people()` for the population at the start (see [People](populations_people.qmd)), this is the population of Kenya from 2000:
+
+```{python}
+kenya = dict(
+    people = ss.people('Kenya', year=2000, n_agents=20_000),
+    demographics = [ss.Births(birth_rate='Kenya'), ss.Deaths(death_rate='Kenya')],
+    start = 2000,
+    stop = 2030,
+    dt = ss.years(1),
+)
+sim = ss.Sim(**kenya)
+sim.run()
+sim.results.alive.plot()
+```
+
+The demographics modules run as agents. They age people, give each newborn a mother of reproductive age (`people.parent`), and can run on a step of their own (e.g. `dt=ss.years(1)` for the demographics of a model whose diseases step daily).
+
+The model's population can be checked against the UN's own estimates of the population of Kenya:
+
+```{python}
+for year in [2010, 2020, 2030]:
+    print(year, 'model:', round(sim.results.alive[year - 2000]), 'UN:', round(ss.people('Kenya', year=year).named.total))
+```
+
+::: {.callout-warning}
+## [PROPOSAL]
+The model overshoots the UN's population of Kenya by about 4% by 2020 and 5% by 2030. The UN's rates that come with Starsim are given every ten years, and each is held for its whole decade, so the falling birth rate of the 2010s is taken as that of 2010 throughout. For the rates of a named place, which are estimates for single years, `ss.Births` and `ss.Deaths` should interpolate between the years given (P11); and the note that Starsim prints for data of your own that is years apart ("give a row for each year") can't be acted on for data that comes with Starsim. Today, the overshoot can be avoided by giving rates for each year, interpolated from `ss.data.rates('Kenya', 'births')`.
+:::
+
+### Data of your own
+
+Rates of your own are given as a table. Crude birth rates have a column for the year and one for the rate (`ss.Births(birth_rate=df)`); death rates have columns for the year, sex, age group, and rate (`ss.Deaths(death_rate=df)`). Each rate holds from its year until the next year given.
+
+Crude birth and death rates are usually given per 1,000 people, and death rates by age per person. A rate above 1 is read as per 1,000, and a rate below 1 as per person; a rate that could be either (from 0.1 to 1, or above 1,000) gives a warning saying which was assumed. `rate_units=1000` (per 1,000) or `rate_units=1` (per person) says which, and silences it:
+
+```python
+births = ss.Births(birth_rate=35)                   # 35 per 1,000 people per year
+births = ss.Births(birth_rate=0.035)                # The same, per person
+deaths = ss.Deaths(death_rate=df, rate_units=1)     # Death rates by age, per person
+```
+
+Declared rates (`ss.birth()`, `ss.death()`) are always per person.
+
+### Life tables
+
+A life table says how many of a cohort die at each age. `ss.death(lifetable=...)` takes one and runs under every solver: as agents, each person's age at death is drawn from it, given their age; in a compartmental model stratified by age, it gives a death rate for each age group. `ss.Deaths(lifetable=...)` also takes a table for each sex, and for each year from which it holds:
+
+```python
+import numpy as np
+table = ss.lifetable(ages=np.arange(0, 105, 5), deaths=dx) # dx: the number dying in each 5-year age group, from a national life table
+deaths = ss.death(lifetable=table)
+```
+
+## Migration
+
+People arriving from outside are `ss.immigration(rate=r)`, where `r` is a number of people per unit time (not per person); as agents, they arrive with ages drawn from the population's. People leaving are `ss.emigration(rate=r)`, a rate per person; as agents, they are recorded as having left (`results.new_emigrants`), not as having died. Both go in `demographics=`:
+
+```python
+demographics = [ss.immigration(rate=ss.peryear(500)), ss.emigration(rate=ss.peryear(0.005))]
+```
+
+For movement between places within a model, see [Places and movement](populations_places.qmd).
+
+## Pregnancy
+
+`ss.Pregnancy` models pregnancy itself, for models where it matters: mother-to-child transmission, maternal health, or contraception. Women conceive at age-specific fertility rates; a pregnancy ends in a delivery, a miscarriage, a stillbirth, an abortion, or a maternal death; and each delivery adds a child, whose mother is known. It runs as agents. Fertility rates by age come as a table, here per 1,000 women:
+
+```{python}
+import pandas as pd
+
+fertility = pd.read_csv('test_data/nigeria_asfr.csv') # Age-specific fertility rates by year
+pregnancy = ss.Pregnancy(fertility_rate=fertility, rate_units=1000) # Per 1,000 women per year
+
+nigeria = dict(
+    people = ss.people('Nigeria', year=2000, n_agents=5000),
+    demographics = [pregnancy, ss.Deaths(death_rate='Nigeria')],
+    start = 2000,
+    stop = 2020,
+    dt = ss.months(1),
+    verbose = 0,
+)
+sim = ss.Sim(**nigeria)
+sim.run()
+sim.results.pregnancy.plot()
+```
+
+Pregnancy is declared, with states `NP` (not pregnant) and `P` (pregnant), so its transitions are events that other modules can use, as for a disease: `conception`, `delivery` (which happens to the mother), and `birth` (which happens to the newborn). Each is also a result (`sim.results.pregnancy.conception`, `.birth`, `.miscarriage`, `.stillbirth`, `.abortion`). Contraception, for example, is a modifier of conception, and an intervention can reach pregnant women (`where=pregnancy.P`) or newborns (`who=pregnancy.birth`; see [Products and deliveries](interventions_products.qmd)):
+
+```{python}
+pregnancy = ss.Pregnancy(fertility_rate=ss.peryear(0.08), rate_units=1)    # 80 conceptions per 1,000 women a year
+contraception = ss.modify(pregnancy.conception, multiply=0.5, start='2005') # Halves conception from 2005
+
+pars = dict(demographics=pregnancy, n_agents=5000, start='2000', stop='2010', dt=ss.months(1), verbose=0)
+scenarios = {
+    'No contraception': ss.Sim(**pars),
+    'Contraception': ss.Sim(**pars, interventions=contraception),
+}
+for label, sim in scenarios.items():
+    sim.run()
+    print(label, 'births:', sim.results.pregnancy.birth.sum())
+```
+
+Mother-to-child transmission uses the networks that pregnancy makes between mother and child (`ss.PrenatalNet` and `ss.BreastfeedingNet`); see [Networks and mixing pools](populations_networks.qmd). `pregnancy.pars` lists the other parameters, such as the duration of pregnancy, the chance of a loss, and maternal and infant mortality.
+
+## Aging
+
+People age if the model has births or deaths, and not otherwise; `use_aging=True` or `use_aging=False` in the sim says otherwise. As agents, each person's age goes up with each step. In a compartmental model stratified by age, people move from each age group to the next: if people are spread evenly over the ages in a group, at a rate of one over its width (a group 5 years wide is left at a rate of 1/5 per year), and for a named population, at the rate its age pyramid gives, as agents would age.

@@ -1043,7 +1043,7 @@ def test_clocks():
     assert born and np.isnan(since).any() and np.allclose(since[~np.isnan(since)] % 1, 0) # Whole months, and none for those with no birth
     assert np.isclose(shares(sim)[-1], np.isnan(since).mean()) # none holds those with no birth
     code = check_code(sim)
-    assert "since_birth=ss.months([0.0, 1.0, 2.0, 3.0, 6.0, 12.0, 24.0])" in code and "kind='clock'" in code and 'move=dict(since_birth=0.0)' in code
+    assert "since_birth=ss.months([0.0, 1.0, 2.0, 3.0, 6.0, 12.0, 24.0])" in code and "kind='clock'" in code and 'move=dict(since_birth=0)' in code
     with pytest.raises(ss.errors.BadSplit, match='none'):
         I, R = ss.states('I R')
         bad = ss.Sim(ss.Disease(ss.Transition(I, R, dur=10), init=dict(I=0.1), first='I', name='d'), n_agents=100, verbose=0)

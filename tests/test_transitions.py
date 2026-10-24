@@ -318,6 +318,17 @@ def test_names():
         course = ss.Transition(I, [H, S], rate=rate3, p=[0.28, 0.72])
     assert 'rate3' in Model(init=dict(I=0.01), name='m').graph.pars
 
+    # Transitions reused in a second disease are copied with their parameters, so the two are independent
+    S, E, I, R = ss.states('S E I R')
+    inf, prog, rec = S >> E @ 1.9*I, E >> I @ ss.days(10), I >> R @ ss.days(8)
+    first, second = ss.Disease(inf, prog, rec), ss.Disease(inf, prog, rec, beta=1.0, name='second') # An SEIR (I read before it is filled) can be built twice
+    assert first.pars.beta.value == 1.9 and second.pars.beta.value == 1.0
+    ss.Sim(second, connectors=ss.modify(second.pars.beta, multiply=0.5), n_agents=200, stop=5, verbose=0).init() # The modifier finds the second's beta
+    S, I, R = ss.states('S I R')
+    dur = ss.par(ss.days(6), bounds=[ss.days(3), ss.days(10)])
+    named = ss.Disease(S >> I @ 0.3*I, I >> R @ dur, R >> S @ ss.days(100), name='named') # A parameter named like a slot, beside a bare value in that slot (it was DuplicateDeclaration)
+    assert named.pars.dur is dur and 'dur_R_to_S' in named.pars
+
     # A model can be built with no Python frame above it, as when called from R
     S, I, R = ss.states('S I R')
     dis = without_frame(ss.Disease, S >> I @ 0.3*I, I >> R @ ss.days(10), init_prev=0.01)
@@ -560,6 +571,12 @@ def test_describe():
     eqs = sir.equations(output=True)
     print(eqs)
     assert eqs.splitlines() == ['dS/dt = -beta * S * I / N', 'dI/dt =  beta * S * I / N - I / dur', 'dR/dt =  I / dur']
+    S, I, R = ss.states('S I R')
+    fatal = ss.Disease(S >> I @ 0.4*I, ss.Transition(I, [R, ss.null], dur=ss.days(8), p=[None, 0.002]), name='fatal')
+    assert 'dR/dt =  (1 - 0.002) * I / dur' in fatal.equations(output=True) # A branch to ss.null, given in a list, takes its share (it was "I / dur")
+    text = fatal.describe(output=True)
+    assert 'null1' in fatal.diagram() and 'I -> R | (removed)' in text # ss.null shown as leaving the model (it was "I -> ")
+    assert 'beta = 0.4 per day' in text # Outside a sim, in the unit of its typed values (it was "per step")
     table = repr(sir.transitions)
     print(table)
     assert 'contact-mediated, source I' in table
@@ -568,6 +585,10 @@ def test_describe():
 
     # R0 from the next-generation matrix: beta × the mean time infectious, with a competing death; the contact matrix's largest eigenvalue; and through a reservoir
     assert np.isclose(sir.R0(), 0.5)
+    S, I, R = ss.states('S I R')
+    immune = ss.Sim(ss.Disease(S >> I @ 1.9*I, I >> R @ ss.days(8), init=dict(R=0.9, I=1e-3), name='measles'), unit='day', solver='ode', verbose=0).init()
+    assert np.isclose(immune.diseases.measles.R0(), 15.2) # With no immunity, whoever starts immune (it was 1.52, R at the start)
+    assert 'R = 1.52 at the start, with 10% susceptible' in '\n'.join(immune.start_lines())
     S, E, I, R = ss.states('S E I R')
     seir = ss.Disease(infection=ss.Transition(S, E, rate=0.3 * I), onset=ss.Transition(E, I, dur=5),
                       recovery=ss.Transition(I, R, dur=10), death=ss.death(I, rate=0.05))
@@ -623,6 +644,15 @@ def test_load():
         code = ss.Sim(ss.Disease(infection=S >> I @ 0.3*I, recovery=I >> R @ mydist(10, 2), init_n=dict(I=10), name='sir'), stop=30, **kw).to_code()
     assert ' mydist(' in code and 'ss.mydist' not in code
     assert 'beta' in ss.diff(*[ss.Sim(diseases=ssl.AgentSIR(beta=b), networks='random', n_agents=1000, start=2000, stop=2003, **kw) for b in [0.1, 0.2]], output=True) # ss.diff() of modules written as code
+    def vaxsim(dur): # A product made by its delivery is written in one call, whole numbers as integers, and the default first state is left out
+        S, I, R = ss.states('S I R')
+        return ss.Sim(ss.Disease(S >> I @ 0.3*I, I >> R @ ss.days(dur), name='sir'), interventions=ss.vaccinate(efficacy=0.9, coverage=0.5, at=[10]), unit='day', stop=60, total_pop=1000, solver='ode', **kw)
+    code = vaxsim(8).to_code()
+    assert 'ss.vaccinate(efficacy=0.9, at=[10]' in code and 'ss.Vaccine' not in code and 'ss.days(8)' in code and 'first' not in code
+    ns = {}
+    exec(code.replace("if __name__ == '__main__':", 'if False:'), ns)
+    assert ns['sim'].hash() == vaxsim(8).hash()
+    assert '8 days -> 10 days' in ss.diff(vaxsim(8), vaxsim(10), output=True) # Not "8 day"
 
     # A sim that has run can be saved and loaded under every solver
     for solver in ['ode', 'binomial', 'gillespie', 'abm']:
@@ -836,7 +866,7 @@ def test_seeded_stay():
     sim = ss.Sim(sir, networks=ss.RandomNet(), unit='day', stop=4, n_agents=10_000, analyzers=ss.infection_log(), verbose=0).run()
     log = sim.analyzers[0].to_df()
     by_seeds = log[log.source.isin(log.target[log.source == -1])]
-    assert len(by_seeds) and (by_seeds.t == ss.days(1)).all(), f'seeds infected on days {sorted(set(by_seeds.t))}'
+    assert len(by_seeds) and (by_seeds.t == 1).all(), f'seeds infected on days {sorted(set(by_seeds.t))}'
     return
 
 

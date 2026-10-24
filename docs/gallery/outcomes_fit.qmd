@@ -1,0 +1,76 @@
+---
+title: Cases, hospitalizations, and deaths, fitted to data
+jupyter: python3
+---
+
+Data on an epidemic is rarely the number infected: it is reported cases, hospital admissions, or deaths, each a share of infections, some time after infection. In Starsim these are outcomes: results computed from the model's flows, with a share, a delay, and (for a stay in hospital) a duration, that don't change the epidemic itself. This page adds three outcomes to an SIR, makes weekly data from the model with a known β, and fits β to it.
+
+## The model
+
+| Parameter | Value | Meaning |
+|---|---|---|
+| β | fitted, between 0.05 and 1 per day | Rate of infection; the data was made with 0.25 |
+| Infectious period | 10 days | Mean time in I (exponential) |
+| Cases | 50% of infections, 5 days later | Reported cases |
+| Hospitalizations | 5% of infections, 7 days later, for 10 days | People in hospital |
+| Deaths | 20% of those hospitalized, about 14 days later | Lognormal delay (mean 14 days, standard deviation 5) |
+| Population | 1,000,000 | |
+| Infectious at the start | 0.1% | |
+
+```{python}
+import starsim as ss
+ss.options(jupyter=True)
+
+beta = ss.par(0.3, bounds=[0.05, 1.0]) # A parameter to fit, with its starting value and bounds
+S, I, R = ss.states('S I R')
+infection = S >> I @ beta*I
+recovery  = I >> R @ ss.days(10)
+cases     = ss.outcome(0.5*infection, delay=ss.days(5))
+hosp      = ss.outcome(0.05*infection, delay=ss.days(7), duration=ss.days(10))
+deaths    = ss.outcome(0.2*hosp, delay=ss.lognorm_ex(mean=14, std=5, unit='days'))
+sir = ss.Disease(infection, recovery, cases, hosp, deaths, init=dict(I=0.001), name='sir')
+
+pars = dict(total_pop=1e6, start='2020-01-01', stop='2020-06-01')
+```
+
+The outcomes are not states, so the diagram, from `diagram()`, is an SIR's:
+
+```{python}
+#| echo: false
+#| output: asis
+fence = '`' * 3
+print(fence + '{mermaid}\n' + sir.diagram() + '\n' + fence)
+```
+
+## Data
+
+The data is made from the model itself, with β = 0.25, as weekly counts of cases and deaths with Poisson noise, as in real reporting. Since the right answer is known, this checks that the fit can find it.
+
+```{python}
+truth = ss.Sim(sir, pars=dict(beta=0.25), rand_seed=2, verbose=0, **pars)
+truth.run()
+data = truth.to_data(['cases', 'deaths'], resample='week')
+data.head()
+```
+
+## Result
+
+The data is matched to results by name (`cases` and `deaths`), and each week of data is compared with the model's total over that week. `sim.fit()` fits every parameter with bounds to every result with data:
+
+```{python}
+sim = ss.Sim(sir, data=data, **pars)
+fit = sim.fit()
+fit.plot()
+```
+
+```{python}
+fit.pars
+```
+
+β comes out at 0.25, the value the data was made with.
+
+## Going further
+
+- [Calibration](../tutorials/t7_calibration.qmd) fits the measles model to weekly case data, and projects from the fit.
+- [Outcomes and observation](../user_guide/models_outcomes.qmd) covers outcomes, and [Calibration](../user_guide/calibration_fitting.qmd) the options of `sim.fit()`.
+- [Coming from camdl](../coming_from/camdl.qmd) and [Coming from flepiMoP](../coming_from/flepimop.qmd) show models that are fitted to outcomes in those frameworks.

@@ -54,7 +54,8 @@ class Progress:
         share = t.ti/max(1, t.npts - 1)
         done = int(round(share*self.width))
         bar = style('━'*done, 'cyan', color=self.color) + style('─'*(self.width - done), 'dim', color=self.color)
-        return f'  {bar} {share:4.0%}  {t.now("str")}  {self.sim.elapsed:.1f} s'
+        now = ss.sim.time_str(t.tvec[t.ti], self.sim.unit_name) # The end of the step being run, so that the last says the end of the run: a date, or e.g. day 27
+        return f'  {bar} {share:4.0%}  {now}  {self.sim.elapsed:.1f} s'
 
     def update(self):
         """ Show the progress at this step: drawn at most ten times a second, or as a line every so often """
@@ -195,7 +196,11 @@ class Presentation:
         """ The resolved model, with every guessed default marked, as a section of a `Description` (`out`, or a new one); see `ss.Disease.describe()` """
         mod = self.module
         engine = getattr(mod, 'engine', None)
-        unit = sim.unit_name if sim is not None else None
+        if sim is not None:
+            unit = sim.unit_name
+        else: # Outside a sim, the unit a sim would take from the typed values (as in ss.Sim._init_unit()), if they agree
+            units = {u.removesuffix('s') for u in self.unit_values()}
+            unit = units.pop() if len(units) == 1 else 'time unit'
         out = Description() if out is None else out
         add = out.add
         shown = set() # The parameters whose doc= and source= are shown already
@@ -335,7 +340,7 @@ class Presentation:
         for name,tr in self.transitions.items():
             kind = 'contact' if tr.contact else 'spontaneous'
             for src in tr.src or [None]:
-                for dst in tr.dst or [None]:
+                for dst in (tr.dst or [None]) + [None]*bool(tr.dst and tr.dies): # ss.null as one of several destinations is an edge of its own
                     out.append((src, dst, name, kind))
         return out
 
@@ -389,6 +394,10 @@ class Presentation:
         lines = []
         sim = getattr(engine, 'sim', None)
         mixing = getattr(sim, 'mixing', None)
+        if self.transmissions and sim is None and self.strats: # The disease as written, not the sim's copy, which knows the contacts
+            name = self.module.name
+            lines.append(f'In each equation, a state is its number in each group of {sc.strjoin([s.name for s in self.strats], sep=" and ")}, and I / N is over the whole population here; '
+                         f'the equations of the disease in a sim, sim.diseases.{name}.equations(), use its contacts')
         if self.transmissions and mixing is not None and getattr(mixing, 'terms', None):
             unit = sim.unit_name
             for term in mixing.terms:
@@ -438,12 +447,10 @@ class Presentation:
         def entry(name, weight=''):
             out = []
             for track in engine.tracks[name]:
-                w = weight if track.p is None else f'{weight}{format_expr(track.p)} * '
+                w = weight if track.p is None else f'{weight}{factor_str(track.p)} * '
                 if track.immediate:
-                    ps = track.tr.p if track.tr.split and track.tr.p else [None]*len(track.tr.dst)
-                    rest = ' - '.join(['1'] + [format_expr(p) for p in ps if p is not None]) # A destination with p=None takes the rest
-                    for dst,p in zip(track.tr.dst, ps):
-                        out += entry(dst.name, w if not track.tr.split else f'{w}{format_expr(p) if p is not None else f"({rest})"} * ')
+                    for dst,share in zip(track.tr.dst, branch_shares(track.tr)[0]):
+                        out += entry(dst.name, f'{w}{share}')
                 else:
                     out.append((track.first, w))
             return out
@@ -481,12 +488,11 @@ class Presentation:
             if flow.to is not None:
                 dsts.append((flow.to, term))
             else:
-                ps = tr.p if (tr.p is not None and len(tr.dst) > 1) else [None]*len(tr.dst)
-                for dst,p in zip(tr.dst, ps):
-                    given = [format_expr(q) for q in ps if q is not None]
-                    w = '' if len(tr.dst) == 1 else (f'{format_expr(p)} * ' if p is not None else f'(1 - {" - ".join(given)}) * ')
+                shares, leaving = branch_shares(tr)
+                for dst,w in zip(tr.dst, shares):
                     for ind,weight in entry(dst.name, w):
                         dsts.append((ind, f'{weight}{term}'))
+                term = f'{leaving}{term}' # With ss.stay, only those who do not stay leave
             out.append(sc.objdict(tr=tr, src=flow.src, term=term, dst=dsts))
 
         names = [comp_name(i) for i in range(len(engine.comps))]
@@ -581,6 +587,27 @@ class Presentation:
 
 #%% Helpers for the text and the model spec
 
+def factor_str(expr):
+    """ An expression written as a factor, in brackets if it is a sum or difference, e.g. "(1 - p_death)" """
+    text = format_expr(expr)
+    return f'({text})' if isinstance(expr, BinOp) and expr.op in '+-' else text
+
+
+def branch_shares(tr):
+    """ The share of a transition's flow that goes to each of its destination states, as a factor to put before it (e.g. "0.3 * ", or "" for all of it), and the share that leaves its source ("" unless ss.stay is one of its destinations); what ss.null takes goes nowhere """
+    if not tr.split:
+        return ['']*len(tr.dst), ''
+    ps = list(tr.p or [None]*len(tr.dst))
+    ends = ps + [tr.p_stay]*tr.stays + [tr.p_die]*tr.dies # One entry for each destination, with ss.stay and ss.null
+    given = [factor_str(p) for p in ends if p is not None]
+    shares = [f'{factor_str(p)} * ' if p is not None else f'(1 - {" - ".join(given)}) * ' for p in ends] # The destination with p=None takes the rest
+    leaving = ''
+    if tr.stays:
+        stay = shares[len(ps)][:-3]
+        leaving = f'(1 - {stay}) * ' if tr.p_stay is not None else f'({" + ".join(given)}) * '
+    return shares[:len(ps)], leaving
+
+
 def edge_label(tr):
     """ A transition's rate as text, for a diagram, e.g. "infection: beta * I" """
     if tr.dur is not None:
@@ -589,8 +616,9 @@ def edge_label(tr):
         text = format_expr(tr.rate)
     else:
         text = ''
-    if tr.p is not None and len(tr.dst) > 1:
-        text += ' (p = ' + ', '.join('rest' if p is None else format_expr(p) for p in tr.p) + ')'
+    if tr.split and (tr.p is not None or tr.p_stay is not None or tr.p_die is not None):
+        ends = list(tr.p or [None]*len(tr.dst)) + [tr.p_stay]*tr.stays + [tr.p_die]*tr.dies # With ss.stay and ss.null
+        text += ' (p = ' + ', '.join('rest' if p is None else format_expr(p) for p in ends) + ')'
     return f'{tr.name}: {text}' if text else tr.name
 
 

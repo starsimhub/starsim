@@ -1,0 +1,136 @@
+---
+title: Population rescaling
+jupyter: python3
+---
+
+A model run as agents needs one agent per person it simulates, and simulating every person in a city or a country is often unnecessary and slow. Starsim lets each agent stand for several people instead. This page covers the size of the population and the number of agents, scaling by a fixed number of people per agent, and dynamic rescaling, in which that number grows as an epidemic does. It applies only to runs as agents: a compartmental model holds numbers of people, so it can be any size at no cost.
+
+## Population size and number of agents
+
+Two settings say how big the population is:
+
+- **`total_pop`** is the size of the population being modeled. As compartments, it is the total of the compartments; as agents, it is the number of people the agents stand for.
+- **`n_agents`** is how many agents are simulated. It is a computational choice, like the time step, and giving it makes the sim run as agents.
+
+If neither is given, the population is 10,000. If only `n_agents` is given, `total_pop` is the same. If only `total_pop` is given and the sim runs as agents, there are as many agents as people, up to 10,000.
+
+Here is an influenza-like infection (R0 = 0.3 per day × 10 days = 3) in a city of a million people, as compartments and as 10,000 agents. (This page uses a slower infection than measles, whose fast rates need short steps when run as agents; see [Solvers](running_solvers.qmd#the-length-of-a-step).)
+
+```{python}
+import starsim as ss
+ss.options(jupyter=True)
+
+S, I, R = ss.states('S I R')
+infection = S >> I @ 0.3*I        # β = 0.3 per day
+recovery  = I >> R @ ss.days(10)  # Infectious for 10 days on average
+flu = ss.Disease(infection, recovery, init_prev=0.001)
+
+ode    = ss.Sim(flu, total_pop=1e6, stop=ss.days(150)).run()               # A million people, as compartments
+agents = ss.Sim(flu, total_pop=1e6, stop=ss.days(150), solver='abm').run() # The same, as 10,000 agents
+print('People per agent:', agents.pars.pop_scale)
+```
+
+Each agent stands for 100 people, and the counts in the agents' results are multiplied by 100. The two agree on the size of the epidemic and of its peak; the peak comes a few days later as agents, partly by chance and partly because agents take whole daily steps.
+
+## Static scaling
+
+The number of people each agent stands for is `pop_scale`, which is `total_pop / n_agents` unless it is given itself. Results that are counts (such as `I`) are multiplied by it when the run ends; results that are shares or averages (such as prevalence) are not.
+
+The cost is resolution. With 5,000 agents for a million people, each agent is 200 people, so an epidemic can't start from fewer than 200 people, and an outbreak started by 10 people can't be represented at all:
+
+```{python}
+flu = ss.Disease(infection, recovery, init_n=dict(I=10)) # 10 people infectious at the start
+static = ss.Sim(flu, total_pop=1e6, n_agents=5_000, stop=ss.days(150), label='Static')
+static.run();
+```
+
+Starsim notes that 10 people round to no agents. The initial infections can instead be given as a number of agents, with `ss.choose_n()`, here 10 agents, each of whom stands for 200 people, so 2,000 people are infectious at the start:
+
+```{python}
+flu = ss.Disease(infection, recovery, init_prev=ss.choose_n(10)) # 10 agents infectious at the start
+static = ss.Sim(flu, total_pop=1e6, n_agents=5_000, stop=ss.days(150), label='Static')
+static.run();
+```
+
+## Dynamic rescaling
+
+With `rescale=True`, each agent starts by standing for one person, and the number grows as the epidemic does, up to `pop_scale`. At the end of each step, the sim:
+
+1. checks the share of agents who are no longer naive (who have left the first state of any disease);
+2. if that share is more than `rescale_threshold` (5% by default), multiplies the number of people per agent by at least `rescale_factor` (1.2 by default), without going past `pop_scale`;
+3. makes enough of the agents who are not naive naive again (if the number of people per agent doubles, half of them), so that the infected people are spread over fewer agents.
+
+So every agent always stands for the same number of people, and agents are freed to stand for the part of the population that has not been infected yet. With dynamic rescaling, the 10 agents infectious at the start are 10 people:
+
+```{python}
+dynamic = ss.Sim(flu, total_pop=1e6, n_agents=5_000, stop=ss.days(150), rescale=True, label='Dynamic')
+dynamic.run()
+dynamic.results.pop_scale.plot()
+```
+
+The number of people per agent (`sim.results.pop_scale`) starts at 1, and grows as the epidemic does, to 200. Here are the three runs:
+
+```{python}
+import matplotlib.pyplot as plt
+
+ten = ss.Disease(infection, recovery, init_n=dict(I=10), name='flu') # 10 people infectious, as compartments
+ode = ss.Sim(ten, total_pop=1e6, stop=ss.days(150), label='ODE', verbose=0).run()
+
+for sim in [ode, static, dynamic]:
+    res = sim.results.flu.I
+    plt.plot(res.timevec, res.values, label=sim.label)
+plt.xlabel('Day')
+plt.ylabel('Number infectious')
+plt.legend();
+```
+
+The static sim starts with 2,000 people infectious, so its epidemic peaks weeks earlier. The dynamic sim starts with 10, like the ODE here; it may take off later or earlier than the ODE by chance, since the ODE always takes off at once, while a few agents can take a while to start a chain of transmission (see [Uncertainty, seeds, and many runs](running_uncertainty.qmd)).
+
+### Results count only the people that agents stand for
+
+While each agent stands for fewer people than `pop_scale`, part of the population is not represented by any agent. These people are all naive, but they are not in the results: at the start, the dynamic sim has 5,000 people alive, not a million, so any share of the population (such as prevalence) worked out from its results is 200 times too high:
+
+```{python}
+res = dynamic.results
+print('Alive at the start:', res.alive[0])
+print('Infectious at the start:', res.flu.I[0])
+```
+
+The people who are missing are `n_agents × (pop_scale − scale)`, where `scale` is the number of people per agent at each step, and they are all in the first state. Adding them back:
+
+```{python}
+missing = dynamic.pars.n_agents * (dynamic.pars.pop_scale - res.pop_scale.values) # People no agent stands for yet
+susceptible = res.flu.S.values + missing
+print('Susceptible at the start, with the missing people:', round(susceptible[0]))
+```
+
+::: {.callout-warning}
+## [PROPOSAL]
+For a declared disease, the people that no agent stands for yet are known to be in its first state, so its results should include them by themselves when `rescale=True` (`S`, `alive`, and every ratio), rather than each user correcting each result by hand (P11). Today, only a disease written as code can do it, in its `finalize_results()`, or the user afterwards, as above.
+:::
+
+### Diseases written as code
+
+Dynamic rescaling needs to know which agents are naive, and to make agents naive again. A declared disease does both by itself. A disease written as code that transmits (a subclass of `ss.Infection`) counts the agents who have ever been infected (`ti_infected`) as not naive, and its `make_naive()` puts each of its states back to its default value, except `rel_sus` and `rel_trans`, which other modules (such as vaccines) often change. A disease that keeps something else, or that sets `rel_sus` itself, overrides it:
+
+```python
+class MyDisease(ss.Infection):
+    def make_naive(self, uids, skip_states=None):
+        super().make_naive(uids, skip_states=['rel_trans']) # Reset rel_sus too
+        self.my_custom_value[uids] = 0 # And anything not kept as a state
+```
+
+A count that is added up during the run would mix steps with different numbers of people per agent, so work out a running total in `finalize_results()`, after the results have been scaled; a declared disease's running totals (`res.infection.cum`) are worked out from the scaled flows when they are asked for.
+
+## Pitfalls
+
+- **Too few agents for the start of an epidemic.** Starsim notes when the initial number of people rounds to too few agents; use more agents, `ss.choose_n()`, or `rescale=True`.
+- **Results during a run are in agents.** Counts are scaled when the run ends; an analyzer that reads a count during the run sees agents.
+- **Rare events.** An event that happens to fewer people than an agent stands for (a rare complication) happens to whole agents or not at all; such a model needs more agents.
+- **Dynamic rescaling changes what results mean** until the scale reaches `pop_scale`: counts of people outside the agents are missing.
+
+## See also
+
+- [Demographics](../tutorials/g2_demographics.qmd), the tutorial that scales agents to the population of a country
+- [People](populations_people.qmd), for the agents and their attributes
+- [Solvers and when they disagree](running_solvers.qmd), for when to run as agents at all

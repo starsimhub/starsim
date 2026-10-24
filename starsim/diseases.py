@@ -154,7 +154,7 @@ class Disease(ss.Module):
 
     @staticmethod
     def reuse(args, members, names=None):
-        """ States and transitions that already belong to another disease are copied (together, so they refer to each other), so one set can build several diseases; parameters stay shared """
+        """ States and transitions that already belong to another disease are copied (together, so they refer to each other, and with their parameters), so one set can build several independent diseases """
         owners = {}
         pars = {}
         endpoints = set() # States that the transitions given move people between, which this disease will own
@@ -202,7 +202,8 @@ class Disease(ss.Module):
             else:
                 members[name] = obj
         args = positional
-        memo = {key:None for key in owners} | {key:p for key,p in pars.items()} | others # The copies belong to no module yet, and parameters stay shared, e.g. one R0 for several models
+        memo = {key:None for key in owners} | {id(p.module):None for p in pars.values() if p.module is not None} # The copies belong to no module yet
+        memo |= {key:p for key,p in pars.items() if p.module is None} | others # Parameters that came with the copied transitions are copied too, so each disease has its own; one not yet registered stays shared, e.g. one R0 for several models
         return sc.dcp((args, members), memo=memo)
 
     def init_graph(self, args, members, pars, kwargs, names=None):
@@ -369,7 +370,7 @@ class Disease(ss.Module):
         The state-transition diagram, as the text of a Mermaid flowchart (https://mermaid.js.org)
 
         People states are rounded and counts slanted; transmissions are dashed; each
-        arrow is labelled with its transition's name and rate. `ss.save('sir.md', sim, format='mermaid')`
+        arrow is labelled with its transition's name and rate. `ss.interop.export(sim, 'mermaid', filename='sir.md')`
         writes the diagram of every disease in a sim.
 
         **Example**:
@@ -383,6 +384,11 @@ class Disease(ss.Module):
     def R0(self, matrix=False):
         """
         The basic reproduction number, from the next-generation matrix at the disease-free state
+
+        By definition it is in a population with no immunity: everyone is taken to be in the first
+        state (e.g. S), each group keeping its size, whoever starts immune (`init=dict(R=0.9)`).
+        The reproduction number at the start, with that immunity, is in the line a run prints
+        as it starts, when it differs (`R0 = 15.2 (R = 1.52 at the start, with 10% susceptible)`).
 
         The model is laid out as an ODE: if the disease is in a sim, a copy of that sim
         is made with `solver='ode'`, with its mixing and stratification; otherwise a sim with
@@ -1211,6 +1217,9 @@ class InfectionLog:
         if self.networks and 'network' in df.columns:
             names = dict(enumerate(self.networks))
             df['network'] = df['network'].map(lambda v: names.get(v, v))
+        if 'network' in df.columns and df['network'].isna().all(): # No route is known (e.g. homogeneous mixing, with no networks): no column of blanks
+            df = df.drop(columns='network')
+        df['t'] = [float(t.value) if isinstance(t, ss.dur) and not isinstance(t, ss.datedur) else t for t in df['t']] # Plain numbers (on the disease's own axis), or dates, rather than durations, so times can be subtracted
 
         df = df.sort_values(['t', 'source', 'target'], kind='stable')
         df = df.reset_index(drop=True)

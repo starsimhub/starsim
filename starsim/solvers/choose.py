@@ -716,10 +716,12 @@ def init_capabilities(sim, modules):
                 continue
             elif flag: # It says it works on groups
                 continue
-            elif flag is None and observer(mod): # It runs in Python beside the compartments, whatever the solver; if it asks for agents, it says so then
+            elif flag is None and observer(mod) and not mod.state_list: # It runs in Python beside the compartments, whatever the solver; if it asks for agents, it says so then
                 add(f'module: {mod.name}', 'yes', 'runs in Python each step')
             else:
-                if isinstance(mod, (ss.Births, ss.Deaths)) and flag is None:
+                if flag is None and observer(mod): # A value for each person (define_states()), which only agents have
+                    why = f'"{mod.name}" ({type(mod).__name__}) keeps a value for each person ({sc.strjoin(s.name for s in mod.state_list[:3])}), which only agents have; if its code works on groups, set compartmental = True on it'
+                elif isinstance(mod, (ss.Births, ss.Deaths)) and flag is None:
                     why = f'"{mod.name}" ({type(mod).__name__}) works on agents; ss.birth() and ss.death() in the disease are its compartmental form'
                 else:
                     why = f'"{mod.name}" ({type(mod).__name__}) works on agents' + ('' if flag is False else '; if its code works on groups, set compartmental = True on it')

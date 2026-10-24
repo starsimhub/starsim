@@ -1,10 +1,8 @@
 ---
-title: Starsim models
-jupyter: python3
+title: Models built with Starsim
 ---
 
-
-The Starsim framework serves as a centralized "hub" for storing anything that is typically required to model the spread of diseases among agents. This includes representations of networks, diseases, populations, demographics, interventions, and products, and logic for connecting all of these things together and simulating their interactions over time.
+The Starsim framework serves as a centralized "hub" for storing anything that is typically required to model the spread of diseases, as compartments or among agents. This includes representations of networks, diseases, populations, demographics, interventions, and products, and logic for connecting all of these things together and simulating their interactions over time.
 
 Specific models that have been created using the Starsim framework are kept in their own separate repositories. Starsim's models include the following:
 
@@ -26,5 +24,3 @@ Specific models that have been created using the Starsim framework are kept in t
 One of the strengths of Starsim is that all of these models are inter-compatible. For example, an HIV-TB coinfection model can be created by combining the HIV module from STIsim and the TB module from TBsim.
 
 Note: the Starsim suite also includes [Covasim](https://github.com/institutefordiseasemodeling/covasim) (for modeling COVID-19). Covasim is built on the same principles as Starsim, but unlike the above tools, it is a separate codebase and is not inter-operable with the other models.
-
-

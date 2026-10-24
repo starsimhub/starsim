@@ -3,7 +3,7 @@ title: The model as data
 jupyter: python3
 ---
 
-In Starsim 3, a disease was a class whose `step()` method changed arrays of agents. That code could be run, but not read: Starsim couldn't describe the model, draw it, or run it any other way. In Starsim 4, a declared disease is a set of objects (states, transitions, parameters) that describe the model without running it. Everything else is derived from them: the description, the diagram and equations, the stratified model, the run's hash, the saved spec, and the engines that run it as an ODE, a stochastic compartmental model, or agents.
+A disease written as code, as a class whose `step()` method changes arrays of agents, can be run but not read: Starsim can't describe the model, draw it, or run it any other way. A *declared* disease is instead a set of objects (states, transitions, parameters) that describe the model without running it. Everything else is derived from them: the description, the diagram and equations, the stratified model, the run's hash, the saved spec, and the engines that run it as an ODE, a stochastic compartmental model, or agents.
 
 This page covers those objects, what Starsim does with them when a module is built, and how it fills in what you left out. [From model to run](build_and_run.qmd) covers what happens next.
 
@@ -53,7 +53,7 @@ sir.recovery.contact      # False
 
 ## Parameters
 
-A number written inline becomes a parameter of the module, named after its slot: above, `sir.pars` has `beta` (the coefficient of `I`) and `dur` (the dwell time of recovery), qualified by the transition if two would clash (`dur_recovery`). Wrap a value in `ss.par()` when it needs a name, bounds, or a source; bounds are what make it fittable, since `sim.fit()` fits every parameter with bounds to every result with data. A value may also vary by group (`ss.by(age=[...])`), in time (`ss.timeseries()`), or between people (a distribution): the slot decides what a value means, and the form is free. Setting a parameter the module doesn't have raises `ss.errors.UnknownParameter`, since a misspelling that is silently ignored is one of the hardest bugs to find. See [Parameters](../user_guide/basics_parameters.qmd).
+A number written inline becomes a parameter of the module, named after its slot: above, `sir.pars` has `beta` (the coefficient of `I`) and `dur` (the dwell time of recovery), qualified by the transition if two would clash (`dur_recovery`). Wrap a value in `ss.par()` when it needs a name, bounds, or a source; bounds are what make it fittable, since `sim.fit()` fits every parameter with bounds to every result with data. A value may also vary by group (`ss.by(age=[...])`), in time (`ss.timeseries()`), or between people (a distribution): the slot decides what a value means, and the form is free. Setting a parameter the module doesn't have raises `ss.errors.UnknownParameter`, since a misspelling that is silently ignored is one of the hardest bugs to find. See [Parameters](../user_guide/models_parameters.qmd).
 
 ## Dimensions
 
@@ -77,7 +77,7 @@ When `ss.Disease(...)` is called, it builds the module's graph (`ss.transitions.
 
 So mistakes in the model's structure are errors when the disease is built, at the line that made it. What needs the sim (the unit of bare numbers, values against their bounds, the shapes of values by group, the choice of solver) is checked at `sim.init()`.
 
-Picking names up from variables is convenient and slightly magical, so it happens in one place, once. It can miss (a transition written inline in the call gets the fallback name), and `describe()` shows the names used.
+Picking names up from variables is convenient but implicit, so it happens in one place, once. It can miss (a transition written inline in the call gets the fallback name), and `describe()` shows the names used.
 
 ## Guessed defaults
 
@@ -112,7 +112,7 @@ sir.transitions
 ## Limits
 
 - **Code is opaque.** A function given as a rate (`rate=my_fn`) isn't analyzed in advance; if it needs something only agents have, a compartmental run stops and says what it asked for.
-- **A disease written as code is not data.** A Starsim 3 style disease, with its own `define_states()` and `step()`, still runs as agents in the same loop, but `describe()` shows only its class, arrays, and parameters. A class can mix the two: declared transitions, plus code in `step()` after `super().step()`.
+- **A disease written as code is not data.** A disease with its own `define_states()` and `step()` runs as agents in the same loop, but `describe()` shows only its class, arrays, and parameters. A class can mix the two: declared transitions, plus code in `step()` after `super().step()`.
 - **Some things need agents.** A distribution across people or an individual-level network has no compartmental form, so `solver='auto'` runs the model as agents and says why. See [Solvers](solvers.qmd).
 
 ## In the design record

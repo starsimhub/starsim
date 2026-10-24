@@ -1,0 +1,165 @@
+---
+title: Contact matrices and data by place
+jupyter: python3
+---
+
+Most infections spread differently between groups of people: children mix mostly with children, and older people have fewer contacts. A **contact matrix** says how much each group mixes with each other one: row *i*, column *j* is the number of contacts per unit time that one person in group *i* has with people in group *j*. This page covers contact matrices by age and by other groups, the matrices and populations that Starsim has for each country, and how a matrix is used under compartments and agents. Networks of individual contacts are on [Networks and mixing pools](populations_networks.qmd), and the [Age groups and contacts tutorial](../tutorials/t4_ages.qmd) uses a contact matrix for measles.
+
+## A contact matrix by age
+
+A contact matrix needs groups to act between, so the model is stratified by age first (see [Stratification](models_stratification.qmd)): here into children (0–14), adults (15–64), and older people (65+), with the share of the population in each. `ss.contacts()` takes the matrix and the lower edge of each of its age groups. With a contact matrix, β is the probability that a contact with an infectious person infects.
+
+The infection here is a flu-like one, much less transmissible than measles, so that the differences between groups show:
+
+```{python}
+import starsim as ss
+ss.options(jupyter=True)
+
+S, I, R = ss.states('S I R')
+infection = S >> I @ 0.03*I       # β = 0.03 per contact
+recovery  = I >> R @ ss.days(5)   # Infectious for 5 days on average
+flu = ss.Disease(infection, recovery, init_prev=0.001)
+flu.stratify(age={0: 0.3, 15: 0.6, 65: 0.1}) # Ages 0-14, 15-64, and 65+, with the share of people in each
+
+contacts = ss.contacts(ages=[0, 15, 65], matrix=[[10, 4, 0.5], [2, 8, 0.5], [1.5, 3, 2]]) # Contacts a day
+sim = ss.Sim(flu, networks=contacts, total_pop=100_000, stop=ss.days(150))
+sim.run()
+sim.results.flu.I.by('age').plot()
+```
+
+Children have the most contacts, mostly with each other, and older people the fewest, so the share infected falls with age:
+
+```{python}
+infections = sim.results.flu.infection.by('age').summarize() # The total in each age group
+people = [30_000, 60_000, 10_000]
+print('Share infected in each age group:', (infections/people).round(2))
+```
+
+::: {.callout-warning}
+## [PROPOSAL]
+`summarize()` on a result by group returns a bare array, so the reader has to remember the order of the groups and divide by their sizes by hand. It should return a table labeled by group, and results should offer the share of each group, e.g. `sim.results.flu.infection.by('age').share()` for the share of each age group ever infected (P10, P15). Today: the array, as above.
+:::
+
+The R0 that the sim prints comes from the matrix: with a contact matrix, R0 is β × the infectious period × the largest eigenvalue of the matrix, which is about 12.2 here, so R0 = 0.03 × 5 × 12.2 ≈ 1.8.
+
+### Reciprocity
+
+Each contact between two groups is counted from both sides: the contacts that children have with adults, over all children, should equal those that adults have with children, over all adults. So with *N* the number of people in each group, *N*~i~ × *C*~ij~ = *N*~j~ × *C*~ji~. The matrix above is reciprocal for the shares given: 30% of people with 4 contacts each with adults, and 60% with 2 each with children. A matrix from a contact survey is reciprocal for the population surveyed but not necessarily for the model's own; Starsim uses a matrix as given, with each row as the contacts of a person in that group, and says so in a note when a matrix over the model's own groups (below) is not reciprocal.
+
+::: {.callout-warning}
+## [PROPOSAL]
+The note on a matrix that is not reciprocal is given only for a matrix over the model's own groups (`ss.contacts(age=...)`), not for one with its own age groups (`ss.contacts(ages=..., matrix=...)`), the form most hand-written matrices take: the matrix in the [quick start](../ten_minutes.qmd), `[[10, 4, 1], [4, 8, 2], [1, 2, 3]]` with shares 30%, 60%, and 10%, is used without a note, though adults then have twice as many contacts with children in all as children have with adults. The same check should apply to both forms, once the matrix is aggregated to the model's groups (P1).
+:::
+
+## The forms of a matrix
+
+`ss.contacts()` takes a matrix in one of four forms:
+
+| Form | Example | The groups |
+|---|---|---|
+| A matrix with its own age groups | `ss.contacts(ages=[0, 15, 65], matrix=...)` | The matrix's own, given by their lower edges; they need not be the model's |
+| A matrix over the model's groups | `ss.contacts(age=...)`, `ss.contacts(risk=...)` | The levels of the model's stratification by that name, in order |
+| One matrix over several stratifications together | `ss.contacts(matrix, dims=['sex', 'risk'])` | Every combination of their levels |
+| A country's matrix, by name | `ss.contacts('Kenya')` | 5-year age groups, from a published study |
+
+A matrix with its own age groups suits data, which comes with the age groups of the study. In a compartmental run it is aggregated to the model's age groups, weighted by population, with a note that says so. As agents, each person has an exact age and is counted in whichever of the matrix's groups it falls in.
+
+Groups need not be ages. A list of names makes groups of any kind, and `ss.contacts()` then takes a matrix over them by the name of the stratification. Here 20% of people are at high risk, and they have four times as many contacts with each other as people at low risk have:
+
+```{python}
+S, I = ss.states('S I')
+infection = S >> I @ 0.05*I
+recovery  = I >> S @ ss.days(10) # No lasting immunity
+sis = ss.Disease(infection, recovery, init_prev=0.01)
+sis.stratify(risk={'low': 0.8, 'high': 0.2})
+
+mixing = ss.contacts(risk=[[2, 1], [4, 8]]) # Reciprocal: 80% × 1 = 20% × 4
+sim = ss.Sim(sis, networks=mixing, total_pop=100_000, stop=ss.days(200))
+sim.run()
+sim.results.sis.I.by('risk').plot()
+```
+
+With matrices for several stratifications (`ss.contacts(age=..., risk=...)`), the contacts between two groups are the product of the entries for each. When that is not how people mix (men mix with women, and by risk differently for each sex), one matrix over the stratifications together says it, with an axis for each, rows before columns:
+
+```python
+import numpy as np
+matrix = np.zeros((2, 2, 2, 2)) # [sex, risk, sex, risk], with sex ['female', 'male'] and risk ['low', 'high']
+matrix[0, :, 1, :] = [[0.8, 0.2], [0.5, 1.5]] # Women's contacts with men
+matrix[1, :, 0, :] = [[0.8, 0.5], [0.2, 2.0]] # Men's contacts with women
+mixing = ss.contacts(matrix, dims=['sex', 'risk'])
+```
+
+### Units
+
+The entries of a matrix are contacts per unit time, in the sim's unit unless `unit=` says otherwise (e.g. `ss.contacts(ages=[0, 15], matrix=..., unit='day')`). A country's matrix is always contacts a day, as the studies give them, whatever the sim's unit.
+
+## Data by place
+
+Starsim has data for each country, from the package `starsim_data`: populations by age and sex, birth and death rates, contact matrices, and administrative units (counties, provinces, and states). What is small and common (the contact matrices of 177 countries, populations, and the first two administrative levels of every country) is bundled with it; the rest is downloaded on first use. The model objects that use a place take its name:
+
+| Call | What it gives |
+|---|---|
+| `ss.people('Kenya')` | The population of Kenya: its size, ages, and the share of women, from the UN World Population Prospects |
+| `ss.contacts('Kenya')` | Kenya's contact matrix by 5-year age group (Prem et al. 2021) |
+| `ss.Births(birth_rate='Kenya')`, `ss.Deaths(death_rate='Kenya')` | Kenya's birth and death rates by year (see [Demographics](populations_demographics.qmd)) |
+| `ss.geo.geography('Kenya', level=1)` | Kenya's 47 counties, with their populations and positions (see [Places and movement](populations_places.qmd)) |
+
+A named population gives the sim its size (`total_pop`) and the share of people in each age group, so a model stratified by age needs no shares of its own. A country's contact matrix can be split by setting: `ss.contacts('Kenya', layer=['home', 'school', 'work', 'community'])` gives a matrix for each, named after it, which together make up the whole. Each can then be changed on its own with `ss.modify()`; here schools close from day 10:
+
+```{python}
+S, I, R = ss.states('S I R')
+infection = S >> I @ 0.03*I
+recovery  = I >> R @ ss.days(5)
+flu = ss.Disease(infection, recovery, init_prev=0.001)
+flu.stratify(age=[0, 5, 15, 65]) # The shares in each come from the population
+
+layers = ss.contacts('Kenya', layer=['home', 'school', 'work', 'community'])
+home, school, work, community = layers
+closure = ss.modify(school, multiply=0, start=ss.days(10)) # No school contacts from day 10
+
+kw = dict(people=ss.people('Kenya'), networks=layers, stop=ss.days(100), verbose=0)
+scenarios = {
+    'Schools open': ss.Sim(flu, **kw),
+    'Schools closed from day 10': ss.Sim(flu, interventions=closure, **kw),
+}
+msim = ss.parallel(scenarios)
+msim.plot('flu.I')
+```
+
+See [Changing parameters](interventions_changes.qmd) for `ss.modify()`.
+
+`ss.people()` and `ss.contacts()` take a year and a source: `ss.people('Kenya', year=2030)` (from 1950 to 2100, with the years between the UN's decadal values interpolated), and `ss.contacts('Kenya', source='mistry2021')` for the matrices of Mistry et al. (2021), by single year of age, for 36 countries. A US state is named with its country, `ss.people('United States:Massachusetts')` and `ss.contacts('United States:Massachusetts')`, from the US Census and Mistry et al. The data itself is in `ss.data`, as tables for looking at or using elsewhere:
+
+```{python}
+matrix, ages, ref = ss.data.contacts('Kenya', layer='school')
+print('Age groups:', ages)
+print('Contacts a day of a child aged 10-14 at school with children aged 10-14:', round(matrix[2, 2], 1))
+print('Source:', ref['study'])
+```
+
+::: {.callout-warning}
+## [PROPOSAL]
+`ss.data.contacts()` and `ss.data.population()` return tuples (a bare matrix, its ages, and a record of the source), though the module calls them tables. Each should return one labeled table, e.g. a DataFrame with the age groups as its index and columns, and the source in its `attrs`, so that `ss.data.contacts('Kenya', layer='school').loc['10-14', '10-14']` reads as it is meant (P11, P13). Today: the tuple, as above.
+:::
+
+Every piece of data records where it came from, which `describe()` shows and the model spec keeps, so a saved model looks up the same data again.
+
+## Contact matrices as agents
+
+Everything above runs as agents too. Given `n_agents`, the people take their ages from the population, and each agent is counted in the matrix's age groups by its exact age:
+
+```{python}
+sim = ss.Sim(flu, people=ss.people('Kenya', n_agents=10_000), networks=layers, stop=ss.days(100), verbose=0)
+sim.run()
+sim.results.flu.I.by('age').plot()
+```
+
+As agents, a contact matrix is a set of mixing pools, one for each pair of groups (`ss.MixingPools`; see [Networks and mixing pools](populations_networks.qmd#mixing-pools)). It is not a network: nobody has particular contacts, so contact tracing needs a network instead.
+
+## Pitfalls
+
+- **A contact matrix needs groups.** `ss.contacts(age=...)` or `ss.contacts(risk=...)` on a model that is not stratified by that name raises an error that says to stratify it. A matrix with its own age groups, on a model with no age groups, stratifies it by the matrix's groups, with the shares of the world's population in each: a guess, which `describe()` marks. Give the shares (or a named population) if they matter.
+- **β is per contact.** Adding a contact matrix to a model whose β was a rate per day with homogeneous mixing multiplies its R0 by roughly the mean number of contacts. Check the R0 that the sim prints.
+- **Two matrices, two meanings.** `ages=` gives the matrix's own age groups; `age=` is a matrix over the model's age groups. Giving both raises an error that says which is which.
+- **Reciprocity.** A matrix that is not reciprocal for the model's population means groups disagree about how many contacts they have with each other. Starsim uses it as given; check a matrix that you wrote by hand.
+- **Units.** A bare matrix is contacts per unit time in the sim's unit. In a sim whose unit is years, `matrix=[[10, ...]]` means 10 contacts a year; give `unit='day'` for contacts a day.

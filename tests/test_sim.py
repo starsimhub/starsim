@@ -472,6 +472,11 @@ def test_rescale():
     cum_fixed = fixed.results.sir.cum_infections[-1]
     cum_rescaled = rescaled.results.sir.cum_infections[-1]
     assert abs(cum_rescaled/cum_fixed - 1) < 0.1 # Rescaling gives about the same epidemic
+    S, I, R = ss.states('S I R')
+    flu = ss.Disease(S >> I @ 0.3*I, I >> R @ ss.days(10), init_n=dict(I=10))
+    seeded = lambda **kw: ss.Sim(flu, total_pop=1e6, n_agents=5000, stop=ss.days(2), verbose=0, **kw).init().diseases[0].I.count()
+    assert seeded(rescale=True) == 10 # A number of people is a number of agents at the start scale (it was 0.05 agents, so nobody)
+    assert seeded() == 1 # Too few to be an agent: one, with a note
 
     with pytest.warns(RuntimeWarning, match='renaming'):
         sim = ss.Sim(n_agents=100, diseases=['sis', 'sis'], networks='random').init()

@@ -371,6 +371,11 @@ class Agents(Engine):
         """ The number of people each agent stands for """
         return self.sim.current_scale
 
+    @property
+    def total_pop(self):
+        """ The number of people the agents stand for now: with dynamic rescaling (rescale=True), each agent starts as one person, so a number of people to seed (init_n=) is a number of agents """
+        return self.sim.pars.total_pop*self.scale/self.sim.pars.pop_scale
+
     def init_post(self):
         """ Sample the agents into the states """
         mod = self.mod
@@ -391,13 +396,22 @@ class Agents(Engine):
             names = list(fracs.keys())
             groups = self.groups(uids) if any(np.ndim(frac) for frac in fracs.values()) else np.zeros(len(uids), dtype=int) # Fractions can differ between groups
             wanted, placed = np.zeros(len(names)), np.zeros(len(names))
+            plan = {}
             for g in np.unique(groups):
                 inds = uids[groups == g]
                 inds = inds[np.argsort(rvs[groups == g], kind='stable')] # In a random order
                 share = np.array([np.broadcast_to(fracs[name], self.sim.groups.n_groups)[g] for name in names])
-                edges = np.cumsum(np.append(0, Compartmental.round_preserving(share*len(inds)))).astype(int) # The number in each state is exact, as it is in a compartmental run
+                plan[g] = (inds, share*len(inds), Compartmental.round_preserving(share*len(inds))) # The number in each state is exact, as it is in a compartmental run
                 wanted += share*len(inds)
-                placed += np.diff(edges)
+                placed += plan[g][2]
+            for i in np.flatnonzero((wanted > 0) & (placed == 0)): # Rounded to whole agents, a small seed would be nobody at all: one agent instead, in the group that wanted the most, taken from its largest state
+                g = max(plan, key=lambda g: plan[g][1][i])
+                n = plan[g][2]
+                if n.max() > 1:
+                    n[np.argmax(n)] -= 1
+                    n[i] += 1
+            for g,(inds,_,n) in plan.items():
+                edges = np.cumsum(np.append(0, n)).astype(int)
                 for i,name in enumerate(names):
                     chosen = inds[edges[i]:edges[i+1]]
                     mod[name][chosen] = True
@@ -431,9 +445,11 @@ class Agents(Engine):
                 infected = [name for name in names if any(state.name == name for tr in self.graph.transmissions for state in tr.dst)]
                 for name in infected:
                     self.log_infections(self.members(mod[name]), seeds=True)
-            for name,want,got in zip(names, wanted, placed): # Rounded to whole agents, a small seed can be none at all
+            final = sum(n for _,_,n in plan.values())
+            for name,want,got,now in zip(names, wanted, placed, final): # Rounded to whole agents, a small seed would be none at all
                 if want > 0 and got == 0:
-                    ss.note(f'"{mod.name}" starts with nobody in {name}: its initial number is {want:.2g} agents at {self.scale:n} people per agent, which rounds to 0. Give more agents (n_agents=) or a larger initial number', sim=self.sim)
+                    start = f'starts with one agent in {name} ({self.scale:n} {"person" if self.scale == 1 else "people"})' if now else f'starts with nobody in {name}'
+                    ss.note(f'"{mod.name}" {start}: its initial number is {want:.2g} agents at {self.scale:n} people per agent, which rounds to 0. For the number given, give more agents (n_agents=), or rescale=True', sim=self.sim)
         self.draw_traits(self.sim.people.auids)
         if self.sim.mixing.register is not None and mod is self.sim.declared[-1]: # The events dated at the start, once every module has its people
             self.step_register(0)

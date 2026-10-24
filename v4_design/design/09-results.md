@@ -66,7 +66,7 @@ res.prevalence.select(risk='high')
 ```
 
 - `.select(**dims)` keeps the named groups along each dimension given and sums over every dimension not given. It returns a result, so it can be plotted, resampled, selected again, or compared with data.
-- `.by(dim)` returns the result with that one dimension kept and the rest summed: one series per group. `.select(...).by(...)` chains.
+- `.by(dim)` returns the result with that one dimension kept and the rest summed: one series per group. `.select(...).by(...)` chains, in either order (`.by('age').select(area='rural')` is the same).
 - A dimension the result does not have is an error that lists the dimensions it does have.
 - A state that is not people has only the dimensions it was stratified by (`patch`, or its own), so `res.W.select(age=0)` is an error and `res.W.select(patch='Nairobi')` is not.
 
@@ -186,7 +186,7 @@ sim.plot()
 - Data for particular strata is given in long form: extra columns named after dimensions (`age`, `patch`) say which stratum each row belongs to, by the level's label (or position). Each result and stratum is then one data series, named like `cases[age=0-14]` and compared with `cases.select(age='0-14')`; a likelihood or weight given for `cases` applies to every stratum of it.
 - For a disease whose strains have courses of their own, a strain's own result is its column (`hpv16.cancer`), and in long form a column named after the strains (`strain`, or the name given to `ss.Strains`) gives it: `cancer` in a row for `strain=hpv16` is `hpv16.cancer`. `hpv.cancer[strain=hpv16]` is an error naming `hpv16.cancer`.
 - The data need not be on the model's time step. A flow (weekly reported cases) is compared with the model's flow summed over each data interval; a stock or ratio (a prevalence survey) is compared with the model's value at the data's time. The result already knows which it is. The interval assumed for flow data is the spacing of the data. Data by calendar year, an integer `year` column (as in UNAIDS-style data and `res.resample('year')`), is the year each row names, not 1 January of it: a flow is summed over the year and a stock or ratio averaged over it, with a note; only whole years inside the run are compared. A result of a module with a timestep of its own is compared on that module's timeline.
-- Results that have data are plotted with it automatically: `sim.plot()` draws the model as a line and the data as points.
+- Results that have data are plotted with it automatically: `sim.plot()` (and `msim.plot()`, with the data of its sims) draws the model as a line and the data as points. A flow with data at a longer period than the step (weekly cases from a daily model) is drawn as the fit compares it, its total over each period of the data, so a good fit looks like one; `fit.plot()` and its posterior band do the same.
 - The data's content is hashed as a part of `sim.hash()` of its own (`data`), apart from the model's ([11-random.md](11-random.md#run-identity)).
 
 Real files rarely arrive with matching headers, so `ss.data` renames on the way in:

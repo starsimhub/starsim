@@ -1,0 +1,123 @@
+---
+title: Vaccination and scenarios
+jupyter: python3
+---
+
+Most models are built to answer a question about an intervention: how many infections would a vaccination campaign prevent, and would it prevent more than another way of spending the same effort? This tutorial adds vaccination to the measles model, compares a one-off campaign with routine vaccination and with a public health response that cuts transmission, and runs them side by side as scenarios.
+
+By the end, you will be able to:
+
+- give a vaccine to a chosen group of people, once or over time, in one call;
+- change a parameter of the model from a given date, for interventions that don't hand anything out;
+- compare several scenarios by name, and read the difference between them from a table.
+
+## The model so far
+
+This is the measles model from [Age groups and contacts](t4_ages.qmd): an SEIR model with a latent period of 10 days and an infectious period of 8, in a town of 100,000 people in three age groups, who mix according to a contact matrix in which children have the most contacts. β is the rate of infection per contact with an infectious person, per day, which with these contacts gives a basic reproduction number R0 of about 15, as for measles. It runs for a year from 1 January 2025.
+
+One thing is new: most people are already immune, from vaccination in earlier years (or from past infection). `init` gives the share of people who start in each state, here the share immune (in R) in each age group, 80% of children, 92% of adults under 65, and 98% of older adults; and `init_n` starts 10 people infectious, as if measles had just been brought into the town.
+
+```{python}
+import starsim as ss
+ss.options(jupyter=True) # Plots and tables suited to a notebook
+
+S, E, I, R = ss.states('S E I R')
+beta = ss.par(0.14, bounds=[0.05, 0.5]) # The rate of infection per contact with an infectious person, per day
+
+infection   = S >> E @ beta*I       # Infection, at a rate of β times the contacts with infectious people
+progression = E >> I @ ss.days(10) # Latent for 10 days on average
+recovery    = I >> R @ ss.days(8)  # Infectious for 8 days on average
+measles = ss.Disease(infection, progression, recovery,
+    init = dict(R=ss.by(age=[0.8, 0.92, 0.98])), # The share immune in each age group
+    init_n = dict(I=10),                          # 10 people infectious at the start
+)
+measles.stratify(age={0: 0.3, 15: 0.6, 65: 0.1}) # Ages 0-14, 15-64, and 65+, with the share of people in each
+
+contacts = ss.contacts(ages=[0, 15, 65], matrix=[[10, 4, 1], [4, 8, 2], [1, 2, 3]]) # Contacts a day, between age groups
+settings = dict(networks=contacts, total_pop=100_000, start='2025-01-01', stop='2026-01-01')
+
+sim = ss.Sim(measles, **settings)
+sim.run()
+sim.results.measles.infection.by('age').plot()
+```
+
+With R0 = 15, an outbreak can only be prevented if more than 1 − 1/15, or about 93%, of people are immune (the herd immunity threshold). Here about 90% are, but only 80% of children, who have the most contacts, so each case at the start infects about 2.4 others on average (the number the sim prints as R0 is this one, the reproduction number with the immunity already in the population). The outbreak infects about 9,000 people over the year, most of them children.
+
+::: {.callout-warning}
+## [PROPOSAL]
+The line a run prints says `R0 = 2.43`, but this is the reproduction number at the start, with 90% of people immune; R0 is 15. The line should say both, e.g. `measles: R0 = 15.1; R = 2.43 at the start, with 10 infectious`, so that a reader checking R0 against the model (P1) is not misled.
+:::
+
+## A vaccination campaign
+
+A vaccine has two parts in a model: the **product**, what the vaccine does to the people who get it (here, it cuts their chance of infection by 93%, about what one dose of measles vaccine does), and the **delivery**, who gets it and when. `ss.vaccinate()` takes both: the vaccine's efficacy, and the group (`where=`), the share of that group reached (`coverage=`), and when (`at=`, for a campaign on given dates).
+
+Suppose the town's health office runs a campaign on 1 March, two months into the outbreak, that reaches 80% of children under 15:
+
+```{python}
+campaign = ss.vaccinate(efficacy=0.93, where=measles.age < 15, coverage=0.8, at='2025-03-01')
+
+sim = ss.Sim(measles, interventions=campaign, **settings)
+sim.run()
+sim.results.measles.infection.by('age').plot()
+```
+
+The campaign cuts the outbreak to about a quarter of its size, from about 9,000 infections to 2,100. A campaign reaches children whether or not they are already immune, as real campaigns do, so most of its doses go to children who were protected already; what matters is the share of the susceptible children it reaches. Each delivery has results of its own, such as the doses delivered each day:
+
+```{python}
+print('Doses delivered:', round(sim.results.campaign.delivered.sum()))
+```
+
+The vaccine here protects everyone vaccinated by 93% (it is "leaky"). Vaccines can also protect some people fully and others not at all, wane over time, be given in several doses, or protect against transmission rather than infection; see [Products and deliveries](../user_guide/interventions_products.qmd) in the user guide.
+
+## Routine vaccination
+
+A campaign reaches many people on one day. Routine vaccination reaches them over time, for example as children come to a clinic. Without `at=`, a delivery is routine: each person is offered the vaccine once, when they first become eligible. With a rate as the coverage, they are reached at that rate for as long as they are eligible. Here, children under 15 are reached at a rate that would vaccinate 80% of them in a year:
+
+```{python}
+routine = ss.vaccinate(efficacy=0.93, where=measles.age < 15, coverage=ss.probperyear(0.8))
+```
+
+`ss.probperyear(0.8)` is a probability of 0.8 over a year, which Starsim converts to the probability for each day of the run. The same children are reached in the end as by the campaign, but more slowly.
+
+## Changing a parameter
+
+Some interventions don't give people anything, but change how the disease spreads: isolating cases, tracing their contacts, or keeping unvaccinated children home from school. In a model, these are changes to a parameter. `ss.modify()` changes a parameter from a given date (and, with `stop=`, until another); it never overwrites the parameter, so when it stops, the parameter has its own value again. Here, an outbreak response from 1 March cuts transmission by 30%:
+
+```{python}
+response = ss.modify(measles.pars.beta, multiply=0.7, start='2025-03-01')
+```
+
+`ss.change()` does the same at several dates, each value holding until the next: for example, `ss.change(measles.pars.beta, at=['2025-03-01', '2025-06-01'], by=[0.7, 0.9])` cuts transmission by 30% from March, and by 10% from June, as the response is scaled down. See [Changing parameters](../user_guide/interventions_changes.qmd) for the other options, such as changing a parameter only for some people, or only while cases are high.
+
+## Comparing scenarios
+
+A scenario is a sim with its own interventions. To compare them, make a sim for each, labeled with a name that says what it is, and run them together with `ss.parallel()`, which runs them at the same time on the computer's cores:
+
+```{python}
+sims = {
+    'No intervention': ss.Sim(measles, **settings),
+    'Campaign':        ss.Sim(measles, interventions=campaign, **settings),
+    'Routine':         ss.Sim(measles, interventions=routine, **settings),
+    'Response':        ss.Sim(measles, interventions=response, **settings),
+}
+msim = ss.parallel(sims)
+msim.plot('measles.I')
+```
+
+With the campaign, the outbreak peaks three weeks after it (people infected before it still fall ill) and then dies out. Routine vaccination of the same children helps less, since by the time most are reached, the outbreak has passed its peak. The response slows the outbreak from the same date, but the outbreak goes on, since it doesn't make anyone immune.
+
+`msim.summarize()` gives each result over the whole run for each scenario: the total of a flow, such as infections, and the value at the end of a state, such as the number recovered. `.loc[...]` picks out one result, here the total infections:
+
+```{python}
+summary = msim.summarize()
+summary.loc['measles_infection']
+```
+
+How a scenario is judged depends on the question. The campaign prevents the most infections, but it needs the most doses at once; the response prevents fewer, but needs no vaccine. A model can't make that choice, but it can say what each option buys.
+
+## Exercises
+
+1. The campaign above is run on 1 March. How many infections does it prevent if it is run on 1 February instead, or on 1 May? What does this say about how quickly a campaign should follow the first cases?
+2. Change the campaign to reach only children who are susceptible (`where=(measles.age < 15) & measles.S`). How many doses does it need, and how many infections does it prevent, compared with the campaign that reaches all children?
+3. Add a scenario that combines the campaign and the response (`interventions=[campaign, response]`). Is its effect the sum of the two on their own? Why not?

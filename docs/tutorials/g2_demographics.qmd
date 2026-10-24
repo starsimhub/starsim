@@ -1,0 +1,161 @@
+---
+title: Demographics
+jupyter: python3
+---
+
+Over an outbreak of a few weeks or months, the population hardly changes, so the core tutorials left births and deaths out. Over years, it does: births bring in new people who have never been infected, deaths remove people who are immune, and the population grows and ages. These change the course of an infection, and for an infection like measles, which leaves lifelong immunity, births are what let it come back at all.
+
+This tutorial covers births and deaths at constant rates, which work for any model, and what they do to measles; the population of a real country, with birth and death rates from UN data, as agents; pregnancy; and how a few thousand agents can stand for a population of millions.
+
+## Starting point
+
+The measles model from the core tutorials, a town of 100,000 people:
+
+```{python}
+import starsim as ss
+ss.options(jupyter=True)
+
+S, I, R = ss.states('S I R')
+infection = S >> I @ 1.9*I        # β = 1.9 per day
+recovery  = I >> R @ ss.days(8)   # Infectious for 8 days on average
+measles = ss.Disease(infection, recovery, init_prev=0.001)
+sim = ss.Sim(measles, total_pop=100_000, stop=ss.days(50))
+sim.run()
+sim.plot()
+```
+
+R0 = 1.9 × 8 ≈ 15, so the outbreak infects nearly everyone, and since nobody new is born, that is the end of it.
+
+## Births, deaths, and the return of measles
+
+`ss.birth()` and `ss.death()` give births and deaths at a constant rate per person: a crude birth rate of 30 per 1,000 people per year is `ss.birth(rate=ss.peryear(0.03))`. People are born into each disease's first state (`S`) and die from every state at the same rate, so with equal rates the population stays the same size. They are given to the sim in `demographics=`.
+
+Births and deaths are rates per year, while β and the infectious period are per day. When a model's rates have different units, Starsim needs every rate to say its own, so β is written `ss.perday(1.9)`; the sim then steps by one day (`dt=ss.days(1)`). This runs for 20 years:
+
+```{python}
+infection = S >> I @ ss.perday(1.9)*I  # β = 1.9 per day
+recovery  = I >> R @ ss.days(8)
+measles = ss.Disease(infection, recovery, init_prev=0.001)
+
+demographics = [
+    ss.birth(rate=ss.peryear(0.03)), # 30 births per 1,000 people per year
+    ss.death(rate=ss.peryear(0.03)), # 30 deaths per 1,000 people per year
+]
+sim = ss.Sim(measles, demographics=demographics, total_pop=100_000, start='2000-01-01', stop='2020-01-01', dt=ss.days(1))
+sim.run()
+
+import matplotlib.pyplot as plt
+res = sim.results.measles
+plt.figure()
+plt.semilogy(res.timevec, res.I) # On a log scale, since the first epidemic is so much larger than the rest
+plt.ylabel('Number infectious');
+```
+
+::: {.callout-warning}
+## [PROPOSAL]
+A result's plot can't be put on a log scale: `res.I.plot()` has no option for it, and in a notebook it shows the figure and returns nothing, so the axes can't be changed afterwards. Plots of results (`res.I.plot()`, `sim.plot()`, `msim.plot()`) should take `log=True` (or return the figure in a notebook too), so that this needs no Matplotlib (P11).
+:::
+
+After the first epidemic, there is a "honeymoon" of almost five years with very little measles, while births slowly rebuild the number of susceptible people. Once there are enough of them for each case to cause more than one more, measles returns, in a series of smaller epidemics that settle toward a steady endemic level. These match the classic theory of an SIR model with births:
+
+- At the endemic level, each case causes one more, so the share of people who are susceptible is 1/R0, about 7%.
+- The average age at infection is about L/(R0 − 1), where L is the life expectancy (1/0.03 = 33 years here): about 2.4 years, so measles becomes a disease of young children.
+- The time between epidemics is about 2π√(A × D), where A is the average age at infection and D is the infectious period (8 days, or 0.022 years): about 1.4 years.
+
+```{python}
+print('Share susceptible at the end:', round(res.S[-1]/100_000, 3))
+```
+
+::: {.callout-warning}
+## [PROPOSAL]
+The run prints "Run step by step, since flows has a step of its own (a modifier with where=, when=, or a function as its amount, an intervention, or an analyzer)". It names an internal module (`flows`, which is the births and deaths) and says how the run is done, which a reader can't act on; it belongs in `describe()`, not in the lines a run prints (P4, P14). The run also prints dates as `2000.01.07`, which should be `2000-01-07`, as they are written in the model.
+:::
+
+Births and deaths are transitions of the disease, like infection and recovery, so they have results of their own (`res.births` and `res.deaths`), and they work under every solver: this model ran as an ODE.
+
+The sim also printed a note: between the epidemics, the number of infectious people in the ODE falls below one, and the plot shows how far: after the first epidemic, to less than a billionth of a billionth of a person. An ODE can recover from a fraction of a person, but a real town can't: once the last case recovers, measles is gone until someone brings it back. A stochastic run shows this, and in a town of 100,000, measles usually dies out after the first epidemic. This is why measles persists only in cities of several hundred thousand people or more (its *critical community size*), and why in smaller places it comes and goes with each new introduction. [Repeated runs and uncertainty](t6_uncertainty.qmd) shows how to run a model stochastically and many times.
+
+## A country's population
+
+Constant rates are enough for a town over a few years. For a country over decades, birth and death rates change from year to year, and death rates differ by age and sex. Starsim includes the UN World Population Prospects for every country: `ss.people('Nigeria')` gives agents with the ages, sex ratio, and size of Nigeria's population in the year the sim starts; `ss.Births(birth_rate='Nigeria')` gives births at Nigeria's crude birth rate in each year; and `ss.Deaths(death_rate='Nigeria')` gives deaths at its death rates by year, age, and sex. These are agents, so the sim needs `n_agents=`.
+
+To check the model, compare its population with the UN's, for the same years. A result is compared with data of the same name, so a column called `alive` is plotted with the result `alive`:
+
+```{python}
+years = [2000, 2010, 2020, 2030]
+population = [ss.people('Nigeria', year=year).named.total for year in years] # The UN's population in each year
+data = dict(date=years, alive=population)
+
+people = ss.people('Nigeria', n_agents=5000)
+demographics = [ss.Births(birth_rate='Nigeria'), ss.Deaths(death_rate='Nigeria')]
+sim = ss.Sim(people=people, demographics=demographics, start=2000, stop=2030, data=data)
+sim.run()
+sim.plot('alive')
+```
+
+The population grows from 126 million to about 260 million, as the UN projects. The ages change too, and `sim.people.plot_ages()` shows the age pyramid at the end of the run:
+
+```{python}
+sim.people.plot_ages()
+```
+
+`ss.Births()` and `ss.Deaths()` also take your own data: one rate, rates by year (a table with a column for the year and one for the rate), or for deaths, rates by year, age, and sex. Crude birth and death rates are usually given per 1,000 people, and these modules read a rate above 1 as per 1,000 and a rate below 1 as per person; give `rate_units=1000` or `rate_units=1` to say which (they warn when a rate could be either). See [Demographics](../user_guide/populations_demographics.qmd) in the user guide.
+
+::: {.callout-warning}
+## [PROPOSAL]
+`ss.birth(rate=...)` reads its rate per person, while `ss.Births(birth_rate=...)` reads a rate above 1 as per 1,000, so the same number means different things in the two. Worse, `ss.birth(rate=ss.peryear(30))` (meant as 30 per 1,000) runs without a word, and 1,000 people become 10^42 in three years. `ss.birth()` and `ss.death()` should at least warn on a rate above 1 per person per year, as `ss.Births()` does; better, both should say per 1,000 explicitly in the same way (e.g. a typed rate like `ss.peryear(30, per=1000)`), with no guessing from the size of the number (P11, P13).
+:::
+
+## Pregnancy
+
+`ss.Births()` adds babies to the population as a whole. `ss.Pregnancy()` instead gives women of reproductive age pregnancies, at age-specific fertility rates, which last about nine months and end in a birth (or a miscarriage, a stillbirth, or a maternal death, at rates that can be set). This is what a model needs when something depends on pregnancy itself: infection passed from mother to child (see [Networks](g1_networks.qmd#mothers-and-children)), testing in antenatal care, or the effects of a disease on pregnancy. Pregnancy is itself declared as states (`NP`, not pregnant, and `P`, pregnant) and transitions (`conception`, `delivery`, and so on), so other modules can use them, e.g. `where=pregnancy.P`, and each transition is a result.
+
+Here Nigeria's age-specific fertility rates (births per 1,000 women of each age, by year, from the UN) are read from a file. Pregnancy takes months, so the sim steps by a month:
+
+```{python}
+import pandas as pd
+
+fertility = pd.read_csv('test_data/nigeria_asfr.csv') # Columns Time (year), AgeGrp (age), and ASFR (births per 1,000 women)
+pregnancy = ss.Pregnancy(fertility_rate=fertility)
+deaths = ss.Deaths(death_rate='Nigeria')
+
+sim = ss.Sim(people=ss.people('Nigeria', n_agents=5000), demographics=[pregnancy, deaths], start=2000, stop=2030, dt=ss.months(1), data=data)
+sim.run()
+sim.plot('alive')
+```
+
+The population grows much as it did with crude birth rates, but now each birth comes from a pregnancy of a particular woman, so it can be linked to her: her age, her infections, and the care she receives.
+
+::: {.callout-warning}
+## [PROPOSAL]
+`ss.Births(birth_rate='Nigeria')` and `ss.Deaths(death_rate='Nigeria')` read UN data by name, but `ss.Pregnancy()` doesn't: its age-specific fertility rates have to be found and read from a file. `ss.Pregnancy(fertility_rate='Nigeria')` should read the UN's age-specific fertility rates in the same way (they are in the World Population Prospects, but not yet in `starsim_data`) (P11).
+:::
+
+## Agents standing for many people
+
+Nigeria has well over 100 million people, but the sims above have 5,000 agents. Each agent stands for many people: the sim takes the size of the population from `ss.people('Nigeria')` (or from `total_pop=`), and divides it by the number of agents, so here each agent stands for about 25,000 people. Results that count people, such as `alive` and births, are multiplied by this, so they are in people, not agents.
+
+::: {.callout-warning}
+## [PROPOSAL]
+The line the sim prints says "as 5,000 agents, each 2.53e+04 people". It should say "each about 25,000 people": scientific notation is the kind of formatting that loses readers who aren't programmers (P10).
+:::
+
+Agents are a sample of the population, so results made from few of them are noisy. Here are births each year, with 1,000 agents and with 20,000:
+
+```{python}
+pars = dict(demographics=[ss.Births(birth_rate='Nigeria'), ss.Deaths(death_rate='Nigeria')], start=2000, stop=2030)
+sims = {
+    '1,000 agents': ss.Sim(people=ss.people('Nigeria', n_agents=1000), **pars),
+    '20,000 agents': ss.Sim(people=ss.people('Nigeria', n_agents=20_000), **pars),
+}
+msim = ss.parallel(sims)
+msim.plot('births.new')
+```
+
+With 1,000 agents, about 40 are born each year, and the number varies by chance by about the square root of that, around 6, or 15%; with 20,000 agents, the variation is about 4%. As a rule of thumb, use enough agents that the events you care about are counted in the hundreds: for births in a whole country, a few thousand agents is plenty, but for the cases of a rare disease, or the deaths in one age group, it may take many more. [Population rescaling](../user_guide/running_rescaling.qmd) shows how to add agents as a rare infection grows.
+
+## Exercises
+
+1. Niger has one of the highest birth rates in the world. Starting from its population in 2020 (`ss.people('Niger', n_agents=5000)`), with its UN birth and death rates, how many people will there be in 2040? Compare this with constant rates of 45 births and 9 deaths per 1,000 people per year (with `ss.birth()` and `ss.death()`).
+2. In the measles model with births, how does the time between epidemics change if the birth rate (and the death rate) is 20 per 1,000 per year instead of 30? Does it agree with the theory above?
+3. Contraception lowers the rate of conception: `ss.modify(pregnancy.conception, multiply=0.7, start=2010)` cuts it by 30% from 2010. Add it to the Nigeria model with pregnancy as an intervention. How many fewer people are there in 2030?

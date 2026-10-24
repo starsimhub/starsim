@@ -3,6 +3,9 @@ Test calibration
 """
 
 #%% Imports and settings
+import io
+import contextlib
+import unittest.mock
 import starsim as ss
 import starsim.fit
 import numpy as np
@@ -42,6 +45,11 @@ def test_particle_mcmc():
     assert ss.fit.default_method(sim, True)[0] == 'optuna'
     fit = make(beta=0.3, data=data).fit(method='pmcmc', draws=100, warmup=100, chains=2, particles=30, parallel=False, rand_seed=1)
     fit.summarize()
+    with unittest.mock.patch('sciris.isjupyter', return_value=True), contextlib.redirect_stdout(io.StringIO()) as out: # In a notebook, the table is returned, which shows itself, and not printed too
+        assert fit.summarize() is fit.table and 'beta' not in out.getvalue()
+    fig = fit.plot() # Weekly data: the model's cases and the band over the same weeks, as the fit compares them (they were daily, seven times too low)
+    lines = fig.axes[0].lines
+    assert all(len(line.get_xdata()) == len(data) for line in lines) and 0.5 < np.nanmax(lines[-1].get_ydata())/data.cases.max() < 2
     table = fit.table.set_index('par')
     assert fit.method == 'pmcmc'
     assert len(fit.samples) == 200 and len(fit.diagnostics.acceptance) == 2

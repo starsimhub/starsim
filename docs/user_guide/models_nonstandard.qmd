@@ -1,0 +1,158 @@
+---
+title: Nonstandard models
+jupyter: python3
+---
+
+Starsim is built for infectious diseases, but nothing in its states and transitions is specific to infection, and a module written as code can hold any property of people and any rule for changing it. This page shows three models that use Starsim in ways other than an infection spreading over a network or between groups: a model of a behavior, declared like a disease; a model from another framework, with interventions that change contacts in one setting; and an agent-based model with no disease at all.
+
+## A model of a behavior
+
+States and transitions describe any process in which people move between categories at given rates: smoking, use of contraception, stages of a chronic disease, employment. Here people are never smokers, current smokers, or former smokers. Never smokers start to smoke at a low background rate, and faster the more smokers there are around them, which has the same form as transmission (a rate proportional to the share of people who are current smokers). Smokers quit, and some former smokers start again:
+
+```{python}
+import starsim as ss
+ss.options(jupyter=True)
+
+never, current, former = ss.states('never current former')
+uptake    = ss.par(ss.peryear(0.005)) # Starting to smoke, unprompted
+influence = ss.par(ss.peryear(0.1))   # Starting to smoke, from contact with smokers
+initiation = never >> current @ uptake + influence*current
+cessation  = current >> former @ ss.peryear(0.04) # Quitting
+relapse    = former >> current @ ss.peryear(0.02) # Starting again
+smoking = ss.Disease(initiation, cessation, relapse, init=dict(current=0.25, former=0.1), first='never')
+
+smoking.equations()
+```
+
+In a model of infection, people start in `S` (susceptible). Here no state has that name, so `first='never'` says which state people start in unless the model puts them elsewhere (here, 25% start as current smokers and 10% as former smokers), and which state anyone born would join.
+
+```{python}
+sim = ss.Sim(smoking, start=2000, stop=2050)
+sim.run()
+sim.plot()
+```
+
+::: {.callout-warning}
+## [PROPOSAL]
+The line the sim prints calls the people who start to smoke "infections", the smokers "infectious", and gives an R0, since initiation has the form of a transmission; `describe()` likewise lists `current` as infectious. For a model that isn't of an infection, these words aren't true (P1). The closing line should name the model's own transition and state ("smoking: 5,759 through initiation; at most 4,203 in current, in 2029"), and R0 should be given only for a disease the user calls infectious, or under a neutral name. Today, read "infections" as the first transition's count and "infectious" as its source state.
+:::
+
+The interventions for a disease work the same way. A program that doubles the rate of quitting from 2025 is a change to the cessation transition:
+
+```{python}
+quitting = ss.change(smoking.cessation, at=2025, by=2) # Twice the rate of quitting from 2025
+scenarios = {
+    'No program': ss.Sim(smoking, start=2000, stop=2050),
+    'Quitting program': ss.Sim(smoking, interventions=quitting, start=2000, stop=2050),
+}
+msim = ss.parallel(scenarios)
+msim.plot('smoking_current')
+```
+
+Such a model can be combined with a disease, e.g. by making smoking change the risk of a disease with `ss.modify(copd.onset, multiply=2, where=smoking.current)`; see [Connectors](interventions_connectors.qmd).
+
+Some models track things that are not people, such as bacteria in water or a population of mosquitoes. These are states with `people=False`, in the same model as the people: see [Diseases](models_diseases.qmd).
+
+## A model from another framework: closing schools
+
+This example adapts the school closure example of the [Epidemics](https://epiverse-trace.github.io/epidemics/) R package: an SEIR model of an influenza-like infection in the population of the United Kingdom, in three age groups (0–19, 20–39, and 40 and over), with R0 of about 1.5, a latent period of 3 days, and an infectious period of 7 days. Contacts between age groups come from the contact matrices of Prem et al. (2021), which come with Starsim, one for each setting (home, school, work, and the rest of the community):
+
+```{python}
+S, E, I, R = ss.states('S E I R')
+beta = ss.par(0.016) # Chance of infection per contact
+flu = ss.Disease(
+    infection = S >> E @ beta*I,
+    onset     = E >> I @ ss.days(3), # Latent for 3 days on average
+    recovery  = I >> R @ ss.days(7), # Infectious for 7 days on average
+    init      = dict(I=1e-6),        # One person in a million infectious at the start
+)
+flu.stratify(age=[0, 20, 40])
+
+settings = ['home', 'school', 'work', 'community']
+contacts = [ss.contacts('United Kingdom', layer=setting) for setting in settings]
+```
+
+Closing schools removes the contacts made at school, from day 200 to day 260; contacts at home, at work, and in the community go on. `ss.modify()` on the school contacts says this, and like any modifier, it doesn't change the contacts themselves, so nothing has to be restored when schools reopen:
+
+```{python}
+school = contacts[1]
+closure = ss.modify(school, multiply=0, start=ss.days(200), stop=ss.days(260))
+
+pars = dict(people=ss.people('United Kingdom'), networks=contacts, stop=ss.days(600))
+scenarios = {
+    'Schools open': ss.Sim(flu, **pars),
+    'Schools closed for 60 days': ss.Sim(flu, interventions=closure, **pars),
+}
+msim = ss.parallel(scenarios)
+msim.plot('flu_I')
+```
+
+The closure doesn't prevent the epidemic, but delays its peak by about six weeks and lowers it by about a fifth, which could matter for hospitals. While schools are closed, the number infectious falls in every age group, and most among children, who make most of the contacts at school; after they reopen, the epidemic resumes:
+
+```{python}
+scenarios['Schools closed for 60 days'].results.flu.I.by('age').plot()
+```
+
+The Epidemics package says a closure differently: as a share by which the contacts of each age group fall (e.g. by half for those under 20). That works in Starsim too, as a modifier of the susceptibility and transmissibility of each group, e.g. `ss.modify(flu.rel_sus, multiply=0.5, where=ss.ppl.age < 20, start=..., stop=...)` and the same for `flu.rel_trans`. Removing the school contacts says more directly what a closure does, if the contacts by setting are known. Since it is all declared, the same model also runs as agents (e.g. with `n_agents=100_000`), for a stochastic version.
+
+## A general agent-based model: wealth
+
+Starsim's people and modules don't need a disease. This is the "wealth model" of the [Mesa](https://mesa.readthedocs.io/en/stable/tutorials/intro_tutorial.html) tutorial: each of 100 people starts with one unit of wealth, and at each step, everyone who has any gives one unit to someone chosen at random. Though the rule is fair, wealth ends up very unequal.
+
+The model is a [module written as code](models_code.qmd). Each person's wealth is a state, and whom each giver gives to is drawn from a Starsim distribution, so that runs can be repeated and compared (see [Random numbers](models_random.qmd)). The Gini coefficient (0 if everyone has the same, near 1 if one person has everything) is a result:
+
+```{python}
+import numpy as np
+
+class Wealth(ss.Module):
+    """ Each person starts with 1 unit of wealth; each step, everyone with any gives 1 unit to someone chosen at random """
+
+    def __init__(self, **kwargs):
+        super().__init__()
+        self.define_states(
+            ss.FloatArr('wealth', default=1.0, label='Wealth'),
+        )
+        self.update_pars(**kwargs)
+        self.recipient = ss.randint(low=0, high=lambda self, sim, uids: len(sim.people)) # Whom each giver gives to
+        return
+
+    def init_results(self):
+        super().init_results()
+        self.define_results(
+            ss.Result('gini', scale=False, label='Gini coefficient'),
+        )
+        return
+
+    def step(self):
+        givers = (self.wealth > 0).uids
+        recipients = self.recipient.rvs(givers)
+        self.wealth[givers] = self.wealth[givers] - 1
+        self.wealth[:] = self.wealth + np.bincount(recipients, minlength=len(self.wealth)) # Each recipient gets 1 unit for each giver who chose them
+        return
+
+    def update_results(self):
+        super().update_results()
+        w = np.sort(self.wealth.values)
+        n = len(w)
+        self.results.gini[self.ti] = np.sum((2*np.arange(1, n+1) - n - 1)*w)/(n*w.sum())
+        return
+
+sim = ss.Sim(Wealth(), n_agents=100, stop=100) # 100 steps
+sim.run()
+sim.results.wealth.gini.plot()
+```
+
+Inequality rises within a few steps and then stays high. The final distribution has many people with nothing and a few with several units:
+
+```{python}
+import matplotlib.pyplot as plt
+
+wealth = sim.people.wealth.wealth
+plt.figure()
+plt.hist(wealth.values, bins=np.arange(wealth.max() + 2) - 0.5)
+plt.xlabel('Wealth')
+plt.ylabel('Number of people')
+plt.show()
+```
+
+Compared with Mesa, where each agent is an object with its own `step()`, Starsim keeps each property as one array over all people, so a rule is applied to everyone at once: this makes the code a little shorter, and faster for large populations.

@@ -1,0 +1,196 @@
+---
+title: People
+jupyter: python3
+---
+
+Every model has a population: how many people there are, their ages and sex, and anything else about them that the model needs, such as where they live. This page covers the size of the population, its ages (including the population of a named country), other properties of people and how a model uses them, and, for a model run as agents, the `People` object that holds what each agent is and has.
+
+The examples use the measles model from the tutorials:
+
+```{python}
+import starsim as ss
+ss.options(jupyter=True)
+
+S, I, R = ss.states('S I R')
+infection = S >> I @ 1.9*I        # β = 1.9 per day
+recovery  = I >> R @ ss.days(8)   # Infectious for 8 days on average
+measles = ss.Disease(infection, recovery, init_prev=0.001)
+```
+
+## How many people
+
+`total_pop=` is the number of people in the population. A model run as compartments needs nothing else:
+
+```{python}
+sim = ss.Sim(measles, total_pop=100_000, stop=ss.days(50))
+sim.run()
+```
+
+As agents, `n_agents=` is the number of agents. Given both, each agent stands for `total_pop/n_agents` people, here 10, and results are given in people, not agents:
+
+```{python}
+sim = ss.Sim(measles, total_pop=100_000, n_agents=10_000, stop=ss.days(50))
+sim.run()
+sim.plot()
+```
+
+The two runs differ a little, since as agents the epidemic is a stochastic process that takes whole daily steps (see [Solvers and when they disagree](running_solvers.qmd)). Without either `total_pop=` or `n_agents=`, a model has 10,000 people. Fewer agents than people make a model faster, but add noise from chance, more so for rare events; see [Population rescaling](running_rescaling.qmd).
+
+## Ages and sex
+
+As agents, each person has an age and a sex. Unless told otherwise, Starsim gives agents the ages of the world's population in 2024, and an even chance of being female. A compartmental model split into age groups without a share for each takes the shares from the same ages, and `describe()` marks them as guessed.
+
+The population of a country is `ss.people()`: its size, its ages, and its share of women, from the UN World Population Prospects (or, for a US state, the US Census), which come with Starsim. The sim takes its size from it, so a compartmental model can use a named population as well as agents can:
+
+```{python}
+kenya = ss.people('Kenya', year=2024)
+print('Population of Kenya in 2024:', round(kenya.named.total))
+
+sim = ss.Sim(measles, people=ss.people('Kenya', year=2024, n_agents=5000), stop=ss.days(50))
+sim.init()
+sim.people.plot_ages();
+```
+
+In a compartmental model, ages matter only once the model is split into age groups, with `measles.stratify(age=[0, 15, 65])`, which then takes the share of people in each group from the named population. See [Stratification](models_stratification.qmd) and, for contacts between age groups, [Contact matrices and data by place](populations_contacts.qmd).
+
+Ages can also come from data of your own, with `ss.People(n_agents, age_data=...)`: a table with a column `age` (the lower edge of each age group) and a column `value` (the number or share of people in it), or a CSV file with those columns:
+
+```{python}
+ppl = ss.People(5000, age_data='test_data/nigeria_age.csv')
+sim = ss.Sim(measles, people=ppl, stop=ss.days(50))
+sim.init()
+sim.people.plot_ages();
+```
+
+A sim copies the people it is given when it is built, so look at `sim.people` afterwards, not at `ppl`.
+
+## Properties of people
+
+A model refers to a property of people with `ss.ppl`: `ss.ppl.age`, `ss.ppl.female`, or a property of your own. `ss.ppl.age < 5` is a condition, which picks out people, for example to say who an intervention reaches:
+
+```{python}
+vaccination = ss.vaccinate(efficacy=0.9, coverage=0.8, where=ss.ppl.age < 5, at=ss.days(10))
+```
+
+A property of your own is given to `ss.People` as a state, with a value for each agent; it can be drawn from a distribution. Here 30% of people live in towns:
+
+```{python}
+urban = ss.BoolState('urban', default=ss.bernoulli(p=0.3))
+ppl = ss.People(10_000, extra_states=urban)
+
+vaccination = ss.vaccinate(efficacy=0.9, coverage=0.9, where=ss.ppl.urban, at=ss.days(1))
+sim = ss.Sim(measles, people=ppl, interventions=vaccination, stop=ss.days(50), verbose=0)
+sim.run()
+print('Share of people in towns:', sim.people.urban.mean())
+```
+
+A property can also be in a rate: `infection = S >> I @ beta*(1 + 0.5*ss.ppl.urban)*I` has transmission 50% higher in towns. `ss.ppl` is read when the sim is built, so the property can be given after the model is written.
+
+In a compartmental model, people have no properties of their own, only the groups the model is split into. The same property is a stratification, and the same condition then picks out a group:
+
+```{python}
+S, I, R = ss.states('S I R')
+measles2 = ss.Disease(S >> I @ 1.9*I, I >> R @ ss.days(8), init_prev=0.001, name='measles')
+measles2.stratify(urban={False: 0.7, True: 0.3}) # 70% rural, 30% in towns
+
+sim = ss.Sim(measles2, interventions=vaccination, total_pop=100_000, stop=ss.days(50), verbose=0)
+sim.run()
+sim.results.measles.I.by('urban').plot()
+```
+
+## People as agents
+
+As agents, `sim.people` holds every agent: its properties, and the states of every module in the sim. Each person has these:
+
+| Name | What it is |
+|---|---|
+| `alive` | Whether the agent is alive |
+| `female` | Whether the agent is female |
+| `age` | The agent's age, in years |
+| `ti_dead` | The step on which the agent died, if it has (NaN otherwise) |
+| `ti_removed` | The step on which the agent left for another reason, such as emigration |
+| `cause_of_death` | The cause of each death (its position in `people.causes`, the names of the causes; -1 for none) |
+| `scale` | The number of people the agent stands for, relative to the others (1 unless set) |
+
+Each module adds its own states, under its name. A declared disease adds a state for each of its states (`sim.people.measles.S`, `.I`, `.R`), the time each agent entered a state (`ti_I`) and is due to leave it, and each person's relative susceptibility and transmissibility (`rel_sus` and `rel_trans`). To save memory, the time of entering a state is kept only when something reads it: the disease itself, or the code of a module in the sim that names it. Reading one that wasn't kept, e.g. in an analysis after the run, raises an error that says so; `ss.options.keep_times = True`, set before the sim is built, keeps them all.
+
+Every agent has a UID, its identifier, which never changes. Agents who die stay in the arrays, so that what happened to them can still be looked up, but are left out of counts, sums, and means. With births and deaths, the number of agents changes as the sim runs:
+
+```{python}
+sim = ss.Sim(n_agents=1000, start='2000', stop='2020', dt=ss.years(1), demographics=True, verbose=0) # Births and deaths at default rates
+sim.init()
+print('Agents at the start:', len(sim.people))
+sim.run()
+print('Births:', sim.results.births.new.sum())
+print('Deaths:', sim.results.new_deaths.sum())
+print('Agents at the end:', len(sim.people))
+```
+
+For how to pick out agents in code, see [Array indexing](models_indexing.qmd).
+
+## States with several columns
+
+Sometimes each person needs several values of the same kind, such as their immunity to each of several strains. A state can have `columns=`, which gives it one row per agent and one column per value. Like any state, it grows as agents are born. Here a [module written as code](models_code.qmd) keeps each person's susceptibility to two strains, and the susceptibility to the second one falls by 10% each year:
+
+```{python}
+class Immunity(ss.Module):
+    """ Susceptibility to two strains, with susceptibility to the second falling over time """
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.define_states(
+            ss.FloatArr('sus', columns=['wild', 'mutant'], default=1.0),
+        )
+        return
+
+    def step(self):
+        self.sus.mutant *= 0.9**(self.t.dt/ss.years(1)) # The second column, for every agent: 10% less each year
+        return
+
+sim = ss.Sim(Immunity(), n_agents=1000, demographics=True, start='2000', stop='2005', dt=ss.months(1), verbose=0)
+sim.run()
+sus = sim.people.immunity.sus
+print('Number of agents:', len(sim.people))
+print('Shape of the values:', sus.values.shape)
+```
+
+A column can be read by name as an attribute (`sus.mutant`), as a key (`sus['mutant']`), or with `sus.col('mutant')`; each gives an ordinary array with one value per agent, and writing to it (`sus.mutant = 0`) changes the state. To index, the first index picks agents and the second picks columns, by name or by position:
+
+```{python}
+uids = ss.uids([0, 1, 2])
+print('Both columns, for 3 agents:')
+print(sus[uids])
+print('The mutant column, for 3 agents:', sus[uids, 'mutant'])
+print('Mean susceptibility to the mutant:', sus.mutant.mean())
+
+sus[uids, 'wild'] = 0 # These agents are now immune to the wild type
+print('Immune to the wild type:', (sus.col('wild') < 0.5).uids)
+```
+
+Since a state with several columns has several values per agent, it can't be turned into UIDs directly; use one column, as above. `columns=3` gives three unnamed columns, read by position only. Column names must be unique, and can't be the name of something an array already has (such as `raw` or `mean`).
+
+## Looking at people
+
+`sim.people.to_df()` gives a table with a row for each agent and a column for each state (a state with several columns gives a column for each, e.g. `immunity.sus_wild`):
+
+```{python}
+sim = ss.Sim(measles, n_agents=1000, stop=ss.days(50), verbose=0)
+sim.run()
+df = sim.people.to_df()
+df.head()
+```
+
+This makes it easy to summarize people in your own way, e.g. the mean age of women and of men:
+
+```{python}
+df.groupby('female').age.mean()
+```
+
+`sim.people.person(10)` gives everything about one agent, here the one with UID 10:
+
+```{python}
+sim.people.person(10)
+```
+
+## In a compartmental run
+
+In a compartmental run there are no agents. `sim.people` then has one row for each group the model is split into, and asking for a property of each person, such as `sim.people.age` in a model not split by age, raises an error saying to stratify by it or to run as agents. Results, `describe()`, and conditions such as `where=ss.ppl.age < 5` (for a model stratified by age) work the same either way.

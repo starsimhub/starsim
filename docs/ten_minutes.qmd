@@ -115,7 +115,7 @@ msim.summarize()
 
 ## Data and fitting
 
-A model is fitted by finding the values of its parameters that make its results match data. To try this where the right answer is known, make data from the model itself: run it with β = 0.025, and draw weekly counts of cases from it, with random noise as in real reporting. The true sim has its own random seed (`rand_seed=2`), so its noise is not the same as any run being fitted.
+A model is fitted by finding the values of its parameters that make its results match data. To try this where the right answer is known, make data from the model itself: run it with β = 0.025, and draw weekly counts of cases from it, with random noise as in real reporting. The noise is drawn with the true sim's own random seed (`rand_seed=2`), not the default seed of the sims being fitted, since the noise in real data has nothing to do with the model's.
 
 ```{python}
 truth = ss.Sim(sir, pars=dict(beta=0.025), rand_seed=2, **pars)

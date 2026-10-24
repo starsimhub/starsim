@@ -1,0 +1,149 @@
+---
+title: The model spec, `to_code()`, and `diff()`
+jupyter: python3
+---
+
+A model declared in Starsim (its states, transitions, parameters, and stratifications) is made of objects, not of code that runs, so it can be written out as plain data. That data is the *model spec*. It is what lets Starsim:
+
+- **identify** a model and a run, with a short hash of each part (`sim.hash()`);
+- **compare** two models, and say how they differ in the model's own terms (`ss.diff()`);
+- **write a model as Python** that builds it again (`sim.to_code()`), e.g. to keep or share a model that was imported or built up step by step;
+- **move models to and from other frameworks** (see [Importing and exporting models](interop_import.qmd)).
+
+## The spec
+
+`sim.to_spec()` gives the spec as a dictionary. Here it is for the measles model used in the tutorials, with a latent period:
+
+```{python}
+import json
+import starsim as ss
+ss.options(jupyter=True)
+
+S, E, I, R = ss.states('S E I R')
+infection = S >> E @ 1.9*I        # β = 1.9 per day
+onset     = E >> I @ ss.days(10)  # Infectious about 10 days after infection
+recovery  = I >> R @ ss.days(8)   # Infectious for 8 days on average
+measles = ss.Disease(infection, onset, recovery, init=dict(I=0.0001, R=0.9))
+sim = ss.Sim(measles, total_pop=100_000, start='2025-01-01', stop='2026-01-01', verbose=0)
+
+spec = sim.to_spec()
+print(list(spec.keys()))
+```
+
+Each disease is in `modules`, with its states, transitions, parameters, and how it starts. One transition looks like this:
+
+```{python}
+print(json.dumps(spec['modules'][0]['transitions'][0], indent=2))
+```
+
+The spec is the model as Starsim has resolved it, not as it was typed: the number 1.9 in the rate has become a named parameter, `beta`; each value has its unit; every default Starsim chose is written out; and every field of each kind of object is always present, with `null` for those not used. So two specs can be compared field by field.
+
+::: {.callout-warning}
+## [PROPOSAL]
+`sim.to_spec()`, `sim.hash()`, and `sim.to_code()` each build a copy of the sim, and that copy prints the line a run starts with ("Sim: measles, 100,000 people, as an ODE, ..."), although nothing is run. They should print nothing; until then, `verbose=0` on the sim (as here) keeps them quiet. (P13)
+:::
+
+## The same model, written differently
+
+Starsim has several ways to write a transition: the operators (`S >> E @ rate`), `ss.Transition()` with keywords, and a class whose members are the states and transitions. They give the same spec, and so the same hash:
+
+```{python}
+S, E, I, R = ss.states('S E I R')
+written_out = ss.Disease(
+    infection = ss.Transition(S, E, rate=1.9*I),
+    onset     = ss.Transition(E, I, dur=ss.days(10)),
+    recovery  = ss.Transition(I, R, dur=ss.days(8)),
+    init = dict(I=0.0001, R=0.9),
+    name = 'measles',
+)
+
+class Measles(ss.Disease):
+    S, E, I, R = ss.states(4)
+    infection = S >> E @ 1.9*I
+    onset     = E >> I @ ss.days(10)
+    recovery  = I >> R @ ss.days(8)
+
+as_class = Measles(init=dict(I=0.0001, R=0.9), name='measles')
+
+hashes = [ss.Sim(m, total_pop=100_000, start='2025-01-01', stop='2026-01-01', verbose=0).hash() for m in [measles, written_out, as_class]]
+print('The same model:', hashes[0] == hashes[1] == hashes[2])
+```
+
+Durations are also compared in one unit, so `ss.days(7)` and `ss.weeks(1)` are the same. The names of transitions do count: a transition named `infection` and one named `S_to_E` are different models, since results and data are matched by name.
+
+## Identifying a run
+
+`sim.hash()` gives a short hash of each part of what a run depends on:
+
+```{python}
+sim.hash()
+```
+
+| Part | Changes when |
+|---|---|
+| `model` | The structure changes: states, transitions, stratifications, networks, declared results |
+| `pars` | The value of a parameter changes |
+| `config` | How it is run changes: the solver, time unit, step, population, or random numbers |
+| `scenario` | The interventions change |
+| `data` | The data attached to it change |
+| `seed` | The random seed changes: another run of the same thing |
+
+So two runs with the same `model` hash and different `pars` hashes are the same model with different values, as in the many runs of a calibration or a parameter sweep. The hashes come from the spec, so they are the same on every machine. Labels and descriptions don't change them. A function used in a model (e.g. in a rate) is identified by its source code.
+
+## Comparing two models
+
+`ss.diff()` compares two models, part by part, and describes the differences in the model's terms. Here the second model has a latent period with a gamma distribution, which is less variable than the exponential one of an ODE, and a shorter infectious period:
+
+```{python}
+S, E, I, R = ss.states('S E I R')
+infection = S >> E @ 1.9*I
+onset     = E >> I @ ss.gamma(a=4, scale=ss.days(2.5)) # Mean 10 days, less variable
+recovery  = I >> R @ ss.days(7)
+measles2 = ss.Disease(infection, onset, recovery, init=dict(I=0.0001, R=0.9), name='measles')
+sim2 = ss.Sim(measles2, total_pop=100_000, start='2025-01-01', stop='2026-01-01', verbose=0)
+
+ss.diff(sim, sim2)
+```
+
+The distribution of the latent period is part of the model's structure, so it shows under `model`; the infectious period is still exponential, with a different mean, so it shows as a change in the value of a parameter, under `pars`.
+
+::: {.callout-warning}
+## [PROPOSAL]
+`ss.diff()` should write durations as people read them ("mean 10 days" and "8 days to 7 days", not "mean 10 day" and "8 day -> 7 day"). (P14)
+:::
+
+## Writing a model as code
+
+`sim.to_code()` writes Python that builds the model again. Running that code gives a model with the same spec, and so the same hash:
+
+```{python}
+print(sim.to_code())
+```
+
+To write it to a file, use `ss.save('measles.py', sim)` (or `sim.to_code('measles.py')`). This is most useful for a model that wasn't written by hand: one imported from another framework, or built up step by step in a notebook.
+
+`to_code()` writes the declared parts: diseases, products and deliveries, changes to parameters, contact matrices, and stratifications. What it can't write, such as a network or a module written as code, it lists in the file and in a warning (`ss.errors.LossyExport`), rather than silently writing a different model:
+
+```{python}
+agents = ss.Sim(measles, networks=ss.RandomNet(n_contacts=10), n_agents=5000, stop=ss.days(100), verbose=0)
+print(agents.to_code())
+```
+
+## What to save, and how
+
+| What | How | Holds | Read back? |
+|---|---|---|---|
+| The model as Python | `ss.save('model.py', sim)` or `sim.to_code()` | Code that builds the model | Yes, by running it |
+| The model spec | `sim.to_spec()` | The model as plain data, with no results | No: it is for hashing and comparing |
+| Results as JSON | `sim.to_json()` | Parameters, a summary, and results, for use elsewhere | No |
+| A saved sim | `ss.save('run.sim', sim)` | The sim itself, including its results, or partway through a run | Yes, with `ss.load()` |
+
+A model is shared as Python: there is no reader that turns a spec back into a sim. Models are written in Python, and code that builds the model is easier to read and check than the data it reduces to.
+
+## Limits
+
+- A network other than a contact matrix is in the spec only as its type and parameters, and `to_code()` lists it to add by hand.
+- A module written as code is identified by its type and parameters, not by its code, so changing the code of a module doesn't change the hash.
+- Two models that are the same mathematically but declared differently (two transitions out of a state, or one transition that branches) may hash differently. A difference that isn't real is the safe way to be wrong.
+
+How the spec is built and hashed is explained in [The model spec, errors, and interop](../architecture/spec_and_interop.qmd).

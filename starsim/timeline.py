@@ -151,7 +151,7 @@ class Timeline(ss.utils.NoDists):
 
     @property
     def relvec(self):
-        """ Relative time in the sim's time units (derived lazily) """
+        """ Time since the start of the sim, as numbers in the unit of the sim's step, `dt` (e.g. weeks for `dt=ss.weeks(1)`, whatever the sim's unit); derived lazily """
         if self._relvec is None and self.yearvec is not None:
             start = self._rel_start # The sim start date, or start year if the sim is duration-based
             if start is None: # Standalone timeline: measure relative to our own start

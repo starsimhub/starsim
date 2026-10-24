@@ -98,7 +98,7 @@ sim.run()
 sim.plot()
 ```
 
-The same text runs as a stochastic compartmental model with `sim.new(solver='binomial')`, with no agents to build.
+The same text runs as a stochastic compartmental model with `sim.run(solver='binomial')`, with no agents to build.
 
 ## How the results agree
 
@@ -171,7 +171,9 @@ sim = ss.Sim(measles, people=people, interventions=seeding, unit='day', stop=365
 sim.run()
 
 res = sim.results.measles
-print(f'Infections: {res.infection.values.sum():,.0f}; deaths: {res.deaths.values.sum():,.0f}; seeded: {np.nansum(sim.results.seeding.delivered.values):.0f}')
+print('Infections:', round(res.infection.sum()))
+print('Deaths:', round(res.deaths.sum()))
+print('Seeded:', round(sim.results.seeding.delivered.sum()))
 ```
 
 ## Bringing your model in

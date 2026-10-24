@@ -119,9 +119,7 @@ sir = ss.Disease(infection=ss.Transition(S, I, rate=beta * I), recovery=ss.Trans
 sim = ss.Sim(sir, total_pop=1000, solver='gillespie', unit='day', start=1, stop=100, data=data, verbose=0)
 
 fit = sim.fit(method='abc-smc', rand_seed=1, verbose=0)
-for key in ['beta', 'gamma']:
-    low, high = np.percentile(fit.samples[key], [2.5, 97.5])
-    print(f'{key}: 95% from {low:.3f} to {high:.3f}')
+fit.table # The posterior median of each parameter and its 95% interval (lower, upper)
 ```
 
 Both intervals cover the true values, and are wider than those of particle MCMC on the same data (in the table above), since ABC-SMC compares the runs with the data by a distance, with no likelihood.

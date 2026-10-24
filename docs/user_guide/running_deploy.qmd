@@ -1,0 +1,131 @@
+---
+title: Deployment
+jupyter: python3
+---
+
+A study with thousands of runs, or a model that others use through a web page, needs more than a laptop and a notebook. Starsim is plain Python, so it runs anywhere Python does: on one large computer, on a cluster, or behind a dashboard. This page covers each.
+
+## On one large computer
+
+The simplest way to run more is a larger computer, such as a cloud virtual machine with many cores. `ss.parallel()` already runs sims on all the cores of the computer it is on, so a script that uses it needs no changes. Here, the measles model is run for ten values of β, ten times each:
+
+```{python}
+import numpy as np
+import sciris as sc
+import starsim as ss
+ss.options(jupyter=True)
+
+S, I, R = ss.states('S I R')
+infection = S >> I @ 1.9*I        # β = 1.9 per day
+recovery  = I >> R @ ss.days(8)   # Infectious for 8 days on average
+measles = ss.Disease(infection, recovery, init=dict(R=0.9), init_n=dict(I=5)) # 90% immune, 5 infectious
+
+sim = ss.Sim(measles, total_pop=20_000, stop=ss.days(180), solver='binomial', verbose=0)
+msim = ss.parallel(sim, pars=dict(beta=np.linspace(1.5, 2.3, 10)), n_runs=10)
+msim.summarize().loc['measles_infection']
+```
+
+`n_cpus=` limits the number of cores used (for a shared computer), and `parallel=False` runs the sims one after another, which is useful for debugging, since an error then comes with its full traceback.
+
+When the sims differ in more than parameter values, make them in a loop, or with a function (see [Scenarios and sweeps](running_scenarios.qmd#building-many-sims)), and give the list to `ss.parallel()`. If making each sim is itself slow (reading large data files, or building a large population), make them in parallel too, with `sc.parallelize()` from Sciris:
+
+```{python}
+def make_sim(seed, coverage):
+    campaign = ss.vaccinate(efficacy=0.95, coverage=coverage, at=ss.days(30))
+    return ss.Sim(measles, interventions=campaign, total_pop=20_000, stop=ss.days(180), solver='binomial', rand_seed=seed, label='Campaign', verbose=0)
+
+sims = sc.parallelize(make_sim, iterarg=range(8), coverage=0.5) # One sim for each seed, 0 to 7
+msim = ss.parallel(sims)
+msim.plot('measles')
+```
+
+Making sims in parallel copies each one back to the main process, which takes time for a large sim; `sc.parallelize(..., serial=True)` makes them one after another, to check whether parallel is faster. Since the eight sims have the same label, they are runs of one scenario, and the plot shows their median and spread; sims with different labels are scenarios of their own (and so is each sim with no label).
+
+::: {.callout-tip}
+A remote computer can be used through SSH and a terminal, or from an editor on your own computer: [VS Code](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-ssh) (and editors based on it, such as [Positron](https://positron.posit.co)), [PyCharm](https://www.jetbrains.com/help/pycharm/configuring-remote-interpreters-via-ssh.html), and [Spyder](https://docs.spyder-ide.org/current/panes/ipythonconsole.html#connect-to-a-remote-kernel) all connect to a remote Python. A Jupyter server on the remote computer (such as [The Littlest JupyterHub](https://tljh.jupyter.org/)) works too.
+:::
+
+## On a cluster with Dask
+
+For more runs than one computer can manage, tools such as [Dask](https://docs.dask.org/) spread them across many computers. Each task makes and runs a sim and returns it; `sim.shrink()` first removes the people, so that only the results are sent back. `ss.MultiSim()` then collects sims that have already run, without running them again. (This and the next example are not run on this page.)
+
+```python
+import dask
+import dask.distributed as dd
+import numpy as np
+import starsim as ss
+
+def run_sim(seed, beta):
+    """ Make and run one sim, and return it without its people """
+    S, I, R = ss.states('S I R')
+    infection = S >> I @ beta*I
+    recovery  = I >> R @ ss.days(8)
+    measles = ss.Disease(infection, recovery, init=dict(R=0.9), init_n=dict(I=5))
+    sim = ss.Sim(measles, total_pop=20_000, stop=ss.days(180), solver='binomial', rand_seed=seed, label=f'beta={beta}', verbose=0)
+    sim.run()
+    sim.shrink()
+    return sim
+
+if __name__ == '__main__':
+    client = dd.Client(n_workers=4)
+    tasks = [dask.delayed(run_sim)(seed, beta) for seed in range(10) for beta in [1.5, 1.9, 2.3]]
+    sims = list(dask.compute(*tasks))
+    msim = ss.MultiSim(sims) # Collects the results of sims that have run
+    msim.plot()
+```
+
+[Coiled](https://coiled.io/), a paid service built on Dask, runs the same tasks on a cluster in the cloud that grows and shrinks with the work:
+
+```python
+import coiled
+
+cluster = coiled.Cluster(n_workers=50, workspace='<your_coiled_workspace>')
+client = cluster.get_client()
+futures = [client.submit(run_sim, seed, 1.9) for seed in range(1000)]
+sims = client.gather(futures)
+msim = ss.MultiSim(sims)
+msim.plot()
+```
+
+The same pattern (a function that makes, runs, and shrinks one sim, given a seed and the values that differ) works with other tools, such as [Joblib](https://joblib.readthedocs.io/) or a job scheduler on a high-performance cluster, where each job saves its sim with `sim.save()` and a final script loads them with `ss.load()` and collects them with `ss.MultiSim()`.
+
+## Interactive dashboards
+
+A model can be put behind a web page, so that others can change its inputs and see the results. There are several tools for this, including [Shiny for Python](https://shiny.posit.co/py/), [Voilà](https://voila.readthedocs.io/), and [Panel](https://panel.holoviz.org/); one of the simplest is [Streamlit](https://streamlit.io/). This one has sliders for the share of the town that is immune and the coverage of a vaccination campaign:
+
+```python
+import streamlit as st
+import starsim as ss
+
+def run_sim(immune, coverage):
+    S, I, R = ss.states('S I R')
+    infection = S >> I @ 1.9*I
+    recovery  = I >> R @ ss.days(8)
+    measles = ss.Disease(infection, recovery, init=dict(R=immune), init_n=dict(I=5))
+    campaign = ss.vaccinate(efficacy=0.95, coverage=coverage, at=ss.days(30))
+    sim = ss.Sim(measles, interventions=campaign, total_pop=20_000, stop=ss.days(180), verbose=0)
+    sim.run()
+    return sim
+
+st.title('Measles in a town of 20,000')
+immune = st.slider('Share immune at the start', 0.5, 0.99, 0.9)
+coverage = st.slider('Coverage of the campaign on day 30', 0.0, 1.0, 0.5)
+
+sim = run_sim(immune, coverage)
+st.write('Infections:', round(sim.results.measles.infection.sum()))
+st.pyplot(sim.diseases.measles.plot())
+```
+
+Saved as `app.py`, it runs (after `pip install streamlit`) with `streamlit run app.py`, which opens the dashboard in a browser. As an ODE, each run takes a fraction of a second, so the page updates as the sliders move.
+
+## Pitfalls
+
+- **Sending whole sims between computers.** A sim with its people can be large; shrink it before returning it (`sim.shrink()`), as `ss.parallel()` does by itself.
+- **The same seed in every task.** Give each run its own `rand_seed`, or every run of a stochastic model is the same.
+- **Code that isn't on the workers.** A module written as code must be importable on every computer that runs it, since sims are sent between them as Python objects (pickles), which need the same code to be read.
+
+## See also
+
+- [Scenarios and sweeps](running_scenarios.qmd), for making and comparing many sims
+- [Uncertainty, seeds, and many runs](running_uncertainty.qmd), for how many runs a question needs
+- [Debugging and profiling](troubleshooting_debugging.qmd), for finding what makes a sim slow

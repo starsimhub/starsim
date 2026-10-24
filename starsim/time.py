@@ -153,6 +153,8 @@ class TimePar:
                         return NotImplemented
                 elif getattr(other, '_is_expr', False) or getattr(other, '_is_cond', False): # As does an expression, or a property of people
                     return NotImplemented
+                elif isinstance(other, ss.by) and other.varies: # A value that varies in time (ss.by(age=[school, 1, 1])) cannot hold a rate times it, so this is an expression, as it is written in a rate
+                    return getattr(ss.expressions.as_expr(self), func.__name__)(other)
                 elif isinstance(other, ss.by):
                     return other.map(lambda v: func(self, v))
                 elif isinstance(other, (types.FunctionType, ft.partial)):

@@ -1,0 +1,68 @@
+---
+title: Gallery
+---
+
+Complete models, each on a page of its own with the same parts: what the model is and why a modeler would build it this way, its state-transition diagram, its parameters, the code, a result with a plot, and where to go next. Each page runs as it is, in a few seconds. They cover a range of diseases and structures, rather than building one model up step by step as the [tutorials](tutorials.qmd) do.
+
+## Models
+
+| Model | What it shows |
+|---|---|
+| [SIR, four ways](gallery/sir.qmd) | The four ways of writing a model, which give the same model; the same model as an ODE, two kinds of stochastic model, and agents |
+| [SEIR with a realistic infectious period](gallery/seir_erlang.qmd) | A latent period; an infectious period with Erlang stages against an exponential one |
+| [Hospitalization and death](gallery/branching.qmd) | A split on entry (who goes to hospital) and competing hazards (death or discharge) |
+| [Cholera with a water reservoir](gallery/cholera.qmd) | A state that is not people (bacteria in the water), with flows in from and out to outside the model |
+| [Age groups and a contact matrix](gallery/age_contacts.qmd) | An age-stratified SIR, with contacts between age groups |
+| [Vaccination as a stratification](gallery/vaccination_strata.qmd) | Vaccinated and unvaccinated groups, and a campaign that moves people between them |
+| [Cases, hospitalizations, and deaths, fitted to data](gallery/outcomes_fit.qmd) | Outcomes with delays; data made from the model; fitting β with `sim.fit()` |
+| [Severity by age, as a function](gallery/custom_code.qmd) | A Python function in a model, which still runs as compartments, and as agents |
+| [An STI on a sexual network](gallery/sexual_network.qmd) | Transmission per sex act over partnerships; many runs as agents |
+
+## Checks against theory
+
+| Check | What it shows |
+|---|---|
+| [Final size](gallery/final_size.qmd) | The share of people ever infected, against the Kermack–McKendrick final-size equation |
+| [The chance of a major outbreak](gallery/major_outbreak.qmd) | The share of stochastic runs that take off, against 1 − 1/R0 |
+
+## Models from other frameworks
+
+Each of the "coming from" pages starts with a showcase model from another framework, written in that framework and in Starsim, with how their results agree and how long each takes:
+
+| Framework | Model |
+|---|---|
+| [Atomica](coming_from/atomica.qmd#the-same-model-in-both) | Atomica's SIR demo, from its framework workbook and databook |
+| [camdl](coming_from/camdl.qmd#the-same-model-in-both) | A closed SIR, observed through weekly reported cases |
+| [EMULSION](coming_from/emulsion.qmd#the-same-model-in-both) | EMULSION's compartmental SIR |
+| [EpiModel](coming_from/epimodel.qmd#the-same-model-in-both) | An SIS over partnerships that form and dissolve |
+| [epydemix](coming_from/epydemix.qmd#the-same-model-in-both) | An SIR in Kenya's population, with contact matrices between five age groups |
+| [flepiMoP](coming_from/flepimop.qmd#the-same-model-in-both) | An SEIR in two provinces whose residents commute between them |
+| [LASER](coming_from/laser.qmd#the-same-model-in-both) | An SEIR in a city and fifteen smaller places, coupled by gravity |
+| [MEmilio](coming_from/memilio.qmd#the-same-model-in-both) | An age-resolved SECIR with seasonality and a cut in contacts |
+| [NumPy](coming_from/numpy.qmd#the-same-model-in-both) | A stochastic SEIR in daily steps for a million people |
+| [odin](coming_from/odin.qmd#the-same-model-in-both) | A discrete-time stochastic SEIR in four age groups, with seasonal forcing |
+| [SimInf](coming_from/siminf.qmd#the-same-model-in-both) | An SIR in each of 1,600 cattle herds, linked by movements |
+| [summer2](coming_from/summer2.qmd#the-same-model-in-both) | An SIR with deaths, stratified by age and by location, with a mixing matrix for each |
+
+## Library modules
+
+Starsim also comes with a library of example modules, written as code, which are illustrative rather than validated: their parameter values are indicative, and some are placeholders. Use them as starting points to copy and adapt. They are imported with `import starsim.library as ssl`:
+
+- **Diseases** (`ssl.diseases`): HIV with CD4 counts (with `ssl.diseases.ART` for treatment), cholera with an environmental reservoir, Ebola with transmission from unburied bodies, measles as an SEIR, and a non-communicable disease.
+- **Networks** (`ssl.networks`): households from survey data, people who move in space and connect to those nearby (`DiskNet`), and theoretical networks such as Erdős–Rényi.
+- **Maternal, newborn, and child health** (`ssl.mnch`): fetal health, neonatal sepsis, and congenital disease.
+
+[Library modules](user_guide/interop_library.qmd) in the user guide describes them, and how to use them.
+
+## Scripts in the repository
+
+A few longer examples are kept as scripts in the [`docs/examples`](https://github.com/starsimhub/starsim/tree/main/docs/examples) folder of the repository, to read and adapt:
+
+- **An embedding network** ([`networks/embedding.py`](https://github.com/starsimhub/starsim/blob/main/docs/examples/networks/embedding.py)): pairs people by their closeness in a continuous space of traits.
+- **One model in several languages** ([`translations/`](https://github.com/starsimhub/starsim/tree/main/docs/examples/translations)): the same simple SIS model written in plain Python, Numba, JAX, Julia, and Rust, next to the Starsim version, for comparing their speed.
+- **LASER** ([`laser/`](https://github.com/starsimhub/starsim/tree/main/docs/examples/laser)): a LASER example and its Starsim equivalents, with scripts to time them.
+
+::: {.callout-warning}
+## [PROPOSAL]
+The diagrams on these pages are drawn from `diagram()`, which returns the text of a Mermaid flowchart, so each page prints it into a Mermaid block in a hidden cell. In a notebook, `sir.diagram()` should draw the diagram itself, as `describe()` shows tables (P11). Its labels should also give the values, with their units, rather than the names of the parameters: `recovery: 10 days`, not `recovery: dur = dur` (P2, P6).
+:::

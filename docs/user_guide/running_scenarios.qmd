@@ -1,0 +1,139 @@
+---
+title: Scenarios and sweeps
+jupyter: python3
+---
+
+A scenario is a sim with something changed: an intervention added, a parameter set to another value, a different population. Comparing scenarios is how most models answer policy questions: how many infections would a campaign avert, and does it matter when it happens? This page covers making scenarios, running them together, comparing them (once or with many runs each), and sweeping a parameter over a range of values.
+
+## Scenarios by label
+
+Here, measles has reached a town of 20,000 people in which 90% are immune, with 50 infectious people on 1 January. The question is what a vaccination campaign that reaches half the town, with a vaccine that protects 95% of those who receive it, would avert, and whether it matters if it happens in February or March:
+
+```{python}
+import starsim as ss
+ss.options(jupyter=True)
+
+S, I, R = ss.states('S I R')
+infection = S >> I @ 1.9*I        # β = 1.9 per day
+recovery  = I >> R @ ss.days(8)   # Infectious for 8 days on average
+measles = ss.Disease(infection, recovery, init=dict(R=0.9), init_n=dict(I=50)) # 90% immune, 50 infectious
+
+base = ss.Sim(measles, total_pop=20_000, start='2025-01-01', stop='2025-07-01')
+february = ss.vaccinate(efficacy=0.95, coverage=0.5, at='2025-02-01')
+march    = ss.vaccinate(efficacy=0.95, coverage=0.5, at='2025-03-01')
+```
+
+`sim.new()` makes a new sim from the same inputs, with whatever is given changed, so each scenario is the base sim with its intervention. `ss.parallel()` runs a dict of sims by label, at the same time on the computer's cores:
+
+```{python}
+scenarios = {
+    'No campaign': base,
+    'Campaign in February': base.new(interventions=february),
+    'Campaign in March': base.new(interventions=march),
+}
+msim = ss.parallel(scenarios)
+msim.plot('measles')
+```
+
+`msim.summarize()` gives each result over the whole run for each scenario: the total of each flow (`measles_infection` is the number of infections) and the final value of each state:
+
+```{python}
+msim.summarize()
+```
+
+A campaign in February averts about 490 of the 1,190 infections; by March, most of the outbreak has happened, and it averts about 140. A scenario contains exactly the interventions given to it, so the baseline is a scenario like any other. The sims themselves are kept, in the order given, in `msim.sims`.
+
+## Many runs of each scenario
+
+These runs are ODEs, so each scenario has one answer. With a stochastic solver, or as agents, run each scenario many times with `n_runs=`, and compare the spread (see [Uncertainty, seeds, and many runs](running_uncertainty.qmd)):
+
+```{python}
+scenarios = {
+    'No campaign': base.new(solver='binomial'),
+    'Campaign in February': base.new(solver='binomial', interventions=february),
+}
+msim = ss.parallel(scenarios, n_runs=20)
+msim.plot('measles')
+```
+
+The runs of each scenario use the same seeds in the same order, so each run of the campaign is paired with a run of the baseline with the same random numbers, and the difference between them is mostly the effect of the campaign rather than chance. `msim.diff()` gives the difference of each scenario from the baseline, run by run:
+
+```{python}
+averted = -msim.diff('No campaign')['Campaign in February'].measles.infection.cum # Infections averted so far, in each pair of runs
+low, mid, high = averted.quantiles()
+print('Infections averted:', round(mid[-1]), 'with 95% of runs between', round(low[-1]), 'and', round(high[-1]))
+averted.plot()
+```
+
+::: {.callout-warning}
+## [PROPOSAL]
+The difference from a baseline should be a summary like any other, in one call: `msim.summarize(baseline='No campaign')`, giving for each scenario the median and interval of the difference in each result, run by run (with `averted` reading more naturally than a negative difference). Today it takes the four lines above: `msim.diff()`, a minus sign, `.cum`, `quantiles()`, and the last value of each (P11, P15).
+:::
+
+Each result across the runs can also be picked by scenario, e.g. `msim.results.measles.I.select(scenario='No campaign')`.
+
+## Parameter sweeps
+
+To see how a result depends on a parameter, run the sim with each of a set of values. `pars=` takes a list of values for each parameter, and each value is a scenario of its own, labeled with it. Here the outbreak with β from 1.5 to 2.3 per day (R0 from 12 to 18):
+
+```{python}
+sim = ss.Sim(measles, total_pop=20_000, start='2025-01-01', stop='2025-07-01', verbose=0)
+msim = ss.parallel(sim, pars=dict(beta=[1.5, 1.9, 2.3]))
+msim.plot('measles')
+```
+
+```{python}
+msim.summarize().loc['measles_infection']
+```
+
+The parameter is named as it is in the model: here `beta`, the name Starsim gives the rate of a transmission (`describe()` lists the names). When there is more than one disease, give the disease too, e.g. `pars={'measles.beta': [1.5, 2.3]}`. The values become columns of `msim.runs`, the table of runs, and a result can be picked by value: `msim.results.measles.I.select(beta=2.3)`. Several parameters given together are taken value by value (the first value of each together, then the second, and so on), so each needs the same number of values; for other sets, give a list of dicts, one per set (`pars=[dict(beta=1.5, dur=ss.days(6)), dict(beta=2.3, dur=ss.days(8))]`, where `dur` is the infectious period). `n_runs=` runs each set that many times.
+
+A sweep shows each value in turn. To carry the uncertainty in a parameter into the results instead, draw its value afresh for each run with `priors=True` (see [Uncertainty, seeds, and many runs](running_uncertainty.qmd#uncertainty-in-parameter-values)).
+
+## Branching from a shared start
+
+When scenarios differ only from some point on, the shared part can be run once: run the base sim part of the way with `sim.run(until=...)`, copy it for each scenario, and run the copies on. See [The Sim](running_sim.qmd#running-part-of-the-way). This saves time only when the shared start is long, since copying a sim takes time too.
+
+## Building many sims
+
+For a larger study, the usual pattern is a function that makes a sim from a few arguments (a scenario, a seed, a setting), so that every sim is made the same way:
+
+```python
+def make_sim(scenario='No campaign', coverage=0.5, total_pop=20_000, rand_seed=1):
+    S, I, R = ss.states('S I R')
+    infection = S >> I @ 1.9*I
+    recovery  = I >> R @ ss.days(8)
+    measles = ss.Disease(infection, recovery, init=dict(R=0.9), init_n=dict(I=50))
+    campaigns = {
+        'No campaign': None,
+        'Campaign in February': ss.vaccinate(efficacy=0.95, coverage=coverage, at='2025-02-01'),
+        'Campaign in March': ss.vaccinate(efficacy=0.95, coverage=coverage, at='2025-03-01'),
+    }
+    sim = ss.Sim(measles, interventions=campaigns[scenario], total_pop=total_pop, start='2025-01-01', stop='2025-07-01', rand_seed=rand_seed, label=scenario)
+    return sim
+
+sims = [make_sim(scenario) for scenario in ['No campaign', 'Campaign in February', 'Campaign in March']]
+msim = ss.parallel(sims) # A list of sims is labeled by each sim's label
+```
+
+If making each sim is itself slow (reading large data files, say), the sims can be made in parallel too, with `sc.parallelize(make_sim, ...)` from Sciris; see [Deployment](running_deploy.qmd).
+
+## Copies, and memory
+
+A sim copies the modules it is given, so the same disease or intervention can be given to several sims, as above. `ss.parallel()`, on the other hand, runs the sims it is given as they are, so after `ss.parallel(scenarios)`, each sim in `scenarios` has its results (with `n_runs=`, the runs are copies, and the sims given are not run). `inplace=False` runs copies instead.
+
+By default, `ss.parallel()` keeps the results of each run but not the people in it, which keeps memory use down when there are many runs. For a sim run on its own and kept, `sim.shrink()` does the same.
+
+`msim.combine()` adds the runs together into one sim, as if they were one population (for several smaller runs of agents); `ss.MultiSim.merge()` puts the runs of several MultiSims together, and `msim.split()` splits them again.
+
+## Pitfalls
+
+- **Scenarios that differ in more than the intervention.** Make each scenario from the same base with `sim.new()`, so that everything else, including the seed, is the same.
+- **Comparing medians instead of differences.** The difference between the medians of two scenarios is not the median difference; use `msim.diff()` for the effect of an intervention, run by run.
+- **`ss.parallel()` relabels the sims it is given.** A sim given in a dict takes the label it is given there, which then follows it into later uses.
+
+## See also
+
+- [Vaccination and scenarios](../tutorials/t5_vaccination.qmd), the tutorial that compares vaccination scenarios for measles
+- [Products and deliveries](interventions_products.qmd) and [Changing parameters](interventions_changes.qmd), for the interventions that scenarios are usually made of
+- [Uncertainty, seeds, and many runs](running_uncertainty.qmd), for reading many runs

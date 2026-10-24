@@ -1168,13 +1168,16 @@ class Engine:
                 x = dt/mean
                 share = min(x, 1) if euler else -np.expm1(-x)
                 step = 'step' if dt == self.dt else 'substep'
-                msg = f'{name} has rate × dt = {x:.2g} ({1/mean:.3g} per {unit} × {dt:n} {unit}{"s" if dt != 1 else ""}), so {"almost everyone leaves" if share > 0.99 else f"{share:.2g} of people leave"} in a {step}'
+                plural = lambda n: f'{n:.2g} {unit}{"s" if n != 1 else ""}'
+                leave = 'almost everyone leaves' if share > 0.99 else f'{share:.0%} leave'
+                msg = f'{name}: people leave after {plural(mean)} on average, and each {step} is {plural(dt)}, so {leave} in a {step}'
                 if euler:
                     msg += ' (Euler scales outflows that would take more than everyone down together)' if x > 1 else ''
                 else: # Whole steps are off the ODE by an amount of order rate × dt, which can be large: about 15% in the prevalence of a seasonal SIRS at 0.12
-                    fixes = 'a smaller dt, substeps=,' if sim.solver == 'binomial' else 'a smaller dt'
-                    msg += f'. Taking whole steps, solver="{sim.solver}" can differ from the ODE by several times that in prevalence; use {fixes} or solver="gillespie"'
-                ss.note(f'{msg}; sim.check_dt() shows how much a smaller step changes the results', ss.errors.LargeStep, sim=sim)
+                    fixes = 'a shorter step (dt=) or substeps=' if sim.solver == 'binomial' else f'a shorter step (e.g. dt=ss.{unit}s({dt/4:.2g}))'
+                    who = 'agents' if sim.solver == 'abm' else 'the chain binomial'
+                    msg += f'. Taking whole steps, {who} can differ from the ODE by that much or more; {fixes} follows it more closely'
+                ss.note(f'{msg}, and sim.check_dt() shows how much it matters', ss.errors.LargeStep, sim=sim)
         return
 
     def varying_dwell(self, name, tr, raw, dw, to_unit):
