@@ -84,7 +84,7 @@ The call to `sim.init()` means that the `SIR` module gets added to `sim.diseases
 
 * the parameters of the modules are added to the sim's centralized parameter dictionary, so you can access them via either `sim.pars.sir.init_prev` or `sim.diseases.sir.pars.init_prev`;
 * the states specific to each module are added to `People`, so you can access them via `sim.diseases.sir.I` or `sim.people.sir.I`;
-* the results specific to each module are added to the centralized results of the `Sim`, so you can access them via `sim.diseases.sir.results.n_I` or `sim.results.sir.n_I`.
+* the results specific to each module are added to the centralized results of the `Sim`, so you can access them via `sim.diseases.sir.results.I` or `sim.results.sir.I`.
 
 The transitions of a declared disease can be printed as a table, with the matrix of which state leads to which:
 
@@ -94,4 +94,4 @@ sim.diseases.sir.transitions
 
 ## Overview of Results
 
-Once you've run a `Sim`, all the results are stored under `sim.results`. This is structured similarly to a nested dictionary, with results specific to each module stored in their own dictionaries, like the `sim.results.sir.n_I` example above. See the [Results page](basics_results.qmd) for more.
+Once you've run a `Sim`, all the results are stored under `sim.results`. This is structured similarly to a nested dictionary, with results specific to each module stored in their own dictionaries, like the `sim.results.sir.I` example above. See the [Results page](basics_results.qmd) for more.

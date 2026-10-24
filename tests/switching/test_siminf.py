@@ -65,7 +65,7 @@ def make_pmcmc():
     gamma = ss.par(ss.perday(0.1), bounds=[0.01, 1])
     S, I, R = ss.states('S I R')
     sir = ss.Disease(infection=ss.Transition(S, I, rate=beta * I), recovery=ss.Transition(I, R, rate=gamma), init_n=dict(I=5), name='sir')
-    data = pd.DataFrame(dict(t=ref_obs_t, n_I=ref_obs_I))
+    data = pd.DataFrame(dict(t=ref_obs_t, I=ref_obs_I))
     return ss.Sim(sir, total_pop=1000, solver='gillespie', unit='day', start=1, stop=100, data=data, verbose=0)
 
 
@@ -73,7 +73,7 @@ def make_pmcmc():
 def test_siminf_register():
     sc.heading('SimInf\'s 1,600 herds and their register, for the first 100 days')
     res = make_herds(*read_register(paths.lfd/'examples'/'siminf'/'sir_herds'/'reference', stop=100), stop=100).run().results.sir
-    S100, herds100 = res.n_S.values[100], (np.asarray(res.n_I.strata)[100] > 0).sum()
+    S100, herds100 = res.S.values[100], (np.asarray(res.I.strata)[100] > 0).sum()
     assert ref_S100[1] <= S100 <= ref_S100[2], f'Susceptible on day 100: {S100:,.0f}, SimInf {ref_S100[0]:,} ({ref_S100[1]:,} to {ref_S100[2]:,})'
     assert ref_herds100[1] <= herds100 <= ref_herds100[2], f'Herds infected on day 100: {herds100}, SimInf {ref_herds100}'
     return res
@@ -88,7 +88,7 @@ def test_siminf_scale():
     build = T.toc(output=True)
     sim.run()
     run = T.toc(output=True) - build
-    herds = (np.asarray(sim.results.sir.n_I.strata)[-1] > 0).sum()
+    herds = (np.asarray(sim.results.sir.I.strata)[-1] > 0).sum()
     print(f'Built in {build:.1f} s and run in {run:.1f} s, against SimInf\'s {ref_build} s and {ref_run} s; {herds:,} herds infected at the end')
     assert build < 2*ref_build, f'Built in {build:.1f} s, against 2 × {ref_build} s for SimInf'
     assert run < 3*ref_run, f'Run in {run:.1f} s, against 3 × {ref_run} s for SimInf'
@@ -106,14 +106,14 @@ def test_siminf_ldata():
                      init_n=dict(I=ss.by(herd=[1] + [0]*(n_herds - 1))), name='sir')
     sir.stratify(herd=np.arange(n_herds).astype(str), kind='space', mobility=ss.geo.Mobility(data=make_register(n_herds, 365)))
     sim = ss.Sim(sir, solver='gillespie', unit='day', start=0, stop=365, total_pop=50*n_herds, verbose=0).run()
-    herds = (np.asarray(sim.results.sir.n_I.strata)[-1] > 0).sum()
+    herds = (np.asarray(sim.results.sir.I.strata)[-1] > 0).sum()
     assert herds > 10, f'Expected the register to carry infection to many herds, but {herds} are infected at the end'
     return sim
 
 
 def test_siminf_filter():
     sc.heading('Timing the particle filter for PMCMC, per particle run')
-    pf = ss.fit.ParticleFilter(make_pmcmc().init(), likelihood=dict(n_I=ss.poisson()))
+    pf = ss.fit.ParticleFilter(make_pmcmc().init(), likelihood=dict(I=ss.poisson()))
     pf(10, seed=0) # Compile
     n = 50
     T = sc.timer()

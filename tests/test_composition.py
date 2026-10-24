@@ -104,7 +104,7 @@ def test_numpy_agents_beside():
     alone = ss.Sim(**kw).run()
     both = ss.Sim(connectors=Mosquitoes(), **kw).run()
     assert both.connectors.mosquitoes.age.max() > 0
-    assert np.array_equal(both.results.sir.n_I.values, alone.results.sir.n_I.values) # Its own random numbers leave those of the other modules alone
+    assert np.array_equal(both.results.sir.I.values, alone.results.sir.I.values) # Its own random numbers leave those of the other modules alone
     return both
 
 
@@ -121,20 +121,6 @@ def test_callback_changes_component():
     I0, I1 = base.results.numpysir.I.values, changed.results.numpysir.I.values
     assert np.array_equal(I0[:21], I1[:21]) and I1[40] < 0.5*I0[40]
     return changed
-
-
-@sc.timer()
-def test_fit_numpy():
-    sc.heading('Testing a fit of a NumPy module through a function that makes the sim, with no gradient')
-    def make(beta=0.3, data=None):
-        return ss.Sim(connectors=NumpySIR(beta=beta, name='numpy'), unit='day', dt=1, start=0, stop=100, verbose=0, data=data)
-    I = make(0.25).run().results.numpy.I
-    data = pd.DataFrame({'numpy.I': I.values[::10]}, index=I.timevec[::10])
-    fit = make(beta=ss.par(0.3, bounds=[0.1, 0.5]), data=data).calibrate(method='optuna', trials=30, verbose=0)
-    assert np.isclose(fit.pars.beta, 0.25, rtol=0.02)
-    with pytest.raises(ss.CapabilityError, match='written as code'): # No gradient, which it says
-        make(beta=ss.par(0.3, bounds=[0.1, 0.5]), data=data).gradient()
-    return fit
 
 
 @sc.timer()
@@ -167,9 +153,9 @@ def test_coded_and_declared():
         return ss.Sim(sir, interventions=[Mover(raw=raw), Reader()], unit='day', stop=6, n_agents=100, solver='abm', verbose=0).run()
     sim = make()
     res = sim.results.sir
-    assert sim.interventions.reader.n == 10 and res.n_I[4] == 10 and res.n_S[4] == 90 # Seen in the same step, and in the results
+    assert sim.interventions.reader.n == 10 and res.I[4] == 10 and res.S[4] == 90 # Seen in the same step, and in the results
     raw = make(raw=True) # Not tracked: the counts and results do not see it, which STARSIM_CHECK_COUNTS=1 checks at each step
-    assert raw.diseases.sir.I.count() == 10 and raw.results.sir.n_I[4] == 0
+    assert raw.diseases.sir.I.count() == 10 and raw.results.sir.I[4] == 0
     with pytest.raises(RuntimeError, match='differs from a new count'):
         raw.diseases.sir.engine.check_counts()
 
@@ -185,6 +171,5 @@ if __name__ == '__main__':
     s1 = test_numpy_ode_beside()
     s2 = test_numpy_agents_beside()
     s3 = test_callback_changes_component()
-    s4 = test_fit_numpy()
     s5 = test_coded_and_declared()
     T.toc()

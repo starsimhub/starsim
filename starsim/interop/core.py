@@ -411,9 +411,9 @@ def disease(source, total=None):
     for name,text in source.results.items():
         if name not in taken:
             node = rates.parse(text)
-            if isinstance(node, ast.Name) and node.id in states: # One state: n_X already, and also kept under the source's name (as 1 * X, which would otherwise be taken as the state itself under another name)
+            if isinstance(node, ast.Name) and node.id in states: # One state: its count is the result X already, and also kept under the source's name (as 1 * X, which would otherwise be taken as the state itself under another name)
                 named[name] = 1*states[node.id]
-                lines.append(f'  {name:16s} a result: n_{node.id}')
+                lines.append(f'  {name:16s} a result: {node.id}')
                 continue
             named[name] = parse(ast.unparse(rates.bare_of(node)))
             lines.append(f'  {name:16s} a result: {text}')

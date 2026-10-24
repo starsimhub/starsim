@@ -16,7 +16,7 @@ So `ss.Sim`, `ss.MultiSim`, `ss.Disease`, `ss.RandomNet`, `ss.MixingPool`, and `
 
 ## The names
 
-The names below are checked against the code: each one is exported by `starsim`, each method exists, and the counts in the headings and in [the total](#the-total) are made from one list in `tests/test_spec.py`, which a test compares with this page. To update the counts after changing the list, run `check_vocabulary(write=True)` from that file. `ss.` also exports names that are not counted: the classes and helpers for writing modules as code (the second tier, listed in `tests/test_spec.py`), and the base classes of the errors (`ss.CodedError`, `ss.StarsimWarning`, `ss.Note`), `ss.note`, and `ss.CapabilityError`. The other errors, warnings, and notes are in `ss.errors` (`ss.errors.UnknownState`), the testing and profiling tools in `ss.debugtools`, and everything else in its own submodule (`ss.solvers.Compartmental`, `ss.transitions.Expr`).
+The names below are checked against the code: each one is exported by `starsim`, each method exists, and the counts in the headings and in [the total](#the-total) are made from one list in `tests/devtests/test_spec.py`, which a test compares with this page. To update the counts after changing the list, run `check_vocabulary(write=True)` from that file. `ss.` also exports names that are not counted: the classes and helpers for writing modules as code (the second tier, listed in `tests/devtests/test_spec.py`), and the base classes of the errors (`ss.CodedError`, `ss.StarsimWarning`, `ss.Note`), `ss.note`, and `ss.CapabilityError`. The other errors, warnings, and notes are in `ss.errors` (`ss.errors.UnknownState`), the testing and profiling tools in `ss.debugtools`, and everything else in its own submodule (`ss.solvers.Compartmental`, `ss.transitions.Expr`).
 
 ### Sim and modules: 12
 
@@ -296,7 +296,7 @@ Since the review of October 2026, these names went, or were promised and never b
 | `solver='sde'`, `'stochastic'`, `'ctmc'` | One solver per method | `'gillespie'` (exact), `'tau'` (tau-leaping), `'binomial'` |
 | `ss.Calibration` as the result of a fit | `sim.calibrate()` returns an `ss.fit.Fit` | `ss.fit.Fit` (Starsim 3's `ss.Calibration` is removed) |
 | `ss.from_spec()`, and `ss.load()` of a model spec | The spec is the normalized form for `sim.hash()` and `ss.diff()`, and is not read back | `ss.save('model.py', sim)` and `ss.save('run.sim', sim)` |
-| `msim.reduce()`, `msim.mean()`, `msim.median()`, `ss.MultiResult`, `ss.multi_run()` | A MultiSim is its results, with a run dimension | `msim.results.sir.n_I.quantiles()` (and `.median()`, `.mean()`); `ss.parallel(pars=...)` |
+| `msim.reduce()`, `msim.mean()`, `msim.median()`, `ss.MultiResult`, `ss.multi_run()` | A MultiSim is its results, with a run dimension | `msim.results.sir.I.quantiles()` (and `.median()`, `.mean()`); `ss.parallel(pars=...)` |
 | `ss.outcome(every=)`, `annualize()` | Resampling belongs to a result | `result.resample('year')` |
 | `ss.routine_vx`, `ss.campaign_vx`, `ss.simple_vx`, `ss.routine_screening`, `ss.campaign_screening`, `ss.routine_triage`, `ss.campaign_triage`, `ss.seasonality`, `ss.rate`, `ss.time_prob`, `ss.rate_prob` | Starsim 3 and 2 duplicates of the language | Products with deliveries, `ss.seasonal`, `ss.per` and `ss.prob`; each is mapped in `skills/migrate-starsim3` |
 
@@ -310,7 +310,7 @@ There is no fixed budget. Before adding a name, check:
 - **Does it make some real model shorter than it is in its original framework?** That is the test the whole design is held to.
 - **Is a keyword enough?** Routine and campaign delivery are keywords on one function, not two classes.
 
-When a name is added or removed, update the list in `tests/test_spec.py` and this document; `check_vocabulary(write=True)` there rewrites the counts, and `test_vocabulary` fails until both agree with the code.
+When a name is added or removed, update the list in `tests/devtests/test_spec.py` and this document; `check_vocabulary(write=True)` there rewrites the counts, and `test_vocabulary` fails until both agree with the code.
 
 ## Not in the language
 

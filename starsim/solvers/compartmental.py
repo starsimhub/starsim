@@ -56,7 +56,7 @@ def step_seconds(p, y, npts, dt, solver, n_sub, tables=None):
     parts = (p.fixed, p.mult, p.consts, p.rel_trans)
     kept = [part.copy() for part in parts]
     if tables is not None:
-        ss.kernels.set_step(parts, 0, tables)
+        ss.kernels.uncompiled().set_step(parts, 0, tables) # As plain Python, as the step is timed: compiling it would take longer than the step
     seconds = ss.kernels.timed_seconds(p, y, npts, dt, solver, n_sub)
     for part,old in zip(parts, kept): # As the step left them
         part[:] = old
@@ -2100,7 +2100,7 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
         self.check_short(short)
         self.sim.t.ti = mod.t.ti = mod.t.npts - 1 # At the last time point, as after a run step by step
         store = lambda key, vals: self.store_run(key, vals.sum(axis=1), vals) # The total, and the values by group
-        n = sc.objdict({name:store(f'n_{name}', stocks[:, self.state_comps[name]].sum(axis=1)) for name in graph.states})
+        n = sc.objdict({name:store(name, stocks[:, self.state_comps[name]].sum(axis=1)) for name in graph.states})
         new = sc.objdict({name:store(name, flows[:, ind]) for name,ind in self.tr_index.items()})
         for name,ind in self.transfer_index.items():
             store(name, flows[:, ind])
@@ -2147,7 +2147,7 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
         has = lambda key: getattr(res.get(key), 'strata', None) is not None
         exprs = any(has(name) for name in graph.exprs) # A sum or ratio by group can use any state or flow
         sources = {key for name,info in self.outcomes.items() if has(name) or has(f'n_{name}') for key,_ in info.sources} # The flows that outcomes kept by group come from
-        kept_s = [i for i,name in enumerate(graph.states) if exprs or has(f'n_{name}')]
+        kept_s = [i for i,name in enumerate(graph.states) if exprs or has(name)]
         kept_f = [ind for name,ind in (self.tr_index | self.transfer_index).items() if exprs or has(name) or name in sources or (has('new_infections') and name in graph.transmissions)]
         return kept_s, kept_f
 
@@ -2244,7 +2244,7 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
         store = self.store_run
         stock_g = lambda i: groups.stocks[:, pos_s[i]] if i in pos_s else None # By group, if needed
         flow_g = lambda ind: groups.flows[:, pos_f[ind]] if ind in pos_f else None
-        n = sc.objdict({name:store(f'n_{name}', totals.stocks[i], stock_g(i)) for i,name in enumerate(states)})
+        n = sc.objdict({name:store(name, totals.stocks[i], stock_g(i)) for i,name in enumerate(states)})
         new = sc.objdict({name:store(name, totals.flows[ind], flow_g(ind)) for name,ind in self.tr_index.items()})
         for name,ind in self.transfer_index.items():
             store(name, totals.flows[ind], flow_g(ind))
@@ -2348,15 +2348,15 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
                 stocks_g, flows_g, kept_s, kept_f, group_ti = grouped
             pos = {ind:j for j,ind in enumerate(kept_f)}
             for j,i in enumerate(kept_s):
-                groups[f'n_{states[i]}'] = stocks_g[:, :, j, :]
+                groups[states[i]] = stocks_g[:, :, j, :]
             for name,ind in (self.tr_index | self.transfer_index).items():
                 if ind in pos:
                     groups[name] = flows_g[:, :, pos[ind], :]
             if 'new_infections' in res and 'new_infections' not in graph.transitions and all(tr.name in groups for tr in graph.transmissions):
                 groups.new_infections = sum(groups[tr.name] for tr in graph.transmissions)
             stratified = [name for name in self.ratio_names() if getattr(res.get(name), 'strata', None) is not None]
-            if stratified and all(f'n_{name}' in groups for name in states): # Sums and ratios of states by group, as in run_all()
-                ctx = StockCtx(self, sc.objdict({name:groups[f'n_{name}'] for name in states}), sc.objdict({name:groups[name] for name in self.tr_index if name in groups}))
+            if stratified and all(name in groups for name in states): # Sums and ratios of states by group, as in run_all()
+                ctx = StockCtx(self, sc.objdict({name:groups[name] for name in states}), sc.objdict({name:groups[name] for name in self.tr_index if name in groups}))
                 for name in stratified:
                     if name in self.ratios:
                         groups[name], denoms[name] = [ss.transitions.evaluate(part, ctx) for part in self.ratios[name]]
@@ -2377,7 +2377,7 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
         stocks, flows = stocks.sum(axis=-1), flows.sum(axis=-1)
         n = sc.objdict({name:stocks[:, :, i] for i,name in enumerate(states)})
         new = sc.objdict({name:flows[:, :, ind] for name,ind in self.tr_index.items()})
-        out = sc.objdict({f'n_{name}':vals for name,vals in n.items()})
+        out = sc.objdict({name:vals for name,vals in n.items()})
         out.update(new)
         out.update({name:flows[:, :, ind] for name,ind in self.transfer_index.items()})
         if 'new_infections' in res and 'new_infections' not in graph.transitions:

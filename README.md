@@ -50,7 +50,7 @@ If you're new to Python, check out our [getting started guide](https://starsim.o
 
 ### Requirements
 
-Python 3.12-3.14 or R.
+Python 3.11-3.14 or R.
 
 We recommend, but do not require, installing Starsim in a virtual environment, such as [uv](https://github.com/astral-sh/uv) or [conda](https://conda-forge.org/download/).
 
@@ -98,19 +98,18 @@ import starsim as ss
 ss.demo()
 ```
 
-Here's how you'd write a minimal compartmental SIR model:
+Here's how you'd write a minimal compartmental SIR model with an infection rate of 0.3 per step and a mean recovery duration of 10 steps:
 
 ```py
 import starsim as ss
 
 S, I, R = ss.states(3)
 sir = ss.Disease(
-    infection = ss.infection(S, I, beta=0.05)
-    recovery = ss.progression(I, R, rate=0.05)
+    infection = ss.Transition(S, I, rate=0.3*I),
+    recovery = ss.Transition(I, R, dur=10)
 )
 
 sim = ss.Sim(sir).run()
-sim.plot()
 sim.sir.plot()
 ```
 
@@ -119,10 +118,10 @@ If you prefer something that looks more like equations rather than code, there's
 ```py
 import starsim as ss
 
-S, I, R = ss.states(3)      # Create model states
-inf = S >> I @ beta=0.05*I  # Define infection at rate beta, mediated by I (*S/N implied)
-rec = I >> R @ 0.05         # Define spontaneous recovery
-ss.Sim([inf, rec]).run().plot() # Create, run, and plot the simulation
+S, I, R = ss.states(3) # Create model states
+inf = S >> I @ 0.3*I   # Define infection at rate beta, mediated by I (*S/N implied)
+rec = I >> R @ 0.1     # Define spontaneous recovery
+ss.Sim(inf, rec).run().plot() # Create, run, and plot the simulation
 ```
 
 The code above runs as a compartmental model by default, but you can also run it as an agent-based model (ABM) if you prefer. ABMs come with additional flexibility, such as defining explicit contact networks:

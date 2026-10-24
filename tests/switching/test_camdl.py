@@ -49,7 +49,7 @@ def make_polio(sia=False):
 def test_camdl_polio():
     sc.heading('The polio model over patch=, without and with SIAs')
     res = make_polio().run().results.seir
-    n_I = res.n_I.values
+    n_I = res.I.values
     assert np.isclose(n_I.max(), ref_peak, rtol=1e-3), f'Peak {n_I.max():,.0f}, camdl {ref_peak:,}'
     assert n_I.argmax() == ref_peak_day, f'Peak on day {n_I.argmax()}, camdl {ref_peak_day}'
     assert np.isclose(res.infection.values.sum(), ref_infections, rtol=1e-3)
@@ -76,7 +76,7 @@ def test_camdl_units():
     S, I, R = ss.states(3)
     sir = ss.Disease(infection=S >> I @ ss.perday(0.4) * I.n, recovery=I >> R @ ss.perday(0.15), init_n=dict(I=10), name='sir')
     sim = ss.Sim(sir, total_pop=10_000, unit='day', stop=84, verbose=0).run()
-    assert np.isclose(sim.results.sir.n_I[1], 10_000*np.exp(-0.15), rtol=1e-3) # Everyone infected at once, then a day of recovery
+    assert np.isclose(sim.results.sir.I[1], 10_000*np.exp(-0.15), rtol=1e-3) # Everyone infected at once, then a day of recovery
     assert any('density-dependent' in str(note) for note in sim.notes)
     return slips
 

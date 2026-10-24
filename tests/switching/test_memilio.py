@@ -90,7 +90,7 @@ def timed_run(n):
 def test_memilio_agreement():
     sc.heading('MEmilio: 50 counties × 6 ages with commuting agree with MEmilio')
     sim, _ = timed_run(50)
-    peak = sim.results.secir.n_ISy.values.max()
+    peak = sim.results.secir.ISy.values.max()
     assert abs(peak/ref_peak_50 - 1) < ref_agree, f'National peak {peak:,.1f} differs from MEmilio\'s {ref_peak_50:,.1f} by more than {ref_agree:.1%}'
     return sim
 
@@ -113,7 +113,7 @@ def test_memilio_npi():
     incidence = secir.symptoms.incidence(over=ss.days(7), by='patch') # A week's new symptomatic cases in each county, per person
     npi = ss.modify(beta, multiply=0.6, where=incidence > 200e-5, hold=ss.days(14))
     sims = [make_sim(d, secir, interventions=ints).run() for ints in [None, npi]]
-    ratio = sims[1].results.secir.n_ISy.values.max()/sims[0].results.secir.n_ISy.values.max()
+    ratio = sims[1].results.secir.ISy.values.max()/sims[0].results.secir.ISy.values.max()
     assert abs(ratio - ref_npi_ratio) < 0.1, f'Local NPIs cut the peak to {ratio:.0%} of baseline, against {ref_npi_ratio:.0%} with the hand-written rule'
     return sims
 
@@ -125,7 +125,7 @@ def test_memilio_projection():
     sim = make_sim(d, make_secir(d, beta=scale*ss.by(age=P['beta'])), on_sim=True) # sim.stratify(), the spelling in best-practices/metapopulation.md
     # The graph importer (ss.load of a MobilityGraph or GraphParameterStudy script) needs MEmilio itself, so is tested in test_interop_memilio.py
     msim = ss.parallel(sim, n_runs=10, priors=True)
-    isy = msim.results.secir.n_ISy
+    isy = msim.results.secir.ISy
     q = isy.select(patch='c005').quantiles([0.05, 0.25, 0.5, 0.75, 0.95])
     p05, p50, p95 = isy.quantiles([0.05, 0.5, 0.95]).max(1)
     assert q.shape[0] == 5 and p05 < p50 < p95, 'The runs should differ, since each draws its own beta'

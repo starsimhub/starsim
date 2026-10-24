@@ -316,7 +316,7 @@ The remedy is to fit one of the two and fix the other, which is what the note sa
 
 ```python
 sim.sensitivity()                          # every parameter with bounds, against every result
-sim.sensitivity(results=['n_I'])           # against chosen results
+sim.sensitivity(results=['I'])           # against chosen results
 ```
 
 Latin hypercube samples over the bounds (`n=100` by default; wide positive bounds on a log scale, as `calibrate()` searches them), with partial rank correlation coefficients between each parameter and a summary of each result (a count by its peak and its final value, a flow by its peak and its total), printed and returned as a data frame. It needs no data. It answers a different question from calibration (which parameters matter?) and is often worth running first, since a parameter that does not matter cannot be fitted.

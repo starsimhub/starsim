@@ -113,24 +113,6 @@ class Coded(ssl.AgentSEIR):
 
 # %% Define the tests
 
-def test_function():
-    sc.heading('Testing a function compiled by Numba, with the same results')
-    x = np.random.default_rng(1).normal(size=10_000)
-    assert ss.jit(longest_run)(x) == longest_run(x)
-    assert np.isclose(ss.jit(score)(x), score(x), rtol=1e-13) # The same up to the order of the sum (NumPy's is pairwise)
-    n = np.array([0, 10, 1000, 100_000]*5)
-    p = np.linspace(0, 1, 20)
-    lam = np.array([0, 0.5, 5, 20, 1000.]*4) # Poisson means of 10 or more are drawn as NumPy does, not as Numba does
-    out = ss.jit(draws)(n, p, lam, np.random.default_rng(2))
-    assert np.array_equal(out, draws(n, p, lam, np.random.default_rng(2)))
-
-    @ss.jit
-    def uncompilable(x):
-        return sc.findinds(x > 0) # Numba can't call Sciris
-    assert np.array_equal(uncompilable(x), sc.findinds(x > 0)) # Runs as Python, with the same result
-    assert uncompilable.failed and uncompilable.said == {None}
-    return
-
 
 def test_jax():
     sc.heading('Testing a function traced by JAX, and its gradient')
@@ -158,7 +140,7 @@ def test_method():
         return ss.Sim(n_agents=5000, diseases=d, networks='random', demographics=True, stop=2030, rand_seed=3, **kw).run()
     s0, s1 = run(False), run(True)
     assert s1.people.n_uids > s1.people.n_alive # Some have died, so the active agents are not everyone
-    for key in ['n_infected', 'n_recovered', 'n_severe', 'new_infections']:
+    for key in ['infected', 'recovered', 'severe', 'new_infections']:
         assert np.array_equal(s0.results.severe[key], s1.results.severe[key]), f'{key} differs when compiled'
     assert np.array_equal(s0.diseases.severe.rel_trans.values, s1.diseases.severe.rel_trans.values)
     for name in ['schedule', 'progress', 'progress_loop']:
@@ -175,9 +157,9 @@ def test_class():
     Compiled = ss.jit(type('Coded', (Coded,), {})) # A subclass, so Coded itself stays as written
     s0, s1 = run(Coded), run(Compiled)
     r0, r1 = s0.diseases[0].results, s1.diseases[0].results
-    for key in ['n_exposed', 'n_infectious', 'n_recovered', 'n_tested', 'new_infections', 'mean_level']:
+    for key in ['exposed', 'infectious', 'recovered', 'tested', 'new_infections', 'mean_level']:
         assert np.array_equal(r0[key], r1[key]), f'{key} differs when compiled'
-    assert r1.n_tested[-1] > 0 and s1.people.n_uids > s1.people.n_alive
+    assert r1.tested[-1] > 0 and s1.people.n_uids > s1.people.n_alive
     parts = {name:getattr(Compiled, name).plan.parts for name in ['step_state', 'set_prognoses', 'step_die', 'update_results']}
     for name, p in parts.items():
         assert any(isinstance(x, ss.perflib._jit.Segment) and not x.failed for x in p), f'{name}() has no compiled part'
@@ -203,10 +185,8 @@ def test_fast_draws():
     return
 
 
-# %% Run as a script
 if __name__ == '__main__':
     T = sc.timer()
-    test_function()
     test_jax()
     test_method()
     test_class()

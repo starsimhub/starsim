@@ -120,7 +120,7 @@ sir.stratify(age=[15, 25, 35, 50], where=dict(sex='female'))   # age groups for 
 
 People outside `where=` have no level of the dimension. Everything that refers to a level follows from that:
 
-- **Results.** Selecting a level selects the people who have one: `res.n_I.select(age='15-24')` is women aged 15 to 24, and `res.n_I.by('age')` has a column for each age group of women, summing to the women and not to everyone. Men are in the totals and in `select(sex='male')`, and in no column of a result split by age: their age is missing, not "all ages".
+- **Results.** Selecting a level selects the people who have one: `res.I.select(age='15-24')` is women aged 15 to 24, and `res.I.by('age')` has a column for each age group of women, summing to the women and not to everyone. Men are in the totals and in `select(sex='male')`, and in no column of a result split by age: their age is missing, not "all ages".
 - **Conditions.** `sir.age == '15-24'` is false for men, so `where=sir.age == '15-24'` reaches women only, and `~(sir.age == '15-24')` includes every man.
 - **Adjustments and movement.** `adjust=` applies to the people with a level; for the others the multiplier is 1. People outside `where=` do not move between its levels (by aging or by a transfer), and someone who moves into a group outside it (a woman aging out of the `where=` of `parity`) leaves its levels.
 - **Values by level.** A value given for each level (`init=dict(I=ss.by(age=[...]))`, or a parameter by age) gives the people with no level the mean over the levels, weighted by the split; a number of people at each level gives them none. An `init=` at levels where the split puts nobody (`ever=True` with `split=[1, 0]`) starts nobody there: a note, or `InitWhereNobodyIs` if that is all of it.
@@ -145,10 +145,10 @@ A stratified result is still one result, with a dimension for each stratificatio
 <!-- fragment -->
 ```python
 res = sim.results.sir
-res.n_I                                        # everyone in I
-res.n_I.select(age=0)                          # the youngest group, by position or by label ('0-14')
-res.n_I.select(sex='female', risk='high')      # one group of two dimensions, summed over the rest
-res.n_I.by('age')                              # one series per age group
+res.I                                        # everyone in I
+res.I.select(age=0)                          # the youngest group, by position or by label ('0-14')
+res.I.select(sex='female', risk='high')      # one group of two dimensions, summed over the rest
+res.I.by('age')                              # one series per age group
 res.infection.select(age=0)                    # incidence in children
 ```
 
@@ -167,7 +167,7 @@ sir.stratify(patch=ss.geo.geography('Kenya', level=1))          # a named source
 
 A list of numbers is bin edges when the property is continuous and labels otherwise; `kind=` settles any ambiguity. The last bin is open-ended. Levels can be referred to by label (`'15-64'`, `'500+'`) or by position.
 
-The CD4 example shows the general rule for continuous properties. `hiv.cd4` is a float per agent, updated by the HIV module's own code. In an agent-based run nothing about that changes: CD4 stays continuous, and the bins let you write `adjust={'death': [8, 3, 1.5, 1]}`, select `sim.results.hiv.n_I.select(cd4='0-200')`, and target interventions by CD4 group. In a compartmental run there are no per-agent values, so the model needs transitions that move people between bins (`decline = ss.transfer(cd4=('500+', '350-500'), rate=...)` and so on); without them the bins are static, and `describe()` says so.
+The CD4 example shows the general rule for continuous properties. `hiv.cd4` is a float per agent, updated by the HIV module's own code. In an agent-based run nothing about that changes: CD4 stays continuous, and the bins let you write `adjust={'death': [8, 3, 1.5, 1]}`, select `sim.results.hiv.I.select(cd4='0-200')`, and target interventions by CD4 group. In a compartmental run there are no per-agent values, so the model needs transitions that move people between bins (`decline = ss.transfer(cd4=('500+', '350-500'), rate=...)` and so on); without them the bins are static, and `describe()` says so.
 
 ## Kinds
 
@@ -268,7 +268,7 @@ variants.immunity = variants.immunity + [ss.immunity(due_to=variants.last, scale
 
 The endpoints are `rel_sus` (acquisition, against the incoming strain, on networks too, HP14), `rel_trans`, `dur=dict(state=...)`, and `p=dict(branch=...)` (a branch probability lowered, the other branches taking the rest, which Covasim's protection against symptoms and severity needs). Protection due to a state lowers `rel_sus` only; protection due to memory lowers the others for the course of an infection, against the strain carried, from the strains remembered from before it. `curve=` maps the level of protection (after the matrix, `scale=`, and `combine=`) to the protection, as Covasim's logistic curve of antibody levels (D8). Products protect by strain too: `ss.Vaccine(efficacy=ss.by(strain=[0.9, 0.3]))` acts on acquiring each strain, under every solver. A strain introduced on a date is a delivery that moves people into an infection with it, `ss.Delivery(move=S >> E, strain='alpha', at=['2021-01-01'], capacity=20)`, under every solver; `dis.infect(uids, strain='alpha')` does the same from code, as agents.
 
-**Results** count each person once (`res.n_I` is a union), `res.n_I.by('strain')` is by level (a set is its own level), acquisitions (by strain acquired), superinfections, moves and new episodes are separate flows. With own courses, `res.hpv.n_I.by('strain')` is each strain's own, and `where=hpv.infected` and `hpv.infected.count() >= 2` are conditions over them.
+**Results** count each person once (`res.I` is a union), `res.I.by('strain')` is by level (a set is its own level), acquisitions (by strain acquired), superinfections, moves and new episodes are separate flows. With own courses, `res.hpv.I.by('strain')` is each strain's own, and `where=hpv.infected` and `hpv.infected.count() >= 2` are conditions over them.
 
 **Own courses** run as one declared disease per strain, copied from the natural history (named after the strains, beside the disease in `sim.diseases`), with each strain's values; with `init_prev=` on the disease, each person seeded gets one strain. Entering a shared state in one course ends the others (the person moves to the state with no way out in them, e.g. `X`; one cancer per person), counted once. Independent courses are k copies of the states side by side, not `2^k`, and run under every solver; courses coupled by `immunity=` or a shared state run as agents only (a compartmental solver raises `CapabilityError`, and `solver='auto'` chooses agents), since then the combination a person carries matters ([12-backends.md](12-backends.md)).
 
@@ -372,7 +372,7 @@ Strata multiply: age (16) × risk (2) × strain (3) × patch (47) is 4,512 compa
 - **Manual array indexing as the mechanism.** General, laborious, and it leaves the model impossible to restratify. Indices are an implementation detail.
 - **Overwrite adjustments.** They make the result depend on the order of stratification.
 - **Always returning a new model.** In place is the common use, and `inplace=False` covers the comparison.
-- **Per-stratum result names** (`n_I_0_female_low`). A result has dimensions; `.select()` and `.by()` read them.
+- **Per-stratum result names** (`I_0_female_low`). A result has dimensions; `.select()` and `.by()` read them.
 - **Every agent property as a dimension.** Dimensions multiply compartments; properties do not have to.
 - **Writing out the compartments by hand.** `S_child`, `S_adult`, and every transition between them.
 - **A separate metapopulation concept.** Space is a dimension that may carry movement.

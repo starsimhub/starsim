@@ -266,7 +266,7 @@ def test_independence(do_plot=False, thresh=0.1):
     kw = dict(n_agents=1000, networks='random', dur=10, verbose=0)
     alone = ss.Sim(diseases=ss.SIS(), **kw).run()
     both = ss.Sim(diseases=[ss.SIR(p_death=0), ss.SIS()], **kw).run()
-    assert np.array_equal(alone.results.sis.n_I, both.results.sis.n_I) # The same people infected with SIS
+    assert np.array_equal(alone.results.sis.I, both.results.sis.I) # The same people infected with SIS
 
     return sim
 
@@ -310,7 +310,7 @@ def test_crn_option():
             sim = ss.Sim(diseases=ssl.AgentSIS(name='sis', beta=0.1, init_prev=0.05), networks=ss.RandomNet(), # The transmission of ss.Infection
                          n_agents=2000, dur=30, rand_seed=seed, verbose=0)
             sim.run()
-        return sim.results['sis']['n_infected'].values
+        return sim.results['sis']['infected'].values
 
     assert ss.options.crn is True, 'CRN should be the default'
 

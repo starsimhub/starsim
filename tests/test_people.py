@@ -45,8 +45,8 @@ def test_people():
     sim.people.scale[sim.people.auids[:500]] = 0.01
     sim.run()
     weights = sim.people.scale.raw[sim.people.auids]
-    assert sim.results.n_alive[-1] == weights.sum() == 505
-    assert np.isclose(sim.results.sis.n_I[-1], weights[sim.diseases.sis.I.raw[sim.people.auids]].sum())
+    assert sim.results.alive[-1] == weights.sum() == 505
+    assert np.isclose(sim.results.sis.I[-1], weights[sim.diseases.sis.I.raw[sim.people.auids]].sum())
 
     # And in a declared model's rates: here infected agents who stand for 0.01 people each make I.frac 0.01, not 0.5
     sis = ss.Disease(S, I, infection=S >> I @ ss.peryear(2)*I.frac, recovery=I >> S @ ss.years(1000), init=dict(I=0.5), name='sis')
@@ -63,7 +63,7 @@ def test_people():
     assert ppl.auids.dtype == np.int64 and ppl.ti_dead.raw.dtype == np.int16
     assert '_raw' not in ppl.uid.__dict__ and np.array_equal(ppl.uid.raw[:ppl.n_uids], np.arange(ppl.n_uids)) and ppl.slot.raw[5] == 5 # people.uid is the index, with no array
     assert ppl.age[ppl.auids[0]] == ppl.age.raw[0] and len(ppl.age[ppl.auids.view(np.ndarray)]) == len(ppl) # One UID, or a plain array of them, indexes as before
-    assert np.array_equal(sim.new().run().results.sir.n_I, sim.results.sir.n_I) # sim.new() rebuilds the same sim
+    assert np.array_equal(sim.new().run().results.sir.I, sim.results.sir.I) # sim.new() rebuilds the same sim
     ppl.scale[ppl.auids[:10]] = 2 # Code that sets one (as a Starsim 3 module does) gives it its own values
     assert ppl.scale.weighted and ppl.scale.shared is None and ppl.scale[ppl.auids[:11]].sum() == 21
 
@@ -91,7 +91,7 @@ def test_ppl_construction(do_plot=False):
     sim.run()
     if do_plot:
         plt.figure()
-        plt.plot(sim.timevec, sim.results.hiv.n_infected)
+        plt.plot(sim.timevec, sim.results.hiv.infected)
         plt.title('Number of HIV infections')
 
     return sim

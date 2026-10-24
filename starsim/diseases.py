@@ -45,14 +45,14 @@ class Disease(ss.Module):
         transitions (list): transitions, as a list (for longer models)
         results (list): extra results: sums and ratios of states
         outcomes (list): `ss.outcome` objects
-        init_prev (float): the initial prevalence, seeded through the transmission
+        init_prev (float): the initial prevalence, seeded through the transmission (by default 0.01, unless a state is given an initial value)
         init (dict): the share of people who start in each state, e.g. `dict(S=0.90, I=0.01, R=0.09)`; each value can be an `ss.by` or a function of the sim
         init_n (dict): instead, the number of people who start in each state, e.g. `dict(I=1)` for one person
         first (str): the state that everyone not put elsewhere starts in, and is born into; by default, the one named `S` or `susceptible` (otherwise it must be given; in the class form, `first = 'N'` in the class body)
         strains (Strains): its strains (`ss.Strains`): in its states, which they share, or each with a course of its own; then `dis.strains`
         kwargs (dict): one keyword per state, transition, parameter, result, or function; also `name`, `label`, and `dt`
 
-    The results are the number in each state (`n_I`), the flow along each transition by its
+    The results are the number in each state (`I`), the flow along each transition by its
     name (`infection`, with its cumulative total as `res.infection.cum`), and the results and
     outcomes declared. The library's `ss.SIR`, `ss.SIS`, and `ss.SEIR` also have Starsim's
     standard `new_infections`, `cum_infections`, and `prevalence` (`standard_results = True`).
@@ -104,7 +104,7 @@ class Disease(ss.Module):
             raise ss.CapabilityError(errormsg)
         return
 
-    def __init__(self, *args, pars=None, strains=None, **kwargs):
+    def __init__(self, *args, pars=None, strains=None, _names=None, **kwargs):
         super().__init__()
         self.strains = None # Its ss.Strains, if it has strains
         self.family = None # For strains with courses of their own: the module that runs them (see ss.strains.Family)
@@ -118,7 +118,7 @@ class Disease(ss.Module):
         if strains is not None and getattr(strains, 'shared', None) is True: # An outcome for each strain carried, before the transitions are built
             ss.strains.prepare(strains, [(x.name, x) for x in list(args) + sc.tolist(kwargs.get('transitions'))] + list(kwargs.items()) + list(members.items()))
         if args or members or any(isinstance(v, declared) or key in ss.transitions.Graph.grouped for key,v in kwargs.items()):
-            self.init_graph(args, members, pars, kwargs, names=ss.utils.caller_names(1))
+            self.init_graph(args, members, pars, kwargs, names=_names or ss.utils.caller_names(1)) # The names of the variables of the code that made it; or, made by the sim from the transitions it was given, of the code that made the sim
         else: # Written as code: its own define_pars() and define_states() follow, as in Starsim 3
             self.update_pars(pars, **kwargs)
         if strains is not None:
@@ -424,6 +424,8 @@ class Disease(ss.Module):
     @ss.required()
     def init_pre(self, sim):
         """ Link the disease to the sim, create its engine and objects, initialize results, and start its infection log if there is an `ss.infection_log` analyzer; see Module.init_pre() for details """
+        if self.graph is not None and any(st.given_init for st in self.graph.states.values()): # A starting value set after the disease was made (e.g. by an importer) turns off the default seeding
+            self.graph.unset_default_init_prev()
         unknown = [key for key in self.pars if key not in self.graph.pars and key not in self.code_pars] if self.graph is not None else [] # Added after the disease was made, so nothing reads it (TL58: pars.init was ignored)
         if unknown:
             hint = ' The starting values are given when the disease is made, e.g. ss.Disease(..., init=dict(I=0.01)) or init_n=dict(I=100), and cannot be set through pars.' if 'init' in unknown or 'init_n' in unknown else ''
@@ -618,7 +620,7 @@ class Disease(ss.Module):
         if self.engine is None:
             raise RuntimeError(f'"{self.name}" has the state of each agent once the sim is initialized (sim.init())')
         if self.sim.solver != 'abm':
-            raise ss.CapabilityError(f'disease.current_state() is the state of each of the agents, but "{self.name}" is run with solver="{self.sim.solver}"; use the counts of its states (e.g. sim.results.{self.name}.n_S) instead')
+            raise ss.CapabilityError(f'disease.current_state() is the state of each of the agents, but "{self.name}" is run with solver="{self.sim.solver}"; use the counts of its states (e.g. sim.results.{self.name}.S) instead')
         names = [s if isinstance(s, str) else s.name for s in sc.tolist(states)] if states is not None else [s.name for s in graph.people_states]
         unknown = [name for name in names if name not in graph.states]
         if unknown:
@@ -1049,8 +1051,8 @@ class Infection(Disease):
         super().update_results()
         res = self.results
         ti = self.ti
-        alive = self.sim.people.n_alive if ss.results.agent_weights(self.sim) is None else self.sim.results.n_alive[self.sim.ti] # With agents of different weights, people alive as results count them (recorded just before)
-        res.prevalence[ti] = res.n_infected[ti] / alive
+        alive = self.sim.people.n_alive if ss.results.agent_weights(self.sim) is None else self.sim.results.alive[self.sim.ti] # With agents of different weights, people alive as results count them (recorded just before)
+        res.prevalence[ti] = res.infected[ti] / alive
         return
 
     def finalize_results(self):

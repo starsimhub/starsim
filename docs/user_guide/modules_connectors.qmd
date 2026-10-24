@@ -73,24 +73,24 @@ s1, s2 = msim.sims
 
 # Compare results
 print('Final infection counts:')
-print(f'HIV infections - Without connector: {s1.results.hiv.n_infected[-1]:n}')
-print(f'HIV infections - With connector:    {s2.results.hiv.n_infected[-1]:n}')
-print(f'SIS infections - Without connector: {s1.results.sis.n_I[-1]:n}')
-print(f'SIS infections - With connector:    {s2.results.sis.n_I[-1]:n}')
+print(f'HIV infections - Without connector: {s1.results.hiv.infected[-1]:n}')
+print(f'HIV infections - With connector:    {s2.results.hiv.infected[-1]:n}')
+print(f'SIS infections - Without connector: {s1.results.sis.I[-1]:n}')
+print(f'SIS infections - With connector:    {s2.results.sis.I[-1]:n}')
 
 # Plot comparative results
 fig = plt.figure(figsize=(12, 4))
 plt.subplot(121)
-plt.plot(s1.timevec, s1.results.hiv.n_infected, label='Without connector', alpha=0.8)
-plt.plot(s2.timevec, s2.results.hiv.n_infected, label='With connector', alpha=0.8)
+plt.plot(s1.timevec, s1.results.hiv.infected, label='Without connector', alpha=0.8)
+plt.plot(s2.timevec, s2.results.hiv.infected, label='With connector', alpha=0.8)
 plt.title('HIV infections over time')
 plt.xlabel('Year')
 plt.ylabel('Number infected')
 plt.legend()
 
 plt.subplot(122)
-plt.plot(s1.timevec, s1.results.sis.n_I, label='Without connector', alpha=0.8)
-plt.plot(s2.timevec, s2.results.sis.n_I, label='With connector', alpha=0.8)
+plt.plot(s1.timevec, s1.results.sis.I, label='Without connector', alpha=0.8)
+plt.plot(s2.timevec, s2.results.sis.I, label='With connector', alpha=0.8)
 plt.title('SIS infections over time')
 plt.xlabel('Year')
 plt.ylabel('Number infected')
@@ -306,7 +306,7 @@ kw = dict(
     verbose = 0,
 )
 sim = ss.Sim(connectors=HIV_SIS(), **kw).run()
-print(f'With the connector written as code: {sim.results.hiv.n_infected[-1]:n} HIV infections and {sim.results.sis.n_I[-1]:n} SIS infections at the end')
+print(f'With the connector written as code: {sim.results.hiv.infected[-1]:n} HIV infections and {sim.results.sis.I[-1]:n} SIS infections at the end')
 ```
 
 This demonstrates several concepts that apply to any module written as code:
@@ -347,8 +347,8 @@ sims = sc.objdict({key:sim for key,sim in zip(sims.keys(), msim.sims)})
 # Create comparison plot
 fig, ax = plt.subplots(2, 2, figsize=(12, 8))
 panels = [
-    ('HIV infections over time', 'hiv', 'n_infected'),
-    ('SIS infections over time', 'sis', 'n_I'),
+    ('HIV infections over time', 'hiv', 'infected'),
+    ('SIS infections over time', 'sis', 'I'),
     ('Cumulative HIV infections', 'hiv', 'cum_infections'),
     ('Cumulative SIS infections', 'sis', 'cum_infections'),
 ]
@@ -367,8 +367,8 @@ sc.heading('Final results summary:')
 for sim in sims.values():
     res = sim.results
     print(f'{sim.label}:')
-    print(f'  HIV: {res.hiv.n_infected[-1]:3.0f} current, {res.hiv.cum_infections[-1]:4.0f} cumulative')
-    print(f'  SIS: {res.sis.n_I[-1]:3.0f} current, {res.sis.cum_infections[-1]:4.0f} cumulative')
+    print(f'  HIV: {res.hiv.infected[-1]:3.0f} current, {res.hiv.cum_infections[-1]:4.0f} cumulative')
+    print(f'  SIS: {res.sis.I[-1]:3.0f} current, {res.sis.cum_infections[-1]:4.0f} cumulative')
 ```
 
 With a connector written as code, the same scenario needs the treatment to undo the co-infection effects itself (resetting `hiv.rel_sus` and `hiv.rel_trans` for the people it cures), and the two modules then have to agree on what the baseline values are.

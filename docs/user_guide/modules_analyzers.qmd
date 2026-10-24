@@ -5,7 +5,7 @@ jupyter: python3
 
 
 
-Each Starsim module can have its own results, which get added to the full list of results in the Sim object. For example, the `ss.Pregnancy` module adds results like `sim.results.pregnancy.n_P` (the number pregnant), and the `ssl.HIV` module adds results like `sim.results.hiv.new_infections`. A declared disease gets a result for every state and transition automatically, and extra results (ratios, sums of states, `ss.outcome()`) are declared with the model (see [Results](basics_results.qmd)). If you are writing your own module, you can add whatever custom results you want. However, another option is to create an `Analyzer` to store results that you might need for one particular analysis but won't need all the time. An `Analyzer` is very similar to other Starsim modules in its structure, but the general idea of an analyzer is that it gets called at the end of a timestep, and reports of the state of things after everything else has been updated without changing any of the module states itself.
+Each Starsim module can have its own results, which get added to the full list of results in the Sim object. For example, the `ss.Pregnancy` module adds results like `sim.results.pregnancy.P` (the number pregnant), and the `ssl.HIV` module adds results like `sim.results.hiv.new_infections`. A declared disease gets a result for every state and transition automatically, and extra results (ratios, sums of states, `ss.outcome()`) are declared with the model (see [Results](basics_results.qmd)). If you are writing your own module, you can add whatever custom results you want. However, another option is to create an `Analyzer` to store results that you might need for one particular analysis but won't need all the time. An `Analyzer` is very similar to other Starsim modules in its structure, but the general idea of an analyzer is that it gets called at the end of a timestep, and reports of the state of things after everything else has been updated without changing any of the module states itself.
 
 ## When analyzers run
 
@@ -209,5 +209,5 @@ sim.analyzers[0].plot() # The sim's copy of the analyzer, which ran
 
 Since we are using a random network, we wouldn't expect any differences in transmission by age, so what you're seeing here is the difference in age bin size.
 
-For a declared disease, the same numbers need no analyzer: stratify the model by age, and read the result by group with `sim.results.sis.n_I.by('age')` (see [Results](basics_results.qmd)).
+For a declared disease, the same numbers need no analyzer: stratify the model by age, and read the result by group with `sim.results.sis.I.by('age')` (see [Results](basics_results.qmd)).
 

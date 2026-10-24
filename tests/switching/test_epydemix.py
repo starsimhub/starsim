@@ -51,8 +51,8 @@ def test_epydemix_kenya():
     sc.heading('epydemix: the Kenya tutorial, 100 chain-binomial runs, against epydemix')
     sim = ss.Sim(make_kenya(), networks=ss.contacts('Kenya'), people=ss.people('Kenya', year=2020), solver='binomial', **kenya)
     res = sim.run(n_runs=100).results.sir
-    I, R = [np.asarray(res[key].values).mean(axis=0) for key in ['n_I', 'n_R']]
-    N = I[0] + R[0] + np.asarray(res.n_S.values).mean(axis=0)[0]
+    I, R = [np.asarray(res[key].values).mean(axis=0) for key in ['I', 'R']]
+    N = I[0] + R[0] + np.asarray(res.S.values).mean(axis=0)[0]
     assert abs(I.max()/N - ref_peak) < 0.005, f'Peak {I.max()/N:.2%} against epydemix\'s {ref_peak:.2%}'
     assert abs(I.argmax() - ref_peak_day) <= 2, f'Peak on day {I.argmax()} against {ref_peak_day}'
     assert abs(R[-1]/N - ref_final) < 0.002, f'Final size {R[-1]/N:.2%} against {ref_final:.2%}'
@@ -95,7 +95,7 @@ def test_epydemix_posterior_projection():
     proj = fit.project(dict(baseline=None, vaccine=vaccine), n=20) # One run per posterior draw
     df = proj.to_df(quantiles=[0.05, 0.5, 0.95])
     assert set(df.scenario) == {'baseline', 'vaccine'}, f'The draws should be runs of each scenario, not scenarios: {df.scenario.unique()[:4]}'
-    peak = df[(df.result == 'n_I') & (df.scenario == 'baseline')].groupby('quantile').value.max()
+    peak = df[(df.result == 'I') & (df.scenario == 'baseline')].groupby('quantile').value.max()
     assert peak[0.05] < peak[0.95], f'The quantiles should be over the draws: {peak.to_dict()}'
     return proj
 
@@ -105,7 +105,7 @@ def test_epydemix_us_state():
     sc.heading('epydemix: Massachusetts by name, as load_epydemix_population() gives it')
     people = ss.people('United States:Massachusetts', year=2020)
     sim = ss.Sim(make_kenya(), networks=ss.contacts('United States:Massachusetts'), people=people, solver='ode', **kenya).run()
-    N = sim.results.sir.n_S[0] + sim.results.sir.n_I[0]
+    N = sim.results.sir.S[0] + sim.results.sir.I[0]
     assert 6.5e6 < N < 7.5e6, f'Expected Massachusetts\' 7.0 million people (2020 census), not {N:,.0f}'
     return sim
 

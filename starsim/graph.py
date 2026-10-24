@@ -6,7 +6,7 @@ import itertools
 import numpy as np
 import sciris as sc
 import starsim as ss
-from .expressions import as_expr, BinOp, Count, did_you_mean, Expr, is_one, linear, par, Row, Share, to_pars
+from .expressions import as_expr, BinOp, Count, count_power, did_you_mean, Expr, is_one, linear, par, per_person, Row, Share, to_pars
 from .parameters import by, TimeValue
 from .transitions import FlowSum, outcome, State, Transition
 from .presentation import Presentation, TransitionTable
@@ -60,7 +60,7 @@ class Graph(Presentation):
         module (`ss.Module`): the module the graph belongs to
         args (list): transitions and outcomes passed positionally
         members (dict): states, transitions, parameters, results, and functions, by name
-        init_prev (float): the initial prevalence, seeded through the transmission
+        init_prev (float): the initial prevalence, seeded through the transmission (by default 0.01, unless a state is given an initial value)
         init (dict): the share of people who start in each state, by name
         init_n (dict): the number of people who start in each state, by name
         first (str): the state people are in unless they are put elsewhere (by default, the one named `S` or `susceptible`; see `resolve_people()`)
@@ -94,6 +94,7 @@ class Graph(Presentation):
             self._add_par(init_prev, name=init_prev.name)
         self.resolve_states()
         self.resolve_transitions()
+        self.resolve_init_prev()
         self.expand_rows()
         self.resolve_people()
         self.resolve_attrs()
@@ -286,11 +287,34 @@ class Graph(Presentation):
                     raise ss.errors.UndrivenTransition(f'the inflow "{name}" ({tr.arrow}) has no rate. Give it one, e.g. {tr.arrow.replace(" -> ", " >> ")} @ 0.1')
                 tr.undriven = True
 
-            # Derive the kind from the rate
+            # Derive the kind from the rate, written per person (a rate written as the whole flow, e.g. beta*S*I/N, is divided by its source)
+            if tr.rate is not None:
+                rate = per_person(tr.rate, tr.src, [st for st in self.states.values() if st.people])
+                if rate is not tr.rate:
+                    tr.flow_given, tr.rate = tr.rate, rate
             tr.const, tr.terms = (None, {}) if tr.rate is None else linear(tr.rate)
             tr.contact = bool(tr.terms)
             for state in tr.terms:
                 state.infectious = True
+        return
+
+    def resolve_init_prev(self):
+        """ By default, 1% of people start infected, seeded through the transmission (frequency- or density-dependent), unless a state is given a starting value """
+        given = any(state.given_init for state in self.states.values())
+        counted = lambda tr: {id(st) for leaf in tr.rate.leaves if isinstance(leaf, Count) for st in leaf.states if st.module is self.module} - {id(st) for st in tr.src or []} # The module's states whose numbers the rate reads, other than its source: I in beta*I.n
+        transmitted = any(tr.contact or (tr.rate is not None and count_power(tr.rate) > 0 and counted(tr)) for tr in self.transitions.values())
+        if self.init_prev is None and not given and transmitted:
+            self.init_prev = par(0.01)
+            self._add_par(self.init_prev, name='init_prev')
+            self.guessed['init_prev'] = 'the default, 1%'
+        return
+
+    def unset_default_init_prev(self):
+        """ Remove the default init_prev, e.g. of a strain that its disease seeds """
+        if self.guessed.pop('init_prev', None) is not None:
+            self.init_prev = None
+            self.pars.pop('init_prev')
+            self.module.pars.pop('init_prev', None)
         return
 
     def expand_rows(self):

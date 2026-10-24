@@ -288,7 +288,7 @@ def test_arr_2d():
     assert imm.raw.shape == (sim.people.uid.len_tot, nv) # Grows along the first axis
     assert imm.values.shape == (len(sim.people), nv) # Values are active agents only
     assert imm[:, 1].mean() > imm[:, 0].mean() == 0.5 # Only column 1 changes
-    assert 'n_sus_imm' not in sim.results.varsis # No automatic results
+    assert 'sus_imm' not in sim.results.varsis # No automatic results
     return sim
 
 

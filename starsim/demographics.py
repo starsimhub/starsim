@@ -504,11 +504,11 @@ class Deaths(Demographics):
     def finalize(self):
         super().finalize()
         self.results.cumulative[:] = np.cumsum(self.results.new)
-        if 'n_alive' not in self.sim.results: # The crude death rate needs the number alive, which ss.Sim(people_results=False) does not record
+        if 'alive' not in self.sim.results: # The crude death rate needs the number alive, which ss.Sim(people_results=False) does not record
             return
         units = self.pars.rate_units*self.t.dt_year
         inds = self.match_time_inds()
-        n_alive = self.sim.results.n_alive[inds]
+        n_alive = self.sim.results.alive[inds]
         deaths = sc.safedivide(self.results.new, n_alive, default=0)
         self.results.cmr[:] = deaths/units
         return

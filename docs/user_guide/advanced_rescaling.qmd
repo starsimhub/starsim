@@ -27,7 +27,7 @@ sir = ss.Disease(S >> I @ ss.perday(0.3) * I, I >> R @ ss.days(10), init_prev=0.
 ode = ss.Sim(sir, total_pop=1e6, stop=ss.days(150), verbose=0).run() # A million people, as compartments
 abm = ss.Sim(sir, total_pop=1e6, stop=ss.days(150), solver='abm', verbose=0).run() # The same, as 10,000 agents
 print(f'Agents: {abm.pars.n_agents:n}, each representing {abm.pars.pop_scale:n} people')
-print(f'Peak infected: ODE {ode.results.sir.n_I.max():,.0f}, agents {abm.results.sir.n_I.max():,.0f}')
+print(f'Peak infected: ODE {ode.results.sir.I.max():,.0f}, agents {abm.results.sir.I.max():,.0f}')
 ```
 
 The rest of this page is about agent-based runs.
@@ -53,7 +53,7 @@ static.run()
 print(f'Each agent represents {static.pars.pop_scale:n} people')
 ```
 
-Results defined with `scale=True` (the default, used for counts such as `n_I`) are multiplied by the scale factor when the sim finishes. Results with `scale=False` (e.g. `prevalence`) are left unchanged.
+Results defined with `scale=True` (the default, used for counts such as `I`) are multiplied by the scale factor when the sim finishes. Results with `scale=False` (e.g. `prevalence`) are left unchanged.
 
 The drawback is resolution. Here, the 10 initial infections represent 2,000 infected people, and an outbreak can never start from fewer than 200 people. Rare events, such as the first few cases of an epidemic, can't be represented accurately.
 
@@ -76,7 +76,7 @@ fig, axs = plt.subplots(1, 2, figsize=(10, 4))
 axs[0].plot(res.timevec, res.pop_scale)
 axs[0].set_title('Population scale factor')
 for sim in [static, dynamic]:
-    axs[1].plot(sim.timevec, sim.results.sir.n_I, label=sim.label)
+    axs[1].plot(sim.timevec, sim.results.sir.I, label=sim.label)
 axs[1].set_title('Number infected')
 axs[1].legend()
 plt.show()
@@ -119,7 +119,7 @@ While the scale factor is less than `pop_scale`, part of the population is not r
 
 ```{python}
 res = dynamic.results
-print(f'n_alive = {res.n_alive[0]:n}, n_S = {res.sir.n_S[0]:n}, n_I = {res.sir.n_I[0]:n}, prevalence = {res.sir.prevalence[0]}')
+print(f'alive = {res.alive[0]:n}, S = {res.sir.S[0]:n}, I = {res.sir.I[0]:n}, prevalence = {res.sir.prevalence[0]}')
 ```
 
 Starsim does not correct for this automatically, since the right correction depends on the disease and on what each result means. For a disease where the unrepresented people are simply susceptible, you can add them back in `finalize_results()`. At each timestep, the scaled agents represent `n_agents` people, and `n_agents*(pop_scale/scale - 1)` more people are not represented:
@@ -132,11 +132,11 @@ class FullPopSIR(ss.SIR):
         sim = self.sim
         if sim.pars.rescale:
             res = self.results
-            n_agents = res.n_S + res.n_I + res.n_R # People represented by agents (already scaled)
+            n_agents = res.S + res.I + res.R # People represented by agents (already scaled)
             ratio = sim.pars.pop_scale/sim.result_scale(self) # Final scale factor relative to the current one
             n_implicit = n_agents*(ratio - 1) # People not represented by agents, who are all naive
-            res.n_S[:] += n_implicit
-            res.prevalence[:] = res.n_I/(n_agents + n_implicit)
+            res.S[:] += n_implicit
+            res.prevalence[:] = res.I/(n_agents + n_implicit)
         return
 
 fullpop_sir = FullPopSIR(name='sir', beta=ss.perday(0.03), init_prev=ss.choose_n(10), dur_inf=ss.days(10), p_death=0)
@@ -145,7 +145,7 @@ fullpop.run()
 
 fig, axs = plt.subplots(1, 2, figsize=(10, 4))
 for sim in [dynamic, fullpop]:
-    axs[0].plot(sim.timevec, sim.results.sir.n_S, label=sim.label)
+    axs[0].plot(sim.timevec, sim.results.sir.S, label=sim.label)
     axs[1].plot(sim.timevec, sim.results.sir.prevalence, label=sim.label)
 axs[0].set_title('Number susceptible')
 axs[1].set_title('Prevalence')
@@ -153,4 +153,4 @@ axs[1].legend()
 plt.show()
 ```
 
-Since the disease has the same name (`sir`) as before, it uses the same random numbers, so the epidemic itself is identical. Only the reported results differ. The same approach applies to the sim's own results (e.g. `n_alive`), which you could adjust in an analyzer's `finalize_results()`.
+Since the disease has the same name (`sir`) as before, it uses the same random numbers, so the epidemic itself is identical. Only the reported results differ. The same approach applies to the sim's own results (e.g. `alive`), which you could adjust in an analyzer's `finalize_results()`.

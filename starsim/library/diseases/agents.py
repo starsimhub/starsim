@@ -39,7 +39,7 @@ class AgentSIR(ss.Infection):
         dur_inf (float/`ss.dur`/`ss.Dist`): how long (in years) people are infected for
         p_death (float/`ss.bernoulli`): the probability of death from infection
     """
-    plot_states = ['n_susceptible', 'n_infected', 'n_recovered'] # Which results to show in plot()
+    plot_states = ['susceptible', 'infected', 'recovered'] # Which results to show in plot()
 
     def __init__(self, pars=None, beta=_, init_prev=_, dur_inf=_, p_death=_, **kwargs):
         super().__init__()
@@ -145,7 +145,7 @@ class AgentSEIR(AgentSIR):
     This class extends `AgentSIR` with an exposed state: agents who are infected but not
     yet infectious. `exposed` and `infectious` are the literal E and I compartments, and
     `infected` is derived from them: an agent is infected from the moment it acquires the
-    infection, whether or not it is yet transmitting. So `n_infected` and `prevalence`
+    infection, whether or not it is yet transmitting. So `infected` and `prevalence`
     count E plus I, while transmission depends on `infectious` alone.
 
     Correspondingly, `ti_exposed` is the time of acquisition and `ti_infectious` is the
@@ -159,7 +159,7 @@ class AgentSEIR(AgentSIR):
         dur_inf (float/`ss.dur`/`ss.Dist`): how long people are infectious for
         p_death (float/`ss.bernoulli`): the probability of death from infection
     """
-    plot_states = ['n_susceptible', 'n_exposed', 'n_infectious', 'n_recovered']
+    plot_states = ['susceptible', 'exposed', 'infectious', 'recovered']
 
     def __init__(self, pars=None, dur_exp=_, **kwargs):
         super().__init__()
@@ -312,7 +312,7 @@ class AgentSIS(ss.Infection):
         fig = plt.figure()
         kw = sc.mergedicts(dict(lw=2, alpha=0.8), kwargs)
         res = self.results
-        for rkey in ['n_susceptible', 'n_infected']:
+        for rkey in ['susceptible', 'infected']:
             plt.plot(res.timevec, res[rkey], label=res[rkey].label, **kw)
         plt.legend(frameon=False)
         plt.xlabel('Time')

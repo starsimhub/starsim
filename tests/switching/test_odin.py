@@ -57,7 +57,7 @@ def test_odin_import(tmp_path):
     path = tmp_path/'age_seir.R'
     path.write_text(odin_model)
     sim = ss.interop.load(path, format='odin', pars=dict(S0=pop - [10, 0, 0, 0], I0=[10, 0, 0, 0], m=m), stop=365)
-    final_R = np.asarray(sim.run(n_runs=20).results.age_seir.n_R.values)[:, -1].mean()
+    final_R = np.asarray(sim.run(n_runs=20).results.age_seir.R.values)[:, -1].mean()
     assert np.isclose(final_R, ref_final_R, rtol=0.03), f'Imported model: mean final R {final_R:,.0f}, odin {ref_final_R:,}'
     return sim
 
@@ -67,7 +67,7 @@ def test_odin_runs():
     sim = make_seir()
     sim.init() # As an odin user calls gen$new() before $run()
     msim = ss.parallel(sim, n_runs=20)
-    final_R = np.asarray(msim.results.seir.n_R.values)[:, -1]
+    final_R = np.asarray(msim.results.seir.R.values)[:, -1]
     assert len(np.unique(final_R)) == 20, f'Expected 20 distinct runs after init(), got {len(np.unique(final_R))} (N5)'
     assert np.isclose(final_R.mean(), ref_final_R, rtol=0.03), f'Mean final R {final_R.mean():,.0f}, odin {ref_final_R:,}'
     return msim
@@ -110,10 +110,10 @@ def test_odin_delay():
     sim = ss.Sim(seir, total_pop=1e7, unit='day', stop=365, verbose=0).init()
     sim.run()
     res = sim.results.seir
-    n_I = res.n_I.values
+    n_I = res.I.values
     assert n_I.argmax() == ref_delay['day'] and np.isclose(n_I.max(), ref_delay['peak'], rtol=0.003), f'Peak of {n_I.max():,.0f} on day {n_I.argmax()}, against odin\'s {ref_delay["peak"]:,} on day {ref_delay["day"]}'
     for state in 'SEIR':
-        assert np.isclose(res[f'n_{state}'][-1], ref_delay[state], rtol=0.005), f'{state} on day 365: {res[f"n_{state}"][-1]:,.0f}, against odin\'s {ref_delay[state]:,}'
+        assert np.isclose(res[state][-1], ref_delay[state], rtol=0.005), f'{state} on day 365: {res[state][-1]:,.0f}, against odin\'s {ref_delay[state]:,}'
     T = sc.timer()
     sim.restart()
     sim.run()
@@ -126,7 +126,7 @@ def test_odin_delay():
 def test_odin_agents():
     sc.heading('The same model as agents')
     agents = make_seir().new(solver='abm', n_agents=20_000, dt=1, stop=120).run()
-    n_I = agents.results.seir.n_I.values
+    n_I = agents.results.seir.I.values
     assert n_I[0] > 0 and n_I.max() > 100*n_I[0], f'Expected an epidemic among the agents; infected {n_I[0]:.0f} at the start and {n_I.max():.0f} at most'
     return agents
 

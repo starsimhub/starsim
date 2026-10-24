@@ -52,7 +52,7 @@ Parameter values can also be given to the sim, by name, without changing the mod
 ```{python}
 sim = ss.Sim(sir, pars=dict(beta=0.2), stop=ss.days(100), verbose=0)
 sim.run()
-print(f'Peak infected: {sim.results.sir.n_I.max():,.0f}')
+print(f'Peak infected: {sim.results.sir.I.max():,.0f}')
 ```
 
 With more than one module, the name is written with the module's, e.g. `pars={'sir.beta': 0.2}`. A name that matches no parameter is an error that lists the parameters there are, so a misspelled parameter is never silently ignored:
@@ -97,7 +97,7 @@ betas = dict(
 )
 for label, beta in betas.items():
     sim = ss.Sim(make_sir(beta), start='2020-01-01', stop='2020-07-01', verbose=0).run()
-    print(f'{label:10s} total infected: {sim.results.sir.n_R[-1]:,.0f}')
+    print(f'{label:10s} total infected: {sim.results.sir.R[-1]:,.0f}')
 ```
 
 A distribution means two different things depending on where it is put. As a value (`dur=ss.lognorm_ex(mean=ss.days(10), std=ss.days(3))`) it gives each agent their own value. As a prior (`ss.par(0.05, prior=ss.lognorm_ex(mean=0.05, std=0.01))`) it is uncertainty about one number, used only by calibration. A compartmental run has no individuals to draw for, so a dwell-time distribution is run as Erlang sub-stages (with a note), and a distribution on anything else, such as `beta`, makes the model run as agents.

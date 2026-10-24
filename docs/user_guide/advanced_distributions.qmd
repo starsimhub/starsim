@@ -187,7 +187,7 @@ sir = ss.Disease(infection, recovery, init_prev=0.01)
 
 ode = ss.Sim(sir, stop=ss.days(100)).run() # A note says how many stages were used
 abm = ss.Sim(sir, stop=ss.days(100), solver='abm', n_agents=5_000, verbose=0).run() # Sampled per agent
-print(f'Peak prevalence: ODE {ode.results.sir.n_I.max()/10_000:.2f}, agents {abm.results.sir.n_I.max()/5_000:.2f}')
+print(f'Peak prevalence: ODE {ode.results.sir.I.max()/10_000:.2f}, agents {abm.results.sir.I.max()/5_000:.2f}')
 ```
 
 An Erlang distribution can also be given directly, as `ss.erlang(k=3, mean=ss.days(10))` (a gamma distribution with an integer shape), or with `stages=3` on the transition; both are exact in every solver. A distribution on a quantity that varies between people, such as `beta`, makes the model run as agents under `solver='auto'`.

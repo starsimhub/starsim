@@ -160,7 +160,6 @@ note_after = 1 # The seconds of a plain run above which choose() says how long i
 plain_total = 0.0 # The seconds that the runs taken as plain Python in this session would have taken, as estimated: see choose()
 noted = False # Whether choose() has said that a run is taken as plain Python, in this session
 chosen = False # Whether choose() has chosen to compile the kernels, in this session
-compiling = False # Whether ss.compile() is compiling the kernels
 no_tables = (np.zeros((0, 0, 0)),)*4 # For a step whose program holds for the whole step: see step()
 plain_copy = None # The copy of the kernels that runs as plain Python, once made: see uncompiled()
 on_disk = None # Whether the compiled kernels were found in Numba's cache, once looked for: see is_compiled()
@@ -290,9 +289,7 @@ def choose(seconds=0.0):
     if chosen or is_compiled():
         return sys.modules[__name__]
     if mode == 'always':
-        chosen = True
-        if not compiling: # ss.compile() says so itself
-            print('Note: compiling the solver (about a minute, once per install)')
+        chosen = True # Each part says so as it is compiled: see ss.perflib.compiling()
         return sys.modules[__name__]
     total = plain_total + seconds
     if total < compile_seconds:
@@ -303,7 +300,7 @@ def choose(seconds=0.0):
         return uncompiled()
     chosen = True
     which = 'this run' if seconds >= compile_seconds else 'the runs in this session'
-    print(f'Note: compiling the solver (about a minute, once per install), since {which} would take about {total:.0f} s as plain Python and {total/speedup:.2g} s compiled')
+    print(f'Note: compiling the solver (once per install), since {which} would take about {total:.0f} s as plain Python and {total/speedup:.2g} s compiled')
     return sys.modules[__name__]
 
 
@@ -319,16 +316,14 @@ def compile(verbose=True):
 
         ss.compile()
     """
-    global compiling
     T = sc.timer()
-    if verbose:
-        print('Compiling the solver kernels (about a minute)...')
-    compiling = True
+    if verbose and not is_compiled():
+        ss.perflib.compiling('the solver kernels', 'Numba', 60, 180) # Then each part, as it is compiled
     def make(solver='binomial'):
         S, I, R = ss.states(3)
         sir = ss.Disease(S >> I @ 0.3*I, I >> R @ ss.days(10), init=dict(I=0.1), name='sir')
         return ss.Sim(sir, total_pop=100, unit='day', stop=3, solver=solver, verbose=0)
-    with ss.options.context(compile='always'):
+    with ss.options.context(compile='always', verbose=ss.options.verbose if verbose else 0):
         make().run() # A whole run, in one call: run(), which has every solver's code
         make().run(until=1) # A run taken a step at a time: one_step()
         sim = make().init()
@@ -344,8 +339,7 @@ def compile(verbose=True):
         settle_places(y, p, engine.dt, np.zeros((p.n_trans + p.n_movers, y.shape[1])))
         if importlib.util.find_spec('jax') is not None: # The draws of the chain binomial in JAX
             importlib.import_module('starsim.perflib._chain').check()
-    make('abm').run() # The passes over the agents (ss.perflib._passes), which are cached apart from the kernels
-    compiling = False
+        make('abm').run() # The passes over the agents (ss.perflib._passes), which are cached apart from the kernels
     if verbose:
         print(f'Compiled the solver kernels in {T.toc(output=True):.0f} s')
     return

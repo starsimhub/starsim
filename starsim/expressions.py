@@ -811,7 +811,7 @@ def linear(expr):
     the expression is not linear in its bare states.
     """
     def nonlinear():
-        raise ss.errors.NonlinearExposure(f'the expression "{expr}" is not linear in its states. A bare state means contact with people in that state; write e.g. I.n if the number itself was meant.')
+        raise ss.errors.NonlinearExposure(f'the expression "{expr}" is not linear in its states. Write the rate per person, where a bare state means contact with people in it (beta*I) and I.n is the number in it (beta*I.n); or the whole flow, with the source of the transition as a factor (beta*S*I/N, frequency-dependent, or beta*S*I, density-dependent).')
 
     if isinstance(expr, ss.transitions.State):
         return None, {expr: par(1, literal=True)}
@@ -852,6 +852,59 @@ def linear(expr):
             nonlinear()
         return expr, {}
     return expr, {} # A parameter or a count
+
+
+def factors(expr):
+    """ The factors of a product, as lists of what is multiplied and what it is divided by, e.g. `([beta, S, I], [N])` for `beta*S*I/N` """
+    if isinstance(expr, BinOp) and expr.op in '*/':
+        na, da = factors(expr.a)
+        nb, db = factors(expr.b)
+        return (na + nb, da + db) if expr.op == '*' else (na + db, da + nb)
+    return [expr], []
+
+
+def as_counts(expr):
+    """ The expression with each bare state replaced by the number in it, e.g. `beta*I` becomes `beta*I.n` """
+    if isinstance(expr, ss.transitions.State):
+        return expr.n
+    elif isinstance(expr, BinOp):
+        return BinOp(expr.op, as_counts(expr.a), as_counts(expr.b))
+    elif isinstance(expr, Func):
+        return Func(expr.name, *[as_counts(arg) for arg in expr.args])
+    return expr
+
+
+def per_person(rate, src, people):
+    """
+    A rate written as the whole flow, as most other frameworks write it, as the rate per person in its source
+
+    A rate with its source as a factor (`S >> I @ beta*S*I/N`) is the whole flow, so it is divided by the
+    source, and its other states are numbers of people: divided by the total of the states that are people,
+    a share of them, which is contact with people in those states, so `beta*S*I/N` is `beta*I` (frequency-dependent);
+    otherwise the numbers themselves, so `beta*S*I` is `beta*I.n` (density-dependent). Any other rate is per
+    person already, and is returned as it is.
+
+    Args:
+        rate (Expr): the rate as written
+        src (list): the sources of the transition
+        people (list): the states of the module that are people
+    """
+    num, den = factors(rate)
+    if len(src or []) != 1 or not any(f is src[0] for f in num):
+        return rate
+    num.pop(next(i for i,f in enumerate(num) if f is src[0]))
+    total = lambda f: isinstance(f, BinOp) and f.op == '+' and set(map(id, f.leaves)) == set(map(id, people)) and all(isinstance(leaf, ss.transitions.State) for leaf in f.leaves)
+    totals = [i for i,f in enumerate(den) if total(f)]
+    if totals: # A share of the people: contact with people in those states
+        den.pop(totals[0])
+    else: # A number of people
+        num, den = [as_counts(f) for f in num], [as_counts(f) for f in den]
+    out = num[0] if num else par(1, literal=True)
+    for f in num[1:]:
+        out = BinOp('*', out, f)
+    for f in den:
+        out = BinOp('/', out, f)
+    return out
 
 
 def divide(a, b, xp=np):

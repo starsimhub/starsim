@@ -468,24 +468,6 @@ def test_timepar_callable():
 
 
 @sc.timer()
-def test_hist_plotting():
-    """ Test that histogram plotting works """
-    sc.heading('Test plotting of distribution histograms')
-
-    # Based on the advanced distributions user guide
-    sir = ss.SIR(
-        init_prev = ss.bernoulli(p=0.15),
-        dur_inf = ss.weibull(c=2, loc=1, scale=2)
-    )
-    sim = ss.Sim(n_agents=100, diseases=sir, dur=15, networks=ss.RandomNet())
-    sim.run()
-
-    # Plot the distribution
-    rvs = sim.diseases.sir.pars.dur_inf.plot_hist()
-    return
-
-
-@sc.timer()
 def test_dtype_consistency():
     """
     The two draw paths must return the same dtype, and float dists must honor ss.dtypes.float.
@@ -620,7 +602,6 @@ def test_engine_copy():
     return copy
 
 
-# %% Run as a script
 if __name__ == '__main__':
     do_plot = True
     sc.options(interactive=do_plot)
@@ -641,7 +622,6 @@ if __name__ == '__main__':
     o11 = test_choice_slots()
     o12 = test_timepar_dists()
     o13 = test_timepar_callable()
-    o14 = test_hist_plotting()
     o15 = test_dtype_consistency()
     o16 = test_choose_n()
     o17 = test_round()

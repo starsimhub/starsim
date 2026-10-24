@@ -174,8 +174,8 @@ sim = ss.Sim(sir, networks=contacts, total_pop=1e6, start='2025-01-01', stop='20
 sim.run()
 
 res = sim.results.sir
-print(f'Peak infected: {res.n_I.max():,.0f}, of whom aged 65+: {res.n_I.select(age="65+").max():,.0f}')
-res.n_I.by('age').plot()
+print(f'Peak infected: {res.I.max():,.0f}, of whom aged 65+: {res.I.select(age="65+").max():,.0f}')
+res.I.by('age').plot()
 ```
 
 Every result is now split by age: `select()` picks one age group, and `by()` gives one series per group. This model has no individual contacts, so it runs as an ODE; give the sim `n_agents=` to run the same model as agents.

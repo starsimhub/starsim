@@ -102,7 +102,7 @@ sir = ss.Disease(infection, recovery, init_n=dict(I=1))    # exactly one person
 1. `init=` is a share of people, up to 1 (`init=dict(S=1.0)` is everyone); more than 1 raises `OutOfBounds`, which points to `init_n=`. A whole number is still a share, so `init=dict(I=1)` (or `1` inside an `ss.by`) is everyone, with a warning to write `1.0`. `init_n=` is a number of people (`init_n=dict(I=1)` is one person), on the disease or on the state (`ss.State(init_n=10)`); a state takes one or the other. `init_prev=` keeps its own rule (above 1 a number of people, up to 1 a share). `describe()` prints which it is (decided 2026-10-22).
 2. `init` and `init_n` accept the parameter ladder ([04-parameters.md](04-parameters.md)), for example `ss.by(age=[0.0, 0.02, 0.01])` (shares in `init=`, numbers of people in `init_n=`), and `init` also a function of the sim, giving a share (or one for each group), as `init_prev` does.
 3. Whatever is left over goes to the first state ([above](#ssstate)), so giving one of `S` or `I` is enough. A value given for the first state is kept, never overwritten: then the rest go to the one state of people with no value (`init=dict(S=0.1, I=1e-4)` in an SIR starts 10% susceptible and the rest in `R`, with a note that says how many people that is: "the other 8,999 people start in R"), and if there is none or several, the values must sum to 1 (numbers of people, to the population), or it is an error that says to give the rest a state (`R=0.8999`). `init_prev=` together with `init=` for a state that `init_prev` seeds is ambiguous and an error. This applies to people only. A state that is not people ([below](#states-that-are-not-people)) starts at zero unless it has an `init`, and its `init` is always a count, never a fraction.
-4. `init_prev=x` on the disease seeds a fraction `x` through its contact-mediated transition, so the seeded individuals start wherever a new infection starts (`I` in an SIR, `E` in an SEIR). A disease with no contact-mediated transition (environmental or vector-borne, below) uses `init` on a state instead. With no initial values at all, nobody starts infected: the 1% is the default only of the library's `ss.SIR`, `ss.SIS`, and `ss.SEIR` (`init_prev=0.01`, as in Starsim 3) and so of `ss.demo()`, and `init()` prints R0 and the number infectious at the start. `init_prev` also takes an `ss.by` (by a dimension: a share for each group; by a property of people that is not one, such as `ss.by(dict(age=[0, 15, 50], value=[0, 0.1, 0.02]))`: each person's own share, as agents), a function of the sim (a share, or one for each group), or a function of the sim and the agents (`fn(sim, uids)`, a share for each, as agents); with a share for each agent, each is drawn on its own. Where a new infection has several destinations, the seeded are shared between them as a new infection is. `init=dict(I=ss.by(...))` by a property of people that is not a dimension is drawn for each agent likewise. Under a compartmental solver, a property that is not a dimension, or a function of the agents, raises `CapabilityError`.
+4. `init_prev=x` on the disease seeds a fraction `x` through its contact-mediated transition, so the seeded individuals start wherever a new infection starts (`I` in an SIR, `E` in an SEIR). A disease with no contact-mediated transition (environmental or vector-borne, below) uses `init` on a state instead. With no initial values at all, a disease with a transmission (frequency- or density-dependent) seeds 1% of people (`init_prev=0.01`, as in Starsim 3), which `describe()` marks as a guess, and `init()` prints R0 and the number infectious at the start; a state given an initial value turns the default off. `init_prev` also takes an `ss.by` (by a dimension: a share for each group; by a property of people that is not one, such as `ss.by(dict(age=[0, 15, 50], value=[0, 0.1, 0.02]))`: each person's own share, as agents), a function of the sim (a share, or one for each group), or a function of the sim and the agents (`fn(sim, uids)`, a share for each, as agents); with a share for each agent, each is drawn on its own. Where a new infection has several destinations, the seeded are shared between them as a new infection is. `init=dict(I=ss.by(...))` by a property of people that is not a dimension is drawn for each agent likewise. Under a compartmental solver, a property that is not a dimension, or a function of the agents, raises `CapabilityError`.
 5. In an agent-based run the number who start in each state is exact (rounded to whole agents), not a chance for each agent; in a compartmental run it is used exactly. People who start in a state that an infection puts people into (`I` in an SIR) have been in it for the first step, as if infected in the step before (an infection is dated by the step it happens in, `ti_I = -1` for them as agents, and one slot along a conveyor): so a seeded case with a fixed stay of one step infects for one generation and is gone at the next time point, as in the Reed-Frost model.
 6. `init=dict(...)` on the disease gives the starting value of several states at once. Its keys are state names and each value means what the same value would mean as `ss.State(init=...)`. It is for when the whole distribution is wanted; if the values do not account for everyone, the remainder goes where item 3 says.
 
@@ -190,7 +190,7 @@ The keys are network names. On a network with acts the value is a probability pe
 | `a >> b @ x` | the complete transition | "a goes to b at x" |
 | `S + I + R >> D` | a sum of states as the source | "any of S, I, R goes to D" (several sources); `S \| I` on states is a condition, for `where=` |
 | `p * A + (1 - p) * B` | a weighted sum of states | a weighted source of infection (several destinations are a list, with `p=`) |
-| `I.n` | a count | the number of people in `I`; the same number as the result `n_I` |
+| `I.n` | a count | the number of people in `I`; the same number as the result `I` |
 | `I.frac` | a fraction | `I.n` divided by the number of people in `I`'s module |
 | `I.total` | a count | the number in `I` in the whole population; in a model stratified by place, `I.n` in a rate is the number in the same place |
 | `S + I + R` | a sum of states | a source of infection or a denominator in a rate; a result when given to the module by name. Never a new state |
@@ -224,7 +224,7 @@ A transition between states with nothing driving it and no `p=` (`I >> S`, `ss.T
 
 There are two ways to mention a state in a rate, and they answer different questions.
 
-- **`I.n` is how many people are in `I`.** It is a number, the same one that appears in the results as `n_I`. `xi * I.n` says each infectious person sheds `xi`, and nothing more is done to it.
+- **`I.n` is how many people are in `I`.** It is a number, the same one that appears in the results as `I`. `xi * I.n` says each infectious person sheds `xi`, and nothing more is done to it.
 - **A bare `I` is contact with people in `I`**: the chance that a contact is with someone in `I`. With no network that is `I.n / N`, so `beta * I` and `beta * I.n / N` are the same model. With a contact matrix or a network it is the same quantity worked out for each person from whom they actually meet, which cannot be written as one formula. That is why the bare form exists.
 
 So write the bare state when people catch the infection from people, and `.n` when the formula needs the number itself (a reservoir, a vector, a threshold).
@@ -233,7 +233,7 @@ So write the bare state when people catch the infection from people, and `.n` wh
 
 **A bare state inside a rate means "exposure to that state through the model's routes".** In `S >> I @ beta * I`, each person in `S` moves to `I` at a hazard of `beta` times their exposure to people in `I`.
 
-- With no network given, mixing is homogeneous with one contact per unit time, so exposure to `I` is `I.n / N`. Then `beta * I` is the textbook `beta * S * I / N` and `beta` is the classical transmission rate. The user never writes `/ N`.
+- With no network given, mixing is homogeneous with one contact per unit time, so exposure to `I` is `I.n / N`. Then `beta * I` is the textbook `beta * S * I / N` and `beta` is the classical transmission rate. The user need not write `/ N`, but may ([below](#the-whole-flow)).
 - When networks or mixing pools are given (`ss.Sim(sir, networks=...)`), they supply who meets whom and how often, and `beta` is per contact. The exposure of each person is then computed from their own contacts. The full definition is in [06-routes.md](06-routes.md).
 
 The model text is the same in both cases. Exposure through a bare state is always frequency-dependent (a share of contacts); density dependence is written with the count, `beta * I.n`, which is what the importers write for a rate such as `beta * S * I`, and a rate per person that grows with a count of people is noted as density-dependent, since `I.frac` is often what was meant. `describe()` prints every rate with its bare states expanded, including the denominator, so what a rate resolved to can always be checked:
@@ -243,7 +243,23 @@ infection    S -> I   contact-mediated, source I
              rate = 0.3 × I.n / N                            [homogeneous mixing]
 ```
 
-Several sources are a sum of exposures: `S >> E @ beta * (I + 0.5 * A)` says asymptomatic people are half as infectious, and `S >> I @ beta * I + beta_vax * I_vax` gives each source its own coefficient. A rate may multiply the exposure by anything that contains no bare state, such as a parameter, a seasonal curve, or a count (`beta * I * (1 - 0.3 * H.frac)`). The rate MUST be linear in the bare states, because exposure through a network is a sum over contacts; `I ** 2` or `I / (I + K)` raises `NonlinearExposure`, which says to use `I.n` if a literal count was meant.
+### The whole flow
+
+Most other frameworks write a rate as the whole flow, as in the equation `dI/dt = β·S·I/N` (camdl `S --> I @ beta * S * I / N`, SimInf `S -> beta*S*I/(S+I+R) -> I`, odin, EpiModel's DCMs), while a few imply the source and the total (epydemix's mediated transitions, as the bare state does here) or name the kind (summer2's frequency and density flows). Both are read. **A rate with the transition's source as a factor is the whole flow**: it is divided by the source, and the other states in it are numbers of people. Divided by the total of the module's states that are people (`N = S + I + R`), they are a share, which is contact with people in them through the routes, as for the bare state; otherwise they are the numbers themselves. So the two common forms are:
+
+| | Per person | Whole flow |
+|---|---|---|
+| Frequency-dependent, `dI/dt = β·S·I/N` | `S >> I @ beta * I` | `S >> I @ beta * S * I / N` |
+| Density-dependent, `dI/dt = β·S·I` | `S >> I @ beta * I.n` | `S >> I @ beta * S * I` |
+
+Each pair is the same model, with the same results and model spec. Any transition can be written either way (`I >> R @ gamma * I` is `I >> R @ gamma`). `describe()` says when a rate was written as the whole flow, and what it is per person:
+
+```text
+infection    S -> I   contact-mediated, source I
+             written as the whole flow, beta × S × I / (S + I + R), so per person in S: beta × I
+```
+
+Several sources are a sum of exposures: `S >> E @ beta * (I + 0.5 * A)` says asymptomatic people are half as infectious, and `S >> I @ beta * I + beta_vax * I_vax` gives each source its own coefficient. A rate may multiply the exposure by anything that contains no bare state, such as a parameter, a seasonal curve, or a count (`beta * I * (1 - 0.3 * H.frac)`). The rate MUST be linear in the bare states, because exposure through a network is a sum over contacts; `I ** 2` or `I / (I + K)` raises `NonlinearExposure`, which says how to write a rate per person or as the whole flow.
 
 Three things follow from the rule and are worth stating:
 
@@ -306,7 +322,7 @@ I, R = ss.states('I R')
 ss.Transition(I, R, dur=ss.days(10), stages=3)
 ```
 
-Generated sub-stages appear in `describe()` and are summed in results, so `n_I` means what the user meant. `ss.erlang(k=3, mean=ss.days(10))`, `ss.gamma` with an integer shape, and `stages=3` give the same model and the same results, but are written differently in the model spec (a gamma dwell time, or an exponential one with `stages: 3`), so their hashes differ.
+Generated sub-stages appear in `describe()` and are summed in results, so `I` means what the user meant. `ss.erlang(k=3, mean=ss.days(10))`, `ss.gamma` with an integer shape, and `stages=3` give the same model and the same results, but are written differently in the model spec (a gamma dwell time, or an exponential one with `stages: 3`), so their hashes differ.
 
 ### A fixed delay
 
@@ -495,7 +511,7 @@ Some of what a disease model tracks is not people: bacteria in water, a mosquito
 - has no age, sex, or risk group and does not sit on networks. Stratifying by a property of people leaves it unsplit; it is split by `patch`, or by dimensions of its own given with `states=` (`malaria.stratify(species=['gambiae', 'funestus'], states=[Sv, Ev, Iv])`). See [05-dimensions.md](05-dimensions.md#states-that-are-not-people);
 - is used in a rate as a count, `W.n`. Used bare it raises `ExposureToCount` (below);
 - is not touched by `ss.death(rate=...)` with no state, which applies to people; its own outflow is written out (`W >> ss.null @ rate`);
-- has results like any other state (`n_W`, and a flow for each of its transitions).
+- has results like any other state (`W`, and a flow for each of its transitions).
 
 ```text
 ExposureToCount: the rate for 'infection' uses the bare state W, and W is not people.
@@ -590,7 +606,7 @@ This is a statement about one module's transitions out of one state. Across modu
 
 ## What is guessed
 
-Every one of these is a default that `describe()` prints and marks, and each row is tested both ways (`tests/test_contracts.py`): a model that makes the guess has it marked, and one that does not, not. The guesses about time (a bare time, the unit) are in [02-types.md](02-types.md), and those about dimensions (a dimension's kind and first level, the population's ages, aging) in [05-dimensions.md](05-dimensions.md).
+Every one of these is a default that `describe()` prints and marks, and each row is tested both ways (`tests/devtests/test_contracts.py`): a model that makes the guess has it marked, and one that does not, not. The guesses about time (a bare time, the unit) are in [02-types.md](02-types.md), and those about dimensions (a dimension's kind and first level, the population's ages, aging) in [05-dimensions.md](05-dimensions.md).
 
 | Guessed | Rule |
 |---|---|

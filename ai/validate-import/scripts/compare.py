@@ -9,7 +9,7 @@ the 5% and 95% quantiles), as written by `lingua_franca_design/examples/tools.py
     python compare.py run model.py port.csv --runs 100
 
     # Compare: exactly if both sides are one run each, statistically otherwise
-    python compare.py compare original.csv port.csv --map I=sir.n_I R=sir.n_R
+    python compare.py compare original.csv port.csv --map I=sir.I R=sir.R
 
 Needs NumPy, pandas, and SciPy (and Starsim for `run`).
 """
@@ -175,7 +175,7 @@ def compare(file_a, file_b, mapping=None, rtol=None, alpha=0.01, shift=0, plot=N
     """ Compare every matched series of the original (file_a) and the port (file_b) """
     a, b = read(file_a), read(file_b)
     mapping = dict(mapping or {})
-    if not mapping: # Series with the same name, or the same last part (I ~ sir.n_I is not guessed: give --map)
+    if not mapping: # Series with the same name, or the same last part (I ~ sir.I is not guessed: give --map)
         names_b = set(b.series)
         mapping = {s:s for s in a.series.unique() if s in names_b}
     if not mapping:
@@ -217,7 +217,7 @@ def main(argv=None):
     p.add_argument('--runs', type=int, default=1)
     p.add_argument('--seed', type=int, default=1)
     p.add_argument('--cpus', type=int, help='the most processes to run on (default: every core)')
-    p.add_argument('--series', nargs='*', help='the results to keep, e.g. sir.n_I (default: all)')
+    p.add_argument('--series', nargs='*', help='the results to keep, e.g. sir.I (default: all)')
     p.add_argument('--time', default='auto', choices=['auto', 'index'], help="the time column: the sim's time, or the step")
     p = sub.add_parser('compare', help='Compare the original (first) with the port (second)')
     p.add_argument('original')

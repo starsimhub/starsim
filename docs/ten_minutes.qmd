@@ -57,7 +57,7 @@ sim.describe()
 
 for solver in ['ode', 'binomial', 'gillespie', 'abm']:
     s = sim.new(solver=solver, verbose=0).run()
-    print(f'{solver:10s} peak infected: {s.results.sir.n_I.max():,.0f}')
+    print(f'{solver:10s} peak infected: {s.results.sir.I.max():,.0f}')
 ```
 
 The stochastic solvers (`'binomial'`, `'gillespie'`, and agents, `'abm'`) give a different answer on each run, close to the ODE's.
@@ -81,11 +81,11 @@ kw = dict(networks=contacts, total_pop=1e6, start='2025-01-01', stop='2025-07-01
 sim = ss.Sim(sir, **kw).run()
 
 res = sim.results.sir
-print(f'Peak infected: {res.n_I.max():,.0f}, of whom aged 65+: {res.n_I.select(age="65+").max():,.0f}')
-res.n_I.by('age').plot()
+print(f'Peak infected: {res.I.max():,.0f}, of whom aged 65+: {res.I.select(age="65+").max():,.0f}')
+res.I.by('age').plot()
 ```
 
-Every state and transition has a result (`n_S`, `n_I`, `n_R`, `infection`, `recovery`), and `cases` is a result too. `select()` and `by()` read them by group.
+Every state and transition has a result (`S`, `I`, `R`, `infection`, `recovery`), and `cases` is a result too. `select()` and `by()` read them by group.
 
 ## An intervention
 
@@ -166,13 +166,13 @@ sir <- ss$Disease(
 )
 sim <- ss$Sim(sir, stop = 100)
 sim$run()
-n_I <- py_to_r(sim$results$sir$n_I$values)
+n_I <- py_to_r(sim$results$sir$I$values)
 cat("Peak infected:", max(n_I), "\n")
 
 msim <- sim$new(solver = "binomial")$run(n_runs = 20L) # A count is an integer: 20L, not 20
 ```
 
-Everything else on this page works the same way from R, with `$` in place of `.`. This code is run by Starsim's tests (`tests/interop/r/sir.R`).
+Everything else on this page works the same way from R, with `$` in place of `.`. This code is run by Starsim's tests (`tests/devtests/interop/r/sir.R`).
 
 ## Next steps
 

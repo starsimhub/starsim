@@ -240,7 +240,7 @@ class People:
     @property
     def n_alive(self):
         """
-        The number of living agents, which is what `results.n_alive` records (with each agent counted by its weight if agents' weights differ: see `people.scale`)
+        The number of living agents, which is what `results.alive` records (with each agent counted by its weight if agents' weights differ: see `people.scale`)
 
         This is not the same as `len(people)`: agents who died on the current timestep are
         not removed from `auids` until `finish_step()`, so that analyzers can still inspect
@@ -374,7 +374,7 @@ class People:
         """
         List of "automatic" states with boolean type (`ss.BoolState`)
 
-        BoolStates automatically generate results like n_alive, n_female, etc.
+        BoolStates automatically generate results of the same names (alive, female, etc.), the number in each.
         This only includes BoolStates that belong directly to People, not those
         from modules (which have their own result generation).
         For a list of all states, see `People.states`.
@@ -390,7 +390,7 @@ class People:
 
         By default, People reports on counts for any `ss.BoolState` instances, e.g. if
         People contains a `ss.BoolState` called 'alive' it will automatically contain a
-        Result for 'n_alive'. For identical behavior that does not automatically
+        Result for 'alive' (the number alive). For identical behavior that does not automatically
         generate results, use `ss.BoolArr` instead of `ss.BoolState`.
 
         This method also creates the standard people-related results like new_deaths,
@@ -406,7 +406,7 @@ class People:
 
         # Create results for all BoolStates
         for state in self.auto_state_list:
-            results.append(ss.Result(f'n_{state.name}', label=state.label, **kw))
+            results.append(ss.Result(state.name, label=state.label, kind='stock', **kw))
 
         # Add standard people-related results
         results.extend([
@@ -733,7 +733,7 @@ class People:
         """ Record per-timestep population counts into the simulation results """
         ti = self.sim.ti
         res = self.sim.results
-        states = [getattr(self, state.name) for state in self.auto_state_list] # Each auto-generated BoolState result, e.g. n_alive, n_female
+        states = [getattr(self, state.name) for state in self.auto_state_list] # Each auto-generated BoolState result, e.g. alive, female
         dying = self.dying()
         counts = None
         if self.scale.weighted: # Each agent counted by its weight (see AgentScale)
@@ -748,7 +748,7 @@ class People:
             else: # From the active agents themselves
                 counts = ss.perflib._passes.count_people(self.auids.view(np.ndarray), tuple(state.raw for state in states), self.alive.raw, self.ti_dead.raw, self.ti_removed.raw, ti)
         if self.scale.weighted: # Agents of different weights make fractions of people
-            for key in [f'n_{state.name}' for state in states] + ['new_deaths', 'new_emigrants', 'cum_deaths']:
+            for key in [state.name for state in states] + ['new_deaths', 'new_emigrants', 'cum_deaths']:
                 if res[key].values.dtype.kind in 'iu':
                     res[key].init_values(dtype=float, force=True)
         unborn = self.unborn_uids()
@@ -760,18 +760,18 @@ class People:
             counts = [count - w[state.raw[unborn] != 0].sum() for state,count in zip(states, counts)] + [counts[-2] - w[gone & (self.ti_dead.raw[unborn] <= ti)].sum(), counts[-1] - w[gone & (self.ti_removed.raw[unborn] <= ti)].sum()]
         if counts is not None:
             for state,count in zip(states, counts):
-                res[f'n_{state.name}'][ti] = count
+                res[state.name][ti] = count
             # Those who died or left in this step are no longer alive, and are taken out at the end of it (see finish_step()); whenever in the step it was requested
             res.new_deaths[ti], res.new_emigrants[ti] = counts[-2:]
         else:
             for state in states:
-                res[f'n_{state.name}'][ti] = state.count()
+                res[state.name][ti] = state.count()
             res.new_deaths[ti], res.new_emigrants[ti] = count_gone(self.auids.view(np.ndarray), self.alive.raw, self.ti_dead.raw, self.ti_removed.raw, ti)
         res.cum_deaths[ti] = res.new_deaths[ti] if ti == 0 else res.cum_deaths[ti-1] + res.new_deaths[ti]
         return
 
     def unborn_uids(self):
-        """ The active agents not yet born, with a negative age (e.g. made at conception by `ss.Pregnancy`), who are not counted among the people (e.g. in `n_alive`) """
+        """ The active agents not yet born, with a negative age (e.g. made at conception by `ss.Pregnancy`), who are not counted among the people (e.g. in the result `alive`) """
         if not self.has_unborn:
             return ss.uids()
         auids = self.auids

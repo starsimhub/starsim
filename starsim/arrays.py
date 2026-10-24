@@ -1297,7 +1297,7 @@ class BoolState(BoolArr):
     BoolStates are typically used to keep track of externally-facing variables (e.g.
     `disease.susceptible`), while BoolArrs can be used to keep track of internal
     ones (e.g. `disease.has_immunity`). A BoolState named "susceptible" will automatically
-    generate a result named "n_susceptible", for example.
+    generate a result named "susceptible" (the number susceptible), for example.
 
     Note on terminology: the term "states" is often used to refer to *all* `ss.Arr` objects,
     (e.g. in `module.define_states()`, whether or not they are BoolStates.

@@ -267,8 +267,8 @@ class ParticleFilter:
     def reader(engine, name):
         """ Where a result is in the stocks or flows of a run, if it is read straight from them: ('stocks' or 'flows', indices to sum) """
         graph = engine.graph
-        if name.startswith('n_') and name[2:] in graph.states:
-            return 'stocks', [list(graph.states).index(name[2:])]
+        if name in graph.states:
+            return 'stocks', [list(graph.states).index(name)]
         flows = engine.tr_index | engine.transfer_index
         if name in flows:
             return 'flows', [flows[name]]
@@ -756,6 +756,7 @@ def nuts(logdensity, z0, draws=500, warmup=500, chains=4, traced=False, seed=Non
             start = jnp.asarray(starts[c]) + 0.01*jax.random.normal(start_key, (d,)) # Each a little apart, even from the same point
             if verbose:
                 print(f'NUTS chain {c+1} of {chains}: {warmup} warm-up draws, then {draws} draws')
+            ss.perflib.compiling('the NUTS sampler', 'JAX', 1, 10)
             adapt = blackjax.window_adaptation(blackjax.nuts, logp)
             (state, params), _ = adapt.run(warm_key, start, num_steps=warmup)
             step = jax.jit(blackjax.nuts(logp, **params).step)
@@ -806,6 +807,7 @@ def nuts_traced(jax, blackjax, logdensity, starts, key, draws, warmup, verbose):
     n_dev = max(k for k in range(1, min(len(devices), chains) + 1) if chains % k == 0) # Each device takes the same number of chains
     shape = lambda arr: arr.reshape((n_dev, chains//n_dev) + arr.shape[1:])
     T = sc.timer()
+    ss.perflib.compiling('the NUTS sampler', 'JAX', 1, 10)
     if n_dev > 1: # Each on cores of its own
         compiled = jax.pmap(jax.vmap(one_chain), devices=devices[:n_dev]).lower(shape(keys), shape(starts)).compile()
         args = (shape(keys), shape(starts))
@@ -1334,7 +1336,7 @@ def sensitivity(sim, pars=None, results=None, n=100, rand_seed=None, verbose=Non
     Args:
         sim (`ss.Sim`): the sim, which is not changed
         pars (list): the names of the parameters (default: all that have bounds)
-        results (list): the results, e.g. `['n_I']` (default: every count and flow)
+        results (list): the results, e.g. `['I']` (default: every count of a state, and every flow)
         n (int): the number of samples
         rand_seed (int): the seed of the samples
         verbose (bool): whether to print the table
@@ -1354,12 +1356,17 @@ def sensitivity(sim, pars=None, results=None, n=100, rand_seed=None, verbose=Non
     X = np.where(logs, np.exp(X), X)
     msim = ss.parallel(sim.new(verbose=0), pars={name:X[:, j].tolist() for j,name in enumerate(names)})
     summaries = sc.objdict()
+    counts = set() # The counts of a state, by module and name
+    for mod in probe.modules:
+        graph = getattr(mod, 'graph', None)
+        states = [s.name for s in mod.auto_state_list] + (list(graph.states) if graph is not None else [])
+        counts |= {(mod.name, state) for state in states}
     for modname,key,res in msim.results.walk():
         if modname is None or res.columns is not None:
             continue
         if results is not None and key not in results:
             continue
-        if results is None and not (key.startswith('n_') or res.kind == 'flow'):
+        if results is None and not ((modname, key) in counts or res.kind == 'flow'):
             continue
         vals = np.asarray(res.values)
         summaries[f'{modname}.{key} peak'] = vals.max(axis=1)

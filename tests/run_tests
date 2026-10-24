@@ -7,5 +7,5 @@
 export SCIRIS_BACKEND='agg'
 export STARSIM_SHOW=0
 
-# Run the tests
-pytest test_*.py interop -n auto --durations=0
+# Run the tests (the developer tests, in devtests/, are slower and run separately: pytest devtests -n auto)
+pytest test_*.py -n auto --durations=0

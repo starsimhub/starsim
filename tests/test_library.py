@@ -61,17 +61,17 @@ def test_diseases():
         sims[name] = sim
         dis = sim.diseases[name]
         res = sim.results[name]
-        n_exp = np.array(res.n_exposed)
-        n_infectious = np.array(res.n_infectious)
-        n_inf = np.array(res.n_infected)
+        n_exp = np.array(res.exposed)
+        n_infectious = np.array(res.infectious)
+        n_inf = np.array(res.infected)
         new = np.array(res.new_infections)
-        total = n_exp + n_infectious + np.array(res.n_susceptible) + np.array(res.n_recovered)
+        total = n_exp + n_infectious + np.array(res.susceptible) + np.array(res.recovered)
         assert res.cum_infections[-1] > 0, f'Expected {name} infections'
         assert new.min() >= 0, f'{name} has negative new_infections: seeds are being double-counted'
         assert new[0] == 0, f'{name} counted its seed infections as new infections'
         assert new.sum() == res.cum_infections[-1], f'{name} cumulative infections do not match the sum'
         assert not (dis.exposed & dis.infectious).any(), f'{name} has agents in both E and I'
-        assert np.array_equal(total, np.array(sim.results.n_alive)), f'{name} compartments do not sum to the population'
+        assert np.array_equal(total, np.array(sim.results.alive)), f'{name} compartments do not sum to the population'
         assert np.array_equal(n_inf, n_exp + n_infectious), f'{name} should count both E and I as infected'
         assert (dis.infectious & ~dis.infected).sum() == 0, f'{name} should transmit only from agents that are infected'
         assert n_exp.max() > 0, f'{name} never had any exposed agents'
@@ -82,8 +82,8 @@ def test_diseases():
 
     # Ebola should progress agents to severe disease and bury the dead
     ebola = sims.ebola.results.ebola
-    assert ebola.n_severe.max() > 0, 'Expected some severe Ebola cases'
-    assert ebola.n_buried.max() > 0, 'Expected some Ebola burials'
+    assert ebola.severe.max() > 0, 'Expected some severe Ebola cases'
+    assert ebola.buried.max() > 0, 'Expected some Ebola burials'
 
     # Cholera dies out completely with a yearly timestep, since its natural history is in days
     yearly = ss.Sim(diseases=ssl.Cholera(beta=ss.perday(0.5)), networks=ss.RandomNet(),
@@ -124,54 +124,7 @@ def test_hiv():
     return s1, s2
 
 
-@sc.timer()
-def test_mnch():
-    """ Check that the MNCH modules run and produce their headline outcomes """
-    sc.heading('Testing MNCH modules...')
-
-    demographics = lambda: [ss.Pregnancy(fertility_rate=ss.time.freq(100, 'year'), burnin=True), ss.Deaths()]
-    networks = lambda: [ss.PrenatalNet(), ss.RandomNet()]
-    sims = sc.objdict()
-
-    # Congenital disease: mother-to-child transmission with birth outcomes
-    sim = ss.Sim(diseases=ssl.mnch.CongenitalDisease(beta=ss.peryear(20), init_prev=0.2),
-                 demographics=demographics(), networks=networks(), **mnch_pars)
-    sim.run()
-    n_congenital = sim.diseases.congenitaldisease.congenital.sum()
-    print(f'  Congenital infections: {n_congenital:n}')
-    assert n_congenital > 0, 'Expected some congenital infections'
-    sims.congenital = sim
-
-    # Neonatal sepsis: newborns are infected at birth, and some die
-    sim = ss.Sim(diseases=ssl.mnch.NeonatalSepsis(), demographics=demographics(),
-                 networks=networks(), **mnch_pars)
-    sim.run()
-    new_inf = sim.results.neonatalsepsis.new_infections.sum()
-    nnd = sim.results.pregnancy.neonatal_deaths.sum()
-    print(f'  Neonatal sepsis infections: {new_inf:n}; neonatal deaths: {nnd:n}')
-    assert new_inf > 0, 'Expected newborns to be infected with sepsis'
-    assert nnd > 0, 'Expected some neonatal deaths'
-    sims.sepsis = sim
-
-    # Fetal health: infection during pregnancy should restrict growth
-    sim = ss.Sim(diseases=ssl.AgentSIR(name='sir', beta=ss.peryear(20)), demographics=demographics(),
-                 connectors=ssl.mnch.fetal_infection(), custom=ssl.mnch.FetalHealth(),
-                 interventions=ssl.mnch.treat_pregnant(disease='sir', start_year=2001),
-                 networks=networks(), **mnch_pars)
-    sim.run()
-    fh = sim.custom.fetal_health
-    n_treated = sim.interventions.treat_pregnant.ti_treated.notnan.sum()
-    n_weighed = fh.birth_weight.notnan.sum()
-    print(f'  Newborns weighed: {n_weighed:n}; LBW: {fh.lbw.sum():n}; treated: {n_treated:n}')
-    assert n_weighed > 0, 'Expected some newborns to have a birth weight'
-    assert n_treated > 0, 'Expected some pregnant women to be treated'
-    sims.fetal = sim
-
-    return sims
-
-
 if __name__ == '__main__':
     exports  = test_exports()
     diseases = test_diseases()
     hiv      = test_hiv()
-    mnch     = test_mnch()

@@ -139,7 +139,7 @@ print(f'Cumulative infections over one year: {answer}')
 
 ### Question 2
 
-**Q: Whether an epidemic 'takes off' depends to a large extent on the basic reproduction number, which in this kind of model depends on `beta`, `n_contacts`, and `dur_inf`. Experiment with different values for each and compare the trajectory of `sim.results.sir.n_I`.**
+**Q: Whether an epidemic 'takes off' depends to a large extent on the basic reproduction number, which in this kind of model depends on `beta`, `n_contacts`, and `dur_inf`. Experiment with different values for each and compare the trajectory of `sim.results.sir.I`.**
 
 A: All three parameters increase transmission, so increasing any of them makes the epidemic grow faster and larger. The cleanest way to see this is to write a small helper that builds a sim for a given set of parameters, then compare them:
 
@@ -164,7 +164,7 @@ sims = [
     make_sim(dur_inf=20),     # Longer infectious period
 ]
 msim = ss.parallel(sims)
-msim.plot('sir.n_I')
+msim.plot('sir.I')
 ```
 
 Each of the three modified scenarios produces a larger, faster epidemic than the baseline, illustrating that they all push the reproduction number in the same direction.
@@ -189,9 +189,9 @@ pars = sc.objdict(
 )
 sim = ss.Sim(pars)
 sim.run()
-sim.plot('n_alive')
+sim.plot('alive')
 
-answer = sim.results.n_alive[-1]/1e6
+answer = sim.results.alive[-1]/1e6
 print(f'Population size in year {pars.stop}: {answer} million')
 ```
 
@@ -224,7 +224,7 @@ for dur_imm in [2, 5, 20]:
     sirs = SIRS(dur_imm=ss.years(dur_imm), init_prev=0.01)
     sims.append(ss.Sim(diseases=sirs, networks='random', stop=100, verbose=0, label=f'dur_imm={dur_imm}'))
 msim = ss.parallel(sims)
-msim.plot('sirs.n_I')
+msim.plot('sirs.I')
 ```
 
 ### Question 2
@@ -293,7 +293,7 @@ flu = ss.Disease(
 )
 sim = ss.Sim(flu, stop=100, verbose=0)
 sim.run()
-sim.plot(['A.n_I', 'B.n_I'])
+sim.plot(['A.I', 'B.I'])
 ```
 
 ## T5 Solutions
@@ -339,7 +339,7 @@ s_rand = ss.Sim(diseases=ss.SIR(beta=ss.peryear(0.1)), networks=ss.RandomNet(n_c
 s_age  = ss.Sim(diseases=ss.SIR(beta=ss.peract(0.1)), networks=ss.SexualNet(), # On a sexual network, beta is a probability per act
                 n_agents=5000, verbose=0, label='Age-structured (sexual)')
 msim = ss.parallel(s_rand, s_age)
-msim.plot('sir.n_I')
+msim.plot('sir.I')
 ```
 
 The age-structured network restricts who can contact whom (and the `SexualNet` only connects agents in partnerships), so it typically produces slower, smaller epidemics than a random network where every agent can mix freely.

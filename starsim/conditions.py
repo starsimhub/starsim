@@ -594,7 +594,11 @@ def group_reasons(cond, sim):
         return [f'the function "{getattr(cond, "__name__", "function")}" takes uids'] if ss.utils.n_args(cond) >= 2 else []
     if isinstance(cond, Cond) and cond.op == 'people' and not is_static(cond, sim):
         prop = cond.args[0]
-        return [f'a condition uses people.{prop}, which is not a dimension; stratify by it (sim.stratify({"sex=[\'female\', \'male\']" if prop == "female" else f"{prop}=[...]"})) to run as compartments']
+        if prop == 'female':
+            example = "sex=['female', 'male']"
+        else:
+            example = f'{prop}=[...]'
+        return [f'a condition uses people.{prop}, which is not a dimension; stratify by it (sim.stratify({example})) to run as compartments']
     if not isinstance(cond, Cond) or cond.op in leaves:
         return []
     out = []
@@ -871,7 +875,7 @@ class Selector:
         ti = min(max(sim.ti - 1, 0), len(res[name]) - 1) # The last time point with results: that of the step before this one
         steps = 1 if over is None else ss.connectors.to_steps(sim, over)
         flows = strata(name)[max(ti - steps + 1, 0):ti + 1].sum(axis=0)
-        people = sum(strata(f'n_{key}')[ti] for key,state in mod.graph.states.items() if state.people)
+        people = sum(strata(key)[ti] for key,state in mod.graph.states.items() if state.people)
         level = np.zeros(len(flows), dtype=int) if by is None else np.maximum(sim.groups.group_levels[:, sim.groups.dim_index(by)], 0)
         num = np.bincount(level, weights=flows)
         den = np.bincount(level, weights=people)

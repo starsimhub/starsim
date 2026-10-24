@@ -44,7 +44,6 @@ reg_fields = ['starts', 'src', 'dst', 'sel', 'sel_starts', 'sel_comps', 'sel_to'
 TAU, RELEASE, RELEASE_END, SHIFT, REGISTER, DELIVER = 1, 2, 4, 8, 16, 32 # What a call does: tau-leaping, release the conveyors' last slots before the draws or after them, move the conveyors along, apply the register's events, or only the deliveries
 leap_bits = 20 # The step's number, shifted by this many bits, plus the substep or leap, counts the calls (for the key of each one's uniforms)
 pieces = ss.kernels.pieces
-compile_seconds = 20 # About how long compiling the handler takes, once per install (23 s measured, with nothing in Numba's cache): see register()
 
 
 def reason(sim):
@@ -690,8 +689,8 @@ def register():
     v = api_version()
     if v not in handlers:
         jx = ss.gradients.jax()
-        if not ss.kernels.compiling and not is_compiled(): # ss.compile() says so itself
-            print(f'Note: compiling the draws of the chain binomial in JAX (about {compile_seconds} s, once per install)')
+        if not is_compiled():
+            ss.perflib.compiling("the chain binomial's draws for JAX", 'Numba', 10, 30) # 14-23 s measured, with nothing in Numba's cache
         name = f'starsim_chain_step_{v[0]}_{v[1]}'
         if name not in registered: # XLA refuses a second handler under a name, so one dropped by check() is reused
             registered[name] = make_handler(*v)

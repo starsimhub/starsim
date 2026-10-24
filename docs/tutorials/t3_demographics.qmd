@@ -104,8 +104,8 @@ data = nigeria_popsize[(nigeria_popsize.year >= 1995) & (nigeria_popsize.year <=
 # Plot the overall population size - simulated vs data
 fig, ax = plt.subplots(1, 1)
 res = sim.results
-ax.scatter(data.year, data.n_alive, alpha=0.5, label='Data')
-ax.plot(sim.t.yearvec, res.n_alive, color='k', label='Model')
+ax.scatter(data.year, data.alive, alpha=0.5, label='Data')
+ax.plot(sim.t.yearvec, res.alive, color='k', label='Model')
 ax.legend()
 ax.set_title('Population')
 plt.show()

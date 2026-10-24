@@ -13,7 +13,8 @@ Starsim 3's SIR, SIS, and SEIR written as code (e.g. `ss.SIS` to `ssl.AgentSIS`;
 their meaning), a `beta` pair on `ss.MFNet` (`beta={'mf': [0.08, 0.04]}`, which was [men to women, women to men]: now
 `ss.peract(m2f=0.08, f2m=0.04)`) or on a mother-to-child network (`[b, 0]`, which is now `b`, since those networks transmit one
 way), `copy_inputs=` (removed: a sim always copies its inputs), `ss.uids.cat()` (now `ss.uids.concatenate()`), `preg.breastfeeding`
-(now `preg.lactation.L`), and `ss.RandomNet(uniform_targets=True)` (now `method='uniform'`). From Starsim 4's prereleases: a test's follow-ups nested in it
+(now `preg.lactation.L`), `ss.RandomNet(uniform_targets=True)` (now `method='uniform'`), and the counts of the states of Starsim's own
+modules (`results.n_alive`, `res.n_infected`, now `results.alive`, `res.infected`). From Starsim 4's prereleases: a test's follow-ups nested in it
 (`ss.screen(test, on_positive=ss.treat(drug))`), which are now steps of their own, added beside it to the interventions (left
 in place, so that the code fails with Starsim 4's own error, when the script can't find where they go); `ss.Test`, now
 `ss.Diagnostic`; the keywords of a delivery (`eligible=`, `years=`, now `where=`, `at=`, only in calls to `ss.screen()`,
@@ -32,6 +33,7 @@ import starsim as ss
 __all__ = ['migrate']
 
 # Names whose rename is mechanical: Starsim 3 spelling (a regular expression) to Starsim 4's
+counted = 'alive|female|susceptible|infected|recovered|exposed|infectious' # The states that Starsim's own modules count (n_alive is now alive)
 renames = [
     (r'\bss\.time_prob\(',         'ss.probperyear(',                'ss.time_prob is ss.probperyear'),
     (r'\bss\.rate_prob\(',         'ss.peryear(',                    'ss.rate_prob is ss.peryear'),
@@ -61,6 +63,8 @@ renames = [
     (r'\bself\.now_entry\b',       'self.t.tvec[self.ti]',           'now_entry (a Starsim 4 prerelease) is the time of the step\'s end, self.t.tvec[self.ti] (self.now is its start)'),
     (r'\bss\.geo\(',              'ss.geo.geography(',              'ss.geo (a Starsim 4 prerelease) is ss.geo.geography'),
     (r'\bss\.(gravity|Mobility)\b', r'ss.geo.\1',                     'ss.gravity and ss.Mobility (a Starsim 4 prerelease) are in ss.geo'),
+    (rf'(\bresults(?:\.\w+)*|\bres\w*)\.n_({counted})\b', r'\1.\2', 'the count of a state is the result named after the state (e.g. results.alive, res.infected)'),
+    (rf'''(['"])(\w+[._])?n_({counted})(['"])''', r'\1\2\3\4', 'the count of a state is the result named after the state (e.g. "alive", "sir.infected")'),
 ]
 
 # Internal helpers that are now only in their submodules, by submodule
@@ -107,7 +111,7 @@ flags = [
     (r'\b(?!(?:np|pd|jnp|torch)\b)\w+\.concat\(', "if this is the concat() of ss.uids, it is concatenate() (x.concatenate(y), or ss.uids.concatenate(x, y))"),
     (r'\bss\.(calibration\.)?(Calibration|CalibComponent|BetaBinomial|Binomial|DirichletMultinomial|GammaPoisson|Normal)\b|\bss\.calibration\b|\b(linear_interp|linear_accum|step_containing)\b', "Starsim 3's calibration was removed: bounds on the parameters (ss.par(v, bounds=[lo, hi])), the data on the sim (ss.Sim(..., data=df)), and sim.calibrate(); a likelihood by series (likelihood=dict(prevalence=ss.normal(scale=s)), or ss.binom, ss.nbinom, ss.poisson), or gof=fn(sim) for a measure of your own"),
     (r'\.plot_compare\(', 'msim.compare(do_plot=True) (with t= and sim_inds= as before)'),
-    (r'\bss\.dynamics_by_age\b', "ss.dynamics_by_age was removed: stratify the sim by age (sim.stratify(age=[0, 20, 40])) and read a result by age group (res.n_I.by('age')), or write an analyzer of your own (see the user guide on analyzers)"),
+    (r'\bss\.dynamics_by_age\b', "ss.dynamics_by_age was removed: stratify the sim by age (sim.stratify(age=[0, 20, 40])) and read a result by age group (res.I.by('age')), or write an analyzer of your own (see the user guide on analyzers)"),
     (r'\b(ppl|people)\.filter\(', "People.filter() and its Filter were removed: use the states as arrays and conditions, e.g. ppl.female.uids, (ppl.female & (ppl.age > 5)).uids, or where=ss.ppl.age < 15"),
     (r'\.to_df\(.*\bdescend\s*=', 'results.to_df() always includes the results of the modules too (as sim.to_df() did), with the times as the column timevec, or as the index with set_date_index=True'),
     (r'\bss\.(Samples|Dataset|samples)\b', 'ss.Samples and ss.Dataset were removed: ss.parallel(sim, n_runs=n) gives the runs (msim.results, msim.to_df()); save their dataframes to keep them'),
@@ -130,6 +134,7 @@ flags = [
     (r'\bmatch_result_keys\b', 'ss.utils.match_result_keys() is gone: res.flatten() gives a flat dict of results'),
     (r'''\bmatch\s*=\s*r?['"][^'"]*\bE\d{3}\b''', 'error codes are gone: catch the error by its class, e.g. pytest.raises(ss.CapabilityError) for what a solver cannot run, or ss.errors.<Name>'),
     (r'\.cum_(?!infections\b)\w+', "if this is the running total of a declared disease's transition (a Starsim 4 prerelease), it is res.<transition>.cum, e.g. res.infection.cum"),
+    (r'\b(results(\.\w+)*|res\w*)\.n_(?!agents\b|contacts\b|edges\b)\w+', "if this is the count of a state (a result made automatically, e.g. Starsim 3's n_infected), it is now named after the state: res.infected; a result the module defines itself keeps its name"),
     (r'''\bmove\s*=\s*['"]''', 'move= takes the states, not a string: move=S >> V (or U + B >> B from either)'),
     (r'\bss\.transfer\(.*\bcoverage\s*=', 'ss.transfer() moves people between levels at a rate (rate=, dur=, or p=); a one-off move of a share of people is a delivery, e.g. ss.Delivery(move=dict(art=True), coverage=0.5, at=[2010], where=...)'),
     (r'\bss\.Treatment\(.*\befficacy\s*=\s*[\d.]', "ss.Treatment's efficacy= is its effects while it is held, as a dict (efficacy=dict(transmission=0.96)): the chance that it cures is cure=, and moving the treated along a transition that is not a recovery (e.g. starting treatment) is moves='diagnosis'"),

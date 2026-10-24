@@ -49,7 +49,7 @@ msim.plot(lines=True)
 Every result of the runs is in `msim.results`, as the same result as for one sim, with a run axis first, so it can be summarized over the runs directly:
 
 ```{python}
-res = msim.results.sir.n_I # One row per run
+res = msim.results.sir.I # One row per run
 low, mid, high = res.quantiles([0.1, 0.5, 0.9]) # Quantiles over the runs
 res.median().plot() # The median, as a result of one run
 print(len(msim), res.shape)
@@ -80,8 +80,8 @@ A result across scenarios can be selected by scenario, e.g. `msim.results.sis.pr
 ```{python}
 sim = ss.Sim(n_agents=2000, diseases=ss.SIR(beta=0.05), networks='random', verbose=0)
 msim = ss.parallel(sim, pars=dict(beta=[0.03, 0.05, 0.08]), n_runs=3)
-print(msim.results.sir.n_I.runs) # The scenario and parameter values of each run
-msim.results.sir.n_I.select(beta=0.08).quantiles().plot()
+print(msim.results.sir.I.runs) # The scenario and parameter values of each run
+msim.results.sir.I.select(beta=0.08).quantiles().plot()
 ```
 
 When there is more than one module, give the parameter with the module's name, e.g. `pars={'sir.beta': [0.03, 0.05]}`.

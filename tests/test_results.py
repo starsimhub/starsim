@@ -43,7 +43,7 @@ def test_export():
     assert len(resampled.values) < len(rs1.new_infections.values)
     assert resampled[0] == rs1.new_infections[:13].sum() # The first year's period includes its end (2001.01.01), as resample() says
     assert resampled.values.sum() == rs1.new_infections.values.sum()
-    assert rs1.n_infected.resample('year')[0] == rs1.n_infected[12] # The end of the first year, 2001.01.01
+    assert rs1.infected.resample('year')[0] == rs1.infected[12] # The end of the first year, 2001.01.01
 
     # Results.resample() resamples all the results in the group
     rs1_annual = rs1.resample('year')
@@ -58,13 +58,13 @@ def test_export():
     dfy1 = rs1.to_df(resample='year')
     dfy2 = rs2.to_df(resample=ss.years(5))
     assert dfs.new_infections.iloc[:13].sum() == dfy1.new_infections.iloc[0] # As above
-    assert rs2.n_susceptible[10] == dfy2.n_susceptible.iloc[0] # Periods from the start, each including its end: entry 10 is 2005.0
+    assert rs2.susceptible[10] == dfy2.susceptible.iloc[0] # Periods from the start, each including its end: entry 10 is 2005.0
     assert rs2.new_infections[:11].sum() == dfy2.new_infections.iloc[0]
 
     # Export whole sim to unified annualized dataframe
     sim_df = sim.to_df(resample='year', use_years=True)
-    assert sim_df.sis1_n_infected.values[0] == rs1.n_infected[12]
-    assert sim_df.sis2_n_infected.values[0] == rs2.n_infected[2] # The end of the first year, as for sis1
+    assert sim_df.sis1_infected.values[0] == rs1.infected[12]
+    assert sim_df.sis2_infected.values[0] == rs2.infected[2] # The end of the first year, as for sis1
 
     # Plot
     res.plot()
@@ -86,38 +86,38 @@ def test_2d_results():
     class BySex(ss.Analyzer):
         def init_results(self):
             super().init_results()
-            self.define_results(ss.Result('n_infected', columns=['female', 'male'], label='Infected'))
+            self.define_results(ss.Result('infected', columns=['female', 'male'], label='Infected', kind='stock'))
 
         def step(self):
             infected = self.sim.diseases.sis.I
             female = self.sim.people.female
-            self.results.n_infected[self.ti] = [np.count_nonzero(infected & female), np.count_nonzero(infected & ~female)]
+            self.results.infected[self.ti] = [np.count_nonzero(infected & female), np.count_nonzero(infected & ~female)]
 
     # And one that stores a result inside a nested Results object
     class Nested(ss.Analyzer):
         def init_results(self):
             super().init_results()
             self.results['nested'] = ss.Results(self)
-            self.results.nested += ss.Result('n_infected', shape=self.t.npts, timevec=self.t.timevec)
+            self.results.nested += ss.Result('infected', shape=self.t.npts, timevec=self.t.timevec, kind='stock')
 
         def step(self):
-            self.results.nested.n_infected[self.ti] = np.count_nonzero(self.sim.diseases.sis.I)
+            self.results.nested.infected[self.ti] = np.count_nonzero(self.sim.diseases.sis.I)
 
     sim = ss.Sim(n_agents=small, pop_scale=10, diseases='sis', networks='random', analyzers=[BySex(), Nested()], start=2000) # Calendar years, resampled by year below
     sim.run()
-    res = sim.results.bysex.n_infected
+    res = sim.results.bysex.infected
     assert res.shape == (sim.t.npts, 2) # One column per sex
-    assert np.array_equal(res.sum(axis=1), sim.results.sis.n_I) # Scaled the same as 1D results
+    assert np.array_equal(res.sum(axis=1), sim.results.sis.I) # Scaled the same as 1D results
     assert np.array_equal(res.male, res[:,1]) and res['male'].label == 'Infected (male)' # Each column is a 1D result
     assert res.resample('year').shape == (len(np.unique(res.timevec.years.astype(int))) - 1, 2) # Resampled along time only: each point after the start closes the year before it
     assert res.to_df().columns.tolist() == ['timevec', 'female', 'male']
-    assert 'bysex_n_infected_male' in sim.to_df().columns # Dataframe columns for each result column
-    assert sim.summary.bysex_n_infected_male == res['male'][-1] # Summarized by column, a stock by its last value
+    assert 'bysex_infected_male' in sim.to_df().columns # Dataframe columns for each result column
+    assert sim.summary.bysex_infected_male == res['male'][-1] # Summarized by column, a stock by its last value
     res.plot()
     sim.plot()
     with pytest.raises(ValueError):
-        ss.Result('n_infected', columns=['low', 'high']) # Column names can't clash with attributes
-    assert np.array_equal(sim.results.nested.nested.n_infected, sim.results.sis.n_I) # Nested results are scaled too
+        ss.Result('infected', columns=['low', 'high']) # Column names can't clash with attributes
+    assert np.array_equal(sim.results.nested.nested.infected, sim.results.sis.I) # Nested results are scaled too
     return sim
 
 
@@ -128,8 +128,8 @@ def test_declared_scale():
     sir = ss.Disease(S >> I @ 0.3 * I, I >> R @ ss.days(10), ever=I + R, share=I / (S + I + R), init=dict(I=0.01), name='sir')
     sim = ss.Sim(sir, unit='day', stop=60, total_pop=10_000, n_agents=medium, solver='abm', verbose=0).run()
     res = sim.results.sir
-    assert np.allclose(res.ever, res.n_I + res.n_R) # Numbers of people, not of agents
-    assert np.allclose(res.share, res.n_I/(res.n_S + res.n_I + res.n_R)) # A ratio is the same either way
+    assert np.allclose(res.ever, res.I + res.R) # Numbers of people, not of agents
+    assert np.allclose(res.share, res.I/(res.S + res.I + res.R)) # A ratio is the same either way
     return sim
 
 
@@ -144,14 +144,14 @@ def test_flow_ratios():
             if strat:
                 sim.stratify(age=[0, 50])
             res = sim.run().results.sir
-            assert np.allclose(res.incidence[1:], res.infection[1:]/res.n_S[1:])
+            assert np.allclose(res.incidence[1:], res.infection[1:]/res.S[1:])
             if strat: # By group: the flow and the stock of the group
                 young = res.incidence.select(age='0-49')[1:]
-                assert np.allclose(young, res.infection.select(age='0-49')[1:]/res.n_S.select(age='0-49')[1:])
+                assert np.allclose(young, res.infection.select(age='0-49')[1:]/res.S.select(age='0-49')[1:])
                 weekly = res.infection.resample('week') # Resampled from the start, by group too
                 assert np.allclose(weekly.select(age='0-49') + weekly.select(age='50+'), weekly) and np.isclose(weekly[1], res.infection[8:15].sum())
-                assert res.n_S.resample('week')[1] == res.n_S[14] # A stock at the end of each week
-                assert np.isclose(res.incidence.resample('week')[1], res.infection[8:15].sum()/res.n_S[8:15].sum()) # A ratio of the sums of its parts
+                assert res.S.resample('week')[1] == res.S[14] # A stock at the end of each week
+                assert np.isclose(res.incidence.resample('week')[1], res.infection[8:15].sum()/res.S[8:15].sum()) # A ratio of the sums of its parts
 
     # A ratio with nobody in its denominator is 0 (nothing divided by anything), not an error
     for solver in ['ode', 'abm']:
@@ -160,49 +160,6 @@ def test_flow_ratios():
         res = ss.Sim(sir, unit='day', stop=10, total_pop=10_000, n_agents=medium, solver=solver, verbose=0).run().results.sir
         assert res.share[0] == 0 and res.share[-1] == 1
 
-    return sim
-
-
-def test_groups_kept(monkeypatch, tmp_path):
-    sc.heading('Testing results kept by group: only those named, and every few steps if every step would take too much memory')
-    S, I, R = ss.states(3)
-    sir = ss.Disease(infection=S >> I @ 0.3 * I, recovery=I >> R @ ss.days(10), share=I / (S + I + R), init=dict(I=0.01), name='sir')
-    make = lambda solver, **kw: ss.Sim(sir, unit='day', stop=91, total_pop=10_000, n_agents=medium, solver=solver, stratify=dict(age=[0, 50]), verbose=0, **kw)
-    res = make('ode', results=['n_I', 'infection']).run().results.sir
-    assert res.n_I.strata is not None and getattr(res.n_S, 'strata', None) is None and res.infection.cum.strata is not None # Only the named results by group (and the cumulative total of a flow kept by group)
-    with pytest.raises(sc.KeyNotFoundError):
-        make('ode', results=['n_J']).init()
-    for solver in ['ode', 'binomial', 'abm']: # A whole run in parts, and a stepped run
-        full = make(solver).run().results.sir
-        monkeypatch.setattr(ss.solvers.Engine, 'group_bytes', 1000) # Too little to keep them by group at every step
-        sim = make(solver).run()
-        monkeypatch.undo()
-        res = sim.results.sir
-        k = res.n_I.group_ti[1] # The steps in each row
-        assert k > 1 and any('kept by group every' in note for note in sim.notes)
-        assert np.allclose(res.n_I, full.n_I) # The totals at every step (as agents, with the same seed)
-        assert np.isclose(res.infection.select(age='0-49')[2], full.infection.select(age='0-49')[k+1:2*k+1].sum()) # A flow by group: its total over the steps of a row
-        assert np.isclose(res.n_I.select(age='50+')[2], full.n_I.select(age='50+')[2*k]) # A state by group: at the end of a row
-        assert np.isclose(res.share.select(age='0-49')[-1], full.share.select(age='0-49')[-1]) # A ratio by group: of its parts at the end
-        assert np.allclose(res.infection.resample(ss.days(2*k)).select(age='0-49'), full.infection.resample(ss.days(2*k)).select(age='0-49'))
-
-    # Data by group, even from a file, keeps them by group at every step, since it is compared with each one
-    sc.dataframe(t=[30.0, 60.0], **{'n_I[age=0-49]': [10.0, 20.0]}).to_csv(tmp_path/'data.csv', index=False)
-    monkeypatch.setattr(ss.solvers.Engine, 'group_bytes', 1000)
-    assert make('ode', data=tmp_path/'data.csv').run().results.sir.n_I.group_ti is None
-    monkeypatch.undo()
-
-    # Many runs: a ratio by group is the ratio of its parts in each run, as in one sim (before: the numerator, or an error)
-    for solver in ['binomial', 'abm']:
-        msim = make(solver).run(n_runs=3)
-        share = msim.results.sir.share.select(age='0-49')
-        assert np.isclose(share.values[-1, -1], msim.sims[-1].results.sir.share.select(age='0-49')[-1]) and share.values.max() <= 1 # The last run's sim
-
-    # Many runs: by group every few steps too, if all of them would take too much memory
-    monkeypatch.setattr(ss.solvers.Compartmental, 'max_bytes', 1000)
-    n_I = make('binomial').run(n_runs=3).results.sir.n_I
-    young, old = n_I.select(age='0-49').values, n_I.select(age='50+').values
-    assert young.shape == (3, len(n_I.group_ti)) and np.allclose(young + old, n_I.values[:, n_I.group_ti])
     return sim
 
 
@@ -222,10 +179,10 @@ def test_result_exprs():
         for sir in [SIR(n_kw=SIR.I + SIR.R, init=dict(I=0.01), name='sir'), plain]: # A result passed to an instance can use the class's states
             res = ss.Sim(sir, unit='day', stop=30, total_pop=10_000, n_agents=medium, solver=solver, verbose=0).run().results.sir
             if 'prev' in res:
-                assert np.allclose(res.prev, res.n_I/(res.n_S + res.n_I + res.n_R)) and np.allclose(res.n_ever, res.n_I + res.n_R)
+                assert np.allclose(res.prev, res.I/(res.S + res.I + res.R)) and np.allclose(res.n_ever, res.I + res.R)
                 assert np.allclose(res.n_kw, res.n_ever) # Scaled, as the instance's states are
             else:
-                assert np.allclose(res.n_ir, res.n_I + res.n_R)
+                assert np.allclose(res.n_ir, res.I + res.R)
     return res
 
 
@@ -237,7 +194,7 @@ def test_standard_prevalence():
         res = ss.Sim(sis, solver=solver, total_pop=10_000, n_agents=10_000, start=2000, stop=2010, verbose=0).run().results.sis
         high, low = res.prevalence.select(risk='high'), res.prevalence.select(risk='low')
         assert high[-1] > 2*low[-1] > 0, f'{solver}: {high[-1]:.3f} against {low[-1]:.3f}'
-        assert np.allclose(res.n_I.select(risk='high')/(res.n_S.select(risk='high') + res.n_I.select(risk='high')), high)
+        assert np.allclose(res.I.select(risk='high')/(res.S.select(risk='high') + res.I.select(risk='high')), high)
         assert np.allclose(0.8*low + 0.2*high, res.prevalence, rtol=0.05) # The groups keep their shares of people, about
     return res
 
@@ -250,7 +207,7 @@ def test_time_points():
     S, I = ss.states('S I')
     dis = ss.Disease(infection=ss.Transition(S, I, rate=0.0 * I), init_n=dict(I=1), kill=kill, name='dis')
     res = ss.Sim(dis, people=ss.People(1000), unit='day', stop=4, verbose=0).run().results
-    assert np.array_equal(res.n_alive, [1000, 998, 996, 994, 992])
+    assert np.array_equal(res.alive, [1000, 998, 996, 994, 992])
     assert np.array_equal(res.new_deaths, [0, 2, 2, 2, 2])
 
     # Weekly data is matched to the total of a flow over each week, whatever the rounding of the sim's times, and whatever the flow is called
@@ -292,7 +249,7 @@ def test_destinations():
         assert C is res['course.C'] and np.array_equal(total.select(to='C'), C) and np.allclose(total.select(to=['C', 'R']), total) # select(to=) is a second spelling
         assert abs(res.cases.sum() - 0.5*C.sum()) <= 3*np.sqrt(0.25*C.sum()) # A destination is a source of an outcome (drawn, except under the ODE)
     with pytest.raises(ValueError):
-        res.n_P.select(to='C') # Not a transition with several destinations
+        res.P.select(to='C') # Not a transition with several destinations
 
     # A data column named for a destination is matched to it, and fitted
     truth = cohort('ode').run().results.dis.course.C
@@ -319,7 +276,22 @@ def test_compare_data():
     return compared
 
 
-# %% Run as a script
+@sc.timer()
+def test_plot():
+    sc.heading('Testing what a module plots')
+    S, I, R = ss.states(3)
+    sim = ss.Sim(S >> I @ 0.3*I, I >> R @ 0.1, verbose=0).run()
+    lines = lambda fig: [[line.get_label() for line in ax.get_lines()] for ax in fig.axes]
+    assert lines(sim.sir.plot()) == [['S', 'I', 'R']] # The states, together
+    assert [len(ax.get_lines()) for ax in sim.sir.plot('flows').axes] == [1, 1] # Each flow, apart
+    assert len(sim.sir.plot('all').axes) == 5
+    assert lines(sim.sir.plot(['S', 'I'])) == [['S', 'I']]
+    assert len(sim.sir.plot('S', 'I').axes) == 2
+    assert len(sim.plot().axes) == 5 # The number alive and the deaths of a closed population are left out
+    plt.close('all')
+    return sim
+
+
 if __name__ == '__main__':
     do_plot = True
     sc.options(interactive=do_plot)
@@ -337,6 +309,7 @@ if __name__ == '__main__':
     res7 = test_result_exprs()
     res8 = test_standard_prevalence()
     res9 = test_compare_data()
+    sim10 = test_plot()
 
     sc.toc(T)
     plt.show()

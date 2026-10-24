@@ -297,7 +297,7 @@ class Strains:
         transmit (str): what a carrier of several strains passes on: 'one' (the default: one strain per transmission, chosen in proportion to the strains' rel_trans, at the infectiousness of the most infectious), or 'each' (each strain at its own rate)
         split (list/dict): the share of each strain among the people infected at the start (default: equal); or, by label, the share of each strain or set of strains carried together, e.g. `split={'DS': 0.5, 'DS+INH': 0.5}`
         cross_immunity (dict/array): Covasim's cross-immunity, `M[challenge][source]` (a dict of dicts by name, as `covasim.parameters.get_cross_immunity()`, or a matrix): protection against infection by the last strain had
-        name (str): the name of the strain dimension, for results (`res.n_I.by('strain')`) and conditions (default 'strain')
+        name (str): the name of the strain dimension, for results (`res.I.by('strain')`) and conditions (default 'strain')
         values (dict): values for each strain by parameter, e.g. `rel_trans=[1, 0.575], cure=[1, 1/3]`
 
     Examples:
@@ -997,7 +997,7 @@ class Family(ss.Module):
     a `CapabilityError`.
 
     Results: for each state or named sum of states that every member has (a stock), the number in it in
-    any member (`n_I`, `infected`); for each transition every member has (a flow), the sum (`cancer`).
+    any member (`I`, `infected`); for each transition every member has (a flow), the sum (`cancer`).
     `res.by('<strain dimension>')` gives each member's own.
     """
     compartmental = False
@@ -1048,6 +1048,7 @@ class Family(ss.Module):
         self.exclusive = [] if strains.shared is False else list(strains.shared) # The states shared by the strains
         if init_prev is not None:
             for mod in members:
+                mod.graph.unset_default_init_prev() # The family seeds them instead
                 own = [key for key,given in dict(init_prev=mod.graph.init_prev is not None, init=any(s.given_init for s in mod.graph.states.values())).items() if given]
                 if own:
                     errormsg = f'"{name}" seeds its strains (init_prev=), but its strain "{mod.name}" has {sc.strjoin(own)} of its own as well; give one or the other'
@@ -1056,7 +1057,7 @@ class Family(ss.Module):
         self.stocks = sc.objdict() # The results that are unions: for each name, the states of each member that make it up
         for key in self.common(members, 'states'):
             if all(mod.graph.states[key].people for mod in members):
-                self.stocks[f'n_{key}'] = [[key] for mod in members]
+                self.stocks[key] = [[key] for mod in members]
         for key in self.common(members, 'exprs'):
             parts = [self.states_of(mod, key) for mod in members]
             if all(parts):
@@ -1107,16 +1108,14 @@ class Family(ss.Module):
     def __getattr__(self, attr):
         """ A state or named sum of states that every member has is a condition: the people in it in any member, e.g. `where=hpv.infected` """
         stocks = self.__dict__.get('stocks')
-        if stocks and not attr.startswith('_'):
-            key = attr if attr in stocks else f'n_{attr}' if f'n_{attr}' in stocks else None
-            if key is not None:
-                parts = []
-                for name,states in zip(self.member_names, stocks[key]):
-                    cond = ss.conditions.Cond('state', name, states[0])
-                    for state in states[1:]:
-                        cond = cond | ss.conditions.Cond('state', name, state)
-                    parts.append(cond)
-                return Union(parts)
+        if stocks and not attr.startswith('_') and attr in stocks:
+            parts = []
+            for name,states in zip(self.member_names, stocks[attr]):
+                cond = ss.conditions.Cond('state', name, states[0])
+                for state in states[1:]:
+                    cond = cond | ss.conditions.Cond('state', name, state)
+                parts.append(cond)
+            return Union(parts)
         return super().__getattr__(attr)
 
     def expand(self):
@@ -1418,7 +1417,7 @@ class Family(ss.Module):
         """ A member's own value of one of the family's results: a stock that is a sum of states (counting each person once), or a flow """
         if key in mod.results:
             return mod.results[key].values
-        return self.results[key].values*0 # Not kept by the member (e.g. n_X of a state it has no result for)
+        return self.results[key].values*0 # Not kept by the member (e.g. X of a state it has no result for)
 
     def not_naive(self):
         return ss.uids() # Its members say who is naive (see ss.Sim.rescale())
@@ -1458,8 +1457,9 @@ class Family(ss.Module):
         if self.exclusive:
             to = sc.strjoin(sorted(set(self.blocked))) if self.blocked is not None else 'the state with no exits'
             lines.append(f'  shared: entering {sc.strjoin(self.exclusive)} in one strain moves the person to {to} in the others')
-        stocks = [f'{key} (union of the members\' {key})' for key in self.stocks if not key.startswith('n_')]
-        lines.append(f'  results: {", ".join(stocks + [f"n_{key[2:]}" for key in self.stocks if key.startswith("n_")])} as unions; {", ".join(self.flows) or "no flows"} as sums; res.by("{self.dim}") for each strain')
+        states = self.members[0].graph.states
+        stocks = [f'{key} (union of the members\' {key})' for key in self.stocks if key not in states]
+        lines.append(f'  results: {", ".join(stocks + [key for key in self.stocks if key in states])} as unions; {", ".join(self.flows) or "no flows"} as sums; res.by("{self.dim}") for each strain')
         if any(self.attr_of(self.members[0], imm.names) is not None for imm in self.immunity):
             lines.append('  compartmental solvers: none (protection from an attribute is kept per agent)')
         else:

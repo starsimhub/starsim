@@ -1244,9 +1244,9 @@ class Agents(Engine):
         """ The number in each state by the level of a derived attribute; or, given some agents (who died), with them taken out """
         ng = self.sim.groups.n_groups
         for key,strat in self.derived_res.items():
-            if not key.startswith('n_') or key[2:] not in self.graph.states:
+            if key not in self.graph.states:
                 continue
-            state = self.graph.states[key[2:]]
+            state = self.graph.states[key]
             inds = self.members(state) if uids is None else uids[self.mod[state.name].raw[uids]]
             groups = self.groups(inds, state) if ng > 1 else 0
             counts = np.bincount(self.derived_groups(strat, groups, self.derived_level(strat, inds)), minlength=ng*strat.n) if len(inds) else 0.0

@@ -62,7 +62,7 @@ def test_atomica_import(demo):
     sim = load(demo).run()
     year, ref = ref_demos[demo][3:]
     for comp,val in ref.items():
-        v4 = at_year(sim, f'n_{comp}', year)
+        v4 = at_year(sim, comp, year)
         assert np.isclose(v4, val, rtol=1e-6), f'{demo}: {comp} in {year} is {v4:n} in v4 against {val:n} in Atomica'
 
 
@@ -85,7 +85,7 @@ def test_atomica_optimize():
     sc.heading('Testing optimizing the HIV demo budget over its seven programs')
     sim = load('hiv_dyn', progbook=True, programs_start=2020) # As Atomica's at_optim.py gives ProgramInstructions(start_year=2020)
     base = sim.new().run()
-    assert np.isclose(at_year(base, 'n_vs', 2030), ref_vs_baseline, rtol=1e-6), 'The programs at current spending should give Atomica\'s baseline'
+    assert np.isclose(at_year(base, 'vs', 2030), ref_vs_baseline, rtol=1e-6), 'The programs at current spending should give Atomica\'s baseline'
     total = sum(ref_alloc.values())
     best = ss.fit.optimize(sim, total=total, start=2020, maximize='all_vs', at=2030)
     assert set(best.alloc) == set(ref_alloc) and np.isclose(sum(best.alloc.values()), total), 'The allocation should cover every program and spend the total'

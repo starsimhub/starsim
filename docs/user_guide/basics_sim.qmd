@@ -54,7 +54,7 @@ sim.describe()
 ```{python}
 for solver in ['ode', 'binomial', 'gillespie', 'abm']:
     s = sim.new(solver=solver, verbose=0).run()
-    print(f'{solver:10s} peak infected: {s.results.sir.n_I.max():,.0f}')
+    print(f'{solver:10s} peak infected: {s.results.sir.I.max():,.0f}')
 ```
 
 The stochastic solvers (`'binomial'`, `'gillespie'`, and `'abm'`) give a different answer on each run, close to the ODE's. `sim.new()` is also the way to change a parameter or the random seed, e.g. `sim.new(pars=dict(beta=0.2))` or `sim.new(rand_seed=2)`.

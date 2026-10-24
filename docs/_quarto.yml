@@ -289,29 +289,30 @@ quartodoc:
         # One page per library subpackage; contents are picked up automatically from each
         # subpackage's __init__.py, so adding a class to the library does not need any
         # docs changes. include_imports is required since these are imported, not defined,
-        # in the __init__.py that is being documented.
+        # in the __init__.py that is being documented. Keep package as starsim (not
+        # starsim.library): otherwise quartodoc reparses all of starsim for every alias.
         - kind: page
           path: library.diseases
-          package: starsim.library
+          package: starsim
           contents:
             - kind: auto
-              name: diseases
+              name: library.diseases
               include_imports: true
               children: embedded
         - kind: page
           path: library.mnch
-          package: starsim.library
+          package: starsim
           contents:
             - kind: auto
-              name: mnch
+              name: library.mnch
               include_imports: true
               children: embedded
         - kind: page
           path: library.networks
-          package: starsim.library
+          package: starsim
           contents:
             - kind: auto
-              name: networks
+              name: library.networks
               include_imports: true
               children: embedded
 
@@ -329,6 +330,7 @@ format:
 
 filters:
   - interlinks
+  - assets/authorship.lua
 
 interlinks:
   fast: false

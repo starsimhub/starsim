@@ -187,6 +187,7 @@ class Function(Base):
             if gens:
                 func = rewrite_gens(func, gens)
             self.numba = make_dispatcher(func, self.cache)
+            self.numba.ss_compiling = (f'{self.py_func.__qualname__}()', 1, 10) # Said by _cache.Compiling
         return self.numba
 
     def call_numba(self, args, kwargs):
@@ -202,6 +203,7 @@ class Function(Base):
         jax = ss.gradients.jax()
         if self.jax_func is None:
             self.jax_func = jax.jit(with_jnp(self.py_func))
+            _cache.compiling(f'{self.py_func.__qualname__}()', 'JAX', 0.2, 5)
         try:
             return self.jax_func(*args, **kwargs)
         except (TypeError, IndexError) as e: # What JAX raises for what it can't trace (e.g. ConcretizationTypeError, NonConcreteBooleanIndexError)
@@ -1139,6 +1141,7 @@ class Variant:
         extra = ''.join(f'\n# {v.source}' for v in callees.values()).replace('\n', '\n# ') # A change to a method it calls makes a new file
         ns = namespace(method.src) | helpers() | {k:v.func for k,v in callees.items()}
         self.func = compile_source(self.source + extra, fdef.name, ns, inspect.getsourcefile(method.src), method.cache)
+        self.func.ss_compiling = (f'{method.src.__qualname__}()', 1, 10) # Said by _cache.Compiling
         self.compiled = set()
         return
 

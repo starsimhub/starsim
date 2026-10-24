@@ -582,7 +582,7 @@ class Pregnancy(ss.Demographics, ss.Disease):
         res.preterm_rate[:] = sc.safedivide(res.n_preterm[:], res.birth[:], default=0)
         inds = self.match_time_inds()
         units = self.pars.rate_units*self.t.dt_year
-        res.cbr[:] = sc.safedivide(res.birth[:], self.sim.results.n_alive[inds], default=0)/units if 'n_alive' in self.sim.results else 0
+        res.cbr[:] = sc.safedivide(res.birth[:], self.sim.results.alive[inds], default=0)/units if 'alive' in self.sim.results else 0
         tdim = min(int(1/self.t.dt_year), self.t.npts) # The ASFR as rolling annual sums, as in Starsim 3
         cs = np.cumsum(self.asfr, axis=1)
         asfr = np.zeros_like(self.asfr)

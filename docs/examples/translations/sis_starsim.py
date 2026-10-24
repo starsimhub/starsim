@@ -27,7 +27,7 @@ T.toc(f'Time for SIS-Starsim, n_agents={pars.n_agents}, dur={pars.dur}')
 
 # Tests
 def test_inf(sim):
-    n_inf = sim.results.sis.n_I
+    n_inf = sim.results.sis.I
     inf0 = n_inf[0]
     infm = n_inf.max()
     inf1 = n_inf[-1]
@@ -48,8 +48,8 @@ n_inf = test_inf(sim)
 # Plot
 do_plot = True
 if do_plot:
-    n_sus = sim.results.sis.n_S
-    n_inf = sim.results.sis.n_I
+    n_sus = sim.results.sis.S
+    n_inf = sim.results.sis.I
     plt.figure('SIS-Starsim')
     plt.plot(n_sus)
     plt.plot(n_inf)
