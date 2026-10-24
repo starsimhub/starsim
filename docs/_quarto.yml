@@ -330,6 +330,7 @@ format:
 
 filters:
   - interlinks
+  - assets/authorship.lua
 
 interlinks:
   fast: false

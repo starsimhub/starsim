@@ -1,16 +1,21 @@
 ---
 title: T2 - Building your model
 jupyter: python3
+authorship:
+  human: 80
+  ai: 20
+  note: Humans wrote the original; AI updated it with additional examples
 ---
 
-
-The purpose of this tutorial is to introduce you to the idea of _model components_. In brief, these are: people, demographics, networks, diseases, interventions, analyzers, and connectors. Within Starsim, these are the ingredients of a model. On a more basic level, you can think of these as the ingredients of an epidemic. Because Starsim is intended to be very modular, you can build up all these things independently and then piece them together to make a model. Or, if that's too complex for your needs, there are also shortcuts you can take to make life simpler!
+The purpose of this tutorial is to introduce you to the idea of _model components_. In brief, these are: people, demographics, networks, diseases, interventions, analyzers, and connectors. Within Starsim, these are the ingredients of a model. On a more basic level, you can think of these as the ingredients of an epidemic. Because Starsim is intended to be very modular, you can build up all these things independently and then piece them together to make a model. Or, if that's too complex for your needs, there are also shortcuts you can take to make life simpler.
 
 In this tutorial we'll focus on people, demographics, networks, diseases. The remaining components (interventions, analyzers, and connectors) will be covered later.
 
 ```{python}
 #| tags: [hide-cell]
 %pip install -q starsim # Install Starsim if required
+import starsim as ss
+ss.options(jupyter=True)
 ```
 
 ## Simple SIR model
@@ -20,7 +25,6 @@ Let's revisit the agent-based SIR model from Tutorial 1:
 ```{python}
 #| jupyter: {outputs_hidden: false}
 import starsim as ss
-ss.options(jupyter=True)
 
 # Define the parameters
 pars = dict(
@@ -42,7 +46,7 @@ sim.run()
 sim.plot()
 ```
 
-Now let's look at the `pars` dictionary in more detail. The one we've created here has 3 things in it: the number of agents (`n_agents`), detail on how the agents interact with each other (`networks`) and detail on what disease we're modeling (`diseases`). When we create and run the model, what happens 'under the hood' is that the simulation creates 5,000 people, and allows them to the interact with one another over the network and transmit the infection.
+Now let's look at the `pars` dictionary in more detail. The one we've created here has three things in it: the number of agents (`n_agents`), detail on how the agents interact with each other (`networks`) and detail on what disease we're modeling (`diseases`). When we create and run the model, what happens 'under the hood' is that the simulation creates 5,000 people, and allows them to the interact with one another over the network and transmit the infection.
 
 ## Simple SIR model built with components
 The example above is a nice simple way to get started, but you might want to have more control over the networks, diseases, and people that you're creating. Here's another version of the exact same model, but written slightly differently:
@@ -73,7 +77,7 @@ sir = ss.Disease(infection, recovery, init_prev=0.01)
 sim = ss.Sim(sir, people=people, networks=network, start='2020-01-01', stop='2020-07-01')
 ```
 
-Before running a model, it is worth checking that Starsim has understood it the way you meant. `describe()` prints the model as Starsim has read it, with everything it had to guess (here, for example, that the recovery time is exponentially distributed) marked as a guess:
+Before running a model, it is worth checking that Starsim has understood it the way you meant. `describe()` prints the model as Starsim has read it, with everything it had to guess (here, for example, that the recovery time is exponentially distributed, and that `*I` is shorthand for `*S*I/N`) marked as a guess:
 
 ```{python}
 sim.describe()
@@ -98,7 +102,7 @@ sim.describe()
 
 for solver in ['ode', 'binomial', 'gillespie', 'abm']:
     s = sim.new(solver=solver).run()
-    print(f'{solver:10s} peak infected: {s.results.sir.n_I.max():,.0f}')
+    print(f'Using {solver}, peak infected: {s.results.sir.I.max():n}')
 ```
 
 The stochastic solvers give a slightly different answer on each run, close to the ODE's.
@@ -115,17 +119,17 @@ network = ss.RandomNet(n_contacts=dict(type='poisson', lam=4))
 If we use this network, our agents will have varying numbers of contacts.
 
 ## Accessing results
-Once you've run a model, you will want to see what the results look like! We've seen a few basic plotting commands above, but if you want to inspect the results for yourself, you can take a look in `sim.results`. This is a dictionary with keys corresponding to core components of interest. For example, once we run the sim from the solver comparison above, its results will have a `sir` key, and `sim.results.sir` is also a dictionary that contains all the results relating to this disease over time. Every state has a count (`n_S`, `n_I`, `n_R`), and every transition has a flow: `infection` is the number of new infections in each step, and `infection.cum` its running total:
+Once you've run a model, you probably want to see what the results look like! We've introduced a few basic plotting commands above, but if you want to inspect the results for yourself, you can take a look in `sim.results`. This is a dictionary with keys corresponding to core components of interest. For example, once we run the sim from the solver comparison above, its results will have a `sir` key, and `sim.results.sir` is also a dictionary that contains all the results relating to this disease over time (note: `sim.results['sir']` also works). Every state has a count (`S`, `I`, `R`), and every transition has a flow: `infection` is the number of new infections in each step, and `infection.cum` its running total:
 
 ```{python}
 sim.run()
 res = sim.results.sir
 print(res.keys())
-print(f'Peak infected: {res.n_I.max():,.0f}; total infections: {res.infection.cum[-1]:,.0f}')
+print(f'Peak infected: {res.I.max():,.0f}; total infections: {res.infection.cum[-1]:,.0f}')
 ```
 
 ## Matters of time
-If no times are given, Starsim models run for 50 steps of one year each. All of this can be easily changed by passing other values to the sim: `start` and `stop` (as dates, e.g. `'2020-01-01'`, or years), and the timestep `dt` (with a unit, e.g. `ss.months(1)`):
+If no times are given, Starsim models run for 50 (unitless) steps). All of this can be easily changed by passing other values to the sim: `start` and `stop` (as dates, e.g. `'2020-01-01'`, or years), and the timestep `dt` (with a unit, e.g. `ss.months(1)`):
 
 ```{python}
 #| jupyter: {outputs_hidden: false}
@@ -167,5 +171,5 @@ You've now seen how to create models using the "sim" class (`ss.Sim`), either by
 ## Exercises
 
 1. How would you model an outbreak of an SIR-like disease within a refugee camp of 2,000 people? Suppose you were interested in the cumulative number of people who got infected over 1 year - how would you find this out?
-2. Whether an epidemic 'takes off' depends to a large extent on the [basic reproduction number](https://en.wikipedia.org/wiki/Basic_reproduction_number), which is the expected number of cases that an infected individual generates. In an agent based model like the one we've created here, that depends largely on three things: `beta` (the transmissibility parameter for the disease), `n_contacts` (the number of contacts each person has), and `dur_inf` (another disease-related parameter that determines the duration of infection). Experiment with different values for each of these and compare the trajectory of `sim.results.sir.n_I` with different parameter values.
+2. Whether an epidemic 'takes off' depends to a large extent on the [basic reproduction number](https://en.wikipedia.org/wiki/Basic_reproduction_number), which is the expected number of cases that an infected individual generates. In an agent based model like the one we've created here, that depends largely on three things: `beta` (the transmissibility parameter for the disease), `n_contacts` (the number of contacts each person has), and `dur_inf` (another disease-related parameter that determines the duration of infection). Experiment with different values for each of these and compare the trajectory of `sim.results.sir.I` with different parameter values.
 
