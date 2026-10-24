@@ -113,24 +113,6 @@ class Coded(ssl.AgentSEIR):
 
 # %% Define the tests
 
-def test_function():
-    sc.heading('Testing a function compiled by Numba, with the same results')
-    x = np.random.default_rng(1).normal(size=10_000)
-    assert ss.jit(longest_run)(x) == longest_run(x)
-    assert np.isclose(ss.jit(score)(x), score(x), rtol=1e-13) # The same up to the order of the sum (NumPy's is pairwise)
-    n = np.array([0, 10, 1000, 100_000]*5)
-    p = np.linspace(0, 1, 20)
-    lam = np.array([0, 0.5, 5, 20, 1000.]*4) # Poisson means of 10 or more are drawn as NumPy does, not as Numba does
-    out = ss.jit(draws)(n, p, lam, np.random.default_rng(2))
-    assert np.array_equal(out, draws(n, p, lam, np.random.default_rng(2)))
-
-    @ss.jit
-    def uncompilable(x):
-        return sc.findinds(x > 0) # Numba can't call Sciris
-    assert np.array_equal(uncompilable(x), sc.findinds(x > 0)) # Runs as Python, with the same result
-    assert uncompilable.failed and uncompilable.said == {None}
-    return
-
 
 def test_jax():
     sc.heading('Testing a function traced by JAX, and its gradient')
@@ -203,10 +185,8 @@ def test_fast_draws():
     return
 
 
-# %% Run as a script
 if __name__ == '__main__':
     T = sc.timer()
-    test_function()
     test_jax()
     test_method()
     test_class()

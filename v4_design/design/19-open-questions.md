@@ -74,7 +74,7 @@ Sources: the open-questions sections of the documents in [best-practices](../bes
 | Is `ss.outcome` needed? | Yes: the flepiMoP and Ghana measles vignettes report cases as outcomes, and flepiMoP's chains them (hospitalizations with a delay and a duration, and deaths from hospitalizations), which states could replace only by changing the model | [09](09-results.md#ssoutcome) |
 | A likelihood on a result that is not an outcome | No wrapping is needed: `sim.calibrate(likelihood=dict(prevalence=...))` gives one by the name of the data series | [13](13-inference.md) |
 | Agents in places with coupling between places (LASER) | A stratification by place with `ss.geo.Mobility(kind='force')`, which moves the force of infection between places rather than people; checked on LASER's England and Wales model | [06](06-routes.md) |
-| Tolerance for agreement between solvers | Stated per test, with the population and number of runs (`tests/test_contracts.py`) | [18](18-conformance.md) |
+| Tolerance for agreement between solvers | Stated per test, with the population and number of runs (`tests/devtests/test_contracts.py`) | [18](18-conformance.md) |
 | A probability per period in the model spec | Kept as written (`prob(0.1, 'day')`): rates are strings in the spec | [14](14-model-spec.md) |
 | Loading a spec that contains functions | Moot: the spec is not read back; a model is saved as code | [14](14-model-spec.md) |
 | Arithmetic across the time types | Written down once, as a table ([02](02-types.md#arithmetic)): `number / dur` is a rate and `number / rate` a duration, adding probabilities combines their rates, and meaningless arithmetic raises `ss.errors.IncompatibleTypes` | [02](02-types.md#arithmetic) |

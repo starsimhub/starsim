@@ -16,7 +16,7 @@ So `ss.Sim`, `ss.MultiSim`, `ss.Disease`, `ss.RandomNet`, `ss.MixingPool`, and `
 
 ## The names
 
-The names below are checked against the code: each one is exported by `starsim`, each method exists, and the counts in the headings and in [the total](#the-total) are made from one list in `tests/test_spec.py`, which a test compares with this page. To update the counts after changing the list, run `check_vocabulary(write=True)` from that file. `ss.` also exports names that are not counted: the classes and helpers for writing modules as code (the second tier, listed in `tests/test_spec.py`), and the base classes of the errors (`ss.CodedError`, `ss.StarsimWarning`, `ss.Note`), `ss.note`, and `ss.CapabilityError`. The other errors, warnings, and notes are in `ss.errors` (`ss.errors.UnknownState`), the testing and profiling tools in `ss.debugtools`, and everything else in its own submodule (`ss.solvers.Compartmental`, `ss.transitions.Expr`).
+The names below are checked against the code: each one is exported by `starsim`, each method exists, and the counts in the headings and in [the total](#the-total) are made from one list in `tests/devtests/test_spec.py`, which a test compares with this page. To update the counts after changing the list, run `check_vocabulary(write=True)` from that file. `ss.` also exports names that are not counted: the classes and helpers for writing modules as code (the second tier, listed in `tests/devtests/test_spec.py`), and the base classes of the errors (`ss.CodedError`, `ss.StarsimWarning`, `ss.Note`), `ss.note`, and `ss.CapabilityError`. The other errors, warnings, and notes are in `ss.errors` (`ss.errors.UnknownState`), the testing and profiling tools in `ss.debugtools`, and everything else in its own submodule (`ss.solvers.Compartmental`, `ss.transitions.Expr`).
 
 ### Sim and modules: 12
 
@@ -310,7 +310,7 @@ There is no fixed budget. Before adding a name, check:
 - **Does it make some real model shorter than it is in its original framework?** That is the test the whole design is held to.
 - **Is a keyword enough?** Routine and campaign delivery are keywords on one function, not two classes.
 
-When a name is added or removed, update the list in `tests/test_spec.py` and this document; `check_vocabulary(write=True)` there rewrites the counts, and `test_vocabulary` fails until both agree with the code.
+When a name is added or removed, update the list in `tests/devtests/test_spec.py` and this document; `check_vocabulary(write=True)` there rewrites the counts, and `test_vocabulary` fails until both agree with the code.
 
 ## Not in the language
 

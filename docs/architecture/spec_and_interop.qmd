@@ -81,7 +81,7 @@ There are three levels:
 | Warning | `ss.StarsimWarning` | issued through Python's warnings, so filters (and `ss.options.warnings='error'`) apply; the run continues |
 | Note | `ss.Note` | kept in `sim.notes` whatever the verbosity, and printed as one line when `verbose` is 1 or more |
 
-Each named message is a class in `ss.errors` (67 of them: 50 errors, 7 warnings, and 10 notes), with a docstring that says when it is raised. The catalog in the design record is generated from those docstrings by `ss.errors.catalog()`, and `tests/test_spec.py` checks that the two match, so the documentation can't fall behind the code.
+Each named message is a class in `ss.errors` (67 of them: 50 errors, 7 warnings, and 10 notes), with a docstring that says when it is raised. The catalog in the design record is generated from those docstrings by `ss.errors.catalog()`, and `tests/devtests/test_spec.py` checks that the two match, so the documentation can't fall behind the code.
 
 ## Importers and exporters
 
@@ -113,11 +113,11 @@ print(ss.interop.export(sim, 'odin'))
 
 An importer keeps the source's names, marks what it guessed (as `[guessed]` in `describe()`, like a hand-written model), keeps going when something doesn't map onto a built-in piece, and lists what it couldn't translate by name (`ss.errors.ImportIncomplete`, also in `sim.imported.incomplete`). An incomplete import still runs, without the listed parts, and the warning says how to finish it with the `import-model` skill. Exporters work the same way in reverse: SBML and odin are written from the model's compartmental form, and each export lists what it left out or changed (`LossyExport`), one line per declaration. `ss.interop.to_hub()` writes the runs of a MultiSim as a forecast-hub submission.
 
-Each importer is tested against its framework's own examples (`tests/interop/`) and in a scaled-down demo per framework (`tests/switching/`). The [Coming from](../coming_from/index.qmd) pages show the translations side by side.
+Each importer is tested against its framework's own examples (`tests/devtests/interop/`) and in a scaled-down demo per framework (`tests/switching/`). The [Coming from](../coming_from/index.qmd) pages show the translations side by side.
 
 ## The vocabulary
 
-A language nobody can hold in their head is one nobody uses correctly, so Starsim's is counted: the design record lists every public name (109 at `ss.`, plus 56 methods and attributes), marking those Starsim 4 adds. `tests/test_spec.py` checks that each exists, that everything exported at `ss.` is counted or in a named second tier (the classes for writing modules as code), and that the counts match.
+A language nobody can hold in their head is one nobody uses correctly, so Starsim's is counted: the design record lists every public name (109 at `ss.`, plus 56 methods and attributes), marking those Starsim 4 adds. `tests/devtests/test_spec.py` checks that each exists, that everything exported at `ss.` is counted or in a named second tier (the classes for writing modules as code), and that the counts match.
 
 The capitalization rule is Starsim's existing one: modules, containers, and base classes are CamelCase (`ss.Sim`, `ss.Disease`, `ss.Vaccine`); the pieces you put inside them are lowercase (`ss.days`, `ss.normal`, `ss.modify`, `ss.vaccinate`). Before a name is added: does Starsim already have one; can it be written with what exists (a bednet is an `ss.modify`, a metapopulation a stratification by patch); would more than one kind of model use it; is a keyword enough?
 

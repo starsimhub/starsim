@@ -489,6 +489,7 @@ class Run:
 def compile_run(run, kind):
     """ A run compiled for one use: 'run' for one, 'many' for a batch, 'jvp' for its derivative along a batch of directions """
     jx = jax()
+    ss.perflib.compiling(dict(run='the run', many='the runs', jvp='the gradient')[kind], 'JAX', 0.2, 5)
     if kind == 'run':
         return jx.jit(run)
     elif kind == 'many':
@@ -1328,18 +1329,21 @@ class LogDensity:
             self._states = jx.jit(self.density.states)
         return
 
+    def apply(self, func, x):
+        """ One of the compiled functions, at some values (compiled the first time) """
+        ss.perflib.compiling('the log-density', 'JAX', 0.5, 5)
+        with jax().enable_x64(True):
+            return func(jax().numpy.asarray(x, dtype=float))
+
     def __call__(self, x):
         """ The log-density at some values """
-        with jax().enable_x64(True):
-            return float(self._value(jax().numpy.asarray(x, dtype=float)))
+        return float(self.apply(self._value, x))
 
     def grad(self, x):
         """ Its gradient, by reverse-mode automatic differentiation (one pass, whatever the number of parameters) """
-        with jax().enable_x64(True):
-            return np.asarray(self._grad(jax().numpy.asarray(x, dtype=float)))
+        return np.asarray(self.apply(self._grad, x))
 
     def run(self, x):
         """ The number in each state at each time point, at some values: a dict of arrays by 'module.state' """
-        with jax().enable_x64(True):
-            return {key:np.asarray(val) for key,val in self._states(jax().numpy.asarray(x, dtype=float)).items()}
+        return {key:np.asarray(val) for key,val in self.apply(self._states, x).items()}
 

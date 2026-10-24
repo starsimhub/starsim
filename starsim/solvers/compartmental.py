@@ -56,7 +56,7 @@ def step_seconds(p, y, npts, dt, solver, n_sub, tables=None):
     parts = (p.fixed, p.mult, p.consts, p.rel_trans)
     kept = [part.copy() for part in parts]
     if tables is not None:
-        ss.kernels.set_step(parts, 0, tables)
+        ss.kernels.uncompiled().set_step(parts, 0, tables) # As plain Python, as the step is timed: compiling it would take longer than the step
     seconds = ss.kernels.timed_seconds(p, y, npts, dt, solver, n_sub)
     for part,old in zip(parts, kept): # As the step left them
         part[:] = old

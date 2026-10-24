@@ -26,7 +26,7 @@ import matplotlib.pyplot as plt
 
 plt.switch_backend('agg')
 
-design = sc.path(__file__).parent.parent / 'v4_design' / 'design'
+design = sc.path(__file__).parent.parent.parent / 'v4_design' / 'design'
 files = sorted(design.glob('[01][0-9]-*.md'))
 fence = re.compile(r'^(<!-- fragment -->\n\n?)?```python\n(.*?)^```', re.M | re.S)
 

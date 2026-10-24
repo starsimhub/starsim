@@ -124,20 +124,6 @@ def test_callback_changes_component():
 
 
 @sc.timer()
-def test_fit_numpy():
-    sc.heading('Testing a fit of a NumPy module through a function that makes the sim, with no gradient')
-    def make(beta=0.3, data=None):
-        return ss.Sim(connectors=NumpySIR(beta=beta, name='numpy'), unit='day', dt=1, start=0, stop=100, verbose=0, data=data)
-    I = make(0.25).run().results.numpy.I
-    data = pd.DataFrame({'numpy.I': I.values[::10]}, index=I.timevec[::10])
-    fit = make(beta=ss.par(0.3, bounds=[0.1, 0.5]), data=data).calibrate(method='optuna', trials=30, verbose=0)
-    assert np.isclose(fit.pars.beta, 0.25, rtol=0.02)
-    with pytest.raises(ss.CapabilityError, match='written as code'): # No gradient, which it says
-        make(beta=ss.par(0.3, bounds=[0.1, 0.5]), data=data).gradient()
-    return fit
-
-
-@sc.timer()
 def test_coded_and_declared():
     sc.heading('Testing code that writes the states of a declared disease run as agents, and a declared intervention on a disease written as code')
     class Mover(ss.Intervention): # Moves ten people from S to I at step 3: by indexing, and with an in-place operator
@@ -185,6 +171,5 @@ if __name__ == '__main__':
     s1 = test_numpy_ode_beside()
     s2 = test_numpy_agents_beside()
     s3 = test_callback_changes_component()
-    s4 = test_fit_numpy()
     s5 = test_coded_and_declared()
     T.toc()

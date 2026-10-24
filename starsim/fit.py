@@ -756,6 +756,7 @@ def nuts(logdensity, z0, draws=500, warmup=500, chains=4, traced=False, seed=Non
             start = jnp.asarray(starts[c]) + 0.01*jax.random.normal(start_key, (d,)) # Each a little apart, even from the same point
             if verbose:
                 print(f'NUTS chain {c+1} of {chains}: {warmup} warm-up draws, then {draws} draws')
+            ss.perflib.compiling('the NUTS sampler', 'JAX', 1, 10)
             adapt = blackjax.window_adaptation(blackjax.nuts, logp)
             (state, params), _ = adapt.run(warm_key, start, num_steps=warmup)
             step = jax.jit(blackjax.nuts(logp, **params).step)
@@ -806,6 +807,7 @@ def nuts_traced(jax, blackjax, logdensity, starts, key, draws, warmup, verbose):
     n_dev = max(k for k in range(1, min(len(devices), chains) + 1) if chains % k == 0) # Each device takes the same number of chains
     shape = lambda arr: arr.reshape((n_dev, chains//n_dev) + arr.shape[1:])
     T = sc.timer()
+    ss.perflib.compiling('the NUTS sampler', 'JAX', 1, 10)
     if n_dev > 1: # Each on cores of its own
         compiled = jax.pmap(jax.vmap(one_chain), devices=devices[:n_dev]).lower(shape(keys), shape(starts)).compile()
         args = (shape(keys), shape(starts))

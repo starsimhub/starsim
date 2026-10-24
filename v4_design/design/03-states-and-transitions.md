@@ -606,7 +606,7 @@ This is a statement about one module's transitions out of one state. Across modu
 
 ## What is guessed
 
-Every one of these is a default that `describe()` prints and marks, and each row is tested both ways (`tests/test_contracts.py`): a model that makes the guess has it marked, and one that does not, not. The guesses about time (a bare time, the unit) are in [02-types.md](02-types.md), and those about dimensions (a dimension's kind and first level, the population's ages, aging) in [05-dimensions.md](05-dimensions.md).
+Every one of these is a default that `describe()` prints and marks, and each row is tested both ways (`tests/devtests/test_contracts.py`): a model that makes the guess has it marked, and one that does not, not. The guesses about time (a bare time, the unit) are in [02-types.md](02-types.md), and those about dimensions (a dimension's kind and first level, the population's ages, aging) in [05-dimensions.md](05-dimensions.md).
 
 | Guessed | Rule |
 |---|---|

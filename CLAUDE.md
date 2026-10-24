@@ -31,8 +31,11 @@ The main simulation loop is orchestrated by `starsim/loop.py`, while parameter m
 
 ### Running tests
 ```bash
-# Run all tests with parallel execution
+# Run the core tests (tests/test_*.py) with parallel execution
 cd tests && ./run_tests
+
+# Run the developer tests (slower and more exhaustive; not run by default)
+cd tests && pytest devtests -n auto
 
 # Run specific test file
 cd tests && pytest test_sim.py
@@ -112,7 +115,8 @@ Example and reference modules that build on core Starsim but are not part of it,
 Core disease base classes (Disease, Infection, NCD, SIR, SIS, SEIR) live in `starsim/diseases.py`.
 
 ### Testing (`tests/`)
-- `test_*.py`: Main test files
+- `test_*.py`: Core test files (about 300 tests, under a minute in parallel); keep new tests here few and quick
+- `devtests/`: Developer tests (contracts, inference, the spec, errors, interop, and slower feature tests), in files named like the core ones
 - `run_tests`: Main test runner script
 - `pytest.ini`: Pytest configuration
 

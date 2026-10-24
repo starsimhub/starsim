@@ -172,7 +172,7 @@ cat("Peak infected:", max(n_I), "\n")
 msim <- sim$new(solver = "binomial")$run(n_runs = 20L) # A count is an integer: 20L, not 20
 ```
 
-Everything else on this page works the same way from R, with `$` in place of `.`. This code is run by Starsim's tests (`tests/interop/r/sir.R`).
+Everything else on this page works the same way from R, with `$` in place of `.`. This code is run by Starsim's tests (`tests/devtests/interop/r/sir.R`).
 
 ## Next steps
 
