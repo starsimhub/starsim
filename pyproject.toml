@@ -86,7 +86,7 @@ lock = [
     "et-xmlfile==2.0.0",
     "fonttools==4.66.1",
     "gitdb==4.0.12",
-    "gitpython==3.2.0",
+    "gitpython==3.2.1",
     "jax==0.11.2",
     "jaxlib==0.11.2",
     "jellyfish==1.2.1",
