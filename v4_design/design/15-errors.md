@@ -90,13 +90,13 @@ The table below is made from the code (`ss.errors.catalog()`, from the docstring
 | `TimeNotKept` | error | A declared disease run as agents keeps the time each agent entered a state (`ti_X`) only for the states whose times the engine reads (for scheduled exits, clocks, and `after=`/`before=`), unless `ss.options.keep_times = True`. Raised when code reads one of the others, e.g. an analyzer or a script after the run; names the array and says to set the option |
 | `TimeOutsideSim` | error | A time given to a delivery (`start=`, a round in `at=`), `ss.modify` (`start=`), or `ss.change` (`at=`) is before the start of the sim or after its end. A `stop=` after the end is allowed, and means it never stops. A number is a time in the sim's unit (in a sim with dates, that long after the start), so the message says to write a calendar year as a date (`'2030'`) |
 | `MissingDimension` | error (also a `KeyError`) | An `ss.transfer` names a stratification the model does not have (a boolean coordinate that does not exist yet is created instead); or a transition uses a value by level of a dimension (`ss.by()`) that the states it moves have no level of; or a value by position along a dimension (`ss.by(age=[...])`) that the sim is not stratified by |
-| `AlreadyRunError` | error (also a `RuntimeError`) | A sim that has already run (or been finalized) is run, stepped, or finalized again; says to make a new sim with `sim.new()`, or to copy the sim before running it |
+| `AlreadyRunError` | error (also a `RuntimeError`) | A sim that has already run (or been finalized) is stepped, finalized, or added to again; `sim.run()` runs it again from the start |
 | `DistNotInitializedError` | error (also a `RuntimeError`) | A distribution made with `strict=True` is sampled before it is initialized (by the sim, or with `dist.init()` or `dist.mock()`) |
 | `DistNotReadyError` | error (also a `RuntimeError`) | A distribution made with `strict=True` is sampled twice in one step, which would reuse its random numbers; `dist.jump()` resets it |
 | `DistSeedRepeatError` | error (also a `RuntimeError`) | Two distributions of a sim have the same seed, or a distribution is jumped back to a state it has passed, so that it would draw the same random numbers twice |
 | `BooleanOperationError` | error (also a `NotImplementedError`) | A logical operation (and, or, xor, not) is applied to an array of people's values that is not Boolean, e.g. `ppl.age & ppl.female` |
-| `NothingToFit` | error | `calibrate()` or `sensitivity()` is called and no parameter has `bounds` |
-| `NoData` | error | `calibrate()` or `compare_models()` is called and no result has data |
+| `NothingToFit` | error | `fit()` or `sensitivity()` is called and no parameter has `bounds` |
+| `NoData` | error | `fit()` or `compare_models()` is called and no result has data |
 | `NoPosterior` | error | `method='nuts'` or `method='pmcmc'` is asked for, and not every data series has a likelihood, or the sim cannot be sampled that way (no gradients, for NUTS; not a stochastic compartmental sim that the kernels run whole, for particle MCMC) |
 | `TargetStatsNotRecovered` | warning | `net.check()` finds that a network does not reproduce a target statistic it was given |
 | `AtBound` | warning | A best-fit value is at or near one of its bounds |

@@ -126,7 +126,7 @@ def test_siminf_filter():
 
 def test_siminf_abc():
     sc.heading('Fitting by ABC-SMC, as SimInf\'s abc()')
-    fit = make_pmcmc().calibrate(method='abc-smc')
+    fit = make_pmcmc().fit(method='abc-smc')
     for key, truth in dict(beta=ref_beta, gamma=ref_gamma).items():
         low, high = np.percentile(fit.samples[key], [2.5, 97.5])
         assert low < truth < high, f'The 95% interval of {key}, {low:.3f} to {high:.3f}, misses the truth, {truth}'

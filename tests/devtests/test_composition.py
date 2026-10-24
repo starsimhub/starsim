@@ -51,7 +51,7 @@ def test_fit_numpy():
         return ss.Sim(connectors=NumpySIR(beta=beta, name='numpy'), unit='day', dt=1, start=0, stop=100, verbose=0, data=data)
     I = make(0.25).run().results.numpy.I
     data = pd.DataFrame({'numpy.I': I.values[::10]}, index=I.timevec[::10])
-    fit = make(beta=ss.par(0.3, bounds=[0.1, 0.5]), data=data).calibrate(method='optuna', trials=30, verbose=0)
+    fit = make(beta=ss.par(0.3, bounds=[0.1, 0.5]), data=data).fit(method='optuna', trials=30, verbose=0)
     assert np.isclose(fit.pars.beta, 0.25, rtol=0.02)
     with pytest.raises(ss.CapabilityError, match='written as code'): # No gradient, which it says
         make(beta=ss.par(0.3, bounds=[0.1, 0.5]), data=data).gradient()

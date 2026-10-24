@@ -12,7 +12,7 @@ import re
 import sciris as sc
 import starsim as ss
 
-__all__ = ['CodedError', 'StarsimWarning', 'Note', 'note', 'CapabilityError', 'AlreadyRunError'] # The base classes, the error for what a solver cannot run, and Starsim 3's error for running a sim twice are also ss.<Name>; the rest are ss.errors.<Name>
+__all__ = ['CodedError', 'StarsimWarning', 'Note', 'note', 'CapabilityError', 'AlreadyRunError'] # The base classes, the error for what a solver cannot run, and the error for a sim that has already run are also ss.<Name>; the rest are ss.errors.<Name>
 
 
 #%% Base classes
@@ -58,10 +58,15 @@ def note(msg, category=None, sim=None, verbose=None):
         if msg in sim.notes: # Only say it once
             return
         sim.notes.append(msg)
+        if verbose == 0: # Kept, but not said
+            return
+        if getattr(sim, '_held', None) is not None: # Said after the line that starts the run (see ss.Sim.init())
+            sim._held.append(msg)
+            return
         verbose = sc.ifelse(verbose, sim.pars.verbose)
     verbose = sc.ifelse(verbose, ss.options.verbose)
     if verbose > 0:
-        print(f'  note: {msg}')
+        print(f'  Note: {msg}')
     return
 
 
@@ -248,9 +253,9 @@ class MissingDimension(CodedError, KeyError):
     """ An `ss.transfer` names a stratification the model does not have (a boolean coordinate that does not exist yet is created instead); or a transition uses a value by level of a dimension (`ss.by()`) that the states it moves have no level of; or a value by position along a dimension (`ss.by(age=[...])`) that the sim is not stratified by """
 
 class AlreadyRunError(CodedError, RuntimeError):
-    """ A sim that has already run (or been finalized) is run, stepped, or finalized again; says to make a new sim with `sim.new()`, or to copy the sim before running it """
+    """ A sim that has already run (or been finalized) is stepped, finalized, or added to again; `sim.run()` runs it again from the start """
     def __init__(self, *args):
-        default = 'To run it again, make a new sim with sim.new(), or copy the sim before running it'
+        default = 'To run it again from the start, call sim.run()'
         args = (f'{args[0]}\n{default}',) + args[1:] if args else (default,)
         super().__init__(*args)
 
@@ -281,10 +286,10 @@ class BooleanOperationError(CodedError, NotImplementedError):
         super().__init__(f'Logical operations are only valid on Boolean arrays, not {arr.dtype}')
 
 class NothingToFit(CodedError):
-    """ `calibrate()` or `sensitivity()` is called and no parameter has `bounds` """
+    """ `fit()` or `sensitivity()` is called and no parameter has `bounds` """
 
 class NoData(CodedError):
-    """ `calibrate()` or `compare_models()` is called and no result has data """
+    """ `fit()` or `compare_models()` is called and no result has data """
 
 class NoPosterior(CodedError):
     """

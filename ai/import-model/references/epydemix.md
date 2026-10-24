@@ -41,7 +41,7 @@ Then, in Starsim, `sim = ss.interop.load('model.json')`. The dump records the la
 | Seasonality from a sine with a peak date | The array passed to the run is imported; by hand, `ss.seasonal(mean=(1 + smin)/2, amplitude=(1 - smin)/(1 + smin), peak=14/365)` | no |
 | Initial numbers drawn at random in each run | The recorded draw, fixed | no |
 | Scenarios (contacts higher from a date) | `ss.modify(dis.S_to_E, multiply=1.3, start='2020-06-01')` | no |
-| `ABCSampler` (ABC-SMC) | `ss.par(..., bounds=[...])`, `data=ss.simdata(...)`, `sim.calibrate()`: a point estimate, no posterior | no |
+| `ABCSampler` (ABC-SMC) | `ss.par(..., bounds=[...])`, `data=ss.simdata(...)`, `sim.fit()`: a point estimate, no posterior | no |
 
 ## What needs care
 

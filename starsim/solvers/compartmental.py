@@ -648,31 +648,34 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
 
     def restart_movement(self):
         """
-        Put the movement between places, worked out again from new values of its parameters (see `ss.geo.Mobility.fitted()`), into the program, as a restart with them needs (see `ss.Sim.restart()`)
+        Put the movement between places, worked out again from new values of its parameters (see `ss.geo.Mobility.fitted()`), into the program, as a restart with them needs (see `ss.Sim.restart()`); False if the new values move people between places the old ones did not, so the sim must be built again
 
         The program keeps its entries, which the new values fill (one that becomes 0 stays as an
         entry of 0), so a compiled run and the gradients' check that the layout is the same both hold.
         """
         mixing = self.sim.mixing
-        def onto(new, rows, cols, what):
-            """ The entries of a new sparse matrix at the old one's, if it has no others """
+        def onto(new, rows, cols):
+            """ The entries of a new sparse matrix at the old one's, or None if it has others """
             vals = np.asarray(new[rows, cols], dtype=float).ravel() if len(rows) else np.zeros(0)
-            if np.count_nonzero(vals) != np.count_nonzero(new.data):
-                errormsg = f'This sim cannot be restarted with these values of the {what}, since they move people between places that the values it was built with do not; use sim.new(pars=...) instead'
-                raise ValueError(errormsg)
-            return vals
+            return vals if np.count_nonzero(vals) == np.count_nonzero(new.data) else None
         p = self.program
         if p is not None and mixing.share is not None:
-            p.sh_val[:] = onto(mixing.share, p.sh_pair[0], p.sh_pair[1], 'movement between places')
+            vals = onto(mixing.share, p.sh_pair[0], p.sh_pair[1])
+            if vals is None:
+                return False
+            p.sh_val[:] = vals
         for mover in self.movers:
             if mover.get('places') is not None:
                 src, dst, step = mover.places
                 coords = self.sim.groups.group_coords[:, mixing.space]
                 new = self.mover_matrix(src, src + (dst - coords[src])*step, mixing.migration[coords[src], dst])
                 old = mover.matrix
+                vals = onto(new, np.repeat(np.arange(old.shape[0]), np.diff(old.indptr)), old.indices)
+                if vals is None:
+                    return False
                 mover.matrix = old.copy()
-                mover.matrix.data = onto(new, np.repeat(np.arange(old.shape[0]), np.diff(old.indptr)), old.indices, 'rates of migration')
-        return
+                mover.matrix.data = vals
+        return True
 
     @staticmethod
     def at_home(share):

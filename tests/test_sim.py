@@ -208,9 +208,9 @@ def test_complex_api():
     s1 = ss.Sim(pars1).run()
     s2 = ss.Sim(pars=pars2, networks=networks, diseases=diseases, demographics=demographics, interventions=interventions).run()
     assert ss.debugtools.check_sims_match(s1, s2), 'Sims should match'
-    with sc.capture() as out: # A fraction, as in Starsim 3: progress every quarter of the run
+    with sc.capture() as out: # A fraction: progress every quarter of the run (to a file; in a terminal or a notebook, a bar redrawn in place)
         ss.Sim(n_agents=100, start=2000, stop=2020, verbose=0.25).run()
-    assert out.count('Running') == 4, out
+    assert out.count('%') == 4, out
     with pytest.raises(ValueError):
         ss.Sim(n_agents=100, verbose=-1).init()
     assert len(ss.Sim(n_agents=100, networks=[['random', 'sexual'], 'maternal'], verbose=0).init().networks) == 3 # One level of nested lists, e.g. from a helper that returns several modules

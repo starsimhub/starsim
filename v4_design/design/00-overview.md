@@ -21,12 +21,12 @@ sir = ss.Disease(infection, recovery, cases, init_prev=0.01)  # names come from 
 # --- a sim: age groups, the mixing that goes with them, and data attached to results by name
 kw  = dict(stratify=dict(age=[0, 15, 65]), networks=ss.contacts('Kenya'), total_pop=50e6, start='2020-01-01', stop='2021-01-01')
 sim = ss.Sim(sir, data='weekly_cases.csv', **kw)     # the file has a column called 'cases'
-sim.describe()                              # initializes the sim, which prints "solver: ode (every part of the model has a compartmental form)" and the unit (day, from the typed values); then the resolved model, with every guessed default marked
+sim.describe()                              # initializes the sim, which prints a line saying what is run and how (50,000,000 people, as an ODE), R0, and its notes (e.g. the unit, a day, from the typed values); then the resolved model, with every guessed default marked
 sim.run()
 sim.plot()                                  # results, with the data drawn over 'cases'
 
 # --- calibration: fit what has bounds to what has data ---------------------
-fit = sim.calibrate()
+fit = sim.fit()
 
 # --- an intervention, and scenarios ----------------------------------------
 masks = ss.modify(sir.pars.beta, multiply=0.6, start='2020-03-15')

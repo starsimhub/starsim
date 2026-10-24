@@ -134,7 +134,7 @@ These are from Starsim's switching demo for LASER users (`tests/switching/test_l
 | Life tables and seeding, as agents and as compartments | **Works**: the same text (with an age stratification, for the life table as compartments) gives the same number of infections within 20% in one run of each |
 | The national model as compartments | **Works**: LASER's full England and Wales (954 places, 30.2 million people, a 40-stage latent period, with a constant death rate and importation as a rate) runs as a chain binomial in 12 s per simulated year |
 | A campaign for children 9 months to 5 years in some regions | **Works**: one `ss.vaccinate(...)` with `where=(ppl.age >= 0.75) & (ppl.age < 5) & measles.district.isin(names)`, which reached exactly those children |
-| Fitting | **Works**: `sim.calibrate()`, with your own loss (`gof=`) if you have one; LASER has no fitting of its own |
+| Fitting | **Works**: `sim.fit()`, with your own loss (`gof=`) if you have one; LASER has no fitting of its own |
 | Places and populations from shapefiles and rasters (`laser-init`) | **Works** for shapes: `ss.geo.geography(scenario)` takes a `GeoDataFrame`, or a .shp, .geojson, or .gpkg file (with geopandas installed), with columns `name` and `population` (or `pop`), and puts each place at the centroid of its shape. **Not yet** for rasters: give the populations by hand |
 
 The England and Wales model in miniature, with the life table, the seeding, and the gravity coupling declared: 20 places and 100,000 agents for a year:

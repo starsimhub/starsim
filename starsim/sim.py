@@ -5,6 +5,7 @@ import os
 import inspect
 import itertools
 import numpy as np
+import pandas as pd
 import sciris as sc
 import starsim as ss
 import matplotlib.pyplot as plt
@@ -47,6 +48,12 @@ def make_disease(arg, names):
     disease = ss.Disease(*transitions, _names=names)
     disease.setattribute('_implicit', True)
     return [obj for obj in flat if not declared(obj)] + [disease]
+
+def num_str(x):
+    """ A time as text: a number (or a duration, by its value) without a needless decimal point (100, not 100.0), or a date """
+    x = x.value if isinstance(x, ss.TimePar) else x
+    return f'{x:n}' if sc.isnumber(x) else str(x)
+
 
 class Sim(ss.Base):
     """
@@ -163,6 +170,7 @@ class Sim(ss.Base):
         self.complete = False  # Whether a simulation has completed running
         self.results_ready = False  # Whether results are ready
         self.elapsed = None # The time required to run
+        self.progress = None # How far a run has got, shown as it goes (see ss.presentation.Progress)
         self.summary = None  # For storing a summary of the results
         self.filename = None # Store the filename, if saved
         self.diagnostics = None # Store diagnostics results
@@ -178,7 +186,7 @@ class Sim(ss.Base):
         return {key:val for key,val in self.pars.items() if key not in skip}
 
     def set_after(self):
-        """ The sim settings set after the sim was made and before it was initialized (e.g. `sim.pars.stop = 30`), which `sim.new()` keeps """
+        """ The sim settings set after the sim was made and before it was initialized, or after it ran (e.g. `sim.pars.stop = 30`), which `sim.new()` keeps """
         made = self.__dict__.get('_made')
         if made is not None:
             for key,val in self._settings().items():
@@ -187,18 +195,16 @@ class Sim(ss.Base):
         return self.__dict__.get('_set_after', {})
 
     def _module_pars(self):
-        """ The parameters of the modules given, by module type and name, as they are now """
-        out = {}
-        for key in ss.modules.module_types() + ['custom']:
-            val = self.pars.get(key)
-            mods = val.values() if isinstance(val, dict) else sc.tolist(val)
-            for mod in mods:
-                if isinstance(mod, ss.Module):
-                    out[(key, mod.name)] = (mod, {k:(v, repr(v)) for k,v in mod.pars.items()}) # A value set in place (e.g. an ss.par given a new value) keeps its identity, so its repr is kept too
-        return out
+        """ The parameters of the modules, by name, as they are now """
+        if self.initialized: # The sim's own modules
+            mods = list(self.modules)
+        else:
+            vals = [self.pars.get(key) for key in ss.modules.module_types() + ['custom', 'modules']]
+            mods = [mod for val in vals for mod in (val.values() if isinstance(val, dict) else sc.tolist(val))]
+        return {mod.name:(mod, {k:(v, repr(v)) for k,v in mod.pars.items()}) for mod in mods if isinstance(mod, ss.Module)} # A value set in place (e.g. an ss.par given a new value) keeps its identity, so its repr is kept too
 
     def pars_after(self):
-        """ The parameters of modules set after the sim was made and before it was initialized (e.g. `sim.pars.diseases.pars.init_prev = 0.5`), which `sim.new()` keeps """
+        """ The parameters of modules set after the sim was made and before it was initialized, or after it ran (e.g. `sim.pars.diseases.pars.init_prev = 0.5`), which `sim.new()` keeps """
         made = self.__dict__.get('_made_pars')
         if made is not None:
             for key,(mod,before) in made.items():
@@ -351,6 +357,7 @@ class Sim(ss.Base):
         self.timer = sc.timer() # Store a timer for keeping track of how long the run takes
         if timer:
             self.timer.start()
+        self._held = [] if self.pars.verbose else None # Notes are said after the line that starts the run
 
         # Validation and initialization -- this is "pre"
         made = self.__dict__.get('_made') or {}
@@ -364,6 +371,9 @@ class Sim(ss.Base):
         self.pars.validate() # Validate parameters
         self._init_solver() # Choose the unit and the solver
         self._init_time() # Initialize time
+        if 'use_aging' not in self.given and not self.pars.use_aging and any(strat.kind == 'age' and strat.edges is not None for strat in self.groups.strats):
+            long = self.t.dt_year*(self.t.npts - 1) >= 1 # Only then does it matter much
+            ss.note('people do not age between the age groups, since nobody is born or dies; pass use_aging=True to age them', sim=self, verbose=None if long else 0)
         self.init_people(**kwargs) # Initialize the people
         self.init_module_attrs(force=force) # Load specified modules from parameters, initialize them, and move them to the Sim object
         self.init_data(check=False) # Load the data before the modules, which read it (e.g. data by group keeps their results by group at every step)
@@ -407,18 +417,9 @@ class Sim(ss.Base):
 
         # It's initialized
         self.initialized = True
-        if self.verbose and self.solver != 'abm': # As a check that the model and its seed are what was meant
-            for dis in self.declared:
-                if dis.graph.transmissions:
-                    try:
-                        ngm = dis.engine.next_generation()
-                    except Exception: # Not every model has one; the line is only a check
-                        ngm = None
-                    if ngm is not None:
-                        R0 = float(np.max(np.abs(np.linalg.eigvals(ngm))))
-                        count = float(dis.engine.count(dis.graph.infectious))
-                        shown = f'{count:,.0f}' if count >= 100 or count == round(count) else f'{count:.3g}' # A share, with total_pop=1, is not 0
-                        print(f'{dis.name}: R0 = {R0:.3g}, with {shown} infectious at the start')
+        held, self._held = self._held, None
+        if self.verbose:
+            print('\n'.join(self.start_lines(held)))
         if timer:
             self.elapsed = self.timer.toc(label='init', output=True, verbose=self.verbose)
         if self.diagnostics and self.diagnostics.states is not None: # Need not None since dict is empty at this point
@@ -474,6 +475,51 @@ class Sim(ss.Base):
                 for attr in getattr(mods[0], '_par_attrs', {}).get(name, [name]):
                     mods[0].setattribute(attr, val)
         return
+
+    def start_lines(self, notes=()):
+        """ What a run says as it starts: what is run and how, R0 (as a check that the model and its seed are what was meant), and the notes """
+        t = self.t
+        mods = list(self.diseases.keys()) or [mod.name for mod in self.modules]
+        when = f'{t.start} to {t.stop}' if t.is_absolute else f'{self.unit_name}s {num_str(t.start)} to {num_str(t.stop)}'
+        if self.solver == 'abm':
+            scale = f', each {self.pars.pop_scale:,.3g} people' if self.pars.pop_scale != 1 else ''
+            how = f'as {len(self.people):,} agents{scale}'
+        else:
+            kind = dict(ode='an ODE', binomial='a stochastic compartmental model (chain binomial)', gillespie='a stochastic compartmental model (Gillespie)', tau='a stochastic compartmental model (tau-leaping)')
+            how = f'{self.pars.total_pop:,.0f} people, as {kind.get(self.solver, self.solver)}'
+        label = f' "{self.label}"' if self.label else ''
+        what = f'{sc.strjoin(mods)}, ' if mods else ''
+        lines = [ss.presentation.style(f'Sim{label}: {what}{how}, {when}', 'bold', color=ss.presentation.in_color())]
+        if self.solver != 'abm':
+            for dis in self.declared:
+                if dis.graph.transmissions:
+                    try:
+                        ngm = dis.engine.next_generation()
+                    except Exception: # Not every model has one; the line is only a check
+                        ngm = None
+                    if ngm is not None:
+                        R0 = float(np.max(np.abs(np.linalg.eigvals(ngm))))
+                        count = float(dis.engine.count(dis.graph.infectious))
+                        shown = f'{count:,.0f}' if count >= 100 or count == round(count) else f'{count:.3g}' # A share, with total_pop=1, is not 0
+                        lines.append(f'  {dis.name}: R0 = {R0:.3g}, with {shown} infectious at the start')
+        lines += [f'  Note: {note}' for note in notes]
+        return lines
+
+    def end_line(self):
+        """ What a run says when it ends: how long it took, and for each disease with a transmission, its infections and their peak """
+        parts = []
+        for dis in getattr(self, 'declared', []):
+            trs = dis.graph.transmissions
+            if trs and all(tr.name in dis.results for tr in trs):
+                total = sum(dis.results[tr.name].values.sum() for tr in trs)
+                infectious = sum(dis.results[state.name].values for state in dis.graph.infectious if state.name in dis.results)
+                if np.ndim(infectious):
+                    peak = int(np.argmax(infectious))
+                    when = dis.results[dis.graph.infectious[0].name].timevec[peak]
+                    when = str(when) if self.t.is_absolute else f'{self.unit_name} {num_str(when)}' # A date, or e.g. day 27
+                    parts.append(f'{dis.name}: {total:,.0f} infections; at most {infectious[peak]:,.0f} infectious, on {when}')
+        took = f'{self.elapsed:.2g}' if self.elapsed < 1 else f'{self.elapsed:.1f}'
+        return f'  Done in {took} s' + (f'; {"; ".join(parts)}' if parts else '')
 
     def by_levels(self, key, given, whole=None):
         """ A parameter with a value per level (`ss.par(ss.by(patch=[...]))`), with the values of some levels replaced, e.g. from `pars={'beta[a]': 0.3}` """
@@ -548,12 +594,17 @@ class Sim(ss.Base):
                     raise ss.errors.OutOfBounds(f'the parameter "{name}" of "{mod.name}" is {ss.transitions.value_str(raw)}, outside its bounds [{low:n}, {high:n}].')
         return
 
-    def new(self, pars=None, **kwargs):
+    def new(self, pars=None, inplace=False, **kwargs):
         """
         A new, uninitialized sim built from the same inputs as this one, optionally with other values
 
+        A sim that has run is run again this way, so it is seldom needed: `sim.run()` runs a
+        finished sim again from the start, and `sim.run(solver='abm')` or `sim.run(n_runs=10)`
+        build what they need themselves.
+
         Args:
             pars (dict): values of model parameters by name, e.g. `dict(beta=0.1)`
+            inplace (bool): if True, this sim becomes the new one, rather than a new one being returned
             kwargs (dict): sim arguments to change, e.g. `rand_seed=2` or `solver='abm'`; `None` goes back to the default, e.g. `n_agents=None` for a compartmental run of an agent-based sim; also `data=`. A new `solver=` puts `substeps=` back to that solver's default unless it is given too, since substeps mean a different thing to each (e.g. an importer's `substeps=1`, whole steps for the chain binomial, would be one Runge-Kutta step of the whole timestep for the ODE)
         """
         if not hasattr(self, 'inputs'):
@@ -561,35 +612,45 @@ class Sim(ss.Base):
             raise ValueError(errormsg)
         if kwargs.get('solver') is not None and kwargs['solver'] != self.pars.solver and 'substeps' not in kwargs:
             kwargs['substeps'] = None
-        data = kwargs.pop('data', self.data) # Data is not a sim parameter, so it is passed on separately
+        data = sc.dcp(kwargs.pop('data', self.data)) # Data is not a sim parameter, so it is passed on separately
+        call = self.__dict__.get('_call')
         if type(self) is Sim:
             inputs = sc.mergedicts(sc.dcp(self.inputs), kwargs)
             inputs = {key:val for key,val in inputs.items() if not (key in kwargs and val is None)} # As if it had not been given
-            sim = Sim(inputs, data=sc.dcp(data))
+            args, kw = [inputs], dict(data=data)
         else: # A subclass is made again by the call that made it
-            call = self.__dict__.get('_call')
             if call is None:
                 errormsg = f'sim.new() cannot make this {type(self).__name__} again, since the arguments it was made with were not kept (its arguments cannot be copied). Make it again by calling {type(self).__name__}(...)'
                 raise ValueError(errormsg)
             args, kw = sc.dcp(call)
             kw = sc.mergedicts(kw, kwargs)
             kw = {key:val for key,val in kw.items() if not (key in kwargs and val is None)}
+        set_after, pars_after = self.set_after(), self.pars_after()
+        par_values, jax, imported = sc.mergedicts(self.par_values, pars), self.jax, self.__dict__.get('imported')
+        if inplace: # This sim becomes the new one
+            sim = self
+            vars(sim).clear()
+            if call is not None:
+                sim._call = call
+            type(sim).__init__(sim, *args, **kw)
+        else:
             sim = type(self)(*args, **kw)
-            sim.data = sc.dcp(data)
-        for key,val in self.set_after().items(): # Settings changed after the sim was made, e.g. sim.pars.stop = 30
+        if type(self) is not Sim:
+            sim.data = data
+        for key,val in set_after.items(): # Settings changed after the sim was made, e.g. sim.pars.stop = 30
             if key not in kwargs:
                 sim.pars[key] = sc.dcp(val)
-        for (key,name),changed in self.pars_after().items(): # Parameters of modules changed after the sim was made
-            target = sim._module_pars().get((key, name))
+        for name,changed in pars_after.items(): # Parameters of modules changed after the sim was made
+            target = sim._module_pars().get(name)
             if target is not None:
                 target[0].pars.update(sc.dcp(changed))
-        sim.par_values = sc.mergedicts(self.par_values, pars)
-        sim.jax = self.jax
-        if hasattr(self, 'imported'): # The same import, with what it did not translate
-            sim.imported = self.imported
+        sim.par_values = par_values
+        sim.jax = jax
+        if imported is not None: # The same import, with what it did not translate
+            sim.imported = imported
         return sim
 
-    def calibrate(self, pars=None, data=None, weights=None, likelihood=None, gof=None, method=None, n_runs=None, rand_seed=None, verbose=None, **kwargs):
+    def fit(self, pars=None, data=None, weights=None, likelihood=None, gof=None, method=None, n_runs=None, rand_seed=None, verbose=None, **kwargs):
         """
         Fit every parameter that has bounds to every result that has data
 
@@ -619,8 +680,8 @@ class Sim(ss.Base):
             S, I, R = ss.states(3)
             sir = ss.Disease(S >> I @ beta * I, I >> R @ ss.days(10), init_prev=0.01)
             sim = ss.Sim(sir, data='cases.csv', start='2020-01-01', stop='2020-06-01')
-            fit = sim.calibrate() # A best fit
-            post = sim.calibrate(method='nuts') # A posterior, given a likelihood for each data series
+            fit = sim.fit() # A best fit
+            post = sim.fit(method='nuts') # A posterior, given a likelihood for each data series
             fit.sim.plot()
             ```
         """
@@ -952,6 +1013,8 @@ class Sim(ss.Base):
         """
         Print the resolved model: every state, transition, and default, with each guess marked
 
+        In a terminal it is in color, and in a notebook it is shown as tables.
+
         Args:
             output (bool): if True, return the text rather than printing it
             verbose (bool): also show what each rate and dwell time is per step: the probability of leaving in a step, as the solvers that take whole steps use it, and the stages of a dwell time
@@ -961,19 +1024,14 @@ class Sim(ss.Base):
         pars = self.pars
         unit = self.unit_name
         mods = list(self.modules)
-        lines = []
-        def add(key, text, guess=None):
-            line = f'{key:12s} {text}'
-            if guess:
-                line = f'{line:60s} [{guess}]'
-            lines.append(line.rstrip())
-            return
+        desc = ss.presentation.Description()
+        add = desc.add
         named = getattr(self, 'named_people', None)
         popguess = '' if ('total_pop' in self.given or 'n_agents' in self.given or getattr(self, 'pop_from', None)) else ' [guessed]'
         stopguess = '' if ('stop' in self.given or 'dur' in self.given) else ' [guessed]' # The default length of a run
         t = self.t
-        lines.append(f'Sim: {len(mods)} module{"s" if len(mods) != 1 else ""}, {pars.total_pop:,.0f} people{popguess}, {unit}s {t.start} to {t.stop}{stopguess}' if self.unit is None or not t.is_absolute else
-                     f'Sim: {len(mods)} module{"s" if len(mods) != 1 else ""}, {pars.total_pop:,.0f} people{popguess}, {t.start} to {t.stop}{stopguess}')
+        when = f'{unit}s {t.start} to {t.stop}' if self.unit is None or not t.is_absolute else f'{t.start} to {t.stop}'
+        desc.section('Sim', f'{len(mods)} module{"s" if len(mods) != 1 else ""}, {pars.total_pop:,.0f} people{popguess}, {when}{stopguess}')
         if self.declared:
             guessed = pars.solver == 'auto'
             add('solver', self.solver, f'guessed: {self.solver_reason}' if guessed else 'requested')
@@ -1022,9 +1080,9 @@ class Sim(ss.Base):
                     add('', text)
         for mod in mods:
             if hasattr(mod, 'describe') and (getattr(mod, 'graph', None) is not None or isinstance(mod, ss.strains.Family)): # Strains with courses of their own after their members
-                lines += ['', mod.describe(output=True)]
+                mod.describe(out=desc)
         if self.declared:
-            lines.append('')
+            desc.section('Mixing and interventions')
             place = f' within each {self.groups.strats[self.mixing.space].name}' if self.mixing.space is not None else ''
             nets = list(self.networks.values()) + getattr(self, 'mixed', [])
             if nets:
@@ -1039,6 +1097,9 @@ class Sim(ss.Base):
                     add('modifier', f'{mod.target}: {" ".join(mod.describe().split())}')
                 elif isinstance(mod, ss.Delivery):
                     add('delivery', mod.describe())
+            if not desc.sections[-1].rows:
+                desc.sections.pop()
+            desc.section('Results and running')
             for mod in self.declared:
                 names = list(mod.graph.states)
                 extra = [key for key,res in mod.results.items() if isinstance(res, ss.Result) and key not in names and key not in mod.graph.transitions and not key.startswith('cum_')]
@@ -1062,8 +1123,8 @@ class Sim(ss.Base):
                 add('', f'{sc.strjoin(tabulated)}: in the kernels\' tables, as {"it depends" if len(tabulated) == 1 else "they depend"} only on time and states')
             if python:
                 add('', f'{sc.strjoin(python)}: in Python, at {"its" if len(python) == 1 else "their"} place in each step')
-            for note in self.notes:
-                add('note', note)
+        else:
+            desc.section('Running')
 
         # The schedule: one line per timestep in use
         groups = sc.ddict(list)
@@ -1074,43 +1135,45 @@ class Sim(ss.Base):
         for i,(dt,names) in enumerate(sorted(groups.items())):
             every = f'every {unit}' if dt == 1 else f'every {dt:n} {unit}s'
             add('schedule' if i == 0 else '', f'{every}: {", ".join(names)}')
+        if self.declared and self.notes:
+            desc.section('Notes')
+            for note in self.notes:
+                add('note', note)
         if verbose and self.declared:
-            lines += ['', *self.describe_steps()]
-        text = '\n'.join(lines)
-        return text if output else print(text)
+            self.describe_steps(desc)
+        return str(desc) if output else desc.show()
 
-    def describe_steps(self):
-        """ The lines of `describe(verbose=True)`: each rate and dwell time per step of its module """
+    def describe_steps(self, desc):
+        """ The sections of `describe(verbose=True)`, added to `desc` (an `ss.presentation.Description`): each rate and dwell time per step of its module """
         unit = self.unit_name
         def plain(raw): # A single value in the sim's unit, or None if it varies (by group, by person, or in time)
             if sc.isnumber(raw) or (isinstance(raw, ss.TimePar) and np.ndim(raw.value) == 0):
                 return ss.solvers.engine.convert(raw, self.unit_base)
             return None
-        lines = []
         for mod in self.declared:
             dt = mod.t.dt.to(self.unit_base).value
-            lines.append(f"Per step of {mod.name} ({dt:n} {unit}{'s' if dt != 1 else ''}):")
+            desc.section(f'Per step of {mod.name}', f"{dt:n} {unit}{'s' if dt != 1 else ''}")
             for name,tr in mod.graph.transitions.items():
                 if tr.contact: # The rate of each person depends on the others, so only its parameters can be converted
                     for leaf in tr.rate.leaves:
                         if isinstance(leaf, ss.transitions.par) and not leaf.literal and (val := plain(leaf.raw)) is not None:
-                            lines.append(f'  {name:12s} {leaf.name} = {val:n} per {unit} → {val*dt:n} per step')
+                            desc.add(name, f'{leaf.name} = {val:n} per {unit} → {val*dt:n} per step')
                     continue
                 dw = mod.engine.dwells.get(name)
                 if dw is None:
                     continue
                 val = dw.mean if dw.dist is not None else plain(dw.par.raw)
                 if val is None or not np.isfinite(val):
-                    lines.append(f'  {name:12s} varies (by group, by person, or in time)')
+                    desc.add(name, f'varies (by group, by person, or in time)')
                     continue
                 mean = 1/val if dw.is_rate else val
                 if dw.fixed:
-                    lines.append(f'  {name:12s} a fixed delay of {mean:n} {unit}s = {mean/dt:n} steps')
+                    desc.add(name, f'a fixed delay of {mean:n} {unit}s = {mean/dt:n} steps')
                 else:
                     rate = dw.k/mean # The rate of leaving each stage
                     stages = f' in each of {dw.k} stages' if dw.k > 1 else ''
-                    lines.append(f'  {name:12s} rate {rate:.4g} per {unit}{stages} → p = 1 - exp(-{rate:.4g} × {dt:n}) = {1 - np.exp(-rate*dt):.4f} per step')
-        return lines
+                    desc.add(name, f'rate {rate:.4g} per {unit}{stages} → p = 1 - exp(-{rate:.4g} × {dt:n}) = {1 - np.exp(-rate*dt):.4f} per step')
+        return desc
 
     def hash(self):
         """
@@ -1387,14 +1450,13 @@ class Sim(ss.Base):
         self.results.timevec = self.timevec # Store the timevec in the results for plotting
         return
 
-    def init_people(self, verbose=None, **kwargs):
+    def init_people(self, **kwargs):
         """
         Initialize people within the sim
         Sometimes the people are provided, in which case this just adds a few sim properties to them.
         Other time people are not provided and this method makes them.
 
         Args:
-            verbose (int):  detail to print
             kwargs  (dict): passed to ss.People()
         """
         # Handle inputs
@@ -1402,10 +1464,6 @@ class Sim(ss.Base):
         if (self.named_people is not None or self.given_pyramid is not None) and self.solver != 'abm': # A compartmental run takes the size and age split of a population, not its agents
             people = None
         n_agents = self.pars.n_agents
-        verbose = sc.ifelse(verbose, self.pars.verbose)
-        if verbose > 0 and self.solver == 'abm':
-            labelstr = f' "{self.label}"' if self.label else ''
-            print(f'Initializing sim{labelstr} with {n_agents:0n} agents')
 
         # If people have not been supplied, make them -- typical use case
         if people is None:
@@ -1728,15 +1786,13 @@ class Sim(ss.Base):
             raise ss.AlreadyRunError(errormsg)
 
         # Print out progress if needed
-        if self.verbose: # Print progress
+        if self.verbose:
             self.elapsed = self.timer.toc(output=True)
             t = self.t
-            simlabel = f'"{self.label}": ' if self.label else ''
-            string = f'  Running {simlabel}{t.now("str")} ({t.ti:2.0f}/{t.npts-1}) ({self.elapsed:0.2f} s) '
             if self.verbose >= 2:
-                sc.heading(string)
-            elif not (t.ti % max(1, round(t.npts*self.verbose) if self.verbose < 1 else t.npts//10)): # About ten lines in all, or with a fraction, every that share of the run
-                sc.progressbar(t.ti, t.npts - 1, label=string, length=20, newline=True)
+                sc.heading(f'  Running {t.now("str")} ({t.ti:2.0f}/{t.npts-1}) ({self.elapsed:0.2f} s) ')
+            elif self.progress is not None:
+                self.progress.update()
         return
 
     def advance(self):
@@ -1777,8 +1833,10 @@ class Sim(ss.Base):
             shrink (bool): whether to explicitly shrink the sim after running
             check_method_calls (bool): whether to check that all required methods were called
             profile (bool): if True, record per-entry CPU timing in the loop (see `sim.loop.to_df()`/`plot_cpu()`)
-            solver (str): the solver to use, if different from the sim's (only before the sim is initialized)
+            solver (str): the solver to use, if different from the sim's (a sim already built for another is built again)
             n_runs (int): if provided, run the sim this many times with different seeds, and return an `ss.MultiSim`; a shortcut for `ss.parallel(sim, n_runs=n_runs)`
+
+        A sim that has finished is run again from the start, with any values changed since.
         """
         imp = getattr(self, 'imported', None)
         unwarned = imp is not None and imp.get('incomplete') and not imp.get('warned') # Once per import: the runs and copies share it
@@ -1786,15 +1844,19 @@ class Sim(ss.Base):
             imp.warned = True
             ss.warn(f'running an import with {len(imp.incomplete)} part(s) of the model not translated (sim.imported.incomplete); '
                     f'its results leave them out. {imp.prompt}', ss.errors.ImportIncomplete)
+        new_solver = solver is not None and solver != (self.solver if self.initialized else self.pars.solver)
         if n_runs is not None:
-            return ss.parallel(self, n_runs=n_runs)
-        if solver is not None:
-            if self.initialized:
-                errormsg = 'The solver can only be chosen before the sim is initialized; use sim.new(solver=...) to get a fresh copy'
-                raise RuntimeError(errormsg)
+            return ss.parallel(self.new(solver=solver) if new_solver else self, n_runs=n_runs)
+        if new_solver and self.initialized: # Built for another solver, so built again
+            self.new(solver=solver, inplace=True)
+        elif solver is not None:
             self.pars.solver = solver
+        if self.complete and until is None: # Run again from the start, with any values changed since
+            self.new(inplace=True)
 
         # Initialization steps
+        if verbose is not None and not self.initialized: # So that initializing says as much
+            self.pars.verbose = ss.parameters.check_verbose(verbose)
         if not self.initialized: self.init() # Automatically initialize if not initialized
         if verbose is not None:
             self._orig_verbose = self.verbose
@@ -1806,6 +1868,7 @@ class Sim(ss.Base):
             errormsg = 'Simulation is already complete'
             raise ss.AlreadyRunError(errormsg)
 
+        self.progress = ss.presentation.Progress(self) if self.verbose else None
         try:
             # Main simulation loop -- just one line!!!
             reason = self.kernel_reason() if until is None and not profile else None
@@ -1829,11 +1892,14 @@ class Sim(ss.Base):
                 self.finalize()
                 if check_method_calls and not kernels:
                     self.check_method_calls()
+                self._made, self._made_pars = self._settings(), self._module_pars() # So that values set after the run are kept when it is run again (see new())
                 if shrink:
                     self.shrink(full=False)
-                sc.printv(f'Run finished after {self.elapsed:0.2f} s.\n', 2, self.verbose)
+                if self.progress is not None:
+                    self.progress.finish(self.end_line())
         finally:
             self.dists.clear_run_caches()
+            self.progress = None
         
         return self # Allows e.g. ss.Sim().run().plot()
 
@@ -1911,9 +1977,10 @@ class Sim(ss.Base):
         """
         Take a sim back to its start so that it can be run again, without building it again
 
-        Only for a sim that is nothing but compartments (see `sim.kernel_only()`), where
-        it makes repeated runs many times faster. `sim.run(n_runs=...)` and `sim.calibrate()`
-        use it where they can.
+        For a sim that is nothing but compartments (see `sim.kernel_only()`), this makes
+        repeated runs many times faster; any other sim (or a change the compartments were
+        not laid out for, such as a new distribution) is built again, as `sim.new()` would.
+        `sim.run(n_runs=...)` and `sim.fit()` use it where they can.
 
         Args:
             pars (dict): values of model parameters by name, e.g. `dict(beta=0.1)`
@@ -1930,31 +1997,26 @@ class Sim(ss.Base):
         if not self.initialized:
             self.init()
         self.loop.index = 0
-        if not self.kernel_only():
-            errormsg = f'This sim cannot be restarted, since it is not run in one call to the kernels: {self.kernel_reason()}. Use sim.new() to get a fresh copy instead'
-            raise ValueError(errormsg)
+        rebuild = lambda: self.new(pars=pars, inplace=True, **({} if rand_seed is None else dict(rand_seed=rand_seed)))
+        if not self.kernel_only() or any(isinstance(val, ss.Dist) for val in (pars or {}).values()): # Not run in one call to the kernels, or a distribution the compartments were not laid out for
+            return rebuild()
         if rand_seed is not None:
             self.pars.rand_seed = rand_seed
         if pars:
-            if any(isinstance(val, ss.Dist) for val in pars.values()):
-                errormsg = 'A sim cannot be restarted with a new distribution, since its compartments were laid out for the old one; use sim.new(pars=...) instead'
-                raise ValueError(errormsg)
             moving = [p for mod in self.declared for strat in mod.graph.strats if strat.mobility is not None for p in strat.mobility.fitted().values()]
             before = [float(p) for p in moving]
             self.par_values = sc.mergedicts(self.par_values, pars)
             self.set_par_values()
+            varies = lambda raw: isinstance(raw, ss.transitions.TimeValue) or (isinstance(raw, ss.by) and raw.varies)
+            for mod in self.declared: # The kernels' program knows which values vary in time from when it was built
+                built = getattr(mod.engine, 'time_pars', None)
+                if built is not None and any(varies(p.raw) != any(p is q for q in built) for p in mod.graph.pars.values()):
+                    return rebuild()
             if any(float(p) != val for p,val in zip(moving, before)): # The movement between places, worked out again with the new values
                 self.mixing.init_movement()
                 for mod in self.declared:
-                    mod.engine.restart_movement()
-            varies = lambda raw: isinstance(raw, ss.transitions.TimeValue) or (isinstance(raw, ss.by) and raw.varies)
-            for mod in self.declared: # The kernels' program knows which values vary in time from when it was built
-                timed = getattr(mod.engine, 'time_pars', None)
-                if timed is not None:
-                    for name,p in mod.graph.pars.items():
-                        if varies(p.raw) != any(p is q for q in timed):
-                            errormsg = f'This sim cannot be restarted with "{name}" {"varying" if varies(p.raw) else "constant"} in time, since it was built with it {"constant" if varies(p.raw) else "varying"}; use sim.new(pars=...) instead'
-                            raise ValueError(errormsg)
+                    if not mod.engine.restart_movement():
+                        return rebuild()
         self.complete = False
         self.results_ready = False
         self.t.ti = 0
@@ -2206,6 +2268,46 @@ class Sim(ss.Base):
         """ The results as a dataframe, with a column for each (e.g. `sir_prevalence`); see `ss.Results.to_df()` for the arguments """
         self.check_results_ready('Please run the sim before exporting the results')
         return self.results.to_df(**kwargs)
+
+    def to_data(self, results, resample=None, noise='poisson', seed=None):
+        """
+        Data drawn from the results of the run, as if observed: e.g. to check that a fit finds values that are known
+
+        Args:
+            results (str/list): the results, by name, e.g. 'cases' (or 'sir.cases' if more than one module has one of that name)
+            resample (str): the period each value is over, e.g. 'week' for the total of a flow over each week
+            noise (str): 'poisson' (the default), for counts drawn with each value as their mean; or None, for the values themselves
+            seed (int): the random seed for the noise (default: the sim's)
+
+        Returns:
+            A dataframe with a column of times (`date`, or `time` in a sim without dates) and a column for each result, as `ss.Sim(data=...)` takes it
+
+        Example:
+            ```python
+            truth = ss.Sim(sir, pars=dict(beta=0.025), rand_seed=2, **pars).run()
+            data = truth.to_data('cases', resample='week') # Weekly cases, with Poisson noise
+            sim = ss.Sim(sir, data=data, **pars)
+            ```
+        """
+        self.check_results_ready('Please run the sim before drawing data from it')
+        if noise not in [None, 'poisson']:
+            errormsg = f'noise="{noise}" is not a kind of noise; the choices are "poisson" and None'
+            raise ValueError(errormsg)
+        rng = np.random.default_rng(sc.ifelse(seed, self.pars.rand_seed))
+        columns = {}
+        for name in sc.tolist(results):
+            res = ss.results.match_column(self, name)
+            if res is None:
+                errormsg = f'The sim has no result "{name}" (or more than one); results are named as in sim.results, e.g. "cases", or "sir.cases"'
+                raise KeyError(errormsg)
+            if noise is not None and res.kind == 'ratio':
+                errormsg = f'"{name}" is a ratio, which has no Poisson noise; give noise=None for its values'
+                raise ValueError(errormsg)
+            series = res.to_series(resample=resample)
+            values = series.to_numpy(dtype=float)
+            columns[name] = rng.poisson(np.maximum(values, 0)) if noise == 'poisson' else values
+        timecol = 'date' if isinstance(series.index[0], (ss.date, pd.Timestamp)) else 'time'
+        return pd.DataFrame({timecol:list(series.index), **columns})
 
     def profile(self, follow=None, do_run=True, plot=True, **kwargs):
         """

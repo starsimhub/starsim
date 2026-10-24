@@ -246,12 +246,12 @@ def test_round_trip(tmp_path):
         else:
             check(name, make())
 
-    # What the fuzzer found: time series keys and a modifier's times as numbers (not dates), conditions, a matrix with its own age bands, and a start in years; and a prior
+    # What the fuzzer found: time series keys and a modifier's times as numbers (not dates), conditions, a matrix with its own age groups, and a start in years; and a prior
     S, I, R = ss.states('S I R')
     beta = ss.par(ss.timeseries({0: 0.3, 20.5: 0.2}), name='beta')
     dur = ss.par(ss.days(10), bounds=[5, 15], prior=ss.uniform(5, 15), name='dur')
     sir = ss.Disease(infection=S >> I @ beta * I, recovery=I >> R @ dur, init_n=dict(I=50), name='sir').stratify(risk=['lo', 'hi'])
-    mixing = ss.contacts([[3, 1], [1, 2]], bands=[0, 15])
+    mixing = ss.contacts([[3, 1], [1, 2]], ages=[0, 15])
     distancing = ss.modify(sir.pars.beta, multiply=0.5, start=12.5, stop=30, where=sir.risk == 'hi')
     vaccine = ss.vaccinate(ss.Vaccine(efficacy=0.8, waning=ss.days(50), name='vx'), coverage=0.3, interval=ss.days(7), start=5, where=ss.ppl.age < 15)
     check('fuzzed', ss.Sim(sir, networks=mixing, interventions=[distancing, vaccine], stratify=dict(age=[0, 15]), unit='day', stop=60, total_pop=10_000, **kw))

@@ -94,7 +94,7 @@ These are from Starsim's switching demo for EpiModel users (`tests/switching/tes
 | Acts per partnership | **Works**: `acts=` on `ssl.DegreeNet`, with `beta` per act |
 | Partner services: notifying the partners of the past year, not only current ones | **Works**: `memory=ss.months(12)` on the network keeps partnerships that have ended, and `trace=` on a delivery reaches them; 4.45 partners notified per diagnosis against the 4.34 expected for 10-week partnerships (0.85 with current partners only) |
 | Network diagnostics (`netdx`) | **Works**: `net.check(n_runs=)` gives the target, the realized value, and its spread for the mean degree, concurrency, maximum degree, and duration |
-| Fit the transmission probability to observed prevalence with `sim.calibrate()` | **Works**: fresh runs at the fitted value give 29.2% prevalence against the 30% it was fitted to (300 agents, `trials=40`; 27.7% with the default number of trials, where the default method, Optuna, uses one run per trial). `method='abc-smc'` is available for stochastic models |
+| Fit the transmission probability to observed prevalence with `sim.fit()` | **Works**: fresh runs at the fitted value give 29.2% prevalence against the 30% it was fitted to (300 agents, `trials=40`; 27.7% with the default number of trials, where the default method, Optuna, uses one run per trial). `method='abc-smc'` is available for stochastic models |
 | Build and run a model from R | **Works**: through reticulate, with `ss$Transition()`, states named with `ss$states()`, and `name=` (the operators `>>` and `@` have no R spelling); R-Starsim's `transition()` and `disease()` wrap this |
 | Scenarios | **Works**: `sim.new(pars=..., interventions=...)` and `ss.parallel(baseline=..., prep=...)` |
 

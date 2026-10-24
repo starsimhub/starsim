@@ -91,6 +91,6 @@ A numeric variable that only gates transitions (age, a counter) is either a stra
 | New entries into a state, per step | Already a result: the transition's name (`res.infection`), with its running total `res.infection.cum` |
 | An expression of counts (prevalence, a percentage) | A result on the disease: `prev = I / (S + I + R)`, `pct = 100 * I.frac` |
 | A reported quantity with a delay or fraction | `cases = ss.outcome(0.3 * infection, delay=ss.days(5))`; weekly data is compared with the total over each week, so a reporting period needs no translation |
-| Data with a likelihood | `ss.outcome(0.6 * infection, likelihood=ss.nbinom(n=k))` (or `ss.poisson()`), then `sim.calibrate()` with the data |
+| Data with a likelihood | `ss.outcome(0.6 * infection, likelihood=ss.nbinom(n=k))` (or `ss.poisson()`), then `sim.fit()` with the data |
 
 When comparing with the source, check what time each value is for: Starsim's `X[ti]` is the number at time point `ti` (`X[0]` the start) and a flow at `ti` the number in the step that ends there; a source that labels steps by their start needs shifting by one step (see the validate-import skill).

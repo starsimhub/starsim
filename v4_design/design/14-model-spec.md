@@ -123,7 +123,7 @@ The top-level parts:
 | `config` | Run settings. `solver` is what was asked for (`"auto"` unless the user chose one); the solver actually used is in `meta`. `integrator` is the ODE scheme (`"rk4"` or `"euler"`), or `null` for the default. `approx` is `null` (approximations are made and noted), `true` (made silently), or `false` (an error). `unit` is the sim's unit, or `null` when time is counted in timesteps; `dt` is a number in that unit |
 | `meta` | Things that describe the document or the run and do not change the model: the library version, the chosen solver and its reason, and the notes made while building it |
 
-The data attached to the sim is not in the spec; `sim.hash()` hashes it separately ([hashing](#hashing)). Fitting settings are not in it either: they are the arguments of `sim.calibrate()`, kept on the fit.
+The data attached to the sim is not in the spec; `sim.hash()` hashes it separately ([hashing](#hashing)). Fitting settings are not in it either: they are the arguments of `sim.fit()`, kept on the fit.
 
 ### States
 

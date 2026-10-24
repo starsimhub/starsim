@@ -254,7 +254,7 @@ def test_destinations():
     # A data column named for a destination is matched to it, and fitted
     truth = cohort('ode').run().results.dis.course.C
     data = pd.DataFrame({'course.C': truth.values[1:]}, index=truth.timevec[1:]) # Daily, as the flow is
-    fit = cohort('ode', p=ss.par(0.5, bounds=[0.05, 0.95], name='p'), data=data).calibrate(gof='rmse')
+    fit = cohort('ode', p=ss.par(0.5, bounds=[0.05, 0.95], name='p'), data=data).fit(gof='rmse')
     assert np.isclose(fit.table.best.iloc[0], 0.3, rtol=1e-2)
     return res
 

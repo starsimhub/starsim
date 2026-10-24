@@ -23,13 +23,13 @@ sir = ss.Disease(
 net = ss.RandomNet(n_contacts=ss.par(4, bounds=[2, 10]))
 sim = ss.Sim(sir, networks=net, n_agents=2000, start='2020-01-01', stop='2020-02-12', dt=ss.days(1), data='prevalence.csv')
 
-fit = sim.calibrate()
+fit = sim.fit()
 fit.plot()
 ```
 
-`calibrate()` fits **every parameter that has `bounds`** to **every result that has data**, and returns an `ss.fit.Fit`. Both were already stated where they belong: the bounds on the parameter, the data on the sim. Nothing is said twice. A parameter of a module written as code, given as an `ss.par` with bounds (`ssl.HIV(beta=ss.par(0.01, bounds=[0.001, 0.1]))`), is fitted too, and so is a setting that such a module keeps as an attribute rather than a parameter (`test_prob(symp_prob=ss.par(0.1, bounds=[0.01, 0.5]))`, as Covasim's interventions do): its code sees the value, and it is fitted and set by name (`pars={'test_prob.symp_prob': 0.2}`) as a parameter is. Bounds given through another `ss.Pars` (a package's full set of defaults for a module, passed to `pars.update()`) are kept. A parameter with a value for each level of a stratification (`ss.par(ss.by(patch=[0.2, 0.3]), bounds=[0.1, 1])`) is fitted level by level, with the same bounds and prior, as `beta[a]`, `beta[b]`, and so on, and a typed value takes typed bounds (`ss.par(ss.days(8), bounds=[ss.days(3), ss.weeks(4)])`).
+`fit()` fits **every parameter that has `bounds`** to **every result that has data**, and returns an `ss.fit.Fit`. Both were already stated where they belong: the bounds on the parameter, the data on the sim. Nothing is said twice. A parameter of a module written as code, given as an `ss.par` with bounds (`ssl.HIV(beta=ss.par(0.01, bounds=[0.001, 0.1]))`), is fitted too, and so is a setting that such a module keeps as an attribute rather than a parameter (`test_prob(symp_prob=ss.par(0.1, bounds=[0.01, 0.5]))`, as Covasim's interventions do): its code sees the value, and it is fitted and set by name (`pars={'test_prob.symp_prob': 0.2}`) as a parameter is. Bounds given through another `ss.Pars` (a package's full set of defaults for a module, passed to `pars.update()`) are kept. A parameter with a value for each level of a stratification (`ss.par(ss.by(patch=[0.2, 0.3]), bounds=[0.1, 1])`) is fitted level by level, with the same bounds and prior, as `beta[a]`, `beta[b]`, and so on, and a typed value takes typed bounds (`ss.par(ss.days(8), bounds=[ss.days(3), ss.weeks(4)])`).
 
-The fitting itself is the submodule `ss.fit`, which an ordinary run never imports: it is imported the first time it is used, by `sim.calibrate()` or by any of its parts (`ss.fit.loglik()`, `ss.fit.ParticleFilter`, `ss.fit.compare_models()`, and so on).
+The fitting itself is the submodule `ss.fit`, which an ordinary run never imports: it is imported the first time it is used, by `sim.fit()` or by any of its parts (`ss.fit.loglik()`, `ss.fit.ParticleFilter`, `ss.fit.compare_models()`, and so on).
 
 ### Compared with Starsim 3
 
@@ -75,17 +75,17 @@ prevalence = ss.Normal(                              # what to compare, how to a
 )
 
 calib = ss.Calibration(sim=make_sim(), calib_pars=calib_pars, build_fn=build_sim, components=[prevalence], total_trials=100, reseed=True)
-calib.calibrate()
+calib.fit()
 calib.check_fit()
 ```
 
-About thirty lines against three (the three `bounds=`, `data=`, and `sim.calibrate()`), and the thirty repeat things the model already knows: where each parameter lives, what the prevalence result is called, and that a prevalence is read at a point in time while a count of new cases is summed over an interval. The lingua franca version has no build function, no extract function, no alignment keyword, and no likelihood.
+About thirty lines against three (the three `bounds=`, `data=`, and `sim.fit()`), and the thirty repeat things the model already knows: where each parameter lives, what the prevalence result is called, and that a prevalence is read at a point in time while a count of new cases is summed over an interval. The lingua franca version has no build function, no extract function, no alignment keyword, and no likelihood.
 
 ### Arguments
 
 <!-- fragment -->
 ```python
-fit = sim.calibrate(
+fit = sim.fit(
     pars       = None,   # which parameters to fit; default: all that have bounds
     data       = None,   # data to fit to; default: the sim's data
     weights    = None,   # relative weight of each data series; default: equal
@@ -119,6 +119,7 @@ sim = ss.Sim(sir, data='cases.csv')       # a path, a dataframe, or ss.simdata(.
 - **Alignment is automatic.** A result that is a state of the system at a point in time (a count, a prevalence) is compared at the data's dates, interpolating if needed. A result that is a flow (new infections, reported cases, deaths) is summed over the interval ending at each data date. The library knows which is which because results are declared ([09-results.md](09-results.md)).
 - Stratified data uses extra columns named after the stratification (`age`, `sex`), matched to the result's coordinates.
 - Data wholly outside the simulated period is an error (`DataMisaligned`); data partly outside is used where it overlaps.
+- Data drawn from a run of the model itself, to check that a fit finds values that are known, is `truth.to_data('cases', resample='week')`: a column for each result named, as Poisson counts with the run's values as their means (`noise=None` for the values themselves), drawn from the run's seed, in the form `ss.Sim(data=...)` takes. Give the true sim another seed than the one fitted (`rand_seed=2`).
 
 ## Goodness of fit
 
@@ -130,7 +131,7 @@ A series whose data are all zero (deaths early in an epidemic, a stratum with no
 
 <!-- fragment -->
 ```python
-fit = sim.calibrate(weights=dict(cases=1, deaths=2, seroprevalence=1))
+fit = sim.fit(weights=dict(cases=1, deaths=2, seroprevalence=1))
 ```
 
 This is the measure Covasim uses. It assumes no noise model, so there is nothing to choose before fitting, and because the differences are not squared, one bad reporting week does not dominate the fit. Dividing by the mean puts series with different units and sizes (thousands of cases, a prevalence of a few percent) on the same scale, so that equal weights are a reasonable starting point. A series whose mean is zero is divided by its range instead (and an all-zero series by 1). For a stochastic sim the score is the mean of the scores of `n_runs` runs. `fit.summarize()` prints the measure before and after the fit.
@@ -139,8 +140,8 @@ Other measures are chosen by name or given as a function:
 
 <!-- fragment -->
 ```python
-fit = sim.calibrate(gof='rmse')    # root-mean-square error, normalized by the mean of the data
-fit = sim.calibrate(gof=fn)        # fn(sim) returns a number to minimize; then data is not needed
+fit = sim.fit(gof='rmse')    # root-mean-square error, normalized by the mean of the data
+fit = sim.fit(gof=fn)        # fn(sim) returns a number to minimize; then data is not needed
 ```
 
 The default measure is not a likelihood, and it does not need to be: it is enough to find parameters that make the model go through the data, which is what most calibration is for. Count data with many zeros may want a different measure, given as a function.
@@ -154,7 +155,7 @@ A likelihood can be attached to a result. It says how the observed number is dis
 cases = ss.outcome(0.5 * infection, delay=ss.days(5), likelihood=ss.nbinom(n=ss.par(10, bounds=[0.1, 100])))
 ```
 
-or, for any result, at calibration time: `sim.calibrate(likelihood=dict(prevalence=ss.normal(scale=0.02)))`, keyed by the result's name or the data column ([09-results.md](09-results.md#an-optional-likelihood)). The likelihoods are `ss.poisson`, `ss.nbinom` (`n` the dispersion), `ss.binom` (`n` the number of trials, the model's value the probability), `ss.bernoulli`, `ss.normal` (`scale`), and `ss.lognorm_ex` (`std`).
+or, for any result, at calibration time: `sim.fit(likelihood=dict(prevalence=ss.normal(scale=0.02)))`, keyed by the result's name or the data column ([09-results.md](09-results.md#an-optional-likelihood)). The likelihoods are `ss.poisson`, `ss.nbinom` (`n` the dispersion), `ss.binom` (`n` the number of trials, the model's value the probability), `ss.bernoulli`, `ss.normal` (`scale`), and `ss.lognorm_ex` (`std`).
 
 - The model's value is the mean of the distribution; the distribution's other parameters are given by the user. One that is an `ss.par` with bounds (the dispersion above) is fitted with the rest.
 - If every series being fitted has a likelihood, the fit uses the sum of their log-likelihoods, treating the series as independent, and says so. `weights=` still applies, as multipliers on each term; with weights other than 1 the result is labeled as weighted.
@@ -172,7 +173,7 @@ By default a fit is a best fit (a point estimate), by the method that suits the 
 | Stochastic compartmental, run whole by the kernels | Optuna | `'pmcmc'` (particle MCMC), with a likelihood for every series |
 | Agent-based, or a stochastic run stepped from Python | Optuna | `'abc-smc'` |
 
-With a likelihood for every series, the best fit is the maximum likelihood (or, with priors, the most probable values), and the printed reason names the posterior method the sim allows. The other methods are chosen by name: `'abc-smc'` (approximate Bayesian computation by sequential Monte Carlo: a posterior without a likelihood, for any sim, with `generations=`, `quantile=`, `tolerance=`, and `particles=`), `'if2'` (iterated filtering, as pomp's and camdl's: the maximum likelihood of a stochastic compartmental sim, from passes of a particle filter in which each particle's values follow a shrinking random walk, with `particles=`, `iterations=`, `cooling=`, `sd=`, and `chains=`), `'asd'` (adaptive stochastic descent, `sc.asd()`), and any method of `scipy.optimize.minimize`. Settings for a method are keywords of `calibrate()`: `trials=` for Optuna (100 by default), `draws=`, `warmup=`, and `chains=` for NUTS (500, 500, and 4) and particle MCMC (1,000, 1,000, and 4), `particles=` for particle MCMC (chosen by each chain in its warm-up by default). An unknown `method=` is an error that lists the methods. Optuna also takes `n_workers=` (processes that propose and run trials at once, sharing what they have learned through Optuna's storage; each trial is one point, run once for agents) and `storage=` (a file name, kept as an Optuna journal, or a database URL), which keeps the trials so that calling the fit again with the same storage resumes it, the trials already there counting towards `trials=`. For the SciPy methods, a search starts from each of the best three points (`restarts=3`; one for a single parameter of a deterministic sim, where the scan already finds the valley) of a spread of points over the bounds (`scan=`, 10 per parameter by default, with the initial values) that are at least a tenth of the bounds apart, and the best result is kept; NUTS starts each chain from one of the best of the same points, so that chains caught in different modes disagree and R-hat sees it.
+With a likelihood for every series, the best fit is the maximum likelihood (or, with priors, the most probable values), and the printed reason names the posterior method the sim allows. The other methods are chosen by name: `'abc-smc'` (approximate Bayesian computation by sequential Monte Carlo: a posterior without a likelihood, for any sim, with `generations=`, `quantile=`, `tolerance=`, and `particles=`), `'if2'` (iterated filtering, as pomp's and camdl's: the maximum likelihood of a stochastic compartmental sim, from passes of a particle filter in which each particle's values follow a shrinking random walk, with `particles=`, `iterations=`, `cooling=`, `sd=`, and `chains=`), `'asd'` (adaptive stochastic descent, `sc.asd()`), and any method of `scipy.optimize.minimize`. Settings for a method are keywords of `fit()`: `trials=` for Optuna (100 by default), `draws=`, `warmup=`, and `chains=` for NUTS (500, 500, and 4) and particle MCMC (1,000, 1,000, and 4), `particles=` for particle MCMC (chosen by each chain in its warm-up by default). An unknown `method=` is an error that lists the methods. Optuna also takes `n_workers=` (processes that propose and run trials at once, sharing what they have learned through Optuna's storage; each trial is one point, run once for agents) and `storage=` (a file name, kept as an Optuna journal, or a database URL), which keeps the trials so that calling the fit again with the same storage resumes it, the trials already there counting towards `trials=`. For the SciPy methods, a search starts from each of the best three points (`restarts=3`; one for a single parameter of a deterministic sim, where the scan already finds the valley) of a spread of points over the bounds (`scan=`, 10 per parameter by default, with the initial values) that are at least a tenth of the bounds apart, and the best result is kept; NUTS starts each chain from one of the best of the same points, so that chains caught in different modes disagree and R-hat sees it.
 
 The same model with no network, run as an ODE:
 
@@ -187,7 +188,7 @@ sir = ss.Disease(
     name       = 'sir',
 )
 sim = ss.Sim(sir, start='2020-01-01', stop='2020-02-12', dt=ss.days(1), data='prevalence.csv')
-fit = sim.calibrate()
+fit = sim.fit()
 ```
 
 ```text
@@ -197,7 +198,7 @@ Converged: the best two of 3 searches, from points of the scan that are apart, e
 ```
 
 ```text
->>> fit = sim.calibrate()          # the model at the top, with a network, run as agents
+>>> fit = sim.fit()          # the model at the top, with a network, run as agents
 Searching on a log scale: beta
 Fitting by optuna (a stochastic sim; override with method=)
 Scoring each point by the mean of 4 runs, with the same seeds at every point (override with n_runs=)
@@ -230,7 +231,7 @@ Sometimes one fitting method is not enough. A cheap, robust search is good at fi
 
 <!-- fragment -->
 ```python
-fit = sim.calibrate(method=['optuna', 'nuts'])
+fit = sim.fit(method=['optuna', 'nuts'])
 ```
 
 Read aloud: "search with Optuna; then, starting from the best parameters Optuna found, sample with NUTS". The returned `fit` is the result of the last stage that ran.
@@ -239,7 +240,7 @@ An entry is either a method's name, which uses that method's default settings, o
 
 <!-- fragment -->
 ```python
-fit = sim.calibrate(method=[
+fit = sim.fit(method=[
     dict(method='optuna', trials=500),    # stage 1: 500 trials to find a good region
     dict(method='nuts', draws=2000),      # stage 2: 2,000 posterior draws, started from stage 1's best fit
 ])
@@ -319,7 +320,7 @@ sim.sensitivity()                          # every parameter with bounds, agains
 sim.sensitivity(results=['I'])           # against chosen results
 ```
 
-Latin hypercube samples over the bounds (`n=100` by default; wide positive bounds on a log scale, as `calibrate()` searches them), with partial rank correlation coefficients between each parameter and a summary of each result (a count by its peak and its final value, a flow by its peak and its total), printed and returned as a data frame. It needs no data. It answers a different question from calibration (which parameters matter?) and is often worth running first, since a parameter that does not matter cannot be fitted.
+Latin hypercube samples over the bounds (`n=100` by default; wide positive bounds on a log scale, as `fit()` searches them), with partial rank correlation coefficients between each parameter and a summary of each result (a count by its peak and its final value, a flow by its peak and its total), printed and returned as a data frame. It needs no data. It answers a different question from calibration (which parameters matter?) and is often worth running first, since a parameter that does not matter cannot be fitted.
 
 ## Model comparison
 
@@ -334,7 +335,7 @@ comp.plot()
 `ss.fit.compare_models` judges models by how well they predict data they were not fitted to:
 
 1. Hold out the last part of each data series (the final 25% of its time points by default; `holdout=` takes a fraction or a date).
-2. Fit each model to the rest with `sim.calibrate()`, by its default method, which is a best fit (an optimizer, not a sampler).
+2. Fit each model to the rest with `sim.fit()`, by its default method, which is a best fit (an optimizer, not a sampler).
 3. Run each fitted model forward over the held-out period.
 4. Score the predictions against the held-out data, the same way for every model: with the default goodness of fit, or, if every series of every model has a likelihood, with the negative log-likelihood of the held-out data at the best fit.
 5. Report a table.

@@ -1736,7 +1736,7 @@ class nbinom(Dist):
 
 class binom(Dist):
     """
-    Binomial distribution: the number of successes in n trials; as a likelihood (see `sim.calibrate()`), the model's value is the probability, e.g. the positives among n tested
+    Binomial distribution: the number of successes in n trials; as a likelihood (see `sim.fit()`), the model's value is the probability, e.g. the positives among n tested
 
     Args:
         n (int): the number of trials (default 1)

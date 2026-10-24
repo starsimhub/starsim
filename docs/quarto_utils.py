@@ -320,6 +320,9 @@ def clean_outputs(folders=None, sleep=3, patterns=None):
 if __name__ == '__main__':
 
     if 'pre' in sys.argv:
+        if not os.environ.get('QUARTO_PROJECT_RENDER_ALL'): # Quarto sets this only for a full render, so skip the pre-render steps when rendering single pages
+            print('Rendering selected pages only, so not updating the version or rebuilding the API docs')
+            sys.exit()
         sc.heading('Starting Quarto docs build', divider='★')
         update_version()
         build_api_docs()
@@ -329,6 +332,9 @@ if __name__ == '__main__':
         build_api_index()
 
     elif 'post' in sys.argv:
+        if not os.environ.get('QUARTO_PROJECT_RENDER_ALL'): # As above
+            print('Rendering selected pages only, so not cleaning outputs')
+            sys.exit()
         clean_outputs()
 
     elif len(sys.argv) > 1:

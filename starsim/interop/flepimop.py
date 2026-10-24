@@ -291,7 +291,7 @@ def load_flepimop(filename, scenario=None, verbose=None, **kwargs):
 
     # What is not translated
     for key,why in dict(seeding='seeding (scheduled importations): an ss.geo.Mobility(data=...) register would carry it',
-                        inference='inference (fitting to data): use sim.calibrate() with ss.simdata()',
+                        inference='inference (fitting to data): use sim.fit() with ss.simdata()',
                         outcome_modifiers='outcome modifiers (changes to the outcomes\' probabilities over date ranges): ss.modify on the weights would carry them').items():
         if cfg.get(key):
             src.skip(key, why)

@@ -25,7 +25,7 @@ class Strat:
 
     Args:
         name (str): the dimension, e.g. 'age'
-        levels (list): bin edges (for a continuous property such as age) or labels
+        levels (list/dict): bin edges (for a continuous property such as age) or labels; or a dict of the share of the population in each, e.g. `{0: 0.3, 15: 0.6, 65: 0.1}`
         split (list): the share of the population in each level (if not given: from an `ss.geo.geography`'s populations; for age groups, the world's ages; for a boolean dimension, everyone at the first level; otherwise equal)
         adjust (dict): multipliers on named transitions, one per level: on its rate (a duration is divided), or on its probability for a branch chosen with p=
         kind (str): 'age', 'space', 'clock', or 'plain'; if not given, 'space' for an `ss.geo.geography` or with `mobility=`, 'age' for a dimension called age, and otherwise 'plain'
@@ -58,6 +58,11 @@ class Strat:
             levels = self.geo.names
             if split is None and self.geo.pop is not None:
                 split = self.geo.pop/self.geo.pop.sum()
+        if isinstance(levels, dict): # Each level with its share, e.g. age={0: 0.3, 15: 0.6, 65: 0.1}
+            if split is not None:
+                errormsg = f'"{name}" was given the share in each level twice, as a dict and as split=; give one'
+                raise ValueError(errormsg)
+            levels, split = list(levels.keys()), list(levels.values())
         if mobility is not None and not isinstance(mobility, Mobility): # A movement model or a matrix on its own is commuting
             mobility = Mobility(mobility) if isinstance(mobility, (gravity, radiation)) else Mobility(matrix=mobility)
             self.guessed['mobility'] = 'commuting, since kind= was not given'
@@ -706,10 +711,8 @@ class Groups:
         for strat in self.strats: # Each property that people do not already have gets a distribution to assign it
             if strat.kind != 'age':
                 setattr(sim, f'rng_strat_{strat.name}', ss.random(name=f'rng_strat_{strat.name}'))
-        if 'use_aging' not in sim.given: # People age if and only if they are born or die, unless told otherwise
+        if 'use_aging' not in sim.given: # People age if and only if they are born or die, unless told otherwise (said in ss.Sim.init(), once the length of the run is known)
             sim.pars.use_aging = sim.has_demography()
-            if not sim.pars.use_aging and any(strat.kind == 'age' and strat.edges is not None for strat in self.strats):
-                ss.note('people do not age between the age groups, since nobody is born or dies; pass use_aging=True to age them', sim=sim)
         return
 
     def moved_by(self, strat):

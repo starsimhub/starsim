@@ -62,7 +62,7 @@ A user who trusts a clean run would have reported all four. The tasks were easie
 
 What went well, by the personas' own account:
 - The `birth_rate=` and `campaign_vx` removal messages led straight to the fix.
-- `ss.modify(..., start=, stop=)`, `ss.outcome(0.3 * infection)` with `sim.calibrate()`, `ss.birth`/`ss.death`, and the typed units `perweek`/`weeks`/`years` all worked on the first try.
+- `ss.modify(..., start=, stop=)`, `ss.outcome(0.3 * infection)` with `sim.fit()`, `ss.birth`/`ss.death`, and the typed units `perweek`/`weeks`/`years` all worked on the first try.
 - The printed "R0 = ..., with N infectious at the start" was each persona's main check that its model was right. It is the most useful line Starsim prints.
 - The "is not a level of age; the levels are 0-4, 5-14, 15+" error fixed itself in one step.
 

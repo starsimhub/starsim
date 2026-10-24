@@ -281,9 +281,9 @@ def test_stratify():
         sir = make_sir().stratify(age=[0, 15, 65], adjust={'recovery': [1.5, 1.0, 0.5]})
         sir.pars.beta.value = 0.03
         pars = dict(n_agents=20_000) if solver == 'abm' else {}
-        sim = ss.Sim(sir, networks=ss.contacts(matrix, bands=[0, 15, 65]), total_pop=100_000, unit='day', stop=150, solver=solver, **pars, **kw).run()
+        sim = ss.Sim(sir, networks=ss.contacts(matrix, ages=[0, 15, 65]), total_pop=100_000, unit='day', stop=150, solver=solver, **pars, **kw).run()
         sims[solver] = sim
-    with pytest.raises(TypeError): # The matrix's own age bands are bands=; age= is a matrix over the model's age groups
+    with pytest.raises(TypeError): # The matrix's own age groups are ages=; age= is a matrix over the model's age groups
         ss.contacts(matrix, age=[0, 15, 65])
     res = sims.ode.results.sir
     by_age = res.S.by('age')
@@ -417,11 +417,11 @@ def test_outcomes():
     weekly = res.cases.resample('week')
     df = sc.dataframe(date=weekly.timevec, cases=weekly.values)
     sim = ss.Sim(make(0.15), data=df, **pars)
-    fit = sim.calibrate()
+    fit = sim.fit()
     fit.summarize()
     assert np.isclose(fit.pars.beta, 0.3, rtol=0.01), f'Expected to recover beta=0.3, not {fit.pars.beta}'
     assert fit.mismatch < 0.01 < fit.mismatch_before
-    assert fit.converged and not sim.calibrate(method='nelder-mead', maxiter=3, scan=0, verbose=0).converged
+    assert fit.converged and not sim.fit(method='nelder-mead', maxiter=3, scan=0, verbose=0).converged
     assert np.isclose(sim.new().init().diseases.sir.pars.beta.value, 0.15) # The original is not changed
     zeros = ss.fit.mismatch(truth, fit.sim.data.assign(deaths=0.0)) # An all-zero series is scaled by the model, not counted raw
     assert np.isclose(zeros, 0.5) # Cases exact (0), deaths 1; before, the raw count of deaths (about 420 a week) swamped the cases
@@ -438,7 +438,7 @@ def test_outcomes():
     typo = ss.Sim(make(0.3), data=df.rename(columns=dict(cases='casess')), **pars).init()
     assert any('casess' in note for note in typo.notes) # Data on a sim can be just for plotting, so a column that matches no result is noted, and an error only when fitting
     with pytest.raises(ss.errors.UnknownDataColumn):
-        typo.calibrate()
+        typo.fit()
     renamed = ss.simdata(df.rename(columns=dict(cases='Reported')), aliases=dict(cases='Reported'))
     assert 'cases' in ss.Sim(make(0.3), data=renamed, **pars).init().data.columns
     assert 'cases' in ss.Sim(make(0.3), **pars).new(data=renamed).init().data.columns # Or to a new sim
@@ -451,9 +451,9 @@ def test_outcomes():
         S, I, R = ss.states('S I R')
         ss.Sim(ss.Disease(infection=ss.Transition(S, I, rate=ss.par() * I), recovery=ss.Transition(I, R, dur=10), init_prev=0.01), **pars).init()
     with pytest.raises(ss.errors.NoData):
-        ss.Sim(make(0.3), **pars).calibrate()
+        ss.Sim(make(0.3), **pars).fit()
     with pytest.raises(ValueError, match='gof'): # Rather than the default in its place
-        sim.calibrate(gof='nea')
+        sim.fit(gof='nea')
     with pytest.raises(ss.errors.UnknownOutcomeSource):
         I, R = ss.states('I R')
         ss.Sim(ss.Disease(recovery=ss.Transition(I, R, dur=3), cases=ss.outcome('infection'), first='I'), **kw).init()
@@ -543,24 +543,24 @@ def test_likelihood():
     df = sc.dataframe(t=weekly.timevec, cases=rng.negative_binomial(10, 10/(10 + weekly.values)))
 
     # The declared likelihood is used, and its dispersion is fitted with beta
-    fit = make(beta=0.2, k=3, exposed=True).calibrate(data=df, method='l-bfgs-b') # The maximum likelihood (NUTS is tested in test_gradients.py)
+    fit = make(beta=0.2, k=3, exposed=True).fit(data=df, method='l-bfgs-b') # The maximum likelihood (NUTS is tested in test_gradients.py)
     fit.summarize()
     assert fit.measure == 'negative log-likelihood'
     assert np.isclose(fit.pars.beta.value, 0.4, rtol=0.05)
     assert 2 < fit.pars.k < 100
     assert np.isclose(ss.fit.loglik(fit.sim), -fit.mismatch)
-    pulled = make(beta=0.2, k=3, exposed=True, prior=ss.normal(0.3, 0.002)).calibrate(data=df, method='l-bfgs-b') # With a prior, the most probable value
+    pulled = make(beta=0.2, k=3, exposed=True, prior=ss.normal(0.3, 0.002)).fit(data=df, method='l-bfgs-b') # With a prior, the most probable value
     assert pulled.measure == 'negative log-posterior' and pulled.pars.beta.value < 0.35
 
     # Counts that are not whole numbers (e.g. weekly averages) have a likelihood, and data that no run can give stops the fit
-    averaged = make(beta=0.2).calibrate(data=df.assign(cases=df.cases/7), method='l-bfgs-b')
+    averaged = make(beta=0.2).fit(data=df.assign(cases=df.cases/7), method='l-bfgs-b')
     assert np.isfinite(averaged.mismatch) and averaged.pars.beta.value > 0.2
     with pytest.raises(ValueError, match='cases'):
-        make().calibrate(data=df.assign(cases=-df.cases/7), method='l-bfgs-b')
+        make().fit(data=df.assign(cases=-df.cases/7), method='l-bfgs-b')
 
     # A likelihood can be given at calibration time, for a result that is not an outcome
     prev = sc.dataframe(t=truth.timevec[::7], prevalence=truth.prevalence.values[::7])
-    fit2 = make(beta=0.2, exposed=True).calibrate(data=prev, likelihood=dict(prevalence=ss.normal(scale=0.01)), method='l-bfgs-b')
+    fit2 = make(beta=0.2, exposed=True).fit(data=prev, likelihood=dict(prevalence=ss.normal(scale=0.01)), method='l-bfgs-b')
     assert fit2.measure == 'negative log-likelihood'
     assert np.isclose(fit2.pars.beta.value, 0.4, rtol=0.01)
 
@@ -583,7 +583,7 @@ def test_likelihood():
                       start='2020-01-01', stop='2020-07-01', unit='day', **kw)
     truth = seasonal(ss.par(80.0), ss.par(0.3)).run()
     data = pd.DataFrame(dict(date=truth.t.datevec[::7], I=truth.results.x.I.values[::7])).set_index('date')
-    fit3 = seasonal(ss.par(20.0, bounds=[1, 200]), ss.par(0.7, bounds=[0.1, 1])).calibrate(data=data)
+    fit3 = seasonal(ss.par(20.0, bounds=[1, 200]), ss.par(0.7, bounds=[0.1, 1])).fit(data=data)
     best = fit3.table.set_index('par').best
     assert np.isclose(best.I0, 80, rtol=0.02) and np.isclose(best.smin, 0.3, rtol=0.02)
     return comp
@@ -720,7 +720,7 @@ def test_modify():
     n_I = runs.results.sir.I
     assert n_I.values.shape == (8, 61) and len(runs) == 8
     assert len(np.unique(n_I.values[:, 30])) > 1 # Each run has its own seed
-    assert runs.summarize().sir_I.std > 0 # Summarized over the eight runs (before, over one sim: a standard deviation of 0)
+    assert runs.summarize().loc['sir_I', 'std'] > 0 # Summarized over the eight runs (before, over one sim: a standard deviation of 0)
     assert np.array_equal(n_I.select(run=3).values, n_I.values[3]) and np.allclose((n_I + 1).values, n_I.values + 1) # A result like any other
     low, mid, high = n_I.quantiles([0.025, 0.5, 0.975])
     assert np.all(low <= mid) and np.all(mid <= high)
@@ -1014,7 +1014,7 @@ def test_time_values():
     assert any("unit='day'" in note for note in quiet.notes) # Kept, with nothing printed
     with sc.capture() as txt:
         ss.Sim(fast, networks=ss.RandomNet(), solver='ode', n_agents=1000, unit='day', stop=5, verbose=1).init()
-    assert txt.index('solver: ode') < txt.index('RandomNet approximated') # The solver line comes before the notes it leads to
+    assert txt.index('as an ODE') < txt.index('RandomNet approximated') # The line that says how it is run comes before the notes it leads to
     assert 'n_agents=1000 is used as the population' in txt # A compartmental run has no agents, so it is the population
     return sim
 

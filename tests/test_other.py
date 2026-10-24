@@ -124,7 +124,7 @@ class Counter(ss.Module):
     assert migrate_text('pars = dict(verbose=0.1)')[0] == 'pars = dict(verbose=0.1)' # A fraction is progress every that share of the run
     assert migrate_text('ss.link_dists(obj, sim)')[0] == 'ss.distributions.link_dists(obj, sim)' # Internal helpers are in their submodules
     assert 'ssl.AgentSIR' in migrate_text('sir = ss.SIR(beta=0.1)')[2][0][1] # A use of ss.SIR is flagged, not rewritten
-    assert 'sim.calibrate()' in migrate_text('calib = ss.Calibration(sim, calib_pars)')[2][0][1] # Removed names are flagged with what to use instead
+    assert 'sim.fit()' in migrate_text('calib = ss.Calibration(sim, calib_pars)')[2][0][1] # Removed names are flagged with what to use instead
     for old in ['ss.demographics.Pregnancy', 'ss.LegacyPregnancy']: # Starsim 3's pregnancy, by its old path or its prerelease name
         assert migrate_text(f'preg = {old}(fertility_rate=20)')[0] == 'preg = ss.Pregnancy(fertility_rate=20)'
     todo = migrate_text('class MyPreg(ss.Pregnancy):\n    def make_embryos(self, conceive_uids):\n        return super().make_embryos(conceive_uids)')[2]
@@ -156,7 +156,7 @@ class Counter(ss.Module):
     # More of Starsim 3 (and the prereleases), and the error for a removed name
     old = "new = ss.uids.cat(a, b); bf = preg.breastfeeding\nS = ss.State('S', infectious=False); net = ss.RandomNet(n_contacts=10, uniform_targets=True)"
     assert migrate_text(old)[0] == "new = ss.uids.concatenate(a, b); bf = preg.lactation.L\nS = ss.State('S'); net = ss.RandomNet(n_contacts=10, method='uniform')"
-    with pytest.raises(AttributeError, match=r'sim\.calibrate\(\)') as info:
+    with pytest.raises(AttributeError, match=r'sim\.fit\(\)') as info:
         ss.Calibration
     assert info.value.obj is None # So that Python suggests no closest name ("emigration")
 

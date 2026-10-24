@@ -174,8 +174,6 @@ def choose_solver(sim):
         reason = 'requested'
     sim.solver = solver
     sim.solver_reason = reason
-    if pars.verbose: # Before the notes that the solver leads to
-        print(f'solver: {solver} ({reason})')
     sim._init_lifetables()
 
     # The population
@@ -225,8 +223,9 @@ def choose_solver(sim):
             if isinstance(p.raw, ss.by) and not set(p.raw.dims) & {strat.name for m in sim.declared for strat in m.graph.derived}: # Not by a derived attribute's levels, which add no groups
                 p.raw.check(sim)
     # The notes on what was chosen, kept in sim.notes whatever the verbosity
-    if sim.unit_source:
-        ss.note(f"unit='{sim.unit}' (from {sim.unit_source})", ss.errors.UnitInferred, sim=sim)
+    if sim.unit_source: # Said only if it may surprise: not when it is the unit of the model's own typed values, or of dates
+        obvious = sim.unit_source in ['the typed values in the model', 'start and stop dates']
+        ss.note(f"unit='{sim.unit}' (from {sim.unit_source})", ss.errors.UnitInferred, sim=sim, verbose=0 if obvious else None)
     return
 
 
@@ -442,7 +441,7 @@ def check_betas(sim, nets):
                         routes = raw if isinstance(raw, dict) else {'default':raw}
                         p.value = routes | {net.name:ss.peract(value)}
                         p.value[net.name].resolve(net)
-                        ss.note(f'the default beta of "{mod.name}" ({val!r}) is read as ss.peract({value}) on "{net.name}", which has acts, as in Starsim 3; give beta= to set it', sim=sim)
+                        ss.note(f'the default beta of "{mod.name}" ({val!r}) is read as ss.peract({value}) on "{net.name}", which has acts; give beta= to set it', sim=sim)
                     elif acts and ss.expressions.value_dimension(val) == -1:
                         raise ss.errors.WrongDimension(f'{where} is {val!r}, a rate per unit time, but "{net.name}" has acts per unit time, so the two would multiply to a rate squared; give the probability per act, e.g. ss.peract({getattr(val, "value", val)}), or leave out acts=')
     return

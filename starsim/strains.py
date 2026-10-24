@@ -594,24 +594,24 @@ class Strains:
         strat.strains = self
         return strat
 
-    def describe(self, graph):
-        """ The strains of a disease with shared states, as lines of its description: how they are run, their values, and the protection between them """
+    def describe(self, graph, out):
+        """ The strains of a disease with shared states, as rows of its description (`out`, an `ss.Description`): how they are run, their values, and the protection between them """
         sets = f'sets of up to {self.max_strains} carried at once ({sc.strjoin(self.labels)}), a new strain replacing the oldest once full' if self.max_strains > 1 else 'one carried at a time'
-        lines = [f'{"strains":12s} {sc.strjoin(self.names)} ("{self.name}"): states shared, one course; {sets}; carried in {sc.strjoin(self._carriers(graph))}']
+        out.add('strains', f'{sc.strjoin(self.names)} ("{self.name}"): states shared, one course; {sets}; carried in {sc.strjoin(self._carriers(graph))}')
         per = {tr.name:tr.per_given for tr in graph.transitions.values() if getattr(tr, 'per_given', None)}
         chances = {p['p']:name for name,p in per.items() if isinstance(p.get('p'), str)}
         for key,vals in self.values.items():
             how = f' (each strain\'s chance in {chances[key]})' if key in chances else ' (the sum of a set\'s, each strain alone)' if per.get(key, {}).get('alone') else ' (a set takes the largest)' if self.max_strains > 1 and key != 'rel_trans' else ''
-            lines.append(f'{"":12s} {key}: {sc.strjoin(f"{v:.4g}" for v in vals)}{how}')
+            out.add('', f'{key}: {sc.strjoin(f"{v:.4g}" for v in vals)}{how}')
         how = dict(one='one strain per transmission, chosen in proportion to rel_trans, at the infectiousness of the most infectious', each='each strain at its own rate')
-        lines.append(f'{"":12s} transmit: {how[self.transmit]}' + (' (from a set)' if self.max_strains > 1 else ''))
+        out.add('', f'transmit: {how[self.transmit]}' + (' (from a set)' if self.max_strains > 1 else ''))
         for imm in self.immunity:
             what = sc.strjoin(f'time in {k[4:]}' if k.startswith('dur.') else f'p of {k[2:]}' if k.startswith('p.') else k for k in imm.values)
             extra = '; the rest is superinfection' if not isinstance(imm.due_to, Memory) and any(n in self._carriers(graph) for n in imm.names) else ''
-            lines.append(f'{"":12s} immunity: {what} × (1 − protection), due to {imm.source}, {imm.rule()} over the strains{" through a curve" if imm.curve is not None else ""}{extra}')
+            out.add('', f'immunity: {what} × (1 − protection), due to {imm.source}, {imm.rule()} over the strains{" through a curve" if imm.curve is not None else ""}{extra}')
         reason = self.needs_agents(graph)
-        lines.append(f'{"":12s} solvers: ' + (f'agents only ({reason})' if reason else 'all'))
-        return lines
+        out.add('', 'solvers: ' + (f'agents only ({reason})' if reason else 'all'))
+        return out
 
     @property
     def spec(self):
@@ -1434,11 +1434,12 @@ class Family(ss.Module):
             return sc.savejson(filename, out, **kwargs)
         return out
 
-    def describe(self, output=False):
-        """ The family: its members, protection, seeding, and results """
+    def describe(self, output=False, out=None):
+        """ The family: its members, protection, seeding, and results; as for `ss.Disease.describe()` """
+        desc = ss.presentation.Description() if out is None else out
         members = self.member_names
         shared = f'; shared: {sc.strjoin(self.exclusive)}' if self.exclusive else ''
-        lines = [f'Strains of {self.name}: {len(members)} with courses of their own ({sc.strjoin(members)}), stepped in this order{shared}']
+        desc.section(f'Strains of {self.name}', f'{len(members)} with courses of their own ({sc.strjoin(members)}), stepped in this order{shared}')
         n = len(members)
         for imm in self.immunity:
             for key in imm.values:
@@ -1447,22 +1448,23 @@ class Family(ss.Module):
                 shape = f'{n}×{n} matrix' if imm.values[key].ndim else f'{float(imm.values[key]):n} from any member against each'
                 attr = self.attr_of(self.members[0], imm.names) is not None
                 over = f'm[k, g]·{imm.source}_k over the strains k' if attr else f'm[k, g] over the strains k whose {imm.source} they are in'
-                lines.append(f'  immunity: {what} of each member × (1 − protection), the protection being {imm.rule()} of {over} ({shape}' +
+                desc.add('immunity', f'{what} of each member × (1 − protection), the protection being {imm.rule()} of {over} ({shape}' +
                              (f', largest protection {largest:.3g})' if largest is not None else ')'))
         if self.init_prev is not None:
             prev = getattr(self.init_prev, '__name__', None) if callable(self.init_prev) and not isinstance(self.init_prev, (ss.Dist, ss.by)) else None
             prev = f'{prev} (a function)' if prev else self.init_prev
-            guess = f'   [guessed: {self.guessed.split}]' if 'split' in self.guessed else ''
-            lines.append(f'  seeding: infected with any strain {prev}, one strain each, in shares {sc.strjoin(f"{s:.3g}" for s in self.split)}{guess}')
+            guess = f'guessed: {self.guessed.split}' if 'split' in self.guessed else None
+            desc.add('seeding', f'infected with any strain {prev}, one strain each, in shares {sc.strjoin(f"{s:.3g}" for s in self.split)}', guess)
         if self.exclusive:
             to = sc.strjoin(sorted(set(self.blocked))) if self.blocked is not None else 'the state with no exits'
-            lines.append(f'  shared: entering {sc.strjoin(self.exclusive)} in one strain moves the person to {to} in the others')
+            desc.add('shared', f'entering {sc.strjoin(self.exclusive)} in one strain moves the person to {to} in the others')
         states = self.members[0].graph.states
         stocks = [f'{key} (union of the members\' {key})' for key in self.stocks if key not in states]
-        lines.append(f'  results: {", ".join(stocks + [key for key in self.stocks if key in states])} as unions; {", ".join(self.flows) or "no flows"} as sums; res.by("{self.dim}") for each strain')
+        desc.add('results', f'{", ".join(stocks + [key for key in self.stocks if key in states])} as unions; {", ".join(self.flows) or "no flows"} as sums; res.by("{self.dim}") for each strain')
         if any(self.attr_of(self.members[0], imm.names) is not None for imm in self.immunity):
-            lines.append('  compartmental solvers: none (protection from an attribute is kept per agent)')
+            desc.add('solvers', 'compartmental solvers: none (protection from an attribute is kept per agent)')
         else:
-            lines.append('  compartmental solvers: ' + ('none (members that affect each other need agents)' if self.coupled else 'members side by side; unions' + (', and seeding' if self.init_prev is not None else '') + ' from each member\'s shares (independent)'))
-        text = '\n'.join(lines)
-        return text if output else print(text)
+            desc.add('solvers', 'compartmental solvers: ' + ('none (members that affect each other need agents)' if self.coupled else 'members side by side; unions' + (', and seeding' if self.init_prev is not None else '') + ' from each member\'s shares (independent)'))
+        if out is not None:
+            return desc
+        return str(desc) if output else desc.show()

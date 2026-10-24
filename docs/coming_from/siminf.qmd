@@ -96,7 +96,7 @@ These are from Starsim's switching demo for SimInf users (`tests/switching/test_
 | Selective movements by state (`states=`), and movements that change state (`to_states=`) | **Works**: columns of the register |
 | A rate for each herd, written `ss.perday(ss.by(herd=b))` | **Fails** when `b` is a NumPy array: the sim raises a `ShapeError` that says the `ss.by()` has 1 value. With a list, `ss.perday(ss.by(herd=list(b)))`, or with the unit inside, `ss.by(herd=[ss.perday(x) for x in b])`, it works |
 | A model with a continuous state per herd (SISe's `phi`) | **Works**: declared, with no C |
-| Fit by particle MCMC (`pmcmc()`) | **Works**: `sim.calibrate(method='pmcmc')`, for a stochastic model with a likelihood, runs four chains, and reports R-hat; on SimInf's `?pmcmc` example the 95% intervals (beta 0.123 to 0.186, gamma 0.066 to 0.089) cover the true values (0.16 and 0.077) |
+| Fit by particle MCMC (`pmcmc()`) | **Works**: `sim.fit(method='pmcmc')`, for a stochastic model with a likelihood, runs four chains, and reports R-hat; on SimInf's `?pmcmc` example the 95% intervals (beta 0.123 to 0.186, gamma 0.066 to 0.089) cover the true values (0.16 and 0.077) |
 | The speed of the particle filter | **Works**: 0.57 ms per particle run on one thread, the same as SimInf's 0.57 ms (the demo asks for within 3 times), and 0.23 ms on four threads |
 | Fit by ABC-SMC (`abc()`) | **Works**: `method='abc-smc'`, below |
 | Speed on a national register | **Works**: see the timings above |
@@ -118,7 +118,7 @@ S, I, R = ss.states('S I R')
 sir = ss.Disease(infection=ss.Transition(S, I, rate=beta * I), recovery=ss.Transition(I, R, rate=gamma), init_n=dict(I=5))
 sim = ss.Sim(sir, total_pop=1000, solver='gillespie', unit='day', start=1, stop=100, data=data, verbose=0)
 
-fit = sim.calibrate(method='abc-smc', rand_seed=1, verbose=0)
+fit = sim.fit(method='abc-smc', rand_seed=1, verbose=0)
 for key in ['beta', 'gamma']:
     low, high = np.percentile(fit.samples[key], [2.5, 97.5])
     print(f'{key}: 95% from {low:.3f} to {high:.3f}')

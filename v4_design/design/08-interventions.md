@@ -99,7 +99,7 @@ ss.treat(treatment, who=None, **delivery)
 ss.Delivery(who=None, **delivery)               # a step people attend, with no product (a visit)
 ```
 
-`who=` says who receives it, and the product is `what=`, also the first argument (`ss.screen(cytology, who=due)` is `ss.screen(who=due, what=cytology)`). `who=` takes:
+`who=` says who receives it, and the product is `what=`, also the first argument (`ss.screen(cytology, who=due)` is `ss.screen(who=due, what=cytology)`). In the common case of a product given by one delivery, the delivery takes the product's own keywords and makes it (`ss.vaccinate(efficacy=0.9, coverage=0.8, at=['2025-02-01'])`); a product given by several deliveries is made once and passed to each. `who=` takes:
 
 | `who=` | Means |
 |---|---|
@@ -368,5 +368,5 @@ Conditions, coverage functions, and `deliver=` functions are tried on what the s
 - **`days=` as the time keyword of `ss.change`.** `at=` takes dates, years, or durations.
 - **Follow-ups nested in a test (`on_positive=`, `on_negative=`).** A cascade is not a tree: a trigger can be the union of several events, one result feeds several steps, and memory carries a result forward. Steps are peers, triggered by events.
 - **`who >> what` as the spelling of a step** (`screening.ascus >> ss.screen(hpv_dna)`), by analogy with `S >> I`. Keywords (`who=`, `what=`) say the same without parentheses around a trigger of several parts.
-- **Delivery extras, removed 2026-10-20 (they can come back if needed):** stock targets (`target=`, `above=`, `ss.share`; STIsim keeps its own), a resource shared by steps (`ss.Resource`, `uses=`, and numeric `priority=` classes), `ss.cascade` (it ran as its steps would as a list), `ss.visit` (a delivery with no product), `count_events=` and `events_df()`, a delivery that makes its own product from the product's keywords (`ss.vaccinate(efficacy=0.9)`), and reading any condition on age as delivery by age (only `at_age=` is). A target is `deliver=` or `capacity=` as a function of the sim, a shared clinic a `capacity=` function that reads what the steps before it used, and a log of events an analyzer.
+- **Delivery extras, removed 2026-10-20 (they can come back if needed):** stock targets (`target=`, `above=`, `ss.share`; STIsim keeps its own), a resource shared by steps (`ss.Resource`, `uses=`, and numeric `priority=` classes), `ss.cascade` (it ran as its steps would as a list), `ss.visit` (a delivery with no product), `count_events=` and `events_df()`, and reading any condition on age as delivery by age (only `at_age=` is). A target is `deliver=` or `capacity=` as a function of the sim, a shared clinic a `capacity=` function that reads what the steps before it used, and a log of events an analyzer.
 - **Budget optimization and optimal control in v1.** `cost=` keeps the door open. (Allocating a fixed budget between imported programs, `ss.fit.optimize`, was added for Atomica's users; optimal control was not.)

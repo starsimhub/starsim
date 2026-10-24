@@ -36,7 +36,7 @@ or `ss.interop.load(m)` on a live pycamdl model, if pycamdl can be imported wher
 | Interventions (off unless enabled) and events (`transfer`, `add` at times) | Listed in `ImportIncomplete`, with the scenarios that enable each (a one-off move between states is `ss.Delivery(move=S >> R, ...)`, below) | no |
 | A compartment with an ODE (`ode`), a reaction such as `A + B --> C` | Listed | no |
 | An observation of a number in states (`prevalence`), a ratio of flows | A result, or listed; give the likelihood when calibrating | no |
-| Fitting (NUTS, IF2, PMMH) | `sim.calibrate(method='nuts')` for an ODE whose series all have a likelihood, `method='pmcmc'` or `'if2'` for a stochastic one (the default is a best fit) | by hand |
+| Fitting (NUTS, IF2, PMMH) | `sim.fit(method='nuts')` for an ODE whose series all have a likelihood, `method='pmcmc'` or `'if2'` for a stochastic one (the default is a best fit) | by hand |
 
 ## What needs care
 

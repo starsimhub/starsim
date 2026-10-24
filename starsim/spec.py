@@ -95,8 +95,13 @@ def strat_kwargs(strat):
         levels = ss.geo.geography(strat['geo']['place'], **named_args(strat['geo'], geo_keys))
     if strat['kind'] == 'clock' and strat.get('unit'): # Durations
         levels = Code(f"ss.{strat['unit']}s({levels})")
-    out = {strat['name']:levels, 'split':split, 'adjust':strat['adjust'] or None, 'kind':strat['kind']}
+    kind = strat['kind']
+    implied = 'age' if strat['name'] == 'age' else 'plain' # The kind stratify() gives when none is given
+    out = {strat['name']:levels, 'split':split, 'adjust':strat['adjust'] or None, 'kind':None if (kind == implied and not strat.get('geo')) else kind}
     if strat.get('split_from'): # Taken from the named population again
+        out.pop('split')
+    elif isinstance(levels, list) and isinstance(split, list) and len(levels) == len(split) and kind != 'clock': # Each level with its share, e.g. age={0: 0.3, 15: 0.6, 65: 0.1}
+        out[strat['name']] = {int(k) if sc.isnumber(k) and not isinstance(k, bool) and float(k).is_integer() else k: v for k,v in zip(levels, split)}
         out.pop('split')
     if strat['states'] is not None:
         out['states'] = strat['states']
@@ -482,7 +487,7 @@ def contacts_code(net):
         if pars.get('beta') != 1.0 or pars.get('diseases') is not None: # Not arguments of ss.contacts()
             return None
         mats = net['contacts']
-        args = [f'{mats["matrix"]!r}, bands={mats["bands"]!r}'] if 'bands' in mats else [f'{mats["matrix"]!r}, dims={mats["dims"]!r}'] if 'dims' in mats else [f'{dim}={mat!r}' for dim,mat in mats.items()]
+        args = [f'ages={mats["ages"]!r}, matrix={mats["matrix"]!r}'] if 'ages' in mats else [f'{mats["matrix"]!r}, dims={mats["dims"]!r}'] if 'dims' in mats else [f'{dim}={mat!r}' for dim,mat in mats.items()]
         if net.get('name') != 'contacts':
             args.append(f'name={net["name"]!r}')
         if net.get('contacts_unit') is not None:
@@ -504,12 +509,12 @@ def contacts_code(net):
 def movable(strat, left):
     """ The arguments to stratify(), with the movement between places written as ss.geo.Mobility() where it is a matrix """
     mob = strat['mobility']
-    plain = {k:v for k,v in strat.items() if k not in ['geo', 'split_from']}
+    plain = {k:v for k,v in strat.items() if k != 'geo'}
     out = strat_kwargs({**plain, 'mobility':None})
     if strat.get('geo'): # A named geography as the call that looks it up, with its own split
         ref = strat['geo']
         out[strat['name']] = Code(f"ss.geo.geography({ref['place']!r}{''.join(f', {k}={v!r}' for k,v in named_args(ref, geo_keys).items())})")
-        out.pop('split')
+        out.pop('split', None)
     if strat.get('split_from'):
         out.pop('split', None)
     if mob is None:

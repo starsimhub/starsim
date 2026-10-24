@@ -88,7 +88,7 @@ def test_epydemix_filter():
 def test_epydemix_posterior_projection():
     sc.heading('epydemix: a posterior with no likelihood, then projections from it')
     sim = make_seasonal(data=weekly_data())
-    fit = sim.calibrate(method='abc-smc', particles=50, generations=3, verbose=0) # A distance (wmape), no likelihood
+    fit = sim.fit(method='abc-smc', particles=50, generations=3, verbose=0) # A distance (wmape), no likelihood
     lo, hi = np.quantile(fit.samples.b, [0.025, 0.975])
     assert lo <= true_b <= hi, f'Expected the posterior of b ({lo:.3f} to {hi:.3f}) to cover {true_b}'
     vaccine = ss.vaccinate(ss.Vaccine(efficacy=0.9), capacity=ss.perday(20_000), start='2020-04-01')
