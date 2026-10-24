@@ -50,7 +50,7 @@ If you're new to Python, check out our [getting started guide](https://starsim.o
 
 ### Requirements
 
-Python 3.12-3.14 or R.
+Python 3.11-3.14 or R.
 
 We recommend, but do not require, installing Starsim in a virtual environment, such as [uv](https://github.com/astral-sh/uv) or [conda](https://conda-forge.org/download/).
 

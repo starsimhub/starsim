@@ -7,7 +7,7 @@ name = "starsim"
 dynamic = ["version"]
 description = "A fast, flexible agent-based disease modeling framework"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.11"
 license = "MIT"
 keywords = ["agent-based model", "simulation", "disease", "epidemiology"]
 
@@ -31,14 +31,14 @@ classifiers = [
 
 dependencies = [
     "numpy>=2.0.0",
-    "pandas>=2.1.0",
+    "pandas>=3.0",
     "sciris>=3.2.8",
     "numba>=0.59.0",
     "scipy",
     "networkx",
     "matplotlib",
     "optuna",
-    "jax",
+    "jax>=0.8",
     "blackjax",
     "starsim_data>=2.0.0",
 ]

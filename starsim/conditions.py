@@ -594,7 +594,11 @@ def group_reasons(cond, sim):
         return [f'the function "{getattr(cond, "__name__", "function")}" takes uids'] if ss.utils.n_args(cond) >= 2 else []
     if isinstance(cond, Cond) and cond.op == 'people' and not is_static(cond, sim):
         prop = cond.args[0]
-        return [f'a condition uses people.{prop}, which is not a dimension; stratify by it (sim.stratify({"sex=[\'female\', \'male\']" if prop == "female" else f"{prop}=[...]"})) to run as compartments']
+        if prop == 'female':
+            example = "sex=['female', 'male']"
+        else:
+            example = f'{prop}=[...]'
+        return [f'a condition uses people.{prop}, which is not a dimension; stratify by it (sim.stratify({example})) to run as compartments']
     if not isinstance(cond, Cond) or cond.op in leaves:
         return []
     out = []
