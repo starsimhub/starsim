@@ -69,9 +69,10 @@ Rather than bundling everything under pars, we're now defining components indivi
 ```{python}
 S, I, R = ss.states(3)
 beta = ss.perday(0.1)
+gamma = ss.days(10)
 
 infection = S >> I @ beta * I
-recovery = I >> R @ ss.days(10)
+recovery = I >> R @ gamma
 sir = ss.Disease(infection, recovery, init_prev=0.01)
 
 sim = ss.Sim(sir, people=people, networks=network, start='2020-01-01', stop='2020-07-01')
