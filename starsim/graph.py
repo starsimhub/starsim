@@ -94,6 +94,7 @@ class Graph(Presentation):
             self._add_par(init_prev, name=init_prev.name)
         self.resolve_states()
         self.resolve_transitions()
+        self.resolve_init_prev()
         self.expand_rows()
         self.resolve_people()
         self.resolve_attrs()
@@ -286,11 +287,24 @@ class Graph(Presentation):
                     raise ss.errors.UndrivenTransition(f'the inflow "{name}" ({tr.arrow}) has no rate. Give it one, e.g. {tr.arrow.replace(" -> ", " >> ")} @ 0.1')
                 tr.undriven = True
 
-            # Derive the kind from the rate
+            # Derive the kind from the rate, written per person (a rate written as the whole flow, e.g. beta*S*I/N, is divided by its source)
+            if tr.rate is not None:
+                rate = per_person(tr.rate, tr.src, [st for st in self.states.values() if st.people])
+                if rate is not tr.rate:
+                    tr.flow_given, tr.rate = tr.rate, rate
             tr.const, tr.terms = (None, {}) if tr.rate is None else linear(tr.rate)
             tr.contact = bool(tr.terms)
             for state in tr.terms:
                 state.infectious = True
+        return
+
+    def resolve_init_prev(self):
+        """ By default, 1% of people start infected, seeded through the transmission, unless a state is given a starting value """
+        given = any(state.given_init for state in self.states.values())
+        if self.init_prev is None and not given and any(tr.contact for tr in self.transitions.values()):
+            self.init_prev = par(0.01)
+            self._add_par(self.init_prev, name='init_prev')
+            self.guessed['init_prev'] = '1% of people, the default'
         return
 
     def expand_rows(self):

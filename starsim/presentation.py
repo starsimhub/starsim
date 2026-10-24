@@ -50,7 +50,7 @@ class Presentation:
         inits = {s.name:s.init for s in self.states.values() if s.init is not None} | {s.name:f'{s.init_n} {"person" if s.init_n == 1 else "people"}' for s in self.states.values() if s.init_n is not None}
         if self.init_prev is not None and not (sc.isnumber(self.init_prev) and self.init_prev == 0):
             inits['init_prev'] = value_str(self.init_prev.raw) if isinstance(self.init_prev, par) else self.init_prev
-        guesses = [self.guessed[key] for key in ['init', 'first', 'rest'] if key in self.guessed]
+        guesses = [self.guessed[key] for key in ['init', 'init_prev', 'first', 'rest'] if key in self.guessed]
         if inits:
             rest = f'; the rest in {self.rest.name}' if self.rest is not None else ''
             add('', 'init: ' + ', '.join(f'{k} = {v}' for k,v in inits.items()) + rest, f'guessed: {"; ".join(guesses)}' if guesses else None)

@@ -1109,6 +1109,21 @@ class Results(ss.utils.NoDists, ss.ndict):
         print(super().__str__(*args, **kwargs))
         return
 
+    def _implicit_has(self, key):
+        """ Whether a key is a result of the sim's one disease made or named by the sim (see `ss.Sim.init_results()`), which is also found here, e.g. `sim.results.I` for `sim.results.sir.I` """
+        implicit = self.__dict__.get('_implicit')
+        return implicit is not None and isinstance(key, str) and key in dict.get(self, implicit, {})
+
+    def __getitem__(self, key):
+        if key not in self and self._implicit_has(key):
+            return self[self._implicit][key]
+        return super().__getitem__(key)
+
+    def __getattr__(self, attr):
+        if self._implicit_has(attr):
+            return self[self._implicit][attr]
+        return super().__getattr__(attr)
+
     def __setitem__(self, key, value):
         """ Also link the flow to each destination of a transition with several to its total, so `res.cin.X` is `res['cin.X']` """
         super().__setitem__(key, value)

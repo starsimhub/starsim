@@ -29,6 +29,25 @@ def given_modules(*inputs):
             mods += [v for v in vals if isinstance(v, ss.Module)]
     return mods
 
+
+def declared(obj):
+    """ Whether an object is part of a declared model (a transition or an outcome) rather than a module """
+    return isinstance(obj, (ss.Transition, ss.outcome, ss.transitions.FlowSum))
+
+
+def make_disease(arg, names):
+    """ Transitions given to the sim (alone or in a list, among modules) as one disease, named from its states (e.g. "sir"), whose results are also at the top of the sim's (`sim.results.I`) """
+    items = sc.tolist(arg) if isinstance(arg, (list, tuple)) or declared(arg) else None
+    if items is None:
+        return arg
+    flat = [obj for item in items for obj in (item if isinstance(item, (list, tuple)) else [item])]
+    transitions = [obj for obj in flat if declared(obj)]
+    if not transitions:
+        return arg
+    disease = ss.Disease(*transitions, _names=names)
+    disease.setattribute('_implicit', True)
+    return [obj for obj in flat if not declared(obj)] + [disease]
+
 class Sim(ss.Base):
     """
     The Sim object
@@ -92,16 +111,19 @@ class Sim(ss.Base):
         models = [arg for arg in models if arg is not None]
         given = dict(label=label, people=people, demographics=demographics, connectors=connectors, networks=networks, diseases=diseases,
                      interventions=interventions, analyzers=analyzers, custom=custom, modules=modules, data=data)
-        for arg in models: # The model: modules, or lists of them; or the sim parameters, as a dict
+        for arg in models: # The model: modules or transitions, or lists of them; or the sim parameters, as a dict
             if isinstance(arg, dict):
                 kwargs = sc.mergedicts({k:v for k,v in arg.items() if given.get(k) is None}, kwargs) # A keyword given outright wins over the same key in the dict
-            elif not (isinstance(arg, ss.Module) or (isinstance(arg, (list, tuple)) and all(isinstance(mod, ss.Module) for mod in arg))):
-                errormsg = f'ss.Sim() takes the model (modules, or lists of them) or a dict of parameters as positional arguments, not {type(arg).__name__}; give everything else by keyword, e.g. label="..."'
+            elif not all(isinstance(obj, ss.Module) or declared(obj) for obj in (arg if isinstance(arg, (list, tuple)) else [arg])):
+                errormsg = f'ss.Sim() takes the model (modules or transitions, or lists of them) or a dict of parameters as positional arguments, not {type(arg).__name__}; give everything else by keyword, e.g. label="..."'
                 raise TypeError(errormsg)
+        names = ss.utils.caller_names(1)
+        models = make_disease(models, names)
+        diseases = make_disease(diseases, names)
         positional = [arg for arg in models if not isinstance(arg, dict)]
         if positional:
             modules = sc.mergelists(*positional, modules)
-        self._name_modules(ss.utils.caller_names(1), demographics, connectors, networks, interventions, diseases, analyzers, custom, modules)
+        self._name_modules(names, demographics, connectors, networks, interventions, diseases, analyzers, custom, modules)
         interventions = self._order_steps(interventions)
         self.par_values = None # Values of model parameters by name, e.g. pars=dict(beta=0.1) or pars=fit.pars
         self.jax = None # Whether a whole run is taken in JAX: of the ODE (as ss.parallel() does for many runs with different values; see ss.gradients), or of the chain binomial and tau-leaping (see ss.perflib._chain); None to choose (see ss.solvers.choose_engine())
@@ -198,6 +220,7 @@ class Sim(ss.Base):
                         name = names.get(id(obj))
                         if name is None and getattr(obj, 'graph', None) is not None: # Not bound to one variable, e.g. built in a helper: named from its states instead, e.g. 'sir'
                             name = ''.join(s.name[0].lower() for s in obj.graph.people_states) or None
+                            obj._implicit = name is not None
                         if name is not None:
                             obj.name = obj.label = name
                             obj._default_name = False
@@ -209,6 +232,22 @@ class Sim(ss.Base):
         if not any(isinstance(mod, ss.Delivery) for mod in sc.tolist(interventions)):
             return interventions
         return ss.interventions.order_steps(sc.tolist(interventions))
+
+    def _named_modules(self, attr):
+        """ The modules called `attr`: the sim's own once it is initialized, else those it was given """
+        if self.__dict__.get('initialized'):
+            mods = self.modules
+        else:
+            mods = given_modules(self.__dict__.get('pars'))
+        return [mod for mod in mods if mod.name == attr]
+
+    def __getattr__(self, attr):
+        """ A module by its name, e.g. `sim.sir` for `sim.diseases.sir`, unless two modules share the name """
+        if not attr.startswith('_') and 'pars' in self.__dict__:
+            mods = self._named_modules(attr)
+            if len(mods) == 1:
+                return mods[0]
+        raise AttributeError(f"'{type(self).__name__}' object has no attribute '{attr}'")
 
     def __getitem__(self, key):
         """ Allow dict-like access, e.g. sim['diseases'] """
@@ -1440,6 +1479,9 @@ class Sim(ss.Base):
                 for key,module in modules.items():
                     self.pars[attr][key] = module.pars
 
+        names = [mod.name for mod in self.modules] # Each module is also sim.<name> (see __getattr__()), unless the name is taken
+        for name in sorted({name for name in names if names.count(name) > 1 or name in dir(self)}):
+            ss.warn(f'There is more than one "{name}" (modules, or a module and an attribute of the sim), so sim.{name} is not a shortcut to a module; use e.g. sim.diseases.{name}')
         return
 
     def lock_pars(self, locked=True):
@@ -1493,6 +1535,11 @@ class Sim(ss.Base):
         for prod in self.products():
             if not [key for key,res in prod.results.items() if isinstance(res, ss.Result) and key != 'timevec']:
                 self.results.pop(prod.name, None)
+
+        # The results of one disease made or named by the sim are also at the top, e.g. sim.results.I
+        implicit = [mod.name for mod in self.diseases() if mod._implicit]
+        if len(implicit) == 1:
+            self.results.setattribute('_implicit', implicit[0])
 
         # The results named to be kept by group must exist
         if self.pars.results is not None:

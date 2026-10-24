@@ -104,7 +104,7 @@ class Disease(ss.Module):
             raise ss.CapabilityError(errormsg)
         return
 
-    def __init__(self, *args, pars=None, strains=None, **kwargs):
+    def __init__(self, *args, pars=None, strains=None, _names=None, **kwargs):
         super().__init__()
         self.strains = None # Its ss.Strains, if it has strains
         self.family = None # For strains with courses of their own: the module that runs them (see ss.strains.Family)
@@ -118,7 +118,7 @@ class Disease(ss.Module):
         if strains is not None and getattr(strains, 'shared', None) is True: # An outcome for each strain carried, before the transitions are built
             ss.strains.prepare(strains, [(x.name, x) for x in list(args) + sc.tolist(kwargs.get('transitions'))] + list(kwargs.items()) + list(members.items()))
         if args or members or any(isinstance(v, declared) or key in ss.transitions.Graph.grouped for key,v in kwargs.items()):
-            self.init_graph(args, members, pars, kwargs, names=ss.utils.caller_names(1))
+            self.init_graph(args, members, pars, kwargs, names=_names or ss.utils.caller_names(1)) # The names of the variables of the code that made it; or, made by the sim from the transitions it was given, of the code that made the sim
         else: # Written as code: its own define_pars() and define_states() follow, as in Starsim 3
             self.update_pars(pars, **kwargs)
         if strains is not None:

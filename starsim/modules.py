@@ -294,6 +294,7 @@ class Module(Base):
         # Handle parameters
         self.pars = ss.Pars() # Usually populated via self.define_pars()
         self._default_name = True # Whether the name is the class default, in which case the sim can rename it to make it unique
+        self._implicit = False # Whether it was made or named by the sim (from the transitions it was given, or its states), so its results are also at the top of the sim's, e.g. sim.results.I
         self.set_metadata(name, label) # Usually reset as part of self.update_pars()
         unknown = [key for key in kwargs if key not in ss.Timeline.keywords]
         if unknown:
