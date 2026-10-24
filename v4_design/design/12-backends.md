@@ -7,7 +7,7 @@ Justified by [best-practices/paradigm-conversion.md](../best-practices/paradigm-
 
 ## The default: `solver='auto'`
 
-> **`'auto'` picks the simplest, fastest representation that runs the model without approximating its mixing or dropping anything individual-level: a deterministic ODE if every piece of the model has a compartmental form, otherwise agents. The choice and the reason are printed.**
+> **`'auto'` picks the simplest, fastest representation that runs the model without approximating its mixing or dropping anything individual-level: a deterministic ODE if every piece of the model has a compartmental form, otherwise agents. The choice is printed as the run starts, and `describe()` gives the reason.**
 
 ```python
 import starsim as ss
@@ -32,7 +32,7 @@ solver: abm (RandomNet is an individual-level network)
 Initializing sim with 10000 agents
 ```
 
-The solver is set with `solver=`, given to `ss.Sim(...)`, or to `sim.run(...)` before the sim is initialized (the second wins). After `init()` the solver is fixed; `sim.new(solver=...)` makes a fresh copy with another, which is how one sim is run several ways. The printed lines can be hidden with `verbose=0`.
+The solver is set with `solver=`, given to `ss.Sim(...)` or to `sim.run(...)` (the second wins). A sim built for one solver is built again for another when `sim.run(solver=...)` asks for it, which is how one sim is run several ways; `sim.new(solver=...)` makes a fresh copy with another instead. The printed lines can be hidden with `verbose=0`.
 
 `'auto'` chooses between the ODE and agents. It never picks a stochastic compartmental solver; a user who wants one asks for it by name ([The solvers](#the-solvers)).
 

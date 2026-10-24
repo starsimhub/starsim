@@ -49,6 +49,12 @@ def make_disease(arg, names):
     disease.setattribute('_implicit', True)
     return [obj for obj in flat if not declared(obj)] + [disease]
 
+def num_str(x):
+    """ A time as text: a number (or a duration, by its value) without a needless decimal point (100, not 100.0), or a date """
+    x = x.value if isinstance(x, ss.TimePar) else x
+    return f'{x:n}' if sc.isnumber(x) else str(x)
+
+
 class Sim(ss.Base):
     """
     The Sim object
@@ -164,6 +170,7 @@ class Sim(ss.Base):
         self.complete = False  # Whether a simulation has completed running
         self.results_ready = False  # Whether results are ready
         self.elapsed = None # The time required to run
+        self.progress = None # How far a run has got, shown as it goes (see ss.presentation.Progress)
         self.summary = None  # For storing a summary of the results
         self.filename = None # Store the filename, if saved
         self.diagnostics = None # Store diagnostics results
@@ -350,6 +357,7 @@ class Sim(ss.Base):
         self.timer = sc.timer() # Store a timer for keeping track of how long the run takes
         if timer:
             self.timer.start()
+        self._held = [] if self.pars.verbose else None # Notes are said after the line that starts the run
 
         # Validation and initialization -- this is "pre"
         made = self.__dict__.get('_made') or {}
@@ -363,6 +371,9 @@ class Sim(ss.Base):
         self.pars.validate() # Validate parameters
         self._init_solver() # Choose the unit and the solver
         self._init_time() # Initialize time
+        if 'use_aging' not in self.given and not self.pars.use_aging and any(strat.kind == 'age' and strat.edges is not None for strat in self.groups.strats):
+            long = self.t.dt_year*(self.t.npts - 1) >= 1 # Only then does it matter much
+            ss.note('people do not age between the age groups, since nobody is born or dies; pass use_aging=True to age them', sim=self, verbose=None if long else 0)
         self.init_people(**kwargs) # Initialize the people
         self.init_module_attrs(force=force) # Load specified modules from parameters, initialize them, and move them to the Sim object
         self.init_data(check=False) # Load the data before the modules, which read it (e.g. data by group keeps their results by group at every step)
@@ -406,18 +417,9 @@ class Sim(ss.Base):
 
         # It's initialized
         self.initialized = True
-        if self.verbose and self.solver != 'abm': # As a check that the model and its seed are what was meant
-            for dis in self.declared:
-                if dis.graph.transmissions:
-                    try:
-                        ngm = dis.engine.next_generation()
-                    except Exception: # Not every model has one; the line is only a check
-                        ngm = None
-                    if ngm is not None:
-                        R0 = float(np.max(np.abs(np.linalg.eigvals(ngm))))
-                        count = float(dis.engine.count(dis.graph.infectious))
-                        shown = f'{count:,.0f}' if count >= 100 or count == round(count) else f'{count:.3g}' # A share, with total_pop=1, is not 0
-                        print(f'{dis.name}: R0 = {R0:.3g}, with {shown} infectious at the start')
+        held, self._held = self._held, None
+        if self.verbose:
+            print('\n'.join(self.start_lines(held)))
         if timer:
             self.elapsed = self.timer.toc(label='init', output=True, verbose=self.verbose)
         if self.diagnostics and self.diagnostics.states is not None: # Need not None since dict is empty at this point
@@ -473,6 +475,51 @@ class Sim(ss.Base):
                 for attr in getattr(mods[0], '_par_attrs', {}).get(name, [name]):
                     mods[0].setattribute(attr, val)
         return
+
+    def start_lines(self, notes=()):
+        """ What a run says as it starts: what is run and how, R0 (as a check that the model and its seed are what was meant), and the notes """
+        t = self.t
+        mods = list(self.diseases.keys()) or [mod.name for mod in self.modules]
+        when = f'{t.start} to {t.stop}' if t.is_absolute else f'{self.unit_name}s {num_str(t.start)} to {num_str(t.stop)}'
+        if self.solver == 'abm':
+            scale = f', each {self.pars.pop_scale:,.3g} people' if self.pars.pop_scale != 1 else ''
+            how = f'as {len(self.people):,} agents{scale}'
+        else:
+            kind = dict(ode='an ODE', binomial='a stochastic compartmental model (chain binomial)', gillespie='a stochastic compartmental model (Gillespie)', tau='a stochastic compartmental model (tau-leaping)')
+            how = f'{self.pars.total_pop:,.0f} people, as {kind.get(self.solver, self.solver)}'
+        label = f' "{self.label}"' if self.label else ''
+        what = f'{sc.strjoin(mods)}, ' if mods else ''
+        lines = [ss.presentation.style(f'Sim{label}: {what}{how}, {when}', 'bold', color=ss.presentation.in_color())]
+        if self.solver != 'abm':
+            for dis in self.declared:
+                if dis.graph.transmissions:
+                    try:
+                        ngm = dis.engine.next_generation()
+                    except Exception: # Not every model has one; the line is only a check
+                        ngm = None
+                    if ngm is not None:
+                        R0 = float(np.max(np.abs(np.linalg.eigvals(ngm))))
+                        count = float(dis.engine.count(dis.graph.infectious))
+                        shown = f'{count:,.0f}' if count >= 100 or count == round(count) else f'{count:.3g}' # A share, with total_pop=1, is not 0
+                        lines.append(f'  {dis.name}: R0 = {R0:.3g}, with {shown} infectious at the start')
+        lines += [f'  Note: {note}' for note in notes]
+        return lines
+
+    def end_line(self):
+        """ What a run says when it ends: how long it took, and for each disease with a transmission, its infections and their peak """
+        parts = []
+        for dis in getattr(self, 'declared', []):
+            trs = dis.graph.transmissions
+            if trs and all(tr.name in dis.results for tr in trs):
+                total = sum(dis.results[tr.name].values.sum() for tr in trs)
+                infectious = sum(dis.results[state.name].values for state in dis.graph.infectious if state.name in dis.results)
+                if np.ndim(infectious):
+                    peak = int(np.argmax(infectious))
+                    when = dis.results[dis.graph.infectious[0].name].timevec[peak]
+                    when = str(when) if self.t.is_absolute else f'{self.unit_name} {num_str(when)}' # A date, or e.g. day 27
+                    parts.append(f'{dis.name}: {total:,.0f} infections; at most {infectious[peak]:,.0f} infectious, on {when}')
+        took = f'{self.elapsed:.2g}' if self.elapsed < 1 else f'{self.elapsed:.1f}'
+        return f'  Done in {took} s' + (f'; {"; ".join(parts)}' if parts else '')
 
     def by_levels(self, key, given, whole=None):
         """ A parameter with a value per level (`ss.par(ss.by(patch=[...]))`), with the values of some levels replaced, e.g. from `pars={'beta[a]': 0.3}` """
@@ -966,6 +1013,8 @@ class Sim(ss.Base):
         """
         Print the resolved model: every state, transition, and default, with each guess marked
 
+        In a terminal it is in color, and in a notebook it is shown as tables.
+
         Args:
             output (bool): if True, return the text rather than printing it
             verbose (bool): also show what each rate and dwell time is per step: the probability of leaving in a step, as the solvers that take whole steps use it, and the stages of a dwell time
@@ -975,19 +1024,14 @@ class Sim(ss.Base):
         pars = self.pars
         unit = self.unit_name
         mods = list(self.modules)
-        lines = []
-        def add(key, text, guess=None):
-            line = f'{key:12s} {text}'
-            if guess:
-                line = f'{line:60s} [{guess}]'
-            lines.append(line.rstrip())
-            return
+        desc = ss.presentation.Description()
+        add = desc.add
         named = getattr(self, 'named_people', None)
         popguess = '' if ('total_pop' in self.given or 'n_agents' in self.given or getattr(self, 'pop_from', None)) else ' [guessed]'
         stopguess = '' if ('stop' in self.given or 'dur' in self.given) else ' [guessed]' # The default length of a run
         t = self.t
-        lines.append(f'Sim: {len(mods)} module{"s" if len(mods) != 1 else ""}, {pars.total_pop:,.0f} people{popguess}, {unit}s {t.start} to {t.stop}{stopguess}' if self.unit is None or not t.is_absolute else
-                     f'Sim: {len(mods)} module{"s" if len(mods) != 1 else ""}, {pars.total_pop:,.0f} people{popguess}, {t.start} to {t.stop}{stopguess}')
+        when = f'{unit}s {t.start} to {t.stop}' if self.unit is None or not t.is_absolute else f'{t.start} to {t.stop}'
+        desc.section('Sim', f'{len(mods)} module{"s" if len(mods) != 1 else ""}, {pars.total_pop:,.0f} people{popguess}, {when}{stopguess}')
         if self.declared:
             guessed = pars.solver == 'auto'
             add('solver', self.solver, f'guessed: {self.solver_reason}' if guessed else 'requested')
@@ -1036,9 +1080,9 @@ class Sim(ss.Base):
                     add('', text)
         for mod in mods:
             if hasattr(mod, 'describe') and (getattr(mod, 'graph', None) is not None or isinstance(mod, ss.strains.Family)): # Strains with courses of their own after their members
-                lines += ['', mod.describe(output=True)]
+                mod.describe(out=desc)
         if self.declared:
-            lines.append('')
+            desc.section('Mixing and interventions')
             place = f' within each {self.groups.strats[self.mixing.space].name}' if self.mixing.space is not None else ''
             nets = list(self.networks.values()) + getattr(self, 'mixed', [])
             if nets:
@@ -1053,6 +1097,9 @@ class Sim(ss.Base):
                     add('modifier', f'{mod.target}: {" ".join(mod.describe().split())}')
                 elif isinstance(mod, ss.Delivery):
                     add('delivery', mod.describe())
+            if not desc.sections[-1].rows:
+                desc.sections.pop()
+            desc.section('Results and running')
             for mod in self.declared:
                 names = list(mod.graph.states)
                 extra = [key for key,res in mod.results.items() if isinstance(res, ss.Result) and key not in names and key not in mod.graph.transitions and not key.startswith('cum_')]
@@ -1076,8 +1123,8 @@ class Sim(ss.Base):
                 add('', f'{sc.strjoin(tabulated)}: in the kernels\' tables, as {"it depends" if len(tabulated) == 1 else "they depend"} only on time and states')
             if python:
                 add('', f'{sc.strjoin(python)}: in Python, at {"its" if len(python) == 1 else "their"} place in each step')
-            for note in self.notes:
-                add('note', note)
+        else:
+            desc.section('Running')
 
         # The schedule: one line per timestep in use
         groups = sc.ddict(list)
@@ -1088,43 +1135,45 @@ class Sim(ss.Base):
         for i,(dt,names) in enumerate(sorted(groups.items())):
             every = f'every {unit}' if dt == 1 else f'every {dt:n} {unit}s'
             add('schedule' if i == 0 else '', f'{every}: {", ".join(names)}')
+        if self.declared and self.notes:
+            desc.section('Notes')
+            for note in self.notes:
+                add('note', note)
         if verbose and self.declared:
-            lines += ['', *self.describe_steps()]
-        text = '\n'.join(lines)
-        return text if output else print(text)
+            self.describe_steps(desc)
+        return str(desc) if output else desc.show()
 
-    def describe_steps(self):
-        """ The lines of `describe(verbose=True)`: each rate and dwell time per step of its module """
+    def describe_steps(self, desc):
+        """ The sections of `describe(verbose=True)`, added to `desc` (an `ss.presentation.Description`): each rate and dwell time per step of its module """
         unit = self.unit_name
         def plain(raw): # A single value in the sim's unit, or None if it varies (by group, by person, or in time)
             if sc.isnumber(raw) or (isinstance(raw, ss.TimePar) and np.ndim(raw.value) == 0):
                 return ss.solvers.engine.convert(raw, self.unit_base)
             return None
-        lines = []
         for mod in self.declared:
             dt = mod.t.dt.to(self.unit_base).value
-            lines.append(f"Per step of {mod.name} ({dt:n} {unit}{'s' if dt != 1 else ''}):")
+            desc.section(f'Per step of {mod.name}', f"{dt:n} {unit}{'s' if dt != 1 else ''}")
             for name,tr in mod.graph.transitions.items():
                 if tr.contact: # The rate of each person depends on the others, so only its parameters can be converted
                     for leaf in tr.rate.leaves:
                         if isinstance(leaf, ss.transitions.par) and not leaf.literal and (val := plain(leaf.raw)) is not None:
-                            lines.append(f'  {name:12s} {leaf.name} = {val:n} per {unit} → {val*dt:n} per step')
+                            desc.add(name, f'{leaf.name} = {val:n} per {unit} → {val*dt:n} per step')
                     continue
                 dw = mod.engine.dwells.get(name)
                 if dw is None:
                     continue
                 val = dw.mean if dw.dist is not None else plain(dw.par.raw)
                 if val is None or not np.isfinite(val):
-                    lines.append(f'  {name:12s} varies (by group, by person, or in time)')
+                    desc.add(name, f'varies (by group, by person, or in time)')
                     continue
                 mean = 1/val if dw.is_rate else val
                 if dw.fixed:
-                    lines.append(f'  {name:12s} a fixed delay of {mean:n} {unit}s = {mean/dt:n} steps')
+                    desc.add(name, f'a fixed delay of {mean:n} {unit}s = {mean/dt:n} steps')
                 else:
                     rate = dw.k/mean # The rate of leaving each stage
                     stages = f' in each of {dw.k} stages' if dw.k > 1 else ''
-                    lines.append(f'  {name:12s} rate {rate:.4g} per {unit}{stages} → p = 1 - exp(-{rate:.4g} × {dt:n}) = {1 - np.exp(-rate*dt):.4f} per step')
-        return lines
+                    desc.add(name, f'rate {rate:.4g} per {unit}{stages} → p = 1 - exp(-{rate:.4g} × {dt:n}) = {1 - np.exp(-rate*dt):.4f} per step')
+        return desc
 
     def hash(self):
         """
@@ -1401,14 +1450,13 @@ class Sim(ss.Base):
         self.results.timevec = self.timevec # Store the timevec in the results for plotting
         return
 
-    def init_people(self, verbose=None, **kwargs):
+    def init_people(self, **kwargs):
         """
         Initialize people within the sim
         Sometimes the people are provided, in which case this just adds a few sim properties to them.
         Other time people are not provided and this method makes them.
 
         Args:
-            verbose (int):  detail to print
             kwargs  (dict): passed to ss.People()
         """
         # Handle inputs
@@ -1416,10 +1464,6 @@ class Sim(ss.Base):
         if (self.named_people is not None or self.given_pyramid is not None) and self.solver != 'abm': # A compartmental run takes the size and age split of a population, not its agents
             people = None
         n_agents = self.pars.n_agents
-        verbose = sc.ifelse(verbose, self.pars.verbose)
-        if verbose > 0 and self.solver == 'abm':
-            labelstr = f' "{self.label}"' if self.label else ''
-            print(f'Initializing sim{labelstr} with {n_agents:0n} agents')
 
         # If people have not been supplied, make them -- typical use case
         if people is None:
@@ -1742,15 +1786,13 @@ class Sim(ss.Base):
             raise ss.AlreadyRunError(errormsg)
 
         # Print out progress if needed
-        if self.verbose: # Print progress
+        if self.verbose:
             self.elapsed = self.timer.toc(output=True)
             t = self.t
-            simlabel = f'"{self.label}": ' if self.label else ''
-            string = f'  Running {simlabel}{t.now("str")} ({t.ti:2.0f}/{t.npts-1}) ({self.elapsed:0.2f} s) '
             if self.verbose >= 2:
-                sc.heading(string)
-            elif not (t.ti % max(1, round(t.npts*self.verbose) if self.verbose < 1 else t.npts//10)): # About ten lines in all, or with a fraction, every that share of the run
-                sc.progressbar(t.ti, t.npts - 1, label=string, length=20, newline=True)
+                sc.heading(f'  Running {t.now("str")} ({t.ti:2.0f}/{t.npts-1}) ({self.elapsed:0.2f} s) ')
+            elif self.progress is not None:
+                self.progress.update()
         return
 
     def advance(self):
@@ -1813,6 +1855,8 @@ class Sim(ss.Base):
             self.new(inplace=True)
 
         # Initialization steps
+        if verbose is not None and not self.initialized: # So that initializing says as much
+            self.pars.verbose = ss.parameters.check_verbose(verbose)
         if not self.initialized: self.init() # Automatically initialize if not initialized
         if verbose is not None:
             self._orig_verbose = self.verbose
@@ -1824,6 +1868,7 @@ class Sim(ss.Base):
             errormsg = 'Simulation is already complete'
             raise ss.AlreadyRunError(errormsg)
 
+        self.progress = ss.presentation.Progress(self) if self.verbose else None
         try:
             # Main simulation loop -- just one line!!!
             reason = self.kernel_reason() if until is None and not profile else None
@@ -1850,9 +1895,11 @@ class Sim(ss.Base):
                 self._made, self._made_pars = self._settings(), self._module_pars() # So that values set after the run are kept when it is run again (see new())
                 if shrink:
                     self.shrink(full=False)
-                sc.printv(f'Run finished after {self.elapsed:0.2f} s.\n', 2, self.verbose)
+                if self.progress is not None:
+                    self.progress.finish(self.end_line())
         finally:
             self.dists.clear_run_caches()
+            self.progress = None
         
         return self # Allows e.g. ss.Sim().run().plot()
 

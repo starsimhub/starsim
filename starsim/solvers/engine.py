@@ -1133,30 +1133,9 @@ class Engine:
         unit = self.sim.unit_base
         return ss.transitions.numeric_dist(raw, lambda val: convert(val, unit), per_agent=per_agent)
 
-    def note_beta(self):
-        """
-        Warn about a beta dict of bare numbers with a step shorter than the unit: in Starsim 3 these were probabilities per step, so a port copied verbatim is too low by a factor of 1/dt.
-        Not on a network with acts, where a bare number is a probability per act, as it was in Starsim 3 (see `ss.peract`).
-        """
-        if self.dt >= 1:
-            return
-        nets = {ss.utils.standardize_netkey(k):net for k,net in self.sim.networks.items()}
-        acts = lambda k: getattr(nets.get(ss.utils.standardize_netkey(k)), 'has_acts', False)
-        for tr in self.graph.transmissions:
-            for leaf in tr.rate.leaves:
-                raw = getattr(leaf, 'raw', None)
-                if isinstance(raw, dict) and raw and all(sc.isnumber(v) for v in raw.values()) and not all(acts(k) for k in raw):
-                    raw = {k:v for k,v in raw.items() if not acts(k)}
-                    unit = self.sim.unit_name
-                    ss.warn(f'{self.mod.name}.{tr.name}: beta={raw} has numbers with no unit, so they are rates per {unit}, with dt = {self.dt:.3g} {unit}. '
-                            f'In Starsim 3, a beta dict of bare numbers was a probability per step: if these came from Starsim 3, give each as one (e.g. ss.prob(..., "month") for monthly steps); '
-                            f'to keep them as rates and silence this, give each a unit (e.g. ss.per{unit}(...)).')
-        return
-
     def note_steps(self):
         """ In a run that takes whole steps, say which transitions are fast compared with the timestep """
         sim = self.sim
-        self.note_beta()
         for tr in self.graph.transitions.values(): # A rate per person that grows with a count of people, which is often a count written for a share
             if tr.people and not tr.inflow and tr.rate is not None and tr.flow_given is None and ss.transitions.count_power(tr.rate) > 0: # Not for the whole flow written without a total (beta*S*I), which says so
                 ss.note(f'{tr.name} has a rate per person of {ss.transitions.format_expr(tr.rate)}, which grows with the number of people (density-dependent); for a share of the population, write .frac (e.g. I.frac), or write the transmission with the bare state (e.g. beta * I)', sim=sim)

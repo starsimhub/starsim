@@ -1014,7 +1014,7 @@ def test_time_values():
     assert any("unit='day'" in note for note in quiet.notes) # Kept, with nothing printed
     with sc.capture() as txt:
         ss.Sim(fast, networks=ss.RandomNet(), solver='ode', n_agents=1000, unit='day', stop=5, verbose=1).init()
-    assert txt.index('solver: ode') < txt.index('RandomNet approximated') # The solver line comes before the notes it leads to
+    assert txt.index('as an ODE') < txt.index('RandomNet approximated') # The line that says how it is run comes before the notes it leads to
     assert 'n_agents=1000 is used as the population' in txt # A compartmental run has no agents, so it is the population
     return sim
 

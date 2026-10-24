@@ -122,7 +122,7 @@ Everything spatial is in the submodule `ss.geo`.
 
 Fitting is the submodule `ss.fit`, which `import starsim` does not import (its first use does), so its names are not counted here: `ss.fit.Fit`, what `sim.fit()` returns (called `fit` below), `ss.fit.compare_models` (fit and compare by out-of-sample prediction), and `ss.fit.optimize` (reallocate spending between programs to maximize or minimize a result). (Starsim 3's `ss.Calibration` is removed.)
 
-### Methods and attributes: 56 distinct names
+### Methods and attributes: 57 distinct names
 
 | On | Names |
 |---|---|
@@ -130,7 +130,7 @@ Fitting is the submodule `ss.fit`, which `import starsim` does not import (its f
 | A state or a sum of states | **`n`** **`frac`** **`total`** **`time`** **`progress`** **`enter`** **`exit`** |
 | A transition | **`to`** **`incidence`** **`uids`** **`ever`** **`count`** **`since`** |
 | A modifiable array (`sir.rel_sus`) | **`effective`** |
-| `ss.Sim` | `init` `run` `plot` `summarize` `to_df` `loop` `results` **`describe`** **`stratify`** **`to_spec`** **`to_code`** `to_json` **`hash`** **`fit`** **`sensitivity`** **`check_dt`** **`what_modifies`** **`new`** **`gradient`** |
+| `ss.Sim` | `init` `run` `plot` `summarize` `to_df` `loop` `results` **`describe`** **`stratify`** **`to_spec`** **`to_code`** `to_json` **`hash`** **`fit`** **`sensitivity`** **`check_dt`** **`what_modifies`** **`new`** **`gradient`** **`to_data`** |
 | `sim.loop` | `insert` `to_df` `plot` `plot_step_order` |
 | A result | **`select`** **`by`** **`cum`** `resample` `sum` |
 | A result of an `ss.MultiSim`, which has a run dimension | **`quantiles`** `values` |
@@ -156,8 +156,8 @@ Names that repeat across rows (`plot`, `summarize`, `to_df`, `describe`, `strati
 | Running, comparing, saving | 7 | 2 |
 | Types you get back or subclass | 5 | 0 |
 | **`ss.` names** | **109** | **46** |
-| Methods and attributes | 56 | 41 |
-| **Total** | **165** | **87** |
+| Methods and attributes | 57 | 42 |
+| **Total** | **166** | **88** |
 
 <!-- counts end -->
 

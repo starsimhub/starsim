@@ -231,7 +231,7 @@ Problems are reported at the earliest step that can detect them ([15-errors.md](
 
 ## Finishing
 
-After the last step, `sim.finalize()` calls each module's `finalize()` once, in module order, and then finalizes the results (scaling, summary statistics). This is Starsim's behavior. Calling `run()` again on a completed sim raises `AlreadyRunError`, which says to make a new sim with `sim.new()` (or to copy the sim before running it).
+After the last step, `sim.finalize()` calls each module's `finalize()` once, in module order, and then finalizes the results (scaling, summary statistics). This is Starsim's behavior. Calling `run()` again on a completed sim runs it again from the start, built again as `sim.new()` would (with any settings or parameters changed since the run); stepping or finalizing it again raises `AlreadyRunError`.
 
 ## Rejected
 

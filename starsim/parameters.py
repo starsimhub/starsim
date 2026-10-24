@@ -225,7 +225,7 @@ class Pars(sc.objdict):
         Update a Dist object in the parameters, e.g. sim.pars.diseases.sir.dur_inf
 
         A distribution (or a dict with a `type`) replaces it. A single value (a number, duration, rate, or function) sets
-        its main parameter and keeps the rest, as in Starsim 3: for `ss.bernoulli`, its probability (`init_prev=0.05`);
+        its main parameter and keeps the rest: for `ss.bernoulli`, its probability (`init_prev=0.05`);
         for `ss.lognorm_ex`, its mean (`dur=5` is a lognormal of mean 5, with the same standard deviation); for
         `ss.constant`, its value; for `ss.choice`, it becomes that value always (`ss.constant`). A bare number keeps the unit of the distribution (see `note_bare()`). To change other
         parameters, use its own method, e.g. `pars.dur_inf.set(mean=8, std=2)`; for a fixed value, give `ss.constant(...)`.
@@ -310,7 +310,7 @@ class SimPars(Pars):
         connectors (str/list/Module): As above
         interventions (str/list/Module): As above
         analyzers (str/list/Module): As above
-        verbose (int/float): How much to print: 0 nothing, 1 the solver, notes, and progress (default), 2 everything (e.g. each step); a fraction is as 1, with progress every that share of the run (e.g. 0.1, as in Starsim 3, for every 10%)
+        verbose (int/float): How much to print: 0 nothing, 1 the solver, notes, and progress (default), 2 everything (e.g. each step); a fraction is as 1, with progress every that share of the run (e.g. 0.1 for every 10%)
     """
     def __init__(self, pars=None, create=True, **kwargs):
 

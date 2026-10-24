@@ -58,10 +58,15 @@ def note(msg, category=None, sim=None, verbose=None):
         if msg in sim.notes: # Only say it once
             return
         sim.notes.append(msg)
+        if verbose == 0: # Kept, but not said
+            return
+        if getattr(sim, '_held', None) is not None: # Said after the line that starts the run (see ss.Sim.init())
+            sim._held.append(msg)
+            return
         verbose = sc.ifelse(verbose, sim.pars.verbose)
     verbose = sc.ifelse(verbose, ss.options.verbose)
     if verbose > 0:
-        print(f'  note: {msg}')
+        print(f'  Note: {msg}')
     return
 
 

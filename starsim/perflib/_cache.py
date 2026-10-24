@@ -57,7 +57,7 @@ def compiling(what, engine, low, high):
     """ Say that something is being compiled, and about how long it takes (in seconds), once a session for each thing """
     if what not in said and ss.options.verbose:
         said.add(what)
-        print(f'Compiling {what} with {engine}, estimated time: {low}-{high} s')
+        print(f'  Compiling {what} with {engine}, estimated time: {low}-{high} s')
     return
 
 

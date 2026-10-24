@@ -182,7 +182,7 @@ ss.Sim(
     solver    = 'auto',          # 'auto' | 'ode' | 'binomial' | 'gillespie' | 'abm'
     approx    = None,            # None notes each approximation; True keeps the notes without printing them; False makes them errors
     rand_seed = 1,
-    verbose   = 1,               # 0 prints nothing; 1 the solver, notes, and progress; 2 everything
+    verbose   = 1,               # 0 prints nothing; 1 what is run and how, the notes, progress, and how the run ended; 2 everything
     # --- what else ---
     interventions = None,
     connectors    = None,
@@ -246,7 +246,7 @@ There is no replicate count on `ss.Sim`: `sim.run(n_runs=100)` is a shortcut for
 | Method | Does |
 |---|---|
 | `sim.init()` | builds the model: resolves defaults, checks, picks the unit and the solver ([00-overview.md](00-overview.md#what-happens-at-build-time)) |
-| `sim.run(solver=None, n_runs=None)` | runs it, calling `init()` first if needed; returns the sim, or with `n_runs=` a MultiSim of that many runs |
+| `sim.run(solver=None, n_runs=None)` | runs it, calling `init()` first if needed (and again from the start, if it has run); returns the sim, or with `n_runs=` a MultiSim of that many runs |
 | `sim.new(**kwargs)` | a fresh, uninitialized copy, with any keywords changed (`sim.new(solver='abm')`) |
 | `sim.describe()` | prints the resolved model, with every guess marked ([below](#describe)) |
 | `sim.stratify(age=..., ...)` | stratifies every module by a property of people; the same as `stratify=` ([05-dimensions.md](05-dimensions.md)) |
@@ -304,30 +304,38 @@ Every module implements `describe()`, and `sim.describe()` covers the whole sim.
 8. the notes given at `init()`;
 9. the sim's unit and where it came from, and the loop as a schedule: one line per group of modules in the order they run, with how often each runs (`every day: sir, random network; every year: births, deaths`). The fully unrolled list stays available as `sim.loop` ([10-execution.md](10-execution.md)).
 
-Everything guessed rather than given is marked `[guessed]`, with the rule that produced it.
+Everything guessed rather than given is marked `[guessed]`, with the rule that produced it. The description is in sections (the sim, each model, mixing and interventions, results and running, and the notes): in color in a terminal, as tables in a notebook, and as plain text otherwise (and from `describe(output=True)`), with each guess at the end of its line.
 
 ```text
 >>> sim = ss.Sim(sir, stop=100)
 >>> sim.describe()
 Sim: 1 module, 10,000 people [guessed], steps 0 to 100
-solver       ode                                             [guessed: every part of the model has a compartmental form]
-unit         none: time is in timesteps                      [nothing in the model has a unit]
+  solver       ode                                             [guessed: every part of the model has a compartmental form]
+  unit         none: time is in timesteps                      [nothing in the model has a unit]
 
 Disease 'sir': 3 states, 2 transitions
-states       S, I, R
-             I infectious
-             init: init_prev = 0.01; the rest in S
+  states       S, I, R
+               I infectious
+               init: init_prev = 0.01; the rest in S
 
-infection    S -> I   contact-mediated, source I
-             beta = 0.3 per step
-             rate = 0.3 × I.n / N                            [homogeneous mixing]
-recovery     I -> R   spontaneous
-             dwell ~ exponential(mean = 10 steps)            [guessed: scalar duration]
+  infection    S -> I   contact-mediated, source I
+               beta = 0.3 per step
+               rate = 0.3 × I.n / N                            [homogeneous mixing]
+  recovery     I -> R   spontaneous
+               dwell ~ exponential(mean = 10 steps)            [guessed: scalar duration]
+  timing       an infection is dated at the end of its step, so what follows it starts then
+               a state's count (the result X) includes the step people enter it; they stay for their whole dwell
 
-mixing       homogeneous, 1 contact per step                 [guessed: no network given]
-results      S, I, R, and one flow per transition
-schedule     every step: sir
+Mixing and interventions
+  mixing       homogeneous, 1 contact per step                 [guessed: no network given]
+
+Results and running
+  results      S, I, R, and one flow per transition
+  plan         sir: in the kernels, the whole run in one call
+  schedule     every step: sir
 ```
+
+A run says, as it starts, what is run and how, in one line (`Sim: sir, 10,000 people, as an ODE, steps 0 to 100`), with R0 under it for a compartmental run and then the notes; as it goes, a bar redrawn in place (in a terminal or a notebook; elsewhere, a line every tenth of the run); and as it ends, how long it took, with each disease's infections and their peak (`Done in 0.03 s; sir: 9,309 infections; at most 3,036 infectious, on 27`). A MultiSim says how many runs of which scenarios it ran, and its runs say nothing, unless `verbose=` is given.
 
 Give the sim a unit (`unit='day'`, a typed `dt`, or dates) and the same lines read `0.3 per day` and `mean = 10 days`, with the source of the unit shown ([02-types.md](02-types.md#bare-numbers)). `sim.describe(output=True)` returns the text instead of printing it.
 

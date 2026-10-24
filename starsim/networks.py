@@ -247,7 +247,7 @@ class Network(Route):
     @property
     def custom_beta(self):
         """
-        Whether it defines its own `net_beta()`, as in Starsim 3: a declared disease then gives it the probability per act
+        Whether it defines its own `net_beta()`: a declared disease then gives it the probability per act
         of each edge, in place of the hazard per act, and what it returns (the probability for the partnership in the step)
         is multiplied by `rel_trans`, `rel_sus`, and the modifiers on the route
         """
@@ -676,7 +676,7 @@ class Network(Route):
         """
         The probability that each edge transmits in a step, given the disease's probability (in the step, or on a network with acts, per act)
 
-        A network written as code can override this, as in Starsim 3 (see `custom_beta`).
+        A network written as code can override this (see `custom_beta`).
         """
         if inds is None: inds = Ellipsis
         if self.has_acts: # The number of acts in each partnership in the step
@@ -1177,7 +1177,7 @@ class SexualNet(DegreeTargets, DynamicNetwork):
 
     People take part after their debut (`debut`), if they do (`participation`, drawn at
     their debut). By default, people who have no partner are paired on every step, so
-    nobody has more than one at a time, as in Starsim 3. With `n_contacts`, the number of
+    nobody has more than one at a time. With `n_contacts`, the number of
     partners people have at a time is a target instead: partnerships end when their
     duration is up, and people look for new ones at a rate that depends on how many they
     have, so the distribution of the number of partners (among people who take part, after
@@ -1218,7 +1218,7 @@ class SexualNet(DegreeTargets, DynamicNetwork):
 
     Examples:
         ```python
-        net = ss.SexualNet() # Men and women, at most one partner at a time, as Starsim 3's ss.MFNet
+        net = ss.SexualNet() # Men and women, at most one partner at a time
         msm = ss.SexualNet(name='msm', between='mm', participation=0.1, dur=ss.lognorm_ex(mean=ss.years(2), std=ss.years(1)))
         net = ss.SexualNet(n_contacts=ss.poisson(0.7), dur=ss.lognorm_ex(mean=ss.years(2), std=ss.years(1)), concurrency=0.1, match=dict(risk=0.8))
         sw = ss.SexualNet(name='sw', between=('fsw', 'client'), n_contacts=dict(fsw=5, client=0.5), dur=ss.months(1)) # With boolean attributes fsw and client
@@ -1531,7 +1531,7 @@ class MaternalNet(PrenatalNet):
     """
     Mother-to-child network, for when prenatal and postnatal transmission need not be told apart
 
-    For now the same as `ss.PrenatalNet` (as in Starsim 3), but named `maternalnet`.
+    For now the same as `ss.PrenatalNet`, but named `maternalnet`.
     """
     pass
 

@@ -119,6 +119,7 @@ sim = ss.Sim(sir, data='cases.csv')       # a path, a dataframe, or ss.simdata(.
 - **Alignment is automatic.** A result that is a state of the system at a point in time (a count, a prevalence) is compared at the data's dates, interpolating if needed. A result that is a flow (new infections, reported cases, deaths) is summed over the interval ending at each data date. The library knows which is which because results are declared ([09-results.md](09-results.md)).
 - Stratified data uses extra columns named after the stratification (`age`, `sex`), matched to the result's coordinates.
 - Data wholly outside the simulated period is an error (`DataMisaligned`); data partly outside is used where it overlaps.
+- Data drawn from a run of the model itself, to check that a fit finds values that are known, is `truth.to_data('cases', resample='week')`: a column for each result named, as Poisson counts with the run's values as their means (`noise=None` for the values themselves), drawn from the run's seed, in the form `ss.Sim(data=...)` takes. Give the true sim another seed than the one fitted (`rand_seed=2`).
 
 ## Goodness of fit
 

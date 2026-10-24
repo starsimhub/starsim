@@ -83,7 +83,7 @@ uv add starsim[dev]  # With dev dependencies
 - `distributions.py`: Statistical distributions and random number generation
 - `errors.py`: Errors, warnings, and notes, as classes (e.g. `ss.errors.UnknownState`; the base classes and `ss.CapabilityError` are also at the root)
 - `expressions.py`: Expressions in rates and results (`ss.par`, `ss.transitions.Expr`), and how they are evaluated and printed
-- `fit.py`: Fitting to data, as `ss.fit` (imported when first used; `sim.calibrate()` is the entry point)
+- `fit.py`: Fitting to data, as `ss.fit` (imported when first used; `sim.fit()` is the entry point)
 - `geo.py`: Places and the movement between them (`ss.geo.geography`, `ss.geo.Mobility`, `ss.geo.gravity`)
 - `gradients.py`: Gradients and log-densities in JAX (`sim.gradient()`, `sim.log_density()`)
 - `graph.py`: The graph of a declared module: its states, transitions, and parameters, completed with defaults and checked (`ss.transitions.Graph`)

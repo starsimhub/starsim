@@ -2,7 +2,7 @@
 
 ## Recommendation
 
-1. **Nothing extra should need declaring.** If parameters carry bounds and results have data, calibration is `sim.calibrate()`.
+1. **Nothing extra should need declaring.** If parameters carry bounds and results have data, calibration is `sim.fit()`.
 2. **Nobody has to think about likelihoods to fit a model.** The default goodness of fit is the normalized absolute error (the mean absolute difference between model and data, divided by the mean of the data) per data series, combined with equal weights. It assumes no noise model. Other measures are available by name, a likelihood is optional, and giving one enables posterior methods.
 3. **Choose the fitting method from the model, and print the choice.** For a deterministic model, a local optimizer with exact gradients from automatic differentiation (L-BFGS-B; Nelder-Mead when the model has no gradient), or NUTS for a posterior when every data series has a likelihood. For a stochastic compartmental model whose data series all have a likelihood, particle MCMC. For any other stochastic model, agent-based ones included, Optuna, which gives a best fit and not a posterior. ABC-SMC gives a posterior without a likelihood when asked for (`method='abc-smc'`). One keyword overrides the choice.
 4. **Fitting settings are separate from the model but normally live in the same script.** They do not change what the model is, so they are not part of its hash (`sim.hash()` covers the model, the run settings, and the data); keeping them next to the model stops the two drifting apart.
@@ -56,7 +56,7 @@ calib.calibrate()
 
 Every piece of that restates something the model already knows. The bounds belong to the parameter. `build_sim` exists only because the calibration does not know where `beta` lives. `extract_fn` names a result that already has a name. `conform='prevalent'` says prevalence is a stock rather than a flow, which the result already knows. And the user had to pick a likelihood (`ss.Normal`, with a variance) before they could fit anything.
 
-The same fit in Starsim 4 is the bounds on `beta`, a data file whose column is named after the result, and `sim.calibrate()` ([13-inference.md](../design/13-inference.md) shows the two side by side).
+The same fit in Starsim 4 is the bounds on `beta`, a data file whose column is named after the result, and `sim.fit()` ([13-inference.md](../design/13-inference.md) shows the two side by side).
 
 ### The method depends on the model
 
@@ -84,7 +84,7 @@ Against that: [summer2](../approaches/summer2.md), [epipack](../approaches/epipa
 
 ## The specification
 
-[13-inference.md](../design/13-inference.md) specifies all of this: `sim.calibrate()` and its arguments, data attached by name, goodness of fit and likelihoods, how the method is chosen, gradients, staged fitting, what the fit reports, `sim.sensitivity()`, and `ss.fit.compare_models()`. Parameters with bounds and priors are in [04-parameters.md](../design/04-parameters.md), and results and outcomes in [09-results.md](../design/09-results.md).
+[13-inference.md](../design/13-inference.md) specifies all of this: `sim.fit()` and its arguments, data attached by name, goodness of fit and likelihoods, how the method is chosen, gradients, staged fitting, what the fit reports, `sim.sensitivity()`, and `ss.fit.compare_models()`. Parameters with bounds and priors are in [04-parameters.md](../design/04-parameters.md), and results and outcomes in [09-results.md](../design/09-results.md).
 
 ## Trade-offs
 

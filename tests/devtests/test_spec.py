@@ -150,7 +150,7 @@ methods = {
     'State': ('n frac total time progress enter exit', 'all'),
     'Transition': ('to incidence uids ever count since', 'all'),
     'arrays.ModifiableArr': ('effective', 'all'),
-    'Sim': ('init run plot summarize to_df loop results describe stratify to_spec to_code to_json hash calibrate sensitivity check_dt what_modifies new gradient', 'describe stratify to_spec to_code hash calibrate sensitivity check_dt what_modifies new gradient'),
+    'Sim': ('init run plot summarize to_df loop results describe stratify to_spec to_code to_json hash fit sensitivity check_dt what_modifies new gradient to_data', 'describe stratify to_spec to_code hash fit sensitivity check_dt what_modifies new gradient to_data'),
     'Loop': ('insert to_df plot plot_step_order', ''),
     'Result': ('select by sum resample cum quantiles values', 'select by cum quantiles'),
     'MultiSim': ('run plot summarize to_df results diff', 'diff'),

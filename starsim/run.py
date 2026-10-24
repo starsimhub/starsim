@@ -202,6 +202,8 @@ class MultiSim:
         """ The sims to run, how many times to run each, the sets of values to run them with, and whether those are draws (runs of each scenario) rather than a sweep (scenarios of their own) """
         sims = [self.base_sim] if self.sims is None else list(getattr(self.sims, 'runners', self.sims)) # Sims restarted for their runs are run again from the sim of each scenario
         draws = priors is not None and priors is not False
+        if n_runs is not None and n_runs == int(n_runs): # A whole number given as a float, e.g. 20 from R
+            n_runs = int(n_runs)
         if self.sims is None and n_runs is None and pars is None and not draws:
             n_runs = 4 # A single sim given to a MultiSim is run four times by default
         if len(sims) > 1: # Different sims are different scenarios
@@ -305,6 +307,8 @@ class MultiSim:
         if kwargs.pop('debug', False):
             kwargs['parallel'] = False # Run in serial
         self.timer.start()
+        verbose = sc.ifelse(kwargs.get('verbose'), ss.options.verbose)
+        kwargs.setdefault('verbose', 0) # The runs say nothing, unless asked to; the MultiSim says what it runs
         if self.ready: # The sim of each run was made by init_sims()
             sims = self.sims
         else:
@@ -316,6 +320,7 @@ class MultiSim:
                     self.sims, self.results, self.runs = restarted
                     self.ready = False
                     self.timer.stop()
+                    self.say(verbose)
                     return self
             sims, self.runs = self.expand(base, n_runs, pars, draws, **opts)
 
@@ -328,7 +333,18 @@ class MultiSim:
         self.results = MultiResults.from_sims(run_sims, self.runs)
         self.ready = False
         self.timer.stop()
+        self.say(verbose)
         return self
+
+    def say(self, verbose):
+        """ Say what was run, and how long it took """
+        if verbose:
+            scenarios = list(dict.fromkeys(self.runs['scenario'])) if self.runs is not None else []
+            n = len(self.runs) if self.runs is not None else len(self.sims)
+            which = f' of {len(scenarios)} scenarios ({sc.strjoin(scenarios)})' if len(scenarios) > 1 else f' of "{scenarios[0]}"' if scenarios and scenarios[0] else ''
+            took = f'{self.timer.elapsed:.2g}' if self.timer.elapsed < 1 else f'{self.timer.elapsed:.1f}'
+            print(f'MultiSim: {n} run{"s" if n != 1 else ""}{which}\n  Done in {took} s')
+        return
 
     def check_run(self, what):
         if self.results is None:
@@ -418,8 +434,9 @@ class MultiSim:
             how (str/dict): how to summarize each result over each run, as for `sim.summarize()`
 
         Returns:
-            A dataframe with a row for each result (and scenario, if there are several), and the columns `median`, `low`, `high`, `mean`, and `std`,
-            each to four significant figures, or the nearest whole number from 1,000 up (the exact values are e.g. `res.quantiles()`)
+            A dataframe with a row for each result (and scenario, if there are several), and the columns `median`, `low`, `high`, `mean`, and `std`
+            (or `value`, if each scenario was run once), each to four significant figures, or the nearest whole number from 1,000 up (the exact
+            values are e.g. `res.quantiles()`)
 
         Example:
             ```python
@@ -446,7 +463,7 @@ class MultiSim:
             groups = res.scenarios() if res.runs is not None else {None:list(range(len(arr)))}
             for scenario,inds in groups.items():
                 vals = arr[inds]
-                stats = dict(median=np.median(vals), low=np.quantile(vals, low), high=np.quantile(vals, high), mean=vals.mean(), std=vals.std())
+                stats = dict(median=np.median(vals), low=np.quantile(vals, low), high=np.quantile(vals, high), mean=vals.mean(), std=vals.std()) if len(vals) > 1 else dict(value=vals[0])
                 rows[key if len(groups) == 1 else (key, scenario)] = {k:readable(v) for k,v in stats.items()}
         several = any(isinstance(key, tuple) for key in rows)
         index = pd.MultiIndex.from_tuples(list(rows), names=['result', 'scenario']) if several else pd.Index(list(rows), name='result')
@@ -877,7 +894,7 @@ def restart_runs(sims, n_runs, pars=None, draws=False):
         return None
     runners = []
     for sim in sims:
-        runner = sim.new(rand_seed=sim.pars.rand_seed).init() # The seed as it is now, which may have been set since the sim was made
+        runner = sim.new(rand_seed=sim.pars.rand_seed, verbose=0).init() # The seed as it is now, which may have been set since the sim was made; the MultiSim says what it runs
         runner.label = sim.label
         if not runner.kernel_only():
             return None

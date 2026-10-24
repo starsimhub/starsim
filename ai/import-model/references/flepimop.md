@@ -24,7 +24,7 @@ A flepiMoP model is a configuration YAML plus CSV files beside it: `compartments
 | A parameter from a `timeseries` file | `ss.timeseries({date: value, ...})`, `ss.by` over places | no |
 | `seeding` (importations on dates) | An `ss.geo.Mobility(data=df)` register (rows with no `from` add people) | no |
 | An outcome from a prevalence | A result (`p * I`), or custom code | no |
-| `inference` | `sim.calibrate()` with the data | no |
+| `inference` | `sim.fit()` with the data | no |
 
 ## What needs care
 

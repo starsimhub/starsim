@@ -28,10 +28,9 @@ class Pregnancy(ss.Demographics, ss.Disease):
     before they are born, so a death of a fetus `on=preg.delivery` is a stillbirth; `preg.birth` happens to the newborns,
     so a neonatal death is `on=preg.birth`.
 
-    Takes the parameters of the Starsim 3 module that it reads (see `__init__()`), with the same names and meanings,
-    plus `p_abortion`; code reacts to its events with `add_callback()`, e.g. `preg.add_callback(preg.birth, fn)`. Its states and
-    results have v4's names: `P` (pregnant), `ti_P`, the scheduled delivery `ti_exit_P` (`set_delivery()` reschedules it),
-    and the flows `conception`, `birth`, `miscarriage`, `stillbirth`, `abortion` (see the migrate-starsim3 skill).
+    Its parameters are listed in `__init__()`; code reacts to its events with `add_callback()`, e.g. `preg.add_callback(preg.birth, fn)`.
+    Its states and results are `P` (pregnant), `ti_P`, the scheduled delivery `ti_exit_P` (`set_delivery()` reschedules it),
+    and the flows `conception`, `birth`, `miscarriage`, `stillbirth`, and `abortion`.
 
     Args:
         fertility_rate (rate/dataframe): age-specific fertility rates, or one rate (default per 1000: see `rate_units`)
@@ -250,7 +249,7 @@ class Pregnancy(ss.Demographics, ss.Disease):
         having conceived in the mean duration of a pregnancy before the start, at her conception hazard then
         (`1 - exp(-h*dur)`), at a step uniform over it, and is run forward by the pregnancy's own transitions
         (abortion, losses, and delivery, with no births), so the start has the gestational ages and the first steps
-        their deliveries. Starsim 3 ran the module's steps before the start instead. In the compartmental form, the same share
+        their deliveries. In the compartmental form, the same share
         of each group, less the abortions and the losses on the way, is spread evenly over gestation (see `ss.solvers.Compartmental.backfill_burnin()`).
         """
         if not self.pars.burnin:
@@ -543,7 +542,7 @@ class Pregnancy(ss.Demographics, ss.Disease):
     def compute_asfr(self):
         """
         The age-specific fertility rates of the step (per 1000 women: deliveries by the mother's age, over the women of
-        that age), and the TFR from them, as in Starsim 3. As compartments, by the age of each group, so it needs an age
+        that age), and the TFR from them. As compartments, by the age of each group, so it needs an age
         stratification (otherwise NaN)
         """
         ti = self.ti
@@ -648,8 +647,8 @@ class Pregnancy(ss.Demographics, ss.Disease):
     def conception_rate(self, sim):
         """
         The hazard of conception, per year, for each agent (by UID) or each group: the fertility rate (in the year a
-        pregnancy starting now would end, if given by year), rescaled from all fecund women to those not pregnant (as
-        in Starsim 3); 0 for anyone not fecund
+        pregnancy starting now would end, if given by year), rescaled from all fecund women to those not pregnant; 0 for
+        anyone not fecund
 
         An override can instead take `(sim, uids)` and return a rate for each of those agents (as agents only), e.g.
         `ss.peryear(table[self.method[uids]])`, rather than one for every slot of the raw arrays.

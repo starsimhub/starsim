@@ -1079,7 +1079,7 @@ def test_rows():
     assert np.allclose(n(make('abm', fn=True, n_agents=20_000).run()), 20_000*np.array([0.5, 0.2, 0.2, 0.1]), rtol=0.06)
     tr = abm.diseases.contra.graph.transitions.from_none
     assert len(tr.p) == 4 and len(tr.p_given) == 2
-    assert 'mix * w normalized over pill, iud, inj' in '\n'.join(abm.diseases.contra.graph.describe(abm))
+    assert 'mix * w normalized over pill, iud, inj' in str(abm.diseases.contra.graph.describe(abm))
     spec = abm.to_spec()
     assert spec['modules'][0]['transitions'][0]['p'][1] == 'expit(b0 + (1.0 * people.urban)) * mix * w' # As given
     check_code(abm, spec)

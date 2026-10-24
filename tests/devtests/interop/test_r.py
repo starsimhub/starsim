@@ -14,7 +14,6 @@ stale = pytest.mark.xfail(reason='stale: rstarsim is not yet updated for v4', st
 has_reticulate = rscript is not None and subprocess.run([rscript, '-e', 'quit(status=!requireNamespace("reticulate", quietly=TRUE))'], capture_output=True).returncode == 0
 
 
-@stale
 @pytest.mark.skipif(not has_reticulate, reason='needs R with reticulate')
 def test_r():
     sc.heading('Testing a declared model built and run from R')

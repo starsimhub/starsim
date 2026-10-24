@@ -1436,7 +1436,7 @@ class Family(ss.Module):
 
     def describe(self, output=False, out=None):
         """ The family: its members, protection, seeding, and results; as for `ss.Disease.describe()` """
-        desc = ss.Description() if out is None else out
+        desc = ss.presentation.Description() if out is None else out
         members = self.member_names
         shared = f'; shared: {sc.strjoin(self.exclusive)}' if self.exclusive else ''
         desc.section(f'Strains of {self.name}', f'{len(members)} with courses of their own ({sc.strjoin(members)}), stepped in this order{shared}')

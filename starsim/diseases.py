@@ -30,7 +30,7 @@ class Disease(ss.Module):
     add behavior by defining methods; `ss.SIR`, `ss.SIS`, and `ss.SEIR` are written
     this way.
 
-    A disease can also be written as code, as in Starsim 3: a subclass that declares
+    A disease can also be written as code: a subclass that declares
     nothing, defines its per-agent arrays (`define_states()`), and changes them in its
     own `step_state()` and `step()`; it runs as agents. One class can mix the two, e.g. a
     declared natural history and a coded array that its `step()` updates after
@@ -337,9 +337,9 @@ class Disease(ss.Module):
 
         Args:
             output (bool): if True, return the text rather than printing it
-            out (`ss.Description`): if given, add the description to it and return it
+            out (`ss.presentation.Description`): if given, add the description to it and return it
         """
-        desc = ss.Description() if out is None else out
+        desc = ss.presentation.Description() if out is None else out
         if self.family is not None: # Strains with courses of their own
             self.family.describe(out=desc)
         elif self.graph is not None:
@@ -687,7 +687,7 @@ class Disease(ss.Module):
 
 class Infection(Disease):
     """
-    A disease with transmission written as code, as in Starsim 3
+    A disease with transmission written as code
 
     An `ss.Disease` that adds network-based transmission with directional beta values
     (`infect()`, `infect_route()`), the `susceptible` and `infected` states, the attributes
@@ -1240,7 +1240,7 @@ class SIR(Disease):
     Declared from states and transitions (see `ss.Disease`), so it runs with any
     solver: as agents over networks, or as compartments. It is the textbook SIR: the
     infectious period is exponential, as any declared duration is, and nobody dies of
-    the infection unless `p_death` is given. The keywords are Starsim 3's.
+    the infection unless `p_death` is given.
 
     Args:
         beta (float/`ss.per`/dict): the transmission rate (per contact, if there are networks; a dict gives one per network, and `default=` for the networks it does not name)
@@ -1249,8 +1249,8 @@ class SIR(Disease):
         p_death (float/`ss.bernoulli`): the probability of death from infection, at the end of the infection (by default 0)
         kwargs (dict): passed to `ss.Disease`, e.g. `name`
 
-    Starsim 3's `ss.SIR`, with its lognormal
-    `dur_inf` and `p_death=0.01`, is `ssl.AgentSIR`, written as code.
+    An SIR model written as code, with a lognormal `dur_inf` and `p_death=0.01`,
+    is `ssl.AgentSIR`.
 
     **Example**:
 
@@ -1288,8 +1288,8 @@ class SEIR(Disease):
     As in `ss.SIR`, each duration is exponential unless a distribution is given, and
     nobody dies of the infection unless `p_death` is given.
 
-    Starsim 3's `ss.SEIR`, with its lognormal durations and `p_death=0.01`, is
-    `ssl.AgentSEIR`, written as code.
+    An SEIR model written as code, with lognormal durations and `p_death=0.01`, is
+    `ssl.AgentSEIR`.
     """
     beta      = ss.par(ss.peryear(0.1))
     dur_exp   = ss.par(ss.years(0.5))
@@ -1322,10 +1322,9 @@ class SIS(Disease):
         dur_inf (float/`ss.dur`/`ss.Dist`): the mean time that people are infected for (by default 10 years; a number is in years), as an exponential unless a distribution is given
         kwargs (dict): passed to `ss.Disease`, e.g. `name`
 
-    Starsim 3's `ss.SIS` had a lognormal `dur_inf` and a per-agent
-    immunity level, boosted by each infection and waning over time (`waning=`,
-    `imm_boost=`), which has no declared form; that model, written as code, is
-    `ssl.AgentSIS`.
+    An SIS model with a per-agent immunity level, boosted by each infection and
+    waning over time (`waning=`, `imm_boost=`), which has no declared form, is
+    `ssl.AgentSIS`, written as code.
     """
     beta      = ss.par(ss.peryear(0.05))
     dur_inf   = ss.par(ss.years(10))

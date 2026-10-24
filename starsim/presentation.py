@@ -4,6 +4,7 @@ How a model is shown: `describe()`, `diagram()`, `equations()`, and its part of 
 import os
 import sys
 import html
+import time
 import shutil
 import inspect
 import textwrap
@@ -30,6 +31,67 @@ def style(text, *names, color=True):
     if not names or not color:
         return text
     return f'\033[{";".join(styles[name] for name in names)}m{text}\033[0m'
+
+
+class Progress:
+    """
+    The progress of a run as it goes: a bar redrawn in place in a terminal or a notebook, or otherwise (e.g. to a
+    file) a line every tenth of the run, or every `verbose` share of it for a fraction (e.g. `verbose=0.05`)
+    """
+    width = 30 # Of the bar
+
+    def __init__(self, sim):
+        self.sim = sim
+        self.mode = 'notebook' if sc.isjupyter() else 'terminal' if sys.stdout.isatty() else 'lines'
+        self.color = in_color()
+        self.handle = None # Of the bar in a notebook
+        self.shown = False
+        self.last = 0 # When it was last drawn
+        return
+
+    def line(self):
+        t = self.sim.t
+        share = t.ti/max(1, t.npts - 1)
+        done = int(round(share*self.width))
+        bar = style('━'*done, 'cyan', color=self.color) + style('─'*(self.width - done), 'dim', color=self.color)
+        return f'  {bar} {share:4.0%}  {t.now("str")}  {self.sim.elapsed:.1f} s'
+
+    def update(self):
+        """ Show the progress at this step: drawn at most ten times a second, or as a line every so often """
+        t = self.sim.t
+        if self.mode == 'lines':
+            verbose = self.sim.verbose
+            every = max(1, round(t.npts*verbose) if verbose < 1 else t.npts//10)
+            if not t.ti % every:
+                print(self.line())
+            return
+        now = time.time()
+        if now - self.last >= 0.1:
+            self.last = now
+            self.draw(self.line())
+        return
+
+    def draw(self, text):
+        if self.mode == 'terminal':
+            print(f'\r\033[K{text}', end='', flush=True)
+        else:
+            from IPython.display import display, Pretty
+            if self.handle is None:
+                self.handle = display(Pretty(text), display_id=True)
+            else:
+                self.handle.update(Pretty(text))
+        self.shown = True
+        return
+
+    def finish(self, text):
+        """ Say how the run ended, in place of the bar """
+        if self.shown and self.mode != 'lines':
+            self.draw(text)
+            if self.mode == 'terminal':
+                print()
+        else:
+            print(text)
+        return
 
 
 class Description:
@@ -74,7 +136,7 @@ class Description:
             if lines:
                 lines.append('')
             if sec.title:
-                summary = f'  {style(sec.summary, "dim", color=color)}' if sec.summary else ''
+                summary = f": {style(sec.summary, 'dim', color=color)}" if sec.summary else ''
                 lines.append(style(sec.title, 'bold', 'cyan', color=color) + summary)
             indent = '  ' if sec.title else ''
             for key,text,guess in sec.rows:

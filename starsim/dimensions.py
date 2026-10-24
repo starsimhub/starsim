@@ -711,10 +711,8 @@ class Groups:
         for strat in self.strats: # Each property that people do not already have gets a distribution to assign it
             if strat.kind != 'age':
                 setattr(sim, f'rng_strat_{strat.name}', ss.random(name=f'rng_strat_{strat.name}'))
-        if 'use_aging' not in sim.given: # People age if and only if they are born or die, unless told otherwise
+        if 'use_aging' not in sim.given: # People age if and only if they are born or die, unless told otherwise (said in ss.Sim.init(), once the length of the run is known)
             sim.pars.use_aging = sim.has_demography()
-            if not sim.pars.use_aging and any(strat.kind == 'age' and strat.edges is not None for strat in self.strats):
-                ss.note('people do not age between the age groups, since nobody is born or dies; pass use_aging=True to age them', sim=sim)
         return
 
     def moved_by(self, strat):
