@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+# Render a single page, e.g. "./quickrender t1", and copy its path to the clipboard
+set -euo pipefail # Fail fast if needed
+
+cd "$(dirname "$0")"
+if [ $# -ne 1 ]; then
+    echo "Usage: ./quickrender <name>, e.g. ./quickrender t1"
+    exit 1
+fi
+
+# Find the page: a name that matches exactly wins, otherwise it must match exactly one page
+name=$(basename "$1" .qmd)
+pages=$(find . -name '*.qmd' -not -path './_*' | sed 's|^\./||' | sort)
+matches=$(echo "$pages" | grep -E "(^|/)${name}\.qmd$" || true)
+if [ -z "$matches" ]; then
+    matches=$(echo "$pages" | grep -E "(^|/)[^/]*${name}[^/]*\.qmd$" || true)
+fi
+count=$(echo -n "$matches" | grep -c '^' || true)
+if [ "$count" -ne 1 ]; then
+    echo "Need exactly 1 page matching \"$name\", but found $count:"
+    echo "$matches"
+    exit 1
+fi
+
+# Do the render!
+echo "Rendering $matches"
+SECONDS=0
+quarto render "$matches" --cache-refresh 2>&1 | awk '/^(\x1b\[1m)?(pandoc|metadata)/ {skip=1} !skip {print; fflush()} /^ *$/ {skip=0}' # Hide the "pandoc" and "metadata" blocks Quarto prints for a single page
+
+# Copy the path of the built page to the clipboard
+output="$(pwd)/_site/${matches%.qmd}.html"
+echo -n "$output" | xclip -selection clipboard > /dev/null 2>&1
+echo -e "Done: $matches built in ${SECONDS} s"
+echo -e "Page (copied to clipboard): $output"
