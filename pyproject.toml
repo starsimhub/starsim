@@ -116,7 +116,7 @@ lock = [
     "pyyaml==6.0.3",
     "scipy==1.18.1",
     "sciris==3.4.0",
-    "setuptools==84.0.0",
+    "setuptools==84.1.0",
     "six==1.17.0",
     "smmap==5.0.3",
     "sqlalchemy==2.1.1",
