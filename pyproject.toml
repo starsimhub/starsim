@@ -56,7 +56,8 @@ test = [
 
 # For building the documentation
 doc = [
-    "quartodoc",
+    "quartopydoc", # Fork of quartodoc
+    "sphobjinv",
     "jupyter",
     "jupyter-cache",
     "jupytext",
