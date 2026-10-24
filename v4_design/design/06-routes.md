@@ -258,7 +258,7 @@ sir_density = ss.Disease(
 ss.Sim(sir_density, total_pop=10_000, unit='day').run()
 ```
 
-The importers write a rate such as `beta * S * I` with no division by the total this way (`beta * I.n`). Since a rate per person that grows with a count of people is often meant as a share (`I.frac`), the build notes it as density-dependent, and says how to write a share.
+It can also be written as the whole flow, `S >> I @ beta * S * I` ([03-states-and-transitions.md](03-states-and-transitions.md#the-whole-flow)), which is the same model; the importers write a rate such as `beta * S * I` with no division by the total as `beta * I.n`. Since a rate per person that grows with a count of people is often meant as a share (`I.frac`), the build notes it as density-dependent, and says how to write a share (not for the whole flow, `beta * S * I`, which says what it means).
 
 ## Layers
 

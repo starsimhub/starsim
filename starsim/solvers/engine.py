@@ -1158,7 +1158,7 @@ class Engine:
         sim = self.sim
         self.note_beta()
         for tr in self.graph.transitions.values(): # A rate per person that grows with a count of people, which is often a count written for a share
-            if tr.people and not tr.inflow and tr.rate is not None and ss.transitions.count_power(tr.rate) > 0:
+            if tr.people and not tr.inflow and tr.rate is not None and tr.flow_given is None and ss.transitions.count_power(tr.rate) > 0: # Not for the whole flow written without a total (beta*S*I), which says so
                 ss.note(f'{tr.name} has a rate per person of {ss.transitions.format_expr(tr.rate)}, which grows with the number of people (density-dependent); for a share of the population, write .frac (e.g. I.frac), or write the transmission with the bare state (e.g. beta * I)', sim=sim)
         if sim.solver in ['gillespie', 'tau'] and self.smooth: # Exact only for rates that are constant within each quarter of a step
             what = 'solver="gillespie"' if sim.solver == 'gillespie' else 'Tau-leaping'

@@ -58,6 +58,9 @@ class Presentation:
             add('', f'init: {self.first.name} = 1.0', f'guessed: {"; ".join(["nothing given"] + guesses)}')
         lines.append('')
 
+        def flow_line(tr):
+            if tr.flow_given is not None:
+                add('', f'written as the whole flow, {format_expr(tr.flow_given, mul="×")}, so per person in {tr.src[0].name}: {format_expr(tr.rate, mul="×")}')
         for name,tr in self.transitions.items():
             if tr.contact:
                 leaf = beta_leaf(tr)
@@ -65,6 +68,7 @@ class Presentation:
                 source = ' + '.join(f'{weight(coef)}{s.name}' for s,coef in tr.terms.items())
                 guess = f'name {tr.guessed["name"]}' if 'name' in tr.guessed else None
                 add(name, f'{tr.arrow}   contact-mediated, source {source}', f'guessed: {guess}' if guess else None)
+                flow_line(tr)
                 for leaf in tr.rate.leaves:
                     if isinstance(leaf, par) and not leaf.literal:
                         add('', f'{leaf.name} = {quantity_str(leaf.raw, "rate" if leaf.slot == "rate" else None, unit)}') # A factor of the rate, such as R0 in R0 × gamma × I, has no unit of its own
@@ -86,7 +90,7 @@ class Presentation:
                 add(name, f'{tr.arrow}   undriven: moved by {sc.strjoin(movers) if movers else "nothing" if sim is not None else "products, deliveries, or code"}')
             else:
                 guess = sc.strjoin(([f'name {tr.guessed["name"]}'] if 'name' in tr.guessed else []) + ([f'acquisition: {tr.guessed["acquisition"]}'] if 'acquisition' in tr.guessed else []), sep='; ')
-                kind = 'spontaneous'
+                kind = 'density-dependent' if tr.rate is not None and ss.transitions.count_power(tr.rate) > 0 else 'spontaneous' # A rate per person that grows with a number of people, e.g. beta*I.n
                 if tr.inflow:
                     kind = f'inflow, in total per {unit or "step"}'
                 elif tr.acquisition:
@@ -94,6 +98,7 @@ class Presentation:
                 elif 'acquisition' in tr.guessed: # Out of the first state, alongside a transmission
                     kind += ', not an acquisition'
                 add(name, f'{tr.arrow}   {kind}', f'guessed: {guess}' if guess else None)
+                flow_line(tr)
                 if tr.immediate:
                     add('', 'immediately (dur=0), in the step people arrive')
                 elif not tr.inflow and (tr.dur is not None or (engine is not None and name in engine.dwells)):

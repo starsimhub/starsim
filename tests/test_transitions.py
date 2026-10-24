@@ -78,6 +78,13 @@ def test_forms():
         recovery = ss.Transition(I, R, dur=10)
     forms.cls = SIR()
 
+    # The whole flow, as most other frameworks write it
+    S, I, R = ss.states(3)
+    N = S + I + R
+    infection = S >> I @ 0.05 * S * I / N
+    recovery = ss.Transition(I, R, dur=10)
+    forms.flow = ss.Disease(infection, recovery, name='sir')
+
     hashes = sc.objdict()
     for key,sir in forms.items():
         sim = ss.Sim(sir, stop=50, **kw)
@@ -136,6 +143,14 @@ def test_forms():
     assert death.src == [I, R]
     many = ss.Disease(S >> I @ 0.05*I, I >> R @ 10, death, name='sir')
     assert [s.name for s in many.graph.transitions.death.src] == ['I', 'R']
+
+    # Density-dependent: the whole flow without the total is the count, and either way 1% start infected by default
+    density = []
+    for flow in [True, False]:
+        S, I, R = ss.states(3)
+        density.append(ss.Sim(ss.Disease(S >> I @ (3e-5*S*I if flow else 3e-5*I.n), I >> R @ 10, name='sir'), stop=50, **kw))
+    assert density[0].hash() == density[1].hash()
+    assert density[0].run().results.sir.I[0] == 100 # init_prev=0.01 by default
     return forms
 
 

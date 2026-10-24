@@ -319,6 +319,22 @@ def test_compare_data():
     return compared
 
 
+@sc.timer()
+def test_plot():
+    sc.heading('Testing what a module plots')
+    S, I, R = ss.states(3)
+    sim = ss.Sim(S >> I @ 0.3*I, I >> R @ 0.1, verbose=0).run()
+    lines = lambda fig: [[line.get_label() for line in ax.get_lines()] for ax in fig.axes]
+    assert lines(sim.sir.plot()) == [['S', 'I', 'R']] # The states, together
+    assert [len(ax.get_lines()) for ax in sim.sir.plot('flows').axes] == [1, 1] # Each flow, apart
+    assert len(sim.sir.plot('all').axes) == 5
+    assert lines(sim.sir.plot(['S', 'I'])) == [['S', 'I']]
+    assert len(sim.sir.plot('S', 'I').axes) == 2
+    assert len(sim.plot().axes) == 5 # The number alive and the deaths of a closed population are left out
+    plt.close('all')
+    return sim
+
+
 # %% Run as a script
 if __name__ == '__main__':
     do_plot = True
@@ -337,6 +353,7 @@ if __name__ == '__main__':
     res7 = test_result_exprs()
     res8 = test_standard_prevalence()
     res9 = test_compare_data()
+    sim10 = test_plot()
 
     sc.toc(T)
     plt.show()

@@ -1242,7 +1242,7 @@ class Results(ss.utils.NoDists, ss.ndict):
         A result across runs is plotted as the median and a 95% interval of each scenario, or every run if `lines=True`.
 
         Args:
-            key (str/list): the result (e.g. `'sir.n_I'`) or results to plot (by default, those plotted automatically); a module's name plots its results; if a list, plot exactly those
+            key (str/list): the result (e.g. `'sir.I'`) or results to plot (by default, those plotted automatically); a module's name plots its results; if a list, plot exactly those, with the results in a list within it in the same axes (e.g. `[['sir.S', 'sir.I'], 'sir.infection']`)
             fig (Figure): if provided, plot into an existing figure
             data (dict): data to plot with the results: the times and values for each result, by the result's module and name (see `sim.plot()`)
             label (str): the label of the lines of a result of one run (e.g. the sim's)
@@ -1255,16 +1255,19 @@ class Results(ss.utils.NoDists, ss.ndict):
             annualize (bool): if True, resample the results to annual values first (each by its kind; see `ss.Result.resample()`)
             kwargs (dict): known arguments (e.g. figsize, font) split between the plotting dicts; see `ss.plot_args()`
         """
-        flat = match_result_keys(self, key, show_skipped=(show_skipped or key)) # Always show skipped with a custom key
+        if isinstance(key, (list, tuple)) and any(isinstance(k, (list, tuple)) for k in key): # Several results in some axes
+            groups = [list(match_result_keys(self, sc.tolist(k), show_skipped=True).values()) for k in key]
+        else:
+            groups = [[res] for res in match_result_keys(self, key, show_skipped=(show_skipped or key)).values()] # Always show skipped with a custom key
         if annualize:
-            flat = sc.objdict({k: res.resample('year') if isinstance(res, Result) else res for k, res in flat.items()})
-        n_cols,_ = sc.getrowscols(len(flat)) # Number of columns of axes
+            groups = [[res.resample('year') if isinstance(res, Result) else res for res in group] for group in groups]
+        n_cols,_ = sc.getrowscols(len(groups)) # Number of columns of axes
         figsize = np.array([8, 6])*np.clip((n_cols-3)/6+1, 1, 1.5) # Scale the default figure size with the number of columns
         kw = ss.plot_args(kwargs, figsize=figsize, alpha=0.8, data_alpha=0.3, data_color='k')
         data = data or {}
         with ss.style(**kw.style):
             if fig is None:
-                fig, axs = sc.getrowscols(len(flat), make=True, **kw.fig)
+                fig, axs = sc.getrowscols(len(groups), make=True, **kw.fig)
                 if isinstance(axs, np.ndarray):
                     axs = axs.flatten()
             else:
@@ -1272,15 +1275,18 @@ class Results(ss.utils.NoDists, ss.ndict):
             if not sc.isiterable(axs):
                 axs = [axs]
             many = False
-            for ax,res in zip(axs, flat.values()):
-                if (res.module, res.name) in data: # Plot the data
-                    x, y = data[(res.module, res.name)]
-                    ax.scatter(x, y, **kw.data)
-                several = res._draw(ax, kw, label=label, lines=lines)
-                if res.columns is not None: # One line per column
+            for ax,group in zip(axs, groups):
+                for res in group:
+                    if (res.module, res.name) in data: # Plot the data
+                        x, y = data[(res.module, res.name)]
+                        ax.scatter(x, y, **kw.data)
+                    several = res._draw(ax, kw, label=sc.ifelse(res.label, res.name) if len(group) > 1 else label, lines=lines)
+                    many = many or (several and res.columns is None) # Several scenarios, labelled once
+                if len(group) > 1 or group[0].columns is not None: # One line per result, or per column
                     ax.legend(**kw.legend)
-                many = many or (several and res.columns is None) # Several scenarios, labelled once
-                format_axes(ax, res, n_ticks, show_module)
+                format_axes(ax, group[0], n_ticks, show_module)
+                if len(group) > 1: # Titled by what the results have in common
+                    ax.set_title(group[0].module if len({res.module for res in group}) == 1 else '')
             if legend and many:
                 axs[0].legend(**kw.legend)
         if title:

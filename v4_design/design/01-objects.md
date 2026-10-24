@@ -166,7 +166,7 @@ Concretely:
 <!-- fragment -->
 ```python
 ss.Sim(
-    modules,                     # a module or a list of modules; diseases=, demographics=, etc. also work
+    modules,                     # a module, transitions, or a list of them; diseases=, demographics=, etc. also work
     # --- who ---
     networks  = None,            # networks and mixing pools alike; none means homogeneous mixing
     people    = None,            # an ss.People, e.g. ss.people('Kenya', year=2024)
@@ -196,6 +196,8 @@ ss.Sim(
 ```
 
 Only the model is required; every other argument has a default that is guessed and printed. The keywords are Starsim's (`networks`, `n_agents`, `total_pop`, `rand_seed`, `data`), with `unit`, `solver`, `approx`, `stratify`, and `integrator` added; `results` now names the results kept by group. One difference from Starsim today: the first positional argument is the model rather than a `pars` dict. A dict in that position is still read as Starsim reads it.
+
+Transitions given to the sim (`ss.Sim(infection, recovery)`, `ss.Sim([infection, recovery])`, or `ss.Sim(diseases=[infection, recovery])`) are one disease, as `ss.Disease(infection, recovery)` is, named from its states (`sir`). The results of that disease, or of one the sim names from its states (`ss.Sim(ss.Disease(...))`), are also at the top of the sim's results (`sim.results.I` is `sim.results.sir.I`), if there is one such disease. Each module is also an attribute of the sim (`sim.sir` is `sim.diseases.sir`), unless two modules, or a module and an attribute of the sim, have the same name, which warns.
 
 `networks=` accepts networks and mixing pools alike. There is no `ss.Homogeneous`: homogeneous mixing is what happens when no network is given, and `ss.MixingPool(n_contacts=10)` sets a contact rate. See [06-routes.md](06-routes.md).
 

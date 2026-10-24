@@ -157,6 +157,21 @@ So an outcome never competes with a testing intervention over who produces `case
 
 An outcome is a result, and anything can read a result: a [trigger](08-interventions.md#triggers) can close schools when `n_hosp` passes a threshold, and a rate can depend on it. What an outcome cannot do is single out individuals, because it never recorded who they were. If being hospitalized changes what happens to a person, hospitalization is a state.
 
+## Plotting
+
+`sim.plot()` plots each result in axes of its own, leaving out the sim's own results that never change (such as the number alive in a closed population). A module's `plot()` plots its results by what they are:
+
+<!-- fragment -->
+```python
+sir.plot()            # the number in each state, together in one axes (the default; 'states')
+sir.plot('flows')     # each transition's flow, in axes of its own
+sir.plot('all')       # every result, each in axes of its own
+sir.plot(['S', 'I'])  # S and I, together
+sir.plot('S', 'I')    # S and I, apart
+```
+
+A list within the list of results given to `sim.plot()` is plotted in one axes too (`sim.plot([['sir.S', 'sir.I'], 'sir.infection'])`).
+
 ## Data
 
 Data is attached to results by name:

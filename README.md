@@ -98,15 +98,15 @@ import starsim as ss
 ss.demo()
 ```
 
-Here's how you'd write a minimal compartmental SIR model:
+Here's how you'd write a minimal compartmental SIR model with an infection rate of 0.3 per step and a mean recovery duration of 10 steps:
 
 ```py
 import starsim as ss
 
 S, I, R = ss.states(3)
 sir = ss.Disease(
-    infection = ss.Transition(S, I, rate=0.3*I)
-    recovery = ss.Transition(I, R, rate=0.1)
+    infection = ss.Transition(S, I, rate=0.3*I),
+    recovery = ss.Transition(I, R, dur=10)
 )
 
 sim = ss.Sim(sir).run()

@@ -992,19 +992,40 @@ class Module(Base):
                 ss.utils.shrink(state, to_shrink)
         return
 
-    def plot(self):
-        """ Plot all results in the module """
+    def plot(self, *keys, **kwargs):
+        """
+        Plot the module's results
+
+        Args:
+            keys (str/list): what to plot: `'states'` (the number in each state, together in one axes; the default,
+                if the module has states), `'flows'` (each transition's flow, in axes of its own), `'all'` (every result,
+                each in axes of its own; the default otherwise), or the names of results: a list of them in one axes
+                (`['S', 'I']`), and each argument in axes of its own (`'S', 'I'`)
+            kwargs (dict): passed to `ss.Results.plot()`, e.g. `fig`, `figsize`, `annualize`
+
+        Examples:
+            ```python
+            sir.plot()           # The states
+            sir.plot('flows')    # Each flow
+            sir.plot(['S', 'I']) # S and I, together
+            sir.plot('S', 'I')   # S and I, apart
+            ```
+        """
         if not len(self.results): # E.g. a module given to a sim, which runs a copy of it
-            errormsg = f'"{self.name}" has no results: a sim runs a copy of each module it is given, so plot the one in the sim, e.g. sim.diseases.{self.name}.plot()'
+            errormsg = f'"{self.name}" has no results: a sim runs a copy of each module it is given, so plot the one in the sim, e.g. sim.{self.name}.plot()'
             raise ValueError(errormsg)
-        with sc.options.with_style('fancy'):
-            flat = sc.flattendict(self.results, sep=': ')
-            timevec = self.t.timevec
-            fig, axs = sc.getrowscols(len(flat), make=True)
-            for ax, (k, v) in zip(axs.flatten(), flat.items()):
-                ax.plot(timevec, v)
-                if isinstance(v, ss.Result) and v.columns is not None: # One line per column for 2D results
-                    ax.legend(v.columns)
-                ax.set_title(k)
-                ax.set_xlabel('Year')
-        return ss.return_fig(fig)
+        results = {k:res for k,res in self.results.items() if isinstance(res, ss.Result)}
+        graph = getattr(self, 'graph', None)
+        states = [k for k in (graph.states if graph is not None else [s.name for s in self.auto_state_list] + self.derived_state_names) if k in results]
+        flows = [k for k,res in results.items() if res.kind == 'flow' and '.' not in k] # Not the flows to each destination of a transition with several
+        groups = []
+        for key in keys or (['states'] if states else ['all']):
+            if key == 'states':
+                groups.append(states)
+            elif key == 'flows':
+                groups += [[k] for k in flows]
+            elif key == 'all':
+                groups += [[k] for k,res in results.items() if res.auto_plot]
+            else:
+                groups.append(sc.tolist(key))
+        return self.results.plot([group for group in groups if group], **kwargs)

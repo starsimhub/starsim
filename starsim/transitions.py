@@ -398,6 +398,7 @@ class Transition(Nameable):
             raise ValueError(errormsg)
         self.src = None
         self.dst = None
+        self.flow_given = None # A rate written as the whole flow (e.g. beta*S*I/N), which the graph divides by the source (see ss.expressions.per_person())
         self.p = None
         self.trigger = None if on is None else ss.on(on)
         if delay is not None:

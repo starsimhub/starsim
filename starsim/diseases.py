@@ -45,7 +45,7 @@ class Disease(ss.Module):
         transitions (list): transitions, as a list (for longer models)
         results (list): extra results: sums and ratios of states
         outcomes (list): `ss.outcome` objects
-        init_prev (float): the initial prevalence, seeded through the transmission
+        init_prev (float): the initial prevalence, seeded through the transmission (by default 0.01, unless a state is given an initial value)
         init (dict): the share of people who start in each state, e.g. `dict(S=0.90, I=0.01, R=0.09)`; each value can be an `ss.by` or a function of the sim
         init_n (dict): instead, the number of people who start in each state, e.g. `dict(I=1)` for one person
         first (str): the state that everyone not put elsewhere starts in, and is born into; by default, the one named `S` or `susceptible` (otherwise it must be given; in the class form, `first = 'N'` in the class body)

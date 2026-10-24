@@ -78,6 +78,8 @@ sir = ss.Disease(infection, recovery, init_prev=0.01)
 sim = ss.Sim(sir, people=people, networks=network, start='2020-01-01', stop='2020-07-01')
 ```
 
+A rate can be written per person, as here, or as the whole flow, as in the equation $dI/dt = \beta S I / N$ (and as most other modeling frameworks write it): with `N = S + I + R`, `S >> I @ beta * S * I / N` is the same model as `S >> I @ beta * I`. Both are frequency-dependent: what matters is the share of people who are infectious. For density-dependent transmission ($dI/dt = \beta S I$), where the number matters, leave out the `/ N` (`beta * S * I`), or write the number per person (`beta * I.n`).
+
 Before running a model, it is worth checking that Starsim has understood it the way you meant. `describe()` prints the model as Starsim has read it, with everything it had to guess (here, for example, that the recovery time is exponentially distributed, and that `*I` is shorthand for `*S*I/N`) marked as a guess:
 
 ```{python}

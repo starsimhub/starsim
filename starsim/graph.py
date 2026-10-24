@@ -6,7 +6,7 @@ import itertools
 import numpy as np
 import sciris as sc
 import starsim as ss
-from .expressions import as_expr, BinOp, Count, did_you_mean, Expr, is_one, linear, par, Row, Share, to_pars
+from .expressions import as_expr, BinOp, Count, count_power, did_you_mean, Expr, is_one, linear, par, per_person, Row, Share, to_pars
 from .parameters import by, TimeValue
 from .transitions import FlowSum, outcome, State, Transition
 from .presentation import Presentation, TransitionTable
@@ -60,7 +60,7 @@ class Graph(Presentation):
         module (`ss.Module`): the module the graph belongs to
         args (list): transitions and outcomes passed positionally
         members (dict): states, transitions, parameters, results, and functions, by name
-        init_prev (float): the initial prevalence, seeded through the transmission
+        init_prev (float): the initial prevalence, seeded through the transmission (by default 0.01, unless a state is given an initial value)
         init (dict): the share of people who start in each state, by name
         init_n (dict): the number of people who start in each state, by name
         first (str): the state people are in unless they are put elsewhere (by default, the one named `S` or `susceptible`; see `resolve_people()`)
@@ -299,9 +299,10 @@ class Graph(Presentation):
         return
 
     def resolve_init_prev(self):
-        """ By default, 1% of people start infected, seeded through the transmission, unless a state is given a starting value """
+        """ By default, 1% of people start infected, seeded through the transmission (frequency- or density-dependent), unless a state is given a starting value """
         given = any(state.given_init for state in self.states.values())
-        if self.init_prev is None and not given and any(tr.contact for tr in self.transitions.values()):
+        transmitted = any(tr.contact or (tr.rate is not None and count_power(tr.rate) > 0) for tr in self.transitions.values())
+        if self.init_prev is None and not given and transmitted:
             self.init_prev = par(0.01)
             self._add_par(self.init_prev, name='init_prev')
             self.guessed['init_prev'] = '1% of people, the default'

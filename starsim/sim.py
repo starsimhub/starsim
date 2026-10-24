@@ -58,7 +58,7 @@ class Sim(ss.Base):
     modules via the `ss.Loop` integration loop.
 
     Args:
-        model (Module/list/dict): the model: a module or a list of modules, which are sorted by type as for `modules`.
+        model (Module/list/dict): the model: a module or a list of modules, which are sorted by type as for `modules`; transitions, alone or in a list (or in `diseases=`), are one disease, named from its states (e.g. `sim.sir`).
             Alternatively, the sim parameters as an `ss.SimPars` object or a nested dictionary, which can include all other arguments
         pars (dict): the values of model parameters by name, e.g. `pars=dict(beta=0.1)` or `pars=fit.pars` (see `ss.par`), and of sim
             settings by their own names (e.g. `stop`) where no parameter of the model has the name; a name that is neither raises `ss.errors.UnknownParameter`
@@ -2422,6 +2422,10 @@ class Sim(ss.Base):
                 plotlabel = sc.uniquename(self.label, figlist, human=True)
             kwargs['num'] = plotlabel
         title = self.label if show_label in ['title', 'suptitle'] else None
+        if key is None and not show_skipped: # The sim's own results that never change (e.g. the number alive and the deaths of a closed population) are left out
+            own = [k for k,res in self.results.items() if isinstance(res, ss.Result)]
+            flat = ss.results.match_result_keys(self.results, None)
+            key = [k for k,res in flat.items() if not (k in own and np.allclose(res.values, res.values[0]))] or None
         return self.results.plot(key=key, fig=fig, data=data, label=self.label, title=title, show_skipped=show_skipped, show_module=show_module, n_ticks=n_ticks, annualize=annualize, **kwargs)
 
 
