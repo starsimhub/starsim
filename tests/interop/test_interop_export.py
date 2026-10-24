@@ -65,8 +65,8 @@ def test_sbml(tmp_path):
         sim.run(); back.run()
         assert back.unit == sim.unit
         a, b = sim.results[sim.diseases[0].name], back.results[back.diseases[0].name]
-        I = sum(b[k] for k in b.keys() if k.startswith('n_I')) # The Erlang stages of I are states of their own
-        assert np.allclose(a.n_I, I, rtol=1e-9, atol=1e-9) and np.allclose(a.n_S, b.n_S, rtol=1e-9, atol=1e-9)
+        I = sum(b[k] for k in b.keys() if k.startswith('I')) # The Erlang stages of I are states of their own
+        assert np.allclose(a.I, I, rtol=1e-9, atol=1e-9) and np.allclose(a.S, b.S, rtol=1e-9, atol=1e-9)
         out.append(back)
 
     # The stages are listed as a change, and what SBML cannot carry as not exported
@@ -93,8 +93,8 @@ def test_odin(tmp_path):
     sim.run(); back.run()
     assert {'infection', 'onset', 'births'} <= set(back.diseases[0].graph.transitions) # Each flow is named after its transition
     a, b = sim.results.seird, back.results[back.diseases[0].name]
-    I = sum(b[k] for k in b.keys() if k.startswith('n_I'))
-    assert np.allclose(a.n_I, I, rtol=1e-9, atol=1e-9) and np.allclose(a.n_D, b.n_D, rtol=1e-9, atol=1e-9)
+    I = sum(b[k] for k in b.keys() if k.startswith('I'))
+    assert np.allclose(a.I, I, rtol=1e-9, atol=1e-9) and np.allclose(a.D, b.D, rtol=1e-9, atol=1e-9)
     with pytest.warns(ss.errors.LossyExport): # A sim that has run is written with its initial state, not its last
         assert ss.interop.export(sim, 'odin', verbose=False) == text
     return back

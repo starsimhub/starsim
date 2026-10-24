@@ -15,10 +15,10 @@ Run the original in its own framework and the port in Starsim, write both as the
    ```bash
    python scripts/compare.py run model.py port.csv --runs 200       # model.py defines sim or make_sim()
    ```
-   This writes every result as `<disease>.<result>` (e.g. `sir.n_I`, `sir.infection`), at the sim's times (in its unit from the start, or in years with dates; `--time index` gives the step instead).
+   This writes every result as `<disease>.<result>` (e.g. `sir.I`, `sir.infection`), at the sim's times (in its unit from the start, or in years with dates; `--time index` gives the step instead).
 4. **Compare**, mapping the original's names to the port's:
    ```bash
-   python scripts/compare.py compare original.csv port.csv --map I=sir.n_I R=sir.n_R --plot compare.png
+   python scripts/compare.py compare original.csv port.csv --map I=sir.I R=sir.R --plot compare.png
    ```
    The mode is chosen from what the two files hold:
    - **exact**: one run on each side (both deterministic). Passes if the largest difference is within `--rtol` (default 1e-3) of the largest value. Use a tighter tolerance when both use the same integrator and step; ODE solvers that differ (RK4 against LSODA, a fixed step against an adaptive one) agree only to their error.
@@ -29,7 +29,7 @@ Run the original in its own framework and the port in Starsim, write both as the
 
 ## Usual causes of a difference
 
-- **Time labels.** Starsim's `n_X[ti]` is the number at time point `ti` (`n_X[0]` is the start), and a flow at `ti` is the number during the step that ends there (0 at `ti = 0`). Most frameworks do the same, but some label a step by its start, or report a flow at the start of its step. If the port looks one step early or late, check with `--shift 1` (or `-1`), and say which convention each side uses rather than leaving the shift unexplained.
+- **Time labels.** Starsim's `X[ti]` is the number at time point `ti` (`X[0]` is the start), and a flow at `ti` is the number during the step that ends there (0 at `ti = 0`). Most frameworks do the same, but some label a step by its start, or report a flow at the start of its step. If the port looks one step early or late, check with `--shift 1` (or `-1`), and say which convention each side uses rather than leaving the shift unexplained.
 - **New against cumulative, and per step against per unit of time.** A transition's result (`sir.infection`) is the number in the step; `sir.infection.cum` the running total. An incidence per day from a weekly step is the step's number divided by 7.
 - **Rates and probabilities.** A per-step probability imported as a rate (or the reverse), or a probability per unit of time confused with a rate, shifts everything a little at small steps and a lot at large ones.
 - **The step.** Agents and a compartmental run of the same model differ by an amount of order `dt` (5 to 10% at a weekly step in some models); a discrete-time stochastic model differs from the ODE by the same. Compare like with like (the same kind of run), or at a finer step, before calling it a disagreement.

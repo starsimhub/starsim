@@ -72,7 +72,7 @@ def test_summer2_tb():
     sc.heading('summer2: the TB model by age, against summer2')
     res = make_tb().run().results.tb
     for year,ref in ref_n_I.items():
-        assert abs(res.n_I.values[year - 1950] - ref) < 1, f'Active TB in {year}: {res.n_I.values[year - 1950]:.1f} against summer2\'s {ref}'
+        assert abs(res.I.values[year - 1950] - ref) < 1, f'Active TB in {year}: {res.I.values[year - 1950]:.1f} against summer2\'s {ref}'
     for year,ref in ref_notifications.items():
         assert np.isclose(res.detection.values[year - 1950], ref, rtol=0.005), f'Notifications in {year}: {res.detection.values[year - 1950]:.0f} against {ref:.0f}'
     return res

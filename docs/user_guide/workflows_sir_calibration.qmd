@@ -65,7 +65,7 @@ print(data)
 # Plot the runs, with the data as points
 res = truth.results.sir
 fig, ax = plt.subplots()
-for state in ['n_S', 'n_I', 'n_R']:
+for state in ['S', 'I', 'R']:
     lines = ax.plot(res[state].timevec, res[state].values.T, lw=0.5, alpha=0.3)
     ax.plot(res[state].timevec, res[state].median().values, lw=2, color=lines[0].get_color(), label=state)
 ax.scatter(data.date, data.prevalence, color='black', zorder=10, label='Observed data')
@@ -127,7 +127,7 @@ msim = fit.sim.new().run(n_runs=10)
 res = msim.results.sir
 
 fig, ax = plt.subplots()
-for state in ['n_S', 'n_I', 'n_R']:
+for state in ['S', 'I', 'R']:
     low, mid, high = res[state].quantiles([0.25, 0.5, 0.75]) # Arrays over time
     line = ax.plot(res[state].timevec, mid, label=state)
     ax.fill_between(res[state].timevec, low, high, alpha=0.3, color=line[0].get_color())
@@ -253,7 +253,7 @@ def weighted_quantiles(values, quantiles, weights):
 
 weights = results['weight'].values
 fig, ax = plt.subplots(figsize=(9, 5))
-for state in ['n_S', 'n_I', 'n_R']:
+for state in ['S', 'I', 'R']:
     values = res[state].values
     q05, q25, q75, q95 = weighted_quantiles(values, [0.05, 0.25, 0.75, 0.95], weights)
     line = ax.plot(res[state].timevec, weights @ values, label=state, zorder=5) # The weighted mean
@@ -272,7 +272,7 @@ plt.tight_layout()
 ```{python}
 # Plot the resampled trajectories. They should be similar to the weighted posterior over latent trajectories shown above.
 fig, ax = plt.subplots(figsize=(9, 5))
-for state in ['n_S', 'n_I', 'n_R']:
+for state in ['S', 'I', 'R']:
     values = res[state].values[resampled]
     line = ax.plot(res[state].timevec, np.median(values, axis=0), label=state, zorder=5)
     color = line[0].get_color()

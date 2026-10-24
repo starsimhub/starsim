@@ -260,7 +260,7 @@ sim.run()
 sim.plot('waningmeasles')
 
 res = sim.results.waningmeasles
-print(f'Susceptible at end: {res.n_susceptible[-1]:n}; recovered at end: {res.n_recovered[-1]:n}')
+print(f'Susceptible at end: {res.susceptible[-1]:n}; recovered at end: {res.recovered[-1]:n}')
 ```
 
 The recovered population drains back into the susceptible pool, as intended. Note that this alone does not produce a second wave: the outbreak burns out before immunity wanes, so there are no infectious agents left to restart it. Recurring waves need a continuing source of infection — births (`ss.Births`), importation, or a slower-burning disease.

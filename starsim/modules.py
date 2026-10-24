@@ -672,7 +672,7 @@ class Module(Base):
         module-level function, or a property, if plain pickling is required.
 
         A callable alias also generates an automatic result, in the same way a `BoolState`
-        does: an alias named `infected` produces `n_infected`. A string alias does not,
+        does: an alias named `infected` produces the result `infected`. A string alias does not,
         since the state it points to is already counted under its own name.
 
         Args:
@@ -712,7 +712,7 @@ class Module(Base):
 
     def define_results(self, *args):
         """ Add results to the module """
-        auto_names = {state.name for state in self.auto_state_list} | set(self.derived_state_names) # Names that already generate an n_<name> result
+        auto_names = {state.name for state in self.auto_state_list} | set(self.derived_state_names) # Names that already generate a result of the same name, their count
         for arg in args:
             if isinstance(arg, (list, tuple)):
                 result = ss.Result(*arg)
@@ -725,8 +725,8 @@ class Module(Base):
             result.update(module=self.label, shape=self.t.npts, timevec=self.t.timevec)
 
             # Add the result to the dict of results; does automatic checking
-            if result.name in self.results and result.name.startswith('n_') and result.name[2:] in auto_names:
-                msg = f'"{self.name}": Another result named "{result.name}" already exists because a result was automatically created for the state "{result.name[2:]}".'
+            if result.name in self.results and result.name in auto_names:
+                msg = f'"{self.name}": Another result named "{result.name}" already exists because a result was automatically created for the state "{result.name}" (the number in it).'
                 raise ValueError(msg)
             self.results += result
         return
@@ -798,15 +798,15 @@ class Module(Base):
 
         By default, modules all report on counts for any explicitly defined "States", e.g. if
         a disease contains an `ss.BoolState` called 'susceptible' it will automatically contain a
-        Result for 'n_susceptible'. For identical behavior that does not automatically
+        Result for 'susceptible' (the number susceptible). For identical behavior that does not automatically
         generate results, use `ss.BoolArr` instead of `ss.BoolState`.
         """
         self.results.timevec = self.t.timevec # Store the timevec in the results for plotting; not a Result so don't use ss.ndict.append()
         results = sc.autolist()
         for state in self.auto_state_list:
-            results += ss.Result(f'n_{state.name}', dtype=int, scale=True, label=state.label)
+            results += ss.Result(state.name, dtype=int, scale=True, label=state.label, kind='stock')
         for name in self.derived_state_names: # A derived state has no state object, but is counted the same way
-            results += ss.Result(f'n_{name}', dtype=int, scale=True, label=name.capitalize())
+            results += ss.Result(name, dtype=int, scale=True, label=name.capitalize(), kind='stock')
         self.define_results(*results)
         return
 
@@ -869,7 +869,7 @@ class Module(Base):
 
         For diseases, these states typically represent attributes like 'susceptible',
         'infectious', 'diagnosed' etc. These variables automatically generate results
-        like n_susceptible, n_infectious, etc. For a list of all states, see
+        of the same names (susceptible, infectious, etc.), the number in each. For a list of all states, see
         `state_list`.
         """
         return self._auto_states[:]
@@ -881,7 +881,7 @@ class Module(Base):
 
         Unlike a string alias, which points at a state that is already counted under its
         own name, a derived state has no state object of its own, so it generates an
-        automatic result (e.g. `n_infected`) in the same way a `BoolState` does.
+        automatic result (e.g. `infected`) in the same way a `BoolState` does.
         """
         return [key for key,alias in self._state_aliases.items() if callable(alias)]
 
@@ -932,11 +932,11 @@ class Module(Base):
         Args:
             names (list): the states to count (default: every `ss.BoolState` and derived state)
         """
-        weights = ss.results.agent_weights(self.sim) # Agents of different weights (people.scale) are each counted by their weight, as in n_alive
+        weights = ss.results.agent_weights(self.sim) # Agents of different weights (people.scale) are each counted by their weight, as in the result alive
         if names is None:
             names = [state.name for state in self.auto_state_list] + self.derived_state_names
         for name in names:
-            res = self.results[f'n_{name}']
+            res = self.results[name]
             if weights is None:
                 res[self.ti] = self[name].sum()
             else:

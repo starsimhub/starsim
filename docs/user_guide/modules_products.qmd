@@ -77,7 +77,7 @@ msim = ss.parallel(
     no_treatment = ss.Sim(**pars),
     treatment    = ss.Sim(**pars, interventions=treatment),
 )
-msim.plot('sis.n_I')
+msim.plot('sis.I')
 ```
 
 `capacity=` caps how many people can be treated: a bare number is per round (or per step, for delivery on events), and a rate such as `ss.peryear(300)` is per unit time, which is how a capacity is given to routine delivery.

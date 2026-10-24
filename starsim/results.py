@@ -36,7 +36,7 @@ def people_scale(sim):
 
 
 def agent_weights(sim):
-    """ Each agent's weight (`people.scale`), by UID, if agents' weights differ; else None. A module written as code counts each agent by its weight when they differ, as `n_alive` does """
+    """ Each agent's weight (`people.scale`), by UID, if agents' weights differ; else None. A module written as code counts each agent by its weight when they differ, as `alive` does """
     scale = getattr(sim.people, 'scale', None) # Not in a mock sim
     return scale.raw if getattr(scale, 'weighted', False) else None
 
@@ -93,17 +93,17 @@ class Result(ss.utils.NoDists, ss.arrays.BaseArr):
         res['alpha'].label # Returns 'new_infections (alpha)'
         ```
 
-    A result across the runs of a MultiSim (`msim.results.sir.n_I`) is the same result with a
+    A result across the runs of a MultiSim (`msim.results.sir.I`) is the same result with a
     run axis first: `select()` also takes `run=` (a position), `scenario=`, and the parameters
     swept; `quantiles()`, `median()`, and `mean()` summarize over the runs of each scenario; and
     `plot()` draws the median and a 95% interval of each scenario (`lines=True` draws every run).
 
         ```python
         msim = sim.run(n_runs=10)
-        n_I = msim.results.sir.n_I # Runs by time points
-        n_I.select(run=3) # One run, as a result of one sim
-        low, mid, high = n_I.quantiles([0.025, 0.5, 0.975])
-        n_I.median().plot()
+        I = msim.results.sir.I # Runs by time points
+        I.select(run=3) # One run, as a result of one sim
+        low, mid, high = I.quantiles([0.025, 0.5, 0.975])
+        I.median().plot()
         ```
     """
     runs = None # For a result across the runs of a MultiSim: one row per run (see above)
@@ -238,9 +238,9 @@ class Result(ss.utils.NoDists, ss.arrays.BaseArr):
         Examples:
             ```python
             res = sim.results.sir
-            res.n_I.select(age=0) # The youngest age group
-            res.n_I.select(sex='female', risk='high')
-            msim.results.sir.n_I.select(beta=0.3).quantiles() # The runs with beta = 0.3
+            res.I.select(age=0) # The youngest age group
+            res.I.select(sex='female', risk='high')
+            msim.results.sir.I.select(beta=0.3).quantiles() # The runs with beta = 0.3
             res.cin.select(to='X') # The flow to one destination of a transition with several, as res.cin.X is
             res.syndromic.cured.select(disease='ct') # A treatment's results for one disease (or edge=) of several
             ```
@@ -794,7 +794,7 @@ class Result(ss.utils.NoDists, ss.arrays.BaseArr):
             ```python
             res = sim.results.sir
             res.infection.resample('week') # Weekly totals
-            res.n_I.resample('week') # The number infected at the end of each week
+            res.I.resample('week') # The number infected at the end of each week
             ```
         """
         if new_unit is None:
@@ -1159,7 +1159,7 @@ class Results(ss.utils.NoDists, ss.ndict):
 
     def flatten(self, sep='_', only_results=True, only_auto=False, columns=False, **kwargs):
         """
-        Turn from a nested dictionary into a flat dictionary, keeping only results by default; keys keep their case, as in `to_df()` (e.g. `sis_n_I`)
+        Turn from a nested dictionary into a flat dictionary, keeping only results by default; keys keep their case, as in `to_df()` (e.g. `sis_I`)
 
         If `columns=True`, split each 2D result into one 1D result per column, e.g. `sis_new_infections_alpha`.
         """
@@ -1200,7 +1200,7 @@ class Results(ss.utils.NoDists, ss.ndict):
 
     def to_df(self, sep='_', set_date_index=False, **kwargs):
         """
-        All the results, as one dataframe with a column for each: e.g. `n_alive` for the sim's own, `sir_prevalence` for a module's,
+        All the results, as one dataframe with a column for each: e.g. `alive` for the sim's own, `sir_prevalence` for a module's,
         and `bysex_n_infected_male` for each column of a 2D result
 
         If the modules have different time points (e.g. different time steps), a dict of dataframes instead, one for the sim's own results and one for each module.

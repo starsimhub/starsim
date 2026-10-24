@@ -12,14 +12,14 @@ seir <- disease(
 sim <- ss$Sim(seir, stop = 120L, verbose = 0L)
 invisible(sim$run())
 df <- results_df(sim)
-cat("Peak infected:", max(df$seir_n_I), "\n")
+cat("Peak infected:", max(df$seir_I), "\n")
 
 # The same rate written with a state in it gives the same epidemic
 sir <- function(...) disease(..., transition("I -> R", rate = ~ gamma), gamma = 0.1, init_n = list(I = 10), name = "sir")
-peak <- function(d) { s <- ss$Sim(d, stop = 100L, verbose = 0L); invisible(s$run()); max(results_df(s)$sir_n_I) }
+peak <- function(d) { s <- ss$Sim(d, stop = 100L, verbose = 0L); invisible(s$run()); max(results_df(s)$sir_I) }
 a <- peak(sir(transition("S -> I", beta = ~ beta), beta = 0.3))
 b <- peak(sir(transition("S -> I", rate = ~ beta * I$frac), beta = 0.3))
 
 # Checks
-stopifnot(max(df$seir_n_I) > 10, df$seir_n_D[nrow(df)] > 0) # It spreads, and some die
+stopifnot(max(df$seir_I) > 10, df$seir_D[nrow(df)] > 0) # It spreads, and some die
 stopifnot(abs(a - b) < 1e-6*a) # Transmission and its formula agree

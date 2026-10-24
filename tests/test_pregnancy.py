@@ -48,7 +48,7 @@ def test_states():
         assert np.isclose(ra[key].sum(), ro[key].sum(), rtol=0.1), f'{key}: agents {ra[key].sum():.0f}, ODE {ro[key].sum():.0f}'
     loss = lambda r: r.miscarriage.sum() + r.stillbirth.sum()
     assert np.isclose(loss(ra), loss(ro), rtol=0.1)
-    assert np.isclose(ro.n_P[0], ra.n_P[0], rtol=0.1) # Women pregnant at the start (burnin=), spread evenly over gestation
+    assert np.isclose(ro.P[0], ra.P[0], rtol=0.1) # Women pregnant at the start (burnin=), spread evenly over gestation
     assert np.isclose(ro.miscarriage.sum()/loss(ro), thr.weeks/40.09, rtol=0.01) # The share of the mean gestation below the threshold, as nothing reads P.time
     assert any('small compartmental form' in str(note) for note in ode.notes)
     return abm
@@ -86,8 +86,8 @@ def test_births():
     for key in ['delivery', 'birth']:
         assert np.isclose(ra.pregnancy[key].sum(), ro.pregnancy[key].sum(), rtol=0.1)
     assert np.isclose(ro.d.born.sum(), ro.pregnancy.birth.sum()) # An inflow of the delivery flow, into the youngest groups
-    assert np.isclose(ro.pregnancy.n_NP[-1] + ro.pregnancy.n_P[-1], ro.d.n_S[-1] + ro.d.n_I[-1])
-    assert ro.pregnancy.n_NP.select(age='0-14').values[-1] > ro.pregnancy.n_NP.select(age='0-14').values[0]
+    assert np.isclose(ro.pregnancy.NP[-1] + ro.pregnancy.P[-1], ro.d.S[-1] + ro.d.I[-1])
+    assert ro.pregnancy.NP.select(age='0-14').values[-1] > ro.pregnancy.NP.select(age='0-14').values[0]
     return abm
 
 
@@ -100,8 +100,8 @@ def test_compartmental():
         pars = dict(start=2000, stop=2005, dt=dt, verbose=0, stratify=strat, use_aging=False)
         ras = [ss.Sim(demographics=make(), n_agents=20_000, rand_seed=seed, **pars).run().results.pregnancy for seed in range(2)]
         ro = ss.Sim(demographics=make(), solver='ode', total_pop=20_000, **pars).run().results.pregnancy
-        half = lambda r: r.n_P.values[len(r.n_P)//2:].mean() # The number pregnant, once settled
-        for key,f in [('delivery', lambda r: r.delivery.sum()), ('birth', lambda r: r.birth.sum()), ('n_P', half)]:
+        half = lambda r: r.P.values[len(r.P)//2:].mean() # The number pregnant, once settled
+        for key,f in [('delivery', lambda r: r.delivery.sum()), ('birth', lambda r: r.birth.sum()), ('P', half)]:
             va = np.mean([f(r) for r in ras])
             assert np.isclose(f(ro), va, rtol=0.05), f'{key} at {dt}: {f(ro):.0f} in compartments, {va:.0f} as agents'
 
@@ -110,7 +110,7 @@ def test_compartmental():
                  solver='binomial', total_pop=20_000, stratify=strat, **kw).run()
     r = sim.results.pregnancy
     assert r.antepartum.sum() > 0 and r.birth.sum() > 1.1*r.delivery.sum() # Twins
-    assert np.isclose(r.n_NP[-1] + r.n_P[-1], r.n_NP[0] + r.n_P[0] + r.birth.sum() - r.antepartum.sum())
+    assert np.isclose(r.NP[-1] + r.P[-1], r.NP[0] + r.P[0] + r.birth.sum() - r.antepartum.sum())
     return sim
 
 
@@ -125,7 +125,7 @@ def test_burnin():
     r = abm.results.pregnancy
     early, later = r.delivery[1:9].sum(), r.delivery[13:21].sum()
     assert np.isclose(early, later, rtol=0.2), f'{early} deliveries in the first 8 months, against {later} a year later'
-    assert np.isclose(r.n_P[0], r.n_P[18], rtol=0.15), f'{r.n_P[0]} pregnant at the start, {r.n_P[18]} later'
+    assert np.isclose(r.P[0], r.P[18], rtol=0.15), f'{r.P[0]} pregnant at the start, {r.P[18]} later'
     assert np.isclose(r.birth[1], r.delivery[1] - r.stillbirth[1], rtol=0.1), 'The first deliveries have their births'
     assert r.conception[0] == 0 and r.abortion[0] == 0, 'Burn-in events are not counted in the results'
 
@@ -137,7 +137,7 @@ def test_burnin():
 
     # sim.new() keeps burnin= (it replays the sim's inputs)
     again = abm.new().run().results.pregnancy
-    assert np.array_equal(again.n_P.values, r.n_P.values) and np.array_equal(again.delivery.values, r.delivery.values)
+    assert np.array_equal(again.P.values, r.P.values) and np.array_equal(again.delivery.values, r.delivery.values)
     return abm
 
 
@@ -147,7 +147,7 @@ def test_burnin_ode():
     make = lambda: ss.Pregnancy(fertility_rate=ss.freqperyear(100), p_abortion=0.1)
     ode = ss.Sim(demographics=make(), solver='ode', total_pop=20_000, **pars).run()
     abm = ss.Sim(demographics=make(), n_agents=20_000, **pars).run()
-    assert np.isclose(ode.results.pregnancy.n_P[0], abm.results.pregnancy.n_P[0], rtol=0.1) and any('burnin=True' in str(note) for note in ode.notes)
+    assert np.isclose(ode.results.pregnancy.P[0], abm.results.pregnancy.P[0], rtol=0.1) and any('burnin=True' in str(note) for note in ode.notes)
     assert ss.Sim(demographics=make(), total_pop=20_000, **pars).init().solver == 'abm'
 
 
@@ -315,7 +315,7 @@ def test_fetus():
     assert np.all(p.P[ppl.parent[fetal]]) and np.all(ppl.age[fetal] < 0) # Every fetus has a pregnant mother, and is lost with her
     assert len(sim.networks.maternalnet) == len(fetal)
     born, unborn = (ppl.alive & (ppl.age >= 0)).sum(), (ppl.alive & (ppl.age < 0)).sum()
-    assert np.isclose(r.d.n_S[-1] + r.d.n_I[-1] + r.d.n_C[-1] + r.d.n_Cs[-1], born + unborn, rtol=0.01) and np.isclose(r.n_alive[-1], born, rtol=0.01) # The unborn are in the disease's states (so they can be infected before birth), though not among the people (as in test_mtct)
+    assert np.isclose(r.d.S[-1] + r.d.I[-1] + r.d.C[-1] + r.d.Cs[-1], born + unborn, rtol=0.01) and np.isclose(r.alive[-1], born, rtol=0.01) # The unborn are in the disease's states (so they can be infected before birth), though not among the people (as in test_mtct)
 
     # Nothing reads fetuses: children are made at delivery
     plain = ss.Sim(demographics=ss.Pregnancy(fertility_rate=ss.freqperyear(100)), n_agents=2000, **kw).init()
@@ -592,7 +592,7 @@ def test_postpartum():
 
 
 def test_postpartum_ode():
-    by = lambda sim: sum(np.asarray(sim.results.pregnancy[k].select(sex='female').by('parity').values)[-1] for k in ['n_NP', 'n_P'])
+    by = lambda sim: sum(np.asarray(sim.results.pregnancy[k].select(sex='female').by('parity').values)[-1] for k in ['NP', 'P'])
     abm = ss.Sim(demographics=make_postpartum(burnin=False), n_agents=20_000, stratify=strat, use_aging=False, **kw).run() # Burn-in as compartments is B5's
     ode = ss.Sim(demographics=make_postpartum(burnin=False), solver='ode', total_pop=20_000, stratify=strat, use_aging=False, **kw).run()
     a, o = by(abm), by(ode)

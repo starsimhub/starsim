@@ -104,7 +104,7 @@ def test_numpy_agents_beside():
     alone = ss.Sim(**kw).run()
     both = ss.Sim(connectors=Mosquitoes(), **kw).run()
     assert both.connectors.mosquitoes.age.max() > 0
-    assert np.array_equal(both.results.sir.n_I.values, alone.results.sir.n_I.values) # Its own random numbers leave those of the other modules alone
+    assert np.array_equal(both.results.sir.I.values, alone.results.sir.I.values) # Its own random numbers leave those of the other modules alone
     return both
 
 
@@ -167,9 +167,9 @@ def test_coded_and_declared():
         return ss.Sim(sir, interventions=[Mover(raw=raw), Reader()], unit='day', stop=6, n_agents=100, solver='abm', verbose=0).run()
     sim = make()
     res = sim.results.sir
-    assert sim.interventions.reader.n == 10 and res.n_I[4] == 10 and res.n_S[4] == 90 # Seen in the same step, and in the results
+    assert sim.interventions.reader.n == 10 and res.I[4] == 10 and res.S[4] == 90 # Seen in the same step, and in the results
     raw = make(raw=True) # Not tracked: the counts and results do not see it, which STARSIM_CHECK_COUNTS=1 checks at each step
-    assert raw.diseases.sir.I.count() == 10 and raw.results.sir.n_I[4] == 0
+    assert raw.diseases.sir.I.count() == 10 and raw.results.sir.I[4] == 0
     with pytest.raises(RuntimeError, match='differs from a new count'):
         raw.diseases.sir.engine.check_counts()
 

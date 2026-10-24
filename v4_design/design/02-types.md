@@ -23,7 +23,7 @@ The difference is only in that conversion, which a module written as code asks f
 
 `ss.datedur` is kept alongside `ss.months` because calendar durations are not fixed multiples of days.
 
-Counts are plain numbers. `I.n` is the number of people in a state (the same number as the result `n_I`) and `I.frac` its fraction ([03-states-and-transitions.md](03-states-and-transitions.md)). `P.time`, the time each person has spent in a state, is a number in the sim's unit, as a bare number returned by a function is.
+Counts are plain numbers. `I.n` is the number of people in a state (the same number as the result `I`) and `I.frac` its fraction ([03-states-and-transitions.md](03-states-and-transitions.md)). `P.time`, the time each person has spent in a state, is a number in the sim's unit, as a bare number returned by a function is.
 
 ## Conversion
 
@@ -172,7 +172,7 @@ A run has N + 1 time points (index 0 is the start) and N steps; step k goes from
 - **One index per step.** Throughout step k, in every phase and every module, `self.ti == k`, so `self.results.x[self.ti] = v` is right wherever it is written. The loop itself records index 0 (the start), before the first step.
 - **Inputs are read at the step's start.** `self.now` is time point k − 1: values by year, `ss.timeseries`, data labeled by period, and dates (`start=2020`) are taken there, as in Starsim 3.
 - **An infection is dated at the end of its step** (`ti_I == ti`), since it has happened by then. What follows it (a latent period, a recovery) starts then, so durations ported unchanged from a model that dates infections at the start put the epidemic about a step later (CV5: 11 days on Covasim's daily model, from its latent period). Other moves are taken at the step's start. Either way, `ti_X` reads as the step the move happened in, so `ti_X == self.ti` is "entered this step"; the time spent in a state is its clock, `X.time`, not `self.ti - ti_X`, which counts a step more for an infection.
-- **A state's count includes the step people enter it**, and people stay for their whole dwell, so `n_X` carries one extra step per stay (ST4: it cost STIsim's trichomoniasis about 14% of its infections against Starsim 3, since people reinfected as soon as they clear are counted per stay).
+- **A state's count includes the step people enter it**, and people stay for their whole dwell, so `X` carries one extra step per stay (ST4: it cost STIsim's trichomoniasis about 14% of its infections against Starsim 3, since people reinfected as soon as they clear are counted per stay).
 - **Dwells are whole steps for agents.** A drawn dwell is rounded at random to the step before or after (0.2 steps is 0 steps 80% of the time), which keeps its mean; `dur=0` is instant. The compartmental solvers take dwells as continuous, or as whole slots for a fixed delay.
 
 `describe()` prints the two lines that change counts (CV5 and ST4) for any disease with a transmission.

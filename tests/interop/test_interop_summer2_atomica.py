@@ -56,10 +56,10 @@ if __name__ == '__main__': # Write it with dump_summer2.py (from the folder give
 '''
 atomica_lib = paths.lfd/'_envs/atomica/lib/python3.12/site-packages/atomica/library' # Atomica's library workbooks, in its environment
 atomica_demos = dict( # Atomica 1.32.4's own runs at dt=1 (start, stop, values at the end), from v4_design/oct17/switching/atomica.md
-    udt      = (2016, 2023, dict(n_dx=2450.0, n_tx=3550.0)),
-    dt       = (2016, 2024, dict(n_dx=240.0, n_tx=3360.0)),
-    diabetes = (2014, 2035, dict(n_sus=1218222.500392, n_sc_uncomp=775.919855)),
-    combined = (2000, 2023, {'SIR_0-4:n_rec':728.476002}), # The first population type only, as listed
+    udt      = (2016, 2023, dict(dx=2450.0, tx=3550.0)),
+    dt       = (2016, 2024, dict(dx=240.0, tx=3360.0)),
+    diabetes = (2014, 2035, dict(sus=1218222.500392, sc_uncomp=775.919855)),
+    combined = (2000, 2023, {'SIR_0-4:rec':728.476002}), # The first population type only, as listed
     hiv_dyn  = (2016, 2035, dict(all_vs=1596938.31)), # A characteristic of one compartment, under its own name
 )
 kw = dict(verbose=False)
@@ -115,8 +115,8 @@ def test_summer2():
     assert sim.imported.incomplete == []
     sim.run()
     res = sim.results.summer2
-    assert np.isclose(res.n_I.values[0], 10) and np.isclose(res.n_I.select(clinical='asymptomatic').values[0], 10), 'The infected should start asymptomatic, as in summer2'
-    assert res.n_I.select(clinical='hospital').values[-1] > 0
+    assert np.isclose(res.I.values[0], 10) and np.isclose(res.I.select(clinical='asymptomatic').values[0], 10), 'The infected should start asymptomatic, as in summer2'
+    assert res.I.select(clinical='hospital').values[-1] > 0
 
     # The same model written by hand, as in the vignette
     S, E, I, R = ss.states('S E I R')
@@ -133,14 +133,14 @@ def test_summer2():
                   adjust={'infection_death': [0, 1, 1, 2], 'rel_trans': [0.5, 1, 0.2, 0.1]})
     hand = ss.Sim(seir, total_pop=1000, dt=0.1, stop=20, verbose=0).run().results.seir
     for state in 'SEIR':
-        assert np.allclose(res[f'n_{state}'].values, hand[f'n_{state}'].values, atol=1e-6), f'n_{state} should match the hand translation'
+        assert np.allclose(res[state].values, hand[state].values, atol=1e-6), f'{state} should match the hand translation'
 
     # Derived outputs, in summer2's conventions (a flow is a rate)
     out = outputs(sim)
     assert np.allclose(out.incidence_old, res.incidence.select(age='old').values/0.1)
     assert np.allclose(out.accum_old, np.cumsum(out.incidence_old))
-    hosp = res.n_I.select(clinical='hospital').values
-    assert np.allclose(out.prop_infected_hosp, hosp/res.n_I.values)
+    hosp = res.I.select(clinical='hospital').values
+    assert np.allclose(out.prop_infected_hosp, hosp/res.I.values)
 
     # A mixing matrix, and a flow parameter that is a function, which is listed as not translated
     d = summer2_model()
@@ -157,7 +157,7 @@ def test_summer2():
     if os.path.exists(folder):
         ref = pd.read_csv(f'{folder}/reference/results.csv')
         theirs = ref[ref.series == 'I_old_hospital'].value.values
-        assert np.abs(res.n_I.select(age='old', clinical='hospital').values - theirs).max() < 0.01, 'Should agree with summer2'
+        assert np.abs(res.I.select(age='old', clinical='hospital').values - theirs).max() < 0.01, 'Should agree with summer2'
 
     # A live summer2 model with named Parameters, a sigmoidal scale-up, and ages with an array mixing matrix, written by dump_summer2.py in summer2's environment, against summer2's own run
     if summer2_python.exists():
@@ -173,7 +173,7 @@ def test_summer2():
         levels = dict(zip(['0', '5', '15', '35', '50', '70'], ['0-4', '5-14', '15-34', '35-49', '50-69', '70+'])) # summer2's age groups, as Starsim labels them
         for c,val in ref['comps'].items():
             state, age = c.split('Xage_')
-            ours = tbres[f'n_{state}'].select(age=levels[age]).values[-1]
+            ours = tbres[state].select(age=levels[age]).values[-1]
             assert np.isclose(ours, val, rtol=1e-3), f'{c} in 2025 should agree with summer2' # The sigmoid is sampled every tenth of a step
         notif = outputs(tb).notifications
         for year in [1990, 2010, 2024]:
@@ -222,7 +222,7 @@ def test_atomica():
         sim = load_atomica(fw, db, dt=1, **kw) # Initial numbers solved from the databook, and each format of parameter as Atomica steps it
     sim.run()
     res = sim.results.tiny
-    assert np.allclose([res.n_sus[0], res.n_inf[0], res.n_rec[0]], [900, 50, 50]), 'The initial numbers should be solved from the characteristics'
+    assert np.allclose([res.sus[0], res.inf[0], res.rec[0]], [900, 50, 50]), 'The initial numbers should be solved from the characteristics'
     assert sim.t.yearvec[-1] == 2009, 'Atomica runs to five years after the data, if there are no births'
 
     # Atomica's step by hand: rates and probabilities move value × dt, durations dt/value, numbers value × dt people
@@ -233,7 +233,7 @@ def test_atomica():
         prev = inf/(s + inf + r)
         flows = dict(si=0.6*prev*s, sr=min(vacc[i], s), ir=inf/5, id=0.02*inf)
         x = np.array([s - flows['si'] - flows['sr'], inf + flows['si'] - flows['ir'] - flows['id'], r + flows['sr'] + flows['ir'], d + flows['id']])
-    assert np.allclose([res.n_sus[-1], res.n_inf[-1], res.n_rec[-1], res.n_dead[-1]], x), 'Should match Atomica\'s Euler step'
+    assert np.allclose([res.sus[-1], res.inf[-1], res.rec[-1], res.dead[-1]], x), 'Should match Atomica\'s Euler step'
     assert np.isclose(res.ch_prev[0], 0.05)
 
     # Against the original's results, if the example is here
@@ -243,7 +243,7 @@ def test_atomica():
         ref = pd.read_csv(f'{folder}/reference/results.csv')
         for comp in ['sus', 'inf', 'rec', 'dead']:
             theirs = ref[ref.series == f'adults_{comp}'].value.values
-            assert np.allclose(sim2.results.SIR[f'n_{comp}'].values, theirs), f'{comp} should agree with Atomica'
+            assert np.allclose(sim2.results.SIR[comp].values, theirs), f'{comp} should agree with Atomica'
 
     # Atomica's own library workbooks, if its environment is here: lower-case headings, numbers in the databook, the setup weights, a timed duration, several population types
     if atomica_lib.exists():

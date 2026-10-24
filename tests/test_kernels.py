@@ -133,7 +133,7 @@ def test_stochastic():
             for seed in range(2):
                 sims = sc.objdict({how:run(key, how, solver=solver, rand_seed=seed, total_pop=pop) for how in ['step', 'all']})
                 assert largest_diff(sims.all, sims.step) == 0, f'{key} under {solver}: the whole run differs from the stepped one'
-                n_I = sims.all.results[sims.all.declared[0].name].n_I.values
+                n_I = sims.all.results[sims.all.declared[0].name].I.values
                 assert np.all(n_I == np.round(n_I)) # Whole people
 
     # Many places, most of which have no events (skipped until something changes them): the same run as step by step
@@ -165,8 +165,8 @@ def test_stochastic():
     def strata(K, **pars):
         sir = make_plain(ss.perday(0.3), init_n=dict(I=ss.by(risk=[2] + [0]*(K-1)))).stratify(risk=[f'g{i}' for i in range(K)])
         return ss.Sim(sir, solver='gillespie', unit='day', stop=100, total_pop=200*K, **pars, **kw)
-    one = ss.Sim(make_plain(ss.perday(0.3), init_n=dict(I=2)), solver='gillespie', unit='day', stop=100, total_pop=2000, **kw).run(n_runs=60).results.sir.n_R.values[:, -1]
-    ten = strata(10).run(n_runs=60).results.sir.n_R.values[:, -1]
+    one = ss.Sim(make_plain(ss.perday(0.3), init_n=dict(I=2)), solver='gillespie', unit='day', stop=100, total_pop=2000, **kw).run(n_runs=60).results.sir.R.values[:, -1]
+    ten = strata(10).run(n_runs=60).results.sir.R.values[:, -1]
     assert abs(one.mean() - ten.mean()) < 3*np.hypot(one.std(), ten.std())/np.sqrt(60) # The same final size
     return sims
 
@@ -187,7 +187,7 @@ def test_stages():
     for solver in ['ode', 'binomial', 'tau', 'abm']:
         pars = dict(n_agents=20_000) if solver == 'abm' else {}
         sims = [ss.Sim(make(), unit='day', stop=150, total_pop=200_000, solver=solver, rand_seed=seed, **pars, **kw).run() for seed in range(1 if solver == 'ode' else 3)]
-        peaks[solver] = np.mean([np.argmax(sim.results.seir.n_I) for sim in sims])
+        peaks[solver] = np.mean([np.argmax(sim.results.seir.I) for sim in sims])
         print(f'{solver:8s} infectious peak on day {peaks[solver]:n}')
     assert max(peaks.values()) - min(peaks.values()) < 6 # The chain-binomial solver moves people through as many stages as they pass in a step; one stage a step would make the latent period 25 days, not 7, and the peak weeks later
 
@@ -197,7 +197,7 @@ def test_stages():
         sim = ss.Sim(ss.Disease(onset=ss.Transition(E, I, dur=ss.normal(7, 1)), death=ss.Transition(E, D, dur=20), first='E', name='d'), unit='day', stop=10, total_pop=1_000_000, solver=solver, **kw)
         return sim.run().results.d
     ode, res = cohort('ode'), cohort('binomial')
-    assert np.allclose([res.n_I[6], res.n_I[8], res.n_D[10]], [ode.n_I[6], ode.n_I[8], ode.n_D[10]], rtol=0.01)
+    assert np.allclose([res.I[6], res.I[8], res.D[10]], [ode.I[6], ode.I[8], ode.D[10]], rtol=0.01)
     return peaks
 
 
@@ -229,7 +229,7 @@ def test_seasonal_steps():
         return ss.Disease(infection=ss.Transition(S, I, rate=beta * I), recovery=ss.Transition(I, R, rate=ss.perday(0.25)), init_n=dict(I=100), name='sir')
     whole = ss.Sim(sir(), unit='day', start='2020-01-01', stop='2020-02-15', total_pop=1e6, **kw).run()
     stepped = ss.Sim(sir(), unit='day', start='2020-01-01', stop='2020-02-15', total_pop=1e6, **kw).run(until='2020-02-15')
-    assert np.allclose(stepped.results.sir.n_I, whole.results.sir.n_I, rtol=1e-9)
+    assert np.allclose(stepped.results.sir.I, whole.results.sir.I, rtol=1e-9)
     return out
 
 
@@ -246,14 +246,14 @@ def test_restart():
     assert largest_diff(sim, new) == 0
 
     sim = ss.Sim(make_plain(0.3, init=dict(I=0.01)), unit='day', stop=100, **kw).init()
-    peaks = [sim.restart(pars=dict(beta=beta)).run().results.sir.n_I.max() for beta in [0.2, 0.3, 0.4]]
-    new = [sim.new(pars=dict(beta=beta)).run().results.sir.n_I.max() for beta in [0.2, 0.3, 0.4]]
+    peaks = [sim.restart(pars=dict(beta=beta)).run().results.sir.I.max() for beta in [0.2, 0.3, 0.4]]
+    new = [sim.new(pars=dict(beta=beta)).run().results.sir.I.max() for beta in [0.2, 0.3, 0.4]]
     assert np.allclose(peaks, new) and peaks[0] < peaks[1] < peaks[2]
 
     # Many runs are restarts of one sim
     base = ss.Sim(make(), solver='binomial', **pars, **kw)
     msim = base.run(n_runs=20)
-    res = msim.results.sir.n_I
+    res = msim.results.sir.I
     assert res.values.shape == (20, base.new().init().t.npts)
     assert len(msim.sims.runners) == 1 and len(msim.sims) == 20 and not base.initialized # One sim was built (the sim of each run is made when asked for), and the one that was given is untouched
     assert len(np.unique(res.values.max(axis=1))) > 10 # Each has its own seed
@@ -262,17 +262,17 @@ def test_restart():
         assert np.allclose(multi.values[7], one.results.sir[key].values), key
     grouped = ss.Sim(models.ages[0](), solver='binomial', **models.ages[1], **kw) # By group too
     many, alone = grouped.run(n_runs=3).results.sir, grouped.new(rand_seed=grouped.pars.rand_seed + 2).run().results.sir
-    assert all(np.allclose(many[key].strata[2], alone[key].strata) for key in ['n_I', 'infection']) and np.allclose(many.n_I.values[2], alone.n_I.values)
+    assert all(np.allclose(many[key].strata[2], alone[key].strata) for key in ['I', 'infection']) and np.allclose(many.I.values[2], alone.I.values)
     assert set(msim.results.sir.keys()) == {key for key,res in one.results.sir.items() if isinstance(res, ss.Result)}
     assert abs(msim.results.sir.cases.values.sum(axis=1).mean()/msim.results.sir.infection.cum.values[:, -1].mean() - 0.6) < 0.05
     base.pars.rand_seed += 7 # A seed set after the sim was made is used, as is an option of running in parallel
     later = ss.parallel(base, n_runs=2, verbose=0)
-    assert len(later.sims.runners) == 1 and np.allclose(later.results.sir.n_I.values[0], msim.results.sir.n_I.values[7])
+    assert len(later.sims.runners) == 1 and np.allclose(later.results.sir.I.values[0], msim.results.sir.I.values[7])
 
     # A sim that has been initialized gives the same distinct runs as one that has not, restarted or copied
     for solver,agents in dict(binomial={}, abm=dict(n_agents=2000)).items():
         fresh = ss.Sim(make(), solver=solver, **agents, **pars, **kw)
-        runs = [ss.parallel(sim, n_runs=4, parallel=False).results.sir.n_I.values for sim in [fresh, fresh.new().init()]]
+        runs = [ss.parallel(sim, n_runs=4, parallel=False).results.sir.I.values for sim in [fresh, fresh.new().init()]]
         assert len(np.unique(runs[0], axis=0)) == 4 and np.array_equal(runs[0], runs[1]), solver # Compared over the whole run, since runs where the epidemic dies out have the same peak
     assert len(ss.parallel(done=fresh.new().run(), fresh=fresh, parallel=False).sims) == 2 # A sim that has run is built again
 
@@ -290,7 +290,7 @@ def test_restart():
                 engine._local_mixing = False
                 engine.pack_targets()
             assert engine.program.local == local
-            out.append(sim.run().results.herds.n_R[-1])
+            out.append(sim.run().results.herds.R[-1])
         return np.mean(out), np.std(out)/np.sqrt(len(out))
     (a, se_a), (b, se_b) = herds(True), herds(False)
     assert abs(a - b) < 3*np.hypot(se_a, se_b) + 1
@@ -301,14 +301,14 @@ def test_restart():
     sirs = ss.Disease(infection=ss.Transition(S, I, rate=ss.perday(0.3) * I), recovery=ss.Transition(I, R, dur=ss.days(10)), waning=ss.Transition(R, S, rate=wane),
                       init_n=dict(I=ss.by(herd=[5, 0]), R=ss.by(herd=[0, 50])), name='sirs')
     sirs.stratify(herd=['a', 'b'], kind='space')
-    S_b = ss.Sim(sirs, total_pop=200, solver='gillespie', unit='day', stop=60, **kw).run().results.sirs.n_S.select(herd='b').values
+    S_b = ss.Sim(sirs, total_pop=200, solver='gillespie', unit='day', stop=60, **kw).run().results.sirs.S.select(herd='b').values
     assert S_b[60] > S_b[29] # Herd b's recovered wane once waning starts
 
     # How often a small outbreak dies out, from the runs' results
     S, I, R = ss.states('S I R')
     small = ss.Disease(infection=ss.Transition(S, I, rate=0.15 * I), recovery=ss.Transition(I, R, dur=10), init_n=dict(I=2), name='small')
     msim_small = ss.Sim(small, total_pop=200, solver='gillespie', unit='day', stop=100, **kw).run(n_runs=50)
-    died = (msim_small.results.small.n_I.values[:, -1] == 0).mean()
+    died = (msim_small.results.small.I.values[:, -1] == 0).mean()
     assert 0.3 < died < 0.9
 
     # How often it is a major outbreak (more than 10% infected), which dying out does not say for an SIR, since every run dies out in the end
@@ -316,13 +316,13 @@ def test_restart():
     sir = ss.Disease(infection=ss.Transition(S, I, rate=2/7 * I), recovery=ss.Transition(I, R, dur=7), init_n=dict(I=1), name='sir')
     msim = ss.Sim(sir, total_pop=1000, solver='gillespie', unit='day', stop=365, **kw).run(n_runs=40)
     major = (msim.results.sir.infection.values.sum(axis=1) > 100).mean()
-    assert 0.25 < major < 0.75 and (msim.results.sir.n_I.values[:, -1] == 0).all()
+    assert 0.25 < major < 0.75 and (msim.results.sir.I.values[:, -1] == 0).all()
 
     # A sim that needs the loop (here, a modifier with a function of the sim) cannot be restarted, and still runs the usual way
     masks = ss.modify('sir.pars.beta', multiply=0.5, when=lambda sim: sim.ti >= 20)
     sim = ss.Sim(make_plain(0.3, init=dict(I=0.01)), unit='day', stop=100, interventions=masks, **kw).init()
     assert not sim.kernel_only() and 'masks' in sim.kernel_reason()
-    assert sim.run().results.sir.n_I.max() < new[1]
+    assert sim.run().results.sir.I.max() < new[1]
     assert base.new().init().kernel_reason() is None
     return msim
 

@@ -158,7 +158,7 @@ def test_method():
         return ss.Sim(n_agents=5000, diseases=d, networks='random', demographics=True, stop=2030, rand_seed=3, **kw).run()
     s0, s1 = run(False), run(True)
     assert s1.people.n_uids > s1.people.n_alive # Some have died, so the active agents are not everyone
-    for key in ['n_infected', 'n_recovered', 'n_severe', 'new_infections']:
+    for key in ['infected', 'recovered', 'severe', 'new_infections']:
         assert np.array_equal(s0.results.severe[key], s1.results.severe[key]), f'{key} differs when compiled'
     assert np.array_equal(s0.diseases.severe.rel_trans.values, s1.diseases.severe.rel_trans.values)
     for name in ['schedule', 'progress', 'progress_loop']:
@@ -175,9 +175,9 @@ def test_class():
     Compiled = ss.jit(type('Coded', (Coded,), {})) # A subclass, so Coded itself stays as written
     s0, s1 = run(Coded), run(Compiled)
     r0, r1 = s0.diseases[0].results, s1.diseases[0].results
-    for key in ['n_exposed', 'n_infectious', 'n_recovered', 'n_tested', 'new_infections', 'mean_level']:
+    for key in ['exposed', 'infectious', 'recovered', 'tested', 'new_infections', 'mean_level']:
         assert np.array_equal(r0[key], r1[key]), f'{key} differs when compiled'
-    assert r1.n_tested[-1] > 0 and s1.people.n_uids > s1.people.n_alive
+    assert r1.tested[-1] > 0 and s1.people.n_uids > s1.people.n_alive
     parts = {name:getattr(Compiled, name).plan.parts for name in ['step_state', 'set_prognoses', 'step_die', 'update_results']}
     for name, p in parts.items():
         assert any(isinstance(x, ss.perflib._jit.Segment) and not x.failed for x in p), f'{name}() has no compiled part'

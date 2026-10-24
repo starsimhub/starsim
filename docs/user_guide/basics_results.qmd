@@ -7,7 +7,7 @@ Every Starsim simulation produces **results**: time series of quantities such as
 
 ## Where results live
 
-After a sim has run, all of its outputs are stored in `sim.results`, which is a nested structure. Each module adds its own group of results, and there are also some sim-level results (such as `n_alive`):
+After a sim has run, all of its outputs are stored in `sim.results`, which is a nested structure. Each module adds its own group of results, and there are also some sim-level results (such as `alive`):
 
 ```{python}
 import starsim as ss
@@ -57,19 +57,19 @@ print(f'First date: {res.timevec[0]}')
 
 ## The results of a declared disease
 
-Every declared disease gets a result for each state and each transition without any being declared: `n_<state>` is the number of people in the state at each time point (a stock), and each transition has a flow named after it, the number of people who made the transition during each step. A flow's running total is `.cum`. The library's `ss.SIR`, `ss.SIS`, and `ss.SEIR` also keep Starsim's standard names, `new_infections`, `cum_infections`, and `prevalence`:
+Every declared disease gets a result for each state and each transition without any being declared: `<state>` (e.g. `I`) is the number of people in the state at each time point (a stock), and each transition has a flow named after it, the number of people who made the transition during each step. A flow's running total is `.cum`. The library's `ss.SIR`, `ss.SIS`, and `ss.SEIR` also keep Starsim's standard names, `new_infections`, `cum_infections`, and `prevalence`:
 
 ```{python}
 res = sim.results.sir
-print('People infected at the end:', res.n_I[-1])
+print('People infected at the end:', res.I[-1])
 print('Infections in the last step:', res.infection[-1])
 print('Infections so far:', res.infection.cum[-1], 'or', res.cum_infections[-1])
 ```
 
-Results follow the convention of other modeling frameworks: a result has one value for each time point of the sim, from `start` to `stop`. `n_I[0]` is the number infected at the start, before any step, and a flow at index 0 is 0, since no step has ended yet; `n_I[ti]` and `infection[ti]` are the number infected at time point `ti` and the number of infections during the step that ends there. A sim with `stop=T` therefore ends at `T`. (This is one step later than in Starsim 3, where index 0 was the end of the first step.) A flow is dated at the end of its step: with a daily step from `2025-01-01`, the infections dated `2025-02-23` are those during the day that starts on `2025-02-22`, so the peak day of incidence is the day before the date of the largest flow.
+Results follow the convention of other modeling frameworks: a result has one value for each time point of the sim, from `start` to `stop`. `I[0]` is the number infected at the start, before any step, and a flow at index 0 is 0, since no step has ended yet; `I[ti]` and `infection[ti]` are the number infected at time point `ti` and the number of infections during the step that ends there. A sim with `stop=T` therefore ends at `T`. (This is one step later than in Starsim 3, where index 0 was the end of the first step.) A flow is dated at the end of its step: with a daily step from `2025-01-01`, the infections dated `2025-02-23` are those during the day that starts on `2025-02-22`, so the peak day of incidence is the day before the date of the largest flow.
 
 ```{python}
-print('Infected at the start:', res.n_I[0])
+print('Infected at the start:', res.I[0])
 print('Infections at the start:', res.infection[0])
 print('Infections in the first step:', res.infection[1])
 ```
@@ -106,7 +106,7 @@ Because a result knows whether it is a flow, a stock, or a ratio, converting it 
 
 ```{python}
 print(res.cases.resample('week').to_series().head())
-print(res.n_I.resample('month').to_series().head())
+print(res.I.resample('month').to_series().head())
 ```
 
 ## Results by group
@@ -116,9 +116,9 @@ After a disease is stratified (for example by age), each result is still one res
 ```{python}
 by_age = ss.Sim(model.stratify(age=[0, 15, 65], inplace=False), start='2020-01-01', stop='2020-07-01', verbose=0).run()
 res_age = by_age.results.sir
-print(f'Peak infected: {res_age.n_I.max():,.0f}, of whom aged 65+: {res_age.n_I.select(age="65+").max():,.0f}')
+print(f'Peak infected: {res_age.I.max():,.0f}, of whom aged 65+: {res_age.I.select(age="65+").max():,.0f}')
 print(f'Peak prevalence among children: {res_age.prevalence.select(age="0-14").max():.2f}')
-res_age.n_I.by('age').plot()
+res_age.I.by('age').plot()
 ```
 
 A ratio such as prevalence is never averaged over groups: its numerator and denominator are each summed over the groups selected, and then divided.
@@ -227,7 +227,7 @@ print('Label:', res.adults.label)
 print('Columns:', list(res.by_column().keys()))
 ```
 
-Most operations handle each column separately: results are scaled by `pop_scale`, `to_df()` and `sim.to_df()` give one dataframe column per result column, `sim.summarize()` summarizes each column, and the results of many runs keep the columns (`res.median()` is 2D). Likewise, `resample()` resamples along time only, aggregating by the kind of the parent result (a flow such as `new_infections` is summed, and a stock such as `n_I` takes its value at the end of each period):
+Most operations handle each column separately: results are scaled by `pop_scale`, `to_df()` and `sim.to_df()` give one dataframe column per result column, `sim.summarize()` summarizes each column, and the results of many runs keep the columns (`res.median()` is 2D). Likewise, `resample()` resamples along time only, aggregating by the kind of the parent result (a flow such as `new_infections` is summed, and a stock such as `I` takes its value at the end of each period):
 
 ```{python}
 annual = res.resample('year')

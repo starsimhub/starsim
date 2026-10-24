@@ -77,7 +77,7 @@ def test_hiv_cd4():
     assert by.columns == ['0-49', '50-199', '200-349', '350-499', '500+']
     assert np.allclose(by.values.sum(axis=1), r.cd4_death.values) and r.cd4_death.sum() > 50
     assert by.values[:, 0].sum() > 0 and by.values[:, -1].sum() > 0 # Deaths at low CD4 (the highest rate) and high (on ART)
-    assert np.allclose(r.n_on_art.by('cd4').values.sum(axis=1), r.n_on_art.values) and r.n_on_art.select(cd4='500+')[-1] > r.n_on_art.select(cd4='0-49')[-1]
+    assert np.allclose(r.on_art.by('cd4').values.sum(axis=1), r.on_art.values) and r.on_art.select(cd4='500+')[-1] > r.on_art.select(cd4='0-49')[-1]
     assert np.allclose(r.cd4_death.cum.by('cd4').values[-1], by.values.sum(axis=0))
     h = sim.diseases.hiv
     ever = ~np.isnan(h.cd4_preart.raw[h.cd4_preart.auids]) # Recorded at the start of ART: in the range of CD4; the potential is above it
@@ -171,7 +171,7 @@ def test_trait_ode():
         dis = ss.Disease(infection=S >> I @ ss.perday(0.3)*(sus if trait else 1)*I, recovery=I >> R @ ss.perday(0.1), init=dict(I=0.001), sus=sus, name='sir')
         return ss.Sim(dis, unit='day', stop=200, total_pop=10_000, **opts, **kw)
     sim = make(solver='ode').run()
-    assert np.allclose(sim.results.sir.n_I, make(trait=False, solver='ode').run().results.sir.n_I) and any('uses its mean' in note for note in sim.notes)
+    assert np.allclose(sim.results.sir.I, make(trait=False, solver='ode').run().results.sir.I) and any('uses its mean' in note for note in sim.notes)
     assert make().init().solver == 'abm'
     with pytest.raises(ss.CapabilityError, match='approx=False'):
         make(solver='ode', approx=False).init()
@@ -283,7 +283,7 @@ def test_burnin():
         hiv, mods = make_hiv(art=ss.peryear(0))
         r = ss.Sim(hiv, connectors=mods, start=start, **kw2).run().results.hiv
         i = (1990 - start)*12 # The step of 1990
-        out[label] = sc.objdict(falling=r.n_falling[i], prog=r.progression[i:i+37].sum(), aids=r.aids_death[i:i+37].sum())
+        out[label] = sc.objdict(falling=r.falling[i], prog=r.progression[i:i+37].sum(), aids=r.aids_death[i:i+37].sum())
     p, b = out.plain, out.burnin
     assert p.prog == 0 and p.falling == 0 # Without it, nobody progresses for years
     assert b.falling > 50 and b.prog > 100 and b.aids > 50, out

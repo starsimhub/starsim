@@ -150,7 +150,7 @@ class Presentation:
                         provenance(leaf)
         if self.transmissions: # The timing contract of spec 02, where modelers look (CV5, ST4)
             add('timing', 'an infection is dated at the end of its step, so what follows it starts then')
-            add('', 'a state\'s count (n_X) includes the step people enter it; they stay for their whole dwell')
+            add('', 'a state\'s count (the result X) includes the step people enter it; they stay for their whole dwell')
         for p in self.all_pars(): # A parameter given only its bounds starts from their middle
             midpoint = getattr(p, 'midpoint', None)
             if midpoint is not None and sc.isnumber(p.raw) and p.raw == midpoint:

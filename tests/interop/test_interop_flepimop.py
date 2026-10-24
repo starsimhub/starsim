@@ -38,7 +38,7 @@ def test_seir_2pop():
     # The same numbers as flepiMoP's, in every compartment of every province (both are RK4 with a step of a day)
     for place in ['large_province', 'small_province']:
         for state in 'SEIR':
-            ours, theirs = res[f'n_{state}'].select(subpop=place).values, reference(folder, f'{place}_{state}')
+            ours, theirs = res[state].select(subpop=place).values, reference(folder, f'{place}_{state}')
             assert len(ours) == len(theirs) + 1 # The sim runs through the end date, as flepiMoP does, so its last number is the day after
             assert np.abs(ours[:-1] - theirs).max() < 1e-6, f'{place} {state} differs from the original'
 
@@ -73,7 +73,7 @@ def test_scenarios():
         sims = [base.new(pars=dict(Ro=r.Ro, p_incidCase=r.p_case), interventions=base.imported.scenarios[scen], **kw).run() for r in rows.itertuples()]
         res = [sim.results.sample_2pop for sim in sims]
         for place in ['large_province', 'small_province']:
-            for key,theirs in [('n_V', 'V'), ('n_I', 'I')]:
+            for key,theirs in [('V', 'V'), ('I', 'I')]:
                 ours = np.mean([r[key].select(subpop=place).values[:-1] for r in res], axis=0)
                 assert np.abs(ours - reference(folder, f'{scen}_{place}_{theirs}')).max() < 1e-6
             for key,theirs in [('incidCase', 'incidCase'), ('incidDeath', 'incidDeath'), ('n_incidHosp', 'currHosp')]: # A flow at index k is the number in the step ending on day k; the original's on day k is the number during day k
@@ -119,7 +119,7 @@ def test_dimensions(tmp_path):
     days = np.arange(len(res.timevec))
     sol = spi.solve_ivp(deriv, [0, days[-1]], [990, 0, 10, 0, 0, 0], t_eval=days, rtol=1e-10, atol=1e-8).y
     for i,state in enumerate(['S_unvaccinated', 'S_vaccinated', 'I_unvaccinated', 'I_vaccinated', 'R_unvaccinated', 'R_vaccinated']):
-        assert np.abs(res[f'n_{state}'].values - sol[i]).max() < 0.05, f'{state} differs from the ODE'
+        assert np.abs(res[state].values - sol[i]).max() < 0.05, f'{state} differs from the ODE'
     return sim
 
 

@@ -17,5 +17,5 @@ with sc.timer():
     sim.run()
 
 if do_plot:
-    plt.plot(sim.tivec, sim.results.hiv.n_infected)
+    plt.plot(sim.tivec, sim.results.hiv.infected)
     plt.show()

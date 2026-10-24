@@ -132,16 +132,16 @@ def test_emulsion(tmp_path):
     assert dis.graph.transitions.force_of_infection.contact
     sim.run()
     res = sim.results.seirq
-    full = res.n_Q.values[:-1] >= 20 # The capacity is a condition on the count at the start of a step
+    full = res.Q.values[:-1] >= 20 # The capacity is a condition on the count at the start of a step
     assert full.any() and (res.detection.values[1:][full] == 0).all()
-    assert np.isclose(res.prevalence_pct[10], 100*(res.n_E[10] + res.n_I[10])/(res.n_S[10] + res.n_E[10] + res.n_I[10] + res.n_Q[10] + res.n_R[10]))
+    assert np.isclose(res.prevalence_pct[10], 100*(res.E[10] + res.I[10])/(res.S[10] + res.E[10] + res.I[10] + res.Q[10] + res.R[10]))
 
     # The same model as an ODE agrees with the stochastic one on average
     ode = ss.interop.load(filename, format='emulsion', **kw)
     ode.pars.solver = 'ode'
     ode.run()
-    runs = ss.interop.load(filename, format='emulsion', **kw).run(n_runs=50).results.seirq.n_R.values[:, -1].mean()
-    assert np.isclose(runs, ode.results.seirq.n_R[-1], rtol=0.1)
+    runs = ss.interop.load(filename, format='emulsion', **kw).run(n_runs=50).results.seirq.R.values[:, -1].mean()
+    assert np.isclose(runs, ode.results.seirq.R[-1], rtol=0.1)
 
     # A probability is per time unit, as EMULSION reads it, not per step
     sc.savetext(tmp_path/'weekly.yaml', emulsion_weekly)
@@ -150,7 +150,7 @@ def test_emulsion(tmp_path):
     listed = [name for name,why in weekly.imported.incomplete]
     assert 'levels: metapop' in listed and 'health_state: production R -> S' in listed # Listed, not dropped
     assert 'import-model' in weekly.imported.prompt # What to ask an AI assistant to finish it
-    left = weekly.new(solver='ode', substeps=None).run().results.weekly.n_I[1]/1000 # The ODE with its own substeps (EMULSION's compartments take whole steps)
+    left = weekly.new(solver='ode', substeps=None).run().results.weekly.I[1]/1000 # The ODE with its own substeps (EMULSION's compartments take whole steps)
     assert np.isclose(left, 0.9**7, rtol=1e-3) # 47.8% still infectious after a 7-day step, as in EMULSION (90% if the probability were per step)
 
     # The originals: EMULSION's SIR as compartments, individuals, and hybrid groups, against 200 EMULSION runs
@@ -160,7 +160,7 @@ def test_emulsion(tmp_path):
         for kind in ['compart', 'IBM', 'hybrid']:
             sir = ss.interop.load(folder/f'original/{kind}_SIR.yaml', **kw)
             assert not sir.imported.incomplete and 'n=100;' in repr(sir) # 100 animals, not the default number of agents
-            final = sir.run(n_runs=200).results[f'{kind}_SIR'].n_R.values[:, -1].mean() # With one infected at the start, many runs die out, so the mean needs many
+            final = sir.run(n_runs=200).results[f'{kind}_SIR'].R.values[:, -1].mean() # With one infected at the start, many runs die out, so the mean needs many
             series = dict(compart='compartment', IBM='ibm', hybrid='hybrid')[kind] + '_R'
             expected = ref[(ref.series == series) & (ref.time == 100)].value.iloc[0]
             rtol = 0.1 if kind == 'compart' else 0.15 # As agents, more runs die out at a daily step (24% of them, against 19% at a tenth of a day), a difference of order dt
@@ -210,7 +210,7 @@ def test_to_code(tmp_path):
     sim = ss.Sim(make(beta=R0*gamma, recovery=gamma), total_pop=1000, unit='day', stop=100, **kw)
     ns = {}
     exec(sim.to_code(), ns)
-    peak = lambda s: s.run().results.sir.n_I.max()
+    peak = lambda s: s.run().results.sir.I.max()
     assert np.isclose(peak(ns['sim'].new(unit='week', dt=ss.days(1))), peak(sim), rtol=1e-3)
 
     # What cannot be written is listed in the code and in a warning
@@ -296,7 +296,7 @@ def test_no_disease():
     sc.heading('Testing what an import of networks only gives')
     S = ss.State(init_n=100) # A disease with no transitions, as an import of a fully custom model may give, runs and stays as it is
     sim = ss.Sim(ss.Disease(S, name='d'), solver='binomial', total_pop=100, stop=10, verbose=0).run()
-    assert np.ptp(sim.results.d.n_S.values) == 0
+    assert np.ptp(sim.results.d.S.values) == 0
     sim = ss.Sim(networks=ss.SexualNet(), n_agents=100, unit='week', stop=10, verbose=0) # A sim of networks only keeps its unit in code
     assert "unit='week'" in sim.to_code()
     return sim

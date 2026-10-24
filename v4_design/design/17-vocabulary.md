@@ -296,7 +296,7 @@ Since the review of October 2026, these names went, or were promised and never b
 | `solver='sde'`, `'stochastic'`, `'ctmc'` | One solver per method | `'gillespie'` (exact), `'tau'` (tau-leaping), `'binomial'` |
 | `ss.Calibration` as the result of a fit | `sim.calibrate()` returns an `ss.fit.Fit` | `ss.fit.Fit` (Starsim 3's `ss.Calibration` is removed) |
 | `ss.from_spec()`, and `ss.load()` of a model spec | The spec is the normalized form for `sim.hash()` and `ss.diff()`, and is not read back | `ss.save('model.py', sim)` and `ss.save('run.sim', sim)` |
-| `msim.reduce()`, `msim.mean()`, `msim.median()`, `ss.MultiResult`, `ss.multi_run()` | A MultiSim is its results, with a run dimension | `msim.results.sir.n_I.quantiles()` (and `.median()`, `.mean()`); `ss.parallel(pars=...)` |
+| `msim.reduce()`, `msim.mean()`, `msim.median()`, `ss.MultiResult`, `ss.multi_run()` | A MultiSim is its results, with a run dimension | `msim.results.sir.I.quantiles()` (and `.median()`, `.mean()`); `ss.parallel(pars=...)` |
 | `ss.outcome(every=)`, `annualize()` | Resampling belongs to a result | `result.resample('year')` |
 | `ss.routine_vx`, `ss.campaign_vx`, `ss.simple_vx`, `ss.routine_screening`, `ss.campaign_screening`, `ss.routine_triage`, `ss.campaign_triage`, `ss.seasonality`, `ss.rate`, `ss.time_prob`, `ss.rate_prob` | Starsim 3 and 2 duplicates of the language | Products with deliveries, `ss.seasonal`, `ss.per` and `ss.prob`; each is mapped in `skills/migrate-starsim3` |
 

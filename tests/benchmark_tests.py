@@ -24,7 +24,7 @@ def run_pytest(cpus=None):
     files = sc.getfilelist('.', 'test_*.py', aspath=False)
     if cpus is None:
         cpus = sc.cpu_count()//2 # To avoid overloading/multithreading
-    args = ['-n', f'{cpus}', '--durations=0'] + files
+    args = ['-n', cpus, '--durations=0'] + files
 
     # Run the tests and capture the oupttus
     print(f'Benchmarking {len(files)} files on {cpus} cores:\n{sc.newlinejoin(files)}\n')

@@ -46,8 +46,8 @@ def ode(*args, **kwargs):
 def fittable(beta=None, **kwargs):
     """ An SIR with a parameter to fit, and data from beta=0.3 (every 10 days) """
     beta = sc.ifelse(beta, ss.par(0.3, bounds=[0.1, 0.5]))
-    truth = ode(sir(), unit='day', stop=60).run().results.sir.n_I
-    data = pd.DataFrame(dict(n_I=truth.values[::10]), index=truth.timevec[::10])
+    truth = ode(sir(), unit='day', stop=60).run().results.sir.I
+    data = pd.DataFrame(dict(I=truth.values[::10]), index=truth.timevec[::10])
     return ode(sir(beta=beta), unit='day', stop=60, data=data, **kwargs)
 
 
@@ -166,7 +166,7 @@ def _():
     ode(sir(late=late, early=early)).init()
 
 @trigger(ss.errors.DataMisaligned)
-def _(): ode(sir(beta=ss.par(0.3, bounds=[0.1, 0.5])), data=pd.DataFrame(dict(time=[500], n_I=[10])), stop=100).calibrate()
+def _(): ode(sir(beta=ss.par(0.3, bounds=[0.1, 0.5])), data=pd.DataFrame(dict(time=[500], I=[10])), stop=100).calibrate()
 
 @trigger(ss.errors.UnknownDataColumn)
 def _(): ode(sir(beta=ss.par(0.3, bounds=[0.1, 0.5])), data=pd.DataFrame(dict(time=[50], n_Q=[10])), stop=100).calibrate()
@@ -219,7 +219,7 @@ def _():
 def _(): ode(sir().stratify(age=[0, 15], where=dict(sex='female'))).init()
 
 @trigger(ss.errors.NothingToFit)
-def _(): ode(sir(), data=pd.DataFrame(dict(time=[50], n_I=[10])), stop=100).calibrate()
+def _(): ode(sir(), data=pd.DataFrame(dict(time=[50], I=[10])), stop=100).calibrate()
 
 @trigger(ss.errors.NoData)
 def _(): ode(sir(beta=ss.par(0.3, bounds=[0.1, 0.5]))).calibrate()
@@ -260,7 +260,7 @@ def _(): fittable(beta=ss.par(0.1, bounds=[0.05, 0.15])).calibrate()
 def _(): fittable().calibrate(method=[dict(method='nelder-mead', maxiter=2, scan=0), 'nelder-mead'])
 
 @trigger(ss.errors.NotConverged)
-def _(): fittable(solver='binomial', total_pop=10_000).calibrate(method='pmcmc', likelihood=dict(n_I=ss.poisson()), draws=10, warmup=10, chains=2, particles=10, parallel=False, rand_seed=1).summarize() # Warned when the fit is summarized
+def _(): fittable(solver='binomial', total_pop=10_000).calibrate(method='pmcmc', likelihood=dict(I=ss.poisson()), draws=10, warmup=10, chains=2, particles=10, parallel=False, rand_seed=1).summarize() # Warned when the fit is summarized
 
 @trigger(ss.errors.UndrivenUnused)
 def _():
@@ -318,8 +318,8 @@ def _():
     beta, c = ss.par(0.1, bounds=[0.01, 1], name='beta'), ss.par(4, bounds=[1, 10], name='c')
     S, I, R = ss.states('S I R')
     model = lambda data=None: ode(ss.Disease(S >> I @ beta*c*I, I >> R @ ss.days(8), init=dict(I=0.01), name='sir'), unit='day', stop=60, data=data)
-    truth = model().run().results.sir.n_I
-    return model(pd.DataFrame(dict(n_I=truth.values[::10]), index=truth.timevec[::10])).calibrate(pars=['beta', 'c']).sim
+    truth = model().run().results.sir.I
+    return model(pd.DataFrame(dict(I=truth.values[::10]), index=truth.timevec[::10])).calibrate(pars=['beta', 'c']).sim
 
 @trigger(ss.errors.NotCompiled, note='runs as Python')
 def _():

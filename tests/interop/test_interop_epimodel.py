@@ -50,8 +50,8 @@ def test_epimodel_netsim():
     assert (net.pars.n_contacts, net.pars.concurrency, net.pars.max_contacts, net.pars.dur) == (0.7, 0.22, 3, 50), 'the network should have EpiModel\'s targets'
     sim.run()
     res = sim.results.sis
-    assert len(res.n_I) == 500, 'EpiModel\'s 500 times are 499 steps'
-    prev = res.n_I[-200:].mean() # EpiModel: 227.5, against 234 over 200 runs (its recovery in the step of infection makes it lower)
+    assert len(res.I) == 500, 'EpiModel\'s 500 times are 499 steps'
+    prev = res.I[-200:].mean() # EpiModel: 227.5, against 234 over 200 runs (its recovery in the step of infection makes it lower)
     assert 180 < prev < 290, f'the equilibrium should be near EpiModel\'s, not {prev}'
     code = sim.to_code()
     assert 'ssl.DegreeNet(n_contacts=0.7, concurrency=0.22, max_contacts=3, dur=50, acts=ss.freqperday(2))' in code
@@ -76,9 +76,9 @@ def test_epimodel_dcm():
     )
     ref = ss.Sim(dis, solver='ode', total_pop=1001, unit='day', dt=ss.days(0.5), start=0, stop=499, verbose=0).run()
     for k in 'SIR':
-        a, b = sim.results.sir[f'n_{k}'].values, ref.results.sir[f'n_{k}'].values
+        a, b = sim.results.sir[k].values, ref.results.sir[k].values
         assert np.allclose(a, b, rtol=1e-8), f'{k} should match the hand-written model'
-    assert sim.results.sir.n_I.values.max() > 100, 'the epidemic should take off'
+    assert sim.results.sir.I.values.max() > 100, 'the epidemic should take off'
     return sim
 
 

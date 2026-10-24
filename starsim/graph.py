@@ -301,11 +301,20 @@ class Graph(Presentation):
     def resolve_init_prev(self):
         """ By default, 1% of people start infected, seeded through the transmission (frequency- or density-dependent), unless a state is given a starting value """
         given = any(state.given_init for state in self.states.values())
-        transmitted = any(tr.contact or (tr.rate is not None and count_power(tr.rate) > 0) for tr in self.transitions.values())
+        counted = lambda tr: {id(st) for leaf in tr.rate.leaves if isinstance(leaf, Count) for st in leaf.states if st.module is self.module} - {id(st) for st in tr.src or []} # The module's states whose numbers the rate reads, other than its source: I in beta*I.n
+        transmitted = any(tr.contact or (tr.rate is not None and count_power(tr.rate) > 0 and counted(tr)) for tr in self.transitions.values())
         if self.init_prev is None and not given and transmitted:
             self.init_prev = par(0.01)
             self._add_par(self.init_prev, name='init_prev')
-            self.guessed['init_prev'] = '1% of people, the default'
+            self.guessed['init_prev'] = 'the default, 1%'
+        return
+
+    def unset_default_init_prev(self):
+        """ Remove the default init_prev, e.g. of a strain that its disease seeds """
+        if self.guessed.pop('init_prev', None) is not None:
+            self.init_prev = None
+            self.pars.pop('init_prev')
+            self.module.pars.pop('init_prev', None)
         return
 
     def expand_rows(self):

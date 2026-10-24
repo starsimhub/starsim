@@ -26,7 +26,7 @@ ref_proba_left = 0.9**7 # switching/emulsion.md §1: EMULSION's share still infe
 
 def check_quickstart(msim, age='growth', health='health'):
     """ Compare the mean counts over runs with EMULSION's, within the noise of 10 runs """
-    mean = lambda mod, *states: np.sum([np.asarray(msim.results[mod][f'n_{s}'].values) for s in states], axis=0).mean(axis=0)
+    mean = lambda mod, *states: np.sum([np.asarray(msim.results[mod][s].values) for s in states], axis=0).mean(axis=0)
     for k,ref in ref_quickstart.items():
         ours = dict(total=mean(age, 'J', 'A')[k], J=mean(age, 'J')[k], M=mean(health, 'M')[k], I=mean(health, 'I')[k])
         for key,val in ref.items():
@@ -57,7 +57,7 @@ initial_conditions: {population: [{prototype: infected, amount: 1000}]}
 '''
     sc.savetext(tmp_path/'proba.yaml', yaml)
     sim = ss.interop.load(tmp_path/'proba.yaml', format='emulsion', verbose=False).new(solver='ode', verbose=0).run()
-    left = sim.results[sim.diseases[0].name].n_I.values[1]/1000
+    left = sim.results[sim.diseases[0].name].I.values[1]/1000
     assert np.isclose(left, ref_proba_left, rtol=1e-3), f'{left:.1%} still infectious after one step, against {ref_proba_left:.1%} in EMULSION'
 
 
@@ -126,7 +126,7 @@ def check_metapop(counts):
 def test_emulsion_metapop_crossed():
     sc.heading('Testing EMULSION\'s metapopulation example with the two machines crossed by hand')
     r = make_metapop().results.sir
-    end = lambda *states: sum(np.asarray(r[f'n_{s}'].values).mean(axis=0)[-1] for s in states)
+    end = lambda *states: sum(np.asarray(r[s].values).mean(axis=0)[-1] for s in states)
     check_metapop(dict(total=end('SJ', 'IJ', 'RJ', 'SA', 'IA', 'RA'), J=end('SJ', 'IJ', 'RJ'), A=end('SA', 'IA', 'RA'), I=end('IJ', 'IA'), R=end('RJ', 'RA')))
 
 
@@ -134,7 +134,7 @@ def test_emulsion_metapop_crossed():
 def test_emulsion_metapop_stages():
     sc.heading('Testing EMULSION\'s metapopulation example with births from adults into juveniles')
     r = make_metapop(staged=True).results.sir
-    end = lambda s, **sel: np.asarray((r[f'n_{s}'].select(**sel) if sel else r[f'n_{s}']).values).mean(axis=0)[-1]
+    end = lambda s, **sel: np.asarray((r[s].select(**sel) if sel else r[s]).values).mean(axis=0)[-1]
     total = sum(end(s) for s in 'SIR')
     check_metapop(dict(total=total, J=sum(end(s, stage='J') for s in 'SIR'), A=sum(end(s, stage='A') for s in 'SIR'), I=end('I'), R=end('R')))
 

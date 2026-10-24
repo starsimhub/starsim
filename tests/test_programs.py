@@ -49,7 +49,7 @@ def test_people():
         sir = make_sir()
         def look(sim): # Results read during the run are people, with 5 people to an agent
             if sim.ti == 30:
-                seen[sim.solver] = sc.objdict(n_I=sim.results.sir.n_I[sim.ti - 1], delivered=sim.results.stock.delivered[sim.ti - 1])
+                seen[sim.solver] = sc.objdict(I=sim.results.sir.I[sim.ti - 1], delivered=sim.results.stock.delivered[sim.ti - 1])
             return True
         stock = ss.vaccinate(ss.Vaccine(efficacy=0.9), capacity=ss.perday(500), start=10, when=look)
         return ss.Sim(sir, interventions=stock, **kwargs)
@@ -57,9 +57,9 @@ def test_people():
     for solver,sim in sims.items():
         res = sim.results
         assert np.allclose(res.stock.delivered[11:60], 500, rtol=0.02), f'{solver}: {res.stock.delivered[11:21]}' # From the step that starts at 10
-        assert seen[solver].n_I == res.sir.n_I[29] and seen[solver].delivered == res.stock.delivered[29] # Not scaled again at the end
+        assert seen[solver].I == res.sir.I[29] and seen[solver].delivered == res.stock.delivered[29] # Not scaled again at the end
     assert sims.abm.pars.pop_scale == 5
-    check_close(sims, lambda sim: seen[sim.solver].n_I, rtol=0.15)
+    check_close(sims, lambda sim: seen[sim.solver].I, rtol=0.15)
     check_close(sims, lambda sim: sim.results.sir.infection.cum[-1], rtol=0.1)
     return sims
 
@@ -78,7 +78,7 @@ def test_priority():
     sims = run_both(make, stop=40, priority=lambda sir: ss.ppl.age) # Oldest first
     for solver,sim in sims.items():
         by = sim.results.stock.delivered.by('age').values
-        n_old = sim.results.sir.n_S.by('age').values[0, 2] + sim.results.sir.n_I.by('age').values[0, 2]
+        n_old = sim.results.sir.S.by('age').values[0, 2] + sim.results.sir.I.by('age').values[0, 2]
         first = int(n_old//500) - 1
         assert np.allclose(by[1:first+1, 2], 500) and by[1:first+1, :2].sum() == 0, f'{solver}: {by[:first+3]}'
     check_close(sims, lambda sim: sim.results.stock.delivered.sum(), rtol=0.01)
@@ -247,7 +247,7 @@ def test_hiv_art():
         r, res, res0 = sim.results.art_prog, sim.results.hiv, base[solver].results.hiv
         assert np.allclose(r.delivered[1:], 100, atol=5.1), f'{solver}: {r.delivered[1:].min():.1f}' # 100 a month, within an agent
         k = 30 # The lowest CD4 is treated first: fewer left in it than at random, and more in the highest
-        assert res.n_cd4_lo[k] < 0.8*res0.n_cd4_lo[k] and res.n_cd4_hi[k] > res0.n_cd4_hi[k], f'{solver}: {res.n_cd4_lo[k]:.0f} vs {res0.n_cd4_lo[k]:.0f}'
+        assert res.cd4_lo[k] < 0.8*res0.cd4_lo[k] and res.cd4_hi[k] > res0.cd4_hi[k], f'{solver}: {res.cd4_lo[k]:.0f} vs {res0.cd4_lo[k]:.0f}'
     check_close(sims, lambda sim: sim.results.hiv.aids_death.sum(), rtol=0.15)
     return sims
 

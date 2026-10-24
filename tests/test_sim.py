@@ -324,10 +324,9 @@ def test_creation_syntax():
         assert list(sim.diseases.keys()) == ['sir'] and sim.sir is sim.diseases.sir # A shortcut to each module
         assert sim.results.I is sim.results.sir.I and sim.results.infection is sim.results.sir.infection
     assert np.array_equal(sims[0].results.I, sims[2].results.I)
-    with pytest.warns(RuntimeWarning, match='sim.sir is not'): # Two modules with the same name have no shortcut
-        sim = ss.Sim(diseases=ss.SIR(), interventions=ss.Intervention(name='sir'), n_agents=100).init()
-    with pytest.raises(AttributeError):
-        sim.sir
+    with pytest.warns(RuntimeWarning, match='sim.summary is not'): # A module named like an attribute of the sim has no shortcut
+        sim = ss.Sim(diseases=ss.SIR(name='summary'), n_agents=100).init()
+    assert not isinstance(sim.summary, ss.Module)
 
     return sim2
 
@@ -353,8 +352,8 @@ def test_add_module():
     vsim.run()
     assert vsim.interventions.second.product is vsim.products()[0]
 
-    inf = sim.results.sis.n_I
-    base_inf = base.results.sis.n_I
+    inf = sim.results.sis.I
+    base_inf = base.results.sis.I
     assert sim.connectors.masks is vx and vx.ti == sim.ti # It was added, and kept in step with the sim
     assert np.array_equal(inf[:ti], base_inf[:ti]) # No change before the module was added...
     assert inf[-1] < base_inf[-1] # ...but fewer infections after

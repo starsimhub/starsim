@@ -40,8 +40,8 @@ seir = ss.Disease(S >> E @ ss.perday(0.3)*I, E >> I @ ss.perday(0.2), I >> R @ s
 sim = ss.Sim(seir, total_pop=1_000_000, unit='day', stop=365, solver='binomial', substeps=1, verbose=0)
 
 msim = sim.run(n_runs=200)
-I_runs = np.asarray(msim.results.seir.n_I.values)
-R_runs = np.asarray(msim.results.seir.n_R.values)
+I_runs = np.asarray(msim.results.seir.I.values)
+R_runs = np.asarray(msim.results.seir.R.values)
 print(f'Starsim, 200 runs: mean peak of I {I_runs.max(axis=1).mean():,.0f}, mean final R {R_runs[:,-1].mean():,.0f}')
 msim.plot()
 ```

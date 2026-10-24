@@ -61,17 +61,17 @@ def test_diseases():
         sims[name] = sim
         dis = sim.diseases[name]
         res = sim.results[name]
-        n_exp = np.array(res.n_exposed)
-        n_infectious = np.array(res.n_infectious)
-        n_inf = np.array(res.n_infected)
+        n_exp = np.array(res.exposed)
+        n_infectious = np.array(res.infectious)
+        n_inf = np.array(res.infected)
         new = np.array(res.new_infections)
-        total = n_exp + n_infectious + np.array(res.n_susceptible) + np.array(res.n_recovered)
+        total = n_exp + n_infectious + np.array(res.susceptible) + np.array(res.recovered)
         assert res.cum_infections[-1] > 0, f'Expected {name} infections'
         assert new.min() >= 0, f'{name} has negative new_infections: seeds are being double-counted'
         assert new[0] == 0, f'{name} counted its seed infections as new infections'
         assert new.sum() == res.cum_infections[-1], f'{name} cumulative infections do not match the sum'
         assert not (dis.exposed & dis.infectious).any(), f'{name} has agents in both E and I'
-        assert np.array_equal(total, np.array(sim.results.n_alive)), f'{name} compartments do not sum to the population'
+        assert np.array_equal(total, np.array(sim.results.alive)), f'{name} compartments do not sum to the population'
         assert np.array_equal(n_inf, n_exp + n_infectious), f'{name} should count both E and I as infected'
         assert (dis.infectious & ~dis.infected).sum() == 0, f'{name} should transmit only from agents that are infected'
         assert n_exp.max() > 0, f'{name} never had any exposed agents'
@@ -82,8 +82,8 @@ def test_diseases():
 
     # Ebola should progress agents to severe disease and bury the dead
     ebola = sims.ebola.results.ebola
-    assert ebola.n_severe.max() > 0, 'Expected some severe Ebola cases'
-    assert ebola.n_buried.max() > 0, 'Expected some Ebola burials'
+    assert ebola.severe.max() > 0, 'Expected some severe Ebola cases'
+    assert ebola.buried.max() > 0, 'Expected some Ebola burials'
 
     # Cholera dies out completely with a yearly timestep, since its natural history is in days
     yearly = ss.Sim(diseases=ssl.Cholera(beta=ss.perday(0.5)), networks=ss.RandomNet(),

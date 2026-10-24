@@ -64,7 +64,7 @@ sim = ss.Sim(sir, stratify=dict(age=[0, 15, 65]))   # or sim.stratify(age=...), 
 sir.stratify(risk=['low', 'high'], adjust={'infection': [1, 3]})  # one disease's own dimension
 ```
 
-Stratifying doesn't copy the states: `sir` still has `S`, `I`, and `R`, and the dimension becomes an axis. In a compartmental run each state has one row per group; as agents the property is an array on the people, and the groups are used for adjustments, conditions, and results. The base model and the stratification don't refer to each other, which is what lets one disease be reused with different structures. A stratified result is still one result (`res.n_I.select(age='0-14')`, `res.n_I.by('age')`). Properties of people are normally stratified on the sim, because every disease has to agree on them.
+Stratifying doesn't copy the states: `sir` still has `S`, `I`, and `R`, and the dimension becomes an axis. In a compartmental run each state has one row per group; as agents the property is an array on the people, and the groups are used for adjustments, conditions, and results. The base model and the stratification don't refer to each other, which is what lets one disease be reused with different structures. A stratified result is still one result (`res.I.select(age='0-14')`, `res.I.by('age')`). Properties of people are normally stratified on the sim, because every disease has to agree on them.
 
 ## The graph: resolve, complete, check
 

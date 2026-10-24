@@ -80,7 +80,7 @@ sis = ss.Disease(S >> I @ 0.05 * I, I >> S @ ss.days(10), init_prev=0.01, name='
 sis.stratify(risk=['low', 'high'], split=[0.8, 0.2])
 mixing = ss.contacts(risk=[[2, 1], [1, 8]])
 sim = ss.Sim(sis, networks=mixing, total_pop=1e5, stop=ss.days(200), verbose=0).run()
-res = sim.results.sis.n_I
+res = sim.results.sis.I
 print(f'Infected at the end: {res.select(risk="low")[-1]:,.0f} at low risk, {res.select(risk="high")[-1]:,.0f} at high risk')
 ```
 

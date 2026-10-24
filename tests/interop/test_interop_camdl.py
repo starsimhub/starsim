@@ -69,7 +69,7 @@ def test_camdl_ir():
     cases = ss.outcome(rho * infection)
     sir = ss.Disease(infection, I >> R @ gamma, cases, init_n=dict(I=10), name='sir')
     ref = ss.Sim(sir, total_pop=10_000, unit='day', stop=ss.weeks(12), solver='ode', substeps=1, verbose=0).run() # One RK4 step a day, as camdl takes
-    for key in ['n_I', 'n_R', 'infection', 'cases']:
+    for key in ['I', 'R', 'infection', 'cases']:
         assert np.allclose(sim.results.sir[key].values, ref.results.sir[key].values, rtol=1e-10), f'{key} should match the model written by hand'
 
     with pytest.raises(ValueError, match='rho'):
@@ -98,8 +98,8 @@ def test_camdl_flat():
     assert 'season' in skipped and 'seed' in skipped, 'the time function and the event should be listed'
     sim.run()
     res = sim.results.sir
-    assert res.n_I_b.values[30] > 1, 'the infection should reach the second group'
-    assert np.allclose(sum(res[f'n_{c}_{g}'].values for c in 'SIR' for g in 'ab'), 2000), 'no one should be lost'
+    assert res.I_b.values[30] > 1, 'the infection should reach the second group'
+    assert np.allclose(sum(res[f'{c}_{g}'].values for c in 'SIR' for g in 'ab'), 2000), 'no one should be lost'
 
     # A guard against an empty group (N_b > 0 ? I_b/N_b : 0), which without it would be 0/0
     for tr in m['transitions'][:2]:
@@ -110,7 +110,7 @@ def test_camdl_flat():
     with pytest.warns(ss.errors.ImportIncomplete): # The time function is still there
         sim = load_camdl(ir, pars=dict(rho=0.5, k=1), **kw)
     sim.run()
-    assert np.isfinite(sim.results.sir.n_I_a.values).all() and sim.results.sir.n_R_a.values[-1] > 100, 'the empty group should not stop the epidemic'
+    assert np.isfinite(sim.results.sir.I_a.values).all() and sim.results.sir.R_a.values[-1] > 100, 'the empty group should not stop the epidemic'
     return sim
 
 
@@ -125,7 +125,7 @@ def test_camdl_file():
     res = sim.results.sir
     for key in 'SIR':
         theirs = ref[ref.series == f'ode_{key}'].value.values # Written as whole numbers
-        assert np.abs(res[f'n_{key}'].values - theirs).max() <= 0.5, f'{key} should agree with camdl to its rounding'
+        assert np.abs(res[key].values - theirs).max() <= 0.5, f'{key} should agree with camdl to its rounding'
     theirs = ref[ref.series == 'ode_cases'].value.values
     weekly = res.cases.values[1:].reshape(-1, 7).sum(axis=1) # The cases of each week, as camdl reports them
     assert np.allclose(weekly, theirs, atol=1e-4), 'the weekly cases should agree with camdl (written to 5 digits)'
@@ -169,7 +169,7 @@ def test_pycamdl(tmp_path):
     ref = pd.read_csv(folder / 'reference/results.csv')
     for c in 'SEIR':
         theirs = ref[ref.series == f'ode_novax_{c}'].value.values
-        ours = sum(res[k].values for k in res.keys() if k.startswith(f'n_{c}_'))
+        ours = sum(res[k].values for k in res.keys() if k.startswith(f'{c}_'))
         assert np.allclose(ours, theirs, rtol=1e-9), f'{c} should agree with pycamdl'
     return sim
 

@@ -47,10 +47,10 @@ Then, in Starsim, `sim = ss.interop.load('model.json')`. The dump records the la
 
 - **One step a day, with no substeps.** epydemix is a discrete-time model in its own right: in a day, `1 - exp(-rate)` of the people leave a state. Starsim's binomial solver takes substeps for an Erlang dwell time (`stages=`), for every transition, which changes the model (deaths by 2 August 6,039 against 10,525 in the COVID example). The import passes `substeps=1`; keep it if you rewrite the death chain with `stages=`.
 - **Initial numbers are rounded down by age.** `percentage_in_agents` spreads the infections over the age groups and rounds each down (10 became 8 in Kenya); the dump records the actual numbers. The COVID tutorial's own initial conditions lose the odd person in each group (`(infected/2).astype(int)` twice), so they add up to 4 fewer than the population; the import makes the sim's population the initial numbers (epydemix still divides by `Nk` in the force of infection, a difference of 6e-7).
-- **A branch has one result.** `I_to_D_or_R` counts everyone leaving `I`; the number dying is the flow into `D` (`D0_to_D1` and `n_D0`), or write the two exits as separate transitions to keep both.
+- **A branch has one result.** `I_to_D_or_R` counts everyone leaving `I`; the number dying is the flow into `D` (`D0_to_D1` and `D0`), or write the two exits as separate transitions to keep both.
 - **Weeks end a day apart.** A Starsim flow summed weekly to a data date covers the week to the end of the day before (the date is the start of that day); epydemix's weeks end on Sunday. Sum the original's daily transitions to the same weeks before comparing.
 - **No posterior.** ABC-SMC is not implemented; the Starsim fit is a point estimate inside the original's posterior, and projections from one point can differ a lot from projections averaged over a posterior. Compare at fixed parameter values first; the calibration is a separate, looser check.
-- **Results by age group.** `res.n_I.select(age=0)` is the first group; select run by run in a multisim.
+- **Results by age group.** `res.I.select(age=0)` is the first group; select run by run in a multisim.
 - `ss.simdata()` wants a `str` path, not a `Path`.
 
 ## Worked example

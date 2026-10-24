@@ -67,7 +67,7 @@ def test_products(do_plot=False):
     base = ss.Sim(make_pars() | dict(diseases=sis)).run().results.agentsis
     sim = ss.Sim(make_pars() | dict(diseases=sis), interventions=treatment).run()
     assert sim.results.treatment.delivered.max() == 20 and sim.results.treatment.waiting.max() > 0 and sim.results.treatment.cured.sum() > 0
-    assert sim.results.agentsis.n_susceptible.mean() > base.n_susceptible.mean(), 'Expected those cured to be susceptible again'
+    assert sim.results.agentsis.susceptible.mean() > base.susceptible.mean(), 'Expected those cured to be susceptible again'
 
     if do_plot:
         sim.plot()

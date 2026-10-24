@@ -90,16 +90,16 @@ def test_nigeria(which='births', dt=1, start=1995, dur=15, do_plot=False):
 
     rtol = 0.05
     print(f'Check final pop size within {rtol*100:n}% of data')
-    assert np.isclose(data.n_alive.values[-1], sim.results.n_alive[-1], rtol=rtol), f'Final population size not within {rtol*100:n}% of data'
-    print(f'✓ (simulated/data={sim.results.n_alive[-1] / data.n_alive.values[-1]:.2f})')
+    assert np.isclose(data.alive.values[-1], sim.results.alive[-1], rtol=rtol), f'Final population size not within {rtol*100:n}% of data'
+    print(f'✓ (simulated/data={sim.results.alive[-1] / data.alive.values[-1]:.2f})')
 
     # Plots
     if do_plot:
         tvec = sim.timevec
         fig, ax = plt.subplots(2, 2)
         ax = ax.ravel()
-        ax[0].scatter(data.year, data.n_alive, alpha=0.5)
-        ax[0].plot(tvec, sim.results.n_alive, color='k')
+        ax[0].scatter(data.year, data.alive, alpha=0.5)
+        ax[0].plot(tvec, sim.results.alive, color='k')
         ax[0].set_title('Population')
 
         ax[1].plot(tvec, 1000 * sim.results.deaths.cmr, label='Simulated CMR')
@@ -132,8 +132,8 @@ def test_constant_pop(do_plot=False):
     sc.heading('Testing constant population size')
     sim = ss.Sim(n_agents=10e3, demographics=[ss.birth(rate=ss.peryear(0.01)), ss.death(rate=ss.peryear(0.01/1.01))], dur=ss.years(200), rand_seed=1).run()
     print("Check final pop size within 5% of starting pop")
-    assert np.isclose(sim.results.n_alive[0], sim.results.n_alive[-1], rtol=0.05)
-    print(f'✓ (final pop / starting pop={sim.results.n_alive[-1] / sim.results.n_alive[0]:.2f})')
+    assert np.isclose(sim.results.alive[0], sim.results.alive[-1], rtol=0.05)
+    print(f'✓ (final pop / starting pop={sim.results.alive[-1] / sim.results.alive[0]:.2f})')
 
     # Plots
     if do_plot:
@@ -557,7 +557,7 @@ def test_unborn():
     assert not (hiv.I.raw[mothers] & ~I0[mothers]).any() # Before, mothers were infected by their children
     r = sim.results
     born = ppl.alive.raw[ppl.auids] & (ppl.age.raw[ppl.auids] >= 0)
-    assert r.n_alive[-1] < r.n_alive[-1] + r.pregnancy.n_unborn[-1] and r.pregnancy.n_unborn[-1] > 0
+    assert r.alive[-1] < r.alive[-1] + r.pregnancy.n_unborn[-1] and r.pregnancy.n_unborn[-1] > 0
     assert np.isclose(ppl.n_alive, born.sum())
     return sim
 
@@ -611,7 +611,7 @@ def test_split_by_age():
     dis.stratify(age=[0, 1, 5])
     dis.stratify(wealth=['poor', 'rich'], split=ss.by([[0, 1], [1, 0], [1, 0]], dims=['age', 'wealth']))
     sim = ss.Sim(diseases=dis, n_agents=5000, start=2000, stop=2002, rand_seed=1, verbose=0, demographics=[ss.Births(birth_rate=ss.peryear(0.04)), ss.Deaths(death_rate=ss.peryear(0.01))]).run()
-    n = lambda t, age: (sim.results.dis.n_S.select(age=age).by('wealth').values[t] + sim.results.dis.n_I.select(age=age).by('wealth').values[t])
+    n = lambda t, age: (sim.results.dis.S.select(age=age).by('wealth').values[t] + sim.results.dis.I.select(age=age).by('wealth').values[t])
     assert n(0, 0).sum() < 0.05*5000 # Before, each age group was a third of the people
     assert n(0, 1)[1] == 0 and n(0, 2)[1] == 0 # Only those under 1 are rich...
     assert n(-1, 0)[0] == 0 and n(-1, 0)[1] > 0 # ...and newborns too
@@ -628,8 +628,8 @@ def test_declared_newborns():
         sim = ss.Sim(sis, n_agents=2000, demographics=[dem, ss.Deaths(death_rate=10)], stratify=dict(risk=['lo', 'hi'], split=[0.2, 0.8]), start=2000, stop=2020, verbose=0, rand_seed=1)
         sim.run()
         r = sim.results
-        n_states = r.sis.n_S[-1] + r.sis.n_I[-1]
-        alive = r.n_alive[-1] + (r.pregnancy.n_unborn[-1] if 'pregnancy' in r else 0) # The unborn are in the disease's states, but not counted among the people
+        n_states = r.sis.S[-1] + r.sis.I[-1]
+        alive = r.alive[-1] + (r.pregnancy.n_unborn[-1] if 'pregnancy' in r else 0) # The unborn are in the disease's states, but not counted among the people
         assert np.isclose(n_states, alive), f'{dem.name}: {n_states} in states but {alive} alive'
         new = sim.people.auids[sim.people.auids >= 2000]
         assert len(new) > 100

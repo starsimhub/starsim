@@ -50,8 +50,8 @@ def test_epydemix():
     dis = sim.diseases[0]
     assert list(dis.transitions.keys()) == ['S_to_E', 'E_to_I', 'I_to_D_or_R'], 'The two exits from I should be one branch'
     res = sim.results.epydemix
-    assert res.n_I.select(age=0).values[0] == 10, 'Each group should start with its initial numbers'
-    total = sum(res[f'n_{c}'].values for c in 'SEIRD')
+    assert res.I.select(age=0).values[0] == 10, 'Each group should start with its initial numbers'
+    total = sum(res[c].values for c in 'SEIRD')
     assert np.allclose(total, 10_000)
 
     # The same model by hand
@@ -69,7 +69,7 @@ def test_epydemix():
     ref = ss.Sim(seird, networks=ss.contacts(age=[[5.0, 1.0], [1.5, 2.0]]), total_pop=10_000, unit='day', start='2020-01-01', stop='2020-03-02',
                  solver='ode', substeps=1, use_aging=False, verbose=0).run()
     for c in 'SEIRD':
-        ours, theirs = res[f'n_{c}'].values, ref.results.epydemix[f'n_{c}'].values
+        ours, theirs = res[c].values, ref.results.epydemix[c].values
         assert np.allclose(ours, theirs, rtol=1e-9), f'{c} should match the model written by hand'
     return sim
 
@@ -92,7 +92,7 @@ def test_kenya():
     )
     sim = load_epydemix(d, **kw)
     msim = ss.parallel(sim, n_runs=200) # Restarted in this process; enough runs that the mean is within about 1% of the true one
-    ours = msim.results.epydemix.n_Infected.mean() # Over the runs
+    ours = msim.results.epydemix.Infected.mean() # Over the runs
     ref = pd.read_csv(f'{folder}/results.csv')
     theirs = ref[ref.series == 'Infected_total'].sort_values('time').value.values
     diff = np.abs(ours - theirs).max()/theirs.max()

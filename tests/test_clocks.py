@@ -44,7 +44,7 @@ def test_events():
         event = on(d)
         vx = ss.vaccinate(ss.Vaccine(efficacy=0), on=event, name='vx')
         res = ss.Sim(d, interventions=vx, n_agents=5000, unit='day', stop=60, **kw).run().results
-        target = res.d[flow][:-1].sum() if flow else res.d.n_D[-2] # Events in a step are acted on by the next, so not those of the last
+        target = res.d[flow][:-1].sum() if flow else res.d.D[-2] # Events in a step are acted on by the next, so not those of the last
         assert np.isclose(res.vx.delivered.sum(), target, rtol=0.02), f'{event}: {res.vx.delivered.sum()} delivered, {target} expected'
 
     # A branch is an event under a compartmental solver too; entering a state is not, yet
@@ -189,7 +189,7 @@ def test_bv_recurrence():
     new = ss.Sim(BV(name='bv'), **kw2).run().results.bv
     old = ss.Sim(Old(name='bv'), **kw2).run().results.bv
     assert new.recur.sum() > 500
-    assert np.array_equal(new.recur, old.recur) and np.array_equal(new.n_P, old.n_P) # The same hazards, so the same draws
+    assert np.array_equal(new.recur, old.recur) and np.array_equal(new.P, old.P) # The same hazards, so the same draws
     return new
 
 

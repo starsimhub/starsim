@@ -116,7 +116,7 @@ def test_seir():
     assert not sim.imported.incomplete
     sim.run()
     res = sim.results.oseir
-    assert res.n_Infected.select(age=1).values[0] == 10, 'Each group should start with its initial numbers'
+    assert res.Infected.select(age=1).values[0] == 10, 'Each group should start with its initial numbers'
 
     # The same model by hand
     Susceptible, Exposed, Infected, Recovered = ss.states(4)
@@ -131,7 +131,7 @@ def test_seir():
     seir.stratify(age=['0', '1'], split=[0.6, 0.4])
     ref = ss.Sim(seir, networks=ss.contacts(age=[[4.0, 1.0], [1.0, 3.0]]), total_pop=10_000, unit='day', stop=ss.days(60), solver='ode', verbose=0).run()
     for s in ['Susceptible', 'Exposed', 'Infected', 'Recovered']:
-        assert np.allclose(res[f'n_{s}'].values, ref.results.oseir[f'n_{s}'].values, rtol=1e-9), f'{s} should match the model written by hand'
+        assert np.allclose(res[s].values, ref.results.oseir[s].values, rtol=1e-9), f'{s} should match the model written by hand'
     return sim
 
 
@@ -158,11 +158,11 @@ def test_secir():
     dis = sim.diseases[0]
     assert list(dis.transitions.keys()) == ['infection', 'onset', 'symptoms', 'severe', 'critical', 'severe_recovery', 'severe_death', 'critical_recovery', 'death']
     res = sim.results.osecir
-    assert 'n_InfectedNoSymptomsConfirmed' not in res and 'n_Dead' not in res, 'Empty confirmed states are left out, and the dead leave'
-    alive = sum(res[f'n_{s}'].values for s in ['Susceptible', 'Exposed', 'InfectedNoSymptoms', 'InfectedSymptoms', 'InfectedSevere', 'InfectedCritical', 'Recovered'])
+    assert 'InfectedNoSymptomsConfirmed' not in res and 'Dead' not in res, 'Empty confirmed states are left out, and the dead leave'
+    alive = sum(res[s].values for s in ['Susceptible', 'Exposed', 'InfectedNoSymptoms', 'InfectedSymptoms', 'InfectedSevere', 'InfectedCritical', 'Recovered'])
     dead = res.death.cum.values + res.severe_death.cum.values
     assert np.allclose(alive + dead, 10_000), 'Everyone is alive or has died'
-    assert res.n_InfectedCritical.values.max() < 15, 'The ICU should not be overfilled'
+    assert res.InfectedCritical.values.max() < 15, 'The ICU should not be overfilled'
     ns = {}
     exec(sim.to_code(), ns)
     assert ns['sim'].hash() == sim.hash(), 'The code should build the same model'
@@ -179,8 +179,8 @@ def test_graph_json():
     sim = load_memilio(d, **kw)
     assert not sim.imported.incomplete
     res = sim.run().results.oseir
-    assert np.isclose(res.n_Susceptible.select(age=0, patch='1').values[0], 2000), 'Each place and group should start with its own numbers'
-    assert res.n_Recovered.select(patch='1').values[-1] > 10, 'The second place should be infected by commuters'
+    assert np.isclose(res.Susceptible.select(age=0, patch='1').values[0], 2000), 'Each place and group should start with its own numbers'
+    assert res.Recovered.select(patch='1').values[-1] > 10, 'The second place should be infected by commuters'
 
     # The same model by hand: commuters are away half the time
     Susceptible, Exposed, Infected, Recovered = ss.states(4)
@@ -196,7 +196,7 @@ def test_graph_json():
     seir.stratify(age=['0', '1'], split=[8/13, 5/13])
     seir.stratify(patch=['0', '1'], split=ss.by(totals/totals.sum(), dims=['age', 'patch']), mobility=ss.geo.Mobility(matrix=[[0, 0.05], [0.1, 0]], kind='commute'))
     ref = ss.Sim(seir, networks=ss.contacts(age=[[4.0, 1.0], [1.0, 3.0]]), total_pop=13_000, unit='day', stop=ss.days(60), solver='ode', verbose=0).run()
-    assert np.allclose(res.n_Infected.values, ref.results.oseir.n_Infected.values, rtol=1e-9), 'The import should match the model written by hand'
+    assert np.allclose(res.Infected.values, ref.results.oseir.Infected.values, rtol=1e-9), 'The import should match the model written by hand'
     return sim
 
 
@@ -207,7 +207,7 @@ def test_graph(tmp_path):
     subprocess.run([str(python), '-I', str(dump), 'graph.py', 'graph.json'], check=True, cwd=tmp_path, capture_output=True)
     sim = ss.interop.load(str(tmp_path/'graph.json'), format='memilio', **kw)
     assert not sim.imported.incomplete
-    res = sim.run().results.osecir.n_InfectedSymptoms
+    res = sim.run().results.osecir.InfectedSymptoms
     theirs = np.load(tmp_path/'graph.npy') # The number with symptoms in each place on each day
     total = theirs.sum(0)
     assert np.abs(res.values - total).max() < 0.02*total.max(), 'The total with symptoms should be within 2% of MEmilio\'s peak' # 1.2%
@@ -230,7 +230,7 @@ def test_study(tmp_path):
     lo, hi = np.array([0.04, 0.06]), np.array([0.06, 0.10])
     draw = (theirs[:, :2] - lo)/(hi - lo)
     pars = [{'TransmissionProbabilityOnContact_draw[0]': a, 'TransmissionProbabilityOnContact_draw[1]': b, 'TimeExposed': te, 'damping': damp} for (a,b),te,damp in zip(draw, theirs[:, 2], theirs[:, 3])]
-    peaks = np.asarray(ss.parallel(sim, pars=pars).results.osecir.n_InfectedSymptoms.values).max(1)
+    peaks = np.asarray(ss.parallel(sim, pars=pars).results.osecir.InfectedSymptoms.values).max(1)
     assert np.allclose(peaks, theirs[:, 4], rtol=0.03), 'Each run should give MEmilio\'s peak with the same draws' # Within 2.1%
 
     # Drawn from the priors, as MEmilio's study draws them
@@ -267,7 +267,7 @@ def test_examples(example, tmp_path):
     res = sim.results.osecir
     for s in ['Susceptible', 'Exposed', 'InfectedNoSymptoms', 'InfectedSymptoms', 'InfectedSevere', 'InfectedCritical', 'Recovered', 'Dead']:
         theirs = ref[ref.series == s].sort_values('time').value.values
-        ours = res.death.cum.values if s == 'Dead' else res[f'n_{s}'].values
+        ours = res.death.cum.values if s == 'Dead' else res[s].values
         diff = np.abs(ours - theirs).max()/total
         assert diff < 1e-3, f'{s} should be within 0.1% of the population of the original, not {diff:.2%}' # The original's own interpolation error is about this
     return sim

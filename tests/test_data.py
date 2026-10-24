@@ -31,9 +31,9 @@ def test_contacts():
     named = ss.contacts('KE') # By code, as by name
     given = ss.contacts(matrix, bands=list(range(0, 80, 5)))
     sims = [ss.Sim(make_sir(), networks=net, stratify=dict(age=[0, 5, 18, 65]), total_pop=10_000, unit='day', stop=60, **kw).run() for net in [named, given]]
-    assert not np.allclose(sims[0].results.sir.n_I, sims[1].results.sir.n_I) # A country's matrix brings its people's ages, so has 44% under 18 rather than the world's 30%
+    assert not np.allclose(sims[0].results.sir.I, sims[1].results.sir.I) # A country's matrix brings its people's ages, so has 44% under 18 rather than the world's 30%
     sims[1] = ss.Sim(make_sir(), networks=given, people=ss.people('Kenya'), stratify=dict(age=[0, 5, 18, 65]), total_pop=10_000, unit='day', stop=60, **kw).run()
-    assert np.allclose(sims[0].results.sir.n_I, sims[1].results.sir.n_I) # The same as the matrix given by hand, with Kenya's people
+    assert np.allclose(sims[0].results.sir.I, sims[1].results.sir.I) # The same as the matrix given by hand, with Kenya's people
     assert sims[0].pars.total_pop == 10_000 and sims[0].groups.strats[0].split[:2].sum() > 0.4 # The ages of Kenya, but not its size
 
     # A place a source does not have says which do
@@ -76,7 +76,7 @@ def test_geo():
     sir = make_sir()
     sir.stratify(patch=kenya, mobility=ss.geo.gravity(away=0.1))
     sim = ss.Sim(sir, total_pop=50e6, unit='day', stop=60, **kw).run()
-    shares = sim.results.sir.n_S.strata[0]/sim.results.sir.n_S.strata[0].sum()
+    shares = sim.results.sir.S.strata[0]/sim.results.sir.S.strata[0].sum()
     assert np.allclose(shares, kenya.pop/kenya.pop.sum()) # People start in each county in proportion to its population
     assert 'starsim_data' in sim.describe(output=True)
 
@@ -119,7 +119,7 @@ def test_people():
     total = ss.people('Kenya', year=2024).named.total
     assert ode.solver == 'ode' and ode.pars.total_pop == total
     n = ode.results.sir
-    initial = n.n_S.strata[:, 0] + n.n_I.strata[:, 0] + n.n_R.strata[:, 0]
+    initial = n.S.strata[:, 0] + n.I.strata[:, 0] + n.R.strata[:, 0]
     _, female, male, _ = ss.data.population('Kenya', year=2024)
     assert np.isclose(initial[0], (female + male)[0]) # The 0-4 group, which is one WPP age group
 
@@ -134,7 +134,7 @@ def test_people():
     growth = sc.objdict()
     for solver,n_agents in [('ode', None), ('abm', 20_000)]:
         sim = ss.Sim(make_sir(), people=ss.people('Kenya', year=2024, n_agents=n_agents), stratify=dict(age=[0, 15, 65]), solver=solver, use_aging=True, unit='day', stop=365, **kw).run()
-        n = sum(sim.results.sir[f'n_{k}'].by('age').values for k in 'SIR')
+        n = sum(sim.results.sir[k].by('age').values for k in 'SIR')
         growth[solver] = n[-1, 2]/n[0, 2] - 1
     assert growth.abm > 0.05 and np.isclose(growth.ode, growth.abm, rtol=0.15) # The 65+ group grows by about 12% in a year; 40% with ages uniform within each group
 
@@ -183,7 +183,7 @@ def test_us_states(us_states):
     school = ss.contacts(state, layer='school')
     assert school.ref['source'] == 'mistry2021_us' and len(school.edges) == 85 # By single year of age, from its own study
     sim = ss.Sim(make_sir(), people=ss.people(state), networks=school, stratify=dict(age=[0, 5, 18, 65]), unit='day', stop=30, **kw).run()
-    assert sim.pars.total_pop == ppl.named.total and sim.results.sir.n_I[-1] > sim.results.sir.n_I[0]
+    assert sim.pars.total_pop == ppl.named.total and sim.results.sir.I[-1] > sim.results.sir.I[0]
     assert sim.hash() == rebuild(sim.to_code()).hash() # Looked up again
     with pytest.raises(ss.errors.UnknownLocation):
         ss.people('Kenya:Nairobi') # Other countries have no data by unit

@@ -87,9 +87,9 @@ A rule with memory ("reopen schools only after four weeks below the threshold") 
 
 ## Results
 
-Every state gets a count (`n_I`) and every transition a flow of the same name (`infection`), with no declaration needed. Extra results are declared with the model: a ratio (`prevalence = I / N`) or an `ss.outcome`, a weighted, delayed sum of flows for observed quantities ("half of infections are reported, five days later": `ss.outcome(0.5 * infection, delay=ss.days(5))`). An outcome moves nobody, and if the model includes testing, the tests' own `positive` results are the cases instead.
+Every state gets a count (`I`) and every transition a flow of the same name (`infection`), with no declaration needed. Extra results are declared with the model: a ratio (`prevalence = I / N`) or an `ss.outcome`, a weighted, delayed sum of flows for observed quantities ("half of infections are reported, five days later": `ss.outcome(0.5 * infection, delay=ss.days(5))`). An outcome moves nobody, and if the model includes testing, the tests' own `positive` results are the cases instead.
 
-Each result knows its kind (a flow, a stock, or a ratio), and that one fact does a lot of work: resampling to weeks, or comparing with weekly data, sums a flow but reads a stock at the end of each week, and a ratio is never averaged across groups (its numerator and denominator are summed, then divided). After stratification a result is still one result with extra dimensions, so `res.n_I.select(age='0-14')` and `res.n_I.by('age')` replace names like `n_I_female_high`. Data attaches by column name (`data='cases.csv'` with a column called `cases`), which is also all that calibration needs (see [Randomness and fitting](randomness_and_fitting.qmd)).
+Each result knows its kind (a flow, a stock, or a ratio), and that one fact does a lot of work: resampling to weeks, or comparing with weekly data, sums a flow but reads a stock at the end of each week, and a ratio is never averaged across groups (its numerator and denominator are summed, then divided). After stratification a result is still one result with extra dimensions, so `res.I.select(age='0-14')` and `res.I.by('age')` replace names like `I_female_high`. Data attaches by column name (`data='cases.csv'` with a column called `cases`), which is also all that calibration needs (see [Randomness and fitting](randomness_and_fitting.qmd)).
 
 A sim is one run. Many runs are an `ss.MultiSim`, whose results are the same `ss.Result` with a run dimension first:
 
@@ -99,7 +99,7 @@ small = ss.Disease(infection=S >> I @ 0.2 * I, recovery=I >> R @ ss.days(10), in
 sim = ss.Sim(small, solver='gillespie', total_pop=1000, unit='day', stop=ss.days(120), verbose=0)
 msim = sim.run(n_runs=20)
 
-n_I = msim.results.sir.n_I
+n_I = msim.results.sir.I
 print('Runs by time points:', n_I.values.shape)
 print('Share of runs with a major outbreak:', (msim.results.sir.infection.values.sum(axis=1) > 100).mean())
 ```

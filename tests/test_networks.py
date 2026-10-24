@@ -551,7 +551,7 @@ def test_partners():
     e = sim.networks[0].edges
     degree = np.bincount(np.concatenate([e.p1, e.p2]), minlength=2000)
     assert np.isclose(degree.mean(), 0.7, rtol=0.1) and np.isclose(degree.var(), degree.mean(), rtol=0.15)
-    assert sim.results.sis.n_I[-1] > 100 # Infection spreads through the partnerships
+    assert sim.results.sis.I[-1] > 100 # Infection spreads through the partnerships
 
     # The targets of EpiModel's introductory network, from the library
     net = ssl.DegreeNet(n_contacts=0.7, concurrency=0.22, max_contacts=3, dur=50)
@@ -563,7 +563,7 @@ def test_partners():
     assert np.isclose(res.mean_degree[200:].mean(), 0.7, rtol=0.1) # ... are what the network has (partnerships last 50 steps, so 200 steps of 1,000 agents vary by about 5% between seeds)
     assert np.isclose(res.concurrency[200:].mean(), 0.22, rtol=0.1)
     assert net.degrees(sim.people.alive.uids).max() <= 3
-    assert sim.results.sis.n_I[-1] > 100 # Infection spreads through the partnerships
+    assert sim.results.sis.I[-1] > 100 # Infection spreads through the partnerships
     table = net.check(n_runs=2, output=True)
     assert list(table.index) == ['mean_degree', 'concurrency', 'max_contacts', 'dur']
     assert np.isclose(table.realized.dur, 50, rtol=0.15) # How long partnerships last, from how many there are and how many form
@@ -572,7 +572,7 @@ def test_partners():
     def prev(acts, beta):
         S, I = ss.states(2)
         sis2 = ss.Disease(infection=ss.Transition(S, I, rate=beta * I), recovery=I >> S @ ss.prob(0.05), init_n=dict(I=10), name='sis')
-        return ss.Sim(sis2, networks=ssl.DegreeNet(n_contacts=0.7, dur=50, acts=acts), n_agents=medium, stop=200, rand_seed=1, verbose=0).run().results.sis.n_I.values
+        return ss.Sim(sis2, networks=ssl.DegreeNet(n_contacts=0.7, dur=50, acts=acts), n_agents=medium, stop=200, rand_seed=1, verbose=0).run().results.sis.I.values
     assert np.allclose(prev(ss.freqperday(2), ss.peract(0.4)), prev(None, ss.prob(1 - 0.6**2)))
     with pytest.raises(ValueError, match='per unit time'): # A bare number would be acts in a step, which depends on the step
         prev(2, ss.peract(0.4))
@@ -702,7 +702,7 @@ def test_per_act():
         S, I = ss.states('S I')
         si = ss.Disease(infection=ss.Transition(S, I, rate=beta * I), init_prev=0.05, name='si')
         sims = [ss.Sim(si, networks=ss.SexualNet(dur=ss.lognorm_ex(mean=ss.years(2), std=ss.years(1))), n_agents=5000, start=2000, stop=2010, dt=dt, rand_seed=seed, verbose=0) for seed in [1, 2]]
-        return np.mean([sim.run().results.si.n_I[-1]/5000 for sim in sims])
+        return np.mean([sim.run().results.si.I[-1]/5000 for sim in sims])
     monthly, weekly = prev(ss.years(1/12)), prev(ss.weeks(1))
     assert np.isclose(monthly, weekly, atol=0.03), f'{monthly:.3f} against {weekly:.3f}'
     assert prev(ss.years(1/12), 0.01) == monthly # A bare number on a network with acts is per act too (as in Starsim 3)
@@ -793,7 +793,7 @@ def test_beta_readings():
     S, I = ss.states('S I')
     hiv = ss.Disease(infection=ss.Transition(S, I, rate=dict(sexualnet=ss.peract(m2f=0.01, f2m=0.005), maternalnet=ss.peryear(0.5)) * I), init_prev=0.1, name='hiv')
     sim = ss.Sim(hiv, networks=[ss.SexualNet(), ss.MaternalNet()], demographics=ss.Pregnancy(), **kw).run()
-    assert sim.results.hiv.n_I[-1] > 0
+    assert sim.results.hiv.I[-1] > 0
     return
 
 
@@ -814,7 +814,7 @@ def test_route_modifiers():
     def run(mods=None, beta=ss.peryear(0.5)):
         S, I = ss.states('S I')
         si = ss.Disease(infection=ss.Transition(S, I, rate=dict(sexualnet=ss.peract(0.05), randomnet=beta) * I), init_prev=0.05, name='si')
-        return ss.Sim(si, networks=[ss.SexualNet(), ss.RandomNet(n_contacts=2)], connectors=mods, n_agents=2000, start=2000, stop=2005, verbose=0).run().results.si.n_I[-1]
+        return ss.Sim(si, networks=[ss.SexualNet(), ss.RandomNet(n_contacts=2)], connectors=mods, n_agents=2000, start=2000, stop=2005, verbose=0).run().results.si.I[-1]
     assert run(condoms(multiply=0, share=1)) > run(condoms(multiply=0, share=1), beta=0) > 0 # Infections only over the random network
     with pytest.raises(ss.errors.RouteMismatch, match='not a route'):
         run(condoms(multiply=0, share=1) + [ss.modify('si.infection', multiply=0.5, route='needles')])
@@ -827,7 +827,7 @@ def test_route_modifiers():
         sir = ss.Disease(infection=ss.Transition(S, I, rate=dict(pool=ss.perday(0.03), home=ss.perday(0.02)) * I), recovery=ss.Transition(I, R, dur=ss.days(10)), init_prev=0.01, name='sir')
         nets = [ss.MixingPool(n_contacts=4, name='pool'), ss.MixingPool(n_contacts=2, name='home')]
         sim = ss.Sim(sir, networks=nets, interventions=mods, stratify=dict(risk=['low', 'high'], split=[0.7, 0.3]), total_pop=10_000, n_agents=10_000, solver=solver, unit='day', stop=100, rand_seed=seed, verbose=0)
-        return sim.run().results.sir.n_R.values
+        return sim.run().results.sir.R.values
     share = lambda: [ss.modify('sir.infection', multiply=0.2, share=ss.by(risk=[0.3, 0.9]), route='pool')]
     ode = pool('ode', share())
     assert np.allclose(ode, pool('ode', [ss.modify('sir.infection', multiply=ss.by(risk=[1 - 0.3*0.8, 1 - 0.9*0.8]), route='pool')])) # The same as its multiplier, 1 - share*(1 - multiply)
@@ -888,15 +888,15 @@ def test_partnership_approx():
                  net=mf(dur=ss.lognorm_ex(mean=ss.years(5), std=ss.years(3)), acts=ss.freqperyear(80)))),
     )
     for name,(at10,at20,kw) in cases.items():
-        prev = lambda solver, seed=1: run(solver, seed=seed, **sc.dcp(kw)).run().results.d.n_I.values[[120, -1] if name != 'gono' else [522, -1]]/5000
+        prev = lambda solver, seed=1: run(solver, seed=seed, **sc.dcp(kw)).run().results.d.I.values[[120, -1] if name != 'gono' else [522, -1]]/5000
         ratio = prev('ode')/np.mean([prev('abm', seed) for seed in range(1 if name == 'gono' else 4)], axis=0) # One run is enough for the weekly gono, whose ratios are far from its bounds (0.18-0.26 and 0.11-0.13 over 8 seeds)
         assert at10[0] < ratio[0] < at10[1] and at20[0] < ratio[1] < at20[1], f'{name}: {ratio}'
 
     # The other compartmental solvers use the same force of infection; approx=False raises, sides need a dimension, and 'auto' keeps agents
     hiv = cases['hiv'][2]
-    ode = run('ode', **sc.dcp(hiv)).run().results.d.n_I[-1]
+    ode = run('ode', **sc.dcp(hiv)).run().results.d.I[-1]
     for solver in ['binomial', 'gillespie']: # Stochastic, in 5,000 people
-        assert np.isclose(run(solver, **sc.dcp(hiv)).run().results.d.n_I[-1], ode, rtol=0.1), solver
+        assert np.isclose(run(solver, **sc.dcp(hiv)).run().results.d.I[-1], ode, rtol=0.1), solver
     with pytest.raises(ss.CapabilityError, match='abm'):
         run('ode', approx=False, **sc.dcp(hiv)).init()
     with pytest.raises(ss.CapabilityError, match=r'stratify\(sex='):
@@ -943,7 +943,7 @@ def test_beta_default():
 
     # A library disease names routes the sim may not have: those are dropped with a note, and the routes it does not name take the default
     sim = ss.Sim(make(sexualnet=ss.peract(m2f=m2f, f2m=0.5*m2f), msm=ss.peract(0.1), default=0), networks=[ss.SexualNet(), ss.MaternalNet()], **kw).run()
-    assert sim.results.d.n_I[-1] > 0
+    assert sim.results.d.I[-1] > 0
     assert any('msm' in note and 'default' in note for note in sim.notes), sim.notes
     assert 'beta on maternalnet' in sim.diseases.d.describe(output=True)
 
@@ -959,7 +959,7 @@ def test_beta_default():
         S, I, R = ss.states('S I R')
         sir = ss.Disease(infection=ss.Transition(S, I, rate=betas * I), recovery=ss.Transition(I, R, dur=ss.days(10)), init_prev=0.01, name='sir')
         sim = ss.Sim(sir, networks=nets, total_pop=10_000, n_agents=10_000, solver=solver, unit='day', stop=100, rand_seed=1, verbose=0)
-        return sim.run().results.sir.n_R.values
+        return sim.run().results.sir.R.values
     res = {}
     for solver in ['abm', 'ode']:
         res[solver] = pools(solver, pool=ss.perday(0.03), home=ss.perday(0.02))

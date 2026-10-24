@@ -32,7 +32,7 @@ sim2 = ss.Sim(label='With demographics', demographics=True, **pars)
 
 # Run both simulations and plot
 msim = ss.parallel(sim1, sim2)
-msim.plot(['n_alive', 'cum_deaths', 'sis_n_S', 'sis_n_I'])
+msim.plot(['alive', 'cum_deaths', 'sis_S', 'sis_I'])
 ```
 
 ## Advanced usage: Pregnancy and births

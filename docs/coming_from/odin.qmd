@@ -73,7 +73,7 @@ sim = ss.Sim(seir, networks=ss.contacts(m, bands=ages), total_pop=pop.sum(), uni
              solver='binomial', use_aging=False, verbose=0)
 
 msim = sim.run(n_runs=20)
-final_R = np.asarray(msim.results.seir.n_R.values)[:, -1]
+final_R = np.asarray(msim.results.seir.R.values)[:, -1]
 print(f'Mean final R over 20 runs: {final_R.mean():,.0f} (odin, 1,000 runs: 532,176)')
 msim.plot()
 ```

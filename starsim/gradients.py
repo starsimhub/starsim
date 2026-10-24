@@ -1182,7 +1182,7 @@ class Density:
             graph = engine.graph
             name = res.name
             staying = name.startswith('n_') and name[2:] in engine.outcomes # The number in an outcome that people stay in
-            if not (name.startswith('n_') and name[2:] in graph.states) and not staying and name not in graph.transitions and name not in graph.outcomes and name not in graph.exprs:
+            if name not in graph.states and not staying and name not in graph.transitions and name not in graph.outcomes and name not in graph.exprs:
                 raise Unsupported(f'the data series "{col}" is the result "{name}", which is not a state, a transition, an outcome, or an expression')
             if (name in graph.outcomes and name not in engine.outcomes) or (staying and engine.outcomes[name[2:]].stay is None and engine.outcomes[name[2:]].p_leave is None):
                 raise Unsupported(f'the outcome "{name}"')
@@ -1232,8 +1232,8 @@ class Density:
                 outcomes = self.outcomes(engine, ctx, new, counts.shape[0]) if any(s.name in graph.outcomes or s.name[2:] in graph.outcomes for s in series) else {}
                 for s in series:
                     name = s.name
-                    if name.startswith('n_') and name[2:] in n:
-                        val = n[name[2:]]
+                    if name in n:
+                        val = n[name]
                     elif name in new:
                         val = new[name]
                     elif name in outcomes:
@@ -1260,7 +1260,7 @@ class Density:
         return self
 
     def states(self, x):
-        """ The number in each state at each time point, at some parameter values: a dict of JAX arrays by 'module.n_state' """
+        """ The number in each state at each time point, at some parameter values: a dict of JAX arrays by 'module.state' """
         Xs = self.numbers(x)
         out = {}
         for unit,run in zip(self.units, self.runs):
@@ -1270,7 +1270,7 @@ class Density:
                 st = stocks if len(unit) == 1 else stocks[k]
                 total = st.sum(axis=-1) # Over the groups
                 for i,name in enumerate(self.engines[j].graph.states):
-                    out[f'{self.mods[j].name}.n_{name}'] = total @ self.member[j][i]
+                    out[f'{self.mods[j].name}.{name}'] = total @ self.member[j][i]
         return out
 
     def __call__(self, x):
@@ -1339,7 +1339,7 @@ class LogDensity:
             return np.asarray(self._grad(jax().numpy.asarray(x, dtype=float)))
 
     def run(self, x):
-        """ The number in each state at each time point, at some values: a dict of arrays by 'module.n_state' """
+        """ The number in each state at each time point, at some values: a dict of arrays by 'module.state' """
         with jax().enable_x64(True):
             return {key:np.asarray(val) for key,val in self._states(jax().numpy.asarray(x, dtype=float)).items()}
 

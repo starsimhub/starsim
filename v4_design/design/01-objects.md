@@ -189,7 +189,7 @@ ss.Sim(
     analyzers     = None,
     data      = None,            # a file, a dataframe, or ss.simdata(...), with columns named like results (09-results.md)
     pars      = None,            # parameter values by name (04-parameters.md)
-    results   = None,            # the results to keep by group, e.g. ['n_I', 'cases']; the totals are always kept (09-results.md)
+    results   = None,            # the results to keep by group, e.g. ['I', 'cases']; the totals are always kept (09-results.md)
     label     = None,
     **kwargs,                    # less common options, e.g. integrator (12-backends.md)
 )
@@ -197,7 +197,7 @@ ss.Sim(
 
 Only the model is required; every other argument has a default that is guessed and printed. The keywords are Starsim's (`networks`, `n_agents`, `total_pop`, `rand_seed`, `data`), with `unit`, `solver`, `approx`, `stratify`, and `integrator` added; `results` now names the results kept by group. One difference from Starsim today: the first positional argument is the model rather than a `pars` dict. A dict in that position is still read as Starsim reads it.
 
-Transitions given to the sim (`ss.Sim(infection, recovery)`, `ss.Sim([infection, recovery])`, or `ss.Sim(diseases=[infection, recovery])`) are one disease, as `ss.Disease(infection, recovery)` is, named from its states (`sir`). The results of that disease, or of one the sim names from its states (`ss.Sim(ss.Disease(...))`), are also at the top of the sim's results (`sim.results.I` is `sim.results.sir.I`), if there is one such disease. Each module is also an attribute of the sim (`sim.sir` is `sim.diseases.sir`), unless two modules, or a module and an attribute of the sim, have the same name, which warns.
+Transitions given to the sim (`ss.Sim(infection, recovery)`, `ss.Sim([infection, recovery])`, or `ss.Sim(diseases=[infection, recovery])`) are one disease, as `ss.Disease(infection, recovery)` is, named from its states (`sir`). The results of that disease, or of one the sim names from its states (`ss.Sim(ss.Disease(...))`), are also at the top of the sim's results (`sim.results.I` is `sim.results.sir.I`), if there is one such disease. Each module is also an attribute of the sim (`sim.sir` is `sim.diseases.sir`), unless the sim has an attribute of that name, which warns.
 
 `networks=` accepts networks and mixing pools alike. There is no `ss.Homogeneous`: homogeneous mixing is what happens when no network is given, and `ss.MixingPool(n_contacts=10)` sets a contact rate. See [06-routes.md](06-routes.md).
 
@@ -235,8 +235,8 @@ msim = ss.parallel(sim, n_runs=100)            # or its shortcut, sim.run(n_runs
 
 msim.plot()                                    # the median and an interval
 msim.plot(lines=True)                          # every run
-msim.results.sir.n_I.quantiles([0.025, 0.5, 0.975])
-msim.results.sir.n_I.values                    # the full array, runs by time
+msim.results.sir.I.quantiles([0.025, 0.5, 0.975])
+msim.results.sir.I.values                    # the full array, runs by time
 ```
 
 There is no replicate count on `ss.Sim`: `sim.run(n_runs=100)` is a shortcut for `ss.parallel(sim, n_runs=100)`, and returns the MultiSim, not the sim. `ss.parallel(baseline=..., vaccine=...)` runs several named sims and returns one object indexed by scenario, run, and time. Results are specified in [09-results.md](09-results.md).
@@ -325,7 +325,7 @@ recovery     I -> R   spontaneous
              dwell ~ exponential(mean = 10 steps)            [guessed: scalar duration]
 
 mixing       homogeneous, 1 contact per step                 [guessed: no network given]
-results      n_S, n_I, n_R, and one flow per transition
+results      S, I, R, and one flow per transition
 schedule     every step: sir
 ```
 

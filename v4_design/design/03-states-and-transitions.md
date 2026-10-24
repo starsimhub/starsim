@@ -190,7 +190,7 @@ The keys are network names. On a network with acts the value is a probability pe
 | `a >> b @ x` | the complete transition | "a goes to b at x" |
 | `S + I + R >> D` | a sum of states as the source | "any of S, I, R goes to D" (several sources); `S \| I` on states is a condition, for `where=` |
 | `p * A + (1 - p) * B` | a weighted sum of states | a weighted source of infection (several destinations are a list, with `p=`) |
-| `I.n` | a count | the number of people in `I`; the same number as the result `n_I` |
+| `I.n` | a count | the number of people in `I`; the same number as the result `I` |
 | `I.frac` | a fraction | `I.n` divided by the number of people in `I`'s module |
 | `I.total` | a count | the number in `I` in the whole population; in a model stratified by place, `I.n` in a rate is the number in the same place |
 | `S + I + R` | a sum of states | a source of infection or a denominator in a rate; a result when given to the module by name. Never a new state |
@@ -224,7 +224,7 @@ A transition between states with nothing driving it and no `p=` (`I >> S`, `ss.T
 
 There are two ways to mention a state in a rate, and they answer different questions.
 
-- **`I.n` is how many people are in `I`.** It is a number, the same one that appears in the results as `n_I`. `xi * I.n` says each infectious person sheds `xi`, and nothing more is done to it.
+- **`I.n` is how many people are in `I`.** It is a number, the same one that appears in the results as `I`. `xi * I.n` says each infectious person sheds `xi`, and nothing more is done to it.
 - **A bare `I` is contact with people in `I`**: the chance that a contact is with someone in `I`. With no network that is `I.n / N`, so `beta * I` and `beta * I.n / N` are the same model. With a contact matrix or a network it is the same quantity worked out for each person from whom they actually meet, which cannot be written as one formula. That is why the bare form exists.
 
 So write the bare state when people catch the infection from people, and `.n` when the formula needs the number itself (a reservoir, a vector, a threshold).
@@ -322,7 +322,7 @@ I, R = ss.states('I R')
 ss.Transition(I, R, dur=ss.days(10), stages=3)
 ```
 
-Generated sub-stages appear in `describe()` and are summed in results, so `n_I` means what the user meant. `ss.erlang(k=3, mean=ss.days(10))`, `ss.gamma` with an integer shape, and `stages=3` give the same model and the same results, but are written differently in the model spec (a gamma dwell time, or an exponential one with `stages: 3`), so their hashes differ.
+Generated sub-stages appear in `describe()` and are summed in results, so `I` means what the user meant. `ss.erlang(k=3, mean=ss.days(10))`, `ss.gamma` with an integer shape, and `stages=3` give the same model and the same results, but are written differently in the model spec (a gamma dwell time, or an exponential one with `stages: 3`), so their hashes differ.
 
 ### A fixed delay
 
@@ -511,7 +511,7 @@ Some of what a disease model tracks is not people: bacteria in water, a mosquito
 - has no age, sex, or risk group and does not sit on networks. Stratifying by a property of people leaves it unsplit; it is split by `patch`, or by dimensions of its own given with `states=` (`malaria.stratify(species=['gambiae', 'funestus'], states=[Sv, Ev, Iv])`). See [05-dimensions.md](05-dimensions.md#states-that-are-not-people);
 - is used in a rate as a count, `W.n`. Used bare it raises `ExposureToCount` (below);
 - is not touched by `ss.death(rate=...)` with no state, which applies to people; its own outflow is written out (`W >> ss.null @ rate`);
-- has results like any other state (`n_W`, and a flow for each of its transitions).
+- has results like any other state (`W`, and a flow for each of its transitions).
 
 ```text
 ExposureToCount: the rate for 'infection' uses the bare state W, and W is not people.

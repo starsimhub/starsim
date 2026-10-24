@@ -68,7 +68,7 @@ def test_vaccine_diseases():
     sims = run_both(lambda **k: make(lambda a, b: {a: 0.95, 'hpv18': dict(acquisition=0.2)}, **k)) # A disease or its name; a number or a dict of effects
     for solver,sim in sims.items():
         r, r0 = sim.results, base[solver].results
-        assert r.hpv16.n_I[-2] < 0.5*r0.hpv16.n_I[-2] and r.hpv18.n_I[-2] < r0.hpv18.n_I[-2], solver
+        assert r.hpv16.I[-2] < 0.5*r0.hpv16.I[-2] and r.hpv18.I[-2] < r0.hpv18.I[-2], solver
         assert r.prog.delivered.sum() == pytest.approx(8000, rel=0.02)
         assert len(sim.modifiers[('hpv16', 'rel_sus', None)]) == len(sim.modifiers[('hpv18', 'rel_sus', None)]) == 1
         assert [s.name for s in sim.groups.strats].count('has_vx') <= 1
@@ -102,7 +102,7 @@ def test_test_diseases():
             return seen[combine]
         r = sim.results
         k = int(np.flatnonzero(r.prog.delivered)[0])
-        n = {g:np.array([r[g][f'n_{x}'][k-1] for x in ['S', 'I', 'CIN', 'CA']]) for g in ['hpv16', 'hpv18']} # At the start of the step it was delivered in
+        n = {g:np.array([r[g][x][k-1] for x in ['S', 'I', 'CIN', 'CA']]) for g in ['hpv16', 'hpv18']} # At the start of the step it was delivered in
         N = n['hpv16'].sum()
         p = 0.0
         for x in range(4):
@@ -161,7 +161,7 @@ def test_outcomes():
         p = np.array([[sum(table[res].get(x, 0) for res in list(table)[j:]) for j in range(3)] for x in ['S', 'I', 'CIN', 'CA']])
         miss = 1.0
         for g in ['hpv16', 'hpv18']:
-            n = np.array([r[g][f'n_{x}'][k-1] for x in ['S', 'I', 'CIN', 'CA']]) # At the start of the step it was delivered in
+            n = np.array([r[g][x][k-1] for x in ['S', 'I', 'CIN', 'CA']]) # At the start of the step it was delivered in
             N = n.sum()
             miss = miss*(1 - n/N @ p)
         tails = np.concatenate([[1], 1 - miss, [0]])
@@ -222,7 +222,7 @@ def test_any():
         k = int(np.flatnonzero(r.prog.delivered)[0])
         exp = seen
         if solver == 'ode': # Independent genotypes: from the marginals
-            f = {x:[r[g][f'n_{x}'][k-1]/10_000 for g in ['hpv16', 'hpv18']] for x in ['CIN', 'CA']} # At the start of the step it was delivered in
+            f = {x:[r[g][x][k-1]/10_000 for g in ['hpv16', 'hpv18']] for x in ['CIN', 'CA']} # At the start of the step it was delivered in
             no_ca = np.prod([1 - p for p in f['CA']])
             exp = sc.objdict(eligible=10_000*no_ca, found=0.9*10_000*(no_ca - np.prod([1 - a - b for a,b in zip(f['CA'], f['CIN'])])))
         assert np.isclose(r.prog.eligible[k], exp.eligible) and np.isclose(r.prog.positive[k], exp.found, rtol=1e-6 if solver == 'ode' else 0.05), solver
@@ -281,11 +281,11 @@ def test_disease_list():
     check_agents(make) # A product keyed by the diseases has a compartmental form (see test_vaccine_diseases())
     base, sim = run_abm(make, vx=False), run_abm(make)
     r, r0 = sim.results, base.results
-    assert r.hpv16.n_I[8] < 0.5*r0.hpv16.n_I[8] and r.hpv18.n_I[8] < 0.5*r0.hpv18.n_I[8] # The vaccine protects against both
+    assert r.hpv16.I[8] < 0.5*r0.hpv16.I[8] and r.hpv18.I[8] < 0.5*r0.hpv18.I[8] # The vaccine protects against both
     assert r.dna.positive.sum() > 0 and r.tx.cured.select(disease='hpv16').sum() > 0 and r.tx.cured.select(disease='hpv18').sum() > 0 # Detected and cured in each
-    assert r.hpv18.n_I[21] < r.hpv18.n_I[20]
+    assert r.hpv18.I[21] < r.hpv18.I[20]
     family = make('strains', solver='abm', n_agents=10_000, **kw).run().results # The same as the list
-    assert np.array_equal(family.hpv18.n_I, r.hpv18.n_I) and family.tx.cured.sum() == r.tx.cured.sum()
+    assert np.array_equal(family.hpv18.I, r.hpv18.I) and family.tx.cured.sum() == r.tx.cured.sum()
 
     # A scalar cure is the dict over every infected state; a test's count and cost are one per person tested
     def cure(c, **kwargs):
@@ -294,7 +294,7 @@ def test_disease_list():
         screening = ss.screen(cyto, at=[2005], name='screening')
         return ss.Sim(g, interventions=[screening, ss.treat(ss.Treatment(cure=c, to='S'), who=screening.high, name='tx')], solver='abm', n_agents=20_000, **kw, **kwargs).run().results
     scalar, bystate = cure(0.936), cure(dict(I=0.936, CIN=0.936)) # Its infected states
-    assert np.array_equal(scalar.hpv16.n_I, bystate.hpv16.n_I) and scalar.tx.cured.sum() == bystate.tx.cured.sum() > 0
+    assert np.array_equal(scalar.hpv16.I, bystate.hpv16.I) and scalar.tx.cured.sum() == bystate.tx.cured.sum() > 0
     assert scalar.screening.delivered.sum() == 20_000 and scalar.screening.cost.sum() == 200_000
 
     # One product for one disease, delivered for another, says to give both
@@ -328,7 +328,7 @@ def test_hpv_vaccines():
     out = sc.objdict({key:run_abm(make, product=None if key == 'base' else key) for key in ['base', 'bivalent', 'nonavalent']})
     base, bi, nona = out.values()
     drop = sc.objdict({k:np.array([1 - inf(sim, g)/inf(base, g) for g in ['hpv16', 'hpv18', 'hi5']]) for k,sim in dict(bi=bi, nona=nona).items()})
-    assert drop.bi[2] < 0.75*drop.nona[2] and abs(drop.bi[0] - drop.nona[0]) < 0.05, f'{drop}' # Less against hi5, the same against hpv16
+    assert drop.bi[2] < 0.75*drop.nona[2] and abs(drop.bi[0] - drop.nona[0]) < 0.05, drop # Less against hi5, the same against hpv16
     r = bi.results
     start = int(np.flatnonzero(r.dose1.delivered)[0])
     assert r.dose2.delivered[:start + 2].sum() == 0 and r.dose2.delivered[start + 2] > 0 # 6 months at quarterly steps

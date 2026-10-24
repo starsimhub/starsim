@@ -16,7 +16,7 @@ infection = S >> I @ beta * I
 
 There are two ways to mention a state in a rate, and they answer different questions:
 
-- **`I.n` is how many people are in `I`.** It is a number, the same one that appears in the results as `n_I`, and it is used exactly as written ([below](#counts-used-literally)).
+- **`I.n` is how many people are in `I`.** It is a number, the same one that appears in the results as `I`, and it is used exactly as written ([below](#counts-used-literally)).
 - **A bare `I` is the chance that a contact is with someone in `I`.** With no network that is `I.n / N`, so `beta * I` and `beta * I.n / N` are the same model. With a contact matrix or a network it is the same quantity worked out for each person from whom they actually meet, which cannot be written as one formula; that is why the bare form exists.
 
 So a bare state is written when people catch the infection from people, and `.n` when the formula needs the number itself (a reservoir, a vector, a threshold). Elsewhere a bare state has the meaning of where it is written, told apart when the model is made: in a result (`prevalence = I/N`), the number in it, kept by group (where `I.n` is the number over every group); in a condition (`where=I`), being in it; and as a trigger (`on=I.enter`), the event of entering it. Three consequences:
@@ -103,7 +103,7 @@ sim = ss.Sim(hiv, networks=[ss.SexualNet(), needles])
 
 ## Counts used literally
 
-`I.n` is the plain number in a state (the same number as the result `n_I`), and `I.frac` is its fraction of the population. A rate may be any arithmetic expression of counts and parameters, and it is then used exactly as written, without going through the routes:
+`I.n` is the plain number in a state (the same number as the result `I`), and `I.frac` is its fraction of the population. A rate may be any arithmetic expression of counts and parameters, and it is then used exactly as written, without going through the routes:
 
 <!-- fragment -->
 ```python
@@ -332,7 +332,7 @@ Under `commute`, a person's home patch does not change. They spend a share `away
 
 This is the standard time-share form of a commuting model. It needs no change to the timestep and works under every solver. It does not represent the time of day; a model that needs daytime and nighttime mixing uses a sub-daily `dt` with separate layers.
 
-The time-share form is the limit in which commuters come back at once. Commuters who come back at a finite rate (Keeling and Rohani's commuter model 7.3, whose `X[i,j]` are the residents of `i` now in `j`) are written with the general pieces: home is a dimension of its own, where people are now is the spatial one, and they move between its levels at rates by home. Results by home count people by home, wherever they are (`res.n_I.by('home')`), as the book's `Y_i = Σ_j Y_ij` does:
+The time-share form is the limit in which commuters come back at once. Commuters who come back at a finite rate (Keeling and Rohani's commuter model 7.3, whose `X[i,j]` are the residents of `i` now in `j`) are written with the general pieces: home is a dimension of its own, where people are now is the spatial one, and they move between its levels at rates by home. Results by home count people by home, wherever they are (`res.I.by('home')`), as the book's `Y_i = Σ_j Y_ij` does:
 
 <!-- fragment -->
 ```python

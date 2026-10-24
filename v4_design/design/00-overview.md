@@ -75,7 +75,7 @@ ss.Sim                          modules, a population, mixing, a timeline, a sol
  │     │     ├── ss.State           declared; people, or a plain count
  │     │     ├── ss.Transition      contact-mediated or spontaneous (derived from its rate)
  │     │     ├── ss.par             named parameters, in sir.pars
- │     │     ├── results            n_<state>, one flow per transition, ss.outcome, ratios
+ │     │     ├── results            <state> (its count), one flow per transition, ss.outcome, ratios
  │     │     └── ss.Infection       a subclass that adds transmission written as code (beta over networks), as in Starsim 3
  │     ├── ss.Demographics      births, deaths, pregnancy
  │     ├── ss.Intervention      deliveries: ss.vaccinate, ss.screen, ss.treat

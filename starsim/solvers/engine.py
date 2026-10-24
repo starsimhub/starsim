@@ -1416,7 +1416,7 @@ class Engine:
         abm = self.sim.solver == 'abm'
         results = sc.autolist()
         for state in graph.states.values():
-            key = f'n_{state.name}'
+            key = state.name
             if key not in mod.results:
                 results += ss.Result(key, dtype=float, scale=abm and state.people, label=state.label or state.name, kind='stock')
         for name,tr in graph.transitions.items():
@@ -1460,7 +1460,7 @@ class Engine:
             names = [strat.name for strat in self.sim.groups.strats]
             dims = sc.objdict() # The dimensions of each result
             for state in graph.states.values():
-                dims[f'n_{state.name}'] = self.applies[state.name]
+                dims[state.name] = self.applies[state.name]
             for name,tr in graph.transitions.items():
                 dims[name] = np.any([self.applies[state.name] for state in tr.src + tr.dst], axis=0)
                 for end in tr.ends:
@@ -1532,7 +1532,7 @@ class Engine:
             for d,s in enumerate(ext):
                 s.sim_coords = coords
                 s.dim = d
-            keys = [f'n_{name}' for name in strat.states]
+            keys = list(strat.states)
             for name,tr in self.graph.transitions.items():
                 if tr.src and all(s.name in strat.states for s in tr.src) and name not in self.derived_trs:
                     keys.append(name)
@@ -1700,7 +1700,7 @@ class Engine:
         return
 
     def record_stocks(self):
-        """ Record the number in each state at the end of the step (so `n_R[ti]` has the people who recovered in the step that ends at time point `ti`, as `recovery[ti]` does) """
+        """ Record the number in each state at the end of the step (so `R[ti]` has the people who recovered in the step that ends at time point `ti`, as `recovery[ti]` does) """
         for state in self.graph.states.values():
             self.stocks[state.name] = self.stock(state)
         return
@@ -1715,23 +1715,23 @@ class Engine:
         for r in people: # The values by group, as they are kept
             r.write_scale = scale
         if getattr(getattr(self.sim.people, 'scale', None), 'weighted', False): # Agents of different weights (people.scale) make fractions of people
-            for key in [f'n_{name}' for name in self.stocks] + list(self.flowcounts):
+            for key in list(self.stocks) + list(self.flowcounts):
                 if res[key].values.dtype.kind in 'iu':
                     res[key].init_values(dtype=float, force=True)
         for name,val in self.stocks.items():
-            res[f'n_{name}'][ti] = val
+            res[name][ti] = val
         for name,val in self.flowcounts.items():
             res[name][ti] = val
         self.step_outcomes()
         derived = getattr(self, 'derived_res', {})
         for name,val in self.stock_groups.items():
-            if f'n_{name}' not in derived:
-                res[f'n_{name}'].store_group(ti, val, self.rows)
+            if name not in derived:
+                res[name].store_group(ti, val, self.rows)
         for name,val in self.flow_groups.items():
             if name not in derived:
                 res[name].store_group(ti, val, self.rows, flow=True)
         for key,strat in derived.items(): # By a derived stratification instead (whose results keep every time point)
-            res[key].store_group(ti, self.stock_derived.get(key[2:], 0.0) if key.startswith('n_') and key[2:] in self.graph.states else self.flow_derived.get(key, 0.0))
+            res[key].store_group(ti, self.stock_derived.get(key, 0.0) if key in self.graph.states else self.flow_derived.get(key, 0.0))
         if self.flow_groups and 'new_infections' in res and 'new_infections' not in graph.transitions:
             res.new_infections.store_group(ti, sum(self.flow_groups.get(tr.name, 0) for tr in graph.transmissions), self.rows, flow=True)
         if self.rows is not None: # The flows by group so far in this row, for the results worked out from them
@@ -1814,17 +1814,17 @@ class Engine:
         if sim.solver != 'ode' or not infected or not self.graph.transmissions:
             return
         res = self.mod.results
-        n = sum(np.asarray(res[f'n_{s.name}'].values, dtype=float) for s in infected)
+        n = sum(np.asarray(res[s.name].values, dtype=float) for s in infected)
         name = self.mod.name
         if 0 < self.n_start < 10:
             ss.note(f'"{name}" starts with {self.n_start:.3g} infected, so whether it takes off is a matter of chance, which solver="{sim.solver}" does not show; '
                     f'solver="gillespie" with ss.parallel(n_runs=...) does', ss.errors.SmallCounts, sim=sim)
         low = np.flatnonzero((n > 0) & (n < 1))
         if len(low) and n[low[0]:].max() > 10:
-            when = res[f'n_{infected[0].name}'].timevec[low[0]]
+            when = res[infected[0].name].timevec[low[0]]
             when = f'{sim.unit_name} {float(when):.4g}' if sc.isnumber(when) else when # e.g. day 125, not 124.99999984
             ss.note(f'the number infected in "{name}" falls to {n[low[0]]:.2g} (at {when}) and then rises to {n[low[0]:].max():,.0f}; a stochastic run would usually die out there. '
-                    f'solver="gillespie" with ss.parallel(n_runs=...) shows how often, in the runs of msim.results.{name}.n_{infected[0].name} after that point', ss.errors.ExtinctionPossible, sim=sim)
+                    f'solver="gillespie" with ss.parallel(n_runs=...) shows how often, in the runs of msim.results.{name}.{infected[0].name} after that point', ss.errors.ExtinctionPossible, sim=sim)
         return
 
     def finalize_results(self):

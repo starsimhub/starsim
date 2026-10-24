@@ -57,7 +57,7 @@ def test_bv_debut():
     sim = ss.Sim(make(), analyzers=check, demographics=demog(), n_agents=5000, start=2000, stop=2010, dt=ss.months(1), unit='year', **kw).run()
     res = sim.results.bv
     assert checked.n >= len(res.timevec) - 1 and res.debut[1:].sum() > 100
-    assert res.n_U[0] < 0.7*5000 # Those 15+ at the start debuted before it
+    assert res.U[0] < 0.7*5000 # Those 15+ at the start debuted before it
     assert 'as soon as it holds' in sim.diseases.bv.describe(output=True)
     assert ss.Sim(make(), stratify=dict(sex=['female', 'male']), n_agents=100, start=2000, stop=2001, unit='year', **kw).init().solver == 'abm' # As agents for now
 
@@ -70,7 +70,7 @@ def test_bv_debut():
     strat = [dict(sex=['female', 'male']), dict(age=[0, 10, 15, 50, 100])]
     ode = ss.Sim(make(), solver='ode', total_pop=10_000, stratify=strat, use_aging=True, start=2000, stop=2010, dt=ss.months(1), unit='year', **kw).run() # v4 ages people only with births or deaths, unless asked
     r = ode.results.bv
-    waiting = r.n_U.select(sex='female', age='15-49')
+    waiting = r.U.select(sex='female', age='15-49')
     assert waiting[0] == 0 and waiting.max() < 10 and r.debut[2:].sum() > 50 # Only those who aged in during the step
     assert any('arrivals where it holds go straight' in note for note in ode.notes)
     return sim
@@ -87,7 +87,7 @@ def test_on_event():
         assert np.isclose(res.b.flag[1:].sum(), res.a.sa[1:].sum(), rtol=0.25)
         r = make_on_event(order, solver='ode').results
         assert np.isclose(r.b.flag.sum(), res.b.flag.sum(), rtol=0.05), f'{r.b.flag.sum():.0f} as an ODE, {res.b.flag.sum():.0f} as agents'
-        assert np.isclose(r.b.flag.sum(), r.b.unflag.sum() + r.b.n_F[-1], rtol=1e-6) # The flow is the move
+        assert np.isclose(r.b.flag.sum(), r.b.unflag.sum() + r.b.F[-1], rtol=1e-6) # The flow is the move
 
     # The events of a state by path, for modules made from strings: the same as the state's own
     def by_path(path):
@@ -105,7 +105,7 @@ def test_on_event():
     S, F, G = ss.states('S F G')
     a = ss.Disease(S, F, G, sa=(sa := S >> F @ ss.peryear(0.5)), flag=F >> G @ ss.on(sa), name='a')
     res = ss.Sim(a, solver='ode', **kw).run().results.a
-    assert res.flag.sum() > 0 and np.isclose(res.flag.sum(), res.sa.sum(), rtol=0.01) and res.n_F.max() < 1e-6*res.n_S[0]
+    assert res.flag.sum() > 0 and np.isclose(res.flag.sum(), res.sa.sum(), rtol=0.01) and res.F.max() < 1e-6*res.S[0]
     return sim
 
 
@@ -183,8 +183,8 @@ def test_syphilis_stay():
         size = dict(n_agents=10_000) if solver == 'abm' else dict(total_pop=10_000)
         sim = ss.Sim(make('explicit'), solver=solver, start=2000, stop=2006, unit='year', **size, **kw).run()
         res = sim.results.syph
-        assert np.isclose(res.n_T[-1]/1e4, 0.35, atol=0.02), f'{solver}: {res.n_T[-1]/1e4:.3f} in T'
-        assert np.isclose(res.tertiary.sum(), res.n_T[-1], rtol=1e-6) # Staying is not a flow
+        assert np.isclose(res.T[-1]/1e4, 0.35, atol=0.02), f'{solver}: {res.T[-1]/1e4:.3f} in T'
+        assert np.isclose(res.tertiary.sum(), res.T[-1], rtol=1e-6) # Staying is not a flow
         out[f'explicit_{solver}'] = sim
     assert 'states.LL.stay' not in out.explicit_abm.diseases.syph.graph.guessed
     s = out.explicit_abm.diseases.syph # Those who stayed: no new dwell time, and LL.time keeps running
@@ -197,7 +197,7 @@ def test_syphilis_stay():
         return ss.Disease(I, H, R, severe=ss.Transition(I, H, p=p, dur=ss.years(1)), mild=ss.Transition(I, R, dur=ss.years(1)), first='I', name='d') # Everyone starts in I
     for solver in ['abm', 'ode']:
         size = dict(n_agents=10_000) if solver == 'abm' else dict(total_pop=10_000)
-        ns = [ss.Sim(branches(p), solver=solver, start=2000, stop=2010, unit='year', **size, **kw).run().results.d.n_H[-1] for p in [0.3, lambda sim: 0.3]]
+        ns = [ss.Sim(branches(p), solver=solver, start=2000, stop=2010, unit='year', **size, **kw).run().results.d.H[-1] for p in [0.3, lambda sim: 0.3]]
         assert np.isclose(ns[1]/1e4, 0.3, atol=0.02) and np.isclose(ns[0], ns[1], rtol=0.05), f'{solver}: {ns}'
     with pytest.raises(ss.errors.BadBranchSplit):
         S, A = ss.states('S A')
@@ -233,15 +233,15 @@ def test_ct_by_sex():
         u = went[ppl.female[went] == f]
         dwell = (ct.ti_Y[u] - ct.ti_P[u] - 1)*0.25 # P was entered at the start (index 0), and Y in the step the dwell ended before, at its start
         assert np.isclose(dwell.mean(), mean, rtol=0.15), f'female={f}: mean dwell {dwell.mean():.2f} months, not {mean}'
-    n_P = sims.nostrat.results.ct.n_P[0]
+    n_P = sims.nostrat.results.ct.P[0]
     assert np.isclose(n_P, 10_000*(0.5*0.2 + 0.5*0.54), rtol=0.05)
-    assert np.array_equal(sims.pars.results.ct.n_P, sims.dists.results.ct.n_P) # The two forms are one distribution
+    assert np.array_equal(sims.pars.results.ct.P, sims.dists.results.ct.P) # The two forms are one distribution
 
     # As compartments: each sex has its own Erlang stages (ragged), keeping its mean
     ode = ss.Sim(make(), solver='ode', total_pop=10_000, stratify=dict(sex=['female', 'male']), **kw2).run()
     r, a = ode.results.ct, sims.pars.results.ct
     for sex in ['female', 'male']:
-        assert np.allclose(r.n_P.select(sex=sex)[::4], a.n_P.select(sex=sex)[::4], atol=150), sex
+        assert np.allclose(r.P.select(sex=sex)[::4], a.P.select(sex=sex)[::4], atol=150), sex
     assert any('4|36 Erlang stages' in note for note in ode.notes)
     with pytest.raises(ss.CapabilityError, match='stratify by it'): # As compartments, sex needs a stratification
         ss.Sim(make(), solver='ode', **kw2).init()
@@ -269,8 +269,8 @@ def test_with_conveyor():
         LL, T, Sp = ss.states('LL T Sp')
         d = ss.Disease(LL, T, Sp, tertiary=ss.Transition(LL, [T, ss.stay], p=[0.35, None], dur=ss.constant(ss.years(2))), cure=(LL + T) >> Sp, first='LL', name='syph') # Everyone (1 or more is people)
         res = ss.Sim(d, solver=solver, start=2000, stop=2004, unit='year', **size(solver), **kw).run().results.syph
-        assert res.n_T[1] == 0 and np.isclose(res.n_T[-1]/1e4, 0.35, atol=0.02), f'{solver}: {res.n_T}'
-        assert np.isclose(res.tertiary.sum(), res.n_T[-1], rtol=1e-6), f'{solver}: {res.tertiary.sum()} in the flow, {res.n_T[-1]} in T'
+        assert res.T[1] == 0 and np.isclose(res.T[-1]/1e4, 0.35, atol=0.02), f'{solver}: {res.T}'
+        assert np.isclose(res.tertiary.sum(), res.T[-1], rtol=1e-6), f'{solver}: {res.tertiary.sum()} in the flow, {res.T[-1]} in T'
 
     def make(clock):
         S, I = ss.states('S I')
@@ -279,7 +279,7 @@ def test_with_conveyor():
         latent = E >> I @ (ss.peryear(1)*(E.time > ss.years(1))) if clock else ss.Transition(E, I, dur=ss.constant(ss.years(2)))
         return [a, ss.Disease(E, I, Z, latent=latent, flag=ss.Transition(E, Z, on=a.I), first='E', name='b')] # The trigger tracks a and b jointly
     out = [ss.Sim(make(False), solver=solver, start=2000, stop=2004, dt=ss.months(1), unit='year', **size(solver), **kw).run().results.b for solver in ['abm', 'ode']]
-    for key in ['n_I', 'n_Z']:
+    for key in ['I', 'Z']:
         assert np.allclose(out[0][key], out[1][key], atol=300), f'{key}: {out[0][key][::12]} as agents, {out[1][key][::12]} as compartments'
     with pytest.raises(ss.CapabilityError, match='E.time is a clock'):
         ss.Sim(make(True), solver='ode', start=2000, stop=2004, dt=ss.months(1), unit='year', **size('ode'), **kw).init()
@@ -362,7 +362,7 @@ def test_hpv_cancel_event():
             a, o = abm.results[g], ode.results[g]
             assert np.isclose(o.cancelled.sum(), a.cancelled.sum(), rtol=0.05), f'{g}: {o.cancelled.sum():.0f} cancelled as an ODE, {a.cancelled.sum():.0f} as agents'
             other = ode.results[next(n for n in names if n != g)]
-            assert np.isclose(o.n_Z[-1], other.n_X[-1], rtol=1e-6)
+            assert np.isclose(o.Z[-1], other.X[-1], rtol=1e-6)
     return abm
 
 

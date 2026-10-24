@@ -200,7 +200,7 @@ def threshold(**kwargs):
     """ 16. Distancing while more than 1,000 are infected, as a function of the sim """
     S, I, R = ss.states('S I R')
     sir = ss.Disease(infection=ss.Transition(S, I, rate=0.3 * I), recovery=ss.Transition(I, R, dur=10), init_prev=0.001, name='sir')
-    distancing = ss.modify(sir.pars.beta, multiply=0.3, when=lambda sim: sim.results.sir.n_I[sim.ti - 1] > 1000, name='distancing')
+    distancing = ss.modify(sir.pars.beta, multiply=0.3, when=lambda sim: sim.results.sir.I[sim.ti - 1] > 1000, name='distancing')
     return make_sim(sir, kwargs, unit='day', stop=200, total_pop=50_000, interventions=distancing)
 
 

@@ -54,14 +54,14 @@ sir3 = ss.Disease(
 
 for sir in [sir1, sir2, sir3]:
     sim = ss.Sim(sir, stop=100, verbose=0).run()
-    print(f'Peak infected: {sim.results.sir.n_I.max():,.0f}')
+    print(f'Peak infected: {sim.results.sir.I.max():,.0f}')
 ```
 
 The first spelling names each transition by its keyword, the second is the one to use for everything else, and the third is for building models programmatically. States, transitions, and the disease take their names from the variables they are assigned to (or from the keyword they are passed under); give `name=` when a disease is built inline.
 
 A bare state inside a rate (`0.3 * I`) means contact with people in that state: with no network that is `I.n / N`, the share of the population who are infectious, so `S >> I @ beta * I` is the textbook `beta * S * I / N`. With a network or a contact matrix, the same expression is worked out from whom each person actually meets, and `beta` is per contact. `I.n` is the number of people in `I`, used exactly as written.
 
-Every declared disease gets a result for each state (`n_S`, `n_I`, `n_R`) and a flow for each transition, named after it (`infection`, `recovery`), with its running total as `.cum`.
+Every declared disease gets a result for each state (`S`, `I`, `R`) and a flow for each transition, named after it (`infection`, `recovery`), with its running total as `.cum`.
 
 ### Looking at the model
 
@@ -113,7 +113,7 @@ recoveries = dict(
 for label, recovery in recoveries.items():
     sir = ss.Disease(infection=S >> I @ 0.3 * I, recovery=recovery, init_prev=0.01, name='sir')
     sim = ss.Sim(sir, stop=ss.days(100), verbose=0).run()
-    print(f'{label:12s} peak infected: {sim.results.sir.n_I.max():,.0f}')
+    print(f'{label:12s} peak infected: {sim.results.sir.I.max():,.0f}')
 ```
 
 As agents, each person draws their own time in the state. In a compartmental run, an Erlang distribution is realized exactly as stages, and any other distribution is approximated by Erlang stages matched to its mean and variance, with a note. `stages=k` on a transition (`ss.Transition(I, R, dur=ss.days(10), stages=3)`) uses `k` stages under every solver, agents included.
@@ -132,7 +132,7 @@ covid = ss.Disease(infection, severe, mild, discharge, init_prev=0.001)
 
 sim = ss.Sim(covid, stop=ss.days(200), verbose=0).run()
 res = sim.results.covid
-print(f'Hospitalized: {res.severe.sum():,.0f}; recovered without hospital: {res.mild.sum():,.0f}; peak in hospital: {res.n_H.max():,.0f}')
+print(f'Hospitalized: {res.severe.sum():,.0f}; recovered without hospital: {res.mild.sum():,.0f}; peak in hospital: {res.H.max():,.0f}')
 ```
 
 Death from infection is a branch to `ss.null`, which stands for outside the model: `ss.Transition(I, R, dur=dur, p=0.99)` and `ss.Transition(I, ss.null, dur=dur, p=0.01)`. This is how `ss.SIR` implements `p_death`.
@@ -333,13 +333,13 @@ self.define_states(
 )
 ```
 
-A callable alias behaves like a property: it takes the module as its only argument and is recomputed on each access, so it can be read but not written to. Unlike a string alias, it generates an automatic result, so `n_infected` still exists and counts E plus I. See [Aliases](modules_adding.qmd#aliases) for more. (The declared `ss.SEIR` follows the same convention: its infected states are `E` and `I`, and only `I` is a source of infection.)
+A callable alias behaves like a property: it takes the module as its only argument and is recomputed on each access, so it can be read but not written to. Unlike a string alias, it generates an automatic result, so `infected` still exists and counts E plus I. See [Aliases](modules_adding.qmd#aliases) for more. (The declared `ss.SEIR` follows the same convention: its infected states are `E` and `I`, and only `I` is a source of infection.)
 
 Incidence is a separate concept from any compartment. `ss.Infection.set_prognoses()` records each infection as it happens, so `new_infections` doesn't depend on what a model does with the `ti_` states or how many stages it has. Seed infections from `init_prev` are prevalent cases, and are excluded from incidence.
 
 The result is that each name means one thing:
 
-- `n_exposed` is the E compartment and `n_infectious` is the I compartment, while `n_infected` and `prevalence` cover both: an agent in the latent period has the infection, and counts towards prevalence.
+- `exposed` is the E compartment and `infectious` is the I compartment, while `infected` and `prevalence` cover both: an agent in the latent period has the infection, and counts towards prevalence.
 - `ti_exposed` is the time of acquisition and `ti_infectious` is the time of becoming infectious. In general, `ti_<state>` is the time the agent entered `<state>`.
 - `ssl.AgentSEIR` deliberately does **not** define `ti_infected`, since it is too easily confused with `ti_infectious`; use `ti_exposed` for the time of acquisition.
 - `new_infections` counts infection events (S→E for SEIR, S→I for SIR).
@@ -396,4 +396,4 @@ For a richer natural history, `ssl.AgentSIR.set_prognoses()` splits into two met
 
 `ssl.Ebola` and `ssl.Cholera` both override `set_progression()` for their extra states (severe/buried and symptomatic respectively), and inherit everything else from `ssl.AgentSEIR`.
 
-If your model adds a compartment, list it in `plot_states` so that `disease.plot()` shows it. This is a class attribute holding the names of the results to plot, so it can be set in one line at the top of the class body: `ssl.AgentSEIR` sets `plot_states = ['n_susceptible', 'n_exposed', 'n_infectious', 'n_recovered']`. Assign a new list rather than modifying the inherited one, since a class attribute is shared by every instance of the class.
+If your model adds a compartment, list it in `plot_states` so that `disease.plot()` shows it. This is a class attribute holding the names of the results to plot, so it can be set in one line at the top of the class body: `ssl.AgentSEIR` sets `plot_states = ['susceptible', 'exposed', 'infectious', 'recovered']`. Assign a new list rather than modifying the inherited one, since a class attribute is shared by every instance of the class.

@@ -44,7 +44,7 @@ abm.run()
 # Plot the results
 plt.figure()
 for sim, label in [(csim, 'ODE'), (abm, 'Agents')]:
-    plt.plot(sim.timevec, sim.results.sirs.n_I, label=label)
+    plt.plot(sim.timevec, sim.results.sirs.I, label=label)
 plt.xlabel('Time (years)')
 plt.ylabel('Number infectious')
 plt.legend()
@@ -98,7 +98,7 @@ sim = ss.Sim(
 sim.run()
 
 # Plot infections by age
-sim.results.sir.n_I.by('age').plot()
+sim.results.sir.I.by('age').plot()
 for day in [50, 80]:
     plt.axvline(day, linestyle=':')
 plt.show()

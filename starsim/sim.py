@@ -242,8 +242,8 @@ class Sim(ss.Base):
         return [mod for mod in mods if mod.name == attr]
 
     def __getattr__(self, attr):
-        """ A module by its name, e.g. `sim.sir` for `sim.diseases.sir`, unless two modules share the name """
-        if not attr.startswith('_') and 'pars' in self.__dict__:
+        """ A module by its name, e.g. `sim.sir` for `sim.diseases.sir` """
+        if not attr.startswith('_') and 'pars' in self.__dict__ and attr not in ss.modules.module_types() + ['custom']: # Not the module types, which init() sets
             mods = self._named_modules(attr)
             if len(mods) == 1:
                 return mods[0]
@@ -1040,7 +1040,7 @@ class Sim(ss.Base):
                 elif isinstance(mod, ss.Delivery):
                     add('delivery', mod.describe())
             for mod in self.declared:
-                names = [f'n_{name}' for name in mod.graph.states]
+                names = list(mod.graph.states)
                 extra = [key for key,res in mod.results.items() if isinstance(res, ss.Result) and key not in names and key not in mod.graph.transitions and not key.startswith('cum_')]
                 text = f'{", ".join(names)}, and one flow per transition' + (f'; also {", ".join(extra)}' if extra else '')
                 ti = getattr(mod.engine, 'group_ti', None)
@@ -1147,7 +1147,7 @@ class Sim(ss.Base):
             if isinstance(mod.get('transitions'), list): # The order of the transitions is not part of the model
                 mod['transitions'] = sorted(mod['transitions'], key=lambda t: t['name'])
             dis = self.diseases.get(mod.get('name')) if mod.get('init_prev') else None
-            if getattr(dis, 'graph', None) is not None and len(dis.graph.transmissions[0].dst) == 1: # init_prev=0.01 is init=dict(I=0.01), the same model
+            if getattr(dis, 'graph', None) is not None and dis.graph.transmissions and len(dis.graph.transmissions[0].dst) == 1: # init_prev=0.01 is init=dict(I=0.01), the same model
                 state = next(s for s in mod['states'] if s['name'] == dis.graph.transmissions[0].dst[0].name)
                 if state.get('init') is None:
                     state['init'], mod['init_prev'] = mod['init_prev'], None
@@ -1479,9 +1479,9 @@ class Sim(ss.Base):
                 for key,module in modules.items():
                     self.pars[attr][key] = module.pars
 
-        names = [mod.name for mod in self.modules] # Each module is also sim.<name> (see __getattr__()), unless the name is taken
-        for name in sorted({name for name in names if names.count(name) > 1 or name in dir(self)}):
-            ss.warn(f'There is more than one "{name}" (modules, or a module and an attribute of the sim), so sim.{name} is not a shortcut to a module; use e.g. sim.diseases.{name}')
+        for mod in self.modules: # Each module is also sim.<name> (see __getattr__()), unless the sim has an attribute of that name (module names are unique: see ss.SimPars.validate_name())
+            if mod.name in dir(self):
+                ss.warn(f'The sim has an attribute "{mod.name}", so sim.{mod.name} is not the module of that name; use e.g. sim.diseases.{mod.name}')
         return
 
     def lock_pars(self, locked=True):
@@ -1870,7 +1870,7 @@ class Sim(ss.Base):
         `sim.kernel_only()`). The sim itself is not changed.
 
         Args:
-            results (str/list): the results, by name (`'n_I'`, or `'sir.n_I'` where needed); default: every result of the declared modules
+            results (str/list): the results, by name (`'I'`, or `'sir.I'` where needed); default: every result of the declared modules
             pars (str/list): the parameters, by name; default: every parameter that has bounds
 
         Returns:
@@ -1882,8 +1882,8 @@ class Sim(ss.Base):
             S, I, R = ss.states(3)
             sir = ss.Disease(S >> I @ beta * I, I >> R @ ss.days(8), init=dict(I=0.01), name='sir')
             sim = ss.Sim(sir, unit='day', stop=100)
-            grad = sim.gradient('n_I')
-            grad.beta.sir.n_I # How the number infectious at each step changes with beta
+            grad = sim.gradient('I')
+            grad.beta.sir.I # How the number infectious at each step changes with beta
             ```
         """
         sim = self.new(verbose=0).init()
@@ -1924,7 +1924,7 @@ class Sim(ss.Base):
             S, I, R = ss.states(3)
             sir = ss.Disease(S >> I @ 0.3*I, ss.Transition(I, R, dur=8), init=dict(I=0.01))
             sim = ss.Sim(sir, unit='day', stop=100).init()
-            peaks = [sim.restart(pars=dict(beta=beta)).run().results.sir.n_I.max() for beta in [0.2, 0.3, 0.4]]
+            peaks = [sim.restart(pars=dict(beta=beta)).run().results.sir.I.max() for beta in [0.2, 0.3, 0.4]]
             ```
         """
         if not self.initialized:
@@ -1989,13 +1989,13 @@ class Sim(ss.Base):
         return
 
     def compartmental_people_results(self):
-        """ In a compartmental run, the results that agents give the sim (n_alive, new_deaths, new_emigrants, cum_deaths), from the declared states and flows """
+        """ In a compartmental run, the results that agents give the sim (alive, new_deaths, new_emigrants, cum_deaths), from the declared states and flows """
         mods = [mod for mod in self.declared if mod.graph.people_states]
-        if self.solver in [None, 'abm'] or 'n_alive' in self.results or not mods:
+        if self.solver in [None, 'abm'] or 'alive' in self.results or not mods:
             return
         first = mods[0] # Each disease's states hold everyone
         kw = dict(module='People', timevec=self.t.timevec, scale=False)
-        alive = sum(np.asarray(first.results[f'n_{state.name}'].values, dtype=float) for state in first.graph.people_states)
+        alive = sum(np.asarray(first.results[state.name].values, dtype=float) for state in first.graph.people_states)
         gone = dict(deaths=0, emigrants=0)
         for mod in mods:
             for tr in mod.graph.transitions.values():
@@ -2003,7 +2003,7 @@ class Sim(ss.Base):
                     gone['emigrants' if getattr(tr, 'migration', False) else 'deaths'] += np.asarray(mod.results[tr.deaths].values, dtype=float)
         deaths, emigrants = [np.broadcast_to(gone[key], alive.shape).copy() for key in ['deaths', 'emigrants']]
         self.results += [
-            ss.Result('n_alive', label='Number alive', values=alive, **kw),
+            ss.Result('alive', label='Number alive', values=alive, kind='stock', **kw),
             ss.Result('new_deaths', label='Deaths', values=deaths, **kw),
             ss.Result('new_emigrants', label='Emigrants', values=emigrants, **kw),
             ss.Result('cum_deaths', label='Cumulative deaths', values=np.cumsum(deaths), **kw),
@@ -2014,7 +2014,7 @@ class Sim(ss.Base):
         """ Raise an error if the number of people in a declared state stopped being a number during the run, rather than return results that are not """
         for mod in self.declared:
             for name in mod.graph.states:
-                res = mod.results.get(f'n_{name}')
+                res = mod.results.get(name)
                 if res is not None and not np.all(np.isfinite(res.values)):
                     ti = int(np.flatnonzero(~np.isfinite(res.values))[0])
                     errormsg = (f'The number of people in "{name}" of "{mod.name}" is not a number from time point {ti} on. A rate too fast for the step can do this, '
@@ -2050,7 +2050,7 @@ class Sim(ss.Base):
         `ss.Result.summarize()`.
 
         Args:
-            how (str/dict): 'mean', 'median', 'last', 'sum', or a function, to summarize every result that way; or a dict of these by result key (e.g. `dict(sir_n_infected='mean')`), with the rest by kind
+            how (str/dict): 'mean', 'median', 'last', 'sum', or a function, to summarize every result that way; or a dict of these by result key (e.g. `dict(sir_infected='mean')`), with the rest by kind
         """
         funcs = dict(mean=np.mean, median=np.median, sum=np.sum, last=lambda res: res[-1])
         if not isinstance(how, dict):

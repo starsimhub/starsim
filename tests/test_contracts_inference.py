@@ -317,15 +317,15 @@ def test_log_density():
     assert np.isclose(ld(x), ss.fit.loglik(sim.new().run()) + prior, rtol=1e-9) # The sim's log-likelihood, plus the prior
     h = 1e-6
     assert np.isclose(ld.grad(x)[0], (ld(x + h) - ld(x - h))/(2*h), rtol=1e-5) # Reverse mode agrees with finite differences
-    assert np.allclose(ld.run(x)['sir.n_I'], sim.new().run().results.sir.n_I, rtol=1e-9) # And the run, as a function
+    assert np.allclose(ld.run(x)['sir.I'], sim.new().run().results.sir.I, rtol=1e-9) # And the run, as a function
     slow = corpus.outcomes(beta=0.06, likelihood=ss.poisson(), data=simulate(models.outcomes, 0.35))
     (_, from_jax, from_run), = jax_loglik(slow, [1.0]) # Built where a step needs 1 substep, evaluated where it needs several
     assert np.isclose(from_jax, from_run, rtol=1e-9) # The substeps are worked out over the bounds, not only at the initial values
     S, I, R = ss.states('S I R')
     beta = ss.par(0.3, bounds=[0.1, 0.5], prior=ss.weibull(c=2, scale=0.3))
-    odd = ss.Sim(ss.Disease(S >> I @ beta*I, I >> R @ ss.days(10), init=dict(I=0.01), name='sir'), solver='ode', unit='day', stop=30, data=pd.DataFrame(dict(n_I=[0.02, 0.05]), index=[10, 20]), verbose=0)
+    odd = ss.Sim(ss.Disease(S >> I @ beta*I, I >> R @ ss.days(10), init=dict(I=0.01), name='sir'), solver='ode', unit='day', stop=30, data=pd.DataFrame(dict(I=[0.02, 0.05]), index=[10, 20]), verbose=0)
     with pytest.raises(ss.CapabilityError, match='weibull'): # A prior that the log-density in JAX does not cover
-        odd.log_density(likelihood=dict(n_I=ss.normal(scale=0.01)))
+        odd.log_density(likelihood=dict(I=ss.normal(scale=0.01)))
     return ld
 
 
@@ -346,7 +346,7 @@ def test_value_per_level():
     one = fit.sim.new(pars={'beta[b]': 0.1}) # One level by name
     assert np.allclose(one.init().diseases.sir.pars.beta.raw.values, [fit.pars.beta.values[0], 0.1])
     proj = fit.project(dict(base=None), n=2)
-    assert np.shape(proj.results.sir.n_I.values)[0] == 2 # Two runs
+    assert np.shape(proj.results.sir.I.values)[0] == 2 # Two runs
 
     # With a value for each of many places, the scan before the search is capped
     places = [f'p{i}' for i in range(12)]
@@ -354,7 +354,7 @@ def test_value_per_level():
     S, I = ss.states('S I')
     sis = ss.Disease(infection=S >> I @ beta*I, recovery=I >> S @ 0.1, init_n=dict(I=ss.by(patch=[10]*12)), name='sis')
     sis.stratify(patch=places)
-    problem = ss.fit.Problem(ss.Sim(sis, stop=10, data=pd.DataFrame(dict(n_I=[200]), index=[5]), verbose=0))
+    problem = ss.fit.Problem(ss.Sim(sis, stop=10, data=pd.DataFrame(dict(I=[200]), index=[5]), verbose=0))
     assert len(problem.names) == 12 and problem.scan_size() == ss.fit.max_scan == 100 and problem.scan_size(500) == 500
     return fit
 
@@ -387,9 +387,9 @@ def test_fitted_where_used():
         S, I, R = ss.states('S I R')
         sir = ss.Disease(infection=ss.Transition(S, I, rate=0.05 * I), recovery=ss.Transition(I, R, dur=10), init_prev=0.01, name='sir')
         return ss.Sim(sir, networks=ss.RandomNet(n_contacts=n_contacts), solver='ode', unit='day', stop=40, verbose=0)
-    n_I = netted(6).run().results.sir.n_I
+    n_I = netted(6).run().results.sir.I
     sim = netted(ss.par(4, bounds=[2, 10]))
-    sim.data = ss.simdata(pd.DataFrame(dict(time=np.arange(5, 41, 5), n_I=np.asarray(n_I)[5::5])).set_index('time'))
+    sim.data = ss.simdata(pd.DataFrame(dict(time=np.arange(5, 41, 5), I=np.asarray(n_I)[5::5])).set_index('time'))
     assert np.isclose(sim.calibrate(verbose=0).pars.n_contacts, 6, rtol=1e-2) # It was not fitted
     return fit
 
@@ -403,12 +403,12 @@ def test_optimize():
         beta = 0.3*(1 - 0.5*cov(a, 0.01) - 0.25*cov(b, 0.01))
         sir = ss.Disease(S >> I @ beta*I.frac, I >> R @ ss.days(10), init_n=dict(I=10), name='sir')
         return ss.Sim(sir, total_pop=10_000, unit='day', stop=100, verbose=0)
-    best = ss.fit.optimize(make(), spend=dict(a='spend_a', b='spend_b'), minimize='sir.n_R')
+    best = ss.fit.optimize(make(), spend=dict(a='spend_a', b='spend_b'), minimize='sir.R')
     assert best.alloc['a'] > 95 and np.isclose(sum(best.alloc.values()), 100) # Almost all of it to the better program, keeping the total
     assert best.value < best.value_before
-    capped = ss.fit.optimize(make(), spend=dict(a='spend_a', b='spend_b'), minimize='sir.n_R', bounds=dict(a=(None, 60))) # A limit on one program
+    capped = ss.fit.optimize(make(), spend=dict(a='spend_a', b='spend_b'), minimize='sir.R', bounds=dict(a=(None, 60))) # A limit on one program
     assert capped.alloc['a'] <= 60 + 1e-6 and np.isclose(sum(capped.alloc.values()), 100) and capped.value < best.value_before
-    least = ss.fit.optimize(make(), spend=dict(a='spend_a', b='spend_b'), minimize='sir.n_R', target=best.value_before) # The least money that does as well as the current allocation
+    least = ss.fit.optimize(make(), spend=dict(a='spend_a', b='spend_b'), minimize='sir.R', target=best.value_before) # The least money that does as well as the current allocation
     assert least.total < 90 and least.value <= best.value_before and np.isclose(sum(least.alloc.values()), least.total)
     return best
 

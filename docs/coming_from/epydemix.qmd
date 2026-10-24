@@ -48,13 +48,13 @@ sim = ss.Sim(sir, networks=ss.contacts('Kenya'), people=ss.people('Kenya', year=
 msim = sim.run(n_runs=100)
 
 res = msim.results.sir
-S, I, R = [np.asarray(res[key].values).mean(axis=0) for key in ['n_S', 'n_I', 'n_R']]
+S, I, R = [np.asarray(res[key].values).mean(axis=0) for key in ['S', 'I', 'R']]
 N = S[0] + I[0] + R[0]
 print(f'Peak: {I.max()/N:.2%} infected on day {I.argmax()} (epydemix: 54.46% on day 40); final size {R[-1]/N:.2%} (99.63%)')
 msim.plot()
 ```
 
-`msim.results.sir.n_I.select(age='0-4').quantiles()` gives the quantiles over runs for one age group, as `get_quantiles_compartments()` does.
+`msim.results.sir.I.select(age='0-4').quantiles()` gives the quantiles over runs for one age group, as `get_quantiles_compartments()` does.
 
 ## How the results agree
 

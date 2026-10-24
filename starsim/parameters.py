@@ -302,7 +302,7 @@ class SimPars(Pars):
         dt (float): The timestep, in units of "unit" (default 1.0)
         rand_seed (int): The overall random seed for the simulation (used to set module-specific random seeds)
         use_aging (bool): Specify whether agents age (by default, agents age if and only if births and/or deaths are included)
-        people_results (bool): Whether to collect the automatic People-level results (n_alive, n_female, new_deaths, cum_deaths, etc.) every timestep (default True); set to False to skip this per-timestep cost in lightweight/ODE-style sims that do not need them (note: some modules, e.g. demographics, rely on results.n_alive)
+        people_results (bool): Whether to collect the automatic People-level results (alive, female, new_deaths, cum_deaths, etc.) every timestep (default True); set to False to skip this per-timestep cost in lightweight/ODE-style sims that do not need them (note: some modules, e.g. demographics, rely on results.alive)
         people (People): If provided, use a pre-existing People object rather than creating one (in which case n_agents will be ignored)
         networks (str/list/Module): The network module(s); can be a string, single module (i.e. Network), or list
         demographics (str/list/Module/bool): births, deaths, and migration of everyone: declared (`ss.birth()`, `ss.death()`, which run under every solver), or modules of agents (e.g. `ss.Births()`, `ss.Pregnancy()`); True for births and deaths at 20 and 10 per 1,000 people per year
@@ -341,7 +341,7 @@ class SimPars(Pars):
         self.integrator = None   # The ODE integration scheme: 'rk4' (the default) or 'euler'
         self.substeps   = None   # The number of substeps per timestep: for the 'rk4' and 'euler' integrators (default: enough that no compartment turns over, or grows through its inflows, by more than a quarter in one), and the 'binomial' solver (default: enough that no more than about a tenth of the people in a compartment leave it in one; 1 takes each step whole, as discrete-time chain-binomial models do)
         self.stratify   = None   # People dimensions for every module, e.g. dict(age=[0, 15, 65])
-        self.results    = None   # The results to keep by group, by name, e.g. ['n_I', 'cases'] or ['sir.n_I']; the others keep only their totals (default: all, every few steps if every step would take more than about 100 MB: see ss.Sim.group_rows())
+        self.results    = None   # The results to keep by group, by name, e.g. ['I', 'cases'] or ['sir.I']; the others keep only their totals (default: all, every few steps if every step would take more than about 100 MB: see ss.Sim.group_rows())
 
         # Demographic parameters
         self.use_aging  = None # True if demographics, false otherwise

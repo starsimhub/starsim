@@ -50,22 +50,22 @@ def test_fixed_delay():
     n0 = 1000
     ode = ss.Sim(cohort(), solver='ode', total_pop=10_000, unit='day', stop=20, **kw).run()
     r = ode.results.d
-    assert np.allclose(r.n_E[:14], n0*np.exp(-mu*k), rtol=1e-6) and r.n_E[14:].max() < 1e-9
+    assert np.allclose(r.E[:14], n0*np.exp(-mu*k), rtol=1e-6) and r.E[14:].max() < 1e-9
     assert np.isclose(r.latent[14], n0*np.exp(-mu*13.5), rtol=1e-5) and np.isclose(r.latent.sum(), r.latent[14]) # Half of the last step's deaths come first
     abm = ss.Sim(cohort(), n_agents=10_000, unit='day', stop=20, **kw).run().results.d
-    assert abm.latent[:14].sum() == 0 and abm.n_E[14] == 0 and np.isclose(abm.latent[14], n0*np.exp(-mu*14), rtol=0.05)
+    assert abm.latent[:14].sum() == 0 and abm.E[14] == 0 and np.isclose(abm.latent[14], n0*np.exp(-mu*14), rtol=0.05)
 
     # An epidemic: as agents, and converging to the exact delay as the step shrinks
     kw2 = dict(unit='day', stop=200, **kw)
     ode = ss.Sim(make_seir(init_prev=0.001), solver='ode', total_pop=50_000, **kw2).run().results.d
-    abm = np.mean([ss.Sim(make_seir(init_prev=0.001), n_agents=50_000, rand_seed=seed, **kw2).run().results.d.n_R[-1] for seed in range(3)])
-    assert np.isclose(ode.n_R[-1], abm, rtol=0.05), f'ODE {ode.n_R[-1]:n}, agents {abm:n}'
+    abm = np.mean([ss.Sim(make_seir(init_prev=0.001), n_agents=50_000, rand_seed=seed, **kw2).run().results.d.R[-1] for seed in range(3)])
+    assert np.isclose(ode.R[-1], abm, rtol=0.05), f'ODE {ode.R[-1]:n}, agents {abm:n}'
     fine = ss.Sim(make_seir(init_prev=0.001), solver='ode', total_pop=1.0, dt=0.25, **kw2).run().results.d
     peak, final = dde(14)
-    assert np.isclose(fine.n_R[-1], final, rtol=0.01) and np.isclose(fine.n_I.max(), peak, rtol=0.03), f'{fine.n_R[-1]:.4f} vs {final:.4f}; peak {fine.n_I.max():.4f} vs {peak:.4f}'
+    assert np.isclose(fine.R[-1], final, rtol=0.01) and np.isclose(fine.I.max(), peak, rtol=0.03), f'{fine.R[-1]:.4f} vs {final:.4f}; peak {fine.I.max():.4f} vs {peak:.4f}'
     for solver in ['binomial', 'gillespie']: # Shifted at loop times under every solver
         res = ss.Sim(make_seir(init_prev=0.001), solver=solver, total_pop=50_000, **kw2).run().results.d
-        assert np.isclose(res.n_R[-1], ode.n_R[-1], rtol=0.1), f'{solver}: {res.n_R[-1]:n} against {ode.n_R[-1]:n}'
+        assert np.isclose(res.R[-1], ode.R[-1], rtol=0.1), f'{solver}: {res.R[-1]:n} against {ode.R[-1]:n}'
 
     with pytest.raises(ValueError):
         ss.Transition(ss.State(), ss.State(), dur=1, stages='steps')
@@ -85,7 +85,7 @@ def test_exit_split():
     dwell = np.random.default_rng(0).lognormal(np.log(3) - sigma2/2, np.sqrt(sigma2), 1_000_000)
     q = logf2(np.maximum(np.round(dwell/0.25), 1)*0.25, k).mean()
     abm = ss.Sim(make(), n_agents=50_000, **kw2).run().results.hpv
-    assert abs(abm.n_C[-1]/50_000 - q) < 0.01
+    assert abs(abm.C[-1]/50_000 - q) < 0.01
     for solver in ['ode', 'binomial']:
         with pytest.raises(ss.CapabilityError, match='P.time is a clock'):
             ss.Sim(make(), solver=solver, total_pop=50_000, **kw2).init()
@@ -121,9 +121,9 @@ def test_bv_clock():
         return ss.Disease(P, R, recur=P >> R @ ss.permonth(0.06)*np.exp(-P.time/ss.months(3)), first='P', name='bv')
     kw2 = dict(start=2000, stop=2003, dt=ss.months(1), unit='year', **kw)
     abm = ss.Sim(cohort(), n_agents=10_000, **kw2).run().results.bv
-    h = 0.06*np.exp(-np.arange(len(abm.n_P))/3) # Per month, at the start of each month in P
+    h = 0.06*np.exp(-np.arange(len(abm.P))/3) # Per month, at the start of each month in P
     expected = 10_000*np.exp(-np.concatenate([[0], np.cumsum(h)[:-1]]))
-    assert np.allclose(abm.n_P, expected, rtol=0.03)
+    assert np.allclose(abm.P, expected, rtol=0.03)
     for solver in ['ode', 'gillespie']:
         with pytest.raises(ss.CapabilityError, match='P.time is a clock'):
             ss.Sim(cohort(), solver=solver, total_pop=10_000, **kw2).init()

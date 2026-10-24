@@ -32,7 +32,7 @@ def test_microsim(do_plot=False):
 
     if do_plot:
         plt.figure()
-        plt.plot(hiv.timevec, hiv.results.n_infected)
+        plt.plot(hiv.timevec, hiv.results.infected)
         plt.title('HIV number of infections')
 
     return sim

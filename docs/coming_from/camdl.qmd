@@ -150,7 +150,7 @@ def make_polio(with_sia=False):
 
 base = make_polio().run().results.seir
 sia = make_polio(with_sia=True).run().results.seir
-print(f'Peak {base.n_I.values.max():,.0f} on day {base.n_I.values.argmax()} (camdl: 130,643 on day 145)')
+print(f'Peak {base.I.values.max():,.0f} on day {base.I.values.argmax()} (camdl: 130,643 on day 145)')
 print(f'Infections: {base.infection.values.sum():,.0f} without SIAs, {sia.infection.values.sum():,.0f} with them (camdl: 950,610 and 863,920)')
 ```
 

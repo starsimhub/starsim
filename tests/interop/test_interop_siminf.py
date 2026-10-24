@@ -52,9 +52,9 @@ def test_mparse():
     assert sim.pars.solver == 'gillespie'
     sim.run()
     res = sim.results.model
-    assert res.n_I.values.max() > 50
-    assert np.isclose((res.n_S + res.n_I + res.n_R).values[-1], 2985, rtol=0.02) # Births and deaths balance
-    assert res.n_I.strata.shape[1] == 3 # By node
+    assert res.I.values.max() > 50
+    assert np.isclose((res.S + res.I + res.R).values[-1], 2985, rtol=0.02) # Births and deaths balance
+    assert res.I.strata.shape[1] == 3 # By node
     return sim
 
 
@@ -64,7 +64,7 @@ def test_dict():
                  u0=dict(S=[95, 90], I=[5, 10]), ldata=dict(beta=[0.5, 0.0], gamma=[0.1, 0.1]), tspan=list(range(1, 101)))
     sim = load_siminf(model, **kw)
     sim.run()
-    I = sim.results.siminf.n_I.strata
+    I = sim.results.siminf.I.strata
     assert I[-1, 0] > 30 # Node 1 keeps an endemic infection
     assert I[-1, 1] == 0 # Node 2 has beta = 0, so its infected recover
     bad = dict(model, transitions=['S -> beta*S -> 2*I'])
@@ -99,7 +99,7 @@ def test_examples():
     sim.run()
     ref = pd.read_csv(folder/'reference'/'results.csv')
     ref = ref[(ref.series == 'S') & (ref.time == 100)].iloc[0]
-    S = sim.results.events_SIR.n_S.values[100]
+    S = sim.results.events_SIR.S.values[100]
     assert ref.low - 50 <= S <= ref.high + 50, f'Expected S on day 100 near SimInf\'s {ref.low:n} to {ref.high:n}, not {S:n}'
 
     folder = examples / 'sise3'
@@ -108,7 +108,7 @@ def test_examples():
     sim = load_siminf(folder/'original'/'events_SISe3.R', u0=folder/'reference'/'u0.csv', events=events, stop=20, **kw)
     sim.run()
     res = sim.results.events_SISe3
-    assert res.n_phi.values[-1] > 0 # The infected shed into phi
+    assert res.phi.values[-1] > 0 # The infected shed into phi
     assert all(sim.diseases[0].states[s].people for s in ['S_2', 'I_3']) # People, though only aging joins them to S_1
     return sim
 

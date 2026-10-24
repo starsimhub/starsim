@@ -337,7 +337,7 @@ def outputs(sim):
             tnames = [k for k in dis.transitions.keys() if k == flow or k.startswith(f'{flow}_')]
             val = sum(select(res[t], {**req.get('source_strata', {}), **req.get('dest_strata', {})}) for t in tnames)/dt
         elif kind == 'comp':
-            val = sum(select(res[f'n_{c}'], req.get('strata') or {}) for c in req['compartments'])
+            val = sum(select(res[c], req.get('strata') or {}) for c in req['compartments'])
         elif kind == 'agg':
             val = sum(get(s) for s in req['sources'])
         elif kind == 'cum':

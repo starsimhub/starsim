@@ -274,19 +274,19 @@ def test_odin_ode():
     assert not sim.imported.incomplete
     res = sim.run().results[sim.diseases[0].name]
     ref = hand_sir(total_pop=1000)
-    assert np.allclose(res.n_I.values, ref.n_I.values, rtol=1e-6), 'Expected the imported SIR to be the SIR'
+    assert np.allclose(res.I.values, ref.I.values, rtol=1e-6), 'Expected the imported SIR to be the SIR'
     assert 'exposure to I' in sc.strjoin(sim.imported.choices)
 
     # User values instead of the defaults
     sim2 = load_odin(write(odin_sir, '.R'), stop=100, pars=dict(beta=0.5), **kw).run()
-    assert sim2.results[sim2.diseases[0].name].n_R.values[-1] > res.n_R.values[-1]
+    assert sim2.results[sim2.diseases[0].name].R.values[-1] > res.R.values[-1]
 
     # An SEIRS with births and deaths: terms multiplied out and paired into flows, the rest into or out of the model
     sim = load_odin(write(odin_seirs, '.R'), stop=365, **kw)
     arrows = sorted(tr.arrow for tr in sim.pars.diseases[0].transitions.values())
     assert len(arrows) == 9, arrows # 5 between states, 4 deaths, and births
     res = sim.run().results[sim.diseases[0].name]
-    total = res.n_S.values + res.n_E.values + res.n_I.values + res.n_R.values
+    total = res.S.values + res.E.values + res.I.values + res.R.values
     assert np.allclose(total, 1000, rtol=1e-6), 'Births balance deaths at this population'
     return sim
 
@@ -310,8 +310,8 @@ def test_odin_discrete():
     sir.stratify(age=['1', '2', '3'], split=[0.3, 0.5, 0.2])
     hand = ss.Sim(sir, networks=ss.contacts(age=age_pars['m']), total_pop=1e5, unit='day', dt=0.25, stop=ss.days(200), solver='ode', verbose=0).run()
     imported = sim.new(solver='ode').run()
-    final = imported.results[imported.diseases[0].name].n_R[-1]
-    assert np.isclose(final, hand.results.sir.n_R[-1], rtol=1e-6) # The same final size as the model written by hand
+    final = imported.results[imported.diseases[0].name].R[-1]
+    assert np.isclose(final, hand.results.sir.R[-1], rtol=1e-6) # The same final size as the model written by hand
     assert imported.results[imported.diseases[0].name].cases.values.sum() > 0.9*final # Weekly cases add up to everyone infected (but the 10 seeded)
     return sim
 
@@ -330,10 +330,10 @@ def test_odin2(tmp_path):
 
     # The same run: Binomial() is rbinom(), dt is built in, and zero_every is a count over a period
     a, b = one.run().results.sir, two.run().results.sir
-    for key in ['n_S', 'n_I', 'n_R', 'incidence']:
+    for key in ['S', 'I', 'R', 'incidence']:
         assert np.array_equal(a[key].values, b[key].values), f'Expected {key} to be the same in both'
     assert 'dt' not in two.diseases[0].pars # The built-in step is the sim's
-    assert b.incidence.values.sum() > 0.5*b.n_R.values[-1]
+    assert b.incidence.values.sum() > 0.5*b.R.values[-1]
 
     # Data with ~ are outcomes with their likelihoods: cases is the weekly count, and deaths a share rho of it with a negative binomial
     weekly = a.incidence.values[1:99].reshape(14, 7).sum(axis=1)
@@ -356,7 +356,7 @@ def test_odin_contacts(tmp_path):
     assert not sim.imported.incomplete
     res = sim.run().results.age_ode
     for k in range(3): # The matrix is not symmetric, so a transposed matrix would not agree
-        diff = np.abs(res.n_R.select(age=str(k+1)).values - ref[f'R[{k+1}]'].values).max()
+        diff = np.abs(res.R.select(age=str(k+1)).values - ref[f'R[{k+1}]'].values).max()
         assert diff < 1, f'Expected R in group {k+1} within 1 person of odin, not {diff:.2f}' # About 0.07 (the two ODE solvers)
     return sim
 
@@ -375,7 +375,7 @@ def test_odin_examples():
     res = sim.new(verbose=0).run(n_runs=500).results[sim.pars.diseases[0].name]
     ref = tools.read_results(ex)
     for state in 'SIR':
-        vals = res[f'n_{state}'].values
+        vals = res[state].values
         diff = np.abs(vals.mean(axis=0) - np.array(ref[state][1])).max()
         tol = 4*vals.std(axis=0).max()/np.sqrt(len(vals)) # Four standard errors of the mean (many runs die out, so it is wide)
         assert diff < tol, f'Expected the mean of {state} within {tol:.1f} people of the original, not {diff:.1f}'
@@ -392,7 +392,7 @@ def test_odin_examples():
     ref = tools.read_results(ex)
     for state in 'SEIR':
         theirs = np.array(ref[state][1])
-        diff = np.abs(res[f'n_{state}'].values - theirs).max()/theirs.max()
+        diff = np.abs(res[state].values - theirs).max()/theirs.max()
         assert diff < 0.1, f'Expected {state} within 10% of the original, not {diff:.1%}'
     return sim
 
@@ -406,7 +406,7 @@ def test_sbml():
     assert set(trans.keys()) == {'infection', 'recovery'}
     res = sim.run().results.sir_sbml
     ref = hand_sir(total_pop=1000, I=10)
-    assert np.allclose(res.n_I.values, ref.n_I.values, rtol=1e-6), 'Expected the imported SIR to be the SIR'
+    assert np.allclose(res.I.values, ref.I.values, rtol=1e-6), 'Expected the imported SIR to be the SIR'
 
     # What is not translated is listed by name
     missing = sc.strjoin(name for name,why in sim.imported.incomplete)

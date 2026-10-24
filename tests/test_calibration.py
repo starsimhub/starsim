@@ -71,14 +71,14 @@ def test_fitted_mobility():
 
     # A restart with a new value works out the movement again, as a new sim does
     sim = make(solver='ode').init()
-    n_I = lambda away: sim.restart(pars=dict(away=away)).run().results.sir.n_I.values.copy()
-    assert np.allclose(n_I(0.01), make(away=0.01, solver='ode').run().results.sir.n_I.values)
+    n_I = lambda away: sim.restart(pars=dict(away=away)).run().results.sir.I.values.copy()
+    assert np.allclose(n_I(0.01), make(away=0.01, solver='ode').run().results.sir.I.values)
     msim = ss.parallel(make(solver='ode'), pars=dict(away=[0.01, 0.1]))
-    assert np.allclose(msim.results.sir.n_I.select(away=0.01).values.ravel(), n_I(0.01))
+    assert np.allclose(msim.results.sir.I.select(away=0.01).values.ravel(), n_I(0.01))
 
     # Its gradient is that of the runs
     h = 1e-5
-    grad = sim.restart(pars=dict(away=0.1)).gradient(results='n_I', pars='away').away.sir.n_I
+    grad = sim.restart(pars=dict(away=0.1)).gradient(results='I', pars='away').away.sir.I
     assert np.allclose(grad, (n_I(0.1 + h) - n_I(0.1 - h))/(2*h), rtol=1e-3, atol=1e-2)
 
     # IF2 gives each particle its own movement, and finds the value that made the data
@@ -101,8 +101,8 @@ def test_fit_inputs(tmp_path):
         sir = ss.Disease(S >> I @ beta*I, I >> R @ ss.years(2), ss.Transition(R, S, dur=ss.years(3)), init_prev=0.01, name='sir')
         return ss.Sim(sir, start=2000, stop=2020, dt=ss.years(0.05), data=data, verbose=0)
     res = make().run().results.sir
-    flows, stocks = res.S_to_I.resample('year'), res.n_I.resample('year', kind='ratio') # A flow summed over each year, a stock averaged over it
-    df = pd.DataFrame(dict(year=flows.timevec, S_to_I=flows.values, n_I=stocks.values)).iloc[1:-1]
+    flows, stocks = res.S_to_I.resample('year'), res.I.resample('year', kind='ratio') # A flow summed over each year, a stock averaged over it
+    df = pd.DataFrame(dict(year=flows.timevec, S_to_I=flows.values, I=stocks.values)).iloc[1:-1]
     fit = make(beta=0.5, data=df).calibrate(verbose=0)
     assert np.isclose(fit.pars.beta, 0.3, rtol=1e-3) # Before, 0.279, from data compared a year off
     assert len(fit.trials) < 60 # Before, 3 searches (131 evaluations)

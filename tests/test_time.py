@@ -475,12 +475,12 @@ def test_bare_units():
 
     # A choice of durations as a dwell, typed or with unit= (it crashed, and unit= was refused); seeds infectious by contact are counted to the end of the step they leave in, as infections by contact are
     for rec in [ss.choice(a=[ss.months(9), ss.months(10)]), ss.choice(a=[9, 10], unit='month')]:
-        n_I = ss.Sim(sis(rec), start=2000, stop=2002, dt=ss.months(1), n_agents=1000, verbose=0).run().results.d.n_I
+        n_I = ss.Sim(sis(rec), start=2000, stop=2002, dt=ss.months(1), n_agents=1000, verbose=0).run().results.d.I
         assert n_I[9] == 1000 and 0 < n_I[10] < 1000 and n_I[11] == 0
 
     # The numbers a function gives a distribution are in its unit= (they were read as years, so nobody left)
     fn = lambda self, sim, uids: np.full(len(uids), 6.0)
-    n_I = ss.Sim(sis(ss.lognorm_ex(mean=fn, std=1, unit='month')), start=2000, stop=2003, dt=ss.months(1), n_agents=1000, verbose=0).run().results.d.n_I
+    n_I = ss.Sim(sis(ss.lognorm_ex(mean=fn, std=1, unit='month')), start=2000, stop=2003, dt=ss.months(1), n_agents=1000, verbose=0).run().results.d.I
     assert n_I[24] == 0
 
     # A peak of a seasonal value outside the year is refused, and a time of year works (T6a: 142 was taken as January)

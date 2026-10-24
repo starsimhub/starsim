@@ -58,7 +58,7 @@ self.define_states(
 )
 ```
 
-Each state becomes an attribute (`self.vaccinated`) and is automatically connected to the `People` object. A handy shortcut: every `ss.BoolState` automatically generates a corresponding `n_<name>` count result (e.g. `n_vaccinated`), so you often don't need to define that result yourself.
+Each state becomes an attribute (`self.vaccinated`) and is automatically connected to the `People` object. A handy shortcut: every `ss.BoolState` automatically generates a corresponding `<name>` count result (e.g. `vaccinated`), so you often don't need to define that result yourself.
 
 #### Aliases
 
@@ -80,7 +80,7 @@ self.define_states(
 
 An alias is only consulted when the attribute isn't otherwise defined, so a base class can use one to supply a default that a subclass replaces just by defining a state (or another alias) of the same name. This is how `ss.Infection` treats everyone infected as infectious, while letting a subclass say otherwise; see [Infected vs. infectious](modules_diseases.qmd#infected-vs-infectious).
 
-A callable alias behaves like a property: it's recomputed on each access, and writing to it raises an error rather than silently discarding the write. It doesn't appear in `state_list`/`state_dict`, but it *does* generate an `n_<name>` result, since unlike a string alias it's a derived quantity that isn't counted anywhere else. Note that a callable alias written as a lambda can't be saved with plain `pickle` (`sc.save()` and `ss.MultiSim` are fine); use a module-level function, or a property, if that matters to you.
+A callable alias behaves like a property: it's recomputed on each access, and writing to it raises an error rather than silently discarding the write. It doesn't appear in `state_list`/`state_dict`, but it *does* generate a `<name>` result (its count), since unlike a string alias it's a derived quantity that isn't counted anywhere else. Note that a callable alias written as a lambda can't be saved with plain `pickle` (`sc.save()` and `ss.MultiSim` are fine); use a module-level function, or a property, if that matters to you.
 
 To replace an inherited state or alias rather than add to it, pass `overwrite=True`. To remove one without replacing it, name it in `reset`, which takes a name or list of names (or `True` for all of them); the name is then undefined, so accessing it raises an `AttributeError`:
 
@@ -133,7 +133,7 @@ When a `Sim` initializes and runs, each module passes through these stages:
 
 ## A complete example
 
-Here's a self-contained custom intervention that vaccinates a fraction of susceptible agents each year, conferring partial protection. It illustrates parameters (including a time parameter and a distribution), a state, use of `self.sim` and `self.t.dt` inside `step()`, and the automatically generated `n_vaccinated` result:
+Here's a self-contained custom intervention that vaccinates a fraction of susceptible agents each year, conferring partial protection. It illustrates parameters (including a time parameter and a distribution), a state, use of `self.sim` and `self.t.dt` inside `step()`, and the automatically generated `vaccinated` result:
 
 ```{python}
 import starsim as ss
@@ -175,7 +175,7 @@ pars = dict(n_agents=5000, diseases='sis', networks='random', verbose=0)
 s1 = ss.Sim(pars, label='No vaccine')
 s2 = ss.Sim(pars, label='Vaccine', interventions=SimpleVaccination(rate=0.2))
 msim = ss.parallel(s1, s2)
-msim.plot('sis_n_I')
+msim.plot('sis_I')
 ```
 
 Because we defined `vaccinated` as a `ss.BoolState`, the count is automatically available as a result, so we can plot the vaccination rollout without any extra code:
@@ -185,7 +185,7 @@ import matplotlib.pyplot as plt
 
 res = s2.results.simplevaccination
 plt.figure()
-plt.plot(res.timevec, res.n_vaccinated)
+plt.plot(res.timevec, res.vaccinated)
 plt.title('Cumulative number vaccinated')
 plt.ylim(bottom=0)
 plt.show()

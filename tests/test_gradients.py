@@ -59,7 +59,7 @@ def compare(make, n=30):
             sim.jax = jax
             sim.run()
             assert not [note for note in sim.notes if 'JAX cannot' in note]
-            rows.append([mod.results[f'n_{state}'][-1] for mod in sim.declared for state in mod.graph.states] + [mod.results.delivered.values.sum() for mod in sim.interventions() if 'delivered' in mod.results])
+            rows.append([mod.results[state][-1] for mod in sim.declared for state in mod.graph.states] + [mod.results.delivered.values.sum() for mod in sim.interventions() if 'delivered' in mod.results])
         out[jax] = np.array(rows)
     a, b = out[True], out[False]
     z = (a.mean(0) - b.mean(0))/np.sqrt((a.var(0) + b.var(0))/n + 1e-12)
@@ -112,12 +112,12 @@ def test_jax_engine():
         sim = ss.Sim(make(), **sc.mergedicts(pars, kw), solver='binomial', rand_seed=3).run()
         assert sim.engine_reason.startswith('JAX: a long run')
         msim = ss.Sim(make(), **sc.mergedicts(pars, kw), solver='binomial').run(n_runs=4) # Taken together in JAX, each as it would be alone
-        assert np.array_equal(msim.results.sir.n_I.values[2], sim.results.sir.n_I.values) # Seeds 1 to 4
+        assert np.array_equal(msim.results.sir.I.values[2], sim.results.sir.I.values) # Seeds 1 to 4
         ode = ss.Sim(make(), **sc.mergedicts(pars, kw), solver='ode').run() # The ODE too, which agrees with the kernels
         assert ode.engine_reason.startswith('JAX: a long run')
         ref = ss.Sim(make(), **sc.mergedicts(pars, kw), solver='ode')
         ref.jax = False
-        assert np.allclose(ode.results.sir.n_I.values, ref.run().results.sir.n_I.values, rtol=1e-9, atol=0)
+        assert np.allclose(ode.results.sir.I.values, ref.run().results.sir.I.values, rtol=1e-9, atol=0)
     finally:
         ss.solvers.choose.jax_after = after
     reported = chain.reported_version
@@ -136,17 +136,17 @@ def test_jax_engine():
 def test_gradient():
     sc.heading('Testing gradients of results against finite differences')
     sim = make_sir()
-    grad = sim.gradient(results=['n_I', 'cases'], pars=['beta', 'dur'])
+    grad = sim.gradient(results=['I', 'cases'], pars=['beta', 'dur'])
     assert not sim.initialized # The sim itself is not changed
     for name,step in [('beta', 1e-6), ('dur', 1e-5)]:
         x0 = 0.4 if name == 'beta' else 8
         runs = [make_sir(**{name:x0 + sign*step}).run().results.sir for sign in [1, -1]]
-        for key in ['n_I', 'cases']:
+        for key in ['I', 'cases']:
             fd = (runs[0][key].values - runs[1][key].values)/(2*step)
             diff = np.abs(grad[name].sir[key] - fd).max()/np.abs(fd).max()
             print(f'd {key}/d {name}: largest {np.abs(fd).max():0.4g}, differs from finite differences by {diff:0.1e}')
             assert diff < 1e-5
-    assert np.all(grad.beta.sir.n_I[1:20] > 0) # A higher beta means more infectious people early on (after the start, which it does not change)
+    assert np.all(grad.beta.sir.I[1:20] > 0) # A higher beta means more infectious people early on (after the start, which it does not change)
     with pytest.raises(ValueError): # Gradients are for the ODE only
         sim.new(solver='gillespie').gradient()
     return grad
@@ -177,7 +177,7 @@ def test_identifiability():
         sir = ss.Disease(S >> I @ rate, I >> R @ ss.par(ss.days(8), bounds=[2, 20], name='dur'), init=dict(I=0.01), name='sir')
         return ss.Sim(sir, unit='day', stop=100, data=data, **kw)
     truth = make().run().results.sir
-    data = pd.DataFrame(dict(n_I=truth.n_I.values[::7]), index=truth.timevec[::7])
+    data = pd.DataFrame(dict(I=truth.I.values[::7]), index=truth.timevec[::7])
     notes = {kind:make(kind, data=data).calibrate(pars=['beta', 'dur'] + (['c'] if kind != 'plain' else [])).sim.notes for kind in ['product', 'sum', 'plain']}
     assert any('only multiplied together' in note for note in notes['product']) # From the model
     assert any('almost the same way' in note for note in notes['sum']) # From the gradients at the best fit
@@ -238,7 +238,7 @@ def test_crossing():
     jax = run_jax(make_coinfection())
     for other in [stepped, jax]:
         for key in ['hiv', 'syph']:
-            assert np.allclose(other.results[key].n_I, sim.results[key].n_I, rtol=1e-9)
+            assert np.allclose(other.results[key].I, sim.results[key].I, rtol=1e-9)
     assert sim.results.hiv.move[1:].sum() > 0 # The transfer's flow is recorded
 
     # Each flow of three diseases tracked jointly takes the exposure summed over the others' compartments as one number, worked out once (adding it up in each flow took 513 operations here, and three HPV genotypes 383 s instead of 9 s)
@@ -246,41 +246,41 @@ def test_crossing():
     ds = [ss.Disease(infection=ss.Transition(S, I, rate=0.3 * I), recovery=ss.Transition(I, R, dur=5), waning=ss.Transition(R, S, dur=20), init_prev=0.01, name=f'd{i}') for i in range(3)]
     mods = [ss.modify(ds[i].rel_sus, multiply=0.5, where=ds[(i+1) % 3].R, name=f'm{i}') for i in range(3)]
     three = ss.Sim(diseases=ds, connectors=mods, unit='day', stop=100, total_pop=10_000, solver='ode', **kw).run()
-    assert len(three.crossings[0].program.ops) == 81 and np.isclose(three.results.d0.n_I[50], 656.392, rtol=1e-6) # One operation for each of the 81 flows; the same run
+    assert len(three.crossings[0].program.ops) == 81 and np.isclose(three.results.d0.I[50], 656.392, rtol=1e-6) # One operation for each of the 81 flows; the same run
 
     # The diseases are one model, so every flow is worked out from the people at the start of the step (each disease in turn, before, was 1% off a fine step)
     fine = make_coinfection(dt=0.025).run()
-    assert np.allclose(fine.results.syph.n_I[::10], sim.results.syph.n_I, rtol=1e-5)
+    assert np.allclose(fine.results.syph.I[::10], sim.results.syph.I, rtol=1e-5)
 
     # Many runs at once take the diseases together too (each was run on its own before, with 23% fewer HIV infections at the end)
     msim = make_coinfection().run(n_runs=2)
-    assert np.allclose(msim.results.hiv.n_I.values[1], sim.results.hiv.n_I, rtol=1e-12)
+    assert np.allclose(msim.results.hiv.I.values[1], sim.results.hiv.I, rtol=1e-12)
 
     # Restarted with other values, as a fresh sim
     restarted = make_coinfection().init().restart(pars={'hiv.beta':0.2}).run()
     fresh = make_coinfection(beta=0.2).run().results
-    assert np.allclose(restarted.results.hiv.n_I, fresh.hiv.n_I, rtol=1e-12)
+    assert np.allclose(restarted.results.hiv.I, fresh.hiv.I, rtol=1e-12)
 
     # The gradient of each disease's results, through the other
-    grad = make_coinfection().gradient(results=['n_I'], pars=['hiv.beta'])
+    grad = make_coinfection().gradient(results=['I'], pars=['hiv.beta'])
     step = 1e-6
     runs = [make_coinfection(beta=0.15 + sign*step).run().results for sign in [1, -1]]
     for key in ['hiv', 'syph']:
-        fd = (runs[0][key].n_I.values - runs[1][key].n_I.values)/(2*step)
-        assert np.abs(grad['hiv.beta'][key].n_I - fd).max() < 1e-5*np.abs(fd).max()
+        fd = (runs[0][key].I.values - runs[1][key].I.values)/(2*step)
+        assert np.abs(grad['hiv.beta'][key].I - fd).max() < 1e-5*np.abs(fd).max()
 
     # The particle filter takes the diseases together, under a stochastic solver, as runs of their program
     large = make_coinfection(beta=0.2, total_pop=1e7).run().results # Large, so that runs differ little
-    data = pd.DataFrame({'hiv.n_I':large.hiv.n_I.values, 'syph.n_I':large.syph.n_I.values}, index=large.hiv.timevec)[::8]
-    lik = {'hiv.n_I':ss.nbinom(n=20), 'syph.n_I':ss.nbinom(n=20)}
+    data = pd.DataFrame({'hiv.I':large.hiv.I.values, 'syph.I':large.syph.I.values}, index=large.hiv.timevec)[::8]
+    lik = {'hiv.I':ss.nbinom(n=20), 'syph.I':ss.nbinom(n=20)}
     pf = np.mean([ss.fit.ParticleFilter(make_coinfection(beta=0.2, data=data, solver='binomial', total_pop=1e7).init(), likelihood=lik)(n_particles=20, seed=seed) for seed in range(3)])
     direct = np.mean([ss.fit.loglik(make_coinfection(beta=0.2, data=data, solver='binomial', total_pop=1e7, rand_seed=seed).run(), likelihood=lik) for seed in range(3)])
     print(f'Particle filter {pf:.2f}, direct runs {direct:.2f}')
     assert abs(pf - direct) < 1 # The filter estimates the likelihood of runs of the sim
 
     # NUTS, with the log-density in JAX
-    data = pd.DataFrame({'hiv.n_I':fresh.hiv.n_I.values, 'syph.n_I':fresh.syph.n_I.values}, index=fresh.hiv.timevec)[::8]
-    fit = make_coinfection(data=data).calibrate(likelihood={'hiv.n_I':ss.normal(scale=50), 'syph.n_I':ss.normal(scale=50)}, method='nuts', draws=50, warmup=50, chains=2, rand_seed=1, verbose=True)
+    data = pd.DataFrame({'hiv.I':fresh.hiv.I.values, 'syph.I':fresh.syph.I.values}, index=fresh.hiv.timevec)[::8]
+    fit = make_coinfection(data=data).calibrate(likelihood={'hiv.I':ss.normal(scale=50), 'syph.I':ss.normal(scale=50)}, method='nuts', draws=50, warmup=50, chains=2, rand_seed=1, verbose=True)
     table = fit.table.set_index('par')
     assert fit.method == 'nuts'
     assert table.lower['hiv.beta'] < 0.2 < table.upper['hiv.beta']
@@ -301,16 +301,16 @@ def test_posterior_data():
 
     # Data in long form: a column says which age group each row is for
     truth = make(beta=0.5).run().results.sir
-    rows = [dict(t=t, age=age, n_I=n, n_hosp=h) for age in ['0-14', '15-64', '65+'] for t,n,h in zip(truth.timevec[::10], truth.n_I.select(age=age).values[::10], truth.n_hosp.select(age=age).values[::10])]
+    rows = [dict(t=t, age=age, I=n, n_hosp=h) for age in ['0-14', '15-64', '65+'] for t,n,h in zip(truth.timevec[::10], truth.I.select(age=age).values[::10], truth.n_hosp.select(age=age).values[::10])]
     sim = make(data=pd.DataFrame(rows)).init()
-    assert 'n_I[age=15-64]' in sim.data.columns
+    assert 'I[age=15-64]' in sim.data.columns
     with pytest.raises(ss.errors.UnknownDataColumn): # Not a level of age
-        make(data=pd.DataFrame([dict(t=10, age='0-4', n_I=1)])).init()
+        make(data=pd.DataFrame([dict(t=10, age='0-4', I=1)])).init()
 
     # Fitted with the log-density in JAX: it is checked against runs of the sim, and sampled again with Python in the loop if they differ
     with sc.capture() as txt, warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter('always')
-        fit = make(data=pd.DataFrame(rows)).calibrate(likelihood=dict(n_I=ss.normal(scale=50), n_hosp=ss.normal(scale=5)), method='nuts', draws=50, warmup=50, chains=2, rand_seed=1, verbose=True)
+        fit = make(data=pd.DataFrame(rows)).calibrate(likelihood=dict(I=ss.normal(scale=50), n_hosp=ss.normal(scale=5)), method='nuts', draws=50, warmup=50, chains=2, rand_seed=1, verbose=True)
     assert 'Python in the loop' not in txt and not any('differs' in str(w.message) for w in caught)
     table = fit.table.set_index('par')
     assert table.lower.beta < 0.5 < table.upper.beta
@@ -321,15 +321,15 @@ def test_posterior_data():
 def test_parallel_pars():
     sc.heading('Testing many runs with different values, in one call')
     betas = [0.3, 0.4, 0.5]
-    singles = [make_sir(beta=beta).run().results.sir.n_I.values for beta in betas]
+    singles = [make_sir(beta=beta).run().results.sir.I.values for beta in betas]
     for n in [1, ss.run.jax_runs//3 + 1]: # Enough runs are taken in one call to JAX
         msim = ss.parallel(make_sir(), pars=dict(beta=betas*n))
-        n_I = msim.results.sir.n_I.values[:3]
+        n_I = msim.results.sir.I.values[:3]
         assert (msim.sims[0].diseases.sir.engine.jax_run is not None) == (n > 1)
         assert msim.run_pars.beta.tolist() == betas*n
         assert np.allclose(n_I, singles, rtol=1e-9), f'{3*n} runs differ from single runs'
     msim = ss.parallel(make_sir(), pars=[dict(beta=0.3), dict(beta=0.5, dur=ss.days(4))], n_runs=2) # A list of sets, each run twice
-    assert len(msim.results.sir.n_I.values) == 4
+    assert len(msim.results.sir.I.values) == 4
     return msim
 
 

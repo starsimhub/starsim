@@ -36,7 +36,7 @@ def make_sis(beta=ss.prob(1 - 0.6**2)):
 def prev_by_group(sim, burnin=150):
     """ Mean prevalence in each risk group after the burn-in """
     res = sim.results.sis
-    n_I, n_S = np.asarray(res.n_I.strata)[burnin:], np.asarray(res.n_S.strata)[burnin:]
+    n_I, n_S = np.asarray(res.I.strata)[burnin:], np.asarray(res.S.strata)[burnin:]
     return (n_I / (n_I + n_S)).mean(axis=0)
 
 
@@ -81,8 +81,8 @@ def test_epimodel_from_r(tmp_path):
         sim <- ss$Sim(sis, networks = net, n_agents = 1000L, stop = 300L, verbose = 0L)
         sim$stratify(risk = c("low", "high"), split = c(0.8, 0.2))
         sim$run()
-        n_I <- py_to_r(sim$results$sis$n_I$strata)[151:301, ]
-        n_S <- py_to_r(sim$results$sis$n_S$strata)[151:301, ]
+        n_I <- py_to_r(sim$results$sis$I$strata)[151:301, ]
+        n_S <- py_to_r(sim$results$sis$S$strata)[151:301, ]
         cat("Prevalence:", colMeans(n_I / (n_I + n_S)), "\\n")
     ''')
     env = dict(os.environ, RETICULATE_PYTHON=sys.executable)

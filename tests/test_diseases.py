@@ -36,7 +36,7 @@ def test_sir():
     if do_plot:
         res = sim.results
         plt.figure()
-        plt.stackplot(sim.timevec, res.sir.n_S, res.sir.n_I, res.sir.n_R, res.new_deaths.cumsum())
+        plt.stackplot(sim.timevec, res.sir.S, res.sir.I, res.sir.R, res.new_deaths.cumsum())
         plt.legend(['Susceptible', 'Infected', 'Recovered', 'Dead'])
         plt.title('SIR')
 
@@ -95,15 +95,15 @@ def test_seir():
         sim.run()
         sims.append(sim)
     short, long = sims
-    print(f'  Peak infectious: {short.results.seir.n_I.max():n} (short) vs {long.results.seir.n_I.max():n} (long)')
-    assert np.argmax(long.results.seir.n_I) > np.argmax(short.results.seir.n_I), 'A longer latent period should delay the peak'
+    print(f'  Peak infectious: {short.results.seir.I.max():n} (short) vs {long.results.seir.I.max():n} (long)')
+    assert np.argmax(long.results.seir.I) > np.argmax(short.results.seir.I), 'A longer latent period should delay the peak'
 
     # Check the compartments and incidence
     sim = short
     seir = sim.diseases.seir
     res = sim.results.seir
     assert not (seir.E & seir.I).any(), 'Agents should not be in both E and I'
-    assert np.allclose(res.prevalence, (res.n_E + res.n_I)/sim.results.n_alive), 'prevalence should be computed from E plus I'
+    assert np.allclose(res.prevalence, (res.E + res.I)/sim.results.alive), 'prevalence should be computed from E plus I'
     assert res.new_infections.min() >= 0 and res.new_infections[0] == 0, 'Seed infections should be excluded from incidence exactly once'
     assert np.array_equal(res.cum_infections, np.cumsum(res.new_infections)), 'Cumulative infections should be the running sum of new infections'
 
@@ -144,13 +144,13 @@ def test_aliases():
     res = sim.results.isolationsir
     assert (dis.infectious == (dis.infected & ~dis.isolated)).all(), 'The derived alias should combine the two states'
     assert res.cum_infections[-1] == 0, 'Isolated agents should not transmit'
-    assert 'n_infectious' in res, 'A derived alias should generate an automatic result'
-    assert res.n_infectious.max() == 0, 'Nobody is infectious, since everyone is isolated'
+    assert 'infectious' in res, 'A derived alias should generate an automatic result'
+    assert res.infectious.max() == 0, 'Nobody is infectious, since everyone is isolated'
 
     # Its new infections are recorded at the end of the step they happen in, as the counts of its states are (during a step, self.ti is its start)
     sim = ss.Sim(n_agents=1000, diseases=ssl.AgentSIR(beta=ss.perday(0.1), dur_inf=ss.days(10), p_death=0), networks='random', dur=ss.days(30), dt=ss.days(1), verbose=0).run()
     res = sim.results.agentsir
-    assert np.array_equal(res.new_infections[1:], -np.diff(res.n_susceptible)) # The infections of each step leave S in it
+    assert np.array_equal(res.new_infections[1:], -np.diff(res.susceptible)) # The infections of each step leave S in it
     assert np.count_nonzero(sim.diseases.agentsir.ti_infected == 10) == res.new_infections[10] # And are dated there too, as a declared disease dates ti_I
 
     # Aliases can also be defined alongside the states they refer to
@@ -186,7 +186,7 @@ def test_aliases():
     rep_sir.init_mock()
     assert 'infectious' in rep_sir.state_dict, 'A state should be able to replace an alias'
     assert [state.name for state in rep_sir.auto_state_list].count('infected') == 1, 'Overwriting a state should replace it, not duplicate it'
-    assert rep_sir.results.n_infected.label == 'Redefined', 'The replacement state should be the one that generates the result'
+    assert rep_sir.results.infected.label == 'Redefined', 'The replacement state should be the one that generates the result'
 
     # An alias that a state would shadow should raise, rather than silently never being consulted
     with pytest.raises(AttributeError):
@@ -233,11 +233,11 @@ def test_ncd():
     df = log.to_df()  # Check generation of line-list
     assert df.source.isna().all()
 
-    assert ncd.results.n_not_at_risk.label == 'Not at risk'
-    assert ncd.results.n_affected.label == 'Affected'
+    assert ncd.results.not_at_risk.label == 'Not at risk'
+    assert ncd.results.affected.label == 'Affected'
     if do_plot:
         plt.figure()
-        plt.stackplot(sim.timevec, ncd.results.n_not_at_risk, ncd.results.n_at_risk - ncd.results.n_affected, ncd.results.n_affected, sim.results.new_deaths.cumsum())
+        plt.stackplot(sim.timevec, ncd.results.not_at_risk, ncd.results.at_risk - ncd.results.affected, ncd.results.affected, sim.results.new_deaths.cumsum())
         plt.legend(['Not at risk', 'At risk', 'Affected', 'Dead'])
         plt.title('NCD')
 
@@ -257,7 +257,7 @@ def test_ncd():
 
     sim2 = ss.Sim(diseases=[Anemia(), Background(init_prev=0.1)], networks='random', n_agents=500, verbose=0).run()
     anemia = sim2.diseases.anemia
-    assert sim2.results.anemia.n_anemic[-1] > 400 # Anemia(p_onset=0.1) for 50 years
+    assert sim2.results.anemia.anemic[-1] > 400 # Anemia(p_onset=0.1) for 50 years
     assert sim2.results.background.new_infections.sum() == 0 # Not transmitted
     assert isinstance(anemia, ss.Disease) and not isinstance(anemia, ss.Infection) and isinstance(sim2.diseases.background, ss.Disease)
     assert not hasattr(anemia, 'susceptible') and 'infect' not in anemia.describe(output=True) # No states of an infection forced on it
@@ -306,7 +306,7 @@ def test_mtct():
     if do_plot:
         sim.plot()
     res = sim.results
-    assert np.array_equal(res.sis.n_S + res.sis.n_I, res.n_alive + res.pregnancy.n_unborn) # Everyone is in a state of the declared SIS, the unborn too (so they can be infected before birth), though they are not counted among the people
+    assert np.array_equal(res.sis.S + res.sis.I, res.alive + res.pregnancy.n_unborn) # Everyone is in a state of the declared SIS, the unborn too (so they can be infected before birth), though they are not counted among the people
     return sim
 
 
@@ -518,7 +518,7 @@ def test_strains_results():
     assert np.array_equal(res.hpv.infected, union) and coinfected.max() > 0 # A union, not a sum: the co-infected are counted once
     assert np.array_equal(res.hpv.cancer, sum(res[name].cancer for name in names)) # A flow is a sum
     assert np.array_equal(res.hpv.infected.by('strain')[:, 1], res.hpv18.infected) # Each member's own
-    assert two_cancers.max() == 0 and res.hpv.n_X[-1] > 0 # One cancer per person: the others move to X
+    assert two_cancers.max() == 0 and res.hpv.X[-1] > 0 # One cancer per person: the others move to X
     assert 'Strains of hpv: 3 with courses of their own' in sim.describe(output=True)
 
     # A union is a condition, with a count of members
@@ -562,7 +562,7 @@ def test_strains_immunity():
         sim = ss.Sim(diseases=hpv, n_agents=20_000, start=2000, stop=2002, dt=1/52, verbose=0).init()
         sim.diseases.b.move_to(sim.people.auids, 'R')
         sim.diseases.a.move_to(sim.people.auids, 'I')
-        left.append(sim.run().results.a.n_I[52]/20_000)
+        left.append(sim.run().results.a.I[52]/20_000)
     assert np.allclose(left, [np.exp(-1), np.exp(-2)], atol=0.01)
     return sim
 
@@ -604,7 +604,7 @@ def test_strains_immunity_attr():
     sim = ss.Sim(diseases=hpv, n_agents=20_000, start=2000, stop=2002, dt=1/52, verbose=0).init()
     sim.diseases.b.nab.raw[:] = 0.625
     sim.diseases.a.move_to(sim.people.auids, 'I')
-    assert np.isclose(sim.run().results.a.n_I[52]/20_000, np.exp(-2), atol=0.01)
+    assert np.isclose(sim.run().results.a.I[52]/20_000, np.exp(-2), atol=0.01)
 
     # The same as a modifier on each genotype, as HPVsim writes it outside a family (the family reads every member's antibodies once a step, and a modifier when its genotype's rel_sus is worked out, so they differ within noise)
     pars = dict(n_agents=2000, start=2000, stop=2010, dt=0.25, verbose=0)
@@ -696,8 +696,8 @@ def test_strains_compartmental():
     alone = ss.Sim(diseases=[make('a', 3, init_prev=0.05), make('b', 2, init_prev=0.05)], solver='ode', total_pop=10_000, **pars).run()
     sim = ss.Sim(diseases=family([make('a', 3, init_prev=0.05), make('b', 2, init_prev=0.05)]), total_pop=10_000, **pars).run()
     res = sim.results
-    assert sim.solver == 'ode' and np.array_equal(res.a.n_I, alone.results.a.n_I) and np.array_equal(res.b.n_I, alone.results.b.n_I) # Bit for bit
-    assert np.allclose(res.hpv.n_I, 10_000*(1 - (1 - res.a.n_I/10_000)*(1 - res.b.n_I/10_000)))
+    assert sim.solver == 'ode' and np.array_equal(res.a.I, alone.results.a.I) and np.array_equal(res.b.I, alone.results.b.I) # Bit for bit
+    assert np.allclose(res.hpv.I, 10_000*(1 - (1 - res.a.I/10_000)*(1 - res.b.I/10_000)))
 
     # Strains that affect each other (immunity=, shared states) need agents: auto runs them as agents, and a compartmental solver refuses, whatever approx=
     families = [lambda: family([make('a', 3), make('b', 2.5)], immunity=ss.immunity(due_to='R', rel_sus=0.3), init_prev=0.1),
@@ -794,7 +794,7 @@ def test_strains_errors():
 def test_current_state():
     sc.heading('Testing current_state(): the index of the state each agent is in')
     S, I, R = ss.states('S I R')
-    sir = ss.Disease(name='sir', infection=ss.Transition(S, I, rate=0.3 * I), recovery=ss.Transition(I, R, dur=4))
+    sir = ss.Disease(name='sir', infection=ss.Transition(S, I, rate=0.3 * I), recovery=ss.Transition(I, R, dur=4), init_prev=0) # Nobody seeded, so only the moves below
     sim = ss.Sim(diseases=sir, n_agents=100, stop=2001, verbose=0).init()
     sir = sim.diseases.sir
     sir.move_to(ss.uids([0, 1]), 'I')
@@ -810,7 +810,7 @@ def test_current_state():
     with pytest.raises(ss.errors.UnknownState):
         sir.current_state(['X'])
     res = sim.run().results.sir
-    assert (res.n_I[0], res.n_R[0]) == (2, 1) # The start counts the agents moved before the first step
+    assert (res.I[0], res.R[0]) == (2, 1) # The start counts the agents moved before the first step
     S, I, R = ss.states('S I R')
     ode = ss.Sim(diseases=ss.Disease(name='sir', infection=ss.Transition(S, I, rate=0.3 * I), recovery=ss.Transition(I, R, dur=4)), stop=2001, verbose=0).init()
     with pytest.raises(ss.CapabilityError, match='agents'):
@@ -853,7 +853,7 @@ def test_mixed_disease():
     mixed = sim.diseases.mixed
     assert sim.solver == 'abm' # The coded array needs agents
     assert mixed.results.infection.sum() > 0 and mixed.years_infected.sum() > 0 # Both parts ran
-    assert np.isclose(mixed.years_infected.sum(), mixed.results.n_I[1:].sum()*sim.t.dt_year) # One step for each step spent infected
+    assert np.isclose(mixed.years_infected.sum(), mixed.results.I[1:].sum()*sim.t.dt_year) # One step for each step spent infected
     with pytest.raises(ss.CapabilityError, match='never calls'): # A declared transition never calls set_prognoses()
         type('Bad', (ss.SIS,), dict(set_prognoses=lambda self, uids, sources=None: None))
     return sim
@@ -881,12 +881,12 @@ def test_code_seams():
     assert list(tb.strats.age.edges) == [0, 15]
     assert sum(len(uids) for uids in seen) == tb.results.diagnosis.sum() == tb.count_diagnosis.raw.sum()
     assert tb.results.fast.sum() > 0 and sim.results.give.delivered.sum() > 0 # Those diagnosed in the last year, then cured by holding a product of the kind
-    assert np.isclose(tb.count(tb.I), tb.results.n_I[-1]) and np.isclose(tb.count(), sim.results.n_alive[-1])
+    assert np.isclose(tb.count(tb.I), tb.results.I[-1]) and np.isclose(tb.count(), sim.results.alive[-1])
     assert np.allclose(np.ones(2)*(1 - tb.pars.eff), 0.1) # A declared parameter read by code during a run is its number
     S, I = ss.states('S I')
     sis = ss.Disease(S >> I @ ss.peryear(2)*I, I >> S @ ss.years(1), ss.death(rate=ss.peryear(0.02)), init=dict(I=0.05), name='sis')
     ode = ss.Sim(sis, total_pop=1000, start=2000, stop=2004, verbose=0).run() # The people results agents give the sim
-    assert np.isclose(ode.results.n_alive[-1], ode.diseases.sis.count()) and np.isclose(ode.results.cum_deaths[-1], 1000 - ode.results.n_alive[-1])
+    assert np.isclose(ode.results.alive[-1], ode.diseases.sis.count()) and np.isclose(ode.results.cum_deaths[-1], 1000 - ode.results.alive[-1])
     return sim
 
 

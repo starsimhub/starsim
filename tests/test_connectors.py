@@ -104,7 +104,7 @@ def test_connectors(do_plot=False):
     sims.nocon = ss.Sim(label='Without connector', **args).run()
     sims.treat = ss.Sim(label='With treatment', connectors=hiv_sis(), interventions=TreatSIS(), **args).run()
     diseases = ['sis', 'hiv']
-    results = sc.odict({sim.label: sc.objdict({d: sim.results[d].n_infected for d in diseases}) for sim in sims.values()})
+    results = sc.odict({sim.label: sc.objdict({d: sim.results[d].infected for d in diseases}) for sim in sims.values()})
 
     if do_plot:
         plt.figure()

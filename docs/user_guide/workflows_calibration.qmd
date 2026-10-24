@@ -163,7 +163,7 @@ Before calibrating, it can help to know which parameters the results depend on a
 
 ```{python}
 sens = sim.sensitivity(n=50, verbose=False)
-sens[['sir.n_I peak', 'sir.infection total']]
+sens[['sir.I peak', 'sir.infection total']]
 ```
 
 ## Your own goodness of fit
@@ -268,14 +268,14 @@ beta = ss.perday(0.3)*(1 - 0.5*coverage(tests, 10) - 0.25*coverage(nets, 10))
 sir = ss.Disease(S >> I @ beta*I.frac, I >> R @ ss.days(10), init_prev=0.001, name='sir')
 sim = ss.Sim(sir, total_pop=10_000, start='2025-01-01', stop='2025-06-01', verbose=0)
 
-best = ss.fit.optimize(sim, spend=['tests', 'nets'], minimize='sir.n_R', verbose=False)
+best = ss.fit.optimize(sim, spend=['tests', 'nets'], minimize='sir.R', verbose=False)
 best.summarize()
 ```
 
 `bounds=` limits what each program can have, by name (e.g. `bounds=dict(tests=(None, 60e3))`, with `None` for no limit), and `target=` asks instead for the least total that reaches a value of the result:
 
 ```{python}
-least = ss.fit.optimize(sim, spend=['tests', 'nets'], minimize='sir.n_R', target=best.value_before, verbose=False)
+least = ss.fit.optimize(sim, spend=['tests', 'nets'], minimize='sir.R', target=best.value_before, verbose=False)
 least.summarize()
 ```
 

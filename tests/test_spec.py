@@ -58,8 +58,8 @@ def write_data():
 def check_growth(sim, where):
     """ Each declared disease with an n_I result must have more people in I at some point than at the start """
     for name in sim.diseases.keys():
-        if name in sim.results and 'n_I' in sim.results[name]:
-            n_I = np.asarray(sim.results[name].n_I)
+        if name in sim.results and 'I' in sim.results[name]:
+            n_I = np.asarray(sim.results[name].I)
             if n_I.ndim > 1: # Several runs
                 n_I = n_I.mean(axis=0)
             assert n_I.max() > n_I[0], f'{where}: "{name}" does not grow (n_I starts at {n_I[0]:n} and peaks at {n_I.max():n})'

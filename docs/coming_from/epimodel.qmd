@@ -53,7 +53,7 @@ partners = ssl.DegreeNet(n_contacts=0.7, concurrency=0.22, max_contacts=3, dur=5
 sim = ss.Sim(sis, networks=partners, n_agents=500, stop=500, verbose=0)
 
 msim = sim.run(n_runs=10)
-n_I = np.asarray(msim.results.sis.n_I.values) # One row per run
+n_I = np.asarray(msim.results.sis.I.values) # One row per run
 print(f'Infected over the last 200 steps: {n_I[:, -200:].mean():.0f} of 500')
 msim.plot()
 ```
@@ -113,7 +113,7 @@ sim.stratify(risk=['low', 'high'], split=[0.8, 0.2])
 sim.run()
 
 res = sim.results.sis
-n_I, n_S = np.asarray(res.n_I.strata)[150:], np.asarray(res.n_S.strata)[150:] # After a burn-in
+n_I, n_S = np.asarray(res.I.strata)[150:], np.asarray(res.S.strata)[150:] # After a burn-in
 low, high = (n_I/(n_I + n_S)).mean(axis=0)
 print(f'Prevalence: {low:.1%} low risk, {high:.1%} high risk (EpiModel: 20.7%, 77.4%)')
 ```

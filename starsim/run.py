@@ -36,7 +36,7 @@ class MultiSim:
 
     Once run, a MultiSim has:
 
-    - `results`: every result with a run axis first (see `ss.Result`), e.g. `msim.results.sir.n_I.quantiles()`;
+    - `results`: every result with a run axis first (see `ss.Result`), e.g. `msim.results.sir.I.quantiles()`;
     - `runs`: one row per run, with its scenario (the label of its sim) and the values of any parameters swept;
     - `sims`: the sims that were run (for runs restarted from one compartmental sim, that sim, as it was after its last run).
 
@@ -534,7 +534,7 @@ class MultiSim:
         Plot the results across the runs: the median and a 95% interval of each scenario, or every run if `lines=True`
 
         Args:
-            key (str/list): the result (e.g. `'sir.n_I'`) or results to plot; by default, those that `sim.plot()` shows
+            key (str/list): the result (e.g. `'sir.I'`) or results to plot; by default, those that `sim.plot()` shows
             fig (Figure): if provided, plot results into an existing figure
             legend (bool): whether to label the scenarios, if there is more than one
             lines (bool): plot every run instead of the median and interval
@@ -665,7 +665,7 @@ class MultiResults(ss.Results):
     """
     The results of the runs of a MultiSim: the results of a sim, each with a run axis first
 
-    Each result is an `ss.Result` (see there for what one across runs does), e.g. `msim.results.sir.n_I.quantiles()`.
+    Each result is an `ss.Result` (see there for what one across runs does), e.g. `msim.results.sir.I.quantiles()`.
     """
     def to_df(self, quantiles=None, **kwargs):
         """ Every result across the runs, as a long dataframe with columns for the module and result: one row per run and time (see `ss.Result.to_df()`), or with `quantiles=`, per scenario, quantile, and time """
@@ -929,7 +929,7 @@ def parallel(*args, n_runs=None, pars=None, priors=False, **kwargs):
 
     Returns:
         A run MultiSim. Each result is available across the runs, with the label of each sim as its scenario,
-        e.g. `msim.results.sir.n_I.quantiles([0.025, 0.5, 0.975])`.
+        e.g. `msim.results.sir.I.quantiles([0.025, 0.5, 0.975])`.
 
     Examples:
         ```python
