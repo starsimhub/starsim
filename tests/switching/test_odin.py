@@ -48,7 +48,7 @@ def make_seir(fitted=False):
     seir = ss.Disease(infection, E >> I @ ss.perday(0.2), I >> R @ gamma, cases, init_n=dict(I=ss.by(age=[10, 0, 0, 0])), name='seir')
     seir.stratify(age=ages, split=pop/pop.sum())
     data = pd.DataFrame(dict(time=7*np.arange(1, 41), cases=ref_cases)) if fitted else None
-    return ss.Sim(seir, networks=ss.contacts(m, bands=ages), total_pop=pop.sum(), unit='day', dt=0.25, stop=280 if fitted else 365,
+    return ss.Sim(seir, networks=ss.contacts(m, ages=ages), total_pop=pop.sum(), unit='day', dt=0.25, stop=280 if fitted else 365,
                   solver='binomial', use_aging=False, data=data, verbose=0)
 
 
@@ -84,7 +84,7 @@ def test_odin_filter():
     step_us = T.toc(output=True)/(n*sim.t.npts)*1e6
     assert np.isfinite(loglik)
     assert step_us < 3*ref_step_us, f'Filter {step_us:.1f} µs per particle-step, against 3 × {ref_step_us} µs for dust'
-    # The fit itself, fit = sim.calibrate(method='pmcmc'), is 4 chains of particle MCMC at 1,000 particles; it is too slow for CI until this passes
+    # The fit itself, fit = sim.fit(method='pmcmc'), is 4 chains of particle MCMC at 1,000 particles; it is too slow for CI until this passes
     return step_us
 
 

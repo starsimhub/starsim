@@ -73,7 +73,7 @@ def test_atomica_calibrate():
     sim.describe(output=True) # Every rate as it was read from the workbook
     data = pd.DataFrame(dict(year=np.arange(2000, 2019), ch_prev=ref_prev))
     sim = sim.new(pars=dict(transpercontact=ss.par(0.008, bounds=[0.0008, 0.024]), recrate=ss.par(5.0, bounds=[0.5, 15])))
-    fit = sim.calibrate(data=data, verbose=0)
+    fit = sim.fit(data=data, verbose=0)
     prev = np.array([at_year(fit.sim, 'ch_prev', y) for y in data.year])
     err = np.mean(abs(prev - ref_prev))/np.mean(ref_prev)
     assert err < ref_calib_err/10, f'The fit is off by {err:.2%} on average, against {ref_calib_err:.1%} for Atomica'

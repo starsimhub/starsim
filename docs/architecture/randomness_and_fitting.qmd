@@ -79,7 +79,7 @@ A related check is `sim.check_dt()`, which reruns the sim at half the timestep a
 
 ## Calibration: bounds plus data
 
-If parameters have bounds and results have data, calibration is one call. The bounds are on the parameter, where they belong (`ss.par(0.2, bounds=[0.05, 0.5])`); the data is on the sim, matched to results by column name. `sim.calibrate()` fits every parameter that has bounds to every result that has data:
+If parameters have bounds and results have data, calibration is one call. The bounds are on the parameter, where they belong (`ss.par(0.2, bounds=[0.05, 0.5])`); the data is on the sim, matched to results by column name. `sim.fit()` fits every parameter that has bounds to every result that has data:
 
 ```{python}
 import pandas as pd
@@ -96,13 +96,13 @@ weekly = truth.results.sir.cases.resample('week')
 data = pd.DataFrame(dict(date=weekly.timevec, cases=weekly.values.round()))
 
 sim = ss.Sim(sir, data=data, **kw)
-fit = sim.calibrate()
+fit = sim.fit()
 fit.table
 ```
 
 There is no build function, extraction function, or alignment keyword: the model already knows where each parameter lives, what the result is called, and that `cases` is a flow (summed over each week of data) while a prevalence would be a stock (read at the data's dates).
 
-The default measure of fit is the normalized absolute error (for each series, the mean of |model − data| over the mean of the data). It needs no noise model, puts series of different sizes on one scale, and isn't dominated by one bad week. A likelihood is optional, on an outcome (`likelihood=ss.nbinom(n=ss.par(10, bounds=[0.1, 100]))`) or as `calibrate(likelihood=...)`; with one for every series, the posterior methods become available.
+The default measure of fit is the normalized absolute error (for each series, the mean of |model − data| over the mean of the data). It needs no noise model, puts series of different sizes on one scale, and isn't dominated by one bad week. A likelihood is optional, on an outcome (`likelihood=ss.nbinom(n=ss.par(10, bounds=[0.1, 100]))`) or as `fit(likelihood=...)`; with one for every series, the posterior methods become available.
 
 ## How the method is chosen
 

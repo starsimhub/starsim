@@ -78,7 +78,7 @@ sim.run()
 sim.plot()
 ```
 
-With data attached (`ss.Sim(..., data=...)`, a table with columns `time` and `cases`), `sim.calibrate()` fits `beta` and `gamma` (a best fit); `sim.calibrate(method='nuts')` gives the posterior, or `method='pmcmc'` with `solver='binomial'`.
+With data attached (`ss.Sim(..., data=...)`, a table with columns `time` and `cases`), `sim.fit()` fits `beta` and `gamma` (a best fit); `sim.fit(method='nuts')` gives the posterior, or `method='pmcmc'` with `solver='binomial'`.
 
 ## How the results agree
 
@@ -88,7 +88,7 @@ With data attached (`ss.Sim(..., data=...)`, a table with columns `time` and `ca
 | An SEIR by 3 ages × 2 patches, with a contact matrix, aging, movement, and vaccination on day 20 | Agree: as an ODE, the infectious in every cell within 0.24%, with and without vaccination; stochastic peaks agree in size, and the south's epidemic rises about a day sooner at a step of a day (less at a quarter-day step) |
 | camdl's 5-patch polio model with gravity importation and three SIA rounds per patch | Agree: total `I` peaks at 130,643 on day 145, as in camdl's ODE and an independent SciPy ODE; total infections over three years are 950,610 without SIAs and 863,920 with them, the same as camdl's |
 | Fitting the SIR to 12 weeks of cases by particle MCMC | Agree: `beta` 0.427 (95% from 0.348 to 0.528) against camdl PMMH's 0.430 (0.348 to 0.523), and `gamma` 0.152 (0.061 to 0.333) against 0.159 (0.062 to 0.303) |
-| The same, by maximum likelihood (IF2, `sim.calibrate(method='if2')`) | Agree: `beta` 0.474 and `gamma` 0.235 against camdl IF2's 0.480 and 0.230; four chains from different starts end within 0.1 of the same log-likelihood |
+| The same, by maximum likelihood (IF2, `sim.fit(method='if2')`) | Agree: `beta` 0.474 and `gamma` 0.235 against camdl IF2's 0.480 and 0.230; four chains from different starts end within 0.1 of the same log-likelihood |
 
 ## Timings
 
@@ -112,9 +112,9 @@ These are from Starsim's switching demo for camdl users (`tests/switching/test_c
 | The polio model with places as `patch=` and an explicit contact matrix between them | **Works**: agreement as above, below |
 | SIAs as one-off moves between states (camdl's `transfer(S -> V)`) | **Works**: `ss.vaccinate(move=S >> V, at=[...], coverage=...)`, below. A one-off move is run from Python each step, not in the compiled kernels |
 | Unit slips that camdl's checker catches | **Works** for two of three: a duration used as a rate, and a rate multiplied by a duration (a number with no unit), raise `ss.errors.WrongDimension` before the run. A count where a share was meant (`I.n` for `I`) is density-dependent transmission, a model of its own, so it is a note; if it makes the run blow up, the run stops with an error, not with NaN |
-| A posterior by particle MCMC with nothing written but `data=` and `sim.calibrate(method='pmcmc')` | **Works**: the same posterior as camdl's PMMH (above) |
+| A posterior by particle MCMC with nothing written but `data=` and `sim.fit(method='pmcmc')` | **Works**: the same posterior as camdl's PMMH (above) |
 | The speed of the particle filter | **Works**: 12 ms per likelihood against camdl's 10.4 ms (above), with the particles shared between threads |
-| Maximum likelihood by IF2 | **Works**: `sim.calibrate(method='if2')` gives camdl's estimates (above), for parameters of the model's rates; a parameter of how the data are observed (a reporting rate) cannot be fitted by IF2 yet |
+| Maximum likelihood by IF2 | **Works**: `sim.fit(method='if2')` gives camdl's estimates (above), for parameters of the model's rates; a parameter of how the data are observed (a reporting rate) cannot be fitted by IF2 yet |
 | Profile likelihoods | **Works** for an ODE: `ss.fit.profile(sim, 'beta')` refits the other parameters at each value of `beta` and gives its confidence interval; a stochastic model raises an error, since its noisy likelihoods would need a smoothed profile, which is not yet supported |
 | Import a `.camdl` file | **Works** (see below), with every stratification expanded into states, so a stratified model comes in as one state per combination of levels |
 | Interventions in a scenario (SIAs) in an imported model | **Not yet**: they are listed as not translated |

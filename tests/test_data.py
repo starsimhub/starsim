@@ -29,7 +29,7 @@ def test_contacts():
     assert home.name == 'home' and home.ref['place'] == 'Kenya' and home.ref['source'] == 'prem2021'
     matrix = ssd.load('Kenya', which='prem2021', kind='all').values
     named = ss.contacts('KE') # By code, as by name
-    given = ss.contacts(matrix, bands=list(range(0, 80, 5)))
+    given = ss.contacts(matrix, ages=list(range(0, 80, 5)))
     sims = [ss.Sim(make_sir(), networks=net, stratify=dict(age=[0, 5, 18, 65]), total_pop=10_000, unit='day', stop=60, **kw).run() for net in [named, given]]
     assert not np.allclose(sims[0].results.sir.I, sims[1].results.sir.I) # A country's matrix brings its people's ages, so has 44% under 18 rather than the world's 30%
     sims[1] = ss.Sim(make_sir(), networks=given, people=ss.people('Kenya'), stratify=dict(age=[0, 5, 18, 65]), total_pop=10_000, unit='day', stop=60, **kw).run()

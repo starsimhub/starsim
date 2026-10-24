@@ -312,7 +312,7 @@ def load_camdl(filename, pars=None, scenario=None, solver='ode', camdlc=None, ve
                 continue
         elif pkind in ['current_pop', 'derived_expr']:
             src.results[oname] = pval if pkind == 'current_pop' else expr(pval, m, set())
-            src.skip(f'{oname} (likelihood)', 'an observation of a number in states, imported as a result; give its likelihood when calibrating (sim.calibrate(likelihood=...))')
+            src.skip(f'{oname} (likelihood)', 'an observation of a number in states, imported as a result; give its likelihood when calibrating (sim.fit(likelihood=...))')
             continue
         else:
             src.skip(oname, f'an observation of {pkind}, which has no translation')

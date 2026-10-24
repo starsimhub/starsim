@@ -359,6 +359,18 @@ def check_undriven(sim):
     return
 
 
+def product_keys(kind):
+    """ The keywords of a kind of product (e.g. `efficacy` and `waning` for `ss.Vaccine`), which its delivery takes to make one """
+    if kind is None:
+        return []
+    keys = []
+    for cls in kind.__mro__:
+        init = cls.__dict__.get('__init__')
+        if init is not None and issubclass(cls, ss.products.Product):
+            keys += [key for key in inspect.signature(init).parameters if key not in keys + ['self', 'name', 'label', 'args', 'kwargs']]
+    return keys
+
+
 class Delivery(ss.products.EventSource, Intervention):
     """
     Deliver a product, or move people along a stratification; see `ss.vaccinate()`, `ss.screen()`, and `ss.treat()`
@@ -381,7 +393,7 @@ class Delivery(ss.products.EventSource, Intervention):
     an `administer(uids)` method.
 
     Args:
-        what (`ss.Product`): what is delivered: an `ss.Vaccine`, `ss.Diagnostic`, or `ss.Treatment` (also the first argument)
+        what (`ss.Product`): what is delivered: an `ss.Vaccine`, `ss.Diagnostic`, or `ss.Treatment` (also the first argument); `ss.vaccinate()`, `ss.screen()`, and `ss.treat()` instead take the product's own keywords and make it, e.g. `ss.vaccinate(efficacy=0.9, ...)`
         who (Cond/event/list): who receives it: a condition (e.g. `ss.ppl.age < 5`), an event (e.g. `sir.infection`, `screening.positive`,
             or a delivery), or a combination with `&` and `|` (an event `|` a condition raises, being neither triggered nor routine);
             or a list, joined by `operator=`; or a function of the sim
@@ -445,6 +457,12 @@ class Delivery(ss.products.EventSource, Intervention):
                  delay=None, disease=None, at_age=None, strain=None, name=None, label=None, **kwargs):
         product = what
         trigger, eligible = ss.conditions.split_who(who, operator=operator, where=where, on=on)
+        own = {key:kwargs.pop(key) for key in product_keys(self.kind) if key in kwargs} # The product's own keywords, e.g. ss.vaccinate(efficacy=0.9, ...)
+        if own:
+            if product is not None:
+                errormsg = f'{sc.strjoin(f"{key}=" for key in own)} {"is" if len(own) == 1 else "are"} for the product, which is given already; give {"it" if len(own) == 1 else "them"} to the product, or leave the product out and ss.{type(self).__name__}() makes one'
+                raise ValueError(errormsg)
+            product = self.kind(**own)
         super().__init__(name=name, label=label, **kwargs)
         self.move_states = None # With move=S >> V: the names of the states people move from (a list), and the one they move to
         self.move_module = None # And the module of those states (as an object until named), which the delivery acts on
@@ -1651,8 +1669,7 @@ class vaccinate(Delivery):
         ```python
         S, I, R = ss.states(3)
         sir = ss.Disease(infection=S >> I @ 0.3*I, recovery=ss.Transition(I, R, dur=10), init_prev=0.01)
-        vaccine = ss.Vaccine(efficacy=0.85)
-        campaign = ss.vaccinate(vaccine, coverage=0.7, at=[20, 40])
+        campaign = ss.vaccinate(efficacy=0.85, coverage=0.7, at=[20, 40]) # Makes the vaccine, ss.Vaccine(efficacy=0.85)
         sim = ss.Sim(sir, interventions=campaign, stop=100).run()
         ```
     """
@@ -1667,8 +1684,7 @@ class treat(Delivery):
         ```python
         S, I, R = ss.states(3)
         sir = ss.Disease(infection=S >> I @ 0.3*I, recovery=ss.Transition(I, R, dur=10), init_prev=0.01)
-        drug = ss.Treatment(cure=0.95)
-        treatment = ss.treat(drug, coverage=0.5, interval=7)
+        treatment = ss.treat(cure=0.95, coverage=0.5, interval=7) # Makes the drug, ss.Treatment(cure=0.95)
         sim = ss.Sim(sir, interventions=treatment, stop=100).run()
         ```
     """
@@ -1688,9 +1704,8 @@ class screen(Delivery):
         ```python
         S, I, R = ss.states(3)
         sir = ss.Disease(infection=S >> I @ 0.3*I, recovery=ss.Transition(I, R, dur=10), init_prev=0.01)
-        test = ss.Diagnostic(sensitivity=0.9, specificity=0.98)
-        screening = ss.screen(test, coverage=0.4, interval=7)
-        treatment = ss.treat(ss.Treatment(cure=0.95), who=screening.positive, coverage=0.8)
+        screening = ss.screen(sensitivity=0.9, specificity=0.98, coverage=0.4, interval=7)
+        treatment = ss.treat(cure=0.95, who=screening.positive, coverage=0.8)
         sim = ss.Sim(sir, interventions=[screening, treatment], stop=100).run()
         ```
     """

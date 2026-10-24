@@ -7,7 +7,7 @@ recovery = I >> R @ ss.days(6)
 cases = ss.outcome(0.3 * infection)
 sir = ss.Disease(infection, recovery, cases, init=dict(I=20), name='sir')
 sim = ss.Sim(sir, data=df, total_pop=1e5, start='2025-01-06', stop='2025-06-01')
-fit = sim.calibrate()
+fit = sim.fit()
 print(fit)
 b = fit.sim.diseases.sir.pars.beta
 print('beta', b, 'R0', float(getattr(b,'value',b))*6)

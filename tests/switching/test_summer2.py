@@ -112,7 +112,7 @@ def test_summer2_nuts():
     in_jax, from_sim = jax_logdensity(runner, np.array([10.2, 1.53]))
     assert np.isclose(in_jax, from_sim, rtol=1e-6), f'The JAX log-density ({in_jax:.6g}) differs from the sim\'s ({from_sim:.6g})'
     with ss.options.context(warnings='error'): # Falling back to Python in the loop is a failure here
-        fit = sim.calibrate(method='nuts', likelihood=lik, warmup=10, draws=10, chains=2, verbose=0) # About 15 s with JAX's cache warm
+        fit = sim.fit(method='nuts', likelihood=lik, warmup=10, draws=10, chains=2, verbose=0) # About 15 s with JAX's cache warm
     assert fit.diagnostics.divergences == 0, f'{fit.diagnostics.divergences} draws diverged'
     assert np.isclose(fit.pars.detect_max, 1.5, rtol=0.05) and np.isclose(fit.pars.beta, 10, rtol=0.05)
     return fit

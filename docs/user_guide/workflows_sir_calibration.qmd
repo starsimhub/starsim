@@ -5,7 +5,7 @@ jupyter: python3
 
 Here we build a simple agent-based susceptible-infected-recovered (SIR) model, with transmission through a mixing pool, and use it to test two calibration workflows. The goal is to check that they can re-identify a known "true" set of parameters from synthetic data, and to explore the resulting latent trajectories. The two workflows are:
 
-1. [Likelihood maximization with `sim.calibrate()`](#optimization), which uses the [Optuna](https://optuna.org/) package for a stochastic model
+1. [Likelihood maximization with `sim.fit()`](#optimization), which uses the [Optuna](https://optuna.org/) package for a stochastic model
 2. [Posterior sampling with a simple Bayesian workflow](#sampling)
 
 Re-identifying known parameter values from synthetic data provides reassurance that the calibration workflow is functioning as expected. For a more realistic Starsim calibration example, please see [Calibration](workflows_calibration.qmd).
@@ -23,7 +23,7 @@ ss.options(jupyter=True)
 
 ## SIR model setup
 
-First, we write the model. The two parameters we want to identify are the transmission rate `beta` and the recovery rate `gamma`, both per day. Each is an `ss.par` with `bounds`, which is what makes it a parameter that `sim.calibrate()` fits. The disease also declares a result, `prevalence`, the fraction of people who are infected, which is what our data will measure. The mixing pool gives each person 2 contacts per day on average, and `n_agents=500` makes the sim run as agents, so the model is stochastic.
+First, we write the model. The two parameters we want to identify are the transmission rate `beta` and the recovery rate `gamma`, both per day. Each is an `ss.par` with `bounds`, which is what makes it a parameter that `sim.fit()` fits. The disease also declares a result, `prevalence`, the fraction of people who are infected, which is what our data will measure. The mixing pool gives each person 2 contacts per day on average, and `n_agents=500` makes the sim run as agents, so the model is stochastic.
 
 ```{python}
 def make_sim(beta=0.1, gamma=0.05, data=None):
@@ -76,15 +76,15 @@ sc.dateformatter(ax=ax);
 
 Data is attached to results by name: the column `prevalence` is compared with the result `prevalence`. The data has a `date` column, so each survey is compared with the model on that date.
 
-## Likelihood maximization with `sim.calibrate()` {#optimization}
+## Likelihood maximization with `sim.fit()` {#optimization}
 
-`sim.calibrate()` fits every parameter that has bounds to every result that has data. Without a likelihood, it minimizes the normalized absolute error between the model and the data. Here we give it a likelihood instead: each survey is a binomial draw from the 500 people surveyed, with the model's prevalence as the probability of testing positive. With `ss.binom(n=...)` as the likelihood, the data are the numbers who tested positive, as above.
+`sim.fit()` fits every parameter that has bounds to every result that has data. Without a likelihood, it minimizes the normalized absolute error between the model and the data. Here we give it a likelihood instead: each survey is a binomial draw from the 500 people surveyed, with the model's prevalence as the probability of testing positive. With `ss.binom(n=...)` as the likelihood, the data are the numbers who tested positive, as above.
 
 Since the model runs as agents, the fit uses Optuna, scoring each set of values by one run, with a fresh random seed at each point. The model starts from `beta=0.1` and `gamma=0.05`, away from the true values.
 
 ```{python}
 sim = make_sim(data=data)
-fit = sim.calibrate(
+fit = sim.fit(
     likelihood = dict(prevalence=ss.binom(n=n_survey)), # Each survey is a binomial draw
     trials     = 60,  # Kept modest so the docs build quickly; use more for a real calibration
     rand_seed  = 1,   # For a reproducible fit
@@ -288,4 +288,4 @@ plt.tight_layout()
 
 The next step would be scenario analysis using these $K$ resampled parameters and latent trajectories. Each of these $K$ samples represents a different possible future trajectory of the epidemic, and the ensemble of these $K$ trajectories can be used to quantify uncertainty in future projections. Each of these $K$ trajectories should be simulated forward $M$ times for each scenario, using common random numbers, to produce final results.
 
-For a deterministic or stochastic compartmental model (`solver='ode'`, `'binomial'`, `'gillespie'`, or `'tau'`), `sim.calibrate()` can also give a posterior directly, from the No-U-Turn sampler or particle MCMC; see [Calibration](workflows_calibration.qmd).
+For a deterministic or stochastic compartmental model (`solver='ode'`, `'binomial'`, `'gillespie'`, or `'tau'`), `sim.fit()` can also give a posterior directly, from the No-U-Turn sampler or particle MCMC; see [Calibration](workflows_calibration.qmd).

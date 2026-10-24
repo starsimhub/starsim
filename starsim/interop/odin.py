@@ -571,7 +571,7 @@ def load_odin(filename, unit='day', stop=None, pars=None, verbose=None, **kwargs
             src.skip(f'{var} ~ {rhs}', why)
     for var in data:
         if var not in src.outcomes:
-            src.skip(f'{var} (data)', 'data with no likelihood (~) that was translated; give it when calibrating (sim.calibrate(likelihood=...))')
+            src.skip(f'{var} (data)', 'data with no likelihood (~) that was translated; give it when calibrating (sim.fit(likelihood=...))')
 
     # Parameters: those the flows and expressions use
     for f in src.flows:

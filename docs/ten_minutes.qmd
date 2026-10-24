@@ -114,11 +114,11 @@ data = pd.DataFrame(dict(date=weekly.index, cases=np.random.default_rng(1).poiss
 data.head()
 ```
 
-`sim.calibrate()` fits every parameter that has bounds (here `beta`) to every result that has data:
+`sim.fit()` fits every parameter that has bounds (here `beta`) to every result that has data:
 
 ```{python}
 sim = ss.Sim(sir, data=data, **kw)
-fit = sim.calibrate()
+fit = sim.fit()
 fit.plot()
 ```
 

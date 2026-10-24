@@ -56,7 +56,7 @@ The performance guard is timing-sensitive, so run it on its own on a quiet machi
 | Solver choice (`solvers/choose.py`) | What `'auto'` picks, the notes, and `describe()` | `test_transitions.py::test_auto`, `test_contracts.py`, `test_sim.py` |
 | Interventions and modifiers (`interventions.py`, `products.py`, `connectors.py`, `solvers/deliveries.py`) | Both engines, the loop order, and whether a whole compartmental run is possible | `test_deliveries.py`, `test_interventions.py`, `test_products.py` |
 | The loop or module lifecycle (`loop.py`, `modules.py`, `sim.py`) | Every sim, including modules written as code | `test_loop.py`, `test_sim.py`, `test_baselines.py` |
-| Fitting (`fit.py`, `gradients.py`) | `sim.calibrate()` and every fitting method | `test_contracts_inference.py`, `test_calibration.py`, `test_gradients.py` |
+| Fitting (`fit.py`, `gradients.py`) | `sim.fit()` and every fitting method | `test_contracts_inference.py`, `test_calibration.py`, `test_gradients.py` |
 | The model spec or code writer (`spec.py`, `presentation.py`) | Hashes, `diff()`, `to_code()`, and the exporters | `test_contracts.py::test_code_round_trip`, `test_transitions.py`, `devtests/interop/` |
 | An importer or exporter (`interop/`) | That framework's users, and its switching demo | its file in `devtests/interop/`, and its demo in `switching/` |
 | An error, warning or note (`errors.py`) | The catalog in the spec | `test_errors.py`, `test_spec.py::test_error_catalog` |

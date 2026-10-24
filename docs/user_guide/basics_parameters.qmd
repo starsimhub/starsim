@@ -40,7 +40,7 @@ print(sir.pars)
 ```
 
 - A named parameter is collected into the module's `pars` under its name (here taken from the variable): `sir.pars.beta`.
-- `bounds` is what makes a parameter fittable: `sim.calibrate()` fits every parameter that has bounds to every result that has data (see [Calibration](workflows_calibration.qmd)). A value outside its bounds is an error.
+- `bounds` is what makes a parameter fittable: `sim.fit()` fits every parameter that has bounds to every result that has data (see [Calibration](workflows_calibration.qmd)). A value outside its bounds is an error.
 - `source` (where the number came from) and `doc` (what it means) are free text, shown by `describe()` under the transition that uses the parameter, and kept in the model spec:
 
 ```{python}

@@ -26,7 +26,7 @@ sim.run()
 sim.plot()                                  # results, with the data drawn over 'cases'
 
 # --- calibration: fit what has bounds to what has data ---------------------
-fit = sim.calibrate()
+fit = sim.fit()
 
 # --- an intervention, and scenarios ----------------------------------------
 masks = ss.modify(sir.pars.beta, multiply=0.6, start='2020-03-15')

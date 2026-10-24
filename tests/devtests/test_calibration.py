@@ -40,17 +40,17 @@ def test_particle_mcmc():
 
     # Particle MCMC, for a stochastic compartmental sim whose data has a likelihood (asked for by name: the default is a best fit)
     assert ss.fit.default_method(sim, True)[0] == 'optuna'
-    fit = make(beta=0.3, data=data).calibrate(method='pmcmc', draws=100, warmup=100, chains=2, particles=30, parallel=False, rand_seed=1)
+    fit = make(beta=0.3, data=data).fit(method='pmcmc', draws=100, warmup=100, chains=2, particles=30, parallel=False, rand_seed=1)
     fit.summarize()
     table = fit.table.set_index('par')
     assert fit.method == 'pmcmc'
     assert len(fit.samples) == 200 and len(fit.diagnostics.acceptance) == 2
     assert table.lower.beta < 0.5 < table.upper.beta # The posterior covers the value that made the data
     with pytest.raises(ss.errors.NoPosterior): # A posterior needs a likelihood
-        make(data=data).calibrate(method='pmcmc', gof='nae')
+        make(data=data).fit(method='pmcmc', gof='nae')
 
     # A best fit scores each point by the mean of several runs, with fresh seeds at each point under Optuna, and reports the score of the best values over the first seeds
-    best = make(beta=0.3, data=data).calibrate(method='optuna', trials=8, rand_seed=1)
+    best = make(beta=0.3, data=data).fit(method='optuna', trials=8, rand_seed=1)
     assert len(best.scores) == 4 # The default for a stochastic compartmental sim
     assert ss.fit.Problem(make(data=data).new(solver='abm', n_agents=2000)).n_runs == 1 # But one for agents, whose runs are slow (Optuna's search learns from nearby points)
     assert np.isclose(best.mismatch, np.mean(best.scores))
@@ -85,7 +85,7 @@ def test_fitted_mobility():
     truth = make(away=0.01, solver='ode').run().results.sir
     weekly = np.add.reduceat(truth.cases.values[1:], np.arange(0, len(truth.cases) - 1, 7))[:-1]
     data = pd.DataFrame(dict(cases=np.random.default_rng(1).poisson(weekly)), index=truth.timevec[7::7][:len(weekly)])
-    fit = make(data=data).calibrate(method='if2', particles=100, iterations=10, chains=2, rand_seed=1, verbose=False)
+    fit = make(data=data).fit(method='if2', particles=100, iterations=10, chains=2, rand_seed=1, verbose=False)
     assert 0.005 < fit.table.set_index('par').best.away < 0.02, fit.table
     return fit
 
@@ -103,7 +103,7 @@ def test_fit_inputs(tmp_path):
     res = make().run().results.sir
     flows, stocks = res.S_to_I.resample('year'), res.I.resample('year', kind='ratio') # A flow summed over each year, a stock averaged over it
     df = pd.DataFrame(dict(year=flows.timevec, S_to_I=flows.values, I=stocks.values)).iloc[1:-1]
-    fit = make(beta=0.5, data=df).calibrate(verbose=0)
+    fit = make(beta=0.5, data=df).fit(verbose=0)
     assert np.isclose(fit.pars.beta, 0.3, rtol=1e-3) # Before, 0.279, from data compared a year off
     assert len(fit.trials) < 60 # Before, 3 searches (131 evaluations)
 
@@ -127,14 +127,14 @@ def test_fit_inputs(tmp_path):
     sim = ss.Sim(diseases=ss.SIS(dt=ss.years(1)), networks=net, interventions=cure(p=ss.par(0.1, bounds=[0.01, 0.5])), n_agents=300, start=2000, stop=2010, data=data, verbose=0)
     sim.pars.diseases.pars.init_prev = 0.2 # Changed after the sim was built: the fit's runs use it too
     with pytest.raises(ss.errors.UnknownDataColumn): # Compared with the results, the column must match one
-        sim.calibrate()
+        sim.fit()
     loss = lambda sim: abs(sim.results.sis.prevalence[-1] - 0.1)
     path = tmp_path/'fit.log'
-    fit = sim.calibrate(gof=loss, trials=6, n_workers=2, storage=path, verbose=0)
+    fit = sim.fit(gof=loss, trials=6, n_workers=2, storage=path, verbose=0)
     assert list(fit.pars.keys()) == ['n_contacts', 'p'] and len(fit.trials) == 6
     assert fit.sim.diseases.sis.pars.init_prev.value == 0.2 and fit.sim.interventions.cure.p == fit.sim.interventions.cure.p_retest
     assert np.isfinite(ss.fit.mismatch(fit.sim, fit.sim.data[['sis_prevalence']])) # Before, a broadcast error
-    again = sim.calibrate(gof=loss, trials=8, storage=path, verbose=0) # Resumed: two more trials
+    again = sim.fit(gof=loss, trials=8, storage=path, verbose=0) # Resumed: two more trials
     assert len(again.trials) == 8 and np.allclose(again.trials.objective[:6], fit.trials.objective)
     return fit
 

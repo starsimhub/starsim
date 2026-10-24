@@ -42,9 +42,9 @@ def test_mixed_timesteps():
     # Check that all results are close
     threshold = 0.02
     summary = msim.summarize()
-    for key,res in summary.items():
-        if res.mean:
-            ratio = res.std/res.mean
+    for key,res in summary.iterrows():
+        if res['mean']:
+            ratio = res['std']/res['mean']
             assert ratio < threshold, f'Result {key} exceeds threshold: {ratio:n} > {threshold}'
             print(f'✓ Result {key} within threshold: {ratio:n} < {threshold}')
     return msim

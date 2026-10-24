@@ -80,7 +80,7 @@ def test_multisim():
     assert np.all(low <= mid) and np.all(mid <= high)
     assert np.array_equal(res.median().values, np.median(res.values, axis=0))
     res.median().plot()
-    assert msim.summarize().sis_I.std > 0
+    assert msim.summarize().loc['sis_I', 'std'] > 0
     msim.show()
 
     # Export results

@@ -120,7 +120,7 @@ These are from Starsim's switching demo for flepiMoP users (`tests/switching/tes
 | Task | Today |
 |---|---|
 | Import a configuration and run it as an ODE by place | **Works**, with a list of anything not translated. A parameter drawn from a distribution (`distribution: truncnorm`) is imported with that distribution as its prior |
-| Fit one value per place: `Ro` by county, fitted to weekly hospitalizations by county with a Poisson likelihood | **Works**: `sim.new(pars=dict(Ro=ss.par(ss.by(subpop=[2.2, 2.2, 2.2]), bounds=[1, 4])))` and `calibrate()`; the fitted values are within 5% of the true ones. Data by place are a long table with a `subpop` column |
+| Fit one value per place: `Ro` by county, fitted to weekly hospitalizations by county with a Poisson likelihood | **Works**: `sim.new(pars=dict(Ro=ss.par(ss.by(subpop=[2.2, 2.2, 2.2]), bounds=[1, 4])))` and `fit()`; the fitted values are within 5% of the true ones. Data by place are a long table with a `subpop` column |
 | A Poisson likelihood on data that are not whole numbers (an ODE's output) | **Works**: the likelihood is finite |
 | Runs that each draw their parameters from their priors | **Works**: `ss.parallel(sim, n_runs=, priors=True)` |
 | A hub submission (hubverse columns): 23 quantiles or the runs themselves, by scenario, location, target, and week; incident, cumulative, and peak targets | **Works**: `ss.interop.to_hub(msim, targets=..., origin_date=..., by='subpop', every='week')`, below; `output_type='sample'` gives the runs |

@@ -180,20 +180,20 @@ def sbc_fit(method, truth=0.35, seed=1, quick=True, verbose=False):
     if method == 'if2': # Maximum likelihood of a stochastic compartmental sim, as for particle MCMC below, with data on cases (an outcome, with a delay)
         kw = dict(solver='binomial', total_pop=1e4, dt=ss.days(2), rand_seed=seed + 1)
         sim = corpus.outcomes(beta=0.25, data=simulate(model, truth, seed=seed, **kw), **kw)
-        return sim.calibrate(method=method, likelihood=dict(cases=ss.poisson()), particles=200 if quick else 1000, iterations=30 if quick else 100, chains=2, rand_seed=seed, verbose=verbose)
+        return sim.fit(method=method, likelihood=dict(cases=ss.poisson()), particles=200 if quick else 1000, iterations=30 if quick else 100, chains=2, rand_seed=seed, verbose=verbose)
     elif method == 'pmcmc':
         # A stochastic compartmental sim, made quick: a small population, two-day steps taken whole, and data on infections
         kw = dict(solver='binomial', substeps=1, total_pop=1e4, dt=ss.days(2), rand_seed=seed + 1)
         sim = corpus.outcomes(beta=0.25, data=simulate(model, truth, seed=seed, col='infection', **kw), **kw)
         n, particles = (100, 20) if quick else (300, 50)
-        return sim.calibrate(method=method, likelihood=dict(infection=ss.poisson()), draws=n, warmup=n, chains=2, particles=particles, parallel=False, rand_seed=seed, verbose=verbose) # Not in parallel, since forking after JAX is loaded can deadlock
+        return sim.fit(method=method, likelihood=dict(infection=ss.poisson()), draws=n, warmup=n, chains=2, particles=particles, parallel=False, rand_seed=seed, verbose=verbose) # Not in parallel, since forking after JAX is loaded can deadlock
     sim = corpus.outcomes(beta=0.25, likelihood=ss.poisson(), data=simulate(model, truth, seed=seed)) # Cases, with the likelihood declared on the outcome
     kwargs = dict(
         nuts   = dict(draws=100, warmup=100, chains=2) if quick else dict(draws=500, warmup=500, chains=4),
         **{'abc-smc': dict(particles=60, generations=5) if quick else dict(particles=200, generations=8)},
         optuna = dict(trials=40 if quick else 200),
     ).get(method, {})
-    return sim.calibrate(method=method, rand_seed=seed, verbose=verbose, **kwargs)
+    return sim.fit(method=method, rand_seed=seed, verbose=verbose, **kwargs)
 
 
 def check_fit(fit, truth, rtol=None, rhat_max=1.1):
@@ -254,7 +254,7 @@ def fit_detect(quick=True):
     model = models.detect
     kw = dict(solver='binomial', total_pop=1e5)
     particles, iterations, rtol = (100, 10, 0.1) if quick else (300, 30, rtols['if2']) # Quick, it was within 5% at 10 of 10 seeds, but by up to 4.8%
-    detect = model.build(0.7*model.truth, data=simulate(model, **kw), **kw).calibrate(method='if2', likelihood={model.col:ss.nbinom(n=20)}, particles=particles, iterations=iterations, chains=2, verbose=False)
+    detect = model.build(0.7*model.truth, data=simulate(model, **kw), **kw).fit(method='if2', likelihood={model.col:ss.nbinom(n=20)}, particles=particles, iterations=iterations, chains=2, verbose=False)
     assert np.isclose(detect.table.best[0], model.truth, rtol=rtol)
     return detect
 
@@ -272,17 +272,17 @@ def test_two_optima():
         return ss.Sim(sir, unit='day', start='2020-01-01', stop='2020-05-01', total_pop=1e5, data=data, verbose=0)
 
     # From the review's simulation-based calibration: an optimizer started from the best point of a scan stopped at 58.86, and SciPy said it had converged
-    fit = make([408, 16683, 30842, 4196, 170, 58, 18, 5, 0, 1, 1, 0, 0, 0, 0, 0, 0]).calibrate(method='l-bfgs-b', rand_seed=57)
+    fit = make([408, 16683, 30842, 4196, 170, 58, 18, 5, 0, 1, 1, 0, 0, 0, 0, 0, 0]).fit(method='l-bfgs-b', rand_seed=57)
     assert fit.mismatch < 54.26 # The better optimum (b = 0.605, dur = 15.3)
     assert fit.converged is False # Only one of the searches from the scan's points found it
 
     # NUTS chains that all started at the initial values agreed on an epidemic that burns out early (b = 0.44), not on the truth (b = 0.116)
-    fit = make([12, 47, 35, 42, 24, 16, 17, 12, 15, 20, 16, 5, 10, 4, 5, 10, 5]).calibrate(method='nuts', draws=200, warmup=200, chains=2, rand_seed=23)
+    fit = make([12, 47, 35, 42, 24, 16, 17, 12, 15, 20, 16, 5, 10, 4, 5, 10, 5]).fit(method='nuts', draws=200, warmup=200, chains=2, rand_seed=23)
     table = fit.table.set_index('par')
     assert table.lower.b < 0.116 < table.upper.b # The chains start from points of the scan that are apart
 
     # Both chains started from the best two points of the scan, and agreed on a mode 13 log-likelihood units below the best (b = 0.96, dur = 2.9), with R-hat 1.03
-    fit = make([416, 18586, 25939, 2792, 40, 4, 5, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0]).calibrate(method='nuts', draws=200, warmup=200, chains=2, rand_seed=69)
+    fit = make([416, 18586, 25939, 2792, 40, 4, 5, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0]).fit(method='nuts', draws=200, warmup=200, chains=2, rand_seed=69)
     table = fit.table.set_index('par')
     assert table.lower.b < 0.656 < table.upper.b # The chains start from the optima found from the scan's points, so at the best (b = 0.646, dur = 18.5)
     return fit
@@ -292,7 +292,7 @@ def test_staged_and_sensitivity():
     sc.heading('Testing staged fitting, and which parameters matter')
     truth = 0.35
     sim = corpus.outcomes(beta=0.25, likelihood=ss.poisson(), data=simulate(models.outcomes, truth))
-    fit = sim.calibrate(method=['optuna', 'nelder-mead'], trials=20, rand_seed=1, verbose=False) # Each stage starts from the one before
+    fit = sim.fit(method=['optuna', 'nelder-mead'], trials=20, rand_seed=1, verbose=False) # Each stage starts from the one before
     assert fit.method == 'nelder-mead' and fit.converged and np.isclose(fit.pars.beta, truth, rtol=0.02)
 
     beta, dur, unused = ss.par(0.3, bounds=[0.1, 0.5]), ss.par(10, bounds=[5, 15]), ss.par(1.0, bounds=[0.5, 2])
@@ -340,7 +340,7 @@ def test_value_per_level():
     truth = make([0.25, 0.4]).run().results.sir.infection
     total = lambda lab, t: np.asarray(truth.select(patch=lab))[t-4:t+1].sum() # Data on a flow are its totals over each period
     df = pd.DataFrame([dict(time=t, patch=lab, infection=total(lab, t)) for lab in ['a', 'b'] for t in range(5, 61, 5)]).set_index('time')
-    fit = make([0.3, 0.3], data=ss.simdata(df)).calibrate(verbose=0)
+    fit = make([0.3, 0.3], data=ss.simdata(df)).fit(verbose=0)
     assert list(fit.table.par) == ['beta[a]', 'beta[b]'] and np.allclose(fit.pars.beta.values, [0.25, 0.4], rtol=1e-4) # Each level is fitted
     assert np.allclose(fit.sim.diseases.sir.pars.beta.raw.values, [0.25, 0.4], rtol=1e-4) # And the fitted sim has them
     one = fit.sim.new(pars={'beta[b]': 0.1}) # One level by name
@@ -372,7 +372,7 @@ def test_fitted_where_used():
     sim = make(ss.par(0.6, bounds=[0.1, 1], name='effect'), ss.par(ss.days(8), bounds=[ss.days(3), ss.weeks(4)], name='dur'))
     sim.data = ss.simdata(df)
     assert np.isclose(sim.new(pars=dict(effect=0.4, dur=ss.days(12))).run().results.sir.infection[-1], truth[-1]) # Each can be set by name
-    fit = sim.calibrate(verbose=0)
+    fit = sim.fit(verbose=0)
     assert np.isclose(fit.pars.effect, 0.4, rtol=1e-3) and np.isclose(fit.pars.dur.value, 12, rtol=1e-3) and isinstance(fit.pars.dur, ss.days)
     with pytest.raises(TypeError, match='put the type inside'):
         ss.perday(ss.par(2.4))
@@ -380,7 +380,7 @@ def test_fitted_where_used():
     # A loss that is a function of the sim needs no data
     plain = make(ss.par(0.6, bounds=[0.1, 1], name='effect'), ss.days(12))
     loss = lambda sim: (np.sum(sim.results.sir.infection) - np.sum(truth))**2 # The total, which rises with the effect
-    assert np.isclose(plain.calibrate(gof=loss, verbose=0).pars.effect, 0.4, rtol=1e-2)
+    assert np.isclose(plain.fit(gof=loss, verbose=0).pars.effect, 0.4, rtol=1e-2)
 
     # A network's parameter, which a compartmental run turns into contact rates
     def netted(n_contacts):
@@ -390,7 +390,7 @@ def test_fitted_where_used():
     n_I = netted(6).run().results.sir.I
     sim = netted(ss.par(4, bounds=[2, 10]))
     sim.data = ss.simdata(pd.DataFrame(dict(time=np.arange(5, 41, 5), I=np.asarray(n_I)[5::5])).set_index('time'))
-    assert np.isclose(sim.calibrate(verbose=0).pars.n_contacts, 6, rtol=1e-2) # It was not fitted
+    assert np.isclose(sim.fit(verbose=0).pars.n_contacts, 6, rtol=1e-2) # It was not fitted
     return fit
 
 
@@ -448,7 +448,7 @@ def test_data_files(tmp_path):
         S, I, R = ss.states(3)
         return ss.Disease(infection=S >> I @ 0.2*I.frac, recovery=I >> R @ ss.days(10), init_n=dict(I=10), name=name)
     with pytest.raises(ss.errors.UnknownDataColumn, match='flu.infection'):
-        ss.Sim([make('flu'), make('rsv')], unit='day', stop=60, verbose=0, data=ss.simdata(path)).calibrate()
+        ss.Sim([make('flu'), make('rsv')], unit='day', stop=60, verbose=0, data=ss.simdata(path)).fit()
     return path
 
 
@@ -467,7 +467,7 @@ def test_observations():
     prev = make(0.3).run().results.sir.prevalence.values
     days = [10, 20, 30, 40, 50]
     data = sc.dataframe(t=days, prevalence=np.random.default_rng(1).binomial(500, prev[days]))
-    fit = make(0.2, data=data).calibrate(likelihood=dict(prevalence=ss.binom(n=500)), method='nelder-mead', verbose=False)
+    fit = make(0.2, data=data).fit(likelihood=dict(prevalence=ss.binom(n=500)), method='nelder-mead', verbose=False)
     assert np.isclose(fit.pars.beta, 0.3, rtol=0.05) # Recovered from 2,500 people surveyed
     return fit
 

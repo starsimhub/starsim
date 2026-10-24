@@ -157,7 +157,7 @@ def test_fit():
     sc.heading('Testing that calibration uses the gradients')
     truth = make_sir(beta=0.5, dur=6, init=0.002).run().results.sir
     data = pd.DataFrame(dict(prevalence=truth.prevalence.values[::7]), index=truth.timevec[::7])
-    fit = make_sir(data=data).calibrate(gof='rmse', verbose=True)
+    fit = make_sir(data=data).fit(gof='rmse', verbose=True)
     print(fit.table)
     assert fit.method == 'l-bfgs-b'
     assert np.allclose(fit.table.best, [0.5, 6, 0.002], rtol=1e-2)
@@ -178,7 +178,7 @@ def test_identifiability():
         return ss.Sim(sir, unit='day', stop=100, data=data, **kw)
     truth = make().run().results.sir
     data = pd.DataFrame(dict(I=truth.I.values[::7]), index=truth.timevec[::7])
-    notes = {kind:make(kind, data=data).calibrate(pars=['beta', 'dur'] + (['c'] if kind != 'plain' else [])).sim.notes for kind in ['product', 'sum', 'plain']}
+    notes = {kind:make(kind, data=data).fit(pars=['beta', 'dur'] + (['c'] if kind != 'plain' else [])).sim.notes for kind in ['product', 'sum', 'plain']}
     assert any('only multiplied together' in note for note in notes['product']) # From the model
     assert any('almost the same way' in note for note in notes['sum']) # From the gradients at the best fit
     assert not notes['plain']
@@ -191,7 +191,7 @@ def test_posterior():
     truth = make_sir(beta=0.5, dur=6).run().results.sir
     weekly = np.add.reduceat(truth.cases.values[1:], np.arange(0, len(truth.cases) - 1, 7))[:-1] # A flow is compared with its total since the last data point
     data = pd.DataFrame(dict(cases=np.random.default_rng(1).poisson(weekly)), index=truth.timevec[7::7][:len(weekly)])
-    fit = make_sir(dur=6, data=data).calibrate(pars=['beta'], likelihood=dict(cases=ss.poisson()), method='nuts', draws=100, warmup=100, chains=2, rand_seed=1, verbose=True)
+    fit = make_sir(dur=6, data=data).fit(pars=['beta'], likelihood=dict(cases=ss.poisson()), method='nuts', draws=100, warmup=100, chains=2, rand_seed=1, verbose=True)
     fit.summarize()
     table = fit.table.set_index('par')
     assert fit.method == 'nuts'
@@ -208,7 +208,7 @@ def test_posterior():
     assert ss.fit.diagnose(chains[:, :, None] + np.array([0, 0, 0, 1.0])[:, None, None])[0][0] > 1.05 # One chain apart from the others
     assert fit.diagnostics.band['cases'].shape == (2, len(truth.cases))
     with pytest.raises(ss.errors.NoPosterior): # A posterior needs a likelihood
-        make_sir(data=data).calibrate(pars=['beta'], method='nuts')
+        make_sir(data=data).fit(pars=['beta'], method='nuts')
     return fit
 
 
@@ -280,7 +280,7 @@ def test_crossing():
 
     # NUTS, with the log-density in JAX
     data = pd.DataFrame({'hiv.I':fresh.hiv.I.values, 'syph.I':fresh.syph.I.values}, index=fresh.hiv.timevec)[::8]
-    fit = make_coinfection(data=data).calibrate(likelihood={'hiv.I':ss.normal(scale=50), 'syph.I':ss.normal(scale=50)}, method='nuts', draws=50, warmup=50, chains=2, rand_seed=1, verbose=True)
+    fit = make_coinfection(data=data).fit(likelihood={'hiv.I':ss.normal(scale=50), 'syph.I':ss.normal(scale=50)}, method='nuts', draws=50, warmup=50, chains=2, rand_seed=1, verbose=True)
     table = fit.table.set_index('par')
     assert fit.method == 'nuts'
     assert table.lower['hiv.beta'] < 0.2 < table.upper['hiv.beta']
@@ -310,7 +310,7 @@ def test_posterior_data():
     # Fitted with the log-density in JAX: it is checked against runs of the sim, and sampled again with Python in the loop if they differ
     with sc.capture() as txt, warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter('always')
-        fit = make(data=pd.DataFrame(rows)).calibrate(likelihood=dict(I=ss.normal(scale=50), n_hosp=ss.normal(scale=5)), method='nuts', draws=50, warmup=50, chains=2, rand_seed=1, verbose=True)
+        fit = make(data=pd.DataFrame(rows)).fit(likelihood=dict(I=ss.normal(scale=50), n_hosp=ss.normal(scale=5)), method='nuts', draws=50, warmup=50, chains=2, rand_seed=1, verbose=True)
     assert 'Python in the loop' not in txt and not any('differs' in str(w.message) for w in caught)
     table = fit.table.set_index('par')
     assert table.lower.beta < 0.5 < table.upper.beta

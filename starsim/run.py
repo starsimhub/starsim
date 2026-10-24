@@ -405,43 +405,52 @@ class MultiSim:
         combined_sim.summarize()
         return combined_sim
 
-    def summarize(self, method='mean', quantiles=None, how=None):
+    def summarize(self, interval=0.95, how=None):
         """
-        Summarize the runs statistically: each result over each run, by its kind (see `sim.summarize()`), and then over the runs
+        A table of each result over the whole of each run, across the runs: the median, an interval, the mean, and the standard deviation
+
+        Each result is first summarized over each run by its kind (see `sim.summarize()`): a flow (e.g. infections) by its
+        total, a stock (e.g. the number recovered) by its final value, and a ratio (e.g. prevalence) by its mean. Results
+        that are 0 throughout are left out.
 
         Args:
-            method (str): one of 'mean' (default: the mean, standard deviation, and standard error over the runs), 'median' (quantiles over the runs), or 'all' (the value of each run)
-            quantiles (dict/list): if method='median', the quantiles (default: median, min, max, q25, and q75)
-            how (str/dict): how to summarize each result over each run: as for `sim.summarize()`
+            interval (float): the share of runs the interval holds (default 0.95: from the 2.5th to the 97.5th percentile), as `msim.plot()` shows
+            how (str/dict): how to summarize each result over each run, as for `sim.summarize()`
+
+        Returns:
+            A dataframe with a row for each result (and scenario, if there are several), and the columns `median`, `low`, `high`, `mean`, and `std`,
+            each to four significant figures, or the nearest whole number from 1,000 up (the exact values are e.g. `res.quantiles()`)
+
+        Example:
+            ```python
+            msim = sim.run(n_runs=20)
+            msim.summarize()                     # Every result
+            msim.summarize().loc['sir_infection'] # The total infections
+            ```
         """
         self.check_run('summarize')
         funcs = dict(mean=np.mean, median=np.median, sum=np.sum, last=lambda vals: vals[-1])
         if not isinstance(how, dict):
             how = {} if how is None else {'':how} # '' matches every key
-        if method == 'median':
-            if quantiles is None:
-                quantiles = sc.objdict({'median':0.5, 'min':0, 'max':1, 'q25':0.25, 'q75':0.75})
-            elif isinstance(quantiles, list):
-                quantiles = {q:q for q in quantiles}
-
-        summary = sc.objdict()
+        low, high = (1 - interval)/2, 1 - (1 - interval)/2
+        rows = {}
         for key,res in self.results.flatten(sep='_', columns=True).items():
+            if not np.any(res.values): # E.g. deaths in a model without them
+                continue
             func = how.get(key, how.get(''))
             if func is None:
-                arr = np.asarray(res.summarize()) # One value per run
+                arr = np.asarray(res.summarize(), dtype=float) # One value per run
             else:
                 func = func if callable(func) else funcs[func]
-                arr = np.array([func(vals) for vals in np.asarray(res.values)])
-            if method == 'all':
-                summary[key] = arr
-            elif method == 'mean':
-                summary[key] = sc.objdict({'mean':arr.mean(), 'std':arr.std(), 'sem':sc.sem(arr)})
-            elif method == 'median':
-                summary[key] = {q: np.quantile(arr, v) for q, v in quantiles.items()}
-            else:
-                errormsg = f'Unknown method "{method}"; use "mean", "median", or "all"'
-                raise ValueError(errormsg)
-
+                arr = np.array([func(vals) for vals in np.asarray(res.values)], dtype=float)
+            groups = res.scenarios() if res.runs is not None else {None:list(range(len(arr)))}
+            for scenario,inds in groups.items():
+                vals = arr[inds]
+                stats = dict(median=np.median(vals), low=np.quantile(vals, low), high=np.quantile(vals, high), mean=vals.mean(), std=vals.std())
+                rows[key if len(groups) == 1 else (key, scenario)] = {k:readable(v) for k,v in stats.items()}
+        several = any(isinstance(key, tuple) for key in rows)
+        index = pd.MultiIndex.from_tuples(list(rows), names=['result', 'scenario']) if several else pd.Index(list(rows), name='result')
+        summary = pd.DataFrame(list(rows.values()), index=index, dtype=object) # So that whole numbers stay whole
         self.summary = summary
         return summary
 
@@ -619,6 +628,14 @@ class MultiSim:
                 del msim.chunks
             out.append(msim)
         return out
+
+
+def readable(x):
+    """ A number to four significant figures, or the nearest whole number from 1,000 up """
+    if not np.isfinite(x) or x == 0:
+        return 0 if x == 0 else x
+    out = round(float(x), max(0, 3 - int(np.floor(np.log10(abs(x))))))
+    return int(out) if out.is_integer() else out
 
 
 def single_run(sim, ind=0, shrink=True, run_args=None, verbose=None, copy_sim=False):
@@ -920,7 +937,7 @@ def parallel(*args, n_runs=None, pars=None, priors=False, **kwargs):
     many times. Every way of running ends in the same results: each result with a run axis first.
 
     Args:
-        args (list): The simulations to run
+        args (list): the sims to run, or a dict of them by label (e.g. `{'No intervention': s1, 'Vaccine': s2}`)
         n_runs (int): if provided, run each sim this many times, each with its own seed (the sim's seed, plus 1, 2, ...)
         pars (dict/list): sets of values of parameters to run each sim with: a dict with a list of values for each parameter (`dict(beta=[0.2, 0.3])`), or a list of dicts; each set is run `n_runs` times (default 1), and the values are in `msim.runs` (and can be selected, e.g. `res.select(beta=0.2)`); `rand_seed` can be given too, e.g. `pars=dict(rand_seed=[1, 5, 9])`
         priors (bool/dict): draw `n_runs` sets of values from the priors of the parameters (`ss.par(prior=...)`, or uniform over its bounds), one run each: a projection that carries the uncertainty in the values; or the draws themselves, as for `pars=` (e.g. from a posterior, as `fit.project()` passes them). Unlike a sweep with `pars=`, the draws are runs of their sim's scenario, so quantiles over a scenario's runs include them
@@ -938,11 +955,18 @@ def parallel(*args, n_runs=None, pars=None, priors=False, **kwargs):
         ss.parallel(s1, s2).plot()
         msim = ss.parallel([s1, s2], shrink=False)
         msim = ss.parallel(s1, n_runs=10) # Ten runs of one sim (also sim.run(n_runs=10))
-        msim = ss.parallel(baseline=s1, vaccine=s2, n_runs=10) # Two scenarios; see msim.diff('baseline')
+        msim = ss.parallel({'Baseline': s1, 'With vaccine': s2}, n_runs=10) # Two scenarios; see msim.diff('Baseline')
         msim = ss.parallel(sim, pars=dict(beta=np.linspace(0.1, 0.5, 100))) # One run with each value of beta
         ```
     """
-    sims = sc.mergelists(*args)
+    sims = []
+    for arg in args: # A dict is sims by their labels, e.g. {'No intervention': s1, 'Vaccine': s2}
+        if isinstance(arg, dict):
+            for label,sim in arg.items():
+                sim.label = label
+                sims.append(sim)
+        else:
+            sims += sc.tolist(arg)
     for key in list(kwargs.keys()): # Named sims
         if isinstance(kwargs[key], ss.Sim):
             sim = kwargs.pop(key)

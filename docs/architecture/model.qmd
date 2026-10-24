@@ -53,7 +53,7 @@ sir.recovery.contact      # False
 
 ## Parameters
 
-A number written inline becomes a parameter of the module, named after its slot: above, `sir.pars` has `beta` (the coefficient of `I`) and `dur` (the dwell time of recovery), qualified by the transition if two would clash (`dur_recovery`). Wrap a value in `ss.par()` when it needs a name, bounds, or a source; bounds are what make it fittable, since `sim.calibrate()` fits every parameter with bounds to every result with data. A value may also vary by group (`ss.by(age=[...])`), in time (`ss.timeseries()`), or between people (a distribution): the slot decides what a value means, and the form is free. Setting a parameter the module doesn't have raises `ss.errors.UnknownParameter`, since a misspelling that is silently ignored is one of the hardest bugs to find. See [Parameters](../user_guide/basics_parameters.qmd).
+A number written inline becomes a parameter of the module, named after its slot: above, `sir.pars` has `beta` (the coefficient of `I`) and `dur` (the dwell time of recovery), qualified by the transition if two would clash (`dur_recovery`). Wrap a value in `ss.par()` when it needs a name, bounds, or a source; bounds are what make it fittable, since `sim.fit()` fits every parameter with bounds to every result with data. A value may also vary by group (`ss.by(age=[...])`), in time (`ss.timeseries()`), or between people (a distribution): the slot decides what a value means, and the form is free. Setting a parameter the module doesn't have raises `ss.errors.UnknownParameter`, since a misspelling that is silently ignored is one of the hardest bugs to find. See [Parameters](../user_guide/basics_parameters.qmd).
 
 ## Dimensions
 

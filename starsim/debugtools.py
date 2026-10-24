@@ -297,10 +297,11 @@ def diff_sims(sim1, sim2, skip_key_diffs=False, skip=None, full=False, output=Fa
     '''
 
     # Convert to dict
+    as_dict = lambda sim: sim.summarize() if isinstance(sim, ss.Sim) else sc.objdict(sim.summarize().to_dict('index')) # A MultiSim's: each result's mean, std, ...
     if isinstance(sim1, (ss.Sim, ss.MultiSim)):
-        sim1 = sim1.summarize()
+        sim1 = as_dict(sim1)
     if isinstance(sim2, (ss.Sim, ss.MultiSim)):
-        sim2 = sim2.summarize()
+        sim2 = as_dict(sim2)
     for sim in [sim1, sim2]:
         if not isinstance(sim, dict):  # pragma: no cover
             errormsg = f'Cannot compare object of type {type(sim)}, must be a sim or a sim.summary dict'
@@ -313,7 +314,7 @@ def diff_sims(sim1, sim2, skip_key_diffs=False, skip=None, full=False, output=Fa
     multi = isinstance(sim1[0], dict) # If it's a dict, then it's a multisim
     if multi:
         for sim in [sim1, sim2]:
-            assert 'mean' in sim[0], f"Can only compare multisims with summarize(method='mean'), but you have keys {sim[0].keys()}"
+            assert 'mean' in sim[0], f"Can only compare the summaries of multisims, with the mean of each result, but you have keys {sim[0].keys()}"
 
     # Compare keys
     keymatchmsg = ''

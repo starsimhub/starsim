@@ -113,14 +113,14 @@ What the compartmental audience does need, and doesn't get today, is (a) tutoria
 | A3 | Writing modules as code | `step()`, custom states, interventions and analyzers written as code, alongside a declared disease |
 | A4 | Several diseases | Co-infection with `ss.modify` (the HIV and SIS example from T4) and diseases tracked jointly |
 
-**Going further: populations** (for people coming from ODE and compartmental frameworks)
+**Going further: populations** (for people coming from ODE and compartmental frameworks) [CK: call it compartments rather than populations, but ok]
 
 | # | Tutorial | Covers |
 |---|---|---|
 | P1 | Stratification in depth | Several dimensions, partial stratification, transfers between strata (vaccination, migration), following summer2's sequence |
 | P2 | Parameters over time | `ss.timeseries`, `ss.seasonal`, `ss.by`, and school holidays as in odin's flu case study |
-| P3 | Places and movement | `ss.geo.geography`, gravity and radiation mobility, a two-patch then many-patch model (LASER's and flepiMoP's progression) |
-| P4 | Bringing a model in, and gradients | Importing an odin or summer2 model, `ss.to_code()`, `ss.diff()`; `sim.gradient()`, posteriors, profile likelihoods |
+| P3 | Places and movement | `ss.geo.geography`, gravity and radiation mobility, a two-patch then many-patch model (LASER's and flepiMoP's progression) [CK: these should work in agent-based as well, no? they could be T7] |
+| P4 | Bringing a model in, and gradients | Importing an odin or summer2 model, `ss.to_code()`, `ss.diff()`; `sim.gradient()`, posteriors, profile likelihoods [CK: gradients and likelihoods should go in calibration] |
 
 Exercises with solutions stay as now.
 
@@ -128,15 +128,15 @@ Exercises with solutions stay as now.
 
 Reorganize the guide from module types to tasks, keep the existing v4 pages, and rewrite v3-first pages so the declared form comes first and code second. Proposed sections, with new pages marked **(new)**:
 
-- **Writing models:** Diseases (states, transitions, rates) · Parameters · Stratification and dimensions **(new)** · Parameters over time **(new)** · Outcomes and observation **(new)** · Reading a model back: `describe`, `diagram`, `equations` **(new)** · Writing modules as code (from `modules_adding`)
+- **Writing models:** Diseases (states, transitions, rates) · Parameters · Stratification and dimensions **(new)** · Parameters over time **(new)** [CK: does this really need a separate page, not part of parameters?]· Outcomes and observation **(new)** · Reading a model back: `describe`, `diagram`, `equations` **(new)** [CK: i don't think this needs its own page]· Writing modules as code (from `modules_adding`)
 - **Populations and contact:** People · Demographics · Networks and mixing pools · Contact matrices and data by place **(new, partly from `modules_networks`)** · Places and movement **(new)**
 - **Running:** The Sim · Solvers and when they disagree **(new; the page no framework has)** · Time · Uncertainty, seeds, and many runs **(new, partly from `workflows_run` and `advanced_random`)** · Scenarios and sweeps · Population rescaling · Deployment
-- **Interventions:** Products and deliveries · Changing parameters · Interactions between diseases (connectors)
-- **Data and fitting:** Calibration · Gradients and posteriors **(new, from `workflows_calibration`)** · Diagnosing a fit **(new; camdl's page as a model)**
-- **Sharing and interop:** The model spec, `to_code`, `diff` **(new)** · Importing and exporting models **(new; the user-facing half of `architecture/spec_and_interop` and the "coming from" pages)** · Library modules
-- **When things go wrong:** Debugging and profiling · Common pitfalls **(new; collect the real ones, as camdl does)** · Making a minimal reproducible example **(new, short)** · Array indexing and random numbers (for code modules)
+- **Interventions:** Products and deliveries · Changing parameters · Interactions between diseases (connectors) [CK: connectors are not just for interactions between diseases, although that's a common use case]
+- **Data and fitting:** Calibration [CK: we need to decide if we're going to use "fitting" or "calibration" ... i think 'calibration' is a bit more common, but let's be clear not to mix our terms, like `fit = sim.calibrate()`] · Gradients and posteriors **(new, from `workflows_calibration`)** · Diagnosing a fit **(new; camdl's page as a model)**
+- **Sharing and interop:** [CK: call it "Interoperability"] The model spec, `to_code`, `diff` **(new)** · Importing and exporting models **(new; the user-facing half of `architecture/spec_and_interop` and the "coming from" pages)** · Library modules
+- **When things go wrong:** [CK: maybe call it "Troubleshooting"] Debugging and profiling · Common pitfalls **(new; collect the real ones, as camdl does)** · Making a minimal reproducible example **(new, short)** · Array indexing and random numbers (for code modules)
 
-Each topic page should follow one template, as MEmilio's solver pages and EpiModel's gallery pages do: what it is for, the smallest example (with a plot or printed output), the options, how it behaves under each solver (one line per solver, including "agents only" or "not under ODE"), pitfalls, and links to the tutorial that uses it and to the architecture page that explains it. The "how it behaves under each solver" line is what lets one guide serve both audiences.
+Each topic page should follow one template, as MEmilio's solver pages and EpiModel's gallery pages do: what it is for, the smallest example (with a plot or printed output), the options, how it behaves under each solver (one line per solver, including "agents only" or "not under ODE"), pitfalls, and links to the tutorial that uses it and to the architecture page that explains it. The "how it behaves under each solver" line is what lets one guide serve both audiences. [CK:, but you've tended to over-emphasize solver choice in the docs pages you've written.]
 
 ### Examples gallery
 
@@ -144,19 +144,19 @@ Each topic page should follow one template, as MEmilio's solver pages and EpiMod
 
 - the nine build-set models in `v4_design/examples/README.md`, which are already tests;
 - two or three LASER-style "reproduce the theory" checks (final size against Kermack–McKendrick, critical community size), which double as validation;
-- for each framework, its translated showcase model, pointing to the matching "coming from" page.
+- for each framework, its translated showcase model, pointing to the matching "coming from" page. [CK: i like all this]
 
 ### Process
 
-- **Write the tutorials around ten-minutes.** It already has the right arc; the core track is that page, slowed down. Keep ten-minutes as the landing quickstart, and put its first plot on the home page, as epydemix does.
-- **Never show the v3 `pars` dict in the core track.** Teach it once, in the user guide's Sim page, as a shorthand.
-- **Keep tutorials and guide distinct.** A tutorial is one path, in order; a guide page is a lookup by topic. Where they meet, the tutorial links to the guide page instead of covering it again (epydemix's duplication is the thing to avoid).
-- **Keep executing everything at build** (as `test_docs.yml` does), with no stub pages in the navigation: a page that isn't written yet isn't listed.
-- **Timing.** Starsim's design record says to rewrite the v4 docs once the implementation settles. The structure here can be set now (navigation, page list, the running model), and pages filled in as their features settle, starting with the core track, whose features (declared models, solvers, stratification, interventions, calibration) are the most stable.
+- **Write the tutorials around ten-minutes.** It already has the right arc; the core track is that page, slowed down. Keep ten-minutes as the landing quickstart, and put its first plot on the home page, as epydemix does. [CK: ok, though i don't love it nearly as much as you do!]
+- **Never show the v3 `pars` dict in the core track.** Teach it once, in the user guide's Sim page, as a shorthand. [CK: ok]
+- **Keep tutorials and guide distinct.** A tutorial is one path, in order; a guide page is a lookup by topic. Where they meet, the tutorial links to the guide page instead of covering it again (epydemix's duplication is the thing to avoid). [CK: agree]
+- **Keep executing everything at build** (as `test_docs.yml` does), with no stub pages in the navigation: a page that isn't written yet isn't listed. [CK: ok]
+- **Timing.** Starsim's design record says to rewrite the v4 docs once the implementation settles. The structure here can be set now (navigation, page list, the running model), and pages filled in as their features settle, starting with the core track, whose features (declared models, solvers, stratification, interventions, calibration) are the most stable. [CK: ok]
 
 ## Decisions for Cliff
 
-1. **Shared core plus two tracks, or two full parallel series?** I recommend the former, for the reasons above. If you'd rather have two series, the cost is roughly doubling the tutorials (about 900 lines today), with most changes then made twice.
-2. **Running model.** A generic respiratory SIR that becomes an age-structured SEIR (as above), or a named disease (measles, which matches the Ghana measles work and LASER's England and Wales example)? A named disease is more engaging but brings more parameters to explain.
-3. **The user guide: reorganize by task (above), or keep the current sections and add the new pages into them?** Reorganizing moves most existing pages; adding is cheaper but keeps the module-type ordering that no other framework uses.
-4. **Gallery: build it now from the build-set models, or later?** It is mostly assembly from existing tests and vignettes.
+1. **Shared core plus two tracks, or two full parallel series?** I recommend the former, for the reasons above. If you'd rather have two series, the cost is roughly doubling the tutorials (about 900 lines today), with most changes then made twice. [CK: yes, shared core]
+2. **Running model.** A generic respiratory SIR that becomes an age-structured SEIR (as above), or a named disease (measles, which matches the Ghana measles work and LASER's England and Wales example)? A named disease is more engaging but brings more parameters to explain. [CK: let's do measles, it's barely more complicated]
+3. **The user guide: reorganize by task (above), or keep the current sections and add the new pages into them?** Reorganizing moves most existing pages; adding is cheaper but keeps the module-type ordering that no other framework uses. [CK: we can reorganize]
+4. **Gallery: build it now from the build-set models, or later?** It is mostly assembly from existing tests and vignettes. [CK: you can build it now, but call it gallery.qmd not examples.qmd]

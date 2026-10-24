@@ -50,6 +50,7 @@ class Disease(ss.Module):
         init_n (dict): instead, the number of people who start in each state, e.g. `dict(I=1)` for one person
         first (str): the state that everyone not put elsewhere starts in, and is born into; by default, the one named `S` or `susceptible` (otherwise it must be given; in the class form, `first = 'N'` in the class body)
         strains (Strains): its strains (`ss.Strains`): in its states, which they share, or each with a course of its own; then `dis.strains`
+        stratify (dict/list): as `stratify()`, e.g. `dict(age={0: 0.3, 15: 0.6, 65: 0.1})`; a list of dicts for one call each
         kwargs (dict): one keyword per state, transition, parameter, result, or function; also `name`, `label`, and `dt`
 
     The results are the number in each state (`I`), the flow along each transition by its
@@ -104,7 +105,7 @@ class Disease(ss.Module):
             raise ss.CapabilityError(errormsg)
         return
 
-    def __init__(self, *args, pars=None, strains=None, _names=None, **kwargs):
+    def __init__(self, *args, pars=None, strains=None, stratify=None, _names=None, **kwargs):
         super().__init__()
         self.strains = None # Its ss.Strains, if it has strains
         self.family = None # For strains with courses of their own: the module that runs them (see ss.strains.Family)
@@ -123,6 +124,8 @@ class Disease(ss.Module):
             self.update_pars(pars, **kwargs)
         if strains is not None:
             ss.strains.attach(self, strains)
+        for call in sc.tolist(stratify):
+            self.stratify(**call)
         return
 
     def __getattr__(self, attr):
@@ -266,7 +269,7 @@ class Disease(ss.Module):
         Stratify the disease by a property of the people in it (age, risk, place, ...), in place, and return it
 
         Args:
-            split (list): the share of the population in each level (if not given: from a named population or geography; for age groups, the world's ages; for a boolean dimension, or one that people are moved along, everyone at the first level; otherwise equal)
+            split (list): the share of the population in each level, unless the levels are a dict of them (if not given: from a named population or geography; for age groups, the world's ages; for a boolean dimension, or one that people are moved along, everyone at the first level; otherwise equal)
             adjust (dict): multipliers on named transitions, one per level, e.g. `{'recovery': [1.5, 1.0, 0.5]}`: on its rate (a duration is divided), or on its probability for a branch chosen with p=
             kind (str): 'age', 'space', 'clock' (the time since an event, e.g. `since_birth=ss.months([0, 3, 12]), kind='clock'`), or 'plain'; if not given, from the value: 'space' for an `ss.geo.geography` or with `mobility=`, 'age' for `age=`, and otherwise 'plain' (whatever the name); strains are `strains=ss.Strains(...)` on the disease
             states (list): the states the dimension applies to (default: every state that is people)
@@ -279,6 +282,7 @@ class Disease(ss.Module):
         Examples:
             ```python
             sir.stratify(age=[0, 15, 65], adjust={'recovery': [1.5, 1.0, 0.5]})
+            sir.stratify(age={0: 0.3, 15: 0.6, 65: 0.1}) # With the share of people in each age group
             sir.stratify(risk=['low', 'high'], split=[0.8, 0.2], adjust={'infection': [1.0, 3.0]})
             sir.stratify(parity=['0', '1-2', '3+'], where=dict(sex='female')) # Only women have a parity
             ```
@@ -327,23 +331,28 @@ class Disease(ss.Module):
         """ Its stratifications by name, e.g. `tb.strats.age.edges` or `tb.strats.risk.labels` (as a condition, a level is `tb.age`) """
         return sc.objdict({strat.name:strat for strat in self.graph.strats}) if self.graph is not None else sc.objdict()
 
-    def describe(self, output=False):
+    def describe(self, output=False, out=None):
         """
-        Print the resolved model as text, with every guessed default marked
+        Print the resolved model, with every guessed default marked
 
         Args:
             output (bool): if True, return the text rather than printing it
+            out (`ss.Description`): if given, add the description to it and return it
         """
+        desc = ss.Description() if out is None else out
         if self.family is not None: # Strains with courses of their own
-            lines = [self.family.describe(output=True)]
+            self.family.describe(out=desc)
         elif self.graph is not None:
-            lines = self.graph.describe(self.sim) + (self.strains.describe(self.graph) if self.strains is not None else [])
+            self.graph.describe(self.sim, out=desc)
+            if self.strains is not None:
+                self.strains.describe(self.graph, out=desc)
         else: # Written as code: its class, arrays, and parameters
-            lines = [f"{type(self).__name__} '{self.name}': written as code, with {len(self.state_list)} arrays",
-                     f'{"arrays":12s} {", ".join(s.name for s in self.state_list)}',
-                     f'{"parameters":12s} {", ".join(self.pars.keys())}']
-        text = '\n'.join(lines)
-        return text if output else print(text)
+            desc.section(f"{type(self).__name__} '{self.name}'", f'written as code, with {len(self.state_list)} arrays')
+            desc.add('arrays', ', '.join(s.name for s in self.state_list))
+            desc.add('parameters', ', '.join(self.pars.keys()))
+        if out is not None:
+            return desc
+        return str(desc) if output else desc.show()
 
     def equations(self, output=False):
         """

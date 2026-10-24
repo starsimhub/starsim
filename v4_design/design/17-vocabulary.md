@@ -120,7 +120,7 @@ Everything spatial is in the submodule `ss.geo`.
 
 `ss.Result`, `ss.Loop`, `ss.Timeline`, `ss.Rate`, `ss.TimePar`, all Starsim's. Users rarely construct these.
 
-Fitting is the submodule `ss.fit`, which `import starsim` does not import (its first use does), so its names are not counted here: `ss.fit.Fit`, what `sim.calibrate()` returns (called `fit` below), `ss.fit.compare_models` (fit and compare by out-of-sample prediction), and `ss.fit.optimize` (reallocate spending between programs to maximize or minimize a result). (Starsim 3's `ss.Calibration` is removed.)
+Fitting is the submodule `ss.fit`, which `import starsim` does not import (its first use does), so its names are not counted here: `ss.fit.Fit`, what `sim.fit()` returns (called `fit` below), `ss.fit.compare_models` (fit and compare by out-of-sample prediction), and `ss.fit.optimize` (reallocate spending between programs to maximize or minimize a result). (Starsim 3's `ss.Calibration` is removed.)
 
 ### Methods and attributes: 56 distinct names
 
@@ -130,7 +130,7 @@ Fitting is the submodule `ss.fit`, which `import starsim` does not import (its f
 | A state or a sum of states | **`n`** **`frac`** **`total`** **`time`** **`progress`** **`enter`** **`exit`** |
 | A transition | **`to`** **`incidence`** **`uids`** **`ever`** **`count`** **`since`** |
 | A modifiable array (`sir.rel_sus`) | **`effective`** |
-| `ss.Sim` | `init` `run` `plot` `summarize` `to_df` `loop` `results` **`describe`** **`stratify`** **`to_spec`** **`to_code`** `to_json` **`hash`** **`calibrate`** **`sensitivity`** **`check_dt`** **`what_modifies`** **`new`** **`gradient`** |
+| `ss.Sim` | `init` `run` `plot` `summarize` `to_df` `loop` `results` **`describe`** **`stratify`** **`to_spec`** **`to_code`** `to_json` **`hash`** **`fit`** **`sensitivity`** **`check_dt`** **`what_modifies`** **`new`** **`gradient`** |
 | `sim.loop` | `insert` `to_df` `plot` `plot_step_order` |
 | A result | **`select`** **`by`** **`cum`** `resample` `sum` |
 | A result of an `ss.MultiSim`, which has a run dimension | **`quantiles`** `values` |
@@ -194,7 +194,7 @@ Keywords are not counted above, but they are vocabulary too, so the main sets ar
 | `ss.geo.Mobility` | `matrix` `data` `kind` `away` |
 | `ss.contacts` | `bands` `name` `source` `layer` `dims`, and a matrix for each stratification by its name |
 | Networks | `sides` (and `net.directions`, which follow from them; `between` on `ss.SexualNet`) |
-| `sim.calibrate` | `pars` `data` `weights` `likelihood` `gof` `method` `n_runs` `rand_seed`, and the method's own settings |
+| `sim.fit` | `pars` `data` `weights` `likelihood` `gof` `method` `n_runs` `rand_seed`, and the method's own settings |
 | `ss.fit.optimize` | `maximize` `minimize` `at` `start` `total` `spend` `bounds` |
 | `ss.fit.compare_models` | `data` `holdout` `folds` |
 
@@ -245,7 +245,7 @@ A bare number in any of these slots takes the slot's type and the sim's unit ([0
 | `ss.lognorm`, `ss.binomial`, `ss.neg_binomial`, `ss.rate` | Not Starsim's names | `ss.lognorm_ex` / `ss.lognorm_im`, Starsim's set, `ss.nbinom`, `ss.per` |
 | `ss.exp_decay`, `ss.linear_decay` | Covered by existing forms | `waning=` as a duration, a function, or `ss.timeseries` |
 | `ss.act`, `queue()`, `phase=`, `sim.substep()` | Queued updates and named phases are gone | Starsim's ordered loop, `sim.loop.insert()` |
-| `ss.Stage`, `fit.apply()` | Simpler spellings | `calibrate(method=[...])`; `fit.sim` |
+| `ss.Stage`, `fit.apply()` | Simpler spellings | `fit(method=[...])`; `fit.sim` |
 | `capabilities()`, `closure=`, `to_ode()`, `scale=` | The closure ladder and per-transition hybrid solvers are out of v1 | `describe()`, `solver=`, printed approximations |
 | `jacobian()`, `fixed_points()`, `sim.equations()` | Symbolic analysis is not a v1 feature | `sir.equations()` |
 | `summary()` on a model, `to_dict()` | `summarize` is about results in Starsim; the model as data is its model spec, and `to_json` is a sim's results | `describe()`, `to_spec()` |
@@ -265,7 +265,7 @@ The second draft's names that went in this revision:
 |---|---|---|
 | `ss.Compartments` | A second module class for states that are not people. The states use the same syntax as the disease's, and the name was confusing, since `S`, `I`, and `R` are compartments too | An ordinary `ss.State` in the disease; `people=False` is inferred, or given |
 | `None` as a source or sink (`None >> W`) | Python evaluates `None @ 0.1` before it sees the arrow | `ss.null` |
-| `method=` on `ss.Sim` and `sim.run`, `methods()`, `'ctmc'` as the name | "Solver" is the word; `method=` stays on `sim.calibrate` for the fitting method | `solver=`, `'gillespie'`; `integrator=` for the ODE scheme |
+| `method=` on `ss.Sim` and `sim.run`, `methods()`, `'ctmc'` as the name | "Solver" is the word; `method=` stays on `sim.fit` for the fitting method | `solver=`, `'gillespie'`; `integrator=` for the ODE scheme |
 | `n_reps` on `ss.Sim`, `.trajectories`, `check_reps` | A sim is one run | `ss.MultiSim(sim, n_runs=100)` or `ss.parallel(sim, n_runs=100)`; `.values` and `.quantiles` on its results; `check_runs` (deferred) |
 | `crn_key` | No case found where keying common random numbers on agent attributes beats Starsim's slots | Slots; `ss.options.crn = False` to turn CRN off |
 | `ss.export` | A model is a Python script, which is already the thing to share | The script, which `ss.save('model.py', sim)` writes (`sim.to_code()`); `ss.save` of the sim |
@@ -294,7 +294,7 @@ Since the review of October 2026, these names went, or were promised and never b
 | `.base` on a modifiable array | Reading the array gives the base value | `sir.rel_sus` for the base, `sir.rel_sus.effective` for the value with modifiers applied |
 | `ss.rate`, `ss.time_prob`, `ss.rate_prob` | Starsim 2 names, deprecated in Starsim 3 (Starsim's other time names are kept) | `ss.peryear(x)`, `ss.probperyear(x)` |
 | `solver='sde'`, `'stochastic'`, `'ctmc'` | One solver per method | `'gillespie'` (exact), `'tau'` (tau-leaping), `'binomial'` |
-| `ss.Calibration` as the result of a fit | `sim.calibrate()` returns an `ss.fit.Fit` | `ss.fit.Fit` (Starsim 3's `ss.Calibration` is removed) |
+| `ss.Calibration` as the result of a fit | `sim.fit()` returns an `ss.fit.Fit` | `ss.fit.Fit` (Starsim 3's `ss.Calibration` is removed) |
 | `ss.from_spec()`, and `ss.load()` of a model spec | The spec is the normalized form for `sim.hash()` and `ss.diff()`, and is not read back | `ss.save('model.py', sim)` and `ss.save('run.sim', sim)` |
 | `msim.reduce()`, `msim.mean()`, `msim.median()`, `ss.MultiResult`, `ss.multi_run()` | A MultiSim is its results, with a run dimension | `msim.results.sir.I.quantiles()` (and `.median()`, `.mean()`); `ss.parallel(pars=...)` |
 | `ss.outcome(every=)`, `annualize()` | Resampling belongs to a result | `result.resample('year')` |

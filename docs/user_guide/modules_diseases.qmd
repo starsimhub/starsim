@@ -186,7 +186,7 @@ A disease can also be written as a class, with its states, parameters, and trans
 ```{python}
 class SEIR(ss.Disease):
     S, E, I, R = ss.states(4)
-    beta     = ss.par(ss.perday(0.3), bounds=[0.1, 1], doc='Transmission rate per contact', source='Assumed') # Bounds make it fittable with sim.calibrate(); doc= and source= are shown by describe()
+    beta     = ss.par(ss.perday(0.3), bounds=[0.1, 1], doc='Transmission rate per contact', source='Assumed') # Bounds make it fittable with sim.fit(); doc= and source= are shown by describe()
     exposure = S >> E @ beta * I
     onset    = E >> I @ ss.days(5)
     recovery = I >> R @ ss.days(10)

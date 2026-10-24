@@ -117,7 +117,7 @@ def _(): sir().stratify(age=[0, 15]).stratify(age=[0, 20])
 def _(): ode(sir().stratify(age=[0, 15], adjust={'recovery': [1, -1]})).init()
 
 @trigger(ss.errors.PartialStratificationMixing)
-def _(): ode(sir().stratify(age=[0, 15], states=['S', 'R']), networks=ss.contacts([[3, 1], [1, 3]], bands=[0, 15])).init()
+def _(): ode(sir().stratify(age=[0, 15], states=['S', 'R']), networks=ss.contacts([[3, 1], [1, 3]], ages=[0, 15])).init()
 
 @trigger(ss.errors.InconsistentDimension)
 def _(): ode([sir('a').stratify(age=[0, 15]), sir('b').stratify(age=[0, 20])]).init()
@@ -166,10 +166,10 @@ def _():
     ode(sir(late=late, early=early)).init()
 
 @trigger(ss.errors.DataMisaligned)
-def _(): ode(sir(beta=ss.par(0.3, bounds=[0.1, 0.5])), data=pd.DataFrame(dict(time=[500], I=[10])), stop=100).calibrate()
+def _(): ode(sir(beta=ss.par(0.3, bounds=[0.1, 0.5])), data=pd.DataFrame(dict(time=[500], I=[10])), stop=100).fit()
 
 @trigger(ss.errors.UnknownDataColumn)
-def _(): ode(sir(beta=ss.par(0.3, bounds=[0.1, 0.5])), data=pd.DataFrame(dict(time=[50], n_Q=[10])), stop=100).calibrate()
+def _(): ode(sir(beta=ss.par(0.3, bounds=[0.1, 0.5])), data=pd.DataFrame(dict(time=[50], n_Q=[10])), stop=100).fit()
 
 @trigger(ss.errors.OverlappingSources)
 def _():
@@ -219,16 +219,16 @@ def _():
 def _(): ode(sir().stratify(age=[0, 15], where=dict(sex='female'))).init()
 
 @trigger(ss.errors.NothingToFit)
-def _(): ode(sir(), data=pd.DataFrame(dict(time=[50], I=[10])), stop=100).calibrate()
+def _(): ode(sir(), data=pd.DataFrame(dict(time=[50], I=[10])), stop=100).fit()
 
 @trigger(ss.errors.NoData)
-def _(): ode(sir(beta=ss.par(0.3, bounds=[0.1, 0.5]))).calibrate()
+def _(): ode(sir(beta=ss.par(0.3, bounds=[0.1, 0.5]))).fit()
 
 @trigger(ss.errors.NoPosterior)
-def _(): fittable().calibrate(method='nuts')
+def _(): fittable().fit(method='nuts')
 
 @trigger(ss.AlreadyRunError)
-def _(): ode(sir(), stop=5).run().run()
+def _(): ode(sir(), stop=5).run().finalize()
 
 @trigger(ss.errors.DistNotInitializedError)
 def _(): ss.random(strict=True, auto=False)(5)
@@ -254,13 +254,13 @@ def _(): ss.Sim(n_agents=100, **kw).init().people.age & True
 def _(): ss.Sim(sir(), networks=ssl.DegreeNet(n_contacts=0.7, dur=1000), n_agents=200, stop=10, **kw).run().networks[0].check(n_runs=2)
 
 @trigger(ss.errors.AtBound)
-def _(): fittable(beta=ss.par(0.1, bounds=[0.05, 0.15])).calibrate()
+def _(): fittable(beta=ss.par(0.1, bounds=[0.05, 0.15])).fit()
 
 @trigger(ss.errors.StageStopped)
-def _(): fittable().calibrate(method=[dict(method='nelder-mead', maxiter=2, scan=0), 'nelder-mead'])
+def _(): fittable().fit(method=[dict(method='nelder-mead', maxiter=2, scan=0), 'nelder-mead'])
 
 @trigger(ss.errors.NotConverged)
-def _(): fittable(solver='binomial', total_pop=10_000).calibrate(method='pmcmc', likelihood=dict(I=ss.poisson()), draws=10, warmup=10, chains=2, particles=10, parallel=False, rand_seed=1).summarize() # Warned when the fit is summarized
+def _(): fittable(solver='binomial', total_pop=10_000).fit(method='pmcmc', likelihood=dict(I=ss.poisson()), draws=10, warmup=10, chains=2, particles=10, parallel=False, rand_seed=1).summarize() # Warned when the fit is summarized
 
 @trigger(ss.errors.UndrivenUnused)
 def _():
@@ -290,7 +290,7 @@ def _():
     return ode(ss.Disease(infection=ss.Transition(S, I, rate=0.3 * I), recovery=ss.Transition(I, R, dur=0.5), init_prev=0.01, name='sir')).init()
 
 @trigger(ss.errors.MatrixAggregated, note='aggregated from 3 age groups')
-def _(): return ode(sir(), stratify=dict(age=[0, 15]), networks=ss.contacts(np.ones((3, 3)), bands=[0, 15, 50])).init()
+def _(): return ode(sir(), stratify=dict(age=[0, 15]), networks=ss.contacts(np.ones((3, 3)), ages=[0, 15, 50])).init()
 
 @trigger(ss.errors.OverlappingSet, note='the last one wins')
 def _():
@@ -319,7 +319,7 @@ def _():
     S, I, R = ss.states('S I R')
     model = lambda data=None: ode(ss.Disease(S >> I @ beta*c*I, I >> R @ ss.days(8), init=dict(I=0.01), name='sir'), unit='day', stop=60, data=data)
     truth = model().run().results.sir.I
-    return model(pd.DataFrame(dict(I=truth.values[::10]), index=truth.timevec[::10])).calibrate(pars=['beta', 'c']).sim
+    return model(pd.DataFrame(dict(I=truth.values[::10]), index=truth.timevec[::10])).fit(pars=['beta', 'c']).sim
 
 @trigger(ss.errors.NotCompiled, note='runs as Python')
 def _():

@@ -254,7 +254,7 @@ There is no replicate count on `ss.Sim`: `sim.run(n_runs=100)` is a shortcut for
 | `sim.hash()` | the run's identity, as an `sc.objdict` ([below](#equality-copying-and-identity)) |
 | `sim.to_spec()`, `sim.to_code()` | the model spec ([14-model-spec.md](14-model-spec.md)), and a Python file that builds the sim again ([16-interop.md](16-interop.md)) |
 | `sim.plot()`, `sim.summarize()`, `sim.to_df()` | results, as in Starsim ([09-results.md](09-results.md)) |
-| `sim.calibrate()` | fits parameters that have bounds to results that have data ([13-inference.md](13-inference.md)) |
+| `sim.fit()` | fits parameters that have bounds to results that have data ([13-inference.md](13-inference.md)) |
 
 Age, sex, and place are properties of people, and every module in a sim has to agree on them, so they are stratified once, on the sim. A dimension that belongs to one disease (strain, drug resistance) is stratified on that disease with `sir.stratify(...)`. The sim works on its own copies of the modules it is given, as in Starsim, so one `sir` can be passed to several sims.
 

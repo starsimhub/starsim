@@ -1,7 +1,7 @@
 """
-Fitting sims to data: likelihoods, particle filters, samplers, and what `sim.calibrate()` runs
+Fitting sims to data: likelihoods, particle filters, samplers, and what `sim.fit()` runs
 
-Imported when it is first used (by `ss.fit.X`, `sim.calibrate()`, or `sim.sensitivity()`), not by `import starsim`.
+Imported when it is first used (by `ss.fit.X`, `sim.fit()`, or `sim.sensitivity()`), not by `import starsim`.
 """
 import os
 import inspect
@@ -190,7 +190,7 @@ def logprior(par, x, xp=np):
 
 class ParticleFilter:
     """
-    An estimate of the likelihood of a stochastic sim's data, from a bootstrap particle filter (see `sim.calibrate()` with `method='pmcmc'`)
+    An estimate of the likelihood of a stochastic sim's data, from a bootstrap particle filter (see `sim.fit()` with `method='pmcmc'`)
 
     Many runs of the sim (the particles, `ss.solvers.Particles`) go forward together. At each data point, each is
     weighted by the likelihood of the data given its results, and when the weights become
@@ -397,7 +397,7 @@ class ParticleFilter:
 
 class Swarm:
     """
-    The parameter values of each particle of IF2, iterated filtering, and the rates of the run that they give (see `sim.calibrate()` with method='if2')
+    The parameter values of each particle of IF2, iterated filtering, and the rates of the run that they give (see `sim.fit()` with method='if2')
 
     Each particle carries values of its own, on the unbounded scale that the fit searches on, which a
     random walk perturbs at the start of each pass of the filter and before each data point, by steps that
@@ -897,7 +897,7 @@ def diagnose(draws):
 
 class Fit(sc.prettyobj):
     """
-    The result of fitting a sim to its data; see `sim.calibrate()`
+    The result of fitting a sim to its data; see `sim.fit()`
 
     Attributes:
         sim (`ss.Sim`): the calibrated sim: a copy of the original with the best-fit values, already run
@@ -946,7 +946,7 @@ class Fit(sc.prettyobj):
 
         Examples:
             ```python
-            fit = sim.calibrate(method='abc-smc')
+            fit = sim.fit(method='abc-smc')
             proj = fit.project(dict(baseline=None, vaccine=ss.vaccinate(...)), stop='2021-01-01')
             df = proj.to_df(quantiles=[0.05, 0.5, 0.95])
             ```
@@ -1294,7 +1294,7 @@ def bound_value(b, raw):
 
 def bounded_pars(probe, pars=None, unused=()):
     """
-    The parameters with bounds in an initialized sim, as `sim.calibrate()` and `sensitivity()` vary them
+    The parameters with bounds in an initialized sim, as `sim.fit()` and `sensitivity()` vary them
 
     Args:
         probe (Sim): an initialized sim
@@ -1349,7 +1349,7 @@ def sensitivity(sim, pars=None, results=None, n=100, rand_seed=None, verbose=Non
         raise ss.errors.NothingToFit('sensitivity() needs parameters with bounds, e.g. beta = ss.par(0.3, bounds=[0.1, 0.5]).')
     names = list(bounded.keys())
     lows, highs = [np.array([float(p.bounds[k]) for p in bounded.values()]) for k in [0, 1]]
-    logs = (lows > 0) & (highs/np.maximum(lows, 1e-300) >= 10) # Wide positive bounds are sampled on a log scale, as calibrate() searches them
+    logs = (lows > 0) & (highs/np.maximum(lows, 1e-300) >= 10) # Wide positive bounds are sampled on a log scale, as fit() searches them
     unit = sps.qmc.LatinHypercube(d=len(names), seed=rand_seed if rand_seed is not None else 1).random(n)
     lo, hi = np.where(logs, np.log(lows), lows), np.where(logs, np.log(highs), highs)
     X = lo + unit*(hi - lo)
@@ -1392,7 +1392,7 @@ def sensitivity(sim, pars=None, results=None, n=100, rand_seed=None, verbose=Non
 
 def profile(sim, par, values=None, level=0.95, **kwargs):
     """
-    The profile likelihood of one parameter: at each of its values, the others refitted by maximum likelihood (`sim.calibrate(pars=...)`), and the confidence interval it gives
+    The profile likelihood of one parameter: at each of its values, the others refitted by maximum likelihood (`sim.fit(pars=...)`), and the confidence interval it gives
 
     The interval is the values whose negative log-likelihood is within half the chi-squared quantile with one
     degree of freedom (1.92 for 95%) of the lowest. Unlike the spread of a point estimate, it also shows whether
@@ -1407,7 +1407,7 @@ def profile(sim, par, values=None, level=0.95, **kwargs):
         par (str): the name of the parameter to profile, one with a single value
         values (list): its values (default: the best fit of every parameter, 10 points spread over the bounds of this one, on the scale it is searched on, then 10 more at a time over the interval and the points next to it, until 5 are within it, at most 4 times)
         level (float): the confidence level of the interval
-        kwargs (dict): passed to `sim.calibrate()` for each fit, e.g. `likelihood=` or `pars=` (the parameters to refit; default: all that have bounds)
+        kwargs (dict): passed to `sim.fit()` for each fit, e.g. `likelihood=` or `pars=` (the parameters to refit; default: all that have bounds)
 
     Returns an objdict with `table` (a dataframe with a row for each value: the value, the refitted values of the
     others, the negative log-likelihood `nll`, and whether the value is in the interval), `best` (the value with
@@ -1447,7 +1447,7 @@ def profile(sim, par, values=None, level=0.95, **kwargs):
         if others:
             with warnings.catch_warnings(): # Far from the best, the others are expected to end at their bounds
                 warnings.simplefilter('ignore', ss.errors.AtBound)
-                fit = fixed.calibrate(**calibrate)
+                fit = fixed.fit(**calibrate)
             return dict({par:float(value)}, **dict(zip(fit.table.par, fit.table.best)), nll=fit.mismatch)
         return {par:float(value), 'nll':-loglik(fixed.run(), likelihood=kwargs.get('likelihood'), weights=kwargs.get('weights'))}
 
@@ -1455,7 +1455,7 @@ def profile(sim, par, values=None, level=0.95, **kwargs):
     if values is not None:
         rows = [point(v) for v in values]
     else:
-        fit = sim.calibrate(**sc.mergedicts(kwargs, dict(pars=others + [par]) if 'pars' in kwargs else {}))
+        fit = sim.fit(**sc.mergedicts(kwargs, dict(pars=others + [par]) if 'pars' in kwargs else {}))
         best = dict(zip(fit.table.par, fit.table.best))
         rows = [dict({par:float(best[par])}, **{k:v for k,v in best.items() if k != par}, nll=fit.mismatch)]
         i = problem.names.index(par)
@@ -1494,7 +1494,7 @@ def prior_draws(sim, n, seed=None):
 
     Returns a dict with a list of `n` values for each parameter that has a prior or bounds;
     a parameter with a value for each level (`ss.par(ss.by(age=[...]), prior=...)`) has a draw
-    for each level, as "beta[a]", "beta[b]", ..., as `calibrate()` fits it.
+    for each level, as "beta[a]", "beta[b]", ..., as `fit()` fits it.
     """
     rng = np.random.default_rng(seed)
     probe = sim.new(verbose=0).init()
@@ -1522,7 +1522,7 @@ def prior_draws(sim, n, seed=None):
 
 def fit_stages(sim, stages, verbose=None, **kwargs):
     """
-    Staged fitting: run each method in turn, each starting from the best fit of the one before; see `sim.calibrate()` with `method=` a list
+    Staged fitting: run each method in turn, each starting from the best fit of the one before; see `sim.fit()` with `method=` a list
 
     Each stage is a method's name, or a dict with `method=` and that method's settings. A stage
     that does not converge stops the sequence (`ss.errors.StageStopped`), and the fit returned is that
@@ -1536,7 +1536,7 @@ def fit_stages(sim, stages, verbose=None, **kwargs):
         method = stage.pop('method')
         if verbose:
             print(f'Stage {i+1} of {len(stages)}: {method}' + (f', started from stage {i}' if i else ''))
-        fit = current.calibrate(method=method, verbose=verbose, **sc.mergedicts(kwargs, stage))
+        fit = current.fit(method=method, verbose=verbose, **sc.mergedicts(kwargs, stage))
         if not fit.converged:
             if i < len(stages) - 1:
                 ss.warn(f'stage {i+1} ({method}) did not converge ({fit.why}), so the stages after it were not run; returning {"stage " + str(i) if good is not None else "its best attempt"}', ss.errors.StageStopped)
@@ -1556,7 +1556,7 @@ def check_gof(gof):
 
 def default_method(sim, use_lik, no_grad=None, n_pars=None):
     """
-    The fitting method that suits a sim, and why: always a point estimate (a posterior is asked for by name), so that what is installed does not change what a fit gives; see `sim.calibrate()`
+    The fitting method that suits a sim, and why: always a point estimate (a posterior is asked for by name), so that what is installed does not change what a fit gives; see `sim.fit()`
 
     Args:
         sim (`ss.Sim`): the sim, initialized
@@ -1583,14 +1583,14 @@ def default_method(sim, use_lik, no_grad=None, n_pars=None):
 
 class Problem:
     """
-    What a fit works on, built once: the fitted parameters (with their bounds, priors, scales, and levels), the data and how it is scored, and how the sim is run; see `sim.calibrate()`
+    What a fit works on, built once: the fitted parameters (with their bounds, priors, scales, and levels), the data and how it is scored, and how the sim is run; see `sim.fit()`
 
     Each fitting method (see `methods`) is a function of a problem. Values are on one of three scales:
     the values themselves (`x`); the scale an optimizer searches on (`encode()`, the log of a value with wide
     positive bounds); and the scale a sampler or random walk moves on, on which every value is allowed
     (`to_z()`, the logit of each value's place between its bounds, of its log for wide bounds).
 
-    Args: as for `sim.calibrate()`
+    Args: as for `sim.fit()`
     """
     def __init__(self, sim, pars=None, data=None, weights=None, likelihood=None, gof=None, n_runs=None, rand_seed=None, verbose=None):
         base = sim.new(verbose=0)
@@ -1602,7 +1602,7 @@ class Problem:
             probe.data = data
         probe.init()
         if probe.data is None and not callable(gof): # A loss that is a function of the sim brings its own data
-            raise ss.errors.NoData('calibrate() needs data: attach it to the sim with ss.Sim(..., data=...), with one column named like each result to fit; or give gof= as a function of the sim that returns the loss.')
+            raise ss.errors.NoData('fit() needs data: attach it to the sim with ss.Sim(..., data=...), with one column named like each result to fit; or give gof= as a function of the sim that returns the loss.')
         self.verbose = verbose = sc.ifelse(verbose, ss.options.verbose)
         check_gof(gof)
         if probe.data is not None and not callable(gof): # Every column is compared with its result, so one that matches none is an error; a loss that is a function of the sim reads what it needs
@@ -1635,7 +1635,7 @@ class Problem:
             why = f'gof="{gof}" was given' if gof is not None else 'not every data series has a likelihood'
             print(f'Note: {why}, so the likelihoods of {sc.strjoin([k for k,v in liks.items() if v is not None])} are not used')
         if not fitted:
-            raise ss.errors.NothingToFit('calibrate() found no parameter with bounds; give the parameters to fit bounds, e.g. beta = ss.par(0.1, bounds=[0.01, 0.5]).')
+            raise ss.errors.NothingToFit('fit() found no parameter with bounds; give the parameters to fit bounds, e.g. beta = ss.par(0.1, bounds=[0.01, 0.5]).')
         self.fitted = fitted
         self.names = names = list(fitted.keys())
         self.products = product_pairs(probe, names[:self.n_model]) # Parameters that the data cannot tell apart, from the model
@@ -2025,7 +2025,7 @@ def fit_optuna(problem, trials=None, n_trials=100, scan=None, n_workers=None, st
     known = [key for key in inspect.signature(optuna.Study.optimize).parameters if key not in ['self', 'func', 'n_trials']]
     unknown = [key for key in kwargs if key not in known]
     if unknown:
-        errormsg = f'calibrate(method="optuna") takes trials= (the number of trials), n_workers=, storage=, and Optuna\'s own keywords ({sc.strjoin(known)}), not {sc.strjoin(unknown)}'
+        errormsg = f'fit(method="optuna") takes trials= (the number of trials), n_workers=, storage=, and Optuna\'s own keywords ({sc.strjoin(known)}), not {sc.strjoin(unknown)}'
         raise TypeError(errormsg)
     n_workers = n_workers or 1
     temp = None
@@ -2208,7 +2208,7 @@ def fit_nuts(problem, draws=500, warmup=500, chains=4, scan=None, **kwargs):
 
 grad_methods = ['l-bfgs-b', 'bfgs', 'cg', 'tnc', 'slsqp', 'trust-constr'] # The SciPy methods that use gradients, when the sim has them
 sampling_methods = ['nuts', 'pmcmc', 'abc-smc'] # The methods that give a posterior
-methods = {'nuts':fit_nuts, 'pmcmc':fit_pmcmc, 'abc-smc':fit_abc_smc, 'if2':fit_if2, 'optuna':fit_optuna, 'asd':fit_asd} | {name:functools.partial(fit_scipy, method=name) for name in scipy_methods} # The methods that sim.calibrate() knows, by name
+methods = {'nuts':fit_nuts, 'pmcmc':fit_pmcmc, 'abc-smc':fit_abc_smc, 'if2':fit_if2, 'optuna':fit_optuna, 'asd':fit_asd} | {name:functools.partial(fit_scipy, method=name) for name in scipy_methods} # The methods that sim.fit() knows, by name
 
 
 def split_data(df, holdout=0.25, folds=None):
@@ -2304,7 +2304,7 @@ def compare_models(sims, data=None, holdout=0.25, folds=None, **kwargs):
     """
     Compare models by how well they predict data they were not fitted to
 
-    Each model is fitted (with `sim.calibrate()`) to all but the last part of each
+    Each model is fitted (with `sim.fit()`) to all but the last part of each
     data series, run forward over that part, and scored on it: by the default
     goodness of fit, or by the log predictive density if every series of every model
     has a likelihood; the same measure is used for every model. A model with more
@@ -2316,7 +2316,7 @@ def compare_models(sims, data=None, holdout=0.25, folds=None, **kwargs):
         data (df/str): the data, attached to every sim (default: each sim's own data, which must be the same for all)
         holdout (float/date): the fraction of each series to hold out (default: the last 25%), or the date (or time) from which to hold it out
         folds (int): if given, repeat the comparison with this many cut points over the held-out part (fit to the first part, predict the next block), and report the mean and spread of the prediction error
-        kwargs (dict): passed to `sim.calibrate()`, e.g. `weights=`
+        kwargs (dict): passed to `sim.fit()`, e.g. `weights=`
 
     Returns:
         An `ss.fit.ModelComparison`; `comp.fits` holds each model's fit
@@ -2374,7 +2374,7 @@ def compare_models(sims, data=None, holdout=0.25, folds=None, **kwargs):
         fit_errors = []
         errors = []
         for train,test in splits:
-            fit = sim.calibrate(data=train, verbose=False, **sc.mergedicts(dict(method=default_method(probe, use_lik)[0]), kwargs)) # A point estimate, for each fold
+            fit = sim.fit(data=train, verbose=False, **sc.mergedicts(dict(method=default_method(probe, use_lik)[0]), kwargs)) # A point estimate, for each fold
             fold_fits.append(fit)
             for df_part,out in [(train, fit_errors), (test, errors)]: # Each scored the same way
                 if use_lik:

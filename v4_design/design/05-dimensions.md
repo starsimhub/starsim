@@ -18,9 +18,11 @@ A dimension name refers to one property across the whole sim, so two modules str
 
 <!-- fragment -->
 ```python
-sir.stratify(age=[0, 15, 65])        # a disease
+sir.stratify(age=[0, 15, 65])        # a disease; the same as ss.Disease(..., stratify=dict(age=[0, 15, 65]))
 sim.stratify(age=[0, 15, 65])        # every disease in the sim; the same as ss.Sim(..., stratify=dict(age=[0, 15, 65]))
 ```
+
+The share of people in each level can be given with the levels, as a dict (`age={0: 0.3, 15: 0.6, 65: 0.1}`), or as `split=` (`age=[0, 15, 65], split=[0.3, 0.6, 0.1]`).
 
 `stratify()` **stratifies the model it is given, in place, and returns it**. In place is the default because it is what is wanted nearly every time, and a line like `sir.stratify(age=...)` that left `sir` unchanged would be the more common mistake. Because the model is returned, the call can go straight into the sim, and calls chain, each one stratifying the result of the one before:
 
@@ -29,7 +31,7 @@ sim.stratify(age=[0, 15, 65])        # every disease in the sim; the same as ss.
 sim = ss.Sim(sir.stratify(age=[0, 15, 65]), networks=ss.contacts('Kenya'))
 
 sir.stratify(age=[0, 15, 65], adjust={'recovery': [1.5, 1.0, 0.5]})
-sir.stratify(risk=['low', 'high'], split=[0.8, 0.2], adjust={'infection': [1.0, 3.0]})
+sir.stratify(risk={'low': 0.8, 'high': 0.2}, adjust={'infection': [1.0, 3.0]})
 ```
 
 `inplace=False` returns a stratified copy and leaves the original untouched, for running the two side by side:
@@ -47,7 +49,7 @@ The full signature:
 <!-- fragment -->
 ```python
 model.stratify(
-    age      = [0, 15, 65],  # the dimension, by name: bin edges, labels, or a geography
+    age      = [0, 15, 65],  # the dimension, by name: bin edges, labels, or a geography; or a dict of the share in each level
     split    = None,       # share of the population in each level
     adjust   = None,       # {transition_name: [multiplier per level]}; also rel_trans and rel_sus
     states   = None,       # which states the dimension applies to (default: every state that is people)
@@ -334,7 +336,7 @@ sir.stratify(age=[0, 15, 65])
 ss.Sim(sir, networks=ss.contacts('Kenya'))
 ```
 
-`ss.contacts()` takes a contact matrix in four forms: a country's, by name (`ss.contacts('Kenya')`, by five-year age group, from `starsim_data`); a matrix with the lower edge of each of its own age groups (`ss.contacts(matrix, bands=[0, 15, 65])`; `age=` is always a matrix over the model's own age groups); or a matrix over the levels of one or more of the model's own dimensions, by name (`ss.contacts(risk=[[2, 1], [1, 8]])`, used whatever the dimension is called; with several, the contacts between two groups are the product of the entries for each); or one matrix over several dimensions together, for mixing that is not such a product (men mix with women, and by risk differently for each sex): `ss.contacts(matrix, dims=['sex', 'risk'])`, with `matrix[i, k, j, l]` the contacts per unit time of one person at levels `(i, k)` with people at `(j, l)`, or the same as a square matrix over the combinations of levels, the first dimension slowest. Its shape is checked against the dimensions' levels when the sim is built (`ShapeError`, naming each dimension's levels), and it is used as given, not balanced; a separable matrix given whole gives the same results as the product form. A matrix by age need not have the model's age groups: the Prem matrices come in five-year bands whatever the model uses. A matrix carries its unit of time: a country's is contacts a day, whatever the sim's unit (S7.8: it was read in the sim's unit, so a sim in years or months had 365 or 30 times too few contacts), and `unit='week'` says it for any matrix; without `unit=`, a matrix given as numbers is per unit of the sim's time, as any bare number is.
+`ss.contacts()` takes a contact matrix in four forms: a country's, by name (`ss.contacts('Kenya')`, by five-year age group, from `starsim_data`); a matrix with the lower edge of each of its own age groups (`ss.contacts(ages=[0, 15, 65], matrix=...)`; `age=` is always a matrix over the model's own age groups); or a matrix over the levels of one or more of the model's own dimensions, by name (`ss.contacts(risk=[[2, 1], [1, 8]])`, used whatever the dimension is called; with several, the contacts between two groups are the product of the entries for each); or one matrix over several dimensions together, for mixing that is not such a product (men mix with women, and by risk differently for each sex): `ss.contacts(matrix, dims=['sex', 'risk'])`, with `matrix[i, k, j, l]` the contacts per unit time of one person at levels `(i, k)` with people at `(j, l)`, or the same as a square matrix over the combinations of levels, the first dimension slowest. Its shape is checked against the dimensions' levels when the sim is built (`ShapeError`, naming each dimension's levels), and it is used as given, not balanced; a separable matrix given whole gives the same results as the product form. A matrix by age need not have the model's age groups: the Prem matrices come in five-year bands whatever the model uses. A matrix carries its unit of time: a country's is contacts a day, whatever the sim's unit (S7.8: it was read in the sim's unit, so a sim in years or months had 365 or 30 times too few contacts), and `unit='week'` says it for any matrix; without `unit=`, a matrix given as numbers is per unit of the sim's time, as any bare number is.
 
 - **In a compartmental run** the matrix is aggregated to the model's groups, weighted by population. Where a model group cuts through a matrix band, the band is split in proportion to population. A one-line note says the matrix was aggregated (`MatrixAggregated`).
 - **In an agent-based run** the matrix is used with its own groups: each agent has an exact age and is counted in whichever band the matrix uses.

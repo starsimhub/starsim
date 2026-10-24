@@ -569,7 +569,7 @@ def test_space():
         truth = ss.Sim(commuters(0.02), solver=solver, **pars).run().results.sir.infection
         data = sc.dataframe(date=truth.timevec, **{f'infection[patch={p}]': truth.select(patch=p) for p in 'abc'})
         away = ss.par(0.1, bounds=[0.002, 0.3])
-        fit = ss.Sim(commuters(away), data=data, solver=solver, **pars).calibrate(verbose=0)
+        fit = ss.Sim(commuters(away), data=data, solver=solver, **pars).fit(verbose=0)
         rtol = 0.05 if solver == 'ode' else 0.5 # A stochastic fit takes fresh seeds at each point, so it does not reproduce the data's own draws (0.023 to 0.029 over three seeds of the fit)
         assert np.isclose(fit.pars.away, 0.02, rtol=rtol), f'Expected to recover away=0.02 with {solver}, not {fit.pars.away}' # Before, a TypeError at init
     assert 'away=away' in ss.Sim(commuters(away), **pars).to_code() # The saved form keeps the fitted parameter, with its bounds, not its value
@@ -636,7 +636,7 @@ import starsim as ss
 S, I, R = ss.states(3)
 sir = ss.Disease(infection=S >> I @ 0.3*I, recovery=I >> R @ ss.days(10), init_prev=0.01, name='sir')
 towns = ss.geo.geography(names=['a', 'b'], pop=[6000, 4000], x=[0, 10], y=[0, 0])
-ss.Sim(sir.stratify(patch=towns, mobility=ss.geo.gravity()), networks=ss.contacts([[3, 1], [1, 2]], bands=[0, 18]), unit='day', stop=20, verbose=0).run()
+ss.Sim(sir.stratify(patch=towns, mobility=ss.geo.gravity()), networks=ss.contacts([[3, 1], [1, 2]], ages=[0, 18]), unit='day', stop=20, verbose=0).run()
 ss.Sim(sir, networks=ss.RandomNet(), n_agents=500, unit='day', stop=20, verbose=0).run()
 ss.Sim(ss.SIS(), stratify=dict(age=[0, 15, 65]), solver='ode', verbose=0).run()
 print('starsim_data' in sys.modules)
@@ -704,7 +704,7 @@ def test_mixing():
                          init_n=dict(I=ss.by(pd.DataFrame(dict(age=['0-4'], place=['a'], value=[10])))), name='sir')
         sir.stratify(age=[0, 5, 50])
         sir.stratify(place=['a', 'b'], kind='space', split=ss.by([[3000, 1000], [5000, 2000], [2000, 500]], dims=['age', 'place']), mobility=mobility)
-        return ss.Sim(sir, networks=ss.contacts([[12, 4, 1], [4, 8, 2], [1, 2, 3]], bands=[0, 5, 50]), total_pop=13_500, unit='day', stop=100, **kw)
+        return ss.Sim(sir, networks=ss.contacts([[12, 4, 1], [4, 8, 2], [1, 2, 3]], ages=[0, 5, 50]), total_pop=13_500, unit='day', stop=100, **kw)
     start = at_start(make_places()).sir
     n = [sum(start[k].select(age=age, place=place)[0] for k in 'SIR') for age in ['0-4', '50+'] for place in ['a', 'b']]
     assert np.allclose(n, [3000, 1000, 2000, 500])
@@ -747,14 +747,14 @@ def test_mixing():
     def attack(solver):
         S, I, R = ss.states('S I R')
         sir = ss.Disease(infection=ss.Transition(S, I, rate=0.03 * I), recovery=ss.Transition(I, R, dur=10), init_prev=0.01, name='sir').stratify(age=[0, 50])
-        sim = ss.Sim(sir, networks=ss.contacts([[12, 1, 1], [1, 2, 1], [1, 1, 1]], bands=[0, 5, 50]), people=ss.people('Kenya'), use_aging=False, unit='day', stop=300, solver=solver, **kw)
+        sim = ss.Sim(sir, networks=ss.contacts([[12, 1, 1], [1, 2, 1], [1, 1, 1]], ages=[0, 5, 50]), people=ss.people('Kenya'), use_aging=False, unit='day', stop=300, solver=solver, **kw)
         res = sim.run().results.sir
         return res.infection.cum[-1]/res.S[0]
     assert np.isclose(attack('ode'), attack('abm'), rtol=0.05) # 0.58 and 0.57; 0.50 by band width
     S, I, R = ss.states('S I R') # A count in a rate is used literally, so the contacts do not apply to it, which is noted
     literal = ss.Disease(infection=S >> I @ 0.05*I.n/(S + I + R).n, recovery=I >> R @ ss.days(10), init=dict(I=0.01), name='sir').stratify(age=[0, 15])
-    assert any('literally' in note for note in ss.Sim(literal, networks=ss.contacts([[3, 1], [1, 2]], bands=[0, 15]), **kw).init().notes)
-    for bad in [dict(matrix=[[-5, 0], [0, 1]], bands=[0, 20]), dict(matrix=[[1, 0], [0, 1]], bands=[20, 0]), dict(age=[[1, np.nan], [1, 1]])]:
+    assert any('literally' in note for note in ss.Sim(literal, networks=ss.contacts([[3, 1], [1, 2]], ages=[0, 15]), **kw).init().notes)
+    for bad in [dict(matrix=[[-5, 0], [0, 1]], ages=[0, 20]), dict(matrix=[[1, 0], [0, 1]], ages=[20, 0]), dict(age=[[1, np.nan], [1, 1]])]:
         with pytest.raises(ValueError):
             ss.contacts(**bad)
 
@@ -816,9 +816,9 @@ def test_ragged():
     split = next(strat for strat in sim.groups.strats if strat.name == 'age').split
     assert (sim.groups.group_levels[:, 2] >= 0).sum() == 4 and np.isclose(sim.results.sir.S.by('parity').values[0].sum(), 5_000*split[1:3].sum(), rtol=0.01) # Women aged 25 to 49
     with pytest.raises(ss.errors.PartialStratificationMixing):
-        ss.Sim(make(), networks=ss.contacts([[3, 1, 1, 1], [1, 3, 1, 1], [1, 1, 3, 1], [1, 1, 1, 3]], bands=[15, 25, 35, 50]), **kw).init()
+        ss.Sim(make(), networks=ss.contacts([[3, 1, 1, 1], [1, 3, 1, 1], [1, 1, 3, 1], [1, 1, 1, 3]], ages=[15, 25, 35, 50]), **kw).init()
     with pytest.raises(ss.errors.PartialStratificationMixing): # So do contacts by a dimension that the infectious state does not have
-        ss.Sim(sir.copy().stratify(age=[0, 15], states=['S', 'R']), networks=ss.contacts([[3, 1], [1, 3]], bands=[0, 15]), **kw).init()
+        ss.Sim(sir.copy().stratify(age=[0, 15], states=['S', 'R']), networks=ss.contacts([[3, 1], [1, 3]], ages=[0, 15]), **kw).init()
     with pytest.raises(ss.errors.MissingDimension):
         ss.Sim(sir.copy().stratify(age=[0, 15], where=dict(sex='female')), **kw).init()
 

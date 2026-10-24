@@ -36,7 +36,7 @@ print(f'Infections: {sim.results.sis.infection.sum():,.0f}')
 sim.plot()
 ```
 
-A declared disease can then be described (`sim.describe()`), run as an ODE or a stochastic compartmental model when nothing in the sim needs agents, swept and compared with `ss.parallel()` and `msim.diff()`, and fitted with `sim.calibrate()`.
+A declared disease can then be described (`sim.describe()`), run as an ODE or a stochastic compartmental model when nothing in the sim needs agents, swept and compared with `ss.parallel()` and `msim.diff()`, and fitted with `sim.fit()`.
 
 ## What still runs
 
@@ -52,7 +52,7 @@ These are from Starsim's switching demo for Starsim 3 users (`tests/switching/te
 |---|---|
 | Run a Starsim 3 model with the disease as code | **Works**: the SIS above as `ssl.AgentSIS` (one changed name) gives the Starsim 3 answer within seed noise (22,555 infections against 21,557, where two seeds differ by about 6%) |
 | Use Starsim 4 verbs on a disease written as code: `ss.modify(hiv.rel_trans, multiply=0.5, start=2005)`, conditions on its arrays (`where=hiv.cd4 < 200`), scenarios with `ss.parallel()` and `msim.diff('baseline')` | **Works**, on the library HIV written as code alongside a declared SIS |
-| Fit with `sim.calibrate()`, with bounds given on a parameter (`ss.SIS(beta=ss.par(ss.peryear(0.1), bounds=[0.05, 1]))`) | **Works**, for the declared `ss.SIS` and for `ssl.AgentSIS` |
+| Fit with `sim.fit()`, with bounds given on a parameter (`ss.SIS(beta=ss.par(ss.peryear(0.1), bounds=[0.05, 1]))`) | **Works**, for the declared `ss.SIS` and for `ssl.AgentSIS` |
 | Port a disease with its `beta` dict copied verbatim | **Warns**: the result is about 12 times too low at monthly steps, and Starsim 4 says why |
 | Port one disease at a time | **Works**: a sim can mix diseases written as code and declared ones, and `ss.parallel()` sweeps and `diff()` work on the whole sim |
 | Speed of a model written as code | **Faster**: an unchanged Starsim 3 model with HIV, an SIS, an SIRS, two networks, demographics, and interventions ran about twice as fast under Starsim 4 (2.2 s against 4.9 s at 3,000 agents) |

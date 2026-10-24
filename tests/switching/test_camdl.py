@@ -91,7 +91,7 @@ def test_camdl_if2():
     sir = ss.Disease(infection, I >> R @ gamma, cases, init_n=dict(I=10), name='sir')
     data = pd.DataFrame(dict(time=7*np.arange(1, 13), cases=ref_cases))
     sim = ss.Sim(sir, total_pop=10_000, unit='day', stop=ss.weeks(12), solver='binomial', data=data, verbose=0)
-    fit = sim.calibrate(method='if2')
+    fit = sim.fit(method='if2')
     beta, gamma = fit.pars.beta.value, fit.pars.gamma.value # Per day
     assert ref_beta[0] < beta < ref_beta[1], f'IF2 beta {beta:.3f}, outside camdl\'s PMMH interval {ref_beta}'
     assert ref_gamma[0] < gamma < ref_gamma[1], f'IF2 gamma {gamma:.3f}, outside camdl\'s PMMH interval {ref_gamma}'

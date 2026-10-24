@@ -257,9 +257,9 @@ def test_names():
     with pytest.raises(ss.errors.OutcomeCycle):
         ss.Sim(make_sir(late=late, early=early), **kw).init()
     with pytest.raises(ss.errors.DataMisaligned): # Entirely after the run
-        ss.Sim(seir, data=pd.DataFrame({'time': [500], 'I': [10]}), stop=100, **kw).calibrate()
+        ss.Sim(seir, data=pd.DataFrame({'time': [500], 'I': [10]}), stop=100, **kw).fit()
     with pytest.raises(ss.errors.NothingToFit):
-        ss.Sim(make_sir(), data=pd.DataFrame({'time': [50], 'I': [10]}), stop=100, **kw).calibrate()
+        ss.Sim(make_sir(), data=pd.DataFrame({'time': [50], 'I': [10]}), stop=100, **kw).fit()
 
     # Operators that would silently drop something
     W = ss.State('W', people=False) # The water first: the first state of people is still S
@@ -574,7 +574,7 @@ def test_describe():
     assert np.isclose(seir.R0(), 0.3/(0.1 + 0.05))
     C = np.array([[10, 3], [3, 5]])
     S, I, R = ss.states('S I R')
-    aged = ss.Sim(ss.Disease(infection=ss.Transition(S, I, rate=0.03 * I), recovery=ss.Transition(I, R, dur=10)), networks=ss.contacts(C, bands=[0, 20]), **kw)
+    aged = ss.Sim(ss.Disease(infection=ss.Transition(S, I, rate=0.03 * I), recovery=ss.Transition(I, R, dur=10)), networks=ss.contacts(C, ages=[0, 20]), **kw)
     assert np.isclose(aged.init().diseases[0].R0(), 0.3*np.linalg.eigvals(C).max()) # With the mixing of its sim
     assert 'C[i, j] * I[j] / N[j]' in aged.diseases[0].equations(output=True) # And its equations say so, with the matrix
     cholera = ss.Sim(make_cholera(), total_pop=10_000, unit='day', **kw)

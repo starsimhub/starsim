@@ -1,6 +1,10 @@
 """
 How a model is shown: `describe()`, `diagram()`, `equations()`, and its part of the model spec (`to_spec()`)
 """
+import os
+import sys
+import html
+import shutil
 import inspect
 import textwrap
 import numpy as np
@@ -9,23 +13,129 @@ import starsim as ss
 from .expressions import BinOp, Expr, format_expr, par, value_str
 from .parameters import by, TimeValue
 
-__all__ = ['Presentation']
+__all__ = ['Presentation', 'Description']
+
+
+#%% Text in a terminal or a notebook
+
+styles = dict(bold='1', dim='2', italic='3', red='31', green='32', yellow='33', blue='34', cyan='36')
+
+def in_color():
+    """ Whether to print in color: to a terminal (not a file, a pipe, or a notebook), unless the NO_COLOR environment variable is set """
+    return sys.stdout.isatty() and not os.environ.get('NO_COLOR') and not sc.isjupyter()
+
+
+def style(text, *names, color=True):
+    """ The text in the named styles (e.g. 'bold', 'cyan'), if `color` """
+    if not names or not color:
+        return text
+    return f'\033[{";".join(styles[name] for name in names)}m{text}\033[0m'
+
+
+class Description:
+    """
+    The description of a model (see `sim.describe()`): sections, each with a title and rows of a key, its text, and what was guessed
+
+    Shown in color in a terminal, as tables in a notebook, and as plain text otherwise (`str(desc)`), with each guess in
+    brackets at the end of its line.
+    """
+    key_width = 12 # The width of the column of keys
+    guess_col = 62 # Where the guesses start, in plain text
+
+    def __init__(self):
+        self.sections = []
+        return
+
+    def section(self, title, summary=None):
+        """ Start a section, e.g. `section("Disease 'sir'", '3 states, 2 transitions')` """
+        self.sections.append(sc.objdict(title=title, summary=summary, rows=[]))
+        return self
+
+    def add(self, key, text, guess=None):
+        """ Add a row to the last section: a key (or '' to go on from the row before), its text, and what was guessed """
+        if not self.sections:
+            self.section(None)
+        self.sections[-1].rows.append((key, text, guess))
+        return self
+
+    def extend(self, other):
+        """ Add the sections of another description """
+        self.sections += other.sections
+        return self
+
+    def __bool__(self):
+        return any(sec.title or sec.rows for sec in self.sections)
+
+    def text(self, color=False, width=None):
+        """ As lines of text; in color, a guess too long for the line goes on the next """
+        width = width or shutil.get_terminal_size().columns
+        lines = []
+        for sec in self.sections:
+            if lines:
+                lines.append('')
+            if sec.title:
+                summary = f'  {style(sec.summary, "dim", color=color)}' if sec.summary else ''
+                lines.append(style(sec.title, 'bold', 'cyan', color=color) + summary)
+            indent = '  ' if sec.title else ''
+            for key,text,guess in sec.rows:
+                pad = f'{key:{self.key_width}s}'
+                plain = f'{indent}{pad} {text}'.rstrip()
+                if not color:
+                    lines.append(f'{plain:{self.guess_col}s} [{guess}]' if guess else plain)
+                    continue
+                line = f'{indent}{style(pad, "bold")} {text}'.rstrip()
+                if guess:
+                    shown = style(f'[{guess}]', 'dim', 'yellow')
+                    fits = len(plain) + len(guess) + 4 <= width
+                    line = f'{line}  {shown}' if fits else f'{line}\n{" "*(len(indent) + len(pad) + 1)}{shown}'
+                lines.append(line)
+        return lines
+
+    def __str__(self):
+        return '\n'.join(self.text())
+
+    def __repr__(self):
+        return str(self)
+
+    def html(self):
+        """ As HTML: a table for each section """
+        esc = html.escape
+        out = ['<div style="font-size:0.9em; line-height:1.35">']
+        for sec in self.sections:
+            if sec.title:
+                summary = f' <span style="opacity:0.6">{esc(sec.summary)}</span>' if sec.summary else ''
+                out.append(f'<div style="font-weight:bold; margin:0.8em 0 0.2em 0">{esc(sec.title)}{summary}</div>')
+            out.append('<table style="border-collapse:collapse; margin-left:1em">')
+            for key,text,guess in sec.rows:
+                guess = f'<span style="opacity:0.6; font-style:italic">{esc(guess)}</span>' if guess else ''
+                out.append(f'<tr><td style="padding:0 1em 0 0; font-weight:bold; vertical-align:top; text-align:left">{esc(key)}</td>'
+                           f'<td style="padding:0 1em 0 0; text-align:left">{esc(text)}</td><td style="text-align:left">{guess}</td></tr>')
+            out.append('</table>')
+        out.append('</div>')
+        return '\n'.join(out)
+
+    def _repr_html_(self):
+        return self.html()
+
+    def show(self):
+        """ Print it: as tables in a notebook, in color in a terminal, and as plain text otherwise """
+        if sc.isjupyter():
+            from IPython.display import display, HTML
+            display(HTML(self.html()))
+        else:
+            print('\n'.join(self.text(color=in_color())))
+        return
 
 
 class Presentation:
     """ How a graph (`ss.transitions.Graph`) is shown: `describe()`, `diagram()`, `equations()`, and `to_spec()`, which the graph inherits """
-    def describe(self, sim=None):
-        """ The resolved model as text, with every guessed default marked; see `ss.Disease.describe()` """
+    def describe(self, sim=None, out=None):
+        """ The resolved model, with every guessed default marked, as a section of a `Description` (`out`, or a new one); see `ss.Disease.describe()` """
         mod = self.module
         engine = getattr(mod, 'engine', None)
         unit = sim.unit_name if sim is not None else None
-        lines = []
-        def add(key, text, guess=None):
-            line = f'{key:12s} {text}'
-            if guess:
-                line = f'{line:60s} [{guess}]'
-            lines.append(line.rstrip())
-            return
+        out = Description() if out is None else out
+        add = out.add
         shown = set() # The parameters whose doc= and source= are shown already
         def provenance(p):
             """ A parameter's doc= and source=, under it """
@@ -36,7 +146,7 @@ class Presentation:
                         add('', f'  {text}')
             return
 
-        lines.append(f"{type(mod).__bases__[0].__name__ if type(mod).__bases__[0] is not ss.Module else type(mod).__name__} '{mod.name}': {len(self.states)} states, {len(self.transitions)} transitions")
+        out.section(f"{type(mod).__bases__[0].__name__ if type(mod).__bases__[0] is not ss.Module else type(mod).__name__} '{mod.name}'", f'{len(self.states)} states, {len(self.transitions)} transitions')
         people = ', '.join(s.name for s in self.people_states)
         add('states', people)
         for state in self.count_states:
@@ -56,7 +166,7 @@ class Presentation:
             add('', 'init: ' + ', '.join(f'{k} = {v}' for k,v in inits.items()) + rest, f'guessed: {"; ".join(guesses)}' if guesses else None)
         elif self.first is not None:
             add('', f'init: {self.first.name} = 1.0', f'guessed: {"; ".join(["nothing given"] + guesses)}')
-        lines.append('')
+        add('', '')
 
         def flow_line(tr):
             if tr.flow_given is not None:
@@ -155,7 +265,7 @@ class Presentation:
             midpoint = getattr(p, 'midpoint', None)
             if midpoint is not None and sc.isnumber(p.raw) and p.raw == midpoint:
                 add('fitted', f'{p.name} = {value_str(p.raw)}, bounds {p.bounds}', 'guessed: the middle of its bounds')
-        return lines
+        return out
 
     def edges(self):
         """ Each transition as (source, destination, name, kind), with None for `ss.null`; a transition to every state (`ss.death()`) is one edge from each """

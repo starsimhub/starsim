@@ -981,11 +981,11 @@ class Context:
 
 class Density:
     """
-    The log of the posterior density of a sim's fitted parameters, as one function in JAX, so that it can be compiled and differentiated whole (see `sim.calibrate()` with method='nuts')
+    The log of the posterior density of a sim's fitted parameters, as one function in JAX, so that it can be compiled and differentiated whole (see `sim.fit()` with method='nuts')
 
     The numbers in the run are worked out from the parameters in JAX: the values in the rates
     by evaluating the model's own expressions, and the rest (e.g. the compartments at the start)
-    from the change in them as each parameter changes, which has to be linear (`sim.calibrate()` checks
+    from the change in them as each parameter changes, which has to be linear (`sim.fit()` checks
     the result against runs of the sim). Then the run, the results that have data, and the
     likelihood and priors. If anything is not covered, `Unsupported` says what.
 
@@ -1146,7 +1146,7 @@ class Density:
             X = {}
             for key,X0 in self.X0[j].items():
                 val = jnp.asarray(X0)
-                for i,slope in self.slopes[j].get(key, {}).items(): # Linear in each parameter (checked in sim.calibrate()); the values in the rates are replaced below by what they exactly are
+                for i,slope in self.slopes[j].get(key, {}).items(): # Linear in each parameter (checked in sim.fit()); the values in the rates are replaced below by what they exactly are
                     val = val + slope*(x[i] - self.x0[i])
                 X[key] = val
             ctx = Context(self, engine, x, series=True)
@@ -1298,7 +1298,7 @@ class Density:
 
 class LogDensity:
     """
-    The log of the posterior density of a sim's fitted parameters as a function of their values, in JAX, for use outside `sim.calibrate()`: see `ss.Sim.log_density()`
+    The log of the posterior density of a sim's fitted parameters as a function of their values, in JAX, for use outside `sim.fit()`: see `ss.Sim.log_density()`
 
     Attributes:
         names (list): the parameters, in the order of the values
