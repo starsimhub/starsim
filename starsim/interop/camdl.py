@@ -1,13 +1,12 @@
 """
-Import a camdl model (a .camdl file, camdl's JSON IR, or a pycamdl model)
+Import a camdl model (a .camdl file, or camdl's JSON IR)
 
 camdl (https://github.com/vsbuffalo/camdl) declares compartments, parameters (with
 bounds and priors), named expressions, transitions whose rates are total flows
 (`S --> I @ beta * S * I / N`), observations with their likelihoods, initial numbers,
 and the time to simulate. Its compiler, `camdlc`, expands the model into a JSON
 intermediate representation (IR), which is what is read here: a `.camdl` file is
-compiled first, with `camdlc` from the PATH (or `CAMDLC`). A pycamdl model, which has
-no IR, is written in the same form by `dump_pycamdl.py`.
+compiled first, with `camdlc` from the PATH (or `CAMDLC`).
 
 The IR has every stratification expanded, so a stratified model is imported with one
 state for each combination of levels (`S_child_north`), which runs the same as the
@@ -58,12 +57,9 @@ def compile_camdl(filename, camdlc=None):
 
 
 def read(source, camdlc=None):
-    """ The IR as a dict, from a .camdl file, a JSON file, a dict, or a pycamdl model """
+    """ The IR as a dict, from a .camdl file, a JSON file, or a dict """
     if isinstance(source, dict):
         return source
-    elif type(source).__module__.startswith('pycamdl'):
-        from . import dump_pycamdl
-        return dump_pycamdl.model_dict(source)
     elif str(source).endswith('.camdl'):
         return compile_camdl(source, camdlc=camdlc)
     with open(source) as f:
@@ -75,9 +71,7 @@ def expr(node, ir, used):
     def ex(n):
         return expr(n, ir, used)
     (kind, val), = node.items()
-    if kind == 'text': # From dump_pycamdl.py
-        return val
-    elif kind == 'const':
+    if kind == 'const':
         return repr(float(val))
     elif kind in ['pop', 'param']:
         return val
@@ -159,7 +153,7 @@ def load_camdl(filename, pars=None, scenario=None, solver='ode', camdlc=None, ve
     Import a camdl model as a sim
 
     Args:
-        filename (str/dict): a `.camdl` file (compiled with `camdlc`), a JSON file of camdl's IR (or one written by `dump_pycamdl.py`), the IR as a dict, or a pycamdl model
+        filename (str/dict): a `.camdl` file (compiled with `camdlc`), a JSON file of camdl's IR, or the IR as a dict
         pars (dict): parameter values, which take the place of the model's (camdl is often given them on the command line, with `--param`)
         scenario (str): a scenario of the model whose parameter values to use (default: the first, if any)
         solver (str): `'ode'` for camdl's `--backend ode`, `'binomial'` for its chain-binomial backend (camdl's default)
@@ -175,7 +169,7 @@ def load_camdl(filename, pars=None, scenario=None, solver='ode', camdlc=None, ve
     ir = read(filename, camdlc=camdlc)
     m = ir['model']
     file = filename if isinstance(filename, str) else None
-    name = m.get('name') if m.get('name') not in [None, 'pycamdl'] else (os.path.splitext(os.path.basename(file))[0] if file else 'camdl')
+    name = m.get('name') if m.get('name') is not None else (os.path.splitext(os.path.basename(file))[0] if file else 'camdl')
     src = Source(name, 'camdl', file)
     pars = dict(pars or {})
     docs = ir.get('docs', {}).get('parameters', {})

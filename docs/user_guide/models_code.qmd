@@ -197,6 +197,7 @@ def init_results(self):
 - `self.pars` are the module's parameters.
 - `self.t.dt` is the length of a step, `self.now` is the date or time the step starts from, and `self.ti` is the index of the time point at the step's end, where what happens during the step is recorded.
 - A transition of a declared disease says who went through it: `disease.recovery.uids` is the agents who recovered in the last step. `disease.recovery.ever`, `.count`, and `.since` say whether, how often, and how long ago each person did.
+- To move people between the states of a declared disease, use `ss.move()`: `ss.move(sir.I, sir.R, p=0.5)` cures half of those infectious, `ss.move(sir.S, sir.I, n=5)` makes five susceptible people infectious, and `sir.move(uids, sir.R)` moves particular agents from wherever they are (as agents only; the arguments can come in any order, with the source before the destination, so `ss.move(sir, uids, 'R')` is the same). It runs the same under every solver, and since people are moved rather than made or lost, every disease keeps the same people; the number in a state of people (`sir.I.n`) is read, not set. A count that is not people (mosquitoes, `ss.State(people=False)`) can also be set (`W.n = 0`) or moved from and to outside the model (`ss.move(ss.null, mosq.Sv, n=1000)`).
 
 A module written as code that is not a disease runs before the diseases in each step, so what it does (protecting someone, say) applies to the transmission in the same step. [Build and run](../architecture/build_and_run.qmd#the-loop) lists the full order.
 

@@ -713,14 +713,14 @@ def test_transfer():
     # A transfer along a dimension the model does not have is an error
     with pytest.raises(ss.errors.MissingDimension):
         I, R = ss.states('I R')
-        ss.Sim(ss.Disease(recovery=ss.Transition(I, R, dur=3), move=ss.transfer(risk=('low', 'high'), rate=0.1)), **kw).init()
+        ss.Sim(ss.Disease(recovery=ss.Transition(I, R, dur=3), switch=ss.transfer(risk=('low', 'high'), rate=0.1)), **kw).init()
     # A transfer given to stratify() registers its parameters too, and a transition can be called "stop"
     c = ss.par(0.0, name='c')
     S, I = ss.states(2)
     later = ss.Disease(inf=S >> I @ 0.1*I, stop=I >> S @ 0.1, init=dict(I=0.01), name='later')
-    later.stratify(v=[False, True], move=ss.transfer(v=True, rate=c*0.2))
+    later.stratify(v=[False, True], switch=ss.transfer(v=True, rate=c*0.2))
     assert 'c' in later.pars and 'stop' in later.transitions
-    assert ss.Sim(later, n_agents=500, stop=10, pars=dict(c=1), **kw).run().results.later.move.sum() > 0
+    assert ss.Sim(later, n_agents=500, stop=10, pars=dict(c=1), **kw).run().results.later.switch.sum() > 0
 
     # A transfer's rate can hold a parameter, set by name, and can be modified
     for solver,agents in [('ode', {}), ('abm', dict(n_agents=2000))]:
@@ -916,7 +916,7 @@ def test_immediate():
     for solver in ['ode', 'abm']:
         I, R = ss.states('I R')
         d = ss.Disease(I, R, drop=ss.Transition(I, R, dur=0, where=ss.conditions.Cond('dim', 'level') == 'b'), first='I', name='d')
-        d.stratify(level=['a', 'b'], split=[1, 0], move=ss.transfer(level='b', rate=ss.perday(0.1)))
+        d.stratify(level=['a', 'b'], split=[1, 0], switch=ss.transfer(level='b', rate=ss.perday(0.1)))
         out[solver] = ss.Sim(d, unit='day', stop=20, solver=solver, **size(solver), **kw).run().results.d.I[-1]/10_000
     assert np.isclose(out['ode'], np.exp(-2), rtol=0.01) and np.isclose(out['abm'], out['ode'], atol=0.02)
 
@@ -947,7 +947,7 @@ def test_level_change_dwell():
     for solver in ['ode', 'abm']: # Recovery is ten times slower in b, and people move there at once; as agents they kept the dwell drawn in a (KI6: 0.37 still infected at day 20 against 0.83)
         I, R = ss.states('I R')
         d = ss.Disease(rec=I >> R @ ss.days(20), first='I', name='d')
-        d.stratify(level=['a', 'b'], split=[1, 0], adjust=dict(rec=[1, 0.1]), move=ss.transfer(level='b', rate=ss.perday(0.5)))
+        d.stratify(level=['a', 'b'], split=[1, 0], adjust=dict(rec=[1, 0.1]), switch=ss.transfer(level='b', rate=ss.perday(0.5)))
         out[solver] = ss.Sim(d, unit='day', dt=0.25, stop=20, total_pop=20_000, n_agents=20_000, solver=solver, verbose=0).run().results.d.I[-1]/20_000
     assert np.isclose(out['abm'], out['ode'], atol=0.03)
     return

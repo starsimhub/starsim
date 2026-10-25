@@ -1,6 +1,6 @@
 """
 Where the tests find files from other repos: the other frameworks' original examples,
-in the lingua_franca_design repo, camdl's Python package, and the R package. Each is looked for next
+in the lingua_franca_design repo, and the R package. Each is looked for next
 to this repo unless an environment variable says where it is; tests that need one
 are skipped if it is not there.
 """
@@ -9,6 +9,5 @@ import sciris as sc
 
 root = sc.path(__file__).parent.parent.parent # The folder this repo is in
 lfd = sc.path(os.getenv('STARSIM_LFD', root/'lingua_franca_design')) # The design repo, with the original examples and their results
-camdl = sc.path(os.getenv('STARSIM_CAMDL', root/'camdl')) # The camdl repo, for pycamdl
 rstarsim = sc.path(os.getenv('STARSIM_RSTARSIM', root/'rstarsim')) # The R package, for its R layer
 no_lfd = f'needs the lingua_franca_design repo: set STARSIM_LFD to where it is (not found at {lfd})'

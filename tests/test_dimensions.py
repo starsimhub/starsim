@@ -105,7 +105,7 @@ def test_strain_clearance():
     d16, d18 = sim.diseases.hpv16, sim.diseases.hpv18
     both = ss.uids(((d16.I.raw | d16.C.raw) & d18.I.raw).nonzero()[0])
     before = d16.current_state()[both].copy(), d16.ti_I.raw[both].copy(), d16.ti_exit_I.raw[both].copy()
-    d18.move_to(both, 'S', src='I')
+    ss.move(d18.I, d18.S, uids=both)
     assert len(both) and not d18.I.raw[both].any()
     assert all(np.array_equal(a, b) for a,b in zip(before, (d16.current_state()[both], d16.ti_I.raw[both], d16.ti_exit_I.raw[both])))
     return sim

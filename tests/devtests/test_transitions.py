@@ -160,8 +160,8 @@ def test_counts():
     # where= can be a state of another module, and a death can have several sources
     J, A, X, Y = ss.states('J A X Y')
     growth = ss.Disease(maturity=J >> A @ ss.perday(0.1), first='J', name='growth')
-    adults = ss.Disease(move=ss.Transition(X, Y, rate=ss.perday(1.0), where=growth.A), first='X', name='adults')
-    assert ss.Sim([growth, adults], n_agents=100, unit='day', stop=5, **kw).run().results.adults.move.sum() > 0
+    adults = ss.Disease(shift=ss.Transition(X, Y, rate=ss.perday(1.0), where=growth.A), first='X', name='adults')
+    assert ss.Sim([growth, adults], n_agents=100, unit='day', stop=5, **kw).run().results.adults.shift.sum() > 0
     assert [s.name for s in ss.death([J, A], rate=0.1).src] == ['J', 'A']
     A, B, C = ss.states('A B C')
     d = ss.Disease(A, B, C, tr=ss.Transition(A + B, C, rate=ss.peryear(0.1)), name='d') # A source that is a sum of states is several sources, as in A + B >> C
@@ -184,6 +184,8 @@ def test_counts():
     frac = sim.results.behaviour.I.values/10_000
     assert np.allclose(sim.connectors.track.peaks, np.maximum.accumulate(frac)[:-1]) # Set from the start of each step
     assert frac.max() < 0.15 # Without the slowing, 30% are infectious at the peak
+    ode = ss.Sim(behaviour, connectors=Track(name='track'), unit='day', stop=200, total_pop=10_000, solver='ode', **kw).run() # The same code, as compartments: the number alive is the number of people, not of groups
+    assert ode.people.alive.sum() == 10_000 and np.isclose(ode.connectors.track.peak, frac.max(), rtol=0.2)
 
     # A comparison is 1 or 0, so a rate can stop at a capacity
     S, I, Q, R = ss.states(4)
@@ -803,7 +805,8 @@ def test_functions():
     assert ss.Sim(typed, interventions=stop_in_place, stop=60, unit='day', **kw).run().results.sir.infection[22] == 0 # Seen (it was not)
     def seed(sim): # Per-step behavior that works on groups
         if sim.ti == 3:
-            sim.diseases.sir.I.n += 5
+            sir = sim.diseases.sir
+            ss.move(sir.S, sir.I, n=5)
     def seed_agents(sim): # Per-step behavior that needs agents
         sim.diseases.sir.S.uids
     def seeded(fn):
@@ -811,6 +814,24 @@ def test_functions():
         return ss.Disease(infection=ss.Transition(S, I, rate=0 * I), recovery=ss.Transition(I, R, dur=1000), init=dict(I=0), seeding=fn, name='sir')
     sim = ss.Sim(seeded(seed), stop=6, unit='day', **kw).run()
     assert sim.solver == 'ode' and sim.results.sir.I[-1] > 4.9 # Called each step, not skipped by a whole run (was 0)
+    assert ss.Sim(seeded(seed), stop=6, unit='day', solver='abm', **kw).run().results.sir.I[-1] == 5 # The same code, as agents
+    def cure(sim): # People are moved, never made or lost: the number of people stays the same in every disease
+        sir = sim.diseases.sir
+        if sim.ti == 10:
+            assert ss.move(sir.I, sir.R, p=0.5) > 0 and ss.move([sir.S, sir.R], sir.I, n=7) == 7 # Exactly n, as whole people too
+            ss.move(ss.null, sir.W, n=100) # A count can come from outside the model
+            with pytest.raises(ss.CapabilityError, match='ss.move'): # Setting the number of people in a state would make or lose people
+                sir.I.n = 0
+            with pytest.raises(ss.errors.PeopleAndCounts):
+                ss.move(sir.I, ss.null)
+    for solver in ['ode', 'binomial', 'abm']:
+        S, I, R, W = ss.State(name='S'), ss.State(name='I'), ss.State(name='R'), ss.State(name='W', people=False)
+        dying = ss.Disease(S >> I @ 0.3*I, I >> R @ ss.days(7), I >> ss.null @ ss.perday(0.01), W >> ss.null @ ss.perday(0.5), init=dict(I=0.01), name='sir')
+        S, I = ss.State(name='S'), ss.State(name='I')
+        sis = ss.Disease(S >> I @ 0.2*I, I >> S @ ss.days(10), init=dict(I=0.01), name='sis')
+        sim = ss.Sim(diseases=[dying, sis], interventions=cure, solver=solver, total_pop=2000, n_agents=2000, unit='day', stop=20, **kw).run()
+        res = sim.results
+        assert np.allclose(res.sir.S + res.sir.I + res.sir.R, res.sis.S + res.sis.I) and res.sir.W.values.max() > 50
     with pytest.raises(ss.CapabilityError, match='uids'): # It asks for agents, which it says
         ss.Sim(seeded(seed_agents), stop=6, unit='day', **kw).run()
     class Mine(ss.Disease):
