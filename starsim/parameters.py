@@ -534,8 +534,9 @@ class SimPars(Pars):
         if name in names:
             if mod._default_name and getattr(mod, '_from_keywords', False) and delivery is not None:
                 mod.name = mod.label = sc.uniquename(f'{delivery.name}_product', list(names), style='_%d')
-            elif mod._default_name and isinstance(mod, ss.Product) and names[name] == 'interventions': # e.g. treatment = ss.treat(ss.Treatment(...)), where the delivery takes the name of its variable: the product is treatment_treatment
-                mod.name = mod.label = sc.uniquename(f'{name}_{type(mod).__name__.lower()}', list(names), style='_%d')
+            elif mod._default_name and isinstance(mod, ss.Product) and names[name] == 'interventions': # e.g. bcg = ss.vaccinate(tbsim.BCG(...)), where the delivery takes the name of its variable: the product is named for its kind, bcg_vaccine
+                kind = next((cls for cls in (ss.Vaccine, ss.Treatment, ss.Diagnostic) if isinstance(mod, cls)), ss.Product)
+                mod.name = mod.label = sc.uniquename(f'{name}_{kind.__name__.lower()}', list(names), style='_%d')
             elif mod._default_name:
                 mod.name = sc.uniquename(name, list(names), style='_%d')
                 if isinstance(mod, ss.Product): # Another product of the same default name

@@ -302,7 +302,7 @@ def test_disk():
     nw2 = ssl.networks.DiskNet(r=0.15, v=ss.time.freq(0.05, unit=ss.years(1)))
     s2 = ss.Sim(n_agents=small, networks=nw2, diseases='sir').init() # This initializes the network
     s2.run()
-    assert len(s2.networks[0]) > 0 and s2.results.sir.cum_infections[-1] > 0, 'Expected edges, and infections through them'
+    assert len(s2.networks[0]) > 0 and s2.results.sir.infection.cum[-1] > 0, 'Expected edges, and infections through them'
 
     if sc.options.interactive:
         s2.plot()

@@ -272,8 +272,6 @@ class ParticleFilter:
         flows = engine.tr_index | engine.transfer_index
         if name in flows:
             return 'flows', [flows[name]]
-        if name == 'new_infections' and graph.transmissions:
-            return 'flows', [engine.tr_index[tr.name] for tr in graph.transmissions]
         return None
 
     @staticmethod

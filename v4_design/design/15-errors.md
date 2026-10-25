@@ -88,7 +88,7 @@ The table below is made from the code (`ss.errors.catalog()`, from the docstring
 | `InitWhereNobodyIs` | error | `init=` gives people a state only at levels of the stratifications where the split puts nobody, so nobody would start there (given at some such levels only, it is a note) |
 | `CapabilityError` | error | The requested solver cannot run part of the model. Three cases: there is no sensible approximation (contact tracing, transmission trees, agent-only custom code); a function or condition asked for something that exists only per agent in a compartmental run; or an approximation would be needed and `approx=False`. Names the part, what it asked for, and what would fix it |
 | `TimeNotKept` | error | A declared disease run as agents keeps the time each agent entered a state (`ti_X`) only for the states whose times the engine reads (for scheduled exits, clocks, and `after=`/`before=`), unless `ss.options.keep_times = True`. Raised when code reads one of the others, e.g. an analyzer or a script after the run; names the array and says to set the option |
-| `TimeOutsideSim` | error | A time given to a delivery (`start=`, a round in `at=`), `ss.modify` (`start=`), or `ss.change` (`at=`) is before the start of the sim or after its end. A `stop=` after the end is allowed, and means it never stops. A number is a time in the sim's unit (in a sim with dates, that long after the start), so the message says to write a calendar year as a date (`'2030'`) |
+| `TimeOutsideSim` | error | A time given to a delivery (`start=`, a round in `at=`), `ss.modify` (`start=`), or `ss.change` (`at=`) is before the start of the sim or after its end. A `stop=` after the end is allowed, and means it never stops. A number is a time in the sim's unit (in a sim with dates, that long after the start, or a whole year within the sim), and the message says so |
 | `MissingDimension` | error (also a `KeyError`) | An `ss.transfer` names a stratification the model does not have (a boolean coordinate that does not exist yet is created instead); or a transition uses a value by level of a dimension (`ss.by()`) that the states it moves have no level of; or a value by position along a dimension (`ss.by(age=[...])`) that the sim is not stratified by |
 | `AlreadyRunError` | error (also a `RuntimeError`) | A sim that has already run (or been finalized) is stepped, finalized, or added to again; `sim.run()` runs it again from the start |
 | `DistNotInitializedError` | error (also a `RuntimeError`) | A distribution made with `strict=True` is sampled before it is initialized (by the sim, or with `dist.init()` or `dist.mock()`) |
@@ -125,7 +125,8 @@ Some mistakes are ordinary Python usage errors and raise a plain `TypeError` or 
 - giving both `rate=` and `dur=` to a transition, or more than one of `multiply=`, `add=`, `set=` to `ss.modify`;
 - a state's name where the state is meant (`ss.Transition(I, 'R', dur=10)`), which says to declare the states;
 - a set of sources without parentheses (`S | I | R >> D @ mu`);
-- using a lazy condition where Python needs a single truth value (`if`, `and`, `or`, `not`); the message says to use `&`, `|`, `~`.
+- using a lazy condition where Python needs a single truth value (`if`, `and`, `or`, `not`); the message says to use `&`, `|`, `~`;
+- reading a result from a module that was given to a sim (`sir.results.I` after `ss.Sim(sir).run()`): the sim ran its own copy, so the `AttributeError` (or `KeyError`) says where the result is (`sim.results.sir.I`).
 
 ## Removed since the first draft
 

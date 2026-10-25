@@ -2112,8 +2112,6 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
         new = sc.objdict({name:store(name, flows[:, ind]) for name,ind in self.tr_index.items()})
         for name,ind in self.transfer_index.items():
             store(name, flows[:, ind])
-        if 'new_infections' in res and 'new_infections' not in graph.transitions:
-            store('new_infections', sum(flows[:, self.tr_index[tr.name]] for tr in graph.transmissions))
         grouped = self.outcomes and self.n_groups > 1 # Outcomes are then worked out by group, and summed: a weight can be one per group
         derived = self.derived(n, new, outcomes=not grouped)
         stratified = [name for name in self.ratio_names() if getattr(res[name], 'strata', None) is not None]
@@ -2156,7 +2154,7 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
         exprs = any(has(name) for name in graph.exprs) # A sum or ratio by group can use any state or flow
         sources = {key for name,info in self.outcomes.items() if has(name) or has(f'n_{name}') for key,_ in info.sources} # The flows that outcomes kept by group come from
         kept_s = [i for i,name in enumerate(graph.states) if exprs or has(name)]
-        kept_f = [ind for name,ind in (self.tr_index | self.transfer_index).items() if exprs or has(name) or name in sources or (has('new_infections') and name in graph.transmissions)]
+        kept_f = [ind for name,ind in (self.tr_index | self.transfer_index).items() if exprs or has(name) or name in sources]
         return kept_s, kept_f
 
     def run_parts(self, part_bytes=50e6):
@@ -2206,7 +2204,7 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
         states = list(graph.states)
         n_flows = self.n_trans + len(self.movers)
         kept_s, kept_f = self.group_needs()
-        totals = sc.objdict(stocks=np.zeros((len(states), npts)), flows=np.zeros((n_flows, npts)), new_infections=np.zeros(npts))
+        totals = sc.objdict(stocks=np.zeros((len(states), npts)), flows=np.zeros((n_flows, npts)))
         groups = sc.objdict(stocks=np.zeros((len(ends), len(kept_s), ng)), flows=np.zeros((len(ends), len(kept_f), ng))) # Only those needed
         pos_s, pos_f = {i:j for j,i in enumerate(kept_s)}, {i:j for j,i in enumerate(kept_f)}
         grouped = self.outcomes and ng > 1 # Outcomes are then worked out by group, from the flows they come from by group at each step
@@ -2224,8 +2222,6 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
             by_state = np.stack([stocks[:, self.state_comps[name]].sum(axis=1) for name in states], axis=1) # Time points by states by groups
             totals.stocks[:, tis] = by_state.sum(axis=-1).T
             totals.flows[:, tis] = flows.sum(axis=-1).T
-            if 'new_infections' in res and 'new_infections' not in graph.transitions:
-                totals.new_infections[tis] = sum(flows[:, self.tr_index[tr.name]] for tr in graph.transmissions).sum(axis=1)
             at_ends(groups.stocks, rows, ends, tis, by_state[:, kept_s])
             add_rows(groups.flows, rows, tis, flows[:, kept_f])
             if whole:
@@ -2256,8 +2252,6 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
         new = sc.objdict({name:store(name, totals.flows[ind], flow_g(ind)) for name,ind in self.tr_index.items()})
         for name,ind in self.transfer_index.items():
             store(name, totals.flows[ind], flow_g(ind))
-        if 'new_infections' in res and 'new_infections' not in graph.transitions:
-            store('new_infections', totals.new_infections, sum(flow_g(self.tr_index[tr.name]) for tr in graph.transmissions) if getattr(res.new_infections, 'strata', None) is not None else None)
         derived = self.derived(n, new, outcomes=not grouped)
         stratified = [name for name in self.ratio_names() if getattr(res[name], 'strata', None) is not None]
         if stratified: # Sums and ratios of states by group: from the states at the end of each row, and the flows over it
@@ -2360,8 +2354,6 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
             for name,ind in (self.tr_index | self.transfer_index).items():
                 if ind in pos:
                     groups[name] = flows_g[:, :, pos[ind], :]
-            if 'new_infections' in res and 'new_infections' not in graph.transitions and all(tr.name in groups for tr in graph.transmissions):
-                groups.new_infections = sum(groups[tr.name] for tr in graph.transmissions)
             stratified = [name for name in self.ratio_names() if getattr(res.get(name), 'strata', None) is not None]
             if stratified and all(name in groups for name in states): # Sums and ratios of states by group, as in run_all()
                 ctx = StockCtx(self, sc.objdict({name:groups[name] for name in states}), sc.objdict({name:groups[name] for name in self.tr_index if name in groups}))
@@ -2388,13 +2380,9 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
         out = sc.objdict({name:vals for name,vals in n.items()})
         out.update(new)
         out.update({name:flows[:, :, ind] for name,ind in self.transfer_index.items()})
-        if 'new_infections' in res and 'new_infections' not in graph.transitions:
-            out.new_infections = sum(new[tr.name] for tr in graph.transmissions)
         out.update(self.derived(n, new, outcomes=outcomes is None, expected=expected, seeds=seeds))
         if outcomes is not None:
             out.update(outcomes)
-        if 'cum_infections' in res and 'new_infections' in out:
-            out.cum_infections = np.cumsum(out.new_infections, axis=-1)
         out.groups = groups
         out.denoms = denoms
         out.group_ti = group_ti
@@ -2412,16 +2400,11 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
             expected (bool): see `derived_outcomes()`
             seeds (list): see `derived_outcomes()`
 
-        Returns a dict of the outcomes, the prevalence, and the results given as expressions.
+        Returns a dict of the outcomes and the results given as expressions.
         This is what `update_results()` does on each step, for every step at once.
         """
         graph = self.graph
-        res = self.mod.results
         out = self.derived_outcomes(new, expected=expected, seeds=seeds) if outcomes else sc.objdict()
-        if self.standard and 'prevalence' in res and 'prevalence' not in graph.exprs:
-            people = sum(n[s.name] for s in graph.people_states)
-            infected = sum(n[s.name] for s in graph.infected)
-            out.prevalence = np.divide(infected, people, out=np.zeros(np.shape(people)), where=people>0)
         if graph.exprs:
             ctx = StockCtx(self, n, new)
             for name,expr in graph.exprs.items():
@@ -2521,11 +2504,14 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
         return n_sub or 0
 
     def binomial_substeps(self):
-        """ The substeps the chain-binomial solver takes in each step, from the fastest rate out of a compartment of people at the start: see `substeps()` """
-        rates = [np.ravel(self.flow_base(flow)*self.flow_mult(flow))/(flow.stages if flow.kind == 'stage' else 1) for flow in self.flows # A dwell in stages, by its mean
-                 if flow.src is not None and not flow.dynamic and flow.kind != 'conveyor' and flow.state.people]
-        rates = np.concatenate(rates) if rates else np.zeros(0)
-        fastest = np.max(rates[np.isfinite(rates)], initial=0.0)
+        """ The substeps the chain-binomial solver takes in each step, from the fastest total rate out of a compartment of people at the start: see `substeps()` """
+        totals = {} # The rates out of each compartment, summed: e.g. recovery and death from I
+        for flow in self.flows:
+            if flow.src is not None and not flow.dynamic and flow.kind != 'conveyor' and flow.state.people:
+                rate = np.ravel(self.flow_base(flow)*self.flow_mult(flow))/(flow.stages if flow.kind == 'stage' else 1) # A dwell in stages, by its mean
+                rate = np.where(np.isfinite(rate), rate, 0.0)
+                totals[flow.src] = totals.get(flow.src, 0.0) + rate
+        fastest = max((np.max(rate, initial=0.0) for rate in totals.values()), default=0.0)
         n_sub = max(int(np.ceil(fastest*self.dt/0.1 - 1e-9)), 1)
         if n_sub > self.max_binomial:
             n_sub = self.max_binomial

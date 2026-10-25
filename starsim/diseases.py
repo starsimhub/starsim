@@ -55,8 +55,7 @@ class Disease(ss.Module):
 
     The results are the number in each state (`I`), the flow along each transition by its
     name (`infection`, with its cumulative total as `res.infection.cum`), and the results and
-    outcomes declared. The library's `ss.SIR`, `ss.SIS`, and `ss.SEIR` also have Starsim's
-    standard `new_infections`, `cum_infections`, and `prevalence` (`standard_results = True`).
+    outcomes declared (e.g. `prevalence=I/(S + I + R)`, as `ss.SIR` declares).
 
     Examples:
         ```python
@@ -88,7 +87,6 @@ class Disease(ss.Module):
     graph = None # The declared states and transitions, built when the disease is made; None if it declares none
     engine = None # Runs the declared part (see ss.solvers.make_engine()); created when the sim is initialized
     infection_log = None # An InfectionLog, if the sim has an ss.infection_log analyzer
-    standard_results = False # Whether to add new_infections, cum_infections, and prevalence (for a disease with a transmission), as the library's diseases do
     code_pars = () # Parameters of a declared module that its own code reads rather than its graph (e.g. ss.Pregnancy's fertility rates)
 
     _infection_methods = ['set_prognoses', 'infect', 'set_outcomes', 'finalize_infections', 'compute_transmission', 'infect_route', 'set_congenital'] # Methods of ss.Infection's transmission, which a declared transition never calls
@@ -1273,7 +1271,7 @@ class SIR(Disease):
     infection = ss.Transition(S, I, rate=beta * I)
     recovery  = ss.Transition(I, R, dur=dur_inf, p=1 - p_death)
     death     = ss.Transition(I, ss.null, dur=dur_inf, p=p_death)
-    standard_results = True
+    prevalence = I/(S + I + R)
 
     def __init__(self, pars=None, **kwargs):
         default_beta = 'beta' not in kwargs and 'beta' not in (pars or {})
@@ -1309,7 +1307,7 @@ class SEIR(Disease):
     latency   = ss.Transition(E, I, dur=dur_exp)
     recovery  = ss.Transition(I, R, dur=dur_inf, p=1 - p_death)
     death     = ss.Transition(I, ss.null, dur=dur_inf, p=p_death)
-    standard_results = True
+    prevalence = (E + I)/(S + E + I + R)
 
     def __init__(self, pars=None, **kwargs):
         default_beta = 'beta' not in kwargs and 'beta' not in (pars or {})
@@ -1340,7 +1338,7 @@ class SIS(Disease):
     S, I      = ss.states('S I')
     infection = ss.Transition(S, I, rate=beta * I)
     recovery  = ss.Transition(I, S, dur=dur_inf)
-    standard_results = True
+    prevalence = I/(S + I)
 
     def __init__(self, pars=None, **kwargs):
         default_beta = 'beta' not in kwargs and 'beta' not in (pars or {})

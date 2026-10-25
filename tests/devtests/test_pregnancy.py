@@ -396,7 +396,7 @@ def test_starsim3():
     # A Starsim 3 disease that transmits over the maternal network
     sim = ss.Sim(demographics=ss.Pregnancy(fertility_rate=ss.freqperyear(100)), diseases=ss.SIS(beta=dict(maternalnet=1.0, random=0.05)),
                  networks=[ss.MaternalNet(), ss.RandomNet()], n_agents=3000, **kw).run()
-    assert sim.demographics.pregnancy.fetus and sim.results.sis.new_infections.sum() > 0
+    assert sim.demographics.pregnancy.fetus and sim.results.sis.infection.sum() > 0
     return sim
 
 

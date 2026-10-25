@@ -305,8 +305,8 @@ def test_staged_and_sensitivity():
     assert total.beta > 0.8 and total.dur > 0.8 and abs(total.unused) < 0.3 # The parameters that matter, and the one that does not
 
     net = ss.RandomNet(n_contacts=ss.par(4, bounds=[2, 10])) # A network's parameter, which an ODE turns into contact rates
-    table = ss.Sim(ss.SIR(beta=ss.par(0.1, bounds=[0.05, 0.3])), networks=net, solver='ode', stop=40, verbose=0).sensitivity(results=['new_infections'], n=20, verbose=False)
-    assert table['sir.new_infections total'].n_contacts > 0.8
+    table = ss.Sim(ss.SIR(beta=ss.par(0.1, bounds=[0.05, 0.3])), networks=net, solver='ode', stop=40, verbose=0).sensitivity(results=['infection'], n=20, verbose=False)
+    assert table['sir.infection total'].n_contacts > 0.8
     return table
 
 

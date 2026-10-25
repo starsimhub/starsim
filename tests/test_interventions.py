@@ -54,7 +54,7 @@ def test_products(do_plot=False):
     assert dxres.delivered[post_dx].sum() > 0, 'Expected people screened after intervention start'
     assert dxres.positive[post_dx].sum() == dxres.high[post_dx].sum() + dxres.low[post_dx].sum() > 0, 'Expected positives to be every result but the last'
     assert dxres.high[post_dx].sum() + dxres.low[post_dx].sum() + dxres.normal[post_dx].sum() == dxres.delivered[post_dx].sum()
-    assert sisres.new_infections[pre_vx].mean() > sisres.new_infections[post_vx].mean(), 'Expected vaccine to reduce prevalence'
+    assert sisres.infection[pre_vx].mean() > sisres.infection[post_vx].mean(), 'Expected vaccine to reduce infections'
 
     # Treatment of a fixed number each step (Starsim 3's treat_num): those not served wait, and leave the queue if no longer infected
     sis = ss.SIS(beta=ss.peryear(0.5))

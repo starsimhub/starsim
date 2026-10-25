@@ -164,6 +164,9 @@ class Sim(ss.Base):
         input_pars = sc.mergedicts(pars, args, kwargs, _copy=True) # Copied together, so the modules given are never run themselves and can be given to other sims, and refer to each other as given
         for mod in given_modules(input_pars): # The sim's own copies are its to change
             mod.setattribute('_given', False)
+        for mod in given_modules(pars, args, kwargs): # The modules given hold no results (the sim runs its copies), so reading one says where they are
+            if isinstance(getattr(mod, 'results', None), ss.Results) and not len(mod.results):
+                mod.results.setattribute('_given_to', mod.name)
         self.pars.update(input_pars)  # Update the parameters
         self.inputs = sc.dcp(input_pars) # Kept so the sim can be rebuilt (see sim.new()), e.g. with other parameter values for calibration
         self.given = [key for key,val in input_pars.items() if val is not None] # Which parameters were supplied, as opposed to defaults

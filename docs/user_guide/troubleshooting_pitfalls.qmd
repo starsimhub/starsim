@@ -42,17 +42,17 @@ ss.Sim(make_measles(), total_pop=100_000, stop=2).run()
 
 Give times with their units (`stop=ss.years(2)`), or as dates (`start='2025-01-01', stop='2027-01-01'`). If nothing in a model has a unit, time is counted in steps, and the run says "steps" where it would say "days".
 
-**A year written as a number is not a date.** In a sim with dates, a number is a time since the start, in the sim's unit, so `at=2025` means 2,025 days after the start. Starsim stops with an error when such a time falls outside the sim:
+**A number as a time is a time since the start.** In a sim with dates, a number is a time in the sim's unit after the start, so `at=30` means 30 days after the start of a sim in days. The one exception is a whole year within the sim (`at=2025` in a sim that runs through 2025), which is read as the start of that year, since it is the only reading that falls in the sim. Starsim stops with an error when a time falls outside the sim:
 
 ```{python}
-vaccination = ss.vaccinate(efficacy=0.9, coverage=0.5, at=2025)
+vaccination = ss.vaccinate(efficacy=0.9, coverage=0.5, at=2026)
 try:
     ss.Sim(make_measles(), interventions=vaccination, start='2025-01-01', stop='2025-07-01').run()
 except ss.errors.TimeOutsideSim as error:
     print(error)
 ```
 
-Write a date as a string: `at='2025'`, or `at='2025-02-01'`.
+A date within a year is written as a string: `at='2025-02-01'`.
 
 **A rate times a duration is not a rate.** A rate of 0.1 per year times 3 days is the chance of an event over those 3 days, a plain number, not a rate. Starsim raises an error rather than guess what was meant:
 

@@ -21,7 +21,7 @@ def run(networks, sir=None, do_plot=False):
     sim.run()
     if do_plot:
         sim.plot()
-    cum = sim.results.sir.cum_infections
+    cum = sim.results.sir.infection.cum
     assert cum[-1] > cum[0], 'There were no new infections in the simulation'
     return sim
 

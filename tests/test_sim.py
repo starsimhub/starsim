@@ -237,14 +237,14 @@ def test_shared_product(do_plot=do_plot):
     if do_plot:
         plt.figure()
         for sim in [s1, s2, s3]:
-            plt.plot(sim.timevec, sim.results.sir.cum_infections, label=sim.label)
+            plt.plot(sim.timevec, sim.results.sir.infection.cum, label=sim.label)
         plt.legend()
         plt.title('Impact of vaccination')
         plt.xlabel('Year')
         plt.ylabel('Cumulative infections')
 
-    assert s2.summary.sir_cum_infections < s1.summary.sir_cum_infections, 'Vaccine should avert infections'
-    assert s3.summary.sir_cum_infections < s2.summary.sir_cum_infections, 'Vaccine should avert infections'
+    assert s2.summary.sir_infection < s1.summary.sir_infection, 'Vaccine should avert infections'
+    assert s3.summary.sir_infection < s2.summary.sir_infection, 'Vaccine should avert infections'
     return s3
 
 
@@ -469,8 +469,8 @@ def test_rescale():
     scale = rescaled.results.pop_scale
     assert scale[0] == 1 and scale[-1] == 10 # Scale starts at 1 and ends at pop_scale
     assert make_sim(init_inf=20, rescale=True).current_scale == 1 # Available before the sim is initialized
-    cum_fixed = fixed.results.sir.cum_infections[-1]
-    cum_rescaled = rescaled.results.sir.cum_infections[-1]
+    cum_fixed = fixed.results.sir.infection.cum[-1]
+    cum_rescaled = rescaled.results.sir.infection.cum[-1]
     assert abs(cum_rescaled/cum_fixed - 1) < 0.1 # Rescaling gives about the same epidemic
     S, I, R = ss.states('S I R')
     flu = ss.Disease(S >> I @ 0.3*I, I >> R @ ss.days(10), init_n=dict(I=10))

@@ -134,7 +134,7 @@ def test_connectors(do_plot=False):
     no_sis = run(lambda hiv, sis: ss.modify(sis.rel_sus, multiply=0, where=hiv.cd4 < 1e6)) # A condition on an array of a disease written as code (everyone's CD4 is below 1e6)
     after = stop_hiv.timevec > 2010
     assert base.hiv.new_infections[after].sum() > 0 and stop_hiv.hiv.new_infections[after].sum() == 0 # No HIV transmission after 2010
-    assert base.sis.new_infections.sum() > 0 and no_sis.sis.new_infections.sum() == 0
+    assert base.sis.infection.sum() > 0 and no_sis.sis.infection.sum() == 0
     return sims
 
 

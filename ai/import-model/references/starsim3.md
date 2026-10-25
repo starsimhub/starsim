@@ -31,7 +31,7 @@ The user-facing version of this mapping, with the traps that change results, is 
 | A custom `ss.Intervention.step()` | A delivery's `deliver=` function, a plain function passed to the disease (called each step), or keep it as a v3 module | Agents only, unless it works on groups |
 | A parameter change over time in an intervention | `ss.change(dis.pars.beta, at=[...], by=[...])` | Exact |
 | `ss.Calibration` with `calib_pars`, `build_fn`, components | Bounds on the parameters (`ss.par(..., bounds=)`), `data=ss.simdata(df)` on the sim, and `sim.fit()`; a likelihood, if wanted, on an outcome (`ss.outcome(..., likelihood=ss.nbinom(n=k))`) | Exact in intent; a different default method (a best fit by gradients for an ODE, Optuna for a stochastic sim) |
-| Results from `update_results()` (`n_infected`, `prevalence`, `new_infections`) | Automatic: `<state>` (its count) and each transition's flow (with its running total, `res.<name>.cum`); `new_infections` and `prevalence` only if declared (e.g. `prevalence = I / (S + I + R)`), though a data column `new_infections` matches the one transmission; extras declared as expressions (`infected = A + C + D`) or `ss.outcome` | Exact, but names differ (below) |
+| Results from `update_results()` (`n_infected`, `prevalence`, `new_infections`) | Automatic: `<state>` (its count) and each transition's flow (with its running total, `res.<name>.cum`); `new_infections` is the transmission's flow (`infection`), and `prevalence` is declared (e.g. `prevalence = I / (S + I + R)`); extras declared as expressions (`infected = A + C + D`) or `ss.outcome` | Exact, but names differ (below) |
 | Analyzers | Keep them (they run on agents), or replace with declared results and `result.by('age')` | Exact |
 
 ## What needs care

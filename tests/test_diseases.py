@@ -104,13 +104,13 @@ def test_seir():
     res = sim.results.seir
     assert not (seir.E & seir.I).any(), 'Agents should not be in both E and I'
     assert np.allclose(res.prevalence, (res.E + res.I)/sim.results.alive), 'prevalence should be computed from E plus I'
-    assert res.new_infections.min() >= 0 and res.new_infections[0] == 0, 'Seed infections should be excluded from incidence exactly once'
-    assert np.array_equal(res.cum_infections, np.cumsum(res.new_infections)), 'Cumulative infections should be the running sum of new infections'
+    assert res.infection.min() >= 0 and res.infection[0] == 0, 'Seed infections should be excluded from incidence exactly once'
+    assert np.array_equal(res.infection.cum, np.cumsum(res.infection)), 'Cumulative infections should be the running sum of new infections'
 
     # Latent agents should not transmit: with no infectious period, there should be no epidemic
     latent = ss.SEIR(dur_exp=ss.lognorm_ex(mean=ss.days(1000)), init_prev=0.1, beta=ss.perday(0.5))
     nosim = ss.Sim(n_agents=n_agents, diseases=latent, networks='random', dur=ss.days(100), dt=ss.days(1), verbose=0).run()
-    assert nosim.results.seir.cum_infections[-1] == 0, 'Exposed agents should not transmit'
+    assert nosim.results.seir.infection.cum[-1] == 0, 'Exposed agents should not transmit'
 
     return sims
 

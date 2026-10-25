@@ -1141,14 +1141,25 @@ class Results(ss.utils.NoDists, ss.ndict):
         implicit = self.__dict__.get('_implicit')
         return implicit is not None and isinstance(key, str) and key in dict.get(self, implicit, {})
 
+    def _given_msg(self, key):
+        """ For the results of a module that was given to a sim, which ran its own copy: where the results are """
+        name = self.__dict__.get('_given_to')
+        if name is not None and isinstance(key, str) and not key.startswith('_') and key not in self:
+            return f'"{key}" is not here: this module was given to a sim, which runs its own copy, so its results are in the sim, e.g. sim.results.{name}.{key}'
+        return None
+
     def __getitem__(self, key):
         if key not in self and self._implicit_has(key):
             return self[self._implicit][key]
+        if msg := self._given_msg(key):
+            raise KeyError(msg)
         return super().__getitem__(key)
 
     def __getattr__(self, attr):
         if self._implicit_has(attr):
             return self[self._implicit][attr]
+        if msg := self._given_msg(attr):
+            raise AttributeError(msg)
         return super().__getattr__(attr)
 
     def __setitem__(self, key, value):
@@ -1594,10 +1605,6 @@ def match_name(sim, col):
             for key in [col] + ([rest] if first == mod.name else []):
                 if key in mod.results and isinstance(mod.results[key], ss.Result):
                     matches.append(mod.results[key])
-    if not matches and name == 'new_infections': # Starsim 3's name, for a declared disease with one transmission: its flow
-        for mod in getattr(sim, 'declared', []):
-            if modname in ['', mod.name] and len(mod.graph.transmissions) == 1:
-                matches.append(mod.results[mod.graph.transmissions[0].name])
     return matches[0] if len(matches) == 1 else None
 
 

@@ -1407,13 +1407,6 @@ class Engine:
             for end in tr.ends: # A flow for each destination, e.g. res.cin.X, whose sum is the total
                 dst = graph.states.get(end)
                 results += ss.Result(f'{name}.{end}', dtype=float, scale=scale, label=f'{tr.label or name} to {"death" if dst is None else dst.label or dst.name}', kind='flow', auto_plot=False)
-        taken = list(graph.transitions.keys()) + list(graph.exprs.keys()) + list(graph.outcomes.keys())
-        self.standard = bool(graph.transmissions) and mod.standard_results
-        if self.standard:
-            kinds = dict(new_infections='flow', cum_infections='stock', prevalence='ratio')
-            for key,label in dict(new_infections='New infections', cum_infections='Cumulative infections', prevalence='Prevalence').items():
-                if key not in taken:
-                    results += ss.Result(key, dtype=float, scale=abm and key=='new_infections', label=label, auto_plot=key=='prevalence', kind=kinds[key])
         for name,expr in graph.exprs.items(): # A ratio, a sum of flows, or otherwise a stock
             if len(ratio_parts(expr)) == 2: # Including one scaled by a number, e.g. I/N*1e5
                 kind = 'ratio'
@@ -1449,8 +1442,6 @@ class Engine:
                     dims[f'{name}.{end}'] = dims[name]
             for name in graph.transfers:
                 dims[name] = np.ones(len(names), dtype=bool)
-            if 'new_infections' in mod.results and 'new_infections' not in graph.transitions:
-                dims['new_infections'] = np.ones(len(names), dtype=bool)
             self.ratios = sc.objdict() # The results that are a ratio of two sums of states, as (numerator, denominator)
             self.denom_dims = sc.objdict() # For a ratio whose denominator has fewer dimensions than its numerator: the denominator's
             for name,expr in graph.exprs.items(): # A sum of states (or flows) that all have the same dimensions has them too; so does a ratio of two, which keeps both, so that selecting groups adds up each before dividing
@@ -1469,12 +1460,6 @@ class Engine:
                         self.ratios[name] = parts
                         if not all(np.array_equal(x, flags[0][0]) for x in flags[1]): # E.g. infection/S with a strain, which susceptibles do not carry
                             self.denom_dims[name] = [n for n,flag in zip(names, den) if flag]
-            if self.standard and 'prevalence' in mod.results and 'prevalence' not in graph.exprs: # The standard prevalence, as the declared ratio of the infected over people, so it is by group as one is (ST20)
-                parts = [ss.expressions.as_stocks(sum(states[1:], states[0])) for states in [[s for s in graph.infected if s.people], graph.people_states] if states]
-                flags = [self.applies[leaf.name] for part in parts for leaf in part.leaves]
-                if len(parts) == 2 and all(np.array_equal(f, flags[0]) for f in flags):
-                    dims['prevalence'] = flags[0]
-                    self.ratios['prevalence'] = parts
             for name,info in self.outcomes.items(): # An outcome has the dimensions of what it is counted from (in order, since outcomes can chain)
                 dims[name] = np.any([dims[key] for key,weight in info.sources if key in dims], axis=0)
                 if f'n_{name}' in mod.results:
@@ -1714,22 +1699,11 @@ class Engine:
                 res[name].store_group(ti, val, self.rows, flow=True)
         for key,strat in derived.items(): # By a derived stratification instead (whose results keep every time point)
             res[key].store_group(ti, self.stock_derived.get(key, 0.0) if key in self.graph.states else self.flow_derived.get(key, 0.0))
-        if self.flow_groups and 'new_infections' in res and 'new_infections' not in graph.transitions:
-            res.new_infections.store_group(ti, sum(self.flow_groups.get(tr.name, 0) for tr in graph.transmissions), self.rows, flow=True)
         if self.rows is not None: # The flows by group so far in this row, for the results worked out from them
             if ti == 0 or self.rows[ti] != self.rows[ti-1]:
                 self.row_flows = sc.objdict()
             for name,val in self.flow_groups.items():
                 self.row_flows[name] = self.row_flows.get(name, 0) + val
-        if self.standard:
-            if 'new_infections' in res and 'new_infections' not in graph.transitions:
-                res.new_infections[ti] = sum(self.flowcounts[tr.name] for tr in graph.transmissions)
-            if 'prevalence' in res and 'prevalence' not in graph.exprs:
-                n = sum(self.stocks[s.name] for s in graph.people_states)
-                res.prevalence[ti] = sum(self.stocks[s.name] for s in graph.infected)/n if n else 0
-                if getattr(res.prevalence, 'strata', None) is not None: # By group, as a declared ratio is
-                    row = ti if self.rows is None else self.rows[ti]
-                    res.prevalence.strata[row], res.prevalence.denom[row] = [sum(self.stock_groups[leaf.name] for leaf in part.leaves) for part in self.ratios['prevalence']]
         if graph.exprs:
             ctx = StockCtx(self)
             for name,expr in graph.exprs.items():
@@ -1813,8 +1787,6 @@ class Engine:
         """ Cumulative results, computed after scaling """
         res = self.mod.results # Already scaled, by group too: see ss.Result.apply_scale()
         self.note_chance()
-        if self.standard and 'cum_infections' in res and 'new_infections' in res:
-            res.cum_infections[:] = np.cumsum(res.new_infections[:])
         return
 
 

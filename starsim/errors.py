@@ -246,8 +246,8 @@ class TimeOutsideSim(CodedError):
     """
     A time given to a delivery (`start=`, a round in `at=`), `ss.modify` (`start=`), or `ss.change` (`at=`) is
     before the start of the sim or after its end. A `stop=` after the end is allowed, and means it never stops. A number is a
-    time in the sim's unit (in a sim with dates, that long after the start), so the message says to write a calendar year as a
-    date (`'2030'`)
+    time in the sim's unit (in a sim with dates, that long after the start, or a whole year within the sim), and the message
+    says so
     """
 
 class MissingDimension(CodedError, KeyError):

@@ -253,7 +253,7 @@ Each person also has their own `rel_sus` and `rel_trans`, which interventions an
 
 ## The library's SIR, SIS, and SEIR
 
-`ss.SIR`, `ss.SIS`, and `ss.SEIR` are declared diseases with named parameters: `beta`, `dur_inf`, `init_prev`, `p_death` (0 by default), and `dur_exp` for the SEIR. As well as a result for each state and transition, they have `new_infections`, `cum_infections`, and `prevalence`:
+`ss.SIR`, `ss.SIS`, and `ss.SEIR` are declared diseases with named parameters: `beta`, `dur_inf`, `init_prev`, `p_death` (0 by default), and `dur_exp` for the SEIR. Their results are the same as any declared disease's, a result for each state and transition, plus a `prevalence` that each declares as a ratio of its states (`prevalence = I/(S + I + R)` in the SIR, `(E + I)/(S + E + I + R)` in the SEIR):
 
 ```{python}
 sir = ss.SIR(beta=ss.perday(1.9), dur_inf=ss.days(8), init_prev=0.001)
