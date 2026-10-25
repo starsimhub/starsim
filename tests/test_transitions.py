@@ -325,6 +325,10 @@ def test_names():
     assert first.pars.beta.value == 1.9 and second.pars.beta.value == 1.0
     ss.Sim(second, connectors=ss.modify(second.pars.beta, multiply=0.5), n_agents=200, stop=5, verbose=0).init() # The modifier finds the second's beta
     S, I, R = ss.states('S I R')
+    seeded = ss.Disease(S >> I @ 1.9*I, I >> R @ ss.days(8), init=dict(I=0.01), name='seeded')
+    again = ss.Disease(S >> I @ 1.9*I, I >> R @ ss.days(8), init_prev=0.01, name='again') # The first's init= stays with it (it raised "given both init_prev= and init=")
+    assert seeded.I.init == 0.01 and again.I.init is None
+    S, I, R = ss.states('S I R')
     dur = ss.par(ss.days(6), bounds=[ss.days(3), ss.days(10)])
     named = ss.Disease(S >> I @ 0.3*I, I >> R @ dur, R >> S @ ss.days(100), name='named') # A parameter named like a slot, beside a bare value in that slot (it was DuplicateDeclaration)
     assert named.pars.dur is dur and 'dur_R_to_S' in named.pars

@@ -47,7 +47,7 @@ print(sim.to_code())
 
 ::: {.callout-warning}
 ## [PROPOSAL]
-`to_code()` should write code as a person would: a delivery that is the only one of its product in one call (`ss.vaccinate(efficacy=0.9, coverage=0.9, at=ss.days(0))`, not a separate `ss.Vaccine` passed to `ss.vaccinate`), whole numbers as whole numbers (`ss.days(8)`, not `ss.days(8.0)`; `100_000`, not `100000`), and no settings that are the default (`first='S'`). Today's output builds the same model, but is longer and less familiar than the code it came from (P8).
+`to_code()` should write code as a person would, closer still to the code it came from: large numbers grouped (`total_pop=100_000`, not `100000`), a single time as itself (`at=ss.days(0)`, not `at=[ss.days(0)]`), and no arguments that only repeat a default (`disease='measles'` for the sim's only disease, `name='vaccination'` for a variable of that name) (P8).
 :::
 
 Only the declared parts of a model are written as code (its diseases, contact matrices, modifiers, and deliveries); anything written as code, such as a custom intervention or network, is listed in comments at the end, to be added by hand. See [The model spec, `to_code()`, and `diff()`](interop_spec.qmd).

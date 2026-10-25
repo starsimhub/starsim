@@ -231,6 +231,7 @@ class Sim(ss.Base):
     @staticmethod
     def _name_modules(names, *args):
         """ A module built with the plain ss.Disease() constructor takes its name from the variable it is assigned to """
+        taken = set(ss.SimPars()) | set(dir(ss.Sim)) # Names the sim already uses, e.g. interventions in def run(interventions): ss.Sim(interventions=interventions)
         for arg in args:
             mods = list(sc.tolist(arg))
             for mod in mods:
@@ -239,6 +240,8 @@ class Sim(ss.Base):
                 for obj in named:
                     if obj is not None and obj._default_name and not getattr(obj, '_from_keywords', False): # A product its delivery made is named for the delivery: see ss.SimPars.validate_name()
                         name = getattr(obj, '_assigned', None) or names.get(id(obj)) # The variable it was first assigned to, else the one that holds it here
+                        if name in taken:
+                            name = None
                         if name is None and getattr(obj, 'graph', None) is not None: # Not bound to one variable, e.g. built in a helper: named from its states instead, e.g. 'sir'
                             name = ''.join(s.name[0].lower() for s in obj.graph.people_states) or None
                             obj._implicit = name is not None

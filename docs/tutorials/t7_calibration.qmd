@@ -35,7 +35,7 @@ measles = ss.Disease(infection, progression, recovery, cases,
 )
 measles.stratify(age={0: 0.3, 15: 0.6, 65: 0.1}) # Ages 0-14, 15-64, and 65+
 
-contacts = ss.contacts(ages=[0, 15, 65], matrix=[[10, 4, 1], [4, 8, 2], [1, 2, 3]]) # Contacts a day, between age groups
+contacts = ss.contacts(ages=[0, 15, 65], matrix=[[10, 6, 1], [3, 8, 1], [3, 6, 3]]) # Contacts a day, between age groups
 settings = dict(networks=contacts, total_pop=100_000, start='2025-01-01', stop='2026-01-01')
 ```
 
@@ -71,34 +71,10 @@ The data is matched to the model's results by name: the column `cases` is compar
 ```{python}
 sim = ss.Sim(measles, data=data, **settings)
 sim.run()
-```
-
-```python
 sim.plot('measles.cases')
 ```
 
-```{python}
-#| echo: false
-# What sim.plot('measles.cases') should show (see the proposal below): the model's weekly cases, with the data
-import matplotlib.pyplot as plt
-def plot_weekly(sims):
-    fig, ax = plt.subplots()
-    for label, s in sims.items():
-        weekly = s.results.measles.cases.to_series(resample='week')
-        ax.plot(weekly.index, weekly.values, label=label)
-    ax.scatter(pd.to_datetime(data.date), data.cases, c='k', s=15, label='Data', zorder=10)
-    ax.set_title('Reported cases a week')
-    ax.legend(frameon=False)
-    return fig
-plot_weekly({'Model': sim});
-```
-
-With the starting guesses, the model's outbreak rises more slowly than the data's, and peaks about two weeks later.
-
-::: {.callout-warning}
-## [PROPOSAL]
-`sim.plot()` and `fit.plot()` plot a result that has data on the model's own time step, so here daily cases are drawn against weekly data, and the model looks seven times too low however well it fits. A flow with data should be plotted as its totals over the data's periods (here, weekly), as the fit compares them, so that the plot shows what is being fitted (P1, P11). The plots on this page are drawn that way by hand until it does.
-:::
+The plot shows the model's cases as weekly totals, as they are compared with the data. With the starting guesses, the model's outbreak rises more slowly than the data's, and is still rising in mid-April, after the data has peaked.
 
 ## Fitting
 
@@ -118,23 +94,13 @@ A fit always finds some values, so check that they make sense. First, the values
 fit.summarize()
 ```
 
-::: {.callout-warning}
-## [PROPOSAL]
-`fit.summarize()` prints the values and also returns them as a table, so a notebook shows them twice. It should return one table that a notebook shows once, as `msim.summarize()` does, with the goodness of fit and whether the search converged shown with it.
-:::
+The fit finds β close to 0.16 and a reported share close to 40%, the values the data was made with. The mismatch falls from 0.29 with the starting guesses to 0.04. Second, look at the fitted model against the data:
 
-The fit finds β close to 0.16 and a reported share close to 40%, the values the data was made with. The mismatch falls from 0.25 with the starting guesses to 0.03. Second, look at the fitted model against the data:
-
-```python
+```{python}
 fit.plot()
 ```
 
-```{python}
-#| echo: false
-plot_weekly({'Before fitting': fit.before, 'After fitting': fit.sim});
-```
-
-The fitted model follows the rise and the peak of the data, and the data scatters around it about as much as Poisson counts should. Third, check what the values imply. R0 is in proportion to β, so with β = 0.16 rather than 0.14, R0 is about 15 × 0.16 / 0.14 ≈ 17, within the range usually given for measles (12 to 18). If the values had been at the edge of their bounds, or had implied an R0 of 50, the model or the bounds would need another look.
+The fitted model follows the rise and the peak of the data, and the data scatters around it about as much as Poisson counts should. Third, check what the values imply. R0 is in proportion to β, so with β = 0.16 rather than 0.14, R0 is about 16 × 0.16 / 0.14 ≈ 18, at the top of the range usually given for measles (12 to 18). If the values had been at the edge of their bounds, or had implied an R0 of 50, the model or the bounds would need another look.
 
 The fit here is good because the data was made with this model. With real data, the model is never exactly right, and the checks above are how you find out where it falls short. [Diagnosing a fit](../user_guide/calibration_diagnosing.qmd) in the user guide goes further.
 
@@ -157,7 +123,7 @@ msim.plot('measles.cases')
 msim.summarize().loc['measles_cases']
 ```
 
-By 1 May, the outbreak has already peaked, so the campaign prevents fewer than 200 reported cases, about 5% of them, much less than the campaign on 1 March did in [Vaccination and scenarios](t5_vaccination.qmd). The data says how far the outbreak has gone, and so how much is left for an intervention to prevent.
+By 1 May, the outbreak has already peaked, so the campaign prevents only about 120 reported cases, 3% of them, much less than the campaign on 1 March did in [Vaccination and scenarios](t5_vaccination.qmd). The data says how far the outbreak has gone, and so how much is left for an intervention to prevent.
 
 These projections use the best-fitting values only. Other values fit the data nearly as well, so a projection is uncertain too; [Calibration](../user_guide/calibration_fitting.qmd) in the user guide shows how to find the range of values that fit (a posterior), and how to carry it into projections with `fit.project()`. It also covers fitting stochastic and agent-based models, likelihoods, and other ways to measure the mismatch.
 

@@ -202,7 +202,7 @@ sim.run()
 sim.results.measles.infection.resample('month').plot()
 ```
 
-(The R0 of 1.07 that the sim prints is for this population, in which 93% are immune; see [The reproduction number](models_building.qmd#the-reproduction-number).) Each epidemic uses up the susceptible people faster than births replace them, and then dies down until births have built them up again. So epidemics recur, here about every two years, and get smaller, towards a steady endemic level at which births balance infections. The period is close to the classical approximation 2π√(AD), with A ≈ 1/(μ(R0 − 1)) ≈ 3.6 years the mean age at infection (for a death rate μ of 0.02 per year) and D = 8 days the infectious period. In this deterministic model the epidemics damp out; [Parameters over time](models_parameters.qmd#parameters-over-time) shows how seasonal contacts keep them going. In a stochastic model the infection can also die out between epidemics in a small population; see [Solvers](running_solvers.qmd).
+(The sim prints R0 = 15.2 and, since 93% start immune, R = 1.07 at the start; see [The reproduction number](models_building.qmd#the-reproduction-number).) Each epidemic uses up the susceptible people faster than births replace them, and then dies down until births have built them up again. So epidemics recur, here about every two years, and get smaller, towards a steady endemic level at which births balance infections. The period is close to the classical approximation 2π√(AD), with A ≈ 1/(μ(R0 − 1)) ≈ 3.6 years the mean age at infection (for a death rate μ of 0.02 per year) and D = 8 days the infectious period. In this deterministic model the epidemics damp out; [Parameters over time](models_parameters.qmd#parameters-over-time) shows how seasonal contacts keep them going. In a stochastic model the infection can also die out between epidemics in a small population; see [Solvers](running_solvers.qmd).
 
 ## States that are not people
 
@@ -287,12 +287,6 @@ A class can also have methods, for behavior that isn't a transition: override `s
 - **A bare number after `@` is a rate.** `I >> R @ 8` is a rate of 8 per day, not 8 days; write `ss.days(8)`.
 - **A rate with no state in it is not transmission.** `S >> I @ 0.2` infects everyone in `S` at 0.2 per day whether or not anyone is infectious. Transmission names its source: `S >> I @ beta*I`.
 - **`init_prev` in an SEIR model starts people in `E`.** To start some people infectious, give `init=dict(I=...)`.
-- **Reusing states in several diseases.** Make the states inside a function that builds the disease (as `make_measles()` above), so that each disease has its own.
-
-::: {.callout-warning}
-## [PROPOSAL]
-Building two SEIR diseases from the same states raises `DuplicateDeclaration` ("the state I is read in a rate of seir, which was declared first"), although the same works for an SIR and the design says that states shared with another disease are copied. Making the states again for each disease works today; reusing them should work too (P13: no ceremony the library can do itself).
-:::
 
 ## See also
 

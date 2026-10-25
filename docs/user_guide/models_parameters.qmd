@@ -25,7 +25,7 @@ The number that multiplies a source of infection is `beta`, and a duration is `d
 
 ## Units of time
 
-A typed value says its unit: `ss.days(8)` is a duration, and `ss.perday(1.9)`, `ss.peryear(0.02)` are rates. A bare number takes the unit of the model, which is the unit of its typed values: here days, from `ss.days(8)`, so β = 1.9 is per day. A model whose typed values are in different units (days and years) has no single unit for its bare numbers, which is an error that asks for `unit=`; giving every rate a type avoids it.
+A typed value says its unit: `ss.days(8)` is a duration, and `ss.perday(1.9)`, `ss.peryear(0.02)` are rates. A bare number takes the unit of the model, which is the unit of its typed values: here days, from `ss.days(8)`, so β = 1.9 is per day. The rates of births and deaths don't count, so adding births per year to this model leaves β per day. A model whose other typed values are in different units (a duration in days and another in years) has no single unit for its bare numbers, which is an error that asks for `unit=`; giving every rate a type avoids it.
 
 Values are converted to the time step of the sim, whatever it is, so the same model can be run with a step of a day or a week. A rate (`ss.perday`) is a rate, converted exactly. A probability over a period, such as a 10% chance of recovering each day, is written `ss.prob(0.1, 'day')`, and is converted as a probability: over a week it is 1 − 0.9^7, not 0.7. See [Time](running_time.qmd) for durations, rates, and dates.
 

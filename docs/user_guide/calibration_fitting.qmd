@@ -61,32 +61,11 @@ fit.summarize()
 
 Both values are close to the ones the data was made with (1.9 and 0.5). The fitted model against the data:
 
-```python
+```{python}
 fit.plot()
 ```
 
-```{python}
-#| echo: false
-import matplotlib.pyplot as plt
-
-def plot_weekly(result, data, title=None):
-    """ The model's weekly totals against the weekly data (what fit.plot() should show) """
-    fig, ax = plt.subplots()
-    result.resample('week').plot(ax=ax)
-    ax.scatter(data.date, data.cases, color='k', s=15, zorder=10, label='Data')
-    ax.legend(frameon=False)
-    ax.set_title(title or 'Weekly reported cases')
-    return fig
-
-fig = plot_weekly(fit.before.results.measles.cases, data)
-fit.sim.results.measles.cases.resample('week').plot(ax=fig.axes[0])
-fig.axes[0].legend(['Before', 'After', 'Data'], frameon=False);
-```
-
-::: {.callout-warning}
-## [PROPOSAL]
-`fit.plot()` should show what the fit compared: here, the model's cases summed over each week of the data. Today it plots the model's daily cases against the weekly data, so a good fit looks about 7 times too low. The plot above is drawn by resampling the result: `fit.sim.results.measles.cases.resample('week').plot()`, with the data added with Matplotlib. (P11: the common check should be one obvious call.)
-:::
+The plot compares what the fit compared: the model's cases summed over each week of the data, before and after the fit.
 
 The original sim is not changed. The fit holds:
 
@@ -210,19 +189,11 @@ Agents are fitted the same way, e.g. `ss.Sim(measles, data=data, n_agents=20_000
 msim = fit.sim.run(n_runs=20)
 ```
 
-```python
+```{python}
 msim.plot('measles.cases')
 ```
 
-```{python}
-#| echo: false
-plot_weekly(msim.results.measles.cases, data, title='Weekly reported cases: median and 95% of 20 runs');
-```
-
-::: {.callout-warning}
-## [PROPOSAL]
-`msim.plot()` should show the sim's data, as `sim.plot()` does, and over the data's own periods (here, weekly totals); today it shows neither. The plot above is `msim.results.measles.cases.resample('week').plot()`, with the data added with Matplotlib. (P11)
-:::
+The plot shows the median and 95% of the 20 runs, as weekly totals, against the data.
 
 ## Using the fit
 
@@ -252,11 +223,6 @@ Before calibrating, it helps to know which parameters the results depend on at a
 sens = sim.sensitivity(n=50, verbose=False)
 sens[['measles.I peak', 'measles.cases total']]
 ```
-
-::: {.callout-warning}
-## [PROPOSAL]
-`sim.sensitivity(verbose=False)` still prints a line for the runs it makes, which lists every one of the 50 samples as a scenario. It should print nothing with `verbose=False`, and a header that lists many scenarios should be shortened (e.g. "50 samples of beta and report"). (P6, P10)
-:::
 
 ## Allocating a budget
 

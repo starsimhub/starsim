@@ -94,25 +94,13 @@ sim.analyzers.infection_log.plot()
 
 From the log, the generation interval (the time from a person's infection to the infection of each person they infect) is the time of each infection minus the time its source was infected:
 
-```python
+```{python}
 infected_at = df.set_index('target').t        # When each agent was infected
 df['generation'] = df.t - df.source.map(infected_at)
 print('Mean generation interval:', round(df.generation.mean(), 1), 'days')
 ```
 
-```{python}
-#| echo: false
-infected_at = df.set_index('target').t.map(lambda t: t.value)
-df['generation'] = df.t.map(lambda t: t.value) - df.source.map(infected_at)
-print('Mean generation interval:', round(df.generation.mean(), 1), 'days')
-```
-
 If a person's contacts all stayed susceptible, the mean would be the mean infectious period, 8 days. It is shorter because they don't: on a network, a person's contacts are soon infected by others or immune, so people infect fewer of them late in their infectious period.
-
-::: {.callout-warning}
-## [PROPOSAL]
-The `t` column of `log.to_df()` should hold plain numbers in the sim's unit (or dates, for a dated sim), so that the log can be used as data: today it holds duration objects (shown as `days(3)`, or `day` for one day), which can't be subtracted in a dataframe (the code above fails), and needs `.map(lambda t: t.value)` first. Also, the `network` column is empty for a declared disease, even when there is one network (P11).
-:::
 
 A disease written as code can add data to each infection, such as the variant (`log.add_entries(uids, sources, time, variant=variants)`), or to each agent's latest infection later on, such as a diagnosis (`log.add_data(uids, diagnosed=True)`). See [Modules written as code](models_code.qmd).
 

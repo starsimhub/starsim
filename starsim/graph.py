@@ -246,6 +246,9 @@ class Graph(Presentation):
         for state in statelist:
             if state.module is not None and state.module is not self.module:
                 raise ss.errors.DuplicateDeclaration(f'state "{state.name}" is used by transitions in two modules, "{state.module.name}" and "{self.module.name}"; a state belongs to one module.')
+            if state.module is None and getattr(state, 'init_from_module', False): # A copy of another disease's state (see ss.Disease.reuse()): that disease's init= was its own
+                state.init, state.init_n = state.declared_init
+                state.init_from_module = False
             state.module = self.module
             self.add(self.states, state.name, state)
 
@@ -255,6 +258,7 @@ class Graph(Presentation):
                 if name not in self.states:
                     raise ss.errors.UnknownState(f'{key}= names a state "{name}" that "{self.module.name}" does not have. States are {sc.strjoin(self.states.keys())}.')
                 setattr(self.states[name], key, val)
+                self.states[name].init_from_module = True
         for state in statelist:
             if state.init is not None and state.init_n is not None:
                 raise ValueError(f'"{state.name}" of "{self.module.name}" is given both init= (a share of people) and init_n= (a number of people); give one or the other')

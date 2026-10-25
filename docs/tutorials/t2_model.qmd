@@ -65,12 +65,7 @@ sim.run()
 sim.plot()
 ```
 
-With only 10% of people susceptible, each infectious person infects 15 × 0.1 ≈ 1.5 others on average (the number the run prints as R0, which here is the reproduction number at the start). So the outbreak still grows, but more slowly, and it infects about 6,000 people over the year instead of almost everyone. An outbreak can only grow when the reproduction number is above 1, so to stop measles spreading, more than 1 − 1/R0 = 1 − 1/15 ≈ 93% of people must be immune: the herd immunity threshold. Try `R=0.95` to see an outbreak that dies out.
-
-::: {.callout-warning}
-## [PROPOSAL]
-The line a run prints says `R0 = 1.52` here, and `measles.R0()` returns the same; but this is the reproduction number at the start, with 90% of people immune. R0 is, by definition, for a population where everyone is susceptible, and here it is 15.2. The line should say both, e.g. `measles: R0 = 15.2; R = 1.52 at the start, with 100 infectious`, and `R0()` should return R0 (with, say, `R0(at_start=True)` for the other), so that the number called R0 means what epidemiologists mean by it (P1, P2).
-:::
+With only 10% of people susceptible, each infectious person infects 15 × 0.1 ≈ 1.5 others on average. This is the reproduction number at the start, which the run prints after R0 (`R = 1.52 at the start, with 10% susceptible`): R0 itself is for a population in which everyone is susceptible, and is still 15.2. So the outbreak still grows, but more slowly, and it infects about 6,000 people over the year instead of almost everyone. An outbreak can only grow when the reproduction number is above 1, so to stop measles spreading, more than 1 − 1/R0 = 1 − 1/15 ≈ 93% of people must be immune: the herd immunity threshold. Try `R=0.95` to see an outbreak that dies out.
 
 ## Parameters
 
@@ -167,17 +162,17 @@ Running a sim again runs it from the start, with whatever has been changed since
 `sim.save()` saves a sim to a file, and `ss.load()` loads it again:
 
 ```{python}
-sim.save('measles.sim')
-sim2 = ss.load('measles.sim')
+sim.save('my-measles.sim')
+sim2 = ss.load('my-measles.sim')
 ```
 
-By default, this leaves out the people and anything else that is only needed to run the sim, so that the file is small; the model and results are kept. To save everything, for example to continue a run later, use `sim.save('measles.sim', shrink=False)`.
+By default, this leaves out the people and anything else that is only needed to run the sim, so that the file is small; the model and results are kept. To save everything, for example to continue a run later, use `sim.save('my-measles.sim', shrink=False)`.
 
 To use the results in another program, such as a spreadsheet, save them as a table:
 
 ```{python}
 df = sim.to_df()
-df.to_csv('measles.csv')
+df.to_csv('my-measles.csv')
 ```
 
 ## Exercises

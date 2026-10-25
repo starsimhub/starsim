@@ -26,15 +26,10 @@ sim.plot()
 A run prints:
 
 - **What it runs, and how:** the diseases, the population, the solver (here an ODE, since nothing in the model needs individual people; see [Solvers](running_solvers.qmd)), and the time span.
-- **R0 of each disease** with the number infectious at the start, as a check that the model is the one you meant: here R0 = β × the infectious period = 1.9 × 8 ≈ 15, as for measles.
+- **R0 of each disease** with the number infectious at the start, as a check that the model is the one you meant: here R0 = β × the infectious period = 1.9 × 8 ≈ 15, as for measles. If some people start immune, the line gives the reproduction number at the start too, e.g. "R0 = 15.2 (R = 1.52 at the start, with 10% susceptible)".
 - **Notes**, if any: something Starsim assumed, approximated, or wants you to check, such as a step that is long for the rates in the model. Notes are kept in `sim.notes` too.
 - **Progress**, for a run that goes a step at a time (as agents, say), rather than all at once.
 - **A closing line**: how long it took, the total number of infections, and the size and timing of the peak.
-
-::: {.callout-warning}
-## [PROPOSAL]
-The R0 line should say which reproduction number it gives. It is computed at the start of the run, with the people who are immune at the start taken out, so for a population that starts partly immune it is the effective reproduction number, not R0: measles with `init=dict(R=0.9)` prints "R0 = 1.52". It should print e.g. "R0 = 15.2; R = 1.52 at the start (90% immune)" (P1: claims are true).
-:::
 
 ## What a sim takes
 
@@ -158,8 +153,8 @@ So on a single day, a woman who becomes pregnant, develops symptoms, moves house
 `sim.save()` saves a sim to a file, and `ss.load()` loads it again:
 
 ```{python}
-sim.save('measles.sim')
-loaded = ss.load('measles.sim')
+sim.save('my-measles.sim')
+loaded = ss.load('my-measles.sim')
 loaded.plot('measles')
 ```
 

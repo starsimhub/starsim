@@ -67,7 +67,7 @@ sim.describe()
 
 **A town of 2,000 people has had no measles for many years, and 70% of its people are immune. Five people arrive with measles. Using `init` and `init_n`, model the outbreak over a year. How many people are infected? Is the reproduction number at the start above or below 1?**
 
-With 30% of people susceptible, the reproduction number at the start is 15.2 × 0.3 ≈ 4.6 (the number the run prints as R0), well above 1. Almost all of the 600 susceptible people are infected. The run also notes that with only 5 people infected at the start, whether an outbreak takes off is partly a matter of chance, which the ODE doesn't show (see Tutorial 6).
+With 30% of people susceptible, the reproduction number at the start is 15.2 × 0.3 ≈ 4.6 (which the run prints after R0, as `R = 4.56 at the start`), well above 1. Almost all of the 600 susceptible people are infected. The run also notes that with only 5 people infected at the start, whether an outbreak takes off is partly a matter of chance, which the ODE doesn't show (see Tutorial 6).
 
 ```{python}
 S, I, R = ss.states('S I R')
@@ -194,7 +194,7 @@ sim.results.measles.H.plot()
 
 **Closing schools halves the contacts between children. Change the matrix so that children have 5 contacts a day with other children instead of 10. How do R0 and the peak number of children infectious change?**
 
-R0 falls from about 15 to about 13. Since this is still far above 1, almost everyone is still infected, but the epidemic is slower (peaking on day 31 instead of day 28), and the peak number of children infectious at once is a little lower.
+R0 falls from about 16 to about 13. Since this is still far above 1, almost everyone is still infected, but the epidemic is slower (peaking on day 30 instead of day 28), and the peak number of children infectious at once is a little lower.
 
 ```{python}
 def run_town(matrix):
@@ -211,8 +211,8 @@ def run_town(matrix):
     print('Peak number of children infectious:', round(sim.results.measles.I.select(age='0-14').max()))
     return sim
 
-schools_open   = run_town([[10, 4, 1], [4, 8, 2], [1, 2, 3]])
-schools_closed = run_town([[5, 4, 1], [4, 8, 2], [1, 2, 3]])
+schools_open   = run_town([[10, 6, 1], [3, 8, 1], [3, 6, 3]])
+schools_closed = run_town([[5, 6, 1], [3, 8, 1], [3, 6, 3]])
 ```
 
 ### Exercise 2
@@ -252,7 +252,7 @@ progression = E >> I @ ss.days(10)
 recovery    = I >> R @ ss.days(8)
 measles = ss.Disease(infection, progression, recovery, init=dict(I=0.0001, R=0.9))
 measles.stratify(age={0: 0.3, 15: 0.6, 65: 0.1})
-contacts = ss.contacts(ages=[0, 15, 65], matrix=[[10, 4, 1], [4, 8, 2], [1, 2, 3]])
+contacts = ss.contacts(ages=[0, 15, 65], matrix=[[10, 6, 1], [3, 8, 1], [3, 6, 3]])
 demographics = [
     ss.birth(rate=ss.peryear(0.045)), # 45 births a year per 1,000 people
     ss.death(rate=ss.peryear(0.02)),
@@ -287,7 +287,7 @@ def make_measles(init_n=10):
     return measles
 
 measles = make_measles()
-contacts = ss.contacts(ages=[0, 15, 65], matrix=[[10, 4, 1], [4, 8, 2], [1, 2, 3]])
+contacts = ss.contacts(ages=[0, 15, 65], matrix=[[10, 6, 1], [3, 8, 1], [3, 6, 3]])
 settings = dict(networks=contacts, total_pop=100_000, start='2025-01-01', stop='2026-01-01', verbose=0)
 ```
 
@@ -302,7 +302,7 @@ msim = ss.parallel(sims)
 msim.summarize().loc['measles_infection']
 ```
 
-A campaign on 1 February prevents almost the whole outbreak (about 8,300 of 9,000 infections); on 1 March, about three quarters of it; on 1 May, when the outbreak is at its peak, only about one infection in seven. Every month of delay lets the outbreak grow by a large factor, so a campaign does the most good if it follows the first cases quickly.
+A campaign on 1 February prevents almost the whole outbreak (about 8,000 of 8,800 infections); on 1 March, about three quarters of it; on 1 May, when the outbreak is at its peak, only about one infection in eight. Every month of delay lets the outbreak grow by a large factor, so a campaign does the most good if it follows the first cases quickly.
 
 **2. A campaign for susceptible children only.** Compare the doses and the infections of the two campaigns:
 
@@ -353,7 +353,7 @@ for n in [1, 2, 5, 10]:
     print(n, 'infectious at the start - outbreak died out in', sum(totals < 100), 'of 50 runs; 1/R to the power', n, 'is', round((1/2.43)**n, 2))
 ```
 
-With 1 person infectious at the start, the outbreak dies out in more than half the runs; with 2, in about one in five; with 5, rarely; and with 10, never. For the outbreak to die out, the chains of infection started by each of the people infectious at the start must all die out, so with n of them the chance is about (1/R)^n. The runs die out a little more often than this, since R = 2.43 is an average over the age groups, and most of the people infectious at the start are adults, who have fewer contacts than children, and so a lower chance of starting an outbreak.
+With 1 person infectious at the start, the outbreak dies out in about half the runs; with 2, in about one in seven; with 5, rarely; and with 10, never. For the outbreak to die out, the chains of infection started by each of the people infectious at the start must all die out, so with n of them the chance is about (1/R)^n. With 1 person infectious, the runs die out more often than this, since R = 2.46 is an average over the age groups, and most of the people infectious at the start are adults, who have fewer contacts than children, and so a lower chance of starting an outbreak.
 
 **2. A smaller town.**
 
@@ -380,7 +380,7 @@ averted = baseline.results.measles.infection.summarize() - vaccinated.results.me
 print('Runs in which the campaign averts no infections:', sum(averted < 10), 'of 50')
 ```
 
-In about one run in five, the campaign averts no infections, because there is no outbreak to avert: the outbreak dies out before 1 March, with or without the campaign, and the runs of the two scenarios are the same until then.
+In about one run in seven, the campaign averts no infections, because there is no outbreak to avert: the outbreak dies out before 1 March, with or without the campaign, and the runs of the two scenarios are the same until then.
 
 ## T7: Calibration
 
@@ -399,7 +399,7 @@ measles = ss.Disease(infection, progression, recovery, cases,
     init_n = dict(I=10),
 )
 measles.stratify(age={0: 0.3, 15: 0.6, 65: 0.1})
-contacts = ss.contacts(ages=[0, 15, 65], matrix=[[10, 4, 1], [4, 8, 2], [1, 2, 3]])
+contacts = ss.contacts(ages=[0, 15, 65], matrix=[[10, 6, 1], [3, 8, 1], [3, 6, 3]])
 settings = dict(networks=contacts, total_pop=100_000, start='2025-01-01', stop='2026-01-01', verbose=0)
 data = pd.read_csv('data/measles_cases.csv')
 ```
@@ -412,7 +412,7 @@ fit = ss.Sim(measles, data=march, **settings).fit(verbose=False)
 fit.pars
 ```
 
-Fitted to the data up to the end of March, β is about 0.147 and the share reported about 58%, against the true 0.16 and 40%. While an outbreak is growing, the cases grow at a rate that depends mostly on β, and their level depends on both how many people are infected and the share reported; but fewer immune people with less reporting, or more transmission with more reporting, give nearly the same rise. Only when the outbreak turns (as susceptible people run out) does the data say how many people have been infected, and so what share of them were reported.
+Fitted to the data up to the end of March, β is about 0.159 and the share reported about 43%, against the true 0.16 and 40%: close, but the reported share is further off than with the data to mid-April. While an outbreak is growing, the cases grow at a rate that depends mostly on β, and their level depends on both how many people are infected and the share reported; but fewer immune people with less reporting, or more transmission with more reporting, give nearly the same rise. Only when the outbreak turns (as susceptible people run out) does the data say how many people have been infected, and so what share of them were reported.
 
 **2. Fitting β only.**
 
@@ -424,7 +424,7 @@ print('Mismatch, with the reported share fitted:', round(fit_both.mismatch, 3), 
 print('Infections in the year, with the reported share fitted:', round(fit_both.sim.results.measles.infection.sum()), '- with it fixed at 50%:', round(fit_beta.sim.results.measles.infection.sum()))
 ```
 
-With the reported share fixed at 50%, too high, the fit finds a slightly smaller β (about 0.151), and fits about three times worse: with too many of its infections reported, the model can't match both the rise of the data and its peak. It projects about the same number of infections over the year, since here the size of the outbreak is set mostly by the immunity in the town, but it would project a fifth more reported cases than the fit of both parameters. A fit that is much worse than another with one more parameter free is a sign that a fixed value is wrong.
+With the reported share fixed at 50%, too high, the fit finds a slightly smaller β (about 0.152), and fits about four times worse: with too many of its infections reported, the model can't match both the rise of the data and its peak. It projects about the same number of infections over the year, since here the size of the outbreak is set mostly by the immunity in the town, but it would project a fifth more reported cases than the fit of both parameters. A fit that is much worse than another with one more parameter free is a sign that a fixed value is wrong.
 
 **3. A campaign on 1 April.**
 
@@ -438,7 +438,7 @@ msim = ss.parallel(sims)
 msim.summarize().loc['measles_cases']
 ```
 
-A campaign on 1 April, at about the peak, would have prevented about 1,000 reported cases (a quarter of them), five times as many as one on 1 May.
+A campaign on 1 April, at about the peak, would have prevented about 700 reported cases (about a fifth of them), six times as many as one on 1 May.
 
 ## T8: Places and movement
 
@@ -606,7 +606,7 @@ print('In 2040, with the UN rates:', round(un.results.alive[-1]/1e6, 1), 'millio
 print('In 2040, with constant rates:', round(constant.results.alive[-1]/1e6, 1), 'million')
 ```
 
-With the UN's rates, Niger grows from about 24 million to about 44 million in 20 years; with a constant 45 births and 9 deaths per 1,000, it grows to about 47 million. The UN expects the birth rate to fall, so the constant rates overestimate the growth.
+With the UN's rates, Niger grows from about 24 million to about 43 million in 20 years; with a constant 45 births and 9 deaths per 1,000, it grows to about 48 million. The UN expects the birth rate to fall, so the constant rates overestimate the growth.
 
 ### Exercise 2
 
@@ -650,7 +650,7 @@ for label, sim in zip(sims, msim.sims):
     print(label, round(sim.results.alive[-1]/1e6), 'million in 2030')
 ```
 
-Cutting conception by 30% from 2010 leaves about 38 million fewer people in 2030 (about 222 million rather than 260 million).
+Cutting conception by 30% from 2010 leaves about 39 million fewer people in 2030 (about 226 million rather than 265 million).
 
 ## G3: Stratification in depth
 
@@ -679,7 +679,7 @@ def run_areas(rural_coverage=0.7, area_contacts=[[0.95, 0.05], [0.15, 0.85]], ca
     measles = make_measles()
     measles.stratify(area={'urban': 0.75, 'rural': 0.25})
     measles.stratify(vaccinated=[False, True], split=coverage, states=['S'], adjust={'rel_sus': [1, 0.03]}, **transfers)
-    contacts = ss.contacts(age=[[10, 4, 1], [4, 8, 2], [1, 2, 3]], area=area_contacts)
+    contacts = ss.contacts(age=[[10, 6, 1], [3, 8, 1], [3, 6, 3]], area=area_contacts)
     sim = ss.Sim(measles, networks=contacts, total_pop=100_000, stop=ss.days(365), verbose=0)
     sim.run()
     return sim
@@ -696,7 +696,7 @@ for label, sim in {'70% rural coverage': base, '90% rural coverage': higher}.ite
     print(label, ': infections in town', round(res.infection.select(area='urban').sum()), ', rural', round(res.infection.select(area='rural').sum()))
 ```
 
-Infections in the rural area fall by about two-thirds, and in town by about 15%, though coverage in town hasn't changed: fewer infections in the rural area means fewer brought into town. Town infections don't fall further because, with a reproduction number of about 1.6 at the start, the town can sustain an outbreak of its own once one starts there.
+Infections in the rural area fall by about two-thirds, and in town by about an eighth, though coverage in town hasn't changed: fewer infections in the rural area means fewer brought into town. Town infections don't fall further because, with a reproduction number of about 1.7 at the start, the town can sustain an outbreak of its own once one starts there.
 
 **2. A rural area more connected to town.**
 
@@ -707,7 +707,7 @@ for label, sim in {'15% of rural contacts in town': base, '40% of rural contacts
     print(label, ': infections in town', round(town.sum()), ', peaking on day', int(np.argmax(town.values)))
 ```
 
-With more contacts between them, the town has more infections (about 10,500 rather than 9,200), and its outbreak peaks a couple of days earlier: more infection is brought in from the rural area, where the outbreak grows fastest, and more of the town's unvaccinated people are exposed to it.
+With more contacts between them, the town has more infections (about 10,900 rather than 9,600), and its outbreak peaks a day earlier: more infection is brought in from the rural area, where the outbreak grows fastest, and more of the town's unvaccinated people are exposed to it.
 
 **3. A catch-up program in the rural area.**
 
@@ -719,7 +719,7 @@ for rate in [0.5, 5]:
 print('No catch-up: infections', round(base.results.measles.infection.sum()))
 ```
 
-At 50% a year, the program vaccinates a few hundred people before the outbreak is over, and prevents about 600 infections. At 500% a year (most unvaccinated people reached within a few months), it vaccinates about 3,800 and prevents about 5,300 infections, more than a quarter of them: to change the course of an outbreak, vaccination has to reach people faster than the outbreak does.
+At 50% a year, the program vaccinates a few hundred people before the outbreak is over, and prevents about 500 infections. At 500% a year (most unvaccinated people reached within a few months), it vaccinates about 3,600 and prevents about 5,000 infections, a quarter of them: to change the course of an outbreak, vaccination has to reach people faster than the outbreak does.
 
 ## G4: Parameters over time
 
@@ -896,7 +896,7 @@ recovery  = I >> R @ ss.days(8)
 measles = ss.Disease(infection, recovery, init_prev=0.001)
 measles.stratify(age=[0, 15, 65])
 
-contacts = ss.contacts(ages=[0, 15, 65], matrix=[[10, 4, 1], [4, 8, 2], [1, 2, 3]])
+contacts = ss.contacts(ages=[0, 15, 65], matrix=[[10, 6, 1], [3, 8, 1], [3, 6, 3]])
 pars = dict(networks=contacts, n_agents=10_000, stop=ss.days(60))
 ```
 
@@ -926,7 +926,7 @@ sim.run()
 sim.results.childcases.share_children.plot()
 ```
 
-At first, about a third of new cases are children, more than their share of the population (about a quarter), since they have the most contacts; by the end of the epidemic, almost none are.
+At first, about two in five new cases are children, more than their share of the population (about a quarter), since they have the most contacts; by the end of the epidemic, almost none are.
 
 ### Exercise 2
 
@@ -993,7 +993,7 @@ msim = ss.parallel(sims)
 msim.summarize().loc['measles_infection']
 ```
 
-Even finding every case and isolating it after 2 days prevents only about 250 of 10,000 infections (about 2.5%). Each case still has 2 days of full transmission and 6 days at a tenth of it, so R falls from about 15 to about 15 × (2 + 6 × 0.1)/8 ≈ 5, which is still far above 1. A disease as infectious as measles can't be controlled by isolating cases; it takes vaccination, which protects people before they are exposed.
+Even finding every case and isolating it after 2 days prevents only about 170 of 10,000 infections (under 2%). Each case still has 2 days of full transmission and 6 days at a tenth of it, so R falls from about 16 to about 16 × (2 + 6 × 0.1)/8 ≈ 5, which is still far above 1. A disease as infectious as measles can't be controlled by isolating cases; it takes vaccination, which protects people before they are exposed.
 
 ## G7: Bringing a model in
 
@@ -1038,7 +1038,7 @@ I_to_R = I >> R @ gamma
 
 measles_seir = ss.Disease(S_to_E, E_to_I, I_to_R, init_n=dict(S=99990, I=10), first='S', name='measles_seir')
 measles_seir.stratify(age={0: 0.3, 15: 0.6, 65: 0.1}) # Added
-contacts = ss.contacts(ages=[0, 15, 65], matrix=[[10, 4, 1], [4, 8, 2], [1, 2, 3]]) # Added
+contacts = ss.contacts(ages=[0, 15, 65], matrix=[[10, 6, 1], [3, 8, 1], [3, 6, 3]]) # Added
 
 sim = ss.Sim(measles_seir, networks=contacts, solver='ode', unit='day', stop=ss.days(50.0), total_pop=100000)
 sim.run()

@@ -213,6 +213,10 @@ class Pars(sc.objdict):
         elif isinstance(new, ss.Dist):
             self[key] = new
 
+        # It varies in time or by level, e.g. ss.timeseries({2000: ss.peryear(0.01), 2010: ss.peryear(0.02)}); replace it
+        elif isinstance(new, (TimeValue, by)):
+            self[key] = new
+
         # Give up
         else:
             errormsg = f'Updating timepar {old} from {type(old)} to {type(new)} is not supported'

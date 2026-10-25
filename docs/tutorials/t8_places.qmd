@@ -32,7 +32,7 @@ measles = ss.Disease(infection, progression, recovery,
 )
 measles.stratify(age={0: 0.3, 15: 0.6, 65: 0.1}) # Ages 0-14, 15-64, and 65+
 
-contacts = ss.contacts(ages=[0, 15, 65], matrix=[[10, 4, 1], [4, 8, 2], [1, 2, 3]]) # Contacts a day, between age groups
+contacts = ss.contacts(ages=[0, 15, 65], matrix=[[10, 6, 1], [3, 8, 1], [3, 6, 3]]) # Contacts a day, between age groups
 settings = dict(networks=contacts, total_pop=100_000, start='2025-01-01', stop='2026-01-01')
 
 sim = ss.Sim(measles, **settings)
@@ -56,25 +56,14 @@ towns.distances.round()
 
 Places are a stratification, as age groups are: `stratify(patch=towns)` splits each state by town (a "patch" is a place in a metapopulation model), so that each town has its own susceptible, exposed, infectious, and recovered people, and the contact matrix applies within each town. The populations of the towns give the population of the model, so `total_pop` isn't needed.
 
-The outbreak starts in Riverton only. `init_n` gives the number infectious at the start in each town, with `ss.by()`, a value for each level of a stratification. Since this changes how the disease starts, the disease is declared again:
+The outbreak starts in Riverton only. `init_n` gives the number infectious at the start in each town, with `ss.by()`, a value for each level of a stratification. Since this changes how the disease starts, the disease is made again from the same transitions:
 
 ```{python}
-S, E, I, R = ss.states('S E I R')
-beta = ss.par(0.14, bounds=[0.05, 0.5])
-
-infection   = S >> E @ beta*I
-progression = E >> I @ ss.days(10)
-recovery    = I >> R @ ss.days(8)
 measles = ss.Disease(infection, progression, recovery,
     init = dict(R=ss.by(age=[0.8, 0.92, 0.98])),
     init_n = dict(I=ss.by(patch=[10, 0, 0, 0])), # 10 people infectious in Riverton, none elsewhere
 )
 ```
-
-::: {.callout-warning}
-## [PROPOSAL]
-Here the states and transitions are declared again because a disease can't be made a second time from the same transitions: `ss.Disease(infection, progression, recovery, init_n=...)` raises `DuplicateDeclaration`, with a message about a state "read in a rate". It should make a new disease from them (as a copy), so that a model can be changed one part at a time, as in a notebook (P13). A shorter alternative would be `measles.new(init_n=...)`.
-:::
 
 ## Movement between towns
 
@@ -93,7 +82,7 @@ sim.results.measles.I.by('patch').plot()
 
 The people of each town keep their home town, but spend a share of their time in the others (the movement is commuting), where they can be infected by the people there, and infect them. 1% of the time is about a quarter of an hour a day, or a day out of every three months.
 
-The outbreak peaks first in Riverton, in early May, and then in each other town in turn: in Hillside and Lakeview, the nearest, in late May and early June, and in Fairfield, the smallest and farthest, in mid-June. Since the towns have the same immunity, each outbreak infects the same share of its town, about 9%. `select()` picks one place's result, as it does an age group's:
+The outbreak peaks first in Riverton, at the end of April, and then in each other town in turn: in Hillside and Lakeview, the nearest, in late May and early June, and in Fairfield, the smallest and farthest, in mid-June. Since the towns have the same immunity, each outbreak infects the same share of its town, about 9%. `select()` picks one place's result, as it does an age group's:
 
 ```{python}
 round(sim.results.measles.infection.select(patch='Fairfield').sum())
@@ -123,7 +112,7 @@ fairfield = msim.results.measles.infection.select(patch='Fairfield').summarize()
 print('Runs with an outbreak in Fairfield:', sum(fairfield > 100), 'of', len(fairfield))
 ```
 
-In about one run in five, measles never takes off in Fairfield: either no infectious person goes there while the other towns' outbreaks last, or the few infections they cause die out. In the others, the outbreak comes at very different times, from May to the end of the year, when some are still going. For a small place that is weakly linked to others, whether an outbreak arrives at all is a matter of chance, and a model that ignores this overstates how surely it spreads.
+In about one run in ten, measles never takes off in Fairfield: either no infectious person goes there while the other towns' outbreaks last, or the few infections they cause die out. In the others, the outbreak comes at very different times, from May to the end of the year, when some are still going. For a small place that is weakly linked to others, whether an outbreak arrives at all is a matter of chance, and a model that ignores this overstates how surely it spreads.
 
 ## As agents
 

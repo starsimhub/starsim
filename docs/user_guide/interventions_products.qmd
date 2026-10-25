@@ -189,10 +189,7 @@ print('Children vaccinated:', sim.results.children.delivered.sum())
 print('Adults vaccinated:', sim.results.adults.delivered.sum())
 ```
 
-::: {.callout-warning}
-## [PROPOSAL]
-Each of these deliveries makes its own vaccine, and both vaccines are called `vaccine`, so the sim renames the second and warns, suggesting that the vaccine be made on its own and named. The point of `ss.vaccinate(efficacy=...)` is that it needn't be: a product made by a delivery should take its name from the delivery (`children_vaccine`, `adults_vaccine`), with no warning (P8, P13). The same holds for tests (`ss.screen()`) and drugs (`ss.treat()`).
-:::
+Each of these deliveries makes its own vaccine. The first is named `vaccine`; since that name is taken, the second is named after its delivery, `adults_product`.
 
 ### Delivery when something happens
 

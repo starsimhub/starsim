@@ -129,11 +129,6 @@ agent_sim.run()
 agent_sim.loop.to_df().head(13)
 ```
 
-::: {.callout-warning}
-## [PROPOSAL]
-The `time` column of `sim.loop.to_df()` shows each time as a duration in a mix of spellings (`days(0)`, `day`, `days(2)`). It should show plain numbers in the sim's unit (or dates, in a sim with dates), as the results do (P10, P14).
-:::
-
 To see what happens during a run, a function of the sim can be inserted into the loop, after (or, with `before=True`, before) any call in it. Here it prints the number infectious every ten days, just after the disease has taken its step:
 
 ```{python}
@@ -147,7 +142,7 @@ probed.loop.insert(show_infectious, label='measles.step')
 probed.run()
 ```
 
-For anything more than a quick look, use an [analyzer](running_analyzers.qmd), which runs at the end of each step and can keep results of its own. Breakpoints and print statements in a module written as code work as in any Python program. A compartmental model that Starsim runs whole (an ODE with nothing that needs to happen between steps) has no loop to look into; inserting a function or adding an analyzer makes it run one step at a time, with the same results, and the run says so.
+For anything more than a quick look, use an [analyzer](running_analyzers.qmd), which runs at the end of each step and can keep results of its own. Breakpoints and print statements in a module written as code work as in any Python program. A compartmental model that Starsim runs whole (an ODE with nothing that needs to happen between steps) has no loop to look into; inserting a function or adding an analyzer makes it run one step at a time, with the same results, and `describe()` says so (under `plan`).
 
 ## Profiling
 

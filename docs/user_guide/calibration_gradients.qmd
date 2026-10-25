@@ -146,26 +146,11 @@ proj.summarize().loc['measles_cases']
 
 Since the model is deterministic, each run differs only in its parameter values, so the interval is the uncertainty from the fit alone. For a stochastic model, the runs would also differ by chance.
 
-The same draws show the fit against the data. The model's weekly cases, over the draws from the posterior:
-
-```python
-post.plot() # The model against the data, with 95% of the posterior as a band
-```
+The same draws show the fit against the data: the model's weekly cases at the starting values and at the best values, with 95% of the posterior as a band:
 
 ```{python}
-#| echo: false
-fig, ax = plt.subplots()
-best = post.project(n=50)
-best.results.measles.cases.resample('week').plot(ax=ax)
-ax.scatter(data.date, data.cases, color='k', s=15, zorder=10, label='Data')
-ax.legend(frameon=False)
-ax.set_title('Weekly reported cases: posterior median and 95% interval');
+post.plot()
 ```
-
-::: {.callout-warning}
-## [PROPOSAL]
-`post.plot()` should compare what the fit compared: the model's cases summed over each week of the data, with the posterior band over the same weeks. Today it plots daily cases and a daily band against weekly data, so the fit looks about 7 times too low. The plot above is drawn from `post.project(n=50)`, with `.resample('week').plot()` and the data added with Matplotlib. (P11)
-:::
 
 ## Other samplers
 

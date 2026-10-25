@@ -206,7 +206,7 @@ def test_posterior():
     rhat, ess = ss.fit.diagnose(chains[:, :, None])
     assert rhat[0] < 1.01 and np.isclose(ess[0], chains.size/3, rtol=0.05)
     assert ss.fit.diagnose(chains[:, :, None] + np.array([0, 0, 0, 1.0])[:, None, None])[0][0] > 1.05 # One chain apart from the others
-    assert fit.diagnostics.band['cases'].shape == (2, len(truth.cases))
+    assert fit.diagnostics.band['cases'].shape == (2, len(data)) # Over the weeks of the data, as the fit compares them
     with pytest.raises(ss.errors.NoPosterior): # A posterior needs a likelihood
         make_sir(data=data).fit(pars=['beta'], method='nuts')
     return fit

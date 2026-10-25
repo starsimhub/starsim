@@ -14,7 +14,6 @@ import os
 import tempfile
 import sciris as sc
 import starsim as ss
-import starsim.interop
 ss.options(jupyter=True)
 
 odin_code = '''
@@ -41,11 +40,6 @@ sc.savetext(filename, odin_code)
 
 sim = ss.interop.load(filename, start='2025-01-01', stop=365)
 ```
-
-::: {.callout-warning}
-## [PROPOSAL]
-`ss.interop` should be loaded when first used, as `ss.fit` is, so that `import starsim.interop` is not needed. Today, without it, `ss.interop` is an error. (P13)
-:::
 
 The format is told from the file (or given with `format='odin'`). odin has no time unit, so its numbers are taken to be per day (`unit=` says otherwise), and odin is told when to stop when it is run, so the sim needs `stop=`, here 365 days; `start=` gives it dates, which a forecast hub needs ([below](#forecast-hubs)). The importer prints how it read each rate. A flow written as a total, like `beta * S * I / N`, is turned into a rate for each person who leaves the state (dividing by `S`), and a rate divided by the total population is read as frequency-dependent transmission: exposure to `I`. The sim runs like any other:
 
@@ -145,11 +139,6 @@ again.run()
 print('Infections, imported from odin:', round(sim.results.measles.S_to_E.values.sum()))
 print('Infections, after a round trip through SBML:', round(again.results.measles.S_to_E.values.sum()))
 ```
-
-::: {.callout-warning}
-## [PROPOSAL]
-Saving in another format should be `ss.save('measles.xml', sim, format='sbml')`, as `ss.save('measles.py', sim)` already writes a model as code; the docstring of `ss.interop.export()` says this works, but today `ss.save()` passes `format=` on to the pickler and fails. (P11)
-:::
 
 ## Forecast hubs
 

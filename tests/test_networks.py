@@ -666,7 +666,7 @@ def test_beta_default():
     beta = next(p['value'] for p in sim.to_spec()['modules'][0]['pars'] if p['name'] == 'beta')
     assert beta['default'] == 0 and 'msm' in beta # Bare, since it is per act on a route with acts
     with pytest.warns(ss.errors.LossyExport):
-        assert "'default': 0.0" in sim.to_code()
+        assert "'default': 0" in sim.to_code() # Whole numbers as integers
 
     # A disease written as code reads the default too
     sim = ss.Sim(diseases=ssl.AgentSIS(beta=dict(random=0.05, msm=0.1, default=0)), networks=['random', ss.SexualNet()], **kw).run()

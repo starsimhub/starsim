@@ -68,7 +68,7 @@ print('Share susceptible at the end:', round(res.S[-1]/100_000, 3))
 
 ::: {.callout-warning}
 ## [PROPOSAL]
-The run prints "Run step by step, since flows has a step of its own (a modifier with where=, when=, or a function as its amount, an intervention, or an analyzer)". It names an internal module (`flows`, which is the births and deaths) and says how the run is done, which a reader can't act on; it belongs in `describe()`, not in the lines a run prints (P4, P14). The run also prints dates as `2000.01.07`, which should be `2000-01-07`, as they are written in the model.
+The run prints dates as `2000.01.07`, which should be `2000-01-07`, as they are written in the model.
 :::
 
 Births and deaths are transitions of the disease, like infection and recovery, so they have results of their own (`res.births` and `res.deaths`), and they work under every solver: this model ran as an ODE.
@@ -103,7 +103,7 @@ sim.people.plot_ages()
 
 ::: {.callout-warning}
 ## [PROPOSAL]
-`ss.birth(rate=...)` reads its rate per person, while `ss.Births(birth_rate=...)` reads a rate above 1 as per 1,000, so the same number means different things in the two. Worse, `ss.birth(rate=ss.peryear(30))` (meant as 30 per 1,000) runs without a word, and 1,000 people become 10^42 in three years. `ss.birth()` and `ss.death()` should at least warn on a rate above 1 per person per year, as `ss.Births()` does; better, both should say per 1,000 explicitly in the same way (e.g. a typed rate like `ss.peryear(30, per=1000)`), with no guessing from the size of the number (P11, P13).
+`ss.birth(rate=...)` reads its rate per person, while `ss.Births(birth_rate=...)` reads a rate above 1 as per 1,000, so the same number means different things in the two (`ss.birth(rate=ss.peryear(30))` now warns that it is per person). Both should say per 1,000 explicitly in the same way (e.g. a typed rate like `ss.peryear(30, per=1000)`), with no guessing from the size of the number (P11, P13).
 :::
 
 ## Pregnancy
@@ -134,11 +134,6 @@ The population grows much as it did with crude birth rates, but now each birth c
 ## Agents standing for many people
 
 Nigeria has well over 100 million people, but the sims above have 5,000 agents. Each agent stands for many people: the sim takes the size of the population from `ss.people('Nigeria')` (or from `total_pop=`), and divides it by the number of agents, so here each agent stands for about 25,000 people. Results that count people, such as `alive` and births, are multiplied by this, so they are in people, not agents.
-
-::: {.callout-warning}
-## [PROPOSAL]
-The line the sim prints says "as 5,000 agents, each 2.53e+04 people". It should say "each about 25,000 people": scientific notation is the kind of formatting that loses readers who aren't programmers (P10).
-:::
 
 Agents are a sample of the population, so results made from few of them are noisy. Here are births each year, with 1,000 agents and with 20,000:
 

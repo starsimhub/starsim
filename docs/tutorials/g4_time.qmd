@@ -47,7 +47,7 @@ sim.run()
 sim.results.measles.I.plot()
 ```
 
-(As in [Tutorial 2](t2_model.qmd), the R0 that the run prints is the reproduction number at the start, about 1 here, since 93% of people are immune; R0 itself is 15.)
+(As in [Tutorial 2](t2_model.qmd), the run prints R0, 15, and the reproduction number at the start, which is about 1 here, since 93% of people are immune.)
 
 The epidemics are large at first, then smaller, and within about 20 years the number of infectious people settles at a steady level, at which new infections just balance the births of new susceptible children. This is what an SEIR model with births does when its rates are constant, but not what measles did: its epidemics kept coming. What kept them going was a rate that changed over the year.
 
@@ -121,7 +121,7 @@ def make_measles_by_age():
     measles.stratify(age={0: 0.3, 15: 0.6, 65: 0.1})
     return measles
 
-contacts = ss.contacts(ages=[0, 15, 65], matrix=[[10, 4, 1], [4, 8, 2], [1, 2, 3]])
+contacts = ss.contacts(ages=[0, 15, 65], matrix=[[10, 6, 1], [3, 8, 1], [3, 6, 3]])
 measles = make_measles_by_age()
 sim = ss.Sim(measles, networks=contacts, **(pars | dict(stop='2020-01-01')))
 sim.run()
@@ -132,7 +132,7 @@ The run is for 20 years, and people now move up the age groups as they get older
 
 ::: {.callout-warning}
 ## [PROPOSAL]
-Two spellings of the same value fail. `ss.perday(0.14) * ss.by(age=[school, 1, 1])`, assigned to a variable before it is used in a rate, raises `IncompatibleTypes` ("a rate (ss.perday) * timeseries has no meaning"), though the same product written inside the rate (`beta*in_school*I`, as above) works. And `ss.by(age=[ss.perday(0.14)*school, ss.perday(0.14), ss.perday(0.14)])` is accepted, but the run fails with `TypeError: float() argument must be a string or a real number, not 'BinOp'`. A value by group that is a number times a time series should work wherever it is written (P11).
+`ss.by(age=[ss.perday(0.14)*school, ss.perday(0.14), ss.perday(0.14)])` is refused, with a message to put the factor outside (`ss.perday(0.14) * ss.by(age=[school, 1, 1])`, which works). A value by group that is a number times a time series could be accepted in either place (P11).
 :::
 
 ## Fitting a value that changes in time
@@ -140,13 +140,10 @@ Two spellings of the same value fail. `ss.perday(0.14) * ss.by(age=[school, 1, 1
 Any of these values can be fitted to data, by giving the part to fit as an `ss.par()` with bounds ([Tutorial 7](t7_calibration.qmd)). For example, the average of a seasonal β, with the amplitude fixed:
 
 ```python
-beta = ss.seasonal(mean=ss.par(ss.perday(1.9), bounds=[ss.perday(1), ss.perday(3)], name='beta'), amplitude=0.2, peak='January')
+beta = ss.seasonal(mean=ss.par(ss.perday(1.9), bounds=[ss.perday(1), ss.perday(3)]), amplitude=0.2, peak='January')
 ```
 
-::: {.callout-warning}
-## [PROPOSAL]
-Without `name='beta'`, the model can't be built: "Could not find a name for the parameter 1.9 used in "infection"; give it one, e.g. ss.par(1.9, name="infection_p")". A parameter in the mean of a seasonal value should be named from where it is used, as a number written in a rate is (`beta`), so that `name=` is needed only to choose another name (P13). The parameters then include both `beta` and `beta_infection` (the seasonal value as a whole), which is confusing; only the parameter to fit should be listed by its own name.
-:::
+The parameter to fit is named after where it is used, `beta_mean`, and the seasonal value as a whole is `beta`.
 
 Every solver follows a value that changes in time within each step (the Gillespie solver approximately, with a note), so these values work the same way as compartments or as agents. For more on the forms a parameter can take, see [Parameters](../user_guide/models_parameters.qmd).
 

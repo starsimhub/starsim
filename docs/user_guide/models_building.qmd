@@ -75,7 +75,7 @@ sim.describe()
 
 ::: {.callout-warning}
 ## [PROPOSAL]
-`describe()` should print a distribution as it was given, `erlang(k=4, mean=8 days)`, not as `ss.gamma(a=4, scale=2.0, loc=0.0)`, which loses its unit and the name the modeler used (P2, P14). Its line "plan: measles: in the kernels, the whole run in one call" is about how the run is computed, which most readers don't need; it could be left out, or said plainly as "run in one call" (P14).
+`describe()` should print a distribution as it was given, `erlang(k=4, mean=8 days)`, not as `ss.gamma(a=4, scale=2.0, loc=0.0)`, which loses its unit and the name the modeler used (P2, P14).
 :::
 
 ### Equations
@@ -138,12 +138,7 @@ measles.R0()
 `R0()` on a disease on its own assumes homogeneous mixing. For a disease in a sim with contacts or groups, use the sim's copy of it, `sim.diseases.measles.R0()`, which includes them (see below for why the sim has a copy).
 
 ::: {.callout-note}
-The R0 that a sim prints when it starts is worked out from the population as it starts. If some people start immune (e.g. `init=dict(R=0.9)`), it is the reproduction number in that population (often called the effective reproduction number, R), not the R0 of the disease.
-:::
-
-::: {.callout-warning}
-## [PROPOSAL]
-The line a sim prints at the start says "R0 = 1.52" for this measles model in a population that starts 90% immune (`init=dict(I=0.001, R=0.9)`), which is the effective reproduction number, not R0 (P1: say what is so). It should print both when they differ: "R0 = 15.2; R = 1.52 at the start".
+The sim prints R0 when it starts. If some people start immune (e.g. `init=dict(I=0.001, R=0.9)`), it also gives the reproduction number in the population as it starts (often called the effective reproduction number, R): "R0 = 15.2 (R = 1.52 at the start, with 10% susceptible)".
 :::
 
 ## Where the parts of a sim go

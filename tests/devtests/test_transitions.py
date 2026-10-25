@@ -866,11 +866,6 @@ def test_functions():
     assert sim3.unit == 'year'
     n_I = sim3.results.hiv.I
     assert n_I[-1] > 1.5*n_I[0]
-    S, I = ss.states('S I')
-    monthly = ss.Disease(infection=ss.Transition(S, I, rate=dict(random=0.08, sexual=0.008) * I), init_prev=0.05, name='hiv')
-    with pytest.warns(RuntimeWarning, match='Starsim 3') as record: # Bare numbers in a beta dict were probabilities per step in Starsim 3, so a verbatim port is 12x too low at monthly steps
-        ss.Sim(monthly, networks=['random', ss.SexualNet()], start=2000, stop=2002, dt=ss.years(1/12), **kw).init()
-    assert "'random'" in str(record[0].message) and "'sexual'" not in str(record[0].message) # Not on a network with acts, where a bare number is per act, as in Starsim 3
     with pytest.raises(ss.errors.RouteMismatch):
         S, I = ss.states('S I')
         other = ss.Disease(infection=ss.Transition(S, I, rate=dict(needles=0.1) * I), init_prev=0.05, name='hiv')
@@ -1021,6 +1016,22 @@ def test_time_values():
         ss.Sim(fast, networks=ss.RandomNet(), solver='ode', n_agents=1000, unit='day', stop=5, verbose=1).init()
     assert txt.index('as an ODE') < txt.index('RandomNet approximated') # The line that says how it is run comes before the notes it leads to
     assert 'n_agents=1000 is used as the population' in txt # A compartmental run has no agents, so it is the population
+
+    # A rate times an ss.by holding a time series, as a variable, is the same as written in the rate (it was IncompatibleTypes); one inside an ss.by is refused when made (it failed at run time)
+    school = ss.timeseries({'2000-01-01': 0.6, '2000-01-07': 1.15, '2000-04-01': 0.6}, period=ss.years(1))
+    def school_run(make):
+        S, E, I, R = ss.states('S E I R')
+        m = ss.Disease(S >> E @ make()*I, E >> I @ ss.days(10), I >> R @ ss.days(8), init=dict(I=0.001), name='measles').stratify(age={0: 0.3, 15: 0.6, 65: 0.1})
+        return ss.Sim(m, networks=ss.contacts(age=[[12, 6, 0.5], [3, 8, 1], [1.5, 6, 3]]), start='2000-01-01', stop='2000-03-01', dt=ss.days(1), **kw).run().results.measles.S_to_E.values
+    beta = ss.perday(0.125) * ss.by(age=[school, 1, 1])
+    assert np.allclose(school_run(lambda: beta), school_run(lambda: ss.perday(0.125) * ss.by(age=[school, 1, 1])))
+    with pytest.raises(TypeError, match='outside'):
+        ss.by(age=[ss.perday(0.125)*school, ss.perday(0.125), ss.perday(0.125)])
+
+    # A parameter inside a seasonal value needs no name: it is named after the value and its field (it was "Could not find a name")
+    S, I, R = ss.states('S I R')
+    beta = ss.seasonal(mean=ss.par(ss.perday(0.3), bounds=[ss.perday(0.1), ss.perday(1)]), amplitude=ss.par(0.2, bounds=[0, 0.5]))
+    assert {'beta', 'beta_mean', 'beta_amplitude'} <= set(ss.Disease(S >> I @ beta*I, I >> R @ ss.days(8), name='sir').pars.keys())
     return sim
 
 

@@ -31,7 +31,7 @@ def make_measles():
     measles.stratify(age={0: 0.3, 15: 0.6, 65: 0.1}) # Ages 0-14, 15-64, and 65+
     return measles
 
-age_contacts = [[10, 4, 1], [4, 8, 2], [1, 2, 3]] # Contacts a day, between age groups
+age_contacts = [[10, 6, 1], [3, 8, 1], [3, 6, 3]] # Contacts a day, between age groups
 pars = dict(total_pop=100_000, stop=ss.days(365))
 
 measles = make_measles()
@@ -40,7 +40,7 @@ sim.run()
 sim.results.measles.I.by('age').plot()
 ```
 
-With nobody immune, R0 is about 15, and almost everyone in the town is infected within a few months.
+With nobody immune, R0 is about 16, and almost everyone in the town is infected within a few months.
 
 ## Vaccination status as a dimension
 
@@ -62,7 +62,7 @@ sim.run()
 sim.results.measles.infection.by('vaccinated').plot()
 ```
 
-`adjust` multiplies a quantity in each level: `rel_sus`, the relative susceptibility, is 1 for the unvaccinated and 0.03 for the vaccinated. The run prints the reproduction number at the start, about 2.3 rather than 15, since most people are protected (as in [Tutorial 2](t2_model.qmd), the run calls this R0). The outbreak is much smaller and slower:
+`adjust` multiplies a quantity in each level: `rel_sus`, the relative susceptibility, is 1 for the unvaccinated and 0.03 for the vaccinated. The run prints a reproduction number of about 2.3 rather than 16: since vaccination is a dimension of the model, the vaccinated are part of the population that this R0 is worked out for, and most of them are protected. The outbreak is much smaller and slower:
 
 ```{python}
 res = sim.results.measles
@@ -95,29 +95,14 @@ measles.stratify(vaccinated=[False, True], split=coverage_by_area, states=['S'],
 
 The contacts are now between groups of two dimensions. With a matrix for each, the contacts between two groups are the product of the entries for each: a child in town has 10 contacts a day with children, and 95% of a person's contacts in town are with others in town, so 9.5 of them are with children in town. Here people in town make 5% of their contacts with people in the rural area, and people in the rural area make 15% of theirs with people in town. (These two are consistent: there are three times as many people in town, so the total contacts each way are the same.)
 
-```python
+```{python}
 contacts = ss.contacts(ages=[0, 15, 65], matrix=age_contacts, area=[[0.95, 0.05], [0.15, 0.85]])
-```
-
-::: {.callout-warning}
-## [PROPOSAL]
-`ss.contacts(ages=..., matrix=..., area=...)` raises "unrecognized argument for contacts: area": the form with the matrix's own age groups (`ages=`) can't be combined with a matrix for another dimension. It should be, as `age=` can (P11). Today, since the matrix's age groups are the model's, `age=age_contacts` does the same; but it checks the matrix in a way that `ages=` does not, and notes that the matrix of Tutorial 4 is not reciprocal, which the same matrix given with `ages=` does not. The two forms should check a matrix in the same way.
-:::
-
-```{python}
-#| echo: false
-contacts = ss.contacts(age=age_contacts, area=[[0.95, 0.05], [0.15, 0.85]])
-```
-
-```{python}
 sim = ss.Sim(measles, networks=contacts, **pars)
 sim.run()
 sim.results.measles.I.by('area').plot()
 ```
 
-A quarter of the people live in the rural area, but it has about half of the infections. With 30% of people unprotected there, the reproduction number at the start is about 15 × (0.3 + 0.7 × 0.03) ≈ 4.8; in town it is about 15 × (0.08 + 0.92 × 0.03) ≈ 1.6. So the outbreak grows fast in the rural area and peaks early, and the town's outbreak follows, more slowly, fed by the contacts between them. This is the pattern of many measles outbreaks in places with high coverage overall.
-
-(The run also notes that the contact matrix of Tutorial 4 is not *reciprocal*: in a real population, the total number of contacts that adults have with people 65 and over must equal the total that people 65 and over have with adults, and with six times as many adults, this matrix's 2 contacts a day each way can't both be right. Starsim uses the matrix as given. Contact matrices from surveys are usually corrected for this before they are used.)
+A quarter of the people live in the rural area, but it has about half of the infections. With 30% of people unprotected there, the reproduction number at the start is about 16 × (0.3 + 0.7 × 0.03) ≈ 5.1; in town it is about 16 × (0.08 + 0.92 × 0.03) ≈ 1.7. So the outbreak grows fast in the rural area and peaks early, and the town's outbreak follows, more slowly, fed by the contacts between them. This is the pattern of many measles outbreaks in places with high coverage overall.
 
 `select()` picks out any combination of groups, and leaves the dimensions not named summed over:
 
@@ -152,11 +137,6 @@ print('Infections:', round(res.infection.sum()))
 print('Children vaccinated during the year:', round(res.routine.sum()))
 print('People who moved to town:', round(res.migration.sum()))
 ```
-
-::: {.callout-warning}
-## [PROPOSAL]
-This run prints "Run step by step, since the transfer "routine" of "measles" has a rate that changes", but the rate doesn't change: it is a fixed rate for each age group. The line describes how the solver runs the model, and should not be printed at the default verbosity (P4, P14); where it is printed, it should be accurate (P1).
-:::
 
 A transfer is a transition, so it has a result of its own, by its name (`routine`, `migration`), and can be changed by an intervention like any other. With both transfers, there are about 300 fewer infections than in the run above without them. Routine vaccination at this pace reaches only about 200 children before the outbreak is over, within a few months. Stopping an outbreak needs a campaign that reaches people quickly, which is a delivery on a date ([Tutorial 5](t5_vaccination.qmd)); a transfer is for what happens steadily over time.
 
@@ -194,7 +174,7 @@ sim.describe()
 
 ::: {.callout-warning}
 ## [PROPOSAL]
-`describe()` gives the mixing as "contact matrix by age", though the contacts are by age and by area, and it doesn't give the shares or adjustments of each dimension (see the proposal in [Stratification](../user_guide/models_stratification.qmd)). Its line `plan` ("as compiled code, one step at a time, since it has been stepped already, or has functions inserted into its loop") is about how the solver runs, in terms a modeler can't act on. The mixing line should name every dimension of the contacts, and the plan should be left out at the default verbosity (P2, P4, P14).
+`describe()` doesn't give the shares or adjustments of each dimension (see the proposal in [Stratification](../user_guide/models_stratification.qmd)). Its line `plan` ("as compiled code, one step at a time, since it has been stepped already, or has functions inserted into its loop") is about how the solver runs, in terms a modeler can't act on, and should be left out at the default verbosity (P2, P4, P14).
 :::
 
 ## Exercises

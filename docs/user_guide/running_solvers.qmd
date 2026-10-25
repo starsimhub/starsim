@@ -36,7 +36,7 @@ sim = ss.Sim(measles, total_pop=100_000, stop=ss.days(150))
 sim.run();
 ```
 
-The first line of the output says what ran and how: here, as an ODE. The reproduction number it prints, 1.52, is the number of people each case infects at the start, which is R0 times the share susceptible. `sim.describe()` shows the same choice and the reason for it, before anything runs. To use another solver, give `solver=` to the sim, or to `run()`:
+The first line of the output says what ran and how: here, as an ODE. The second gives R0, 15.2, and the reproduction number at the start, R = 1.52, the number of people each case infects at the start, which is R0 times the share susceptible. `sim.describe()` shows the same choice and the reason for it, before anything runs. To use another solver, give `solver=` to the sim, or to `run()`:
 
 ```python
 sim = ss.Sim(measles, total_pop=100_000, stop=ss.days(150), solver='gillespie')
@@ -155,7 +155,7 @@ plt.legend();
 
 ::: {.callout-warning}
 ## [PROPOSAL]
-Comparing sims with different time steps should take one call, as for any other comparison: `ss.parallel({'ODE': ode, 'Agents, steps of a day': daily, ...}).plot('measles')`, with the results resampled to common time points. Today, results whose time points differ are left out of `msim.results` without a word, and `msim.plot('measles')` then fails with "Key not found; valid keys are:" followed by an empty list. The Matplotlib above is the workaround (P11).
+Comparing sims with different time steps should take one call, as for any other comparison: `ss.parallel({'ODE': ode, 'Agents, steps of a day': daily, ...}).plot('measles')`, with the results resampled to common time points. Today `ss.parallel()` raises an error that the sims have results at different times, and asks for the same start, stop, and `dt`. The Matplotlib above is the workaround (P11).
 :::
 
 The ODE peaks on day 6, and agents with steps of a quarter of a day within a day of it; agents with daily steps peak three days later, and higher. The agents' run notes the size of the step, and `sim.check_dt()` runs the sim again with half the step and shows how much each result changes:

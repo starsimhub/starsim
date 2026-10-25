@@ -20,9 +20,9 @@ The contact matrix, with the rows and columns in the order 0–14, 15–64, 65+:
 
 | | 0–14 | 15–64 | 65+ |
 |---|---|---|---|
-| **0–14** | 8 | 3 | 1 |
+| **0–14** | 8 | 5 | 2 |
 | **15–64** | 3 | 6 | 2 |
-| **65+** | 1 | 2 | 3 |
+| **65+** | 3 | 5 | 3 |
 
 ```{python}
 import starsim as ss
@@ -34,7 +34,7 @@ recovery  = I >> R @ ss.days(10)
 sir = ss.Disease(infection, recovery, init=dict(I=0.001), name='sir')
 sir.stratify(age={0: 0.3, 15: 0.5, 65: 0.2})  # The lower edge of each age group, and its share of people
 
-contacts = ss.contacts(ages=[0, 15, 65], matrix=[[8, 3, 1], [3, 6, 2], [1, 2, 3]])
+contacts = ss.contacts(ages=[0, 15, 65], matrix=[[8, 5, 2], [3, 6, 2], [3, 5, 3]])
 ```
 
 The diagram, from `diagram()`, is the same as an SIR's: the age groups split each state, and don't change the transitions.
@@ -54,13 +54,13 @@ sim.run()
 sim.results.sir.I.by('age').plot()
 ```
 
-R0 is about 5, set by the largest eigenvalue of the matrix of contacts weighted by β and the infectious period, not by any one group's contacts. The epidemic is driven by children, who have the most contacts: almost all of them are infected, against fewer of those aged 65 and over, who mix least. The total infected in each age group:
+R0 is about 6, set by the largest eigenvalue of the matrix of contacts weighted by β and the infectious period, not by any one group's contacts. Children, who have the most contacts, drive the epidemic, but with an R0 this high, it reaches almost everyone in every age group. The total infected in each age group:
 
 ```{python}
 sim.results.sir.infection.by('age').summarize()
 ```
 
-Of 30,000 children, 50,000 adults under 65, and 20,000 people aged 65 and over, these are all but a few hundred in the younger two groups, and about 95% of the oldest.
+Of 30,000 children, 50,000 adults under 65, and 20,000 people aged 65 and over, these are all but a few hundred in each group.
 
 ## Going further
 

@@ -63,6 +63,7 @@ class State(Nameable, Expr):
         self.name = name
         self.init = init
         self.init_n = init_n
+        self.declared_init = (init, init_n) # As declared, before a disease's init= or init_n= (see ss.transitions.Graph), so a copy for another disease starts from these
         self.people = people is not False
         self.people_given = people is not None # Said explicitly, so not checked (see ss.transitions.Graph.check_counts())
         self.infectious = False # Whether it is a source of infection: in the rate of a transmission (see ss.transitions.Graph.resolve_transitions())

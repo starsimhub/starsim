@@ -114,16 +114,16 @@ When the question is whether there is an outbreak at all, count the runs with on
 
 ## Mixing and stratification
 
-**With contacts, β is per contact.** Without a network or contact matrix, everyone mixes with everyone, and β is the rate at which a susceptible person is infected per unit of the share infectious (as if each person had one contact a day). With a contact matrix, β is the chance of infection per contact, so R0 is multiplied by the number of contacts. Adding a contact matrix with about 15 contacts a day to the measles model, with β left at 1.9, gives an R0 of about 200:
+**With contacts, β is per contact.** Without a network or contact matrix, everyone mixes with everyone, and β is the rate at which a susceptible person is infected per unit of the share infectious (as if each person had one contact a day). With a contact matrix, β is the chance of infection per contact, so R0 is multiplied by the number of contacts. Adding a contact matrix with about 15 contacts a day to the measles model, with β left at 1.9, gives an R0 of about 210:
 
 ```{python}
 measles = make_measles()
 measles.stratify(age={0: 0.3, 15: 0.6, 65: 0.1})
-contacts = ss.contacts(ages=[0, 15, 65], matrix=[[10, 4, 1], [4, 8, 2], [1, 2, 3]])
+contacts = ss.contacts(ages=[0, 15, 65], matrix=[[10, 6, 1], [3, 8, 1], [3, 6, 3]])
 ss.Sim(measles, networks=contacts, total_pop=100_000, stop=ss.days(50)).run()
 ```
 
-When contacts are added to a model, scale β down to keep the same R0; here, β = 0.12 per contact gives R0 ≈ 13. `describe()` says what β is per (`beta on contacts: 1.9 per day per contact`).
+When contacts are added to a model, scale β down to keep the same R0; here, β = 0.12 per contact gives R0 ≈ 14. `describe()` says what β is per (`beta on contacts: 1.9 per day per contact`).
 
 **`stratify()` changes the disease itself.** It works in place, and returns the disease too. Run the same notebook cell twice and the second `stratify()` does nothing (with a note); stratify the same disease again by the same property in a different way, and it raises an error, since its states are already split:
 

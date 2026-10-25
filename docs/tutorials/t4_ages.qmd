@@ -44,13 +44,15 @@ The model now has a compartment for each state in each age group: `S` for childr
 
 ## Contacts between age groups
 
-A contact matrix gives the number of contacts a day that a person in each age group has with people in each age group: row *i*, column *j* is the number of contacts that one person in group *i* has with people in group *j*. Contact surveys, such as POLYMOD in Europe, measure these. Here, children have 10 contacts a day with other children, 4 with adults, and 1 with people 65 and over, 15 in all; adults have 14; and people 65 and over have 6:
+A contact matrix gives the number of contacts a day that a person in each age group has with people in each age group: row *i*, column *j* is the number of contacts that one person in group *i* has with people in group *j*. Contact surveys, such as POLYMOD in Europe, measure these. Here, children have 10 contacts a day with other children, 6 with adults, and 1 with people 65 and over, 17 in all; adults have 12; and people 65 and over have 12:
 
 | Contacts a day, of a person aged... | ...with people 0–14 | ...with people 15–64 | ...with people 65+ |
 |---|---|---|---|
-| 0–14 | 10 | 4 | 1 |
-| 15–64 | 4 | 8 | 2 |
-| 65+ | 1 | 2 | 3 |
+| 0–14 | 10 | 6 | 1 |
+| 15–64 | 3 | 8 | 1 |
+| 65+ | 3 | 6 | 3 |
+
+A contact between a child and an adult is a contact for both of them, so the matrix is reciprocal: the children, 30% of the town, have 6 contacts each with adults, and the adults, twice as many, have 3 each with children, the same number of contacts in all. (Starsim notes a matrix that isn't.)
 
 `ss.contacts()` takes the matrix, with the lower edge of each of its age groups (`ages=`), and is given to the sim as how people mix (`networks=`). With contacts, β means something different: it is the rate of infection per contact with an infectious person, per day. With about 13 contacts a day on average, a β of 1.9 a day is about 0.14 per contact:
 
@@ -64,13 +66,13 @@ recovery    = I >> R @ ss.days(8)
 measles = ss.Disease(infection, progression, recovery, init=dict(I=0.001))
 measles.stratify(age={0: 0.3, 15: 0.6, 65: 0.1})
 
-contacts = ss.contacts(ages=[0, 15, 65], matrix=[[10, 4, 1], [4, 8, 2], [1, 2, 3]]) # Contacts a day, between age groups
+contacts = ss.contacts(ages=[0, 15, 65], matrix=[[10, 6, 1], [3, 8, 1], [3, 6, 3]]) # Contacts a day, between age groups
 sim = ss.Sim(measles, networks=contacts, total_pop=100_000, stop=ss.days(150))
 sim.run()
 sim.results.measles.I.by('age').plot()
 ```
 
-R0 is still about 15, as the run prints. With contacts, Starsim works it out from the matrix (as the largest eigenvalue of the next-generation matrix), so it depends on who meets whom, not only on the average number of contacts. The plot shows the number of people infectious in each age group. Children are infected first, and people 65 and over last: by day 25, 96% of children have been infected, but only 61% of people 65 and over. Since R0 is so high, almost everyone in every group is infected in the end.
+R0 is now about 16, as the run prints. With contacts, Starsim works it out from the matrix (as the largest eigenvalue of the next-generation matrix), so it depends on who meets whom, not only on the average number of contacts. The plot shows the number of people infectious in each age group. Children are infected first, and people 65 and over last: by day 18, 68% of children have been infected, but only 51% of people 65 and over. Since R0 is so high, almost everyone in every group is infected in the end.
 
 ## Results by age group
 
@@ -88,11 +90,6 @@ Each group is named by its ages (`'0-14'`, `'15-64'`, `'65+'`). For the total ov
 ```{python}
 res.infection.by('age').summarize()
 ```
-
-::: {.callout-warning}
-## [PROPOSAL]
-`res.infection.by('age').summarize()` returns a bare array, without the names of the groups. It should return the values labeled by group (e.g. a pandas Series with `0-14`, `15-64`, `65+`), as `msim.summarize()` labels its rows (P15).
-:::
 
 ## Births and deaths
 
@@ -120,15 +117,10 @@ This run is for 20 years, from 2025, so a few things are new:
 
 - The birth and death rates are per year, and the other rates in the model per day, so `unit='day'` says which unit the bare numbers of the model (β) are in ([Tutorial 2](t2_model.qmd)).
 - `dt=ss.weeks(1)` records the results once a week, since daily results over 20 years are more than needed. As an ODE, the model is still solved finely in between.
-- The town starts with 90% of people immune, as after an earlier epidemic. (So the run prints R0 = 1.51: as in [Tutorial 2](t2_model.qmd), this is the reproduction number at the start, with 90% of people immune.)
+- The town starts with 90% of people immune, as after an earlier epidemic. (So the run prints R = 1.58 at the start, as well as R0, as in [Tutorial 2](t2_model.qmd).)
 - People now age: children born into `S` move from the youngest age group to the next as they grow up.
 
 The result is a series of epidemics, each smaller than the last, about a year and a half apart, settling down to a steady level of infection. This is the classic pattern of measles before vaccination, in which epidemics recur every year or two. In the troughs between epidemics, there are only a handful of infectious people in the whole town, and in reality measles would often die out there, until it was brought in again from elsewhere. An ODE can't show this, since it follows the expected numbers, which never reach zero; [Tutorial 6](t6_uncertainty.qmd) runs the model by chance instead.
-
-::: {.callout-warning}
-## [PROPOSAL]
-This run prints "Run step by step, since flows has a step of its own (a modifier with where=, when=, or a function as its amount, an intervention, or an analyzer)". This is about how the ODE is run, not about the model, and "flows" is not a name the reader gave anything; it should not be printed at the default verbosity (P4, P14).
-:::
 
 ## A real population
 

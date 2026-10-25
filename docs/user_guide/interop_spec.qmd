@@ -24,7 +24,7 @@ infection = S >> E @ 1.9*I        # β = 1.9 per day
 onset     = E >> I @ ss.days(10)  # Infectious about 10 days after infection
 recovery  = I >> R @ ss.days(8)   # Infectious for 8 days on average
 measles = ss.Disease(infection, onset, recovery, init=dict(I=0.0001, R=0.9))
-sim = ss.Sim(measles, total_pop=100_000, start='2025-01-01', stop='2026-01-01', verbose=0)
+sim = ss.Sim(measles, total_pop=100_000, start='2025-01-01', stop='2026-01-01')
 
 spec = sim.to_spec()
 print(list(spec.keys()))
@@ -37,11 +37,6 @@ print(json.dumps(spec['modules'][0]['transitions'][0], indent=2))
 ```
 
 The spec is the model as Starsim has resolved it, not as it was typed: the number 1.9 in the rate has become a named parameter, `beta`; each value has its unit; every default Starsim chose is written out; and every field of each kind of object is always present, with `null` for those not used. So two specs can be compared field by field.
-
-::: {.callout-warning}
-## [PROPOSAL]
-`sim.to_spec()`, `sim.hash()`, and `sim.to_code()` each build a copy of the sim, and that copy prints the line a run starts with ("Sim: measles, 100,000 people, as an ODE, ..."), although nothing is run. They should print nothing; until then, `verbose=0` on the sim (as here) keeps them quiet. (P13)
-:::
 
 ## The same model, written differently
 
@@ -65,7 +60,7 @@ class Measles(ss.Disease):
 
 as_class = Measles(init=dict(I=0.0001, R=0.9), name='measles')
 
-hashes = [ss.Sim(m, total_pop=100_000, start='2025-01-01', stop='2026-01-01', verbose=0).hash() for m in [measles, written_out, as_class]]
+hashes = [ss.Sim(m, total_pop=100_000, start='2025-01-01', stop='2026-01-01').hash() for m in [measles, written_out, as_class]]
 print('The same model:', hashes[0] == hashes[1] == hashes[2])
 ```
 
@@ -100,17 +95,12 @@ infection = S >> E @ 1.9*I
 onset     = E >> I @ ss.gamma(a=4, scale=ss.days(2.5)) # Mean 10 days, less variable
 recovery  = I >> R @ ss.days(7)
 measles2 = ss.Disease(infection, onset, recovery, init=dict(I=0.0001, R=0.9), name='measles')
-sim2 = ss.Sim(measles2, total_pop=100_000, start='2025-01-01', stop='2026-01-01', verbose=0)
+sim2 = ss.Sim(measles2, total_pop=100_000, start='2025-01-01', stop='2026-01-01')
 
 ss.diff(sim, sim2)
 ```
 
 The distribution of the latent period is part of the model's structure, so it shows under `model`; the infectious period is still exponential, with a different mean, so it shows as a change in the value of a parameter, under `pars`.
-
-::: {.callout-warning}
-## [PROPOSAL]
-`ss.diff()` should write durations as people read them ("mean 10 days" and "8 days to 7 days", not "mean 10 day" and "8 day -> 7 day"). (P14)
-:::
 
 ## Writing a model as code
 
@@ -125,7 +115,7 @@ To write it to a file, use `ss.save('measles.py', sim)` (or `sim.to_code('measle
 `to_code()` writes the declared parts: diseases, products and deliveries, changes to parameters, contact matrices, and stratifications. What it can't write, such as a network or a module written as code, it lists in the file and in a warning (`ss.errors.LossyExport`), rather than silently writing a different model:
 
 ```{python}
-agents = ss.Sim(measles, networks=ss.RandomNet(n_contacts=10), n_agents=5000, stop=ss.days(100), verbose=0)
+agents = ss.Sim(measles, networks=ss.RandomNet(n_contacts=10), n_agents=5000, stop=ss.days(100))
 print(agents.to_code())
 ```
 

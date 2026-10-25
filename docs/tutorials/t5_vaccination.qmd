@@ -13,7 +13,7 @@ By the end, you will be able to:
 
 ## The model so far
 
-This is the measles model from [Age groups and contacts](t4_ages.qmd): an SEIR model with a latent period of 10 days and an infectious period of 8, in a town of 100,000 people in three age groups, who mix according to a contact matrix in which children have the most contacts. β is the rate of infection per contact with an infectious person, per day, which with these contacts gives a basic reproduction number R0 of about 15, as for measles. It runs for a year from 1 January 2025.
+This is the measles model from [Age groups and contacts](t4_ages.qmd): an SEIR model with a latent period of 10 days and an infectious period of 8, in a town of 100,000 people in three age groups, who mix according to a contact matrix in which children have the most contacts. β is the rate of infection per contact with an infectious person, per day, which with these contacts gives a basic reproduction number R0 of about 16, as for measles. It runs for a year from 1 January 2025.
 
 One thing is new: most people are already immune, from vaccination in earlier years (or from past infection). `init` gives the share of people who start in each state, here the share immune (in R) in each age group, 80% of children, 92% of adults under 65, and 98% of older adults; and `init_n` starts 10 people infectious, as if measles had just been brought into the town.
 
@@ -33,7 +33,7 @@ measles = ss.Disease(infection, progression, recovery,
 )
 measles.stratify(age={0: 0.3, 15: 0.6, 65: 0.1}) # Ages 0-14, 15-64, and 65+, with the share of people in each
 
-contacts = ss.contacts(ages=[0, 15, 65], matrix=[[10, 4, 1], [4, 8, 2], [1, 2, 3]]) # Contacts a day, between age groups
+contacts = ss.contacts(ages=[0, 15, 65], matrix=[[10, 6, 1], [3, 8, 1], [3, 6, 3]]) # Contacts a day, between age groups
 settings = dict(networks=contacts, total_pop=100_000, start='2025-01-01', stop='2026-01-01')
 
 sim = ss.Sim(measles, **settings)
@@ -41,12 +41,7 @@ sim.run()
 sim.results.measles.infection.by('age').plot()
 ```
 
-With R0 = 15, an outbreak can only be prevented if more than 1 − 1/15, or about 93%, of people are immune (the herd immunity threshold). Here about 90% are, but only 80% of children, who have the most contacts, so each case at the start infects about 2.4 others on average (the number the sim prints as R0 is this one, the reproduction number with the immunity already in the population). The outbreak infects about 9,000 people over the year, most of them children.
-
-::: {.callout-warning}
-## [PROPOSAL]
-The line a run prints says `R0 = 2.43`, but this is the reproduction number at the start, with 90% of people immune; R0 is 15. The line should say both, e.g. `measles: R0 = 15.1; R = 2.43 at the start, with 10 infectious`, so that a reader checking R0 against the model (P1) is not misled.
-:::
+With R0 = 16, an outbreak can only be prevented if more than 1 − 1/16, or about 94%, of people are immune (the herd immunity threshold). Here about 90% are, but only 80% of children, who have the most contacts, so each case at the start infects about 2.5 others on average: the reproduction number with the immunity already in the population, which the run prints after R0 (`R = 2.46 at the start`). The outbreak infects about 9,000 people over the year, most of them children.
 
 ## A vaccination campaign
 
@@ -105,7 +100,7 @@ msim = ss.parallel(sims)
 msim.plot('measles.I')
 ```
 
-With the campaign, the outbreak peaks three weeks after it (people infected before it still fall ill) and then dies out. Routine vaccination of the same children helps less, since by the time most are reached, the outbreak has passed its peak. The response slows the outbreak from the same date, but the outbreak goes on, since it doesn't make anyone immune.
+With the campaign, the outbreak peaks about two weeks after it (people infected before it still fall ill) and then dies out. Routine vaccination of the same children helps less, since by the time most are reached, the outbreak has passed its peak. The response slows the outbreak from the same date, but the outbreak goes on, since it doesn't make anyone immune.
 
 `msim.summarize()` gives each result over the whole run for each scenario: the total of a flow, such as infections, and the value at the end of a state, such as the number recovered. `.loc[...]` picks out one result, here the total infections:
 

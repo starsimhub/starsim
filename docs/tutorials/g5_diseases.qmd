@@ -61,14 +61,9 @@ Without the interactions, HIV only just sustains itself. With them, it spreads t
 `sim.what_modifies()` lists the modifiers on a quantity, with their conditions, which is a useful check in a model with many:
 
 ```{python}
-sim = msim.sims[1] # The sim with interactions
+sim = msim.sims['Interacting']
 sim.what_modifies(sim.diseases.sti.rel_sus)
 ```
-
-::: {.callout-warning}
-## [PROPOSAL]
-`sim.what_modifies(sim.diseases.hiv.rel_sus)` raises a `KeyError` ("No module named "hiv" with declared transitions was found"), since HIV here is written as code. It should list the modifiers on any module's quantities, declared or not. Also, `msim.sims` is a list, so a scenario's sim is found by its position (`msim.sims[1]`), not by its label: `msim.sims['Interacting']` should work when the sims were given as a dict by label (P9, P11).
-:::
 
 ## Diseases tracked jointly
 

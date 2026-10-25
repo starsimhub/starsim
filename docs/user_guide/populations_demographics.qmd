@@ -16,8 +16,8 @@ import starsim as ss
 ss.options(jupyter=True)
 
 S, I, R = ss.states('S I R')
-infection = S >> I @ ss.perday(1.9)*I # β = 1.9 per day
-recovery  = I >> R @ ss.days(8)       # Infectious for 8 days on average
+infection = S >> I @ 1.9*I       # β = 1.9 per day
+recovery  = I >> R @ ss.days(8)   # Infectious for 8 days on average
 measles = ss.Disease(infection, recovery, init_prev=0.001)
 
 demographics = [
@@ -29,11 +29,6 @@ sim = ss.Sim(measles, **pars)
 sim.run()
 sim.results.measles.I.plot()
 ```
-
-::: {.callout-warning}
-## [PROPOSAL]
-The tutorials write measles' transmission rate as a bare number, `S >> I @ 1.9*I`, whose unit (per day) is taken from the model's typed values (here `ss.days(8)`). Adding births or deaths per year to that model raises an error, since the model's typed values are then in days and in years, and the unit of the bare 1.9 is no longer known; `demographics=True` does the same. A bare number in a disease should take the unit of that disease's own typed values, so that the model of the tutorials keeps working when demographics are added (P11, P13). Today, give the rate a unit, `ss.perday(1.9)`, as above, or give the sim `unit='day'`.
-:::
 
 The births and deaths are transitions of the disease, so they are among its results (`sim.results.measles.births`, `sim.results.measles.deaths`) and in `describe()`. With several diseases, the same people are born into and die from each of them.
 
@@ -85,10 +80,7 @@ for year in [2010, 2020, 2030]:
     print(year, 'model:', round(sim.results.alive[year - 2000]), 'UN:', round(ss.people('Kenya', year=year).named.total))
 ```
 
-::: {.callout-warning}
-## [PROPOSAL]
-The model overshoots the UN's population of Kenya by about 4% by 2020 and 5% by 2030. The UN's rates that come with Starsim are given every ten years, and each is held for its whole decade, so the falling birth rate of the 2010s is taken as that of 2010 throughout. For the rates of a named place, which are estimates for single years, `ss.Births` and `ss.Deaths` should interpolate between the years given (P11); and the note that Starsim prints for data of your own that is years apart ("give a row for each year") can't be acted on for data that comes with Starsim. Today, the overshoot can be avoided by giving rates for each year, interpolated from `ss.data.rates('Kenya', 'births')`.
-:::
+The model follows the UN's estimates to within 1%. The UN's rates that come with Starsim are estimates for single years, given every ten years, so `ss.Births` and `ss.Deaths` interpolate between them.
 
 ### Data of your own
 

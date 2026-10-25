@@ -21,19 +21,19 @@ recovery  = I >> R @ ss.days(8)
 measles = ss.Disease(infection, recovery, init_prev=0.001)
 measles.stratify(age={0: 0.3, 15: 0.6, 65: 0.1}) # Ages 0-14, 15-64, and 65+, with the share in each
 
-contacts = ss.contacts(ages=[0, 15, 65], matrix=[[10, 4, 1], [4, 8, 2], [1, 2, 3]])
+contacts = ss.contacts(ages=[0, 15, 65], matrix=[[10, 6, 1], [3, 8, 1], [3, 6, 3]])
 sim = ss.Sim(measles, networks=contacts, total_pop=100_000, stop=ss.days(60))
 sim.run()
 sim.results.measles.I.by('age').plot()
 ```
 
-Children, who have the most contacts, are infected first: the number infectious peaks among them on day 5, among adults a day later, and among people 65 and over a day after that, and with fewer contacts, a smaller share of older people is infectious at once. (In numbers, most of those infectious are adults, who are 60% of the population.) The model is still the SIR model, but each equation now holds for each age group, and transmission sums over the groups that each group meets:
+Children, who have the most contacts, are infected first: the number infectious peaks among them on day 5, and among adults and people 65 and over a day later, when about three in four of each group are infectious at once. (In numbers, most of those infectious are adults, who are 60% of the population.) The model is still the SIR model, but each equation now holds for each age group, and transmission sums over the groups that each group meets:
 
 ```{python}
 sim.diseases.measles.equations()
 ```
 
-With contacts, β is the rate of infection per contact with an infectious person, and R0 depends on the whole contact matrix: here 0.14 per contact gives an R0 of about 15, as before. [Contact matrices and data by place](populations_contacts.qmd) covers contact matrices, including those for real countries (`ss.contacts('Kenya')`).
+With contacts, β is the rate of infection per contact with an infectious person, and R0 depends on the whole contact matrix: here 0.14 per contact gives an R0 of about 16, close to the 15 before. [Contact matrices and data by place](populations_contacts.qmd) covers contact matrices, including those for real countries (`ss.contacts('Kenya')`).
 
 ## Levels and shares
 

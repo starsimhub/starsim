@@ -130,6 +130,8 @@ sim.run()
 sim.plot('cases')
 ```
 
+The plot shows the model's cases summed over each week of the data, as they are compared in a fit.
+
 - **Data need not be on the model's time step.** A flow, such as weekly reported cases, is compared with the model's total over each week of the data; a stock or a ratio, such as the share immune in a serosurvey, with the model's value on the date of the data. The result already knows which it is.
 - **With several diseases**, a column is matched to the one that has a result of that name, or is named with its disease, `measles.cases`.
 - **Data by group** is given in long form: extra columns named after dimensions (`age`) say which group each row is for, and each row is compared with `cases.select(age=...)`.
@@ -143,11 +145,6 @@ sim = ss.Sim(measles, data=data, total_pop=100_000, start='2025-01-01', stop='20
 ```
 
 Data attached this way is what [calibration](calibration_fitting.qmd) fits to: `sim.fit()` fits every parameter that has bounds to every result that has data.
-
-::: {.callout-warning}
-## [PROPOSAL]
-The plot above draws the model's daily cases against weekly data, so the data is about seven times the model's line even where they agree. A plot of a flow with data should show the model summed over the same periods as the data, as the fit compares them (P11: the obvious call should show the right comparison).
-:::
 
 ## Likelihoods
 

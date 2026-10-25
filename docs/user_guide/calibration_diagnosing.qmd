@@ -74,7 +74,7 @@ A pattern in the residuals points to the structure of the model, not to the fitt
 
 ::: {.callout-warning}
 ## [PROPOSAL]
-This check should be built in: `fit.plot()` should show the model over the data's own periods (here, weekly totals, not daily cases), and `fit.plot(residuals=True)` should add the residuals. Today `fit.plot()` plots daily cases against weekly data, and the residuals have to be worked out by hand, as above. (P11, P15)
+This check should be built in: `fit.plot(residuals=True)` should add the residuals below the model and the data. Today `fit.plot()` shows the model's weekly totals against the data, but the residuals have to be worked out by hand, as above. (P11, P15)
 :::
 
 ## Did the search converge?

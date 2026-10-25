@@ -56,19 +56,18 @@ msim = ss.parallel(scenarios, n_runs=20)
 msim.plot('measles')
 ```
 
-The runs of each scenario use the same seeds in the same order, so each run of the campaign is paired with a run of the baseline with the same random numbers, and the difference between them is mostly the effect of the campaign rather than chance. `msim.diff()` gives the difference of each scenario from the baseline, run by run:
+The runs of each scenario use the same seeds in the same order, so each run of the campaign is paired with a run of the baseline with the same random numbers, and the difference between them is mostly the effect of the campaign rather than chance. `msim.summarize(baseline=...)` gives the difference of each scenario from the baseline, run by run, summarized over the runs:
+
+```{python}
+msim.summarize(baseline='No campaign').loc['measles_infection']
+```
+
+The difference in infections is negative, about −520: the campaign averts about 520 infections, with 95% of runs between about 340 and 630. `msim.diff()` gives the differences themselves, run by run, as results; here, the infections averted so far at each point in time:
 
 ```{python}
 averted = -msim.diff('No campaign')['Campaign in February'].measles.infection.cum # Infections averted so far, in each pair of runs
-low, mid, high = averted.quantiles()
-print('Infections averted:', round(mid[-1]), 'with 95% of runs between', round(low[-1]), 'and', round(high[-1]))
 averted.plot()
 ```
-
-::: {.callout-warning}
-## [PROPOSAL]
-The difference from a baseline should be a summary like any other, in one call: `msim.summarize(baseline='No campaign')`, giving for each scenario the median and interval of the difference in each result, run by run (with `averted` reading more naturally than a negative difference). Today it takes the four lines above: `msim.diff()`, a minus sign, `.cum`, `quantiles()`, and the last value of each (P11, P15).
-:::
 
 Each result across the runs can also be picked by scenario, e.g. `msim.results.measles.I.select(scenario='No campaign')`.
 

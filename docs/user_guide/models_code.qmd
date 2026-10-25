@@ -21,12 +21,7 @@ Many things that once needed a module of their own are declared, and a declared 
 | One disease changing the risk of another | `ss.modify(sti.rel_sus, multiply=3, where=hiv.I)` | [Connectors](interventions_connectors.qmd) |
 | A number to report, such as cases from infections | `ss.outcome()` | [Outcomes and observation](models_outcomes.qmd) |
 
-Write a module as code when the model needs something none of these can say. A module that keeps a value for each person, like the one below, works on agents, so a sim with one runs as agents (give it `n_agents=`); it works with declared diseases in the same sim.
-
-::: {.callout-warning}
-## [PROPOSAL]
-A sim with a module that keeps a value for each person should choose to run as agents by itself. Today `solver='auto'` doesn't see this: `ss.Sim(cold, Antibodies())`, with the module below and no `n_agents=`, runs as an ODE and then fails partway with an error that `cold.recovery.uids` exists only as agents (P13). Until then, give `n_agents=` or `solver='abm'`.
-:::
+Write a module as code when the model needs something none of these can say. A module that keeps a value for each person, like the one below, works on agents, so a sim with one runs as agents by itself (`n_agents=` says how many); it works with declared diseases in the same sim.
 
 ## An example: immunity that fades gradually
 

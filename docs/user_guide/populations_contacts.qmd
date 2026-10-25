@@ -37,19 +37,14 @@ print('Share infected in each age group:', (infections/people).round(2))
 
 ::: {.callout-warning}
 ## [PROPOSAL]
-`summarize()` on a result by group returns a bare array, so the reader has to remember the order of the groups and divide by their sizes by hand. It should return a table labeled by group, and results should offer the share of each group, e.g. `sim.results.flu.infection.by('age').share()` for the share of each age group ever infected (P10, P15). Today: the array, as above.
+Results should offer the share of each group, e.g. `sim.results.flu.infection.by('age').share()` for the share of each age group ever infected, so that the sizes of the groups needn't be divided by by hand (P10, P15). Today: `summarize()` gives the total in each group, labeled by group, and the shares are worked out as above.
 :::
 
 The R0 that the sim prints comes from the matrix: with a contact matrix, R0 is β × the infectious period × the largest eigenvalue of the matrix, which is about 12.2 here, so R0 = 0.03 × 5 × 12.2 ≈ 1.8.
 
 ### Reciprocity
 
-Each contact between two groups is counted from both sides: the contacts that children have with adults, over all children, should equal those that adults have with children, over all adults. So with *N* the number of people in each group, *N*~i~ × *C*~ij~ = *N*~j~ × *C*~ji~. The matrix above is reciprocal for the shares given: 30% of people with 4 contacts each with adults, and 60% with 2 each with children. A matrix from a contact survey is reciprocal for the population surveyed but not necessarily for the model's own; Starsim uses a matrix as given, with each row as the contacts of a person in that group, and says so in a note when a matrix over the model's own groups (below) is not reciprocal.
-
-::: {.callout-warning}
-## [PROPOSAL]
-The note on a matrix that is not reciprocal is given only for a matrix over the model's own groups (`ss.contacts(age=...)`), not for one with its own age groups (`ss.contacts(ages=..., matrix=...)`), the form most hand-written matrices take: the matrix in the [quick start](../ten_minutes.qmd), `[[10, 4, 1], [4, 8, 2], [1, 2, 3]]` with shares 30%, 60%, and 10%, is used without a note, though adults then have twice as many contacts with children in all as children have with adults. The same check should apply to both forms, once the matrix is aggregated to the model's groups (P1).
-:::
+Each contact between two groups is counted from both sides: the contacts that children have with adults, over all children, should equal those that adults have with children, over all adults. So with *N* the number of people in each group, *N*~i~ × *C*~ij~ = *N*~j~ × *C*~ji~. The matrix above is reciprocal for the shares given: 30% of people with 4 contacts each with adults, and 60% with 2 each with children. A matrix from a contact survey is reciprocal for the population surveyed but not necessarily for the model's own; Starsim uses a matrix as given, with each row as the contacts of a person in that group, and says so in a note when it is not reciprocal for the model's shares (for a matrix with its own age groups, once it is aggregated to the model's).
 
 ## The forms of a matrix
 

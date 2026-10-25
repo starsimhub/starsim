@@ -33,7 +33,7 @@ measles = ss.Disease(infection, progression, recovery,
 )
 measles.stratify(age={0: 0.3, 15: 0.6, 65: 0.1}) # Ages 0-14, 15-64, and 65+
 
-contacts = ss.contacts(ages=[0, 15, 65], matrix=[[10, 4, 1], [4, 8, 2], [1, 2, 3]]) # Contacts a day, between age groups
+contacts = ss.contacts(ages=[0, 15, 65], matrix=[[10, 6, 1], [3, 8, 1], [3, 6, 3]]) # Contacts a day, between age groups
 settings = dict(networks=contacts, total_pop=100_000, start='2025-01-01', stop='2026-01-01')
 
 sim = ss.Sim(measles, **settings)
@@ -63,7 +63,7 @@ plt.xlabel('Infections over the year')
 plt.ylabel('Number of runs');
 ```
 
-The answer has two parts. In about one run in five, measles dies out with almost no one infected; otherwise, it infects about 9,000 people, give or take a few hundred. The average of the runs, about 7,000, is a size that no outbreak has. Chance matters at the start, when there are few cases; once thousands of people are infected, the ups and downs average out, and the outbreak's size hardly varies.
+The answer has two parts. In about one run in seven, measles dies out with almost no one infected; otherwise, it infects about 9,000 people, give or take a few hundred. The average of the runs, about 7,700, is a size that no outbreak has. Chance matters at the start, when there are few cases; once thousands of people are infected, the ups and downs average out, and the outbreak's size hardly varies.
 
 ::: {.callout-warning}
 ## [PROPOSAL]
@@ -78,7 +78,7 @@ The answer has two parts. In about one run in five, measles dies out with almost
 msim.summarize()
 ```
 
-For infections, the median is about 9,100, and the 95% range runs from 0 to about 9,300: it holds both the outbreaks that died out and those that didn't. A range like this says that the outcome is uncertain, but not how; the histogram above does.
+For infections, the median is about 8,900, and the 95% range runs from 0 to about 9,100: it holds both the outbreaks that died out and those that didn't. A range like this says that the outcome is uncertain, but not how; the histogram above does.
 
 `msim.plot()` without `lines=True` shows the median and the 95% range at each point in time:
 
@@ -119,12 +119,15 @@ plt.xlabel('Infections averted by the response')
 plt.ylabel('Number of runs');
 ```
 
-In most runs where the outbreak takes off, the response averts about 2,000 infections, with little spread; where it dies out either way, it averts none; and in a run or two, the outbreak was still small on 1 March, and the response stops it altogether. Compare this with the 95% range of the outbreak's size in each scenario (`msim.summarize()`), which is far wider, since it includes the chance that measles takes off at all. Comparing runs in pairs takes that chance out of the comparison.
+In the runs where the outbreak takes off, the response averts about 1,800 to 2,400 infections; where it dies out either way, it averts none. Compare this with the 95% range of the outbreak's size in each scenario (`msim.summarize()`), which is far wider, since it includes the chance that measles takes off at all. Comparing runs in pairs takes that chance out of the comparison.
 
-::: {.callout-warning}
-## [PROPOSAL]
-The difference between scenarios, run by run, should be one call that gives a table like `msim.summarize()`'s: `msim.summarize(baseline='No intervention')`, with the median, range, mean, and standard deviation of the difference from the baseline for each result and scenario (P15). Today it takes `msim.diff()`, then a result, then `summarize()`, as above.
-:::
+`msim.summarize(baseline=...)` gives these differences, run by run, for every result at once, with the median, the 95% range, the mean, and the standard deviation of each, as `msim.summarize()` does for the results themselves:
+
+```{python}
+msim.summarize(baseline='No intervention')
+```
+
+A negative difference is a fall: the median run has about 2,100 fewer infections with the response than without it.
 
 ## Repeating a run exactly
 
@@ -152,6 +155,6 @@ The runs vary in the same way: the outbreaks peak at different times, and, as wi
 
 ## Exercises
 
-1. Start the outbreak with 1, 2, 5, and 10 infectious people, and run each 50 times. In what share of runs does the outbreak die out? Compare this with 1/R, which is roughly the chance that one case leads to no outbreak in a model like this one, where R is the reproduction number at the start (about 2.4).
+1. Start the outbreak with 1, 2, 5, and 10 infectious people, and run each 50 times. In what share of runs does the outbreak die out? Compare this with 1/R, which is roughly the chance that one case leads to no outbreak in a model like this one, where R is the reproduction number at the start (about 2.5).
 2. Run the model in a town of 5,000 people instead of 100,000 (`total_pop=5_000`), 50 times. How does the 95% range of the outbreak's size, as a share of the town, compare with that of the larger town?
 3. Compare the campaign of [Vaccination and scenarios](t5_vaccination.qmd) (80% of children under 15, on 1 March) with no intervention, 50 times each. In how many runs does the campaign avert no infections, and why?
