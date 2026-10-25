@@ -96,7 +96,7 @@ from .kernels import compile # Compile the solver kernels ahead of time
 from .expressions import par, mother, attr
 from .transitions import (
     State, states, pars, null, stay, on,
-    Transition, birth, death, lifetable, immigration, emigration, outcome,
+    Transition, move, birth, death, lifetable, immigration, emigration, outcome,
 )
 
 from .dimensions import transfer # Also ss.dimensions.Strat, ss.dimensions.Groups

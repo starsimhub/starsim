@@ -1,9 +1,8 @@
 """
-Test importing camdl models, from camdl's IR, a .camdl file, and a pycamdl model
+Test importing camdl models, from camdl's IR and from .camdl files, against camdl's own runs
 """
-import sys
-import runpy
 import shutil
+import subprocess
 import tempfile
 import warnings
 import numpy as np
@@ -16,7 +15,7 @@ from starsim.interop.camdl import load_camdl
 
 lfd = paths.lfd # The examples, with the originals' results, if this folder is here
 camdlc = lfd / '_envs/camdl/bin/camdlc' if (lfd / '_envs/camdl/bin/camdlc').exists() else shutil.which('camdlc') or 'camdlc' # The one built for the examples; another on the PATH may be older
-pycamdl = paths.camdl/'pycamdl'
+camdl = lfd / '_envs/camdl/bin/camdl' if (lfd / '_envs/camdl/bin/camdl').exists() else shutil.which('camdl') or 'camdl' # Likewise
 golden = lfd / '_envs/camdl/src/ocaml/golden' # camdl's library of models, as compiled IR
 kw = dict(verbose=False)
 
@@ -154,23 +153,28 @@ def test_camdl_golden():
 
 
 @pytest.mark.skipif(not lfd.exists(), reason=paths.no_lfd)
-@pytest.mark.skipif(not pycamdl.exists(), reason='needs pycamdl: set STARSIM_CAMDL to where the camdl repo is')
-def test_pycamdl(tmp_path):
-    """ A pycamdl model (SEIR by age and patch, with aging and movement), written with dump_pycamdl.py, against pycamdl's own ODE run """
-    sc.heading('Testing pycamdl import')
-    sys.path.insert(0, str(pycamdl))
-    from starsim.interop import dump_pycamdl
+@pytest.mark.skipif(not sc.path(camdl).exists(), reason='needs camdl')
+def test_camdl_stratified(tmp_path):
+    """ An SEIR by age and patch, with aging and movement, as a .camdl file: against camdl's own ODE run of it, and the pycamdl original's """
+    sc.heading('Testing camdl import of a stratified model')
     folder = lfd / 'examples/camdl/stratified'
-    model = runpy.run_path(str(folder / 'original/stratified.py'), run_name='original')['m']
-    path = tmp_path / 'model.json'
-    dump_pycamdl.dump(model, path)
-    sim = load_camdl(str(path), **kw).run()
+    model, pars = folder / 'stratified.camdl', dict(beta=0.04, gamma=0.1, move=0.01)
+    traj = tmp_path / 'traj.tsv'
+    cmd = [str(camdl), 'simulate', str(model), '--backend', 'ode', '--no-progress', '--output-dir', str(tmp_path / 'store'), '-o', str(traj)]
+    for key,val in pars.items():
+        cmd += ['--param', f'{key}={val}']
+    subprocess.run(cmd, check=True, capture_output=True)
+    theirs = pd.read_csv(traj, sep='\t', comment='#')
+    sim = load_camdl(model, pars=pars, camdlc=str(camdlc), **kw).run()
     res = sim.results[sim.diseases[0].name]
-    ref = pd.read_csv(folder / 'reference/results.csv')
+    cells = [key for key in res.keys() if key in theirs.columns]
+    assert len(cells) == 24 # 4 states by 3 age groups by 2 patches
+    for key in cells:
+        assert np.abs(res[key].values - theirs[key].values).max() <= 0.5, f'{key} should agree with camdl to its rounding (it writes whole numbers)'
+    ref = pd.read_csv(folder / 'reference/results.csv') # The original in pycamdl, written to full precision
     for c in 'SEIR':
-        theirs = ref[ref.series == f'ode_novax_{c}'].value.values
-        ours = sum(res[k].values for k in res.keys() if k.startswith(f'{c}_'))
-        assert np.allclose(ours, theirs, rtol=1e-9), f'{c} should agree with pycamdl'
+        ours = sum(res[key].values for key in cells if key.startswith(f'{c}_'))
+        assert np.allclose(ours, ref[ref.series == f'ode_novax_{c}'].value.values, rtol=1e-9), f'{c} should agree with the original'
     return sim
 
 
@@ -181,5 +185,5 @@ if __name__ == '__main__':
     sim3 = test_camdl_file()
     sim5 = test_camdl_golden()
     with tempfile.TemporaryDirectory() as tmp:
-        sim4 = test_pycamdl(sc.path(tmp))
+        sim4 = test_camdl_stratified(sc.path(tmp))
     T.toc()

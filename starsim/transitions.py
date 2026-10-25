@@ -24,7 +24,7 @@ from .expressions import as_expr, BinOp, closest, dists_in, Count, count_power, 
 from .parameters import by, seasonal, Static, timeseries, TimeValue
 
 __all__ = ['Expr', 'par', 'pars', 'State', 'states', 'null',
-           'Transition', 'birth', 'death', 'lifetable', 'immigration', 'emigration', 'outcome', 'Graph',
+           'Transition', 'move', 'birth', 'death', 'lifetable', 'immigration', 'emigration', 'outcome', 'Graph',
            'by', 'timeseries', 'seasonal', 'Strat', 'Transfer', 'transfer']
 
 
@@ -745,6 +745,123 @@ class Transition(Nameable):
         return f'Transition({name}{self.arrow}{driver})'
 
 
+def move(*args, p=None, n=None, uids=None):
+    """
+    Move people between states of a declared disease from code, the same way under every solver
+
+    A one-off move along no transition (as `ss.Delivery(move=I >> R)` is for a declared intervention), so people
+    are moved and never made or lost: the number of people stays the same in every disease. A count that is not
+    people (`ss.State(people=False)`, e.g. mosquitoes) moves the same way, and also from and to outside the model
+    (`ss.null`), which for people is a birth or a death, and is declared. Also `disease.move(...)`, the same with
+    the disease given.
+
+    Args:
+        args: in any order, told apart by what they are: the state (or a list of states) to move people from and the
+            state to move them to, as the code sees them at run time (`sir.I`) or by name (`'I'`), the source first;
+            the disease, which is enough to say where they come from (any of its states of people); and the agents to
+            move (`ss.uids`), as `uids=`
+        p (float): the share of the people in the source to move, in each group (by default, everyone)
+        n (float): instead, the number of people to move, shared among the groups and states in proportion to who is in them
+        uids (uids): only these agents (those of them in the source), which needs agents; with `p=` or `n=`, a share or number of them
+
+    Returns:
+        The number of people moved
+
+    **Examples**::
+
+        ss.move(sir.I, sir.R, p=0.5) # Cure half of those infectious
+        ss.move(sir.S, sir.I, n=5) # Five susceptible people become infectious
+        sir.move(uids, sir.R) # These agents, from wherever they are (also ss.move(sir, uids, sir.R), or sir.move(uids, 'R'))
+        self.move(self.I, self.R, uids=uids) # In a disease's own code: these agents, if they are infectious
+        ss.move(mosq.Sv, ss.null, p=0.1) # A tenth of the mosquitoes die
+    """
+    if p is not None and n is not None:
+        raise ValueError('ss.move() moves a share of the people (p=) or a number of them (n=), not both')
+
+    # Tell the arguments apart
+    diseases, ends = [], []
+    for arg in args:
+        if isinstance(getattr(arg, 'graph', None), Graph):
+            diseases.append(arg)
+        elif is_uids(arg):
+            if uids is not None:
+                raise ValueError('ss.move() was given the agents to move twice')
+            uids = arg
+        else:
+            ends.append(arg)
+    if len(diseases) > 1:
+        raise ValueError(f'ss.move() moves people between the states of one disease, not {len(diseases)}')
+    if not 1 <= len(ends) <= 2:
+        raise ValueError(f'ss.move() takes the state people move to, and the state (or states) they move from unless the disease is given; not {len(ends)} of them')
+    home = diseases[0] if diseases else None
+    def find(x):
+        if isinstance(x, str):
+            if home is None:
+                raise ValueError(f'ss.move() was given the state "{x}" by name, so it needs the disease too, e.g. sir.move(..., "{x}")')
+            if x not in home.graph.states:
+                raise ss.errors.UnknownState(f'"{x}" is not a state of "{home.name}". Its states are {sc.strjoin(home.graph.states.keys())}')
+            x = getattr(home, x)
+        return run_state(x)
+    to = None if ends[-1] is null else find(ends[-1])
+    if len(ends) == 2:
+        src = ends[0]
+        srcs = [] if src is null else [find(x) for x in sc.tolist(src)]
+    elif home is None:
+        raise ValueError('ss.move() was given only the state people move to; give the state they move from too, or the disease, for any of its states (e.g. sir.move(uids, sir.R))')
+    elif to is None or not to[1].people:
+        raise ValueError('ss.move() of a count needs the state it comes from (or ss.null)')
+    else: # Any of the disease's states of people but the destination
+        srcs = [(home, state) for state in home.graph.people_states if state is not to[1]]
+    pairs = srcs + ([] if to is None else [to])
+    mods = {id(mod):mod for mod,_ in pairs} | ({id(home):home} if home is not None else {})
+    if len(mods) != 1:
+        raise ValueError(f'ss.move() moves people between the states of one disease, not {len(mods) or "none"}')
+    mod = next(iter(mods.values()))
+    if mod.engine is None:
+        raise RuntimeError(f'"{mod.name}" moves people once the sim is initialized (sim.init())')
+
+    # Check that the move keeps the people, then make it
+    states = [state for _,state in pairs]
+    people = [state.name for state in states if state.people]
+    if people and len(people) < len(states):
+        counts = [state.name for state in states if not state.people]
+        raise ss.errors.PeopleAndCounts(f'ss.move() would move between people ({sc.strjoin(people)}) and counts ({sc.strjoin(counts)}, declared with people=False) of "{mod.name}"')
+    if people and (not srcs or to is None):
+        raise ss.errors.PeopleAndCounts(f'ss.move() moves people between states, so the number of people stays the same; people come into the model and leave it by births, deaths, and migration, which are declared (e.g. ss.birth(), ss.death(), ss.immigration())')
+    if not srcs and n is None:
+        raise ValueError(f'ss.move() from outside the model adds a number: give n=')
+    if uids is not None and (mod.sim.solver != 'abm' or not people):
+        raise ss.CapabilityError(f'ss.move() of particular agents (uids) needs agents, but ' + (f'"{mod.name}" is run with solver="{mod.sim.solver}", which has none.\n     Move a share (p=) or a number (n=) of the people in a state instead, or run with solver="abm"' if people else 'a count has none'))
+    if n is None and p is None:
+        p = 1.0
+    kw = dict(uids=uids.uids if hasattr(uids, 'uids') else ss.uids(uids)) if uids is not None else dict()
+    return mod.engine.move_some([state for _,state in srcs], None if to is None else to[1], p=p, n=n, **kw)
+
+
+def is_uids(x):
+    """ Whether an argument of `ss.move()` is agents: `ss.uids`, an array of integers, or a mask of agents (an `ss.BoolArr` that is not a disease's state) """
+    if isinstance(x, ss.uids):
+        return True
+    elif isinstance(x, np.ndarray):
+        return np.issubdtype(x.dtype, np.integer)
+    elif isinstance(x, ss.BoolArr):
+        return getattr(x, 'name', None) not in getattr(getattr(getattr(x, 'mod', None), 'graph', None), 'states', {})
+    elif isinstance(x, (list, tuple)) and x:
+        return all(isinstance(v, (int, np.integer)) and not isinstance(v, bool) for v in x)
+    return False
+
+
+def run_state(x):
+    """ The disease and the declared state of a state as code sees it at run time (`sir.I`), or as declared """
+    if isinstance(x, State):
+        return x.module, x
+    mod = getattr(x, 'mod', None) or getattr(getattr(x, 'engine', None), 'mod', None) # Agents in a state (an ss.BoolState), or a count (ss.solvers.CountState)
+    graph = getattr(mod, 'graph', None)
+    if graph is None or getattr(x, 'name', None) not in graph.states:
+        raise TypeError(f'ss.move() moves people between the states of a declared disease (e.g. sir.I), not {type(x).__name__}')
+    return mod, graph.states[x.name]
+
+
 class Per:
     """ The transition that drives a birth (`ss.birth(per=)`), kept by reference when its module is copied, since it may be another module's """
     def __init__(self, tr):
@@ -965,7 +1082,7 @@ class outcome(Nameable):
         source (Transition/outcome/list): a transition, one branch of one (`cin.to(CA)`), another outcome, or a weighted sum of them, e.g. `0.5 * infection`
         delay (any): the time from the source event to this one: a duration or a distribution
         duration (any): if given, also produces `n_<name>`: the number currently in this outcome
-        likelihood (`ss.Dist`): optional likelihood, for calibration
+        likelihood (`ss.Dist`/func): optional likelihood, for calibration: a distribution, or a function `fn(observed, model)` returning the log-likelihood of each value (see `ss.fit.logpdf()`)
         name (str): the name; if not given, taken from the keyword or the variable it is assigned to
 
     Examples:
@@ -1024,11 +1141,18 @@ class outcome(Nameable):
         return dict(name=self.name, type='outcome', source=source, delay=ss.presentation.quantity_json(self.delay, 'dur', unit),
                     duration=ss.presentation.quantity_json(self.duration, 'dur', unit), likelihood=self.likelihood_json())
 
+    @property
+    def likelihood_pars(self):
+        """ The parameters of its likelihood: a distribution's, or none for a function or no likelihood """
+        return self.likelihood.pars if isinstance(self.likelihood, ss.Dist) else {}
+
     def likelihood_json(self):
         """ The likelihood as data: its distribution, and each parameter as a model parameter (by name) or a number """
         lik = self.likelihood
         if lik is None:
             return None
+        elif not isinstance(lik, ss.Dist): # A function
+            return ss.presentation.func_json(lik)
         pars = {}
         for key,val in lik.pars.items():
             if isinstance(val, par) and val.name is not None:

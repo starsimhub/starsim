@@ -45,7 +45,7 @@ class Agents(Engine):
         self._drawn_ti = -1 # The step whose competing rates have been drawn: see enter()
         self.batches = [] # Who entered a state, from where, and when, for the events of branches and of entering and leaving states: see event_uids()
         self._phase = (-1, 0) # Where the engine is in a step: see start_phase()
-        self.moved_early = None # Moved by code (move_to()) before the start, so they have no history to fill in: see fire_placed()
+        self.moved_early = None # Moved by code (ss.move()) before the start, so they have no history to fill in: see fire_placed()
         self.state_index = {state.name:i for i,state in enumerate(graph.people_states)}
         self.triggers = [tr for tr in graph.transitions.values() if tr.trigger is not None and not tr.trigger.outcome] # Moved by ss.on(): see triggered(); those on the outcome of a delivery move as it happens (see ss.interventions.trigger_moves())
         self.trigger_mods = set().union(*[ss.conditions.module_refs(tr.trigger.x) for tr in self.triggers]) # The modules whose changes they react to
@@ -159,6 +159,7 @@ class Agents(Engine):
         add('init', ss.random())
         add('seed_who', ss.random()) # Who is seeded, by an init_prev for each agent: see init_post()
         add('seed_where', ss.random()) # Where the seeded go, if a new infection has several destinations: see seed()
+        add('move', ss.random()) # Who code moves (ss.move()): see move_some()
         if type(self.mod).burnin_plan is not ss.Disease.burnin_plan:
             add('burnin', ss.random()) # Who starts part way through, and since when: see backfill_burnin()
         for state in graph.people_states:
@@ -362,9 +363,38 @@ class Agents(Engine):
         self.enter(dst, moved, self.ti if ti is None else ti, tr=tr, srcs=srcs)
         if not self._started:
             self.moved_early = moved if self.moved_early is None else ss.uids.concatenate([self.moved_early, moved])
-        if tr is None and self.stocks and self.sim.loop.index == 0: # A one-off move before the first step (e.g. move_to() in init_post(), or after sim.init()): the start, recorded already (see init_post()), is recorded again with them
+        if tr is None and self.stocks and self.sim.loop.index == 0: # A one-off move before the first step (e.g. ss.move() in init_post(), or after sim.init()): the start, recorded already (see init_post()), is recorded again with them
             self.record_stocks()
         return moved
+
+    def move_some(self, srcs, dst, p=None, n=None, uids=None):
+        """ A one-off move from code (`ss.move()`): a share `p` of the agents in some states (or `n` people, as the nearest whole number of agents; or of `uids`, those given), chosen at random, to a state; or of a count, to and from outside the model too (`dst` or `srcs` empty); returns the number of people moved """
+        if not (srcs[0] if srcs else dst).people: # A count: an exact share, as its flows are
+            have = sum(self.counts[state.name].sum() for state in srcs)
+            if n is not None:
+                p = min(n/have, 1.0) if have > 0 else 0.0
+            moved = 0.0 if srcs else n*self.state_split[dst.name]
+            for state in srcs:
+                amount = self.counts[state.name]*p
+                self.counts[state.name] = self.counts[state.name] - amount
+                moved = moved + amount
+            if dst is not None:
+                self.counts[dst.name] = self.counts[dst.name] + moved
+            return float(np.sum(moved))
+        mod = self.mod
+        cands = ss.uids.concatenate([mod[state.name].uids for state in srcs])
+        if uids is not None:
+            cands = cands.intersect(uids)
+        if n is None and np.ndim(p) == 0 and p == 1: # Everyone: no random numbers to draw
+            return len(self.move_states(cands, srcs, dst))*self.scale
+        draws = self.dists.move.rvs(cands)
+        if n is None:
+            chosen = cands[draws < p]
+        else:
+            k = min(int(round(n/self.scale)), len(cands))
+            chosen = cands[np.sort(np.argsort(draws, kind='stable')[:k])]
+        moved = self.move_states(chosen, srcs, dst)
+        return len(moved)*self.scale
 
     @property
     def scale(self):
@@ -1209,7 +1239,7 @@ class Agents(Engine):
     def fire_placed(self):
         """
         People placed at the start count as having gone through the transitions on the shortest path from the first state to theirs, at the start
-        (each source read as just completed), or, with no such path, as having entered their state; not those moved by code (move_to()), whose move set what it sets
+        (each source read as just completed), or, with no such path, as having entered their state; not those moved by code (ss.move()), whose move set what it sets
         """
         mod = self.mod
         paths = self.paths()

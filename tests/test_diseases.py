@@ -445,8 +445,10 @@ def test_current_state():
     sir = ss.Disease(name='sir', infection=ss.Transition(S, I, rate=0.3 * I), recovery=ss.Transition(I, R, dur=4), init_prev=0) # Nobody seeded, so only the moves below
     sim = ss.Sim(diseases=sir, n_agents=100, stop=2001, verbose=0).init()
     sir = sim.diseases.sir
-    sir.move_to(ss.uids([0, 1]), 'I')
-    sir.move_to(ss.uids([2]), 'R')
+    sir.move(ss.uids([0, 1]), sir.I) # From wherever they are; the arguments are told apart by what they are
+    ss.move(sir, [2], 'R')
+    assert sir.move(sir.S, sir.I, uids=ss.uids([1, 3, 4])) == 2 # Of these, only those in S
+    sir.move('I', 'S', uids=[3, 4]) # By name
     cs = sir.current_state()
     assert isinstance(cs, ss.IntArr) and cs.labels == ['S', 'I', 'R']
     assert cs[ss.uids([0, 1, 2, 3])].tolist() == [1, 1, 2, 0]

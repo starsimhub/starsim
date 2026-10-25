@@ -81,8 +81,10 @@ def choose_solver(sim):
     """
     Work out the sim's unit and solver; see `ss.Disease` for declaring a model that can be run with different solvers
 
-    A sim with no declared states and transitions is run as agents, as in earlier
-    versions of Starsim, and none of this applies to it. Which engine then takes a whole
+    Agents are made only when something needs them, whether the model is declared or
+    written as code: a sim of modules written as code with nothing per person (e.g. an
+    ODE of its own in NumPy) has no agents, and one with per-person arrays (Starsim 3's
+    diseases written as code) runs as agents. Which engine then takes a whole
     stochastic compartmental run, JAX or the kernels, is chosen when the sim is run, by
     `choose_engine()`.
     """
@@ -121,16 +123,6 @@ def choose_solver(sim):
     sim._init_named_people()
     sim.groups.init()
     sim.mixing = solvers.Mixing(sim)
-    if not sim.declared:
-        sim._init_unit()
-        if solver not in ['auto', 'abm']:
-            raise ss.CapabilityError(f'cannot run with solver="{solver}": the model is written as code (it has no declared states and transitions), so it runs as agents.\n'
-                                     f'     Leave the solver as "auto", or declare the model\'s states and transitions to run it as compartments.')
-        sim.solver = 'abm'
-        sim.solver_reason = None
-        sim.capabilities = []
-        return
-
     # The unit
     sim._init_unit()
 
@@ -169,7 +161,7 @@ def choose_solver(sim):
                 if cap.ingredient.startswith('property:'):
                     ss.note(f'running as agents: {cap.auto}', sim=sim)
         else:
-            solver, reason = 'ode', 'every part of the model has a compartmental form'
+            solver, reason = 'ode', 'every part of the model has a compartmental form' if sim.declared else 'nothing in the model needs agents'
     else:
         reason = 'requested'
     sim.solver = solver
@@ -716,16 +708,14 @@ def init_capabilities(sim, modules):
                 continue
             elif flag: # It says it works on groups
                 continue
-            elif flag is None and observer(mod) and not mod.state_list: # It runs in Python beside the compartments, whatever the solver; if it asks for agents, it says so then
-                add(f'module: {mod.name}', 'yes', 'runs in Python each step')
-            else:
-                if flag is None and observer(mod): # A value for each person (define_states()), which only agents have
-                    why = f'"{mod.name}" ({type(mod).__name__}) keeps a value for each person ({sc.strjoin(s.name for s in mod.state_list[:3])}), which only agents have; if its code works on groups, set compartmental = True on it'
-                elif isinstance(mod, (ss.Births, ss.Deaths)) and flag is None:
-                    why = f'"{mod.name}" ({type(mod).__name__}) works on agents; ss.birth() and ss.death() in the disease are its compartmental form'
-                else:
-                    why = f'"{mod.name}" ({type(mod).__name__}) works on agents' + ('' if flag is False else '; if its code works on groups, set compartmental = True on it')
-                add(f'module: {mod.name}', 'no', 'works on agents', auto=why, fatal=True)
+            elif isinstance(mod, (ss.Births, ss.Deaths)): # They add and remove agents
+                add(f'module: {mod.name}', 'no', 'works on agents', auto=f'"{mod.name}" ({type(mod).__name__}) adds and removes agents; ss.birth() and ss.death() in the disease are its compartmental form', fatal=True)
+            elif flag is False:
+                add(f'module: {mod.name}', 'no', 'compartmental = False', auto=f'"{mod.name}" ({type(mod).__name__}) has compartmental = False, so runs only as agents', fatal=True)
+            elif mod.state_list: # A value for each person (define_states()), which only agents have
+                add(f'module: {mod.name}', 'no', 'per-agent arrays', auto=f'"{mod.name}" ({type(mod).__name__}) keeps a value for each person ({sc.strjoin(s.name for s in mod.state_list[:3])}), which only agents have; if its code works on groups, set compartmental = True on it', fatal=True)
+            else: # Code with nothing per person runs beside the compartments, whatever its kind; if it asks for agents, it says so then
+                add(f'module: {mod.name}', 'yes', 'runs in Python each step' + ('' if observer(mod) else '; compartmental = False if it needs agents'))
             continue
 
         # A declared module: code of its own, functions, and what needs agents

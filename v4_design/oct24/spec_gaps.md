@@ -72,6 +72,8 @@ Mostly yes. About 45 of the 55 models in camdl's golden library (`ocaml/golden/`
 
 ## He et al. 2010
 
+*Update (2026-10-25): it runs, declared with a little code or as code, and is filtered as pomp does; see [spec_gaps_response.md](spec_gaps_response.md).*
+
 The one real model that is not easy. It has every hard piece at once: noise on infection (`overdispersed`), births as a deterministic flow, `balance` to tie `R` to the census population, a yearly cohort entry whose size follows the birth rate and population on the day, and the normal likelihood whose standard deviation depends on the model's value. The rest of it (power mixing over `pop(t)`, school-term forcing, interpolated population and birth rate from a TSV) is written easily. As the classic benchmark of pomp and of camdl's particle filter, it is worth deciding whether v4 means to cover it.
 
 ## By model

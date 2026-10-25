@@ -1050,3 +1050,81 @@ R0 rises from 15 to about 200. In the odin model, β = 1.9 is the rate of infect
 sim = ss.Sim(measles_seir, networks=contacts, pars=dict(beta=ss.perday(0.14)), solver='ode', unit='day', stop=ss.days(50.0), total_pop=100000)
 sim.run()
 ```
+
+## G8: When the model doesn't fit
+
+```{python}
+#| echo: false
+# The tutorial's code, run again here so that its model, likelihood and filter are defined
+import re
+fence = '`'*3 # A code block's fence, which can't be written out here
+exec('\n'.join(re.findall(fence + r'\{python\}\n(.*?)' + fence, open('g8_extending.qmd').read(), re.S)))
+```
+
+**1. Without the noise.** A connector whose value is always 1:
+
+```{python}
+class NoNoise(Noise):
+    def step(self):
+        self.value = 1.0
+
+def run(connector, seed=1):
+    sim = ss.Sim(make_measles(), connectors=connector, solver='binomial', total_pop=lookup('pop', start),
+                 start=start, stop=stop, dt=ss.days(1), rand_seed=seed, verbose=0).run()
+    weekly = pars.rho*sim.results.measles.recovery.values[1:].reshape(-1, 7).sum(axis=1)
+    return weekly
+
+plt.figure(figsize=(10, 4))
+for label, connector in [('With noise', Noise(pars.sigma_se)), ('Without noise', NoNoise(pars.sigma_se))]:
+    plt.plot(data.index, run(connector), label=label, alpha=0.8)
+plt.ylabel('Reported cases per week')
+plt.legend()
+```
+
+Without the noise, the epidemics settle within a few years into small ones every year, with peaks of fewer than 2,000 reported cases a week. With it, they stay large and irregular, mostly every other year, with peaks of 4,000 to 5,000 a week, as London's were. This is He et al.'s finding: the chance of who is infected alone isn't enough to keep London's large epidemics going, and the variation in transmission from week to week is.
+
+**2. A cohort spread over a week.**
+
+```{python}
+def births_week(sim):
+    """ As births(), with the cohort entering over days 252-258 """
+    yearly = lookup('pop', sim.now)*lookup('birthrate', sim.now)
+    entry = 252 <= sim.now.dayofyear <= 258
+    return ss.perday(yearly*((1 - pars.cohort)/365.25 + pars.cohort*entry/7))
+
+def make_week():
+    S, E, I, R = ss.states('S E I R')
+    N0 = lookup('pop', start)
+    return ss.Disease(
+        infection = S >> E @ force,
+        latency   = E >> I @ ss.perday(pars.sigma),
+        recovery  = I >> R @ ss.perday(pars.gamma),
+        births    = ss.null >> S @ births_week,
+        deaths    = ss.death(rate=ss.perday(pars.mu)),
+        init_n    = dict(S=round(pars.s0*N0), E=round(pars.e0*N0), I=round(pars.i0*N0)),
+        name      = 'measles',
+    )
+
+for label, make in [('One day', make_measles), ('One week', make_week)]:
+    sims = [ss.Sim(make(), connectors=Noise(pars.sigma_se), solver='binomial', total_pop=lookup('pop', start),
+                   start=start, stop=stop, dt=ss.days(1), rand_seed=seed, verbose=0) for seed in range(4)]
+    totals = [pars.rho*s.results.measles.recovery.values.sum() for s in ss.parallel(sims).sims]
+    print(f'{label}: {np.mean(totals):,.0f} ± {np.std(totals):,.0f} reported cases')
+```
+
+Almost nothing changes: the totals are the same within the variation between runs. A week is short next to the three weeks or so from infection to recovery, and the children who enter during it are infected over the following months, not the following days.
+
+**3. The number of particles.** With the step written for whole arrays (`euler_step`), since the compiled one needs its source, which code run this way doesn't have:
+
+```{python}
+runs = [(n, seed) for n in [100, 300, 1000] for seed in range(3)]
+sims = [make_coded(n=n, analyzers=Filter(data.recovery.values), rand_seed=seed) for n,seed in runs]
+logliks = sc.ddict(list)
+for (n, seed), s in zip(runs, ss.parallel(sims).sims):
+    logliks[n].append(s.analyzers.pfilter.loglik)
+for n, ll in logliks.items():
+    print(f'{n:5,} particles: {np.mean(ll):,.0f} ± {np.std(ll):,.0f}')
+```
+
+The estimate rises with the number of particles (from about −5,935 with 100 to about −5,830 with 1,000, and −5,819 with 2,000), and differs between runs by 10 to 20 log-likelihood units at each. The filter's estimate of the likelihood is unbiased, but its logarithm is too low on average, by more the fewer the particles. So estimates made with different numbers of particles can't be compared, and a fit needs enough particles that the spread is small next to the differences it is looking for.
+

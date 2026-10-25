@@ -798,8 +798,8 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
             self.pass_syncs({sy.row:recorded*sy.mask for sy in syn})
         return recorded
 
-    def move_states(self, frac, srcs, dst, syn=None, y=None, move=None):
-        """ Move a fraction of the people in each of some states, and each group, to a state: along a transition (see `force()`), or along none, as a one-off move (`ss.vaccinate(move=S >> V)`); with `syn` (synchronized flows), also returns the moves in this module's own groups; with `y`, of those people rather than the engine's """
+    def move_states(self, frac, srcs, dst, syn=None, y=None, move=None, given=None):
+        """ Move a fraction of the people in each of some states, and each group, to a state: along a transition (see `force()`), or along none, as a one-off move (`ss.vaccinate(move=S >> V)`); with `syn` (synchronized flows), also returns the moves in this module's own groups; with `y`, of those people rather than the engine's; with `given`, the number to move from each compartment instead (see `move_some()`) """
         own = y is None
         y = self.y if own else y
         total = np.zeros(self.n_groups)
@@ -812,7 +812,7 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
             base = self.dim_map(state.name, dst.name, move=move)
             dim_map = self.synced(base, syn) if syn else base
             for comp in self.state_comps[state.name]:
-                n = self.take(y[comp], frac[s])
+                n = self.take(y[comp], frac[s]) if given is None else given[comp]
                 y[comp] -= n
                 total += n if dim_map is None else n @ dim_map
                 recorded += n if base is None else n @ base # In this module's own groups, before the others' coordinates move
@@ -828,6 +828,28 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
         if own:
             self.changed()
         return (total, recorded) if syn is not None else total
+
+    def move_some(self, srcs, dst, p=None, n=None):
+        """ A one-off move from code (`ss.move()`): a share `p` of the people in some states (or `n` of them, exactly where the solver keeps whole people) to a state, or of a count, to and from outside the model too (`dst` or `srcs` empty); returns the number moved """
+        comps = [comp for state in srcs for comp in self.state_comps[state.name]]
+        have = self.y[comps]
+        total = have.sum()
+        if n is not None:
+            p = min(n/total, 1.0) if total > 0 else 0.0
+        if not (srcs[0] if srcs else dst).people: # A count: an exact share, as its flows are
+            moved = have*p if srcs else n*self.state_split[dst.name]
+            for comp,amount in zip(comps, moved):
+                self.y[comp] -= amount
+            if dst is not None:
+                self.arrive(dst.name, moved.sum(axis=0) if srcs else moved, self.y)
+            self.changed()
+            return float(moved.sum())
+        given = None
+        if n is not None and self.integer: # Exactly n whole people, chosen at random from those there
+            draw = self.rng.multivariate_hypergeometric(np.round(have).astype(np.int64).ravel(), int(min(round(n), round(total))))
+            given = dict(zip(comps, draw.reshape(have.shape).astype(float)))
+        frac = np.full(self.selector.shape, float(p)) if np.ndim(p) == 0 else np.broadcast_to(p, self.selector.shape)
+        return float(self.move_states(frac, srcs, dst, given=given).sum())
 
     def move_share(self, tr, frac, srcs):
         """ Move a share of each state and group (within the sources `srcs`) along a triggered transition: with p=, that share of them; with several destinations, split between them """

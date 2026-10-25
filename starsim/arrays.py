@@ -1313,6 +1313,10 @@ class BoolState(BoolArr):
             return float(engine.n_of(uids))*engine.scale
         return float(len(uids))
 
+    @n.setter
+    def n(self, value):
+        ss.solvers.engine.no_set_count(getattr(self.mod, 'name', 'module'), self.name)
+
     @property
     def time(self):
         """
@@ -1413,6 +1417,35 @@ class BoolState(BoolArr):
         out = super().__ixor__(other)
         self._changed_all()
         return out
+
+
+class GroupAlive(BoolState):
+    """
+    `people.alive` in a run without agents: one row per group of people, not one per person
+
+    Counting it (`sim.people.alive.sum()`, `.count()`) gives the number of people alive, as it does
+    with agents, and its mean is 1, the share of them alive; so code that counts people means the same
+    under every solver. Which people (`.uids`, `.true()`) a run without agents does not have, so these
+    raise, saying what to use instead.
+    """
+    def n_alive(self):
+        """ The number of people (`people.n`, the same in every declared disease), or with none, the population """
+        people = self.people
+        return float(np.sum(people.n)) if people.grouped else people.sim.pars.total_pop
+
+    def no_agents(self, what):
+        raise ss.CapabilityError(f'people.alive.{what} was asked for, but this run has no agents: it has one row for each group of people.\n'
+                                 f'     Use the number alive (people.alive.sum()) or the number in a disease\'s states (e.g. sir.I.n), or run with solver="abm"; a module written as code that reads agents can say so with compartmental = False.')
+
+    def sum(self, *args, **kwargs): return self.n_alive()
+    def count(self, *args, **kwargs): return self.n_alive()
+    def mean(self, *args, **kwargs): return 1.0
+    def true(self): self.no_agents('true()')
+    def false(self): self.no_agents('false()')
+
+    @property
+    def uids(self):
+        self.no_agents('uids')
 
 
 class Watch(ss.utils.NoDists):

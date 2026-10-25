@@ -7,7 +7,7 @@ An analyzer records something during a run that the results don't keep, without 
 
 ## When an analyzer runs
 
-An analyzer runs at the start (time point 0) and then at the end of each step, after the step's results have been recorded. In the analyzer, `sim.ti` (or `self.ti` in a class) is the time point at the end of the step, where the step's results go. A declared disease dates each infection at the end of the step in which it happened, in its state `ti_I`, so the people infected during this step are those with `ti_I == ti`.
+An analyzer runs at the start (time point 0) and then at the end of each step, after the step's results have been recorded. In the analyzer, `sim.ti` (or `self.ti` in a class) is the time point at the end of the step, where the step's results go. A declared disease dates each infection at the end of the step in which it happened, in its state `ti_I`, so the people infected during this step are those with `ti_I == ti`. An analyzer that acts every few steps (`if self.ti % 7 == 0`, at the end of each week) also acts at time point 0, before anything has happened, unless it skips it (`if self.ti == 0: return`).
 
 ## A function as an analyzer
 
@@ -106,7 +106,7 @@ A disease written as code can add data to each infection, such as the variant (`
 
 ## Analyzers in a compartmental run
 
-An analyzer can be given to a model that runs as compartments (an analyzer is the one kind of module written as code that doesn't make the sim run as agents). There, it sees the number of people in each compartment, not individuals: `sim.diseases.measles.I.n` is the number infectious. The run then goes a step at a time, so it is slower; for a quantity that can be worked out from the results after the run, such as the effective reproduction number R0 × S/N, compute it from the results instead.
+An analyzer can be given to a model that runs as compartments, as any module written as code can that keeps nothing for each person. There, it sees the number of people in each compartment, not individuals: `sim.diseases.measles.I.n` is the number infectious. The run then goes a step at a time, so it is slower; for a quantity that can be worked out from the results after the run, such as the effective reproduction number R0 × S/N, compute it from the results instead.
 
 ## Pitfalls
 

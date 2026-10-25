@@ -8,7 +8,7 @@ This section explains how Starsim is put together and why. It is for two kinds o
 
 A model in Starsim is written once, as data: states (`S, I, R = ss.states('S I R')`), transitions between them (`S >> I @ beta * I`), and parameters, with the mixing, demography and interventions around them. Each disease checks its own structure when it is made (unknown names, rates of the wrong shape). When the sim is initialized, Starsim reads those objects, fills in what was left out (and records each guess), checks them against each other, and chooses how to run them: as a deterministic ODE, as one of three stochastic compartmental solvers, or as agents. Because the model is data rather than code, everything else is derived from the same objects: the printed description, the equations, the diagram, the hash that identifies a run, the saved model spec, the code that rebuilds it, and the exports to other frameworks. One declared model, several ways to run it, and one source of truth for all of them.
 
-A model can also be written as code, as classes with their own `step()` methods: these run as agents through the same loop, and can sit beside declared models in one sim.
+A model can also be written as code, as classes with their own `step()` methods: these run through the same loop, as agents if they keep a value for each person and otherwise with no agents at all (an ODE of your own runs as just that), and can sit beside declared models in one sim.
 
 ## The principles behind it
 

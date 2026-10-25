@@ -324,6 +324,7 @@ ss.Transition(I, R, dur=ss.days(10), stages=3)
 
 Generated sub-stages appear in `describe()` and are summed in results, so `I` means what the user meant. `ss.erlang(k=3, mean=ss.days(10))`, `ss.gamma` with an integer shape, and `stages=3` give the same model and the same results, but are written differently in the model spec (a gamma dwell time, or an exponential one with `stages: 3`), so their hashes differ.
 
+
 ### A fixed delay
 
 `ss.constant` is a fixed delay, as odin's `delay()` and a reporting lag are: `onset = E >> I @ ss.constant(ss.days(14))`. As agents, everyone's exit is scheduled 14 days after they arrive, rounded to whole steps (see below). A compartmental run does not approximate it by stages (a fixed delay is the one dwell time whose Erlang stages never converge: 200 of them are stiff and still 1.6% off); it keeps a conveyor of whole steps instead. With a delay of `K` steps, the state has `K + 1` compartments, one for the people who arrived in each of the last `K` steps and one for those who arrived during this one; at the end of each step everyone moves along one, and those who have been there `K` steps leave in the next step. The chain-binomial solver lets them leave at its start, once the step's rates are worked out from the people as they were, as agents' scheduled exits come first; Gillespie and tau-leaping, at its middle; and the ODE, at a constant rate over it. So the number in each compartment at each time point is exact for a delay of whole steps, the ODE's release within a step is exact to second order, and the solvers agree with agents step for step. The other exits of the state (deaths, aging) act on everyone in it; in the ODE they act on those leaving until they leave, whose release over the step is lowered to the share those exits leave (h·dt/(exp(h·dt) − 1) for a total rate h), so that a delay of K steps keeps exp(−h·K·dt) of its people, as agents and the stochastic solvers do (it kept exp(−h·(K − ½)·dt): MA7's 12-day incubation with mortality 0.1 a day gave 5,279 infectious mosquitoes for the exact 5,020). Nothing in a conveyor has a rate, so it is not stiff: odin's 14-day SEIR runs in 8 ms and agrees with odin's delay differential equation within 0.25% of the peak at a step of a day (0.06% at half a day).
@@ -420,7 +421,7 @@ I >> ss.null @ ss.peryear(0.1)
 - A death rate (or any rate) by single year of age need not match the model's age groups: `ss.by(dict(age=np.arange(100), value=[...]))` gives each band by its lower edge, read for each person's own age as agents. As compartments each age group needs one value, so bands that split a group raise `CapabilityError` (and `solver='auto'` runs agents); bands coarser than the groups, or the same, are exact. A function whose numbers are in a unit is written with the unit, `ss.peryear(fn)`, which is `ss.peryear(1) * fn`.
 - As agents, people age in a model whose births are declared, as they do with demographics modules.
 - A birth driven by a transition, `ss.birth(NB, per=farrowing, n=10)`, makes children each time a parent goes through it, including twice in a step (a dwell shorter than a step) and a transition out of the model (`ss.null`, e.g. a maternal death at delivery). Newborns enter their states as anyone else does: entering events and the attributes they set fire (as they do for people born of a module written as code, and for people placed at the start, who enter their state by placement), their traits (`ss.attr(dist)`) are drawn, and an exit due at once (`dur=0`) is taken in the step they are born.
-- People moved into a state by code before the start (`disease.move_to()` in `init_post()`) went along no transition, so no history is filled in for them: attributes recorded on the transitions into that state stay as they are (decided 2026-10-22).
+- People moved into a state by code before the start (`ss.move()` in `init_post()`) went along no transition, so no history is filled in for them: attributes recorded on the transitions into that state stay as they are (decided 2026-10-22).
 - `ss.Pregnancy`'s events for other modules: `preg.delivery` happens to the mother, and to her fetuses (when they are agents) before they are born, so a fetal death `on=preg.delivery` is a stillbirth; `preg.birth` happens to the newborns, so a neonatal death is `on=preg.birth`. Infant mortality is its declared transition `infant_mortality`, at `infant_rate` (0 by default) for children under 1, which `ss.modify()` and `ss.by()` adjust like any other (decided 2026-10-22). Starsim 3's coded pregnancy is ported by rewriting onto these seams; a subclass that overrides one of its methods raises.
 - In an agent-based run, removals are requested during the step and carried out at its end (Starsim's `request_death`), so a person who dies this step is still visible to the modules that run after the disease ([10-execution.md](10-execution.md)).
 
@@ -484,17 +485,21 @@ A plain function passed as a keyword to a module is called once per step, after 
 ```python
 def seed_cluster(sim):
     sir = sim.diseases.sir
-    if sim.ti == 30:                     # on step 30, infect five susceptible agents
-        uids = sir.S.uids[:5]
-        sir.S[uids] = False
-        sir.I[uids] = True
+    if sim.ti == 30:                     # on step 30, five susceptible people become infectious
+        ss.move(sir.S, sir.I, n=5)
 
 sir = ss.Disease(infection, recovery, seeding=seed_cluster)
 ```
 
-The function is called with the sim, after the module's transitions, every step; there is nothing to wrap it in. To pass a function as a named *parameter* rather than as behavior, wrap it in `ss.par(fn)`.
+The function is called with the sim, after the module's transitions, every step; there is nothing to wrap it in. Written with `ss.move()` ([below](#moving-people-from-code)), it runs under every solver; written with each agent's state (`sir.S.uids`), only as agents. To pass a function as a named *parameter* rather than as behavior, wrap it in `ss.par(fn)`.
 
 The other way is the class form: subclass `ss.Disease`, declare the states and transitions in the class body, and override `step()` ([01-objects.md](01-objects.md#the-class-form)). A disease written entirely as code, with per-agent arrays and no declared states, is also an `ss.Disease` (or an `ss.Infection`, for transmission written as code, as in Starsim 3), and runs as agents; one class can mix declared parts and coded ones ([01-objects.md](01-objects.md#the-class-form)). Both are ordinary, supported ways to write a model. What they cost is the choice of solver: custom code runs as agents unless it happens to work on groups, by the same try-it rule, and `describe()` and `solvers()` say which.
+
+### Moving people from code
+
+A module written as code moves people between states with `ss.move(src, dst, p=, n=)`: `p=` a share of the people in `src` (in each group), or `n=` a number of them (shared among the groups and source states in proportion to who is in them, and at most all of them); with neither, everyone in `src` moves. It is written with the states as the code sees them at run time, `ss.move(sir.I, sir.R, p=0.5)`, or from several states, `ss.move([prot.U, prot.W], prot.B)`, or from any state of the disease, `ss.move(sir, sir.R)`, and it returns the number moved. Its arguments are told apart by what they are, so their order is free but for the source coming before the destination: states (at run time, `sir.I`, or by name, `'I'`, with the disease given), the disease, and agents (`ss.uids`, an array or list of integers, or a mask of agents, such as `sim.people.female`). `disease.move()` is `ss.move()` with the disease given, so `sir.move(uids, sir.R)`, `sir.move(uids, 'R')`, `ss.move(sir, uids, sir.R)`, and, in a disease's own code, `self.move(self.I, self.R, uids=uids)` all work, and `move` is not a name a state or transition can have. `uids=` moves those agents (of those in `src`; with `p=` or `n=`, a share or a number of them), which needs agents: in a compartmental run it raises `ss.CapabilityError`, by the try-it rule ([12-backends.md](12-backends.md)). It moves the same people under every solver: as agents, a share or a number of them chosen at random from the disease's own random numbers (so common random numbers hold; `n=` is people, so with scaling it is the nearest whole number of agents); in a compartmental run, the share of each compartment, drawn as whole people where the solver keeps whole people, and exactly `n` people when `n=` is given. It is a one-off move along no transition, as `ss.Delivery(move=I >> R)` is for a declared intervention, so it is in the states' results and in no transition's flow. Since people are moved and never made or lost, the number of people stays the same in every disease; people are added and removed only by births, deaths, and migration, which are declared ([Births, deaths, and migration](#births-deaths-and-migration)). So the count of a state of people is read, never written: `sir.I.n = 0` raises `ss.CapabilityError` and says to use `ss.move()` (decided 2026-10-25).
+
+A count that is not people ([below](#states-that-are-not-people)) is a number under every solver, so its value may be written (`W.n = 0`, a reservoir emptied), and it is moved the same way, including from and to outside the model: mosquitoes that emerge, `ss.move(ss.null, mosq.Sv, n=1000)`, and die, `ss.move(mosq.Sv, ss.null, p=0.1)`. A count moves as an exact share under every solver, as its declared flows do. A move between people and a count raises `PeopleAndCounts`, as a transition between them does; people from or to outside the model are a birth or a death, which are declared.
 
 ## States that are not people
 
@@ -512,6 +517,7 @@ Some of what a disease model tracks is not people: bacteria in water, a mosquito
 - is used in a rate as a count, `W.n`. Used bare it raises `ExposureToCount` (below);
 - is not touched by `ss.death(rate=...)` with no state, which applies to people; its own outflow is written out (`W >> ss.null @ rate`);
 - has results like any other state (`W`, and a flow for each of its transitions).
+- can have its value written from code (`W.n = 0`), or be moved with `ss.move()`, to and from `ss.null` too, unlike a state of people ([above](#moving-people-from-code)).
 
 ```text
 ExposureToCount: the rate for 'infection' uses the bare state W, and W is not people.
@@ -584,15 +590,15 @@ class Peak(ss.Connector):                      # the largest prevalence so far
         self.peak = 0.0
     def step(self):
         sir = self.sim.diseases.sir
-        self.peak = max(self.peak, sir.I.n/self.sim.people.alive.sum())
+        self.peak = max(self.peak, sir.I.frac)
 
 S, I, R = ss.states(3)
 slowing = lambda sim: np.exp(-5 * sim.connectors.peak.peak)      # people take care once they have seen a large epidemic
 sir = ss.Disease(infection=S >> I @ ss.perday(0.3) * I * slowing, recovery=I >> R @ ss.days(10), init_n=dict(I=10))
-sim = ss.Sim(sir, connectors=Peak(name='peak'), n_agents=10_000, unit='day', stop=200)
+sim = ss.Sim(sir, connectors=Peak(name='peak'), total_pop=10_000, unit='day', stop=200)
 ```
 
-The connector runs before the diseases in each step, so every rate in the step sees the value from its start. A function in a rate runs as agents (`solver='auto'` chooses them). What accumulates or decays is a flow into a count instead (`ss.null >> C @ rate`), which every solver runs, and a total by week is a flow's result resampled (`res.infection.resample('week')`). (`ss.update`, a declared form of this for agents only, is gone.)
+The connector runs before the diseases in each step, so every rate in the step sees the value from its start. It reads only counts, so it runs under every solver: here as an ODE, a step at a time, with the function called once a step ([12-backends.md](12-backends.md#functions-try-it)); with `n_agents=`, as agents. What accumulates or decays is a flow into a count instead (`ss.null >> C @ rate`), which every solver runs, and a total by week is a flow's result resampled (`res.infection.resample('week')`). (`ss.update`, a declared form of this for agents only, is gone.)
 
 ### How counts are advanced
 

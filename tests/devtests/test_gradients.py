@@ -217,7 +217,7 @@ def make_coinfection(beta=0.15, data=None, dt=0.25, **kwargs):
     beta = ss.par(beta, bounds=[0.05, 0.5], name='beta')
     S, I = ss.states('S I')
     hiv = ss.Disease(infection=ss.Transition(S, I, rate=beta * I), death=ss.death(I, rate=0.05), init_prev=0.05, name='hiv')
-    hiv.stratify(art=[False, True], states=['I'], adjust=dict(death=[1.0, 0.2]), move=ss.transfer(art=True, rate=ss.peryear(0.1)))
+    hiv.stratify(art=[False, True], states=['I'], adjust=dict(death=[1.0, 0.2]), switch=ss.transfer(art=True, rate=ss.peryear(0.1)))
     S, I = ss.states('S I')
     syph = ss.Disease(infection=ss.Transition(S, I, rate=1.0 * I), cure=ss.Transition(I, S, dur=ss.years(1)), init_prev=0.05, name='syph')
     coinfection = [
@@ -239,7 +239,7 @@ def test_crossing():
     for other in [stepped, jax]:
         for key in ['hiv', 'syph']:
             assert np.allclose(other.results[key].I, sim.results[key].I, rtol=1e-9)
-    assert sim.results.hiv.move[1:].sum() > 0 # The transfer's flow is recorded
+    assert sim.results.hiv.switch[1:].sum() > 0 # The transfer's flow is recorded
 
     # Each flow of three diseases tracked jointly takes the exposure summed over the others' compartments as one number, worked out once (adding it up in each flow took 513 operations here, and three HPV genotypes 383 s instead of 9 s)
     S, I, R = ss.states('S I R')

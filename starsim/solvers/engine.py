@@ -78,6 +78,12 @@ def by_level(levels, n):
     return np.searchsorted(levels[order], np.arange(n + 1)), order
 
 
+def no_set_count(mod, name):
+    """ Setting the number of people in a state (`sir.I.n = 0`), which would make or lose people: they are moved instead (`ss.move()`), so the number of people stays the same in every disease """
+    raise ss.CapabilityError(f'{mod}.{name}.n is the number of people in {name}, which is read, not set: setting it would make or lose people.\n'
+                             f'     Move them with ss.move(), e.g. ss.move({mod}.{name}, <the state they go to>, n=...); people come into the model and leave it by births and deaths, which are declared.')
+
+
 class CountState:
     """
     A state as it is at run time when it holds a count rather than agents
@@ -102,6 +108,8 @@ class CountState:
 
     @n.setter
     def n(self, value):
+        if self.state.people:
+            no_set_count(self.engine.mod.name, self.name)
         self.engine.set_count(self.state, value)
         return
 

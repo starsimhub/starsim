@@ -107,6 +107,12 @@ Writing your own behavior in Python, next to a declared model.
 
 Importing a model from another framework, and comparing models.
 :::
+
+::: {.g-col-6}
+[**G8: When the model doesn't fit**](tutorials/g8_extending.qmd)
+
+A classic model with features Starsim has no words for, in four steps from declared to compiled code.
+:::
 :::
 
 The answers to the exercises are in the [solutions](tutorials/solutions.qmd).

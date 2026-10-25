@@ -195,6 +195,10 @@ Tradeoffs from [oct22/claude_assessment.md](../oct22/claude_assessment.md) (T1�
 - **IF2's fast SBC check** runs at `rtol=0.1` (no smaller size held 5% at every seed); the 5% check is behind `STARSIM_SLOW`.
 - **From the skeptic review** ([oct22/skeptic_review.md](../oct22/skeptic_review.md)): a reference RHS and integrator with a conformance page (M–L); complete exports to NumPy/deSolve/odin tested in CI (L; may reopen "export beyond Mermaid, SBML, and odin"); `'auto'` moving an ODE to agents as a warning, fixed `result.strata` shapes, and an explicit opt-in for the partner-change ODE (S each); the partner-change ODE's weights on the hazard, not the chance per partnership (S; a solver choice: the spec states the current form, `06-routes.md:202`); JAX and fitting as optional extras and `interop/` as a satellite or with its own owners (reopen two Won't do entries); `ARCHITECTURE.md`, the dated design history archived, `MAINTAINERS`/`CITATION.cff`, and a v4 README (the README conflicts with "no docs until final" only in that one file); the constitution's correctness wording.
 
+## Extending a model with code (2026-10-25)
+
+- **Compiled user code inside the kernels.** A rate (or a flow) given as an `@ss.jit` function of the counts, the time and a uniform, called by the kernels inside each run or particle. It is what a declared model with code of its own (He et al. 2010's noise on infection, [oct24/spec_gaps_response.md](oct24/spec_gaps_response.md)) would need to run in one call to the kernels and through the built-in particle filter, IF2 and particle MCMC. It would take a new kind of entry in the kernels' program, a compile for each model, and a fallback from JAX's chain binomial (which couldn't call it), and the rate would be one that `describe()` and the model spec can't show. It waits because the same model already runs and is filtered as a module written as code (the tutorial `docs/tutorials/g8_extending.qmd` matches pomp), and the gain (speed, the built-in fit) has not been measured against a need.
+
 ## Modeling paradigms (2026-10-23)
 
 Looked at whether v4 should support modeling paradigms beyond the ODE, chain-binomial, Gillespie, tau-leaping, and agent solvers. Following [paradigm-conversion.md](../best-practices/paradigm-conversion.md), each is treated as a point on an axis of the same declared model, not as a separate kind of model.
@@ -207,6 +211,8 @@ Looked at whether v4 should support modeling paradigms beyond the ODE, chain-bin
 ## Won't do
 
 Work that was looked at and decided against, with why, so that it is not proposed again without a new reason.
+
+- **camdl's `overdispersed`, `deterministic`, and `balance` as features, and more built-in likelihoods** (beta, beta-binomial, zero-inflated negative binomial, a normal whose spread depends on the model). Each is a keyword that one or two benchmark models need, and each is a few lines of code with what v4 already has: a connector that sets a value each step, a function of the sim, a module written as code, and a likelihood given as a function `fn(observed, model)`. Cliff (2026-10-25): no more complexity or built-in features, but a sensible, easy path for unanticipated extensions; that path is [oct24/spec_gaps_response.md](oct24/spec_gaps_response.md) and the tutorial `docs/tutorials/g8_extending.qmd`.
 
 - **NumPy versions of the agent passes, to avoid their first-use compile.** An agent-based run compiles about 5 s of Numba passes (`census`, `count_alive`, `due_alive` and others) once per install; Cliff (2026-10-21): "5 s as a one-off compile is acceptable". So no second implementation of them (about 150–250 lines) for small populations.
 - **Export to Petri nets.** A Petri net carries only the states and transitions (places and transitions), less than the Mermaid diagram does with its rates, and no importer reads one back to check the round trip. Decided by Cliff (2026-10-16).

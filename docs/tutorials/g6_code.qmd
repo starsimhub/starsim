@@ -3,7 +3,7 @@ title: Modules written as code
 jupyter: python3
 ---
 
-Most of a Starsim model is declared: its states and transitions, the interventions given to it, and the results it reports. Declared parts run under every solver, and `describe()`, `diagram()`, and `equations()` show them. But some parts of a model are easier to say in code: a rule of your own for who receives an intervention, a quantity that each person carries, or a result worked out in a way of your own. A **module written as code** is a Python class with a `step()` method, which Starsim calls once at each step, and which can read and change anything in the sim. It sits in the same sim as declared diseases, and since it works with individual people, a sim with one runs as agents.
+Most of a Starsim model is declared: its states and transitions, the interventions given to it, and the results it reports. Declared parts run under every solver, and `describe()`, `diagram()`, and `equations()` show them. But some parts of a model are easier to say in code: a rule of your own for who receives an intervention, a quantity that each person carries, or a result worked out in a way of your own. A **module written as code** is a Python class with a `step()` method, which Starsim calls once at each step, and which can read and change anything in the sim. It sits in the same sim as declared diseases. A module that keeps a value for each person, like the intervention below, works with individual people, so a sim with one runs as agents; one that keeps nothing per person runs without them ([G8](g8_extending.qmd)).
 
 This tutorial writes two modules for the measles model: an analyzer, which records something no built-in result does, and an intervention, with states of its own. Before writing a module, check the table at the top of [Modules written as code](../user_guide/models_code.qmd) in the user guide, since many things that look as if they need code (vaccination, testing, treatment, contact tracing, and changes to parameters) can be declared.
 
@@ -145,7 +145,7 @@ Isolating 80% of cases 4 days after they become infectious changes almost nothin
 
 ## What changes with a module written as code
 
-- **The sim runs as agents.** A module written as code works with individual people, so a sim with one can't run as compartments. Declared diseases in the same sim run as agents too, with no change to how they are written.
+- **The sim runs as agents if the module needs them.** `Isolation` keeps values for each person, so a sim with it runs as agents, and declared diseases in the same sim run as agents too, with no change to how they are written. A module that keeps nothing per person runs under any solver; if its code then asks for individual people (`measles.I.uids`) in a run without agents, the run stops and says so, and `compartmental = False` on the class makes the sim run as agents.
 - **`describe()` lists the module,** but not what it does, since that is in its code. The modifier that carries its effect is shown in full.
 - **The sim works on its own copy of each module.** To reach a disease or another module from a module, use `self.sim` in `step()` (e.g. `self.sim.diseases.measles`), not a variable from outside the class.
 

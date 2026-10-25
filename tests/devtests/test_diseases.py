@@ -184,7 +184,8 @@ def test_strains_results():
     # A union is a condition, with a count of members
     sim = ss.Sim(diseases=hpv, n_agents=500, start=2000, stop=2001, verbose=0).init()
     for name in names[:2]:
-        sim.diseases[name].move_to(ss.uids([0, 1, 2]), 'I')
+        d = sim.diseases[name]
+        ss.move(d, d.I, uids=ss.uids([0, 1, 2]))
     selector = sim.diseases.hpv31.engine.selector
     assert np.array_equal(selector.select(sim.diseases.hpv.infected), np.array([sim.diseases[name].I.raw | sim.diseases[name].Ca.raw for name in names]).any(0))
     assert np.flatnonzero(selector.select(sim.diseases.hpv.infected.count() >= 2)).tolist() == [0, 1, 2]
@@ -204,8 +205,9 @@ def test_strains_immunity():
         hpv = family([hpv16, hpv18], immunity=ss.immunity(due_to='R', rel_sus=matrix, combine=combine))
         vaccine = ss.modify(hpv16.rel_sus, multiply=0.5, where=ss.ppl.age >= 0)
         sim = ss.Sim(diseases=hpv, connectors=vaccine, n_agents=100, verbose=0).init()
-        sim.diseases.hpv16.move_to(ss.uids([0, 1]), 'R')
-        sim.diseases.hpv18.move_to(ss.uids([0]), 'R')
+        d16, d18 = sim.diseases.hpv16, sim.diseases.hpv18
+        ss.move(d16, d16.R, uids=ss.uids([0, 1]))
+        ss.move(d18, d18.R, uids=ss.uids([0]))
         sim.diseases.hpv.start_step()
         return sim.diseases.hpv16.engine.mult_raw('rel_sus')[:3]
     assert np.allclose(rel_sus('sum'), [(1 - (0.2 + 0.1))*0.5, 0.4, 0.5]) # (1 − min(1, Σ))·(1 − vaccine) = 0.35, as HPVsim
@@ -220,8 +222,8 @@ def test_strains_immunity():
         a, b = make('a', 0.0), make('b', 0.0)
         hpv = family([a, b], immunity=ss.immunity(due_to='R', dur=dict(I=[[0, 0], [dur, 0]])))
         sim = ss.Sim(diseases=hpv, n_agents=20_000, start=2000, stop=2002, dt=1/52, verbose=0).init()
-        sim.diseases.b.move_to(sim.people.auids, 'R')
-        sim.diseases.a.move_to(sim.people.auids, 'I')
+        ss.move(sim.diseases.b, sim.diseases.b.R) # Everyone
+        ss.move(sim.diseases.a, sim.diseases.a.I)
         left.append(sim.run().results.a.I[52]/20_000)
     assert np.allclose(left, [np.exp(-1), np.exp(-2)], atol=0.01)
     return sim
@@ -263,7 +265,7 @@ def test_strains_immunity_attr():
     hpv = family([a, b], immunity=ss.immunity(due_to='nab', dur=dict(I=[[0, 0], [0.8, 0]])))
     sim = ss.Sim(diseases=hpv, n_agents=20_000, start=2000, stop=2002, dt=1/52, verbose=0).init()
     sim.diseases.b.nab.raw[:] = 0.625
-    sim.diseases.a.move_to(sim.people.auids, 'I')
+    ss.move(sim.diseases.a, sim.diseases.a.I) # Everyone
     assert np.isclose(sim.run().results.a.I[52]/20_000, np.exp(-2), atol=0.01)
 
     # The same as a modifier on each genotype, as HPVsim writes it outside a family (the family reads every member's antibodies once a step, and a modifier when its genotype's rel_sus is worked out, so they differ within noise)

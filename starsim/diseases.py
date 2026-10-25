@@ -568,31 +568,17 @@ class Disease(ss.Module):
         """ The agents who have left the first state (e.g. who are no longer susceptible), for dynamic rescaling (see `ss.Sim.rescale()`) """
         return (~self[self.graph.first.name]).uids
 
-    def move_to(self, uids, to, src=None):
+    def move(self, *args, **kwargs):
         """
-        Move some agents of a declared disease into a state, as a one-off move along no transition (e.g. from code: a cure, or seeding)
+        Move people between this disease's states from code, the same way under every solver: `ss.move()` with the disease given
 
-        Args:
-            uids (uids): the agents to move
-            to (str/State): the state to move them into
-            src (str/list): the states to move them from (by default, any state of people other than `to`); agents in none of them stay where they are
+        **Examples**::
 
-        Returns:
-            The agents moved
-
-        **Example**::
-
-            sir.move_to(uids, 'R', src='I') # A cure, from code
+            sir.move(sir.I, sir.R, p=0.5) # Cure half of those infectious
+            sir.move(uids, sir.R) # These agents, from wherever they are (or sir.move(uids, 'R'))
+            self.move(self.I, self.R, uids=uids) # In the disease's own code: these agents, if they are infectious
         """
-        graph = self.graph
-        if self.engine is None:
-            raise RuntimeError(f'"{self.name}" moves people once the sim is initialized (sim.init())')
-        if self.sim.solver != 'abm':
-            raise ss.CapabilityError(f'disease.move_to() moves agents, but "{self.name}" is run with solver="{self.sim.solver}"; use an intervention (e.g. ss.Delivery(move=...)) for a compartmental run')
-        name = lambda s: s if isinstance(s, str) else s.name
-        dst = graph.states[name(to)]
-        srcs = [graph.states[name(s)] for s in sc.tolist(src)] if src is not None else [s for s in graph.people_states if s is not dst]
-        return self.engine.move_states(ss.uids(uids), srcs, dst)
+        return ss.move(self, *args, **kwargs)
 
     def infect(self, uids, strain=None):
         """
