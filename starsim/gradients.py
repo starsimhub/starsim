@@ -1163,6 +1163,9 @@ class Density:
         """ Which result each data series is compared with, and the matrix that lines it up with the data """
         sim = self.sim
         liks = ss.fit.likelihoods(sim, likelihood=self.likelihood)
+        for col,lik in liks.items():
+            if lik is not None and not isinstance(lik, ss.Dist):
+                raise Unsupported(f'the likelihood of "{col}", a function')
         lined = ss.results.lineup(sim)
         self.member = [np.array([[comp.state.name == name for comp in engine.comps] for name in engine.graph.states], dtype=float) for engine in self.engines] # Which compartments each state is
         self.series = []
@@ -1249,7 +1252,7 @@ class Density:
         def par(val):
             i = self.index.get(id(val)) if isinstance(val, ss.par) else None
             return x[i] if i is not None else (val.raw if isinstance(val, ss.par) else val)
-        return ss.fit.logpdf(dist, observed, model, xp=jax().numpy, pars={key:par(val) for key,val in dist.pars.items()})
+        return ss.fit.logpdf(dist, observed, model, xp=jax().numpy, pars={key:par(val) for key,val in ss.fit.lik_pars(dist).items()})
 
     #%% The whole of it
 

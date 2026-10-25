@@ -438,6 +438,7 @@ class Sim(ss.Base):
             for key in missing:
                 self.people.__dict__.pop(key, None)
             self.people._no_groups = missing
+            self.people.alive.__class__ = ss.arrays.GroupAlive # Counting it would count the groups
 
         # It's initialized
         self.initialized = True

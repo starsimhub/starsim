@@ -216,6 +216,23 @@ def test_loop_without_sim():
     return loop
 
 
+@sc.timer()
+def test_coded_alone():
+    sc.heading('Testing that a module written as code runs with no agents, and the loop calls only what does something')
+    class Decay(ss.Module): # An ODE of its own, with nothing per person
+        def __init__(self):
+            super().__init__()
+            self.y = 1.0
+        def step(self):
+            self.y *= np.exp(-0.1)
+    sim = ss.Sim(modules=Decay(), stop=10, verbose=0).run()
+    assert sim.solver != 'abm' and len(sim.people) == 1, 'Code with nothing per person should not make agents'
+    assert np.isclose(sim.custom.decay.y, np.exp(-1))
+    assert set(sim.loop.to_df().label) == {'sim.advance', 'sim.start_step', 'decay.step', 'sim.finish_step'} # Nothing else does anything here
+    assert not sim.check_method_calls() # What was left out counts as called
+    return sim
+
+
 # %% Run as a script
 if __name__ == '__main__':
     do_plot = True
@@ -229,5 +246,6 @@ if __name__ == '__main__':
     l4 = test_callable_cache_cleanup()
     l5 = test_loop_plan_views_and_insert()
     l6 = test_loop_without_sim()
+    l7 = test_coded_alone()
 
     T.toc()

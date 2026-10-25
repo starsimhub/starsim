@@ -113,6 +113,10 @@ class DateArray(np.ndarray):
     @property
     def years(self):
         """ Represent the dates as floating point years """
+        if isinstance(self.unit, type) and issubclass(self.unit, date) and len(self) > 1:
+            ns = np.array([d.value for d in self], dtype=np.int64)
+            if not np.any(ns % 1_000_000_000): # Whole seconds (as every timeline's are): all at once, with the same result as date.to_year() for each
+                return date._years_of(ns)
         return np.array([self.unit(d).years for d in self]) # Convert to the stored unit's type, then convert to years
 
     def to_date(self, inplace=False, day_round=None, die=True):
@@ -348,6 +352,17 @@ class date(pd.Timestamp):
         year_start = pd.Timestamp(year=self.year,month=1,day=1).timestamp()
         year_end = pd.Timestamp(year=self.year+1,month=1,day=1).timestamp()
         return self.year + (self.timestamp()-year_start)/(year_end-year_start)
+
+    @staticmethod
+    def _years_of(ns):
+        """ As `to_year()`, for many dates at once, given as nanoseconds since 1970 (in whole seconds, for which it is the same to the last bit) """
+        def seconds(x): # As pd.Timestamp.timestamp(): rounded to microseconds, with halves away from zero
+            v = x/1e9
+            return np.copysign(np.floor(np.abs(v)*1e6 + 0.5), v)/1e6
+        year = ns.astype('datetime64[ns]').astype('datetime64[Y]')
+        start = seconds(year.astype('datetime64[ns]').astype(np.int64))
+        end = seconds((year + np.timedelta64(1, 'Y')).astype('datetime64[ns]').astype(np.int64))
+        return year.astype(np.int64) + 1970 + (seconds(ns) - start)/(end - start)
 
     def __float__(self):
         return self.to_year()

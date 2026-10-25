@@ -369,11 +369,11 @@ def disease_code(spec, lines, left):
         else:
             extra = ''.join(f', {k}={code_value(r[k])}' for k in ['delay', 'duration'] if r[k] is not None)
             lik = r['likelihood']
-            if isinstance(lik, dict): # Its distribution, with each parameter a model parameter (by name) or a number
+            if isinstance(lik, dict) and 'type' in lik: # Its distribution, with each parameter a model parameter (by name) or a number
                 args = ', '.join(f'{k}={v["par"] if isinstance(v, dict) else repr(v)}' for k,v in lik['pars'].items())
                 extra += f', likelihood=ss.{lik["type"]}({args})'
             elif lik is not None:
-                left.append(f'the likelihood of {r["name"]} ({lik})')
+                left.append(f'the likelihood of {r["name"]} ({lik.get("fn", lik) if isinstance(lik, dict) else lik})')
             source = r['source']
             members.append((r['name'], f'ss.outcome({code_expr(source)}{extra})'))
 

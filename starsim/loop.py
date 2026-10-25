@@ -251,7 +251,8 @@ class Loop:
         # Collect the start_steps
         self += sim.start_step
         for mod in sim.modules:
-            self += mod.start_step
+            if self._keep(mod.start_step):
+                self += mod.start_step
 
         # Rescale the population if needed
         if sim.pars.rescale:
@@ -290,7 +291,8 @@ class Loop:
             self += disease.step
 
         # Update people who died -- calls disease.step_die() internally
-        self += sim.people.step_die
+        if self._keep(sim.people.step_die):
+            self += sim.people.step_die
 
         first = len(self.funcs) # From here to the analyzers, the functions also run at the first time point, to record the start (except the interventions')
 
@@ -301,7 +303,7 @@ class Loop:
         if sim.pars.get('people_results', True): # People results can be opted out for lightweight sims
             self += sim.people.update_results
         for mod in sim.modules:
-            if not self._null_update_results(mod):
+            if self._keep(mod.update_results):
                 self += mod.update_results
 
         # Apply analyzers
@@ -311,9 +313,9 @@ class Loop:
         self.at_start = {i for i in range(first, len(self.funcs)) if self.funcs[i]['module'] not in intvs}
 
         # Clean up dead agents, and perform other housekeeping tasks
-        for mod in sim.modules:
-            self += mod.finish_step
-        self += sim.people.finish_step
+        for func in [mod.finish_step for mod in sim.modules] + [sim.people.finish_step]:
+            if self._keep(func):
+                self += func
         self += sim.finish_step
 
         return self.funcs
@@ -322,6 +324,44 @@ class Loop:
         """ Whether a module shares the sim's timeline (the usual case), so its time moves with the sim's """
         t, sim_t = mod.t, self.sim.t
         return len(t.yearvec) == len(sim_t.yearvec) and t.tvec.unit is sim_t.tvec.unit and np.array_equal(t.yearvec, sim_t.yearvec)
+
+    def _keep(self, func):
+        """ Whether to put a call in the plan (see `_noop()`); one left out counts as called, for `ss.Sim.check_method_calls()` """
+        if not self._noop(func):
+            return True
+        required = getattr(func.__self__, '_call_required', {})
+        for key in required:
+            if key.endswith(f'.{func.__name__}'):
+                required[key] += 1
+        return False
+
+    def _noop(self, func):
+        """
+        Whether a call of the step is sure to do nothing in this sim, so is left out of the plan
+
+        This is so only for Starsim's own methods, when nothing has been changed that they
+        would act on: a module's `start_step()` with no random numbers to move on, its
+        `finish_step()` and `update_results()` (see `_null_update_results()`) when inherited
+        unchanged, and the people's deaths and removals in a run without agents (in which nobody
+        dies as an agent). The sim's own calls are always kept, as places to insert others. A method that a
+        module overrides is always kept, so a module written as code costs the loop only the
+        methods it defines.
+        """
+        obj, name = func.__self__, func.__name__
+        sim = self.sim
+        if isinstance(obj, ss.Module):
+            inherited = getattr(type(obj), name) is getattr(ss.Module, name)
+            if name == 'start_step':
+                return inherited and (obj.dists is None or not ss.options.crn) # Moving the streams on is all it does
+            elif name == 'finish_step':
+                return inherited
+            elif name == 'update_results':
+                return self._null_update_results(obj)
+        elif obj is sim.people and name in ['step_die', 'finish_step']:
+            people = type(obj)
+            same = people.step_die is ss.People.step_die and people.finish_step is ss.People.finish_step and people.update_post is ss.People.update_post and people.remove_dead is ss.People.remove_dead
+            return same and sim.solver != 'abm' # One row per group, which never die or leave
+        return False
 
     @staticmethod
     def _null_update_results(mod):
@@ -415,7 +455,7 @@ class Loop:
             t = tvec[ti]
             for func_order, func, label, module, func_name in specs:
                 if ti or func_order in self.at_start:
-                    append(LoopEntry(time=t, ti=ti, func_order=func_order, func=func, label=label, module=module, func_name=func_name))
+                    append(LoopEntry(t, ti, func_order, func, label, module, func_name)) # By position, which is quicker for the many entries
         return plan
 
     def _make_plan_sorted(self):

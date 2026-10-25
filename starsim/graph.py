@@ -565,9 +565,9 @@ class Graph(Presentation):
         # Register the explicit ss.par objects used in the transitions, and in the weights and likelihoods of the outcomes
         used = [(tr.name, expr) for tr in self.transitions.values() for expr in [tr.rate, tr.dur] + sc.tolist(tr.p) + sc.tolist(getattr(tr, 'p_given', None))]
         used += [(oc.name, weight) for oc in self.outcomes.values() for weight in oc.weights]
-        used += [(oc.name, val) for oc in self.outcomes.values() if oc.likelihood is not None for val in oc.likelihood.pars.values() if isinstance(val, par)]
+        used += [(oc.name, val) for oc in self.outcomes.values() for val in oc.likelihood_pars.values() if isinstance(val, par)]
         for oc in self.outcomes.values(): # A parameter written inside a likelihood, e.g. ss.nbinom(n=ss.par(10, bounds=[1, 100])), is named after the outcome and its keyword
-            for key,val in (oc.likelihood.pars.items() if oc.likelihood is not None else []):
+            for key,val in oc.likelihood_pars.items():
                 if isinstance(val, par) and not val.literal and val.name is None and self.names.get(id(val)) is None:
                     val.name = f'{oc.name}_{key}'
         used += [(f'init of {state.name}', init) for state in self.states.values() for init in [state.init, state.init_n] if isinstance(init, Expr)] # So an initial count can be fitted

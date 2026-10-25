@@ -584,15 +584,15 @@ class Peak(ss.Connector):                      # the largest prevalence so far
         self.peak = 0.0
     def step(self):
         sir = self.sim.diseases.sir
-        self.peak = max(self.peak, sir.I.n/self.sim.people.alive.sum())
+        self.peak = max(self.peak, sir.I.frac)
 
 S, I, R = ss.states(3)
 slowing = lambda sim: np.exp(-5 * sim.connectors.peak.peak)      # people take care once they have seen a large epidemic
 sir = ss.Disease(infection=S >> I @ ss.perday(0.3) * I * slowing, recovery=I >> R @ ss.days(10), init_n=dict(I=10))
-sim = ss.Sim(sir, connectors=Peak(name='peak'), n_agents=10_000, unit='day', stop=200)
+sim = ss.Sim(sir, connectors=Peak(name='peak'), total_pop=10_000, unit='day', stop=200)
 ```
 
-The connector runs before the diseases in each step, so every rate in the step sees the value from its start. A function in a rate runs as agents (`solver='auto'` chooses them). What accumulates or decays is a flow into a count instead (`ss.null >> C @ rate`), which every solver runs, and a total by week is a flow's result resampled (`res.infection.resample('week')`). (`ss.update`, a declared form of this for agents only, is gone.)
+The connector runs before the diseases in each step, so every rate in the step sees the value from its start. It reads only counts, so it runs under every solver: here as an ODE, a step at a time, with the function called once a step ([12-backends.md](12-backends.md#functions-try-it)); with `n_agents=`, as agents. What accumulates or decays is a flow into a count instead (`ss.null >> C @ rate`), which every solver runs, and a total by week is a flow's result resampled (`res.infection.resample('week')`). (`ss.update`, a declared form of this for agents only, is gone.)
 
 ### How counts are advanced
 

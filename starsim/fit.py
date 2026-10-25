@@ -78,6 +78,11 @@ def likelihoods(sim, df=None, likelihood=None):
     return out
 
 
+def lik_pars(lik):
+    """ The parameters of a likelihood: a distribution's, or none for a function """
+    return lik.pars if isinstance(lik, ss.Dist) else {}
+
+
 def logpdf(dist, observed, model, xp=np, pars=None):
     """
     The log-likelihood of each observed value, when the model's value is the mean of the distribution
@@ -91,13 +96,27 @@ def logpdf(dist, observed, model, xp=np, pars=None):
     averages): the factorials are taken as gamma functions, which gives the same values
     for whole numbers.
 
+    A likelihood can also be a function of the observed and the model's values,
+    `fn(observed, model)`, returning the log-likelihood of each, for one the list above
+    lacks (e.g. a normal whose variance grows with the mean). It is worked out with
+    NumPy, so the log-density in JAX (for NUTS) does not cover it, and NUTS samples
+    with Python in the loop instead.
+
     Args:
-        dist (`ss.Dist`): the likelihood
+        dist (`ss.Dist`/func): the likelihood
         observed (array): the data
         model (array): the model's values at the data
         xp (module): the array namespace: NumPy, or `jax.numpy` for the log-density in JAX (see `ss.gradients.Density`)
         pars (dict): the distribution's parameters, if not their current values (the log-density in JAX gives those that are fitted as JAX values)
     """
+    if not isinstance(dist, ss.Dist):
+        if not callable(dist):
+            errormsg = f'A likelihood is a distribution (e.g. ss.poisson()) or a function fn(observed, model) returning the log-likelihood of each value, not {type(dist).__name__}'
+            raise TypeError(errormsg)
+        if xp is not np:
+            raise ss.gradients.Unsupported(f'the likelihood {getattr(dist, "__name__", "")}(), a function')
+        out = np.asarray(dist(np.asarray(observed), np.asarray(model)), dtype=float)
+        return np.broadcast_to(out, np.broadcast_shapes(np.shape(observed), np.shape(model)))
     jsp = None if xp is np else ss.gradients.jax().scipy
     gammaln = spsp.gammaln if jsp is None else jsp.special.gammaln
     norm = sps.norm if jsp is None else jsp.stats.norm
@@ -1615,8 +1634,8 @@ class Problem:
         # The parameters
         liks = likelihoods(probe, likelihood=likelihood)
         self.use_lik = use_lik = all(lik is not None for lik in liks.values()) and gof is None
-        used = [id(val) for lik in liks.values() if use_lik and lik is not None for val in lik.pars.values()]
-        unused = [id(val) for mod in probe.declared for oc in mod.graph.outcomes.values() if oc.likelihood is not None for val in oc.likelihood.pars.values() if id(val) not in used]
+        used = [id(val) for lik in liks.values() if use_lik and lik is not None for val in lik_pars(lik).values()]
+        unused = [id(val) for mod in probe.declared for oc in mod.graph.outcomes.values() if oc.likelihood is not None for val in lik_pars(oc.likelihood).values() if id(val) not in used]
         fitted, contacts = bounded_pars(probe, pars, unused)
         self.levels = levels = {} # For a parameter with a value per level (ss.par(ss.by(patch=[...]), bounds=)): each level is fitted, with the same bounds and prior, as "beta[a]", "beta[b]", ...
         for key,p in list(fitted.items()):
@@ -1629,7 +1648,7 @@ class Problem:
         self.n_model = len(fitted)
         if use_lik:
             for col,lik in liks.items(): # A parameter of a likelihood given at calibration time, with bounds, is fitted too
-                for key,val in lik.pars.items():
+                for key,val in lik_pars(lik).items():
                     if isinstance(val, ss.par) and val.module is None and val.bounds is not None and (pars is None or val.name in sc.tolist(pars)):
                         fitted[val.name or f'{col}_{key}'] = val
             if verbose:

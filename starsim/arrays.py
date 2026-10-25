@@ -1415,6 +1415,28 @@ class BoolState(BoolArr):
         return out
 
 
+class GroupAlive(BoolState):
+    """
+    `people.alive` in a run without agents: one row per group of people, not one per person
+
+    Counting it (`sim.people.alive.sum()`, `.count()`, `.uids`) would count the groups, not
+    the people, so it raises, saying what to use instead.
+    """
+    def no_agents(self, what):
+        raise ss.CapabilityError(f'people.alive.{what} was asked for, but this run has no agents: it has one row for each group of people, so this would count the groups.\n'
+                                 f'     Use the number in a disease\'s states (e.g. sir.I.n, or sir.I.frac for the share), or run with solver="abm"; a module written as code that reads agents can say so with compartmental = False.')
+
+    def sum(self, *args, **kwargs): self.no_agents('sum()')
+    def mean(self, *args, **kwargs): self.no_agents('mean()')
+    def count(self, *args, **kwargs): self.no_agents('count()')
+    def true(self): self.no_agents('true()')
+    def false(self): self.no_agents('false()')
+
+    @property
+    def uids(self):
+        self.no_agents('uids')
+
+
 class Watch(ss.utils.NoDists):
     """
     The link from a state to the engine that keeps count of who is in it (`BoolState.watch`), which is told of

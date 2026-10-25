@@ -543,14 +543,19 @@ def test_coded_beside():
     assert numpy.solver == 'ode' and np.array_equal(numpy.results.sir.I.values, alone.results.sir.I.values)
     assert numpy.connectors.numpysis.y[1] > 0.5 # Its own model ran (to near 1 - 0.1/0.3)
 
-    # Code that says it needs agents, and an intervention written as code, make the model run as agents
+    # Code that says it needs agents makes the model run as agents; an intervention written as code does not, and if it reads agents, the run stops and says so
     class Agentish(Watch):
         compartmental = False
-    for mod in [Agentish(), Tagger()]:
-        sim = corpus.sir(unit='day', n_agents=2000, **{'analyzers' if isinstance(mod, ss.Analyzer) else 'interventions':mod}).init()
+    class AgentTagger(Tagger):
+        compartmental = False
+    for mod in [Agentish(), AgentTagger()]:
+        sim = corpus.sir(unit='day', **{'analyzers' if isinstance(mod, ss.Analyzer) else 'interventions':mod}).init()
         assert sim.solver == 'abm', f'{type(mod).__name__} should need agents'
+    assert corpus.sir(unit='day', interventions=Tagger()).init().solver == 'ode' # Written as code is not a reason for agents
+    with pytest.raises(ss.CapabilityError, match='compartmental = False'):
+        corpus.sir(unit='day', interventions=Tagger()).run()
     with pytest.raises(ss.CapabilityError):
-        corpus.sir(unit='day', interventions=Tagger(), solver='ode').init()
+        corpus.sir(unit='day', interventions=AgentTagger(), solver='ode').init()
     class Level(ss.Module): # A plain module that keeps a value for each person needs agents (it ran as an ODE and failed partway)
         def __init__(self):
             super().__init__()

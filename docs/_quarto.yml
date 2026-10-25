@@ -123,6 +123,7 @@ website:
               - tutorials/g5_diseases.qmd
               - tutorials/g6_code.qmd
               - tutorials/g7_import.qmd
+              - tutorials/g8_extending.qmd
             - tutorials/solutions.qmd
         - section: "**User guide**"
           href: user_guide.qmd

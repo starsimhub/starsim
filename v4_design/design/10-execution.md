@@ -115,6 +115,8 @@ This is Starsim's `ss.Loop`, unchanged apart from one addition: `insert()` also 
 
 A sim with functions inserted into its loop is taken a step at a time, not in one call to the kernels; `sim.kernel_reason()` says why a run is stepped.
 
+**What does nothing is not called.** A call that is sure to do nothing in this sim is left out of the plan, so the loop costs a module written as code only the methods it defines: a module's `start_step()` with no random numbers to move on, its `finish_step()` and `update_results()` when inherited unchanged (and, for `update_results()`, with no states to count), and the people's deaths and removals in a run without agents. The sim's own calls (`sim.advance`, `sim.start_step`, `sim.finish_step`) are always kept, as places to insert others. A method left out counts as called for `sim.check_method_calls()`. A sim of one module written as code, daily for 21 years (7,672 steps), spends about 0.01 s in the loop itself, a few percent of a run whose step is compiled ([oct24/spec_gaps_response.md](../oct24/spec_gaps_response.md)).
+
 Whatever the order is, it can be printed, and it is the only thing that determines what runs when.
 
 ### The schedule in `describe()`

@@ -965,7 +965,7 @@ class outcome(Nameable):
         source (Transition/outcome/list): a transition, one branch of one (`cin.to(CA)`), another outcome, or a weighted sum of them, e.g. `0.5 * infection`
         delay (any): the time from the source event to this one: a duration or a distribution
         duration (any): if given, also produces `n_<name>`: the number currently in this outcome
-        likelihood (`ss.Dist`): optional likelihood, for calibration
+        likelihood (`ss.Dist`/func): optional likelihood, for calibration: a distribution, or a function `fn(observed, model)` returning the log-likelihood of each value (see `ss.fit.logpdf()`)
         name (str): the name; if not given, taken from the keyword or the variable it is assigned to
 
     Examples:
@@ -1024,11 +1024,18 @@ class outcome(Nameable):
         return dict(name=self.name, type='outcome', source=source, delay=ss.presentation.quantity_json(self.delay, 'dur', unit),
                     duration=ss.presentation.quantity_json(self.duration, 'dur', unit), likelihood=self.likelihood_json())
 
+    @property
+    def likelihood_pars(self):
+        """ The parameters of its likelihood: a distribution's, or none for a function or no likelihood """
+        return self.likelihood.pars if isinstance(self.likelihood, ss.Dist) else {}
+
     def likelihood_json(self):
         """ The likelihood as data: its distribution, and each parameter as a model parameter (by name) or a number """
         lik = self.likelihood
         if lik is None:
             return None
+        elif not isinstance(lik, ss.Dist): # A function
+            return ss.presentation.func_json(lik)
         pars = {}
         for key,val in lik.pars.items():
             if isinstance(val, par) and val.name is not None:

@@ -10,6 +10,7 @@ import starsim as ss
 import starsim.fit
 import numpy as np
 import pandas as pd
+import scipy.special as sps
 import sciris as sc
 import pytest
 
@@ -40,6 +41,13 @@ def test_particle_mcmc():
         sim.restart(pars=dict(beta=beta))
         est[beta] = filt(n_particles=100, seed=1)
     assert est[0.5] > max(est[0.4], est[0.6])
+
+    # A likelihood can be a function of the data and the model's values, as for one the core lacks; here the Poisson's own, which gives the same
+    poisson = lambda observed, model: observed*np.log(np.maximum(model, 1e-9)) - np.maximum(model, 1e-9) - sps.gammaln(observed + 1)
+    filt = ss.fit.ParticleFilter(sim, likelihood=dict(cases=poisson))
+    assert np.isclose(filt(n_particles=100, seed=1), est[0.6]) # The sim was last restarted at 0.6
+    ran = make(data=data).run()
+    assert np.isclose(ss.fit.loglik(ran, likelihood=dict(cases=poisson)), ss.fit.loglik(ran))
 
     # Particle MCMC, for a stochastic compartmental sim whose data has a likelihood (asked for by name: the default is a best fit)
     assert ss.fit.default_method(sim, True)[0] == 'optuna'

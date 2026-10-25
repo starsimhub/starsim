@@ -33,7 +33,7 @@ The rule behind this is that `'auto'` never approximates the mixing and never dr
 
 - an individual-level network (`ss.RandomNet`, `ss.SexualNet`), or `n_agents=`;
 - a function that takes `uids`, or a per-agent attribute that isn't a stratification (viral load);
-- a disease, network, intervention or other module written as code, unless it sets `compartmental = True` (analyzers don't count);
+- a module written as code that keeps a value for each person (`define_states()`), or that says `compartmental = False`; being written as code isn't a reason by itself, so a module that keeps nothing per person (an ODE of its own, an analyzer) runs beside the compartments, and a sim of such modules has no agents at all;
 - anything that needs individual histories: contact tracing, the infection log, time in a state, or each person's mother or children.
 
 Everything else, including contact matrices, stratifications, fixed delays, and interventions that target strata, has a compartmental form.
