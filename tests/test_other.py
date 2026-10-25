@@ -6,6 +6,7 @@ import numpy as np
 import sciris as sc
 import starsim as ss
 import starsim.library as ssl
+from starsim.interop import migrate
 from starsim.interop.migrate import migrate_text
 import matplotlib.pyplot as plt
 
@@ -124,6 +125,12 @@ class Counter(ss.Module):
     assert migrate_text('pars = dict(verbose=0.1)')[0] == 'pars = dict(verbose=0.1)' # A fraction is progress every that share of the run
     assert migrate_text('ss.link_dists(obj, sim)')[0] == 'ss.distributions.link_dists(obj, sim)' # Internal helpers are in their submodules
     assert 'ssl.AgentSIR' in migrate_text('sir = ss.SIR(beta=0.1)')[2][0][1] # A use of ss.SIR is flagged, not rewritten
+
+    # The code cells of Quarto, Markdown, and notebooks, and nothing else in them
+    path = sc.path('notes.qmd') # Only its suffix is read
+    qmd = "Text with ss.Test\n\n```{python}\nx = ss.Test()\n```\n"
+    blocks = migrate.code_blocks(path, qmd)
+    assert migrate.replace_blocks(path, qmd, [migrate_text(code)[0] for _,code in blocks]) == qmd.replace('x = ss.Test', 'x = ss.Diagnostic')
     assert 'sim.fit()' in migrate_text('calib = ss.Calibration(sim, calib_pars)')[2][0][1] # Removed names are flagged with what to use instead
     for old in ['ss.demographics.Pregnancy', 'ss.LegacyPregnancy']: # Starsim 3's pregnancy, by its old path or its prerelease name
         assert migrate_text(f'preg = {old}(fertility_rate=20)')[0] == 'preg = ss.Pregnancy(fertility_rate=20)'

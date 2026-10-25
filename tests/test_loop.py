@@ -49,6 +49,7 @@ def test_run_options():
     assert not len(s1.loop.cpu_time), 'Default run should not record CPU times'
     df = s1.loop.to_df()
     assert 'cpu_time' in df.columns and df['cpu_time'].isna().all(), 'cpu_time should be NaN without profiling'
+    assert df.time.dtype == float # Plain numbers, not durations (it showed days(0), day, days(2))
 
     # One time index during a step: every module sees the same one, the step's, where its results go (the first step is ti == 1)
     seen = sc.objdict(rate=[], intv=[])

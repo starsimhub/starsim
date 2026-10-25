@@ -437,6 +437,12 @@ def test_period_rates():
     preg = ss.Sim(n_agents=100, demographics=ss.Pregnancy(fertility_rate=data, rate_units=1), start=2010, stop=2011, verbose=0).init().demographics.pregnancy
     frd = preg.fertility_rate_data
     assert list(frd.columns[-2:]) == [45, 50] and frd[45].iloc[0] == 0.2 and frd[50].iloc[0] == 0
+
+    # A named place's UN rates, every ten years, are interpolated to each year (each was held for its decade)
+    rows, years, _ = ss.Births(birth_rate='Kenya').birth_rows
+    assert np.isclose(rows[2015], (rows[2010] + rows[2020])/2) and 2015 in years
+    deaths = ss.Deaths(death_rate='Kenya').death_rows[0]
+    assert np.allclose(deaths[2015, 'f'], (deaths[2010, 'f'] + deaths[2020, 'f'])/2)
     return sim
 
 
@@ -454,6 +460,8 @@ def test_lifetable_deaths():
         assert abs(dead[sel].mean() - expected) < 4*np.sqrt(expected/sel.sum()), f'{dead[sel].mean():.3f} died, not {expected:.3f}'
     with pytest.raises(ValueError, match='female and male'):
         ss.Deaths(lifetable=dict(women=table(0.01), men=table(0.03)))
+    alone = ss.Sim(n_agents=2000, demographics=[ss.death(lifetable=table(0.02))], start=2000, stop=2005, verbose=0).run() # ss.death(lifetable=) with no disease runs as ss.Deaths (it was an error naming the transition "->")
+    assert 0 < (~alone.people.alive.raw).mean() < 0.3
 
     # A death rate by single year of age on 5-year age groups (which only agents read), and a function of the sim per year
     mx = ss.by(dict(age=np.arange(100), value=[ss.peryear(0.001*np.exp(0.07*a)) for a in range(100)]))
@@ -473,6 +481,21 @@ def test_lifetable_deaths():
         assert np.isclose(n[0], n[1], rtol=0.06), f'{n[0]:n} deaths as agents, {n[1]:n} as compartments'
     assert np.isclose(n[1], 50_000*(1 - np.exp(-0.02*5)), rtol=1e-3)
     return sim
+
+
+@sc.timer()
+def test_declared_demographics_alone():
+    """ Births and deaths declared with no disease: as agents by default, as compartments with a compartmental solver named, and a per-person rate that looks per 1,000 warns """
+    sc.heading('Testing ss.birth() and ss.death() with no disease...')
+    flows = lambda: [ss.birth(rate=ss.peryear(0.03)), ss.death(rate=ss.peryear(0.01))]
+    ode = ss.Sim(demographics=flows(), start=2000, dur=10, solver='ode', verbose=0).run()
+    assert np.isclose(ode.results.alive[-1], 10_000*np.exp(0.02*10), rtol=1e-3)
+    assert ss.Sim(demographics=flows(), n_agents=500, start=2000, dur=2, verbose=0).run().solver == 'abm'
+    with pytest.warns(RuntimeWarning, match='per person'): # 30 per 1,000, given as 30 per person
+        ss.birth(rate=ss.peryear(30))
+    with pytest.raises(ValueError, match='not in starsim_data'): # No age-specific fertility by place
+        ss.Pregnancy(fertility_rate='Nigeria')
+    return ode
 
 
 @sc.timer()
@@ -506,7 +529,7 @@ def test_births_parents():
 def test_unborn():
     """ The unborn of ss.Pregnancy are not counted among the people, are not seeded, and a single beta on a maternal network goes from mother to child """
     sc.heading('Testing the unborn...')
-    S = ss.State() # The first state declared, where people start unless put elsewhere
+    S = ss.State() # The first state, by its name, where people start unless put elsewhere
     I = ss.State(init=0.5)
     hiv = ss.Disease(infection=S >> I @ ss.par(dict(prenatalnet=0.33, breastfeedingnet=0.12)) * I, name='hiv')
     sim = ss.Sim(hiv, demographics=ss.Pregnancy(fertility_rate=ss.peryear(0.15), rate_units=1), networks=[ss.PrenatalNet(), ss.BreastfeedingNet()],
@@ -577,6 +600,12 @@ def test_declared_newborns():
         share = sim.people.risk[new].mean()
         assert 0.7 < share < 0.9, f'{dem.name}: {share:.2f} of newborns are high risk, not 0.8'
         assert sim.diseases.sis.I[new].any() # Newborns can be infected
+
+    # Declared births and deaths of the population are run by the disease, so an ODE run needs no step-by-step loop for them (it said "flows has a step of its own")
+    S, I, R = ss.states('S I R')
+    sir = ss.Disease(S >> I @ ss.perday(0.3)*I, I >> R @ ss.days(8), name='sir')
+    sim = ss.Sim(sir, demographics=[ss.birth(rate=ss.peryear(0.05)), ss.death(rate=ss.peryear(0.02))], start='2000', stop='2001', verbose=0).init()
+    assert sim.solver == 'ode' and sim.kernel_reason() is None
     print('✓ (newborns in declared states)')
     return
 
@@ -596,6 +625,7 @@ if __name__ == '__main__':
     s11 = test_birth_data_cols()
     s12 = test_period_rates()
     s13 = test_lifetable_deaths()
+    s13b = test_declared_demographics_alone()
     s14 = test_births_parents()
     s15 = test_unborn()
     s17 = test_cause_of_death()

@@ -192,6 +192,20 @@ class MultiSim:
         return sc.pr(self)
 
     @property
+    def sims(self):
+        """ The sim of each run, by position (`msim.sims[0]`) or by scenario (`msim.sims['Vaccine']`: its sim, or a list of them if it has several runs) """
+        sims = self.__dict__.get('_sims', self.__dict__.get('sims'))
+        runs = self.__dict__.get('runs')
+        if isinstance(sims, (Sims, RestartedSims)):
+            sims.scenarios = list(runs['scenario']) if runs is not None and len(runs) == len(sims) else None
+        return sims
+
+    @sims.setter
+    def sims(self, sims):
+        self.__dict__['_sims'] = Sims(sims) if isinstance(sims, (list, tuple)) and not isinstance(sims, Sims) else sims
+        return
+
+    @property
     def run_pars(self):
         """ The values of the parameters swept (or drawn) in each run, as a dataframe (or None if there are none) """
         if self.runs is None or len(self.runs.columns) == 1:
@@ -421,7 +435,7 @@ class MultiSim:
         combined_sim.summarize()
         return combined_sim
 
-    def summarize(self, interval=0.95, how=None):
+    def summarize(self, interval=0.95, how=None, baseline=None):
         """
         A table of each result over the whole of each run, across the runs: the median, an interval, the mean, and the standard deviation
 
@@ -432,6 +446,7 @@ class MultiSim:
         Args:
             interval (float): the share of runs the interval holds (default 0.95: from the 2.5th to the 97.5th percentile), as `msim.plot()` shows
             how (str/dict): how to summarize each result over each run, as for `sim.summarize()`
+            baseline (str): the label of a scenario to compare with: each other scenario's difference from it, run by run (the runs are paired by position, as in `msim.diff()`), so the interval is of the paired differences
 
         Returns:
             A dataframe with a row for each result (and scenario, if there are several), and the columns `median`, `low`, `high`, `mean`, and `std`
@@ -443,6 +458,7 @@ class MultiSim:
             msim = sim.run(n_runs=20)
             msim.summarize()                     # Every result
             msim.summarize().loc['sir_infection'] # The total infections
+            msim.summarize(baseline='No intervention') # Each scenario's difference from the baseline, e.g. the infections averted (negative)
             ```
         """
         self.check_run('summarize')
@@ -451,6 +467,10 @@ class MultiSim:
             how = {} if how is None else {'':how} # '' matches every key
         low, high = (1 - interval)/2, 1 - (1 - interval)/2
         rows = {}
+        n_scenarios = len(set(self.runs['scenario'])) if self.runs is not None else 1 # A result of only some of the runs (e.g. of an intervention one scenario has) has fewer
+        if baseline is not None and (self.runs is None or baseline not in set(self.runs['scenario'])):
+            errormsg = f'No runs are labelled "{baseline}"; the labels are {list(dict.fromkeys(self.runs["scenario"])) if self.runs is not None else []}'
+            raise KeyError(errormsg)
         for key,res in self.results.flatten(sep='_', columns=True).items():
             if not np.any(res.values): # E.g. deaths in a model without them
                 continue
@@ -461,10 +481,20 @@ class MultiSim:
                 func = func if callable(func) else funcs[func]
                 arr = np.array([func(vals) for vals in np.asarray(res.values)], dtype=float)
             groups = res.scenarios() if res.runs is not None else {None:list(range(len(arr)))}
+            if baseline is not None and baseline not in groups: # A result the baseline does not have (e.g. of an intervention)
+                continue
             for scenario,inds in groups.items():
                 vals = arr[inds]
+                if baseline is not None: # The paired differences from the baseline, run by run
+                    if scenario == baseline:
+                        continue
+                    base = arr[groups[baseline]]
+                    if len(base) != len(vals):
+                        errormsg = f'Cannot compare "{scenario}" with "{baseline}": they have {len(vals)} and {len(base)} runs'
+                        raise ValueError(errormsg)
+                    vals = vals - base
                 stats = dict(median=np.median(vals), low=np.quantile(vals, low), high=np.quantile(vals, high), mean=vals.mean(), std=vals.std()) if len(vals) > 1 else dict(value=vals[0])
-                rows[key if len(groups) == 1 else (key, scenario)] = {k:readable(v) for k,v in stats.items()}
+                rows[key if n_scenarios == 1 else (key, scenario)] = {k:readable(v) for k,v in stats.items()}
         several = any(isinstance(key, tuple) for key in rows)
         index = pd.MultiIndex.from_tuples(list(rows), names=['result', 'scenario']) if several else pd.Index(list(rows), name='result')
         summary = pd.DataFrame(list(rows.values()), index=index, dtype=object) # So that whole numbers stay whole
@@ -507,8 +537,12 @@ class MultiSim:
             else:
                 ti = t if sc.isnumber(t) else sc.findnearest(res.convert_timevec().years, year) # Nearest timestep to the date, using the result's own timevec since modules can have different dt
                 vals = np.asarray(res.values)[:, ti]
+            pos = getattr(res, 'run_pos', None) # A result of only some of the runs is NaN in the others
             for label,i in zip(labels, inds):
-                val = vals[i]
+                if pos is not None and i not in pos:
+                    resdict[label][key] = np.nan
+                    continue
+                val = vals[i if pos is None else pos.index(i)]
                 if t is not None and res.scale and val == np.round(val): # Show whole-number counts as ints (but not e.g. 4.5 from scaling)
                     val = int(val)
                 resdict[label][key] = val
@@ -555,7 +589,7 @@ class MultiSim:
         self.check_run('to_df')
         return self.results.to_df(quantiles=quantiles)
 
-    def plot(self, key=None, fig=None, legend=True, lines=False, **kwargs):
+    def plot(self, key=None, fig=None, legend=True, lines=False, show_data=True, **kwargs):
         """
         Plot the results across the runs: the median and a 95% interval of each scenario, or every run if `lines=True`
 
@@ -564,10 +598,14 @@ class MultiSim:
             fig (Figure): if provided, plot results into an existing figure
             legend (bool): whether to label the scenarios, if there is more than one
             lines (bool): plot every run instead of the median and interval
+            show_data (bool): plot the data of the first sim that has any, as `sim.plot()` does (a flow with data at a longer period than the step is shown as its totals over the data's periods)
             **kwargs (dict): known arguments (e.g. figsize, font) split between the plotting dicts; see `ss.plot_args()` for all valid options
         """
         self.check_run('plot')
-        return self.results.plot(key=key, fig=fig, legend=legend, lines=lines, **kwargs)
+        sims = list(getattr(self.sims, 'runners', self.sims) or []) # Of sims restarted for their runs, the sim of each scenario, which was run
+        withdata = next((sim for sim in sims if getattr(sim, 'data', None) is not None and sim.results_ready), None) if show_data else None
+        data = ss.results.plot_data(withdata) if withdata is not None else None
+        return self.results.plot(key=key, fig=fig, legend=legend, lines=lines, data=data, **kwargs)
 
     @classmethod
     def merge(cls, *args):
@@ -597,6 +635,7 @@ class MultiSim:
         msim.runs = pd.concat([ms.runs for ms in args], ignore_index=True)
         starts = np.cumsum([0] + [len(ms) for ms in args])
         msim.chunks = [list(range(a, b)) for a,b in zip(starts[:-1], starts[1:])] # Used to enable automatic splitting later
+        msim.chunk_labels = [ms.label for ms in args] # So each part of the split has its own label again
         return msim
 
     def split(self, inds=None, chunks=None):
@@ -634,9 +673,13 @@ class MultiSim:
                 errormsg = 'If a MultiSim has not been created via merge(), you must supply either inds or chunks to split it'
                 raise ValueError(errormsg)
         out = []
-        for indlist in inds:
+        labels = getattr(self, 'chunk_labels', None) if inds is getattr(self, 'chunks', None) else None
+        for i,indlist in enumerate(inds):
             indlist = list(indlist)
             msim = sc.dcp(self)
+            if labels is not None:
+                msim.label = labels[i]
+                del msim.chunk_labels
             msim.results = self.results.take(indlist)
             msim.runs = self.runs.iloc[indlist].reset_index(drop=True)
             if len(self.sims) == len(self): # One sim per run
@@ -740,7 +783,8 @@ class MultiResults(ss.Results):
         for (modname,key),arr in arrays.items():
             like = arr['like']
             values = np.asarray(arr['values'])
-            res = like.asnew(values=values, _shape=values.shape, runs=runs, low=None, high=None)
+            res = like.asnew(values=values, _shape=values.shape, runs=arr['runs'] if 'runs' in arr else runs, low=None, high=None)
+            res.run_pos = arr.get('run_pos') # For a result of only some of the runs, their positions among all the runs
             if getattr(like, 'strata', None) is not None or arr.get('strata') is not None:
                 res.strata, res.denom = arr.get('strata'), arr.get('denom')
                 res.group_ti = arr.get('group_ti', getattr(like, 'group_ti', None))
@@ -766,17 +810,28 @@ class MultiResults(ss.Results):
                 return None
 
         first = sims[0]
-        entries = [(None, key, res) for key,res in first.results.items() if isinstance(res, ss.Result)]
-        entries += [(modname, key, res) for modname,modres in first.results.items() if isinstance(modres, ss.Results) for key,res in modres.items() if isinstance(res, ss.Result)]
+        times = [sim.t.tvec for sim in sims]
+        if any(len(t) != len(times[0]) or np.any(t != times[0]) for t in times[1:]): # Results at different times cannot be stacked as runs of one thing
+            steps = sc.strjoin(f'"{sim.label}": {len(t)} steps of {sim.t.dt}' for sim,t in zip(sims, times))
+            raise ss.errors.ShapeError(f'the sims have results at different times ({steps}), so they cannot be put together as runs of one MultiSim. Give them the same start, stop, and dt.')
+        entries = {}
+        for sim in sims: # Every result of any run, e.g. of an intervention only one scenario has
+            entries |= {(None, key):res for key,res in sim.results.items() if isinstance(res, ss.Result) and (None, key) not in entries}
+            entries |= {(modname, key):res for modname,modres in sim.results.items() if isinstance(modres, ss.Results) for key,res in modres.items() if isinstance(res, ss.Result) and (modname, key) not in entries}
         arrays = {}
-        for modname,key,res in entries:
+        for (modname,key),res in entries.items():
             found = [get(sim, modname, key) for sim in sims]
-            if not all(isinstance(r, ss.Result) and r.values is not None for r in found):
+            pos = [i for i,r in enumerate(found) if isinstance(r, ss.Result) and r.values is not None]
+            if not pos:
                 continue
+            found = [found[i] for i in pos]
             values = [np.asarray(r.values) for r in found]
             if len({v.shape for v in values}) != 1:
                 continue
-            arr = dict(like=res, values=np.stack(values))
+            arr = dict(like=found[0], values=np.stack(values))
+            if len(pos) < len(sims): # A result of only some of the runs is across those runs
+                arr['run_pos'] = pos
+                arr['runs'] = runs.iloc[pos].reset_index(drop=True) if runs is not None else None
             strata = [getattr(r, 'strata', None) for r in found]
             if all(x is not None for x in strata) and len({x.shape for x in strata}) == 1:
                 arr['strata'] = np.stack(strata)
@@ -788,10 +843,19 @@ class MultiResults(ss.Results):
     def take(self, inds):
         """ The results of some of the runs, by position """
         arrays = {}
+        runs = None
+        inds = list(sc.toarray(inds))
         for modname,key,res in self.walk():
-            sub = res.take(inds)
-            arrays[modname, key] = dict(like=sub, values=sub.values, strata=getattr(sub, 'strata', None), denom=getattr(sub, 'denom', None))
-        runs = next(iter(arrays.values()))['like'].runs if arrays else None
+            pos = getattr(res, 'run_pos', None)
+            if pos is None:
+                sub = res.take(inds)
+                runs = sub.runs if runs is None else runs
+                arrays[modname, key] = dict(like=sub, values=sub.values, strata=getattr(sub, 'strata', None), denom=getattr(sub, 'denom', None))
+            else: # A result of only some of the runs: those of them taken
+                keep = [(j, inds.index(p)) for j,p in enumerate(pos) if p in inds]
+                if keep:
+                    sub = res.take([j for j,_ in keep])
+                    arrays[modname, key] = dict(like=sub, values=sub.values, strata=getattr(sub, 'strata', None), denom=getattr(sub, 'denom', None), runs=sub.runs, run_pos=[i for _,i in keep])
         return MultiResults.build(arrays, runs, timevec=self.get('timevec'))
 
     @classmethod
@@ -800,10 +864,10 @@ class MultiResults(ss.Results):
         arrays = {}
         first = results[0]
         others = [{(m, k):r for m,k,r in res.walk()} for res in results]
-        runs = pd.concat([next(iter(o.values())).runs for o in others], ignore_index=True)
+        runs = pd.concat([next(r for r in o.values() if getattr(r, 'run_pos', None) is None).runs for o in others], ignore_index=True)
         for modname,key,res in first.walk():
             found = [o.get((modname, key)) for o in others]
-            if any(r is None for r in found):
+            if any(r is None or getattr(r, 'run_pos', None) is not None for r in found): # Only results of every run
                 continue
             join = lambda attr: None if any(getattr(r, attr, None) is None for r in found) else np.concatenate([getattr(r, attr) for r in found])
             arrays[modname, key] = dict(like=res, values=join('values'), strata=join('strata'), denom=join('denom'))
@@ -833,6 +897,27 @@ def par_sets(pars):
 
 jax_runs = 300 # The number of runs of an ODE with different values from which ss.parallel() takes them in one call to JAX: about 0.5 s to set up, then faster than the kernels (a three-state model crosses over at about 300 runs)
 
+def by_scenario(sims, key):
+    """ For `msim.sims['Vaccine']`: the sim of the scenario, or a list of them if it has several runs """
+    scenarios = getattr(sims, 'scenarios', None) or []
+    inds = [i for i,label in enumerate(scenarios) if label == key]
+    if not inds:
+        errormsg = f'msim.sims has no scenario "{key}"; the scenarios are {sc.strjoin(dict.fromkeys(scenarios))}, or give the number of a run'
+        raise KeyError(errormsg)
+    out = [sims[i] for i in inds]
+    return out[0] if len(out) == 1 else out
+
+
+class Sims(list):
+    """ The sims of the runs of a MultiSim: a list, which can also be indexed by scenario (see `MultiSim.sims`) """
+    scenarios = None # The scenario of each run, set by the MultiSim
+
+    def __getitem__(self, ind):
+        if isinstance(ind, str):
+            return by_scenario(self, ind)
+        return super().__getitem__(ind)
+
+
 class RestartedSims(cabc.Sequence):
     """
     The sim of each run of sims that were restarted for their runs (see `restart_runs()`), made when it is first asked for
@@ -852,6 +937,8 @@ class RestartedSims(cabc.Sequence):
         return len(self.runners)*len(self.sets)*self.n_runs
 
     def __getitem__(self, ind):
+        if isinstance(ind, str):
+            return by_scenario(self, ind)
         if isinstance(ind, slice):
             return [self[i] for i in range(*ind.indices(len(self)))]
         ind = range(len(self))[ind] # Raises an IndexError if out of range, and handles negative indices
@@ -935,7 +1022,7 @@ def restart_runs(sims, n_runs, pars=None, draws=False):
                 values[modname, key].append(vals)
         sim.restart(pars=sets[-1], rand_seed=seed + n_runs - 1).run() # The sim itself is left as its last run
     arrays = {}
-    join = lambda arrs: arrs[0] if len(arrs) == 1 else np.concatenate(arrs) # Without a copy for one sim, since by group they can be large
+    join = lambda arrs: arrs[0] if len(arrs) == 1 else np.concatenate(arrs) if len({np.shape(a)[1:] for a in arrs}) == 1 else None # Without a copy for one sim, since by group they can be large; None if the sims have different groups (e.g. a delivery that adds a group), as in MultiResults.from_sims()
     for (modname,key),vals in values.items():
         res = next(sim.results[modname][key] for sim in runners if modname in sim.results) # A delivery may be in some of the sims only
         vals = join(vals)

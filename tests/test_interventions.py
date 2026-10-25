@@ -1,6 +1,7 @@
 """
 Run tests of what Starsim 3's delivery classes did, with the deliveries: routine and campaign delivery by year, products shared between deliveries, tests with several results, and treatment with a capacity and a queue
 """
+import warnings
 import sciris as sc
 import numpy as np
 import starsim as ss
@@ -53,7 +54,7 @@ def test_products(do_plot=False):
     assert dxres.delivered[post_dx].sum() > 0, 'Expected people screened after intervention start'
     assert dxres.positive[post_dx].sum() == dxres.high[post_dx].sum() + dxres.low[post_dx].sum() > 0, 'Expected positives to be every result but the last'
     assert dxres.high[post_dx].sum() + dxres.low[post_dx].sum() + dxres.normal[post_dx].sum() == dxres.delivered[post_dx].sum()
-    assert sisres.new_infections[pre_vx].mean() > sisres.new_infections[post_vx].mean(), 'Expected vaccine to reduce prevalence'
+    assert sisres.infection[pre_vx].mean() > sisres.infection[post_vx].mean(), 'Expected vaccine to reduce infections'
 
     # Treatment of a fixed number each step (Starsim 3's treat_num): those not served wait, and leave the queue if no longer infected
     sis = ss.SIS(beta=ss.peryear(0.5))
@@ -88,6 +89,17 @@ def test_two_products():
     vaccinated = sim.products()[0].ti_delivered.notnan.sum()
     assert len(sim.products()) == 1
     assert res.vx1.delivered.sum() + res.vx2.delivered.sum() == vaccinated > 0, 'Expected each person to be vaccinated by one delivery, once'
+
+    # Products made by their deliveries are named without a warning, and a delivery keeps the name of its first variable
+    vaccine = ss.vaccinate(efficacy=0.9, coverage=0.5, at=2005)
+    campaign = ss.vaccinate(efficacy=0.5, coverage=0.5, at=2010)
+    with warnings.catch_warnings():
+        warnings.simplefilter('error')
+        two = ss.Sim(make_pars(), interventions=[vaccine, campaign]).init()
+    assert [p.name for p in two.products()] == ['vaccine_product', 'campaign_product'] # "vaccine" is taken by the first delivery, so each is named for its delivery (it was vaccine_vaccine, and a warning)
+    for intervention in [campaign]: # Also bound to a loop variable, and passed through sim.new()
+        assert 'campaign' in ss.Sim(make_pars(), interventions=intervention).init().interventions
+        assert 'campaign' in ss.Sim(make_pars()).new(interventions=intervention).init().interventions
     return sim
 
 

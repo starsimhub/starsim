@@ -71,18 +71,26 @@ def to_time(sim, val):
     """
     Convert a time (a date, a duration since the start, or a number) to the same kind of time as the sim's timeline
 
-    A number is a time in the sim's unit: in a sim with dates, that long after the start (a calendar
-    year is written as a date, e.g. '2030'); otherwise, a time on the sim's own axis (which, for
-    a sim whose start and stop are years, e.g. `start=2000`, is the year).
+    A number is a time in the sim's unit: in a sim with dates, that long after the start, unless that
+    is outside the sim and the number is a whole year within it (`at=2005` in a sim from 1975 to 2030
+    is the start of 2005); otherwise, a time on the sim's own axis (which, for a sim whose start and
+    stop are years, e.g. `start=2000`, is the year).
     """
     t = sim.t
     if val is None:
         return None
     elif isinstance(val, (str, ss.date)):
-        return ss.date(val)
+        date = ss.date(val)
+        if not t.is_absolute and isinstance(t.tvec[0], ss.years) and ss.time.assume_cal_year(t.tvec[0]): # A timeline in calendar years (start=2000): the date's year, as the timeline holds it
+            return ss.years(date.to_year())
+        return date
     elif t.is_absolute:
         if sc.isnumber(val):
-            val = ss.time.get_dur_class(sim.unit_base)(val)
+            time = t.tvec[0] + ss.time.get_dur_class(sim.unit_base)(val)
+            first, last = t.tvec[0].year, t.tvec[-1].year
+            if not t.tvec[0] <= time <= t.tvec[-1] and float(val).is_integer() and first <= val <= last: # A year, which is the only reading that falls within the sim
+                return ss.date(int(val))
+            return time
         return t.tvec[0] + val
     elif sc.isnumber(val):
         return type(t.tvec[0])(val)
@@ -114,8 +122,8 @@ def to_ti(sim, val, name='time', after=False):
     if time < tvec[0] or (time > tvec[-1] and not after):
         hint = ''
         if sc.isnumber(val) and sim.t.is_absolute:
-            hint = f"; a number is a time in the sim's unit ({sim.unit_base}s) since the start" + (f", so for the year {val:n} write it as a date, '{val:n}'" if ss.time.assume_cal_year(val) else '')
-        when = f'{val}, which is {time}' if sc.isnumber(val) else f'{val}'
+            hint = f"; a number is a time in the sim's unit ({sim.unit_base}s) since the start, or a year within the sim"
+        when = f'{val}, which is {time}' if sc.isnumber(val) and not (sim.t.is_absolute and ss.time.assume_cal_year(val)) else f'{val}'
         raise ss.errors.TimeOutsideSim(f'{name} ({when}) is outside the sim ({tvec[0]} to {tvec[-1]}){hint}.')
     ti = next((ti for ti,now in enumerate(tvec) if reached(now, time)), len(tvec)) # len(tvec) if after the end
     if ti >= len(tvec) - 1 and not after: # The last time point records the end of the run: no step starts there, so nothing timed then would happen

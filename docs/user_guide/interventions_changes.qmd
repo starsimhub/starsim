@@ -1,0 +1,167 @@
+---
+title: Changing parameters
+jupyter: python3
+---
+
+Many interventions give nothing to anyone: they change a quantity in the model, such as transmission (masks, distancing, school closures), how long people stay infectious (faster diagnosis), or susceptibility in some group. Starsim has two calls for these. `ss.change()` changes a quantity at given times, and `ss.modify()` changes it while a condition holds, for everyone or for some people. Interventions that deliver a vaccine, test, or drug are on [Products and deliveries](interventions_products.qmd), and the same `ss.modify()` is how one module changes another, on [Connectors](interventions_connectors.qmd).
+
+## Masks and distancing
+
+Here is a flu-like epidemic in a town of 100,000, with β = 0.4 per day and an infectious period of 5 days (R0 = 2), and two policies: masks worn from day 20 to day 60, which cut transmission by 40%, and distancing that halves transmission from day 20 and then eases to 80% of its usual level from day 60:
+
+```{python}
+import starsim as ss
+ss.options(jupyter=True)
+
+S, I, R = ss.states('S I R')
+infection = S >> I @ 0.4*I        # β = 0.4 per day
+recovery  = I >> R @ ss.days(5)   # Infectious for 5 days on average
+flu = ss.Disease(infection, recovery, init_prev=0.001)
+
+masks = ss.modify(flu.pars.beta, multiply=0.6, start=ss.days(20), stop=ss.days(60))
+distancing = ss.change(flu.pars.beta, at=[ss.days(20), ss.days(60)], by=[0.5, 0.8])
+
+kw = dict(total_pop=100_000, stop=ss.days(150), verbose=0)
+scenarios = {
+    'No intervention': ss.Sim(flu, **kw),
+    'Masks': ss.Sim(flu, interventions=masks, **kw),
+    'Distancing': ss.Sim(flu, interventions=distancing, **kw),
+}
+msim = ss.parallel(scenarios)
+msim.plot('flu.I')
+```
+
+`flu.pars.beta` is the β of the transmission, which a declared disease names `beta`. Masks delay the epidemic, but once they come off, most of it still happens; distancing, which never fully ends, cuts it by more:
+
+```{python}
+msim.summarize().loc['flu_infection']
+```
+
+## Changes at given times: `ss.change()`
+
+`ss.change(target, at=[...], by=[...])` multiplies a quantity by each value of `by` from each time in `at` until the next; before the first, the quantity has its own value. Each multiplier is relative to the quantity's own value, not to the one before. `to=` gives values instead of multipliers: `ss.change(flu.pars.beta, at=[ss.days(20)], to=[0.25])`. The times are dates in a sim with dates (`at=['2025-03-01']`), durations since the start (`ss.days(20)`), or numbers in the sim's unit.
+
+## Changes while a condition holds: `ss.modify()`
+
+`ss.modify(target, multiply=...)` changes a quantity for as long as it applies: always, between `start=` and `stop=`, on the steps where a function says so (`when=`), or for the people a condition selects (`where=`). It takes exactly one of:
+
+| Keyword | What it does |
+|---|---|
+| `multiply=` | Multiplies the quantity |
+| `efficacy=` | Removes a share of the risk: the same as `multiply=1 - efficacy`, for protection such as condoms |
+| `add=` | Adds to the quantity (parameters only) |
+| `set=` | Replaces the quantity (parameters only) |
+
+and any of:
+
+| Keyword | Meaning |
+|---|---|
+| `start=`, `stop=` | When it applies (by default, always) |
+| `where=` | Who it applies to: a condition, or a function of the sim (by default, everyone) |
+| `when=` | A function of the sim that returns `True` on the steps it applies |
+| `hold=` | Once `where=` or `when=` selects someone, it stays on for them for at least this long |
+| `share=` | With `multiply=` or `efficacy=`, the share of acts (or contacts) it applies to, e.g. condom use in 30% of acts |
+| `route=` | For a change to transmission, the network or networks it applies on (by default, all) |
+
+The amount can itself vary: `multiply=` takes anything a parameter takes, such as `ss.seasonal()` or `ss.timeseries()` (see [Parameters](models_parameters.qmd)).
+
+### What can be changed
+
+The target of a modifier is any named quantity in the model:
+
+| Target | Example | What it changes |
+|---|---|---|
+| A parameter | `flu.pars.beta` | The parameter, for everyone it applies to |
+| A transition | `flu.recovery` | The transition's rate (or its probability, for a branch with `p=`) |
+| Susceptibility or infectiousness | `flu.rel_sus`, `flu.rel_trans` | Each person's relative chance of infection, or of infecting others (multiply only) |
+| A network or contact layer | `school`, from `ss.contacts('Kenya', layer=[...])` | The contacts on it |
+| Any of these by name | `'flu.pars.beta'`, `'school.pars.n_contacts'` | The same, written as a path |
+
+Here faster diagnosis from day 30 halves the time that people stay infectious, by doubling the rate of recovery, and susceptibility is halved for people aged 65 and over in an age-structured version of the model:
+
+```{python}
+faster = ss.modify(flu.recovery, multiply=2, start=ss.days(30))
+sim = ss.Sim(flu, interventions=faster, **kw)
+sim.run()
+print('Infections with faster diagnosis:', round(sim.results.flu.infection.sum()))
+
+flu_age = ss.Disease(infection, recovery, init_prev=0.001)
+flu_age.stratify(age={0: 0.3, 15: 0.6, 65: 0.1})
+older = ss.modify(flu_age.rel_sus, multiply=0.5, where=ss.ppl.age >= 65)
+
+sim = ss.Sim(flu_age, interventions=older, **kw)
+sim.run()
+sim.results.flu_age.I.by('age').plot()
+```
+
+Closing schools is a modifier on the school layer of a contact matrix: see [Contact matrices and data by place](populations_contacts.qmd#data-by-place).
+
+### Who it applies to
+
+`where=` is a condition on people or on the states of modules, written before the sim exists: `ss.ppl.age >= 65`, `flu.I`, or a combination with `&`, `|`, and `~` (and, or, not), such as `(ss.ppl.age >= 65) & ~flu.R`. A condition is worked out each time it is needed, in the sim it runs in, so the same condition works in every copy of a sim made by `ss.parallel()` or by calibration. Anything else is a function of the sim, returning a boolean array or the UIDs of people: `where=lambda sim: sim.people.age >= 65`. A condition on a property of people, such as age, can be run as compartments only if the model is stratified by that property, as above; otherwise the model runs as agents.
+
+## Changes triggered by the epidemic
+
+A rule such as "close schools when cases pass a threshold" is a function of the sim, given as `when=`, which returns `True` on the steps it applies. It can read any result up to the start of the step (`sim.ti - 1`, since this step's results aren't written yet). `when=` has no memory: the modifier is on exactly when the function says so, so a bare threshold switches on and off as the epidemic crosses it. `hold=` adds the simplest memory: once on, it stays on for at least that long. Here transmission is halved for at least 30 days whenever more than 5,000 people are infectious:
+
+```{python}
+def many_infectious(sim):
+    return sim.results.flu.I[sim.ti - 1] > 5000
+
+reactive = ss.modify(flu.pars.beta, multiply=0.5, when=many_infectious, hold=ss.days(30))
+sim = ss.Sim(flu, interventions=reactive, **kw)
+sim.run()
+sim.plot('flu')
+```
+
+A condition on a result can also be written with the result itself, which works out the condition for each place (or other group) on its own. Here each of two towns halves its transmission for at least 14 days once its cases over a week pass 200 per 100,000 people:
+
+```{python}
+towns = ss.geo.geography(names=['North', 'South'], pop=[50_000, 50_000], x=[0, 20], y=[0, 0])
+S, I, R = ss.states('S I R')
+infection = S >> I @ 0.4*I
+recovery  = I >> R @ ss.days(5)
+flu_towns = ss.Disease(infection, recovery, init_n=dict(I=ss.by(patch=[10, 0])))
+flu_towns.stratify(patch=towns, mobility=ss.geo.gravity(away=0.001))
+
+weekly = flu_towns.infection.incidence(over=ss.days(7), by='patch') # New infections over the past week, as a share of each town
+local = ss.modify(flu_towns.pars.beta, multiply=0.5, where=weekly > 200e-5, hold=ss.days(14))
+
+sim = ss.Sim(flu_towns, interventions=local, stop=ss.days(150), verbose=0)
+sim.run()
+sim.results.flu_towns.I.by('patch').plot()
+```
+
+Each town's measures keep its epidemic near the threshold. Any other rule that remembers what it did (a lockdown that lasts until cases fall below a lower threshold, say) is a module written as code: a subclass of `ss.Intervention` whose `step()` decides, and an `ss.modify()` whose `when=` reads its decision, so that the base value is never overwritten. See [Modules written as code](models_code.qmd).
+
+## How changes combine
+
+A modifier never overwrites the quantity it changes. The quantity keeps its own **base** value, and the modifiers active now are applied on top of it to give the **effective** value, which the model uses:
+
+```
+effective = (the set value, if any, otherwise the base) × every multiplier + every addition
+```
+
+that is, set, then multiply, then add, whatever order the modifiers were given in. Two 40% reductions give a 64% reduction (0.6 × 0.6 = 0.36), the usual assumption for independent effects; the efficacies of products (such as a vaccine's) are multipliers of the same kind. Since the base is never changed, nothing has to be undone when a modifier stops applying, and modifiers from several sources combine instead of erasing each other. `sim.what_modifies()` lists the modifiers on a quantity, with their conditions:
+
+```{python}
+sim = ss.Sim(flu_age, interventions=older, **kw)
+sim.init()
+sim.what_modifies(sim.diseases.flu_age.rel_sus)
+```
+
+## Interventions or connectors
+
+A modifier can be given to the sim as an intervention (`interventions=`) or as a connector (`connectors=`). The two do the same thing, and differ only in where they run in each step; by convention, policies go in `interventions=` and interactions that are part of the biology (one disease raising the risk of another) in `connectors=` (see [Connectors](interventions_connectors.qmd)).
+
+## Under compartments and agents
+
+Changes work the same under every solver. As agents, a change to contacts (such as `multiply=0.5` on a layer) means each contact happens with that probability in a step; in a compartmental run, the contacts are scaled. `where=` on a property of people needs either agents, or a model stratified by that property, and a model with neither runs as agents.
+
+## Pitfalls
+
+- **`by=` is relative to the base.** `ss.change(beta, at=[20, 60], by=[0.5, 0.8])` sets transmission to 80% of its base from day 60, not to 80% of the 50% before.
+- **Susceptibility and infectiousness only multiply.** `add=` and `set=` are for parameters; on `rel_sus` and `rel_trans`, use `multiply=`.
+- **A trigger with no memory flickers.** `when=` on a threshold switches the modifier on and off as the quantity crosses it; give `hold=` for a measure that stays in place once begun.
+- **Read results from before this step.** A function given as `when=` runs before the step's results are written; read `[sim.ti - 1]`, not `[sim.ti]`.
+- **`and`, `or`, and `not` don't combine conditions.** Use `&`, `|`, and `~`, with brackets.

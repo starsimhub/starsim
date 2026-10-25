@@ -125,9 +125,9 @@ from .run import MultiSim, parallel
 
 # ss.fit (fitting to data) is imported when it is first used, so that import starsim stays fast
 def __getattr__(name):
-    if name == 'fit':
+    if name in ['fit', 'interop']: # Imported when first used
         import importlib
-        return importlib.import_module('.fit', __name__)
+        return importlib.import_module(f'.{name}', __name__)
     hint = '; import it first: import starsim.library as ssl' if name == 'library' else ''
     if not hint and not name.startswith('_'):
         try:

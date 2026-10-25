@@ -1,0 +1,163 @@
+---
+title: Gradients and likelihoods
+jupyter: python3
+---
+
+For a deterministic model, run as an ODE, Starsim can work out how each result changes as each parameter changes: the *gradient*, or the derivatives of the results with respect to the parameters. It does this by automatic differentiation with [JAX](https://docs.jax.dev), which follows the calculation of the run step by step, rather than by rerunning the model with slightly different values. Gradients make several things possible:
+
+- Fitting many parameters quickly, with an optimizer that follows the gradient (the default for an ODE with three or more fitted parameters).
+- Drawing from the posterior (the distribution of values consistent with the data and the priors) with the No-U-Turn sampler, NUTS, a Hamiltonian Monte Carlo method that uses the gradient to move through the space of parameters efficiently.
+- Seeing which parts of the epidemic a parameter affects, and by how much.
+
+This page assumes the basics of [Calibration](calibration_fitting.qmd). Gradients need JAX (`pip install jax`), a model that runs as an ODE, and one whose whole run is compiled: a rate that calls a Python function, a module written as code, or a movement register rules them out, and the fit says which when it can't use gradients.
+
+## The model
+
+The model is a measles outbreak in a town of 100,000, 90% of whom are immune, with two unknowns: the transmission rate `beta` and the share of cases reported, `report`. Reported cases are counts, so their likelihood is a Poisson: it says how the data vary around the model's value. The data are a year of weekly cases drawn from a run with `beta = 1.9` and `report = 0.5`:
+
+```{python}
+import numpy as np
+import matplotlib.pyplot as plt
+import starsim as ss
+ss.options(jupyter=True)
+
+S, E, I, R = ss.states('S E I R')
+beta   = ss.par(1.5, bounds=[0.5, 4])  # Transmission rate per day
+report = ss.par(0.3, bounds=[0.05, 1]) # Share of cases reported
+
+infection = S >> E @ beta*I
+onset     = E >> I @ ss.days(10)
+recovery  = I >> R @ ss.days(8)
+cases     = ss.outcome(report*onset, likelihood=ss.poisson())
+measles = ss.Disease(infection, onset, recovery, cases, init=dict(I=0.0001, R=0.9))
+pars = dict(total_pop=100_000, start='2025-01-01', stop='2026-01-01')
+
+truth = ss.Sim(measles, pars=dict(beta=1.9, report=0.5), rand_seed=2, **pars)
+truth.run()
+data = truth.to_data('cases', resample='week')
+```
+
+## The gradient of a result
+
+`sim.gradient()` gives the derivative of each result, at each time, with respect to each parameter with bounds, at the parameters' current values. Here, at the true values, for the daily reported cases:
+
+```{python}
+grad = truth.gradient('cases')
+
+fig, ax = plt.subplots()
+t = truth.results.timevec
+ax.plot(t, grad.beta.measles.cases, label='Change in daily cases per unit of beta')
+ax.plot(t, grad.report.measles.cases, label='Change in daily cases per unit of report')
+ax.axhline(0, color='k', lw=0.5)
+ax.legend();
+```
+
+A higher β brings the epidemic forward: more cases before the peak, and fewer after it, when the susceptible people have already been used up. A higher reporting share scales every week's cases up in proportion. Because the two parameters change the curve in different ways, the data can tell them apart. Two parameters whose gradients had the same shape could only be fitted as a combination (see [Parameter identification](calibration_identification.qmd)).
+
+The result is indexed by parameter, then module, then result: `grad.beta.measles.cases` is an array with one value per time step.
+
+## The log-density
+
+`sim.log_density()` gives the log of the posterior density of the fitted parameters (the log-likelihood of the data, plus the log of the priors), as a function of their values, together with its gradient. It is what a sampler or optimizer of your own would use:
+
+```{python}
+sim = ss.Sim(measles, data=data, **pars)
+density = sim.log_density()
+print('Parameters:', density.names)
+print('At the starting values:', density.x0)
+print('Log-density:', density(density.x0))
+print('Its gradient:', density.grad(density.x0))
+```
+
+The gradient is positive for both parameters: at the starting values (1.5 and 0.3), increasing either would make the data more likely.
+
+## A best fit with gradients
+
+`sim.fit()` uses the gradient by default when a deterministic model has three or more fitted parameters (`'l-bfgs-b'`); with one or two, Nelder–Mead, which needs no gradient, is faster. Either can be asked for:
+
+```{python}
+fit = sim.fit(method='l-bfgs-b')
+fit.table
+```
+
+Every data series here has a likelihood, so this is the maximum likelihood estimate. If a parameter has a prior (`ss.par(1.5, bounds=[0.5, 4], prior=ss.normal(2, 0.2))`), the best fit is instead the most probable value, given the data and the prior.
+
+## A posterior with NUTS
+
+A best fit is one set of values. A posterior is the whole distribution of values that are consistent with the data, which says how certain each value is, and how the parameters depend on each other. `method='nuts'` draws from it, given a likelihood for every data series. The priors are each parameter's `prior=`, or uniform over its bounds:
+
+```{python}
+post = sim.fit(method='nuts', draws=250, warmup=250)
+post.summarize();
+```
+
+Each chain of the sampler starts at a different point, spends `warmup=` draws tuning itself, and then makes `draws=` draws (500 of each by default; fewer here to keep this page quick). The table gives, for each parameter, the median of the posterior and its 95% interval (`lower` and `upper`), with two checks that the chains agree: the R-hat (`rhat`), which should be at most 1.01, and the effective sample size (`ess`), the number of independent draws the correlated draws are worth. [Diagnosing a fit](calibration_diagnosing.qmd) says what to do if they fail.
+
+The draws themselves are in `post.samples`, one row for each:
+
+```{python}
+fig, ax = plt.subplots()
+ax.scatter(post.samples.beta, post.samples.report, s=5, alpha=0.5)
+ax.scatter(1.9, 0.5, marker='x', s=100, color='red', label='True values')
+ax.set_xlabel('beta (per day)')
+ax.set_ylabel('report')
+ax.legend();
+```
+
+The two are negatively correlated: a slightly higher β gives a slightly larger epidemic, which a slightly lower reporting share brings back to the same number of reported cases.
+
+## Profile likelihoods
+
+A profile likelihood is another way to find a confidence interval for one parameter, without priors: at each value of it, the other parameters are refitted, and the values whose negative log-likelihood is within 1.92 of the lowest form the 95% confidence interval. It also shows whether the data determine the parameter at all: a profile that stays flat up to a bound means they don't.
+
+```{python}
+prof = ss.fit.profile(sim, 'beta', values=np.linspace(1.86, 1.94, 9))
+print('Best value of beta:', round(prof.best, 3))
+print('95% confidence interval:', np.round(prof.interval, 3))
+prof.table
+```
+
+Without `values=`, `ss.fit.profile()` chooses the values itself, spread over the bounds and then concentrated around the best, which takes longer. Plotting the profile:
+
+```{python}
+fig, ax = plt.subplots()
+ax.plot(prof.table.beta, prof.table.nll - prof.table.nll.min(), 'o-')
+ax.axhline(prof.threshold, color='k', ls='--', label='95% threshold')
+ax.set_xlabel('beta (per day)')
+ax.set_ylabel('Negative log-likelihood, above the lowest')
+ax.legend();
+```
+
+The interval agrees with the posterior's above. A profile needs a deterministic model whose data series all have a likelihood, and parameters without priors.
+
+## Projecting from a posterior
+
+`fit.project()` runs the fitted model under each scenario, once for each of `n` draws from the posterior, with the same draws in every scenario. The spread of the runs is then the uncertainty in the fitted values, carried into the projection. Here, a vaccination campaign on 1 April that reaches half the town, compared with none:
+
+```{python}
+vaccination = ss.vaccinate(efficacy=0.97, coverage=0.5, at='2025-04-01')
+proj = post.project({'No campaign': None, 'Campaign': vaccination}, n=50)
+proj.plot('measles.cases')
+```
+
+```{python}
+proj.summarize().loc['measles_cases']
+```
+
+Since the model is deterministic, each run differs only in its parameter values, so the interval is the uncertainty from the fit alone. For a stochastic model, the runs would also differ by chance.
+
+The same draws show the fit against the data: the model's weekly cases at the starting values and at the best values, with 95% of the posterior as a band:
+
+```{python}
+post.plot()
+```
+
+## Other samplers
+
+NUTS is for deterministic models. For a stochastic model, the likelihood can't be differentiated, and the other posterior methods apply (see [Calibration](calibration_fitting.qmd#how-the-fit-is-found)):
+
+- `method='pmcmc'`, particle MCMC, for a stochastic compartmental model (e.g. `solver='binomial'`) whose data series all have a likelihood: the likelihood at each point is estimated by running many copies of the model (particles) and weighting them by how well they match each data point.
+- `method='abc-smc'`, approximate Bayesian computation, for any model, including agents: it keeps the values whose runs come closest to the data, and needs no likelihood.
+- `method='if2'`, iterated filtering, finds the maximum likelihood values of a stochastic compartmental model with particles.
+
+How the gradients are computed (the run in JAX, and the steps around it) is explained in [Randomness and fitting](../architecture/randomness_and_fitting.qmd#how-the-method-is-chosen).

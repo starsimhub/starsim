@@ -63,6 +63,7 @@ class State(Nameable, Expr):
         self.name = name
         self.init = init
         self.init_n = init_n
+        self.declared_init = (init, init_n) # As declared, before a disease's init= or init_n= (see ss.transitions.Graph), so a copy for another disease starts from these
         self.people = people is not False
         self.people_given = people is not None # Said explicitly, so not checked (see ss.transitions.Graph.check_counts())
         self.infectious = False # Whether it is a source of infection: in the rate of a transmission (see ss.transitions.Graph.resolve_transitions())
@@ -721,10 +722,12 @@ class Transition(Nameable):
 
     @property
     def arrow(self):
-        """ Its source and destinations, for messages, e.g. 'S -> I' """
-        def names(items):
-            return ' | '.join([s.label_name for s in items or []])
-        return f'{names(self.src)} -> {names(self.dst)}'.strip()
+        """ Its source and destinations, for messages, e.g. 'S -> I', 'I -> (removed)', '(added) -> S', or '(everyone) -> (removed)' for ss.death() """
+        def names(items, null):
+            return ' | '.join([s.label_name for s in items or []] + [null]*(not items))
+        src = '(everyone)' if getattr(self, 'every_state', False) and not self.src else names(self.src, '(added)')
+        dst = names(self.dst, '(removed)') + ' | (removed)'*bool(self.dst and self.dies)
+        return f'{src} -> {dst}'
 
     @property
     def driver_str(self):
@@ -799,6 +802,7 @@ def birth(state=None, rate=None, per=None, n=1, sex=None, name=None, label=None)
     if per is not None and rate is not None:
         errormsg = 'ss.birth() takes either rate= (a crude birth rate) or per= (a transition that drives the births), not both'
         raise ValueError(errormsg)
+    check_per_person(rate, 'birth')
     out = Transition(null, state, rate=rate, name=name, label=label)
     out.per_capita = per is None
     out.per = None if per is None else Per(per)
@@ -806,6 +810,16 @@ def birth(state=None, rate=None, per=None, n=1, sex=None, name=None, label=None)
     out.sex = sex
     out.state_given = state is not None
     return out
+
+
+def check_per_person(rate, kind):
+    """ Warn if the rate of a birth or death of everyone (`ss.birth()`, `ss.death()`), which is per person, is more than 1 per person per year: most likely a rate per 1,000 people (as `ss.Births` and `ss.Deaths` take it), which would grow or empty the population at once """
+    raw = getattr(rate, 'raw', rate)
+    if isinstance(raw, ss.Rate) and raw.unit is not None and np.ndim(raw.value) == 0:
+        per_year = raw.to('year').value
+        if per_year > 1:
+            ss.warn(f'the rate of ss.{kind}() is {per_year:n} per person per year; it is per person, so a crude {kind} rate of {per_year:n} per 1,000 is ss.peryear({per_year/1000:n})')
+    return
 
 
 class lifetable:
@@ -898,6 +912,8 @@ def death(state=None, rate=None, dur=None, lifetable=None, name=None, label=None
         out.every_state = True
         out.lifetable = lifetable
         return out
+    if state is None: # The deaths of everyone, a crude death rate (a disease's deaths, from one state, can be faster)
+        check_per_person(rate, 'death')
     out = Transition(state, null, rate=rate, dur=dur, name=name, label=label)
     out.every_state = state is None
     return out

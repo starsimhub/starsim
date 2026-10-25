@@ -1,0 +1,171 @@
+---
+title: Time
+jupyter: python3
+---
+
+Every rate in a model is per some unit of time, every duration is in some unit, and a sim runs over a span of time in steps. This page covers how to give each of these, how Starsim converts between them, and the conventions it uses for calendars. The short version: give rates and durations with their units (`ss.perday(1.9)`, `ss.days(8)`), give the span as dates or durations, and Starsim does the rest.
+
+## The time span and the step
+
+A sim runs from `start` to `stop` (or for `dur`), in steps of `dt`. The span can be given in three ways:
+
+| Given as | Example | Time is |
+|---|---|---|
+| Dates | `start='2025-01-01', stop='2025-07-01'` | Calendar dates; results are dated |
+| Years | `start=2025, stop=2030` | Years, as numbers with dates behind them |
+| Durations | `stop=ss.days(50)` | Time since the start (day 0, day 1, ...) |
+
+Here is the measles model over the first two months of 2025:
+
+```{python}
+import starsim as ss
+ss.options(jupyter=True)
+
+S, I, R = ss.states('S I R')
+infection = S >> I @ ss.perday(1.9)*I # β = 1.9 per day
+recovery  = I >> R @ ss.days(8)       # Infectious for 8 days on average
+measles = ss.Disease(infection, recovery, init_prev=0.001)
+
+sim = ss.Sim(measles, total_pop=100_000, start='2025-01-01', stop='2025-03-01')
+sim.run()
+sim.plot('measles')
+```
+
+The step, `dt`, is one unit of the model by default (here a day). Results are recorded at every time point, from the start to the stop inclusive, so a run of 59 daily steps has 60 time points: the state at the start, then after each step. A flow, such as infections, at a time point is the number during the step that ends there.
+
+### Choosing the step
+
+For the ODE, Gillespie, and tau-leaping, the step only says how often results are recorded: the ODE takes as many smaller steps inside each one as it needs, and the other two work in continuous time. For agents and the chain binomial, each step is taken whole, so a step that is long compared with the time people spend in a state changes the results. Starsim notes when this may be so, and `sim.check_dt()` measures it; see [Solvers and when they disagree](running_solvers.qmd#the-length-of-a-step).
+
+A module can have a step of its own, such as yearly births in a model with weekly transmission (`ss.Births(..., dt=ss.years(1))`), and the modules are run in order of time.
+
+## Units
+
+A typed value carries its own unit: `ss.perday(1.9)` is 1.9 per day, and `ss.days(8)` is 8 days. Typed values are converted to the sim's step, so a model can mix units freely, with weekly rates and daily steps, say, or yearly births and daily transmission.
+
+A bare number is also accepted. The slot says what it is (after `@`, it is a rate; for `dur=` it is a duration), and the sim says its unit, taken from the first of these that applies:
+
+1. `unit=` given to the sim, e.g. `unit='day'`;
+2. the typed values in the model's diseases, and in births and deaths declared with `ss.birth()` and `ss.death()` (`ss.days(8)` makes it days);
+3. `start` or `stop` given as dates (days);
+4. a typed `dt`, such as `dt=ss.weeks(1)`;
+5. `start` or `stop` given as years (years);
+6. none of these: time is counted in steps.
+
+So in the measles model as the tutorials write it, `S >> I @ 1.9*I` is per day because `ss.days(8)` is in days. When the unit comes from rules 2 to 5, it is a guess at what the bare numbers meant, and the sim says where it came from in a note. If the typed values have different units (days for the disease, years for births, say), the unit is the shortest of them, and the step is one of it; if there are bare numbers too, which unit those are in can't be known, and the sim stops with an error asking for `unit=`.
+
+### Time in steps
+
+If nothing has a unit, time is counted in steps: a rate is per step, a duration is in steps, and `stop=50` is 50 steps. This is what a textbook model in discrete time means:
+
+```{python}
+S, I, R = ss.states('S I R')
+textbook = ss.Disease(S >> I @ 1.9*I, ss.Transition(I, R, dur=8), init_prev=0.001)
+sim = ss.Sim(textbook, total_pop=100_000, stop=50)
+sim.run();
+```
+
+Such a sim has no calendar, so dated data, dated interventions, and seasonal parameters (which are yearly cycles) are errors until it is given a unit (`unit='day'`) or dates.
+
+## Rates, probabilities, and durations
+
+Starsim has four kinds of time quantity, each with constructors for days, weeks, months, and years:
+
+| Kind | Means | Constructors |
+|---|---|---|
+| Duration | A length of time | `ss.days(8)`, `ss.weeks`, `ss.months`, `ss.years`, and `ss.datedur` for calendar arithmetic |
+| Rate | A hazard: events per person per unit of time, happening continuously | `ss.perday(1.9)`, `ss.perweek`, `ss.permonth`, `ss.peryear` |
+| Probability | The chance of an event within a period | `ss.prob(0.1, 'day')`, and `'week'`, `'month'`, `'year'` |
+| Frequency | An expected number of events per unit of time, such as sex acts per year (used in modules written as code) | `ss.freq(80, 'year')` |
+
+Converting each to a step is Starsim's job. Over a step of length Δt, a rate *r* becomes the probability 1 − exp(−*r* Δt) of at least one event, a probability *p* per period *T* becomes 1 − (1 − *p*)^(Δt/*T*), a frequency *f* becomes *f* Δt events, and a duration *d* is used through its rate 1/*d*. The ODE, Gillespie, and tau-leaping use the rates themselves, with no conversion.
+
+The kinds combine where the result has a meaning:
+
+```{python}
+print(ss.perday(0.1) * ss.days(3))               # The chance of at least one event in 3 days
+print(ss.prob(0.1, 'day') + ss.prob(0.1, 'day')) # Two competing risks of 0.1 a day: 0.19 a day
+print(1 / ss.days(10))                           # A rate: 0.1 per day
+print(2 / ss.perday(0.1))                        # A duration: 20 days
+```
+
+Where they don't, it is an error that says why, for example adding a rate to a probability:
+
+```{python}
+try:
+    ss.perday(0.1) + ss.prob(0.1, 'day')
+except Exception as e:
+    print(e)
+```
+
+### Which to use
+
+- **A rate** (`ss.peryear(0.01)`) for anything that happens to a person once, at some rate: infection, recovery, death. This is what most models use, and what an ODE means by a rate.
+- **A duration** (`ss.days(8)`) for the average time spent in a state; it is the same as the rate 1/duration, and usually easier to read.
+- **A probability per period** (`ss.prob(0.01, 'year')`) when the data is a share of people in a period: for example, 10 deaths in a year among 1,000 people.
+- **A frequency** (`ss.freq(80, 'year')`) for a number of events that can each happen many times, such as contacts or acts.
+
+A rate of deaths, such as 10 per 1,000 people per year, is per person-year: people who have died stop contributing person-years. So of 1,000 people with a death rate of `ss.peryear(0.1)`, 95 die in a year (1,000 × (1 − exp(−0.1))), not 100; if 100 is what the data means, it is a probability, `ss.prob(0.1, 'year')`.
+
+## Dates
+
+`ss.date` is a calendar date, made from a string, a year, or its parts:
+
+```{python}
+d = ss.date('2025-01-01')
+print(d, ss.date(2025), ss.date(2025, 1, 1))
+print(d.years)            # As a year
+print(d + ss.days(10))    # Ten days later
+```
+
+A duration added to a date counts time exactly, with a year as 365 days and a month as 1/12 of a year. `ss.datedur` counts in calendar units instead, which is what "six months later" usually means:
+
+```{python}
+print(d + ss.years(0.5))            # Half of 365 days later
+print(d + ss.datedur(months=6))     # Six calendar months later
+```
+
+## The timeline
+
+`sim.t` holds the sim's time points, in several forms: `datevec` (dates), `yearvec` (years as numbers), `relvec` (time since the start, in the unit of the step: weeks, here), and `tivec` (the number of each time point). `timevec` is the one that is most natural for the sim (dates for a dated sim, time since the start otherwise), and is what results use:
+
+```{python}
+sim = ss.Sim(measles, total_pop=100_000, start='2025-01-01', stop='2025-03-01', dt=ss.weeks(1), verbose=0).init()
+print(sim.t.datevec[:4])
+print(sim.t.relvec[:4])
+```
+
+The time points run from `start` up to the last one at or before `stop`. Given `dur` instead of `stop`, the stop is `start + dur`, so the two are the same.
+
+## Conventions
+
+Time has corners where reasonable choices differ. These are Starsim's:
+
+- **A year is 365 days, and a month is exactly 1/12 of a year.** So a monthly rate gives the same number of events in February as in March, and in a leap year as in another.
+- **A number given as `start` is a year if it looks like one** (`2025`), and a time since the start otherwise (`0`).
+- **Dates are whole days**, unless a smaller step is asked for (`dt=ss.days(0.25)`).
+- **A bare number equals a duration with the same value** (`ss.days(5) == 5` is true), but durations in different units are compared properly (`ss.years(1) == ss.days(365)` is true).
+- **A probability stays between 0 and 1**: doubling `ss.prob(0.5)` gives 0.75 (the chance of at least one of two events), not 1.
+
+## In modules written as code
+
+A module written as code works with time a step at a time. Each time quantity in its parameters knows the module's step after `sim.init()`, so:
+
+- `rate.to_prob()` is the probability of an event in one step (do this last, after multiplying the rate by any relative risks: `(rate * rel_risk).to_prob()`, not `rate.to_prob() * rel_risk`, which is not a probability);
+- `dur.to_dt()` is a duration as a number of steps, for comparing with the step numbers that states such as a time of infection hold;
+- `freq.to_events()` is the expected number of events in one step.
+
+A duration or rate is never silently a plain number: `float(ss.days(5))` is an error, since the number it stands for depends on the step. Use `.to_dt()`, `.to_prob()`, `.to('year')`, or `.value` (the number in its own unit). Values drawn from a distribution of durations are already in steps. See [Modules written as code](models_code.qmd).
+
+## Pitfalls
+
+- **A bare number after `@` is a rate, not a duration.** `I >> R @ 8` means 8 recoveries per person per unit of time (an infectious period of 1/8 of a day). Write `ss.days(8)`, or `ss.Transition(I, R, dur=8)`; Starsim notes a duration shorter than a step, which usually means this mistake.
+- **Mixed units with bare numbers.** A model with typed values in days and births in years can't tell what a bare β means; give β its unit, or `unit=`.
+- **A long run with daily steps.** Twenty years of daily steps is 7,300 steps; Starsim warns when a sim has very many steps, since a longer step (`dt=ss.weeks(1)`) is often enough.
+- **Steps of agents and the chain binomial.** These take each step whole; check that the step is short enough for the fastest rate in the model.
+
+## See also
+
+- [Building your model](../tutorials/t2_model.qmd), the tutorial that introduces units, dates, and steps
+- [Parameters](models_parameters.qmd), for parameters that change over time
+- [Solvers and when they disagree](running_solvers.qmd), for the length of a step

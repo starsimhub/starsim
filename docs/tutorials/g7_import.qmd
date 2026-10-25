@@ -1,0 +1,204 @@
+---
+title: Bringing a model in
+jupyter: python3
+---
+
+Many models already exist, written in other frameworks: an ODE model in odin or summer2, a stochastic model in SimInf, a configuration for flepiMoP. Starsim can read a model from eleven such frameworks and turn it into a Starsim model: the same states, transitions, and parameters, which can then be run, checked, stratified, given interventions, and fitted like any other. This tutorial imports a measles model written in odin, checks that it was read correctly, compares it with the model of the earlier tutorials, writes it out as Starsim code, and finishes an import that Starsim couldn't complete by itself.
+
+By the end of this tutorial, you will be able to:
+
+- import a model from another framework with `ss.interop.load()`, and read how each of its rates was translated;
+- check an imported model with `describe()`, and compare it with another model with `ss.diff()`;
+- write a model as Starsim code with `sim.to_code()`;
+- finish an import from the list of what wasn't translated.
+
+## A model in odin
+
+[odin](https://mrc-ide.github.io/odin) is a language for compartmental models in R. Here is the measles model of [Tutorial 3](t3_structure.qmd), as an odin user might write it, in the file `data/measles_seir.R`:
+
+```r
+deriv(S) <- -beta * S * I / N
+deriv(E) <- beta * S * I / N - sigma * E
+deriv(I) <- sigma * E - gamma * I
+deriv(R) <- gamma * I
+
+N <- S + E + I + R
+
+initial(S) <- N0 - I0
+initial(E) <- 0
+initial(I) <- I0
+initial(R) <- 0
+
+N0 <- user(100000)   # Population size
+I0 <- user(10)       # Number infectious at the start
+beta <- user(1.9)    # Transmission rate, per day
+sigma <- user(0.1)   # 1 / latent period (10 days)
+gamma <- user(0.125) # 1 / infectious period (8 days)
+```
+
+Each `deriv()` is the rate of change of a compartment, written as the total flows in and out: β S I / N people a day are infected, σ E become infectious, and γ I recover. This is the form of most textbooks and frameworks. A Starsim transition is written per person instead (each susceptible person is infected at a rate of β times the share infectious), so importing is mostly a matter of turning each total flow into a rate per person.
+
+## Importing it
+
+`ss.interop.load()` reads the file. The importers are in a part of Starsim that `import starsim` doesn't load by itself, so it is imported first. odin has no unit of time, so its numbers are taken to be per day (`unit=` says otherwise), and odin is told how long to run when it is run, so `stop=` gives it here, in days:
+
+```{python}
+import starsim as ss
+import starsim.interop # The importers
+ss.options(jupyter=True) # Plots and tables suited to a notebook
+
+sim = ss.interop.load('data/measles_seir.R', stop=50)
+```
+
+The import says how it read each flow, which is the first thing to check:
+
+- `beta * S * I / N`, the flow from `S` to `E`, is a transmission: `S` is taken out (since the rate is per susceptible person), and `I / N`, the share infectious, is exposure to infectious people. Since it is divided by the population, it is frequency-dependent, and becomes `beta * I`, as in the earlier tutorials.
+- `sigma * E` and `gamma * I` are spontaneous: each person leaves at a rate of σ or γ a day, whatever anyone else is doing. These become rates per person.
+
+Anything the importer can't classify this way it keeps as written, as a total flow in terms of the numbers in each state, which is exact under every solver. And anything it can't translate at all it lists, as the last section shows.
+
+## Checking it
+
+The imported model is an ordinary Starsim sim. `describe()` shows it as Starsim has built it:
+
+```{python}
+sim.describe()
+```
+
+The model is as written in odin, with a few things marked as guessed: odin's flows have no names, so each transition is named after the states it joins (`S_to_E`), and the reading of the transmission as frequency-dependent is marked too. The solver is the one odin uses for this model, an ODE, so that the results can be checked against odin's. Running it:
+
+```{python}
+sim.run()
+sim.plot()
+```
+
+R0 is 1.9 × 8 = 15.2, as it should be, and with 10 people infectious at the start, the epidemic peaks on day 35.
+
+## Comparing it with a model written in Starsim
+
+`ss.diff()` compares two models in their own terms: their states, transitions, parameters, and settings. Here is the imported model against the measles model as written in Tutorial 3:
+
+```{python}
+S, E, I, R = ss.states('S E I R')
+infection   = S >> E @ 1.9*I
+progression = E >> I @ ss.days(10)
+recovery    = I >> R @ ss.days(8)
+measles = ss.Disease(infection, progression, recovery, init_n=dict(I=10))
+mine = ss.Sim(measles, total_pop=100_000, stop=ss.days(50))
+
+ss.diff(sim, mine)
+```
+
+The transitions are matched by the states they join, so `S_to_E` is matched with `infection`, and the infections are the same. The other two differ only in how they are written: the import has a rate of 0.1 a day where Tutorial 3 has an average of 10 days, which is the same exponential distribution. The parameters are the same, and the settings differ only in the solver (an ODE in the import, and chosen by Starsim in the other, which also chooses an ODE). So these are the same model.
+
+## Writing it as Starsim code
+
+`sim.to_code()` writes the model as a Python script that builds it again. For an imported model, it also says where the model came from and how each rate was read:
+
+```{python}
+print(sim.to_code())
+```
+
+The code is a starting point to edit. A transition can be given a better name (`infection` rather than `S_to_E`), a rate can be written as the duration it stands for, and anything Starsim has that odin doesn't (age groups, interventions, a fit to data) can be added. `sim.to_code('measles_seir.py')` writes it to a file.
+
+## Running it in other ways
+
+Since the import is an ordinary model, it can be run in any of the ways the earlier tutorials show. `sim.new()` makes a new sim from the same inputs, with whatever is given changed. Here it is run as agents, which odin can't do:
+
+```{python}
+agents = sim.new(solver='abm', n_agents=10_000)
+agents.run()
+agents.plot()
+```
+
+The solver is given here as well as the number of agents, since the import asked for an ODE, to match odin. The agents follow the ODE closely, as they should in a town of this size. Each agent stands for 10 people, since the model's population is still 100,000.
+
+## When an import is incomplete
+
+Not everything in another framework's model has a direct translation. The importer translates what it can, and lists the rest by name rather than guessing. Here is the measles model over 20 years, with births, deaths, and seasonal transmission, in `data/measles_seasonal.R`:
+
+```r
+deriv(S) <- mu * N - beta * S * I / N - mu * S
+deriv(E) <- beta * S * I / N - sigma * E - mu * E
+deriv(I) <- sigma * E - gamma * I - mu * I
+deriv(R) <- gamma * I - mu * R
+
+N <- S + E + I + R
+beta <- beta0 * (1 + amp * cos(2 * 3.141593 * t / 365)) # Highest at the start of each year
+
+initial(S) <- 7000
+initial(E) <- 30
+initial(I) <- 30
+initial(R) <- 92940
+
+beta0 <- user(1.9)   # Mean transmission rate, per day
+amp <- user(0.2)     # Size of the seasonal cycle, relative to the mean
+sigma <- user(0.1)   # 1 / latent period (10 days)
+gamma <- user(0.125) # 1 / infectious period (8 days)
+mu <- user(0.00008)  # Birth and death rate, per day (about 3% a year)
+```
+
+Over 20 years, a step of a week is plenty, so `dt=7` (days) is given as well:
+
+```{python}
+sim = ss.interop.load('data/measles_seasonal.R', stop=20*365, dt=7)
+```
+
+β now depends on the time, `t`, in a formula the importer doesn't translate. So the transmission, which uses β, isn't translated either, and the warning (`ImportIncomplete`) lists both. The births, deaths, latent period, and recovery are translated. The list is also kept with the sim:
+
+```{python}
+sim.imported.incomplete
+```
+
+The sim still runs without the parts that are missing, but here that means a model with no transmission, so it has to be finished first. The code that `to_code()` writes lists what wasn't translated at the end, as comments:
+
+```{python}
+print(sim.to_code())
+```
+
+To finish it, add what is missing. A seasonal cycle like this one is `ss.seasonal()` ([Parameters over time](g4_time.qmd)): a mean, an amplitude, and the time of year of the peak, here the start of the year (`peak=0`). Here is the code above, with the transmission added and the transitions renamed. Births and deaths into and out of every state are also shorter written as `ss.birth()` and `ss.death()` in `demographics=`, as in [Tutorial 4](t4_ages.qmd), which is the same model:
+
+```{python}
+beta = ss.seasonal(mean=ss.perday(1.9), amplitude=0.2, peak=0) # Added: β, highest at the start of the year
+
+S, E, I, R = ss.states('S E I R')
+infection   = S >> E @ beta*I # Added: the transmission
+progression = E >> I @ ss.perday(0.1)
+recovery    = I >> R @ ss.perday(0.125)
+measles = ss.Disease(infection, progression, recovery, init_n=dict(S=7000, E=30, I=30, R=92940))
+
+demographics = [ss.birth(rate=ss.perday(8e-05)), ss.death(rate=ss.perday(8e-05))]
+sim = ss.Sim(measles, demographics=demographics, total_pop=100_000, stop=ss.days(20*365), dt=ss.days(7))
+sim.run()
+sim.results.measles.I.plot()
+```
+
+This gives the two-year cycle of measles epidemics that [Parameters over time](g4_time.qmd) explains. Checking it against the original model, run in odin, would be the last step.
+
+For a longer model, with more that isn't translated, `sim.imported.prompt` is a prompt for an AI assistant with Starsim's skill for importing models, which can finish the job in the same way: write the code, translate what is listed, and check the result against the original.
+
+## Other frameworks
+
+`ss.interop.load()` reads models from these frameworks, and tells which one a file is from by its contents (or give `format=`):
+
+| Framework | What is read | Translated example |
+|---|---|---|
+| Atomica | The framework and databook workbooks (`.xlsx`) | [Coming from Atomica](../coming_from/atomica.qmd) |
+| camdl | A `.camdl` file, or its compiled JSON | [Coming from camdl](../coming_from/camdl.qmd) |
+| EMULSION | The YAML model | [Coming from EMULSION](../coming_from/emulsion.qmd) |
+| EpiModel | An R script, or JSON written by a script in R | [Coming from EpiModel](../coming_from/epimodel.qmd) |
+| epydemix | The model itself, or JSON written by a script in its environment | [Coming from epydemix](../coming_from/epydemix.qmd) |
+| flepiMoP | The YAML configuration, with the files it names | [Coming from flepiMoP](../coming_from/flepimop.qmd) |
+| MEmilio | JSON written by a script in its environment | [Coming from MEmilio](../coming_from/memilio.qmd) |
+| odin | An R file in odin's language | [Coming from odin](../coming_from/odin.qmd) |
+| SBML | An SBML file (`.xml`) | |
+| SimInf | An R script | [Coming from SimInf](../coming_from/siminf.qmd) |
+| summer2 | The model itself, or JSON written by a script in its environment | [Coming from summer2](../coming_from/summer2.qmd) |
+
+Where a framework is not a Python package that can be installed with Starsim, a short script, run where that framework is installed, writes its model as JSON for Starsim to read; the scripts are in `starsim/interop/`. A model can also be written out to odin or SBML, with `ss.interop.export(sim, 'odin', filename='measles.R')`; each export lists anything it couldn't carry. [Importing and exporting models](../user_guide/interop_import.qmd) covers the importers and exporters in more detail, and [The model spec, `to_code()`, and `diff()`](../user_guide/interop_spec.qmd) covers comparing and writing out models.
+
+## Exercises
+
+1. Import the model with another value of β, with `pars=dict(beta=1.5)` to `ss.interop.load()`, and use `ss.diff()` to compare the result with the model above. What does `ss.diff()` report?
+2. Import the model of the first section for a village of 1,000 people with one person infectious at the start (`pars=dict(N0=1000, I0=1)`), and run it as a stochastic compartmental model 100 times (`sim.run(solver='binomial', n_runs=100)`), for 200 days. In how many of the runs is there no outbreak? Compare this with 1/R0, the chance that a single infection's chain of transmission dies out by chance in a branching process.
+3. Write the imported model of the first section as code, and stratify it by age as in [Tutorial 4](t4_ages.qmd), with the contact matrix there. What happens to R0, and why? What value of β gives an R0 of about 15 again?

@@ -1,31 +1,28 @@
 ---
 title: What is Starsim?
-jupyter: python3
 ---
-
 
 ## Introduction
 
 Starsim is a framework for modeling the spread of diseases, as compartmental models or among agents via dynamic transmission networks. Starsim supports:
 
-- Writing a disease as its states and the transitions between them, and running the same model as an ODE, as a stochastic compartmental model, or as agents
-
+- Writing a disease as its states and the transitions between them (compartments and the rates of flow between them, as in a textbook model), and running the same model as a deterministic compartmental model, as a stochastic one, or as agents
 - Co-transmission of multiple diseases at once, capturing how they interact biologically and behaviorally
 - Non-infectious diseases, either on their own or as factors affecting the transmission or mortality of infectious diseases
 - Detailed modeling of mother-child relationships starting from conception, allowing investigation of infant and childhood diseases
 - Multiple types of transmission network, including theoretical (e.g. Erdős–Rényi) and realistic (e.g. age-assortative sexual partnerships)
 - Different intervention types, such as vaccines or treatments, and showing their impact through different delivery methods such as mass campaigns or targeted outreach
-- Automated calibration to data, plus careful handling of random numbers to minimize variance between simulations
+- Calibration to data, and common random numbers, so that two scenarios differ by what was changed rather than by chance
 
 Starsim is available for both Python and R, and is fully open-source under the MIT license.
 
 ## Types of disease modeling
 
-Starsim models can be compartmental or agent-based (ABM). A disease written as states and transitions (a *declared* disease) can be run either way: Starsim runs it as an ODE when every part of the model has a compartmental form, and as agents when something in it needs individuals (such as a contact network), and it can be asked for either. Modules written as code (custom diseases, networks, and interventions with their own `step()` method) run as agents, alongside declared diseases; analyzers run beside either. ABMs are most suitable for questions that are moderately complex, and have medium to large amounts of data available:
+Starsim models can be compartmental or agent-based (an ABM). A disease written as states and transitions can be run either way: as compartments when the model can be written as compartments, and as agents when something in it needs individuals, such as a network of who is in contact with whom. Starsim chooses which, and says so; it can also be told. Parts of a model written as Python code, such as a custom intervention, run as agents. ABMs are most suitable for questions that are moderately complex, and have medium to large amounts of data available:
 
 ![Types of Model](assets/types_of_model.png)
 
-For simpler questions, statistical or compartmental models are often all that's needed. For very complex questions, LLMs (which themselves might be trained on agent-based model outputs) may be more suitable. Examples of each type of question are:
+For simpler questions, statistical or compartmental models are often all that's needed. For very complex questions, machine learning models may be more suitable. Examples of each type of question are:
 
 - **Statistical models**: "Are people who received the vaccine less likely to get infected?"
 - **Machine learning models**: "What behavioral factors influence vaccination uptake?"
@@ -38,7 +35,7 @@ Starsim aims to address the limitations of existing ABMs, specifically along the
 
 | Dimension | Starsim | Status quo |
 |----------|----------|----------|
-| Usability   | Starsim is fast, has a simple interface, and only requires knowledge of Python   | Many ABMs are slow, complex, or require knowledge of C++/Java   |
+| Usability   | Starsim is fast, has a simple interface, and requires knowledge of Python (or R) only   | Many ABMs are slow, complex, or require knowledge of C++/Java   |
 | Capability   | Starsim supports multiple custom diseases and networks, including co-transmission   | Most other disease models are single-disease or hard-coded to a handful of diseases   |
 | Outcome   | Once you've collected your data, modeling your questions with Starsim takes days to weeks   | Writing, testing, and calibrating a custom model can take months to years   |
 
@@ -76,6 +73,4 @@ Starsim is suitable for many use cases, but not all. Some examples of suitable S
 However, there are other cases where Starsim may not be suitable. These include:
 
 - If you are doing a very simple modeling task, such as a simple SIR or SEIR model, you might as well use plain Python or R. Starsim is fast and concise, but is unlikely to be faster or significantly more concise than well-written custom code. But if your script starts getting longer than about 100 lines, and if you want to do calibration or handle different time units, there is a good chance that Starsim would be able to make things easier.
-- If your current model is highly specialized to a given context, the switching cost of moving to Starsim may not be worthwhile (though as noted, AI tools have made this much easier than it used to be, so get in touch if this is of interest to you).
-
-
+- If your current model is highly specialized to a given context, the switching cost of moving to Starsim may not be worthwhile. Starsim can import models from several other frameworks (see [Coming from another framework](../coming_from/index.qmd)), and AI tools make translating a model much easier than it used to be, so get in touch if this is of interest to you.

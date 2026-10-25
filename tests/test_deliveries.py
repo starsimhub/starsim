@@ -7,6 +7,7 @@ import os
 import tempfile
 import pytest
 import numpy as np
+import pandas as pd
 import sciris as sc
 import starsim as ss
 import starsim.library as ssl
@@ -176,6 +177,8 @@ def test_conditions():
         n_S = sim.results.sir.S.by('age').values[5, 0]
         assert np.isclose(sim.results.kids.delivered[6], n_S, rtol=0.02) # Every susceptible child at time 5, and nobody else, in the step from it
         assert np.allclose(sim.results.kids.delivered.by('age').values[6], [sim.results.kids.delivered[6], 0, 0]) # By stratum: all in the youngest group
+        total = sim.results.kids.delivered.by('age').summarize() # Labelled by group
+        assert isinstance(total, pd.Series) and len(total) == 3 and np.isclose(total.iloc[0], sim.results.kids.delivered.summarize())
     check_close(sims, lambda sim: sim.results.kids.delivered.sum(), rtol=0.05)
 
     # A function of the sim does the same
@@ -381,6 +384,7 @@ def test_coverage_by_group():
     young = ['0-4', '5-14']
     assert np.allclose(res.coverage.by('age').values[6], [0.8, 0.2, 0.5])
     assert np.isclose(res.coverage.select(age=young)[6], res.delivered.select(age=young)[6]/res.eligible.select(age=young)[6]) # Not 0.8 + 0.2
+    assert np.isclose(res.eligible.summarize(), res.eligible.values.sum()) # The offers made over the run (it was their mean over every step, e.g. 19.6 of 1,000 eligible)
     return res
 
 
@@ -429,6 +433,10 @@ def test_effective():
     with pytest.raises(ss.CapabilityError): # There are no agents to have values
         ode.diseases.sir.rel_sus.effective
     assert 'multiply=0.1 ' in ode.what_modifies('sir.rel_sus', output=True) # Not 0.09999999999999998
+    hiv = ssl.HIV() # A disease written as code: its rel_sus is tracked, and its parameters are said not to be (it was a KeyError)
+    coded = ss.Sim(hiv, networks=ss.RandomNet(), connectors=ss.modify(hiv.rel_sus, multiply=0.5, name='half'), n_agents=200, verbose=0).init()
+    assert 'half' in coded.what_modifies(coded.diseases.hiv.rel_sus, output=True)
+    assert 'written as code' in coded.what_modifies('hiv.pars.beta', output=True)
     return sim
 
 

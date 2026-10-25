@@ -483,10 +483,51 @@ def test_bare_units():
     n_I = ss.Sim(sis(ss.lognorm_ex(mean=fn, std=1, unit='month')), start=2000, stop=2003, dt=ss.months(1), n_agents=1000, verbose=0).run().results.d.I
     assert n_I[24] == 0
 
+    # A bare beta is in the unit of the disease's own durations, beside births and deaths per year (it raised IncompatibleTypes)
+    S, I, R = ss.states('S I R')
+    sir = ss.Disease(S >> I @ 1.9*I, I >> R @ ss.days(8), name='sir')
+    sim = ss.Sim(sir, demographics=[ss.birth(rate=ss.peryear(0.02)), ss.death(rate=ss.peryear(0.02))], start='2000', stop='2001', n_agents=500, verbose=0).init()
+    assert sim.unit == 'day'
+
     # A peak of a seasonal value outside the year is refused, and a time of year works (T6a: 142 was taken as January)
     with pytest.raises(ValueError):
         ss.seasonal(peak=142)
     assert np.isclose(ss.seasonal(peak=ss.days(142)).peak_frac, 142/365)
+    return
+
+
+@sc.timer()
+def test_time_text():
+    sc.heading('Testing times as a run prints them, and dates on a timeline in calendar years')
+    import io, contextlib, warnings
+    def make():
+        S, I, R = ss.states('S I R')
+        return ss.Disease(S >> I @ ss.perday(1.9)*I, I >> R @ ss.days(8), init_n=dict(I=10), name='measles')
+
+    # Numbers as numbers in the timeline's own unit, dates as dates without a time of day (they were "days 2000 to 2002" and "on day 2000.01.08 00:27:36")
+    sim = ss.Sim(make(), total_pop=1e5, start=2000, stop=2002, verbose=0).run()
+    assert 'years 2000 to 2002' in sim.start_lines()[0] and 'on year 2000.02' in sim.end_line()
+    sim = ss.Sim(make(), total_pop=1e5, start='2000', stop='2002', verbose=0).run()
+    assert '2000.01.01 to 2002.01.01' in sim.start_lines()[0] and sim.end_line().endswith('on 2000.01.08')
+    sim = ss.Sim(make(), total_pop=1e5, stop=ss.days(7300), dt=7, verbose=0).init() # A stop that is not a whole number of steps is said (it ended at day 7294 silently)
+    assert 'days 0 to 7294 (the last whole step before 7300)' in sim.start_lines()[0]
+
+    # A date given to a delivery in a sim in calendar years, without warnings (they were "Dates with years < 1 are not valid")
+    with warnings.catch_warnings():
+        warnings.simplefilter('error')
+        sim = ss.Sim(ss.SIS(), interventions=ss.vaccinate(efficacy=0.8, coverage=0.5, at=['2001'], capacity=50), n_agents=500, start=2000, stop=2002, dt=ss.months(1), verbose=0).run()
+    assert np.flatnonzero(sim.interventions[0].results.delivered.values).tolist() == [13] # The step from 2001
+
+    # The step count warning says where the unit came from (it said "from None" with unit='day')
+    with pytest.warns(ss.errors.UnitInferred, match="unit='day'"):
+        ss.Sim(make(), total_pop=1e5, stop=ss.years(30), unit='day', verbose=0).init()
+
+    # The model's hash and spec build a quiet copy (they printed the lines a run starts with)
+    sim = ss.Sim(make(), total_pop=1e5, stop=ss.days(20))
+    with contextlib.redirect_stdout(io.StringIO()) as out:
+        sim.hash()
+        sim.to_code()
+    assert out.getvalue() == '' and not sim.initialized
     return
 
 

@@ -105,7 +105,7 @@ Lines are lines of model code (not counting blank lines, comments, imports, or p
 | The SEIR with clinical status | 134 (55 for the model alone) | 15 | 0.0008 s once compiled; 3.5 s the first time | 0.015 s (0.059 s the first time); 0.2 ms to rerun a built sim | Pass |
 | A COVID model in 384 compartments (16 age groups, five clinical levels, three levels of protection) | | | 3.6 to 4.3 s the first time; 0.23 to 0.41 s after that | 0.2 to 0.56 s the first time; 0.08 to 0.5 s after that | |
 
-The last row was measured on 17 October 2026, on a machine shared with other jobs. Starsim's compiled kernels are the same for every model, and are compiled once, so there is no wait for each new model.
+The last row was measured on 17 October 2026, on a machine shared with other jobs. Starsim's compiled code is the same for every model, and is compiled once, so there is no wait for each new model.
 
 ## What works and what does not yet
 
@@ -121,7 +121,7 @@ These are from Starsim's switching demo for summer2 users (`tests/switching/test
 | summer2's sigmoidal scale-up | **Not yet**: `ss.timeseries` has constant, linear, and cosine interpolation, so the sigmoid is sampled into a time series |
 | A plain number times a time series (`1.5 * ss.timeseries(...)`) | **Works**. A parameter with no name inline (`ss.par(1.5) * ss.timeseries(...)`) raises a `ValueError` asking for one: give it as `ss.par(1.5, name='k')`, or assign it to a variable first |
 | The same model as a stochastic model or as agents | **Works**: `solver='binomial'`, `'gillespie'`, or `'abm'`; at a yearly step the stochastic solvers can differ a lot from the ODE, and `sim.check_dt()` shows how much a smaller step changes the results |
-| Interventions with costs (active case finding) | **Works**: `ss.treat(ss.Treatment(efficacy=0.7, transition='detection', cost=5), where=I, coverage=0.5, at=[2026, 2027])` |
+| Interventions with costs (active case finding) | **Works**: `ss.treat(cure=0.7, transition='detection', cost=5, where=I, coverage=0.5, at=[2026, 2027])` |
 | Contact matrices and populations by country | **Works**: `ss.contacts('Philippines')` and `ss.people('Philippines', year=2021)` are bundled |
 
 ## Bringing your model in

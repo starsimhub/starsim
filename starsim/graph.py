@@ -229,6 +229,7 @@ class Graph(Presentation):
                         for s in ([leaf] if isinstance(leaf, State) else leaf.states if isinstance(leaf, Count) else []):
                             if id(s) not in found:
                                 self._refs.append(s)
+        self._refs = [s for s in self._refs if id(s) not in found] # A state read in a rate before the transition that fills it (e.g. the I in S >> E @ beta*I, with E >> I after) is not only read
         for s in self._refs: # A state used only in a rate still belongs to this module unless another module has claimed it
             if s.module is None or s.module is self.module:
                 found[id(s)] = s
@@ -245,6 +246,9 @@ class Graph(Presentation):
         for state in statelist:
             if state.module is not None and state.module is not self.module:
                 raise ss.errors.DuplicateDeclaration(f'state "{state.name}" is used by transitions in two modules, "{state.module.name}" and "{self.module.name}"; a state belongs to one module.')
+            if state.module is None and getattr(state, 'init_from_module', False): # A copy of another disease's state (see ss.Disease.reuse()): that disease's init= was its own
+                state.init, state.init_n = state.declared_init
+                state.init_from_module = False
             state.module = self.module
             self.add(self.states, state.name, state)
 
@@ -254,6 +258,7 @@ class Graph(Presentation):
                 if name not in self.states:
                     raise ss.errors.UnknownState(f'{key}= names a state "{name}" that "{self.module.name}" does not have. States are {sc.strjoin(self.states.keys())}.')
                 setattr(self.states[name], key, val)
+                self.states[name].init_from_module = True
         for state in statelist:
             if state.init is not None and state.init_n is not None:
                 raise ValueError(f'"{state.name}" of "{self.module.name}" is given both init= (a share of people) and init_n= (a number of people); give one or the other')
@@ -542,6 +547,7 @@ class Graph(Presentation):
             counts[slot] = counts.get(slot, 0) + 1
         inner = {q.name or self.names.get(id(q)) for tr,slot,p in slots for q in inner_pars(p.value)} # The names of parameters inside values that vary in time, e.g. ss.seasonal(mean=beta), or inside a probability per act, which are registered below
         inner |= {q.name or self.names.get(id(q)) for tr,slot,p in slots if isinstance(p.value, Expr) for q in p.value.leaves if isinstance(q, par) and q is not p} # And inside an expression in a slot, e.g. dur=dur_rec*k
+        inner |= {p.name or self.names.get(id(p)) for tr,slot,p in slots if not any(p is q for _,_,q in anon)} # And the explicit ones in the slots, registered below, e.g. dur = ss.par(ss.days(6)) in one transition and a bare ss.days(100) in another
         taken = lambda name: name in self.pars or name in self.states or name in self.transitions or name in inner
         for tr,slot,p in anon:
             name = f'{slot}_{tr.name}' if counts[slot] > 1 or taken(slot) else slot
@@ -549,6 +555,12 @@ class Graph(Presentation):
                 name = f'{slot}_of_{tr.name}'
             self._add_par(p, name=name)
             p.slot_named = True
+        for tr,slot,p in slots: # A parameter inside a value that varies in time, given without a name or a variable of its own, is named after the parameter and its field, e.g. beta_mean in beta = ss.seasonal(mean=ss.par(...))
+            val = p.value
+            for field in getattr(val, 'fields', []) if isinstance(val, TimeValue) else []:
+                for q in sc.tolist(getattr(val, field, None)):
+                    if isinstance(q, par) and not q.literal and q.name is None and self.names.get(id(q)) is None:
+                        q.name = f'{p.name}_{field}'
 
         # Register the explicit ss.par objects used in the transitions, and in the weights and likelihoods of the outcomes
         used = [(tr.name, expr) for tr in self.transitions.values() for expr in [tr.rate, tr.dur] + sc.tolist(tr.p) + sc.tolist(getattr(tr, 'p_given', None))]

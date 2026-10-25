@@ -7,6 +7,8 @@ Makes the mechanical changes of the upgrade in place, and lists what needs a per
     python -m starsim.interop.migrate mypackage/ tests/   # Rewrite in place
     python -m starsim.interop.migrate mymodel.py --check  # Only list what would change
 
+It reads `.py` files, and the Python code cells of notebooks (`.ipynb`), Quarto (`.qmd`), and Markdown (`.md`).
+
 The changes made are the renames (e.g. `ss.time_prob()` to `ss.probperyear()`, `ss.MFNet` and `ss.SexualNetwork` to `ss.SexualNet`,
 and `ss.library.X` to `ssl.X`), `verbose=-1` (now `verbose=0`), `res.annualize()` (now `res.resample('year')`), subclasses of
 Starsim 3's SIR, SIS, and SEIR written as code (e.g. `ss.SIS` to `ssl.AgentSIS`; Starsim 3's `ss.Disease` and `ss.Infection` keep
@@ -20,12 +22,13 @@ in place, so that the code fails with Starsim 4's own error, when the script can
 `ss.Diagnostic`; the keywords of a delivery (`eligible=`, `years=`, now `where=`, `at=`, only in calls to `ss.screen()`,
 `ss.treat()`, `ss.vaccinate()`, `ss.Delivery()`, and `ss.transfer()`, never in a `def`); `ss.SexualNet(sides=)`, now `between=`;
 `init=` given as numbers of people, now `init_n=`; arrow strings between levels (`ss.transfer(risk='low -> high')`, now
-`risk=('low', 'high')`); `infectious=` of `ss.State()`, removed; and `ti_entry`, now `ti` (one time index in every phase of a step). Read the diff afterwards: each
+`risk=('low', 'high')`); `infectious=` of `ss.State()`, removed; `solver='stochastic'`, now `'binomial'`; and `ti_entry`, now `ti` (one time index in every phase of a step). Read the diff afterwards: each
 change is listed with its line.
 """
 import re
 import ast
 import sys
+import json
 import argparse
 import sciris as sc
 import starsim as ss
@@ -57,6 +60,7 @@ renames = [
     (r'\b(\w*preg\w*)\.pregnancies\b', r'\1.conception',            "ss.Pregnancy's pregnancies result is its flow conception"),
     (r'\b(\w*preg\w*)\.breastfeeding\b', r'\1.lactation.L',          "ss.Pregnancy's breastfeeding is the state L of its ss.Lactation (preg.lactation)"),
     (r'\buids\.cat\(',             'uids.concatenate(',              'ss.uids.cat() is ss.uids.concatenate()'),
+    (r'''(\bsolver\s*=\s*)(['"])stochastic\2''', r'\1\2binomial\2',  "solver='stochastic' (a Starsim 4 prerelease) is solver='binomial', the chain binomial"),
     (r'\bss\.people\.(?!People\b)', 'ss.ppl.',                        'ss.people (a Starsim 4 prerelease) is ss.ppl'),
     (r'\bss\.library\.',          'ssl.',                           'ss.library is imported by itself: import starsim.library as ssl, then ssl.X'),
     (r'\b(\w+)\.ti_entry\b',       r'\1.ti',                        'ti_entry (a Starsim 4 prerelease) is ti: the time index is the same in every phase of a step, and an infection is dated with it'),
@@ -83,9 +87,9 @@ for submodule, names in moved.items():
 
 # What needs a person: a regular expression, and what to write instead
 flags = [
-    (r'\bss\.(routine|campaign)_(vx|screening|triage)\b', "a delivery: ss.vaccinate(ss.Vaccine(efficacy=e), coverage=p, start=y, interval=ss.years(1)) for routine (Starsim 3's prob= was a share reached each year), at=[...] for a campaign; ss.screen() for screening, and for triage a second ss.screen(who=screening.positive) of its own"),
+    (r'\bss\.(routine|campaign)_(vx|screening|triage)\b', "a delivery: ss.vaccinate(efficacy=e, coverage=p, start=y, interval=ss.years(1)) for routine (Starsim 3's prob= was a share reached each year), at=[...] for a campaign; ss.screen() for screening, and for triage a second ss.screen(who=screening.positive) of its own"),
     (r'\bss\.(RoutineDelivery|CampaignDelivery|BaseTest|BaseScreening|BaseTriage|BaseTreatment|BaseVaccination)\b', "Starsim 3's delivery classes were removed: ss.screen(), ss.vaccinate(), or ss.treat() with coverage= (prob=p is coverage=ss.probperyear(p), offered at every step), start= and stop= (start_year=, end_year=; stop is not included), at= (a campaign's years=), and where= (eligibility=); a subclass that overrides step() is an ss.Intervention written as code"),
-    (r'\bss\.treat_num\b', 'ss.treat(ss.Treatment(cure=e), on=dis.infection (or who=screening.positive), capacity=n, queue=True): those not served wait, and leave the queue when no longer eligible'),
+    (r'\bss\.treat_num\b', 'ss.treat(cure=e, on=dis.infection (or who=screening.positive), capacity=n, queue=True): those not served wait, and leave the queue when no longer eligible'),
     (r'\bss\.(Dx|Tx|Vx)\b', "Starsim 3's products written as code were removed: ss.Diagnostic (a table of more than two results is results=dict(...), most severe first), ss.Treatment (cure=, or cure=dict(<state>=...) by state), ss.Vaccine (efficacy=); an administer() of your own is administer(self, uids) on a subclass of ss.Product, returning its outcomes as dict(positive=uids)"),
     (r'\.diagnosed\b', "if this is the result of an ss.screen (a Starsim 4 prerelease), it is now positive (e.g. sim.results.screening.positive)"),
     (r'\bss\.simple_vx\b', 'ss.Vaccine(efficacy=e)'),
@@ -135,6 +139,9 @@ flags = [
     (r'''\bmatch\s*=\s*r?['"][^'"]*\bE\d{3}\b''', 'error codes are gone: catch the error by its class, e.g. pytest.raises(ss.CapabilityError) for what a solver cannot run, or ss.errors.<Name>'),
     (r'\.cum_(?!infections\b)\w+', "if this is the running total of a declared disease's transition (a Starsim 4 prerelease), it is res.<transition>.cum, e.g. res.infection.cum"),
     (r'\b(results(\.\w+)*|res\w*)\.n_(?!agents\b|contacts\b|edges\b)\w+', "if this is the count of a state (a result made automatically, e.g. Starsim 3's n_infected), it is now named after the state: res.infected; a result the module defines itself keeps its name"),
+    (r'''\bf(['"])[^'"]*\bn_\{''', "if this makes the name of a state's count (e.g. f'n_{state}'), the count is now the result named after the state, e.g. f'{state}'"),
+    (r'''(['"])(\w+[._])?n_(?!agents\b|contacts\b|edges\b)\w+\1''', "if this names the count of a state (e.g. 'n_symptomatic'), it is now the result named after the state, e.g. 'symptomatic'"),
+    (r'\b(new|cum)_infections\b', "if this is a result of ss.SIR, ss.SIS, ss.SEIR, or another declared disease: new_infections is the flow of the transition that infects (res.infection), and cum_infections its running total (res.infection.cum; sir_infection in sim.summary); a disease written as code (ssl.AgentSIR, ss.Infection) keeps both"),
     (r'''\bmove\s*=\s*['"]''', 'move= takes the states, not a string: move=S >> V (or U + B >> B from either)'),
     (r'\bss\.transfer\(.*\bcoverage\s*=', 'ss.transfer() moves people between levels at a rate (rate=, dur=, or p=); a one-off move of a share of people is a delivery, e.g. ss.Delivery(move=dict(art=True), coverage=0.5, at=[2010], where=...)'),
     (r'\bss\.Treatment\(.*\befficacy\s*=\s*[\d.]', "ss.Treatment's efficacy= is its effects while it is held, as a dict (efficacy=dict(transmission=0.96)): the chance that it cures is cure=, and moving the treated along a transition that is not a recovery (e.g. starting treatment) is moves='diagnosis'"),
@@ -575,12 +582,56 @@ def migrate_text(text, analyzers=None):
     return text, sorted(changes), sorted(found)
 
 
+def code_blocks(path, text):
+    """
+    The Python code in a file, as a list of (where, code): the whole of a `.py` file, or each code cell of a notebook (`.ipynb`)
+    or fenced Python block of Quarto or Markdown (`.qmd`, `.md`), where `where` is the line the code starts on (0 for a `.py` file),
+    or for a notebook, the number of the cell
+    """
+    if path.suffix == '.ipynb':
+        cells = json.loads(text)['cells']
+        return [(f'cell {i+1}', ''.join(cell['source'])) for i,cell in enumerate(cells) if cell['cell_type'] == 'code']
+    elif path.suffix in ['.qmd', '.md']:
+        lines = text.splitlines(keepends=True)
+        return [(start, ''.join(lines[start:end])) for start,end in fenced(lines)]
+    return [(0, text)]
+
+
+def fenced(lines):
+    """ The fenced Python blocks of Quarto or Markdown (```{python} or ```python), as (first, end) indices of the lines of their code """
+    blocks, start, fence = [], None, None
+    for i, line in enumerate(lines):
+        match = re.match(r'\s*(`{3,}|~{3,})\s*\{?\s*(python|py)\b', line)
+        if start is None and match:
+            start, fence = i+1, match.group(1)
+        elif start is not None and line.strip() == fence:
+            blocks.append((start, i))
+            start = None
+    return blocks
+
+
+def replace_blocks(path, text, new):
+    """ The text of a file with its code (see `code_blocks()`) replaced by the new code, given in the same order """
+    if path.suffix == '.ipynb':
+        nb = json.loads(text)
+        cells = [cell for cell in nb['cells'] if cell['cell_type'] == 'code']
+        for cell, code in zip(cells, new):
+            cell['source'] = code.splitlines(keepends=True)
+        return json.dumps(nb, indent=1, ensure_ascii=False) + '\n'
+    elif path.suffix in ['.qmd', '.md']:
+        lines = text.splitlines(keepends=True)
+        for (start,end), code in reversed(list(zip(fenced(lines), new))): # From the end, so the earlier blocks keep their places
+            lines[start:end] = [code]
+        return ''.join(lines)
+    return new[0]
+
+
 def migrate(*paths, check=False, verbose=True):
     """
     Rewrite the Starsim 3 code in files or folders for Starsim 4, in place
 
     Args:
-        paths (str): files, or folders whose `.py` files are migrated
+        paths (str): files, or folders whose `.py`, `.ipynb`, `.qmd`, and `.md` files are migrated (the code cells only, in all but `.py`)
         check (bool): only report what would change, without writing
         verbose (bool): print each change and what needs a person
 
@@ -595,16 +646,23 @@ def migrate(*paths, check=False, verbose=True):
     files = []
     for path in paths:
         path = sc.path(path)
-        files += sorted(path.rglob('*.py')) if path.is_dir() else [path]
+        files += sorted(f for ext in ['py', 'ipynb', 'qmd', 'md'] for f in path.rglob(f'*.{ext}')) if path.is_dir() else [path]
     texts = {f:f.read_text() for f in files}
-    analyzers = find_analyzers(texts.values())
+    blocks = {f:code_blocks(f, text) for f,text in texts.items()}
+    analyzers = find_analyzers([code for b in blocks.values() for _,code in b])
     out = sc.objdict(changed=sc.objdict(), todo=sc.objdict())
     for f, text in texts.items():
-        new, changes, todo = migrate_text(text, analyzers=analyzers)
+        new, changes, todo = [], [], []
+        for where, code in blocks[f]:
+            code, c, t = migrate_text(code, analyzers=analyzers)
+            at = (lambda line: f'{where}, line {line}') if isinstance(where, str) else (lambda line: line + where) # The line in the file, or in a notebook's cell
+            new.append(code)
+            changes += [(at(line), note) for line,note in c]
+            todo += [(at(line), message) for line,message in t]
         if changes:
             out.changed[str(f)] = changes
             if not check:
-                f.write_text(new)
+                f.write_text(replace_blocks(f, text, new))
         if todo:
             out.todo[str(f)] = todo
     if verbose:

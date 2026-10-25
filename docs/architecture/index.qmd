@@ -2,20 +2,20 @@
 title: Architecture
 ---
 
-This section explains how Starsim 4 is put together and why. It is for two kinds of reader: a modeler who wants to know what happens when they call `sim.run()`, and a prospective contributor deciding whether this is a codebase they could work in. You don't need any of it to use Starsim; the [user guide](../user_guide/intro_starsim.qmd) is the place for that.
+This section explains how Starsim is put together and why. It is for two kinds of reader: a modeler who wants to know what happens when they call `sim.run()`, and a prospective contributor deciding whether this is a codebase they could work in. You don't need any of it to use Starsim; the [user guide](../user_guide/intro_starsim.qmd) is the place for that.
 
 ## The idea in one paragraph
 
-A model in Starsim 4 is written once, as data: states (`S, I, R = ss.states('S I R')`), transitions between them (`S >> I @ beta * I`), and parameters, with the mixing, demography and interventions around them. Each disease checks its own structure when it is made (unknown names, rates of the wrong shape). When the sim is initialized, Starsim reads those objects, fills in what was left out (and records each guess), checks them against each other, and chooses how to run them: as a deterministic ODE, as one of three stochastic compartmental solvers, or as agents. Because the model is data rather than code, everything else is derived from the same objects: the printed description, the equations, the diagram, the hash that identifies a run, the saved model spec, the code that rebuilds it, and the exports to other frameworks. One declared model, several ways to run it, and one source of truth for all of them.
+A model in Starsim is written once, as data: states (`S, I, R = ss.states('S I R')`), transitions between them (`S >> I @ beta * I`), and parameters, with the mixing, demography and interventions around them. Each disease checks its own structure when it is made (unknown names, rates of the wrong shape). When the sim is initialized, Starsim reads those objects, fills in what was left out (and records each guess), checks them against each other, and chooses how to run them: as a deterministic ODE, as one of three stochastic compartmental solvers, or as agents. Because the model is data rather than code, everything else is derived from the same objects: the printed description, the equations, the diagram, the hash that identifies a run, the saved model spec, the code that rebuilds it, and the exports to other frameworks. One declared model, several ways to run it, and one source of truth for all of them.
 
-Models written the Starsim 3 way, as classes with their own `step()` code, still work: they run as agents through the same loop, and can sit beside declared models in one sim.
+A model can also be written as code, as classes with their own `step()` methods: these run as agents through the same loop, and can sit beside declared models in one sim.
 
 ## The principles behind it
 
 Every design choice is checked against a short constitution. In order of weight:
 
 - **Simplicity.** Writing and changing a model should be easy for an epidemiologist, not just an engineer. A model ported to Starsim should get shorter.
-- **Performance.** As close to custom compiled code as is feasible. This is why compartmental runs go through compiled kernels and why agents use compiled passes over their arrays.
+- **Performance.** As close to custom compiled code as is feasible. This is why compartmental runs go through *kernels* (small functions, compiled with Numba, that step the compartments) and why agents use compiled passes over their arrays.
 - **Flexibility.** Every major modeling feature should be expressible, even if not every one is built in. When a declaration can't say something, a module's `step()` can.
 - **Correctness.** The machinery is validated by tests, but over-correctness should not cost simplicity or speed: Euler steps, Erlang stages and other standard approximations are fine, as long as they are announced.
 

@@ -3,9 +3,9 @@ title: The model spec, errors, and interop
 jupyter: python3
 ---
 
-Because a Starsim 4 model is made of objects (states, transitions, parameters) rather than a block of code, it can be written out as plain data. That data is the *model spec*, and it is what makes several other things cheap: hashing a model, comparing two models, writing a model as code, and moving models to and from other frameworks. This page covers the spec, the messages Starsim gives when something is wrong, the importers and exporters, and how the size of the language is kept in check.
+Because a Starsim model is made of objects (states, transitions, parameters) rather than a block of code, it can be written out as plain data. That data is the *model spec*, and it is what makes several other things cheap: hashing a model, comparing two models, writing a model as code, and moving models to and from other frameworks. This page covers the spec, the messages Starsim gives when something is wrong, the importers and exporters, and how the size of the language is kept in check.
 
-## Three forms, three jobs
+## Three ways to write a model out
 
 | What | Method | Holds | Read back? |
 |---|---|---|---|
@@ -22,6 +22,7 @@ The spec is the resolved model: every guessed default written out as a value, ev
 ```{python}
 import json
 import starsim as ss
+ss.options(jupyter=True)
 
 S, I, R = ss.states('S I R')
 sir = ss.Disease(infection=S >> I @ 0.05 * I, recovery=I >> R @ ss.days(7), init_prev=0.01, name='sir')
@@ -117,7 +118,7 @@ Each importer is tested against its framework's own examples (`tests/devtests/in
 
 ## The vocabulary
 
-A language nobody can hold in their head is one nobody uses correctly, so Starsim's is counted: the design record lists every public name (109 at `ss.`, plus 56 methods and attributes), marking those Starsim 4 adds. `tests/devtests/test_spec.py` checks that each exists, that everything exported at `ss.` is counted or in a named second tier (the classes for writing modules as code), and that the counts match.
+A language nobody can hold in their head is one nobody uses correctly, so Starsim's is counted: the design record lists every public name (109 at `ss.`, plus 56 methods and attributes). `tests/devtests/test_spec.py` checks that each exists, that everything exported at `ss.` is counted or in a named second tier (the classes for writing modules as code), and that the counts match.
 
 The capitalization rule is Starsim's existing one: modules, containers, and base classes are CamelCase (`ss.Sim`, `ss.Disease`, `ss.Vaccine`); the pieces you put inside them are lowercase (`ss.days`, `ss.normal`, `ss.modify`, `ss.vaccinate`). Before a name is added: does Starsim already have one; can it be written with what exists (a bednet is an `ss.modify`, a metapopulation a stratification by patch); would more than one kind of model use it; is a keyword enough?
 

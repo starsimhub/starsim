@@ -69,13 +69,17 @@ S, E, I, R = ss.states(4)
 infection = S >> E @ ss.seasonal(mean=ss.perday(0.012), amplitude=0.3, peak=0) * I
 seir = ss.Disease(infection, E >> I @ ss.perday(0.2), I >> R @ ss.perday(0.1), init_n=dict(I=ss.by(age=[10, 0, 0, 0])))
 seir.stratify(age=ages, split=pop/pop.sum())
-sim = ss.Sim(seir, networks=ss.contacts(m, bands=ages), total_pop=pop.sum(), unit='day', dt=0.25, stop=365,
+sim = ss.Sim(seir, networks=ss.contacts(ages=ages, matrix=m), total_pop=pop.sum(), unit='day', dt=0.25, stop=365,
              solver='binomial', use_aging=False, verbose=0)
 
 msim = sim.run(n_runs=20)
-final_R = np.asarray(msim.results.seir.R.values)[:, -1]
-print(f'Mean final R over 20 runs: {final_R.mean():,.0f} (odin, 1,000 runs: 532,176)')
 msim.plot()
+```
+
+The final number recovered, over the 20 runs (odin's mean over 1,000 runs is 532,176):
+
+```{python}
+msim.summarize().loc[['seir_R']]
 ```
 
 The same file can also be imported. `ss.interop.load()` reads odin's language directly, without R or odin, and turns the arrays coupled by the contact matrix into an age stratification with `ss.contacts()`:

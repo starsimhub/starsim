@@ -55,8 +55,7 @@ class Disease(ss.Module):
 
     The results are the number in each state (`I`), the flow along each transition by its
     name (`infection`, with its cumulative total as `res.infection.cum`), and the results and
-    outcomes declared. The library's `ss.SIR`, `ss.SIS`, and `ss.SEIR` also have Starsim's
-    standard `new_infections`, `cum_infections`, and `prevalence` (`standard_results = True`).
+    outcomes declared (e.g. `prevalence=I/(S + I + R)`, as `ss.SIR` declares).
 
     Examples:
         ```python
@@ -88,7 +87,6 @@ class Disease(ss.Module):
     graph = None # The declared states and transitions, built when the disease is made; None if it declares none
     engine = None # Runs the declared part (see ss.solvers.make_engine()); created when the sim is initialized
     infection_log = None # An InfectionLog, if the sim has an ss.infection_log analyzer
-    standard_results = False # Whether to add new_infections, cum_infections, and prevalence (for a disease with a transmission), as the library's diseases do
     code_pars = () # Parameters of a declared module that its own code reads rather than its graph (e.g. ss.Pregnancy's fertility rates)
 
     _infection_methods = ['set_prognoses', 'infect', 'set_outcomes', 'finalize_infections', 'compute_transmission', 'infect_route', 'set_congenital'] # Methods of ss.Infection's transmission, which a declared transition never calls
@@ -154,7 +152,7 @@ class Disease(ss.Module):
 
     @staticmethod
     def reuse(args, members, names=None):
-        """ States and transitions that already belong to another disease are copied (together, so they refer to each other), so one set can build several diseases; parameters stay shared """
+        """ States and transitions that already belong to another disease are copied (together, so they refer to each other, and with their parameters), so one set can build several independent diseases """
         owners = {}
         pars = {}
         endpoints = set() # States that the transitions given move people between, which this disease will own
@@ -202,7 +200,8 @@ class Disease(ss.Module):
             else:
                 members[name] = obj
         args = positional
-        memo = {key:None for key in owners} | {key:p for key,p in pars.items()} | others # The copies belong to no module yet, and parameters stay shared, e.g. one R0 for several models
+        memo = {key:None for key in owners} | {id(p.module):None for p in pars.values() if p.module is not None} # The copies belong to no module yet
+        memo |= {key:p for key,p in pars.items() if p.module is None} | others # Parameters that came with the copied transitions are copied too, so each disease has its own; one not yet registered stays shared, e.g. one R0 for several models
         return sc.dcp((args, members), memo=memo)
 
     def init_graph(self, args, members, pars, kwargs, names=None):
@@ -369,7 +368,7 @@ class Disease(ss.Module):
         The state-transition diagram, as the text of a Mermaid flowchart (https://mermaid.js.org)
 
         People states are rounded and counts slanted; transmissions are dashed; each
-        arrow is labelled with its transition's name and rate. `ss.save('sir.md', sim, format='mermaid')`
+        arrow is labelled with its transition's name and rate. `ss.interop.export(sim, 'mermaid', filename='sir.md')`
         writes the diagram of every disease in a sim.
 
         **Example**:
@@ -383,6 +382,11 @@ class Disease(ss.Module):
     def R0(self, matrix=False):
         """
         The basic reproduction number, from the next-generation matrix at the disease-free state
+
+        By definition it is in a population with no immunity: everyone is taken to be in the first
+        state (e.g. S), each group keeping its size, whoever starts immune (`init=dict(R=0.9)`).
+        The reproduction number at the start, with that immunity, is in the line a run prints
+        as it starts, when it differs (`R0 = 15.2 (R = 1.52 at the start, with 10% susceptible)`).
 
         The model is laid out as an ODE: if the disease is in a sim, a copy of that sim
         is made with `solver='ode'`, with its mixing and stratification; otherwise a sim with
@@ -1211,6 +1215,9 @@ class InfectionLog:
         if self.networks and 'network' in df.columns:
             names = dict(enumerate(self.networks))
             df['network'] = df['network'].map(lambda v: names.get(v, v))
+        if 'network' in df.columns and df['network'].isna().all(): # No route is known (e.g. homogeneous mixing, with no networks): no column of blanks
+            df = df.drop(columns='network')
+        df['t'] = [float(t.value) if isinstance(t, ss.dur) and not isinstance(t, ss.datedur) else t for t in df['t']] # Plain numbers (on the disease's own axis), or dates, rather than durations, so times can be subtracted
 
         df = df.sort_values(['t', 'source', 'target'], kind='stable')
         df = df.reset_index(drop=True)
@@ -1264,7 +1271,7 @@ class SIR(Disease):
     infection = ss.Transition(S, I, rate=beta * I)
     recovery  = ss.Transition(I, R, dur=dur_inf, p=1 - p_death)
     death     = ss.Transition(I, ss.null, dur=dur_inf, p=p_death)
-    standard_results = True
+    prevalence = I/(S + I + R)
 
     def __init__(self, pars=None, **kwargs):
         default_beta = 'beta' not in kwargs and 'beta' not in (pars or {})
@@ -1300,7 +1307,7 @@ class SEIR(Disease):
     latency   = ss.Transition(E, I, dur=dur_exp)
     recovery  = ss.Transition(I, R, dur=dur_inf, p=1 - p_death)
     death     = ss.Transition(I, ss.null, dur=dur_inf, p=p_death)
-    standard_results = True
+    prevalence = (E + I)/(S + E + I + R)
 
     def __init__(self, pars=None, **kwargs):
         default_beta = 'beta' not in kwargs and 'beta' not in (pars or {})
@@ -1331,7 +1338,7 @@ class SIS(Disease):
     S, I      = ss.states('S I')
     infection = ss.Transition(S, I, rate=beta * I)
     recovery  = ss.Transition(I, S, dur=dur_inf)
-    standard_results = True
+    prevalence = I/(S + I)
 
     def __init__(self, pars=None, **kwargs):
         default_beta = 'beta' not in kwargs and 'beta' not in (pars or {})

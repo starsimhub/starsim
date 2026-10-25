@@ -282,7 +282,7 @@ fit.to_df()      # every evaluation
 fit.project(dict(baseline=None, vaccine=ss.vaccinate(...)), n=100)   # scenarios run with the posterior's draws
 ```
 
-The original `sim` is not changed. `fit.sim` is an ordinary sim: plot it, add interventions to a copy, pass it to `ss.parallel`. For methods that give a posterior, `fit.plot()` shows a band over the posterior (the 2.5th and 97.5th percentiles of the model's value over draws), and `fit.project()` runs each scenario once per draw (or with the best fit, for a method that gives no posterior), returning a MultiSim whose results have a run dimension labeled by scenario. `ss.parallel(sim, priors=True)` draws the parameters from their priors instead, for forward runs before fitting.
+The original `sim` is not changed. `fit.sim` is an ordinary sim: plot it, add interventions to a copy, pass it to `ss.parallel`. For methods that give a posterior, `fit.plot()` shows a band over the posterior (the 2.5th and 97.5th percentiles of the model's value over draws), and `fit.project()` runs each scenario once per draw (or with the best fit, for a method that gives no posterior: 100 runs with their own seeds, or one for a deterministic sim, an ODE), returning a MultiSim whose results have a run dimension labeled by scenario. `ss.parallel(sim, priors=True)` draws the parameters from their priors instead, for forward runs before fitting.
 
 ### Convergence reporting
 

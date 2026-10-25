@@ -110,7 +110,7 @@ These are from Starsim's switching demo for camdl users (`tests/switching/test_c
 | Task | Today |
 |---|---|
 | The polio model with places as `patch=` and an explicit contact matrix between them | **Works**: agreement as above, below |
-| SIAs as one-off moves between states (camdl's `transfer(S -> V)`) | **Works**: `ss.vaccinate(move=S >> V, at=[...], coverage=...)`, below. A one-off move is run from Python each step, not in the compiled kernels |
+| SIAs as one-off moves between states (camdl's `transfer(S -> V)`) | **Works**: `ss.vaccinate(move=S >> V, at=[...], coverage=...)`, below. A one-off move is run from Python each step, so the run is taken a step at a time rather than in one call to compiled code |
 | Unit slips that camdl's checker catches | **Works** for two of three: a duration used as a rate, and a rate multiplied by a duration (a number with no unit), raise `ss.errors.WrongDimension` before the run. A count where a share was meant (`I.n` for `I`) is density-dependent transmission, a model of its own, so it is a note; if it makes the run blow up, the run stops with an error, not with NaN |
 | A posterior by particle MCMC with nothing written but `data=` and `sim.fit(method='pmcmc')` | **Works**: the same posterior as camdl's PMMH (above) |
 | The speed of the particle filter | **Works**: 12 ms per likelihood against camdl's 10.4 ms (above), with the particles shared between threads |
@@ -150,8 +150,9 @@ def make_polio(with_sia=False):
 
 base = make_polio().run().results.seir
 sia = make_polio(with_sia=True).run().results.seir
-print(f'Peak {base.I.values.max():,.0f} on day {base.I.values.argmax()} (camdl: 130,643 on day 145)')
-print(f'Infections: {base.infection.values.sum():,.0f} without SIAs, {sia.infection.values.sum():,.0f} with them (camdl: 950,610 and 863,920)')
+print('Peak:', round(base.I.max()), 'on day', base.I.values.argmax(), '(camdl: 130643 on day 145)')
+print('Infections without SIAs:', round(base.infection.sum()), '(camdl: 950610)')
+print('Infections with SIAs:', round(sia.infection.sum()), '(camdl: 863920)')
 ```
 
 ## Bringing your model in

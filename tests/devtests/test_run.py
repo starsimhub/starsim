@@ -86,12 +86,16 @@ def test_combine_merge():
     # Compare
     df = msim.compare(output=True)
     assert df.shape[1] == 3 and 'bysex_infected_male' in df.index # One column per sim, one row per result
-    assert msim.compare(t=-1, output=True).loc['sis_cum_infections'].tolist() == [s.results.sis.cum_infections[-1] for s in sims]
+    assert msim.compare(t=-1, output=True).loc['sis_I'].tolist() == [s.results.sis.I[-1] for s in sims]
     msim.compare(t='2005-01-01', do_plot=True)
 
     # Merge and split
     m1, m2 = msim.split(chunks=[1,2])
+    m1.label, m2.label = 'first', 'second'
     merged = ss.MultiSim.merge(m1, m2)
+    assert [m.label for m in merged.split()] == ['first', 'second'] # Each part keeps its own label (both were the first's)
+    with pytest.raises(ss.errors.ShapeError, match='different times'): # Sims with different steps (their results were silently left out)
+        ss.parallel(ss.Sim(diseases='sis', n_agents=200, dt=1, verbose=0), ss.Sim(diseases='sis', n_agents=200, dt=0.5, verbose=0), parallel=False)
     assert len(m1) == 1 and len(m2) == 2 and len(merged) == 3
     assert np.array_equal(merged.results.sis.I.values, msim.results.sis.I.values)
     assert [len(m) for m in merged.split()] == [1, 2] # Uses the chunks from the merge

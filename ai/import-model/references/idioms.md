@@ -79,7 +79,7 @@ A numeric variable that only gates transitions (age, a counter) is either a stra
 | A change of a parameter at given times | `ss.change(sir.pars.beta, at=['2020-03-15', '2020-06-01'], by=[0.5, 1.0])` |
 | A change for some people or under a condition | `ss.modify(sir.rel_sus, multiply=0.6, where=..., start=, stop=, when=)` |
 | Vaccination as a move between strata | `sir.stratify(vaccinated=[False, True], adjust={'infection': [1, 0.15]})` and `ss.Delivery(move=dict(vaccinated=True), coverage=, at=)` |
-| A product delivered to people | `ss.vaccinate(ss.Vaccine(efficacy=0.85), coverage=0.7, at=[...], where=...)`, `ss.screen(...)`, `ss.treat(...)` |
+| A product delivered to people | `ss.vaccinate(efficacy=0.85, coverage=0.7, at=[...], where=...)`, `ss.screen(...)`, `ss.treat(...)` |
 | A trigger (start when prevalence passes a threshold) | `when=lambda sim: ...` on a modifier or delivery (no memory); a rule with memory is a delivery's `deliver=` function |
 | Scenarios | One sim per scenario, run together with `ss.parallel(baseline=sim, vaccine=sim2)` |
 

@@ -1,97 +1,103 @@
 ---
-title: T1 - Getting started
+title: Getting started
 jupyter: python3
-authorship:
-  human: 90
-  ai: 10
-  note: Humans wrote the first draft, which AI updated with new examples
 ---
 
-Starsim is a flexible framework for modeling disease and health. Starsim was designed by a team with expertise in infectious diseases, so many of the examples that we'll cover throughout these tutorials are examples of infectious diseases. However, you can also use Starsim for modeling other things, like non-communicable diseases (NCDs) or family planning and maternal health.
+Starsim is a framework for modeling the spread of disease, and the health of populations more generally. A model in Starsim is written the way an epidemiologist would describe it: the states people can be in, the transitions between them, and the rates of those transitions. Starsim then runs it, either as a compartmental model (a set of equations for the number of people in each state) or as agents (one simulated person at a time).
 
-Installing and getting started with Starsim is quite simple.
+These tutorials follow one example throughout: a deliberately simplified outbreak of measles in a town of 100,000 people. This first tutorial writes the simplest version of it, runs it, and shows how to check what was built. Later tutorials add a latent period, age groups, vaccination, data, and several towns.
 
-To install, just type `pip install starsim`. If it worked, you should be able to import Starsim with `import starsim as ss`.
+By the end of this tutorial, you will be able to:
 
-The basic design philosophy of Starsim is: **common tasks should be simple**. Since Starsim is most commonly used for modeling infectious diseases, everything related to that should be straightforward. The most common tasks that you are likely to do are:
+- write an SIR model and run it;
+- plot its results and read what the run prints;
+- check the model as Starsim has built it, with `describe()`;
+- run the same model as agents.
 
--   Defining a model
--   Running a simulation
--   Plotting results
+## Installing Starsim
 
-This tutorial walks you through the simplest possible version of how to do these things.
-
-```{python}
-#| tags: [hide-cell]
-%pip install -q starsim # Install Starsim if required
-import starsim as ss
-ss.options(jupyter=True) # This makes the plotting nicer in notebooks
-```
-
-## Hello world
-
-Let's start with the simplest version of a Starsim model. We'll make a version of a [classic SIR model](https://en.wikipedia.org/wiki/Compartmental_models_in_epidemiology): people are infected at a rate `beta` times the share of people who are infectious, and recover after 10 steps on average. Here's how our code would look using Starsim's equation-based shorthand:
+Starsim is a Python package. To install it, type `pip install starsim` in a terminal (or `%pip install starsim` in a notebook). Then, in Python:
 
 ```{python}
 import starsim as ss
-
-S, I, R = ss.states(3)      # Create the states
-infection = S >> I @ 0.3*I  # Define infection
-recovery  = I >> R @ 0.1    # Define recovery
-sim = ss.Sim(infection, recovery) # Create the simulation
-sim.run().plot() # Run and plot the simulation
+ss.options(jupyter=True) # Plots and tables suited to a notebook
 ```
 
-This is (almost) equivalent to the more explicit, "Pythonic" way of writing it:
+## An SIR model of measles
+
+In an SIR model, each person is in one of three compartments: susceptible (S), infectious (I), or recovered and immune (R). People move between them along two transitions:
+
+- **Infection**, from S to I. Each susceptible person is infected at a rate of β times the share of people who are infectious. So the number of new infections per day is β S I / N, where N is the size of the population: the more infectious people there are, the faster the infection spreads.
+- **Recovery**, from I to R. People with measles are infectious for about 8 days, so here they recover after 8 days on average.
+
+For measles, β is about 1.9 per day: someone who is infectious, in a population where everyone is susceptible, infects about 1.9 people a day. Over the 8 days they are infectious, they infect 1.9 × 8 ≈ 15 people. This is the basic reproduction number, R0, and 15 is a typical value for measles, one of the most contagious diseases known.
+
+In Starsim, the compartments are states, and each transition says where people move from, where they move to, and at what rate (after `@`):
 
 ```{python}
-S = ss.State('Susceptible')
-I = ss.State('Infectious', init=0.01)
-R = ss.State('Recovered')
-N = S + I + R
-sir = ss.Disease(
-    infection = ss.Transition(S, I, rate=0.3*S*I/N), # Susceptible people are infected...
-    recovery  = ss.Transition(I, R, dur=10),           # ...and infectious people recover
-)
-sim = ss.Sim(sir, stop=100) # Make the sim
-sim.run()                   # Run it
-sim.plot()                  # Plot all results
-sim.sir.plot()              # Plot the SIR results
+S, I, R = ss.states('S I R')
+infection = S >> I @ 1.9*I        # From S to I, at a rate of β = 1.9 per day times the share infectious
+recovery  = I >> R @ ss.days(8)   # From I to R, after 8 days on average
+measles = ss.Disease(infection, recovery, init_prev=0.001)
 ```
 
-A model in Starsim is a set of states (here `S`, `I`, and `R`, declared first) and the transitions between them. Nothing here has a unit, so time is counted in steps: the sim runs for 100 steps, and the rates and durations are per step. When the sim runs, it prints the solver it chose: since nothing in this model needs individual people, it is run as an ODE by default.
+A state in a rate, like `I` in `1.9*I`, is the share of people in that state. A duration, like `ss.days(8)`, is the average time spent in a state before leaving it. The rate 1.9 has no unit of its own, so it takes the unit of the duration: 1.9 per day. `init_prev=0.001` starts the outbreak with 0.1% of people infectious (100 people in a town of 100,000), and everyone else susceptible.
 
-## The same model with agents
-
-Starsim was originally developed as a purely agent-based framework: people are simulated individually and interact via contact networks. Here, we use agents with random mixing, which is comparable to the compartmental model above. Starsim comes with several built-in disease models, including SIR of course, so we can refer to it by name:
+The disease is named `measles`, after its variable. These are the standard equations of an SIR model, which `equations()` prints:
 
 ```{python}
-pars = dict(
-    n_agents = 10_000,    # Number of agents to simulate
-    networks = dict(      # Networks add detail on how the agents interact with each other
-        type = 'random',  # Here, we use a 'random' network
-        n_contacts = 10   # Each person has an average of 10 contacts with other people
-    ),
-    diseases = dict(      # Diseases add detail on what diseases to model
-        type = 'sir',     # Here, we're creating an SIR disease
-        init_prev = 0.01, # Proportion of the population initially infected
-        beta = 0.05,      # Probability of transmission between contacts
-    )
-)
+measles.equations()
+```
 
-# Make the sim, run and plot
-sim = ss.Sim(pars)
+Here `dur` is the infectious period (8 days), so `I / dur` is the rate of recovery.
+
+## Running the model
+
+To run the model, give it to a sim (`ss.Sim`), with the size of the population and how long to run for, here 50 days:
+
+```{python}
+sim = ss.Sim(measles, total_pop=100_000, stop=ss.days(50))
 sim.run()
 sim.plot()
-sim.diseases.sir.plot()
 ```
 
-Because the model now has a network of individual contacts, it runs as agents, and the sim says so. `beta` now means the probability of transmission per contact (per year: since no times were given, the sim runs for 50 years with a step of one year).
+The run prints three lines: what it ran (the disease, 100,000 people, as an ODE, from day 0 to day 50), R0 (15.2, as worked out above), and what happened: how many people were infected, and the size and day of the peak.
 
-As the tutorials progress we'll show how to build up models with different diseases and transmission pathways, and how to customize them in lots of different ways.
+Starsim chose to run this model as an ODE (a deterministic compartmental model, solved as a set of differential equations), since nothing in it needs individual people. The plot shows each state (`S`, `I`, and `R`), and each transition as the number of people who made it each day (`infection` and `recovery`).
+
+With an R0 of 15 and nobody immune, almost everyone in the town is infected, and the outbreak peaks within a week. This is far faster than real measles outbreaks, because the model has no latent period: people are infectious from the moment they are infected, whereas with measles they are infected for about 10 days before they can infect anyone else. [Tutorial 3](t3_structure.qmd) adds this.
+
+## Checking the model
+
+To build a model that runs, Starsim fills in whatever it is not given: here, for example, how people mix (everyone with everyone else equally, since no contacts were given), and how the time spent infectious varies between people (exponentially, as in the standard ODE). `describe()` shows the whole model as Starsim has built it: every state, transition, and setting, with each value that Starsim chose itself marked as guessed, so that nothing about the model is hidden:
+
+```{python}
+sim.describe()
+```
+
+It is worth reading `describe()` for every new model, to check that it is the model you meant.
+
+::: {.callout-warning}
+## [PROPOSAL]
+Some lines of `describe()` are about how the model is run rather than what it is, or in words a modeler won't know: "plan: as compiled code, the whole run in one call", "contact-mediated", "dwell". These should be in plain terms, or left out unless asked for (e.g. `describe(verbose=True)`), so that the description reads as the model (P14).
+:::
+
+## The same model as agents
+
+Starsim can also run the same model as agents: one simulated person at a time, each with their own state, who are infected and recover by chance. Giving `n_agents=` says how many agents to simulate. Here, 10,000 agents stand for the 100,000 people of the town, so each agent stands for 10 people:
+
+```{python}
+sim = ss.Sim(measles, total_pop=100_000, n_agents=10_000, stop=ss.days(50))
+sim.run()
+sim.plot()
+```
+
+The epidemic is much the same: almost everyone is infected, and the peak is about as high. It comes a few days later than in the ODE, though, and the run prints a note saying why. Agents move one step of time at a time (by default, a day), and this outbreak is so fast that a day is a long step: the number of infectious people grows several times over in a day. With a shorter step, such as `dt=ss.days(0.25)`, agents follow the ODE closely; [Tutorial 2](t2_model.qmd) shows how.
+
+Agents are what a model needs when people differ in ways that compartments can't hold, such as each person's own contacts in a network. For a model like this one, where everyone mixes with everyone else, both give the same answer when the step is short enough. The model is written the same way either way; the [tutorials](../tutorials.qmd) that follow mostly use the ODE, since it is fast and gives the expected epidemic, and say where agents would give something different.
 
 ## Exercises
 
-1.  To simulate a susceptible-infectious-susceptible (SIS) model instead of SIR, what would we change in the examples above?
-2.  How do the results change if we increase/decrease `beta`?
-3.  How do the results change if we reduce the number of agents to 200?
+1. Suppose people with measles were infectious for only 5 days, with the same β. What would R0 be? Change the model, run it, and check the R0 the run prints. How does the epidemic change?
+2. Run the agent version of the model with 1,000 agents instead of 10,000 (each standing for 100 people). What changes in the plot, and why?
+3. Using the output of `describe()`, find out how Starsim assumes that people mix, and how long people stay infectious (the distribution as well as the average).

@@ -44,6 +44,8 @@ def test_mermaid(tmp_path):
     assert 'I -->|"recovery: dur = dur"| R' in text
     ss.interop.export(sim, 'mermaid', filename=tmp_path/'sir.md', verbose=False)
     assert sc.loadtext(tmp_path/'sir.md').startswith('```mermaid\nflowchart LR') # A Markdown file has the diagram in a fenced block
+    with pytest.raises(ValueError, match='ss.interop.export'): # ss.save() writes Starsim's own formats, and says which call writes this one (it was a TypeError from pickling)
+        ss.save(tmp_path/'sir.xml', sim, format='sbml')
 
     # Two diseases are a subgraph each; a stratification is in the title
     sim = ss.Sim([sir('a'), sir('b')], stratify=dict(age=[0, 18]), unit='day', **kw)
@@ -122,6 +124,8 @@ def test_hub():
     assert peak.horizon.isna().all() and np.allclose(peak.value.values, inc.groupby(['scenario_id', 'output_type_id']).value.max().values)
     med = hub[(hub.target == 'inc inf') & (hub.output_type_id == 0.5)].groupby('scenario_id').value.sum()
     assert med['lockdown'] < med['base'], 'The scenarios should not be pooled'
+    undated = ss.parallel(make(1.0, 'base').new(start=None, stop=60), n_runs=2, parallel=False) # Without dates, the origin is a time (it was an AttributeError on strftime)
+    assert set(ss.interop.to_hub(undated, targets=dict(infection=['inc inf'])).origin_date) == {0.0}
     return hub
 
 

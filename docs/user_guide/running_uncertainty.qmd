@@ -1,0 +1,162 @@
+---
+title: Uncertainty, seeds, and many runs
+jupyter: python3
+---
+
+A single run of a model answers "what happens on average?" (an ODE) or "what happened this once?" (one stochastic run). Many questions need more: how large could the outbreak be? How likely is it to die out? Is the difference between two scenarios real, or chance? This page covers running a model many times, reading the spread of the runs, carrying uncertainty in parameter values into the results, and the random seeds that make runs reproducible.
+
+## Many runs of one model
+
+Here is measles introduced into a town of 20,000 people, of whom 90% are immune, by five infectious people. Each case infects about 1.5 others at the start (R0 of 15 times the 10% who are susceptible). As an ODE, the sim gives one epidemic:
+
+```{python}
+import starsim as ss
+ss.options(jupyter=True)
+
+S, I, R = ss.states('S I R')
+infection = S >> I @ 1.9*I        # β = 1.9 per day
+recovery  = I >> R @ ss.days(8)   # Infectious for 8 days on average
+measles = ss.Disease(infection, recovery, init=dict(R=0.9), init_n=dict(I=5)) # 90% immune, 5 infectious
+
+sim = ss.Sim(measles, total_pop=20_000, stop=ss.days(180))
+sim.run();
+```
+
+To see the outbreaks that could happen, run the model as a stochastic model, in which people move between states at random, and run it many times. `sim.run(n_runs=50)` runs it 50 times, each with its own random seed, and `solver='gillespie'` runs it as an exact stochastic compartmental model (a model that runs as agents is stochastic already; see [Solvers](running_solvers.qmd) for the choices):
+
+```{python}
+msim = sim.run(solver='gillespie', n_runs=50)
+msim.plot('measles')
+```
+
+The plot shows the median of the runs at each time point, and the range that holds 95% of them. `lines=True` shows each run instead, which shows what the median hides:
+
+```{python}
+msim.plot('measles', lines=True)
+```
+
+Some runs die out at once, and the others take off at different times. With five cases at the start and R = 1.5, branching-process theory gives a chance of (1/1.5)⁵ ≈ 13% that all five chains of transmission end by chance.
+
+## Totals and time points
+
+`msim.summarize()` gives each result over the whole of each run (the total of a flow, such as infections; the final value of a state), and then the median, a 95% interval (`low` to `high`), the mean, and the standard deviation over the runs:
+
+```{python}
+msim.summarize()
+```
+
+The median outbreak has about 1,150 infections, while the interval runs from almost none (the runs that died out) to about 1,330. A summary of a total is a summary over whole epidemics: each run gives one number.
+
+The band in the plot is different: it is the spread of the runs at each time point, taken separately. The median curve is not a typical epidemic, since the runs peak at different times, and at each time point the median mixes runs that are rising, peaking, and over. Its peak is lower than the peak of most runs:
+
+```{python}
+peaks = msim.summarize(how={'measles_I': max}).loc['measles_I'] # The peak of each run, summarized
+print('Median of the peaks:', peaks['median'])
+print('Peak of the median curve:', msim.results.measles.I.median().max())
+```
+
+So for a question about the size or timing of the peak, summarize the peak of each run (as above), not the median curve; for a question about how many people are infected on a given date, the band at each time point is the answer. The usual summaries of a result over the runs are built in:
+
+```python
+res = msim.results.measles.I
+res.median()                     # The median at each time point
+low, mid, high = res.quantiles() # The 2.5%, 50%, and 97.5% quantiles at each time point
+res.quantiles([0.25, 0.5, 0.75]) # Other quantiles
+res.mean()                       # The mean at each time point
+res.select(run=3)                # One run
+```
+
+## How many runs
+
+The interval is estimated from the runs, so with few runs its ends are uncertain themselves. The ends of a 95% interval rest on the most extreme 2.5% of runs at each end: one run in 40. With 500 runs:
+
+```{python}
+many = sim.run(solver='gillespie', n_runs=500)
+many.summarize().loc['measles_infection']
+```
+
+Here the summary of 50 runs was already close to this. In general, the median settles with a few tens of runs, while the ends of the interval rest on few runs each, and move most from one set of runs to the next. As a rough guide, 20 to 50 runs are enough for a median and the shape of the spread, and a few hundred for the ends of a 95% interval. Stochastic compartmental runs are fast, so many runs are cheap; for agents, it may be worth starting with fewer.
+
+## Uncertainty in parameter values
+
+Chance is one source of uncertainty; not knowing the parameters is another. A parameter declared with `ss.par()` and bounds (or a prior) can be drawn afresh for each run with `priors=True`: each run takes a value drawn uniformly between the bounds (or from the prior), so the spread of the runs includes both. Here β is between 1.5 and 2.3 per day (R0 between 12 and 18):
+
+```{python}
+S, I, R = ss.states('S I R')
+beta = ss.par(1.9, bounds=[1.5, 2.3]) # β, known to lie between these values
+infection = S >> I @ beta*I
+recovery  = I >> R @ ss.days(8)
+measles = ss.Disease(infection, recovery, init=dict(R=0.9), init_n=dict(I=5))
+
+sim = ss.Sim(measles, total_pop=20_000, stop=ss.days(180), solver='gillespie', verbose=0)
+msim = ss.parallel(sim, priors=True, n_runs=50)
+msim.runs.head() # The value of beta in each run
+```
+
+```{python}
+msim.plot('measles')
+```
+
+After a model is fitted to data, the values found by the fit can be carried into a projection the same way (`fit.project()`; see [Calibration](calibration_fitting.qmd)). To see how the results depend on each value in turn, rather than all at once, sweep the parameter instead (see [Scenarios and sweeps](running_scenarios.qmd)).
+
+## Is a difference real?
+
+Comparing two scenarios run many times, the question is whether the difference between them is larger than the difference chance alone would make. Starsim helps in two ways.
+
+First, the runs of each scenario use the same seeds in the same order (the first run of each with seed 1, the second with seed 2, and so on), so the first run of the baseline and the first run of the intervention scenario share their random numbers: the same people are infected by the same chains of transmission, until the intervention changes them. Starsim makes sure that a random number goes to the same use in both runs, even when the intervention changes how many draws are made (this is called using common random numbers). The difference between paired runs is then mostly the effect of the intervention, not noise.
+
+Second, `msim.diff()` gives the difference of each scenario from a baseline, run by run. Here, a vaccination campaign reaches half the town on day 30, with a vaccine that protects 95% of those who receive it, in a town where 50 people are infectious at the start:
+
+```{python}
+measles = ss.Disease(infection, recovery, init=dict(R=0.9), init_n=dict(I=50))
+sim = ss.Sim(measles, total_pop=20_000, stop=ss.days(180), solver='binomial', verbose=0)
+campaign = ss.vaccinate(efficacy=0.95, coverage=0.5, at=ss.days(30))
+
+paired = ss.parallel({'No campaign': sim, 'Campaign': sim.new(interventions=campaign)}, n_runs=30)
+averted = -paired.diff('No campaign').Campaign.measles.infection.cum # Infections averted so far, run by run
+low, mid, high = averted.quantiles()
+print('Infections averted:', round(mid[-1]), 'with 95% of runs between', round(low[-1]), 'and', round(high[-1]))
+```
+
+For comparison, here are the same scenarios with different seeds for the campaign (`rand_seed=1000`), so that the runs are not paired:
+
+```{python}
+unpaired = ss.parallel({'No campaign': sim, 'Campaign': sim.new(interventions=campaign, rand_seed=1000)}, n_runs=30)
+averted = -unpaired.diff('No campaign').Campaign.measles.infection.cum
+low, mid, high = averted.quantiles()
+print('Infections averted:', round(mid[-1]), 'with 95% of runs between', round(low[-1]), 'and', round(high[-1]))
+```
+
+The estimate of the effect is about the same, but its interval is wider when the runs are not paired, since the difference then includes the chance differences between two unrelated outbreaks. Pairing is what makes a small effect visible in few runs. Paired runs need the same model apart from the intervention: a change to anything else (the population size, the time step) breaks the pairing.
+
+## Seeds
+
+Every stochastic run starts from a random seed (`rand_seed`, 1 by default), and the same seed gives the same run, on any computer:
+
+```{python}
+a = ss.Sim(measles, total_pop=20_000, stop=ss.days(180), solver='binomial', rand_seed=1, verbose=0).run()
+b = ss.Sim(measles, total_pop=20_000, stop=ss.days(180), solver='binomial', rand_seed=1, verbose=0).run()
+c = ss.Sim(measles, total_pop=20_000, stop=ss.days(180), solver='binomial', rand_seed=2, verbose=0).run()
+print('Infections with seeds 1, 1, and 2:', a.results.measles.infection.sum(), b.results.measles.infection.sum(), c.results.measles.infection.sum())
+```
+
+`n_runs=k` uses the seeds `rand_seed`, `rand_seed + 1`, ..., `rand_seed + k − 1`, so the first of many runs is the same as a single run, and any run can be made again on its own: run *i* (counting from 0) of a sim with seed 1 is the sim with `rand_seed=1 + i`. To run particular seeds, give them as a sweep: `ss.parallel(sim, pars=dict(rand_seed=[1, 5, 9]))`. An ODE has no random numbers, so its seed changes nothing.
+
+::: {.callout-warning}
+## [PROPOSAL]
+`msim.runs`, the table of runs, should include the seed of each run, so that a run that stands out can be made again without working out its seed by hand (P11). Today it lists each run's scenario and any parameters swept, but not its seed.
+:::
+
+## Pitfalls
+
+- **The median curve is not a typical epidemic.** For the size or timing of the peak, summarize each run's peak.
+- **Runs that die out pull the summary down.** If the question is about outbreaks that take off, look at those runs (e.g. `lines=True`), and report the chance of dying out separately.
+- **Too few runs for the ends of an interval.** Use a few hundred for a 95% interval that you will report.
+- **Unpaired scenarios.** Give scenarios the same seed (the default), and change only the intervention.
+
+## See also
+
+- [Repeated runs and uncertainty](../tutorials/t6_uncertainty.qmd), the tutorial that runs the measles model many times
+- [Solvers and when they disagree](running_solvers.qmd), for which stochastic solver to use
+- [Scenarios and sweeps](running_scenarios.qmd), for comparing scenarios and sweeping parameters
+- [Random numbers](models_random.qmd), for how common random numbers work, and how to keep them in modules written as code

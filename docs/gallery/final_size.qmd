@@ -1,0 +1,70 @@
+---
+title: Final size
+jupyter: python3
+---
+
+In a closed SIR epidemic that starts with almost everyone susceptible, the share of people who are ever infected, *z*, depends only on R0. Kermack and McKendrick (1927) showed that it solves the final-size equation
+
+$$z = 1 - e^{-R_0 z},$$
+
+whatever the infectious period or how fast the epidemic runs. This page checks Starsim's ODE against the equation for R0 from just above 1 to 4.
+
+## The model
+
+An SIR with an infectious period of 10 days, and β = R0 / 10 per day for each value of R0. A population of a million starts with one person in a million infectious, so that almost everyone starts susceptible, as the equation assumes, and each run lasts long enough (2,000 days) for even the slowest epidemic, with R0 just above 1, to end.
+
+```{python}
+import numpy as np
+import matplotlib.pyplot as plt
+import starsim as ss
+ss.options(jupyter=True)
+
+def make_sir(R0):
+    S, I, R = ss.states('S I R')
+    infection = S >> I @ (R0/10)*I
+    recovery  = I >> R @ ss.days(10)
+    return ss.Disease(infection, recovery, init=dict(I=1e-6), name='sir')
+```
+
+```{python}
+#| echo: false
+#| output: asis
+fence = '`' * 3
+print(fence + '{mermaid}\n' + make_sir(2).diagram() + '\n' + fence)
+```
+
+## Result
+
+For each R0, the final size from the model is the share of people recovered at the end:
+
+```{python}
+R0s = np.arange(1.1, 4.01, 0.3)
+model = []
+for R0 in R0s:
+    sim = ss.Sim(make_sir(R0), total_pop=1e6, stop=ss.days(2000), verbose=0)
+    sim.run()
+    model.append(sim.results.sir.R[-1] / 1e6)
+```
+
+The equation has no closed-form solution, but it can be solved by iteration: start from any *z* between 0 and 1 and apply the right-hand side repeatedly, which converges to the solution when R0 > 1.
+
+```{python}
+R0_curve = np.linspace(1.01, 4, 200)
+z = np.ones_like(R0_curve)
+for i in range(500):
+    z = 1 - np.exp(-R0_curve*z)
+
+plt.plot(R0_curve, z, label='Final-size equation')
+plt.plot(R0s, model, 'o', label='Starsim (ODE)')
+plt.xlabel('R0')
+plt.ylabel('Share of people ever infected')
+plt.legend()
+plt.show()
+```
+
+The model agrees with the equation to within a few parts in a million, for every R0: about the share of people infectious at the start, which the equation leaves out. Run as agents or stochastically in a large population, the model gives close to the same final size in the runs in which a major outbreak occurs (see [The chance of a major outbreak](major_outbreak.qmd)).
+
+## Going further
+
+- [SIR, four ways](sir.qmd) writes and runs the SIR model this check uses.
+- Kermack WO, McKendrick AG (1927). A contribution to the mathematical theory of epidemics. *Proceedings of the Royal Society A* 115:700–721.

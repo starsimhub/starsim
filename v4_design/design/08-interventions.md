@@ -264,7 +264,7 @@ ss.change(sir.pars.beta, at=[ss.days(30), ss.days(60)], to=[0.02, 0.05])
 ```
 
 - `target` is any quantity `ss.modify` accepts.
-- `at=` takes dates, durations since the start of the sim (`ss.days(30)`), or numbers, which are times in the sim's unit: in a sim with dates, that long after the start (so a calendar year is written as a date, `'2030'`); in a sim whose `start` and `stop` are years (`start=2020`), the year. A time outside the sim raises `TimeOutsideSim`; so does a `start=` or a round of a delivery, while a `stop=` after the end means it never stops. `start=` is not accepted: the change starts at its first time.
+- `at=` takes dates, durations since the start of the sim (`ss.days(30)`), or numbers, which are times in the sim's unit: in a sim with dates, that long after the start, unless that falls outside the sim and the number is a whole year within it, which is then the start of that year (`at=2005` in a sim from 1975 to 2030), since that is the only reading in the sim; in a sim whose `start` and `stop` are years (`start=2020`), the year. A time outside the sim raises `TimeOutsideSim`; so does a `start=` or a round of a delivery, while a `stop=` after the end means it never stops. `start=` is not accepted: the change starts at its first time.
 - `by=` gives multipliers relative to the baseline value (not to the previous entry); `to=` gives absolute values. Exactly one is given, with one entry per time.
 - Each value holds from its time until the next; before the first time the baseline applies.
 

@@ -32,7 +32,7 @@ sis = ss.Disease(
 )
 sim = ss.Sim(sis, networks=ss.RandomNet(n_contacts=4), n_agents=5000, start=2000, stop=2010, dt=ss.years(1/12), verbose=0)
 sim.run()
-print(f'Infections: {sim.results.sis.infection.sum():,.0f}')
+print('Infections:', round(sim.results.sis.infection.sum()))
 sim.plot()
 ```
 
@@ -62,4 +62,5 @@ These are from Starsim's switching demo for Starsim 3 users (`tests/switching/te
 ## Next steps
 
 - The [migration guide](../migration/v3_v4.md): what changes the numbers, and a table of jobs and their Starsim 4 spellings.
-- [Starsim 4 in ten minutes](../ten_minutes.qmd): the declared language, solvers, calibration, and scenarios.
+- [Starsim in ten minutes](../ten_minutes.qmd): a declared model built step by step, with age groups, interventions, calibration, and uncertainty.
+- [Getting started](../tutorials/t1_intro.qmd): the tutorials, which build up one model a step at a time.

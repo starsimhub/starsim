@@ -223,7 +223,7 @@ Requirement 2 rules out one random number stream shared across workers, and is o
 6. Choose the solver if `solver='auto'`, and work out any approximations the solver needs ([12-backends.md](12-backends.md)).
 7. Collect the loop's functions (the plan itself is made when the loop first runs).
 8. Allocate state, set initial conditions, and initialize the random number streams.
-9. Print the solver with its reason, any approximations, where the sim's unit came from if it was not given as `unit=`, and, for each disease with a transmission, R0 and the number infectious at the start, one line each (`verbose=0` hides them; `approx=True` hides the approximation notes only). The notes are kept in `sim.notes` whatever is printed. `sim.describe()` prints the full resolved model, including the schedule, at any time.
+9. Print the solver with its reason, any approximations, where the sim's unit came from if it was not given as `unit=`, and, for each disease with a transmission, R0 (in a population with no immunity; with the reproduction number at the start too, if immunity at the start changes it by more than 1%) and the number infectious at the start, one line each (`verbose=0` hides them; `approx=True` hides the approximation notes only). The notes are kept in `sim.notes` whatever is printed. `sim.describe()` prints the full resolved model, including the schedule, at any time.
 
 The model spec ([14-model-spec.md](14-model-spec.md)) and `sim.hash()` ([11-random.md](11-random.md#run-identity)) are worked out when asked for, not at `init()`, since a run does not need them.
 

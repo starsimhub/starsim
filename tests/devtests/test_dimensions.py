@@ -1043,7 +1043,7 @@ def test_clocks():
     assert born and np.isnan(since).any() and np.allclose(since[~np.isnan(since)] % 1, 0) # Whole months, and none for those with no birth
     assert np.isclose(shares(sim)[-1], np.isnan(since).mean()) # none holds those with no birth
     code = check_code(sim)
-    assert "since_birth=ss.months([0.0, 1.0, 2.0, 3.0, 6.0, 12.0, 24.0])" in code and "kind='clock'" in code and 'move=dict(since_birth=0.0)' in code
+    assert "since_birth=ss.months([0.0, 1.0, 2.0, 3.0, 6.0, 12.0, 24.0])" in code and "kind='clock'" in code and 'move=dict(since_birth=0)' in code
     with pytest.raises(ss.errors.BadSplit, match='none'):
         I, R = ss.states('I R')
         bad = ss.Sim(ss.Disease(ss.Transition(I, R, dur=10), init=dict(I=0.1), first='I', name='d'), n_agents=100, verbose=0)
@@ -1112,6 +1112,33 @@ def test_contacts_dims():
     assert np.isclose(abm[-1], ode[-1], rtol=0.1), (abm[-1], ode[-1]) # As with any contact matrix (about 7% apart for the product form here too)
     with pytest.raises(ss.errors.ShapeError, match='risk'):
         run(ss.contacts(np.ones((6, 6)), dims=['sex', 'risk']))
+    return
+
+
+def test_contacts_ages():
+    sc.heading('Testing a contact matrix with its own age groups: beside another dimension, its notes, and its results by group')
+    C, area = [[10, 4, 1], [4, 8, 2], [1, 2, 3]], [[0.9, 0.1], [0.2, 0.8]]
+    def make(stratify=True):
+        S, E, I, R = ss.states('S E I R')
+        m = ss.Disease(S >> E @ 0.14*I, E >> I @ ss.days(10), I >> R @ ss.days(8), init_n=dict(I=10), name='measles')
+        if stratify:
+            m.stratify(age={0: 0.3, 15: 0.6, 65: 0.1})
+            m.stratify(area={'urban': 0.7, 'rural': 0.3})
+        return m
+    pars = dict(total_pop=100_000, n_agents=10_000, stop=ss.days(30), rand_seed=1, **kw)
+    for solver in ['abm', 'ode']: # ages= combines with another dimension's matrix as age= does (it was "unrecognized argument area")
+        sims = [ss.Sim(make(), networks=net, solver=solver, **pars).run() for net in [ss.contacts(age=C, area=area), ss.contacts(ages=[0, 15, 65], matrix=C, area=area)]]
+        assert np.allclose(*[sim.results.measles.S_to_E.values for sim in sims])
+    res = sims[0].results.measles.S_to_E
+    assert np.allclose(res.by('age').select(area='rural').values, res.select(area='rural').by('age').values) # In either order (it was "is not stratified")
+    assert 'contact matrix by age and area' in sims[0].describe(output=True) # It was "by age"
+    assert sum('not reciprocal' in note and '"age"' in note for note in sims[1].notes) == 1 # Checked over its own groups, once (it was never checked for ages=)
+
+    # Over other age groups than the model's: one note for all the layers, saying "split" when the model has more groups
+    sim = ss.Sim(make(False), networks=ss.contacts(ages=[0, 15, 65], matrix=C), stratify=dict(age=[0, 5, 18, 65]), solver='ode', **pars).init()
+    assert any('split from 3 age groups into' in note for note in sim.notes)
+    assert 'sim.diseases.measles.equations()' in make().equations(output=True) # The disease as written knows nothing of the sim's contacts, and says where they are (it was silent)
+    assert 'C[i, j]' in ss.Sim(make(), networks=ss.contacts(ages=[0, 15, 65], matrix=C), solver='ode', **pars).init().diseases.measles.equations(output=True)
     return
 
 

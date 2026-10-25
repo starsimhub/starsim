@@ -662,6 +662,11 @@ def test_hold_by_place():
     local = run('ode')
     assert not np.allclose(run('ode', by=None), local) # Unlike one rule for the whole population
     assert np.all(run('ode', hold=None) > local) # And the hold keeps it down longer
+    for solver in ['ode', 'abm']: # On a model without groups (it was an AttributeError on the results' strata)
+        flu = ss.SIR(beta=0.3, name='flu')
+        rule = ss.modify(flu.pars.beta, multiply=0.3, where=flu.infection.incidence(over=ss.days(7)) > 0.01)
+        peak = lambda rule: ss.Sim(flu, interventions=rule, unit='day', stop=100, solver=solver, n_agents=5000, verbose=0).run().results.flu.I.max()
+        assert peak(rule) < peak(None)
 
     # In a rate, the incidence is not supported yet, and the error says what to write instead
     S, I, R = ss.states('S I R')

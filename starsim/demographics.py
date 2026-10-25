@@ -59,6 +59,25 @@ def rate_rows(data):
     return dict(zip(data.index, data.to_numpy(dtype=float))), years, ages
 
 
+def yearly_rows(found):
+    """ Rates from `rate_rows()` that are estimates for single years some years apart (a named place's UN rates, every ten years), as a row for each year between, linearly interpolated, so none is held for a decade """
+    if found is None:
+        return None
+    rows, years, ages = found
+    labels = np.unique(years)
+    keys = {key[1:] if isinstance(key, tuple) else () for key in rows} # e.g. ('f',) and ('m',) by sex, or () with none
+    out = {}
+    for rest in keys:
+        get = lambda y: rows[(y, *rest) if rest else y]
+        for a,b in zip(labels[:-1], labels[1:]):
+            for y in range(int(a), int(b)):
+                w = (y - a)/(b - a)
+                out[(y, *rest) if rest else y] = (1 - w)*np.asarray(get(a)) + w*np.asarray(get(b))
+        out[(labels[-1], *rest) if rest else labels[-1]] = np.asarray(get(labels[-1]))
+    new_years = np.unique([key[0] if isinstance(key, tuple) else key for key in out])
+    return out, new_years, ages
+
+
 def period_year(years, year):
     """
     The year of the data that applies at `year`: the latest at or before it, as `ss.timeseries` holds each value until the next
@@ -118,6 +137,7 @@ class Flows(Demographics):
         transitions (list): births (`ss.birth()`), deaths of everyone (`ss.death()` with no state), and migration (`ss.immigration()`, `ss.emigration()` with no state)
     """
     compartmental = True
+    tabulated = True # Its step does nothing, so a compartmental run need not be taken a step at a time for it (see ss.Sim.kernel_reason())
 
     def __init__(self, transitions, **kwargs):
         super().__init__(**kwargs)
@@ -136,8 +156,13 @@ class Flows(Demographics):
         out = []
         for tr in self.transitions:
             rate = getattr(tr.rate, 'raw', None)
-            if not (tr.per_capita or (tr.every_state and not tr.migration)) or getattr(tr, 'lifetable', None) is not None or not isinstance(rate, ss.TimePar):
-                errormsg = f'"{tr.name or tr.arrow}" in demographics= needs a declared disease (e.g. ss.SIR()) to run; with none, give births and deaths as ss.birth(rate=ss.peryear(...)) and ss.death(rate=ss.peryear(...)), or use ss.Births() and ss.Deaths()'
+            table = getattr(tr, 'lifetable', None)
+            if table is not None and tr.every_state: # Deaths by a life table, at the death rate of each age band
+                out.append(ss.Deaths(lifetable=table, name=tr.name or 'deaths'))
+                continue
+            if not (tr.per_capita or (tr.every_state and not tr.migration)) or not isinstance(rate, ss.TimePar):
+                kind = 'births' if tr.inflow else 'migration' if tr.migration else 'deaths'
+                errormsg = f'the {kind} "{tr.name or tr.arrow}" in demographics= need a declared disease (e.g. ss.SIR()) to run; with none, give births and deaths as ss.birth(rate=ss.peryear(...)) and ss.death(rate=ss.peryear(...)), or use ss.Births() and ss.Deaths()'
                 raise ValueError(errormsg)
             if tr.per_capita:
                 out.append(ss.Births(birth_rate=rate, rate_units=1, name=tr.name or 'births'))
@@ -196,6 +221,8 @@ class Births(Demographics):
         # If it's a number it's left as-is; otherwise it's converted to a dataframe
         self.pars.birth_rate = self.standardize_birth_data()
         self.birth_rows = rate_rows(self.pars.birth_rate)
+        if self.named_data: # Estimates for single years, every ten years: interpolated between them
+            self.birth_rows = yearly_rows(self.birth_rows)
         self.pars.rate_units = infer_rate_units(self.pars.rate_units, self.pars.birth_rate, 'birth_rate')
         self.n_births_this_step = 0 # For results tracking
         self.dist = ss.bernoulli(p=0) # Per-agent birth draw (CRN path); set to the birth rate each step
@@ -407,6 +434,8 @@ class Deaths(Demographics):
         # If it's a number it's left as-is; otherwise it's converted to a dataframe
         self.death_rate_data = self.standardize_death_data() # TODO: refactor
         self.death_rows = rate_rows(self.death_rate_data)
+        if self.named_data: # Estimates for single years, every ten years: interpolated between them
+            self.death_rows = yearly_rows(self.death_rows)
         self.pars.rate_units = infer_rate_units(self.pars.rate_units, self.death_rate_data, 'death_rate')
         self._p_death = ss.bernoulli(p=0)  # Placeholder, populated by make_p_death
         self.n_deaths = 0 # For results tracking

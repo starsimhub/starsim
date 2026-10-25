@@ -1,0 +1,150 @@
+---
+title: Age groups and contacts
+jupyter: python3
+---
+
+So far, everyone in the model town mixes with everyone else equally. In reality, children have many more contacts than adults, mostly with other children, at school and at home, which is one reason measles is mostly a disease of children. This tutorial splits the model into age groups, gives the number of contacts between them from a contact matrix, and reads the results by age. It then adds births and deaths, and uses the population and contacts of a real country.
+
+By the end of this tutorial, you will be able to:
+
+- split a model into age groups, with the share of people in each;
+- give the contacts between groups as a contact matrix, and say what β means then;
+- plot and read results for each age group;
+- add births and deaths, and see why they make measles come back;
+- use the age structure and contact matrix of a country.
+
+## The model so far
+
+This is the SEIR model from [Tutorial 3](t3_structure.qmd) (without deaths from measles, which are few and change little here), run for 150 days:
+
+```{python}
+import starsim as ss
+ss.options(jupyter=True) # Plots and tables suited to a notebook
+
+S, E, I, R = ss.states('S E I R')
+infection   = S >> E @ 1.9*I        # β = 1.9 per day
+progression = E >> I @ ss.days(10)  # Latent for 10 days on average
+recovery    = I >> R @ ss.days(8)   # Infectious for 8 days on average
+measles = ss.Disease(infection, progression, recovery, init=dict(I=0.001))
+
+sim = ss.Sim(measles, total_pop=100_000, stop=ss.days(150))
+sim.run()
+sim.plot()
+```
+
+## Age groups
+
+`stratify()` splits each state of a disease into groups: here, by age, into three groups, 0–14, 15–64, and 65 and over. Each is given by its lower edge, with the share of the population in it, here 30%, 60%, and 10%:
+
+```python
+measles.stratify(age={0: 0.3, 15: 0.6, 65: 0.1}) # Ages 0-14, 15-64, and 65+, with the share of people in each
+```
+
+The model now has a compartment for each state in each age group: `S` for children, `S` for adults, and so on. On its own, this changes nothing about the epidemic, since everyone still mixes with everyone else equally: each group is infected at the same rate, in proportion to its size. What makes age groups matter is how much each group mixes with each other one.
+
+## Contacts between age groups
+
+A contact matrix gives the number of contacts a day that a person in each age group has with people in each age group: row *i*, column *j* is the number of contacts that one person in group *i* has with people in group *j*. Contact surveys, such as POLYMOD in Europe, measure these. Here, children have 10 contacts a day with other children, 6 with adults, and 1 with people 65 and over, 17 in all; adults have 12; and people 65 and over have 12:
+
+| Contacts a day, of a person aged... | ...with people 0–14 | ...with people 15–64 | ...with people 65+ |
+|---|---|---|---|
+| 0–14 | 10 | 6 | 1 |
+| 15–64 | 3 | 8 | 1 |
+| 65+ | 3 | 6 | 3 |
+
+A contact between a child and an adult is a contact for both of them, so the matrix is reciprocal: the children, 30% of the town, have 6 contacts each with adults, and the adults, twice as many, have 3 each with children, the same number of contacts in all. (Starsim notes a matrix that isn't.)
+
+`ss.contacts()` takes the matrix, with the lower edge of each of its age groups (`ages=`), and is given to the sim as how people mix (`networks=`). With contacts, β means something different: it is the rate of infection per contact with an infectious person, per day. With about 13 contacts a day on average, a β of 1.9 a day is about 0.14 per contact:
+
+```{python}
+S, E, I, R = ss.states('S E I R')
+beta = ss.par(0.14, bounds=[0.05, 0.5]) # The rate of infection per contact with an infectious person, per day
+
+infection   = S >> E @ beta*I       # Infection, at a rate of β times the contacts with infectious people
+progression = E >> I @ ss.days(10)
+recovery    = I >> R @ ss.days(8)
+measles = ss.Disease(infection, progression, recovery, init=dict(I=0.001))
+measles.stratify(age={0: 0.3, 15: 0.6, 65: 0.1})
+
+contacts = ss.contacts(ages=[0, 15, 65], matrix=[[10, 6, 1], [3, 8, 1], [3, 6, 3]]) # Contacts a day, between age groups
+sim = ss.Sim(measles, networks=contacts, total_pop=100_000, stop=ss.days(150))
+sim.run()
+sim.results.measles.I.by('age').plot()
+```
+
+R0 is now about 16, as the run prints. With contacts, Starsim works it out from the matrix (as the largest eigenvalue of the next-generation matrix), so it depends on who meets whom, not only on the average number of contacts. The plot shows the number of people infectious in each age group. Children are infected first, and people 65 and over last: by day 18, 68% of children have been infected, but only 51% of people 65 and over. Since R0 is so high, almost everyone in every group is infected in the end.
+
+## Results by age group
+
+Every result of a stratified model is kept for each group, and the totals over all groups are as before (`res.I` is the number infectious of all ages). `by('age')` splits a result into one series for each age group, as in the plot above, and `select()` picks one group:
+
+```{python}
+res = sim.results.measles
+children = res.I.select(age='0-14')
+print('Peak number of children infectious:', round(children.max()))
+print('Infections in people 65 and over:', round(res.infection.select(age='65+').sum()))
+```
+
+Each group is named by its ages (`'0-14'`, `'15-64'`, `'65+'`). For the total over the whole run in each group at once, `summarize()` gives a value for each:
+
+```{python}
+res.infection.by('age').summarize()
+```
+
+## Births and deaths
+
+Over a few months, a town's population hardly changes. Over years, though, children are born susceptible, and this is what makes measles come back: an epidemic leaves too few susceptible people for the next one, until enough children have been born since. Births and deaths are given to the sim as `demographics`. `ss.birth()` is a crude birth rate, here 30 births a year per 1,000 people, and `ss.death()` a death rate, here 20 deaths a year per 1,000 people at every age (a simplification; [Demographics](g2_demographics.qmd) shows how to use death rates by age, from data):
+
+```{python}
+S, E, I, R = ss.states('S E I R')
+infection   = S >> E @ beta*I
+progression = E >> I @ ss.days(10)
+recovery    = I >> R @ ss.days(8)
+measles = ss.Disease(infection, progression, recovery, init=dict(I=0.0001, R=0.9)) # 90% immune at the start
+measles.stratify(age={0: 0.3, 15: 0.6, 65: 0.1})
+demographics = [
+    ss.birth(rate=ss.peryear(0.03)), # 30 births a year per 1,000 people
+    ss.death(rate=ss.peryear(0.02)), # 20 deaths a year per 1,000 people
+]
+
+sim = ss.Sim(measles, networks=contacts, demographics=demographics, total_pop=100_000,
+             unit='day', dt=ss.weeks(1), start='2025-01-01', stop='2045-01-01')
+sim.run()
+sim.results.measles.I.plot()
+```
+
+This run is for 20 years, from 2025, so a few things are new:
+
+- The birth and death rates are per year, and the other rates in the model per day, so `unit='day'` says which unit the bare numbers of the model (β) are in ([Tutorial 2](t2_model.qmd)).
+- `dt=ss.weeks(1)` records the results once a week, since daily results over 20 years are more than needed. As an ODE, the model is still solved finely in between.
+- The town starts with 90% of people immune, as after an earlier epidemic. (So the run prints R = 1.58 at the start, as well as R0, as in [Tutorial 2](t2_model.qmd).)
+- People now age: children born into `S` move from the youngest age group to the next as they grow up.
+
+The result is a series of epidemics, each smaller than the last, about a year and a half apart, settling down to a steady level of infection. This is the classic pattern of measles before vaccination, in which epidemics recur every year or two. In the troughs between epidemics, there are only a handful of infectious people in the whole town, and in reality measles would often die out there, until it was brought in again from elsewhere. An ODE can't show this, since it follows the expected numbers, which never reach zero; [Tutorial 6](t6_uncertainty.qmd) runs the model by chance instead.
+
+## A real population
+
+For a model of a real place, the share of people in each age group, and the contacts between them, can come from data. `ss.people('Kenya')` is the population of Kenya, by age and sex (from the UN World Population Prospects), and `ss.contacts('Kenya')` is a contact matrix for Kenya, by 5-year age group (from Prem et al., 2021). Given these, `stratify()` needs only the age groups, and takes the share of people in each from the population; Starsim adds up the contact matrix into the model's age groups. `total_pop` keeps the model to a town of 100,000 people, rather than the whole country:
+
+```{python}
+S, E, I, R = ss.states('S E I R')
+infection   = S >> E @ beta*I
+progression = E >> I @ ss.days(10)
+recovery    = I >> R @ ss.days(8)
+measles = ss.Disease(infection, progression, recovery, init=dict(I=0.001))
+measles.stratify(age=[0, 15, 65]) # The share in each group comes from the population
+
+sim = ss.Sim(measles, people=ss.people('Kenya'), networks=ss.contacts('Kenya'), total_pop=100_000, stop=ss.days(150))
+sim.run()
+sim.results.measles.I.by('age').plot()
+```
+
+Kenya has a young population: about 37% of people are under 15, and 3% are 65 or over. The run notes that the contact matrix was added up into the model's three age groups. With the same β, R0 is a little higher, 17, since people in Kenya have more contacts a day than in the made-up matrix above, and the outbreak peaks a little sooner.
+
+Everything in this tutorial works the same way when the model is run as agents (with `n_agents=`, as in [Tutorial 1](t1_intro.qmd)): each agent has an age, and so belongs to an age group, and agents age, are born, and die. For more on contact matrices and data by place, see [Contact matrices and data by place](../user_guide/populations_contacts.qmd), and for more on stratification, such as several dimensions at once, see [Stratification in depth](g3_strata.qmd).
+
+## Exercises
+
+1. Closing schools halves the contacts between children. Change the matrix so that children have 5 contacts a day with other children instead of 10. How do R0 and the peak number of children infectious change?
+2. In the model of Kenya, how many of the infections in the first 50 days are in children under 15, and what share is this of all infections in that time?
+3. In the model with births and deaths, raise the birth rate to 45 a year per 1,000 people, as in some countries with young populations. How does the time between epidemics change, and why?

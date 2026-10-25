@@ -22,8 +22,7 @@ EpiModel, epydemix, MEmilio                                                     
 
 <!-- fragment -->
 ```python
-import starsim.interop # Not imported by import starsim
-sim = ss.interop.load('model.xml',  format='sbml')
+sim = ss.interop.load('model.xml',  format='sbml') # ss.interop is imported when first used, as ss.fit is
 sim = ss.interop.load('model.yaml', format='emulsion')
 sim = ss.interop.load('config.yml', format='flepimop')
 sim = ss.interop.load('framework.xlsx', format='atomica', databook='databook.xlsx')
@@ -80,7 +79,6 @@ Writing the importers found gaps in the language. Each import lists the part it 
 ## Export
 
 ```python
-import starsim.interop
 S, I, R = ss.states('S I R')
 sir = ss.Disease(infection=ss.Transition(S, I, rate=0.3 * I), recovery=ss.Transition(I, R, dur=10), init_prev=0.01, name='sir')
 sim = ss.Sim(sir, unit='day')

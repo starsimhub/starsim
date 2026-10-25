@@ -4,21 +4,33 @@
 
 ::: {.grid}
 ::: {.g-col-4}
-[**Starsim 4 in ten minutes**](ten_minutes.qmd)
+[**Starsim in ten minutes**](ten_minutes.qmd)
 
-A model, its solvers, interventions, and calibration, on one page.
+An epidemic model built step by step: age groups, interventions, calibration, and uncertainty.
 :::
 
 ::: {.g-col-4}
 [**Tutorials**](tutorials.qmd)
 
-An interactive tour of Starsim's key features.
+Step-by-step lessons that build up one model, a simplified measles outbreak, and then go further.
 :::
 
 ::: {.g-col-4}
 [**User guide**](user_guide.qmd)
 
 Each topic in more depth than the tutorials.
+:::
+
+::: {.g-col-4}
+[**Gallery**](gallery.qmd)
+
+Models built with Starsim, each with its diagram, parameters, code, and a result.
+:::
+
+::: {.g-col-4}
+[**Coming from another framework**](coming_from/index.qmd)
+
+Models from other frameworks written in Starsim, and how to import them.
 :::
 
 ::: {.g-col-4}

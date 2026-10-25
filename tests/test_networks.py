@@ -302,7 +302,7 @@ def test_disk():
     nw2 = ssl.networks.DiskNet(r=0.15, v=ss.time.freq(0.05, unit=ss.years(1)))
     s2 = ss.Sim(n_agents=small, networks=nw2, diseases='sir').init() # This initializes the network
     s2.run()
-    assert len(s2.networks[0]) > 0 and s2.results.sir.cum_infections[-1] > 0, 'Expected edges, and infections through them'
+    assert len(s2.networks[0]) > 0 and s2.results.sir.infection.cum[-1] > 0, 'Expected edges, and infections through them'
 
     if sc.options.interactive:
         s2.plot()
@@ -573,7 +573,7 @@ def test_beta_readings():
     with pytest.raises(ss.errors.WrongDimension, match=r'ss.peract\(0.01\)'): # A rate per unit time times acts per unit time is not a hazard
         ss.Sim(sis(ss.permonth(0.01)), networks=ss.SexualNet(), **kw).init()
     sim = ss.Sim(diseases='sis', networks=['sexual', 'random'], n_agents=500, verbose=0).init() # But the default of ss.SIS is a probability per act there, as in Starsim 3
-    assert sim.diseases.sis.pars.beta.raw['sexualnet'] == ss.peract(0.05) and any('as in Starsim 3' in note for note in sim.notes)
+    assert sim.diseases.sis.pars.beta.raw['sexualnet'] == ss.peract(0.05) and any('which has acts' in note for note in sim.notes)
     with pytest.raises(ss.errors.RouteMismatch, match=r'ss.peract\(m2f=0.3, f2m=0.15\)'): # A pair has no direction names
         ss.Sim(sis(dict(sexualnet=[0.3, 0.15])), networks=ss.SexualNet(), **kw).init()
     with pytest.raises(ss.errors.RouteMismatch, match='no acts'): # No act to be per
@@ -666,7 +666,7 @@ def test_beta_default():
     beta = next(p['value'] for p in sim.to_spec()['modules'][0]['pars'] if p['name'] == 'beta')
     assert beta['default'] == 0 and 'msm' in beta # Bare, since it is per act on a route with acts
     with pytest.warns(ss.errors.LossyExport):
-        assert "'default': 0.0" in sim.to_code()
+        assert "'default': 0" in sim.to_code() # Whole numbers as integers
 
     # A disease written as code reads the default too
     sim = ss.Sim(diseases=ssl.AgentSIS(beta=dict(random=0.05, msm=0.1, default=0)), networks=['random', ss.SexualNet()], **kw).run()

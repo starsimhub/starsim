@@ -13,10 +13,10 @@ Creating a sim only stores what it was given (as copies, so one `sir` can go int
 2. **Groups.** The stratifications of the sim and its modules are collected into `sim.groups`.
 3. **Unit.** The unit of bare numbers is chosen ([below](#units-and-time)).
 4. **Solver.** Under `solver='auto'`, Starsim tries to lay the model out as compartments (which runs none of its code) and chooses an ODE if every part has a compartmental form, agents otherwise. For a compartmental run, networks become contact rates between groups, and the population becomes one row per group. See [Solvers](solvers.qmd).
-5. **Objects.** The timeline, the people, and for each declared disease an engine for the chosen solver. This is the one place where the solver changes which objects exist.
+5. **Objects.** The timeline, the people, and for each declared disease an *engine*, the object that runs its transitions under the chosen solver. This is the one place where the solver changes which objects exist.
 6. **Starting values.** Random number streams ([Randomness and fitting](randomness_and_fitting.qmd)), people's attributes, then each state's initial conditions.
 7. **Results and the loop.** Results are allocated, data is attached to them by name, and the loop's functions are collected. Parameters are locked, so setting one that doesn't exist raises an error.
-8. **Report.** The solver and its reason, a note for each inference or approximation (kept in `sim.notes`), and for a compartmental model with transmission, R0 and the number infectious at the start, as a check that the model and its seed are what you meant.
+8. **Report.** One line saying what will run and how (the modules, the population, the solver, and the span of time), a note for each inference or approximation (kept in `sim.notes`), and for a compartmental model with transmission, R0 and the number infectious at the start, as a check that the model and its seed are what you meant. The reason for the solver is in `sim.solver_reason`, and in `describe()`.
 
 ```{python}
 import starsim as ss
@@ -48,7 +48,7 @@ Starsim has four time types: durations (`ss.days(10)`), hazard rates (`ss.perday
 | `ss.Sim(sir, start=2020, stop=2030)` | year | `unit='year' (from start and stop years)` |
 | `ss.Sim(sir, stop=100, dt=ss.weeks(1))` | week | `unit='week' (from dt)` |
 
-**One time index per step.** Step `k` goes from time point `k − 1` to `k`. Throughout it, in every module, `sim.ti` is `k`, where its results go, and `sim.now` is its start, when values that vary in time are read. At `ti == 0` the loop only records the start. See [Time](../user_guide/advanced_time.qmd).
+**One time index per step.** Step `k` goes from time point `k − 1` to `k`. Throughout it, in every module, `sim.ti` is `k`, where its results go, and `sim.now` is its start, when values that vary in time are read. At `ti == 0` the loop only records the start. See [Time](../user_guide/running_time.qmd).
 
 ## The loop
 
@@ -74,7 +74,7 @@ New agents exist before diseases see them, networks update before interventions 
 
 **The loop is data.** After `sim.init()`, `sim.loop.to_df()` lists every call at every time, and `sim.loop.insert(fn, label='sir.step')` adds a function at any point, or moves a module there. The order can always be printed, and it is the only thing that decides what runs when.
 
-In a compartmental run, a disease's own flows have no order: the ODE evaluates them together. If nothing needs a step of its own, the whole run is one call to the compiled kernels, with no Python loop; `sim.kernel_reason()` says why a run is stepped instead ("it runs as agents", or a function inserted into the loop).
+In a compartmental run, a disease's own flows have no order: the ODE evaluates them together. If nothing needs a step of its own, the whole run is one call to the *kernels* (small functions, compiled with Numba, that step the compartments; see [Solvers](solvers.qmd#the-engines)), with no Python loop; `sim.kernel_reason()` says why a run is stepped instead ("it runs as agents", or a function inserted into the loop).
 
 ## Per-module timesteps
 
@@ -87,12 +87,12 @@ schedule     every day: randomnet, sir
 
 ## The runtime objects
 
-These are Starsim's, so a Starsim 3 module finds them where it expects.
+These are the objects that hold a run's state, and that a module written as code reads and writes.
 
 - **Modules.** Diseases, networks, demographics, interventions, connectors, and analyzers are all `ss.Module` (`starsim/modules.py`), with one lifecycle: `init_pre()` and `init_post()`, then the step functions above, then `finalize()`. They differ in what they contain, not in how they are scheduled.
 - **Engines.** A declared disease's `step()` hands its transitions to its engine (`ss.solvers.make_engine()`): `Agents` or `Compartmental`, or one that runs nothing for a disease written as code. This is the seam between model and solver: no method of `ss.Disease` asks which solver it has. A subclass that overrides `step()` calls `super().step()`, then does anything else.
 - **People.** As agents, `sim.people` (`starsim/people.py`) has one entry per agent: age, sex, whether alive, and every module's states. In a compartmental run it has one row per group, so `people.age` in a model not stratified by age raises an error saying to stratify or run as agents.
-- **Arrays.** As agents, a declared state is an `ss.BoolState` over agents (`starsim/arrays.py`), beside the `ss.FloatArr` and others that code adds. `arr[uids]` reads and writes some agents (`ss.uids`), and `arr.values` those alive. Arrays grow as agents are born; the dead leave at the end of the step. Writes by code to a declared state (`sir.I[uids] = True`) are tracked, so counts see them; writes through `.raw`, the NumPy array underneath, are not. See [Array indexing](../user_guide/advanced_indexing.qmd).
+- **Arrays.** As agents, a declared state is an `ss.BoolState` over agents (`starsim/arrays.py`), beside the `ss.FloatArr` and others that code adds. `arr[uids]` reads and writes some agents (`ss.uids`), and `arr.values` those alive. Arrays grow as agents are born; the dead leave at the end of the step. Writes by code to a declared state (`sir.I[uids] = True`) are tracked, so counts see them; writes through `.raw`, the NumPy array underneath, are not. See [Array indexing](../user_guide/models_indexing.qmd).
 
 ## Limits
 

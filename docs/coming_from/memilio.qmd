@@ -134,7 +134,7 @@ These are from Starsim's switching demo for MEmilio users (`tests/switching/test
 |---|---|
 | Counties by age with commuting (`ss.geo.Mobility(matrix=..., kind='commute')`) | **Works**: national peak within 0.2% of MEmilio's at 50 counties |
 | Speed at 400 counties × 6 ages | **Works**: 0.7 s against MEmilio's 1.54 s, with the time growing about in proportion to the number of counties |
-| Dynamic NPIs by county: a county whose 7-day incidence passes 200 per 100,000 gets its own damping for at least 14 days | **Works**: `incidence = secir.symptoms.incidence(over=ss.days(7), by='patch')` and `ss.modify(beta, multiply=0.6, where=incidence > 200e-5, hold=ss.days(14))`; the peak falls to 20% of the peak without NPIs, as with a rule written by hand. This is run from Python each step, not in the compiled kernels |
+| Dynamic NPIs by county: a county whose 7-day incidence passes 200 per 100,000 gets its own damping for at least 14 days | **Works**: `incidence = secir.symptoms.incidence(over=ss.days(7), by='patch')` and `ss.modify(beta, multiply=0.6, where=incidence > 200e-5, hold=ss.days(14))`; the peak falls to 20% of the peak without NPIs, as with a rule written by hand. This is run from Python each step, so the run is taken a step at a time rather than in one call to compiled code |
 | A parameter study: each run draws its parameters from their distributions, with percentiles by county | **Works**: `ss.par(1.0, prior=ss.uniform(0.75, 1.25))`, `ss.parallel(sim, n_runs=10, priors=True)`, and `msim.results.secir.ISy.select(patch='c005').quantiles([0.05, 0.25, 0.5, 0.75, 0.95])` |
 | Import a graph (`MobilityGraph`) or a `GraphParameterStudy` | **Works** (see below) |
 | Import an `osecirvvs` model | **Not yet** |

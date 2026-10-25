@@ -55,6 +55,15 @@ def num_str(x):
     return f'{x:n}' if sc.isnumber(x) else str(x)
 
 
+def time_str(x, unit_name, plural=False):
+    """ A time point as text, for what a run prints: a date as a date (without a time of day, e.g. 2020.01.08), a duration with its own unit (e.g. year 2000.02, as on a timeline in calendar years), or a number in the sim's unit (e.g. day 27) """
+    if isinstance(x, (ss.date, pd.Timestamp)):
+        return str(ss.date(x)).partition(' ')[0]
+    if isinstance(x, ss.dur) and not isinstance(x, ss.datedur):
+        unit_name = type(x).base.removesuffix('s')
+    return f'{unit_name}{"s"*plural} {num_str(x)}'
+
+
 class Sim(ss.Base):
     """
     The Sim object
@@ -124,6 +133,10 @@ class Sim(ss.Base):
             elif not all(isinstance(obj, ss.Module) or declared(obj) for obj in (arg if isinstance(arg, (list, tuple)) else [arg])):
                 errormsg = f'ss.Sim() takes the model (modules or transitions, or lists of them) or a dict of parameters as positional arguments, not {type(arg).__name__}; give everything else by keyword, e.g. label="..."'
                 raise TypeError(errormsg)
+        mods = dict(demographics=demographics, connectors=connectors, networks=networks, diseases=diseases, interventions=interventions, analyzers=analyzers, custom=custom, modules=modules)
+        if any(val is None and key in kwargs for key,val in mods.items()): # Modules given in a dict of parameters (as sim.new() does) are named and ordered as if given by keyword
+            mods = {key:(kwargs.pop(key) if val is None and key in kwargs else val) for key,val in mods.items()}
+            demographics, connectors, networks, diseases, interventions, analyzers, custom, modules = mods.values()
         names = ss.utils.caller_names(1)
         models = make_disease(models, names)
         diseases = make_disease(diseases, names)
@@ -151,6 +164,9 @@ class Sim(ss.Base):
         input_pars = sc.mergedicts(pars, args, kwargs, _copy=True) # Copied together, so the modules given are never run themselves and can be given to other sims, and refer to each other as given
         for mod in given_modules(input_pars): # The sim's own copies are its to change
             mod.setattribute('_given', False)
+        for mod in given_modules(pars, args, kwargs): # The modules given hold no results (the sim runs its copies), so reading one says where they are
+            if isinstance(getattr(mod, 'results', None), ss.Results) and not len(mod.results):
+                mod.results.setattribute('_given_to', mod.name)
         self.pars.update(input_pars)  # Update the parameters
         self.inputs = sc.dcp(input_pars) # Kept so the sim can be rebuilt (see sim.new()), e.g. with other parameter values for calibration
         self.given = [key for key,val in input_pars.items() if val is not None] # Which parameters were supplied, as opposed to defaults
@@ -190,7 +206,9 @@ class Sim(ss.Base):
         made = self.__dict__.get('_made')
         if made is not None:
             for key,val in self._settings().items():
-                if val is not made.get(key):
+                before = made.get(key)
+                plain = isinstance(val, (int, float, str, bool)) and type(val) is type(before) # Compared by value, since a sim run in another process comes back with copies of them
+                if val is not before and not (plain and val == before):
                     self._set_after[key] = sc.dcp(val)
         return self.__dict__.get('_set_after', {})
 
@@ -216,14 +234,17 @@ class Sim(ss.Base):
     @staticmethod
     def _name_modules(names, *args):
         """ A module built with the plain ss.Disease() constructor takes its name from the variable it is assigned to """
+        taken = set(ss.SimPars()) | set(dir(ss.Sim)) # Names the sim already uses, e.g. interventions in def run(interventions): ss.Sim(interventions=interventions)
         for arg in args:
             mods = list(sc.tolist(arg))
             for mod in mods:
                 named = [mod] if type(mod) is ss.Disease or isinstance(mod, (ss.modify, ss.Delivery)) else []
                 named += [getattr(mod, 'product', None)]*isinstance(mod, ss.Delivery)
                 for obj in named:
-                    if obj is not None and obj._default_name:
-                        name = names.get(id(obj))
+                    if obj is not None and obj._default_name and not getattr(obj, '_from_keywords', False): # A product its delivery made is named for the delivery: see ss.SimPars.validate_name()
+                        name = getattr(obj, '_assigned', None) or names.get(id(obj)) # The variable it was first assigned to, else the one that holds it here
+                        if name in taken:
+                            name = None
                         if name is None and getattr(obj, 'graph', None) is not None: # Not bound to one variable, e.g. built in a helper: named from its states instead, e.g. 'sir'
                             name = ''.join(s.name[0].lower() for s in obj.graph.people_states) or None
                             obj._implicit = name is not None
@@ -353,6 +374,9 @@ class Sim(ss.Base):
             timer (bool): if True, count the time required for initialization (otherwise just count run time)
             kwargs (dict): passed to ss.People()
         """
+        if self.initialized and not force: # E.g. after sim.describe(), which initializes it
+            return self
+
         # Handle the timer
         self.timer = sc.timer() # Store a timer for keeping track of how long the run takes
         if timer:
@@ -480,9 +504,14 @@ class Sim(ss.Base):
         """ What a run says as it starts: what is run and how, R0 (as a check that the model and its seed are what was meant), and the notes """
         t = self.t
         mods = list(self.diseases.keys()) or [mod.name for mod in self.modules]
-        when = f'{t.start} to {t.stop}' if t.is_absolute else f'{self.unit_name}s {num_str(t.start)} to {num_str(t.stop)}'
+        when = f'{time_str(t.tvec[0], None)} to {time_str(t.tvec[-1], None)}' if t.is_absolute else f'{time_str(t.tvec[0], self.unit_name, plural=True)} to {num_str(t.tvec[-1])}' # On the timeline's own axis, though stop may be given in another unit (e.g. ss.weeks(8))
+        stop = t.stop.to_year() if isinstance(t.stop, ss.date) else t.stop.years if isinstance(t.stop, ss.dur) else None
+        if stop is not None and stop - t.yearvec[-1] > 1e-6: # The stop is not a whole number of steps from the start, so the run ends at the last step before it
+            given = time_str(t.stop, None) if t.is_absolute else num_str(type(t.tvec[-1])(t.stop) if isinstance(t.tvec[-1], ss.dur) else t.stop)
+            when += f' (the last whole step before {given})'
         if self.solver == 'abm':
-            scale = f', each {self.pars.pop_scale:,.3g} people' if self.pars.pop_scale != 1 else ''
+            rounded = float(f'{self.pars.pop_scale:.3g}') # To 3 significant figures, without an exponent (e.g. 25,300)
+            scale = '' if rounded == 1 else f', each {rounded:,.0f} people' if rounded >= 10 else f', each {rounded:g} people'
             how = f'as {len(self.people):,} agents{scale}'
         else:
             kind = dict(ode='an ODE', binomial='a stochastic compartmental model (chain binomial)', gillespie='a stochastic compartmental model (Gillespie)', tau='a stochastic compartmental model (tau-leaping)')
@@ -494,14 +523,18 @@ class Sim(ss.Base):
             for dis in self.declared:
                 if dis.graph.transmissions:
                     try:
-                        ngm = dis.engine.next_generation()
+                        ngm, ngm_start = dis.engine.next_generation(), dis.engine.next_generation(start=True) # In a population with no immunity, and as it starts
                     except Exception: # Not every model has one; the line is only a check
                         ngm = None
                     if ngm is not None:
-                        R0 = float(np.max(np.abs(np.linalg.eigvals(ngm))))
+                        R0, R = [float(np.max(np.abs(np.linalg.eigvals(m)))) for m in [ngm, ngm_start]]
                         count = float(dis.engine.count(dis.graph.infectious))
                         shown = f'{count:,.0f}' if count >= 100 or count == round(count) else f'{count:.3g}' # A share, with total_pop=1, is not 0
-                        lines.append(f'  {dis.name}: R0 = {R0:.3g}, with {shown} infectious at the start')
+                        at_start = ''
+                        if abs(R - R0) > 0.01*R0: # Some start immune
+                            share = float(dis.engine.count([dis.graph.first]))/float(dis.engine.count(dis.graph.people_states))
+                            at_start = f' (R = {R:.3g} at the start, with {share:.0%} susceptible)'
+                        lines.append(f'  {dis.name}: R0 = {R0:.3g}{at_start}, with {shown} infectious at the start')
         lines += [f'  Note: {note}' for note in notes]
         return lines
 
@@ -515,8 +548,8 @@ class Sim(ss.Base):
                 infectious = sum(dis.results[state.name].values for state in dis.graph.infectious if state.name in dis.results)
                 if np.ndim(infectious):
                     peak = int(np.argmax(infectious))
-                    when = dis.results[dis.graph.infectious[0].name].timevec[peak]
-                    when = str(when) if self.t.is_absolute else f'{self.unit_name} {num_str(when)}' # A date, or e.g. day 27
+                    tvec = dis.t.tvec if len(dis.t.tvec) == len(infectious) else self.t.tvec # On the disease's own timeline, if it has one
+                    when = time_str(tvec[peak], self.unit_name) # A date, or e.g. day 27, as in the first line
                     parts.append(f'{dis.name}: {total:,.0f} infections; at most {infectious[peak]:,.0f} infectious, on {when}')
         took = f'{self.elapsed:.2g}' if self.elapsed < 1 else f'{self.elapsed:.1f}'
         return f'  Done in {took} s' + (f'; {"; ".join(parts)}' if parts else '')
@@ -756,6 +789,11 @@ class Sim(ss.Base):
         if output:
             return df
         dt, unit = coarse.t.dt.to(coarse.unit_base).value, coarse.unit_name
+        inner = lambda sim: [mod.engine.dt/max(mod.engine.substeps(), 1) for mod in sim.declared if hasattr(mod.engine, 'substeps')]
+        if coarse.solver == 'binomial' and coarse.pars.substeps is None and len(inner(coarse)) and np.allclose(inner(coarse), inner(fine)): # It takes substeps of the same size whatever the step
+            print(f'The chain-binomial solver takes enough substeps by default (here of {inner(coarse)[0]:n} {unit}s) that the step does not change its results: '
+                  f'a step of {dt:n} or {dt/factor:n} {unit}s gives the same run. Give substeps=1 to take whole steps, as most chain-binomial models do, and see how much they matter')
+            return
         print(f'Change in each result when the timestep goes from {dt:n} to {dt/factor:n} {unit}s (largest difference, as a share of the largest value):')
         for row in df.itertuples():
             print(f'  {row.module}.{row.result:<20s} {row.change:6.1%}   (peak {row.peak:n} → {row.peak_fine:n})')
@@ -773,8 +811,14 @@ class Sim(ss.Base):
             self.init()
         mod, kind, name = ss.connectors.parse_target(target)
         modname = mod if isinstance(mod, str) else mod.name
+        coded = not any(mod.name == modname for mod in self.declared) and isinstance(self.diseases.get(modname), ss.Disease)
         if modname in self.all_networks(): # The contacts of a network
             kind = 'par'
+        elif coded: # A disease written as code: only its rel_sus and rel_trans can be modified (see ss.modify)
+            if kind not in ['rel_sus', 'rel_trans']:
+                kind = 'par'
+                text = f'{modname}.pars.{name}\n  modifiers: none; "{modname}" is written as code, so its own code reads its parameters, and only its rel_sus and rel_trans can be modified'
+                return text if output else print(text)
         else:
             graph = self.get_declared(modname).graph
             if kind is None:
@@ -954,7 +998,12 @@ class Sim(ss.Base):
         mods = [mod for key in ss.modules.module_types() + ['custom'] for mod in pars[key].values() if isinstance(mod, ss.Module)]
         setters = [mod for mod in mods if getattr(mod, 'sets_unit', True) and (mod in self.declared or isinstance(mod, ss.Disease))] # The model's own numbers; the typed values of networks, demographics, interventions and ss.Pregnancy say nothing of them
         def mod_units(mod):
-            vals = mod.graph.unit_values() if mod in self.declared else ss.graph.unit_values(mod.pars.values())
+            if mod in self.declared: # Births and deaths of the population held by a disease (see _init_flows()) are typed, and like demographics say nothing of the unit of its bare numbers
+                flows = {id(leaf) for tr in self.flows_of(mod) for expr in [tr.rate, tr.dur] + sc.tolist(tr.p) if isinstance(expr, ss.transitions.Expr) for leaf in expr.leaves}
+                vals = ss.graph.unit_values([p.raw for p in mod.graph.all_pars() if id(p) not in flows] + [val for oc in mod.graph.outcomes.values() for val in [oc.delay, oc.duration]])
+                vals = vals or mod.graph.unit_values() # ... unless they are its only typed values
+            else:
+                vals = ss.graph.unit_values(mod.pars.values())
             return [u.removesuffix('s') for u in vals] + ([base(mod.t.dt)] if is_dur(mod.t.dt) else [])
         units = [u for mod in setters for u in mod_units(mod)]
         defaults = [u for mod in mods if mod not in setters for u in mod_units(mod)] # Used only if nothing else gives a unit
@@ -964,9 +1013,14 @@ class Sim(ss.Base):
             order = ['day', 'week', 'month', 'year']
             unit = sorted(set(units), key=order.index)[0]
             source = 'the typed values in the model'
-            if len(set(units)) > 1:
+            bare_in = lambda mod: [f'{mod.name}.{p.name}' if not p.literal else f'{p.raw} in {mod.name}' for p in mod.graph.all_pars() if p.slot in ['rate', 'dur'] and sc.isnumber(p.raw) and p.raw != 0] if mod in self.declared else [] # 0 is 0 in any unit
+            own = {u for mod in setters if bare_in(mod) for u in mod_units(mod)} # The units of the modules that have bare numbers: a module's bare numbers are in its own unit (e.g. a disease's beta in the days of its durations, beside births per year)
+            if len(set(units)) > 1 and len(own) == 1:
+                unit = own.pop()
+                source = 'the typed values of the modules with bare numbers'
+            elif len(set(units)) > 1:
                 self.units_disagree = sorted(set(units), key=order.index)
-                bare = [f'{mod.name}.{p.name}' if not p.literal else f'{p.raw} in {mod.name}' for mod in setters if mod in self.declared for p in mod.graph.all_pars() if p.slot in ['rate', 'dur'] and sc.isnumber(p.raw) and p.raw != 0] # 0 is 0 in any unit
+                bare = [name for mod in setters for name in bare_in(mod)]
                 if bare: # Which unit they are in cannot be guessed
                     raise ss.errors.IncompatibleTypes(f'the typed values in the model have different units ({sc.strjoin(self.units_disagree)}), so the unit of the bare numbers {sc.strjoin(bare)} is not known. Set it with unit=, e.g. ss.Sim(..., unit=\'{unit}\').')
                 if pars.dt is None: # The finest, as the most likely, but the step is then that small
@@ -1088,7 +1142,7 @@ class Sim(ss.Base):
             if nets:
                 for net in nets:
                     term = [term for term in self.mixing.terms if term.name == net.name] if self.solver != 'abm' else []
-                    how = '' if not term else f': {term[0].contacts:n} contacts per {unit}' if term[0].kind == 'homogeneous' else f': the partner-change model (approx), partnerships formed at {term[0].partnership.formed:.2g} a {unit}' if 'partnership' in term[0] else f': contact matrix by {self.groups.strats[term[0].dim].name}'
+                    how = '' if not term else f': {term[0].contacts:n} contacts per {unit}' if term[0].kind == 'homogeneous' else f': the partner-change model (approx), partnerships formed at {term[0].partnership.formed:.2g} a {unit}' if 'partnership' in term[0] else f': contact matrix by {sc.strjoin([self.groups.strats[d].name for d in term[0].get("dims", [term[0].dim])], sep=" and ")}' # Every dimension it is over, e.g. age and area
                     add('mixing', f'{net.name} ({type(net).__name__}){how}')
             elif any(mod.graph.transmissions for mod in self.declared): # How a state in a rate is read is shown with each rate
                 add('mixing', f'homogeneous{place}, 1 contact per {unit}', 'guessed: no network given')
@@ -1116,11 +1170,11 @@ class Sim(ss.Base):
             else:
                 whole = self.kernel_reason()
                 joint = ''.join(f'; {" × ".join(c.names)} as one program' for c in self.crossings)
-                add('plan', f'{sc.strjoin(declared)}: in the kernels, ' + ('the whole run in one call' if whole is None else f'one step at a time, since {whole}') + joint)
+                add('plan', f'{sc.strjoin(declared)}: as compiled code, ' + ('the whole run in one call' if whole is None else f'one step at a time, since {whole}') + joint)
             tabulated = [mod.name for mod in self.modules if mod.name in stepped and getattr(mod, 'tabulated', False) and self.solver != 'abm']
             python = [mod.name for mod in self.modules if mod.name in stepped and mod.name not in declared + tabulated]
             if tabulated:
-                add('', f'{sc.strjoin(tabulated)}: in the kernels\' tables, as {"it depends" if len(tabulated) == 1 else "they depend"} only on time and states')
+                add('', f'{sc.strjoin(tabulated)}: as tables in the compiled code, as {"it depends" if len(tabulated) == 1 else "they depend"} only on time and states')
             if python:
                 add('', f'{sc.strjoin(python)}: in Python, at {"its" if len(python) == 1 else "their"} place in each step')
         else:
@@ -1175,6 +1229,12 @@ class Sim(ss.Base):
                     desc.add(name, f'rate {rate:.4g} per {unit}{stages} → p = 1 - exp(-{rate:.4g} × {dt:n}) = {1 - np.exp(-rate*dt):.4f} per step')
         return desc
 
+    def _built_copy(self):
+        """ A built copy of this sim, built quietly (without the lines a run prints as it starts), for what reads the built model, e.g. `hash()` and `to_spec()` """
+        sim = sc.dcp(self)
+        sim.pars.verbose = 0
+        return sim.init()
+
     def hash(self):
         """
         The model's fingerprint: short hashes of its structure, its parameter values, the run settings, the scenario, and the data, plus the seed
@@ -1199,7 +1259,7 @@ class Sim(ss.Base):
         so the hash raises an error rather than treat two such sims as the same model.
         """
         if not self.initialized: # A copy, so that this sim is not changed
-            return sc.dcp(self).init().hash()
+            return self._built_copy().hash()
         spec = self.to_spec()
         digest = ss.utils.short_hash
         model = dict(modules=spec['modules'], networks=spec['networks'], stratify=spec['stratify'], modifiers=spec['modifiers'])
@@ -1240,7 +1300,7 @@ class Sim(ss.Base):
             kwargs (dict): passed to `sc.savejson()`
         """
         if not self.initialized: # A copy, so that this sim is not changed
-            return sc.dcp(self).init().to_spec(filename=filename, **kwargs)
+            return self._built_copy().to_spec(filename=filename, **kwargs)
         pars = self.pars
         def tstr(val):
             if isinstance(val, ss.dur) and type(val).base != self.unit_base + 's': # A duration in another unit than the sim's (e.g. start=2000 in years, with rates per day) is written with its unit
@@ -1446,7 +1506,8 @@ class Sim(ss.Base):
         self.t = ss.Timeline(name='sim')
         self.t.init(self)
         if self.t.npts > 3001 and 'dt' not in self.given: # The step was not asked for
-            ss.warn(f'the sim has {self.t.npts:n} steps of one {self.unit} (the model\'s unit, from {self.unit_source}); give dt= for a longer step, e.g. dt=ss.weeks(1)', ss.errors.UnitInferred)
+            why = f"the model's unit, from {self.unit_source}" if self.unit_source else f"unit='{self.pars.unit}'" if self.pars.unit is not None else "the model's unit" # The unit given (source None) is said as given
+            ss.warn(f'the sim has {self.t.npts:n} steps of one {self.unit} ({why}); give dt= for a longer step, e.g. dt=ss.weeks(1)', ss.errors.UnitInferred)
         self.results.timevec = self.timevec # Store the timevec in the results for plotting
         return
 
@@ -1873,8 +1934,8 @@ class Sim(ss.Base):
             # Main simulation loop -- just one line!!!
             reason = self.kernel_reason() if until is None and not profile else None
             kernels = until is None and not profile and reason is None
-            if reason is not None and self.solver != 'abm' and getattr(self, 'declared', None): # Say once why a compartmental run is taken a step at a time
-                sc.printv(f'Run step by step, since {reason}', 1, self.verbose)
+            if reason is not None and self.solver != 'abm' and getattr(self, 'declared', None): # Say once why a compartmental run is taken a step at a time: only about speed, so only with verbose=2 (describe() says it too)
+                sc.printv(f'Run step by step, since {reason}', 2, self.verbose)
             if kernels: # JAX or the kernels: see ss.solvers.choose_engine()
                 use_jax, why = ss.solvers.choose_engine(self)
                 sc.printv(f'engine: {why}', 2, self.verbose)
@@ -2508,14 +2569,7 @@ class Sim(ss.Base):
             ```
         """
         self.check_results_ready('Please run the sim before plotting')
-        data = {} # The data, by the result that each column matches
-        if show_data and self.data is not None:
-            x = self.data.index.values
-            x = ss.DateArray(x) if len(x) and isinstance(x[0], ss.date) else x # As the results' time vector is, so they share an axis
-            for col in self.data.columns:
-                res = ss.results.match_name(self, col)
-                if res is not None:
-                    data[(res.module, res.name)] = (x, self.data[col].values)
+        data = ss.results.plot_data(self) if show_data else {} # The data, by the result that each column matches; a flow with data at a longer period (e.g. weekly) is shown as its totals over the data's periods, as the fit compares them
         if fig is None and show_label in ['fig', 'fignum'] and self.label:
             plotlabel = self.label
             figlist = sc.autolist()

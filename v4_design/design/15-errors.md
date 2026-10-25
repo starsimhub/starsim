@@ -88,7 +88,7 @@ The table below is made from the code (`ss.errors.catalog()`, from the docstring
 | `InitWhereNobodyIs` | error | `init=` gives people a state only at levels of the stratifications where the split puts nobody, so nobody would start there (given at some such levels only, it is a note) |
 | `CapabilityError` | error | The requested solver cannot run part of the model. Three cases: there is no sensible approximation (contact tracing, transmission trees, agent-only custom code); a function or condition asked for something that exists only per agent in a compartmental run; or an approximation would be needed and `approx=False`. Names the part, what it asked for, and what would fix it |
 | `TimeNotKept` | error | A declared disease run as agents keeps the time each agent entered a state (`ti_X`) only for the states whose times the engine reads (for scheduled exits, clocks, and `after=`/`before=`), unless `ss.options.keep_times = True`. Raised when code reads one of the others, e.g. an analyzer or a script after the run; names the array and says to set the option |
-| `TimeOutsideSim` | error | A time given to a delivery (`start=`, a round in `at=`), `ss.modify` (`start=`), or `ss.change` (`at=`) is before the start of the sim or after its end. A `stop=` after the end is allowed, and means it never stops. A number is a time in the sim's unit (in a sim with dates, that long after the start), so the message says to write a calendar year as a date (`'2030'`) |
+| `TimeOutsideSim` | error | A time given to a delivery (`start=`, a round in `at=`), `ss.modify` (`start=`), or `ss.change` (`at=`) is before the start of the sim or after its end. A `stop=` after the end is allowed, and means it never stops. A number is a time in the sim's unit (in a sim with dates, that long after the start, or a whole year within the sim), and the message says so |
 | `MissingDimension` | error (also a `KeyError`) | An `ss.transfer` names a stratification the model does not have (a boolean coordinate that does not exist yet is created instead); or a transition uses a value by level of a dimension (`ss.by()`) that the states it moves have no level of; or a value by position along a dimension (`ss.by(age=[...])`) that the sim is not stratified by |
 | `AlreadyRunError` | error (also a `RuntimeError`) | A sim that has already run (or been finalized) is stepped, finalized, or added to again; `sim.run()` runs it again from the start |
 | `DistNotInitializedError` | error (also a `RuntimeError`) | A distribution made with `strict=True` is sampled before it is initialized (by the sim, or with `dist.init()` or `dist.mock()`) |
@@ -96,7 +96,7 @@ The table below is made from the code (`ss.errors.catalog()`, from the docstring
 | `DistSeedRepeatError` | error (also a `RuntimeError`) | Two distributions of a sim have the same seed, or a distribution is jumped back to a state it has passed, so that it would draw the same random numbers twice |
 | `BooleanOperationError` | error (also a `NotImplementedError`) | A logical operation (and, or, xor, not) is applied to an array of people's values that is not Boolean, e.g. `ppl.age & ppl.female` |
 | `NothingToFit` | error | `fit()` or `sensitivity()` is called and no parameter has `bounds` |
-| `NoData` | error | `fit()` or `compare_models()` is called and no result has data |
+| `NoData` | error | `fit()`, `compare_models()`, or `log_density()` is called and no result has data |
 | `NoPosterior` | error | `method='nuts'` or `method='pmcmc'` is asked for, and not every data series has a likelihood, or the sim cannot be sampled that way (no gradients, for NUTS; not a stochastic compartmental sim that the kernels run whole, for particle MCMC) |
 | `TargetStatsNotRecovered` | warning | `net.check()` finds that a network does not reproduce a target statistic it was given |
 | `AtBound` | warning | A best-fit value is at or near one of its bounds |
@@ -107,7 +107,7 @@ The table below is made from the code (`ss.errors.catalog()`, from the docstring
 | `ImportIncomplete` | warning | An import could not translate something in the source. Lists each item by name, says what to ask an AI assistant with the `import-model` skill to finish it, and warns again when the sim is first run |
 | `UnitInferred` | note | The sim's unit was not given with `unit=` and was taken from `dt`, from `start` and `stop`, or from the typed values. Says which unit and where it came from (`unit='day' (from start and stop dates)`). Not said when nothing has a unit: time is then in timesteps and nothing was inferred |
 | `LargeStep` | note | `rate × dt > 0.1` for a converted rate, or a mean dwell time shorter than the step; says how far `rate × dt` is from `1 − exp(−rate × dt)` and points to `sim.check_dt()` |
-| `MatrixAggregated` | note | In a compartmental run, a contact matrix whose age groups are not the model's was aggregated to the model's groups, weighted by population. Names the matrix and both sets of groups. Agents use the matrix's own groups and get no note |
+| `MatrixAggregated` | note | In a compartmental run, a contact matrix whose age groups are not the model's was aggregated (or split) to the model's groups, weighted by population. Names the matrices (once for all of them, e.g. the layers of a country's) and both sets of groups. Agents use the matrix's own groups and get no note |
 | `OverlappingSet` | note | Two `set=` modifiers are active for the same people at once; the one later in the loop is used. Names both |
 | `ClippedToRange` | note | The modifiers of a rate, duration, or multiplier made it negative, so it was set to 0 where it was; or made the probabilities of the branches out of a state come to more than 1, so they were scaled to sum to 1. Said once per quantity |
 | `NotCompiled` | note | A function or method given to `ss.jit` can't be compiled (or traced by JAX), so it runs as written; says why (e.g. what Numba couldn't compile, or what a method reads that compiled code can't take). Said once per function, or once per sim for a method (in `sim.notes`) |
@@ -125,7 +125,8 @@ Some mistakes are ordinary Python usage errors and raise a plain `TypeError` or 
 - giving both `rate=` and `dur=` to a transition, or more than one of `multiply=`, `add=`, `set=` to `ss.modify`;
 - a state's name where the state is meant (`ss.Transition(I, 'R', dur=10)`), which says to declare the states;
 - a set of sources without parentheses (`S | I | R >> D @ mu`);
-- using a lazy condition where Python needs a single truth value (`if`, `and`, `or`, `not`); the message says to use `&`, `|`, `~`.
+- using a lazy condition where Python needs a single truth value (`if`, `and`, `or`, `not`); the message says to use `&`, `|`, `~`;
+- reading a result from a module that was given to a sim (`sir.results.I` after `ss.Sim(sir).run()`): the sim ran its own copy, so the `AttributeError` (or `KeyError`) says where the result is (`sim.results.sir.I`).
 
 ## Removed since the first draft
 

@@ -1,0 +1,178 @@
+---
+title: Disease structure
+jupyter: python3
+---
+
+The SIR model of the first two tutorials leaves out much of what happens in a measles infection. This tutorial adds three pieces of structure that most models of infectious disease need: a latent period, in which people are infected but not yet infectious; the distribution of the time people spend in a state, not just its average; and a branch, where people in one state go one of two ways (here, a small share die). It then names the parameters of the model, and shows the model as a diagram and as equations.
+
+By the end of this tutorial, you will be able to:
+
+- turn an SIR model into an SEIR model, and say why it changes the course of the epidemic but not R0;
+- choose the distribution of a duration;
+- split a transition into branches;
+- name parameters, with a description and a range of plausible values;
+- check a model from its diagram and equations.
+
+## The model so far
+
+This is the SIR model from [Tutorial 2](t2_model.qmd), run for 150 days, since the model will soon be slower:
+
+```{python}
+import starsim as ss
+ss.options(jupyter=True) # Plots and tables suited to a notebook
+
+S, I, R = ss.states('S I R')
+infection = S >> I @ 1.9*I        # β = 1.9 per day
+recovery  = I >> R @ ss.days(8)   # Infectious for 8 days on average
+measles = ss.Disease(infection, recovery, init_prev=0.001)
+
+sir = ss.Sim(measles, total_pop=100_000, stop=ss.days(150))
+sir.run()
+sir.plot()
+```
+
+## A latent period
+
+After someone is infected with measles, there are about 10 days before they become infectious (and about two weeks before the rash appears). In an SEIR model, people in this latent period are in a compartment of their own, E (exposed): infected, but not yet infectious. Infection now moves people from S to E, and a new transition, progression, moves them from E to I after the latent period:
+
+```{python}
+S, E, I, R = ss.states('S E I R')
+infection   = S >> E @ 1.9*I        # Infected by contact with infectious people, I
+progression = E >> I @ ss.days(10)  # Infectious after a latent period of 10 days on average
+recovery    = I >> R @ ss.days(8)   # Recovered after 8 days on average
+measles = ss.Disease(infection, progression, recovery, init=dict(I=0.001))
+
+seir = ss.Sim(measles, total_pop=100_000, stop=ss.days(150))
+seir.run()
+seir.plot()
+```
+
+The rate of infection is still β times the share of people in `I`, not `E`, since people in `E` don't transmit. The outbreak starts with 0.1% of people infectious, as before; `init_prev=0.001` would instead put them in `E`, where an infection starts, so that nobody would be infectious until the first of them had been through the latent period.
+
+To compare the two models, `ss.parallel()` runs several sims at once (each with a label), and plots any result of them together:
+
+```{python}
+msim = ss.parallel({'SIR': sir, 'SEIR': seir})
+msim.plot('measles.I')
+```
+
+R0 is the same in both, 15.2, as the runs print: it depends on how many people each infectious person infects (β = 1.9 a day, for 8 days), not on how long it takes them to become infectious. But the outbreak is very different. With a latent period, the time from one infection to the next (the generation time) is about 18 days instead of 8, so the epidemic grows more slowly: it peaks on day 28 rather than day 6, and lower, with about 29,000 people infectious at once rather than 74,000. Almost everyone is still infected in the end, since that depends on R0.
+
+## How long people stay in a state
+
+A duration such as `ss.days(10)` is an average. By default, the time each person spends in the state is exponentially distributed with this average, as in the standard ODE model. An exponential distribution is a poor description of most latent periods, though: with an average of 10 days, it has 10% of people becoming infectious within a day, and 12% still not infectious after three weeks. The latent period of measles varies much less than this.
+
+A duration can be given as any distribution instead. An Erlang distribution (a gamma distribution with a whole-number shape, `k`) is the usual choice in compartmental models; with `k=10`, the latent period has the same average, 10 days, and a standard deviation of about 3 days:
+
+```{python}
+S, E, I, R = ss.states('S E I R')
+infection   = S >> E @ 1.9*I
+progression = E >> I @ ss.erlang(k=10, mean=ss.days(10))  # 10 days on average; 95% between 5 and 17
+recovery    = I >> R @ ss.days(8)
+measles = ss.Disease(infection, progression, recovery, init=dict(I=0.001))
+
+erlang = ss.Sim(measles, total_pop=100_000, stop=ss.days(150))
+msim = ss.parallel({'Exponential': seir, 'Erlang': erlang})
+msim.plot('measles.I')
+```
+
+The epidemic again has the same R0, but grows more slowly still, peaking about two weeks later. With an exponential latent period, the few people who become infectious within a day or two start new chains of infection early, and this speeds up the whole epidemic. So the distribution of a duration, not just its average, sets how fast an epidemic grows: worth knowing when a model is fitted to the early growth of an outbreak.
+
+As an ODE, Starsim runs an Erlang distribution as `k` stages that people go through one after another, each exponential (`equations()` shows them, as `E_1` to `E_10`); as agents, each person draws their own time from the distribution. Other distributions, such as `ss.lognorm_ex(mean=ss.days(10), std=ss.days(2))`, are covered in [Distributions](../user_guide/models_distributions.qmd). The next tutorials keep to exponential durations, for simplicity.
+
+## Branches: a share who die
+
+Most people with measles recover, but a small share die, from complications such as pneumonia. How many varies widely between settings, from 1 in 1,000 cases or fewer in high-income countries to several in 100 in some low-income settings. Suppose it is 2 in 1,000 here. People leaving `I` then go one of two ways, a branch: 99.8% recover and 0.2% die. A branch is a transition with `p=`, the share of people that take it:
+
+```{python}
+S, E, I, R = ss.states('S E I R')
+infection   = S >> E @ 1.9*I
+progression = E >> I @ ss.days(10)
+recovery    = ss.Transition(I, R, dur=ss.days(8), p=0.998)        # 99.8% recover...
+death       = ss.Transition(I, ss.null, dur=ss.days(8), p=0.002)  # ...and 0.2% die
+measles = ss.Disease(infection, progression, recovery, death, init=dict(I=0.001))
+
+sim = ss.Sim(measles, total_pop=100_000, stop=ss.days(150))
+sim.run()
+print('Deaths:', round(sim.results.measles.death.sum()))
+```
+
+`ss.null` is outside the model: people who die leave the population. Each branch has its own result, named after it (`recovery` and `death`), and could have its own duration (if, say, people who die did so sooner). The equations show how a branch works: who goes which way is decided when people enter `I`, so `I` is in two parts, `I_1` for those who will recover and `I_2` for those who will die:
+
+```{python}
+measles.equations()
+```
+
+A branch is not the only way for two transitions to leave one state. Two transitions out of a state with rates (or durations), and no `p=`, are competing risks: both act on everyone in the state, and whichever happens first moves them. Then the share that goes each way is set by the rates. A branch says the share directly, which is how the share of cases that die (the case fatality ratio) is usually known.
+
+The next tutorials leave deaths out, since they are few and change little else in this model.
+
+## Naming parameters
+
+Starsim names the parameters of a model itself (`beta`, `dur_progression`, ...), as [Tutorial 2](t2_model.qmd) showed. To name them yourself, and to say more about them, write them with `ss.par()`. Each takes its name from its variable, and can have a description (`doc=`), where its value comes from (`source=`), and bounds, the range of values it could plausibly take:
+
+```{python}
+S, E, I, R = ss.states('S E I R')
+beta           = ss.par(1.9, bounds=[1, 3], doc='Transmission rate per day')
+dur_latent     = ss.par(ss.days(10), bounds=[ss.days(7), ss.days(14)], doc='Average latent period', source='Assumed for this tutorial')
+dur_infectious = ss.par(ss.days(8), doc='Average infectious period')
+
+infection   = S >> E @ beta*I
+progression = E >> I @ dur_latent
+recovery    = ss.Transition(I, R, dur=dur_infectious, p=0.998)
+death       = ss.Transition(I, ss.null, dur=dur_infectious, p=0.002)
+measles = ss.Disease(infection, progression, recovery, death, init=dict(I=0.001))
+
+sim = ss.Sim(measles, total_pop=100_000, stop=ss.days(150))
+sim.describe()
+```
+
+`describe()` lists each parameter with its description and source. One parameter can be used in several places, as `dur_infectious` is here, and changing it changes it everywhere: `ss.Sim(measles, pars=dict(dur_latent=ss.days(12)), ...)` runs the model with a latent period of 12 days. The bounds are what [calibration](t7_calibration.qmd) uses: `sim.fit()` searches for the values of every parameter with bounds that best match data.
+
+::: {.callout-warning}
+## [PROPOSAL]
+`describe()` doesn't show the bounds of a parameter. It should, next to its value (e.g. `beta = 1.9 per day, between 1 and 3`), since which parameters will be fitted, and over what range, is part of the model (P2).
+:::
+
+## The model as a diagram and as equations
+
+Two more ways to check a model, besides `describe()`, are its diagram and its equations. `equations()` prints the model as the ODEs it stands for, with the names of the parameters:
+
+```{python}
+measles.equations()
+```
+
+`diagram()` gives the states and transitions as a flowchart, in Mermaid, a language for diagrams that Quarto, GitHub, and many other tools draw:
+
+```{python}
+print(measles.diagram())
+```
+
+Drawn, it looks like this, with the transmission dashed, and the empty circle for `ss.null`:
+
+```{mermaid}
+flowchart LR
+    S(["S"])
+    E(["E"])
+    I(["I"])
+    R(["R"])
+    S -.->|"infection: beta * I"| E
+    E -->|"progression: dur = dur_latent"| I
+    I -->|"recovery: dur = dur_infectious"| R
+    I -->|"death: dur = dur_infectious"| null1(( ))
+```
+
+::: {.callout-warning}
+## [PROPOSAL]
+In a notebook, `measles.diagram()` should draw the diagram (as `describe()` shows tables), not give its text to print; the text would stay available, e.g. as `measles.diagram(output='mermaid')` (P13). The diagram should also show the share that takes each branch (`p = 0.998`, `p = 0.002`).
+:::
+
+## Writing a disease as a class
+
+A disease can also be written as a class, with its states, parameters, and transitions in the class body. This is worth doing for a disease that will be used in several models, or shared with others, since then it can be made with different values of its parameters, like the diseases in Starsim's library (e.g. `Measles(beta=1.5)`). [Diseases](../user_guide/models_diseases.qmd) in the user guide shows how.
+
+## Exercises
+
+1. Measles has a latent period of 10 to 12 days. Run the SEIR model with a latent period of 12 days, using `pars=`. Does R0 change? How do the timing and height of the peak change?
+2. Give the infectious period an Erlang distribution too, with `k=4`. Using `R0()` and a plot of `I`, check whether R0 or the course of the epidemic changes.
+3. About 1 in 10 people with measles in this town are admitted to hospital, after 4 days of being infectious on average, and stay for 7 days. Add a state for people in hospital (assume they don't transmit), and find the largest number of people in hospital at once.

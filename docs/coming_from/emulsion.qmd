@@ -113,10 +113,10 @@ sir = ss.Disease(
     recovery  = ss.Transition(I, R, rate=ss.perday(0.1)),
     init_n    = dict(I=1),
 )
-compartment = ss.Sim(sir, total_pop=100, stop=ss.days(100), solver='binomial', verbose=0)
-ibm         = ss.Sim(sir, total_pop=100, stop=ss.days(100), solver='abm', verbose=0)
+compartments = ss.Sim(sir, total_pop=100, stop=ss.days(100), solver='binomial', verbose=0)
+individuals  = ss.Sim(sir, total_pop=100, stop=ss.days(100), solver='abm', verbose=0)
 
-msim = ss.parallel(compartment=compartment, ibm=ibm, n_runs=20)
+msim = ss.parallel({'Compartments': compartments, 'Individuals': individuals}, n_runs=20)
 msim.plot()
 ```
 

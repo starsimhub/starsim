@@ -1310,6 +1310,8 @@ class LogDensity:
         if why:
             errormsg = f'The log-density in JAX needs a sim that runs in JAX, and this one cannot, since {why}'
             raise ss.CapabilityError(errormsg)
+        if sim.data is None:
+            raise ss.errors.NoData('The log-density is of the data given the parameters, but the sim has no data; attach it with ss.Sim(..., data=df)')
         fitted = find_pars(sim, None if pars is None else sc.tolist(pars))
         self.names = list(fitted.keys())
         self.x0 = np.array([p.raw.value if isinstance(p.raw, ss.TimePar) else p.raw for p in fitted.values()], dtype=float)

@@ -1,0 +1,171 @@
+---
+title: Building and checking a model
+jupyter: python3
+---
+
+A Starsim model is a sim (`ss.Sim`) that holds a population and a set of modules: one or more diseases, and whatever else the model needs (contacts, births and deaths, interventions). This page covers how those parts fit together, and how to check that the model Starsim built is the one you meant: what it filled in for you, its equations, its diagram, and its reproduction number.
+
+For a first walk through a model, see [Getting started](../tutorials/t1_intro.qmd) and [Building your model](../tutorials/t2_model.qmd).
+
+## A model and its parts
+
+Here is a simplified measles outbreak in a town of 100,000 people: an SIR model, in which people are susceptible (S), infectious (I), or recovered and immune (R). Each susceptible person is infected at a rate of β = 1.9 per day times the share of people who are infectious, and people are infectious for 8 days on average:
+
+```{python}
+import starsim as ss
+ss.options(jupyter=True)
+
+S, I, R = ss.states('S I R')
+infection = S >> I @ 1.9*I        # From S to I, at a rate of 1.9 per day times the share infectious
+recovery  = I >> R @ ss.days(8)   # From I to R, after 8 days on average
+measles = ss.Disease(infection, recovery, init_prev=0.001)
+
+sim = ss.Sim(measles, total_pop=100_000, stop=ss.days(50))
+sim.run()
+sim.plot()
+```
+
+The basic reproduction number is R0 = β × the infectious period = 1.9 × 8 ≈ 15, as for measles, and the sim prints it when it starts. With an R0 that high, nearly everyone is infected within a few weeks.
+
+A sim can hold these kinds of modules, each given to it by keyword (a disease can also be given first, as here):
+
+| Kind | What it is for | Keyword | See |
+|---|---|---|---|
+| Diseases | The states people can be in, and how they move between them | `diseases=` | [Diseases](models_diseases.qmd) |
+| Networks and contacts | Who meets whom: contact matrices, mixing pools, and networks of individual contacts | `networks=` | [Contact matrices](populations_contacts.qmd), [Networks](populations_networks.qmd) |
+| Demographics | Births, deaths, and pregnancy | `demographics=` | [Demographics](populations_demographics.qmd) |
+| Interventions | Vaccination, testing, treatment, and changes to parameters | `interventions=` | [Products and deliveries](interventions_products.qmd), [Changing parameters](interventions_changes.qmd) |
+| Connectors | Links between modules, such as one disease making another more likely | `connectors=` | [Connectors](interventions_connectors.qmd) |
+| Analyzers | Extra results, collected as the sim runs | `analyzers=` | [Analyzers](running_analyzers.qmd) |
+
+The sim itself holds what applies to the whole model: the population (`total_pop=`, or `n_agents=` for a model run as agents), the period (`start=`, `stop=`, and the time step `dt=`), and the random seed. See [The Sim](running_sim.qmd) for these.
+
+## Declared modules and modules written as code
+
+A disease can be written in two ways, and both kinds can be in the same sim:
+
+- **Declared**, as states and the transitions between them, as above. The model is then a description that Starsim can read: it can print the model's equations, draw its diagram, work out its R0, and run it either as a compartmental model (deterministic or stochastic) or as individual agents. This is the usual way to write a disease, and most of this section of the guide is about it.
+- **Written as code**, as a Python class with arrays for each person and a `step()` method that updates them. This is for what states and transitions can't say, such as a quantity that changes continuously in each person (a CD4 count, or a level of immunity). A module written as code runs as agents. See [Modules written as code](models_code.qmd).
+
+## Checking a model
+
+A short model leaves a lot unsaid. The measles model above doesn't say how the time spent infectious is distributed around its mean of 8 days, how people mix, or how the model should be run. Starsim fills in each of these with a default, and `describe()` lists the whole model as it was built: every state, transition, parameter, and setting, with each value that Starsim chose itself marked as **guessed**, and the rule it used.
+
+```{python}
+sim.describe()
+```
+
+Three things here were guessed:
+
+- **How long people stay infectious.** A single duration is the mean of an exponential distribution, as in an ODE model: many people recover within a few days, and a few stay infectious for weeks. For measles, whose infectious period varies much less than that, a distribution with less spread is more realistic; see [Durations](models_diseases.qmd#durations).
+- **How people mix.** With no contacts given, everyone is equally likely to meet everyone else (homogeneous mixing), with one contact per day, so β is the classical transmission rate. With a contact matrix or a network, β is per contact instead; see [Stratification](models_stratification.qmd).
+- **How the model is run.** Nothing in this model is about individual people, so Starsim runs it as a deterministic compartmental model (an ODE). The same model runs as agents with `n_agents=` or `solver='abm'`; see [Solvers](running_solvers.qmd).
+
+Other common guesses are the population size (10,000 people, if no size is given), the length of the run (50 units of time), the unit of time (from the values in the model, such as the days of `ss.days(8)`), and how the epidemic starts (1% of people infectious, if nothing is said). A guess is not an error: it is a choice you didn't make, listed so you can check it. Each one goes away when the value is given. Here the infectious period has an Erlang distribution with less spread, and the model is to be run as an ODE, so the only guess left is the mixing:
+
+```{python}
+S, I, R = ss.states('S I R')
+infection = S >> I @ 1.9*I
+recovery  = I >> R @ ss.erlang(k=4, mean=ss.days(8)) # Less spread than an exponential
+measles = ss.Disease(infection, recovery, init_prev=0.001)
+
+sim = ss.Sim(measles, total_pop=100_000, stop=ss.days(50), solver='ode')
+sim.describe()
+```
+
+::: {.callout-warning}
+## [PROPOSAL]
+`describe()` should print a distribution as it was given, `erlang(k=4, mean=8 days)`, not as `ss.gamma(a=4, scale=2.0, loc=0.0)`, which loses its unit and the name the modeler used (P2, P14).
+:::
+
+### Equations
+
+`equations()` writes out the system of differential equations of a declared disease, with its parameters by name. Here β was named `beta`, since it multiplies the share infectious, and the infectious period `dur`:
+
+```{python}
+S, I, R = ss.states('S I R')
+infection = S >> I @ 1.9*I
+recovery  = I >> R @ ss.days(8)
+measles = ss.Disease(infection, recovery, init_prev=0.001)
+
+measles.equations()
+```
+
+These are the equations whatever the model is run as: as agents, each person moves between states at the same rates. A model with a non-exponential duration shows the stages it is run with, and a model with contacts by age shows its mixing.
+
+### Diagram
+
+`diagram()` gives the model's diagram, as the text of a [Mermaid](https://mermaid.js.org) flowchart:
+
+```{python}
+print(measles.diagram())
+```
+
+Pasted into a page that renders Mermaid (as Quarto, GitHub, and many wikis do), it is drawn as:
+
+```{mermaid}
+flowchart LR
+    S(["S"])
+    I(["I"])
+    R(["R"])
+    S -.->|"infection: beta * I"| I
+    I -->|"recovery: dur = dur"| R
+```
+
+A dashed arrow is a transmission, and a solid one any other transition.
+
+::: {.callout-warning}
+## [PROPOSAL]
+In a notebook, `diagram()` should draw the diagram (as a rendered image), and give the text only when asked, e.g. `diagram(output='text')` (P11: the obvious call should show the obvious thing). Its label "dur = dur" says nothing; it should give the value, "recovery: 8 days".
+:::
+
+### Transitions and states
+
+`transitions` is a table of the transitions, with what drives each (a rate or a duration) and its kind: a transition is **contact-mediated** if people catch it from people in another state (here, `I`), and **spontaneous** otherwise. Printing it also shows which state leads to which:
+
+```{python}
+measles.transitions
+```
+
+### The reproduction number
+
+`R0()` works out the basic reproduction number from the next-generation matrix of the model: the number of people one infectious person infects in a population where everyone else is susceptible. For a simple SIR model this is β × the infectious period, but `R0()` works for any declared model, including those with several infectious states, groups with their own contacts, or vectors:
+
+```{python}
+measles.R0()
+```
+
+`R0()` on a disease on its own assumes homogeneous mixing. For a disease in a sim with contacts or groups, use the sim's copy of it, `sim.diseases.measles.R0()`, which includes them (see below for why the sim has a copy).
+
+::: {.callout-note}
+The sim prints R0 when it starts. If some people start immune (e.g. `init=dict(I=0.001, R=0.9)`), it also gives the reproduction number in the population as it starts (often called the effective reproduction number, R): "R0 = 15.2 (R = 1.52 at the start, with 10% susceptible)".
+:::
+
+## Where the parts of a sim go
+
+A sim runs a copy of each module it is given, so that the same disease can go into several sims (for example, one for each scenario) without one run changing another. After a sim is initialized (by `sim.init()`, or by `sim.run()`, which initializes it if needed), its copy of each module is in `sim.diseases`, `sim.networks`, and so on, by name. A module takes its name from the variable it was assigned to (here `measles`), or from `name=`.
+
+```{python}
+sim = ss.Sim(measles, total_pop=100_000, stop=ss.days(50), verbose=0)
+sim.run()
+
+print(sim.diseases.measles is measles) # The sim's copy, not the original
+print(sim.diseases.measles.pars)        # The disease's parameters
+print(sim.results.measles.keys())       # Its results
+```
+
+- The parameters of each module are in `sim.diseases.measles.pars` (and `sim.pars.measles`); see [Parameters](models_parameters.qmd).
+- The results are in `sim.results`, by module: `sim.results.measles.I`. Every state and every transition has a result of the same name. See [Outcomes and observation](models_outcomes.qmd) for declaring more, and [Results](running_results.qmd) for working with them.
+- In a model run as agents, the people are in `sim.people`, with each person's age, sex, and the states of each disease; see [People](populations_people.qmd).
+
+## Pitfalls
+
+- **Changing the original after the sim is made.** Since the sim has a copy, changing `measles` after `ss.Sim(measles, ...)` has no effect on that sim. Change the sim's copy, or give the new value to the sim by name (`ss.Sim(measles, pars=dict(beta=1.5))`), or make a new sim.
+- **Reading a guess as a choice.** A model that runs is not necessarily the model you meant. Read `describe()` once for each new model, and give any value it guessed that matters to your question.
+- **R0 of the wrong model.** `measles.R0()` is for homogeneous mixing; in a sim with contacts or groups, use `sim.diseases.measles.R0()`.
+
+## See also
+
+- [Diseases: states, transitions, and rates](models_diseases.qmd), for writing the model itself
+- [The Sim](running_sim.qmd), for the sim's own settings
+- [The model as data](../architecture/model.qmd), for how Starsim reads a declared model and fills in what was left out

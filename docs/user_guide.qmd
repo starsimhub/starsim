@@ -4,7 +4,7 @@ pagetitle: "User guide"
 
 # User guide
 
-These user guides provide a more in-depth look at each topic compared to the corresponding tutorials.
+The user guide is organized by task: each page covers one topic, to look up when you need it, with the smallest example, the options, and the pitfalls. The [tutorials](tutorials.qmd) are the place to start; they link to these pages where a topic goes further.
 
 :::{.callout-note}
 You can download these user guides as Jupyter notebooks to run them locally. Look for the download button at the top of each page.
@@ -24,41 +24,62 @@ To run these user guides locally:
 ## Introduction
 
 - [What is Starsim?](user_guide/intro_starsim.qmd)
-- [Starsim models](user_guide/intro_models.qmd)
+- [Models built with Starsim](user_guide/intro_models.qmd)
 
-## Basics
+## Writing models
 
-- [Model structure](user_guide/basics_model.qmd)
-- [The Sim object](user_guide/basics_sim.qmd)
-- [People, states, and arrays](user_guide/basics_people.qmd)
-- [Parameters](user_guide/basics_parameters.qmd)
-- [Results](user_guide/basics_results.qmd)
+- [Building and checking a model](user_guide/models_building.qmd)
+- [Diseases: states, transitions, and rates](user_guide/models_diseases.qmd)
+- [Parameters](user_guide/models_parameters.qmd)
+- [Stratification](user_guide/models_stratification.qmd)
+- [Outcomes and observation](user_guide/models_outcomes.qmd)
+- [Distributions](user_guide/models_distributions.qmd)
+- [Modules written as code](user_guide/models_code.qmd)
+- [Array indexing](user_guide/models_indexing.qmd)
+- [Random numbers](user_guide/models_random.qmd)
+- [Nonstandard models](user_guide/models_nonstandard.qmd)
 
-## Modules
+## Populations and contact
 
-- [Diseases](user_guide/modules_diseases.qmd)
-- [Networks](user_guide/modules_networks.qmd)
-- [Demographics](user_guide/modules_demographics.qmd)
-- [Interventions](user_guide/modules_interventions.qmd)
-- [Products](user_guide/modules_products.qmd)
-- [Analyzers](user_guide/modules_analyzers.qmd)
-- [Connectors](user_guide/modules_connectors.qmd)
-- [Library modules](user_guide/modules_library.qmd)
-- [Adding new modules](user_guide/modules_adding.qmd)
+- [People](user_guide/populations_people.qmd)
+- [Demographics](user_guide/populations_demographics.qmd)
+- [Networks and mixing pools](user_guide/populations_networks.qmd)
+- [Contact matrices and data by place](user_guide/populations_contacts.qmd)
+- [Places and movement](user_guide/populations_places.qmd)
 
-## Workflows
+## Running
 
-- [Multiple runs](user_guide/workflows_run.qmd)
-- [Parameter identification (SIR calibration)](user_guide/workflows_sir_calibration.qmd)
-- [Calibration](user_guide/workflows_calibration.qmd)
-- [Deployment](user_guide/workflows_deploy.qmd)
+- [The Sim](user_guide/running_sim.qmd)
+- [Time](user_guide/running_time.qmd)
+- [Results](user_guide/running_results.qmd)
+- [Analyzers](user_guide/running_analyzers.qmd)
+- [Solvers and when they disagree](user_guide/running_solvers.qmd)
+- [Uncertainty, seeds, and many runs](user_guide/running_uncertainty.qmd)
+- [Scenarios and sweeps](user_guide/running_scenarios.qmd)
+- [Population rescaling](user_guide/running_rescaling.qmd)
+- [Deployment](user_guide/running_deploy.qmd)
 
-## Advanced topics
+## Interventions
 
-- [Time](user_guide/advanced_time.qmd)
-- [Array indexing](user_guide/advanced_indexing.qmd)
-- [Distributions](user_guide/advanced_distributions.qmd)
-- [Random numbers](user_guide/advanced_random.qmd)
-- [Population rescaling](user_guide/advanced_rescaling.qmd)
-- [Profiling and debugging](user_guide/advanced_profiling.qmd)
-- [Nonstandard usage](user_guide/advanced_nonstandard.qmd)
+- [Products and deliveries](user_guide/interventions_products.qmd)
+- [Changing parameters](user_guide/interventions_changes.qmd)
+- [Connectors](user_guide/interventions_connectors.qmd)
+
+## Calibration
+
+- [Calibration](user_guide/calibration_fitting.qmd)
+- [Parameter identification](user_guide/calibration_identification.qmd)
+- [Gradients and likelihoods](user_guide/calibration_gradients.qmd)
+- [Diagnosing a fit](user_guide/calibration_diagnosing.qmd)
+
+## Interoperability
+
+- [The model spec, `to_code()`, and `diff()`](user_guide/interop_spec.qmd)
+- [Importing and exporting models](user_guide/interop_import.qmd)
+- [Library modules](user_guide/interop_library.qmd)
+
+## Troubleshooting
+
+- [Debugging and profiling](user_guide/troubleshooting_debugging.qmd)
+- [Common pitfalls](user_guide/troubleshooting_pitfalls.qmd)
+- [A minimal reproducible example](user_guide/troubleshooting_mre.qmd)

@@ -42,9 +42,9 @@ def make_seasonal(data=None):
 def weekly_data():
     """ Weekly new infections from one run at the true value """
     dates = pd.date_range('2020-03-01', periods=13, freq='W')
-    truth = make_seasonal(data=ss.simdata(pd.DataFrame({'new_infections': 0.0}, index=dates))).run()
-    weekly = ss.results.compare(truth)['new_infections'][1]
-    return ss.simdata(pd.DataFrame({'new_infections': np.round(weekly)}, index=dates))
+    truth = make_seasonal(data=ss.simdata(pd.DataFrame({'infection': 0.0}, index=dates))).run()
+    weekly = ss.results.compare(truth)['infection'][1]
+    return ss.simdata(pd.DataFrame({'infection': np.round(weekly)}, index=dates))
 
 
 def test_epydemix_kenya():
@@ -76,7 +76,7 @@ def test_epydemix_vaccine_by_age():
 def test_epydemix_filter():
     sc.heading('epydemix: the particle filter peaks at the true value for a seasonal × mobility beta')
     sim = make_seasonal(data=weekly_data()).init()
-    filt = ss.fit.ParticleFilter(sim, likelihood=dict(new_infections=ss.poisson()))
+    filt = ss.fit.ParticleFilter(sim, likelihood=dict(infection=ss.poisson()))
     loglik = {}
     for b in [0.4, true_b, 0.6]:
         sim.restart(pars=dict(b=b), rand_seed=0)

@@ -1,0 +1,158 @@
+---
+title: Modules written as code
+jupyter: python3
+---
+
+Most of a Starsim model is declared: its states and transitions, the interventions given to it, and the results it reports. Declared parts run under every solver, and `describe()`, `diagram()`, and `equations()` show them. But some parts of a model are easier to say in code: a rule of your own for who receives an intervention, a quantity that each person carries, or a result worked out in a way of your own. A **module written as code** is a Python class with a `step()` method, which Starsim calls once at each step, and which can read and change anything in the sim. It sits in the same sim as declared diseases, and since it works with individual people, a sim with one runs as agents.
+
+This tutorial writes two modules for the measles model: an analyzer, which records something no built-in result does, and an intervention, with states of its own. Before writing a module, check the table at the top of [Modules written as code](../user_guide/models_code.qmd) in the user guide, since many things that look as if they need code (vaccination, testing, treatment, contact tracing, and changes to parameters) can be declared.
+
+## Starting point
+
+The measles model with age groups and a contact matrix (from [Age groups and contacts](t4_ages.qmd)), run as 10,000 agents. With contacts, β is the chance of infection per contact per day, and 0.14 gives an R0 of about 16:
+
+```{python}
+import numpy as np
+import starsim as ss
+ss.options(jupyter=True)
+
+S, I, R = ss.states('S I R')
+infection = S >> I @ 0.14*I       # Chance of infection per contact per day
+recovery  = I >> R @ ss.days(8)   # Infectious for 8 days on average
+measles = ss.Disease(infection, recovery, init_prev=0.001)
+measles.stratify(age=[0, 15, 65]) # Ages 0-14, 15-64, and 65+
+
+contacts = ss.contacts(ages=[0, 15, 65], matrix=[[10, 6, 1], [3, 8, 1], [3, 6, 3]])
+pars = dict(networks=contacts, n_agents=10_000, stop=ss.days(60))
+sim = ss.Sim(measles, **pars)
+sim.run()
+sim.results.measles.infection.by('age').plot()
+```
+
+The epidemic is fast, and all three age groups are infected within about two weeks, most of them working-age adults, the largest group.
+
+## A quick look: a function
+
+The smallest module is a function of the sim, which Starsim calls at each step. Given as `analyzers=`, it runs at the end of each step, after the diseases have moved people between states. A transition of a declared disease knows who went through it in the last step (`measles.infection.uids`, their IDs), and `sim.people.age` is everyone's age, so the mean age of the people just infected is one line. Here the function keeps it in a list:
+
+```{python}
+mean_ages = []
+
+def age_of_cases(sim):
+    """ The mean age of the people infected in the last step """
+    new = sim.diseases.measles.infection.uids
+    if len(new):
+        mean_ages.append(sim.people.age[new].mean())
+    return
+
+sim = ss.Sim(measles, analyzers=age_of_cases, **pars)
+sim.run()
+print('Mean age of the first cases:', round(mean_ages[0]))
+print('Mean age of the last cases:', round(mean_ages[-1]))
+```
+
+The mean age of the people infected rises as the epidemic goes on, from about 30 to over 50: children, who have the most contacts, are infected early, and people aged 65 and over, who have fewer, later. A function is good for a quick look like this, but it has no parameters, states, or results of its own, so its output is kept outside the sim, in a list that every run would add to. For anything more, write a class.
+
+## An analyzer
+
+An analyzer is a class that inherits from `ss.Analyzer`. To report a result, it gives it in `init_results()` with `define_results()`, and fills it in `step()`. A result has one value for each time point, and `self.ti` is the current one. `scale=False` says that the result is a mean, not a count, so it isn't multiplied by the number of people each agent stands for:
+
+```{python}
+class CaseAges(ss.Analyzer):
+    """ The mean age of the people infected in each step """
+
+    def init_results(self):
+        super().init_results()
+        self.define_results(
+            ss.Result('mean_age', scale=False, label='Mean age of new cases'),
+        )
+        return
+
+    def step(self):
+        new = self.sim.diseases.measles.infection.uids
+        if len(new):
+            self.results.mean_age[self.ti] = self.sim.people.age[new].mean()
+        else:
+            self.results.mean_age[self.ti] = np.nan # No new cases, so no mean age
+        return
+
+sim = ss.Sim(measles, analyzers=CaseAges(), **pars)
+sim.run()
+sim.results.caseages.mean_age.plot()
+```
+
+The result is in the sim's results, under the module's name (its class name in lower case), and is plotted, saved, and compared across runs like any other.
+
+## An intervention with states of its own
+
+Measles cases can be isolated once they are found, which cuts the number of people they infect. Whether isolation can stop an outbreak depends on how many cases are found and how soon, so a model of it needs to follow each case: whether they will be found, when, and whether they are isolated now. Values that belong to each person are **states** of the module, given with `define_states()`: `ss.BoolState` for true or false, and `ss.FloatArr` for a number. Each state has a value for every agent, grows as agents are born, and each `ss.BoolState` also gives a result, the number of people for whom it is true.
+
+The intervention below decides, for each person newly infected, whether they will be found (with a probability `p_found`), and isolates those found after a delay (`delay`) until they recover. Random draws come from a Starsim distribution (`ss.bernoulli`) rather than from NumPy, so that the module's draws don't change when other parts of the model do (see [Random numbers](../user_guide/models_random.qmd)):
+
+```{python}
+class Isolation(ss.Intervention):
+    """ Isolate a share of measles cases, a delay after they become infectious, until they recover """
+
+    def __init__(self, p_found=0.8, delay=ss.days(2), **kwargs):
+        super().__init__()
+        self.define_pars(
+            p_found = ss.bernoulli(p=p_found), # Whether each case is found
+            delay = delay,                     # Time from becoming infectious to isolation
+        )
+        self.update_pars(**kwargs)
+        self.define_states(
+            ss.BoolState('found', label='Found'),
+            ss.FloatArr('ti_isolate', label='Time point of isolation'),
+            ss.BoolState('isolated', label='Isolated'),
+        )
+        return
+
+    def step(self):
+        measles = self.sim.diseases.measles
+
+        # Decide who of those infected in the last step will be found, and when they will be isolated
+        found = self.pars.p_found.filter(measles.infection.uids)
+        self.found[found] = True
+        self.ti_isolate[found] = self.ti + self.pars.delay/self.t.dt # The delay, in steps
+
+        # Isolate those who are due, and release those who have recovered
+        due = (self.found & measles.I & (self.ti_isolate <= self.ti)).uids
+        self.isolated[due] = True
+        recovered = (self.isolated & ~measles.I).uids
+        self.isolated[recovered] = False
+        return
+```
+
+The class decides who is isolated; what isolation does is a modifier, which multiplies the transmissibility of the people isolated by 0.1 (isolation stops 90% of their transmission). Keeping the effect in a modifier means that the disease's own values are never overwritten, and `describe()` lists it as part of the model. Its condition, `isolation.isolated`, is the intervention's state, read at each step:
+
+```{python}
+def isolation_scenario(delay):
+    """ An isolation intervention with this delay, and its effect """
+    isolation = Isolation(delay=delay)
+    effect = ss.modify(measles.rel_trans, multiply=0.1, where=isolation.isolated)
+    return [isolation, effect]
+
+sims = {
+    'No isolation': ss.Sim(measles, **pars),
+    'Isolated after 4 days': ss.Sim(measles, interventions=isolation_scenario(ss.days(4)), **pars),
+    'Isolated after 1 day': ss.Sim(measles, interventions=isolation_scenario(ss.days(1)), **pars),
+}
+msim = ss.parallel(sims)
+msim.plot('measles.I')
+```
+
+Isolating 80% of cases 4 days after they become infectious changes almost nothing: by then, with an R0 of 16, each case has already infected many others. Isolating them after 1 day slows the epidemic and lowers its peak, but most people are still infected in the end. This is why measles is controlled by vaccination, which acts before exposure, and not by finding cases.
+
+## What changes with a module written as code
+
+- **The sim runs as agents.** A module written as code works with individual people, so a sim with one can't run as compartments. Declared diseases in the same sim run as agents too, with no change to how they are written.
+- **`describe()` lists the module,** but not what it does, since that is in its code. The modifier that carries its effect is shown in full.
+- **The sim works on its own copy of each module.** To reach a disease or another module from a module, use `self.sim` in `step()` (e.g. `self.sim.diseases.measles`), not a variable from outside the class.
+
+[Modules written as code](../user_guide/models_code.qmd) in the user guide covers the rest: the other kinds of module (networks, demographics, connectors, and diseases written as code), aliases, the order in which Starsim calls a module's methods, and the pitfalls. [Analyzers](../user_guide/running_analyzers.qmd) covers analyzers in more depth.
+
+## Exercises
+
+1. Change the `CaseAges` analyzer to record the share of new cases who are children (aged under 15) instead of their mean age.
+2. Isolation in the model above starts with the first case. In practice, it starts once an outbreak is noticed. Give `Isolation` a parameter `threshold`, and have it isolate no one until the number of cases found so far reaches it. How much does a threshold of 50 cases change the effect of isolation after 1 day?
+3. Measles is infectious for about four days before its rash appears, so cases can't usually be found within a day. If every case were found (`p_found=1`) and isolated 2 days after becoming infectious, how many infections would isolation prevent? What does this say about controlling measles by isolating cases?

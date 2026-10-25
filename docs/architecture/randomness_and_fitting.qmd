@@ -11,6 +11,7 @@ This page covers how Starsim handles randomness, so that runs are reproducible a
 
 ```{python}
 import starsim as ss
+ss.options(jupyter=True)
 
 S, I, R = ss.states('S I R')
 sir = ss.Disease(infection=S >> I @ 0.2 * I, recovery=I >> R @ ss.days(10), init_prev=0.01, name='sir')
@@ -42,18 +43,18 @@ for kw in [dict(networks=ss.RandomNet(n_contacts=4), n_agents=2000), dict(solver
     alone = ss.Sim(make_sir(), unit='day', stop=ss.days(60), verbose=0, **kw).run()
     both  = ss.Sim([make_sir(), make_flu()], unit='day', stop=ss.days(60), verbose=0, **kw).run()
     same = np.array_equal(alone.results.sir.infection.values, both.results.sir.infection.values)
-    print(f'{alone.solver}: SIR results unchanged by adding flu: {same}')
+    print(f'{alone.solver}: SIR results unchanged by adding flu:', same)
 ```
 
 Every draw goes through one small library (`ss.perflib`, compiled with Numba). Uniforms are counter-based (a SplitMix64 hash of a key and an index), and most distributions are drawn by inverting their CDF at one uniform, so each draw is a monotone function of its uniform. That property is what makes common random numbers work well.
 
 ## Common random numbers
 
-With common random numbers (CRN), the same agent making the same decision gets the same random number in the baseline and in the intervention scenario. Much of the Monte Carlo noise then cancels in the difference, so small effects can be seen with fewer runs. CRN is on by default, as in Starsim 3.
+With common random numbers (CRN), the same agent making the same decision gets the same random number in the baseline and in the intervention scenario. Much of the Monte Carlo noise then cancels in the difference, so small effects can be seen with fewer runs. CRN is on by default.
 
 The key is the agent's *slot*, a persistent index that Starsim maintains for exactly this purpose: agent 7's uniform for a given decision depends only on its slot and the distribution's stream, not on how many other agents drew from that distribution. A newborn's slot is drawn from its parent's stream, so the same birth gets the same slot in both scenarios. The guarantee is: agents with the same slot in both scenarios get identical draws from every paired distribution; agents born after the scenarios diverge may have no counterpart.
 
-CRN has limits. It pairs draws, not outcomes: for a large change, or late in an epidemic, the scenarios infect different people and the noise grows back. It doesn't cover sampling without replacement or joint draws across agents. And a compartmental run has no agents to pair, so two scenarios start from the same draws but drift apart once their counts differ. `ss.options.crn = False` turns it off. The user guide's [random numbers](../user_guide/advanced_random.qmd) page shows CRN at work.
+CRN has limits. It pairs draws, not outcomes: for a large change, or late in an epidemic, the scenarios infect different people and the noise grows back. It doesn't cover sampling without replacement or joint draws across agents. And a compartmental run has no agents to pair, so two scenarios start from the same draws but drift apart once their counts differ. `ss.options.crn = False` turns it off. The user guide's [random numbers](../user_guide/models_random.qmd) page shows CRN at work.
 
 ## Run identity
 
@@ -82,18 +83,15 @@ A related check is `sim.check_dt()`, which reruns the sim at half the timestep a
 If parameters have bounds and results have data, calibration is one call. The bounds are on the parameter, where they belong (`ss.par(0.2, bounds=[0.05, 0.5])`); the data is on the sim, matched to results by column name. `sim.fit()` fits every parameter that has bounds to every result that has data:
 
 ```{python}
-import pandas as pd
-
 S, I, R = ss.states('S I R')
 beta = ss.par(0.2, bounds=[0.05, 0.5])
 infection = S >> I @ beta * I
 sir = ss.Disease(infection, I >> R @ ss.days(10), cases=ss.outcome(0.5 * infection), init_prev=0.01, name='sir')
 
-# Weekly cases from a run with beta = 0.3, to fit to
+# Weekly cases drawn from a run with beta = 0.3, with Poisson noise, to fit to
 kw = dict(start='2020-01-01', stop='2020-04-01', total_pop=1e5, verbose=0)
-truth = ss.Sim(sir, pars=dict(beta=0.3), **kw).run()
-weekly = truth.results.sir.cases.resample('week')
-data = pd.DataFrame(dict(date=weekly.timevec, cases=weekly.values.round()))
+truth = ss.Sim(sir, pars=dict(beta=0.3), rand_seed=2, **kw).run()
+data = truth.to_data('cases', resample='week')
 
 sim = ss.Sim(sir, data=data, **kw)
 fit = sim.fit()
@@ -112,7 +110,7 @@ By default a fit is a best fit, by a method that suits the sim, chosen and print
 |---|---|---|
 | ODE, with gradients | L-BFGS-B, gradients by automatic differentiation (Nelder-Mead for one or two parameters) | `'nuts'` |
 | ODE, without gradients | Nelder-Mead | `'abc-smc'` |
-| Stochastic compartmental, run whole by the kernels | Optuna | `'pmcmc'` |
+| Stochastic compartmental, run in one call to the compiled kernels | Optuna | `'pmcmc'` |
 | Agents, or a run stepped from Python | Optuna | `'abc-smc'` |
 
 **Gradients.** The ODE is run by Numba kernels with fourth-order Runge–Kutta steps. For a gradient, `ss.gradients` takes the same program and runs the same steps in JAX, which differentiates them; the cheap steps either side (parameters to the program's numbers, and the run to results and the goodness of fit) are done by central differences, so the gradient is accurate to about 1e-9. For NUTS the whole log-density (run, likelihood, and priors) is one JAX function. `sim.gradient()` and `sim.log_density()` expose the same machinery directly. Gradients need a run the kernels take whole, so a `when=` function, a movement register, or code of your own rules them out, and the printed reason says which.
@@ -123,14 +121,14 @@ By default a fit is a best fit, by a method that suits the sim, chosen and print
 
 Every fit says whether it converged (`fit.converged`, `fit.why`), by what the method knows: R-hat and divergences for NUTS, whether separate searches agree for the SciPy optimizers, recent improvement for Optuna (whose spread of trials is never shown as an interval). A best fit at a bound (`AtBound`) and parameters the data can't tell apart (`Unidentifiable`, such as `beta` and the number of contacts) are noted. `method=['optuna', 'nuts']` runs stages, each starting from the last one's best fit, and stops at a stage that doesn't converge.
 
-## The other questions
+## Other questions a fit leads to
 
 - **Which parameters matter?** `sim.sensitivity()` reports partial rank correlations over a Latin hypercube of the bounds. It needs no data.
 - **Which model is better?** `ss.fit.compare_models([sim_sir, sim_seir])` fits each model to the start of the data and ranks them by how well they predict the held-out end.
 - **How sure are we?** `ss.fit.profile()` gives a profile likelihood for one parameter of a deterministic fit, and `fit.project()` runs scenarios over the posterior's draws.
 - **How should a budget be spent?** `ss.fit.optimize()` reallocates spending between programs to maximize or minimize a result.
 
-The fitting code is the submodule `ss.fit` (`starsim/fit.py`), which an ordinary run never imports. It wraps existing optimizers and samplers (SciPy, Optuna, BlackJAX) rather than reimplementing them; particle MCMC and ABC-SMC are short samplers written in Starsim, since they need the sim's own particles and runs. For a worked example, see the user guide on [calibration](../user_guide/workflows_calibration.qmd).
+The fitting code is the submodule `ss.fit` (`starsim/fit.py`), which an ordinary run never imports. It wraps existing optimizers and samplers (SciPy, Optuna, BlackJAX) rather than reimplementing them; particle MCMC and ABC-SMC are short samplers written in Starsim, since they need the sim's own particles and runs. For a worked example, see the [calibration tutorial](../tutorials/t7_calibration.qmd), and the user guide on [calibration](../user_guide/calibration_fitting.qmd) and [gradients and likelihoods](../user_guide/calibration_gradients.qmd).
 
 ## In the design record
 
