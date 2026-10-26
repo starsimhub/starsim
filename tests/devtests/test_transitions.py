@@ -239,7 +239,8 @@ def test_births():
         assert np.isclose(n_flu, n_sis), f'{solver}: {n_flu:n} people in flu but {n_sis:n} in sis' # Before, births only in one disease, or twice
         assert np.isclose(n_flu, 2000*np.exp(0.03*20), rtol=0.06) # 3,644
     assert ss.Sim(flu(), demographics=demog, **kw).init().solver == 'ode' # Not agents, as birth_rate= gave
-    assert ss.Sim(demographics=True, **kw).run().results.births.cumulative[-1] > 0 # With no declared disease, ss.Births and ss.Deaths
+    alone = ss.Sim(demographics=True, **kw).run() # With no declared disease, a declared module of everyone alive, chosen for as any declared model (it was ss.Births and ss.Deaths, as agents)
+    assert alone.solver == 'ode' and alone.results.population.births.sum() > 0
     with pytest.raises(ss.errors.DuplicateDeclaration): # Births in two diseases would count people twice
         ss.Sim(ss.SIR(name='a', births=ss.birth(rate=0.02)), ss.SIS(name='b', births=ss.birth(rate=0.02)), **kw).init()
 
@@ -285,7 +286,7 @@ def test_stratify():
         pars = dict(n_agents=20_000) if solver == 'abm' else {}
         sim = ss.Sim(sir, networks=ss.contacts(matrix, ages=[0, 15, 65]), total_pop=100_000, unit='day', stop=150, solver=solver, **pars, **kw).run()
         sims[solver] = sim
-    with pytest.raises(TypeError): # The matrix's own age groups are ages=; age= is a matrix over the model's age groups
+    with pytest.raises(TypeError): # The matrix's own age groups are ages=; there is no age=
         ss.contacts(matrix, age=[0, 15, 65])
     res = sims.ode.results.sir
     by_age = res.S.by('age')
@@ -1043,7 +1044,7 @@ def test_time_values():
     def school_run(make):
         S, E, I, R = ss.states('S E I R')
         m = ss.Disease(S >> E @ make()*I, E >> I @ ss.days(10), I >> R @ ss.days(8), init=dict(I=0.001), name='measles').stratify(age={0: 0.3, 15: 0.6, 65: 0.1})
-        return ss.Sim(m, networks=ss.contacts(age=[[12, 6, 0.5], [3, 8, 1], [1.5, 6, 3]]), start='2000-01-01', stop='2000-03-01', dt=ss.days(1), **kw).run().results.measles.S_to_E.values
+        return ss.Sim(m, networks=ss.contacts([[12, 6, 0.5], [3, 8, 1], [1.5, 6, 3]]), start='2000-01-01', stop='2000-03-01', dt=ss.days(1), **kw).run().results.measles.S_to_E.values
     beta = ss.perday(0.125) * ss.by(age=[school, 1, 1])
     assert np.allclose(school_run(lambda: beta), school_run(lambda: ss.perday(0.125) * ss.by(age=[school, 1, 1])))
     with pytest.raises(TypeError, match='outside'):
@@ -1396,7 +1397,7 @@ def test_algebra():
     def peract_dict(solver): # A per-act beta for each direction, in a dict by route
         return run(solver, sis(rate=lambda I: dict(sexualnet=ss.peract(m2f=0.05, f2m=0.03))*I), networks=ss.SexualNet())
     def by_contacts(solver): # A value by sex over a contact matrix by sex
-        return run(solver, sis(rate=lambda I: ss.by(sex=dict(female=0.3, male=0.2))*ss.peryear(10)*I), networks=ss.contacts(sex=[[0, 1], [1, 0]]))
+        return run(solver, sis(rate=lambda I: ss.by(sex=dict(female=0.3, male=0.2))*ss.peryear(10)*I), networks=ss.contacts([[0, 1], [1, 0]], dims='sex'))
     def route_sources(solver): # A rate for each route, each with its own source weights
         S, A, B = ss.states('S A B')
         rate = dict(random=ss.peryear(1)*(A + 0.5*B), home=ss.peryear(2)*(A + B))

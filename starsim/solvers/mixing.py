@@ -372,12 +372,17 @@ class Mixing:
         if len(bands) != len(levels) or not np.allclose(bands, levels):
             how = 'aggregated from {} age groups to' if len(bands) > strat.n else 'split from {} age groups into' if len(bands) < strat.n else 'regrouped from {} age groups into'
             self.regrouped.setdefault((how, len(bands)), []).append(net.name) # Said once for all the matrices (e.g. the layers of a country's), in note_regrouped()
-        if getattr(net, 'ages', None) is not None or getattr(net, 'age_edges', None) is not None: # A matrix given with its age groups, checked over them as ss.contacts(age=...) is over the model's
-            whole = lambda x: x == int(x)
-            labels = [f'{lo:g}+' if hi == top else f'{lo:g}-{hi-1:g}' if whole(lo) and whole(hi) else f'{lo:g}-{hi:g}' for lo,hi in bands] # As the model's age groups are labelled
-            own = sc.objdict(name='age', labels=labels, split=cdf(bands[:, 1]) - cdf(bands[:, 0]))
-            self.check_reciprocal(net, own, contacts.T) # Rows as the contacts of a person in each group
+        if getattr(net, 'ages', None) is not None or getattr(net, 'age_edges', None) is not None: # A matrix given with its age groups, checked over them as ss.contacts(matrix) is over the model's
+            self.check_bands(net, bands, contacts, cdf)
         return d, matrix
+
+    def check_bands(self, net, bands, contacts, cdf):
+        """ `check_reciprocal()` for a contact matrix over age bands of its own (`contacts`, [source band, destination band]), with the share of people in each from `cdf` (see `age_cdf()`) """
+        whole = lambda x: x == int(x)
+        labels = [f'{lo:g}+' if hi == np.inf else f'{lo:g}-{hi-1:g}' if whole(lo) and whole(hi) else f'{lo:g}-{hi:g}' for lo,hi in bands] # As the model's age groups are labelled
+        own = sc.objdict(name='age', labels=labels, split=cdf(bands[:, 1]) - cdf(bands[:, 0]))
+        self.check_reciprocal(net, own, contacts.T) # Rows as the contacts of a person in each group
+        return
 
     def note_regrouped(self):
         """ Say which contact matrices were given over other age groups than the model's, once for all of them """
@@ -449,7 +454,7 @@ class Mixing:
             return sc.objdict(kind='matrix', cells=cells, matrix=full.matrix*beta, name=net.name, dim=names.index(full.dims[0]), dims=[names.index(dim) for dim in full.dims])
         mats = dict(net.dims)
         edges = getattr(net, 'age_edges', None)
-        if edges is not None: # A matrix by age with its own age groups (ss.contacts(ages=..., matrix=..., area=...)): over the model's age groups, first, since it can add them
+        if edges is not None: # A matrix by age with its own age groups (ss.contacts(dict(age=..., area=...), ages=...)): over the model's age groups, first, since it can add them
             bands = np.column_stack([edges, np.append(edges[1:], np.inf)])
             mats['age'] = self.regroup_ages(net, bands, bands, np.asarray(mats['age'], dtype=float).T)[1]
         matrix = np.ones((1, 1))
@@ -511,7 +516,7 @@ class Mixing:
 
         A mixing pool's hazard is worked out from the share of each group that is infectious,
         so the contact matrix is used as in a compartmental run, from the agents' counts in
-        each group (see `ss.solvers.Agents.infect()`), with any movement between places. Over the
+        each group (see `ss.solvers.Agents.transmit()`), with any movement between places. Over the
         model's dimensions, everyone in a group has the same contacts, so this is what a pool for
         each pair of groups would give, without making one.
         """
@@ -530,6 +535,10 @@ class Mixing:
                 self.pool_terms[net.name] = sc.objdict(kind='homogeneous', contacts=self.mean(net.pars.n_contacts, sim.unit_base)*beta, name=net.name)
             else:
                 self.pool_terms[net.name] = self.dim_matrices(net, beta) if (getattr(net, 'dims', None) or getattr(net, 'full', None) is not None) else self.age_matrix(net, beta)
+        for net in nets: # A matrix given with its own age groups and used by them (see ss.MixingPools.band_exposure()): checked over them, as in a compartmental run
+            if isinstance(net, ss.MixingPools) and net.name not in self.pool_terms and getattr(net, 'ages', None) is not None:
+                strat = next((strat for strat in sim.groups.strats if strat.kind == 'age'), None)
+                self.check_bands(net, np.column_stack([net.edges, np.append(net.edges[1:], np.inf)]), np.asarray(net.pars.n_contacts, dtype=float), self.age_cdf(strat))
         self.note_regrouped()
         if self.space is not None and any(term.kind == 'matrix' for term in self.pool_terms.values()):
             self.init_space() # A contact matrix can add an age stratification, which changes the groups

@@ -64,10 +64,7 @@ for label, disease in spellings.items():
 The state-transition diagram, from `diagram()` (the dashed arrow is a transmission):
 
 ```{python}
-#| echo: false
-#| output: asis
-fence = '`' * 3
-print(fence + '{mermaid}\n' + spellings['Operators'].diagram() + '\n' + fence)
+spellings['Operators'].diagram()
 ```
 
 ## Result

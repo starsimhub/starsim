@@ -73,6 +73,8 @@ class FetalHealth(ss.Module):
 
     At delivery: `birth_weight = baseline_for_GA × percentile × (1 - restriction)`
 
+    Note: CRN safe.
+
     Args:
         weight_by_ga (array):           Nx2 array of [gestational_age_weeks, weight_grams]
         interp_fn (callable):           interpolation function with signature (x, xp, fp) -> array (default np.interp)
@@ -344,6 +346,8 @@ class treat_pregnant(ss.Intervention):
     Treatment only applies between `start_year` and `end_year`. If not
     specified, defaults to the full simulation period.
 
+    Note: CRN safe.
+
     Args:
         disease (str):              name of the target disease (default: 'sir')
         start_year (float):         first year treatment is available (default: sim start)
@@ -433,6 +437,8 @@ class fetal_infection(ss.Connector):
        by checking `ti_infected == self.ti`: an infection in the previous step is dated at its end, which is this step's start).
 
     Requires `ssl.mnch.FetalHealth()` in `custom` and an SIR disease written as code (`ssl.AgentSIR(name="sir")`) in `diseases`.
+
+    Note: CRN safe.
 
     Args:
         timing_shift (Dist):    weeks to shift delivery forward per infection (default: lognormal mean=3, std=1)

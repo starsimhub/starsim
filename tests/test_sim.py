@@ -2,6 +2,7 @@
 Test Sim API
 """
 
+import pytest
 import numpy as np
 import starsim as ss
 import starsim.library as ssl
@@ -76,6 +77,9 @@ def test_default(do_plot=do_plot):
     sim = ss.Sim(n_agents=n_agents).run()
     if do_plot:
         sim.plot()
+    with pytest.raises(ValueError, match='no agents'): # It was a ZeroDivisionError
+        ss.Sim(n_agents=0, total_pop=1, diseases='sir').init()
+    assert ss.Sim(diseases='sir', n_agents=None).run().solver != 'abm' # Not given, as if left out
     return sim
 
 

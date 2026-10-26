@@ -106,7 +106,7 @@ class Options(sc.objdict):
         options.check_method_calls = sc.parse_env('STARSIM_CHECK_METHOD_CALLS', 'warn', str)
 
         optdesc.date_sep = 'Set separator for dates'
-        options.date_sep = sc.parse_env('STARSIM_DATE_SEP', '.', str)
+        options.date_sep = sc.parse_env('STARSIM_DATE_SEP', '-', str)
 
         optdesc.jupyter = 'Set whether to use Jupyter settings: -1=auto, 0=False, 1=True'
         options.jupyter = sc.parse_env('STARSIM_JUPYTER', -1, int)

@@ -7,7 +7,7 @@ import pandas as pd
 import sciris as sc
 import starsim as ss
 
-__all__ = ['Pregnancy', 'Lactation']
+__all__ = ['Pregnancy']
 
 
 class Pregnancy(ss.Demographics, ss.Disease):
@@ -28,9 +28,16 @@ class Pregnancy(ss.Demographics, ss.Disease):
     before they are born, so a death of a fetus `on=preg.delivery` is a stillbirth; `preg.birth` happens to the newborns,
     so a neonatal death is `on=preg.birth`.
 
+    As agents, a live birth starts breastfeeding (`lactating`, with `p_breastfeed`), or restarts it for a woman breastfeeding
+    already; it ends after `dur_breastfeed`, or at once if a child of hers dies before the age of 1. It is a state of each
+    woman rather than one of the module's exclusive states (`NP`, `P`), since it overlaps the next pregnancy. A
+    `BreastfeedingNet` pairs each newborn with a mother who breastfeeds, and ends the pair when she stops.
+
     Its parameters are listed in `__init__()`; code reacts to its events with `add_callback()`, e.g. `preg.add_callback(preg.birth, fn)`.
     Its states and results are `P` (pregnant), `ti_P`, the scheduled delivery `ti_exit_P` (`set_delivery()` reschedules it),
-    and the flows `conception`, `birth`, `miscarriage`, `stillbirth`, and `abortion`.
+    and the flows `conception`, `birth`, `miscarriage`, `stillbirth`, and `abortion`; as agents, `lactating` (breastfeeding).
+
+    Note: CRN safe as agents.
 
     Args:
         fertility_rate (rate/dataframe): age-specific fertility rates, or one rate (default per 1000: see `rate_units`)
@@ -42,6 +49,8 @@ class Pregnancy(ss.Demographics, ss.Disease):
         p_loss (bernoulli): chance of a spontaneous loss in each step of the module
         loss_threshold (dur): gestational age that separates a miscarriage from a stillbirth
         infant_rate (rate): hazard of death before the age of 1, for the children
+        p_breastfeed (bernoulli): chance a mother breastfeeds a newborn
+        dur_breastfeed (dur/Dist): duration of breastfeeding
         p_abortion (float): chance a pregnancy ends in an abortion, at conception
         burnin (bool): whether women are pregnant at the start, at the gestational ages they would have reached (default True; see `burnin_plan()`); agents only
         metadata (dict): data column mappings for fertility rate data if a dataframe is supplied
@@ -51,6 +60,9 @@ class Pregnancy(ss.Demographics, ss.Disease):
         preg = ss.Pregnancy(fertility_rate=ss.freqperyear(80))
         sim = ss.Sim(demographics=preg, n_agents=5000, start=2000, stop=2010, dt=ss.months(1)).run()
         sim.results.pregnancy.conception.sum()
+
+        # Lactational amenorrhea: fewer conceptions while breastfeeding, in the first 6 months
+        lam = ss.modify(preg.conception, multiply=0.1, where=preg.lactating & (preg.since_birth < ss.months(6)))
         ```
     """
     NP, P = ss.states('NP P')
@@ -72,7 +84,7 @@ class Pregnancy(ss.Demographics, ss.Disease):
     birth       = ss.birth(NP, per=delivery) # Children, linked to the mother (agents only, for now): embryos_per_pregnancy of them (see __init__())
     infant_mortality = ss.Transition(NP, ss.null, rate=infant_rate) # The children (not fetuses), until the age of 1: see _gate_infant()
 
-    sets_unit = False # Its typed defaults (weeks and years) do not set the unit of the model's bare numbers: see ss.Sim._init_unit()
+    sets_unit = False # Its typed defaults (weeks and years) do not set the unit of the model's bare numbers: see ss.solvers.choose.init_unit()
 
     _v3_methods = ['make_p_conceive', 'standardize_fertility_data', 'set_ptb', 'set_rel_sus', 'updates_pre', 'update_breastfeeding', 'process_delivery',
                    '_post_delivery', 'set_breastfeeding', 'process_newborns', 'progress_pregnancies', 'update_maternal_deaths', 'select_conceivers',
@@ -80,7 +92,7 @@ class Pregnancy(ss.Demographics, ss.Disease):
                    'process_neonatal_deaths'] # The hooks of Starsim 3's coded pregnancy (the methods its own steps called), which this one never calls; not its properties and helpers (fecund, tri1_uids, _get_uids, ...), which a subclass may define for its own code
 
     _v3_attrs = dict(ti_delivery='ti_exit_P, the step of the scheduled delivery (np.ceil() of it for a whole step)', ti_pregnant='ti_P', pregnant='P',
-                     breastfeeding='lactation.L (with an ss.Lactation in the sim)') # Attributes of Starsim 3's coded pregnancy, and what they are now
+                     breastfeeding='lactating') # Attributes of Starsim 3's coded pregnancy, and what they are now
 
     def __getattr__(self, attr):
         """ An attribute of Starsim 3's pregnancy says what it is now, rather than suggesting a near name """
@@ -96,11 +108,11 @@ class Pregnancy(ss.Demographics, ss.Disease):
         if overridden:
             errormsg = (f'{cls.__name__} defines {sc.strjoin(overridden)}, from Starsim 3\'s ss.Pregnancy, which v4\'s declared one never calls, so it would be silently ignored.\n'
                         f'     Use its seams instead: conception_rate(sim) for who conceives; ss.modify() of its transitions (preg.conception, preg.miscarriage, ...) and its parameters (maternal_rate, infant_rate, ...);\n'
-                        f'     since_birth and ss.Lactation for postpartum and breastfeeding; ss.on(preg.birth), or add_callback() from code, at a delivery or loss (see the migrate-starsim3 skill).')
+                        f'     since_birth and lactating for postpartum and breastfeeding; ss.on(preg.birth), or add_callback() from code, at a delivery or loss (see the migrate-starsim3 skill).')
             raise ss.CapabilityError(errormsg)
         return
 
-    def __init__(self, pars=None, fetus='auto', lactation='auto', metadata=None, **kwargs):
+    def __init__(self, pars=None, fetus='auto', metadata=None, **kwargs):
         declared = [k for k,v in ss.transitions.class_members(type(self)).items() if isinstance(v, ss.par)]
         given = sc.mergedicts(pars, {k:kwargs.pop(k) for k in list(kwargs) if k not in ss.Timeline.keywords + ['label', 'strains'] and not (k in declared and isinstance(kwargs[k], ss.par))})
         kwargs.setdefault('name', 'pregnancy')
@@ -163,11 +175,12 @@ class Pregnancy(ss.Demographics, ss.Disease):
             ss.FloatArr('n_pregnancies', default=0, label='Number of pregnancies'),
             ss.FloatArr('ti_delivered', label='The step of the last delivery'),
             ss.FloatArr('dur_gestation', label='The duration of the current (or last) pregnancy as drawn, in weeks'),
+            ss.BoolState('lactating', label='Breastfeeding'),
+            ss.FloatArr('ti_weaned', label='The step breastfeeding ends'),
         )
         self.rng_md = ss.random() # For a plain number as p_maternal_death
         self.rng_dur = ss.random() # For the durations of pregnancies with a relative risk of preterm birth: see preterm_risk()
         self.fetus = fetus # Whether fetuses are agents, from conception: see _init_fetus()
-        self.lactation_opt = lactation # Whether to add an ss.Lactation: see link()
         self._nnd = 0 # Neonatal deaths in the step
         self._mothers = [] # The ages of the women who delivered in the step, for the ASFR (agents)
         self.asfr_bins = np.array([0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 100])
@@ -287,21 +300,6 @@ class Pregnancy(ss.Demographics, ss.Disease):
         note = f'{self.name}: women pregnant at the start, conceived over the {"step" if steps == 1 else f"{steps} steps"} before it (burnin=True)'
         return sc.objdict(share=share, steps=steps, tr=self.graph.transitions.conception, target=['P'], note=note, after=after)
 
-    def link(self, sim):
-        """
-        `lactation='auto'`: add an `ss.Lactation` to a sim that has none, if it has a `BreastfeedingNet` (or `lactation=True`),
-        with this module's breastfeeding parameters; called by `ss.solvers.choose_solver()`
-        """
-        pars = sim.pars
-        mods = [m for key in ss.modules.module_types() + ['custom'] for m in pars[key].values()]
-        if self.lactation_opt is False or any(isinstance(m, Lactation) for m in mods):
-            return
-        if self.lactation_opt is True or any(isinstance(net, ss.BreastfeedingNet) for net in pars.networks.values()):
-            lact = Lactation(p_breastfeed=self.pars.p_breastfeed, dur_breastfeed=self.pars.dur_breastfeed, pregnancy=self)
-            pars.demographics.append(lact)
-            lact.link(sim)
-        return
-
     def compartmental_form(self, sim):
         """
         The small compartmental form, used only when a compartmental solver is named (`solver='auto'` runs a pregnancy as
@@ -309,7 +307,7 @@ class Pregnancy(ss.Demographics, ss.Disease):
         `dur_pregnancy` (a fixed delay, or Erlang stages for a distribution), with `n` children per delivery
         (`ss.birth(per=preg.delivery)`). The losses do not read the gestational age (`P.time`): the loss rate is split
         between miscarriage and stillbirth by the share of the mean gestation below `loss_threshold`. It has no fetuses,
-        no links between mothers and children, no lactation, no preterm risk, and no deaths at delivery (`p_maternal_death`). Returns the note that says so
+        no links between mothers and children, no breastfeeding, no preterm risk, and no deaths at delivery (`p_maternal_death`). Returns the note that says so
         """
         g = self.graph
         trs = g.transitions
@@ -319,7 +317,7 @@ class Pregnancy(ss.Demographics, ss.Disease):
         trs.miscarriage.rate = g.pars.loss_rate*early
         trs.stillbirth.rate = g.pars.loss_rate*(1 - early)
         note = (f'"{self.name}" runs in its small compartmental form: losses at a constant rate, {early:.0%} of them miscarriages (the share of the mean gestation below loss_threshold); '
-                f'no fetuses, links between mothers and children, lactation, preterm risk, or deaths at delivery. Run with solver="abm" for these')
+                f'no fetuses, links between mothers and children, breastfeeding, preterm risk, or deaths at delivery. Run with solver="abm" for these')
         return note
 
     def step(self):
@@ -327,6 +325,9 @@ class Pregnancy(ss.Demographics, ss.Disease):
         if self.ti == 1 and self.abm and self.fetus: # On the first step: women pregnant at the start (burnin=) carry fetuses too
             moms = self.P.uids
             self._conceive(moms[~np.isin(moms, self.sim.people.parent.raw[self._unborn(moms)])], 0)
+        if self.abm: # Weaning
+            lact = self.lactating.uids
+            self.lactating[lact[self.ti_weaned[lact] <= self.ti]] = False
         ss.Disease.step_state(self)
         self._react()
         ss.Disease.step(self)
@@ -395,24 +396,10 @@ class Pregnancy(ss.Demographics, ss.Disease):
                 net.add_pairs(self.sim.people.parent.raw[new], new)
         return
 
-    @property
-    def lactation(self):
-        """ The sim's ss.Lactation, if it has one """
-        return next((m for m in self.sim.demographics() if isinstance(m, Lactation)), None) if self.sim is not None else None
-
     def _react(self):
-        """ As agents, once for each event: make the fetuses of new pregnancies, pair newborns with breastfeeding mothers, and draw the values recorded at events (see attr()) """
+        """ As agents, once for each event: make the fetuses of new pregnancies, and draw the values recorded at events (see attr()) """
         if not self.abm:
             return
-        nets = [net for net in self.sim.networks.values() if isinstance(net, ss.BreastfeedingNet)]
-        lact = self.lactation
-        if nets and lact is not None:
-            kids = self.engine.fresh('breastfed', 'birth') # After ss.Lactation has started on preg.live_birth
-            if len(kids):
-                moms = self.sim.people.parent.raw[kids]
-                fed = lact.L.raw[moms]
-                for net in nets:
-                    ss.PostnatalNet.add_pairs(net, ss.uids(moms[fed]), kids[fed])
         new = self.engine.fresh('ptb', 'conception', unique=False) # Before the fetuses are made, since their ages count down to the delivery
         if len(new):
             np.add.at(self.n_pregnancies.raw, new, 1) # Each conception, including a second in a step after an abortion at once
@@ -452,6 +439,13 @@ class Pregnancy(ss.Demographics, ss.Disease):
         self.set_delivery(uids, self.ti_P.internal(uids) + 1 + self.engine.whole_steps('P', uids, steps, dt=1.0), weeks=weeks[inds]) # Rounded up or down at random, as the engine rounds a dwell time (see ss.solvers.Agents.whole_steps())
         return
 
+    def lactate(self, moms, ti):
+        """ At a live birth (agents): each mother breastfeeds, or breastfeeds again, with `p_breastfeed`, for `dur_breastfeed` from step `ti` """
+        fed = self.pars.p_breastfeed.rvs(moms)
+        self.lactating[moms] = fed
+        self.ti_weaned[moms[fed]] = ti + self.pars.dur_breastfeed.rvs(moms[fed])
+        return
+
     def _classify_births(self, newborns, ti):
         """ Starsim 3: the gestational age at birth of each newborn (weeks since the mother conceived), and whether preterm or very preterm """
         if not len(newborns):
@@ -488,12 +482,14 @@ class Pregnancy(ss.Demographics, ss.Disease):
                 engine.record_event('stillbirth', still)
         else:
             new = engine.grow_children(tr, parents, ti)
-        for net in self.sim.networks.values():
-            if isinstance(net, ss.PostnatalNet) and not isinstance(net, ss.BreastfeedingNet):
-                net.add_pairs(ppl.parent.raw[new], new)
         moms = ss.uids(np.unique(ppl.parent.raw[new]))
         self._mothers.append(ppl.age.raw[parents])
         self.ti_live_birth[moms] = engine.index_of(ti)
+        self.lactate(moms, engine.index_of(ti))
+        for net in self.sim.networks.values():
+            if isinstance(net, ss.PostnatalNet): # A BreastfeedingNet pairs each newborn with a mother who breastfeeds
+                kids = new[self.lactating.raw[ppl.parent.raw[new]]] if isinstance(net, ss.BreastfeedingNet) else new
+                net.add_pairs(ppl.parent.raw[kids], kids)
         self._classify_births(new, ti)
         engine.record_event('live_birth', moms)
         p_md = self.pars.p_maternal_death # At delivery, as in Starsim 3 (agents only)
@@ -641,7 +637,10 @@ class Pregnancy(ss.Demographics, ss.Disease):
         self._nnd += np.count_nonzero((age >= 0) & (age <= 28/365) & ~self.fetal.raw[uids])
         infant = (age >= 0) & (age < 1) & (parent != ppl.parent.nan) & ~self.fetal.raw[uids]
         moms = ss.uids(np.unique(parent[infant]))
-        engine.record_event('infant_death', moms[ppl.alive.raw[moms]])
+        moms = moms[ppl.alive.raw[moms]]
+        engine.record_event('infant_death', moms)
+        lact = moms[self.lactating.raw[moms]]
+        self.ti_weaned[lact] = np.minimum(self.ti_weaned[lact], self.ti) # Breastfeeding stops, at the start of the next step (see step())
         return
 
     @property
@@ -693,16 +692,13 @@ class Pregnancy(ss.Demographics, ss.Disease):
         return ss.peryear(np.where(fertile, rate, 0)*(fertile if not self.abm else 1))
 
 
-def _preg(name):
-    """ An event of the sim's pregnancy module, for a module declared before it exists; named "pregnancy" until `Lactation.link()` names the sim's own """
-    return ss.conditions.Event('tr', ss.conditions.Named('pregnancy', name))
-
-
 class Population(ss.Demographics, ss.Disease):
     """
     Everyone alive, as one declared state (`N`), to hold the births, deaths, and migration declared for the whole population
-    (`ss.Sim(demographics=[ss.birth(...), ss.death(...)])`) when there is no declared disease, so they can run as compartments
-    (with a compartmental solver named; otherwise they run as agents, as `ss.Births` and `ss.Deaths`). Added by the sim.
+    (`ss.Sim(demographics=[ss.birth(...), ss.death(...)])`) when there is no declared disease, so they are a declared model
+    like any other, which `solver='auto'` chooses for as for a disease. Added by the sim.
+
+    Note: CRN safe as agents.
     """
     N = ss.State(label='Alive')
     first = 'N'
@@ -711,74 +707,6 @@ class Population(ss.Demographics, ss.Disease):
     def __init__(self, **kwargs):
         kwargs.setdefault('name', 'population')
         super().__init__(**kwargs)
-        return
-
-
-class Lactation(ss.Demographics, ss.Disease):
-    """
-    Lactation, as declared states: `N` (not breastfeeding) and `L` (breastfeeding)
-
-    A sibling of `ss.Pregnancy` (or of a subclass of it, by any name), since lactation overlaps the next pregnancy. A live birth starts it
-    (with `p_breastfeed`), or restarts it for a woman breastfeeding already; it ends after `dur_breastfeed`, or at once
-    if a child of hers dies before the age of 1. A `BreastfeedingNet` pairs each newborn with a mother who is in `L`
-    and ends the pair when she leaves it. Added by `ss.Pregnancy` when the sim has a `BreastfeedingNet`
-    (`lactation='auto'`). Agents only, since it is triggered by events of each mother and her children.
-
-    Args:
-        p_breastfeed (float): chance a mother breastfeeds a newborn
-        dur_breastfeed (dur/Dist): duration of breastfeeding
-        pregnancy (str/Pregnancy): the pregnancy module whose events drive it, or its name (default: the sim's only `ss.Pregnancy`, of any subclass)
-
-    Examples:
-        ```python
-        preg, lact = ss.Pregnancy(fertility_rate=ss.freqperyear(80)), ss.Lactation()
-        lam = ss.modify(preg.conception, multiply=0.1, where=lact.L & (preg.since_birth < ss.months(6)))
-        ```
-    """
-    N, L = ss.states('N L')
-    first = 'N' # Where people start, and are born into
-    p_breastfeed   = ss.par(1.0, doc='Chance a mother breastfeeds a newborn')
-    dur_breastfeed = ss.par(ss.lognorm_ex(mean=ss.years(0.75), std=ss.years(0.5)), doc='Duration of breastfeeding')
-
-    start   = ss.Transition(N, [L, ss.stay], p=[p_breastfeed, None], on=_preg('live_birth'))
-    restart = ss.Transition(L, [L, N], p=[p_breastfeed, None], on=_preg('live_birth')) # A new child: L.time starts again
-    wean    = ss.Transition(L, N, dur=dur_breastfeed)
-    stop    = ss.Transition(L, N, on=_preg('infant_death'))
-
-    sets_unit = False # Its typed defaults (weeks and years) do not set the unit of the model's bare numbers: see ss.Sim._init_unit()
-    compartmental = False # Driven by events of each mother and her children, which only agents have
-
-    def __init__(self, pars=None, pregnancy=None, **kwargs):
-        declared = [k for k,v in ss.transitions.class_members(type(self)).items() if isinstance(v, ss.par)]
-        given = sc.mergedicts(pars, {k:kwargs.pop(k) for k in list(kwargs) if k in declared and not isinstance(kwargs[k], ss.par)})
-        if isinstance(given.get('p_breastfeed'), ss.bernoulli): # As in Starsim 3
-            given['p_breastfeed'] = given['p_breastfeed'].pars.p
-        kwargs.setdefault('name', 'lactation')
-        super().__init__(**kwargs)
-        self.pars.update(given)
-        self.pregnancy = pregnancy # The pregnancy module, or its name; found by link() if None
-        return
-
-    def link(self, sim):
-        """ Find the pregnancy module whose events drive this one (`pregnancy=`, else the sim's only `ss.Pregnancy`), and point the triggers of the transitions at it by name; called by `ss.solvers.choose_solver()` """
-        preg = self.pregnancy
-        if preg is None:
-            pregs = [m for key in ss.modules.module_types() + ['custom'] for m in sim.pars[key].values() if isinstance(m, Pregnancy)]
-            if len(pregs) > 1:
-                errormsg = f'"{self.name}" is driven by the events of a pregnancy module, but the sim has several ({sc.strjoin([m.name for m in pregs])}); give the one to use, e.g. ss.Lactation(pregnancy="{pregs[0].name}")'
-                raise ValueError(errormsg)
-            preg = pregs[0] if pregs else None
-        name = ss.conditions.modname(preg) if preg is not None else 'pregnancy'
-        for tr in self.graph.transitions.values():
-            trig = tr.trigger
-            if trig is not None and trig.event and isinstance(trig.x.args[1], ss.conditions.Named): # A copy, since the class's trigger is shared by every instance
-                tr.trigger = sc.cp(trig)
-                tr.trigger.x = ss.conditions.Event('tr', ss.conditions.Named(name, trig.x.args[1].name))
-        return
-
-    def step(self):
-        ss.Disease.step_state(self)
-        ss.Disease.step(self)
         return
 
 

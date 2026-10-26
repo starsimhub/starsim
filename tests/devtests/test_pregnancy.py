@@ -269,7 +269,7 @@ def test_fetus():
 
 @sc.timer()
 def test_lactation():
-    sc.heading('Testing ss.Lactation: started by live births, ended by weaning or an infant death; BreastfeedingNet; LAM')
+    sc.heading('Testing breastfeeding (preg.lactating): started by live births, ended by weaning or an infant death; BreastfeedingNet; LAM')
     def make(lam=False):
         preg = ss.Pregnancy(fertility_rate=ss.freqperyear(150))
         S, I = ss.states('S I')
@@ -277,22 +277,27 @@ def test_lactation():
             infection = ss.Transition(S, I, rate=dict(maternalnet=0.3, breastfeedingnet=0.5) * I),
             death     = ss.Transition(I, ss.null, rate=ss.peryear(2), where=ss.ppl.age < 1), # Infant deaths end breastfeeding
             init=dict(I=0.3), name='d')
-        mods = []
-        if lam:
-            lact = ss.Lactation()
-            mods.append(ss.modify(preg.conception, multiply=0.1, where=lact.L & (preg.since_birth < ss.months(6))))
-            return dict(demographics=[preg, lact], diseases=d, connectors=mods, networks=[ss.MaternalNet(), ss.BreastfeedingNet()])
-        return dict(demographics=preg, diseases=d, networks=[ss.MaternalNet(), ss.BreastfeedingNet()])
-    checked = sc.objdict(n=0)
+        mods = [ss.modify(preg.conception, multiply=0.1, where=preg.lactating & (preg.since_birth < ss.months(6)))] if lam else []
+        return dict(demographics=preg, diseases=d, connectors=mods, networks=[ss.MaternalNet(), ss.BreastfeedingNet()])
+    checked = sc.objdict(n=0, weaned=0, stopped=0, last=None)
     def check(sim):
-        lact, net = sim.demographics.lactation, sim.networks.breastfeedingnet
-        assert np.all(lact.L[net.p1]), 'every breastfeeding pair has a lactating mother'
+        preg, net = sim.demographics.pregnancy, sim.networks.breastfeedingnet
+        assert np.all(preg.lactating[net.p1]), 'every breastfeeding pair has a lactating mother'
         checked.n += len(net)
+        now = preg.lactating.raw.copy()
+        if checked.last is not None: # Who stopped in this step, among those alive: weaned (at the ti_weaned drawn), or early (an infant death, which sets it to that step)
+            n = len(checked.last)
+            ended = np.flatnonzero(checked.last & ~now[:n] & sim.people.alive.raw[:n])
+            early = preg.ti_weaned.raw[ended] == np.round(preg.ti_weaned.raw[ended])
+            checked.weaned += (~early).sum()
+            checked.stopped += early.sum()
+        checked.last = now
     sim = ss.Sim(**make(), analyzers=check, n_agents=10_000, **kw).run()
     r, ppl, hiv = sim.results, sim.people, sim.diseases.d
-    assert 'lactation' in sim.demographics # lactation='auto': there is a BreastfeedingNet
-    assert np.isclose(r.lactation.start.sum() + r.lactation.restart.sum(), r.pregnancy.birth.sum(), rtol=0.05) # p_breastfeed=1
-    assert r.lactation.wean.sum() > 500 and r.lactation.stop.sum() > 10 and checked.n > 0
+    preg = sim.demographics.pregnancy
+    moms = preg.ti_live_birth.notnan.uids
+    assert len(moms) > 500 and np.all(preg.ti_weaned.notnan[moms]) # p_breastfeed=1: every mother breastfed
+    assert checked.weaned > 500 and checked.stopped > 10 and checked.n > 0
     kids = ppl.parent.notnan.uids
     infected = kids[hiv.I[kids]]
     assert len(infected) > 50 # In utero and by breastfeeding
@@ -303,23 +308,14 @@ def test_lactation():
 
 @sc.timer()
 def test_lactation_subclass():
-    sc.heading('Testing ss.Lactation with a subclass of ss.Pregnancy that has another name')
+    sc.heading('Testing breastfeeding with a subclass of ss.Pregnancy that has another name')
     class FP(ss.Pregnancy):
         def __init__(self, **kwargs):
             kwargs.setdefault('name', 'fp')
             super().__init__(**kwargs)
     sim = ss.Sim(demographics=FP(fertility_rate=ss.freqperyear(150)), networks=[ss.MaternalNet(), ss.BreastfeedingNet()], n_agents=5000, **kw).run()
     r = sim.results
-    assert 'lactation' in sim.demographics # lactation='auto', found by type rather than by the name "pregnancy"
-    assert r.fp.birth.sum() > 100
-    assert np.isclose(r.lactation.start.sum() + r.lactation.restart.sum(), r.fp.birth.sum(), rtol=0.05) # Driven by fp's live births
-    assert r.lactation.wean.sum() > 50
-    for given in ['fp', None]: # By name, or as the module
-        fp = FP(fertility_rate=ss.freqperyear(150))
-        named = ss.Sim(demographics=[fp, ss.Lactation(pregnancy=given or fp)], n_agents=2000, **kw).run()
-        assert named.results.lactation.start.sum() > 0
-    with pytest.raises(ValueError, match='pregnancy='): # Two pregnancy modules, and neither given
-        ss.Sim(demographics=[FP(), ss.Pregnancy(), ss.Lactation()], n_agents=100, **kw).init()
+    assert r.fp.birth.sum() > 100 and len(sim.networks.breastfeedingnet) > 0 # Found by type rather than by the name "pregnancy"
     return sim
 
 
@@ -349,11 +345,11 @@ def test_code_pars():
 
 
 def make_hiv_vertical(bf=True):
-    preg = ss.Pregnancy(fertility_rate=ss.freqperyear(120))
+    preg = ss.Pregnancy(fertility_rate=ss.freqperyear(120), p_breastfeed=0.8)
     S, I = ss.states('S I')
     beta = dict(maternalnet=ss.peryear(0.2), breastfeedingnet=ss.peryear(0.3 if bf else 0))
     hiv = ss.Disease(S, I, infection=ss.Transition(S, I, rate=beta * I), death=ss.Transition(I, ss.null, rate=ss.peryear(0.05)), init=dict(I=0.2), name='hiv')
-    return dict(demographics=[preg, ss.Lactation(p_breastfeed=0.8)], diseases=hiv, networks=[ss.MaternalNet(), ss.BreastfeedingNet()])
+    return dict(demographics=preg, diseases=hiv, networks=[ss.MaternalNet(), ss.BreastfeedingNet()])
 
 
 @sc.timer()

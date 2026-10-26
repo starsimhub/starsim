@@ -35,10 +35,7 @@ campaign = ss.Delivery(move=dict(vaccinated=True), coverage=0.5, at=ss.days(10),
 `stratify()` splits each state in two, with everyone unvaccinated at the start (`split=[1, 0]`), and `adjust=` multiplies the rate of infection by 1 for the unvaccinated and 0.1 for the vaccinated. The campaign is a delivery that moves people to the vaccinated group: it needs no vaccine product, since the effect of vaccination is in the stratification. The diagram, from `diagram()`, is an SIR's, since the vaccinated and unvaccinated groups split each state:
 
 ```{python}
-#| echo: false
-#| output: asis
-fence = '`' * 3
-print(fence + '{mermaid}\n' + make_sir().diagram() + '\n' + fence)
+make_sir().diagram()
 ```
 
 ## Result

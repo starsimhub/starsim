@@ -184,7 +184,7 @@ If nothing is given, a disease with transmission starts with 1% of people infect
 
 ## Births and deaths in a disease
 
-Births and deaths of everyone are usually given to the sim, as `demographics=`, so that the same people are born into and die from every disease ([Demographics](populations_demographics.qmd)). With one disease, they can also be declared in it: `ss.birth(S, rate=...)` is a crude birth rate (per person per unit of time) into `S`, and `ss.death(rate=...)` with no state is a death rate in every state.
+Births and deaths of everyone are usually given to the sim, as `demographics=`, so that the same people are born into and die from every disease ([Demographics](populations_demographics.qmd)). With one disease, they can also be declared in it: `ss.birth(S, rate=...)` is a crude birth rate into `S` (a typed rate is per person; a bare number is per year, and above 1 per 1,000 people), and `ss.death(rate=...)` with no state is a death rate in every state, read the same way. A death from one state, `ss.death(I, rate=...)`, is a rate like any other: a bare number is in the model's unit.
 
 New births are the supply of susceptible people that keeps measles endemic. Here is measles in a city of a million, starting from a population in which it has circulated before, so that only 7% of people are still susceptible. Since this model has values in both days and years, the unit of a bare number can't be known, so β is given as `ss.perday()`:
 

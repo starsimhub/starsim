@@ -127,12 +127,7 @@ sim = ss.Sim(measles, total_pop=100_000, stop=ss.days(150))
 sim.describe()
 ```
 
-`describe()` lists each parameter with its description and source. One parameter can be used in several places, as `dur_infectious` is here, and changing it changes it everywhere: `ss.Sim(measles, pars=dict(dur_latent=ss.days(12)), ...)` runs the model with a latent period of 12 days. The bounds are what [calibration](t7_calibration.qmd) uses: `sim.fit()` searches for the values of every parameter with bounds that best match data.
-
-::: {.callout-warning}
-## [PROPOSAL]
-`describe()` doesn't show the bounds of a parameter. It should, next to its value (e.g. `beta = 1.9 per day, between 1 and 3`), since which parameters will be fitted, and over what range, is part of the model (P2).
-:::
+`describe()` lists each parameter with its value, its bounds (`beta = 1.9 per day, between 1 and 3`), its description, and its source. One parameter can be used in several places, as `dur_infectious` is here, and changing it changes it everywhere: `ss.Sim(measles, pars=dict(dur_latent=ss.days(12)), ...)` runs the model with a latent period of 12 days. The bounds are what [calibration](t7_calibration.qmd) uses: `sim.fit()` searches for the values of every parameter with bounds that best match data.
 
 ## The model as a diagram and as equations
 
@@ -142,30 +137,13 @@ Two more ways to check a model, besides `describe()`, are its diagram and its eq
 measles.equations()
 ```
 
-`diagram()` gives the states and transitions as a flowchart, in Mermaid, a language for diagrams that Quarto, GitHub, and many other tools draw:
+`diagram()` draws the states and transitions as a flowchart, with the transmission dashed, the empty circle for `ss.null`, and each arrow labelled with its value and, for a branch, the share that takes it:
 
 ```{python}
-print(measles.diagram())
+measles.diagram()
 ```
 
-Drawn, it looks like this, with the transmission dashed, and the empty circle for `ss.null`:
-
-```{mermaid}
-flowchart LR
-    S(["S"])
-    E(["E"])
-    I(["I"])
-    R(["R"])
-    S -.->|"infection: beta * I"| E
-    E -->|"progression: dur = dur_latent"| I
-    I -->|"recovery: dur = dur_infectious"| R
-    I -->|"death: dur = dur_infectious"| null1(( ))
-```
-
-::: {.callout-warning}
-## [PROPOSAL]
-In a notebook, `measles.diagram()` should draw the diagram (as `describe()` shows tables), not give its text to print; the text would stay available, e.g. as `measles.diagram(output='mermaid')` (P13). The diagram should also show the share that takes each branch (`p = 0.998`, `p = 0.002`).
-:::
+The diagram is written in Mermaid, a language for diagrams that JupyterLab, Quarto, GitHub, and many other tools draw; `print(measles.diagram())` gives its text.
 
 ## Writing a disease as a class
 

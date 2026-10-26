@@ -107,7 +107,7 @@ from .diseases import Disease, Infection, SIR, SEIR, SIS
 from .strains import immunity, Strains
 
 from . import pregnancy
-from .pregnancy import Pregnancy, Lactation
+from .pregnancy import Pregnancy
 
 from .loop import Loop
 

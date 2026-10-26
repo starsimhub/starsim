@@ -48,18 +48,19 @@ Each contact between two groups is counted from both sides: the contacts that ch
 
 ## The forms of a matrix
 
-`ss.contacts()` takes a matrix in one of four forms:
+`ss.contacts()` takes a matrix and what it is over:
 
 | Form | Example | The groups |
 |---|---|---|
-| A matrix with its own age groups | `ss.contacts(ages=[0, 15, 65], matrix=...)` | The matrix's own, given by their lower edges; they need not be the model's |
-| A matrix over the model's groups | `ss.contacts(age=...)`, `ss.contacts(risk=...)` | The levels of the model's stratification by that name, in order |
+| A matrix with its own age groups | `ss.contacts(matrix, ages=[0, 15, 65])` | The matrix's own, given by their lower edges; they need not be the model's |
+| A matrix over the model's groups | `ss.contacts(matrix)` (its age groups), `ss.contacts(matrix, dims='risk')` | The levels of the model's stratification by that name, in order |
 | One matrix over several stratifications together | `ss.contacts(matrix, dims=['sex', 'risk'])` | Every combination of their levels |
+| A matrix for each of several stratifications | `ss.contacts(dict(age=..., risk=...))` | Every combination of their levels, with the product of the entries for each |
 | A country's matrix, by name | `ss.contacts('Kenya')` | 5-year age groups, from a published study |
 
 A matrix with its own age groups suits data, which comes with the age groups of the study. In a compartmental run it is aggregated to the model's age groups, weighted by population, with a note that says so. As agents, each person has an exact age and is counted in whichever of the matrix's groups it falls in.
 
-Groups need not be ages. A list of names makes groups of any kind, and `ss.contacts()` then takes a matrix over them by the name of the stratification. Here 20% of people are at high risk, and they have four times as many contacts with each other as people at low risk have:
+Groups need not be ages. A list of names makes groups of any kind, and `ss.contacts()` then takes a matrix over them, with the name of the stratification as `dims=`. Here 20% of people are at high risk, and they have four times as many contacts with each other as people at low risk have:
 
 ```{python}
 S, I = ss.states('S I')
@@ -68,13 +69,13 @@ recovery  = I >> S @ ss.days(10) # No lasting immunity
 sis = ss.Disease(infection, recovery, init_prev=0.01)
 sis.stratify(risk={'low': 0.8, 'high': 0.2})
 
-mixing = ss.contacts(risk=[[2, 1], [4, 8]]) # Reciprocal: 80% × 1 = 20% × 4
+mixing = ss.contacts([[2, 1], [4, 8]], dims='risk') # Reciprocal: 80% × 1 = 20% × 4
 sim = ss.Sim(sis, networks=mixing, total_pop=100_000, stop=ss.days(200))
 sim.run()
 sim.results.sis.I.by('risk').plot()
 ```
 
-With matrices for several stratifications (`ss.contacts(age=..., risk=...)`), the contacts between two groups are the product of the entries for each. When that is not how people mix (men mix with women, and by risk differently for each sex), one matrix over the stratifications together says it, with an axis for each, rows before columns:
+With a matrix for each of several stratifications (`ss.contacts(dict(age=..., risk=...))`, with `ages=` if the one by age has its own age groups), the contacts between two groups are the product of the entries for each. When that is not how people mix (men mix with women, and by risk differently for each sex), one matrix over the stratifications together says it, with an axis for each, rows before columns:
 
 ```python
 import numpy as np
@@ -86,7 +87,7 @@ mixing = ss.contacts(matrix, dims=['sex', 'risk'])
 
 ### Units
 
-The entries of a matrix are contacts per unit time, in the sim's unit unless `unit=` says otherwise (e.g. `ss.contacts(ages=[0, 15], matrix=..., unit='day')`). A country's matrix is always contacts a day, as the studies give them, whatever the sim's unit.
+The entries of a matrix are contacts per unit time, in the sim's unit unless `unit=` says otherwise (e.g. `ss.contacts(matrix, ages=[0, 15], unit='day')`). A country's matrix is always contacts a day, as the studies give them, whatever the sim's unit.
 
 ## Data by place
 
@@ -153,8 +154,8 @@ As agents, a contact matrix is a set of mixing pools, one for each pair of group
 
 ## Pitfalls
 
-- **A contact matrix needs groups.** `ss.contacts(age=...)` or `ss.contacts(risk=...)` on a model that is not stratified by that name raises an error that says to stratify it. A matrix with its own age groups, on a model with no age groups, stratifies it by the matrix's groups, with the shares of the world's population in each: a guess, which `describe()` marks. Give the shares (or a named population) if they matter.
+- **A contact matrix needs groups.** `ss.contacts(...)` or `ss.contacts(..., dims='risk')` on a model that is not stratified by that name raises an error that says to stratify it. A matrix with its own age groups, on a model with no age groups, stratifies it by the matrix's groups, with the shares of the world's population in each: a guess, which `describe()` marks. Give the shares (or a named population) if they matter.
 - **β is per contact.** Adding a contact matrix to a model whose β was a rate per day with homogeneous mixing multiplies its R0 by roughly the mean number of contacts. Check the R0 that the sim prints.
-- **Two matrices, two meanings.** `ages=` gives the matrix's own age groups; `age=` is a matrix over the model's age groups. Giving both raises an error that says which is which.
+- **Whose age groups.** `ss.contacts(matrix, ages=[...])` has the matrix's own age groups, regrouped to the model's; `ss.contacts(matrix)` is over the model's own age groups, so its shape has to match them.
 - **Reciprocity.** A matrix that is not reciprocal for the model's population means groups disagree about how many contacts they have with each other. Starsim uses it as given; check a matrix that you wrote by hand.
 - **Units.** A bare matrix is contacts per unit time in the sim's unit. In a sim whose unit is years, `matrix=[[10, ...]]` means 10 contacts a year; give `unit='day'` for contacts a day.

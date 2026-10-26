@@ -275,7 +275,7 @@ class date(pd.Timestamp):
         return out
 
     def __repr__(self, bracket=True):
-        """ Show the date in brackets, e.g. <2024.04.04> """
+        """ Show the date in brackets, e.g. <2024-04-04> """
         _ = ss.options.date_sep
         y = f'{self.year:04d}'
         m = f'{self.month:02d}'
@@ -290,7 +290,7 @@ class date(pd.Timestamp):
         return string
 
     def __str__(self):
-        """ Like repr, but just the date, e.g. 2024.04.04 """
+        """ Like repr, but just the date, e.g. 2024-04-04 """
         return self.__repr__(bracket=False)
 
     def replace(self, *args, **kwargs):
@@ -518,8 +518,8 @@ class date(pd.Timestamp):
         Example usage:
 
         >>> date.arange(2020, 2025)
-            array([<2020.01.01>, <2021.01.01>, <2022.01.01>, <2023.01.01>,
-                   <2024.01.01>, <2025.01.01>], dtype=object)
+            array([<2020-01-01>, <2021-01-01>, <2022-01-01>, <2023-01-01>,
+                   <2024-01-01>, <2025-01-01>], dtype=object)
 
         Args:
                     start (float/ss.date/ss.dur): Lower bound - can be a date or a numerical year

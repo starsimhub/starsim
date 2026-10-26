@@ -308,7 +308,7 @@ def test_odin_discrete():
     S, I, R = ss.states(3)
     sir = ss.Disease(infection=S >> I @ ss.seasonal(mean=ss.perday(0.02), amplitude=0.3) * I, recovery=I >> R @ ss.perday(0.1), init_n=dict(I=ss.by(age=[10, 0, 0])), name='sir')
     sir.stratify(age=['1', '2', '3'], split=[0.3, 0.5, 0.2])
-    hand = ss.Sim(sir, networks=ss.contacts(age=age_pars['m']), total_pop=1e5, unit='day', dt=0.25, stop=ss.days(200), solver='ode', verbose=0).run()
+    hand = ss.Sim(sir, networks=ss.contacts(age_pars['m']), total_pop=1e5, unit='day', dt=0.25, stop=ss.days(200), solver='ode', verbose=0).run()
     imported = sim.new(solver='ode').run()
     final = imported.results[imported.diseases[0].name].R[-1]
     assert np.isclose(final, hand.results.sir.R[-1], rtol=1e-6) # The same final size as the model written by hand

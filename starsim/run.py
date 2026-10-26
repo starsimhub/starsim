@@ -2,6 +2,7 @@
 Running many sims: ss.parallel() and ss.MultiSim
 """
 import collections.abc as cabc
+import time
 import functools as ft
 import numpy as np
 import pandas as pd
@@ -32,12 +33,16 @@ class MultiSim:
         initialize (bool): whether to make and initialize the sim of each run now (otherwise, when it is run)
         inplace (bool): whether to update sims that are run as they are (with no `n_runs` or `pars`) with their results (default True)
         debug (bool): if True, run in serial
-        kwargs (dict): how to run the sims: `parallel` (default True), `n_cpus`, `par_args` (passed to `sc.parallelize()`), `shrink`, `verbose`, and `run_args` (passed to `sim.run()`)
+        kwargs (dict): how to run the sims: `parallel` (default True), `n_cpus`, `par_args` (passed to `sc.Parallel()`), `shrink`, `verbose`, and `run_args` (passed to `sim.run()`)
+
+    By default (`verbose` not given) the runs print nothing of their own, and the MultiSim shows their progress: nothing for
+    runs that are done within a second, a bar for each run if there are up to 10 that each take more than 10 seconds, and
+    otherwise one bar with the number of runs done (to a file, a line every tenth); then a line on what was run.
 
     Once run, a MultiSim has:
 
     - `results`: every result with a run axis first (see `ss.Result`), e.g. `msim.results.sir.I.quantiles()`;
-    - `runs`: one row per run, with its scenario (the label of its sim) and the values of any parameters swept;
+    - `runs`: one row per run, with its scenario (the label of its sim), the values of any parameters swept or drawn, and its seed (`rand_seed`);
     - `sims`: the sims that were run (for runs restarted from one compartmental sim, that sim, as it was after its last run).
 
     `len(msim)` is the number of runs.
@@ -119,7 +124,7 @@ class MultiSim:
         self.label = base_sim.label if (label is None and base_sim is not None) else label
         self.run_args = sc.mergedicts(dict(n_runs=n_runs, pars=pars, priors=priors, inplace=inplace, debug=debug), kwargs)
         self.results = None # Every result, with a run axis first
-        self.runs = None # One row per run: its scenario, and the values of any parameters swept
+        self.runs = None # One row per run: its scenario, the values of any parameters swept, and its seed
         self.summary = None
         self.ready = False # Whether the sim of each run has been made, by init_sims()
         self.timer = sc.timer() # Create a timer
@@ -208,9 +213,9 @@ class MultiSim:
     @property
     def run_pars(self):
         """ The values of the parameters swept (or drawn) in each run, as a dataframe (or None if there are none) """
-        if self.runs is None or len(self.runs.columns) == 1:
+        if self.runs is None or not len(self.runs.columns.difference(['scenario', 'rand_seed'])):
             return None
-        return self.runs.drop(columns='scenario')
+        return self.runs.drop(columns=['scenario', 'rand_seed'], errors='ignore')
 
     def resolve(self, n_runs=None, pars=None, priors=False):
         """ The sims to run, how many times to run each, the sets of values to run them with, and whether those are draws (runs of each scenario) rather than a sweep (scenarios of their own) """
@@ -244,7 +249,7 @@ class MultiSim:
         return sims, n_runs, pars, draws
 
     def expand(self, sims, n_runs=None, pars=None, draws=False, **opts):
-        """ The sim of each run, each with its own seed (seed, seed + 1, ...) and set of values (see `make_run()`), and a dataframe of the runs; a set of values swept is a scenario of its own, and a draw (`draws=True`) is a run of its sim's scenario """
+        """ The sim of each run, each with its own seed (see `run_seed()`) and set of values (see `make_run()`), and a dataframe of the runs; a set of values swept is a scenario of its own, and a draw (`draws=True`) or a seed swept is a run of its sim's scenario """
         sets = par_sets(pars)
         out = []
         rows = []
@@ -252,10 +257,11 @@ class MultiSim:
             if n_runs is not None and sim.initialized and not hasattr(sim, 'inputs'):
                 errormsg = f'Sim "{sim.label}" is already initialized, so its runs would all be the same; pass an uninitialized sim to run it with n_runs'
                 raise ValueError(errormsg)
-            for p in sets:
+            for j,p in enumerate(sets):
                 for i in range(sc.ifelse(n_runs, 1)):
-                    out.append(sim if n_runs is None and p is None else self.make_run(sim, p, sim.pars.rand_seed + i, **opts)) # A sim run once as it is is run itself
-                    rows.append(run_row(sim, p, draws))
+                    seed = run_seed(sim.pars.rand_seed, p, j, i, n_runs, draws)
+                    out.append(sim if n_runs is None and p is None else self.make_run(sim, p, seed, **opts)) # A sim run once as it is is run itself
+                    rows.append(run_row(sim, p, seed, draws))
         return out, pd.DataFrame(rows)
 
     def make_run(self, sim, values, seed):
@@ -338,7 +344,8 @@ class MultiSim:
                     return self
             sims, self.runs = self.expand(base, n_runs, pars, draws, **opts)
 
-        run_sims = run_each(sims, **kwargs) # This does all the work! Output sims are copies due to the pickling during parallelization
+        progress = ss.presentation.RunsProgress(sims) if verbose and not kwargs['verbose'] else None # The runs' own progress, if they say nothing
+        run_sims = run_each(sims, progress=progress, **kwargs) # This does all the work! Output sims are copies due to the pickling during parallelization
         if inplace:
             for old,new in zip(sims, run_sims):
                 if old is not new:
@@ -347,17 +354,21 @@ class MultiSim:
         self.results = MultiResults.from_sims(run_sims, self.runs)
         self.ready = False
         self.timer.stop()
-        self.say(verbose)
+        self.say(verbose, progress)
         return self
 
-    def say(self, verbose):
-        """ Say what was run, and how long it took """
+    def say(self, verbose, progress=None):
+        """ Say what was run, and how long it took: in place of the runs' progress, if it was shown """
         if verbose:
             scenarios = list(dict.fromkeys(self.runs['scenario'])) if self.runs is not None else []
             n = len(self.runs) if self.runs is not None else len(self.sims)
             which = f' of {len(scenarios)} scenarios ({sc.strjoin(scenarios)})' if len(scenarios) > 1 else f' of "{scenarios[0]}"' if scenarios and scenarios[0] else ''
             took = f'{self.timer.elapsed:.2g}' if self.timer.elapsed < 1 else f'{self.timer.elapsed:.1f}'
-            print(f'MultiSim: {n} run{"s" if n != 1 else ""}{which}\n  Done in {took} s')
+            text = f'MultiSim: {n} run{"s" if n != 1 else ""}{which}\n  Done in {took} s'
+            if progress is not None:
+                progress.finish(text)
+            else:
+                print(text)
         return
 
     def check_run(self, what):
@@ -698,7 +709,7 @@ def readable(x):
     return int(out) if out.is_integer() else out
 
 
-def single_run(sim, ind=0, shrink=True, run_args=None, verbose=None, copy_sim=False):
+def single_run(sim, ind=0, shrink=True, run_args=None, verbose=None, copy_sim=False, track=False, globaldict=None, show=None):
     """
     Run one sim, as `run_each()` does: labelled by its position if it has no label, and shrunk afterwards if `shrink`
 
@@ -709,18 +720,27 @@ def single_run(sim, ind=0, shrink=True, run_args=None, verbose=None, copy_sim=Fa
         run_args (dict): arguments passed to `sim.run()`
         verbose (int): detail to print
         copy_sim (bool): whether to run a copy of the sim (as pickling gives when running in parallel)
+        track (bool): whether to put how far the run has got in `globaldict`, by `ind` (see `ss.presentation.RunsProgress`)
+        globaldict (dict): a dict shared with the other runs (given by `sc.parallelize()`, or by `run_each()` when run in a loop)
+        show (func): what shows the progress, when run in this process
     """
     if copy_sim:
         sim = sim.copy()
     if not sim.label:
         sim.label = f'Sim {ind}'
+    if track:
+        sim.progress = ss.presentation.Share(sim, globaldict, ind, show)
     sim.run(**sc.mergedicts({'verbose': verbose}, run_args))
+    if track:
+        globaldict[ind] = 1.0
+        if show is not None:
+            show()
     if shrink:
         sim.shrink(die=False)
     return sim
 
 
-def run_each(sims, parallel=True, n_cpus=None, par_args=None, shrink=None, verbose=None, run_args=None):
+def run_each(sims, parallel=True, n_cpus=None, par_args=None, shrink=None, verbose=None, run_args=None, progress=None):
     """
     Run each of a list of sims, in parallel using multiprocessing (or, with `parallel=False`, in a loop)
 
@@ -728,14 +748,31 @@ def run_each(sims, parallel=True, n_cpus=None, par_args=None, shrink=None, verbo
     still uses the parallelization methods (just on a single core), while the latter
     simply runs in a loop.
 
+    With `progress` (an `ss.presentation.RunsProgress`), each run puts how far it has got in a dict shared with
+    this process (Sciris' `globaldict`), from which the progress is drawn ten times a second.
+
     Returns the list of run sims (copies, since they are pickled to run in parallel).
     """
-    kwargs = dict(verbose=verbose, shrink=shrink, run_args=run_args)
+    kwargs = dict(verbose=verbose, shrink=shrink, run_args=run_args, track=progress is not None)
     if parallel:
-        par_args = sc.mergedicts({'ncpus': n_cpus, 'start_method': ss.kernels.start_method()}, par_args)
+        par_args = sc.mergedicts({'ncpus': n_cpus, 'start_method': ss.kernels.start_method(), 'parallelizer': 'multiprocess-async', 'globaldict': {}}, par_args)
         with ss.kernels.one_blas_thread():
-            return sc.parallelize(ft.partial(ss.kernels.one_thread, single_run), iterkwargs=dict(sim=sims, ind=np.arange(len(sims))), kwargs=kwargs, **par_args) # The runs share the cores, so each takes one thread
-    return [single_run(sim, ind=i, copy_sim=True, **kwargs) for i,sim in enumerate(sims)] # A fresh sim, as pickling gives when running in parallel
+            P = sc.Parallel(ft.partial(ss.kernels.one_thread, single_run), iterkwargs=dict(sim=sims, ind=np.arange(len(sims))), kwargs=kwargs, **par_args) # The runs share the cores, so each takes one thread
+            try:
+                P.run_async()
+                if progress is not None:
+                    progress.store = P.globaldict
+                    while P.running:
+                        progress.update()
+                        time.sleep(0.05)
+                P.finalize()
+            except BaseException:
+                P.close() # Without leaving the workers running, as sc.parallelize() does
+                raise
+        return P.results
+    show = None if progress is None else progress.update
+    store = {} if progress is None else progress.store
+    return [single_run(sim, ind=i, copy_sim=True, globaldict=store, show=show, **kwargs) for i,sim in enumerate(sims)] # A fresh sim, as pickling gives when running in parallel
 
 
 class MultiResults(ss.Results):
@@ -775,7 +812,7 @@ class MultiResults(ss.Results):
         The results of many runs, each with a run axis first: the one constructor that every way of running many sims ends in
 
         Args:
-            arrays (dict): for each result, by (module, key), with the module None for the sim's own results: the result of one run it is like (`like`, for its name, kind, label, time points, and dimensions), its `values` (runs by time points), and if it is kept by group, `strata` and `denom` (runs by rows by groups) and `group_ti` (see `ss.Sim.group_rows()`)
+            arrays (dict): for each result, by (module, key), with the module None for the sim's own results: the result of one run it is like (`like`, for its name, kind, label, time points, and dimensions), its `values` (runs by time points), and if it is kept by group, `strata` and `denom` (runs by rows by groups) and `group_ti` (see `ss.solvers.group_rows()`)
             runs (dataframe): one row per run: its scenario, and the values of any parameters swept
             timevec (array): the sim's time points
         """
@@ -874,10 +911,21 @@ class MultiResults(ss.Results):
         return cls.build(arrays, runs, timevec=first.get('timevec'))
 
 
-def run_row(sim, p, draws=False):
-    """ The row of a run in `msim.runs`: its scenario, and its values; a set of swept values is a scenario of its own, and a draw is a run of its sim's scenario """
-    tag = '' if draws else ', '.join(f'{k}={v:n}' if sc.isnumber(v) else f'{k}={v}' for k,v in (p or {}).items())
-    return dict(scenario=f'{sim.label}: {tag}' if sim.label and tag else (sim.label or tag), **(p or {}))
+def run_row(sim, p, seed, draws=False):
+    """ The row of a run in `msim.runs`: its scenario, its values, and its seed; a set of swept values is a scenario of its own, and a draw or a seed swept is a run of its sim's scenario """
+    tag = '' if draws else ', '.join(f'{k}={v:n}' if sc.isnumber(v) else f'{k}={v}' for k,v in (p or {}).items() if k != 'rand_seed')
+    return dict(scenario=f'{sim.label}: {tag}' if sim.label and tag else (sim.label or tag), **(p or {})) | dict(rand_seed=seed)
+
+
+def run_seed(seed, p, j, i, n_runs, draws=False):
+    """
+    The seed of run `i` of set of values `j` (`p`) of a sim with this seed: the seed given in the set (plus `i`), if it has one; otherwise
+    `seed + i`, the same for every set swept (so they are compared with the same chance events), or for draws, a seed of each draw's own,
+    since the draws of a posterior are runs of a scenario, and so differ by chance as well as by their values
+    """
+    if p is not None and 'rand_seed' in p:
+        return p['rand_seed'] + i
+    return seed + (j*sc.ifelse(n_runs, 1) if draws else 0) + i
 
 
 def par_sets(pars):
@@ -926,15 +974,16 @@ class RestartedSims(cabc.Sequence):
     asked for: a copy of its scenario's sim, restarted with the run's seed and values
     and run. `runners` are the sims (one per scenario) that were restarted.
     """
-    def __init__(self, runners, sets, n_runs):
+    def __init__(self, runners, sets, n_runs, seeds):
         self.runners = runners
-        self.sets = sets
+        self.sets = sets # The values of each set, for each runner
         self.n_runs = n_runs
+        self.seeds = seeds # The seed of each run
         self.made = {}
         return
 
     def __len__(self):
-        return len(self.runners)*len(self.sets)*self.n_runs
+        return len(self.runners)*len(self.sets[0])*self.n_runs
 
     def __getitem__(self, ind):
         if isinstance(ind, str):
@@ -943,11 +992,11 @@ class RestartedSims(cabc.Sequence):
             return [self[i] for i in range(*ind.indices(len(self)))]
         ind = range(len(self))[ind] # Raises an IndexError if out of range, and handles negative indices
         if ind not in self.made:
-            runner = self.runners[ind // (len(self.sets)*self.n_runs)]
-            p = self.sets[(ind // self.n_runs) % len(self.sets)]
-            seed = runner.pars.rand_seed - (self.n_runs - 1) + ind % self.n_runs # The runner was left as its last run, with the last seed
+            r = ind // (len(self.sets[0])*self.n_runs)
+            runner = self.runners[r]
+            p = self.sets[r][(ind // self.n_runs) % len(self.sets[r])]
             sim = sc.dcp(runner)
-            self.made[ind] = sim.restart(pars=p, rand_seed=seed).run()
+            self.made[ind] = sim.restart(pars=p, rand_seed=self.seeds[ind]).run()
         return self.made[ind]
 
     def __add__(self, other):
@@ -958,6 +1007,17 @@ class RestartedSims(cabc.Sequence):
 
     def __repr__(self):
         return f'<{len(self)} sims, one per run, made when asked for>'
+
+
+def base_values(sim, keys):
+    """ The values of the parameters named in `keys` that the sim was built with, or None if one can't be found this way (e.g. a value for one level) """
+    if not keys:
+        return {}
+    try:
+        found = ss.gradients.find_pars(sim, keys)
+    except ValueError:
+        return None
+    return {key:sc.dcp(p.raw) for key,p in found.items()}
 
 
 def restart_runs(sims, n_runs, pars=None, draws=False):
@@ -977,8 +1037,6 @@ def restart_runs(sims, n_runs, pars=None, draws=False):
     if not all(hasattr(sim, 'inputs') and declared(sim) for sim in sims): # A sim that has been initialized or run is rebuilt from its inputs too
         return None
     sets = par_sets(pars)
-    if any('rand_seed' in p for p in sets if p is not None): # Each run with a seed given is built
-        return None
     runners = []
     for sim in sims:
         runner = sim.new(rand_seed=sim.pars.rand_seed, verbose=0).init() # The seed as it is now, which may have been set since the sim was made; the MultiSim says what it runs
@@ -990,26 +1048,34 @@ def restart_runs(sims, n_runs, pars=None, draws=False):
             if any(key.split('.')[-1] in net.pars and ('.' not in key or key.split('.')[0] == net.name) for key in keys):
                 return None
         runners.append(runner)
-    runs = pd.DataFrame([run_row(sim, p, draws) for sim in runners for p in sets for i in range(n_runs)])
+    runs = pd.DataFrame([run_row(sim, p, run_seed(sim.pars.rand_seed, p, j, i, n_runs, draws), draws) for sim in runners for j,p in enumerate(sets) for i in range(n_runs)])
+    seeds = list(runs['rand_seed'])
+    sets = [None if p is None else {k:v for k,v in p.items() if k != 'rand_seed'} or None for p in sets] # A seed given is the seed of its runs, not a parameter
+    keys = sorted({key for p in sets if p is not None for key in p})
+    bases = [base_values(sim, keys) for sim in runners] # Each set starts from the values the sim was built with, not from the set before
+    if any(base is None for base in bases):
+        return None
+    sets = [[sc.mergedicts(base, p) or None for p in sets] for base in bases]
     values = sc.ddict(list)
     groups = sc.ddict(list)
     denoms = sc.ddict(list)
     group_ti = dict()
-    for sim in runners:
-        seed = sim.pars.rand_seed
-        if pars is not None and len(sets)*n_runs >= jax_runs and ss.gradients.reason(sim) is None: # Every run in one call to JAX (an ODE run does not depend on the seed)
-            outs = list(ss.gradients.run_sets(sim, [p for p in sets for i in range(n_runs)]).items())
+    for r,sim in enumerate(runners):
+        first = r*len(sets[r])*n_runs # The position of the sim's first run
+        if pars is not None and None not in sets[r] and len(sets[r])*n_runs >= jax_runs and ss.gradients.reason(sim) is None: # Every run in one call to JAX (an ODE run does not depend on the seed)
+            outs = list(ss.gradients.run_sets(sim, [p for p in sets[r] for i in range(n_runs)]).items())
         else:
             outs = []
-            for p in sets: # All the runs of each module with each set of values are one call to the kernels
+            for j,p in enumerate(sets[r]): # All the runs of each module with each set of values are one call to the kernels
                 if p is not None:
                     sim.restart(pars=p)
+                run_seeds = np.array(seeds[first + j*n_runs:first + (j+1)*n_runs])
                 for mod in sim.declared:
                     cross = mod.engine.cross
                     if cross is None:
-                        outs.append((mod.name, mod.engine.run_many(seed + np.arange(n_runs))))
+                        outs.append((mod.name, mod.engine.run_many(run_seeds)))
                     elif mod.name == cross.names[0]: # Diseases tracked jointly are run together
-                        outs += cross.run_many(seed + np.arange(n_runs))
+                        outs += cross.run_many(run_seeds)
         for modname,out in list(outs):
             outs += list(out.pop('deliveries', {}).items()) # The results of the deliveries the kernels took, as those of modules of their own
         for modname,out in outs:
@@ -1020,7 +1086,7 @@ def restart_runs(sims, n_runs, pars=None, draws=False):
                 groups[modname, key].append(vals)
             for key,vals in out.items():
                 values[modname, key].append(vals)
-        sim.restart(pars=sets[-1], rand_seed=seed + n_runs - 1).run() # The sim itself is left as its last run
+        sim.restart(pars=sets[r][-1], rand_seed=seeds[first + len(sets[r])*n_runs - 1]).run() # The sim itself is left as its last run
     arrays = {}
     join = lambda arrs: arrs[0] if len(arrs) == 1 else np.concatenate(arrs) if len({np.shape(a)[1:] for a in arrs}) == 1 else None # Without a copy for one sim, since by group they can be large; None if the sims have different groups (e.g. a delivery that adds a group), as in MultiResults.from_sims()
     for (modname,key),vals in values.items():
@@ -1030,7 +1096,7 @@ def restart_runs(sims, n_runs, pars=None, draws=False):
             strata, denom = [join(d[modname, key]) if (modname, key) in d else None for d in [groups, denoms]]
             strata = strata if strata is not None and len(strata) == len(runs) else None
             arrays[modname, key] = dict(like=res, values=vals, strata=strata, denom=denom if strata is not None else None, group_ti=group_ti.get(modname))
-    return RestartedSims(runners, sets, n_runs), MultiResults.build(arrays, runs), runs
+    return RestartedSims(runners, sets, n_runs, seeds), MultiResults.build(arrays, runs), runs
 
 
 def parallel(*args, n_runs=None, pars=None, priors=False, **kwargs):
@@ -1043,8 +1109,8 @@ def parallel(*args, n_runs=None, pars=None, priors=False, **kwargs):
     Args:
         args (list): the sims to run, or a dict of them by label (e.g. `{'No intervention': s1, 'Vaccine': s2}`)
         n_runs (int): if provided, run each sim this many times, each with its own seed (the sim's seed, plus 1, 2, ...)
-        pars (dict/list): sets of values of parameters to run each sim with: a dict with a list of values for each parameter (`dict(beta=[0.2, 0.3])`), or a list of dicts; each set is run `n_runs` times (default 1), and the values are in `msim.runs` (and can be selected, e.g. `res.select(beta=0.2)`); `rand_seed` can be given too, e.g. `pars=dict(rand_seed=[1, 5, 9])`
-        priors (bool/dict): draw `n_runs` sets of values from the priors of the parameters (`ss.par(prior=...)`, or uniform over its bounds), one run each: a projection that carries the uncertainty in the values; or the draws themselves, as for `pars=` (e.g. from a posterior, as `fit.project()` passes them). Unlike a sweep with `pars=`, the draws are runs of their sim's scenario, so quantiles over a scenario's runs include them
+        pars (dict/list): sets of values of parameters to run each sim with: a dict with a list of values for each parameter (`dict(beta=[0.2, 0.3])`), or a list of dicts; each set is run `n_runs` times (default 1), with the same seeds for every set, and each set is a scenario of its own; the values are in `msim.runs` (and can be selected, e.g. `res.select(beta=0.2)`), with each run's `rand_seed`. Seeds can be given too, e.g. `pars=dict(rand_seed=[1, 5, 9])`, as runs of the scenario rather than scenarios
+        priors (bool/dict): draw `n_runs` sets of values from the priors of the parameters (`ss.par(prior=...)`, or uniform over its bounds), one run each: a projection that carries the uncertainty in the values; or the draws themselves, as for `pars=` (e.g. from a posterior, as `fit.project()` passes them). Unlike a sweep with `pars=`, the draws are runs of their sim's scenario, each with a seed of its own (the sim's seed, plus 1, 2, ...), so quantiles over a scenario's runs include both the draws and chance
         kwargs (dict): sims passed as keywords are labelled with the keyword, e.g. `ss.parallel(baseline=s1, vaccine=s2)`;
             everything else is passed to `ss.MultiSim()`, e.g. `parallel=False`, `n_cpus`, `shrink`
 

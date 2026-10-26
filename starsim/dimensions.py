@@ -63,6 +63,9 @@ class Strat:
                 errormsg = f'"{name}" was given the share in each level twice, as a dict and as split=; give one'
                 raise ValueError(errormsg)
             levels, split = list(levels.keys()), list(levels.values())
+        if isinstance(mobility, (list, tuple)) and any(isinstance(m, (Mobility, gravity, radiation)) for m in mobility):
+            errormsg = f'mobility= takes one movement for "{name}", not {len(mobility)}; movements of one kind can be combined by adding their matrices (ss.geo.Mobility(matrix=M1 + M2)), but several kinds at once (e.g. a register and commuting) are not supported'
+            raise TypeError(errormsg)
         if mobility is not None and not isinstance(mobility, Mobility): # A movement model or a matrix on its own is commuting
             mobility = Mobility(mobility) if isinstance(mobility, (gravity, radiation)) else Mobility(matrix=mobility)
             self.guessed['mobility'] = 'commuting, since kind= was not given'

@@ -28,7 +28,7 @@ R0 = 1.9 × 8 ≈ 15, so the outbreak infects nearly everyone, and since nobody 
 
 ## Births, deaths, and the return of measles
 
-`ss.birth()` and `ss.death()` give births and deaths at a constant rate per person: a crude birth rate of 30 per 1,000 people per year is `ss.birth(rate=ss.peryear(0.03))`. People are born into each disease's first state (`S`) and die from every state at the same rate, so with equal rates the population stays the same size. They are given to the sim in `demographics=`.
+`ss.birth()` and `ss.death()` give births and deaths at a constant rate per person: a crude birth rate of 30 per 1,000 people per year is `ss.birth(rate=ss.peryear(0.03))`. A bare number is read as `ss.Births` reads it (below), per year and, above 1, per 1,000 people, so `ss.birth(rate=30)` is the same (with a warning saying how it was read). People are born into each disease's first state (`S`) and die from every state at the same rate, so with equal rates the population stays the same size. They are given to the sim in `demographics=`.
 
 Births and deaths are rates per year, while β and the infectious period are per day. When a model's rates have different units, Starsim needs every rate to say its own, so β is written `ss.perday(1.9)`; the sim then steps by one day (`dt=ss.days(1)`). This runs for 20 years:
 
@@ -66,11 +66,6 @@ After the first epidemic, there is a "honeymoon" of almost five years with very 
 print('Share susceptible at the end:', round(res.S[-1]/100_000, 3))
 ```
 
-::: {.callout-warning}
-## [PROPOSAL]
-The run prints dates as `2000.01.07`, which should be `2000-01-07`, as they are written in the model.
-:::
-
 Births and deaths are transitions of the disease, like infection and recovery, so they have results of their own (`res.births` and `res.deaths`), and they work under every solver: this model ran as an ODE.
 
 The sim also printed a note: between the epidemics, the number of infectious people in the ODE falls below one, and the plot shows how far: after the first epidemic, to less than a billionth of a billionth of a person. An ODE can recover from a fraction of a person, but a real town can't: once the last case recovers, measles is gone until someone brings it back. A stochastic run shows this, and in a town of 100,000, measles usually dies out after the first epidemic. This is why measles persists only in cities of several hundred thousand people or more (its *critical community size*), and why in smaller places it comes and goes with each new introduction. [Repeated runs and uncertainty](t6_uncertainty.qmd) shows how to run a model stochastically and many times.
@@ -101,10 +96,7 @@ sim.people.plot_ages()
 
 `ss.Births()` and `ss.Deaths()` also take your own data: one rate, rates by year (a table with a column for the year and one for the rate), or for deaths, rates by year, age, and sex. Crude birth and death rates are usually given per 1,000 people, and these modules read a rate above 1 as per 1,000 and a rate below 1 as per person; give `rate_units=1000` or `rate_units=1` to say which (they warn when a rate could be either). See [Demographics](../user_guide/populations_demographics.qmd) in the user guide.
 
-::: {.callout-warning}
-## [PROPOSAL]
-`ss.birth(rate=...)` reads its rate per person, while `ss.Births(birth_rate=...)` reads a rate above 1 as per 1,000, so the same number means different things in the two (`ss.birth(rate=ss.peryear(30))` now warns that it is per person). Both should say per 1,000 explicitly in the same way (e.g. a typed rate like `ss.peryear(30, per=1000)`), with no guessing from the size of the number (P11, P13).
-:::
+`ss.birth(rate=)` and `ss.death(rate=)` read a bare number the same way, so `ss.birth(rate=30)` and `ss.Births(birth_rate=30)` are both 30 births per 1,000 people per year. A typed rate given to `ss.birth()` or `ss.death()` is per person (`ss.peryear(0.03)`), and warns if it is above 1 per person per year.
 
 ## Pregnancy
 

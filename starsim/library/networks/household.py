@@ -25,6 +25,8 @@ class HouseholdNet(ss.Network):
     This network assumes only one mother per household. Births are automatically
     added to their mother's household network.
 
+    Note: not CRN safe unless `dynamic=False` (the partners who move out are drawn together).
+
     Args:
         dhs_data (DataFrame/str): A pandas or Sciris dataframe with columns `hh_id`
             and `ages`. Optionally also `sexes`. The `ages` column should

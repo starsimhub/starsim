@@ -160,6 +160,8 @@ def test_commuting():
     home, now = sim.people.home.raw, sim.people.patch.raw
     assert abs((now[home == 0] == 1).mean() - away) < 0.02 and abs((now[home == 1] == 0).mean() - away) < 0.03
     assert sim.results.sir.infection.cum.by('home').values[-1, 1] > 1000
+    with pytest.raises(TypeError, match='one movement'): # Several on one dimension (it was a bare TypeError)
+        ss.SIR().stratify(patch=['a', 'b'], mobility=[ss.geo.Mobility(matrix=T), ss.geo.Mobility(matrix=T)])
     return sim
 
 

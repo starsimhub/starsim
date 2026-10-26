@@ -243,8 +243,8 @@ def load_epydemix(source, start=None, stop=None, verbose=None, **kwargs):
     if n > 1:
         levels = edges if edges is not None else list(groups)
         src.stratify(**{dim:levels}, split=(people/people.sum()).tolist())
-        src.config.networks = ss.contacts(**{dim:matrix.tolist()})
-        src.code['networks'] = f'ss.contacts({dim}={matrix.tolist()!r})'
+        src.config.networks = ss.contacts(matrix.tolist(), dims=dim)
+        src.code['networks'] = f'ss.contacts({matrix.tolist()!r}' + (f', dims={dim!r}' if dim != 'age' else '') + ')'
         src.notes.append(f'contacts      the {len(pop["contacts"])} settings of {pop["name"]} ({sc.strjoin(pop["contacts"].keys())}) added together')
 
     # Run settings: epydemix's end date is the last day it steps through, so the sim stops a day later

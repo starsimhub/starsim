@@ -928,7 +928,7 @@ def run_many(engine, seeds, state_of, kept_s, kept_f, rows, max_bytes=200e6):
     Take many runs of an engine (or a crossing) that differ only in their seed, in batches of runs taken together (`jax.vmap`)
 
     Returns what `ss.kernels.run_many()` fills in: the number in each state and the total of each flow at each time
-    point, the states and flows kept by group at each row (see `ss.Sim.group_rows()`), and the number each delivery
+    point, the states and flows kept by group at each row (see `ss.solvers.group_rows()`), and the number each delivery
     reached and found eligible, in total and by group, as runs by time points (or rows) by ... by groups (or 1).
 
     Args:

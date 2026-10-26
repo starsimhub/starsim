@@ -86,6 +86,8 @@ res.infection.by('vaccinated').plot()
 
 With 90% vaccinated, the outbreak is much smaller, and about two in five of those infected are vaccinated: when nearly everyone is vaccinated, the few vaccine failures among them can be a large share of cases, though each vaccinated person is far less likely to be infected.
 
+`sim.describe()` lists each dimension with its levels, the share of people in each (`split: False 0.1, True 0.9`), and its adjustments (`adjust: rel_sus × 1, 0.03`), so the parts of the model that a stratification adds can be checked there.
+
 A share given for each level of a dimension applies within each level of the others: here 90% of each age group is vaccinated. Shares that differ by age are an `ss.by()` over both dimensions; see [Stratification in depth](../tutorials/g3_strata.qmd).
 
 ## Stratifying part of a model
@@ -169,11 +171,6 @@ Run as compartments, each state has one compartment for each combination of leve
 - **Contacts by other age groups.** A contact matrix by age groups that differ from the model's is converted to the model's, with a note. Check it in `describe()`.
 - **R0 without the contacts.** `measles.R0()` on the disease alone assumes homogeneous mixing; `sim.diseases.measles.R0()` uses the sim's contacts and groups.
 - **A closed population doesn't age.** Over a long run without births or deaths, the age groups stay as they started.
-
-::: {.callout-warning}
-## [PROPOSAL]
-`describe()` should list each dimension's shares (here 0.3, 0.6, and 0.1, and 0.1 and 0.9) and its adjustments (`rel_sus` 1 and 0.03 by vaccination). Today it gives only the levels, so the parts of the model that a stratification adds can't be checked there (P2: `describe()` should describe everything).
-:::
 
 ## See also
 

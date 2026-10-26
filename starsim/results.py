@@ -230,7 +230,7 @@ class Result(ss.utils.NoDists, ss.arrays.BaseArr):
         Select groups of a stratified result by name: keeps the given levels of each dimension, and sums over the rest
 
         The values by group are kept at every time point, or, if that would take too much memory, every few steps
-        (see `ss.Sim.group_rows()` and the sim parameter `results`); then the result has a value at the end of each
+        (see `ss.solvers.group_rows()` and the sim parameter `results`); then the result has a value at the end of each
         of these periods, which for a flow is its total over the period.
 
         For a result across the runs of a MultiSim, also select runs: by position (`run=3`, a result of one
@@ -501,7 +501,7 @@ class Result(ss.utils.NoDists, ss.arrays.BaseArr):
         Args:
             strats (list): the stratifications of the sim
             dims (list): the names of those this result has
-            shape (tuple): the number of rows (one per time point, or one every few steps: see `ss.Sim.group_rows()`) and of groups
+            shape (tuple): the number of rows (one per time point, or one every few steps: see `ss.solvers.group_rows()`) and of groups
             group_ti (array): the time point of each row, if there is not one per time point
             ratio (bool): whether the result is a ratio, which keeps its denominator by group too, so that selecting groups adds up each before dividing
         """
@@ -514,7 +514,7 @@ class Result(ss.utils.NoDists, ss.arrays.BaseArr):
         return
 
     def store_group(self, ti, vals, rows=None, flow=False):
-        """ Keep the values by group at time point ti, if this result keeps them: in its row, where a flow is added up over the steps of the row (`rows` gives the row of each time point; see `ss.Sim.group_rows()`) """
+        """ Keep the values by group at time point ti, if this result keeps them: in its row, where a flow is added up over the steps of the row (`rows` gives the row of each time point; see `ss.solvers.group_rows()`) """
         strata = getattr(self, 'strata', None)
         if strata is None:
             return

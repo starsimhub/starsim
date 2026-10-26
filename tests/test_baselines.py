@@ -7,15 +7,13 @@ import pytest
 import sciris as sc
 import starsim as ss
 import benchmark_models as bm
+from timing import REF_MOPS, SLOWDOWN as REGRESSION_FACTOR # Fail if a normalized time exceeds its baseline by more than this
 
 baseline_filename   = sc.thisdir(__file__, 'baseline.yaml')
 benchmark_filename  = sc.thisdir(__file__, 'benchmark.yaml')
 perf_guard_filename = sc.thisdir(__file__, 'perf_guard.yaml')
 sc.options(interactive=False) # Assume not running interactively
 # ss.options.warnings = 'error' # For additional debugging
-
-REGRESSION_FACTOR = 1.5 # Performance guard: fail if a normalized time exceeds its baseline by more than this
-REF_MOPS = 270 # Reference sc.benchmark(which='numpy') MOPS (Intel i7-12700H), used for CPU normalization
 
 # Define the parameters
 pars = sc.objdict(

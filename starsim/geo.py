@@ -242,6 +242,8 @@ class Mobility:
     its date, before that step's transitions, and the events of a step happen in the
     order of the table.
 
+    Note: CRN safe as agents.
+
     Args:
         model (gravity/radiation): a movement model (instead of `matrix`)
         matrix (array): the movement from each place (rows) to each place: for commuting the share of time spent there, and for migration the rate of moving there (a SciPy sparse array for many places, most pairs of which share no one)

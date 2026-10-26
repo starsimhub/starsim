@@ -137,7 +137,7 @@ code_names = """
 AgeGroup Arr Base Births BoolArr
 BoolState BreastfeedingNet DateArray Deaths Delivery
 DynamicNetwork Event FloatArr IndexArr IntArr MaternalNet Pars PostnatalNet
-Pregnancy Lactation PrenatalNet Product Results SEIR SIR SIS SimPars beta_dist beta_mean
+Pregnancy PrenatalNet Product Results SEIR SIR SIS SimPars beta_dist beta_mean
 check_requires choose_n demo dtypes histogram infection_log
 multi_random ndict note plot_args randint random register_modules required return_fig root
 show style to_code uids warn jit move

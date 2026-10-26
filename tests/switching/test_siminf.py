@@ -2,7 +2,7 @@
 Switching demo for the SimInf seat: SIR in 16,000 herds with the movement register, fitted by PMCMC or ABC-SMC.
 
 Passes when: within 3x of SimInf's time, with agreement as today.
-Blocked today by: N21 (a rate for each herd), N17.
+Blocked today by: N17.
 Scaled down to SimInf's 1,600 herds over the first 100 days (from LFD), a synthetic register of 100 herds, and the one-herd PMCMC example;
 and the 16,000-herd time at full size (SimInf 1.9 s to run and 2.1 s to build; v4 52.5 s and 13 s before N26). The step "from R" (N17) is tests/test_r.py.
 """
@@ -15,6 +15,7 @@ import starsim as ss
 import starsim.fit
 sys.path.insert(0, str(sc.thispath().parent)) # For tests/paths.py when run as a script (conftest.py does this under pytest)
 import paths
+import timing
 
 ref_S100 = [199_906, 199_855, 200_057] # SimInf, 1,600 herds: susceptible on day 100, mean and 5% to 95% range of 200 runs (LFD examples/siminf/sir_herds/reference/results.csv), as in vignettes/siminf/sir_herds/README.md
 ref_herds100 = [2.0, 0, 3] # The same for the number of herds infected on day 100
@@ -22,6 +23,8 @@ ref_ms_per_run = 0.57 # SimInf's time per particle run in its pmcmc example: swi
 ref_obs_t = np.arange(5, 101, 5) # SimInf's ?pmcmc example in miniature (s2_data.csv), Poisson observations of I: switching/siminf.md §3
 ref_obs_I = [9, 9, 22, 25, 25, 56, 56, 83, 93, 113, 131, 152, 171, 162, 118, 128, 128, 107, 71, 76]
 ref_beta, ref_gamma = 0.16, 0.077 # The values the data were simulated with
+v4_build, v4_run = 2.0, 3.0 # Starsim's build and run of the herds ten times over, in s, normalized to the reference machine (see timing.py), 2026-10-25
+v4_ms_per_run = 0.37 # Starsim's filter per particle run, in ms, normalized; same date
 ref_build, ref_run = 2.1, 1.9 # SimInf's time to build and run its herds and events ten times over (16,000 herds, 4,666,920 events, four years) on one thread: switching/siminf.md, "The second week" §2
 
 
@@ -83,20 +86,16 @@ def test_siminf_register():
 def test_siminf_scale():
     sc.heading('SimInf\'s herds and events ten times over: 16,000 herds and 4.7 million events, for four years')
     u0, register = read_register(paths.lfd/'examples'/'siminf'/'sir_herds'/'reference', copies=10) # Reading and converting the data is not timed, as in SimInf
-    T = sc.timer()
-    sim = make_herds(u0, register, stop=1460).init() # Exact, as SimInf (about 6 million events): herds that do not affect each other are always run exactly
-    build = T.toc(output=True)
-    sim.run()
-    run = T.toc(output=True) - build
+    build, sim = timing.timed(lambda: make_herds(u0, register, stop=1460).init(), repeats=1) # Exact, as SimInf (about 6 million events): herds that do not affect each other are always run exactly
+    run, _ = timing.timed(sim.run, repeats=1)
     herds = (np.asarray(sim.results.sir.I.strata)[-1] > 0).sum()
-    print(f'Built in {build:.1f} s and run in {run:.1f} s, against SimInf\'s {ref_build} s and {ref_run} s; {herds:,} herds infected at the end')
-    assert build < 2*ref_build, f'Built in {build:.1f} s, against 2 × {ref_build} s for SimInf'
-    assert run < 3*ref_run, f'Run in {run:.1f} s, against 3 × {ref_run} s for SimInf'
+    print(f'{herds:,} herds infected at the end')
+    timing.check(build, v4_build, 'Built', other=(ref_build, 'SimInf'))
+    timing.check(run, v4_run, 'Run', other=(ref_run, 'SimInf'))
     assert herds > 5000 # About 1,250 of each copy's 1,600 when infection takes off there (as at 1,600 herds), which it does in most
     return sim
 
 
-@pytest.mark.xfail(reason='N21: ss.perday(ss.by(herd=b)) is accepted, then raises a misleading ShapeError at init ("ss.by(herd=...) has 1 values, but herd has 100 levels")', strict=False)
 def test_siminf_ldata():
     sc.heading('A rate for each herd, as mparse() with ldata')
     n_herds = 100
@@ -116,11 +115,10 @@ def test_siminf_filter():
     pf = ss.fit.ParticleFilter(make_pmcmc().init(), likelihood=dict(I=ss.poisson()))
     pf(10, seed=0) # Compile
     n = 50
-    T = sc.timer()
-    loglik = pf(n, seed=1)
-    ms_per_run = T.toc(output=True)/n*1e3
+    seconds, loglik = timing.timed(lambda: pf(n, seed=1))
+    ms_per_run = seconds/n*1e3
     assert np.isfinite(loglik)
-    assert ms_per_run < 3*ref_ms_per_run, f'{ms_per_run:.1f} ms per particle run, against 3 × {ref_ms_per_run} ms for SimInf'
+    timing.check(ms_per_run, v4_ms_per_run, 'Filter per particle run', unit='ms', other=(ref_ms_per_run, 'SimInf'))
     return ms_per_run
 
 

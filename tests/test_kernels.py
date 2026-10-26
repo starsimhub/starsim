@@ -3,6 +3,9 @@ Test the kernels: that a run taken in one call matches the same run taken step b
 """
 
 # %% Imports and settings
+import time
+import itertools
+from unittest import mock
 import pytest
 import numpy as np
 import sciris as sc
@@ -65,9 +68,9 @@ def make_delay():
 models = sc.objdict(
     sir     = (make_sir,     dict(total_pop=10_000, unit='day', stop=ss.weeks(12))),
     seir    = (make_seir,    dict(unit='day', stop=200)),
-    ages    = (make_ages,    dict(unit='day', stop=100, networks=ss.contacts(age=np.array([[8, 3, 1], [3, 6, 2], [1, 2, 3]])))),
+    ages    = (make_ages,    dict(unit='day', stop=100, networks=ss.contacts(np.array([[8, 3, 1], [3, 6, 2], [1, 2, 3]])))),
     towns   = (make_towns,   dict(unit='day', stop=150, total_pop=100_000)),
-    commute = (make_commute, dict(unit='day', stop=150, total_pop=100_000, use_aging=True, networks=ss.contacts(age=np.array([[8, 3, 1], [3, 6, 2], [1, 2, 3]])))), # Aging, which a model without births or deaths has only if asked for
+    commute = (make_commute, dict(unit='day', stop=150, total_pop=100_000, use_aging=True, networks=ss.contacts(np.array([[8, 3, 1], [3, 6, 2], [1, 2, 3]])))), # Aging, which a model without births or deaths has only if asked for
     malaria = (make_malaria, dict(unit='day', stop=200, total_pop=10_000)),
     tb      = (make_tb,      dict(stop=30, total_pop=100_000)), # Has a transfer, so is stepped
     delay   = (make_delay,   dict(unit='day', stop=150)),
@@ -212,8 +215,21 @@ def test_plain_estimate():
     for n_sub in [1, None]: # As if no substeps were taken, then as the run takes them
         sim.pars.substeps = n_sub
         seconds.append(engine.plain_seconds())
-    assert seconds[1] > 20*seconds[0] # Recovery in a day under monthly steps: 122 substeps a step, so that no one turns over by more than a quarter in one (a timed step, so less than 122 times: a step has work of its own)
+    assert seconds[1] > 20*seconds[0] # Recovery in a day under monthly steps: 122 substeps a step, so that no one turns over by more than a quarter in one
     return seconds
+
+
+@sc.timer()
+def test_engine_choice():
+    sc.heading('Testing that the engine chosen for a run depends on the model only, not on the cache or the load')
+    choices = []
+    for compiled in [True, False]:
+        clock = itertools.count(0.0, 100.0*(1 - compiled)) # Each call 100 s after the last, as if the machine were busy
+        with mock.patch.object(ss.kernels, 'is_compiled', lambda: compiled), mock.patch.object(time, 'perf_counter', lambda: next(clock)): # And a cold cache
+            sim = ss.Sim(make_commute(), total_pop=1e5, unit='day', stop=60, solver='ode', **kw).init()
+            choices.append((ss.solvers.kernel_seconds(sim), ss.solvers.choose_engine(sim)))
+    assert choices[0] == choices[1], f'The estimate and the engine changed with the cache or the clock: {choices}'
+    return choices
 
 
 if __name__ == '__main__':
@@ -228,5 +244,6 @@ if __name__ == '__main__':
     seasonal = test_seasonal_steps()
     res = test_plain()
     plain = test_plain_estimate()
+    choices = test_engine_choice()
 
     T.toc()

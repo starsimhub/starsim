@@ -733,10 +733,6 @@ class Module(Base):
             self.results += result
         return
 
-    def link(self, sim):
-        """ Before the sim's modules are gathered: add any other modules this one needs, or find the ones it works with (e.g. `ss.Pregnancy` adds an `ss.Lactation`); called by `ss.solvers.choose_solver()`. Does nothing by default """
-        return
-
     @required()
     def init_pre(self, sim, force=False):
         """

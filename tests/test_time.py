@@ -504,11 +504,11 @@ def test_time_text():
         S, I, R = ss.states('S I R')
         return ss.Disease(S >> I @ ss.perday(1.9)*I, I >> R @ ss.days(8), init_n=dict(I=10), name='measles')
 
-    # Numbers as numbers in the timeline's own unit, dates as dates without a time of day (they were "days 2000 to 2002" and "on day 2000.01.08 00:27:36")
+    # Numbers as numbers in the timeline's own unit, dates as dates without a time of day (they were "days 2000 to 2002" and "on day 2000-01-08 00:27:36")
     sim = ss.Sim(make(), total_pop=1e5, start=2000, stop=2002, verbose=0).run()
     assert 'years 2000 to 2002' in sim.start_lines()[0] and 'on year 2000.02' in sim.end_line()
     sim = ss.Sim(make(), total_pop=1e5, start='2000', stop='2002', verbose=0).run()
-    assert '2000.01.01 to 2002.01.01' in sim.start_lines()[0] and sim.end_line().endswith('on 2000.01.08')
+    assert '2000-01-01 to 2002-01-01' in sim.start_lines()[0] and sim.end_line().endswith('on 2000-01-08')
     sim = ss.Sim(make(), total_pop=1e5, stop=ss.days(7300), dt=7, verbose=0).init() # A stop that is not a whole number of steps is said (it ended at day 7294 silently)
     assert 'days 0 to 7294 (the last whole step before 7300)' in sim.start_lines()[0]
 

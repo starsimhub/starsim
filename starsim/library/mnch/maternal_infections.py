@@ -63,6 +63,8 @@ class CongenitalDisease(AgentSIR):
     normal) and schedules it for delivery time. `step_congenital()`
     in `step_state()` executes those scheduled events.
 
+    Note: CRN safe.
+
     Args:
         birth_outcome_keys (list): outcome names — each needs a `ti_<key>` state
         birth_outcomes (objdict):  `ss.choice` distributions keyed by category;

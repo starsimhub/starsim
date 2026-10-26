@@ -35,10 +35,7 @@ flu = ss.Disease(infection, course, discharge, init=dict(I=0.001), name='flu')
 The diagram, from `diagram()`:
 
 ```{python}
-#| echo: false
-#| output: asis
-fence = '`' * 3
-print(fence + '{mermaid}\n' + flu.diagram() + '\n' + fence)
+flu.diagram()
 ```
 
 ## Result

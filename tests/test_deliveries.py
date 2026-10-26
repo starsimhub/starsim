@@ -136,15 +136,15 @@ def test_applied():
     with pytest.raises(ss.errors.Unapplied, match="'precin.C'"):
         ss.Sim(hpv, interventions=ss.vaccinate(ss.Vaccine(efficacy=dict(precin=0.5)), at=0), **kw).init()
 
-    # Applied: modifiers of a disease written as code that overrides infect(), and a change to an inflow under the ODE
-    class OwnInfect(ssl.AgentSIS):
-        def infect(self): # Its own loop over the routes, as Covasim's is
+    # Applied: modifiers of a disease written as code that overrides transmit(), and a change to an inflow under the ODE
+    class OwnTransmit(ssl.AgentSIS):
+        def transmit(self): # Its own loop over the routes, as Covasim's is
             betamap = self.validate_beta()
             rel_trans = self.rel_trans.asnew(self.infectious.raw*self.rel_trans.raw, copy=False)
             rel_sus = self.rel_sus.asnew(self.susceptible.raw*self.rel_sus.raw, copy=False)
-            out = [self.infect_route(i, route, betamap[ss.utils.standardize_netkey(key)], rel_trans, rel_sus) for i,(key,route) in enumerate(self.sim.networks.items())]
+            out = [self.transmit_route(i, route, betamap[ss.utils.standardize_netkey(key)], rel_trans, rel_sus) for i,(key,route) in enumerate(self.sim.networks.items())]
             return self.finalize_infections(*zip(*out))
-    sim = ss.Sim(diseases=OwnInfect(name='sis'), networks='random', connectors=ss.modify('sis.rel_sus', multiply=0), n_agents=1000, verbose=0).run()
+    sim = ss.Sim(diseases=OwnTransmit(name='sis'), networks='random', connectors=ss.modify('sis.rel_sus', multiply=0), n_agents=1000, verbose=0).run()
     assert sim.results.sis.new_infections.sum() == 0
     for solver in ['ode', 'abm']:
         Sv = ss.State('Sv', people=False)

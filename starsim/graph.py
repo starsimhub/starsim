@@ -63,7 +63,7 @@ class Graph(Presentation):
         init_prev (float): the initial prevalence, seeded through the transmission (by default 0.01, unless a state is given an initial value)
         init (dict): the share of people who start in each state, by name
         init_n (dict): the number of people who start in each state, by name
-        first (str): the state people are in unless they are put elsewhere (by default, the one named `S` or `susceptible`; see `resolve_people()`)
+        first (str): the state people are in unless they are put elsewhere (by default, the one named `S` or `susceptible`, else the first made; see `resolve_people()`)
         names (dict): the names of the variables of the code that made the module, by the id of what they hold (see `ss.utils.caller_names()`), which name the states, transitions, and parameters given without one
     """
     grouped = ['transitions', 'results', 'outcomes'] # The keywords that each take several members, e.g. ss.Disease(transitions=[...])
@@ -307,7 +307,7 @@ class Graph(Presentation):
         """ By default, 1% of people start infected, seeded through the transmission (frequency- or density-dependent), unless a state is given a starting value """
         given = any(state.given_init for state in self.states.values())
         counted = lambda tr: {id(st) for leaf in tr.rate.leaves if isinstance(leaf, Count) for st in leaf.states if st.module is self.module} - {id(st) for st in tr.src or []} # The module's states whose numbers the rate reads, other than its source: I in beta*I.n
-        transmitted = any(tr.contact or (tr.rate is not None and count_power(tr.rate) > 0 and counted(tr)) for tr in self.transitions.values())
+        transmitted = any(tr.contact or (not tr.inflow and tr.rate is not None and count_power(tr.rate) > 0 and counted(tr)) for tr in self.transitions.values()) # Births at a rate on counts (ss.null >> N @ b*N.n) are not a transmission
         if self.init_prev is None and not given and transmitted:
             self.init_prev = par(0.01)
             self._add_par(self.init_prev, name='init_prev')
@@ -352,13 +352,21 @@ class Graph(Presentation):
             tr.p = [Share(built[covered[n]], n) if n in covered else tr.p[next(entries)] for n in names]
         return
 
+    def transmitted_from(self):
+        """ The states of people that transmission (by contact, or at a rate on counts of others) takes people from """
+        out = {}
+        for tr in self.transitions.values():
+            if tr.src and not tr.inflow and (tr.contact or (tr.rate is not None and count_power(tr.rate) > 0)):
+                out.update({id(s):s for s in tr.src if s.people})
+        return list(out.values())
+
     def resolve_people(self):
         """
         Which states are people: every state, unless it is declared a count (`ss.State(people=False)`, e.g. mosquitoes or
         bacteria in the water); and the first state, where people are unless they are put elsewhere: `first=` if given,
-        else the state named `S` or `susceptible` (in any case). Nothing else is guessed: with neither, `check_first()` raises
-        when the sim is initialized (a birth into a state of its own, `ss.birth(X)`, needs no first state, but the people who
-        start in no state do)
+        else the state named `S` or `susceptible` (in any case), else the one state transmission infects people from, else the first state of people made (states are kept in the
+        order they were created: see `resolve_states()`), which `describe()` shows as a guess. Not the state a birth goes to
+        (`ss.birth(NB)` says where births go, not where everyone starts), nor the order of the transitions
         """
         states = list(self.states.values())
         self.people_states = [s for s in states if s.people]
@@ -370,8 +378,14 @@ class Graph(Presentation):
             self.first = self.states[name]
         elif any(s.name.lower() in ['s', 'susceptible'] for s in self.people_states):
             self.first = next(s for s in self.people_states if s.name.lower() in ['s', 'susceptible'])
+        elif len(sources := self.transmitted_from()) == 1: # The one state transmission infects people from, e.g. Ca in Ca >> P @ beta*P
+            self.first = sources[0]
+            self.guessed['first'] = f'{self.first.name} is where people start, the state infected from (or give first=)'
+        elif self.people_states:
+            self.first = self.people_states[0]
+            self.guessed['first'] = f'{self.first.name} is where people start, the first state made (or give first=)'
         else:
-            self.first = None # Raises when the sim is initialized: see check_first()
+            self.first = None # Nothing is people (e.g. a model of mosquitoes alone)
         for tr in self.transitions.values(): # A birth or immigration with no state given
             if tr.dst is None and self.first is not None:
                 tr.dst = [self.first]
@@ -419,16 +433,6 @@ class Graph(Presentation):
                 others = [s.name for s in self.people_states if id(s) not in group]
                 raise ss.errors.PeopleAndCounts(f'"{tr.name}" ({tr.arrow}) fills {sc.strjoin(others)}, which no transition links to {self.first.name}, where people start, so {"it looks like" if len(others) == 1 else "they look like"} a count of something else (e.g. mosquitoes). '
                                                 f'Every state is people unless declared a count: if {"it is" if len(others) == 1 else "they are"} not people, declare {sc.strjoin(others)} with ss.State(people=False) (or ss.states(n, people=False)); if {"it is" if len(others) == 1 else "they are"} people, say so with people=True.')
-        return
-
-    def check_first(self, why=None):
-        """ Raise if the module has states of people but no first state (see `resolve_people()`), which every solver needs: it is where people start unless they are put elsewhere, and where those added later (born, or seeded from) come from """
-        if self.first is None and self.people_states:
-            names = [s.name for s in self.people_states]
-            errormsg = (f'"{self.module.name}" has no first state, the state people {why or "start in unless they are put elsewhere, and are born into"}. It is the state named S or susceptible, '
-                        f'and "{self.module.name}" has neither (its states are {sc.strjoin(names)}).\n'
-                        f'     Say which with first=, e.g. ss.Disease(..., first="{names[0]}")')
-            raise ss.errors.UnknownState(errormsg)
         return
 
     def resolve_rest(self):
@@ -840,17 +844,15 @@ class Graph(Presentation):
         return self.module
 
     def add_flow(self, tr):
-        """ Add a birth, death, or migration declared for the whole population (`ss.Sim(demographics=[ss.birth(...)])`), after the graph is built; see `ss.Sim._init_flows()` """
+        """ Add a birth, death, or migration declared for the whole population (`ss.Sim(demographics=[ss.birth(...)])`), after the graph is built; see `ss.solvers.choose.init_flows()` """
         name = tr.name or ('births' if tr.per_capita else 'immigration' if tr.inflow else 'emigration' if tr.migration else 'deaths')
         if name in self.transitions:
             raise ss.errors.DuplicateDeclaration(f'"{self.module.name}" already has a transition named "{name}"; give the one in demographics= another name, e.g. ss.birth(..., name="{name}2")')
         tr.name = name
         if tr.inflow: # Born into (or arriving in) the state given, or else the state people are in unless they are put elsewhere
-            if not tr.state_given:
-                self.check_first(f'added by "{name}" in demographics= are put in')
             dst = tr.dst[0] if tr.state_given else self.first
             if not any(s is dst for s in self.people_states):
-                raise ss.errors.UnknownState(f'"{name}" in demographics= adds people to "{dst.name}", which is not a state of people of "{self.module.name}"; its states are {sc.strjoin(s.name for s in self.people_states)}')
+                raise ss.errors.UnknownState(f'"{name}" in demographics= adds people to "{getattr(dst, "name", None)}", which is not a state of people of "{self.module.name}"; its states are {sc.strjoin(s.name for s in self.people_states)}')
             tr.dst = [dst]
         if tr.rate is None and tr.dur is None:
             raise ss.errors.UndrivenTransition(f'"{name}" in demographics= has no rate; give it one, e.g. ss.birth(rate=ss.peryear(0.02))')
@@ -880,6 +882,16 @@ class Graph(Presentation):
         return [s for s in self.states.values() if s.infectious]
 
     @property
+    def density_sources(self):
+        """ The states whose numbers drive an acquisition at a rate on counts of people, which is density-dependent transmission: `I` in `S >> I @ beta*I.n` """
+        out = {}
+        for tr in self.acquisitions:
+            if tr.rate is not None and not tr.contact and count_power(tr.rate) > 0:
+                out.update({id(leaf.states[0]):leaf.states[0] for leaf in tr.rate.leaves if isinstance(leaf, Count) and len(leaf.states) == 1
+                            and leaf.states[0].people and leaf.states[0].module is self.module and not any(leaf.states[0] is src for src in tr.src or [])})
+        return list(out.values())
+
+    @property
     def transmissions(self):
         return [tr for tr in self.transitions.values() if tr.contact]
 
@@ -903,13 +915,13 @@ class Graph(Presentation):
     @property
     def infected(self):
         """
-        The states counted in prevalence: the states people are infected into, and the sources of infection (of people, or of a count, as `Ih` in a bite rate `Ih.n / N` of mosquitoes)
+        The states counted in prevalence: the states people are infected into, and the sources of infection (of people by contact, as `I` in `beta*I`, or density-dependent, in `beta*I.n`; or of a count, as `Ih` in a bite rate `Ih.n / N` of mosquitoes)
 
         In a model where nobody is a source of infection (a staged condition such as a cancer), also every state that
         people reach from those without passing through a state they can be in without having been infected (TL52: only
         the first stage was counted, so a test found 649 of 1,637 people with cancer)
         """
-        sources = {id(s):s for s in self.infectious}
+        sources = {id(s):s for s in self.infectious + self.density_sources}
         for tr in self.transitions.values():
             if not tr.people and tr.rate is not None:
                 sources.update({id(leaf.states[0]):leaf.states[0] for leaf in tr.rate.leaves if isinstance(leaf, Count) and len(leaf.states) == 1 and leaf.states[0].people})

@@ -36,10 +36,7 @@ pars = dict(total_pop=1e6, start='2020-01-01', stop='2020-06-01')
 The outcomes are not states, so the diagram, from `diagram()`, is an SIR's:
 
 ```{python}
-#| echo: false
-#| output: asis
-fence = '`' * 3
-print(fence + '{mermaid}\n' + sir.diagram() + '\n' + fence)
+sir.diagram()
 ```
 
 ## Data

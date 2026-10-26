@@ -549,7 +549,7 @@ class CompartmentalDelivery:
         Args:
             tally (array): runs by time points by 2 by groups (or by one group, the total)
             tally_g (array): the same by group, as runs by rows by 2 by groups, if they are kept apart from the totals
-            group_ti (array): the time point of each row of `tally_g`, if they are not every time point (see `ss.Sim.group_rows()`)
+            group_ti (array): the time point of each row of `tally_g`, if they are not every time point (see `ss.solvers.group_rows()`)
         """
         d = self.delivery
         delivered, eligible = tally[:, :, 0], tally[:, :, 1]

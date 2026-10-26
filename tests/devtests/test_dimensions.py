@@ -513,7 +513,7 @@ def test_space():
         for solver in ['ode', 'abm']:
             attack = run(make(ss.geo.Mobility(matrix=M, kind='force')), solver, total_pop=20_000, unit='day', stop=200).results.sir.infection.cum.by('place').values[-1]
             assert attack[0] > 5000 and (attack[1] > 5000) == reached, f'Expected b to be reached: {reached}, with {solver}, not {attack}'
-            contacts = run(make(), solver, networks=ss.contacts(place=M.T + np.diag(1 - M.sum(axis=1))), total_pop=20_000, unit='day', stop=200).results.sir.infection.cum.by('place').values[-1]
+            contacts = run(make(), solver, networks=ss.contacts(M.T + np.diag(1 - M.sum(axis=1)), dims='place'), total_pop=20_000, unit='day', stop=200).results.sir.infection.cum.by('place').values[-1]
             assert np.allclose(contacts, attack), f'Expected the contact matrix to give the same run as kind="force" with {solver}: {contacts} against {attack}'
 
     # A movement matrix may be sparse, for many places; the time share is kept sparse either way, with the same run
@@ -660,7 +660,7 @@ def test_mixing():
         sir.stratify(age=['young', 'old']) # Labels, so not the age that people have
         sir.stratify(location=['urban', 'rural'], split=[0.7, 0.3])
         return sir
-    mixing = ss.contacts(age=[[0.2, 0.3], [0.5, 0.7]], location=[[0.8, 0.2], [0.2, 0.8]])
+    mixing = ss.contacts(dict(age=[[0.2, 0.3], [0.5, 0.7]], location=[[0.8, 0.2], [0.2, 0.8]]))
     sims = sc.objdict({solver:run(make(), solver, networks=mixing, total_pop=10_000, dt=0.1, stop=20) for solver in solvers})
     res = sims.ode.results.sir
     assert sims.ode.groups.strats[0].kind == 'plain'
@@ -671,10 +671,10 @@ def test_mixing():
         assert np.isclose(sims[solver].results.sir.R[-1], res.R[-1], rtol=0.1), f'Expected {solver} to match the ODE'
     assert sims.abm.results.sir.I[0] <= 10 # As agents, the number who start in each state is exact (less anyone who has already recovered)
     with pytest.raises(ss.errors.ShapeError):
-        ss.Sim(make(), networks=ss.contacts(location=np.ones((3, 3))), **kw).init()
+        ss.Sim(make(), networks=ss.contacts(np.ones((3, 3)), dims='location'), **kw).init()
     assert mixing.pars.n_contacts[1, 2] == 0.5*0.2 # From (old, urban) to (young, rural)
     T = sc.timer()
-    ss.Sim(make(), networks=ss.contacts(place=np.eye(500) + 0.01), **kw) # A matrix over many places is copied into the sim as numbers, not as 250,000 objects
+    ss.Sim(make(), networks=ss.contacts(np.eye(500) + 0.01, dims='place'), **kw) # A matrix over many places is copied into the sim as numbers, not as 250,000 objects
     assert T.toc(output=True) < 5 # About 0.1 s; 774 places took 170 s
 
     # Where people start can be given for each level of a dimension
@@ -754,7 +754,7 @@ def test_mixing():
     S, I, R = ss.states('S I R') # A count in a rate is used literally, so the contacts do not apply to it, which is noted
     literal = ss.Disease(infection=S >> I @ 0.05*I.n/(S + I + R).n, recovery=I >> R @ ss.days(10), init=dict(I=0.01), name='sir').stratify(age=[0, 15])
     assert any('literally' in note for note in ss.Sim(literal, networks=ss.contacts([[3, 1], [1, 2]], ages=[0, 15]), **kw).init().notes)
-    for bad in [dict(matrix=[[-5, 0], [0, 1]], ages=[0, 20]), dict(matrix=[[1, 0], [0, 1]], ages=[20, 0]), dict(age=[[1, np.nan], [1, 1]])]:
+    for bad in [dict(matrix=[[-5, 0], [0, 1]], ages=[0, 20]), dict(matrix=[[1, 0], [0, 1]], ages=[20, 0]), dict(matrix=[[1, np.nan], [1, 1]])]:
         with pytest.raises(ValueError):
             ss.contacts(**bad)
 
@@ -1100,7 +1100,7 @@ def test_contacts_dims():
 
     # A separable matrix given whole is the product of one for each
     for solver in ['ode', 'abm']:
-        assert np.allclose(run(ss.contacts(sex=sex, risk=risk), solver), run(ss.contacts(np.kron(sex, risk), dims=['sex', 'risk']), solver))
+        assert np.allclose(run(ss.contacts(dict(sex=sex, risk=risk)), solver), run(ss.contacts(np.kron(sex, risk), dims=['sex', 'risk']), solver))
 
     # One that is not: men mix with women, and the high-risk with each other more among men; as (2, 2, 2, 2) or (4, 4), first stratification slowest
     m = np.zeros((2, 2, 2, 2))
@@ -1127,12 +1127,12 @@ def test_contacts_ages():
         return m
     pars = dict(total_pop=100_000, n_agents=10_000, stop=ss.days(30), rand_seed=1, **kw)
     for solver in ['abm', 'ode']: # ages= combines with another dimension's matrix as age= does (it was "unrecognized argument area")
-        sims = [ss.Sim(make(), networks=net, solver=solver, **pars).run() for net in [ss.contacts(age=C, area=area), ss.contacts(ages=[0, 15, 65], matrix=C, area=area)]]
+        sims = [ss.Sim(make(), networks=net, solver=solver, **pars).run() for net in [ss.contacts(dict(age=C, area=area)), ss.contacts(dict(age=C, area=area), ages=[0, 15, 65])]]
         assert np.allclose(*[sim.results.measles.S_to_E.values for sim in sims])
+        assert sum('not reciprocal' in note and '"age"' in note for note in sims[1].notes) == 1 # Checked over its own groups, once, as agents too (it was never checked for ages=, and then only in a compartmental run)
     res = sims[0].results.measles.S_to_E
     assert np.allclose(res.by('age').select(area='rural').values, res.select(area='rural').by('age').values) # In either order (it was "is not stratified")
     assert 'contact matrix by age and area' in sims[0].describe(output=True) # It was "by age"
-    assert sum('not reciprocal' in note and '"age"' in note for note in sims[1].notes) == 1 # Checked over its own groups, once (it was never checked for ages=)
 
     # Over other age groups than the model's: one note for all the layers, saying "split" when the model has more groups
     sim = ss.Sim(make(False), networks=ss.contacts(ages=[0, 15, 65], matrix=C), stratify=dict(age=[0, 5, 18, 65]), solver='ode', **pars).init()

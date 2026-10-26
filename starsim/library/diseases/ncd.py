@@ -15,6 +15,8 @@ class NCD(ss.Disease):
     (e.g., hypertension, diabetes), a state for having the condition, and associated
     mortality. It is written as code (see `ss.Disease`), and is not transmitted.
 
+    Note: CRN safe.
+
     Args:
         initial_risk (float/`ss.bernoulli`): initial prevalence of risk factors
         dur_risk (float/`ss.dur`/`ss.Dist`): how long a person is at risk for

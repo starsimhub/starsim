@@ -73,10 +73,7 @@ sim = ss.Sim(measles, total_pop=100_000, stop=ss.days(50), solver='ode')
 sim.describe()
 ```
 
-::: {.callout-warning}
-## [PROPOSAL]
-`describe()` should print a distribution as it was given, `erlang(k=4, mean=8 days)`, not as `ss.gamma(a=4, scale=2.0, loc=0.0)`, which loses its unit and the name the modeler used (P2, P14).
-:::
+A distribution is shown as it was given, with its units (`erlang(k=4, mean=8 days)`). `describe(verbose=True)` adds how the model is run (here, as compiled code, the whole run in one call) and what each rate and duration is per step.
 
 ### Equations
 
@@ -95,29 +92,13 @@ These are the equations whatever the model is run as: as agents, each person mov
 
 ### Diagram
 
-`diagram()` gives the model's diagram, as the text of a [Mermaid](https://mermaid.js.org) flowchart:
+`diagram()` draws the model's diagram, with each arrow labelled with its transition's name and value:
 
 ```{python}
-print(measles.diagram())
+measles.diagram()
 ```
 
-Pasted into a page that renders Mermaid (as Quarto, GitHub, and many wikis do), it is drawn as:
-
-```{mermaid}
-flowchart LR
-    S(["S"])
-    I(["I"])
-    R(["R"])
-    S -.->|"infection: beta * I"| I
-    I -->|"recovery: dur = dur"| R
-```
-
-A dashed arrow is a transmission, and a solid one any other transition.
-
-::: {.callout-warning}
-## [PROPOSAL]
-In a notebook, `diagram()` should draw the diagram (as a rendered image), and give the text only when asked, e.g. `diagram(output='text')` (P11: the obvious call should show the obvious thing). Its label "dur = dur" says nothing; it should give the value, "recovery: 8 days".
-:::
+A dashed arrow is a transmission, and a solid one any other transition; a transition with `p=` also gives the share that takes it. The diagram is a [Mermaid](https://mermaid.js.org) flowchart, which is drawn in JupyterLab and in pages built with Quarto; `print(measles.diagram())` gives its text, to paste into anything else that draws Mermaid (such as GitHub, and many wikis).
 
 ### Transitions and states
 

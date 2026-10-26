@@ -33,6 +33,8 @@ class AgentSIR(ss.Infection):
     and `p_death=0.01`, where the declared `ss.SIR` is the textbook SIR, with an
     exponential `dur_inf` and no deaths. Use it to keep a Starsim 3 model as it was.
 
+    Note: CRN safe.
+
     Args:
         beta (float/`ss.prob`): the infectiousness
         init_prev (float/s`s.bernoulli`): the fraction of people to start of being infected
@@ -152,6 +154,8 @@ class AgentSEIR(AgentSIR):
     time of becoming infectious. `ti_infected` is deliberately not defined, since it is
     too easily confused with `ti_infectious`.
 
+    Note: CRN safe.
+
     Args:
         beta (float/`ss.prob`): the infectiousness
         init_prev (float/`ss.bernoulli`): the fraction of people to start off being infected
@@ -225,6 +229,8 @@ class AgentSIS(ss.Infection):
     that is boosted by each infection and wanes exponentially, which sets each agent's
     `rel_sus`. There is no death in this case. For an SIS model without immunity,
     use the declared `ss.SIS`, which runs with every solver.
+
+    Note: CRN safe.
 
     Args:
         beta (float/`ss.prob`): the infectiousness

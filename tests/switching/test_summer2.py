@@ -46,7 +46,7 @@ def make_tb(ages=True, data=None):
                     death=ss.death(rate=1/70), birth=ss.birth(S, rate=0.02), init_n=dict(I=1000), name='tb')
     if ages:
         tb.stratify(age=[0, 5, 15, 35, 50, 70], split=[1/6]*6, adjust={'early_activation': [3, 1.5, 1, 1, 1, 1], 'rel_trans': [0.1, 0.2, 1, 1, 1, 1]})
-    return ss.Sim(tb, networks=ss.contacts(age=mixing) if ages else None, total_pop=1e6, start=1950, stop=2025, unit='year', data=data, verbose=0)
+    return ss.Sim(tb, networks=ss.contacts(mixing) if ages else None, total_pop=1e6, start=1950, stop=2025, unit='year', data=data, verbose=0)
 
 
 def notifications():

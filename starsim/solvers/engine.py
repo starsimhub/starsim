@@ -9,7 +9,7 @@ import sciris as sc
 import starsim as ss
 from types import SimpleNamespace as Bunch # A plain object with attributes; much faster to read than an objdict, which matters inside the ODE's right-hand side
 
-__all__ = ['Engine', 'CountState', 'StockCtx', 'convert', 'add_rows', 'at_ends', 'by_level', 'no_tables']
+__all__ = ['Engine', 'CountState', 'StockCtx', 'convert', 'add_rows', 'at_ends', 'by_level', 'no_tables', 'kept_by_group', 'group_rows', 'people_results']
 
 
 no_tables = ss.kernels.no_tables # For a step whose program holds for the whole step: see ss.kernels.step()
@@ -58,7 +58,7 @@ def times(x, *factors):
 
 
 def add_rows(out, rows, tis, vals):
-    """ Add values at consecutive time points `tis` (along the first axis of `vals`) into the rows of `out` they belong to: see `ss.Sim.group_rows()` """
+    """ Add values at consecutive time points `tis` (along the first axis of `vals`) into the rows of `out` they belong to: see `ss.solvers.group_rows()` """
     r = rows[tis]
     firsts = np.flatnonzero(np.diff(r, prepend=-1)) # Where each row starts
     out[r[firsts]] += np.add.reduceat(vals, firsts, axis=0)
@@ -69,6 +69,74 @@ def at_ends(out, rows, ends, tis, vals):
     """ Put the values at the time points among `tis` that end a row into that row of `out` """
     last = np.isin(tis, ends)
     out[rows[tis[last]]] = vals[last]
+    return
+
+
+def kept_by_group(sim, mod, key):
+    """ Whether a result of a module is kept by group: every one, unless the sim parameter `results` names the ones to keep (by name, or as "module.name") """
+    names = sim.pars.results
+    return names is None or key in sc.tolist(names) or f'{mod.name}.{key}' in sc.tolist(names)
+
+
+def group_rows(sim, npts, row_bytes, budget, name=None):
+    """
+    The time points at which results are kept by group: each one, or the end of every few steps if each one would take more than `budget` bytes
+
+    The number of steps between them is the shortest of a week, two weeks, four weeks, a quarter, half a year, or
+    a year (or of 2, 5, 10, 20, ... steps for a sim with no unit, or one longer than a day) that keeps them within
+    the budget. A row of values by group then holds a flow added up over its steps, and anything else as it is
+    at the end of them (so a ratio of states is the ratio then). See `ss.Result.select()`.
+
+    Args:
+        npts (int): the number of time points
+        row_bytes (float): the memory the results take at each time point
+        budget (float): the most memory they may take
+        name (str): the module whose results they are, to say so in a note
+
+    Returns the row of each time point and the time point each row ends at, or (None, None) for every time point.
+    """
+    columns = [] if sim.data is None else sim.data.columns
+    if npts*row_bytes <= budget or npts <= 2 or sim.pars.rescale: # With rescaling, the scale differs at each step, and is applied to each one
+        return None, None
+    elif any('[' in str(col) for col in columns): # Data by group, which are compared with the results at each step
+        return None, None
+    most = max(int(budget//row_bytes), 2) # The most rows that fit
+    need = int(np.ceil((npts - 1)/(most - 1))) # The fewest steps per row
+    days = float(sim.t.dt.days) if sim.unit is not None else None
+    if days is not None and days <= 1:
+        ladder = [max(int(round(d/days)), 1) for d in [7, 14, 28, 91, 182, 364]]
+    else:
+        ladder = [m*10**e for e in range(8) for m in [1, 2, 5]]
+    every = next((k for k in ladder if k >= need), need)
+    rows = (np.arange(npts) + every - 1)//every # The start is a row of its own, then each `every` steps
+    ends = np.minimum(np.arange(rows[-1] + 1)*every, npts - 1)
+    unit = sim.unit or 'step'
+    span = f'{every} {unit}s' if days is None else f'{every*days:g} days'
+    ss.note(f'the results of "{name}" are kept by group every {span} (a flow added up over them), since every {unit} would take {npts*row_bytes/1e6:,.0f} MB; '
+            f'name the results to keep by group with results=[...] to keep them more often', sim=sim)
+    return rows, ends
+
+
+def people_results(sim):
+    """ In a compartmental run, the results that agents give the sim (alive, new_deaths, new_emigrants, cum_deaths), from the declared states and flows """
+    mods = [mod for mod in sim.declared if mod.graph.people_states]
+    if sim.solver in [None, 'abm'] or 'alive' in sim.results or not mods:
+        return
+    first = mods[0] # Each disease's states hold everyone
+    kw = dict(module='People', timevec=sim.t.timevec, scale=False)
+    alive = sum(np.asarray(first.results[state.name].values, dtype=float) for state in first.graph.people_states)
+    gone = dict(deaths=0, emigrants=0)
+    for mod in mods:
+        for tr in mod.graph.transitions.values():
+            if tr.deaths is not None and tr.deaths in mod.results:
+                gone['emigrants' if getattr(tr, 'migration', False) else 'deaths'] += np.asarray(mod.results[tr.deaths].values, dtype=float)
+    deaths, emigrants = [np.broadcast_to(gone[key], alive.shape).copy() for key in ['deaths', 'emigrants']]
+    sim.results += [
+        ss.Result('alive', label='Number alive', values=alive, kind='stock', **kw),
+        ss.Result('new_deaths', label='Deaths', values=deaths, **kw),
+        ss.Result('new_emigrants', label='Emigrants', values=emigrants, **kw),
+        ss.Result('cum_deaths', label='Cumulative deaths', values=np.cumsum(deaths), **kw),
+    ]
     return
 
 
@@ -189,13 +257,12 @@ class Engine:
         sim (`ss.Sim`): the sim
     """
     max_map_bytes = 2e9 # The most memory a map between groups may take in a compartmental run (see dim_map())
-    group_bytes = 100e6 # The most memory that a module's results may take by group in one run; above it, they are kept every few steps (see ss.Sim.group_rows())
+    group_bytes = 100e6 # The most memory that a module's results may take by group in one run; above it, they are kept every few steps (see ss.solvers.group_rows())
 
     def __init__(self, module, sim):
         self.mod = module
         self.sim = sim
         self.graph = module.graph
-        self.graph.check_first()
         self.cache = dict() # Parameter values for the current step
         self.fixed = dict() # Converted values of plain parameters, which hold for the whole run
         self.arities = dict() # The number of arguments of each user function: see n_args()
@@ -997,7 +1064,7 @@ class Engine:
 
     @property
     def inferred_unit(self):
-        """ Whether the sim's unit was worked out from the typed values in the model, rather than given with unit= (see `ss.Sim._init_unit()`) """
+        """ Whether the sim's unit was worked out from the typed values in the model, rather than given with unit= (see `ss.solvers.choose.init_unit()`) """
         return self.sim.pars.unit is None and self.sim.unit_source == 'the typed values in the model'
 
     def bare_return(self, p, func, out):
@@ -1145,7 +1212,7 @@ class Engine:
         """ In a run that takes whole steps, say which transitions are fast compared with the timestep """
         sim = self.sim
         for tr in self.graph.transitions.values(): # A rate per person that grows with a count of people, which is often a count written for a share
-            if tr.people and not tr.inflow and tr.rate is not None and tr.flow_given is None and ss.transitions.count_power(tr.rate) > 0: # Not for the whole flow written without a total (beta*S*I), which says so
+            if tr.people and not tr.inflow and tr.rate is not None and tr.flow_given is None and ss.transitions.count_power(tr.rate) > 0 and not self.plausible_density(tr): # Not for the whole flow written without a total (beta*S*I), which says so
                 ss.note(f'{tr.name} has a rate per person of {ss.transitions.format_expr(tr.rate)}, which grows with the number of people (density-dependent); for a share of the population, write .frac (e.g. I.frac), or write the transmission with the bare state (e.g. beta * I)', sim=sim)
         if sim.solver in ['gillespie', 'tau'] and self.smooth: # Exact only for rates that are constant within each quarter of a step
             what = 'solver="gillespie"' if sim.solver == 'gillespie' else 'Tau-leaping'
@@ -1187,6 +1254,20 @@ class Engine:
                     msg += f'. Taking whole steps, {who} can differ from the ODE by that much or more; {fixes} follows it more closely'
                 ss.note(f'{msg}, and sim.check_dt() shows how much it matters', ss.errors.LargeStep, sim=sim)
         return
+
+    def plausible_density(self, tr):
+        """
+        Whether a transition is density-dependent transmission as meant (`S >> I @ beta*I.n`, see `ss.transitions.Graph.density_sources`), rather than
+        a count written for a share: whether one infectious person infects each susceptible at a rate under 5% a step. A beta meant for a share
+        (0.3 per day) is far above one for density dependence, R0/(N × the time infectious), unless the population is a handful of people
+        """
+        if not tr.acquisition or not self.graph.density_sources:
+            return False
+        one = ss.expressions.substitute(tr.rate, {id(leaf):1.0 for leaf in tr.rate.leaves if isinstance(leaf, ss.expressions.Count)})
+        try:
+            return bool(np.all(np.asarray(self.eval(one))*self.dt < 0.05))
+        except Exception: # A value not known until the run (e.g. a function of time)
+            return False
 
     def varying_dwell(self, name, tr, raw, dw, to_unit):
         """ A dwell time whose distribution has parameters with a value for each group (`ss.by`): see each engine's own """
@@ -1437,7 +1518,7 @@ class Engine:
         ng = self.sim.groups.n_groups
         self.stock_groups = sc.objdict()
         self.flow_groups = sc.objdict()
-        self.rows = self.group_ti = None # The row of each time point in the results by group, and the time point of each row, if they are kept every few steps: see ss.Sim.group_rows()
+        self.rows = self.group_ti = None # The row of each time point in the results by group, and the time point of each row, if they are kept every few steps: see ss.solvers.group_rows()
         self.row_flows = sc.objdict() # Then, the flows by group so far in the current row
         if ng > 1:
             names = [strat.name for strat in self.sim.groups.strats]
@@ -1474,10 +1555,10 @@ class Engine:
                     dims[f'n_{name}'] = dims[name]
             grouped = [] # The results kept by group, and their dimensions
             for key,flags in dims.items():
-                if np.any(flags) and self.sim.kept(mod, key):
+                if np.any(flags) and kept_by_group(self.sim, mod, key):
                     grouped.append((mod.results[key], flags))
             n_arrays = sum(1 + (res.name in self.ratios) for res,flags in grouped) # The numerator by group, and the denominator alongside it
-            self.rows, self.group_ti = self.sim.group_rows(mod.t.npts, n_arrays*ng*8, self.group_bytes, name=mod.name)
+            self.rows, self.group_ti = group_rows(self.sim, mod.t.npts, n_arrays*ng*8, self.group_bytes, name=mod.name)
             n_rows = mod.t.npts if self.rows is None else len(self.group_ti)
             for res,flags in grouped:
                 res.init_groups(self.sim.groups.strats, [name for name,flag in zip(names, flags) if flag], (n_rows, ng), self.group_ti, ratio=res.name in self.ratios)
@@ -1697,6 +1778,7 @@ class Engine:
             res[name][ti] = val
         for name,val in self.flowcounts.items():
             res[name][ti] = val
+        self.written_ti = ti # See Agents.infect_now()
         self.step_outcomes()
         derived = getattr(self, 'derived_res', {})
         for name,val in self.stock_groups.items():

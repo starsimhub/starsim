@@ -34,10 +34,7 @@ erlang = make_seir(ss.erlang(mean=ss.days(10), k=3))
 The infection leads to E, so the people infected at the start are put in I with `init=dict(I=0.001)`. The diagram, from `diagram()`:
 
 ```{python}
-#| echo: false
-#| output: asis
-fence = '`' * 3
-print(fence + '{mermaid}\n' + erlang.diagram() + '\n' + fence)
+erlang.diagram()
 ```
 
 As an ODE, the Erlang period is exact: I is split into three stages, each with a mean of a third of the period, as the equations show:

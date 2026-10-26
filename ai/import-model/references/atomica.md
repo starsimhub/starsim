@@ -20,13 +20,13 @@ An Atomica model is a framework workbook (compartments, characteristics, paramet
 | Databook values by year | `ss.timeseries(..., mode='linear')`, held constant outside, as Atomica does | yes |
 | Initial numbers | Solved from the databook's compartments and characteristics at the first year, as Atomica does: those with a setup weight (by default, those in the databook or with a default), zeros fixed, least squares with the smallest norm | yes |
 | Several population types (`Population types` sheet) | The first type as the disease; the others (each would be a disease of its own) and the interactions between them listed | no |
-| `SRC_POP_AVG()`, `SRC_POP_SUM()` and the like, and a flow's value (`x*:ddis`) in a function | Listed (with the transitions that use them): an aggregate over interacting populations is a contact matrix, `ss.contacts(population=...)` | no |
+| `SRC_POP_AVG()`, `SRC_POP_SUM()` and the like, and a flow's value (`x*:ddis`) in a function | Listed (with the transitions that use them): an aggregate over interacting populations is a contact matrix, `ss.contacts(..., dims='population')` | no |
 | Several populations | A stratification `population=[...]` with `kind='space'` (so `sus.n` is the count in each population), values as `ss.by(population=[...])` | yes |
 | Atomica's step | `integrator='euler', substeps=1`, `dt` in years (Atomica's default 0.25) | yes |
 | Programs (the program book) | Coverage from spending, and each affected parameter as baseline plus coverage times effect, by hand | no |
 | Junctions | A branch: `ss.Transition(src, [a, b], rate=..., p=[pa, pb])` | no |
 | Transfers between populations | `ss.transfer`, or `mobility=` on the population stratification | no |
-| Interactions (a force of infection between populations) | A contact matrix, `ss.contacts(population=[[...]])` | no |
+| Interactions (a force of infection between populations) | A contact matrix, `ss.contacts([[...]], dims='population')` | no |
 
 ## What needs care
 

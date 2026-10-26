@@ -716,7 +716,8 @@ class People:
             # Remove the UIDs from the networks too
             uids = ss.uids(gone)
             for network in self.sim.networks.values():
-                network.remove_uids(uids) # TODO: only run once every nth timestep
+                if not network.one_step: # Edges that end at the next step anyway are left
+                    network.remove_uids(uids)
 
             # Keep the others, in order
             self._auids_room = room

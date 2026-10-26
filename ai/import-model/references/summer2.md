@@ -27,7 +27,7 @@ Then, in Starsim, `sim = ss.interop.load('model.json')`. If the source builds se
 | `stratify_with()` | `stratify(...)` with `split=`, `states=`, and `adjust=` (`Multiply(x)` is x, `Overwrite(x)` is x/base) | yes |
 | Infectiousness adjustments | `adjust={'rel_trans': [...]}` | yes |
 | `AgeStratification` | Numeric levels with `kind='age'`; Starsim ages people itself, so summer2's aging flows are left out, and the unit is years | yes |
-| Mixing matrices (`Data(...)` or a plain array) | `networks=ss.contacts(age=..., location=...)` (multiplied together, as summer2's Kronecker product) | yes |
+| Mixing matrices (`Data(...)` or a plain array) | `networks=ss.contacts(dict(age=..., location=...))` (multiplied together, as summer2's Kronecker product) | yes |
 | A flow into a stratified compartment with adjustments | The shares as the split (an `ss.by` over an earlier dimension with `source_strata`), and the flow multiplied by their sum | yes |
 | Derived outputs | `ss.interop.summer2.outputs(sim)`, which works them out from the results | yes |
 | A named `Parameter` | A parameter of that name, with the value given in `params.json` (or `ss.interop.load(model, pars=...)` for a live model) | yes |

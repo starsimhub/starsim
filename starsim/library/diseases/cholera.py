@@ -24,6 +24,8 @@ class Cholera(AgentSEIR):
 
     Parameter values are drawn from the literature; see the source for citations.
 
+    Note: CRN safe.
+
     Args:
         beta (prob):            per-contact transmission probability
         init_prev (Dist):       initial prevalence
@@ -170,10 +172,10 @@ class Cholera(AgentSEIR):
 
         return
 
-    def infect(self):
+    def transmit(self):
         """ Add indirect transmission """
         # Make new cases via direct transmission
-        new_cases, sources, networks = super().infect()
+        new_cases, sources, networks = super().transmit()
 
         # Make new cases via indirect transmission
         pars = self.pars

@@ -13,7 +13,6 @@ value per group. Everything else is a number per group that Python sets once a s
 
 import os
 import sys
-import time
 import importlib
 import ctypes
 import contextlib
@@ -148,14 +147,55 @@ def kernel(error_model='numpy', **kwargs):
     return (lambda func: func) if plain else nb.jit(nopython=True, cache=True, error_model=error_model, **kwargs)
 
 jit = kernel()
+
+if plain:
+    def borrow(x):
+        """ As plain Python, x as it is (see the compiled `borrow()`) """
+        return x
+else:
+    from numba.core import cgutils
+    from numba.extending import intrinsic
+
+    @intrinsic
+    def borrow(typingctx, x):
+        """
+        The same arrays (an array, a random generator, or a tuple or program of them) without an owner, for the entry points to pass on
+        to the kernels a step calls; only while the caller holds the originals
+
+        Numba counts a reference to every array of a tuple each time a call is passed it, and again when inlined,
+        so passing the program (about 45 arrays) cost about 0.5 µs a call, and most of a step of a small model.
+        An array with no owner (a null meminfo) is not counted.
+        """
+        def unowned(context, builder, typ, val):
+            if isinstance(typ, nb.types.Array):
+                ary = context.make_array(typ)(context, builder, value=val)
+                ary.meminfo = cgutils.get_null_value(ary.meminfo.type)
+                ary.parent = cgutils.get_null_value(ary.parent.type)
+                return ary._getvalue()
+            if isinstance(typ, nb.types.NumPyRandomGeneratorType):
+                gen = cgutils.create_struct_proxy(typ)(context, builder, value=val)
+                gen.meminfo = cgutils.get_null_value(gen.meminfo.type)
+                gen.parent = cgutils.get_null_value(gen.parent.type)
+                return gen._getvalue()
+            if isinstance(typ, nb.types.BaseTuple):
+                for i,t in enumerate(typ):
+                    val = builder.insert_value(val, unowned(context, builder, t, builder.extract_value(val, i)), i)
+            return val
+        return x(x), lambda context, builder, sig, args: unowned(context, builder, sig.args[0], args[0])
+
+
+@jit
+def hold(x):
+    """ Nothing: a use of x, so that Numba keeps it to here, for what was borrowed from it (see `borrow()`) """
+    return
+
 pieces = 4 # The stochastic solvers that take steps of their own length hold values that vary in time for a quarter of a step at a time: see step()
 golden = draws.GOLDEN # The step between the counters of a random stream: see uniform()
 sparse_flows = 256 # The flows above which the exact solver by place follows only the compartments that hold anyone: see sparse_events()
-row_groups = 50 # The groups from which a draw for every group is made as a vectorized row, which is faster for many groups (and slower for a few): measured for 1, 16, 50, and 260 groups, see v4_design/oct22/jax/draws.md
+row_groups = 50 # The groups from which a draw for every group is made as a vectorized row, which is faster for many groups (and slower for a few): measured for 1, 16, 50, and 260 groups, see v4_design/oct25/backlog/perf_jax.md
 
 
 compile_seconds = 60 # About how long compiling the kernels takes, once per install: runs that would take longer than this as plain Python are compiled first (by default: see choose())
-speedup = 50 # About how many times faster the compiled kernels are than plain Python (40 to 150 times for stiff ODEs)
 note_after = 1 # The seconds of a plain run above which choose() says how long it would take compiled
 plain_total = 0.0 # The seconds that the runs taken as plain Python in this session would have taken, as estimated: see choose()
 noted = False # Whether choose() has said that a run is taken as plain Python, in this session
@@ -201,64 +241,68 @@ def is_compiled():
     return on_disk or bool(step.signatures)
 
 
+def work(p, y):
+    """
+    About how many operations working out a program's rates once takes, from its size alone: each group times each
+    flow, target, operation, compartment, and compartment of an infectious state; for each exposure, through each
+    mixing term, each group and cell, each entry of the time share between places that it uses (times the levels in
+    each place), and each pair of cells that mix in a place (a quarter as many for a whole matrix of more than 16,
+    which BLAS takes); and each entry of a mover times its compartments. For `plain_seconds()` and `compiled_seconds()`.
+    """
+    nc, ng = y.shape
+    size = ng*(len(p.src) + len(p.tgt_comp) + len(p.ops) + nc + len(p.set_comps))
+    if len(p.ops): # Exposure is worked out only for rates that depend on the compartments
+        mixing = 0.0
+        for t in range(len(p.sizes)):
+            cells, block = int(p.sizes[t]), int(p.block[t])
+            pairs = len(p.sh_val)*block
+            mixing += 3*ng + cells + (2*p.use[0, t] + p.use[2, t])*pairs + p.use[1, t]*cells*block*(0.25 if block == cells > 16 else 1)
+        size += np.sum(p.exp_set >= 0)*mixing
+    if p.n_movers:
+        size += np.sum(np.diff(p.mov_starts[0])*np.diff(p.mov_starts[1]))
+    return size
+
+
+def evals(npts, solver, n_sub):
+    """ How many times a run works out the rates: at each step, each substep (see `substeps()`), and each stage (four for RK4 and tau-leaping) """
+    stages = 4 if solver in [solvers['rk4'], solvers['tau']] else 1
+    return npts*stages*max(n_sub, 1)
+
+
 def plain_seconds(p, y, npts, solver, n_sub=1):
     """
-    About how long a run would take as plain Python, in seconds: about 20 µs a step (or, for the exact solver, an
-    event), and 0.4 µs for each group times each flow, operation, and compartment, and each pair of levels or places
-    that mix; RK4 and tau-leaping take about four times as many steps, each substep counts as a step, and the exact
-    solver takes about one event for each person and flow. Fitted to declared SIRs with 1 to 50 groups, to within
-    about 2×, which is enough to choose whether to compile.
+    About how long a run would take as plain Python, in seconds, from the program's size alone, so that it is the same
+    for a model whatever has run before and whatever else the machine is doing: 10 µs each time the rates are worked
+    out (see `evals()`), plus 0.6 µs for each operation that takes (see `work()`); the exact solver takes about one
+    event for each person and flow. Measured once (W8, 2026-10-25) on 13 plain runs of the ODE (declared SIRs with 1
+    to 100 groups, over 20 and 50 places, Ghana measles over 260 districts, MEmilio's 50 counties, two SEIRs with
+    stages tracked jointly, a stiff SIS, and an SIS with aging), it is within 0.75 to 1.6 times the time taken, and
+    0.35 for the SIS with aging, whose epidemic needs more substeps than its rates at the start (see `substeps()`):
+    enough to choose whether to compile.
 
     Args:
         n_sub (int): the substeps in each step (see `substeps()`)
     """
-    nc, ng = y.shape
-    size = ng*(len(p.src) + len(p.ops) + nc) + len(p.exp_set)*(3*len(p.sh_val) + (p.sizes**2).sum())
     if solver == solvers['gillespie']:
-        return y.sum()*len(p.src)*(1e-5 + 3e-7*size)
-    stages = 4 if solver in [solvers['rk4'], solvers['tau']] else 1
-    return npts*stages*max(n_sub, 1)*(2e-5 + 4e-7*size)
+        return y.sum()*len(p.src)*(1e-5 + 3e-7*work(p, y))
+    return evals(npts, solver, n_sub)*(1e-5 + 6e-7*work(p, y))
 
 
-def deciding():
-    """ Whether `choose()` would weigh how long a run takes (rather than take the kernels as they are chosen already): so `timed_seconds()` is only paid for when it is needed """
-    return ss.options.compile == 'auto' and not chosen and not is_compiled()
-
-
-def timed_seconds(p, y, npts, dt, solver, n_sub, kn=None):
+def compiled_seconds(p, y, npts, solver, n_sub=1):
     """
-    About how long a run would take as plain Python, in seconds: one step taken as plain Python (on copies, with
-    its own random numbers), times the number of steps. Timing a step counts what an estimate from the size of the
-    program misses (C3: the substeps an ODE chooses as it grows, the stages of dwell times, the mixing), which left
-    plain runs of 1 to 4 minutes estimated at 3 to 16 s; a step is taken again (up to 3 times) while they have taken
-    under a tenth of a second, and the fastest kept, since the first call of plain Python pays tens of milliseconds
-    once.
-
-    Args:
-        p (Program): the flows; its parts that a step sets afresh are changed
-        y (array): the compartments at the start (not changed)
-        npts (int): the time points of the run
-        dt (float): the timestep
-        solver (int): which of `solvers` to use
-        n_sub (int): the substeps given (0 to let the solver choose, as it does in the run)
-        kn (module): the kernels to time (default: as plain Python); the compiled ones (`ss.kernels`) are timed at least twice, since their first call in a session loads them
+    About how long a run of the ODE would take in the compiled kernels, in seconds, from the program's size alone (as
+    `plain_seconds()` is, and never timed): 0.5 ms a run, plus 0.1 µs each time the rates are worked out (see
+    `evals()`) and 2 ns for each operation that takes (see `work()`). Measured once (W8, 2026-10-25, on a quiet machine)
+    on 24 runs (the models of `plain_seconds()` and MEmilio's 100 to 400 counties, some with Euler steps), it is within
+    0.93 to 1.6 times the time taken for the runs of more than 0.05 s (Ghana's 260 districts over 16 years: 3.7 s
+    against 4.0 s; MEmilio's 400 counties: 0.95 s against 0.62 s), and 0.34 to 1.4 times for the shorter ones (the
+    lowest the SIS with aging, and two SEIRs tracked jointly, 0.41). See `ss.solvers.kernel_seconds()`.
     """
-    plain = kn is None
-    kn = uncompiled() if plain else kn
-    rng = np.random.default_rng(0)
-    best, spent = np.inf, 0.0
-    for i in range(3):
-        start = time.perf_counter()
-        kn.one_step(rng, y, p, dt, solver, n_sub, no_tables, -1)
-        took = time.perf_counter() - start
-        best, spent = min(best, took), spent + took
-        if spent > 0.1 and (plain or i > 0):
-            break
-    return (npts - 1)*best
+    return 5e-4 + evals(npts, solver, n_sub)*(1e-7 + 2e-9*work(p, y))
 
 
 def substeps(rates, dt, n_sub, solver):
-    """ About how many substeps a solver takes in each step, for `plain_seconds()`: those given (`n_sub`), or else for the ODE, enough for the fastest of the rates out of a compartment given, as `step()` chooses them """
+    """ About how many substeps a solver takes in each step, for `plain_seconds()` and `compiled_seconds()`: those given (`n_sub`), or else for the ODE, enough for the fastest of the rates out of a compartment given, as `step()` chooses them """
     if n_sub > 0 or solver >= 2: # The stochastic solvers that take steps of their own length count them in their own way
         return max(n_sub, 1)
     rates = np.ravel(rates)
@@ -296,11 +340,11 @@ def choose(seconds=0.0):
         plain_total = total
         if seconds >= note_after and not noted:
             noted = True
-            print(f'Note: running the solver as plain Python (about {seconds:.0f} s; about {seconds/speedup:.2g} s compiled, after compiling once per install for about a minute: ss.compile())')
+            print(f'Note: running the solver as plain Python (about {seconds:.0f} s; 15 to 300 times faster compiled, after compiling once per install for about a minute: ss.compile())')
         return uncompiled()
     chosen = True
     which = 'this run' if seconds >= compile_seconds else 'the runs in this session'
-    print(f'Note: compiling the solver (once per install), since {which} would take about {total:.0f} s as plain Python and {total/speedup:.2g} s compiled')
+    print(f'Note: compiling the solver (once per install), since {which} would take about {total:.0f} s as plain Python')
     return sys.modules[__name__]
 
 
@@ -506,12 +550,13 @@ def split(rng, n, a, b, weights, credit, out, comps, which, maps, scratch, rec, 
 
 
 @jit
-def credit(rng, n, a, b, p, scratch, flows, rows):
+def credit(rng, n, a, b, parent, weights, index, scratch, flows, rows):
     """
     Count the events of a flow (n, by group) also in the transitions they pass through with no wait (see
     `ss.solvers.Compartmental.entry`). The credits nested in the same one (or in none) are exclusive, so they are one
     multinomial draw from its count, as a chain of conditional binomials; a credit that overlaps the others is drawn on
-    its own. rows is scratch for the draws (see `workspace()`)
+    its own. parent, weights, and index are the program's crd_parent, crd_w, and crd_index (not the program, since a call that is passed
+    it costs more than the draws of a small model); rows is scratch for the draws (see `workspace()`)
     """
     if b == a:
         return
@@ -521,21 +566,21 @@ def credit(rng, n, a, b, p, scratch, flows, rows):
         left[0, g] = n[g]
         mass[0, g] = 1.0
     for k in range(a, b):
-        q = p.crd_parent[k]
+        q = parent[k]
         i = k - a + 1
         j = 0 if q < 0 else q - a + 1
         if q == -2:
-            some_binomials(rng, n, p.crd_w[k], left[i], rows)
+            some_binomials(rng, n, weights[k], left[i], rows)
         else:
             for g in range(ng):
-                prob[g] = p.crd_w[k, g]/mass[j, g] if mass[j, g] > 0 else 0.0
+                prob[g] = weights[k, g]/mass[j, g] if mass[j, g] > 0 else 0.0
             some_binomials(rng, left[j], prob, left[i], rows)
         for g in range(ng):
             if q != -2:
                 left[j, g] -= left[i, g]
-                mass[j, g] -= p.crd_w[k, g]
-            mass[i, g] = p.crd_w[k, g]
-            flows[p.crd_index[k], g] += left[i, g]
+                mass[j, g] -= weights[k, g]
+            mass[i, g] = weights[k, g]
+            flows[index[k], g] += left[i, g]
     return
 
 
@@ -645,16 +690,16 @@ def draw_chain(rng, y, p, w, s, dt, new, flows):
         if p.named[f]:
             land(rng, n, p.record[f], p.maps, flows[p.index[f]])
         split(rng, n, p.tgt_starts[f], p.tgt_starts[f+1], p.tgt_w, False, new, p.tgt_comp, p.tgt_map, p.maps, groups, p.tgt_rec, flows, w[10])
-        credit(rng, n, p.crd_starts[f], p.crd_starts[f+1], p, w[9], flows, w[10])
+        credit(rng, n, p.crd_starts[f], p.crd_starts[f+1], p.crd_parent, p.crd_w, p.crd_index, w[9], flows, w[10])
     f = p.src_last[s] # The last stage
     if p.named[f]:
         land(rng, ends, p.record[f], p.maps, flows[p.index[f]])
     split(rng, ends, p.tgt_starts[f], p.tgt_starts[f+1], p.tgt_w, False, new, p.tgt_comp, p.tgt_map, p.maps, groups, p.tgt_rec, flows, w[10])
-    credit(rng, ends, p.crd_starts[f], p.crd_starts[f+1], p, w[9], flows, w[10])
+    credit(rng, ends, p.crd_starts[f], p.crd_starts[f+1], p.crd_parent, p.crd_w, p.crd_index, w[9], flows, w[10])
     return
 
 
-@jit
+@kernel(inline='always') # Compiled into step(), since a call that is passed the program costs about as much as a small step (see into_many())
 def draw(rng, y, p, w, dt, flows, tau):
     """
     Draw whole numbers of events over a time dt, and add them to the flows
@@ -718,18 +763,8 @@ def draw(rng, y, p, w, dt, flows, tau):
                     new[p.tgt_comp[t], g] += n[g]
             else:
                 split(rng, n, t, p.tgt_starts[f+1], p.tgt_w, False, new, p.tgt_comp, p.tgt_map, p.maps, groups, p.tgt_rec, flows, w[10])
-            credit(rng, n, p.crd_starts[f], p.crd_starts[f+1], p, w[9], flows, w[10])
-    for m in range(p.n_movers): # Movement between groups: as move() does, but written out, since a call here (once a leap) slows tau-leaping by a few percent
-        for e in range(p.mov_starts[1, m], p.mov_starts[1, m+1]):
-            if p.mov_rate[e] != 0:
-                g, h = p.mov_pair[0, e], p.mov_pair[1, e]
-                prob = -np.expm1(-p.mov_rate[e]*dt)
-                for k in range(p.mov_starts[0, m], p.mov_starts[0, m+1]):
-                    c = p.mov_comps[k]
-                    moved = binomial(rng, new[c, g], prob)
-                    new[c, g] -= moved
-                    new[c, h] += moved
-                    flows[p.n_trans + m, g] += moved
+            credit(rng, n, p.crd_starts[f], p.crd_starts[f+1], p.crd_parent, p.crd_w, p.crd_index, w[9], flows, w[10])
+    move(rng, new, p.mov_starts, p.mov_comps, p.mov_pair, p.mov_rate, p.n_trans, dt, flows) # Movement between groups, from where the flows left people
     y[:] = new
     return
 
@@ -1383,9 +1418,9 @@ def settle_step(y, p, rates, dt, flows):
     return
 
 
-@jit
-def move(rng, y, mov_starts, mov_comps, mov_pair, mov_rate, n_trans, dt, flows, whole):
-    """ Move people between groups over a time dt: as whole numbers drawn at random, or as the expected share (for the exact solver, once a step) """
+@kernel(inline='always') # Inlined and given the program's fields, since a call from draw() (once a leap) that is passed the program slows tau-leaping by a few percent
+def move(rng, y, mov_starts, mov_comps, mov_pair, mov_rate, n_trans, dt, flows):
+    """ Move people between groups over a time dt, as whole numbers drawn at random: for the stochastic solvers (after the flows' draws, or for the exact solver once a step; the ODE adds the movers to its rates of change instead) """
     for m in range(mov_starts.shape[1] - 1):
         for e in range(mov_starts[1, m], mov_starts[1, m+1]):
             if mov_rate[e] != 0:
@@ -1393,7 +1428,7 @@ def move(rng, y, mov_starts, mov_comps, mov_pair, mov_rate, n_trans, dt, flows, 
                 prob = -np.expm1(-mov_rate[e]*dt)
                 for k in range(mov_starts[0, m], mov_starts[0, m+1]):
                     c = mov_comps[k]
-                    moved = binomial(rng, y[c, g], prob) if whole else y[c, g]*prob
+                    moved = binomial(rng, y[c, g], prob)
                     y[c, g] -= moved
                     y[c, h] += moved
                     flows[n_trans + m, g] += moved
@@ -1453,7 +1488,7 @@ def event(rng, y, p, w, dt, flows):
     if p.named[which]:
         land(rng, n, p.record[which], p.maps, flows[p.index[which]])
     split(rng, n, p.tgt_starts[which], p.tgt_starts[which+1], p.tgt_w, False, y, p.tgt_comp, p.tgt_map, p.maps, groups, p.tgt_rec, flows, w[10])
-    credit(rng, n, p.crd_starts[which], p.crd_starts[which+1], p, w[9], flows, w[10])
+    credit(rng, n, p.crd_starts[which], p.crd_starts[which+1], p.crd_parent, p.crd_w, p.crd_index, w[9], flows, w[10])
     return wait
 
 
@@ -1553,7 +1588,7 @@ def convey(rng, y, p, w, flows, release):
             if p.named[f]:
                 land(rng, n, p.record[f], p.maps, flows[p.index[f]])
             split(rng, n, p.tgt_starts[f], p.tgt_starts[f+1] - 1, p.tgt_w, False, y, p.tgt_comp, p.tgt_map, p.maps, groups, p.tgt_rec, flows, w[10]) # Not the last target, which is the slot they leave
-            credit(rng, n, p.crd_starts[f], p.crd_starts[f+1], p, w[9], flows, w[10])
+            credit(rng, n, p.crd_starts[f], p.crd_starts[f+1], p.crd_parent, p.crd_w, p.crd_index, w[9], flows, w[10])
         else:
             for g in range(ng):
                 for k in range(b-1, a+1, -1): # The last slot is empty by now (or nearly, by rounding, in the ODE)
@@ -1639,12 +1674,12 @@ def step_end(rng, y, p, w, flows):
     return
 
 
-def into_advance(expr, caller, callee):
-    """ Whether Numba compiles step() into its caller rather than calling it: only into advance(), since there a call that is passed the program costs as much as a small step, whereas compiling it into run() and run_many() too adds about 20 s to compiling the kernels """
-    return caller.func_id.func_name == 'advance'
+def into_many(expr, caller, callee):
+    """ Whether Numba compiles step() into its caller rather than calling it: into advance() and run_many(), which take many small runs, since a call that is passed the program costs about as much as a small step (0.2 to 0.5 µs, even borrowed: see `borrow()`); not into run(), where it would save about a millisecond a run (of a few thousand steps), for about 10 s more compiling """
+    return caller.func_id.func_name in ['advance', 'run_many']
 
 
-@kernel(inline=into_advance)
+@kernel(inline=into_many)
 def step(rng, y, p, w, dt, n_sub, solver, flows, tables, row):
     """
     Take one timestep
@@ -1964,7 +1999,7 @@ def step(rng, y, p, w, dt, n_sub, solver, flows, tables, row):
         if (timed and elapsed >= dt - 1e-12) or (not timed and sub >= n_sub):
             break
     if solver == 4: # The exact solver moves people between groups once, over the whole step
-        move(rng, y, p.mov_starts, p.mov_comps, p.mov_pair, p.mov_rate, p.n_trans, dt, flows, True)
+        move(rng, y, p.mov_starts, p.mov_comps, p.mov_pair, p.mov_rate, p.n_trans, dt, flows)
         for e in range(len(p.mov_rate)): # The places they move between are stepped again
             if p.mov_rate[e] != 0:
                 cells[5, p.places[p.mov_pair[0, e]]] = 0
@@ -2167,7 +2202,8 @@ def run(rng, y, p, dt, npts, solver, n_sub, fixed, mult, consts, rel_trans, reg,
     `start` on, as is `tally`.
     """
     y = y.copy()
-    w = workspace(y, p)
+    ws = workspace(y, p)
+    w, p, rng = borrow((ws, p, rng)) # Held to the end, and by the caller
     stocks = np.empty((npts - start, y.shape[0], y.shape[1]))
     flows = np.zeros((npts - start, p.n_trans + p.n_movers, y.shape[1]))
     short = 0.0
@@ -2177,6 +2213,7 @@ def run(rng, y, p, dt, npts, solver, n_sub, fixed, mult, consts, rel_trans, reg,
         k = ti - start
         short += time_point(rng, y, p, w, ti, (k-1)*per_step, per_step, dt, n_sub, solver, flows[k], tables, reg, sh, tally[k])
         stocks[k] = y
+    hold(ws)
     return y, stocks, flows, short
 
 
@@ -2190,7 +2227,7 @@ def run_many(rngs, ys, p, dt, start, npts, solver, n_sub, fixed, mult, consts, r
         ys (array): the compartments of each run at time point `start`, by group; changed in place
         start (int): the time point to start from, so the runs can be taken a part at a time (the tables then start at the step from it, unless they have a single entry)
         stocks, flows (arrays): filled in with the number in each state at each time point, and the total of each transition and mover over the step that ends at it, as runs by time points by states (or transitions) by 1 (the total)
-        stocks_g, flows_g (arrays): those kept by group, as runs by rows by states (or transitions) by groups: a state as it is at the last time point of its row, and a flow added up over them (see `ss.Sim.group_rows()`)
+        stocks_g, flows_g (arrays): those kept by group, as runs by rows by states (or transitions) by groups: a state as it is at the last time point of its row, and a flow added up over them (see `ss.solvers.group_rows()`)
         tally (array): filled in with the total number each delivery reached and found eligible, as runs by time points by deliveries by 2 by 1
         tally_g (array): the same by group, in the rows of `rows` (runs by rows by deliveries by 2 by groups)
         state_of (array): the state that each compartment is part of
@@ -2202,12 +2239,13 @@ def run_many(rngs, ys, p, dt, start, npts, solver, n_sub, fixed, mult, consts, r
     nc, ng = ys.shape[1], ys.shape[2]
     nflows = p.n_trans + p.n_movers
     n_rows = len(stocks_g[0]) if len(rows) else 0
-    w = workspace(ys[0], p)
+    ws = workspace(ys[0], p)
+    w, p = borrow((ws, p)) # Held to the end, and by the caller
     now = np.empty((nflows, ng))
     tables = (fixed, mult, consts, rel_trans)
     now_sh = np.zeros((len(sh.to), 2, ng))
     for r in range(len(rngs)):
-        rng = rngs[r]
+        rng = borrow(rngs[r])
         y = ys[r]
         wake(w) # Each run steps every place first
         for ti in range(start, npts):
@@ -2237,6 +2275,7 @@ def run_many(rngs, ys, p, dt, start, npts, solver, n_sub, fixed, mult, consts, r
                     stocks[r, ti, s, 0] += y[c, g]
                     if end and grp_state[s] >= 0:
                         stocks_g[r, rows[ti], grp_state[s], g] += y[c, g]
+    hold(ws)
     return
 
 
@@ -2262,14 +2301,15 @@ def advance(rngs, p, ys, first, last, dt, start, end, solver, n_sub, fixed, mult
     nc, ng = ys.shape[1], ys.shape[2]
     nflows = p.n_trans + p.n_movers
     by_group = stocks.shape[3] == ng
-    w = workspace(ys[0], p)
+    ws = workspace(ys[0], p)
+    w, p = borrow((ws, p)) # Held to the end, and by the caller
     now = np.empty((nflows, ng))
     tally = np.zeros((len(sh.to), 2, ng)) # Not kept
     parts = (p.fixed, p.mult, p.consts, p.rel_trans)
     own = ys[first:last].copy() # Copies of its own of these runs and their values, since threads that share an array contend for the count of references to it
     mine = [table[first:last].copy() if len(table) > 1 else table.copy() for table in (fixed, mult, consts, rel_trans)]
     for r in range(first, last):
-        rng = rngs[r]
+        rng = borrow(rngs[r])
         y = own[r - first]
         tables = (mine[0][r - first if len(fixed) > 1 else 0], mine[1][r - first if len(mult) > 1 else 0], mine[2][r - first if len(consts) > 1 else 0], mine[3][r - first if len(rel_trans) > 1 else 0])
         set_step(parts, 0, tables) # The values of this run, for those that are held for the whole run
@@ -2282,7 +2322,7 @@ def advance(rngs, p, ys, first, last, dt, start, end, solver, n_sub, fixed, mult
                 if sh.due[:, ti-1].any():
                     wake(w)
             set_step(parts, (ti-1)*per_step - row0, tables)
-            step(rng, y, p, w, dt, n_sub, solver, now, tables, (ti-1)*per_step - row0 if per_step == 3 else -1) # Compiled into advance(): see into_advance()
+            step(rng, y, p, w, dt, n_sub, solver, now, tables, (ti-1)*per_step - row0 if per_step == 3 else -1) # Compiled into advance(): see into_many()
             if len(reg.src):
                 apply_events(rng, y, reg, ti, solver >= 2)
                 if solver == 4 and p.local:
@@ -2302,6 +2342,7 @@ def advance(rngs, p, ys, first, last, dt, start, end, solver, n_sub, fixed, mult
                 for g in range(ng):
                     flows[r, ti, f, g if by_group else 0] += now[f, g]
     ys[first:last] = own
+    hold(ws)
     return
 
 

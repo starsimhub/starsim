@@ -19,7 +19,7 @@ sim = ss.interop.load('model.json', format='memilio') # A sim, with how each rat
 
 The importer writes each model's equations as MEmilio's C++ has them (`cpp/models/ode_*/model.h`), with the parameters, populations, and contacts from the file. It translates, exactly:
 
-- parameters by age group, as `ss.by(..., dims=['age'])` where they differ, and age groups as labels (`'0'`, `'1'`, ...) with `ss.contacts(age=...)`, the matrix at the start summed over MEmilio's matrices;
+- parameters by age group, as `ss.by(..., dims=['age'])` where they differ, and age groups as labels (`'0'`, `'1'`, ...) with `ss.contacts(...)`, the matrix at the start summed over MEmilio's matrices;
 - dampings as a factor on the force of infection (`contacts`, an `ss.timeseries` with `mode='cosine'`), from the matrix MEmilio uses at the start and either side of each damping, so the levels and types of the dampings are already combined;
 - seasonality (`season`, an `ss.seasonal` with the peak from `StartDay`);
 - test and trace (`risk`) and ICU capacity (`critical_share`), as functions of the total counts, along MEmilio's half cosine;
@@ -42,7 +42,7 @@ It lists (`ImportIncomplete`): a parameter that differs by age group where it be
 | `TransmissionProbabilityOnContact` × contacts, with `RelativeTransmissionNoSymptoms` | `infection = S >> E @ beta * contacts * (0.7*INS + risk*ISy)` | Exact |
 | `RiskOfInfectionFromSymptomatic` rising to `Max...` with `TestAndTraceCapacity` | An expression of counts: `excess = np.clip((0.91/2*INS.n - 35)/(5*35 - 35), 0, 1)`, `risk = 0.35 - 0.1*np.cos(np.pi*excess)` | Exact |
 | `Seasonality` with `StartDay` | `ss.seasonal(mean=beta, amplitude=0.2, peak=(-StartDay/365) % 1)` (or a start date and `peak=0`) | Exact |
-| `ContactMatrix` by age | `dis.stratify(age=['0', '1', '2'])` and `networks=ss.contacts(age=matrix)` | Exact |
+| `ContactMatrix` by age | `dis.stratify(age=['0', '1', '2'])` and `networks=ss.contacts(matrix)` | Exact |
 | `Damping(coeffs, t, ...)` (a cut in contacts, smoothed over the day before) | `ss.timeseries({0: 1.0, t-1: 1.0, t: 1 - coeff}, mode='cosine')` as a factor of the rate | Exact |
 | Populations by age and state | `init_n=dict(E=100, INS=50, ...)` (split evenly over groups by default) and `total_pop=` | Exact |
 | `...Confirmed` states that nothing flows into | Leave out | Exact |
@@ -86,7 +86,7 @@ secir = ss.Disease(
     init_n    = dict(E=100, INS=50, ISy=50, ISev=20, ICr=10, R=10),
 )
 secir.stratify(age=['0', '1', '2'])
-sim = ss.Sim(secir, networks=ss.contacts(age=np.full((3, 3), 10/3)), total_pop=10_000, stop=ss.days(50))
+sim = ss.Sim(secir, networks=ss.contacts(np.full((3, 3), 10/3)), total_pop=10_000, stop=ss.days(50))
 ```
 
 ## Running the original

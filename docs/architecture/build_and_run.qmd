@@ -7,7 +7,7 @@ The [previous page](model.qmd) covered the model as data, and the graph that res
 
 ## What `sim.init()` does
 
-Creating a sim only stores what it was given (as copies, so one `sir` can go into several sims). The rest happens at `sim.init()`, which `sim.run()` and `sim.describe()` call if needed. In order (`Sim.init()` in `starsim/sim.py`, and `choose_solver()` in `starsim/solvers/choose.py`):
+Creating a sim only stores what it was given (as copies, so one `sir` can go into several sims). The rest happens at `sim.init()`, which `sim.run()` and `sim.describe()` call if needed. In order (`Sim.init()` in `starsim/sim.py`, and `choose_solver()` and the steps that build a declared model in `starsim/solvers/choose.py`):
 
 1. **Values.** Values given by name (`pars=dict(beta=0.1)`) are set, and each parameter is checked against its bounds (`ss.errors.OutOfBounds`).
 2. **Groups.** The stratifications of the sim and its modules are collected into `sim.groups`.
@@ -16,7 +16,7 @@ Creating a sim only stores what it was given (as copies, so one `sir` can go int
 5. **Objects.** The timeline, the people, and for each declared disease an *engine*, the object that runs its transitions under the chosen solver. This is the one place where the solver changes which objects exist.
 6. **Starting values.** Random number streams ([Randomness and fitting](randomness_and_fitting.qmd)), people's attributes, then each state's initial conditions.
 7. **Results and the loop.** Results are allocated, data is attached to them by name, and the loop's functions are collected. Parameters are locked, so setting one that doesn't exist raises an error.
-8. **Report.** One line saying what will run and how (the modules, the population, the solver, and the span of time), a note for each inference or approximation (kept in `sim.notes`), and for a compartmental model with transmission, R0 and the number infectious at the start, as a check that the model and its seed are what you meant. The reason for the solver is in `sim.solver_reason`, and in `describe()`.
+8. **Report.** One line saying what will run and how (the modules, the population, the solver, and the span of time), a note for each inference or approximation (kept in `sim.notes`), and for a compartmental model with transmission, R0 and the number infectious at the start, as a check that the model and its seed are what you meant. When `sim.describe()` initializes the sim, the line is said when the sim is run instead. The reason for the solver is in `sim.solver_reason`, and in `describe()`.
 
 ```{python}
 import starsim as ss

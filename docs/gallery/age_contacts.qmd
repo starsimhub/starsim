@@ -40,10 +40,7 @@ contacts = ss.contacts(ages=[0, 15, 65], matrix=[[8, 5, 2], [3, 6, 2], [3, 5, 3]
 The diagram, from `diagram()`, is the same as an SIR's: the age groups split each state, and don't change the transitions.
 
 ```{python}
-#| echo: false
-#| output: asis
-fence = '`' * 3
-print(fence + '{mermaid}\n' + sir.diagram() + '\n' + fence)
+sir.diagram()
 ```
 
 ## Result

@@ -96,7 +96,7 @@ measles.stratify(vaccinated=[False, True], split=coverage_by_area, states=['S'],
 The contacts are now between groups of two dimensions. With a matrix for each, the contacts between two groups are the product of the entries for each: a child in town has 10 contacts a day with children, and 95% of a person's contacts in town are with others in town, so 9.5 of them are with children in town. Here people in town make 5% of their contacts with people in the rural area, and people in the rural area make 15% of theirs with people in town. (These two are consistent: there are three times as many people in town, so the total contacts each way are the same.)
 
 ```{python}
-contacts = ss.contacts(ages=[0, 15, 65], matrix=age_contacts, area=[[0.95, 0.05], [0.15, 0.85]])
+contacts = ss.contacts(dict(age=age_contacts, area=[[0.95, 0.05], [0.15, 0.85]]), ages=[0, 15, 65])
 sim = ss.Sim(measles, networks=contacts, **pars)
 sim.run()
 sim.results.measles.I.by('area').plot()
@@ -166,16 +166,11 @@ The two agree to within about 10%. They needn't agree exactly: the agents are on
 
 ## How big the model gets
 
-As compartments, each state has a compartment for each combination of levels, so the dimensions multiply: here `S` has 3 age groups × 2 areas × 2 levels of vaccination = 12 compartments, and `E`, `I`, and `R` have 6 each, 30 in all. Sixteen age groups, five areas, and two levels of vaccination in every state would be 640. Large models can still run quickly, but are hard to check; `describe()` lists each dimension, its levels, and the states it applies to:
+As compartments, each state has a compartment for each combination of levels, so the dimensions multiply: here `S` has 3 age groups × 2 areas × 2 levels of vaccination = 12 compartments, and `E`, `I`, and `R` have 6 each, 30 in all. Sixteen age groups, five areas, and two levels of vaccination in every state would be 640. Large models can still run quickly, but are hard to check; `describe()` lists each dimension, its levels, the states it applies to, the share of people in each level (`split`), and its adjustments (`adjust`):
 
 ```{python}
 sim.describe()
 ```
-
-::: {.callout-warning}
-## [PROPOSAL]
-`describe()` doesn't give the shares or adjustments of each dimension (see the proposal in [Stratification](../user_guide/models_stratification.qmd)). Its line `plan` ("as compiled code, one step at a time, since it has been stepped already, or has functions inserted into its loop") is about how the solver runs, in terms a modeler can't act on, and should be left out at the default verbosity (P2, P4, P14).
-:::
 
 ## Exercises
 

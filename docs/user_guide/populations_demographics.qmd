@@ -9,7 +9,7 @@ This page covers births and deaths declared for a population, which work however
 
 ## Births and deaths
 
-Births and deaths for the whole population go in `demographics=`. `ss.birth(rate=r)` adds people at a crude birth rate `r` (per person per unit time), into the first state of each disease (here `S`); `ss.death(rate=r)` removes people from every state at rate `r`. Here is the measles model of the tutorials over 30 years, with 30 births and 10 deaths per 1,000 people a year:
+Births and deaths for the whole population go in `demographics=`. `ss.birth(rate=r)` adds people at a crude birth rate `r` (a typed rate is per person, e.g. `ss.peryear(0.03)`; a bare number is per year, and above 1 per 1,000 people, as `ss.Births` reads it, so `30` is the same), into the first state of each disease (here `S`); `ss.death(rate=r)` removes people from every state at rate `r`, read the same way. Here is the measles model of the tutorials over 30 years, with 30 births and 10 deaths per 1,000 people a year:
 
 ```{python}
 import starsim as ss

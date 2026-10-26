@@ -31,7 +31,7 @@ Then, in Starsim, `sim = ss.interop.load('model.json')`. The dump records the la
 | `override_parameter()` of a number | Folded into the parameter's `ss.timeseries` | yes |
 | Age groups (`"0-4"`, `"65+"`) and `Nk` | `stratify(age=[0, 5, ...], split=Nk)`, `use_aging=False` (epydemix does not age people) | yes |
 | Groups that are not ages | `stratify(group=[...])` | yes |
-| Contact matrices by setting | `networks=ss.contacts(age=sum of the settings)` | yes |
+| Contact matrices by setting | `networks=ss.contacts(sum of the settings)` | yes |
 | Initial numbers by group (recorded run) | `init_n=dict(I=ss.by([...], dims=['age']))`, the state with most people taking the rest (it is made the first state, `first=`) | yes |
 | Daily steps of a chain binomial | `solver='binomial'`, `substeps=1`, `unit='day'`, stop a day after `end_date` | yes |
 | `add_intervention()` on one setting | Listed; by hand (`ss.modify(dis.S_to_E, multiply=..., start=..., stop=...)` if every setting is reduced alike, or the contacts as two networks) | no |

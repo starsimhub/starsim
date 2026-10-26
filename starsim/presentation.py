@@ -1,5 +1,5 @@
 """
-How a model is shown: `describe()`, `diagram()`, `equations()`, and its part of the model spec (`to_spec()`)
+How a model is shown: `describe()`, `diagram()`, `equations()`, and its part of the model spec (`to_spec()`); and how a sim is (`sim.describe()`, `sim.what_modifies()`, `sim.check_dt()`)
 """
 import os
 import sys
@@ -14,7 +14,7 @@ import starsim as ss
 from .expressions import BinOp, Expr, format_expr, par, value_str
 from .parameters import by, TimeValue
 
-__all__ = ['Presentation', 'Description']
+__all__ = ['Presentation', 'Description', 'Diagram']
 
 
 #%% Text in a terminal or a notebook
@@ -40,22 +40,25 @@ class Progress:
     """
     width = 30 # Of the bar
 
-    def __init__(self, sim):
+    def __init__(self, sim=None):
         self.sim = sim
         self.mode = 'notebook' if sc.isjupyter() else 'terminal' if sys.stdout.isatty() else 'lines'
         self.color = in_color()
         self.handle = None # Of the bar in a notebook
+        self.lines = 0 # The number of lines drawn in a terminal, to draw over
         self.shown = False
         self.last = 0 # When it was last drawn
         return
 
+    def bar(self, share):
+        done = int(round(share*self.width))
+        return style('━'*done, 'cyan', color=self.color) + style('─'*(self.width - done), 'dim', color=self.color)
+
     def line(self):
         t = self.sim.t
         share = t.ti/max(1, t.npts - 1)
-        done = int(round(share*self.width))
-        bar = style('━'*done, 'cyan', color=self.color) + style('─'*(self.width - done), 'dim', color=self.color)
         now = ss.sim.time_str(t.tvec[t.ti], self.sim.unit_name) # The end of the step being run, so that the last says the end of the run: a date, or e.g. day 27
-        return f'  {bar} {share:4.0%}  {now}  {self.sim.elapsed:.1f} s'
+        return f'  {self.bar(share)} {share:4.0%}  {now}  {self.sim.elapsed:.1f} s'
 
     def update(self):
         """ Show the progress at this step: drawn at most ten times a second, or as a line every so often """
@@ -73,8 +76,11 @@ class Progress:
         return
 
     def draw(self, text):
+        """ Draw the text (of one line or several) over what was drawn before """
         if self.mode == 'terminal':
-            print(f'\r\033[K{text}', end='', flush=True)
+            up = f'\033[{self.lines - 1}F' if self.lines > 1 else '\r' # Back to the start of what was drawn
+            print(f'{up}\033[J{text}', end='', flush=True)
+            self.lines = text.count('\n') + 1
         else:
             from IPython.display import display, Pretty
             if self.handle is None:
@@ -92,6 +98,81 @@ class Progress:
                 print()
         else:
             print(text)
+        return
+
+
+class RunsProgress(Progress):
+    """
+    The progress of the runs of a MultiSim (see `ss.run.run_each()`), from how far each has got (`store`, which each run's `Share` sets)
+
+    Nothing is shown for the first `wait` seconds, so runs that are done by then print only the MultiSim's closing line. Then,
+    if there are at most `max_bars` runs and each is predicted to take more than `slow` seconds (from how far the furthest has
+    got), there is a bar for each; otherwise one bar for them all, with the number done. To a file, it is a line every tenth.
+    """
+    wait = 1.0
+    slow = 10.0
+    max_bars = 10
+
+    def __init__(self, sims):
+        super().__init__()
+        labels = [sim.label or f'Sim {i}' for i,sim in enumerate(sims)]
+        self.labels = labels if len(set(labels)) == len(labels) else [f'Run {i} ({label})' for i,label in enumerate(labels)] # The runs of a sim share its label
+        self.store = {} # How far each run has got, by its position (1 when done): a dict, or one shared with the processes that run them
+        self.start = time.time()
+        self.each = None # Whether there is a bar for each run, decided once there is something to predict from
+        self.tenth = 0 # The last tenth printed, to a file
+        return
+
+    def update(self):
+        now = time.time()
+        elapsed = now - self.start
+        if elapsed < self.wait or (now - self.last < 0.1 and self.mode != 'lines'):
+            return
+        self.last = now
+        n = len(self.labels)
+        store = dict(self.store) # One call, if it is shared between processes
+        shares = [min(1.0, store.get(i, 0.0)) for i in range(n)]
+        done = sum(share == 1 for share in shares)
+        total = sum(shares)/n
+        runs = f'{done} of {n} runs  {elapsed:.1f} s'
+        if self.mode == 'lines':
+            if int(total*10) > self.tenth:
+                self.tenth = int(total*10)
+                print(f'  {total:4.0%}  {runs}', flush=True)
+            return
+        running = [share for share in shares if 0 < share < 1]
+        if self.each is None and (running or done):
+            self.each = n <= self.max_bars and bool(running) and elapsed/max(running) > self.slow
+        if self.each:
+            w = max(len(label) for label in self.labels)
+            text = '\n'.join(f'  {label:<{w}}  {self.bar(share)} {share:4.0%}' for label,share in zip(self.labels, shares)) + f'\n  {runs}'
+        else:
+            text = f'  {self.bar(total)} {total:4.0%}  {runs}'
+        self.draw(text)
+        return
+
+
+class Share:
+    """ How far one of a MultiSim's runs has got, as the run's `sim.progress`: put in `store` (see `RunsProgress`) at most ten times a second, and shown with `show()` if given (when run in this process) """
+    def __init__(self, sim, store, ind, show=None):
+        self.sim = sim
+        self.store = store
+        self.ind = ind
+        self.show = show
+        self.last = 0
+        return
+
+    def update(self):
+        now = time.time()
+        if now - self.last >= 0.1:
+            self.last = now
+            t = self.sim.t
+            self.store[self.ind] = t.ti/max(1, t.npts - 1)
+            if self.show is not None:
+                self.show()
+        return
+
+    def finish(self, text):
         return
 
 
@@ -190,17 +271,36 @@ class Description:
         return
 
 
+class Diagram(str):
+    """
+    A diagram as the text of a Mermaid flowchart (https://mermaid.js.org), which a notebook draws
+
+    It is a string, so `print()` gives the text, and it can be pasted into anything that draws
+    Mermaid (GitHub, Quarto, most Markdown viewers). In JupyterLab (4.1 or later) and in a
+    page built by Quarto, it is drawn as a Markdown block.
+    """
+    def __repr__(self):
+        return str(self)
+
+    def _repr_markdown_(self):
+        fence = '{mermaid}' if 'QUARTO_DOCUMENT_PATH' in os.environ else 'mermaid' # Quarto draws only its own form of the block, which JupyterLab doesn't
+        return f'```{fence}\n{self.rstrip()}\n```'
+
+
 class Presentation:
     """ How a graph (`ss.transitions.Graph`) is shown: `describe()`, `diagram()`, `equations()`, and `to_spec()`, which the graph inherits """
+    def unit_name(self, sim=None):
+        """ The unit its numbers are read in: the sim's, or outside a sim, the unit a sim would take from the typed values (as in ss.solvers.choose.init_unit()), if they agree """
+        if sim is not None:
+            return sim.unit_name
+        units = {u.removesuffix('s') for u in self.unit_values()}
+        return units.pop() if len(units) == 1 else 'time unit'
+
     def describe(self, sim=None, out=None):
         """ The resolved model, with every guessed default marked, as a section of a `Description` (`out`, or a new one); see `ss.Disease.describe()` """
         mod = self.module
         engine = getattr(mod, 'engine', None)
-        if sim is not None:
-            unit = sim.unit_name
-        else: # Outside a sim, the unit a sim would take from the typed values (as in ss.Sim._init_unit()), if they agree
-            units = {u.removesuffix('s') for u in self.unit_values()}
-            unit = units.pop() if len(units) == 1 else 'time unit'
+        unit = self.unit_name(sim)
         out = Description() if out is None else out
         add = out.add
         shown = set() # The parameters whose doc= and source= are shown already
@@ -248,7 +348,7 @@ class Presentation:
                 flow_line(tr)
                 for leaf in tr.rate.leaves:
                     if isinstance(leaf, par) and not leaf.literal:
-                        add('', f'{leaf.name} = {quantity_str(leaf.raw, "rate" if leaf.slot == "rate" else None, unit)}') # A factor of the rate, such as R0 in R0 × gamma × I, has no unit of its own
+                        add('', par_str(leaf, 'rate' if leaf.slot == 'rate' else None, unit), midpoint_guess(leaf)) # A factor of the rate, such as R0 in R0 × gamma × I, has no unit of its own
                         provenance(leaf)
                 terms = getattr(getattr(sim, 'mixing', None), 'terms', [])
                 if sim is None or (not len(sim.pars.networks) and all(term.kind == 'homogeneous' for term in terms)):
@@ -287,7 +387,7 @@ class Presentation:
                     if scaled is not None:
                         raw = scaled[0].raw
                     if isinstance(raw, ss.Dist):
-                        text = f'dwell ~ {raw}' + (f' × {format_expr(scaled[1], values="number", unit=unit, mul="×")}' if scaled is not None else '')
+                        text = f'dwell ~ {dist_str(raw, unit)}' +(f' × {format_expr(scaled[1], values="number", unit=unit, mul="×")}' if scaled is not None else '')
                         if dw is not None and dw.fixed:
                             text += ', a fixed delay'
                         elif dw is not None and not dw.exact:
@@ -320,28 +420,44 @@ class Presentation:
                     add('', f'{what} {quantity_str(getattr(tr, key), "dur", unit)} in {sc.strjoin(s.name for s in tr.src)}')
             if tr.guessed.get('import'):
                 add('', f'imported as {tr.guessed["import"]}', 'guessed')
-            for expr in [tr.rate, tr.dur] + sc.tolist(tr.p): # The other documented parameters of the transition, each with its value
+            for expr in [tr.rate, tr.dur] + sc.tolist(tr.p): # The other parameters of the transition that are documented or can be fitted, each with its value
                 for leaf in (expr.leaves if isinstance(expr, Expr) else []):
-                    if isinstance(leaf, par) and (leaf.doc or leaf.source) and id(leaf) not in shown:
-                        add('', f'{leaf.name} = {quantity_str(leaf.raw, leaf.slot if leaf.slot in ["rate", "dur"] else None, unit)}')
+                    if isinstance(leaf, par) and (leaf.doc or leaf.source or leaf.bounds is not None) and id(leaf) not in shown:
+                        add('', par_str(leaf, leaf.slot if leaf.slot in ['rate', 'dur'] else None, unit), midpoint_guess(leaf))
                         provenance(leaf)
-        if self.transmissions: # The timing contract of spec 02, where modelers look (CV5, ST4)
+        for name,oc in self.outcomes.items(): # Each outcome as it is defined, e.g. "0.5 × onset, after 4 days (exponential)"
+            source = oc.to_spec(unit)['source'].replace(' * ', ' × ')
+            text = f'outcome: {source}' + (f', after {delay_str(oc.delay, unit)}' if oc.delay is not None else '')
+            if oc.duration is not None:
+                text += f'; n_{name} for {delay_str(oc.duration, unit)}'
+            if oc.likelihood is not None:
+                text += f'; likelihood {getattr(oc.likelihood, "__name__", type(oc.likelihood).__name__)}'
+            add(name, text)
+        if self.transmissions and getattr(sim, 'solver', 'abm') in ['abm', 'binomial']: # The timing contract of spec 02, where modelers look (CV5, ST4), for the solvers that take whole steps
             add('timing', 'an infection is dated at the end of its step, so what follows it starts then')
             add('', 'a state\'s count (the result X) includes the step people enter it; they stay for their whole dwell')
-        for p in self.all_pars(): # A parameter given only its bounds starts from their middle
-            midpoint = getattr(p, 'midpoint', None)
-            if midpoint is not None and sc.isnumber(p.raw) and p.raw == midpoint:
-                add('fitted', f'{p.name} = {value_str(p.raw)}, bounds {p.bounds}', 'guessed: the middle of its bounds')
+        fitted = [p for p in self.all_pars() if p.bounds is not None and id(p) not in shown] # The other parameters that can be fitted, e.g. a share of an outcome
+        for i,p in enumerate(fitted):
+            add('' if i else 'fitted', par_str(p, p.slot if p.slot in ['rate', 'dur'] else None, unit), midpoint_guess(p))
+            provenance(p)
         return out
 
     def edges(self):
-        """ Each transition as (source, destination, name, kind), with None for `ss.null`; a transition to every state (`ss.death()`) is one edge from each """
+        """
+        Each transition as (source, destination, name, kind, p), with None for `ss.null`; a transition to every state (`ss.death()`) is one edge from each
+
+        `p` is the share that takes this destination, for a transition with `p=` (None for the one that takes the rest), and False for one without.
+        """
         out = []
         for name,tr in self.transitions.items():
             kind = 'contact' if tr.contact else 'spontaneous'
+            dsts = (tr.dst or [None]) + [None]*bool(tr.dst and tr.dies) # ss.null as one of several destinations is an edge of its own
+            ps = (list(tr.p) if tr.p is not None else [None]*len(tr.dst or [None])) + [getattr(tr, 'p_die', None)]*bool(tr.dst and tr.dies)
+            if tr.p is None and not tr.dies:
+                ps = [False]*len(dsts)
             for src in tr.src or [None]:
-                for dst in (tr.dst or [None]) + [None]*bool(tr.dst and tr.dies): # ss.null as one of several destinations is an edge of its own
-                    out.append((src, dst, name, kind))
+                for dst,p in zip(dsts, ps):
+                    out.append((src, dst, name, kind, p))
         return out
 
     def diagram(self, prefix='', indent='    '):
@@ -352,12 +468,14 @@ class Presentation:
             prefix (str): put before each node's name, so that several diseases can be drawn in one chart (`ss.interop.to_mermaid()`)
             indent (str): put before each line
         """
+        sim = getattr(self.module, 'sim', None)
+        unit = self.unit_name(sim if getattr(sim, 'initialized', False) else None)
         lines = []
         nulls = 0
         for state in self.states.values():
             shape = ('(["', '"])') if state.people else ('[/"', '"/]')
             lines.append(f'{indent}{prefix}{state.name}{shape[0]}{state.label_name}{shape[1]}')
-        for src,dst,name,kind in self.edges():
+        for src,dst,name,kind,p in self.edges():
             ends = []
             for state in [src, dst]:
                 if state is None:
@@ -366,7 +484,7 @@ class Presentation:
                 else:
                     ends.append(prefix + state.name)
             arrow = '-.->' if kind == 'contact' else '-->'
-            text = edge_label(self.transitions[name]).replace('"', '#quot;')
+            text = edge_label(self.transitions[name], p, unit).replace('"', '#quot;')
             lines.append(f'{indent}{ends[0]} {arrow}|"{text}"| {ends[1]}')
         return lines
 
@@ -585,7 +703,264 @@ class Presentation:
         return out
 
 
+#%% A sim: describe(), what_modifies(), and check_dt()
+
+def check_dt(sim, factor=2, output=False):
+    """ Rerun the sim with a smaller timestep, and report how much each result changes: see `ss.Sim.check_dt()` """
+    if not hasattr(sim, 'inputs'):
+        errormsg = 'sim.check_dt() is only available for sims with declared states and transitions'
+        raise ValueError(errormsg)
+    coarse = sim if sim.results_ready else sim.new(verbose=0).run()
+    fine = sim.new(dt=coarse.t.dt/factor, verbose=0)
+    for val in fine.pars.values(): # A module with its own timestep takes a smaller one too
+        for mod in sc.tolist(val):
+            if isinstance(mod, ss.Module) and mod.t.dt is not None:
+                mod.t.dt = mod.t.dt/factor
+    fine.run()
+    rows = []
+    for mod in coarse.declared:
+        n = mod.t.npts - 1 # The module's own timeline, which may differ from the sim's
+        for key,res in mod.results.items():
+            if not isinstance(res, ss.Result) or key.startswith('cum_') or np.ndim(res.values) != 1:
+                continue
+            other = fine.results[mod.name][key].values
+            if res.kind == 'flow': # A flow: total it over each of the larger steps (a flow at a time point is over the step that ends there)
+                a, b = res.values[1:n+1], other[1:n*factor+1].reshape(n, factor).sum(axis=1)
+            else: # A stock: at each of the larger steps' time points
+                b = other[::factor]
+                a, b = res.values[:len(b)], b[:len(res.values)]
+            scale = np.abs(a).max()
+            change = np.abs(b - a).max()/scale if scale else 0.0
+            rows.append(dict(module=mod.name, result=key, peak=a.max(), peak_fine=b.max(), change=change))
+    df = sc.dataframe(rows).sort_values('change', ascending=False).reset_index(drop=True)
+    if output:
+        return df
+    dt, unit = coarse.t.dt.to(coarse.unit_base).value, coarse.unit_name
+    inner = lambda sim: [mod.engine.dt/max(mod.engine.substeps(), 1) for mod in sim.declared if hasattr(mod.engine, 'substeps')]
+    if coarse.solver == 'binomial' and coarse.pars.substeps is None and len(inner(coarse)) and np.allclose(inner(coarse), inner(fine)): # It takes substeps of the same size whatever the step
+        print(f'The chain-binomial solver takes enough substeps by default (here of {inner(coarse)[0]:n} {unit}s) that the step does not change its results: '
+              f'a step of {dt:n} or {dt/factor:n} {unit}s gives the same run. Give substeps=1 to take whole steps, as most chain-binomial models do, and see how much they matter')
+        return
+    print(f'Change in each result when the timestep goes from {dt:n} to {dt/factor:n} {unit}s (largest difference, as a share of the largest value):')
+    for row in df.itertuples():
+        print(f'  {row.module}.{row.result:<20s} {row.change:6.1%}   (peak {row.peak:n} → {row.peak_fine:n})')
+    return
+
+
+def what_modifies(sim, target, output=False):
+    """ Everything that modifies a quantity: see `ss.Sim.what_modifies()` """
+    if not sim.initialized:
+        sim.init()
+    mod, kind, name = ss.connectors.parse_target(target)
+    modname = mod if isinstance(mod, str) else mod.name
+    coded = not any(mod.name == modname for mod in sim.declared) and isinstance(sim.diseases.get(modname), ss.Disease)
+    if modname in sim.all_networks(): # The contacts of a network
+        kind = 'par'
+    elif coded: # A disease written as code: only its rel_sus and rel_trans can be modified (see ss.modify)
+        if kind not in ['rel_sus', 'rel_trans']:
+            kind = 'par'
+            text = f'{modname}.pars.{name}\n  modifiers: none; "{modname}" is written as code, so its own code reads its parameters, and only its rel_sus and rel_trans can be modified'
+            return text if output else print(text)
+    else:
+        graph = sim.get_declared(modname).graph
+        if kind is None:
+            kind = 'transition' if name in graph.transitions else 'par'
+        if kind == 'transition':
+            kind = graph.modifier_kind(name)
+    path = f'{modname}.pars.{name}' if kind == 'par' else f'{modname}.{name or kind}'
+    mods = sim.modifiers.get((modname, kind, name), [])
+    lines = [path, '  modifiers' if mods else '  modifiers: none']
+    lines += [f'    {mod.describe()}' for mod in mods]
+    if path in sim.clipped:
+        lines.append('  clipped: the modifiers made it negative during the run, so it was set to 0 where it was')
+    text = '\n'.join(lines)
+    if output:
+        return text
+    print(text)
+    return
+
+
+def describe_sim(sim, output=False, verbose=False):
+    """ The resolved sim, with each guess marked: see `ss.Sim.describe()` """
+    if not sim.initialized: # Quietly: the run says its start line when it is run
+        sim._quiet = True
+        sim.init()
+    pars = sim.pars
+    unit = sim.unit_name
+    mods = list(sim.modules)
+    desc = Description()
+    add = desc.add
+    named = getattr(sim, 'named_people', None)
+    popguess = '' if ('total_pop' in sim.given or 'n_agents' in sim.given or getattr(sim, 'pop_from', None)) else ' [guessed]'
+    stopguess = '' if ('stop' in sim.given or 'dur' in sim.given) else ' [guessed]' # The default length of a run
+    t = sim.t
+    when = f'{unit}s {t.start} to {t.stop}' if sim.unit is None or not t.is_absolute else f'{t.start} to {t.stop}'
+    desc.section('Sim', f'{len(mods)} module{"s" if len(mods) != 1 else ""}, {pars.total_pop:,.0f} people{popguess}, {when}{stopguess}')
+    if sim.declared:
+        guessed = pars.solver == 'auto'
+        add('solver', sim.solver, f'guessed: {sim.solver_reason}' if guessed else 'requested')
+        for cap in sim.capabilities: # What matters to which solvers can run it: see ss.solvers.init_capabilities()
+            add('', f'{cap.ingredient}: {cap.groups} as compartments ({cap.how})')
+        if not guessed: # What auto would have done
+            reasons = ss.solvers.auto_reasons(sim)
+            add('', f'auto would choose: ' + (f'abm ({reasons[0]})' if reasons else 'ode (every part of the model has a compartmental form)'))
+        if sim.solver == 'abm':
+            scale = f', each standing for {pars.pop_scale:n} people' if pars.pop_scale != 1 else ''
+            add('', f'{pars.n_agents:,} agents{scale}', None if 'n_agents' in sim.given else 'guessed')
+        if named is not None: # Where a named population came from
+            ref = named.ref
+            guess = None if named.year is not None else 'guessed: the year the sim starts' if sim.t.is_absolute else 'guessed: the year of the revision'
+            if sim.people_from is not None:
+                guess = f'guessed: the ages of the country of "{sim.people_from}"'
+            add('people', f"{named.place}, {ref['year']}, from starsim_data {ref['version']} ({ref.get('study', '?')} {ref.get('revision', '')})".rstrip(), guess)
+        if sim.unit is None:
+            text = 'none: time is in timesteps' if unit == 'step' else f'none: time is in units with no name, and a step is {pars.dt.value:n} of them'
+            add('unit', text, 'nothing in the model has a unit')
+        else:
+            add('unit', sim.unit, f'from {sim.unit_source}' if sim.unit_source else None)
+        for strat in sim.groups.strats: # Each dimension: its levels, the states it applies to, and what it generates
+            text = f'{strat.name} ({strat.kind}): {sc.strjoin(strat.labels)}'
+            text += f'; where {", ".join(f"{k}={sc.strjoin(sc.tolist(v))}" for k,v in strat.where.items())}' if getattr(strat, 'where', None) else ''
+            text += f'; applies to {sc.strjoin(strat.states)}' if strat.states is not None else '; applies to every state' if strat.kind == 'space' else f'; applies to the people of {sc.strjoin(strat.holders)}' if strat.kind == 'disease' else ''
+            if strat.kind == 'space':
+                text += f'; mobility: {strat.mobility if strat.mobility is not None else "none"}'
+                if strat.geo is not None and strat.geo.ref is not None: # Where a named geography came from
+                    ref = strat.geo.ref
+                    text += f"; places from starsim_data {ref['version']} ({ref.get('boundaries', '?')} boundaries; population: {ref.get('population', '?')})"
+            elif strat.kind == 'age':
+                text += f'; split as the population of {named.place}' if getattr(strat, 'split_from', None) == 'people' else ''
+                text += '; people do not age (use_aging=False)' if not pars.use_aging else '; nobody ages, since time is in timesteps' if sim.unit is None else '; people age between the groups'
+            text += sim.groups.moved_by(strat)
+            if strat.name in getattr(sim.groups, 'kept', set()):
+                text += f'; people.{strat.attr}, from the people given'
+            guesses = list(strat.guessed.values())
+            if strat.kind == 'age' and 'use_aging' not in sim.given:
+                guesses.append('aging, since people are born or die' if pars.use_aging else 'no aging, since nobody is born or dies')
+            add('dimension', text, f'guessed: {"; ".join(guesses)}' if guesses else None)
+            for row in strat_rows(strat):
+                add('', row)
+        for crossing in sim.crossings: # Diseases tracked jointly: why, how big, and what is assumed (see ss.solvers.Crossing)
+            sizes = [sim.groups.strats[sim.groups.dim_index(name)].n for name in crossing.names]
+            add('jointly', f'{" × ".join(crossing.names)}: {" × ".join(str(n) for n in sizes)} = {int(np.prod(sizes))} joint states of people', '; '.join(crossing.reasons))
+            for text in crossing.describe():
+                add('', text)
+    for mod in mods:
+        if hasattr(mod, 'describe') and (getattr(mod, 'graph', None) is not None or isinstance(mod, ss.strains.Family)): # Strains with courses of their own after their members
+            mod.describe(out=desc)
+    if sim.declared:
+        desc.section('Mixing and interventions')
+        place = f' within each {sim.groups.strats[sim.mixing.space].name}' if sim.mixing.space is not None else ''
+        nets = list(sim.networks.values()) + getattr(sim, 'mixed', [])
+        if nets:
+            for net in nets:
+                term = [term for term in sim.mixing.terms if term.name == net.name] if sim.solver != 'abm' else []
+                how = '' if not term else f': {term[0].contacts:n} contacts per {unit}' if term[0].kind == 'homogeneous' else f': the partner-change model (approx), partnerships formed at {term[0].partnership.formed:.2g} a {unit}' if 'partnership' in term[0] else f': contact matrix by {sc.strjoin([sim.groups.strats[d].name for d in term[0].get("dims", [term[0].dim])], sep=" and ")}' # Every dimension it is over, e.g. age and area
+                add('mixing', f'{net.name} ({type(net).__name__}){how}')
+        elif any(mod.graph.transmissions for mod in sim.declared): # How a state in a rate is read is shown with each rate
+            add('mixing', f'homogeneous{place}, 1 contact per {unit}', 'guessed: no network given')
+        for mod in list(sim.connectors()) + list(sim.interventions()):
+            if isinstance(mod, ss.modify):
+                add('modifier', f'{mod.target}: {" ".join(mod.describe().split())}')
+            elif isinstance(mod, ss.Delivery):
+                add('delivery', mod.describe())
+        if not desc.sections[-1].rows:
+            desc.sections.pop()
+        desc.section('Results and running')
+        for mod in sim.declared:
+            names = list(mod.graph.states)
+            extra = [key for key,res in mod.results.items() if isinstance(res, ss.Result) and key not in names and key not in mod.graph.transitions and not key.startswith('cum_')]
+            text = f'{", ".join(names)}, and one flow per transition' + (f'; also {", ".join(extra)}' if extra else '')
+            ti = getattr(mod.engine, 'group_ti', None)
+            if ti is not None: # Kept by group every few steps
+                text += f'; by group every {ti[1]} {unit}s'
+            add('results', text, 'guessed: to keep them by group within 100 MB; results=[...] keeps fewer, more often' if ti is not None else None)
+        if verbose: # What runs where, which is about the solver and not the model: the declared modules in the kernels or as agents, and the rest in Python (see sim.kernel_reason())
+            stepped = {func['module'] for func in sim.loop.funcs} - {'sim', 'people'}
+            declared = [mod.name for mod in sim.declared]
+            if sim.solver == 'abm':
+                add('plan', f'{sc.strjoin(declared)}: as agents, each step in Python')
+            else:
+                whole = sim.kernel_reason()
+                joint = ''.join(f'; {" × ".join(c.names)} as one program' for c in sim.crossings)
+                add('plan', f'{sc.strjoin(declared)}: as compiled code, ' + ('the whole run in one call' if whole is None else f'one step at a time, since {whole}') + joint)
+            tabulated = [mod.name for mod in sim.modules if mod.name in stepped and getattr(mod, 'tabulated', False) and sim.solver != 'abm']
+            python = [mod.name for mod in sim.modules if mod.name in stepped and mod.name not in declared + tabulated]
+            if tabulated:
+                add('', f'{sc.strjoin(tabulated)}: as tables in the compiled code, as {"it depends" if len(tabulated) == 1 else "they depend"} only on time and states')
+            if python:
+                add('', f'{sc.strjoin(python)}: in Python, at {"its" if len(python) == 1 else "their"} place in each step')
+    else:
+        desc.section('Running')
+
+    # The schedule: one line per timestep in use
+    groups = sc.ddict(list)
+    for mod in mods:
+        if isinstance(mod, ss.Product) and mod.name not in sim.results: # Given by a delivery, so not run on its own
+            continue
+        groups[mod.t.dt.to(sim.unit_base).value if sim.declared else mod.t.dt.years].append(mod.name)
+    for i,(dt,names) in enumerate(sorted(groups.items())):
+        every = f'every {unit}' if dt == 1 else f'every {dt:n} {unit}s'
+        add('schedule' if i == 0 else '', f'{every}: {", ".join(names)}')
+    if sim.declared and sim.notes:
+        desc.section('Notes')
+        for note in sim.notes:
+            add('note', note)
+    if verbose and sim.declared:
+        describe_steps(sim, desc)
+    return str(desc) if output else desc.show()
+
+
+def describe_steps(sim, desc):
+    """ The sections of `describe(verbose=True)`, added to `desc` (a `Description`): each rate and dwell time per step of its module """
+    unit = sim.unit_name
+    def plain(raw): # A single value in the sim's unit, or None if it varies (by group, by person, or in time)
+        if sc.isnumber(raw) or (isinstance(raw, ss.TimePar) and np.ndim(raw.value) == 0):
+            return ss.solvers.engine.convert(raw, sim.unit_base)
+        return None
+    for mod in sim.declared:
+        dt = mod.t.dt.to(sim.unit_base).value
+        desc.section(f'Per step of {mod.name}', f"{dt:n} {unit}{'s' if dt != 1 else ''}")
+        for name,tr in mod.graph.transitions.items():
+            if tr.contact: # The rate of each person depends on the others, so only its parameters can be converted
+                for leaf in tr.rate.leaves:
+                    if isinstance(leaf, ss.transitions.par) and not leaf.literal and (val := plain(leaf.raw)) is not None:
+                        desc.add(name, f'{leaf.name} = {val:n} per {unit} → {val*dt:n} per step')
+                continue
+            dw = mod.engine.dwells.get(name)
+            if dw is None:
+                continue
+            val = dw.mean if dw.dist is not None else plain(dw.par.raw)
+            if val is None or not np.isfinite(val):
+                desc.add(name, f'varies (by group, by person, or in time)')
+                continue
+            if dw.is_rate and val == 0:
+                desc.add(name, 'a rate of 0: nobody leaves this way')
+                continue
+            mean = 1/val if dw.is_rate else val
+            if dw.fixed:
+                desc.add(name, f'a fixed delay of {mean:n} {unit}s = {mean/dt:n} steps')
+            else:
+                rate = dw.k/mean # The rate of leaving each stage
+                stages = f' in each of {dw.k} stages' if dw.k > 1 else ''
+                desc.add(name, f'rate {rate:.4g} per {unit}{stages} → p = 1 - exp(-{rate:.4g} × {dt:n}) = {1 - np.exp(-rate*dt):.4f} per step')
+    return desc
+
+
 #%% Helpers for the text and the model spec
+
+def strat_rows(strat, most=6):
+    """ For describe(): the share of people in each level of a dimension (up to `most` levels), and the multipliers it adjusts by """
+    def short(items):
+        return ', '.join(items) if len(items) <= most else ', '.join(items[:most-1]) + f', and {len(items) - most + 1} more'
+    rows = []
+    if strat.joint is not None:
+        rows.append(f'split: by {sc.strjoin([d for d in strat.joint.dims if d != strat.name] or strat.joint.dims)}, as given')
+    elif strat.kind != 'clock' and strat.split is not None:
+        rows.append('split: ' + short([f'{label} {share:.3g}' for label,share in zip(strat.labels, strat.split)]))
+    if strat.adjust and strat.kind != 'strain': # A strain's are shown with its strains
+        rows.append('adjust: ' + '; '.join(f'{key} × {short([f"{v:n}" for v in vals])}' for key,vals in strat.adjust.items()))
+    return rows
+
 
 def factor_str(expr):
     """ An expression written as a factor, in brackets if it is a sum or difference, e.g. "(1 - p_death)" """
@@ -608,18 +983,62 @@ def branch_shares(tr):
     return shares[:len(ps)], leaving
 
 
-def edge_label(tr):
-    """ A transition's rate as text, for a diagram, e.g. "infection: beta * I" """
-    if tr.dur is not None:
-        text = f'dur = {format_expr(tr.dur)}'
-    elif tr.rate is not None:
-        text = format_expr(tr.rate)
-    else:
+def edge_label(tr, p, unit):
+    """ A transition's name and value, for an arrow of a diagram, e.g. "infection: 1.9 × I", "recovery: 8 days, p = 0.998" (`p` as given by `edges()`) """
+    kind = lambda k: None if unit == 'time unit' else k # A bare number in a model with no unit is shown as it is
+    val = tr.dur if tr.dur is not None else tr.rate
+    if val is None:
         text = ''
-    if tr.split and (tr.p is not None or tr.p_stay is not None or tr.p_die is not None):
-        ends = list(tr.p or [None]*len(tr.dst)) + [tr.p_stay]*tr.stays + [tr.p_die]*tr.dies # With ss.stay and ss.null
-        text += ' (p = ' + ', '.join('rest' if p is None else format_expr(p) for p in ends) + ')'
+    elif isinstance(val, par) and isinstance(val.raw, ss.Dist):
+        text = dist_str(val.raw, unit)
+    elif isinstance(val, par):
+        text = quantity_str(val.raw, kind('dur' if tr.dur is not None else 'rate'), unit)
+    else:
+        text = format_expr(val, values='number', unit=unit, mul='×')
+    if p is not False:
+        share = 'p = the rest' if p is None else f'p = {format_expr(p, values=True)}'
+        text = f'{text}, {share}' if text else share
     return f'{tr.name}: {text}' if text else tr.name
+
+
+def par_str(p, kind, unit):
+    """ A parameter and its value, with its bounds if it can be fitted, e.g. "beta = 1.9 per day, between 1 and 3" """
+    text = f'{p.name} = {quantity_str(p.raw, kind, unit)}'
+    if p.bounds is not None:
+        val, lo, hi = [quantity_str(v, kind, unit).partition(' ') for v in [p.raw] + list(p.bounds)] # Each as (number, ' ', unit)
+        same = lo[2] == hi[2]
+        text += f', between {lo[0] if same else "".join(lo)} and {hi[0] if same and hi[2] == val[2] else "".join(hi)}' # The unit once, and not at all if it is the value's
+    return text
+
+
+def midpoint_guess(p):
+    """ The guess of a parameter given only its bounds, which starts from their middle """
+    midpoint = getattr(p, 'midpoint', None)
+    return 'guessed: the middle of its bounds' if midpoint is not None and sc.isnumber(p.raw) and p.raw == midpoint else None
+
+
+def delay_str(val, unit):
+    """ A delay or a duration of an outcome: a distribution as written, or a mean, which is exponential """
+    if isinstance(val, ss.Dist):
+        return dist_str(val, unit)
+    elif callable(val):
+        return value_str(val)
+    return f'{quantity_str(val, "dur", unit)} (exponential)'
+
+
+def dist_str(dist, unit):
+    """ A distribution as a modeler writes it, with its units, e.g. "erlang(k=4, mean=8 days)" or "lognormal(mean=10 days, std=4 days)", rather than its internal parameters """
+    pars = dist.pars
+    q = lambda v: quantity_str(dist_unit(dist, v), 'dur', unit)
+    if isinstance(dist, ss.gamma) and sc.isnumber(pars.a) and sc.isnumber(pars.loc) and pars.loc == 0: # As ss.erlang() or ss.gamma(mean=, std=) take it
+        mean = pars.a*pars.scale
+        return f'erlang(k={int(pars.a)}, mean={q(mean)})' if pars.a == int(pars.a) else f'gamma(mean={q(mean)}, std={q(mean/float(np.sqrt(pars.a)))})'
+    name = dict(lognorm_ex='lognormal', expon='exponential').get(type(dist).__name__, type(dist).__name__)
+    unitless = dist.unitless_pars or []
+    vals = {k:value_str(v) if k in unitless else q(v) for k,v in pars.items() if not (k == 'loc' and sc.isnumber(v) and v == 0)} # Leaving out the default location
+    if list(vals) == ['v']: # ss.constant(), by its value alone
+        return f'{name}({vals["v"]})'
+    return f'{name}({", ".join(f"{k}={v}" for k,v in vals.items())})'
 
 
 def quantity_str(raw, kind, unit):
@@ -720,6 +1139,14 @@ def partnership_lines(mod, tr, sim, name):
 def seasonal_str(raw, mean):
     """ An `ss.seasonal` as the textbooks write it, e.g. "1.3 per day × (1 + 0.1 cos(2π(t − 0.25)))", given its mean as text """
     return f'{mean} × (1 + {raw.amplitude:n} cos(2π(t − {raw.peak_frac:.4g})))'
+
+
+def timeseries_str(raw, most=4):
+    """ An `ss.timeseries` in a line, e.g. "timeseries(99 values, 1 on 2020-02-23 to 0.3 on 2020-05-31)", or each of its values if it has only a few """
+    items = [f'{value_str(v)} at {t}' for t,v in zip(raw.times, raw.values)]
+    if len(items) > most:
+        items = [f'{len(items)} values', f'{items[0]} to {items[-1]}']
+    return f'timeseries({", ".join(items)})'
 
 
 def move_json(level, unit=None):

@@ -37,10 +37,7 @@ cholera = ss.Disease(infection, recovery, shedding, decay, init=dict(I=0.001), n
 `W.n` and `I.n` are counts (the amount of bacteria, and the number of people infectious), where a bare `I` in a rate would be the share of people infectious. `ss.null` is outside the model: shedding adds bacteria from nowhere, and decay removes them. The diagram, from `diagram()`, in which W is slanted since it is not people:
 
 ```{python}
-#| echo: false
-#| output: asis
-fence = '`' * 3
-print(fence + '{mermaid}\n' + cholera.diagram() + '\n' + fence)
+cholera.diagram()
 ```
 
 ```{python}
