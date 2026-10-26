@@ -50,7 +50,7 @@ class Pregnancy(ss.Demographics, ss.Disease):
         p_loss (bernoulli): chance of a spontaneous loss in each step of the module
         loss_rate (rate/func): hazard of a spontaneous loss (instead of `p_loss`), or a function of `(sim, uids)`
         loss_threshold (dur): gestational age that separates a miscarriage from a stillbirth
-        infant_rate (rate/func): hazard of death before the age of 1, for the children
+        infant_rate (rate/func): hazard of death before the age of 1, for the children (a function of the sim and the agents is called only for the children aged 0 to 1)
         p_breastfeed (bernoulli): chance a mother breastfeeds a newborn
         dur_breastfeed (dur/Dist): duration of breastfeeding
         p_abortion (float): chance a pregnancy ends in an abortion, at conception

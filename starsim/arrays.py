@@ -1365,6 +1365,8 @@ class BoolState(BoolArr):
         inds = np.atleast_1d(np.asarray(key))
         if len(inds) > 1 and not np.all(inds[1:] > inds[:-1]): # Each agent once, so a change is counted once
             inds = np.unique(inds)
+        if engine.sim.groups.n_groups > 1:
+            engine.sim.groups.group_raw() # Any changes of group (e.g. by age) are counted before this one
         old = self.raw[inds]
         self.raw[key] = value
         engine.wrote(self.name, inds, old, self.raw[inds])
@@ -1376,6 +1378,8 @@ class BoolState(BoolArr):
         if engine is None:
             return super().set(uids, new_vals=new_vals)
         inds = np.atleast_1d(np.asarray(uids))
+        if engine.sim.groups.n_groups > 1:
+            engine.sim.groups.group_raw() # As in __setitem__()
         old = self.raw[inds]
         out = super().set(uids, new_vals=new_vals)
         engine.wrote(self.name, inds, old, self.raw[inds])

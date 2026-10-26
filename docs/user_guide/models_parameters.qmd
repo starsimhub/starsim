@@ -194,6 +194,8 @@ sim.run()
 sim.plot()
 ```
 
+A rate is worked out for the people who could take it at each step (everyone in its source state), so a function in a rate is called for them, every step. Multiplied by a condition, it is called only for the people the condition holds for, and is 0 for the others: with `rate = ss.par(fn, name='infant')*(ss.ppl.age < 1)`, `fn` is given only the children under 1, and need not check their ages itself.
+
 A function that uses `uids`, or anything else about individual people, needs agents, so a model with one runs as agents. Where the same thing can be said by group (`ss.by(age=...)` on a stratified model), it runs under every solver.
 
 A distribution in a rate gives each person their own rate: in `S >> I @ ss.gamma(a=0.5, scale=3.8)*I`, each person has their own transmission rate (the same as `ss.Transition(S, I, rate=ss.gamma(a=0.5, scale=3.8)*I)`). A distribution on its own after `@` is a dwell time; times a state, it is a rate.

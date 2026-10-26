@@ -1516,6 +1516,62 @@ def test_inflow_add():
     return sim
 
 
+def test_gated_function():
+    """ FP12: a function rate times a condition is called only for the agents the condition holds for, and gives the same flows as the function taking care of it itself """
+    sc.heading('A function rate gated by a condition')
+    asked = []
+    def young_rate(sim, uids):
+        asked.append(np.asarray(sim.people.age[uids]))
+        return ss.peryear(np.full(len(uids), 0.2))
+    def young_rate_itself(sim, uids):
+        return ss.peryear(np.where(sim.people.age[uids] < 20, 0.2, 0.0))
+    def make(rate):
+        S, I = ss.states('S I')
+        return ss.Disease(dying=S >> ss.null @ rate, recovery=I >> S @ ss.years(1), name='d')
+    gated = ss.Sim(diseases=make(ss.par(young_rate, name="young")*(ss.ppl.age < 20)), n_agents=2000, start=2000, stop=2005, rand_seed=3, **kw).run()
+    itself = ss.Sim(diseases=make(young_rate_itself), n_agents=2000, start=2000, stop=2005, rand_seed=3, **kw).run()
+    seen = np.concatenate(asked)
+    assert len(seen) and np.all(seen < 20), 'The function is called only for those under 20'
+    assert np.array_equal(gated.results.d.dying.values, itself.results.d.dying.values), 'The same deaths as a function that gives 0 to the others'
+
+    # ss.Pregnancy's infant_rate, a function of the children it is asked about
+    ages = []
+    def infant_rate(sim, uids):
+        ages.append(np.asarray(sim.people.age[uids]))
+        return ss.peryear(np.full(len(uids), 0.05))
+    preg = ss.Pregnancy(fertility_rate=ss.freqperyear(100), infant_rate=infant_rate)
+    sim = ss.Sim(demographics=preg, n_agents=2000, start=2000, stop=2004, dt=ss.months(1), **kw).run()
+    ages = np.concatenate(ages)
+    assert len(ages) and np.all((ages >= 0) & (ages < 1)), 'infant_rate is called only for the children under 1'
+    assert sim.results.pregnancy.infant_mortality.sum() > 0
+    return sim
+
+
+def test_compiled_eval():
+    """ Agents evaluate a rate from a function made once (by group where a part is the same within a group, with shared parts once, and powers from a table): the same numbers as evaluating it directly """
+    sc.heading('Compiled expressions as agents')
+    S, I = ss.states('S I')
+    k = ss.par(ss.by(patch=[1.0, 2.0, 0.5]), name='k')
+    n_inf = ss.attr(1, on=I.enter, combine='sum', name='n_inf')
+    d = ss.Disease(infection=S >> I @ ss.peryear(0.4)*k*(0.5**n_inf)*I.n/(S + I).n, recovery=I >> S @ ss.years(0.5), init=dict(I=0.1), name='d')
+    sim = ss.Sim(diseases=d, n_agents=3000, start=2000, stop=2003, rand_seed=1, **kw)
+    sim.stratify(patch=ss.geo.geography(names=['A', 'B', 'C'], pop=[1000, 1000, 1000]))
+    sim.run()
+    engine = sim.diseases.d.engine
+    rate = sim.diseases.d.graph.transitions.infection.rate
+    uids = sim.people.auids
+    compiled = engine.eval_for(rate, uids)
+    with engine.evaluating(uids=uids, for_uids=True):
+        direct = ss.transitions.evaluate(rate, engine)
+    assert np.array_equal(np.broadcast_to(compiled, len(uids)), np.broadcast_to(direct, len(uids))), 'The same numbers'
+    assert np.ptp(compiled) > 0, 'Different by patch and by the number of infections'
+    power = ss.solvers.agents.power
+    whole = np.array([0, 1, 2, 3, 0, 7]*50, dtype=float)
+    assert np.array_equal(power(0.02, whole), 0.02**whole), 'Powers of whole numbers from a table'
+    part = whole + 0.5
+    assert np.array_equal(power(0.02, part), 0.02**part)
+    return sim
+
 if __name__ == '__main__':
     do_plot = True
     sc.options(interactive=do_plot)
@@ -1539,3 +1595,5 @@ if __name__ == '__main__':
     test_describe_init_func()
     test_counter_in_expression()
     test_inflow_add()
+    gated = test_gated_function()
+    compiled = test_compiled_eval()

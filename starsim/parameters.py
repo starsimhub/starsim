@@ -1007,7 +1007,7 @@ class by:
         if self.array is not None:
             return list(self.array.flat)
         if self.table is not None:
-            return list(self.table['value'])
+            return list(self.cached('values', lambda: list(self.table['value']))) # As row_values() reads them, rather than from the table at each step
         return [v for vals in self.given.values() for v in (list(vals.values()) if isinstance(vals, dict) else sc.tolist(vals))]
 
     @property
@@ -1292,30 +1292,31 @@ class by:
             return False
         return self.cached('on_people', on_people, sim)
 
-    def positions(self, sim, dim):
-        """ As agents: the number of levels along one dimension, and each agent's position along it (indexed by UID), with that number for people with no value """
+    def positions(self, sim, dim, uids=None):
+        """ As agents: the number of levels along one dimension, and each agent's position along it (indexed by UID, or for `uids`), with that number for people with no value """
         people = sim.people
         names = [strat.name for strat in sim.groups.strats]
         kind = self.keys(dim)
         strat = sim.groups.strats[names.index(dim)] if dim in names else None
+        some = (lambda arr: arr) if uids is None else (lambda arr: arr[uids]) # Everyone's, or only those asked for
         if strat is not None and kind is None: # By level of a dimension of the sim
-            level = sim.groups.level(names.index(dim)).astype(int)
+            level = some(sim.groups.level(names.index(dim))).astype(int)
             return strat.n, np.where(level >= 0, level, strat.n)
         if kind is None: # Values by position, but no dimension gives the positions
             raise ss.errors.MissingDimension(f'ss.by() gives values by position along "{dim}", but the sim is not stratified by it: stratify the sim (e.g. stratify=dict({dim}=[...])), or give the values by label (e.g. ss.by({dim}={{label: value}}))')
         kind, keys = kind
         if strat is not None and strat.edges is None: # A dimension's labels, by name
-            level = sim.groups.level(names.index(dim)).astype(int)
+            level = some(sim.groups.level(names.index(dim))).astype(int)
             order = np.array([keys.index(str(label)) for label in strat.labels] + [len(keys)])
             return len(keys), order[np.where(level >= 0, level, strat.n)]
         if dim == 'sex' and strat is None: # people.female: a key is for women if it says so (as for a dimension called sex), and otherwise for men
-            raw = people.female.raw
+            raw = some(people.female.raw)
             keys = [str(key.lower() in ['female', 'females', 'f', 'women', 'woman']) for key in keys]
         else:
             if strat is not None:
                 dim = strat.attr
             try:
-                raw = people[dim].raw
+                raw = some(people[dim].raw)
             except AttributeError:
                 raise ss.errors.UnknownState(f'ss.by() is by "{dim}", which is neither a dimension of the sim nor a property of people{ss.expressions.did_you_mean(dim, list(people.states.keys()))}') from None
         n = len(keys)
@@ -1344,8 +1345,13 @@ class by:
         grid, index = self.lookup_grid(sim, convert, year, cache)
         return grid[index]
 
-    def lookup_grid(self, sim, convert=None, year=None, cache=None):
-        """ As `lookup()`, but as the grid of values and each agent's position along each of its dimensions (indexed by UID), so that the values of only some agents can be taken (`grid[tuple(ind[uids] for ind in index)]`) """
+    def lookup_grid(self, sim, convert=None, year=None, cache=None, uids=None):
+        """
+        As `lookup()`, but as the grid of values and each agent's position along each of its dimensions (indexed by UID), so that the values of only some agents can be taken (`grid[tuple(ind[uids] for ind in index)]`)
+
+        With `uids`, the positions are those of these agents alone (`grid[index]` is their values), which is much faster when they are few
+        (e.g. those entering a state), and the value of people with no value along a dimension is worked out only if one of them has none.
+        """
         def positions(dim):
             if cache is None:
                 return self.positions(sim, dim)
@@ -1357,21 +1363,23 @@ class by:
             """ People at each level, for the value of those with none """
             key = ('weights', dim, self.cached(('keys_id', dim), lambda: self.keys_id(dim)))
             if cache is None or key not in cache:
-                w = np.bincount(index[i][sim.people.auids], minlength=sizes[i] + 1)[:sizes[i]]
+                everyone = index[i] if uids is None else positions(dim)[1]
+                w = np.bincount(everyone[sim.people.auids], minlength=sizes[i] + 1)[:sizes[i]]
                 w = w if w.sum() > 0 else np.ones(len(w))
                 if cache is None:
                     return w
                 cache[key] = w
             return cache[key]
         convert = self.converter(sim, convert, year)
-        sizes, index = zip(*[positions(dim) for dim in self.dims])
+        sizes, index = zip(*[positions(dim) if uids is None else self.positions(sim, dim, uids) for dim in self.dims])
+        missing = [uids is None or bool(np.any(ind == n)) for ind,n in zip(index, sizes)] # Whether the value for people with no value is needed
         if self.table is None:
             out = np.ones([n + 1 for n in sizes])
             for i,(dim,n) in enumerate(zip(self.dims, sizes)):
                 vals = self.given[dim]
                 vals = list(vals.values()) if isinstance(vals, dict) else [vals]*n if np.ndim(vals) == 0 else list(vals)
                 vals = np.array([convert(v) for v in vals], dtype=float)
-                vals = np.append(vals, np.average(vals, weights=weights(i, dim)))
+                vals = np.append(vals, np.average(vals, weights=weights(i, dim)) if missing[i] else np.nan)
                 shape = [1]*len(sizes)
                 shape[i] = n + 1
                 out = out*vals.reshape(shape)
@@ -1380,7 +1388,7 @@ class by:
             rows = self.row_index()
             out = np.bincount(np.ravel_multi_index(rows, shape), weights=self.row_values(convert), minlength=int(np.prod(shape))).reshape(shape)
             for i,n in enumerate(sizes):
-                if not np.any(rows[i] == n): # No row gives the value for people with no value
+                if missing[i] and not np.any(rows[i] == n): # No row gives the value for people with no value
                     inner = np.take(out, range(n), axis=i)
                     np.put_along_axis(out, np.full([1 if j == i else s + 1 for j,s in enumerate(sizes)], n), np.expand_dims(np.average(inner, axis=i, weights=weights(i, self.dims[i])), i), axis=i)
         return out, index

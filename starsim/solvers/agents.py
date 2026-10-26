@@ -14,6 +14,20 @@ __all__ = ['Agents']
 check_counts = sc.parse_env('STARSIM_CHECK_COUNTS', False, bool) # Whether the agent engine checks the counts it keeps against a new count at each step: see ss.solvers.Agents.check_counts()
 
 
+def power(a, b):
+    """
+    `a**b` in an expression: a number to the power of whole numbers for many agents (e.g. a protection per past infection,
+    `(1 - p)**n_infections`) is taken from a table of its powers, the same numbers with one power worked out for each whole number
+    """
+    if np.ndim(a) == 0 and np.ndim(b) == 1 and len(b) > 100 and b.dtype.kind == 'f':
+        lo, hi = b.min(), b.max() # NaN if any is, which is worked out as usual
+        if 0 <= lo and hi < 1000:
+            whole = b.astype(np.int64)
+            if (whole == b).all():
+                return np.power(a, np.arange(int(hi) + 1, dtype=b.dtype))[whole]
+    return a ** b
+
+
 class Agents(Engine):
     """
     Runs a graph as agents
@@ -64,6 +78,8 @@ class Agents(Engine):
         self._uids = None # The agents being evaluated: see eval_for()
         self._for_uids = False
         self.memo = None # Values kept while the shares of one transition are worked out: see branch_probs_for()
+        self._memo = None # Values of parts of expressions kept while several are evaluated for the same agents: see compile()
+        self.compiled = dict() # Each expression evaluated, as a function: see eval()
         arrs = [ss.arrays.ModifiableArr('rel_sus', default=1.0, label='Relative susceptibility', shared=True), # No memory until something sets them
                 ss.arrays.ModifiableArr('rel_trans', default=1.0, label='Relative transmission', shared=True)]
         self.scheduled = [state.name for state in graph.people_states if graph.exits[state.name].branches or graph.exits[state.name].timed or graph.exits[state.name].remainder] # The states with exits that are scheduled when people enter them
@@ -755,8 +771,25 @@ class Agents(Engine):
         self.live_total = None
         return
 
+    def moved_groups(self, uids, before, after):
+        """ Some agents' groups have changed by themselves (e.g. they reached the next age group: see `ss.dimensions.Groups.regrouped()`): move them between the counts kept by group """
+        if self.live is None:
+            return
+        ng = self.sim.groups.n_groups
+        mod = self.mod
+        shift = lambda inside: np.bincount(after[inside], minlength=ng) - np.bincount(before[inside], minlength=ng)
+        for state in self.graph.people_states:
+            inside = mod[state.name].raw[uids]
+            if inside.any():
+                self.live[state.name] = self.live[state.name] + shift(inside)
+        counted = self.sim.people.alive.raw[uids] & (uids < self.n_counted) # Those made since are counted by alive_counts()
+        if counted.any():
+            self.live_total = self.live_total + shift(counted)
+        return
+
     def live_counts(self):
-        """ The number of agents in each state of people now, by group (not collapsed): kept from the last census, or counted again """
+        """ The number of agents in each state of people now, by group (not collapsed): kept from the last census (with any changes of group since: see `moved_groups()`), or counted again """
+        self.sim.groups.group_raw()
         if self.live is None:
             self.census()
         return self.live
@@ -981,18 +1014,15 @@ class Agents(Engine):
         return values
 
     def by_people(self, by, uids=None):
-        """ A value read from each person's own properties (see `ss.by.lookup()`), for the agents being evaluated (or for `uids`); worked out once a step """
+        """ A value read from each person's own properties (see `ss.by.lookup()`), for the agents being evaluated (or for `uids`): looked up for those agents alone, since often few are asked for (e.g. those entering a state) """
         if self._by_group and uids is None:
             errormsg = f'{by} is read from each person, so cannot be used where a value is worked out for groups rather than agents (a count that is not people, an inflow, or init_prev)'
             raise ValueError(errormsg)
         if uids is not None and not self.sim.people.initialized: # A distribution's parameter, tried when the distribution is made, before there are people
             return np.ones(np.size(uids))
-        key = ('by_people', id(by))
-        if key not in self.cache:
-            self.cache[key] = by.lookup_grid(self.sim, self.convert, year=self.year, cache=self.cache)
-        grid, index = self.cache[key]
         uids = self._uids if uids is None else uids
-        return grid[tuple(ind[uids] for ind in index)] # Only the agents asked for, since often few are (e.g. those entering a state)
+        grid, index = by.lookup_grid(self.sim, self.convert, year=self.year, cache=self.cache, uids=uids)
+        return grid[index]
 
     def value(self, p):
         if self._drawing and id(p.raw) in self.attr_dists: # A distribution an attribute is drawn from: see draw_attr()
@@ -1040,6 +1070,222 @@ class Agents(Engine):
         if np.ndim(out) and len(out) != len(uids): # One value per agent in the population
             out = np.asarray(out)[uids]
         return out
+
+    #%% Expressions, compiled once
+
+    def __getstate__(self):
+        """ Copied or saved without the compiled expressions (functions that hold this engine), which are made again when first used """
+        state = self.__dict__.copy()
+        state['compiled'] = dict()
+        state['_memo'] = None
+        return state
+
+    def eval(self, expr):
+        """
+        Evaluate an expression, as `ss.transitions.evaluate()` does, from a function of it made the first time it is
+        evaluated (see `compile()`), so that each step does only the arithmetic and reads the values
+        """
+        entry = self.compiled.get(id(expr))
+        if entry is None or entry[0] is not expr: # Kept with the expression, so its id is not taken by another
+            if len(self.compiled) > 10_000: # Expressions made as the sim runs (e.g. by a function of the model's states) are let go of now and then
+                self.compiled.clear()
+            entry = self.compiled[id(expr)] = (expr, self.compile(expr))
+        return entry[1]()
+
+    def compile(self, expr):
+        """
+        An expression as a function of no arguments that evaluates it for the agents being evaluated, with what to do at each
+        part decided once, rather than at each step. It gives the same numbers as `ss.transitions.evaluate()`, and:
+
+        - a part that has one value for each group (made of numbers, values in time, values by the sim's dimensions, and counts:
+          see `groupwise()`) is worked out for the groups, and then taken for each agent from their group, which is much less
+          arithmetic than for each agent when there are many agents and few groups (e.g. a rate by place that reads counts by place);
+        - a product with a condition (e.g. `infant_rate*((ss.ppl.age >= 0) & (ss.ppl.age < 1))`) is worked out only for the agents
+          the condition holds for (0 for the others), so a function rate in it is called only for them (see `gated()`);
+        - a part evaluated again for the same agents while `self._memo` is kept (e.g. the factor that the terms of a transmission share)
+          is taken from it.
+        """
+        E = ss.expressions
+        if isinstance(expr, E.BinOp):
+            if expr.op == '*' and self.gated(expr):
+                return self.compile_gated(expr)
+            if self.groupwise(expr):
+                return self.compile_grouped(expr)
+            return self.memoized(expr, self.compile_op(expr))
+        elif isinstance(expr, E.Func):
+            if self.groupwise(expr):
+                return self.compile_grouped(expr)
+            return self.memoized(expr, self.compile_op(expr))
+        return self.compile_leaf(expr)
+
+    def compile_op(self, expr, compile=None):
+        """ Arithmetic or a NumPy function of the parts of an expression, each compiled with `compile` (by default `compile()`) """
+        E = ss.expressions
+        compile = compile or self.compile
+        if isinstance(expr, E.Func):
+            args = [compile(arg) for arg in expr.args]
+            if expr.name == 'expit': # The logistic function, 1/(1 + exp(-x)), which NumPy does not have
+                return lambda: 1/(1 + np.exp(-args[0]()))
+            func = getattr(np, expr.name)
+            if len(args) == 1:
+                arg = args[0]
+                return lambda: 1.0*func(arg()) # A comparison is 1 or 0
+            a, b = args
+            return lambda: 1.0*func(a(), b())
+        a, b = compile(expr.a), compile(expr.b)
+        op = expr.op
+        if   op == '+': return lambda: a() + b()
+        elif op == '-': return lambda: a() - b()
+        elif op == '*': return lambda: a() * b()
+        elif op == '/': return lambda: E.divide(a(), b())
+        else:           return lambda: power(a(), b())
+
+    def compile_leaf(self, expr):
+        """ A part of an expression with no arithmetic in it: a parameter, a count, a property of people, ... """
+        E = ss.expressions
+        if isinstance(expr, E.par):
+            return lambda: self.value(expr)
+        elif isinstance(expr, E.Count):
+            return lambda: self.count_expr(expr)
+        elif isinstance(expr, ss.transitions.State):
+            return lambda: self.exposure(expr)
+        elif isinstance(expr, E.Prop):
+            return lambda: self.prop(expr.cond)
+        elif isinstance(expr, ss.conditions.Cond):
+            return lambda: self.prop(expr)
+        elif isinstance(expr, E.Clock):
+            return lambda: self.clock(expr)
+        elif isinstance(expr, E.attr):
+            return lambda: self.attr(expr)
+        return lambda: ss.transitions.evaluate(expr, self) # Anything else (a share of a row, a mother's value) as it evaluates itself
+
+    def memoized(self, expr, func):
+        """ A compiled part of an expression whose value is kept in `self._memo`, while it is kept, for the same agents and the same route and strain """
+        key = id(expr)
+        def memoized():
+            memo = self._memo
+            if memo is None:
+                return func()
+            kept = memo.get(key)
+            if kept is not None and kept[0] is self._uids and kept[1] == (self._by_group, self._route, self._strain):
+                return kept[2]
+            out = func()
+            memo[key] = (self._uids, (self._by_group, self._route, self._strain), out) # The agents are kept with it, so their id is not taken by others
+            return out
+        return memoized
+
+    def groupwise(self, expr):
+        """
+        Whether a part of an expression has one value for each group (or for everyone): made only of numbers, values in time, values by
+        the sim's dimensions (`ss.by`, not read from each person), and counts and exposures of this module's own states. Not a property of
+        people, an attribute, a clock, a function (which may give a value for each agent), or a parameter spread across people.
+        """
+        E = ss.expressions
+        if isinstance(expr, E.BinOp):
+            return self.groupwise(expr.a) and self.groupwise(expr.b)
+        elif isinstance(expr, E.Func):
+            return all(self.groupwise(arg) for arg in expr.args)
+        elif isinstance(expr, E.Count):
+            return not self.split_states(expr.states)[1] # Another module's states are counted by its engine
+        elif isinstance(expr, ss.transitions.State):
+            return True
+        elif isinstance(expr, E.par):
+            raw = expr.raw
+            if id(expr) in self.spread or isinstance(raw, (dict, ss.Dist, ss.peract)):
+                return False
+            elif isinstance(raw, E.Expr):
+                return self.groupwise(raw)
+            elif isinstance(raw, ss.by):
+                return type(raw) is ss.by and 'to' not in raw.dims and not raw.on_people(self.sim) and self.derived_strat(raw) is None
+            elif isinstance(raw, ss.transitions.TimeValue):
+                return True
+            return not callable(raw)
+        return False
+
+    def compile_grouped(self, expr):
+        """
+        A part of an expression with one value for each group (see `groupwise()`), worked out for the groups and then taken for each
+        agent being evaluated from their group: the same numbers, since each agent's is the same arithmetic on the same values. Worked out
+        for the agents instead where a group's value is not what an agent's is (on a route, while drawing, or with modifiers of its parameters)
+        """
+        E = ss.expressions
+        plain = self.memoized(expr, self.compile_op(expr, compile=self.compile_plain))
+        leaves = expr.leaves
+        if not any(isinstance(leaf, (E.Count, ss.transitions.State)) or (isinstance(leaf, E.par) and isinstance(leaf.raw, ss.by)) for leaf in leaves):
+            return plain # Numbers for everyone, so nothing is gained
+        names = [leaf.name for leaf in leaves if isinstance(leaf, E.par) and leaf.name and not leaf.literal]
+        modname = self.mod.name
+        def grouped():
+            if self._by_group or not self._for_uids or self._route is not None or self._drawing:
+                return plain()
+            modifiers = self.sim.modifiers
+            if names and modifiers and any(modifiers.get((modname, 'par', name)) for name in names): # A modifier may differ between the agents of a group
+                return plain()
+            with self.evaluating(by_group=True, for_uids=False):
+                out = plain()
+            if np.ndim(out) == 0:
+                return out
+            if len(out) != self.sim.groups.n_groups: # Not one value per group after all
+                return plain()
+            return out[self.groups(self._uids)]
+        return grouped
+
+    def compile_plain(self, expr):
+        """ As `compile()`, for the parts inside a part worked out by group (see `compile_grouped()`), which are compiled as they are """
+        E = ss.expressions
+        if isinstance(expr, (E.BinOp, E.Func)):
+            return self.compile_op(expr, compile=self.compile_plain)
+        return self.compile_leaf(expr)
+
+    def gated(self, expr):
+        """ Whether a product has a condition as a factor (true or false for each person) and a function as a parameter in another, so is worked out only where the condition holds (see `compile_gated()`) """
+        factors = self.product_factors(expr)
+        conds = [f for f in factors if self.is_condition(f)]
+        if not conds:
+            return False
+        funcs = [leaf for f in factors if not self.is_condition(f) for leaf in f.leaves if isinstance(leaf, ss.expressions.par) and callable(leaf.raw) and not isinstance(leaf.raw, (ss.transitions.TimeValue, ss.Dist))]
+        return bool(funcs)
+
+    @staticmethod
+    def product_factors(expr):
+        """ The factors of a product, in order (e.g. `[a, b, c]` for `a*b*c`) """
+        if isinstance(expr, ss.expressions.BinOp) and expr.op == '*':
+            return Agents.product_factors(expr.a) + Agents.product_factors(expr.b)
+        return [expr]
+
+    @staticmethod
+    def is_condition(expr):
+        """ Whether a part of an expression is a condition, which is 1 or 0 for each person (not a property, e.g. `ss.ppl.age`, which is its value) """
+        cond = expr.cond if isinstance(expr, ss.expressions.Prop) else expr
+        return isinstance(cond, ss.conditions.Cond) and (cond.op in ss.conditions.comparisons or cond.op in ['&', '|', '~', 'isin', 'state'])
+
+    def compile_gated(self, expr):
+        """
+        A product with a condition as a factor (see `gated()`): the conditions are evaluated first, and the product only for the agents they
+        hold for, so a function in it (e.g. FPsim's infant mortality, by the mother's age) is called only for them. The others' value is 0
+        (as the product's would be, unless the function gives them a NaN or an infinity, which is not read).
+        """
+        conds = [self.compile_leaf(f) for f in self.product_factors(expr) if self.is_condition(f)]
+        whole = self.memoized(expr, self.compile_op(expr))
+        def gated():
+            if self._by_group or not self._for_uids:
+                return whole()
+            uids = self._uids
+            holds = np.ones(len(uids), dtype=bool)
+            for cond in conds:
+                holds &= np.asarray(cond()) != 0
+            if holds.all():
+                return whole()
+            out = np.zeros(len(uids))
+            if holds.any():
+                sub = uids[holds]
+                with self.evaluating(uids=sub):
+                    vals = whole()
+                if np.ndim(vals) and len(vals) != len(sub): # One value per agent in the population
+                    vals = np.asarray(vals)[sub]
+                out[holds] = vals
+            return out
+        return gated
 
     def clock(self, clock):
         """ The value of a clock for the agents being evaluated, from the engine of the module its states belong to """
@@ -1212,7 +1458,9 @@ class Agents(Engine):
                     out[:] = True
             else:
                 inside = [index[s[1] if isinstance(s, tuple) else s.name] for s in obj]
-                src_in = np.isin(srcs, inside)
+                table = np.zeros(len(index) + 1, dtype=bool) # Whether each state (by index, and -1 for none, the last) is one of them
+                table[inside] = True
+                src_in = table[srcs]
                 dst_in = np.bool_(dst in inside) # Not a Python bool, whose ~ is an integer
                 out |= (~src_in & dst_in) if kind == 'enter' else (src_in & ~dst_in)
         return out
@@ -2302,7 +2550,9 @@ class Agents(Engine):
         self.forced = dict()
         self.step_lifetables()
         sim = self.sim
-        if sim.groups.group_fold is not None or any(strat.edges is not None for strat in sim.groups.strats): # Groups that change by themselves (age groups), or counts by place taken from the agents (see local_count()): counted again at each step
+        if sim.groups.n_groups > 1:
+            sim.groups.group_raw() # Groups that change by themselves (age groups) are moved between the counts now: see moved_groups()
+        if sim.groups.group_fold is not None: # Counts by place taken from the agents (see local_count()): counted again at each step
             self.live = None
         elif self.live is not None and check_counts:
             self.check_counts()
@@ -2380,7 +2630,8 @@ class Agents(Engine):
 
     def draw_competing(self, state, uids, dt, key=None):
         """ The competing rates out of a state, in one draw per agent over a time `dt` (a number, or one for each agent): moves those who leave, and returns which they are """
-        rates = [(tr, self.eval_for(tr.rate, uids)*self.adjusted(tr.name, uids)) for tr in self.competing[state.name]]
+        with self.evaluating(memo={} if len(self.competing[state.name]) > 1 else None): # A part that several rates share (e.g. the EIR, indoors and outdoors) is worked out once
+            rates = [(tr, self.eval_for(tr.rate, uids)*self.adjusted(tr.name, uids)) for tr in self.competing[state.name]]
         rates = [(tr, rate) for tr,rate in rates if np.ndim(rate) or rate > 0] # A rate of 0 for everyone (e.g. ss.Pregnancy's infant_rate by default) moves nobody, so it is left out of the draw
         competing = [tr for tr,rate in rates]
         stays = [self.stayed(tr, state, uids) for tr,rate in rates]
@@ -2404,18 +2655,24 @@ class Agents(Engine):
                 hazards = [np.where(certain, np.isinf(h), h) for h in hazards]
                 total = np.sum(hazards, axis=0)
                 p_exit = np.where(certain, 1.0, p_exit)
-            edges = np.cumsum([np.zeros(n)] + hazards, axis=0)*np.divide(p_exit, total, out=np.zeros(n), where=total>0)
+            share = np.divide(p_exit, total, out=np.zeros(n), where=total>0)
+            edges = None # Worked out in the compiled pass below, unless it can't be taken
         if np.isnan(total).any():
             bad = [tr.name for tr,h in zip(competing, hazards) if np.isnan(h).any()]
             raise ss.errors.ClockOutsideDomain(f'the rate of {sc.strjoin(bad)} out of {state.name} is NaN for some people: it reads a clock or an attribute where it has no value.')
-        crn = self.dists[f'exit_{state.name}'].crn_key() if same else None
+        crn = self.dists[f'exit_{state.name}'].crn_key() if key is None and len(uids) else None
         if crn is not None: # The usual case: each agent's draw is made in one compiled pass, as rvs() would make it, so only those who leave are listed
-            pos, which = ss.perflib._passes.competing_exits(uids, self.sim.people.slot_raw(), *crn, p_exit, edges)
+            if same:
+                pos, which = ss.perflib._passes.competing_exits(uids, self.sim.people.slot_raw(), *crn, p_exit, edges)
+            else: # With the edges of each agent's exits worked out in it, as np.cumsum() of the hazards times p_exit/total
+                pos, which = ss.perflib._passes.competing_agent_exits(uids, self.sim.people.slot_raw(), *crn, p_exit, share, np.array(hazards, dtype=float).reshape(len(hazards), n))
             leaving = np.zeros(len(uids), dtype=bool)
             leaving[pos] = True
             for i,tr in enumerate(competing):
                 self.move(tr, state, uids[pos[which == i]])
             return leaving
+        if edges is None:
+            edges = np.cumsum([np.zeros(n)] + hazards, axis=0)*share
         rvs = self.dists[f'exit_{state.name}'].rvs(uids) if key is None else self.draw(key, uids) # Drawn on entry as well, so perhaps more than once a step
         leaving = rvs < p_exit
         for i,tr in enumerate(competing):
@@ -2961,7 +3218,9 @@ class Agents(Engine):
                     self.transmit_acts(tr, i, nkey, route, rel_sus, by_strain, new_cases, pairs)
                 continue
             everyone = ss.uids(np.arange(len(sus_raw)))
-            coefs, target = self.by_target({state: self.route_beta(coef, nkey, route, everyone) for state,coef in tr.terms.items()}, route) # For each source state
+            with self.evaluating(memo={} if len(tr.terms) > 1 else None): # The factor the source states share (e.g. a susceptibility of each person) is worked out once
+                coefs = {state: self.route_beta(coef, nkey, route, everyone) for state,coef in tr.terms.items()}
+            coefs, target = self.by_target(coefs, route) # For each source state
             route_sus = rel_sus if target is None else rel_sus.asnew(rel_sus.raw*target, copy=False)
             ref = max([np.max(c) for c in coefs.values()] + [0])
             if ref <= 0:
@@ -3260,7 +3519,7 @@ class Agents(Engine):
         weights = {}
         for state,c in coefs.items():
             ratio = np.broadcast_to(np.asarray(c, dtype=float), shape)[on]/target[on]
-            if len(ratio) and not np.allclose(ratio, ratio[0]):
+            if len(ratio) and not ((ratio == ratio[0]) | (np.abs(ratio - ratio[0]) <= 1e-8 + 1e-5*np.abs(ratio[0]))).all(): # As np.allclose(), in fewer passes
                 raise ss.CapabilityError(f'"{self.mod.name}" has source states whose values on "{route.name}" differ between people other than in proportion, which agents cannot run yet; write the rate as one value by person times the source states (e.g. ss.by(...)*(A + 0.5*B)), or run with solver="ode"')
             weights[state] = float(ratio[0])*top if len(ratio) else 0.0
         return weights, (target/top if top > 0 else target)
