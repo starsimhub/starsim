@@ -542,6 +542,43 @@ def test_code_seams():
     return sim
 
 
+def test_define_transitions():
+    sc.heading('A declared disease whose structure depends on its arguments, declared on self in __init__()')
+
+    class SIRS(ss.Disease):
+        def __init__(self, waning=True, **kwargs):
+            super().__init__(init_prev=0.01, **kwargs)
+            self.define_states(ss.states('S I R'))
+            beta = ss.par(0.3)
+            self.define_transitions(
+                infection = self.S >> self.I @ beta*self.I,
+                recovery  = self.I >> self.R @ ss.days(10),
+            )
+            if waning: # A transition only some versions have
+                self.define_transitions(waning=self.R >> self.S @ ss.days(100))
+            self.define_results(prevalence=self.I.frac)
+
+    class ClassSIRS(ss.Disease): # The same model in a class body
+        S, I, R = ss.states(3)
+        beta = ss.par(0.3)
+        infection = S >> I @ beta*I
+        recovery  = I >> R @ ss.days(10)
+        waning    = R >> S @ ss.days(100)
+        prevalence = I.frac
+
+    assert list(SIRS(waning=False).transitions) == ['infection', 'recovery']
+    kw = dict(unit='day', stop=100, verbose=0)
+    sim = ss.Sim(SIRS(name='sirs'), **kw).run()
+    ref = ss.Sim(ClassSIRS(init_prev=0.01, name='sirs'), **kw).run()
+    assert np.allclose(sim.results.sirs.prevalence, ref.results.sirs.prevalence)
+
+    with pytest.raises(ss.CapabilityError): # Declared once, while it is made
+        sirs = SIRS()
+        sirs.graph
+        sirs.define_states(ss.State('V'))
+    return sim
+
+
 if __name__ == '__main__':
     do_plot = True
     sc.options(interactive=do_plot)
@@ -561,3 +598,4 @@ if __name__ == '__main__':
     cong  = test_congenital()
     seeded = test_strains_seeding()
     test_strains_errors()
+    define = test_define_transitions()

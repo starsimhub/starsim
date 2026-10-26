@@ -648,7 +648,7 @@ def init_unit(sim):
         pars.dt = dur_class(sc.ifelse(pars.dt, 1.0))
     in_years = unit == 'year' and pars.start is None # A model in years with no start starts in the year 2000 (see ss.Timeline)
     if not dates and not years and not in_years:
-        if pars.start is None or sc.isnumber(pars.start):
+        if sc.isnumber(pars.start) or (pars.start is None and (pars.stop is None or pars.dur is None)): # With a stop and a dur, the start is stop - dur (see ss.Timeline)
             pars.start = dur_class(sc.ifelse(pars.start, 0))
         if sc.isnumber(pars.stop):
             pars.stop = dur_class(pars.stop)

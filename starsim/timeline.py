@@ -328,7 +328,7 @@ class Timeline(ss.utils.NoDists):
             self.dt    = sc.ifelse(self.dt,    sim.t.dt,    sim.pars.dt)
             self.start = sc.ifelse(self.start, sim.t.start, sim.pars.start)
             self.stop  = sc.ifelse(self.stop,  sim.t.stop,  sim.pars.stop)
-            if self.start is None or self.stop is None: # Only set dur if start or stop is not specified
+            if self is sim.t or self.start is None or self.stop is None: # The sim's own dur, even with a start and stop, so three that disagree raise below; a module with a start of its own runs to the sim's stop
                 self.dur   = sc.ifelse(self.dur,   sim.t.dur,   sim.pars.dur)
 
         # Convert strings to other types, starting with dt
@@ -448,7 +448,9 @@ class Timeline(ss.utils.NoDists):
 
             case (start, stop, dur): # e.g. ss.Sim(start=2010, stop=2030, dur=50)
                 if dur != stop - start: # This is fine unless they don't match
-                    errormsg = f'You supplied {start = }, {stop = }, and {dur = }, but {dur = } ≠ stop - start = {stop - start}'
+                    unit = type(dur) if not isinstance(dur, ss.datedur) else ss.years # The span in the unit dur was given in, e.g. "366 days, not 30 days"
+                    span, given = [f'{round(x.years/unit(1).years, 6):g} {unit.__name__}' for x in [stop - start, dur]]
+                    errormsg = f'start={self.start}, stop={self.stop}, and dur={self.dur} disagree: from start to stop is {span}, not {given}. Give two of the three'
                     raise ValueError(errormsg)
 
             case _: # This should not occur since we matched all 8 cases above
