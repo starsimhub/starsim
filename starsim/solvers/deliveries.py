@@ -489,7 +489,7 @@ class CompartmentalDelivery:
         watched = d.name in [ss.conditions.modname(leaf.args[0]) for mod in sim.interventions() if isinstance(mod, ss.Delivery) for leaf in ss.conditions.event_leaves(mod.on)] or d._needs # Its events are read, which the kernels do not keep
         static = ss.conditions.is_static(d.eligible, sim) and (sc.isnumber(d.coverage) or d.coverage is None or isinstance(d.coverage, ss.by))
         past = d.at_age is not None # The people past the age are left out on the first step: see ss.Delivery.skip_past()
-        limited = d.capacity is not None or d.queue is not None or bool(getattr(product, 'doses', None)) # Served in an order, or given in doses, which the kernels do not take
+        limited = d.capacity is not None or d.queue is not None or bool(getattr(product, 'doses', None)) or getattr(product, 'during', None) is not None # Served in an order, given in doses, or held only in some states, which the kernels do not take
         return moves and scheduled and static and not limited and d.when is None and not watched and not past
 
     def plain_move(self):
@@ -525,6 +525,21 @@ class CompartmentalDelivery:
             for ind,w in eng.entry[d.move_states[1]][0]:
                 land[ind] += w
         return due, np.broadcast_to(sel, selector.shape), cov, to, rest, land
+
+    def respell(self):
+        """
+        For routine delivery that records who has been offered it: the share of the people in each state and group who start a new
+        spell of being eligible (offered it, and no longer eligible), and the group they go back to (see `ss.Delivery.new_spells()`);
+        None for any other. The kernels take it as a delivery of its own that reaches nobody, with everyone eligible going to `rest`.
+        """
+        d = self.delivery
+        if not d.remembers:
+            return None
+        selector = self.selector
+        sim = self.sim
+        gone = (selector.dim(d.offered) == 1)*selector.everyone()*(1 - d.eligible_now(held=False))
+        back = self.eng.targets({sim.groups.dim_index(d.offered):0})
+        return np.broadcast_to(np.clip(gone, 0, 1), selector.shape), back
 
     def store_shifts(self, tally, start=0, done=True):
         """

@@ -248,7 +248,8 @@ def unapplied(graph, modname, kind, name, mods):
             dsts = sc.strjoin(f"'{modname}.{tables[0]}.{dst.name}'" for dst in graph.transitions[tables[0]].dst)
             return f'it is a value over "to" in the p= table of "{tables[0]}", which is built once, when the sim is made (a change to the table is not yet supported). To change the probability of one destination, modify it by name: {dsts}.'
     elif kind in ['rel_sus', 'rel_trans']:
-        if not (graph.acquisitions if kind == 'rel_sus' else graph.infectious):
+        trans_read = kind == 'rel_trans' and any(isinstance(leaf, ss.expressions.Count) and leaf.trans for tr in graph.transitions.values() if tr.rate is not None for leaf in tr.rate.leaves) # Read by a count weighted by infectiousness (A.n_trans)
+        if not (graph.acquisitions if kind == 'rel_sus' else graph.infectious) and not trans_read:
             return f'"{modname}" has no {"acquisition" if kind == "rel_sus" else "transmission"} for it to scale. Modify one of its transitions by name instead: {sc.strjoin(graph.transitions)}.'
     elif kind in ['transition', 'branch']:
         tr = graph.transitions.get(name)

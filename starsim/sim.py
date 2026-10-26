@@ -279,6 +279,12 @@ class Sim(ss.Base):
                         if name is not None:
                             obj.name = obj.label = name
                             obj._default_name = False
+        steps = [mod for arg in args for mod in sc.tolist(arg) if isinstance(mod, ss.Delivery)]
+        used = [mod.name for mod in steps if not mod._default_name]
+        for mod in steps: # Steps made in a function, with no variable to be named by (HP72): numbered, e.g. screen, screen_1, here rather than when the sim copies them, since a condition refers to a step by its name
+            if mod._default_name:
+                mod.name = mod.label = sc.uniquename(mod.name, used, style='_%d')
+            used.append(mod.name)
         return
 
     @staticmethod

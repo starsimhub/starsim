@@ -193,6 +193,8 @@ The keys are network names. On a network with acts the value is a probability pe
 | `I.n` | a count | the number of people in `I`; the same number as the result `I` |
 | `I.frac` | a fraction | `I.n` divided by the number of people in `I`'s module |
 | `I.total` | a count | the number in `I` in the whole population; in a model stratified by place, `I.n` in a rate is the number in the same place |
+| `(w*I).n` | a weighted count | each person in `I` counted by `w`, a value of theirs (a number, an `ss.by`, a property of people), e.g. `(ss.by(biting=[0.5, 1, 2])*I).n`, how much the infectious are bitten (MS3) |
+| `I.n_trans` | a weighted count | each person in `I` counted by their infectiousness (`rel_trans`, with products and modifiers on it, times the state's), e.g. what they shed (TY6) |
 | `S + I + R` | a sum of states | a source of infection or a denominator in a rate; a result when given to the module by name. Never a new state |
 | `ss.null >> S`, `I >> ss.null` | an inflow, an outflow | "from outside", "to outside" |
 

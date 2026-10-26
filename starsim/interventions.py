@@ -227,7 +227,11 @@ def remembered(selector, cond):
             raise ss.CapabilityError(f'{cond} is the memory of an event of "{owner.name}", a module written as code, which cannot run with solver="{sim.solver}". Run with solver="abm".')
         last, count = arr.raw, arr.counts.raw
     elif selector.abm:
-        last, count = [a.raw for a in owner._mem[outcome]]
+        mem = owner.__dict__.get('_mem', {}).get(outcome)
+        if mem is None:
+            errormsg = f'{cond} cannot be read: "{owner.name}" has no memory of {"its" if outcome is None else "the outcome " + repr(outcome) + " of its"} events{"" if owner.__dict__.get("_mem") is not None else " yet (it is kept once the sim is initialized)"}; read the memory of the step in the sim, e.g. sim.interventions.{owner.name}.ever'
+            raise ValueError(errormsg)
+        last, count = [a.raw for a in mem]
     else: # Only .ever, as a level (see ss.solvers.memory_layout())
         return selector.dim(ss.solvers.memory_layout(sim, (owner.name, outcome)).name) > 0
     if kind == 'ever':
@@ -309,7 +313,7 @@ def order_steps(mods):
                         errormsg = f'"{m.name}" is triggered by {leaf}, but "{ss.conditions.modname(leaf.args[0])}" is not delivered in the sim: add it to interventions='
                         raise ValueError(errormsg)
                     deps[i] |= {index[id(d)] for d in found if d is not m}
-            if any(leaf.op == 'event' and (leaf.args[0] is m or (isinstance(leaf.args[0], Delivery) and leaf.args[0].name == m.name)) for leaf in ss.conditions.event_leaves(m.on) if isinstance(m.on, ss.conditions.Cond)):
+            if any(leaf.op == 'event' and (leaf.args[0] is m or (isinstance(leaf.args[0], Delivery) and id(leaf.args[0]) not in index and leaf.args[0].name == m.name)) for leaf in ss.conditions.event_leaves(m.on) if isinstance(m.on, ss.conditions.Cond)): # By name only for a copy: two steps made in a function share the default name (HP72), which the sim then makes unique
                 errormsg = f'"{m.name}" is triggered by its own event ({m.on}), so would never happen; a delivery can read its own memory (e.g. who={m.name}.since >= ss.years(5)), but not be triggered by itself'
                 raise ValueError(errormsg)
     out, done = [], set()
@@ -403,7 +407,8 @@ class Delivery(ss.products.EventSource, Intervention):
         move (Transition/dict/StrainMove): instead of a product, a move between two states for the people reached, written with the states, e.g. `move=S >> V` (a one-off campaign), or from any of several (`move=U + P + W >> P`: a re-dose, which restarts the time in `P` of those already there); or the level of a stratification they move to, e.g. `move=dict(vaccinated=True)`, or from one level to another, `move=dict(risk=('low', 'high'))`; or a change of strains, e.g. `move=DS >> RIF`
         strain (str/Strain): with `move=` into a state where people carry a strain (e.g. `move=S >> E`), the strain they arrive with: the import of a strain on a date, e.g. `ss.Delivery(move=S >> E, strain='alpha', at=['2021-01-01'], capacity=20)`
         increment (str/dict): instead of a product, a counter that goes up for the people reached: its name, which adds 1 (`increment='doses'`), or a dict of the amount for each (`dict(doses=2)`)
-        at_age (dur/float): routine delivery to people as they reach this age (a bare number is in years), e.g. `at_age=ss.months(9)`
+        at_age (dur/float): routine delivery to people as they reach this age (a bare number is in years), e.g. `at_age=ss.months(9)`; not to people
+            already past it when delivery starts, nor (as agents) to those who arrive past it later, e.g. immigrants
         start (date/float): when delivery starts, within the sim (default: the start of the sim); a number is a time in the sim's unit (in a sim with dates, that long after the start)
         stop (date/float): when delivery stops (default: never); a stop after the end of the sim never stops it
         at (list): deliver in rounds at these times (a campaign), each within the sim; a calendar year in a sim with dates is written as a date, e.g. '2030'
@@ -666,6 +671,8 @@ class Delivery(ss.products.EventSource, Intervention):
         if self.holds:
             doses = self.product.doses
             levels = [False] + [f'dose {k+1}' for k in range(len(doses))] if doses else [False, True]
+            if self.boxed(sim): # Waning as a box (MS6): its levels
+                levels = [False] + self.product.box_form.levels()
             out.append(Strat(self.product.dim, levels, split=[1.0] + [0.0]*(len(levels) - 1)))
         for dim,level in (self.move or {}).items():
             if isinstance(level, bool):
@@ -675,8 +682,14 @@ class Delivery(ss.products.EventSource, Intervention):
         out += ss.solvers.memory_strats(self, sim)
         return out
 
-    def dim_moves(self):
-        """ Movement along those properties that happens by itself: losing the protection of a product """
+    def boxed(self, sim):
+        """ Whether holding the product has the levels of a box in this sim: in a compartmental run, for a product that wanes as an `ss.box` (see `ss.Held.box_form`) """
+        return self.holds and sim is not None and sim.solver not in [None, 'abm'] and self.product.box_form is not None
+
+    def dim_moves(self, sim=None):
+        """ Movement along those properties that happens by itself: losing the protection of a product (at a rate, or through the levels of a box) """
+        if self.boxed(sim):
+            return self.product.box_form.moves(self.product.dim)
         if self.holds and self.product.loses:
             return [sc.objdict(dim=self.product.dim, src=1, dst=0, dur=self.product.waning)]
         return []
@@ -731,15 +744,16 @@ class Delivery(ss.products.EventSource, Intervention):
         names = [d if isinstance(d, str) else d.name for d in self.disease_list]
         names = [m for n in names for m in (sim.diseases[n].member_names if isinstance(sim.diseases.get(n), ss.strains.Family) else [n])] # Strains with courses of their own, by the disease's name
         missing = [n for n in names if n not in declared]
+        coded = [n for n in missing if coded_disease(sim, n) is not None]
+        if coded and (len(coded) < len(names) or not isinstance(self.product, (ss.Diagnostic, ss.Treatment))): # Several diseases written as code (HP70): a test or a cure by their states, as for strains with courses of their own
+            raise ss.errors.UnknownDisease(f'disease= of "{self.name}" names {sc.strjoin(coded)}, written as code; a delivery for several diseases written as code is a test or a treatment of all of them (and none declared), so give one delivery for each (e.g. disease="{coded[0]}")')
+        missing = [n for n in missing if n not in coded]
         if missing:
-            coded = [n for n in missing if n in sim.diseases]
-            if coded: # A delivery for several diseases is keyed by their declared states
-                raise ss.errors.UnknownDisease(f'disease= of "{self.name}" names {sc.strjoin(coded)}, written as code; a delivery for several diseases is for declared ones only, so give one delivery for each (e.g. disease="{coded[0]}")')
             known = f'the declared diseases are {sc.strjoin(declared)}' if declared else 'it has no declared diseases'
             raise ss.errors.UnknownDisease(f'disease= of "{self.name}" names {sc.strjoin(missing)}, which {"is not a disease" if len(missing) == 1 else "are not diseases"} in the sim; {known}.')
         self.disease_list = names
         self.disease = names[0]
-        self.product.key_by([sim.get_declared(n) for n in names])
+        self.product.key_by([sim.diseases[n] if n in coded else sim.get_declared(n) for n in names])
         return
 
     def init_pre(self, sim):
@@ -861,6 +875,9 @@ class Delivery(ss.products.EventSource, Intervention):
             errormsg = f'queue= of "{self.name}" is how long people wait when there is not enough capacity, so it needs capacity='
             raise ValueError(errormsg)
         self.compartments = ss.solvers.CompartmentalDelivery(self) if sim.solver != 'abm' else None
+        if self.boxed(sim) and next(d for d in sim.interventions() if isinstance(d, Delivery) and d.product is self.product) is self: # Once for the product
+            b = self.product.box_form
+            ss.note(f'the box of "{self.product.name}" ({b.dur!r}) is {b.stages} levels of holding it, each left at a rate, so its end is spread over about {b.dur/np.sqrt(b.stages)!r} either way (as agents, it is exact); give ss.box(..., stages=) more for less', sim=sim)
         return
 
     def check_coded(self, sim):
@@ -870,14 +887,14 @@ class Delivery(ss.products.EventSource, Intervention):
             raise ss.CapabilityError(f'"{self.name}" is for "{dis.name}", which is written as code, so it cannot run with solver="{sim.solver}". Run with solver="abm".')
         product = self.product
         needs = []
-        if isinstance(product, ss.Diagnostic) and product.detects is None:
-            needs.append(('infected', 'a state, which the test detects (or give detects= to the test)'))
+        if isinstance(product, ss.Diagnostic) and product.detects is None and any('detects' in t for t in product.tables()): # Unless its results are by state (HP70)
+            needs.append(('infected', 'a state, which the test detects (or give detects= to the test, or results by state)'))
         if isinstance(product, ss.Treatment) and product.curing:
             needs.append(('clear_infection', 'a method of the UIDs cured'))
         if self.holds:
             needs += [(attr, 'an array the efficacy scales') for key,attr in [('acquisition', 'rel_sus'), ('transmission', 'rel_trans')] if key in product.effects]
         if self.move_states is not None or (product is not None and getattr(product, 'moves', None) is not None):
-            raise ss.CapabilityError(f'"{self.name}" moves people between states of "{dis.name}", which is written as code, so has no declared states; a delivery for it can test (the state "infected"), cure (clear_infection()), or protect (rel_sus and rel_trans)')
+            raise ss.CapabilityError(f'"{self.name}" moves people between states of "{dis.name}", which is written as code, so has no declared states; a delivery for it can test (the state "infected", or results by its states), cure (clear_infection(), of all its infected or by state), or protect (rel_sus and rel_trans)')
         for attr,what in needs:
             if not hasattr(dis, attr):
                 raise ss.errors.UnknownEffect(f'"{self.name}" is for "{dis.name}", which is written as code and has no "{attr}": {what}')
@@ -1063,7 +1080,7 @@ class Delivery(ss.products.EventSource, Intervention):
             if self.queue is not None: # Those waiting are served even if nobody new arrives
                 self.receive(self.selector.nobody())
             return
-        if self.at_age is not None and not self.started and self.remembers: # Only if it keeps who was offered it (not a rate among those eligible)
+        if self.at_age is not None and self.remembers: # Only if it keeps who was offered it (not a rate among those eligible)
             self.skip_past()
         if self.deliver is not None:
             self.give(self.delivered_by_function())
@@ -1096,12 +1113,26 @@ class Delivery(ss.products.EventSource, Intervention):
 
     def skip_past(self):
         """
-        For `at_age=`, on its first step: the people already past the age are recorded as offered it, so only those who reach the
-        age get it: as agents, those older by more than a step; in a compartmental run, everyone in an age group at or above it
+        For `at_age=`: the people already past the age are recorded as offered it, so only those who reach the age get it: on its
+        first step, everyone past it (as agents, older by more than a step; in a compartmental run, everyone in an age group at or
+        above it); and as agents, on each step after, the agents who have arrived since (e.g. immigrants made by `people.grow()`, HP76)
         """
+        selector = self.selector
+        if self.started and not selector.abm:
+            return
+        new = None
+        if self.started: # Only the agents who have arrived since its last step
+            new = selector.nobody()
+            new[self._seen:] = True
         self.started = True
+        if selector.abm:
+            self._seen = self.sim.people.uid.len_used
         age = ss.years(self.at_age).value if isinstance(self.at_age, ss.TimePar) else self.at_age
-        past = self.selector.select(ss.conditions.Cond('people', 'age') >= age + self.t.dt_year*self.selector.abm)
+        past = selector.select(ss.conditions.Cond('people', 'age') >= age + self.t.dt_year*selector.abm)
+        if new is not None:
+            if not new.any():
+                return
+            past = past & new
         self.shift(self.offer(past), {self.sim.groups.dim_index(self.offered):1})
         return
 
@@ -1198,7 +1229,7 @@ class Delivery(ss.products.EventSource, Intervention):
             sel = sel*selector.in_states(self.move_states[0])
         if self.carriers is not None: # Only the people carrying strains, for a change of them
             sel = sel*selector.in_states(self.carriers)
-        if self.holds and held and not callable(self.product.waning): # Not to people who already hold it (or every dose of it); a product that fades by a function is given again, restarting it (MA15)
+        if self.holds and held and not self.product.fades: # Not to people who already hold it (or every dose of it); a product that fades by a function is given again, restarting it (MA15)
             level = selector.dim(self.product.dim)
             doses = self.product.doses
             sel = sel*((level < len(doses)) if doses else (level == 0))
@@ -1502,13 +1533,15 @@ class Delivery(ss.products.EventSource, Intervention):
         treated_any = np.zeros(len(uids), dtype=bool)
         several = len(diseases) > 1
         for dis in diseases:
-            eng = self.eng if dis == self.disease else sim.get_declared(dis).engine
+            coded = coded_disease(sim, dis)
+            eng = self.eng if dis == self.disease else ss.connectors.AgentModifiers.engine(coded, sim) if coded is not None else sim.get_declared(dis).engine
             mod = eng.mod
             edges = [e for e in self.edges if e.dis == dis]
             insides = [np.logical_or.reduce([mod[s.name].raw[uids] for s in e.srcs]) for e in edges] # Before anyone moves
             rvs = self.rng_eff.rvs(uids) # One draw per person and disease
             treated = np.zeros(len(uids), dtype=bool)
             for e,inside in zip(edges, insides):
+                inside = inside & ~treated # In the sources of an earlier move: the states of a disease written as code need not be exclusive, so each person is cured from the first state named that they are in
                 p = self.edge_prob(e, eng)
                 cured = inside & (rvs < (p if np.ndim(p) == 0 else p[uids]))
                 eng.force(uids[cured], e.tr, e.dst, srcs=e.srcs)
@@ -1528,7 +1561,7 @@ class Delivery(ss.products.EventSource, Intervention):
         """ Work out the result of each test (one draw per person, from the probability of each result: see `ss.Diagnostic.tails()`), and either act on it or wait for it """
         selector = self.selector
         product = self.product
-        tails = product.tails(selector, self.dis.name, self.infected_states)
+        tails = product.tails(selector, self.dis.name, self.infected_states, family=self.disease_list if self._coded else None)
         if self.compartments is not None:
             return self.compartments.test(chosen, tails)
         n = len(product.result_names)

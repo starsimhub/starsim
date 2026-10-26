@@ -1187,6 +1187,8 @@ def quantity_json(raw, kind, unit):
         return dict(type='peract') | {k:quantity_json(v, None, unit) for k,v in items.items()}
     elif isinstance(raw, Expr):
         return format_expr(raw, exact=True)
+    elif isinstance(raw, ss.box): # Waning as a box, then a decay (MS6)
+        return dict(box=quantity_json(raw.dur, None, unit), decay=None if raw.decay is None else quantity_json(raw.decay, None, unit), stages=raw.stages)
     elif callable(raw):
         return func_json(raw)
     elif isinstance(raw, dict): # A bare number as the default of a beta for each route stays bare, since it is per act on the routes with acts it applies to

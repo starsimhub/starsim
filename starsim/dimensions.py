@@ -595,7 +595,7 @@ class Groups:
                 for strat in mod.dims(sim):
                     strat.owner = mod.name # Part of the scenario, not of the model
                     strats.setdefault(strat.name, strat)
-                self.dim_moves += [move for move in mod.dim_moves() if move.dim not in [m.dim for m in self.dim_moves]]
+                self.dim_moves += [move for move in mod.dim_moves(sim) if move.dim not in [m.dim for m in self.dim_moves]]
                 for dim in list(mod.move or {}) + list(getattr(mod, 'increment', None) or {}):
                     if dim not in strats:
                         raise ss.errors.MissingDimension(f'the transfer "{mod.name}" moves people along "{dim}", but the model is not stratified by it. Add e.g. sim.stratify({dim}=[...]).')

@@ -1829,6 +1829,7 @@ def step(rng, y, p, w, dt, n_sub, solver, flows, tables, row):
     for f in range(nflows):
         for g in range(ng):
             flows[f, g] = 0
+    moved_in = np.zeros((nc, ng) if auto and p.n_movers else (0, 0)) # The people moving into each compartment and group from other groups, at the start of the step: left out of the growth that sets the substeps
     while True:
         for stage in range(stages):
             ys = y if stage == 0 else yt # Where the rates are worked out
@@ -2026,6 +2027,8 @@ def step(rng, y, p, w, dt, n_sub, solver, flows, tables, row):
                             dy[stage, c, g] -= ys[c, g]*r
                             dy[stage, c, j] += ys[c, g]*r
                             df[stage, p.n_trans + m, g] += ys[c, g]*r
+                            if stage == 0 and sub == 0 and len(moved_in):
+                                moved_in[c, j] += ys[c, g]*r
             if solver == 1: # Euler: a compartment whose outflows would take more than everyone in it in a substep has them scaled down together, as compartmental frameworks with large steps do (yt is free, so holds the scale)
                 for c in range(nc):
                     for g in range(ng):
@@ -2072,16 +2075,17 @@ def step(rng, y, p, w, dt, n_sub, solver, flows, tables, row):
                     for g in range(ng):
                         everyone += y[c, g]
                 least = 1e-9*everyone # Not a compartment that is only starting to fill, whose growth follows another's: of everyone, not of its group (TR4: a group of 1e-13 people, of a strain only starting to emerge, took 4 million substeps a step)
-                for g in range(ng):
+                for g in range(ng): # Not through people moving in from other groups (a cohort moving through the stages of a box, MS6), which are linear and as fast as the movers' rates, which the substeps allow for already
                     for c in range(nc):
-                        if dy[0, c, g] > 0 and y[c, g] > least:
-                            growing = max(growing, dy[0, c, g]/y[c, g])
+                        gain = dy[0, c, g] - (moved_in[c, g] if len(moved_in) else 0.0)
+                        if gain > 0 and y[c, g] > least:
+                            growing = max(growing, gain/y[c, g])
                     for e in range(len(p.set_starts) - 1): # Nor a count that a rate reads, over all its compartments (RF1: the first slot of a conveyor fills from empty in each step, so the people infectious, I.n, grew tenfold in a step taken whole)
                         tot = 0.0
                         grow = 0.0
                         for k in range(p.set_starts[e], p.set_starts[e+1]):
                             tot += y[p.set_comps[k], g]
-                            grow += dy[0, p.set_comps[k], g]
+                            grow += dy[0, p.set_comps[k], g] - (moved_in[p.set_comps[k], g] if len(moved_in) else 0.0)
                         if grow > 0 and tot > least:
                             growing = max(growing, grow/tot)
                 more = int(np.ceil(growing*dt/0.25))

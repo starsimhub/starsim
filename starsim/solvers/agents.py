@@ -937,6 +937,55 @@ class Agents(Engine):
                 out += np.bincount(mixing.places, weights=self.counts[state.name], minlength=n_places)
         return out[mixing.places] if self._by_group else self.for_uids(out[places]) # For each group, or for the agents the rate is being worked out for, so it combines with a value by person (e.g. ss.by(patch=...))
 
+    def count_weighted(self, states, expr):
+        """ A weighted count (`(ss.by(biting=w)*I).n`, `A.n_trans`): each agent in the states counted by its weight (and infectiousness), in the same place, as `local_count()` gives it """
+        sim = self.sim
+        mixing = sim.mixing
+        people = sim.people
+        places = self.place_raw() if mixing.space is not None else None
+        n_places = sim.groups.strats[mixing.space].n if places is not None else 1
+        members = self._members
+        out = np.zeros(n_places)
+        for state in states:
+            uids = members[state.name] if members is not None and state.name in members else self.members(state)
+            if not len(uids):
+                continue
+            w = np.ones(len(uids))
+            if expr.weights is not None and state in expr.weights: # Per agent, even while the counts are advanced by group
+                with self.evaluating(uids=uids, for_uids=True, by_group=False):
+                    vals = np.asarray(self.eval(expr.weights[state]), dtype=float)
+                w = w*(vals[uids] if vals.ndim and len(vals) != len(uids) else np.broadcast_to(vals, len(uids)))
+            if expr.trans: # Infectiousness, as in exposure()
+                w = w*self.mod.rel_trans[uids]*self.mult('rel_trans', None, uids)*state.rel_trans
+            if people.scale.weighted:
+                w = w*people.scale.raw[uids]
+            out += np.bincount(places[uids], weights=w, minlength=n_places) if places is not None else w.sum()
+        out = out*self.scale
+        if places is None:
+            return float(out[0])
+        return out[mixing.places] if self._by_group else self.for_uids(out[places])
+
+    def coverage(self, expr):
+        """ A product's coverage (`itn.coverage`): the share of the agents in the same place who hold it, each by the protection they have left (or a function of the time since delivery) """
+        sim = self.sim
+        people = sim.people
+        mixing = sim.mixing
+        product = self.product_of(expr)
+        alive = np.asarray(people.alive.raw, dtype=bool)
+        held = (np.asarray(people[product.dim].raw) > 0) & alive
+        fn = expr.weight if expr.weight is not None else product.waning if callable(product.waning) else None
+        w = product.remaining(fn, held, self) if fn is not None else held*1.0
+        n = alive*1.0
+        if people.scale.weighted:
+            w, n = w*people.scale.raw, n*people.scale.raw
+        if mixing.space is None:
+            return w.sum()/max(n.sum(), 1e-12)
+        places = self.place_raw()
+        n_places = sim.groups.strats[mixing.space].n
+        auids = people.auids
+        share = np.bincount(places[auids], weights=w[auids], minlength=n_places)/np.maximum(np.bincount(places[auids], weights=n[auids], minlength=n_places), 1e-12)
+        return share[mixing.places] if self._by_group else self.for_uids(share[places])
+
     def note_counter(self, strat, what):
         """ Agents add to each person's own value, so a counter's levels need not be one apart (see `Compartmental.note_counter()`) """
         return

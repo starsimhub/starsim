@@ -165,8 +165,13 @@ class Expr:
 
     @property
     def n(self):
-        """ The number in these states, e.g. (S + I + R).n """
-        return Count(self._sum_states(), kind='n')
+        """ The number in these states, e.g. (S + I + R).n; or a weighted count, each person counted by a value of theirs, e.g. (ss.by(biting=w)*I).n (MS3) """
+        return Count(*self._sum_states(weights=True), kind='n')
+
+    @property
+    def n_trans(self):
+        """ The number in these states, each counted by their infectiousness (`rel_trans`, with the products and modifiers on it, times the state's), e.g. what people shed into an environment: shedding*A.n_trans (TY6) """
+        return Count(*self._sum_states(weights=True), kind='n', trans=True)
 
     @property
     def frac(self):
@@ -178,14 +183,18 @@ class Expr:
         """ The number in these states in the whole population: in a model with places, in every place, not only the same one as with .n """
         return Count(self._sum_states(), kind='total')
 
-    def _sum_states(self):
-        """ The states in a plain sum of states, e.g. S + I + R """
+    def _sum_states(self, weights=False):
+        """ The states in a plain sum of states, e.g. S + I + R; with `weights=True`, also a weight for each that is not 1, which may be a value per person (e.g. `ss.by(biting=w)*I + 0.5*E`): (states, weights) """
         const, terms = linear(self)
-        ok = const is None and all(is_one(coef) for coef in terms.values())
-        if not ok:
-            errormsg = f'".n" and ".frac" need a plain sum of states such as (S + I + R), not "{self}"'
+        weighted = {state:coef for state,coef in terms.items() if not is_one(coef)}
+        if const is not None or (weighted and not weights):
+            errormsg = f'".n" needs a sum of states such as (S + I + R), each with a weight per person if any (e.g. (ss.by(biting=w)*I).n), and ".frac" and ".total" a plain sum; not "{self}"'
             raise TypeError(errormsg)
-        return list(terms.keys())
+        for state,coef in weighted.items():
+            if not state.people or any(isinstance(leaf, (ss.transitions.State, Count, Clock, Flow, Stock)) for leaf in coef.leaves):
+                errormsg = f'the weight of {state.name} in "{self}.n" is {coef}; a weighted count is of people, each counted by a value of theirs (a number, an ss.by, or a property of people), not by states or counts'
+                raise TypeError(errormsg)
+        return (list(terms.keys()), weighted or None) if weights else list(terms.keys())
 
     @property
     def leaves(self):
@@ -312,11 +321,21 @@ def is_one(expr):
 
 
 class Count(Expr):
-    """ The number of people (or things) in one or more states (`I.n`), that number as a fraction of the module's people (`I.frac`), or the number in the whole population (`I.total`, which in a model with places is not only the same place) """
-    def __init__(self, states, kind='n'):
+    """
+    The number of people (or things) in one or more states (`I.n`), that number as a fraction of the module's people (`I.frac`), or the number in the whole population (`I.total`, which in a model with places is not only the same place)
+
+    A weighted count (`(ss.by(biting=w)*I).n`, MS3; `A.n_trans`, TY6) counts each person by a value of theirs: `weights` by state (a value per person, e.g. an `ss.by`), and with `trans`, their infectiousness.
+    """
+    def __init__(self, states, weights=None, kind='n', trans=False):
         self.states = states
+        self.weights = weights or None # {state: expression}, for those not counted as 1
         self.kind = kind
+        self.trans = trans
         return
+
+    @property
+    def weighted(self):
+        return self.weights is not None or self.trans
 
 
 class Stock(Expr):
@@ -524,6 +543,68 @@ class Func(Expr):
     @property
     def leaves(self):
         return [leaf for arg in self.args for leaf in arg.leaves]
+
+
+class Coverage(Expr):
+    """
+    A product's coverage, as a quantity in a rate (`itn.coverage`, MS4): the share of the people in the same place who hold it,
+    each counted by how much protection they have left (the product's `waning=`, if it is a function of time), or by a function
+    of the time since delivery: `itn.coverage(lambda t: ...)`, as `waning=` takes it (`fn(t)` or `fn(t, sim, uids)`)
+
+    In a compartmental run, the people holding it are counted at each level of holding it (see `ss.box`); a function is read
+    at the middle of each level's time, relative to the box (so a product of boxes of the same length, e.g. a bed net's usage,
+    blocking, and killing, is exact). Worked out once a step.
+
+    Args:
+        product (`ss.Product`): the product (found in the sim by its name)
+        weight (func): a function of the time since delivery, for what each holder counts as (default: the protection left)
+
+    Examples:
+        ```python
+        itn = ss.Vaccine(efficacy=dict(bite_indoor=0.6), waning=ss.box(dur=ss.years(3)), name='itn')
+        mortality = Sv >> ss.null @ 1/life + a*f_in*itn.coverage(lambda t: kill(t)) # Mosquitoes killed by nets, in proportion to the nets in use
+        ```
+    """
+    def __init__(self, product, weight=None):
+        self.product = product
+        self.weight = weight
+        return
+
+    @property
+    def name(self):
+        return f'{self.product.name}.coverage'
+
+    def __call__(self, weight):
+        """ The coverage with each holder counted by a function of the time since delivery """
+        return Coverage(self.product, weight)
+
+    def __copy__(self): return self
+    def __deepcopy__(self, memo): return self
+
+    def to_str(self, parent=False):
+        return self.name if self.weight is None else f'{self.name}({getattr(self.weight, "__name__", "weight")})'
+
+    def level_weights(self, sim):
+        """ In a compartmental run: what a person at each level of holding the product counts as (0 for none) """
+        product = self.product if getattr(self.product, 'sim', None) is sim else next(p for p in sim.products() if p.name == self.product.name)
+        b = product.box_form if product.fades else None
+        if product.fades and b is None:
+            raise ss.CapabilityError(f'{self.name} counts the people holding "{product.name}" by how much protection they have left, which fades by a function of time that only agents keep (an ss.box() has a compartmental form)')
+        if self.weight is None:
+            n = 1 + (len(b.levels()) if b is not None else 1)
+            return np.array([0.0] + [1.0]*(n - 1)) # Holding it is the protection left (the levels of a box wane as agents' protection fades)
+        if b is None:
+            raise ss.CapabilityError(f'{self.name}({getattr(self.weight, "__name__", "weight")}) counts each holder by a function of the time since delivery, which in a compartmental run needs the product to wane as an ss.box() (whose levels give the time)')
+        k = b.stages
+        times = [(i + 0.5)*b.dur/k for i in range(k)] + ([b.dur + b.decay] if b.decay is not None else [])
+        if ss.utils.n_args(self.weight) >= 2:
+            raise ss.CapabilityError(f'{self.name} counts each holder by a function of (t, sim, uids), whose uids exist only per agent; with solver="{sim.solver}", give a function of t alone')
+        unit = ss.time.get_dur_class(sim.unit_base)
+        vals = []
+        for t in times: # Each level's time, relative to the box's own waning
+            w = np.ravel(np.asarray(self.weight(unit(np.array([t.to(sim.unit_base).value]))), dtype=float))[0]
+            vals.append(w/max(float(b(t)), 1e-12))
+        return np.array([0.0] + vals)
 
 
 class Clock(Expr):
@@ -981,6 +1062,8 @@ def evaluate(expr, ctx):
         return expr.evaluate(ctx)
     elif isinstance(expr, Clock):
         return ctx.clock(expr)
+    elif isinstance(expr, Coverage):
+        return ctx.coverage(expr)
     elif isinstance(expr, attr):
         return ctx.attr(expr)
     elif isinstance(expr, mother):
@@ -1080,13 +1163,14 @@ def format_expr(expr, values=False, bare=None, mul='*', exact=False, unit=None):
         elif isinstance(e, Prop):
             return repr(e.cond)
         elif isinstance(e, Count):
-            names = [s.label_name for s in e.states]
-            inner = names[0] if len(names) == 1 else '(' + ' + '.join(names) + ')'
-            return f'{inner}.{e.kind}'
+            weights = e.weights or {}
+            names = [s.label_name if s not in weights else f'{fmt(weights[s])}{mul}{s.label_name}' for s in e.states]
+            inner = names[0] if len(names) == 1 and not weights else '(' + ' + '.join(names) + ')'
+            return f'{inner}.{e.kind}{"_trans" if e.trans else ""}'
         elif isinstance(e, Share):
             share = f'share({fmt(e.row.row)}, to={e.label})' # Its row's value at this destination, over the row's sum
             return share if e.row.scalar is None else f'{fmt(e.row.scalar)} {mul} {share}'
-        elif isinstance(e, (Clock, mother)):
+        elif isinstance(e, (Clock, mother, Coverage)):
             return e.to_str()
         return str(e.name) # A flow
     return fmt(expr)

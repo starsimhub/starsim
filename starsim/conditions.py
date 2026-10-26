@@ -149,6 +149,13 @@ class Cond:
         """ For an event: the time since it last happened to each person (infinite if never), e.g. `cytology.since >= ss.years(5)` """
         return self.memory('since')
 
+    @property
+    def uids(self):
+        """ The agents the condition holds for now, in a sim that is running or has run (agents only): e.g. `sim.interventions.screening.ever.uids`, everyone ever screened (the sim's copy of the delivery, not the one given, which the sim copies) """
+        sim = self.evaluate_in(sim_only=True)
+        auids = sim.people.auids
+        return auids[np.asarray(self.evaluate_in(), dtype=bool)[auids]]
+
     def memory(self, kind):
         if self.op != 'event' and not (isinstance(self, Event) and self.args[0] == 'tr'):
             errormsg = f'.{kind} is the memory of an event (a delivery, an outcome of one such as screening.positive, a product, a declared transition such as tb.diagnosis, or an ss.Event), not of {self!r}'
@@ -607,6 +614,14 @@ def as_cond(obj):
         return Event('tr', obj)
     elif isinstance(obj, ss.Arr):
         return from_arr(obj)
+    elif isinstance(obj, ss.expressions.Expr) and not isinstance(obj, ss.expressions.par): # A declared sum of states (infected = P + A + C): being in any of them (TY15)
+        try:
+            const, terms = ss.expressions.linear(obj)
+        except ss.errors.NonlinearExposure:
+            return obj
+        states = list(terms)
+        if const is None and states and all(isinstance(s, ss.State) and s.people and ss.expressions.is_one(c) for s,c in terms.items()):
+            return join('|', [as_cond(s) for s in states])
     return obj
 
 

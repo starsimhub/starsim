@@ -385,6 +385,10 @@ class Run:
                 if len(self.p.mov_rate):
                     fastest = jnp.maximum(fastest, jnp.max(X['mov_rate']))
                 dy0 = self.derivs(y, rates0, Xs, dt/jnp.maximum(jnp.ceil(fastest*dt/0.25), 1))[0]
+                for m in range(self.p.n_movers): # Not through people moving in from other groups, which the movers' rates allow for already (see ss.kernels.step())
+                    ent = slice(self.p.mov_starts[1, m], self.p.mov_starts[1, m+1])
+                    comps = self.p.mov_comps[self.p.mov_starts[0, m]:self.p.mov_starts[0, m+1]]
+                    dy0 = dy0.at[comps].add(-jnp.zeros((len(comps), self.ng)).at[:, self.p.mov_pair[1, ent]].add(y[comps][:, self.p.mov_pair[0, ent]]*X['mov_rate'][ent]))
                 least = 1e-9*y.sum() # Not a compartment that is only starting to fill: of everyone, not of its group (see ss.kernels.step())
                 filling = (dy0 > 0) & (y > least)
                 growing = jnp.max(jnp.where(filling, dy0/jnp.where(filling, y, 1.0), 0.0))

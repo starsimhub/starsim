@@ -960,7 +960,7 @@ class Engine:
                             if ends and d != self.strain and not any(self.applies[s.name][d] for s in ends):
                                 dim = sim.groups.strats[d].name
                                 raise ss.errors.MissingDimension(f'"{name}" uses a value by level of "{dim}" ({leaf.raw}), but {sc.strjoin(s.name for s in ends)} {"has" if len(ends) == 1 else "have"} no level of "{dim}", so there is no level to take it from.\n'
-                                                          f'     Stratify {sc.strjoin(s.name for s in ends)} by "{dim}" too, or give the value without ss.by().')
+                                                          f'     Stratify {sc.strjoin(s.name for s in ends)} by "{dim}" too, or give the value without ss.by(); for a count with each person weighted by their level (e.g. how much each infectious person is bitten), weight the states inside the count: (ss.by({dim}=...)*I).n.')
         self.init_strain_weights()
         self.note_function_reads()
         return
@@ -1112,11 +1112,28 @@ class Engine:
     def count_expr(self, expr):
         """ The value of a count in a rate (`I.n`, `I.total`, `I.frac`), with another disease's states counted by that disease """
         own, others = self.split_states(expr.states)
+        if expr.weighted: # Each person counted by a value of theirs (MS3, TY6)
+            out = self.count_weighted(own, expr) if own else 0.0
+            for name,states in others.items():
+                out = out + self.sim.get_declared(name).engine.count_weighted(states, expr)
+            return out
         method = dict(n='local_count', total='total_count', frac='local_frac')[expr.kind]
         out = getattr(self, method)(own) if own else 0.0
         for name,states in others.items():
             out = out + getattr(self.sim.get_declared(name).engine, method)(states)
         return out
+
+    def count_weighted(self, states, expr):
+        """ A weighted count (`(ss.by(biting=w)*I).n`, `A.n_trans`: see `ss.expressions.Count`), in the same place as whoever it is evaluated for; by the engines """
+        raise NotImplementedError
+
+    def product_of(self, expr):
+        """ The sim's copy of the product of a coverage (`itn.coverage`, see `ss.expressions.Coverage`) """
+        product = next((p for p in self.sim.products() if p.name == expr.product.name), None)
+        if product is None or not product.holds:
+            errormsg = f'{expr} is the coverage of "{expr.product.name}", which is not a product that people hold delivered in the sim; deliver it, e.g. ss.vaccinate({expr.product.name}, ...)'
+            raise ValueError(errormsg)
+        return product
 
     #%% Dwell times
 

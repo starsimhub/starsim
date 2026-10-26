@@ -441,7 +441,7 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
             flow.expr = None if (flow.kind in ['stage', 'conveyor'] or (flow.kind != 'contact' and tr.dur is not None)) else tr.rate
             if flow.strain and tr.const is not None: # A part of the rate with no source of infection has no strain, so is counted once, with the first
                 flow.expr = flow.expr - tr.const
-            flow.dynamic = flow.expr is not None and any(isinstance(leaf, (ss.State, ss.transitions.Count)) for leaf in flow.expr.leaves)
+            flow.dynamic = flow.expr is not None and any(isinstance(leaf, (ss.State, ss.transitions.Count, ss.expressions.Coverage)) for leaf in flow.expr.leaves)
 
         self.n_comps = len(self.comps)
         self.n_trans = len(self.tr_index)
@@ -880,6 +880,35 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
         if self.n_groups > 1:
             self.stock_groups[state.name] = self.count([state], total=False)
         return self.count([state])
+
+    def count_weighted(self, states, expr):
+        """ A weighted count (`(ss.by(biting=w)*I).n`, `A.n_trans`): the people in each state and group counted by the group's weight (and infectiousness), in the same place """
+        out = 0.0
+        for state in states:
+            n = self.count([state], total=False)
+            if expr.weights is not None and state in expr.weights:
+                n = n*np.asarray(self.eval(expr.weights[state]), dtype=float)
+            if expr.trans: # Infectiousness, as in exposure()
+                n = n*state.rel_trans*self.mult_raw('rel_trans', state=state)
+            out = out + n
+        mixing = self.sim.mixing
+        out = np.broadcast_to(out, (self.n_groups,))
+        if mixing.space is None:
+            return float(out.sum())
+        return np.bincount(mixing.places, weights=out)[mixing.places]
+
+    def coverage(self, expr):
+        """ A product's coverage (`itn.coverage`): the share of the people in the same place who hold it, by what each level of holding it counts as (see `ss.expressions.Coverage.level_weights()`) """
+        sim = self.sim
+        product = self.product_of(expr)
+        weights = expr.level_weights(sim)
+        level = sim.groups.group_coords[:, sim.groups.dim_index(product.dim)]
+        n = self.n_people(total=False)
+        num = n*weights[np.clip(level, 0, len(weights) - 1)]
+        mixing = sim.mixing
+        if mixing.space is None:
+            return float(num.sum()/max(n.sum(), 1e-12))
+        return (np.bincount(mixing.places, weights=num)/np.maximum(np.bincount(mixing.places, weights=n), 1e-12))[mixing.places]
 
     def exposure(self, state):
         """ Exposure to people in a state through the sim's mixing: the chance that a contact is with someone in that state """
@@ -1473,9 +1502,13 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
                 check(expr)
                 ops.append(kn.CONST)
                 args.append(add(pars, id(expr), expr))
-            elif isinstance(expr, ss.transitions.Count) and self.split_states(expr.states)[1]: # Another disease's states, counted by it once a step, as a function of the sim is
+            elif isinstance(expr, ss.transitions.Count) and (self.split_states(expr.states)[1] or expr.weighted): # Another disease's states, or a weighted count (MS3, TY6), counted once a step, as a function of the sim is
                 if id(expr) not in self.foreign_pars:
                     self.foreign_pars[id(expr)] = ss.par((lambda e: lambda sim: self.count_expr(e))(expr), name=f'{ss.transitions.format_expr(expr)} (counted by its disease)', literal=True)
+                return flatten(self.foreign_pars[id(expr)], strain, routes, rtr)
+            elif isinstance(expr, ss.expressions.Coverage): # A product's coverage (MS4), worked out once a step
+                if id(expr) not in self.foreign_pars:
+                    self.foreign_pars[id(expr)] = ss.par((lambda e: lambda sim: self.coverage(e))(expr), name=f'{expr} (worked out each step)', literal=True)
                 return flatten(self.foreign_pars[id(expr)], strain, routes, rtr)
             elif isinstance(expr, ss.transitions.Count):
                 ops.append(kn.COUNT if expr.kind == 'n' else kn.TOTAL if expr.kind == 'total' else kn.FRAC)
@@ -1898,6 +1931,9 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
             return f'the modifier "{stepped[0].name}" is applied each step (it has where=, when=, or a function as its amount, or changes a value that varies by person)'
         if self.net_mods: # The contacts are set once for a whole run
             return 'a modifier changes the contacts of a network'
+        weighted = next((leaf for tr in graph.transitions.values() if tr.rate is not None for leaf in tr.rate.leaves if (isinstance(leaf, ss.transitions.Count) and leaf.weighted) or isinstance(leaf, ss.expressions.Coverage)), None)
+        if weighted is not None: # Counted in Python once a step (see init_program())
+            return f'{weighted} is {"a weighted count" if isinstance(weighted, ss.transitions.Count) else "the coverage of a product"}, which is worked out at each step'
         if any(key[:2] == (mod.name, 'route') for key,mods in sim.modifiers.items() if mods): # Likewise
             return f'a modifier acts on a transmission of "{mod.name}" on one route'
         if any(key[:2] == (mod.name, 'branch') for key,mods in sim.modifiers.items() if mods): # Where arrivals go is set once for a whole run
@@ -2078,13 +2114,24 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
         sim = self.sim
         nc, ng, npts = len(self.comps), self.n_groups, self.mod.t.npts
         self.deliveries = [mod for mod in sim.interventions() if isinstance(mod, ss.Delivery) and mod.dis is self.mod and mod.tabulated]
-        K = len(self.deliveries)
+        rows = [] # Each delivery, and for routine delivery that records who has been offered it, the new spells of being eligible before it (and after a transfer), each as a delivery that reaches nobody: see CompartmentalDelivery.respell()
+        self.shift_of = [] # The row of each delivery, whose tally is its results
+        for mod in self.deliveries:
+            due, sel_k, cov_k, to, rest, land = mod.compartments.shifts()
+            respell = mod.compartments.respell()
+            if respell is not None:
+                rows.append((due, respell[0], np.zeros_like(respell[0]), np.arange(ng), respell[1], np.zeros_like(land)))
+            self.shift_of.append(len(rows))
+            rows.append((due, sel_k, cov_k, to, rest, land))
+            if respell is not None and mod.product is None and mod.changes: # A transfer ends the spell of those it moves
+                rows.append(rows[-2])
+        K = len(rows)
         due = np.zeros((K, npts), dtype=np.bool_)
         sel, cov = np.zeros((K, nc, ng)), np.zeros((K, nc, ng))
         to, rest = np.zeros((K, ng), dtype=np.int64), np.zeros((K, ng), dtype=np.int64)
         land = np.zeros((K, nc, ng))
-        for k,mod in enumerate(self.deliveries):
-            due[k], sel_k, cov_k, to[k], rest[k], land[k] = mod.compartments.shifts()
+        for k,(due_k, sel_k, cov_k, to_k, rest_k, land_k) in enumerate(rows):
+            due[k], to[k], rest[k], land[k] = due_k, to_k, rest_k, land_k
             for s,name in enumerate(self.selector.states):
                 for comp in self.state_comps[name]:
                     sel[k, comp], cov[k, comp] = sel_k[s], cov_k[s]
@@ -2104,7 +2151,7 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
         elif use_jax and self.sim.solver in ['binomial', 'tau']: # The chain binomial or tau-leaping in JAX: see ss.perflib._chain
             *out, tally = importlib.import_module('starsim.perflib._chain').run(self)
             for k,mod in enumerate(self.deliveries):
-                mod.compartments.store_shifts(tally[:, k])
+                mod.compartments.store_shifts(tally[:, self.shift_of[k]])
         elif use_jax:
             out = ss.gradients.run(self)
         elif self.rows is not None: # The results by group are kept every few steps, so the run is taken a part at a time, and only those are kept
@@ -2115,7 +2162,7 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
             tally = np.zeros((self.mod.t.npts, len(self.shifts.to), 2, self.n_groups))
             out = self.kernels().run(self.make_rng(stream=1), *args, *tables, self.register, self.shifts, tally, self.per_step(), 0)
             for k,mod in enumerate(self.deliveries):
-                mod.compartments.store_shifts(tally[:, k])
+                mod.compartments.store_shifts(tally[:, self.shift_of[k]])
         self.y, stocks, flows, short = out
         flows = self.count_deaths(flows)
         if tally is None and getattr(self, 'deliveries', None): # The ODE taken in JAX: the deliveries' results, from the compartments at each time point they happened at
@@ -2201,7 +2248,7 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
             short += more
             last = end == npts - 1
             for k,mod in enumerate(self.deliveries):
-                mod.compartments.store_shifts(tally[:, k] if start == 0 else tally[1:, k], start=0 if start == 0 else start + 1, done=last) # The first row is the end of the part before
+                mod.compartments.store_shifts(tally[:, self.shift_of[k]] if start == 0 else tally[1:, self.shift_of[k]], start=0 if start == 0 else start + 1, done=last) # The first row is the end of the part before
             yield (start, stocks, flows) if start == 0 else (start + 1, stocks[1:], flows[1:])
             start = end
         self.y = y
@@ -2293,7 +2340,7 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
             if ti < len(stocks) - 1: # No step follows the last time point
                 self.kernels().apply_shifts(self.rng, np.array(stocks[ti]), sh, ti, False, tally[ti+1]) # Expected numbers, so nothing is drawn; at the time point of the step from ti, its end
         for k,mod in enumerate(self.deliveries):
-            mod.compartments.store_shifts(tally[:, k])
+            mod.compartments.store_shifts(tally[:, self.shift_of[k]])
         return
 
     def run_many(self, seeds):
@@ -2322,7 +2369,7 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
         kept_s, kept_f = self.group_needs() # The states and flows to keep by group
         rows = group_ti = None
         if ng > 1 and (kept_s or kept_f or self.deliveries):
-            row_bytes = len(seeds)*(len(kept_s) + len(kept_f) + 2*len(self.deliveries))*ng*8
+            row_bytes = len(seeds)*(len(kept_s) + len(kept_f) + 2*len(self.shifts.to))*ng*8
             rows, group_ti = ss.solvers.group_rows(self.sim, npts, row_bytes, self.max_bytes, name=self.mod.name)
             rows = np.arange(npts) if rows is None else rows
         grp_state, grp_flow = np.full(len(states), -1), np.full(n_flows, -1)
@@ -2339,7 +2386,7 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
         else:
             run_many_parts(self, rngs, ys, args, self.per_step(), ng, (stocks, flows, stocks_g, flows_g, tally, tally_g), state_of, rows, grp_state, grp_flow)
         out = self.collect(stocks, flows, grouped=None if rows is None else (stocks_g, flows_g, kept_s, kept_f, group_ti), seeds=seeds)
-        out.deliveries = sc.objdict({mod.name:mod.compartments.many_shifts(tally[:, :, k], None if rows is None else tally_g[:, :, k], group_ti) for k,mod in enumerate(self.deliveries)})
+        out.deliveries = sc.objdict({mod.name:mod.compartments.many_shifts(tally[:, :, self.shift_of[k]], None if rows is None else tally_g[:, :, self.shift_of[k]], group_ti) for k,mod in enumerate(self.deliveries)})
         return out
 
     def collect(self, stocks, flows, expected=False, grouped=None, seeds=None):
