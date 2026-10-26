@@ -123,6 +123,7 @@ class Graph(Presentation):
         self._declared = [] # States that were passed in directly
         self._keywords = dict() # Values given as keywords, e.g. ss.Disease(..., beta=0.3)
         unnamed = sc.autolist()
+        given = {name for name,_ in named if name is not None}
         for name,obj in named:
             if isinstance(obj, FlowSum): # A sum or a share of flows, e.g. recovery + death or 0.5 * infection, is an outcome
                 obj = outcome(obj)
@@ -139,7 +140,7 @@ class Graph(Presentation):
             if isinstance(obj, State) and None not in (name, obj.name) and name != obj.name: # A named state under another name, e.g. n_infected = I, is a result: the number in the state
                 self.add(self.exprs, name, ss.expressions.as_stocks(obj))
                 continue
-            if isinstance(obj, par) and name is not None and obj.name not in (None, name) and any(p is obj for p in self.pars.values()): # Another name for a parameter already declared, e.g. A = saturation_age in a class body: the same parameter, not a second one
+            if isinstance(obj, par) and name is not None and obj.name not in (None, name) and (any(p is obj for p in self.pars.values()) or obj.name in given): # Another name for a parameter declared under its own name (which a keyword may give a value), e.g. A = saturation_age in a class body: the same parameter, not a second one
                 continue
             if isinstance(obj, (Transition, outcome, par, State)):
                 if name is not None:

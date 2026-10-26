@@ -123,6 +123,18 @@ class Sim(ss.Base):
                     self._made_pars = self._module_pars()
                 return
             cls.__init__ = ft.wraps(init)(__init__)
+        sim_init = cls.__dict__.get('init')
+        if sim_init is not None: # A subclass whose init() builds modules of its own before Sim.init() (as STIsim's does): those made by init() are not added after the sim was made either
+            def wrapped_init(self, *args, **kw):
+                if self.__dict__.get('_in_init'):
+                    return sim_init(self, *args, **kw)
+                self.modules_after() # Noted before the subclass's init() runs
+                self._in_init = True
+                try:
+                    return sim_init(self, *args, **kw)
+                finally:
+                    self._in_init = False
+            cls.init = ft.wraps(sim_init)(wrapped_init)
         return
 
     def __new__(cls, *args, **kwargs):
@@ -250,7 +262,7 @@ class Sim(ss.Base):
     def modules_after(self):
         """ The modules added after the sim was made and before it was initialized (e.g. `sim.pars.analyzers += my_analyzer`), by kind, which `sim.new()` keeps (copies) """
         made = self.__dict__.get('_made_pars')
-        if made is not None and not self.initialized:
+        if made is not None and not self.initialized and not self.__dict__.get('_in_init'):
             ids = {id(mod) for mod,_ in made.values()}
             for key in ss.modules.module_types() + ['custom', 'modules']:
                 val = self.pars.get(key)

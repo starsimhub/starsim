@@ -156,6 +156,21 @@ def test_fit_inputs(tmp_path):
     return fit
 
 
+def test_new_subclass_init():
+    """ A sim subclass whose init() builds modules from its inputs (as STIsim's does): sim.new() makes it again from the inputs, not with those modules added """
+    class MySim(ss.Sim):
+        def init(self, **kwargs):
+            if not self.pars.diseases:
+                self.pars.diseases = [ss.SIS()] # Built by init(), as STIsim builds its diseases from their names
+            return super().init(**kwargs)
+    sim = MySim(n_agents=200, dur=10, verbose=0)
+    sim.pars.analyzers = [ss.infection_log()] # Added after the sim was made, so kept
+    sim.init()
+    new = sim.new().init()
+    assert list(new.diseases.keys()) == ['sis'] and list(new.analyzers.keys()) == ['infection_log']
+    return new
+
+
 @sc.timer()
 def test_fit_what_is_not_a_parameter():
     sc.heading('Testing fitting a value set in code, values in a dict parameter, a modifier\'s amount, and data from an analyzer added after the sim was made')

@@ -1460,6 +1460,8 @@ def test_class_helpers():
     res, pars = sim.results.t, sim.diseases.t.pars
     assert 'prevalence' in res and not any(k in res for k in ['p_carrier', 'rel'])
     assert 'A' in pars and 'A2' not in pars
+    t = ss.Sim(diseases=T(A=30.0, init_prev=0.1), n_agents=100, dur=ss.days(3), dt=ss.days(1), verbose=0).init().diseases.t # A value given to a parameter that has another name in the class (Typhoid's A = unexp2sus_saturation_age)
+    assert t.value('A') == 30 and 'A2' not in t.pars
     eir = ss.par(ss.perday(0.01), name='eir')
     S, I = ss.states('S I')
     with pytest.raises(ss.errors.DuplicateDeclaration, match='a name of its own'):
