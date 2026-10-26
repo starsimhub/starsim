@@ -179,3 +179,55 @@ print('Seeded:', round(sim.results.seeding.delivered.sum()))
 ## Bringing your model in
 
 There is no importer for LASER models, since a LASER model is Python code with components rather than a model file. The import-model skill for AI assistants (`skills/import-model/references/laser.md` in the Starsim repository) maps each LASER component to its Starsim form.
+
+## Reusing LASER's own code
+
+A LASER model can also be run inside Starsim as it is, keeping LASER's arrays and calling its compiled kernels from a module written as code, as [Tutorial G8](../tutorials/g8_extending.qmd) does for a model with code of its own. Starsim then gives the loop, the timeline, the results, and the rest of the sim (interventions, analyzers, other diseases). The kernels run at LASER's own speed: the hub-and-spoke SEIR above ran within 2 to 6% of LASER at every thread count (measured 2026-10-25).
+
+This code is not run when the docs are built, since it needs LASER installed:
+
+```python
+import numpy as np
+import numba as nb
+import starsim as ss
+from laser.core.distributions import normal
+from laser.generic import components as lc
+from laser.generic.shared import State
+
+S, E, I, R = [s.value for s in (State.SUSCEPTIBLE, State.EXPOSED, State.INFECTIOUS, State.RECOVERED)]
+
+class LaserSEIR(ss.Module):
+    """ LASER's SEIR components as one Starsim module: LASER's arrays and kernels, stepped once a day by Starsim """
+    def __init__(self, pop, network, beta=2/14, **kwargs):
+        super().__init__(name='laser_seir', **kwargs)
+        self.pop, self.network, self.beta = pop, network, beta
+        self.expdur = normal(loc=7.0, scale=1.0) # LASER's own distributions
+        self.infdur = normal(loc=14.0, scale=2.0)
+
+    def init_post(self):
+        super().init_post()
+        n = self.pop.sum()
+        self.state = np.full(n, S, dtype=np.int8) # One value a person, as LASER keeps them
+        self.etimer = np.zeros(n, dtype=np.uint16)
+        self.itimer = np.zeros(n, dtype=np.uint16)
+        self.nodeid = np.repeat(np.arange(len(self.pop), dtype=np.uint16), self.pop)
+        ... # Seed some infections, and set up the counts by place (self.counts)
+
+    def step(self):
+        tick = self.ti - 1 # Starsim's first step is ti=1; LASER's first tick is 0
+        moved = lambda: np.zeros((nb.get_num_threads(), len(self.pop)), dtype=np.int32) # The moves by thread and place, which update the counts
+        lc.nb_timer_update(self.state, I, self.itimer, R, moved(), self.nodeid) # Recoveries
+        lc.nb_timer_update_timer_set(self.state, E, self.etimer, I, self.itimer, moved(), self.nodeid, self.infdur, 1, tick) # Onsets
+        ft = ... # The force of infection by place, from the counts and self.network, as LASER works it out
+        lc.TransmissionSE.nb_transmission_step(self.state, self.nodeid, ft, moved(), self.etimer, self.expdur, 1, tick) # Infections
+
+sim = ss.Sim(modules=LaserSEIR(pop, network), unit='day', start=0, stop=365)
+```
+
+What to know:
+
+- LASER's arrays are its own (an `int8` state and `uint16` timers, one value a person), so the kernels act on arrays the module keeps, not on a declared disease's states. Kept as Starsim states of `sim.people` instead (`ss.Arr`, passing `.raw`), the run was 24 to 37% slower, from the people's own work each step.
+- LASER draws from Numba's own generator, one stream a thread, so a run is reproducible only at the same number of threads, and its draws don't share Starsim's common random numbers.
+- Importing `laser.generic` also imports its geography packages (geopandas, pyproj, shapely), even when only the kernels are used.
+- Starsim's first step is `ti = 1` (from time point 0 to 1), while LASER's first tick is 0: getting this wrong gives no epidemic, silently.
+

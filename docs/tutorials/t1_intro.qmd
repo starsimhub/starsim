@@ -77,11 +77,6 @@ sim.describe()
 
 It is worth reading `describe()` for every new model, to check that it is the model you meant. `describe(verbose=True)` adds how the model is run (as compiled code or as agents) and what each rate is per step.
 
-::: {.callout-warning}
-## [PROPOSAL]
-Two words of `describe()` are ones a modeler may not know: "contact-mediated" (a transmission) and "dwell" (the time spent in a state). They could be in plain terms, e.g. "transmission, from I" and "time in I ~ exponential(mean = 8 days)" (P14).
-:::
-
 ## The same model as agents
 
 Starsim can also run the same model as agents: one simulated person at a time, each with their own state, who are infected and recover by chance. Giving `n_agents=` says how many agents to simulate. Here, 10,000 agents stand for the 100,000 people of the town, so each agent stands for 10 people:

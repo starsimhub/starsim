@@ -295,7 +295,7 @@ Modifiers made with `ss.modify` are always listed, because they are declared; di
 Every module implements `describe()`, and `sim.describe()` covers the whole sim. For a model it prints:
 
 1. every state, with its properties, and which states are counts and not people;
-2. every transition, with its name, its kind, and its rate or dwell-time distribution as resolved (`dwell ~ exponential(mean = 10 days)`, not `dur=10`; a distribution as it was given, `erlang(k=4, mean=8 days)`, not by its internal parameters), its source of infection where there is one, and its rate with bare states expanded (`0.3 × I.n / N` under homogeneous mixing);
+2. every transition, with its name, its kind, and its rate or dwell-time distribution as resolved (`time in I ~ exponential(mean = 10 days)`, not `dur=10`; a distribution as it was given, `erlang(k=4, mean=8 days)`, not by its internal parameters), its source of infection where there is one, and its rate with bare states expanded (`0.3 × I.n / N` under homogeneous mixing);
 3. every parameter that is documented or can be fitted, with its value and its bounds (`beta = 1.9 per day, between 1 and 3`); there is no separate table of parameters;
 4. every outcome, with its definition (`cases   outcome: 0.5 × onset, after 4 days (exponential)`);
 5. every stratification, with its levels, the share of people in each (`split: 0-14 0.3, 15-64 0.6, 65+ 0.1`), and its adjustments (`adjust: rel_sus × 1, 0.03`);
@@ -324,11 +324,11 @@ Disease 'sir': 3 states, 2 transitions
                I infectious
                init: init_prev = 0.01; the rest in S
 
-  infection    S -> I   contact-mediated, source I
+  infection    S -> I   transmission, from I
                beta = 0.3 per step
                rate = 0.3 × I.n / N                            [homogeneous mixing]
   recovery     I -> R   spontaneous
-               dwell ~ exponential(mean = 10 steps)            [guessed: scalar duration]
+               time in I ~ exponential(mean = 10 steps)          [guessed: scalar duration]
 
 Mixing and interventions
   mixing       homogeneous, 1 contact per step                 [guessed: no network given]

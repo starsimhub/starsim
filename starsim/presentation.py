@@ -344,7 +344,7 @@ class Presentation:
                 weight = lambda coef: format_expr(coef.b) + ' ' if isinstance(coef, BinOp) and coef.op == '*' and coef.a is leaf else '' # A weight on a source (beta * (I + 0.5*A))
                 source = ' + '.join(f'{weight(coef)}{s.name}' for s,coef in tr.terms.items())
                 guess = f'name {tr.guessed["name"]}' if 'name' in tr.guessed else None
-                add(name, f'{tr.arrow}   contact-mediated, source {source}', f'guessed: {guess}' if guess else None)
+                add(name, f'{tr.arrow}   transmission, from {source}', f'guessed: {guess}' if guess else None)
                 flow_line(tr)
                 for leaf in tr.rate.leaves:
                     if isinstance(leaf, par) and not leaf.literal:
@@ -386,19 +386,20 @@ class Presentation:
                     scaled = ss.transitions.scaled_dist(raw) if tr.dur is not None and isinstance(raw, ss.transitions.Expr) else None # A distribution times a factor, each draw scaled (see Engine.init_dwells())
                     if scaled is not None:
                         raw = scaled[0].raw
+                    within = f'time in {" | ".join(s.name for s in tr.src)} ~' # The time people spend in the state before leaving this way
                     if isinstance(raw, ss.Dist):
-                        text = f'dwell ~ {dist_str(raw, unit)}' +(f' × {format_expr(scaled[1], values="number", unit=unit, mul="×")}' if scaled is not None else '')
+                        text = f'{within} {dist_str(raw, unit)}' +(f' × {format_expr(scaled[1], values="number", unit=unit, mul="×")}' if scaled is not None else '')
                         if dw is not None and dw.fixed:
                             text += ', a fixed delay'
                         elif dw is not None and not dw.exact:
                             text += f', as {dw.k} Erlang stages'
                             stages = None if tr.stages else 'guessed: stages from the mean and standard deviation'
                     elif tr.dur is None:
-                        text = f'dwell ~ exponential(rate = {quantity_str(raw, "rate", unit)})'
+                        text = f'{within} exponential(rate = {quantity_str(raw, "rate", unit)})'
                     else:
-                        text = f'dwell ~ exponential(mean = {quantity_str(raw, "dur", unit)})'
+                        text = f'{within} exponential(mean = {quantity_str(raw, "dur", unit)})'
                         if tr.stages:
-                            text = f'dwell ~ Erlang({tr.stages} stages, mean = {quantity_str(raw, "dur", unit)})'
+                            text = f'{within} Erlang({tr.stages} stages, mean = {quantity_str(raw, "dur", unit)})'
                     add('', text, 'guessed: scalar duration' if not isinstance(raw, ss.Dist) and tr.dur is not None and not tr.stages else stages)
                 elif tr.rate is not None:
                     add('', f'rate = {format_expr(tr.rate, values="number", unit=unit, mul="×")}')
@@ -435,7 +436,7 @@ class Presentation:
             add(name, text)
         if self.transmissions and getattr(sim, 'solver', 'abm') in ['abm', 'binomial']: # The timing contract of spec 02, where modelers look (CV5, ST4), for the solvers that take whole steps
             add('timing', 'an infection is dated at the end of its step, so what follows it starts then')
-            add('', 'a state\'s count (the result X) includes the step people enter it; they stay for their whole dwell')
+            add('', 'a state\'s count (the result X) includes the step people enter it; they stay for the whole time drawn for them')
         fitted = [p for p in self.all_pars() if p.bounds is not None and id(p) not in shown] # The other parameters that can be fitted, e.g. a share of an outcome
         for i,p in enumerate(fitted):
             add('' if i else 'fitted', par_str(p, p.slot if p.slot in ['rate', 'dur'] else None, unit), midpoint_guess(p))
@@ -1209,7 +1210,7 @@ class TransitionTable(sc.objdict):
         for name,tr in self.items():
             src = ' | '.join(s.name for s in tr.src) or '(outside)'
             dst = ' | '.join(s.name for s in tr.dst) or '(outside)'
-            kind = f'contact-mediated, source {" + ".join(s.name for s in tr.terms)}' if tr.contact else 'spontaneous'
+            kind = f'transmission, from {" + ".join(s.name for s in tr.terms)}' if tr.contact else 'spontaneous'
             rows.append([name, src, dst, tr.driver_str, kind])
         widths = [max(len(row[i]) for row in rows) + 2 for i in range(5)]
         out = '\n'.join(''.join(cell.ljust(w) for cell,w in zip(row, widths)).rstrip() for row in rows)

@@ -239,7 +239,7 @@ So write the bare state when people catch the infection from people, and `.n` wh
 The model text is the same in both cases. Exposure through a bare state is always frequency-dependent (a share of contacts); density dependence is written with the count, `beta * I.n`, which is what the importers write for a rate such as `beta * S * I`, and a rate per person that grows with a count of people is noted as density-dependent, since `I.frac` is often what was meant. `describe()` prints every rate with its bare states expanded, including the denominator, so what a rate resolved to can always be checked:
 
 ```text
-infection    S -> I   contact-mediated, source I
+infection    S -> I   transmission, from I
              rate = 0.3 × I.n / N                            [homogeneous mixing]
 ```
 
@@ -255,7 +255,7 @@ Most other frameworks write a rate as the whole flow, as in the equation `dI/dt 
 Each pair is the same model, with the same results and model spec. Any transition can be written either way (`I >> R @ gamma * I` is `I >> R @ gamma`). `describe()` says when a rate was written as the whole flow, and what it is per person:
 
 ```text
-infection    S -> I   contact-mediated, source I
+infection    S -> I   transmission, from I
              written as the whole flow, beta × S × I / (S + I + R), so per person in S: beta × I
 ```
 
@@ -290,7 +290,7 @@ This is how environmental and vector-borne transmission are written. There is no
 A scalar duration means an exponentially distributed dwell time with that mean, not "exactly 10 days". That is what every ODE means; here `describe()` prints it:
 
 ```text
-recovery   I -> R   dwell ~ exponential(mean = 10 days)     [guessed: scalar duration]
+recovery   I -> R   time in I ~ exponential(mean = 10 days) [guessed: scalar duration]
 ```
 
 Any `ss.Dist` of durations is accepted:
@@ -658,7 +658,7 @@ It writes the equations the model has under homogeneous mixing or the mixing it 
 ```text
 >>> sir.transitions
 name        from  to   driven by          kind
-infection   S     I    beta * I           contact-mediated, source I
+infection   S     I    beta * I           transmission, from I
 recovery    I     R    dur = 10 days      spontaneous
 
       S    I            R

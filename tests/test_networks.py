@@ -614,7 +614,7 @@ def test_peract_spec():
         return ss.Sim(syph, networks=ss.SexualNet(), interventions=condoms, n_agents=500, start=2000, stop=2002, verbose=0)
     sim = make(ss.peract(m2f=0.3, f2m=0.15)).init()
     text = sim.diseases.syph.describe(output=True)
-    for line in ['source P + 0.55 EL', 'beta on sexualnet: per act, m2f 0.3, f2m 0.15', "sexualnet's sides m and f", '"condoms"']:
+    for line in ['from P + 0.55 EL', 'beta on sexualnet: per act, m2f 0.3, f2m 0.15', "sexualnet's sides m and f", '"condoms"']:
         assert line in text, line
     for beta, value in [(ss.peract(m2f=0.3, f2m=0.15), dict(type='peract', m2f=0.3, f2m=0.15)), (0.01, dict(type='peract', value=0.01))]:
         sim = make(beta)

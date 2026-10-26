@@ -606,7 +606,7 @@ def test_describe():
         assert string in text, f'Expected "{string}" in describe()'
     table = repr(sir.transitions)
     print(table)
-    assert 'contact-mediated, source I' in table
+    assert 'transmission, from I' in table
     spec = sim.to_spec()
     assert spec['modules'][0]['transitions'][0]['rate'] == 'beta * I'
 

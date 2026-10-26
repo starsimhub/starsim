@@ -54,7 +54,7 @@ def unnamed(named):
 
 # Each row of the "what is guessed" table in 03-states-and-transitions.md: a sim that makes the guess, one that does not, and what describe() says
 guesses = dict(
-    dwell      = (lambda: ss.Sim(plain_sir()),                      lambda: ss.Sim(declared_sir()),                       'dwell ~'),
+    dwell      = (lambda: ss.Sim(plain_sir()),                      lambda: ss.Sim(declared_sir()),                       'time in I ~'),
     stages     = (lambda: ss.Sim(lognormal(None), solver='ode'),     lambda: ss.Sim(lognormal(4), solver='ode'),           'stages'),
     unit       = (lambda: ss.Sim(plain_sir()),                      lambda: ss.Sim(plain_sir(), unit='day'),             'unit'),
     mixing     = (lambda: ss.Sim(plain_sir()),                      lambda: ss.Sim(plain_sir(), networks=ss.RandomNet(), n_agents=1000), 'mixing'),

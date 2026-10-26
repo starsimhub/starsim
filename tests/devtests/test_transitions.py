@@ -1210,7 +1210,7 @@ def test_source_weights():
     for beta, net, solver in [(ss.peryear(0.5), ss.MixingPool(n_contacts=4), 'ode'), (ss.peryear(0.5), ss.MixingPool(n_contacts=4), 'abm'), (dict(sexualnet=ss.peract(m2f=0.05, f2m=0.03)), ss.SexualNet(), 'abm')]: # A dict or ss.peract times a weighted sum (a TypeError before)
         res = [ss.Sim(make(form, beta), networks=net, n_agents=3000, total_pop=3000, start=2000, stop=2010, dt=ss.months(1), solver=solver, verbose=0).run().results.syph.P.values for form in ['dict', 'op']]
         assert np.array_equal(res[0], res[1]) and res[0][-1] > 0, f'{solver}: {res[0][-1]} against {res[1][-1]}'
-    assert 'source P + 0.55 EL' in make('dict', 0.3).describe(output=True)
+    assert 'from P + 0.55 EL' in make('dict', 0.3).describe(output=True)
     return
 
 
