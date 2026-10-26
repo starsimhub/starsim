@@ -1142,6 +1142,26 @@ def test_contacts_ages():
     return
 
 
+
+def test_by_place_times_local_count():
+    """ A value by place times a count in the same place (a vector's bites per person), as agents and as an ODE, and 'patch' in people """
+    out = {}
+    for solver in ['abm', 'ode']:
+        S, I = ss.states('S I')
+        V = ss.State(people=False)
+        f = ss.par(ss.by(patch=[0.2, 0.8]), name='f')
+        sis = ss.Disease(infection=ss.Transition(S, I, rate=f*ss.perday(0.1)*V.n/(S + I).n, acquisition=True), recovery=I >> S @ ss.days(20),
+                         hatch=ss.null >> V @ ss.perday(1)*(S + I).n, death=V >> ss.null @ ss.days(1), init=dict(I=0.0, V=ss.by(patch=[500, 500])), name='sis')
+        sis.stratify(patch=['a', 'b'], kind='space')
+        pop = dict(n_agents=1000) if solver == 'abm' else dict(total_pop=1000)
+        sim = ss.Sim(sis, solver=solver, unit='day', stop=60, verbose=0, **pop).run()
+        out[solver] = sim.results.sis.I.by('patch')[-1]
+        if solver == 'abm':
+            assert 'patch' in sim.people and 'nonexistent' not in sim.people
+    for solver, inf in out.items():
+        assert inf[1] > 2*inf[0], f'[{solver}] Expected about four times the infections where f is four times as high: {inf}'
+    return out
+
 if __name__ == '__main__':
     mixing  = test_mixing()
     states  = test_states()
@@ -1161,3 +1181,4 @@ if __name__ == '__main__':
     clocks  = test_clocks()
     rows    = test_rows()
     cdims   = test_contacts_dims()
+    place_counts = test_by_place_times_local_count()

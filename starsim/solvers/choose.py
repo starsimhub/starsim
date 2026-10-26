@@ -448,6 +448,10 @@ def set_par_values(sim):
         if not mods: # A parameter of a module written as code: one given with bounds (e.g. when fitting it), else any
             mods = [mod for mod in coded if name in mod.pars.bounded() and modname in ['', mod.name]]
             mods = mods or [mod for mod in coded if name in mod.pars and modname in ['', mod.name]]
+            if len(mods) > 1 and all(mod.pars.bounded().get(name) is mods[0].pars.bounded().get(name) is not None for mod in mods): # One ss.par shared by several modules (e.g. a beta for every genotype): set in each
+                for mod in mods:
+                    mod.pars.update({name:val})
+                continue
         if len(mods) != 1:
             options = [f'{mod.name}.{k}' for mod in sim.declared for k in mod.graph.pars] + [f'{mod.name}.{k}' for mod in coded for k in mod.pars.bounded()]
             raise ss.errors.UnknownParameter(f'pars= has a value for "{key}", which {"matches no parameter" if not mods else "is a parameter of more than one module"}. '

@@ -515,7 +515,7 @@ class Agents(Engine):
         init_prev = self.graph.init_prev
         if isinstance(init_prev, ss.transitions.par):
             init_prev = init_prev.raw
-        trs = self.graph.transmissions
+        trs = self.seed_transmissions() # With no transmission, the acquisition (e.g. the onset of a condition that is not transmitted)
         if not len(trs):
             return None
         elif isinstance(init_prev, ss.choose_n): # With several destinations, a number of people shared between them as a fraction is
@@ -897,7 +897,7 @@ class Agents(Engine):
                 out += placed*self.scale
             else:
                 out += np.bincount(mixing.places, weights=self.counts[state.name], minlength=n_places)
-        return out[mixing.places] if self._by_group else out[places]
+        return out[mixing.places] if self._by_group else self.for_uids(out[places]) # For each group, or for the agents the rate is being worked out for, so it combines with a value by person (e.g. ss.by(patch=...))
 
     def note_counter(self, strat, what):
         """ Agents add to each person's own value, so a counter's levels need not be one apart (see `Compartmental.note_counter()`) """
@@ -3232,6 +3232,10 @@ class Agents(Engine):
             return coefs, None
         shape = np.broadcast_shapes(*[a.shape for a in arrays])
         target = np.max([np.broadcast_to(np.asarray(c, dtype=float), shape) for c in coefs.values()], axis=0) # Above 0 wherever any coefficient is, so none is lost where another is 0
+        if target.ndim == 1 and len(target) == len(self.mod.rel_sus.raw): # By UID: the slots of no agent (room for births to come) hold no value (NaN), and count for nothing
+            active = np.zeros(len(target), dtype=bool)
+            active[self.sim.people.auids] = True
+            target = np.where(active, target, 0.0)
         top = target.max()
         on = target > 0
         weights = {}

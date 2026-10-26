@@ -157,6 +157,23 @@ def test_burnin():
     return out
 
 
+def test_attr_in_rate_with_births():
+    """ A transmission whose rate reads an attribute keeps going once births grow the arrays (their spare room holds no value) """
+    class SIS(ss.Disease):
+        S = ss.State()
+        I = ss.State()
+        n_inf = ss.attr(1, on=I.enter, combine='sum')
+        infection = S >> I @ 0.5**n_inf*ss.perday(0.5)*I
+        recovery = I >> S @ ss.perday(0.1)
+
+    out = []
+    for dem in [None, ss.Births(birth_rate=ss.peryear(20))]:
+        sim = ss.Sim(start=2000, dur=ss.days(10), dt=ss.days(1), n_agents=5_000, networks=ss.RandomNet(n_contacts=5), diseases=SIS(init_prev=0.01), demographics=dem, rand_seed=2, **kw).run()
+        out.append(sim.results.sis.infection.values)
+    assert out[1][3:].sum() > 0.5*out[0][3:].sum() # Not stopped after the first growth
+    return
+
+
 if __name__ == '__main__':
     sc.options(interactive=False)
     test_hiv_cd4()

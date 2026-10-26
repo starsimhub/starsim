@@ -699,7 +699,7 @@ def pmmh(logpost, z0, draws=1000, warmup=1000, chains=4, particles=None, seed=No
             print('Particle MCMC: running the chains one after another, since JAX has been started in this process')
     if parallel and chains > 1:
         with ss.kernels.one_blas_thread():
-            results = sc.parallelize(functools.partial(ss.kernels.one_thread, one_chain), iterarg=list(seeds), start_method=ss.kernels.start_method())
+            results = sc.parallelize(ss.kernels.worker(one_chain), iterarg=list(seeds), start_method=ss.kernels.start_method())
     else:
         results = [one_chain(chain_seed) for chain_seed in seeds]
     out, logdens, accepted, n = [np.array(v) for v in zip(*results)]
@@ -1339,6 +1339,8 @@ def bounded_pars(probe, pars=None, unused=()):
     for mod in list(probe.modules) + mixed: # A parameter of a module written as code, given as ss.par with bounds, e.g. ssl.HIV(beta=ss.par(0.01, bounds=[0.001, 0.1])); see ss.Pars.bounded()
         if getattr(mod, 'graph', None) is None and isinstance(mod.pars, ss.Pars):
             for name,p in mod.pars.bounded().items():
+                if any(p is q for q in fitted.values()): # One ss.par shared by several modules (e.g. a beta for every genotype) is fitted once
+                    continue
                 if p.bounds is not None and (pars is None or name in pars or f'{mod.name}.{name}' in pars):
                     taken = name in fitted or any(name in m.pars for m in probe.declared)
                     fitted[f'{mod.name}.{name}' if taken else name] = p
@@ -2062,7 +2064,7 @@ def fit_optuna(problem, trials=None, n_trials=100, scan=None, n_workers=None, st
     if remaining > 0 and n_workers > 1:
         shares = [len(part) for part in np.array_split(np.arange(remaining), n_workers)]
         with ss.kernels.one_blas_thread(): # The workers share the cores, so each takes one thread, as in ss.parallel()
-            sc.parallelize(functools.partial(ss.kernels.one_thread, optuna_worker), iterarg=list(enumerate(shares)), kwargs=dict(problem=p, storage=storage, kwargs=kwargs), ncpus=n_workers, start_method=ss.kernels.start_method())
+            sc.parallelize(ss.kernels.worker(optuna_worker), iterarg=list(enumerate(shares)), kwargs=dict(problem=p, storage=storage, kwargs=kwargs), ncpus=n_workers, start_method=ss.kernels.start_method())
         study = optuna_study(p, storage)
     elif remaining > 0:
         study.optimize(functools.partial(optuna_trial, p), n_trials=remaining, **kwargs)

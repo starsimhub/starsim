@@ -395,7 +395,7 @@ class Delivery(ss.products.EventSource, Intervention):
     Note: CRN safe as agents.
 
     Args:
-        what (`ss.Product`): what is delivered: an `ss.Vaccine`, `ss.Diagnostic`, or `ss.Treatment` (also the first argument); `ss.vaccinate()`, `ss.screen()`, and `ss.treat()` instead take the product's own keywords and make it, e.g. `ss.vaccinate(efficacy=0.9, ...)`
+        what (`ss.Product`): what is delivered: an `ss.Vaccine`, `ss.Diagnostic`, or `ss.Treatment`, or a product written as code (an `ss.Product` with an `administer()`), which any of them can give (also the first argument); `ss.vaccinate()`, `ss.screen()`, and `ss.treat()` instead take the product's own keywords and make it, e.g. `ss.vaccinate(efficacy=0.9, ...)`
         who (Cond/event/list): who receives it: a condition (e.g. `ss.ppl.age < 5`), an event (e.g. `sir.infection`, `screening.positive`,
             or a delivery), or a combination with `&` and `|` (an event `|` a condition raises, being neither triggered nor routine);
             or a list, joined by `operator=`; or a function of the sim
@@ -483,8 +483,9 @@ class Delivery(ss.products.EventSource, Intervention):
             self.move_states = ([st.name for st in src], dst[0].name)
             self.move_module = getattr(dst[0], 'module', None)
             move = None
-        if self.kind is not None and not isinstance(product, self.kind) and self.move_states is None:
-            errormsg = f'ss.{type(self).__name__}() delivers an ss.{self.kind.__name__}, not {type(product).__name__}'
+        coded = product is not None and type(product).administer is not ss.Product.administer # A product written as code, which any delivery can give
+        if self.kind is not None and not isinstance(product, self.kind) and self.move_states is None and not coded:
+            errormsg = f'ss.{type(self).__name__}() delivers an ss.{self.kind.__name__} (or an ss.Product with an administer() of its own), not {type(product).__name__}'
             raise TypeError(errormsg)
         if strain is not None and self.move_states is None:
             errormsg = f'strain= of "{name or type(self).__name__}" is the strain people arrive with in a move between states, e.g. move=S >> E, strain="alpha"; give move= too'
@@ -772,7 +773,8 @@ class Delivery(ss.products.EventSource, Intervention):
             self.disease = self.trigger_disease(sim)
         coded = [name for name in sim.diseases.keys() if coded_disease(sim, name) is not None] # PL2: a disease written as code, as agents
         if self.disease is None:
-            if len(declared) != 1 and not (not declared and len(coded) == 1):
+            own = self.product is not None and type(self.product).administer is not ss.Product.administer # A product written as code acts on what its code says, so any disease written as code can evaluate the conditions
+            if len(declared) != 1 and not (not declared and (len(coded) == 1 or (own and coded))):
                 raise ss.errors.UnknownDisease(f'"{self.name}" needs to know which disease it is for, and the sim has {len(declared) or "no"} declared diseases{" (" + sc.strjoin(declared) + ")" if declared else ""}{" and " + sc.strjoin(coded) + " written as code" if coded else ""}. Use disease=.')
             self.disease = declared[0] if declared else coded[0]
         elif self.disease not in declared + coded:

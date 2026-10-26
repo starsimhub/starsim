@@ -1344,6 +1344,9 @@ def numeric_pars(dist, convert, per_agent=None):
     for key,val in dist.pars.items():
         if isinstance(val, par): # A named parameter, e.g. ss.bernoulli(ss.par(0.6, name='sero')): its current value, which the sim's pars= or a calibration sets
             val = val.raw
+        if dist.unit is not None and key in (dist.unitless_pars or ()) and key not in shape_pars: # e.g. the mean of ss.lognorm_im(), which is of the log of the value, so would be converted as if it were a duration
+            errormsg = f'The parameter "{key}" of {dist} has no unit (for ss.lognorm_im(), it is of the log of the value), so unit= cannot convert it; give the distribution with no unit, as a parameter times a unit, e.g. d = ss.par(ss.{type(dist).__name__}(...)) and then dur=d*ss.days(1)'
+            raise ValueError(errormsg)
         if isinstance(val, by):
             if per_agent is None:
                 errormsg = f'The parameter "{key}" of {dist} has a value for each group ({val}), so has no single value here'
@@ -1404,8 +1407,9 @@ def numeric_dist(dist, convert, per_agent=None):
 
 
 def varying_pars(dist):
-    """ The parameters of a distribution that differ between people: values by group (`ss.by`), and functions """
-    return {key:val for key,val in dist.pars.items() if isinstance(val, by) or (callable(val) and not isinstance(val, (type, ss.Dist, ss.TimePar)))}
+    """ The parameters of a distribution that differ between people: values by group (`ss.by`, also as a named parameter, `ss.par(ss.by(...))`), and functions """
+    raw = {key:val.raw if isinstance(val, par) else val for key,val in dist.pars.items()}
+    return {key:val for key,val in raw.items() if isinstance(val, by) or (callable(val) and not isinstance(val, (type, ss.Dist, ss.TimePar)))}
 
 
 def by_dist(raw):

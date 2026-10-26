@@ -217,6 +217,12 @@ class People:
         for uid in self.auids:
             yield self.person(uid)
 
+    def __contains__(self, key):
+        """ Whether people have a property by this name, e.g. `'patch' in sim.people` (which would otherwise go through every person) """
+        if isinstance(key, str):
+            return key in self.keys()
+        return any(person is key for person in self)
+
     def __setstate__(self, state):
         """
         Set the state upon unpickling/deepcopying

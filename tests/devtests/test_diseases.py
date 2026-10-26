@@ -391,6 +391,24 @@ def test_strains_branch_flows():
     return out
 
 
+def test_condition_by_sex():
+    """ A condition acquired at a rate by sex whose values are parameters, with its initial prevalence from a function of the agents (no transmission), given in pars= """
+    class Condition(ss.Disease):
+        p_female = ss.par(ss.probperyear(0.05))
+        p_male = ss.par(ss.probperyear(0.02))
+        susceptible, affected = ss.states('susceptible affected')
+        onset = ss.Transition(susceptible, affected, rate=ss.by(sex=dict(female=p_female, male=p_male)))
+
+    cond = Condition(pars=dict(init_prev=ss.bernoulli(p=lambda sim, uids: np.where(sim.people.female[uids], 0.3, 0.1))), p_male=ss.par(ss.probperyear(0.01), bounds=[0.001, 0.1]))
+    assert {'p_female', 'p_male'} <= set(cond.pars.keys()) and cond.pars.p_male.bounds == [0.001, 0.1] # The parameters inside ss.by are the disease's, and one given replaces the class's
+    sim = ss.Sim(diseases=cond, n_agents=10_000, start=2000, stop=2010, dt=1, verbose=0).run()
+    first = sim.results.condition.affected[0]/10_000
+    assert np.isclose(first, 0.2, atol=0.02), first # Seeded by sex through the acquisition
+    assert sim.results.condition.onset.sum() > 0
+    return sim
+
+
+
 if __name__ == '__main__':
     do_plot = True
     sc.options(interactive=do_plot)
@@ -401,3 +419,4 @@ if __name__ == '__main__':
     compart = test_strains_compartmental()
     spec    = test_strains_spec()
     branch  = test_strains_branch_flows()
+    cond    = test_condition_by_sex()

@@ -886,6 +886,7 @@ class Result(ss.utils.NoDists, ss.arrays.BaseArr):
             timevec = np.floor(years + 1e-9).astype(int)
         out = self.asnew(values=values, low=low, high=high, timevec=timevec, kind=self.kind, _shape=values.shape)
         out.group_ti = None # Its values by group, if any, are at its own time points
+        out.use_years = use_years # Its times are years, which to_df() keeps (see convert_timevec())
         if strata is not None:
             out.strata, out.denom = new_strata, new_denom
         elif no_groups:
@@ -921,6 +922,8 @@ class Result(ss.utils.NoDists, ss.arrays.BaseArr):
         """ Make sure we're using a timevec that's in the right format i.e. dates """
         if self.timevec is None:
             return None
+        if getattr(self, 'use_years', False) and not force: # Resampled with use_years=True: the periods are labeled by their year
+            return np.asarray(self.timevec)
         if not self.has_dates or force:
             if not force and len(self.timevec) and sc.isnumber(self.timevec[0]) and not ss.time.assume_cal_year(self.timevec[0]): # Elapsed time (e.g. from year 0), not calendar years, so there are no dates to give
                 return np.asarray(self.timevec)

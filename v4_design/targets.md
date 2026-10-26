@@ -23,8 +23,10 @@ Specific goals:
 - [ ] FPsim: Compartmental version does NOT need to work, but great if it can
 - [ ] HPVsim: Compartmental version works except with networks, including with strains
 - [ ] Malariasim: Unified compartmental/ABM representations for both mosquitoes and agents
+- [ ] MIGHTI: Either compartmental or agent-based, but much simplified
 - [ ] STIsim: Compartmental works for individual diseases; networks and some disease combinations might not be expressible
 - [ ] TBsim: Unified compartmental/ABM representation, except for households etc
+- [ ] Typhoidsim: Unified compartmental/ABM, except for genetics, networks, etc
 
 ## Other models
 

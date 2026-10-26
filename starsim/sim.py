@@ -226,10 +226,11 @@ class Sim(ss.Base):
         made = self.__dict__.get('_made_pars')
         if made is not None:
             for key,(mod,before) in made.items():
-                changed = {k:sc.dcp(v) for k,v in mod.pars.items() if k not in before or v is not before[k][0] or repr(v) != before[k][1]}
+                bounded = mod.pars.bounded() if isinstance(mod.pars, ss.Pars) else {} # A value given as ss.par keeps its bounds, so that it can still be fitted
+                changed = {k:bounded.get(k, v) for k,v in mod.pars.items() if k not in before or v is not before[k][0] or repr(v) != before[k][1]}
                 if changed:
                     self._pars_after[key] = changed
-        return self.__dict__.get('_pars_after', {})
+        return sc.dcp(self.__dict__.get('_pars_after', {})) # Copied together, so that an ss.par shared by several modules (e.g. a beta for every genotype) stays one
 
     @staticmethod
     def _name_modules(names, *args):
@@ -535,10 +536,10 @@ class Sim(ss.Base):
         for key,val in set_after.items(): # Settings changed after the sim was made, e.g. sim.pars.stop = 30
             if key not in kwargs:
                 sim.pars[key] = sc.dcp(val)
-        for name,changed in pars_after.items(): # Parameters of modules changed after the sim was made
+        for name,changed in pars_after.items(): # Parameters of modules changed after the sim was made (copies)
             target = sim._module_pars().get(name)
             if target is not None:
-                target[0].pars.update(sc.dcp(changed))
+                target[0].pars.update(changed)
         sim.par_values = par_values
         sim.jax = jax
         if imported is not None: # The same import, with what it did not translate
@@ -877,7 +878,7 @@ class Sim(ss.Base):
         """
         matches = []
 
-        if self.initialized:
+        if self.initialized or 'demographics' in self.__dict__: # Initialized, or initializing: the modules have been moved to the sim (see init_module_attrs())
             modules = self.modules
         else:
             modules = sc.search(self.pars, type=ss.Module).values()

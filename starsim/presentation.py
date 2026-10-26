@@ -829,7 +829,7 @@ def describe_sim(sim, output=False, verbose=False):
                     ref = strat.geo.ref
                     text += f"; places from starsim_data {ref['version']} ({ref.get('boundaries', '?')} boundaries; population: {ref.get('population', '?')})"
             elif strat.kind == 'age':
-                text += f'; split as the population of {named.place}' if getattr(strat, 'split_from', None) == 'people' else ''
+                text += (f'; split as the population of {named.place}' if named is not None else '; split as the ages of the people given') if getattr(strat, 'split_from', None) == 'people' else '' # A named population, or ss.People(age_data=...) (MA29)
                 text += '; people do not age (use_aging=False)' if not pars.use_aging else '; nobody ages, since time is in timesteps' if sim.unit is None else '; people age between the groups'
             text += sim.groups.moved_by(strat)
             if strat.name in getattr(sim.groups, 'kept', set()):

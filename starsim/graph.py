@@ -15,9 +15,11 @@ __all__ = ['Graph']
 
 
 def inner_pars(val):
-    """ The parameters inside a value: of a value that varies in time (`ss.seasonal(mean=beta)`) or a probability per act (`ss.peract(m2f=b)`), also within a beta for each route """
+    """ The parameters inside a value: of a value that varies in time (`ss.seasonal(mean=beta)`), a probability per act (`ss.peract(m2f=b)`), or a value by level (`ss.by(sex=dict(female=p_f, male=p_m))`), also within a beta for each route """
     if isinstance(val, (TimeValue, ss.peract)):
         return val.pars
+    elif isinstance(val, ss.by):
+        return [q for v in val.items for q in ([v] if isinstance(v, par) else inner_pars(v))]
     elif isinstance(val, dict):
         return [q for v in val.values() for q in inner_pars(v)]
     return []
@@ -567,7 +569,7 @@ class Graph(Presentation):
                         q.name = f'{p.name}_{field}'
 
         # Register the explicit ss.par objects used in the transitions, and in the weights and likelihoods of the outcomes
-        used = [(tr.name, expr) for tr in self.transitions.values() for expr in [tr.rate, tr.dur] + sc.tolist(tr.p) + sc.tolist(getattr(tr, 'p_given', None))]
+        used = [(tr.name, expr) for tr in self.transitions.values() for expr in [tr.rate, tr.dur] + sc.tolist(tr.p) + sc.tolist(getattr(tr, 'p_given', None)) + [getattr(tr, 'p_die', None), getattr(tr, 'p_stay', None)]] # Including the shares of ss.null and ss.stay among the destinations
         used += [(oc.name, weight) for oc in self.outcomes.values() for weight in oc.weights]
         used += [(oc.name, val) for oc in self.outcomes.values() for val in oc.likelihood_pars.values() if isinstance(val, par)]
         for oc in self.outcomes.values(): # A parameter written inside a likelihood, e.g. ss.nbinom(n=ss.par(10, bounds=[1, 100])), is named after the outcome and its keyword
@@ -992,6 +994,7 @@ class Graph(Presentation):
     def spread_pars(self):
         """ The parameters whose value is a distribution across people (e.g. `beta=ss.lognorm_ex(0.3, 0.1)`), other than dwell times, which are stages or are sampled on entry """
         dwells = [tr.dur for tr in self.transitions.values()]
+        dwells += [scaled[0] for tr in self.transitions.values() if tr.dur is not None and isinstance(tr.dur.raw, Expr) and (scaled := ss.transitions.scaled_dist(tr.dur.raw)) is not None] # A distribution times a factor, e.g. dur=d*ss.weeks(1), is drawn on entry too
         return [p for p in self.all_pars() if isinstance(p.raw, ss.Dist) and not any(p is dur for dur in dwells)]
 
 

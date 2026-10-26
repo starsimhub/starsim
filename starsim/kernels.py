@@ -16,6 +16,7 @@ import sys
 import importlib
 import ctypes
 import contextlib
+import functools as ft
 import collections
 import multiprocessing as mp
 import numpy as np
@@ -2369,11 +2370,31 @@ def one_step(rng, y, p, dt, solver, n_sub, tables, row):
 
 #%% Threads, for the workers of ss.parallel() and of a calibration
 
-def one_thread(func, *args, **kwargs):
-    """ Run a function with one thread for the kernels (the passes over the agents, see `ss.options.threads`, and the places of a Gillespie run): for the workers of `ss.parallel()` and of a calibration, which share the cores already """
+def one_thread(func, *args, main_modules=None, **kwargs):
+    """
+    Run a function with one thread for the kernels (the passes over the agents, see `ss.options.threads`, and the places of a Gillespie run): for the workers of `ss.parallel()` and of a calibration, which share the cores already
+
+    With `main_modules` (see `worker()`), the modules imported in the main process's `__main__` are imported in this one's
+    first, for a worker started afresh (by forkserver, see `start_method()`)
+    """
     ss.options.threads = 1
     nb.set_num_threads(1)
+    if main_modules: # A function defined in a notebook or script looks up its names (e.g. cv of import covasim as cv) in __main__, which in a worker started afresh lacks them
+        main = sys.modules['__main__']
+        for alias,name in main_modules.items():
+            if not hasattr(main, alias):
+                try:
+                    setattr(main, alias, importlib.import_module(name))
+                except Exception: # A module that can't be imported by name (e.g. made at run time) is left out, as it was
+                    pass
     return func(*args, **kwargs)
+
+
+def worker(func):
+    """ A function to run in each worker of `ss.parallel()` or of a calibration: with one thread for the kernels, and the modules imported in `__main__` (see `one_thread()`) """
+    main = sys.modules.get('__main__')
+    modules = {alias:val.__name__ for alias,val in vars(main).items() if type(val) is type(sys) and not alias.startswith('_')} if main is not None else {}
+    return ft.partial(one_thread, func, main_modules=modules)
 
 
 blas_threads = [('openblas_set_num_threads', 'openblas_get_num_threads'), ('openblas_set_num_threads64_', 'openblas_get_num_threads64_'), ('scipy_openblas_set_num_threads', 'scipy_openblas_get_num_threads'),

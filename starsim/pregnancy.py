@@ -110,6 +110,11 @@ class Pregnancy(ss.Demographics, ss.Disease):
                         f'     Use its seams instead: conception_rate(sim) for who conceives; ss.modify() of its transitions (preg.conception, preg.miscarriage, ...) and its parameters (maternal_rate, infant_rate, ...);\n'
                         f'     since_birth and lactating for postpartum and breastfeeding; ss.on(preg.birth), or add_callback() from code, at a delivery or loss (see the migrate-starsim3 skill).')
             raise ss.CapabilityError(errormsg)
+        shadowed = [name for name,val in ss.transitions.class_members(Pregnancy).items() if isinstance(val, ss.par) and callable(vars(cls).get(name))]
+        if shadowed: # A method named after a parameter (e.g. loss_rate) would replace the parameter, and nothing would call it
+            errormsg = (f'{cls.__name__} defines {sc.strjoin(shadowed)}, a parameter of ss.Pregnancy, as a method, which nothing calls (conception_rate() is the method it calls).\n'
+                        f'     Give the parameter a function as its value instead, e.g. self.pars.update({shadowed[0]}=self.my_{shadowed[0]}) in __init__(), where my_{shadowed[0]}(sim, uids) returns a rate for those agents.')
+            raise ss.CapabilityError(errormsg)
         return
 
     def __init__(self, pars=None, fetus='auto', metadata=None, **kwargs):
@@ -641,6 +646,8 @@ class Pregnancy(ss.Demographics, ss.Disease):
         engine.record_event('infant_death', moms)
         lact = moms[self.lactating.raw[moms]]
         self.ti_weaned[lact] = np.minimum(self.ti_weaned[lact], self.ti) # Breastfeeding stops, at the start of the next step (see step())
+        if self.callbacks and engine._started: # The events of these deaths (losses, infant deaths) are recorded after the step's callbacks, and are no longer news by the next step's
+            self.run_callbacks()
         return
 
     @property

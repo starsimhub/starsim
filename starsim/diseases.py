@@ -216,6 +216,10 @@ class Disease(ss.Module):
         meta = {key:kwargs.pop(key) for key in ['name', 'label'] if key in kwargs}
         declared = (ss.State, ss.Transition, ss.outcome, ss.transitions.Expr, ss.transitions.FlowSum, ss.transitions.Transfer)
         timepars = {key:kwargs.pop(key) for key in ss.Timeline.time_args if key in kwargs and not isinstance(kwargs[key], declared)} # A transition can be called "stop"
+        pars = sc.mergedicts(pars)
+        for key in ['init_prev', 'init', 'init_n']: # The initial conditions can also be given in pars=, as the parameters are
+            if key in pars:
+                kwargs[key] = pars.pop(key)
         init_prev = kwargs.pop('init_prev', None)
         init = kwargs.pop('init', None)
         init_n = kwargs.pop('init_n', None)
@@ -223,7 +227,14 @@ class Disease(ss.Module):
         first = first if isinstance(first, str) else None
         self.set_metadata(**meta)
         self.t.update(**timepars)
-        memo = {id(leaf):leaf for val in members.values() if isinstance(val, ss.Transition) for expr in [val.rate, val.dur] + sc.tolist(getattr(val, 'p', None)) if isinstance(expr, ss.transitions.Expr) for leaf in expr.leaves if isinstance(leaf, ss.par) and not any(leaf is m for m in members.values())}
+        holds_members = lambda leaf: isinstance(leaf.raw, ss.by) and any(v is m for v in leaf.raw.items for m in members.values()) # A value by level holding the class's parameters (ss.by(sex=dict(female=p_f, male=p_m))), copied with them
+        def leaves(expr): # Including those inside a parameter that holds an expression, as a dwell time written as an expression is held (e.g. dur=d*ss.days(1), with d = ss.par(ss.lognorm_im(...)))
+            for leaf in expr.leaves:
+                yield leaf
+                if isinstance(leaf, ss.par) and isinstance(leaf.raw, ss.transitions.Expr):
+                    yield from leaves(leaf.raw)
+        holds_expr = lambda leaf: isinstance(leaf.raw, ss.transitions.Expr) and any(inner is m for inner in leaves(leaf.raw) for m in members.values()) # One holding the class's parameters, copied with them
+        memo = {id(leaf):leaf for val in members.values() if isinstance(val, ss.Transition) for expr in [val.rate, val.dur, getattr(val, 'p_die', None), getattr(val, 'p_stay', None)] + sc.tolist(getattr(val, 'p', None)) if isinstance(expr, ss.transitions.Expr) for leaf in leaves(expr) if isinstance(leaf, ss.par) and not any(leaf is m for m in members.values()) and not holds_members(leaf) and not holds_expr(leaf)}
         members = sc.dcp(members, memo=memo) # Copy class members (together, so they still refer to each other) so instances do not share them; a parameter defined outside the class (rate = ss.par(...) at module level) stays shared, as in the operator form, so it keeps its name
         kwargs = {k:ss.expressions.rebind(v, memo) for k,v in kwargs.items()} # A result given here that reads the class's states reads the copies
         for key in [key for key,val in kwargs.items() if isinstance(val, ss.par) and isinstance(members.get(key), ss.par)]: # e.g. ss.SIS(beta=ss.par(0.1, bounds=[0.05, 1])): the class's parameter, which its transitions use, takes the value and bounds

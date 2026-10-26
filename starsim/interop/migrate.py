@@ -371,6 +371,10 @@ def migrate_ast(text, analyzers=None):
             return False
         line = edits.line(kw.lineno)
         start, end = kw.col_offset, kw.end_col_offset
+        if not line[:start].strip() and re.fullmatch(rb'\s*,?\s*', line[end:]): # Alone on its line (a call written over several): remove the line
+            edits.add_lines(kw, '', note)
+            call.keywords.remove(kw)
+            return True
         before = re.search(rb',\s*$', line[:start])
         after = re.match(rb'\s*,\s*', line[end:])
         if before:
@@ -536,13 +540,17 @@ def migrate_ast(text, analyzers=None):
     return text, notes, found, uses_ssl
 
 
-def migrate_text(text, analyzers=None):
+ssl_import = r'^\s*import starsim\.library as ssl'
+
+
+def migrate_text(text, analyzers=None, imported=False):
     """
     Migrate the source code of one file
 
     Args:
         text (str): the source code
         analyzers (set): the names of classes that are analyzers (see `find_analyzers()`); by default, those in this file
+        imported (bool): whether `starsim.library` is already imported as `ssl` (by an earlier cell of a notebook)
 
     Returns:
         A tuple of the new text, the changes made (line, note), and what needs a person (line, message)
@@ -564,7 +572,7 @@ def migrate_text(text, analyzers=None):
         return text, changes, [(E.lineno or 0, f'could not be parsed, so only renames were made: {E}')]
     changes += notes
     uses_ssl |= bool(re.search(r'\bssl\.', text))
-    if uses_ssl and not re.search(r'^\s*import starsim\.library as ssl', text, re.M):
+    if uses_ssl and not imported and not re.search(ssl_import, text, re.M):
         text, n = re.subn(r'^(\s*)import starsim as ss\s*$', r'\g<0>\n\1import starsim.library as ssl', text, count=1, flags=re.M)
         if n:
             changes.append((0, 'added import starsim.library as ssl'))
@@ -627,7 +635,7 @@ def migrate(*paths, check=False, verbose=True):
     Rewrite the Starsim 3 code in files or folders for Starsim 4, in place
 
     Args:
-        paths (str): files, or folders whose `.py`, `.ipynb`, `.qmd`, and `.md` files are migrated (the code cells only, in all but `.py`)
+        paths (str): files, or folders whose `.py`, `.ipynb`, `.qmd`, and `.md` files are migrated (the code cells only, in all but `.py`), except in hidden folders (e.g. `.jupyter_cache`)
         check (bool): only report what would change, without writing
         verbose (bool): print each change and what needs a person
 
@@ -642,15 +650,18 @@ def migrate(*paths, check=False, verbose=True):
     files = []
     for path in paths:
         path = sc.path(path)
-        files += sorted(f for ext in ['py', 'ipynb', 'qmd', 'md'] for f in path.rglob(f'*.{ext}')) if path.is_dir() else [path]
+        hidden = lambda f: any(part.startswith('.') for part in f.relative_to(path).parts[:-1]) # In a hidden folder, e.g. .jupyter_cache or .ipynb_checkpoints
+        files += sorted(f for ext in ['py', 'ipynb', 'qmd', 'md'] for f in path.rglob(f'*.{ext}') if not hidden(f)) if path.is_dir() else [path]
     texts = {f:f.read_text() for f in files}
     blocks = {f:code_blocks(f, text) for f,text in texts.items()}
     analyzers = find_analyzers([code for b in blocks.values() for _,code in b])
     out = sc.objdict(changed=sc.objdict(), todo=sc.objdict())
     for f, text in texts.items():
         new, changes, todo = [], [], []
+        imported = False # Whether an earlier cell imports starsim.library as ssl
         for where, code in blocks[f]:
-            code, c, t = migrate_text(code, analyzers=analyzers)
+            code, c, t = migrate_text(code, analyzers=analyzers, imported=imported)
+            imported |= bool(re.search(ssl_import, code, re.M))
             at = (lambda line: f'{where}, line {line}') if isinstance(where, str) else (lambda line: line + where) # The line in the file, or in a notebook's cell
             new.append(code)
             changes += [(at(line), note) for line,note in c]

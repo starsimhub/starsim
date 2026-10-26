@@ -47,7 +47,7 @@ class Pars(sc.objdict):
         """ Note that a parameter with a unit (or a distribution of values with one) was set to a bare number, which keeps that unit """
         typed = [old] if isinstance(old, ss.TimePar) else [v for v in old.pars.values() if isinstance(v, ss.TimePar)]
         if typed and typed[0].base is not None and np.any(np.asarray(sc.tolist(new), dtype=float) != 0): # Zero is the same in any unit
-            object.__setattr__(self, '_bare', (self._bare or {}) | {key:typed[0].base})
+            object.__setattr__(self, '_bare', (self._bare or {}) | {key:(typed[0].base, type(typed[0]).__name__)}) # The unit, and the kind of value (e.g. "years" or "peryear"), to say how to give it
         return
 
     def forget_bare(self, keys):
@@ -58,11 +58,12 @@ class Pars(sc.objdict):
 
     def bare_units(self, unit, label):
         """ Warn about each parameter set to a bare number whose unit (that of its default) is not the sim's, e.g. ss.SexualNet(dur=5) in a sim in days """
-        for key,base in (self._bare or {}).items():
+        for key,(base,kind) in (self._bare or {}).items():
             if base != unit:
                 runs = f'runs in {unit}' if unit else 'counts time in timesteps'
+                as_unit = lambda u: u if kind == base else kind.replace(base[:-1], u[:-1]) # A rate in the same form, e.g. ss.peryear() as ss.permonth()
                 ss.warn(f'{label}: {key} was given as a number with no unit, so it is read in {base} (the unit of its default), but the sim {runs}. '
-                        f'Give it a unit to say which is meant, e.g. ss.{base}(...)' + (f' or ss.{unit}(...).' if unit else '.'))
+                        f'Give it a unit to say which is meant, e.g. ss.{kind}(...)' + (f' or ss.{as_unit(unit)}(...).' if unit else '.'))
         return
 
     def lock(self, locked=True):
@@ -708,8 +709,9 @@ class by:
     `people.female`, or a property such as `urban`) is read from each person, as agents:
     give its values by name (`sex=dict(female=..., male=...)`), or as a table. A column of
     numbers in a table holds the lower edges of bins (the last one open-ended), so a table by
-    single year of age works whatever the model's age groups (a compartmental run averages
-    it over each group, with a note); a row whose key is None gives the value for people with
+    single year of age works as agents whatever the model's age groups (a compartmental run
+    needs bins whose edges are those of the groups, or coarser: a group split by a bin has no
+    one value, and is refused); a row whose key is None gives the value for people with
     no value of the property, who otherwise get the mean over the levels.
 
     Args:
@@ -1032,6 +1034,8 @@ class by:
     def converter(self, sim, convert=None, year=None):
         """ A function that gives a value as a number: a value that varies in time is taken at the sim's current time, or at `year` if given """
         def out(v):
+            if isinstance(v, ss.par): # A parameter among the values (e.g. ss.by(sex=dict(female=p_f, male=p_m))): its current value
+                v = v.raw
             if not isinstance(v, TimeValue):
                 return v if convert is None else convert(v)
             when = sim.t.now('year') if year is None else year
@@ -1089,7 +1093,7 @@ class by:
 
     def binned_grid(self, sim, strats, convert):
         """ For a table with a column of bin edges (e.g. age=[0, 15, 50]), the model's or coarser: the value for each group, that of the bin it is in. Bins that split a group raise, since a group has no one value (see `split_groups()`) """
-        dim = self.split_groups(sim)
+        dim = self.cached('split', lambda: self.split_groups(sim), sim) # Once per sim, not at every step (it compares every edge)
         if dim is not None:
             raise ss.CapabilityError(f'{self} is by bins of {dim} that split the model\'s groups ({sc.strjoin(strats[[s.name for s in strats].index(dim)].labels)}), so a group has no one value.\n'
                                      f'     Give it by the model\'s groups, or run with solver="abm" (which reads each person\'s own {dim}).')
@@ -1356,6 +1360,8 @@ class timeseries(TimeValue):
                 out.append(time.years if isinstance(time, ss.date) else time.to('year').value)
             if np.any(np.diff(out) <= 0):
                 errormsg = f'The times of ss.timeseries() must be in order, not {self.times}'
+                if np.all(np.diff(self.times) > 0) if all(sc.isnumber(t) for t in self.times) else False: # In order as given, but not as read: bare numbers are in the sim's unit, and a date has whole days
+                    errormsg += f', which are read as {sc.strjoin([f"{y:.6g}" for y in out])} years (bare times are in the sim\'s unit, {sim.unit_base}s, after the start); for times in another unit, give typed times, e.g. ss.years(...)'
                 raise ValueError(errormsg)
             start, stop = sim.t.yearvec[0], sim.t.yearvec[-1]
             if len(out) > 1 and (out[-1] < start or out[0] > stop) and any(sc.isnumber(time) for time in self.times): # e.g. days of the year (0 to 365) beside calendar years: the value is flat over the run

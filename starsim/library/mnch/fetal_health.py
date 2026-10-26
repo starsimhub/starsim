@@ -138,9 +138,9 @@ class FetalHealth(ss.Module):
     def init_pre(self, sim):
         """ Register callbacks with the Pregnancy module """
         super().init_pre(sim)
-        if not hasattr(sim.demographics, 'pregnancy'):
+        preg = sim.get_module(ss.Pregnancy, die=False) # By type, so a subclass with its own name (e.g. FPsim's fp) is found
+        if preg is None:
             raise ValueError('FetalHealth requires a Pregnancy module. Add ss.Pregnancy() to demographics.')
-        preg = sim.demographics.pregnancy
         preg.add_callback(preg.conception, self.on_conception)
         preg.add_callback(preg.birth, self.on_delivery)
         return
@@ -199,7 +199,7 @@ class FetalHealth(ss.Module):
         self.sga[newborn_uids]  = sga
 
         # SVN: small vulnerable newborn = preterm | lbw | sga
-        preterm = self.sim.demographics.pregnancy.preterm[newborn_uids]
+        preterm = self.sim.get_module(ss.Pregnancy).preterm[newborn_uids]
         svn = preterm | lbw | sga
         self.svn[newborn_uids] = svn
 
@@ -233,7 +233,7 @@ class FetalHealth(ss.Module):
         if not len(uids):
             return
 
-        preg = self.sim.people.pregnancy
+        preg = self.sim.get_module(ss.Pregnancy)
         weeks_per_ts = self.dt.weeks
         shifts_ts = shift_weeks / weeks_per_ts
 
@@ -279,7 +279,7 @@ class FetalHealth(ss.Module):
         if not len(uids):
             return
 
-        preg = self.sim.people.pregnancy
+        preg = self.sim.get_module(ss.Pregnancy)
         current_shift = self.timing_shift[uids]
         recover_weeks = current_shift * fraction
 
@@ -321,7 +321,7 @@ class FetalHealth(ss.Module):
         Returns:
             tuple: (birth_weights, ga_weeks) arrays
         """
-        preg = self.sim.people.pregnancy
+        preg = self.sim.get_module(ss.Pregnancy)
         ga_wk = (preg.ti_delivered[uids] - preg.ti_P[uids]) * self.dt.weeks # At delivery, which has just happened
 
         ref = self.pars.weight_by_ga
@@ -401,7 +401,7 @@ class treat_pregnant(ss.Intervention):
             return
 
         sim     = self.sim
-        preg    = sim.people.pregnancy
+        preg    = sim.get_module(ss.Pregnancy)
         disease = sim.diseases[self.disease_name]
         fh      = sim.custom['fetal_health']
 
@@ -490,7 +490,7 @@ class fetal_infection(ss.Connector):
     def init_post(self):
         """ Register a callback so we can apply damage at conception for women who are already infected when they become pregnant: after FetalHealth's (registered in its init_pre()), which sets the baseline """
         super().init_post()
-        preg = self.sim.demographics.pregnancy
+        preg = self.sim.get_module(ss.Pregnancy)
         preg.add_callback(preg.conception, self._on_conception)
         return
 
@@ -520,7 +520,7 @@ class fetal_infection(ss.Connector):
     def step(self):
         """ Each timestep, check for new infections in pregnant women and apply damage """
         sim  = self.sim
-        preg = sim.people.pregnancy
+        preg = sim.get_module(ss.Pregnancy)
         if not preg.P.any():
             return
 

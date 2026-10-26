@@ -757,7 +757,7 @@ def run_each(sims, parallel=True, n_cpus=None, par_args=None, shrink=None, verbo
     if parallel:
         par_args = sc.mergedicts({'ncpus': n_cpus, 'start_method': ss.kernels.start_method(), 'parallelizer': 'multiprocess-async', 'globaldict': {}}, par_args)
         with ss.kernels.one_blas_thread():
-            P = sc.Parallel(ft.partial(ss.kernels.one_thread, single_run), iterkwargs=dict(sim=sims, ind=np.arange(len(sims))), kwargs=kwargs, **par_args) # The runs share the cores, so each takes one thread
+            P = sc.Parallel(ss.kernels.worker(single_run), iterkwargs=dict(sim=sims, ind=np.arange(len(sims))), kwargs=kwargs, **par_args) # The runs share the cores, so each takes one thread
             try:
                 P.run_async()
                 if progress is not None:
