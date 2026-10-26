@@ -115,7 +115,7 @@ def make_metapop(staged=False):
                          recovery_A=IA >> RA @ ss.perday(0.1), mature_S=SJ >> SA @ ss.perday(1/20), mature_I=IJ >> IA @ ss.perday(1/20), mature_R=RJ >> RA @ ss.perday(1/20),
                          births=ss.null >> SJ @ 2*b*(SA + IA + RA).n, deaths=ss.death(rate=b*N.n/K), init_n=dict(IJ=ss.by(pop=[10] + [0]*9)), first='SJ', name='sir')
     sir.stratify(pop=[f'p{i}' for i in range(10)], kind='space')
-    return ss.Sim(sir, solver='binomial', unit='day', start='2018-01-01', stop=ss.days(100), total_pop=1000, verbose=0).run(n_runs=20)
+    return ss.Sim(sir, solver='binomial', substeps=1, unit='day', start='2018-01-01', stop=ss.days(100), total_pop=1000, verbose=0).run(n_runs=20) # Whole days, as EMULSION takes them
 
 
 def check_metapop(counts):

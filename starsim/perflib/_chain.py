@@ -58,6 +58,10 @@ def reason(sim):
         return f'"{next(mod.name for mod in sim.interventions() if isinstance(mod, ss.Delivery) and mod.move_states is not None)}" moves people between states, which only the kernels draw'
     elif ss.options.compile == 'never':
         return 'its draws are compiled by Numba, and ss.options.compile is "never"'
+    for mod in sim.declared:
+        name = mod.engine.certain() if hasattr(mod.engine, 'certain') else None
+        if name is not None:
+            return f'"{mod.name}" has a probability of 1 over a period ({name}), an infinite rate, which the kernels take as everyone moving at once'
     try:
         check()
     except RuntimeError as e:

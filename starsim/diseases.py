@@ -91,6 +91,7 @@ class Disease(ss.Module):
     engine = None # Runs the declared part (see ss.solvers.make_engine()); created when the sim is initialized
     infection_log = None # An InfectionLog, if the sim has an ss.infection_log analyzer
     code_pars = () # Parameters of a declared module that its own code reads rather than its graph (e.g. ss.Pregnancy's fertility rates)
+    reads_modifiers = () # For a disease written as code: which of rel_sus and rel_trans its own code reads, with modified(), so ss.modify() of them is applied (an ss.Infection with a beta reads both)
 
     _infection_methods = ['set_prognoses', 'transmit', 'set_outcomes', 'finalize_infections', 'compute_transmission', 'transmit_route', 'set_congenital'] # Methods of ss.Infection's transmission, which a declared transition never calls
 
@@ -604,6 +605,33 @@ class Disease(ss.Module):
             self.infection_log.add_entries(uids, sources, self.t.tvec[self.ti]) # At the step's time point, as ti_infected is
         return
 
+    def modified(self, key, uids=None, vals=None):
+        """
+        `rel_sus` or `rel_trans` (`key`) times the modifiers active on it (`ss.modify(dis.rel_sus, ...)`, and products), for a disease written as code that reads it
+
+        An `ss.Infection` with a `beta` reads both in its transmission (`transmit_route()`). Any other disease written as
+        code that reads one says so in its class, `reads_modifiers = ('rel_sus',)`, so that modifiers of it are applied
+        rather than refused.
+
+        Args:
+            key (str): 'rel_sus' or 'rel_trans'
+            uids (uids): the agents to give the values of (default: an array of every agent, by UID)
+            vals (Arr): the values to multiply (default: the disease's own `rel_sus` or `rel_trans`)
+
+        **Example**::
+
+            class Diabetes(ss.Disease):
+                reads_modifiers = ('rel_sus',) # ss.modify(diabetes.rel_sus, ...) scales its onset
+                def step(self):
+                    uids = self.at_risk.uids
+                    onset = self.pars.p_onset.rvs(uids)*self.modified('rel_sus', uids) # ...
+        """
+        arr = self[key]
+        vals = arr if vals is None else vals
+        if isinstance(arr, ss.arrays.ModifiableArr) and arr.engine is not None:
+            vals = vals.asnew(vals.raw*arr.engine.mult_raw(key), copy=False)
+        return vals if uids is None else vals[uids]
+
     def not_naive(self):
         """ The agents who have left the first state (e.g. who are no longer susceptible), for dynamic rescaling (see `ss.Sim.rescale()`) """
         return (~self[self.graph.first.name]).uids
@@ -788,10 +816,11 @@ class Infection(Disease):
 
     def init_post(self):
         """
-        Set initial values for states. This could involve passing in a full set of initial conditions,
-        or using init_prev, or other. Note that this is different to initialization of the Arr objects
-        i.e., creating their dynamic array, linking them to a People instance. That should have already
-        taken place by the time this method is called.
+        Set initial values for states: by default, infect `init_prev` of the people (`set_prognoses()`)
+
+        The initial infections are dated by the first step: in `set_prognoses()`, `self.ti` is 1 (not 0, the
+        start of the run), as it is for those infected in the first step, so a disease that schedules from
+        `self.ti` (e.g. `self.ti_recovered[uids] = self.ti + dur`) gives them the same course, as Starsim 3 did.
         """
         super().init_post()
         if self.pars.init_prev is None:
@@ -801,7 +830,12 @@ class Infection(Disease):
         unborn = people.unborn_uids() if isinstance(people, ss.People) else ss.uids() # E.g. the fetuses of pregnancies that ss.Pregnancy starts before the start, who are not seeded
         initial_cases = self.pars.init_prev.filter() if not len(unborn) else self.pars.init_prev.filter(people.auids[people.age.raw[people.auids] >= 0])
         if len(initial_cases):
-            self.set_prognoses(initial_cases, sources=-1)  # -1 = externally seeded infection with no source agent
+            ti = self.t.ti
+            self.t.ti = min(1, self.t.npts-1) # Dated by the first step, as an infection in it is, so code that schedules from self.ti (e.g. ti_recovered = self.ti + dur) gives them as long as Starsim 3 did, not a step less (CV2)
+            try:
+                self.set_prognoses(initial_cases, sources=-1)  # -1 = externally seeded infection with no source agent
+            finally:
+                self.t.ti = ti
         return initial_cases
 
     def init_results(self):
@@ -995,13 +1029,6 @@ class Infection(Disease):
 
         return self.finalize_infections(new_cases, sources, networks)
 
-    def modified(self, vals, key):
-        """ Values for `rel_sus` or `rel_trans` (`key`), e.g. those passed to `transmit_route()`, times the modifiers active on it, including products (see `ss.modify()`) """
-        arr = self[key]
-        if isinstance(arr, ss.arrays.ModifiableArr) and arr.engine is not None:
-            return vals.asnew(vals.raw*arr.engine.mult_raw(key), copy=False)
-        return vals
-
     def transmit_route(self, i, route, betas, rel_trans, rel_sus):
         """
         Compute the transmission along a single network (or other route)
@@ -1020,8 +1047,8 @@ class Infection(Disease):
         Returns:
             A tuple of the target UIDs, the source UIDs, and the network IDs of the new infections (possibly with duplicates)
         """
-        rel_trans = self.modified(rel_trans, 'rel_trans')
-        rel_sus = self.modified(rel_sus, 'rel_sus')
+        rel_trans = self.modified('rel_trans', vals=rel_trans)
+        rel_sus = self.modified('rel_sus', vals=rel_sus)
         new_cases = []
         sources = []
         mods = self.sim.modifiers

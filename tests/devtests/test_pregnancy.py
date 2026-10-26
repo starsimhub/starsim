@@ -514,6 +514,53 @@ def test_fertility_function():
     return out
 
 
+@sc.timer()
+def test_coded_reads():
+    sc.heading('Testing what code reads of the pregnancy: the delivery before the step\'s conceptions (FP2), its memory as an array (FP9), ss.mother() of children (FP10), one rate as data (ST2), and a preterm redraw (ST5)')
+    # A woman who delivers faces conception again in the step, after the delivery's records
+    preg = ss.Pregnancy(fertility_rate=ss.freqperyear(300))
+    lam = ss.modify(preg.conception, multiply=0, where=preg.since_birth < ss.months(3))
+    sim = ss.Sim(n_agents=3000, demographics=preg, interventions=lam, start=2000, stop=2004, dt=ss.months(1), verbose=0, rand_seed=1)
+    same = []
+    sim.init()
+    p = sim.demographics.pregnancy
+    for ti in range(sim.t.npts - 1):
+        sim.run_one_step()
+        same.append((p.P & (p.ti_P == p.ti_delivered)).sum())
+    assert sum(same) == 0 and p.results.birth.sum() > 300, same
+    assert not any('delivery: people leave after' in str(note) for note in sim.notes) # A dwell of 32 to 42 weeks loses nobody to monthly steps (FP7)
+
+    # Its memory and conditions as arrays, with the names declarations use
+    uids = p.ti_live_birth.notnan.uids
+    assert np.allclose(p.since_birth[uids], sim.ti - p.ti_live_birth[uids]) # In the sim's unit (months)
+    assert np.array_equal((p.P & p.lactating)[uids], p.P[uids] & p.lactating[uids])
+    assert len(p.since_birth.values) == len(sim.people) and np.all(np.isinf(p.since_birth[p.ti_live_birth.isnan.uids]))
+
+    # A preterm risk for one redraw, not kept as her baseline; and a delivery due in the past is taken in the next step
+    moms = p.P.uids
+    base = p.rel_ptb_base[moms].copy()
+    weeks = p.dur_gestation[moms].copy()
+    p.preterm_risk(moms, rel=20)
+    assert np.array_equal(p.rel_ptb_base[moms], base) and np.mean(p.dur_gestation[moms] < 37) > np.mean(weeks < 37) + 0.2
+    p.set_delivery(moms[:5], sim.ti - 3)
+    assert np.all(p.ti_exit_P[moms[:5]] == sim.ti + 1)
+
+    # ss.mother() in the infant rate reads the children's mothers, with no fetuses as agents
+    preg = ss.Pregnancy(fertility_rate=ss.freqperyear(300), infant_rate=ss.peryear(0.5)*ss.mother(ss.ppl.age > 30))
+    sim = ss.Sim(n_agents=2000, demographics=preg, start=2000, stop=2003, dt=ss.months(1), verbose=0).run()
+    assert not sim.demographics.pregnancy.fetus and sim.results.pregnancy.infant_mortality.sum() > 20
+
+    # One fertility rate is a rate per woman-year, rescaled to the women not pregnant, as data are
+    preg = ss.Pregnancy(fertility_rate=ss.freqperyear(100))
+    sim = ss.Sim(n_agents=5000, demographics=preg, start=2000, stop=2001, dt=ss.months(1), verbose=0).init()
+    p, ppl = sim.demographics.pregnancy, sim.people
+    fecund = ppl.female.raw & (ppl.age.raw >= 15) & (ppl.age.raw < 50) & ppl.alive.raw
+    rate = np.asarray(p.conception_rate(sim).value)
+    expected = 0.1*fecund.sum()/(fecund & ~p.P.raw).sum()
+    assert np.allclose(rate[fecund], expected) and np.all(rate[~fecund] == 0)
+    return sim
+
+
 if __name__ == '__main__':
     T = sc.timer()
     abm = test_states()
@@ -534,4 +581,5 @@ if __name__ == '__main__':
     test_postpartum_ode()
     saved = test_save_load()
     test_fertility_function()
+    reads = test_coded_reads()
     T.toc()

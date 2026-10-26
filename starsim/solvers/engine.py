@@ -20,12 +20,8 @@ def convert(val, unit):
     if isinstance(val, ss.TimePar):
         if isinstance(val, ss.prob): # A probability per period becomes the hazard that gives it
             period = 1.0 if val.unit is None else val.unit.to(unit).value # With no unit, the probability is per unit of the sim's time
-            if np.any(np.asarray(val.value) >= 1): # TL12: an infinite hazard, which no solver can step (agents moved nobody, and the ODE gave NaN)
-                errormsg = f'A probability of 1 per period ({val!r}) is an infinite rate, which no solver can step. '
-                errormsg += 'A number times a probability scales its rate (so ss.probperyear(1)*0.8 is still a certainty); for an 80% chance a year, write ss.probperyear(0.8). '
-                errormsg += 'For everyone to move at once, give the transition no rate (an immediate transition).'
-                raise ValueError(errormsg)
-            return -np.log1p(-val.value)/period
+            with np.errstate(divide='ignore'): # A probability of 1 is an infinite hazard: certain within the step (FP1)
+                return -np.log1p(-np.asarray(val.value, dtype=float))[()]/period
         return val.to(unit).value
     return val
 
@@ -1250,6 +1246,8 @@ class Engine:
             if dw.dist is None and (callable(dw.par.raw) or isinstance(dw.par.raw, (ss.by, ss.expressions.Expr))): # Not known until the sim runs, or not one number
                 continue
             mean = dw.mean if dw.dist is not None else self.dwell_mean(name)
+            if sim.solver == 'abm' and dw.dist is not None and dw.family != 'exponential' and mean is not None and getattr(dw, 'std', None) is not None and np.all(np.asarray(mean, dtype=float) - 2*np.asarray(dw.std, dtype=float) >= dt): # As agents, a dwell drawn from a distribution that seldom reaches below a step (e.g. a pregnancy of 32 to 42 weeks, at a monthly step) loses nobody to whole steps (FP7)
+                continue
             if mean is not None and np.ndim(mean) == 0 and mean > 0 and dt/mean > 0.1: # The chain-binomial solver moves people through the stages exactly (see ss.kernels.draw_chain()), and agents draw the whole dwell time, so it is the mean that matters
                 x = dt/mean
                 share = min(x, 1) if euler else -np.expm1(-x)

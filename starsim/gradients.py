@@ -63,6 +63,9 @@ def reason(sim):
         engine = mod.engine
         if engine.register is not None and len(engine.register.src):
             return f'"{mod.name}" has a movement register'
+        name = mod.engine.certain() if hasattr(mod.engine, 'certain') else None
+        if name is not None:
+            return f'"{mod.name}" has a probability of 1 over a period ({name}), an infinite rate, which the kernels take as everyone moving at once'
     return None
 
 

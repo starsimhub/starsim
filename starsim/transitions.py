@@ -499,6 +499,26 @@ class Transition(Nameable):
         """
         return ss.conditions.Cond('incidence', self, over, by) # The transition itself, since it may be named and given its module later
 
+    def hazard(self, uids):
+        """
+        In a running sim, as agents: the current rate of the transition for some agents, with its modifiers (e.g. a treatment's
+        efficacy, `ss.modify()`), per unit of the sim's time, e.g. to weight a death requested from code (`people.request_death(uids, hazard=...)`)
+
+        It is the rate those agents would face if they were in its source state now (0 for a transition with no rate).
+
+        **Example**::
+
+            h = tb.death.hazard(uids) # The hazard of death from TB for each of these agents
+        """
+        engine = getattr(self.module, 'engine', None)
+        if not isinstance(engine, ss.solvers.Agents):
+            raise ss.CapabilityError(f'{self.name}.hazard() is a rate for each agent, in a sim initialized with solver="abm"')
+        uids = ss.uids(uids)
+        if self.rate is None:
+            return np.zeros(len(uids))
+        out = engine.eval_for(self.rate, uids)*engine.adjusted(self.name, uids)
+        return np.broadcast_to(np.maximum(np.asarray(out, dtype=float), 0), len(uids)).copy()
+
     def to(self, dst):
         """ The event of taking one branch of this transition, e.g. `precin.to(S)`: a condition, `on=`, or `.uids` """
         return ss.conditions.Event('to', self, dst)

@@ -368,7 +368,7 @@ class Prop(Expr):
         """ The properties of people it reads, e.g. ['age'] """
         out = []
         def walk(c):
-            if c.op == 'people':
+            if c.op == 'people' and len(c.args) == 1: # Not ss.ppl.get(name, default), which need not exist
                 out.append(c.args[0])
             elif c.op not in ss.conditions.leaves:
                 for arg in c.args:

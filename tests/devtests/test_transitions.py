@@ -1572,6 +1572,33 @@ def test_compiled_eval():
     assert np.array_equal(power(0.02, part), 0.02**part)
     return sim
 
+
+@sc.timer()
+def test_certain_and_substeps():
+    sc.heading('Testing a probability of 1 under every solver (FP1), and the chain binomial\'s default substeps near threshold (TB3)')
+    # Everyone moves in the step, shared equally between two certain exits; a finite rate competing with them takes nobody
+    S, I, A, B, D = ss.states('S I A B D')
+    def make():
+        return ss.Disease(S, I, A, B, D, infection=S >> I @ ss.peryear(0.5), toa=I >> A @ ss.probperyear(1), tob=I >> B @ ss.probperyear(1)*0.5, die=I >> D @ ss.peryear(2), init=dict(I=0.5), name='d')
+    for solver in ['abm', 'ode', 'binomial', 'tau', 'gillespie']:
+        res = ss.Sim(make(), n_agents=2000, solver=solver, start=2000, stop=2001, dt=ss.years(0.1), **kw).run().results.d
+        first = res.I[0]
+        assert res.D[1] <= 0.01*first, solver # In compartments, those infected within a substep wait for the next, and a few die first
+        assert np.isclose(res.A[1] + res.B[1], first + (res.S[0] - res.S[1]), rtol=0.05) and np.isclose(res.A[1], res.B[1], rtol=0.15), (solver, res.A[1], res.B[1])
+    with pytest.raises(ValueError, match='infinite number of arrivals'):
+        ss.Sim(ss.Disease(S, I, birth=ss.birth(S, rate=ss.probperyear(1)), name='d'), n_agents=100, solver='ode', start=2000, stop=2001, **kw).run()
+
+    # An SIS just above threshold: the default substeps follow the ODE (whole steps gave 0.083 for 0.048)
+    def sis():
+        S, I = ss.states('S I')
+        return ss.Disease(S, I, infection=S >> I @ 1.05*I.frac, recovery=I >> S @ 1.0, init=dict(I=0.1), name='d')
+    pars = dict(unit='year', dt=ss.months(1), start=0, stop=50, total_pop=1e9, **kw)
+    ode = ss.Sim(sis(), solver='ode', **pars).run().results.d.I[-1]
+    sim = ss.Sim(sis(), solver='binomial', **pars).run()
+    assert sim.diseases.d.engine.substeps() >= 15 and np.isclose(sim.results.d.I[-1], ode, rtol=0.08), (sim.diseases.d.engine.substeps(), sim.results.d.I[-1]/ode)
+    return sim
+
+
 if __name__ == '__main__':
     do_plot = True
     sc.options(interactive=do_plot)
@@ -1597,3 +1624,4 @@ if __name__ == '__main__':
     test_inflow_add()
     gated = test_gated_function()
     compiled = test_compiled_eval()
+    certain = test_certain_and_substeps()

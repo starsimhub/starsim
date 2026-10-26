@@ -189,6 +189,30 @@ class Counter(ss.Module):
 
 
 # %% Run as a script
+def test_cli(tmp_path, monkeypatch, capsys):
+    """ The starsim command: installing the skill for AI agents (to a temporary home folder), and showing the guide and its skills """
+    sc.heading('Testing the starsim command')
+    from starsim import cli
+    monkeypatch.setenv('HOME', str(tmp_path))
+    monkeypatch.setenv('USERPROFILE', str(tmp_path)) # The home folder on Windows
+    cli.main(['ai'])
+    skill = tmp_path / '.agents' / 'skills' / 'starsim' / 'SKILL.md'
+    assert skill.exists() and not (tmp_path / '.claude' / 'skills').exists() # Only for Claude Code if it is installed
+    other = tmp_path / '.claude' / 'skills' / 'starsim' / 'SKILL.md'
+    other.parent.mkdir(parents=True)
+    other.write_text('---\nname: starsim\n---\nSomeone else\'s skill')
+    cli.main(['ai', 'install', '--to', 'claude'])
+    assert 'Someone else' in other.read_text() # Not overwritten without --force
+    cli.main(['ai', 'show'])
+    out = capsys.readouterr().out
+    assert all(f'`{name}`' in out for name in ['import-model', 'migrate-starsim3', 'validate-import']) # The guide lists the skills
+    cli.main(['ai', 'show', 'import-model'])
+    assert 'name: import-model' in capsys.readouterr().out
+    cli.main(['ai', 'uninstall'])
+    assert not skill.exists() and other.exists()
+    return
+
+
 if __name__ == '__main__':
     do_plot = True
     sc.options(interactive=do_plot)

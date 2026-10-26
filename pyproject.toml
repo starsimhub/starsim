@@ -128,6 +128,9 @@ lock = [
 
 optuna = ["scikit-learn"]
 
+[project.scripts]
+starsim = "starsim.cli:main"
+
 [project.urls]
 "Website" = "https://starsim.org"
 "Source" = "https://github.com/starsimhub/starsim/"
@@ -138,6 +141,7 @@ include = ["starsim*"]
 
 [tool.setuptools.package-data]
 starsim = ["*.ipynb", "*.rst", "*.csv"]
+starsim_ai = ["**/*"]
 
 [tool.setuptools.dynamic]
 version = {attr = "starsim.version.__version__"}

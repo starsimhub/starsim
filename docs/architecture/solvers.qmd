@@ -112,7 +112,7 @@ Each path below is checked against a reference where one exists: the ODE against
 
 ## Limits
 
-- Solvers that take whole steps differ from the ODE by an amount of order `dt`, which is why the agreement tests use a quarter-day step. With whole weekly steps (`substeps=1`) on an SIR with daily rates, the chain binomial's peak is about a third higher than the ODE's; by default it takes enough substeps to stay within a few percent.
+- Solvers that take whole steps differ from the ODE by an amount of order `dt`, which is why the agreement tests use a quarter-day step. With whole weekly steps (`substeps=1`) on an SIR with daily rates, the chain binomial's peak is about a third higher than the ODE's; by default it takes enough substeps to stay within a few percent (see `Compartmental.binomial_substeps()`: about x/2 for x the rate out of a compartment times the substep, amplified near the epidemic threshold).
 - Agreement is tested on simple models. For complex ones (a sexual network as an ODE), solvers are expected to differ; the guarantee is that Starsim says what it approximated.
 - Gillespie is exact but takes events one at a time; for millions of events in groups that mix, `'tau'` is the practical choice.
 - Gradients exist only for `solver='ode'` and for rates written as expressions. One model can't yet mix solvers (an ODE with rare importations as discrete events).

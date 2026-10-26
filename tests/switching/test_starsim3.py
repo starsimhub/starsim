@@ -69,7 +69,7 @@ def test_starsim3_fit():
 
 def test_starsim3_port():
     sc.heading('Starsim 3: the same SIS redeclared, with the beta dict ported as the migrate-starsim3 skill says')
-    skill = sc.loadtext(sc.thispath() / '../../ai/migrate-starsim3/SKILL.md')
+    skill = sc.loadtext(sc.thispath() / '../../starsim_ai/migrate-starsim3/SKILL.md')
     assert "beta={'random': ss.prob(0.05, 'month')}" in skill # Bare numbers in a beta dict were probabilities per step in Starsim 3; core says nothing about Starsim 3, so the skill carries the rule
     S, I = ss.states('S I')
     sis = ss.Disease(infection=ss.Transition(S, I, rate=dict(randomnet=ss.prob(0.05, 'month')) * I), recovery=ss.Transition(I, S, dur=ss.years(1)), init_prev=0.01, name='sis')

@@ -73,7 +73,7 @@ class Cond:
 
     def __repr__(self):
         op, args = self.op, self.args
-        if op == 'people': return f'people.{args[0]}'
+        if op == 'people': return f'people.{args[0]}' if len(args) == 1 else f'people.get({args[0]!r}, {args[1]!r})'
         elif op in ['state', 'array']: return f'{modname(args[0])}.{args[1]}' if args[0] is not None else f'{args[1]}'
         elif op == 'dim':  return f'{args[0]}'
         elif op == 'kind': return f'{args[0].__name__}.held'
@@ -188,6 +188,40 @@ class Cond:
     def isin(self, values):
         return Cond('isin', self, tuple(values))
 
+    def __getitem__(self, uids):
+        """
+        In a running sim, as agents: the condition's value for some agents (by UID), as code reads an array, so code and
+        declarations share the names (e.g. `preg.since_birth[uids]`, `(preg.P & preg.lactating)[uids]`, `tb.diagnosis.count[uids]`)
+        """
+        return self.evaluate_in()[uids]
+
+    @property
+    def values(self):
+        """ In a running sim, as agents: the condition's value for each agent alive, in the order of `sim.people.auids` (as `ss.Arr.values`) """
+        sim = self.evaluate_in(sim_only=True)
+        return self.evaluate_in()[sim.people.auids]
+
+    def evaluate_in(self, sim_only=False):
+        """ For `cond[uids]` and `cond.values`: the value for each agent (by UID), in the sim of a module the condition reads """
+        mod = find_module(self)
+        sim = getattr(mod, 'sim', None)
+        if sim is None or not sim.initialized:
+            errormsg = f'{self!r} has no values yet: cond[uids] and cond.values are for a condition on a module in a sim that has been initialized'
+            raise ValueError(errormsg)
+        if sim_only:
+            return sim
+        if sim.solver != 'abm':
+            raise ss.CapabilityError(f'{self!r}[uids] is a value for each agent, which exist only with solver="abm"; with solver="{sim.solver}", read the counts in its results')
+        selector = Selector(sim, mod if getattr(mod, 'graph', None) is not None else None)
+        try:
+            out = self.eval(selector)
+        except (KeyError, AttributeError) as e: # E.g. the memory of a declared transition that nothing in the model reads (tb.diagnosis.since), which is not kept
+            raise ss.CapabilityError(f'{self!r} cannot be read: "{mod.name}" keeps it only when something in the model reads it (a condition, rate, or result), and nothing does ({e})') from e
+        out = np.asarray(out)
+        if out.ndim == 0:
+            out = np.full(sim.people.uid.len_tot, out[()])
+        return out
+
     def eval(self, ctx):
         """ Evaluate the condition; `ctx` supplies the value of each leaf (see `Selector`) """
         op, args = self.op, self.args
@@ -212,6 +246,26 @@ class Cond:
                 return np.clip(a*b if op == '&' else a + b - a*b, 0, 1)
             a, b = as_bool(a), as_bool(b)
         return ops[op](a, b)
+
+
+def find_module(cond):
+    """ The first module (as an object, with its sim) that a condition reads, or None """
+    stack = [cond]
+    seen = set()
+    while stack:
+        x = stack.pop()
+        if id(x) in seen:
+            continue
+        seen.add(id(x))
+        if isinstance(x, ss.Module):
+            return x
+        if isinstance(x, Cond):
+            stack.extend(reversed(x._args))
+        elif isinstance(x, (tuple, list)):
+            stack.extend(reversed(x))
+        elif isinstance(getattr(x, 'module', None), ss.Module): # A state or transition of a declared module
+            return x.module
+    return None
 
 
 class Event(Cond):
@@ -830,6 +884,8 @@ class Selector:
                 d = dims.index(name)
                 strat = sim.groups.strats[d]
                 return sim.groups.group_vals(d, strat.worth(), outside=strat.worth() @ strat.split)[None, :]
+            if len(args) > 1 and name not in sim.people: # ss.ppl.get(name, default), and nothing added the property
+                return np.full(self.shape if self.abm else (1, sim.groups.n_groups), args[1])
             arr = sim.people[name] # In a compartmental run this is one value per group, and stops with a message if people are not stratified by it
             return arr.raw if self.abm else np.asarray(arr.raw)[None, :sim.groups.n_groups]
         name = args[1]

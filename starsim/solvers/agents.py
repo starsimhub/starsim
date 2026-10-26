@@ -1682,6 +1682,11 @@ class Agents(Engine):
                         self.flow_groups[f'{name}.{dst.name}'] = self.flow_groups.get(f'{name}.{dst.name}', 0) + np.bincount(self.groups(inds, dst), weights=self.weights(inds), minlength=self.sim.groups.n_groups)
                 if len(inds) and (dst.name in self.scheduled or (self._row is not None and self.competing[dst.name])):
                     arrived[dst.name].append(inds)
+        if self._row is not None and by_tr and self._backfill is None: # Births driven by a flow (e.g. at a delivery) before the arrivals face the rates of where they arrived, so those rates see the event that brought them (its children and records, e.g. ss.Pregnancy's since_birth: FP2)
+            if self._news: # The modules that react to the event first, as they would at the end of the step (e.g. a fetus that dies at the delivery is stillborn, not born)
+                self._news = False
+                self.notify(ti)
+            self.step_per(ti)
         onward = [] # The same-step cascade: those whose exit is due already when they enter (a branch nobody waits in, or a dwell time that rounds to no steps) move on at once, as in the ODE, rather than being held for a step
         row = self._row
         staying = [] # Entered in the state-change row, into a state with competing rates
@@ -1818,6 +1823,7 @@ class Agents(Engine):
                 born.append(new)
         if born:
             born = ss.uids.concatenate(born)
+            self.cache.clear() # Values worked out this step before the children and the event's records (e.g. a rate function of the mothers' time since birth), for the draws of those who arrive now (see finish_moves())
             for mod in self.sim.declared: # In each module they were put in
                 engine = mod.engine
                 if engine is not self and isinstance(engine, Agents) and (engine.move_due(born, ti) or engine._news): # Or a birth recorded there just now, which its triggers and those of the modules that react to it see

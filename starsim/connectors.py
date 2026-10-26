@@ -320,10 +320,11 @@ class AgentModifiers:
     @staticmethod
     def unapplied(mod, kind):
         """ Why a disease written as code would not apply the modifiers on its `rel_sus` or `rel_trans` (`kind`), or None if it would: a transmitted `ss.Infection` reads them in `transmit_route()` (see `check_applied()`) """
-        if isinstance(mod, ss.Infection) and 'beta' in mod.pars:
+        if (isinstance(mod, ss.Infection) and 'beta' in mod.pars) or kind in getattr(mod, 'reads_modifiers', ()): # Or its own code reads them, with mod.modified()
             return None
         why = 'it is not an ss.Infection' if not isinstance(mod, ss.Infection) else 'it has no beta'
-        return f'"{mod.name}" is written as code and is not transmitted ({why}), so nothing reads its rel_sus or rel_trans; a product or modifier acts on it only through its transmission.'
+        return (f'"{mod.name}" is written as code and is not transmitted ({why}), so nothing reads its rel_sus or rel_trans; a product or modifier acts on it only through its transmission. '
+                f'If its own code reads {kind} with {mod.name}.modified(\'{kind}\', uids), say so in its class: reads_modifiers = (\'{kind}\',).')
 
     @staticmethod
     def attach(mod, kind, sim):

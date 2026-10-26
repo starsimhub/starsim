@@ -98,6 +98,8 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
     and the compartments it feeds. Every solver steps the same list of flows.
     """
     max_binomial = 100 # The most substeps the chain-binomial solver chooses in a step (see substeps())
+    max_ngm = 1000 # The most compartments by groups for which binomial_substeps() works out R0 (the next-generation matrix takes two evaluations of the model for each)
+    binomial_bias = 0.05 # The most rate × substep (x) the chain-binomial solver takes by default: people who arrive in a compartment within a substep leave from the next, so it holds about x/2 too many (TC1, TB3; see binomial_substeps())
     max_bytes = 500e6 # The most memory that run_many() may use for the values of each group, over all its runs; above it, they are kept every few steps (see ss.solvers.group_rows())
 
     def __init__(self, module, sim):
@@ -1702,7 +1704,7 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
             maps       = np.array(list(maps.values()), dtype=float).reshape(len(maps), ng, ng),
         )
         local = self._local_mixing and not maps and self.program.contacts.shape[0] == self.program.contacts.shape[2] == 1 and all(flow.record is None for flow in self.flows) # Places do not affect each other within a step: see ss.kernels.gillespie_places()
-        self.program = self.program._replace(local=local)
+        self.program = self.program._replace(local=self.certain() is None and local) # The exact solver place by place works out its own rates, so does not take an infinite one
         return
 
     def refresh_program(self):
@@ -1861,6 +1863,18 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
         return F @ np.linalg.inv(V)
 
     #%% A whole run in the kernels
+
+    def certain(self):
+        """ The name of a transition with an infinite rate (a probability of 1 over the period) at the start, which the kernels take as everyone moving at once (see `ss.kernels.certain()`), and which JAX and the exact solver by place do not; or None """
+        for flow in self.flows:
+            if flow.kind != 'conveyor' and (not flow.dynamic or flow.src is None) and np.isinf(np.asarray(self.flow_base(flow)*self.flow_mult(flow), dtype=float)).any():
+                name = flow.tr.name if flow.tr is not None else 'a transition'
+                if flow.src is None: # Nobody to move: a rate of arrivals
+                    raise ValueError(f'"{name}" of "{self.mod.name}" brings people in at a probability of 1 over a period, an infinite rate, which in compartments is an infinite number of arrivals. Give it as a rate (e.g. ss.peryear(0.05)), or run as agents (solver="abm")')
+                return name
+        if any(np.isinf(self.prog_value(par)).any() for par in self.prog_pars):
+            return 'a parameter'
+        return None
 
     def kernel_only(self):
         """ Whether the whole run can be taken in one call to the kernels: see `kernel_reason()` """
@@ -2491,11 +2505,10 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
         """
         The number of substeps to take in each timestep (0 to let the solver choose)
 
-        The chain-binomial solver takes enough substeps that no more than about a tenth
-        of the people in a compartment leave it in one, as far as the rates are known at
-        the start (at most `max_binomial`): each substep is off the ODE by an amount of
-        order rate × dt (ST55: an acute stage of 1.7 months at monthly steps took everyone
-        infected from 9% to 51%). It moves people through as many stages of a dwell time as
+        The chain-binomial solver takes enough substeps that its step bias is small, as far as
+        the rates are known at the start (at most `max_binomial`): see `binomial_substeps()`.
+        Each substep is off the ODE by an amount of order rate × dt (ST55: an acute stage of 1.7
+        months at monthly steps took everyone infected from 9% to 51%). It moves people through as many stages of a dwell time as
         they pass in a substep (see `ss.kernels.draw_chain()`), so it is the dwell's mean
         that counts, not its stages; a fixed delay is a conveyor of whole steps. `substeps=1`
         takes whole steps, as most chain-binomial models (and frameworks' discrete-time
@@ -2509,7 +2522,16 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
         return n_sub or 0
 
     def binomial_substeps(self):
-        """ The substeps the chain-binomial solver takes in each step, from the fastest total rate out of a compartment of people at the start: see `substeps()` """
+        """
+        The substeps the chain-binomial solver takes in each step, from the fastest total rate out of a compartment of people at the start (see `substeps()`)
+
+        People who arrive in a compartment within a substep leave it from the next, so a compartment holds about x/2 too
+        many, with x its total rate out times the substep, and R is that much too high (TC1). So x is kept to
+        `binomial_bias` (5%), which bounds the bias in each compartment to about 2.5%; and near the epidemic threshold,
+        where the prevalence moves by the bias in R over R0 - 1 (an SIS's endemic prevalence is 1 - 1/R0), to
+        0.1 × |R0 - 1|, for a bias of about 5% (TB3: TBsim's resistance model, +12% at 3 substeps a month, is +3% at
+        12; an SIS with R0 = 1.05 gave 0.083 for 0.048 at whole steps).
+        """
         totals = {} # The rates out of each compartment, summed: e.g. recovery and death from I
         for flow in self.flows:
             if flow.src is not None and not flow.dynamic and flow.kind != 'conveyor' and flow.state.people:
@@ -2517,11 +2539,25 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
                 rate = np.where(np.isfinite(rate), rate, 0.0)
                 totals[flow.src] = totals.get(flow.src, 0.0) + rate
         fastest = max((np.max(rate, initial=0.0) for rate in totals.values()), default=0.0)
-        n_sub = max(int(np.ceil(fastest*self.dt/0.1 - 1e-9)), 1)
+        x_max = self.binomial_bias
+        R0 = None
+        if fastest > 0 and len(self.comps)*self.n_groups <= self.max_ngm: # R0, if it has one (an infection written as a rate, e.g. beta*I.frac, is one too), and if it is quick to work out
+            try:
+                ngm = self.next_generation()
+                R0 = float(np.max(np.abs(np.linalg.eigvals(ngm)))) if ngm is not None and ngm.size else None
+            except Exception: # Not every model has one
+                R0 = None
+            if R0 is not None and np.isfinite(R0):
+                x_max = min(x_max, 0.1*abs(R0 - 1))
+        h = x_max/fastest if fastest > 0 else np.inf # The length of a substep, in the sim's unit, rounded to the nearest power of 2 of it (so x is within √2 of x_max), so that halving dt halves the substeps and keeps their length (see sim.check_dt())
+        h = 2.0**np.round(np.log2(h)) if np.isfinite(h) and h > 0 else np.inf
+        need = int(np.ceil(self.dt/h - 1e-9)) if np.isfinite(h) else 1
+        n_sub = max(need, 1)
         if n_sub > self.max_binomial:
             n_sub = self.max_binomial
             unit = self.sim.unit_name
-            ss.note(f'"{self.mod.name}" has a rate of {fastest:.3g} per {unit} out of a state, so the chain-binomial solver would take {int(np.ceil(fastest*self.dt/0.1))} substeps a step to follow it; it takes {n_sub}, with rate × dt = {fastest*self.dt/n_sub:.2g} in each. A smaller dt, substeps=, or solver="tau" follows it more closely', ss.errors.LargeStep, sim=self.sim)
+            near = f' (R0 = {R0:.3g}, near the epidemic threshold, where a small bias in R moves the prevalence a lot)' if R0 is not None and x_max < self.binomial_bias else ''
+            ss.note(f'"{self.mod.name}" has a rate of {fastest:.3g} per {unit} out of a state{near}, so the chain-binomial solver would take {need} substeps a step to keep its step bias small; it takes {n_sub}, with rate × dt = {fastest*self.dt/n_sub:.2g} in each. A smaller dt, substeps=, or solver="tau" follows it more closely', ss.errors.LargeStep, sim=self.sim)
         return n_sub
 
     def step_state(self):

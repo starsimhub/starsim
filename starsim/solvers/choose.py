@@ -315,7 +315,7 @@ def kernel_seconds(sim):
             seconds += ss.kernels.compiled_seconds(p, np.empty((cross.n_rows if cross is not None else engine.n_comps, groups)), mod.t.npts, solver, n_sub)
             continue
         elif sim.solver == 'tau':
-            leaps = max(np.max(rates, initial=0)*engine.dt/0.03, 1)
+            leaps = max(np.max(rates[np.isfinite(rates)], initial=0)*engine.dt/0.03, 1) # An infinite rate (a probability of 1) moves everyone at once, in no leaps (see ss.kernels.certain())
         seconds += 1.5e-7*mod.t.npts*groups*(len(p.src) + p.n_movers + 2*np.sum(p.src_chain))*leaps*max(engine.substeps(), 1)
     return seconds
 

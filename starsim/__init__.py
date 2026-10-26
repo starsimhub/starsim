@@ -162,5 +162,8 @@ def _load_fonts():
 # Try loading fonts
 _load_fonts()
 
+# Say if Starsim has not been compiled yet
+kernels.note_uncompiled()
+
 # Don't keep these in the module
 del sc

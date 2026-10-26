@@ -30,6 +30,17 @@ class LazyPeople:
             raise AttributeError(name)
         return ss.conditions.Cond('people', name)
 
+    def get(self, name, default):
+        """
+        `ss.ppl.<name>`, or `default` for everyone if nothing adds the property `<name>` to the people, e.g. one that a
+        module adds (`people.add_state()`), read by a rate whether or not that module is in the sim
+
+        **Example**::
+
+            onset = S >> D @ ss.peryear(0.01)*(1 + 0.5*ss.ppl.get('unstable_housing', 0))
+        """
+        return ss.conditions.Cond('people', name, default)
+
     def __repr__(self):
         return 'ss.ppl'
 
@@ -452,6 +463,45 @@ class People:
                 self.states[combined_name] = state # Register the state on the user-facing side using the combined name. Within the original module, it can still be referenced by its original name
         return
 
+    def add_state(self, state):
+        """
+        Add a property of each person, from a module (e.g. a social determinant of health that several modules read, as `ss.ppl.<name>`)
+
+        Idempotent: if the people have a property of that name already (added by another module, say), it is
+        returned as it is, so each module that reads it can add it. Call it before the people's values are made,
+        e.g. in a module's `init_pre()`; added later, its values are made at once.
+
+        Args:
+            state (Arr): the array, e.g. `ss.BoolArr('housing', default=False)` or `ss.FloatArr('adherence', default=ss.uniform())`
+
+        Returns:
+            The property's array (the one given, or the one added before)
+
+        **Example**::
+
+            def init_pre(self, sim):
+                super().init_pre(sim)
+                self.housing = sim.people.add_state(ss.BoolArr('housing', default=ss.bernoulli(0.8)))
+        """
+        name = state.name
+        if name in self.states:
+            return self.states[name]
+        if name in self.__dict__ or name in dir(type(self)):
+            errormsg = f'The people cannot have a property called "{name}": it is already {"a module" if isinstance(getattr(self, name), ss.Module) else "an attribute"} of the people. Give the array another name.'
+            raise AttributeError(errormsg)
+        self.states.append(state)
+        setattr(self, name, state)
+        state.link_people(self)
+        sim = self.__dict__.get('sim')
+        if sim is not None:
+            dists = ss.distributions.link_dists(obj=state, sim=sim, module=self, skip=[ss.Sim, ss.Module, People]) # Its own (not those of the people it links to)
+            if self.initialized: # Initialized with the others otherwise (see ss.Sim.init())
+                for trace,dist in dists.items():
+                    dist.init(trace=f'people_{name}_{trace}', seed=sim.dists.base_seed, sim=sim)
+        if self.initialized:
+            state.init_vals()
+        return state
+
     def init_vals(self):
         """ Populate states with initial values, the final step of initialization """
         for state in self.states():
@@ -596,7 +646,7 @@ class People:
             self.age[self.alive.uids] += sim.t.dt_year
         return
 
-    def request_death(self, uids, cause=None):
+    def request_death(self, uids, cause=None, hazard=None):
         """
         External-facing function to request an agent die at the current timestep
 
@@ -613,14 +663,16 @@ class People:
         see and record outcomes for agents that died this timestep.
 
         Each person dies once, of one cause: if several modules request the death of the same person
-        in the same step, one of them is chosen at random (each equally likely, whatever the order of
-        the modules, with common random numbers), and the cause is kept in `people.cause_of_death`
+        in the same step, one of them is chosen at random (whatever the order of the modules, with
+        common random numbers): in proportion to the hazards of the claims if each gave one (`hazard=`),
+        and otherwise each equally likely. The cause is kept in `people.cause_of_death`
         (see `people.causes`). A module counts its deaths after they are resolved, with
         `people.died_of(module)`, so a death is counted once.
 
         Args:
             uids: Agent IDs to request deaths for
             cause (Module/str): what they die of: a module (by its name) or a name (default: none)
+            hazard (float/array): the hazard of this death, one number or one per agent (in any unit, the same for every module, e.g. per year), to weight the choice of cause among the claims on the same person in the step (e.g. `dis.death.hazard(uids)` for a declared transition)
 
         Returns:
             UIDs of agents that have been scheduled to die on this timestep
@@ -630,7 +682,8 @@ class People:
             name = cause.name if isinstance(cause, ss.Module) else cause
             if name not in self.causes:
                 self.causes.append(name)
-            self._claims.append((ss.uids(uids), self.causes.index(name)))
+            hazard = np.full(len(uids), np.nan) if hazard is None else np.broadcast_to(np.asarray(hazard, dtype=float), len(uids))
+            self._claims.append((ss.uids(uids), self.causes.index(name), hazard))
         return
 
     def died_of(self, cause):
@@ -644,22 +697,35 @@ class People:
         self._died_of = {}
         if not claims:
             return
-        uids = np.concatenate([u for u,c in claims]).astype(np.int64)
-        codes = np.concatenate([np.full(len(u), c) for u,c in claims])
+        uids = np.concatenate([u for u,c,h in claims]).astype(np.int64)
+        codes = np.concatenate([np.full(len(u), c) for u,c,h in claims])
+        hazards = np.concatenate([h for u,c,h in claims])
         keep = np.isin(uids, death_uids) # E.g. not someone who left instead
-        uids, codes = uids[keep], codes[keep]
+        uids, codes, hazards = uids[keep], codes[keep], hazards[keep]
         rank = np.argsort(np.argsort([str(name) for name in self.causes]))[codes] # By the name of the cause, so the order of the modules does not matter
         order = np.lexsort((rank, uids))
-        uids, codes, rank = uids[order], codes[order], rank[order]
+        uids, codes, rank, hazards = uids[order], codes[order], rank[order], hazards[order]
         new = np.ones(len(uids), dtype=bool)
         new[1:] = (uids[1:] != uids[:-1]) | (rank[1:] != rank[:-1]) # One claim per cause per person
-        uids, codes = uids[new], codes[new]
+        uids, codes, hazards = uids[new], codes[new], hazards[new]
         people, start, counts = np.unique(uids, return_index=True, return_counts=True)
         pick = start.copy()
         several = counts > 1
-        if several.any(): # One of the causes, each equally likely
+        if several.any(): # One of the causes: in proportion to their hazards if every claim on the person gave one (MG8), else each equally likely
             u = self._cause_dist.rvs(ss.uids(people[several]))
-            pick[several] += np.minimum((u*counts[several]).astype(int), counts[several] - 1)
+            if np.isnan(hazards).all():
+                pick[several] += np.minimum((u*counts[several]).astype(int), counts[several] - 1)
+            else:
+                group = np.repeat(np.arange(len(people)), counts)
+                w = np.maximum(hazards, 0)
+                equal = np.logical_or.reduceat(np.isnan(w), start) | (np.add.reduceat(np.nan_to_num(w), start) <= 0)
+                w = np.where(equal[group], 1.0, w)
+                cum = np.cumsum(w)
+                within = cum - np.repeat(cum[start] - w[start], counts) # The running total within each person's claims
+                target = np.zeros(len(people))
+                target[several] = u*within[start + counts - 1][several]
+                below = np.add.reduceat((within <= target[group]).astype(int), start)
+                pick[several] += np.minimum(below[several], counts[several] - 1)
         people, codes = ss.uids(people), codes[pick]
         self.cause_of_death[people] = codes
         for code in np.unique(codes):

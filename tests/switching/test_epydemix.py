@@ -49,7 +49,7 @@ def weekly_data():
 
 def test_epydemix_kenya():
     sc.heading('epydemix: the Kenya tutorial, 100 chain-binomial runs, against epydemix')
-    sim = ss.Sim(make_kenya(), networks=ss.contacts('Kenya'), people=ss.people('Kenya', year=2020), solver='binomial', **kenya)
+    sim = ss.Sim(make_kenya(), networks=ss.contacts('Kenya'), people=ss.people('Kenya', year=2020), solver='binomial', substeps=1, **kenya) # Whole days, as epydemix takes them
     res = sim.run(n_runs=100).results.sir
     I, R = [np.asarray(res[key].values).mean(axis=0) for key in ['I', 'R']]
     N = I[0] + R[0] + np.asarray(res.S.values).mean(axis=0)[0]

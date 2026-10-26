@@ -135,6 +135,9 @@ class Options(sc.objdict):
         optdesc.compile = 'Whether the compartmental solvers run compiled (by Numba) or as plain Python, which gives the same results: "auto" (default) for compiled if they are compiled already (see ss.compile()), or if the runs in a session would take longer uncompiled than compiling takes (about two minutes, once per install), with a note either way; "always" to always compile them first; "never" for plain Python (and the kernels, not JAX, for the chain binomial, whose draws in JAX are compiled by Numba; so a long seeded chain-binomial run gives other numbers than with "auto")'
         options.compile = sc.parse_env('STARSIM_COMPILE', 'auto', str)
 
+        optdesc.uncompiled_warning = 'If True (default), say on import when Starsim has not been compiled yet (see ss.compile()) -- NOTE, only has effect via the environment variable since executed on load'
+        options.uncompiled_warning = sc.parse_env('STARSIM_UNCOMPILED_WARNING', True, bool)
+
         optdesc.crn = 'If True (default), use common random numbers (CRN) for reproducibility across scenarios. Set False for faster draws (one plain uniform per agent/edge, skipping the slot machinery); statistically valid but not CRN-safe across scenarios.'
         options.crn = sc.parse_env('STARSIM_CRN', True, bool)
 
