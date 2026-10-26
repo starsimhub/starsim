@@ -1411,6 +1411,111 @@ def test_algebra():
     return
 
 
+def test_init_expression():
+    """ TY2: init= takes an expression of people's properties and parameters, under every solver, and its parameters can be set by name """
+    class M(ss.Disease):
+        A = ss.par(20.0)
+        k = ss.par(1.0)
+        age = ss.ppl.age # A helper, not a result
+        U = ss.State()
+        S = ss.State(init=np.minimum(1, 1 - (A - age)/(k*age + A))) # Gauld et al.'s share susceptible by age
+        first = 'U'
+        become = U >> S @ ss.peryear(0.01)
+    share = lambda sim: sim.results.m.S[0]/(sim.results.m.S[0] + sim.results.m.U[0])
+    sim = ss.Sim(diseases=M(), n_agents=20_000, dur=ss.days(3), dt=ss.days(1), verbose=0, rand_seed=1).run()
+    age = sim.people.age.raw[sim.people.auids]
+    expected = np.mean(np.minimum(1, 1 - (20 - age)/(age + 20)))
+    assert abs(share(sim) - expected) < 0.01
+    ode = ss.Sim(diseases=M(), n_agents=20_000, dur=ss.days(3), dt=ss.days(1), verbose=0, solver='ode', use_aging=True)
+    ode.stratify(age=[0, 5, 10, 15, 20, 100])
+    assert abs(share(ode.run()) - expected) < 0.03 # By age group
+    fitted = ss.Sim(diseases=M(), n_agents=20_000, dur=ss.days(3), dt=ss.days(1), verbose=0, rand_seed=1, pars={'m.A': 5}).run()
+    assert share(fitted) > share(sim) + 0.05
+    class Q(ss.Disease): # Given in __init__(), reading the class's parameters
+        U, S = ss.states('U S')
+        first = 'U'
+        A = ss.par(20.0)
+        become = U >> S @ ss.peryear(0.01)
+        def __init__(self, **kwargs):
+            super().__init__(init=dict(S=np.minimum(1, ss.ppl.age/self.A)), **kwargs)
+    q = ss.Sim(diseases=Q(), n_agents=5000, dur=ss.days(3), dt=ss.days(1), verbose=0).run()
+    assert list(q.diseases.q.pars.keys()).count('A') == 1 and 0.3 < q.results.q.S[0]/(q.results.q.S[0] + q.results.q.U[0]) < 1
+    return sim
+
+
+def test_class_helpers():
+    """ TY4, MS11: an expression per person as a class member is a helper, not a result; another name for a parameter is the same parameter; a parameter given as a result under its own name is an error """
+    class T(ss.Disease):
+        S, I = ss.states('S I')
+        p_gall = ss.par(ss.by(age={0: 0.1, 30: 0.2}))
+        p_cpg = ss.par(0.15)
+        A = ss.par(20.0)
+        A2, age = A, ss.ppl.age # Another name, and a property of people
+        p_carrier = p_cpg*p_gall # A value for each person (by age)
+        rel = age/A2
+        rec = ss.Transition(I, [S, ss.null], p=[p_carrier, None], dur=ss.days(3))
+        inf = S >> I @ ss.perday(0.01)*rel*I
+        prevalence = I/(S + I)
+    sim = ss.Sim(diseases=T(init_prev=0.1), n_agents=500, dur=ss.days(10), dt=ss.days(1), verbose=0).run()
+    res, pars = sim.results.t, sim.diseases.t.pars
+    assert 'prevalence' in res and not any(k in res for k in ['p_carrier', 'rel'])
+    assert 'A' in pars and 'A2' not in pars
+    eir = ss.par(ss.perday(0.01), name='eir')
+    S, I = ss.states('S I')
+    with pytest.raises(ss.errors.DuplicateDeclaration, match='a name of its own'):
+        ss.Disease(S >> I @ eir, I >> S @ ss.perday(0.1), eir=eir, name='m')
+    S, I = ss.states('S I')
+    m = ss.Disease(S >> I @ eir, I >> S @ ss.perday(0.1), eir_now=1*eir, name='m') # As the docs say: a result of a parameter is an expression
+    assert 'eir_now' in ss.Sim(diseases=m, n_agents=100, dur=ss.days(3), dt=ss.days(1), verbose=0).run().results.m
+    return sim
+
+
+def test_describe_init_func():
+    """ MS10: describe() names a function that gives an initial value """
+    class M(ss.Disease):
+        S, I = ss.states('S I')
+        inf = S >> I @ ss.peryear(0.1)
+        def start(self, sim):
+            return 0.1
+        def __init__(self, **kwargs):
+            super().__init__(init=dict(I=self.start), **kwargs)
+    sim = ss.Sim(diseases=M(), n_agents=100, verbose=0).init()
+    assert 'I = start(sim)' in str(sim.diseases.m.describe(output=True))
+    return
+
+
+def test_counter_in_expression():
+    """ TY14: a counter's level is read in a rate as a property of people, as agents and as compartments """
+    out = {}
+    for solver in ['abm', 'ode']:
+        S, I = ss.states('S I')
+        tppi = ss.par(0.5)
+        infection = ss.Transition(S, I, rate=(1 - tppi)**ss.ppl.infections*ss.perday(0.3)*I, increment='infections')
+        sis = ss.Disease(infection, I >> S @ ss.days(7), init=dict(I=0.01), name='sis')
+        sis.stratify(infections=list(range(6)))
+        sim = ss.Sim(diseases=sis, n_agents=10_000, dur=ss.days(150), dt=ss.days(1), verbose=0, solver=solver, rand_seed=1).run()
+        out[solver] = sim.results.sis.infection.sum()/10_000
+    assert abs(out['abm'] - out['ode']) < 0.1*out['ode'] and out['ode'] < 3 # Fewer than with no protection (about 5 infections per person)
+    return out
+
+
+def test_inflow_add():
+    """ TY15: ss.modify(inflow, add=) adds an amount from outside the model to an inflow from ss.null, under every solver """
+    for solver in ['abm', 'ode']:
+        S, I = ss.states('S I')
+        cfu = ss.State(people=False)
+        ty = ss.Disease(S >> I @ ss.perday(1e-9)*cfu.n, I >> S @ ss.days(10), shedding=ss.null >> cfu @ ss.perday(100)*I.n, decay=cfu >> ss.null @ ss.perday(0.5), init=dict(I=0.0), name='ty')
+        added = ss.modify('ty.shedding', add=ss.perday(1e6), start=2000.02)
+        sim = ss.Sim(diseases=ty, interventions=added, n_agents=1000, start=2000, dur=ss.days(40), dt=ss.days(1), verbose=0, solver=solver).run()
+        cfus = sim.results.ty.cfu.values
+        assert cfus[3] == 0 and 1.9e6 < cfus[-2] < 2.2e6 # Added from day 8, decaying at half a day: about 2 million at equilibrium
+    with pytest.raises(ValueError, match='inflow'):
+        S, I = ss.states('S I')
+        sir = ss.Disease(S >> I @ ss.perday(0.1)*I, name='sir')
+        ss.Sim(diseases=sir, interventions=ss.modify('sir.S_to_I', add=1), n_agents=100, verbose=0).init() # Not an inflow
+    return sim
+
+
 if __name__ == '__main__':
     do_plot = True
     sc.options(interactive=do_plot)
@@ -1429,3 +1534,8 @@ if __name__ == '__main__':
     branch = test_branches()
     bwhere = test_branch_where()
     test_algebra()
+    test_init_expression()
+    test_class_helpers()
+    test_describe_init_func()
+    test_counter_in_expression()
+    test_inflow_add()

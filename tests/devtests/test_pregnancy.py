@@ -501,6 +501,19 @@ def test_save_load():
     return loaded
 
 
+def test_fertility_function():
+    """ FP13: each of the three rates is a parameter, which can be a function of (sim, uids); conception_rate() is fertility's default """
+    def fert(sim, uids):
+        ppl = sim.people
+        return ss.peryear(np.where(ppl.female[uids] & (ppl.age[uids] > 15) & (ppl.age[uids] < 45), 0.3, 0.0))
+    out = {}
+    for label,preg in [('default', ss.Pregnancy()), ('function', ss.Pregnancy(fertility=fert))]:
+        sim = ss.Sim(demographics=preg, n_agents=2000, rand_seed=1, **(kw | dict(stop=2003))).run()
+        out[label] = sim.results.pregnancy.conception.sum()
+    assert out['function'] > 1.5*out['default'] # 0.3 a year, about three times the default's
+    return out
+
+
 if __name__ == '__main__':
     T = sc.timer()
     abm = test_states()
@@ -520,4 +533,5 @@ if __name__ == '__main__':
     pp = test_postpartum()
     test_postpartum_ode()
     saved = test_save_load()
+    test_fertility_function()
     T.toc()

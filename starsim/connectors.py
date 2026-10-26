@@ -353,7 +353,7 @@ class modify(Connector):
             any of these as a string (`'sir.pars.beta'`); or the contacts of a network, as the network (`ss.contacts('Kenya', layer='school')`,
             matched by its name) or as a path (`'school.pars.n_contacts'`)
         multiply (float): multiply the quantity by this; like `add` and `set`, it can also be `ss.by(...)` or a function of the sim
-        add (float): add this to the quantity (a parameter only)
+        add (float): add this to the quantity: a parameter, or an inflow (a transition from `ss.null`, e.g. CFUs shed into a reservoir), to which it adds an amount per unit time from outside the model
         set (float): replace the quantity with this (a parameter only)
         efficacy (float): for protection such as a condom or a needle program, the share of the risk it removes: the same as `multiply=1 - efficacy` (give one of them)
         share (float): with `multiply=` or `efficacy=`, the share of acts (or, on a route without acts, of contacts) it acts on: the hazard is multiplied by
@@ -485,7 +485,7 @@ class modify(Connector):
             kind = 'route'
         if self.op != 'multiply' and kind != 'par': # A per-person quantity or a rate is a multiplier on each person's own value, which set= or add= would replace
             what = 'each person\'s own value' if kind in ['rel_sus', 'rel_trans'] else 'the rate (or probability) worked out for each person and group'
-            errormsg = f'{self.op}= on {self.target} would replace {what}; use multiply= (set= and add= are for parameters, e.g. {modname}.pars.beta)'
+            errormsg = f'{self.op}= on {self.target} would replace {what}; use multiply= (set= and add= are for parameters, e.g. {modname}.pars.beta; add= is also for an inflow from ss.null)'
             raise ValueError(errormsg)
         self.target_module, self.target_kind = modname, kind
         for key in [name] if self.route is None else [f'{name}@{route}' for route in self.route]: # On a route, under the transmission's name and the route's (see ss.connectors.route_mult())

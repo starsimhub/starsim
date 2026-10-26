@@ -358,9 +358,39 @@ def test_trigger(cls):
 
 
 # %% Run as a script
+def test_unknown_par_set():
+    """ MG7: a parameter set before init() that the module never defined raises, with a did-you-mean """
+    net = ss.RandomNet()
+    net.pars.n_contact = 4
+    with pytest.raises(ss.errors.UnknownParameter, match='did you mean n_contacts'):
+        ss.Sim(diseases='sis', networks=net, n_agents=100, verbose=0).init()
+    net = ss.RandomNet()
+    net.pars.update(extra=1, create=True) # Defined on purpose
+    ss.Sim(diseases='sis', networks=net, n_agents=100, verbose=0).init()
+    sis = ss.SIS()
+    sis.pars.betta = 0.9
+    with pytest.raises(ss.errors.UnknownParameter, match='did you mean beta'):
+        ss.Sim(diseases=sis, networks='random', n_agents=100, verbose=0).init()
+    return
+
+
+def test_rebound_par():
+    """ FP13: a subclass that rebinds a declared parameter to a method or a value raises, since its transitions never read it """
+    with pytest.raises(ss.CapabilityError, match='as a method'):
+        class P(ss.Pregnancy):
+            def loss_rate(self, sim, uids):
+                return 0
+    with pytest.raises(ss.CapabilityError, match='as a value'):
+        class S(ss.SIR):
+            beta = 0.2
+    return
+
+
 if __name__ == '__main__':
     T = sc.timer()
     test_every_class()
     for cls in triggers:
         test_trigger(cls)
+    test_unknown_par_set()
+    test_rebound_par()
     T.toc()

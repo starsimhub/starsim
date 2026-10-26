@@ -102,6 +102,24 @@ def test_combine_merge():
     return msim
 
 
+@sc.timer()
+def test_quiet_quantiles():
+    """ Runs of a quiet sim print nothing (TB4), and the quantiles of several scenarios unpack by quantile (HP74) """
+    sc.heading('Testing quiet runs and quantiles by scenario')
+    kw = dict(diseases='sis', networks='random', n_agents=300, verbose=0)
+    with sc.capture() as text:
+        ss.Sim(**kw).run(n_runs=2)
+        msim = ss.parallel(ss.Sim(label='a', **kw), ss.Sim(label='b', rand_seed=5, **kw), n_runs=3, parallel=False)
+    assert 'MultiSim' not in text and '%' not in text # The sims' verbose=0 is the MultiSim's default
+
+    I = msim.results.sis.I
+    low, mid, high = I.quantiles([0.1, 0.5, 0.9]) # A result for each quantile, with a row per scenario
+    assert low.values.shape == (2, len(I.timevec))
+    assert np.allclose(high.select(scenario='b').values, I.select(scenario='b').quantiles([0.9]).values)
+    assert (low.values <= high.values).all()
+    return msim
+
+
 if __name__ == '__main__':
     do_plot = True
     sc.options(interactive=do_plot)
@@ -109,6 +127,7 @@ if __name__ == '__main__':
 
     msim2 = test_multisim_construction(do_plot)
     msim3 = test_combine_merge()
+    msim4 = test_quiet_quantiles()
 
     T.toc()
 

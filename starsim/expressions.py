@@ -241,6 +241,7 @@ class par(Nameable, Expr):
         self.source = source
         self.doc = doc
         self.name = name
+        self.name_given = name is not None # Named when made (name=), not by the variable it is assigned to
         self.label = label
         self.literal = literal # An anonymous value written inline, e.g. the 0.5 in 0.5*A
         self.slot = None # The kind of slot it fills: 'rate', 'dur', or None (a plain number)
@@ -642,15 +643,16 @@ class attr(Expr):
 
     Which it is depends on `value` and `on=`: a distribution with `on=` is drawn when the event happens to
     someone; an expression (or the name of another attribute) with `on=` is recorded then, as it was just
-    before the move; a distribution with no `on=` is a trait; and an expression, or a dict of one by state
+    before the move; a dict of them by event (a transition, `tr.to(B)`, `X.enter`, ...) records each event's
+    own value, with no `on=`; a distribution with no `on=` is a trait; and an expression, or a dict of one by state
     (states not listed give NaN), with no `on=` is derived, worked out when it is read. Attributes set on
     the same event are set in the order they are declared, and each sees the ones before it. As agents only.
 
     Args:
-        value (Dist/Expr/str/dict): the distribution, the expression, the name of another attribute, or a dict of expressions by state (or by a sum of states)
+        value (Dist/Expr/str/dict): the distribution, the expression, the name of another attribute, a dict of expressions by state (or by a sum of states), or a dict of distributions or expressions by event
         on (Event/Transition): the event(s) that set it, joined with `|`; none for a trait or a derived attribute
         combine (str/func): how a new value is combined with the one already held: 'last' (the default), 'first', 'max', 'min', 'sum', or `fn(old, new)`
-        init (float): the value before any event (default NaN, or 0 for `combine='sum'`)
+        init (float/Dist/Expr): the value before any event (default NaN, or 0 for `combine='sum'`): a number, or a distribution or an expression (e.g. of `ss.ppl`) drawn or worked out for each person when they are made (at the start, once placed in their states, and at birth)
         name (str): the name; if not given, taken from the keyword or class attribute it is assigned to
         label (str): a human-readable name
 
@@ -660,7 +662,9 @@ class attr(Expr):
         cd4_preart = ss.attr('cd4', on=start_art)                               # Recorded, just before starting
         rel_sev    = ss.attr(ss.normal(1, 0.2))                                 # A trait
         cd4        = ss.attr({latent: cd4_latent, falling: cd4_latent*(1 - falling.progress)}) # Derived
+        dose       = ss.attr({contact: dose_hi, environment: cfu.n/N*share})        # Recorded, a value for each event
         nab        = ss.attr(ss.uniform(0.5, 0.95), on=clearance, combine='max', init=0)
+        n_inf      = ss.attr(1, on=I.enter, combine='sum', init=ss.poisson(lam=ss.ppl.age/20)) # Past infections at the start
         ```
     """
     def __init__(self, value, on=None, combine='last', init=None, name=None, label=None):
@@ -668,6 +672,12 @@ class attr(Expr):
             errormsg = f'combine= is one of {sc.strjoin(combines)}, or a function of (old, new); not {combine!r}'
             raise ValueError(errormsg)
         self.value = ss.transitions.by_dist(value) # A distribution for each group, e.g. ss.by(urban={False: h0, True: h1}), is one distribution
+        self.by_event = None # For a dict by event: (events, value) for each, set in ss.transitions.Graph.resolve_attrs() (TY1)
+        if isinstance(value, dict) and value and all(is_event(key) for key in value):
+            if on is not None:
+                errormsg = f'The attribute {name or ""} is a dict by event, whose keys are the events that set it, so it takes no on='
+                raise ValueError(errormsg)
+            on = list(value.keys())
         self.on = on
         self.combine = combine
         self.init = init
@@ -688,7 +698,7 @@ class attr(Expr):
 
     @property
     def kind(self):
-        """ 'drawn', 'recorded', 'trait', or 'derived' """
+        """ 'drawn', 'recorded', 'trait', or 'derived' (a dict by event is 'recorded', each event's value drawn or worked out) """
         random = isinstance(self.value, ss.Dist) or (isinstance(self.value, Expr) and bool(dists_in(self.value)))
         if self.on is None:
             return 'trait' if random else 'derived'
@@ -700,8 +710,13 @@ class attr(Expr):
 
     @property
     def default(self):
-        """ The value before any event """
-        return self.init if self.init is not None else 0.0 if self.combine == 'sum' else np.nan
+        """ The value before any event, as a number (one drawn for each person, `init_value`, is NaN, or 0 for `combine='sum'`, until drawn) """
+        return self.init if self.init is not None and self.init_value is None else 0.0 if self.combine == 'sum' else np.nan
+
+    @property
+    def init_value(self):
+        """ The distribution or expression the value before any event is drawn from or worked out from for each person, if it is one (TY3) """
+        return self.init if isinstance(self.init, (ss.Dist, Expr, ss.conditions.Cond)) else None
 
     def combined(self, old, new):
         """ A new value combined with the one held """
@@ -719,6 +734,13 @@ class attr(Expr):
         for k,v in self.__dict__.items():
             new.__dict__[k] = sc.dcp(v, memo=memo) if k != 'module' else memo.get(id(v), v)
         return new
+
+
+def is_event(key):
+    """ Whether a key of a dict given to `ss.attr()` is an event (a transition, `tr.to(B)`, `X.enter`, `X.exit`, or several joined with |) rather than a state """
+    if isinstance(key, (ss.transitions.Transition, ss.conditions.Event)):
+        return True
+    return isinstance(key, ss.conditions.Cond) and key.op == '|' and all(is_event(arg) for arg in key.args)
 
 
 def dists_in(expr):
@@ -745,8 +767,8 @@ def events_in(on, graph=None):
 
 
 def rebind(expr, memo):
-    """ The expression with the states and transitions it reads replaced by their copies in `memo`, e.g. `SIR(n=SIR.I + SIR.R)` reads the instance's copies of the class's states; parameters are kept, not copied """
-    if isinstance(expr, (ss.transitions.State, ss.transitions.Transition)):
+    """ The expression with the states, transitions, and parameters it reads replaced by their copies in `memo`, e.g. `SIR(n=SIR.I + SIR.R)` reads the instance's copies of the class's states; other parameters are kept, not copied """
+    if isinstance(expr, (ss.transitions.State, ss.transitions.Transition, par)):
         return memo.get(id(expr), expr)
     if not isinstance(expr, (BinOp, Func, Count, Flow, Clock)):
         return expr
@@ -765,6 +787,12 @@ def rebind(expr, memo):
 def clocks_in(obj):
     """ The clocks an expression, a condition, or a list or dict of them reads """
     return [part for part in nodes(obj) if isinstance(part, Clock)]
+
+
+def per_person_in(expr):
+    """ Whether an expression has a value for each person or group rather than one for the whole model (so it cannot be a result): it reads a property of people, a clock, an attribute, a mother, or a parameter by level (ss.by) or spread across people (a distribution) """
+    kinds = (Prop, Clock, attr, mother)
+    return any(isinstance(part, kinds) or (isinstance(part, par) and isinstance(part.value, (ss.by, ss.Dist))) for part in nodes(expr))
 
 
 class BinOp(Expr):

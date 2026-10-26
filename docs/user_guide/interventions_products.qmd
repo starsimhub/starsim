@@ -164,7 +164,7 @@ msim.plot('sis.I')
 
 ### Coverage and capacity
 
-`coverage=0.7` is a share of the eligible people. `capacity=` is a number available: a bare number is per round for campaigns (or per step, for delivery on events or by a function), and a rate, such as `ss.peryear(500)`, is per unit time, which routine delivery needs. When fewer are available than people who would receive one, those who do are chosen at random, unless `priority=` says who comes first (e.g. `priority=ss.ppl.age`, the oldest first). Given together, coverage is applied first, and capacity caps the result:
+`coverage=0.7` is a share of the eligible people. A typed rate or probability, such as `coverage=ss.perday(0.1)`, is the chance of being reached over the step (or over the round, with `interval=`), and routine delivery then offers it at every step to those eligible: a rate of seeking care, for example. `capacity=` is a number available: a bare number is per round for campaigns (or per step, for delivery on events or by a function), and a rate, such as `ss.peryear(500)`, is per unit time, which routine delivery needs. When fewer are available than people who would receive one, those who do are chosen at random, unless `priority=` says who comes first (e.g. `priority=ss.ppl.age`, the oldest first). Given together, coverage is applied first, and capacity caps the result:
 
 ```{python}
 limited = ss.vaccinate(efficacy=0.8, coverage=0.6, at=['2005', '2010'], capacity=500) # At most 500 doses a round

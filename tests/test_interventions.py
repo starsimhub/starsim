@@ -100,6 +100,11 @@ def test_two_products():
     for intervention in [campaign]: # Also bound to a loop variable, and passed through sim.new()
         assert 'campaign' in ss.Sim(make_pars(), interventions=intervention).init().interventions
         assert 'campaign' in ss.Sim(make_pars()).new(interventions=intervention).init().interventions
+
+    # Two products of the same default name: the warning names the product's own class (HP85b)
+    t1, t2 = [ss.treat(ss.Treatment(cure=c), coverage=0.5, at=2005) for c in [0.5, 0.9]]
+    with pytest.warns(Warning, match=r"ss\.Treatment\(\.\.\., name="):
+        ss.Sim(make_pars(), interventions=[t1, t2]).init()
     return sim
 
 

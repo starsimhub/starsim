@@ -104,6 +104,13 @@ class Disease(ss.Module):
             errormsg = (f'{cls.__name__} declares states or transitions and defines {sc.strjoin(overridden)}, which a declared transition never calls, so it would be silently ignored.\n'
                         f'     A disease whose transmission is written as code subclasses {base} (import starsim.library as ssl); a declared one changes its transitions.')
             raise ss.CapabilityError(errormsg)
+        rebound = [name for name in dict.fromkeys(k for base in cls.__mro__[1:] for k,v in vars(base).items() if isinstance(v, ss.par)) if name in vars(cls) and not isinstance(vars(cls)[name], (ss.par, ss.transitions.Expr))]
+        if rebound: # A declared parameter rebound to something else (a method, a number) is dropped from the model, and its transitions keep the base class's parameter, so it would be silently ignored
+            name = rebound[0]
+            how = (f'give the parameter a function as its value instead, e.g. self.pars.update({name}=self.my_{name}) in __init__(), where my_{name}(sim, uids) returns the value for those agents' if callable(vars(cls)[name]) else
+                   f'to change its default, give the value in __init__(), e.g. super().__init__(**({{"{name}": {vars(cls)[name]!r}}} | kwargs))')
+            errormsg = f'{cls.__name__} defines {sc.strjoin(rebound)}, a parameter of {cls.__mro__[1].__name__}, as {"a method" if callable(vars(cls)[name]) else "a value"}, which its transitions never read; {how}'
+            raise ss.CapabilityError(errormsg)
         infect = vars(cls).get('infect')
         if infect is not None and infection and len(inspect.signature(infect).parameters) == 1: # Starsim 3's transmission pass, infect(self), which is transmit() now: it would never be called
             errormsg = f'{cls.__name__} defines infect(self), the transmission pass, which is called transmit() now (infect(uids) infects people from code); rename it to transmit(), and infect_route() to transmit_route()'
@@ -211,6 +218,18 @@ class Disease(ss.Module):
         memo |= {key:p for key,p in pars.items() if p.module is None} | others # Parameters that came with the copied transitions are copied too, so each disease has its own; one not yet registered stays shared, e.g. one R0 for several models
         return sc.dcp((args, members), memo=memo)
 
+    def check_par_members(self, args, members, kwargs):
+        """ A parameter given by keyword under the name it already has (name=), and read by a transition, as if it were a result (e.g. eir=eir) is an error: a result needs a name of its own (MS11) """
+        for key,val in kwargs.items():
+            if isinstance(val, ss.par) and val.name_given and val.name == key:
+                exprs = [e for obj in list(args) + list(members.values()) + list(kwargs.values()) if isinstance(obj, ss.Transition) for e in [obj.rate, obj.dur] + sc.tolist(obj.p)]
+                exprs += [obj for obj in list(members.values()) + list(kwargs.values()) if isinstance(obj, ss.transitions.Expr) and obj is not val]
+                if any(part is val for part in ss.expressions.nodes(exprs)):
+                    errormsg = (f'"{key}" of "{self.name}" is given the parameter "{key}" itself, which its transitions already read, so it is not a result: a result needs a name of its own. '
+                                f'For a result of a parameter, write an expression of it under another name, e.g. {key}_now = 1*{key}')
+                    raise ss.errors.DuplicateDeclaration(errormsg)
+        return
+
     def init_graph(self, args, members, pars, kwargs, names=None):
         """ Build the graph of declared states and transitions; see `ss.transitions.Graph` """
         meta = {key:kwargs.pop(key) for key in ['name', 'label'] if key in kwargs}
@@ -237,8 +256,10 @@ class Disease(ss.Module):
         memo = {id(leaf):leaf for val in members.values() if isinstance(val, ss.Transition) for expr in [val.rate, val.dur, getattr(val, 'p_die', None), getattr(val, 'p_stay', None)] + sc.tolist(getattr(val, 'p', None)) if isinstance(expr, ss.transitions.Expr) for leaf in leaves(expr) if isinstance(leaf, ss.par) and not any(leaf is m for m in members.values()) and not holds_members(leaf) and not holds_expr(leaf)}
         members = sc.dcp(members, memo=memo) # Copy class members (together, so they still refer to each other) so instances do not share them; a parameter defined outside the class (rate = ss.par(...) at module level) stays shared, as in the operator form, so it keeps its name
         kwargs = {k:ss.expressions.rebind(v, memo) for k,v in kwargs.items()} # A result given here that reads the class's states reads the copies
+        init, init_n = [{k:ss.expressions.rebind(v, memo) for k,v in d.items()} if isinstance(d, dict) else d for d in [init, init_n]] # Likewise a starting value, e.g. init=dict(S=1 - (A - age)/(k*age + A)) with the class's parameters
         for key in [key for key,val in kwargs.items() if isinstance(val, ss.par) and isinstance(members.get(key), ss.par)]: # e.g. ss.SIS(beta=ss.par(0.1, bounds=[0.05, 1])): the class's parameter, which its transitions use, takes the value and bounds
             members[key].merge(kwargs.pop(key))
+        self.check_par_members(args, members, kwargs)
         members = sc.mergedicts(members, kwargs)
         args, members = self.reuse(args, members, names)
         self.graph = ss.transitions.Graph(self, args, members, init_prev=init_prev, init=init, init_n=init_n, first=first, names=names)
@@ -461,7 +482,7 @@ class Disease(ss.Module):
         unknown = [key for key in self.pars if key not in self.graph.pars and key not in self.code_pars] if self.graph is not None else [] # Added after the disease was made, so nothing reads it (TL58: pars.init was ignored)
         if unknown:
             hint = ' The starting values are given when the disease is made, e.g. ss.Disease(..., init=dict(I=0.01)) or init_n=dict(I=100), and cannot be set through pars.' if 'init' in unknown or 'init_n' in unknown else ''
-            raise ss.errors.UnknownParameter(f'"{self.name}" has no parameter named {sc.strjoin(unknown)}, so nothing would read it. Its parameters are {sc.strjoin(self.graph.pars.keys())}.{hint}')
+            raise ss.errors.UnknownParameter(f'"{self.name}" has no parameter named {sc.strjoin(unknown)}, so nothing would read it. Its parameters are {sc.strjoin(self.graph.pars.keys())}{ss.expressions.did_you_mean(unknown[0], self.graph.pars.keys())}{hint}')
         self.engine = ss.solvers.make_engine(self, sim)
         self.engine.define()
         needs = ss.interventions.memory_needs(sim) if isinstance(sim, ss.Sim) and self.graph is not None and self.graph.transitions else {} # Not a mock sim

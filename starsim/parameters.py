@@ -43,6 +43,7 @@ class Pars(sc.objdict):
     _locked = False # Whether new keys can be added; set by lock()
     _bare = None # The parameters set to a bare number, with the unit it is read in: see bare_units()
     _bounded = None # For a module written as code: the parameters given as ss.par (e.g. with bounds, to be fitted), by name; see bounded()
+    _added = None # Keys added by setting them (pars.x = v) rather than defined (define_pars(), or update(create=True)); see check_added()
 
     def bounded(self):
         """ The parameters of a module written as code that were given as `ss.par` (e.g. `beta=ss.par(ss.peryear(0.1), bounds=[0.05, 1])`, or `cin_fn=dict(k=ss.par(0.3, bounds=[0.1, 0.5]))` as "cin_fn.k"), by name; their values are used as any other's """
@@ -93,21 +94,42 @@ class Pars(sc.objdict):
         object.__setattr__(self, '_locked', locked) # Set as an attribute, not a key
         return self
 
+    def check_added(self, label):
+        """
+        Raise `ss.errors.UnknownParameter` for a key that was set (e.g. `mod.pars.art_efficacy = 0.9`) but never defined, before the
+        parameters were locked: a misspelt or renamed parameter, which would otherwise silently do nothing
+        """
+        added = [key for key in (self._added or []) if key in self and '.' not in key and key not in (self._bounded or {})] # Not a value inside a dict parameter by its name (e.g. "cin_fn.k"), nor one given as ss.par
+        if added:
+            key = added[0]
+            known = [k for k in self.keys() if k not in added]
+            errormsg = (f'"{label}" has no parameter named "{key}": it was set (e.g. pars.{key} = ...) but never defined, so it would do nothing. '
+                        f'Its parameters are {sc.strjoin(known) or "none"}{ss.expressions.did_you_mean(key, known) if known else "."} To add a new parameter on purpose, use pars.update({key}=..., create=True).')
+            raise ss.errors.UnknownParameter(errormsg)
+        return
+
     def __setitem__(self, key, value):
         if self._locked and key not in self:
             errormsg = f'Key "{key}" not found; available keys are {list(self.keys())}. To add a new parameter, use pars.update({key}=..., create=True).'
             raise sc.KeyNotFoundError(errormsg)
+        if key not in self: # Added by setting it, not defined: see check_added()
+            object.__setattr__(self, '_added', (self._added or set()) | {key})
         current = self.get(key)
         if isinstance(current, ss.par): # A new value for a declared parameter (e.g. sir.pars.beta = 0.1) is taken by it, keeping its name and bounds, since the module's transitions use this same object
             if isinstance(value, ss.par):
                 current.merge(value)
             else:
+                replaced_dist(key, current.value, value)
                 current.value = value
             return
         if (isinstance(value, ss.par) or has_par(value)) and key in self: # A parameter of a module written as code, given with bounds (say): as update() takes it
             self.update({key:value})
             return
         return super().__setitem__(key, value)
+
+    def __reduce_ex__(self, protocol):
+        """ Pickled (and shallow-copied) with its keys and attributes restored directly, as for a deep copy, so a key is not taken as one set by hand (see `check_added()`) """
+        return (_restore_pars, (self.__class__, dict(self), dict(self.__dict__)))
 
     def __deepcopy__(self, memo):
         """ Copy the keys directly, since by default a copy sets the attributes first, so locked parameters couldn't be copied """
@@ -144,6 +166,8 @@ class Pars(sc.objdict):
 
         # Perform the update
         self.forget_bare(pars) # Noted again below if still a bare number
+        if create and self._added: # Now defined
+            object.__setattr__(self, '_added', self._added - set(pars))
         for key,new in pars.items():
             if isinstance(new, ss.par) and key in self.keys() and not isinstance(self[key], ss.par): # A parameter of a module written as code, given with bounds (say): its code uses the value, and the parameter is kept so it can be fitted
                 new.name = new.name or key
@@ -284,6 +308,11 @@ class Pars(sc.objdict):
             old.set(new)
             if isinstance(new, Number):
                 self.note_bare(key, old, new)
+            elif isinstance(new, (ss.dur, ss.Rate)) and not isinstance(old, ss.constant): # MS8: in a declared model, a duration alone is an exponential, so say that it was not
+                first = next(iter(old.pars), 'mean')
+                val = f'ss.{new!r}'
+                ss.warn(f'{key}={val} set the {first} of its default distribution, which is now {old}, keeping its other parameters. '
+                        f'To replace the distribution, give one, e.g. {key}=ss.expon({val}) for an exponential, or ss.constant({val}) for a fixed value')
 
         # Give up
         else:
@@ -313,6 +342,24 @@ class Pars(sc.objdict):
     def to_json(self, **kwargs):
         """ Convert to JSON representation """
         return sc.jsonify(dict(self), **kwargs)
+
+
+def _restore_pars(cls, items, state):
+    """ Rebuild a `Pars` from its keys and attributes (see `Pars.__reduce_ex__()`) """
+    new = cls.__new__(cls)
+    dict.update(new, items)
+    new.__dict__.update(state)
+    return new
+
+
+def replaced_dist(key, old, new):
+    """ Warn that a single value given for a declared parameter whose default is a distribution (not an exponential) replaces it, e.g. dur=ss.days(10) for a lognormal is an exponential (MS8) """
+    if isinstance(old, ss.Dist) and not isinstance(old, (ss.expon, ss.constant)) and (isinstance(new, (ss.dur, ss.Rate)) or sc.isnumber(new)):
+        first = next(iter(old.pars), 'mean')
+        val = new if sc.isnumber(new) else f'ss.{new!r}'
+        ss.warn(f'{key}={val} replaced its default distribution, {old}, by a single value (as a dwell time, an exponential with that mean). '
+                f'To keep the distribution and set its {first}, give it, e.g. {key}=ss.{type(old).__name__}({first}={val}, ...)')
+    return
 
 
 class SimPars(Pars):
@@ -570,7 +617,9 @@ class SimPars(Pars):
             elif mod._default_name:
                 mod.name = sc.uniquename(name, list(names), style='_%d')
                 if isinstance(mod, ss.Product): # Another product of the same default name
-                    ss.warn(f'The product "{name}" is renamed "{mod.name}", since another module (in {names[name]}) is also called "{name}"; give the product a name to avoid this warning, e.g. ss.Vaccine(..., name="{name}_product")')
+                    cls = type(mod)
+                    cls = f'ss.{cls.__name__}' if cls.__module__.startswith('starsim.') else cls.__name__ # E.g. ss.Treatment, or a package's own hpv.dx
+                    ss.warn(f'The product "{name}" is renamed "{mod.name}", since another module (in {names[name]}) is also called "{name}"; give the product a name to avoid this warning, e.g. {cls}(..., name="{name}_product")')
                 elif not isinstance(mod, ss.modify): # A modifier's default name says what it does (beta_multiply), so a second one is simply numbered
                     ss.warn(f'Module name "{name}" is already used, so renaming this module "{mod.name}"; set the name explicitly to avoid this warning')
             else:
@@ -722,6 +771,49 @@ def check_verbose(verbose):
 arith = {'+':lambda a,b: a + b, '-':lambda a,b: a - b, '*':lambda a,b: a*b, '/':lambda a,b: a/b, '**':lambda a,b: a**b} # The arithmetic of ss.by
 
 
+class by_func:
+    """
+    A value for each level of one dimension from a function of the sim, `ss.by(patch=fn)`, where `fn(sim)` gives one value per level
+    (e.g. a value for each place from code beside a declared model), worked out once a step and read by every solver as a value by
+    level (`ss.by(patch=[...])`) is, whatever other dimensions the sim has
+
+    Args:
+        dim (str): the dimension
+        func (func): a function of the sim, giving one value per level of the dimension (or one number)
+    """
+    def __init__(self, dim, func):
+        self.dim = dim
+        self.func = func
+        self.__name__ = f'ss.by({dim}={getattr(func, "__name__", "function")})'
+        return
+
+    def __repr__(self):
+        return f'ss.by({self.dim}={getattr(self.func, "__name__", "function")})'
+
+    def levels(self, sim, convert):
+        """ The function's values now, converted to numbers in the sim's unit: one number, or an `ss.by` over the dimension, which each solver reads as it reads any """
+        vals = convert(self.func(sim))
+        if np.ndim(vals) == 0:
+            return vals
+        groups = sim.groups
+        names = [strat.name for strat in groups.strats]
+        name = getattr(self.func, '__name__', 'function')
+        if self.dim not in names:
+            errormsg = f'ss.by({self.dim}={name}) gives a value for each level of "{self.dim}", which is not a dimension of the sim; its dimensions are {sc.strjoin(names) or "none"}'
+            raise ss.errors.ShapeError(errormsg)
+        strat = groups.strats[groups.dim_index(self.dim)]
+        vals = np.asarray(vals, dtype=float)
+        if len(vals) != strat.n:
+            errormsg = f'ss.by({self.dim}={name}) gave {len(vals)} values, but "{self.dim}" has {strat.n} levels ({sc.strjoin(strat.labels)})'
+            raise ss.errors.ShapeError(errormsg)
+        return by(**{self.dim:list(vals)})
+
+    def __call__(self, sim):
+        """ As a function of the sim (which the solvers read through `levels()` instead): a value for each group, in the sim's unit """
+        out = self.levels(sim, lambda v: ss.solvers.convert(v, sim.unit_base))
+        return out.per_group(sim) if isinstance(out, by) else out
+
+
 def isnull(val):
     """ Whether a value in a table is missing (None or NaN), e.g. the row for people with no value of a property """
     return val is None or (isinstance(val, float) and np.isnan(val))
@@ -769,6 +861,13 @@ class by:
         mix = ss.by(dict(age=[15, 15, 25, 25], to=['pill', 'iud', 'pill', 'iud'], value=[0.7, 0.3, 0.4, 0.6])) # A switching row by age, over the destinations
         ```
     """
+    def __new__(cls, table=None, dims=None, **kwargs):
+        if table is None and dims is None and len(kwargs) == 1: # A function of the sim giving one value per level, e.g. ss.by(patch=fn) (MS2)
+            (dim, val), = kwargs.items()
+            if callable(val) and not isinstance(val, (TimeValue, ss.Dist, ss.TimePar, by, Expr, type)):
+                return by_func(dim, val)
+        return super().__new__(cls)
+
     def __init__(self, table=None, dims=None, **kwargs):
         if (table is None) == (not kwargs):
             errormsg = 'ss.by() takes a table, or one value per level for each dimension, e.g. ss.by(age=[0.1, 0.2, 0.3])'
@@ -1475,7 +1574,7 @@ class timeseries(TimeValue):
 
 class seasonal(TimeValue):
     """
-    A value with a yearly cycle: `mean × (1 + amplitude × cos(2π(t − peak)))`, with `t` in years
+    A value with a yearly cycle: `mean × (1 + amplitude × cos(2π(t − peak)))`, with `t` in years (or another period)
 
     It can be used wherever a value or a function of the sim can. In a sim with no
     dates, time starts at the beginning of a year.
@@ -1484,6 +1583,7 @@ class seasonal(TimeValue):
         mean (any): the mean over the year: a number or a typed quantity
         amplitude (float): the size of the cycle relative to the mean (0.3 means from 70% to 130% of it)
         peak (str/float/dur): when the value is highest: a month (its middle is used), a fraction of the year (0 to 1), or a time of year (e.g. `ss.days(142)`)
+        period (dur/float): the length of the cycle (default a year), e.g. `ss.years(0.5)` for two peaks a year, the first at `peak`; a number is in years
 
     Examples:
         ```python
@@ -1491,14 +1591,20 @@ class seasonal(TimeValue):
         S, I = ss.states(2)
         sis = ss.Disease(infection=S >> I @ beta*I, recovery=ss.Transition(I, S, dur=10), init_prev=0.01)
         sim = ss.Sim(sis, start='2020-01-01', stop='2023-01-01').run()
+        rains = ss.seasonal(amplitude=0.5, peak='April', period=ss.years(0.5)) # Peaks in April and October
         ```
     """
     months = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december']
 
-    def __init__(self, mean=1.0, amplitude=0.0, peak=0.0):
+    def __init__(self, mean=1.0, amplitude=0.0, peak=0.0, period=None):
         self.mean = mean
         self.amplitude = amplitude
         self.peak = peak
+        self.period = period
+        self.period_years = 1.0 if period is None else float(period.years) if isinstance(period, ss.dur) else float(period)
+        if not self.period_years > 0:
+            errormsg = f'The period of ss.seasonal() is a duration, e.g. ss.years(0.5), not {period}'
+            raise ValueError(errormsg)
         if isinstance(peak, str):
             matches = [i for i,month in enumerate(self.months) if month.startswith(peak.lower())]
             if len(matches) != 1 or len(peak) < 3:
@@ -1507,7 +1613,7 @@ class seasonal(TimeValue):
             self.peak_frac = (matches[0] + 0.5)/12
         else:
             if isinstance(peak, ss.dur): # A time of year, e.g. ss.days(142)
-                self.peak_frac = float(peak.years) % 1
+                self.peak_frac = float(peak.years) % self.period_years
             else:
                 self.peak_frac = float(peak)
                 if sc.isnumber(peak) and not 0 <= self.peak_frac <= 1:
@@ -1516,7 +1622,8 @@ class seasonal(TimeValue):
         return
 
     def __repr__(self):
-        return f'seasonal(mean={self.mean}, amplitude={self.amplitude}, peak={self.peak!r})'
+        period = '' if self.period is None else f', period={self.period!r}'
+        return f'seasonal(mean={self.mean}, amplitude={self.amplitude}, peak={self.peak!r}{period})'
 
     @property
     def typed(self):
@@ -1526,7 +1633,7 @@ class seasonal(TimeValue):
 
     def factor(self, year):
         """ The value relative to the mean, at a year or an array of them """
-        return np.maximum(0.0, 1 + const_value(self.amplitude)*np.cos(2*np.pi*(year - self.peak_frac)))
+        return np.maximum(0.0, 1 + const_value(self.amplitude)*np.cos(2*np.pi*(year - self.peak_frac)/self.period_years))
 
     def at(self, year, sim=None):
         return const_value(self.mean)*float(self.factor(year))
@@ -1538,4 +1645,7 @@ class seasonal(TimeValue):
         return convert(mean)*self.factor(np.asarray(years, dtype=float)) # Converted once, rather than at each time
 
     def to_json(self):
-        return dict(seasonal=dict(mean=ss.presentation.quantity_json(self.mean, None, None), amplitude=self.amplitude, peak=self.peak))
+        out = dict(mean=ss.presentation.quantity_json(self.mean, None, None), amplitude=self.amplitude, peak=self.peak)
+        if self.period is not None:
+            out['period'] = ss.presentation.quantity_json(self.period, 'dur', None)
+        return dict(seasonal=out)

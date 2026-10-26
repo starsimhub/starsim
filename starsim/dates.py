@@ -464,14 +464,8 @@ class date(pd.Timestamp):
             return op(self.to_year(), other)
         elif isinstance(other, np.ndarray):
             return np.vectorize(lambda x: self._compare(x, op))(other)
-        elif isinstance(other, str):
-            try:
-                other = date(other)
-            except ValueError: # A string that is not a date (e.g. a key, when sc.search() compares keys) is not equal to one
-                if op in (operator.eq, operator.ne):
-                    return op is operator.ne
-                raise
-            return op(self, other)
+        elif isinstance(other, str): # A string that is not a date raises, for == as for <, rather than comparing unequal
+            return op(self, date(other))
         else:
             return getattr(pd.Timestamp, f'__{op.__name__}__')(self, other)
 

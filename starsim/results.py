@@ -384,21 +384,28 @@ class Result(ss.utils.NoDists, ss.arrays.BaseArr):
         Args:
             q (list): the quantiles
 
-        Returns a result with one row per quantile (and scenario, if there are several), e.g. `low, mid, high = res.quantiles()`.
+        Returns a result with one row per quantile, e.g. `low, mid, high = res.quantiles()`. With several scenarios, there is
+        a row for each quantile and scenario, the quantile first, so the same unpacking gives a result for each quantile
+        with a row per scenario (`low.select(scenario='vaccine')`).
         """
         self._check_runs('quantiles()')
         q = np.atleast_1d(q).astype(float).tolist()
-        rows = []
-        vals = []
-        for scenario,inds in self.scenarios().items():
-            vals.append(np.quantile(self.values[inds], q, axis=0))
-            rows += [dict(scenario=scenario, quantile=x) for x in q]
-        values = np.concatenate(vals)
+        groups = self.scenarios()
+        values = np.stack([np.quantile(self.values[inds], q, axis=0) for inds in groups.values()], axis=1) # Quantile, scenario, time
+        values = values.reshape((-1,) + values.shape[2:])
+        rows = [dict(scenario=scenario, quantile=x) for x in q for scenario in groups]
         out = self.asnew(values=values, _shape=values.shape, runs=pd.DataFrame(rows))
         if getattr(self, 'strata', None) is not None:
             out.strata = out.denom = None
             out.no_groups = 'quantiles are not kept by group; select the groups first, e.g. res.select(age=0).quantiles()'
         return out
+
+    def __iter__(self):
+        """ The values row by row; for the quantiles of several scenarios, a result for each quantile, with a row per scenario (so `low, mid, high = res.quantiles()` works with scenarios too) """
+        runs = self.runs
+        if runs is not None and 'quantile' in runs and runs['quantile'].nunique() > 1 and runs['scenario'].nunique() > 1:
+            return iter([self.take(list(inds)) for inds in runs.groupby('quantile', sort=False).indices.values()])
+        return super().__iter__()
 
     def median(self, *args, **kwargs):
         """ For a result across runs, the median over the runs of each scenario (as a result of one run, if there is one scenario); otherwise the median of the values """

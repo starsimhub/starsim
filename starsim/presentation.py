@@ -324,7 +324,8 @@ class Presentation:
         infected = [s.name for s in self.infected if s.people]
         if infected and not self.transmissions: # With a transmission, they are its destination and its source, as above
             add('', f'infected: {", ".join(infected)}', 'counted in prevalence, and cured by ss.treat')
-        inits = {s.name:s.init for s in self.states.values() if s.init is not None} | {s.name:f'{s.init_n} {"person" if s.init_n == 1 else "people"}' for s in self.states.values() if s.init_n is not None}
+        init_str = lambda v: f'{value_str(v)}(sim)' if callable(v) and not isinstance(v, (ss.Dist, Expr, ss.by, ss.parameters.TimeValue)) else v # A function by its name (MS10), e.g. Sv = mosquito_start(sim)
+        inits = {s.name:init_str(s.init) for s in self.states.values() if s.init is not None} | {s.name:f'{s.init_n} {"person" if s.init_n == 1 else "people"}' for s in self.states.values() if s.init_n is not None}
         if self.init_prev is not None and not (sc.isnumber(self.init_prev) and self.init_prev == 0):
             inits['init_prev'] = value_str(self.init_prev.raw) if isinstance(self.init_prev, par) else self.init_prev
         guesses = [self.guessed[key] for key in ['init', 'init_prev', 'first', 'rest'] if key in self.guessed]
@@ -1139,7 +1140,8 @@ def partnership_lines(mod, tr, sim, name):
 
 def seasonal_str(raw, mean):
     """ An `ss.seasonal` as the textbooks write it, e.g. "1.3 per day × (1 + 0.1 cos(2π(t − 0.25)))", given its mean as text """
-    return f'{mean} × (1 + {raw.amplitude:n} cos(2π(t − {raw.peak_frac:.4g})))'
+    period = '' if raw.period_years == 1 else f'/{raw.period_years:.4g}'
+    return f'{mean} × (1 + {raw.amplitude:n} cos(2π(t − {raw.peak_frac:.4g}){period}))'
 
 
 def timeseries_str(raw, most=4):

@@ -114,8 +114,29 @@ def test_entry_hazard():
     return
 
 
+def test_keep_time():
+    """ MG2: ss.State(keep_time=True) keeps the time of entering it for code to read; a clock as a class member is a helper, not a result """
+    def make(keep):
+        class C(ss.Disease):
+            S = ss.State()
+            I = ss.State(keep_time=keep)
+            inf = S >> I @ ss.perday(0.05)
+            duration = I.time # Not a result
+        return C(init_prev=0)
+    sim = ss.Sim(diseases=make(True), n_agents=200, dur=ss.days(20), dt=ss.days(1), **kw).run()
+    c = sim.diseases.c
+    assert 'duration' not in sim.results.c
+    u = c.I.uids
+    assert len(u) and np.all(c.ti - c.ti_I[u] >= 0)
+    sim = ss.Sim(diseases=make(False), n_agents=200, dur=ss.days(20), dt=ss.days(1), **kw).run()
+    with pytest.raises(ss.errors.TimeNotKept, match='keep_time'):
+        sim.diseases.c.ti_I.values
+    return
+
+
 if __name__ == '__main__':
     sc.options(interactive=False)
     test_events()
     test_syphilis_latent()
     test_entry_hazard()
+    test_keep_time()

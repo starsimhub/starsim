@@ -916,7 +916,7 @@ def time_value(raw, ctx, years):
     if any(isinstance(ss.parameters.const_value(v), ss.prob) for name in raw.fields for v in sc.tolist(getattr(raw, name))):
         raise Unsupported(f'a fitted parameter inside {raw}, which is a probability')
     if isinstance(raw, ss.seasonal):
-        return val(raw.mean)*jnp.maximum(0.0, 1 + val(raw.amplitude)*jnp.cos(2*np.pi*(years - raw.peak_frac)))
+        return val(raw.mean)*jnp.maximum(0.0, 1 + val(raw.amplitude)*jnp.cos(2*np.pi*(years - raw.peak_frac)/raw.period_years))
     elif isinstance(raw, ss.timeseries):
         _, i, j, w = raw.weights(years, ctx.engine.sim)
         vals = jnp.stack([jnp.asarray(val(v), dtype=float) for v in raw.values])

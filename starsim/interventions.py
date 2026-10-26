@@ -409,8 +409,8 @@ class Delivery(ss.products.EventSource, Intervention):
         at (list): deliver in rounds at these times (a campaign), each within the sim; a calendar year in a sim with dates is written as a date, e.g. '2030'
         interval (dur): deliver in rounds this far apart, between `start` and `stop`
         where (Cond/func): who can receive it, joined to who= with `&`: a condition (e.g. `ss.ppl.age < 5`), or a function of the sim
-        coverage (float): the fraction of eligible people reached; also `ss.by(...)`, a function of the sim returning a probability per person, or a typed probability
-            (`ss.probperyear(0.5)`), which is over the step or the round (and, for routine delivery, offered at every step to those eligible)
+        coverage (float): the fraction of eligible people reached; also `ss.by(...)`, a function of the sim returning a probability per person, or a typed rate or probability
+            (e.g. `ss.perday(0.1)`, `ss.probperyear(0.5)`): the chance over the step or the round (and, for routine delivery, offered at every step to those eligible)
         capacity (float): the number that can be delivered: a number per round (or per step, for delivery on events or by a function), or a rate (e.g. `ss.peryear(50_000)`),
             which routine delivery needs; a rate in rounds gives what accrues between them
         priority (Cond/list/Expr/func): who is served first when not everyone can be (under `capacity=`): a condition, or a list of them

@@ -1123,7 +1123,7 @@ class Unkept(BaseArr):
     @property
     def values(self):
         errormsg = (f'{self.mod.name}.{self.name} is not kept, since the engine does not need it (to save memory).\n'
-                    f'     Set ss.options.keep_times = True before the sim is initialized to keep the time of entering every state.')
+                    f'     Declare the state with ss.State(keep_time=True) to keep it, or set ss.options.keep_times = True before the sim is initialized to keep the time of entering every state.')
         raise ss.errors.TimeNotKept(errormsg)
 
     raw = values

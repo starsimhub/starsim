@@ -151,6 +151,15 @@ class Counter(ss.Module):
     text, changes, todo = migrate_text("hiv = ssl.HIV(beta={'mf': [0.08, 0.04], 'prenatal': [0.2, 0], 'msm': [0.1, 0.1]})") # A beta pair has direction names
     assert text == "hiv = ssl.HIV(beta={'mf': ss.peract(m2f=0.08, f2m=0.04), 'prenatal': 0.2, 'msm': [0.1, 0.1]})" and any('"msm"' in msg for line,msg in todo)
 
+    # The names of results: Starsim's own counts renamed after results, and a package's own results left alone (CV5, ST4, HP80, MG10)
+    text, changes, todo = migrate_text("a = sim.results.n_alive; b = res['sir.n_infected']; c = df['n_alive']")
+    assert text == "a = sim.results.alive; b = res['sir.infected']; c = df['n_alive']" and len(todo) == 1 # A column of a dataframe could be anything's: listed
+    own = "class Mosquito(ss.Module):\n    def init_results(self):\n        self.define_results(ss.Result('n_infected'))\n    def step(self):\n        self.results.n_infected[self.ti] = 5\nx = res['n_infected']; y = res.new_infections"
+    assert migrate_text(own)[1:] == ([], []) # A result the package makes keeps its name, and new_infections is a declared disease's only next to one
+    assert migrate_text('sir = ss.SIR()\nx = res.new_infections')[2][1][0] == 2
+    assert not migrate_text('x = hiv.results.diagnosed')[2] and migrate_text('screening = ss.screen(test)\nx = sim.results.screening.diagnosed')[2][0][0] == 2
+    assert 'ss.treat(' in migrate_text('from starsim.interventions import treat_num, Intervention')[2][0][1] # An import of a removed name
+
     # A test's follow-ups nested in it (Starsim 4's prereleases) become steps of their own, after it in the interventions
     text, changes, todo = migrate_text("screening = ss.screen(ss.Test(), interval=7, on_positive=ss.treat(ss.Treatment()))\nsim = ss.Sim(interventions=[screening])")
     assert text.splitlines() == ['screening = ss.screen(ss.Diagnostic(), interval=7)', 'screening_positive = ss.treat(ss.Treatment(), who=screening.positive)', 'sim = ss.Sim(interventions=[screening, screening_positive])']

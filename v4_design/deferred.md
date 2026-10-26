@@ -158,7 +158,7 @@ Set aside while building [oct22/plan_b.md](oct22/plan_b.md), each with what it w
 - CB-7: no age preference on `ss.SexualNet` (STIsim's age gap: 0.4 ± 21.7 years against 7.8 ± 3.0). S–M.
 - CB-11: BV's ODE (192 groups, 1,152 compartments) takes 23 s compiled, 10× its 20,000 agents. Measure where the time goes. S.
 - FP9: `to_spec()`, `hash()` and `diff()` on an array duration: `ss.normal(loc=ss.months(np.array([3, 6])))` raises `only 0-dimensional arrays ...`. S.
-- FP12: `msim.reduce()`'s replacement, `low, mid, high = res.quantiles([...])`, raises `too many values to unpack` when the scenarios are labeled, since `quantiles()` is per scenario; Starsim 3's pooled band has no spelling. S.
+- *Done (2026-10-26, HP74: with several scenarios, `quantiles()` puts the quantile first, so the unpacking gives a result for each quantile with a row per scenario; Starsim 3's pooled band is `np.quantile(res, q, axis=0)`).* FP12: `msim.reduce()`'s replacement, `low, mid, high = res.quantiles([...])`, raises `too many values to unpack` when the scenarios are labeled, since `quantiles()` is per scenario; Starsim 3's pooled band has no spelling. S.
 - FP23: with no declared module, every `ss.change`/`ss.modify` crashes with `min() iterable argument is empty` (in `sc.suggest` with an empty list); a coded module's parameters can't be modified. S for the crash.
 - FP28: no delivery to a mix (`Delivery(move=dict(to=[...], p=...))` gives a misleading `MissingDimension`), and no modifier over several transitions (`ss.modify([tr1, tr2])` is refused clearly). S–M.
 - FP32: an `ss.par` in a modifier amount can be changed only when it is also given to a module by keyword; by object it says "does not belong to a module yet", by name "not found". S.

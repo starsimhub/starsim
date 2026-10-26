@@ -1257,10 +1257,14 @@ class SexualNet(DegreeTargets, DynamicNetwork):
                 max_contacts = None,
                 match = None,
             )
+        if not self.forms_own and isinstance(dur, ss.dur): # A single duration is a mean, and partnerships end at a constant rate, as for ssl.DegreeNet (not the default's standard deviation of a year)
+            dur = ss.expon(scale=dur) # Given as the distribution, rather than as the mean of the default (MS8)
+        elif not self.forms_own and isinstance((pars or {}).get('dur'), ss.dur):
+            pars = dict(pars) | dict(dur=ss.expon(scale=pars['dur']))
         self.update_pars(pars, **kwargs)
         given = dur if dur is not None else (pars or {}).get('dur')
-        if not self.forms_own and isinstance(given, (int, float, ss.dur)): # A single duration is a mean, and partnerships end at a constant rate, as for ssl.DegreeNet (not the default's standard deviation of a year)
-            self.pars.dur = ss.expon(scale=self.pars.dur.pars.mean) # The mean set by update_pars(), in the default's unit if a bare number
+        if not self.forms_own and isinstance(given, (int, float)): # Likewise a bare number, in the default's unit
+            self.pars.dur = ss.expon(scale=self.pars.dur.pars.mean) # The mean set by update_pars()
         between = self.pars.between
         groups = dict(mf=('male', 'female'), mm=('male', 'male')).get(between) if isinstance(between, str) else between
         if not isinstance(groups, (tuple, list)) or len(groups) != 2 or not all(isinstance(g, str) for g in groups):

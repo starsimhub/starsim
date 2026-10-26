@@ -167,7 +167,8 @@ def code_value(val):
             return '{' + ', '.join(f'{k!r}: {code_value(v)}' for k,v in items) + '}'
         elif 'seasonal' in val:
             f = val['seasonal']
-            return f'ss.seasonal(mean={code_value(f["mean"])}, amplitude={f["amplitude"]!r}, peak={f["peak"]!r})'
+            period = f', period={code_value(f["period"])}' if 'period' in f else ''
+            return f'ss.seasonal(mean={code_value(f["mean"])}, amplitude={f["amplitude"]!r}, peak={f["peak"]!r}{period})'
         return '{' + ', '.join(f'{k!r}: {code_value(v)}' for k,v in val.items()) + '}' # A plain dict, e.g. adjust=
     elif isinstance(val, list):
         return '[' + ', '.join(code_value(v) for v in val) + ']'

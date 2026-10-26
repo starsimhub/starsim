@@ -40,6 +40,7 @@ class Pregnancy(ss.Demographics, ss.Disease):
     Note: CRN safe as agents.
 
     Args:
+        fertility (rate/func): the hazard of conception: by default `conception_rate()`, from `fertility_rate`; or a rate, or a function of `(sim, uids)` giving a rate for those agents
         fertility_rate (rate/dataframe): age-specific fertility rates, or one rate (default per 1000: see `rate_units`)
         rel_fertility (float): multiplier on the fertility rate
         p_infertile (bernoulli): primary infertility
@@ -47,8 +48,9 @@ class Pregnancy(ss.Demographics, ss.Disease):
         max_age (float): maximum age of conception
         dur_pregnancy (dur/Dist): duration of pregnancy; a number is in weeks
         p_loss (bernoulli): chance of a spontaneous loss in each step of the module
+        loss_rate (rate/func): hazard of a spontaneous loss (instead of `p_loss`), or a function of `(sim, uids)`
         loss_threshold (dur): gestational age that separates a miscarriage from a stillbirth
-        infant_rate (rate): hazard of death before the age of 1, for the children
+        infant_rate (rate/func): hazard of death before the age of 1, for the children
         p_breastfeed (bernoulli): chance a mother breastfeeds a newborn
         dur_breastfeed (dur/Dist): duration of breastfeeding
         p_abortion (float): chance a pregnancy ends in an abortion, at conception
@@ -107,13 +109,8 @@ class Pregnancy(ss.Demographics, ss.Disease):
         overridden = [name for name in cls._v3_methods if name in vars(cls)]
         if overridden:
             errormsg = (f'{cls.__name__} defines {sc.strjoin(overridden)}, from Starsim 3\'s ss.Pregnancy, which v4\'s declared one never calls, so it would be silently ignored.\n'
-                        f'     Use its seams instead: conception_rate(sim) for who conceives; ss.modify() of its transitions (preg.conception, preg.miscarriage, ...) and its parameters (maternal_rate, infant_rate, ...);\n'
+                        f'     Use its seams instead: fertility= (a rate, or a function of (sim, uids); conception_rate() by default) for who conceives; ss.modify() of its transitions (preg.conception, preg.miscarriage, ...) and its parameters (maternal_rate, infant_rate, ...);\n'
                         f'     since_birth and lactating for postpartum and breastfeeding; ss.on(preg.birth), or add_callback() from code, at a delivery or loss (see the migrate-starsim3 skill).')
-            raise ss.CapabilityError(errormsg)
-        shadowed = [name for name,val in ss.transitions.class_members(Pregnancy).items() if isinstance(val, ss.par) and callable(vars(cls).get(name))]
-        if shadowed: # A method named after a parameter (e.g. loss_rate) would replace the parameter, and nothing would call it
-            errormsg = (f'{cls.__name__} defines {sc.strjoin(shadowed)}, a parameter of ss.Pregnancy, as a method, which nothing calls (conception_rate() is the method it calls).\n'
-                        f'     Give the parameter a function as its value instead, e.g. self.pars.update({shadowed[0]}=self.my_{shadowed[0]}) in __init__(), where my_{shadowed[0]}(sim, uids) returns a rate for those agents.')
             raise ss.CapabilityError(errormsg)
         return
 
@@ -160,7 +157,7 @@ class Pregnancy(ss.Demographics, ss.Disease):
             elif isinstance(dp, ss.choice) and np.ndim(dp.pars.a) == 0:
                 dp = ss.constant(dp.pars.a)
             graph['dur_pregnancy'] = dp
-        self.pars.update(fertility=self.conception_rate, **graph)
+        self.pars.update(**({'fertility':self.conception_rate} | graph)) # Each of the three rates (fertility, loss_rate, infant_rate) is a parameter, which can be a function of (sim, uids); conception_rate() is fertility's default
         birth = self.graph.transitions.birth
         birth.n_born = self.pars.embryos_per_pregnancy
         birth.sex = self.pars.sex_ratio
@@ -285,12 +282,15 @@ class Pregnancy(ss.Demographics, ss.Disease):
             kept = (1 - g.pars.p_abortion.raw)*(-np.expm1(-loss)/loss if loss > 0 else 1.0)
         def share():
             sim = engine.sim
-            if ss.utils.n_args(self.conception_rate) >= 2: # An override for the agents given (sim, uids): put in place by UID
+            fertility = self.graph.pars.fertility.raw # conception_rate() unless another rate or function was given
+            if not callable(fertility):
+                rate = np.full(len(sim.people.uid.raw), float(engine.convert(fertility)))
+            elif ss.utils.n_args(fertility) >= 2: # A function of the agents given (sim, uids): put in place by UID
                 uids = sim.people.auids
                 rate = np.zeros(len(sim.people.uid.raw))
-                rate[uids] = engine.convert(self.conception_rate(sim, uids))
+                rate[uids] = engine.convert(fertility(sim, uids))
             else:
-                rate = np.asarray(engine.convert(self.conception_rate(sim)), dtype=float)
+                rate = np.asarray(engine.convert(fertility(sim)), dtype=float)
             return -np.expm1(-rate*dt*steps)*kept
         def after(kept, before): # A delivery before the start (then a new pregnancy) counts in the parity of the woman, and in her pregnancies with the one she has at the start (a loss before the start counts in neither, so deliveries plus losses are pregnancies); and the fetuses of those pregnant at the start are there at the start
             delivered = np.maximum(self.sim.people.parity.raw[kept] - before['parity'], 0) if 'parity' in before else 0

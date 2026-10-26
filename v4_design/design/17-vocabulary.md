@@ -55,7 +55,7 @@ Starsim's library modules (`ss.SIR`, `ss.SIS`, `ss.SEIR`, `ss.Births`, `ss.Death
 | **`ss.transfer`** | Movement between levels of a stratification |
 | **`ss.par`** | A named parameter with `bounds`, `prior`, `source`, `doc` |
 | **`ss.pars`** | Several parameters at once, from defaults and the values given, for a disease whose transitions are made in `__init__()`: `p = ss.pars(defaults, **kwargs)` |
-| **`ss.attr`** | A value for each person: drawn or recorded at an event (`on=`), drawn once (a trait), or derived from others |
+| **`ss.attr`** | A value for each person: drawn or recorded at an event (`on=`), or a value for each event (a dict by event); drawn once (a trait); or derived from others. `init=` is the value before any event: a number, or a distribution or expression drawn for each person when they are made |
 | **`ss.outcome`** | A reported quantity: a weighted sum of flows that is delayed, given a duration, or totaled by reporting period |
 | **`ss.simdata`** | A data file or data frame with its columns matched to result names: `ss.simdata(df, aliases=..., ignore_extra=True)` |
 | **`ss.state`** | A state named by its module and name, as a condition, before the module is made: `ss.state('hiv.I')` |

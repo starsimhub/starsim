@@ -762,6 +762,8 @@ class Module(Base):
             self.t.init(sim=self.sim) # Initialize time vector
             self.link_timepars() # Add module dt to the timepars
             self.check_bare_units(sim)
+            if isinstance(self.pars, ss.Pars) and getattr(self, 'graph', None) is None: # A declared module checks its own, against its graph (see ss.Disease.init_pre())
+                self.pars.check_added(self.name) # A parameter set but never defined, e.g. renamed (MG7)
             if self.name in sim.pars:
                 sim.pars[self.name] = self.pars
             else: # Add a new key, which is allowed even if the sim's parameters are locked
@@ -792,7 +794,7 @@ class Module(Base):
         This is what lets a timepar resolve itself against the timestep with no
         argument, e.g. `self.pars.death_rate.to_prob()` or `self.pars.dur_inf.to_dt()`.
         """
-        timepars = sc.search(self, type=ss.TimePar, skip=dict(keys=['sim', 'module', 't'] + list(getattr(self, 'timepar_skip', [])), subclasses=ss.distributions.no_dists())) # Skip the timeline, else the module's own dt would be linked to itself
+        timepars = sc.search(self, type=ss.TimePar, skip=dict(keys=ss.utils.skipkeys(['sim', 'module', 't'] + list(getattr(self, 'timepar_skip', []))), subclasses=ss.distributions.no_dists())) # Skip the timeline, else the module's own dt would be linked to itself
 
         # Initialize them with the parent module
         dt = self.t.dt

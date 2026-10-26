@@ -676,6 +676,9 @@ class Engine:
         raw = p.raw
         if route:
             out = self.route_value(p, raw)
+        elif isinstance(raw, ss.parameters.by_func): # A value for each level of a dimension, from a function of the sim (MS2)
+            out = self.by_levels(raw)
+            out = self.by_group(out) if isinstance(out, ss.by) else out
         elif isinstance(raw, ss.Dist): # Not a dwell time (those are handled separately), so use the mean
             out = ss.transitions.dwell_stats(raw, self.convert)[0]
         elif callable(raw):
@@ -866,6 +869,13 @@ class Engine:
             if state is None or self.applies[state.name][d]:
                 out = out*self.sim.groups.group_vals(d, vals)
         return out
+
+    def by_levels(self, bf):
+        """ The values of `ss.by(dim=fn)` (`ss.parameters.by_func`) this step, as a number or an `ss.by`, once a step """
+        key = ('by_func', id(bf))
+        if key not in self.cache:
+            self.cache[key] = bf.levels(self.sim, self.convert)
+        return self.cache[key]
 
     def by_group(self, by):
         """ Expand a value for each level of one or more dimensions to a value for each group, once a step """
@@ -1141,7 +1151,8 @@ class Engine:
                 if np.isnan(mean): # A parameter is a function of the agents
                     if self.sim.solver != 'abm':
                         raise ss.CapabilityError(f'"{name}" cannot run with solver="{self.sim.solver}": its dwell time {raw} has a parameter that is a function of the agents. Run with solver="abm".')
-                    if getattr(raw, 'unit', None) is None and not any(isinstance(v, ss.TimePar) for v in raw.pars.values()): # What the function returns has no unit to say otherwise
+                    typed_factor = scaled is not None and any(isinstance(getattr(leaf, 'raw', None), ss.TimePar) for leaf in trans.as_expr(scaled[1]).leaves) # e.g. dur=d*ss.days(1), whose numbers are days (TY5)
+                    if getattr(raw, 'unit', None) is None and not typed_factor and not any(isinstance(v, ss.TimePar) for v in raw.pars.values()): # What the function returns has no unit to say otherwise
                         funcs = sc.strjoin(getattr(v, '__name__', 'a function') if callable(v) else str(v) for v in raw.pars.values() if callable(v) or isinstance(v, (ss.conditions.Cond, ss.transitions.Expr)))
                         ss.note(f'the dwell time of "{name}" comes from {funcs}, whose numbers are read in {self.sim.unit_base}s, the sim\'s unit; if they are in another unit, give it on the distribution, e.g. unit="month"', sim=self.sim)
                 elif dw.family == 'expon':
@@ -1299,6 +1310,10 @@ class Engine:
                 continue
             if isinstance(init, ss.transitions.par):
                 init = init.raw
+            elif isinstance(init, ss.transitions.Expr) and ss.expressions.per_person_in(init): # An expression of people's properties and parameters, e.g. 1 - (A - age)/(k*age + A) (TY2)
+                if state.people and not is_n and self.sim.solver == 'abm': # Read for each person, as agents: see Agents.init_post()
+                    continue
+                init = np.asarray(self.eval(init), dtype=float)[()] # For each group
             elif isinstance(init, ss.transitions.Expr): # An expression of parameters, e.g. I0/2
                 init = float(self.eval(init))
             if callable(init) and not isinstance(init, (ss.by, ss.Dist)): # A function of the sim, as for init_prev

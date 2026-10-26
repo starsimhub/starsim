@@ -232,6 +232,12 @@ def test_datearray_operations():
     with pytest.raises(TypeError):
         b.days_since('2020-01-01')
 
+    # A date compares with a string as with the date it names, and a string that is not a date raises, for == as for < (HP79)
+    assert d0 == '2020-01-01' and d0 != '2020-01-02' and d0 < '2020-02-01'
+    for func in [lambda: d0 == 'sim', lambda: d0 != '2020-13-01', lambda: d0 < 'sim']:
+        with pytest.raises(ValueError):
+            func()
+
     return
 
 
@@ -493,6 +499,13 @@ def test_bare_units():
     with pytest.raises(ValueError):
         ss.seasonal(peak=142)
     assert np.isclose(ss.seasonal(peak=ss.days(142)).peak_frac, 142/365)
+
+    # A cycle of another period (TY15f): two peaks a year, in a declared rate and in its spec
+    rains = ss.seasonal(mean=ss.perday(0.2), amplitude=0.5, peak='April', period=ss.years(0.5))
+    assert np.allclose(rains.factor(np.array([3.5, 9.5])/12), 1.5) and np.allclose(rains.factor(np.array([0.5, 6.5])/12), 0.5)
+    sis = ss.Disease(S >> I @ rains*I, I >> S @ ss.days(10), init_prev=0.1, name='sis')
+    sim = ss.Sim(sis, start='2000', stop='2002', verbose=0)
+    assert 'period=ss.years(0.5)' in sim.to_code()
     return
 
 

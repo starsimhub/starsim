@@ -86,7 +86,7 @@ class Agents(Engine):
                 infected.add(d)
                 todo.append(d)
         self.halved = infected & {s.name for s in graph.infectious if graph.exits[s.name].hazards}
-        unkept = [state.name for state in graph.people_states if read is not None and state.name not in read and state.name not in self.scheduled and state.name not in clocked and not any(getattr(tr, 'after', None) is not None or getattr(tr, 'before', None) is not None for tr in graph.exits[state.name].hazards)]
+        unkept = [state.name for state in graph.people_states if read is not None and not state.keep_time and state.name not in read and state.name not in self.scheduled and state.name not in clocked and not any(getattr(tr, 'after', None) is not None or getattr(tr, 'before', None) is not None for tr in graph.exits[state.name].hazards)]
         for state in graph.people_states:
             name = state.name
             arrs += [ss.BoolState(name, label=state.label or name)]
@@ -174,7 +174,8 @@ class Agents(Engine):
         if type(self.mod).burnin_plan is not ss.Disease.burnin_plan:
             add('burnin', ss.random()) # Who starts part way through, and since when: see backfill_burnin()
         for state in graph.people_states:
-            if isinstance(state.init.raw if isinstance(state.init, ss.par) else state.init, ss.by): # For a share given for each person's own properties: see init_post()
+            init = state.init.raw if isinstance(state.init, ss.par) else state.init
+            if isinstance(init, ss.by) or (isinstance(init, ss.transitions.Expr) and ss.expressions.per_person_in(init)): # For a share given for each person's own properties: see init_post()
                 add(f'init_{state.name}', ss.random())
         for state in graph.people_states:
             add(f'branch_{state.name}', ss.random())
@@ -232,9 +233,11 @@ class Agents(Engine):
                     add(f'sex_{tr.name}', copy(tr.sex) if isinstance(tr.sex, ss.Dist) else ss.bernoulli(p=tr.sex))
         self.attr_dists = dict() # Each distribution an attribute is drawn from, and the key of its copy: see draw_attr()
         for a in self.attrs.values():
-            if a.kind in ['drawn', 'trait']:
-                for i,p in enumerate(ss.expressions.dists_in(a.value)):
-                    key = f'attr_{a.name}_{i}'
+            values = [('', a.value)] if a.kind in ['drawn', 'trait'] else [(f'event{j}_', v) for j,(_,v) in enumerate(a.by_event or [])] # Each event's own (TY1)
+            values += [('init_', a.init_value)] if a.init_value is not None else [] # And the value before any event, if drawn (TY3)
+            for prefix,value in values:
+                for i,p in enumerate(ss.expressions.dists_in(value)):
+                    key = f'attr_{a.name}_{prefix}{i}'
                     add(key, ss.transitions.numeric_dist(p.value, self.convert, per_agent=self.agent_values)) # In the sim's unit, as a dwell time is (a distribution of typed values would draw them in steps)
                     self.attr_dists[id(p.value)] = key
         mod.setattribute('trans_rng', ss.multi_random('source', 'target'))
@@ -459,9 +462,11 @@ class Agents(Engine):
                     self.stamp(name, chosen, self.seed_ti(name))
             for state in self.graph.people_states: # A share given for each person's own properties (e.g. init=dict(I=ss.by(dict(age=[0, 15], value=[0, 0.1])))): drawn for each agent of the first state
                 init = state.init.raw if isinstance(state.init, ss.par) else state.init
-                if isinstance(init, ss.by) and init.on_people(self.sim):
+                per_person = isinstance(init, ss.transitions.Expr) and ss.expressions.per_person_in(init) # e.g. init=dict(S=1 - (A - age)/(k*age + A)) (TY2)
+                if per_person or (isinstance(init, ss.by) and init.on_people(self.sim)):
                     first = self.members(self.graph.first)
-                    chosen = first[self.dists[f'init_{state.name}'].rvs(first) < init.lookup(self.sim, self.convert)[first]]
+                    share = self.values_for(init, first) if per_person else init.lookup(self.sim, self.convert)[first]
+                    chosen = first[self.dists[f'init_{state.name}'].rvs(first) < share]
                     mod[self.graph.first.name][chosen] = False
                     mod[state.name][chosen] = True
                     self.stamp(state.name, chosen, self.seed_ti(state.name))
@@ -996,6 +1001,9 @@ class Agents(Engine):
             return self.by_agent(p.raw, self._uids)
         if isinstance(p.raw, ss.by) and self._route is None: # Depends on which agents are being evaluated, so is not cached (on a route, a beta is worked out by group: see Engine.route_value())
             return self.by_people(p.raw) if p.raw.on_people(self.sim) else self.by_group(p.raw)
+        if isinstance(p.raw, ss.parameters.by_func) and self._route is None: # From a function of the sim, one value per level (MS2): as a value by level
+            out = self.by_levels(p.raw)
+            return self.by_group(out) if isinstance(out, ss.by) else out
         key = id(p)
         if key in self.spread: # Each agent's own value, as an array indexed by UID
             if key not in self.cache:
@@ -1164,14 +1172,15 @@ class Agents(Engine):
                     elif op == 'add':      value = value + np.where(mask, amount, 0.0)
         return value
 
-    def draw_attr(self, a, uids):
-        """ Draws of an attribute for some agents: from its distribution, or an expression of several, each from a stream of its own """
+    def draw_attr(self, a, uids, value=None):
+        """ Draws of an attribute for some agents: from its distribution, or an expression of several, each from a stream of its own (or of `value`, e.g. its value before any event) """
+        value = a.value if value is None else value
         if not len(uids):
             return np.zeros(0)
-        if isinstance(a.value, ss.Dist):
-            return np.asarray(self.draw(self.attr_dists[id(a.value)], uids), dtype=float)
+        if isinstance(value, ss.Dist):
+            return np.asarray(self.draw(self.attr_dists[id(value)], uids), dtype=float)
         with self.evaluating(drawing=True):
-            return self.values_for(a.value, uids)
+            return self.values_for(ss.expressions.as_expr(value), uids)
 
     def draw_traits(self, uids):
         """ The traits of agents who have just been made (or placed at the start), and their derived attributes from them """
@@ -1179,6 +1188,9 @@ class Agents(Engine):
             return
         for a in getattr(self, 'traits', []):
             self.mod[a.name][uids] = self.draw_attr(a, uids)
+        for a in getattr(self, 'attrs', {}).values(): # The value before any event, drawn for each person
+            if a.init_value is not None and a.kind not in ['derived', 'trait']:
+                self.mod[a.name][uids] = self.draw_attr(a, uids, value=a.init_value)
         self.write_derived(uids)
         return
 
@@ -1227,7 +1239,14 @@ class Agents(Engine):
                 if not mask.any():
                     continue
                 sel = uids if mask.all() else uids[mask]
-                new = self.draw_attr(a, sel) if a.kind == 'drawn' else self.values_for(a.value, sel)
+                if a.by_event is not None: # Each event's own value (TY1)
+                    new = np.full(len(sel), np.nan)
+                    for events,value in a.by_event:
+                        case = self.event_mask(events, tr, srcs[mask], dst)
+                        if case.any():
+                            new[case] = self.draw_attr(a, sel[case], value=value)
+                else:
+                    new = self.draw_attr(a, sel) if a.kind == 'drawn' else self.values_for(a.value, sel)
                 old = mod[a.name].raw[sel]
                 if a.combine == 'first':
                     val = np.where(mod[f'had_{a.name}'].raw[sel], old, new)
@@ -2198,7 +2217,7 @@ class Agents(Engine):
             mod[arr][uids] = np.nan
         for a in getattr(self, 'attrs', {}).values():
             if a.kind not in ['derived', 'trait']:
-                mod[a.name][uids] = a.default
+                mod[a.name][uids] = a.default if a.init_value is None else self.draw_attr(a, uids, value=a.init_value)
         mod[first][uids] = True
         self.stamp(first, uids, 0)
         return

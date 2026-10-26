@@ -745,6 +745,18 @@ def init_where(sim):
             if target is not None and p.name not in target.graph.pars:
                 target.graph.pars[p.name] = p
                 target.define_pars(**{p.name:p})
+    for m in list(sim.pars.interventions.values()) + list(sim.pars.connectors.values()): # An amount added to an inflow from outside the model (from ss.null), e.g. CFUs added to a reservoir: a parameter of 0 added to its rate, which the modifier adds to (TY15b)
+        if isinstance(m, ss.modify) and m.op == 'add' and m.target_kind in ['transition', None]:
+            target = next((mod for mod in sim.declared if mod.name == ss.conditions.modname(m.target_module)), None)
+            tr = target.graph.transitions.get(m.target_name) if target is not None else None
+            if tr is not None and tr.inflow and tr.rate is not None and getattr(tr, 'per', None) is None:
+                name = f'{tr.name}_added'
+                if name not in target.graph.pars: # Once, if the sim is built again
+                    p = ss.par(0.0, doc=f'Added to the inflow {tr.name} from outside the model, by ss.modify(..., add=)')
+                    target.graph._add_par(p, name)
+                    tr.rate = tr.rate + p
+                    target.define_pars(**{name:p})
+                m.target_kind, m.target_name = 'par', name
     return
 
 
