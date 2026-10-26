@@ -28,6 +28,6 @@ Keep the task set fixed, so that runs can be compared. If Cliff asks for harder 
    
    All of them may read docstrings (`help()`) and what Starsim prints. Tell each to write one script per task, an `answers.json` in the format `score.py` reads, and a `log.md` recording every first spelling it tried, every error and note it saw, and every first attempt whose number it later changed, with that number.
 4. **Score** with `python references/benchmark/score.py <scratchpad>/naive/*/answers.json`. Count the silent wrong first attempts from the logs: a first attempt that ran without an error and whose number would have failed `score.py`.
-5. **Reproduce** each problem the personas met in a minimal script, and check it against the NR findings, `admin/deferred.md`, and the latest plan.
+5. **Reproduce** each problem the personas met in a minimal script, and check it against the NR findings, `deferred.md`, and the latest plan.
 6. **Write** `v4_design/<date>/reviews/naive.md` in the README's shape. The details are a table of persona by task (right or wrong, and whether the first attempt was silently wrong), the first spellings each persona tried for the main concepts (as in the oct17 review's "First spellings" table), and tool calls and minutes per persona. Copy each persona's `log.md` and `answers.json` to `v4_design/<date>/reviews/naive/<persona>/` so the report's evidence is kept.
 7. **Clean up** the snapshot worktree and any background shells.

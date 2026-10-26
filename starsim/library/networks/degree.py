@@ -31,6 +31,8 @@ class DegreeNet(ss.networks.DegreeTargets, ss.DynamicNetwork):
     are not only sexual: people who share needles have partners too. For sexual
     partnerships, between men and women or between men, see `ss.SexualNet`.
 
+    Note: not CRN safe when people are born or die.
+
     Args:
         n_contacts (float/`ss.Dist`/`ss.by`): the number of partners a person has at a time: a distribution over whole numbers (e.g. `ss.poisson(0.7)`), or a number, which is the mean of a Poisson; or a number for each level of a property of people (`ss.by(risk=[0.4, 1.6])`), as EpiModel's nodefactor
         dur (float/`ss.dur`/`ss.Dist`): how long partnerships last: a mean (they end at a constant rate), or a distribution; a bare number is in the sim's unit

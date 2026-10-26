@@ -22,6 +22,8 @@ class HIV(ss.Infection):
     CD4 counts. Since `beta` defaults to 0, it must be set for transmission to
     occur.
 
+    Note: CRN safe.
+
     Args:
         beta (float):           per-contact transmission probability (0 by default)
         cd4_min (float):        CD4 count approached by untreated agents
@@ -132,6 +134,8 @@ class ART(ss.Intervention):
     treated with a probability interpolated from `coverage` at the corresponding
     `year`. Requires the `HIV` module.
 
+    Note: CRN safe.
+
     Args:
         year (float/array):     year(s) at which coverage is specified
         coverage (float/array): probability of ART initiation at each year
@@ -202,6 +206,8 @@ class CD4_analyzer(ss.Analyzer):
     Results are stored in `self.cd4`, a (timesteps × agents) array. Requires the
     `HIV` module. Note that this analyzer allocates a full dense array, so it is
     best suited to small simulations.
+
+    Note: CRN safe.
     """
     def __init__(self, **kwargs):
         super().__init__(**kwargs)

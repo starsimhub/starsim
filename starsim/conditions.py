@@ -129,9 +129,9 @@ class Cond:
             raise TypeError(errormsg)
         return Event(kind, states)
 
-    def __or__(self, other):  return Cond('|', self, tr_event(other, self))
+    def __or__(self, other):  return Cond('|', self, other)
     def __rand__(self, other): return Cond('&', other, self)
-    def __ror__(self, other):  return Cond('|', tr_event(other, self), self)
+    def __ror__(self, other):  return Cond('|', other, self)
     def __invert__(self):     return Cond('~', self)
 
     @property
@@ -547,11 +547,10 @@ def as_cond(obj):
         return Cond('event', obj.mod, obj.name)
     elif isinstance(obj, ss.solvers.CountState): # A declared state after a compartmental run (e.g. sir.S once sir has run): the state it counts
         return as_cond(obj.state)
-    elif isinstance(obj, (ss.State, ss.Transition, ss.transitions.Transfer)): # Looked up by name when the sim runs, since the sim works on copies
-        out = Cond('state', getattr(obj, 'module', None), obj.name)
-        if not isinstance(obj, ss.State):
-            out.kind = 'transfer' if isinstance(obj, ss.transitions.Transfer) else 'transition' # An event, since people go through it
-        return out
+    elif isinstance(obj, ss.State): # Looked up by name when the sim runs, since the sim works on copies
+        return Cond('state', getattr(obj, 'module', None), obj.name)
+    elif isinstance(obj, (ss.Transition, ss.transitions.Transfer)): # An event, since people go through it
+        return Event('tr', obj)
     elif isinstance(obj, ss.Arr):
         return from_arr(obj)
     return obj
@@ -562,15 +561,8 @@ def is_event(cond):
     if not isinstance(cond, Cond):
         return False
     if cond.op in leaves:
-        return cond.op in ['event', 'move'] or getattr(cond, 'kind', None) is not None
+        return cond.op in ['event', 'move']
     return all(is_event(arg) for arg in cond.args if isinstance(arg, Cond))
-
-
-def tr_event(obj, other):
-    """ A transition joined with | to an event (or to another transition) is the event of going through it, e.g. on=precin.to(S) | cin.to(S) | clear """
-    if isinstance(obj, ss.Transition) and (isinstance(other, ss.Transition) or has_event(other)):
-        return Event('tr', obj)
-    return obj
 
 
 def has_event(cond):
@@ -626,6 +618,13 @@ def event_leaves(cond):
     elif cond.op in leaves:
         return [cond] if is_event(cond) else []
     return [leaf for arg in cond.args for leaf in event_leaves(arg)]
+
+
+def event_key(leaf):
+    """ A leaf of a condition as (module name, name): of the transition for going through one (`Event('tr')`), otherwise its first two operands, e.g. (delivery, outcome) """
+    if isinstance(leaf, Event) and leaf.args[0] == 'tr':
+        return (modname(leaf.module), leaf.args[1].name)
+    return (modname(leaf.args[0]), leaf.args[1])
 
 
 def join(op, conds):
@@ -848,12 +847,7 @@ class Selector:
                 errormsg = f'The condition {cond} is on "{name}", which is a count, not a state of people'
                 raise ValueError(errormsg)
             return self.in_states([name])
-        elif graph is not None and name in graph.transitions:
-            return self.event(mod, name)
-        elif graph is not None and name in graph.transfers: # The people who moved along a stratification this step
-            if not self.abm:
-                raise ss.CapabilityError(f'the condition {cond} is the transfer "{name}" of "{mod.name}" as an event, which cannot run with solver="{sim.solver}" yet.\n'
-                                         f'     Run with solver="abm", or leave the solver as "auto".')
+        elif graph is not None and (name in graph.transitions or name in graph.transfers): # A path to a transition (ss.state('ng.cure')): the people who went through it this step
             return self.event(mod, name)
         elif not self.abm and graph is not None and name in graph.states and self.mod.name in getattr(self.dim_strat(mod.name), 'holders', []): # A state of a disease tracked jointly with this one: see ss.solvers.Crossing
             return np.isin(self.dim(mod.name), self.dim_strat(mod.name).state_levels[name])
@@ -886,17 +880,20 @@ class Selector:
             return share[sim.groups.group_raw()] if len(share) > 1 else np.full(self.shape, share[0])
         return share[None, :]
 
-    def event(self, mod, name):
-        """ The people who went through a transition this step """
+    def event(self, mod, name, to=None):
+        """ The people who went through a declared transition or transfer this step (to one destination, in a compartmental run: see `event_of()`) """
         engine = mod.engine
         if self.abm:
             out = np.zeros(self.shape, dtype=bool)
             out[engine.events.get(name, ss.uids())] = True
             return out
+        if name in mod.graph.transfers: # The people who moved along a stratification this step
+            raise ss.CapabilityError(f'the transfer "{name}" of "{mod.name}" as an event cannot run with solver="{self.sim.solver}" yet.\n'
+                                     f'     Run with solver="abm", or leave the solver as "auto".')
         if self.mod is not None and mod is not self.mod: # TL37: crashed with a broadcasting error, or with as many states in each, gave a wrong answer
             raise ss.CapabilityError(f'the event {mod.name}.{name} cannot select people of "{self.mod.name}" with solver="{self.sim.solver}": a compartmental run does not follow which state of "{self.mod.name}" '
                                      f'the people who went through a transition of "{mod.name}" are in. Run with solver="abm", or use an event of "{self.mod.name}".')
-        return engine.event_frac(name)
+        return engine.event_frac(name, to=to)
 
     def lineage(self, cond, depth=0):
         """ The events that the people of an event are all within: itself, the delivery it is an outcome of, the product, and what triggered the delivery, as (module name, outcome) """
@@ -912,7 +909,7 @@ class Selector:
                 out |= self.lineage(mod.on, depth + 1)
             return out
         elif cond.op in leaves:
-            return {(modname(cond.args[0]), cond.args[1])} if is_event(cond) else set()
+            return {event_key(cond)} if is_event(cond) else set()
         return set() # Events combined are agents only (see group_reasons())
 
     def relation(self, ca, cb):
@@ -921,7 +918,7 @@ class Selector:
         for name,o1 in la:
             if o1 is not None and isinstance(self.module(name), ss.Delivery) and any(n == name and o2 is not None and o2 != o1 for n,o2 in lb):
                 return 'disjoint'
-        key = lambda c: (modname(c.args[0]), c.args[1]) if isinstance(c, Cond) and c.op in leaves else None
+        key = lambda c: event_key(c) if isinstance(c, Cond) and c.op in leaves else None
         if key(cb) is not None and key(cb) in la:
             return 'a_in_b'
         elif key(ca) is not None and key(ca) in lb:
@@ -929,19 +926,21 @@ class Selector:
         return None
 
     def event_of(self, event):
-        """ The people an event (`tr.to(B)`, `X.enter`, `X.exit`) happened to """
+        """ The people an event (`tr`, `tr.to(B)`, `X.enter`, `X.exit`) happened to """
         mod = self.mod if event.module is None else self.module(modname(event.module))
         engine = mod.engine
+        spec = event.spec()
+        name = None if isinstance(event, child) else spec.get('tr')
+        graph = getattr(mod, 'graph', None)
+        if isinstance(name, str) and graph is not None and (name in graph.transitions or name in graph.transfers) and not (self.abm and 'to' in spec): # A declared transition or transfer (as compartments, also a branch of one)
+            return self.event(mod, name, to=spec.get('to'))
         if self.abm:
             out = np.zeros(self.shape, dtype=bool)
-            uids = engine.event_uids(**event.spec())
+            uids = engine.event_uids(**spec)
             out[event.mothers(self.sim, uids) if isinstance(event, child) else uids] = True
             return out
-        spec = event.spec()
-        if isinstance(event, child) or ('tr' in spec and (not isinstance(spec['tr'], str) or spec['tr'] not in mod.graph.transitions)):
+        if isinstance(event, child) or 'tr' in spec:
             raise ss.CapabilityError(f'the condition {event} cannot run with solver="{self.sim.solver}" yet: it is an event that only agents record. Run with solver="abm".')
-        if 'tr' in spec:
-            return engine.event_frac(spec['tr'], to=spec.get('to'))
         raise ss.CapabilityError(f'the condition {event} cannot run with solver="{self.sim.solver}" yet: entering or leaving a state as an event is agents only for now. Run with solver="abm".')
 
     def dim_strat(self, name):

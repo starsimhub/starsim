@@ -2,11 +2,11 @@
 
 Written 2026-10-22, after [plan.md](plan.md) reached about 98%. It comes from the five downstream reviews written this afternoon, all of `ssv4` at `598831ac`:
 
-- [reviews/tbsim.md](reviews/tbsim.md) (TR, TS, TC, TH, and TB §);
-- [reviews/covasim.md](reviews/covasim.md) (CV19–CV30);
-- [reviews/fpsim.md](reviews/fpsim.md) (FP73–FP93);
-- [reviews/hpvsim.md](reviews/hpvsim.md) (HP62–HP68);
-- [reviews/stisim.md](reviews/stisim.md) (ST54–ST61, plus HS- and CB- from its part notes).
+- reviews/tbsim.md (TR, TS, TC, TH, and TB §);
+- reviews/covasim.md (CV19–CV30);
+- reviews/fpsim.md (FP73–FP93);
+- reviews/hpvsim.md (HP62–HP68);
+- reviews/stisim.md (ST54–ST61, plus HS- and CB- from its part notes).
 
 There is no malariasim review from today (I1 runs it). The reviews were made at `598831ac`. `fd56c1fd` ("update stale docs") came after and changed `starsim/interop/migrate.py` and the migrate-starsim3 skill: it renames `ss.SexualNetwork`, removes `copy_inputs=`, splits `on_positive=` follow-ups out instead of deleting them, and moves counts to `init_n=`. So G starts by checking which migration findings are still there.
 
@@ -37,7 +37,7 @@ This plan is done when all of these hold, and not before or beyond:
 7. **I is done**: the six reviews rerun (malariasim included), `targets.md` ticked where they say so, and the records updated.
 8. **Checks pass**: the full suite, `tests/switching` apart from known timing flakes, and the perf guard, with nothing meaningfully slower (Cliff: 1.2 → 1.5 s matters, 1.2 → 1.5 ms doesn't).
 
-Not part of it: changes in tbsim, Covasim, FPsim, HPVsim or STIsim themselves (written up instead, per the October 22 [stale_other_repos.md](stale_other_repos.md)); the docs (plan.md F4); each model's own bugs; and anything in deferred.md that isn't named below. A new idea goes to deferred.md. If one is added here instead (only for an SWA, or because it blocks an item), the estimate goes down and the update says why.
+Not part of it: changes in tbsim, Covasim, FPsim, HPVsim or STIsim themselves (written up instead, per the October 22 stale_other_repos.md); the docs (plan.md F4); each model's own bugs; and anything in deferred.md that isn't named below. A new idea goes to deferred.md. If one is added here instead (only for an SWA, or because it blocks an item), the estimate goes down and the update says why.
 
 **Estimate**: about 95% done (2026-10-22, 17:45: A2, A4, the strains-by-count refusal and two `tests/switching` failures done; up from 90%; total about 97). Left: I1 (rerun the six reviews, for Cliff to launch one per session with `/v4.review`), and Cliff's answers to the questions below. Weights: S 1, M 3. Total about 95 units. Update this line with every edit. It should only go up.
 
@@ -55,12 +55,12 @@ B, C, D and E touch mostly different files and can run in parallel ([[parallel-w
 
 ## A. The step clock after A2
 
-- [x] **A1. Write-up for Cliff (S)**. *Done*: [step_clock.md](step_clock.md). HP62 turned out not to be the seed date (CR4 needs it), but where a seed leaves relative to the network pass; an agent has it. Symptom 3 is the one question. One page, before changing anything, as for A2. The four symptoms (CV19, HP62, FP73/ST54, ST60), each with its repro, and the options:
+- [x] **A1. Write-up for Cliff (S)**. *Done*: step_clock.md. HP62 turned out not to be the seed date (CR4 needs it), but where a seed leaves relative to the network pass; an agent has it. Symptom 3 is the one question. One page, before changing anything, as for A2. The four symptoms (CV19, HP62, FP73/ST54, ST60), each with its repro, and the options:
   - **Declared moves dated at `ti`** (deferred.md's "date a declared progression at the step's index", promoted). Then `ti_X == self.ti` means "this step" for code and engine alike. Reopens decision 16 and question 16. M.
   - **Seeds count from the first step** (HP62, and question 27, "left as is", which HP62 shows is wrong for v4's own `ss.SIR`): a seed with a dwell of k steps transmits for k steps. Contract test: a seed with a one-step dwell transmits exactly once.
   - **Coded schedules from Starsim 3 (CV19)**: v3's `days=0` was the first step, which is now `ti == 1`. Options: a clear name for the step's start index (`self.t.ti_start`), called out in the migration row; or interventions' `step()` also called at `ti == 0`, as analyzers are. The guess is the first, since a call at `ti == 0` is a step that isn't one.
   - **Question 15** (Cliff: split a coded step into working out the changes and applying them, as Ghana measles does). Say whether it removes any of the above, or is separate.
-- [x] **A2. Build what Cliff picks (M)**. *Done 2026-10-22*, as option A (the guess; [worklogs_b/a2_stamps.md](worklogs_b/a2_stamps.md)): every `ti_X` reads as the index of the step the move happened in, and `ti_exit_X` as the step the exit is taken in; the engine keeps its own times (`StepArr.internal()`), so results are bit-identical on every benchmark and `baseline.yaml` is unchanged. STIsim's `ti_P == ti` finds each step's conceptions (0 before). Contract test `test_clocks.py::test_stamps`. HP62's part: see [step_clock.md](step_clock.md) symptom 1.
+- [x] **A2. Build what Cliff picks (M)**. *Done 2026-10-22*, as option A (the guess; [worklogs_b/a2_stamps.md](worklogs_b/a2_stamps.md)): every `ti_X` reads as the index of the step the move happened in, and `ti_exit_X` as the step the exit is taken in; the engine keeps its own times (`StepArr.internal()`), so results are bit-identical on every benchmark and `baseline.yaml` is unchanged. STIsim's `ti_P == ti` finds each step's conceptions (0 before). Contract test `test_clocks.py::test_stamps`. HP62's part: see step_clock.md symptom 1.
 - [x] **A3. `.time` from code (S; ST60, SWA)**. *Done*: a duration in the sim's unit, NaN outside the state (not for those being split as they leave); 34 in the first trimester against 34 by hand (5,946 before). `preg.P.time < ss.weeks(13)` is True for 5,957 of 6,000 agents. Make it duration-aware (or NaN outside the state) so the comparison is right or raises; give `ss.Pregnancy` a gestational age and `since_delivery` if A2 doesn't make them one-liners (FP73).
 - [x] **A4. Records (S)**. *Done*: the skill's rows (and CV19's), specs 02 and 10, `a2_timing.md`: `a2_timing.md:29` ("needs no index rewrite at all"), the migrate skill's timing rows (FP92; recheck lines 89, 91, 96 and the gestation formula at 39 after `fd56c1fd`), `docs/migration/v3_v4.md:35`, plan.md questions 16 and 27.
 

@@ -7,7 +7,7 @@ without some)
 Each is one pass (or two) in place of several NumPy passes and their temporaries, in chunks that several threads take for
 a large network or population (see `ss.options.threads`; one thread in the workers of `ss.parallel()`). Lists are kept in
 order, and random numbers come from counters, so the results do not depend on the number of threads. See
-v4_design/oct22/jax/agents.md for the timings. Called by `ss.People`, `ss.Network`, `ss.RandomNet`, `ss.SexualNet`,
+v4_design/oct25/backlog/perf_jax.md for the timings. Called by `ss.People`, `ss.Network`, `ss.RandomNet`, `ss.SexualNet`,
 `ss.Births`, `ss.solvers.Agents` and the groups of `ss.dimensions`; not for the user. They are kept apart from the
 compartmental kernels (`ss.kernels`), so a change to either does not make Numba compile the other again.
 """

@@ -75,12 +75,7 @@ To build a model that runs, Starsim fills in whatever it is not given: here, for
 sim.describe()
 ```
 
-It is worth reading `describe()` for every new model, to check that it is the model you meant.
-
-::: {.callout-warning}
-## [PROPOSAL]
-Some lines of `describe()` are about how the model is run rather than what it is, or in words a modeler won't know: "plan: as compiled code, the whole run in one call", "contact-mediated", "dwell". These should be in plain terms, or left out unless asked for (e.g. `describe(verbose=True)`), so that the description reads as the model (P14).
-:::
+It is worth reading `describe()` for every new model, to check that it is the model you meant. `describe(verbose=True)` adds how the model is run (as compiled code or as agents) and what each rate is per step.
 
 ## The same model as agents
 

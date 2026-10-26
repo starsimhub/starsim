@@ -10,6 +10,7 @@ import pytest
 import numpy as np
 import sciris as sc
 import starsim as ss
+import starsim.library as ssl
 import corpus
 
 stochastic = ['binomial', 'gillespie', 'abm']
@@ -53,7 +54,7 @@ def unnamed(named):
 
 # Each row of the "what is guessed" table in 03-states-and-transitions.md: a sim that makes the guess, one that does not, and what describe() says
 guesses = dict(
-    dwell      = (lambda: ss.Sim(plain_sir()),                      lambda: ss.Sim(declared_sir()),                       'dwell ~'),
+    dwell      = (lambda: ss.Sim(plain_sir()),                      lambda: ss.Sim(declared_sir()),                       'time in I ~'),
     stages     = (lambda: ss.Sim(lognormal(None), solver='ode'),     lambda: ss.Sim(lognormal(4), solver='ode'),           'stages'),
     unit       = (lambda: ss.Sim(plain_sir()),                      lambda: ss.Sim(plain_sir(), unit='day'),             'unit'),
     mixing     = (lambda: ss.Sim(plain_sir()),                      lambda: ss.Sim(plain_sir(), networks=ss.RandomNet(), n_agents=1000), 'mixing'),
@@ -152,14 +153,23 @@ def test_streams_across_sims():
 
 
 def test_crn_pairing():
-    sc.heading('Testing that common random numbers pair the runs of a scenario and its baseline, for a declared disease as agents')
-    def infections(seed, campaign):
-        intv = ss.Delivery(move=dict(vaccinated=True), coverage=0.05, at=[10], name='campaign') if campaign else None # A small change
-        return corpus.vaccination(solver='abm', interventions=intv, n_agents=2000, rand_seed=seed).run().results.sir.infection.values.sum()
-    base, alt = [np.array([infections(seed, campaign) for seed in range(20)]) for campaign in [False, True]]
-    ratio = np.var(alt - base)/(np.var(alt) + np.var(base)) # 1 for independent runs
-    assert ratio < 0.5, f'The difference between the scenarios varies {ratio:.2f} times as much as for independent runs' # 0.14 to 0.32 over four sets of 20 seeds
-    return ratio
+    sc.heading('Testing that with common random numbers, making one agent immune changes few other agents, for a declared disease as agents')
+    def susceptible(seed, uid=None): # Who is still susceptible at the end; with uid, that agent is made immune at the start
+        intv = ss.vaccinate(efficacy=1.0, coverage=1.0, at=[0], where=lambda sim: ss.uids([uid]), name='vx') if uid is not None else None
+        sir = ss.SIR(beta=ss.perday(0.05), dur_inf=ss.days(10), init_prev=0.02)
+        sim = ss.Sim(n_agents=1000, diseases=sir, networks=ssl.RandomSafeNet(n_edges=2), interventions=intv, solver='abm', unit='day', stop=100, rand_seed=seed, verbose=0) # A network that keeps CRN when people are born or die (ss.RandomNet does not)
+        return sim.run().diseases.sir['S'].raw.copy()
+    changed = dict()
+    for crn in [True, False]:
+        with ss.options.context(crn=crn):
+            changed[crn] = []
+            for seed in range(5):
+                base = susceptible(seed)
+                uid = int(np.nonzero(~base)[0][-1]) # An agent infected in the baseline
+                changed[crn].append(max(int((base != susceptible(seed, uid)).sum()) - 1, 0)) # Other agents whose outcome changes
+    assert np.median(changed[True]) <= 2, f'With CRN, making one agent immune changed the outcomes of {changed[True]} other agents' # 0 to 4
+    assert np.median(changed[False]) > 50, f'Without CRN, making one agent immune changed only {changed[False]} other agents' # About 300 of 800 infected
+    return changed
 
 
 # %% The code of a model builds it again
@@ -600,7 +610,7 @@ def test_joint_population():
     assert ss.Sim([split, ss.SIS(name='b')], demographics=ss.death(rate=ss.peryear(0.01)), total_pop=1000, stop=2010, verbose=0).init().solver == 'abm'
     text = pair().init().describe(output=True)
     assert 'a × b: 2 × 2 = 4 joint states of people' in text and 'people die of a' in text and 'start independent' in text
-    assert 'plan         a, b: as compiled code, the whole run in one call; a × b as one program' in text
+    assert 'plan         a, b: as compiled code, the whole run in one call; a × b as one program' in pair().init().describe(output=True, verbose=True) # How it is run, only when asked
     return j
 
 

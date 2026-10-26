@@ -61,8 +61,3 @@ A few longer examples are kept as scripts in the [`docs/examples`](https://githu
 - **An embedding network** ([`networks/embedding.py`](https://github.com/starsimhub/starsim/blob/main/docs/examples/networks/embedding.py)): pairs people by their closeness in a continuous space of traits.
 - **One model in several languages** ([`translations/`](https://github.com/starsimhub/starsim/tree/main/docs/examples/translations)): the same simple SIS model written in plain Python, Numba, JAX, Julia, and Rust, next to the Starsim version, for comparing their speed.
 - **LASER** ([`laser/`](https://github.com/starsimhub/starsim/tree/main/docs/examples/laser)): a LASER example and its Starsim equivalents, with scripts to time them.
-
-::: {.callout-warning}
-## [PROPOSAL]
-The diagrams on these pages are drawn from `diagram()`, which returns the text of a Mermaid flowchart, so each page prints it into a Mermaid block in a hidden cell. In a notebook, `sir.diagram()` should draw the diagram itself, as `describe()` shows tables (P11). Its labels should also give the values, with their units, rather than the names of the parameters: `recovery: 10 days`, not `recovery: dur = dur` (P2, P6).
-:::

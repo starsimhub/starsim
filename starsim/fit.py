@@ -951,7 +951,7 @@ class Fit(sc.prettyobj):
 
     def project(self, scenarios=None, n=None, rand_seed=None, **kwargs):
         """
-        Run the fitted model forward under each scenario, with the uncertainty in the fitted values: one run per draw from the posterior (or runs of the best fit, each with its own seed, for a method that gives none), with the same draws in every scenario
+        Run the fitted model forward under each scenario, with the uncertainty in the fitted values: one run per draw from the posterior, each with a seed of its own (or runs of the best fit, each with its own seed, for a method that gives none), with the same draws and seeds in every scenario
 
         Args:
             scenarios (dict): for each scenario, what changes: None, an intervention or a list of them, or a dict of arguments for `sim.new()` (default: the fitted sim alone)

@@ -40,17 +40,19 @@ def test_mermaid(tmp_path):
     sim = make_sir()
     text = ss.interop.export(sim, 'mermaid', verbose=False)
     assert text.startswith('flowchart LR')
-    assert 'S -.->|"infection: beta * I"| I' in text # A transmission is dashed, and labelled with its rate
-    assert 'I -->|"recovery: dur = dur"| R' in text
+    assert 'S -.->|"infection: 0.3 × I"| I' in text # A transmission is dashed, and labelled with its rate
+    assert 'I -->|"recovery: 7 days"| R' in text # With its value (it was "dur = dur")
     ss.interop.export(sim, 'mermaid', filename=tmp_path/'sir.md', verbose=False)
     assert sc.loadtext(tmp_path/'sir.md').startswith('```mermaid\nflowchart LR') # A Markdown file has the diagram in a fenced block
-    with pytest.raises(ValueError, match='ss.interop.export'): # ss.save() writes Starsim's own formats, and says which call writes this one (it was a TypeError from pickling)
-        ss.save(tmp_path/'sir.xml', sim, format='sbml')
+    ss.save(tmp_path/'sir.xml', sim, format='sbml', verbose=False) # Another format is written by its exporter (it was a TypeError from pickling)
+    assert '<sbml' in sc.loadtext(tmp_path/'sir.xml')
+    with pytest.raises(ValueError, match='the formats are'):
+        ss.save(tmp_path/'sir.x', sim, format='nosuch')
 
     # Two diseases are a subgraph each; a stratification is in the title
     sim = ss.Sim([sir('a'), sir('b')], stratify=dict(age=[0, 18]), unit='day', **kw)
     text = ss.interop.export(sim, 'mermaid', verbose=False)
-    assert 'subgraph a["a (stratified by age: 0-17, 18+)"]' in text and 'b_I -->|"recovery: dur = dur"| b_R' in text
+    assert 'subgraph a["a (stratified by age: 0-17, 18+)"]' in text and 'b_I -->|"recovery: 7 days"| b_R' in text
     return text
 
 

@@ -39,10 +39,7 @@ sim.plot()
 
 The same transition can also be written as the whole flow, as many textbooks and frameworks write it. With `N = S + I + R`, `S >> I @ 1.9*S*I/N` is the same model as `S >> I @ 1.9*I`. Both are *frequency-dependent* transmission: what matters is the share of people who are infectious, so a larger town has more infections but not a faster epidemic. For *density-dependent* transmission, where what matters is the number of infectious people (as for some diseases of animals), use the number in the state, `I.n`, as in `S >> I @ beta*I.n`. Then β is per infectious person, so it is much smaller, and R0 = β N × the infectious period grows with the size of the population.
 
-::: {.callout-warning}
-## [PROPOSAL]
-A density-dependent transmission (`beta*I.n`) runs correctly, but Starsim doesn't treat it as a transmission: the run prints a note suggesting it be written as a share instead, no R0, and no count of infections; `describe()` counts `R` as infected; and `R0()` fails with "Singular matrix". It should be recognized as a transmission like `beta*I`, with R0 = β N D, and the note given only where `I.n` looks like a mistake (P1, P2).
-:::
+Starsim treats it as a transmission like `beta*I`, with `I` as its source: the run prints R0 (β N × the infectious period) and the number of infections, and `describe()` and `R0()` work as for frequency dependence. If β looks like it was meant for a share (one infectious person would infect each susceptible at a rate of 5% or more a step), the run notes how to write a share instead.
 
 **Durations.** `I >> R @ ss.days(8)` has a duration instead of a rate: people spend 8 days in `I` on average, which is the same as a per capita rate of recovery of 1/8 per day. As in the standard SIR model, the time each person spends infectious is exponentially distributed, with this mean. [Tutorial 3](t3_structure.qmd) shows how to give other distributions.
 

@@ -132,7 +132,7 @@ The interval agrees with the posterior's above. A profile needs a deterministic 
 
 ## Projecting from a posterior
 
-`fit.project()` runs the fitted model under each scenario, once for each of `n` draws from the posterior, with the same draws in every scenario. The spread of the runs is then the uncertainty in the fitted values, carried into the projection. Here, a vaccination campaign on 1 April that reaches half the town, compared with none:
+`fit.project()` runs the fitted model under each scenario, once for each of `n` draws from the posterior, with the same draws (and seeds) in every scenario. Each draw has a seed of its own, so the spread of the runs is the uncertainty in the fitted values, carried into the projection, together with chance. Here, a vaccination campaign on 1 April that reaches half the town, compared with none:
 
 ```{python}
 vaccination = ss.vaccinate(efficacy=0.97, coverage=0.5, at='2025-04-01')

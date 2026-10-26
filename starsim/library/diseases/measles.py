@@ -18,6 +18,8 @@ class Measles(AgentSEIR):
     `p_death`) or recover after `dur_inf`. Natural history parameters are from
     the US CDC.
 
+    Note: CRN safe.
+
     Args:
         beta (prob):        per-contact transmission probability
         init_prev (Dist):   initial prevalence

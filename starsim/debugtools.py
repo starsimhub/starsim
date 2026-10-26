@@ -33,7 +33,7 @@ class Profile(sc.profile):
         net = ss.RandomNet()
         hiv = ssl.HIV() # A disease written as code
         sim = ss.Sim(networks=net, diseases=hiv)
-        prof = sim.profile(follow=[net.add_pairs, hiv.infect])
+        prof = sim.profile(follow=[net.add_pairs, hiv.transmit])
         prof.disp()
         ```
     """

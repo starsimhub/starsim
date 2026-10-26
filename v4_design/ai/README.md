@@ -33,8 +33,8 @@ Write the report to `v4_design/<date>/reviews/<name>.md` (make the folder if nee
 
 1. **Header.** Date, the `ssv4` commit and branch (and whether dirty), the versions of the other side, the machine and its load.
 2. **Scorecard.** One row per target line in `targets.md` that the skill covers: the target, its status (**met**, **partly met**, **not met**, or **not measured**), and the evidence in one line (a number, with its comparison). Say which boxes in `targets.md` could now be ticked; don't edit `targets.md` (it is Cliff's).
-3. **Since the last report.** Find the most recent earlier report of the same name (`ls -d v4_design/*/reviews/<name>.md`, or for the first run, the older review the skill names) and list what changed: targets newly met or lost, numbers that moved.
-4. **Findings.** What v4 should change to meet the targets that aren't met, ranked by how much each would move the scorecard, each with a minimal repro (a short script in the scratchpad, quoted inline or summarized with its output). Cross-reference `admin/deferred.md` and the plan in the latest dated folder, and say for each finding whether it is already tracked.
+3. **Since the last report.** Only if an earlier report of the same name exists (`ls -d v4_design/*/reviews/<name>.md`): list what changed, i.e. targets newly met or lost, and numbers that moved. Otherwise leave this section out; no baseline is kept on purpose.
+4. **Findings.** What v4 should change to meet the targets that aren't met, ranked by how much each would move the scorecard, each with a minimal repro (a short script in the scratchpad, quoted inline or summarized with its output). Cross-reference `deferred.md` and the plan in the latest dated folder, and say for each finding whether it is already tracked.
 5. **Details.** The per-model or per-task tables behind the scorecard.
 
 Keep it short: the scorecard and findings are what Cliff reads; the details are for checking them.

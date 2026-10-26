@@ -532,11 +532,10 @@ class CrossRun:
     def function(self, clamp=False):
         jnp = jax().numpy
         inner = self.run.function(clamp)
-        cross = self.cross
 
-        def run(Xs):
-            y_end, stocks, flows, n = inner(cross.numbers(list(Xs), xp=jnp, reps=self.reps))
-            parts = [cross.split(k, y_end, stocks, flows, xp=jnp) for k in range(len(Xs))]
+        def run(Xs): # The crossing is looked up when traced, so a run shared by the sims of a model keeps only the latest one's (see `joint_runner()`)
+            y_end, stocks, flows, n = inner(self.cross.numbers(list(Xs), xp=jnp, reps=self.reps))
+            parts = [self.cross.split(k, y_end, stocks, flows, xp=jnp) for k in range(len(Xs))]
             return tuple(part[0] for part in parts), tuple(part[1] for part in parts), tuple(part[2] for part in parts), n
 
         return run
@@ -581,7 +580,7 @@ def runner(engine, program, how):
 
 
 def joint_runner(cross, captured, n_max=None):
-    """ The `CrossRun` of a crossing, from the program and how to run each of its engines; made again only if how the program's flows are put together has changed (or, with `n_max`, always) """
+    """ The `CrossRun` of a crossing, from the program and how to run each of its engines; made again only if how the program's flows, or the engines' within it, are put together has changed (or, with `n_max`, always), and shared with any other crossing put together the same way, as `runner()` does """
     programs = [program for program,how in captured]
     if cross.program is None or cross.built != [id(p) for p in programs]:
         cross.build(programs)
@@ -589,13 +588,11 @@ def joint_runner(cross, captured, n_max=None):
     how = captured[0][1][:4] + (per_step,)
     if n_max is not None:
         return CrossRun(cross, Run(cross.program, *how, n_max=n_max), reps)
-    key = Run.key(cross.program, *how)
-    kept = cross.jax_run
-    if kept is not None and kept[0] == key:
-        return kept[1]
-    run = CrossRun(cross, Run(cross.program, *how, n_max=kept[1].n_max if kept is not None else 4), reps)
-    cross.jax_run = (key, run)
-    return run
+    key = (Run.key(cross.program, *how), tuple(reps)) + tuple(Run.key(program, *eng_how) for program,eng_how in captured) # The engines' programs fix where each one's numbers go in the crossing's
+    if key not in runs:
+        runs[key] = CrossRun(cross, Run(cross.program, *how, n_max=4), reps)
+    runs[key].cross = cross # Put together the same way, so the same run; the numbers are gathered from this crossing (and an earlier sim's is not kept)
+    return runs[key]
 
 
 def units(sim):
@@ -724,13 +721,13 @@ def run_sets(sim, par_sets):
         runs = []
         for i,pars in enumerate(par_sets): # Results worked out from the values of the parameters in each run (an outcome can depend on them)
             sim.par_values = sc.mergedicts(base, pars)
-            sim.set_par_values()
+            ss.solvers.set_par_values(sim)
             engine.cache.clear()
             runs.append(engine.collect(stocks[i:i+1], flows[i:i+1]))
         results[mod.name] = sc.objdict({key:(sc.objdict({k:np.concatenate([run[key][k] for run in runs]) for k in runs[0][key]}) if key in ['groups', 'denoms'] else np.concatenate([run[key] for run in runs])) for key in runs[0] if key != 'group_ti'})
         results[mod.name].group_ti = None # The values by group, if kept, are at every time point
     sim.par_values = base
-    sim.set_par_values()
+    ss.solvers.set_par_values(sim)
     return results
 
 

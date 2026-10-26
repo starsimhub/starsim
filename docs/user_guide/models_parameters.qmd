@@ -196,10 +196,7 @@ sim.plot()
 
 A function that uses `uids`, or anything else about individual people, needs agents, so a model with one runs as agents. Where the same thing can be said by group (`ss.by(age=...)` on a stratified model), it runs under every solver.
 
-::: {.callout-warning}
-## [PROPOSAL]
-A distribution in a rate, so that each person has their own transmission rate (`S >> I @ ss.gamma(a=0.5, scale=3.8)*I`), raises `WrongDimension`, since a distribution after `@` is taken to be a duration before the `*I` is seen. It works with the keyword form, `ss.Transition(S, I, rate=ss.gamma(a=0.5, scale=3.8)*I)`. A distribution multiplied by a state should be read as a rate in both forms (P11: one obvious way, and the table above says every form works in every place).
-:::
+A distribution in a rate gives each person their own rate: in `S >> I @ ss.gamma(a=0.5, scale=3.8)*I`, each person has their own transmission rate (the same as `ss.Transition(S, I, rate=ss.gamma(a=0.5, scale=3.8)*I)`). A distribution on its own after `@` is a dwell time; times a state, it is a rate.
 
 ## Parameters of modules written as code
 

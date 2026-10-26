@@ -26,6 +26,8 @@ class ErdosRenyiNet(ss.DynamicNetwork):
 
     Warning: this network is quite slow compared to `ss.RandomNet`.
 
+    Note: CRN safe.
+
     Args:
         p (float):      probability that each possible edge is created per timestep
         dur (dur/Dist): how long edges persist; 0 means new edges each timestep
@@ -97,6 +99,8 @@ class NullNet(ss.Network):
     >> empty_net_static = ssl.StaticNet(nx.empty_graph)
     >> empty_net_rand = ss.RandomNet(n_contacts=0)
 
+    Note: CRN safe.
+
     Args:
         n_people (int): number of agents in the network; defaults to the sim's `n_agents`
     """
@@ -143,6 +147,8 @@ class RandomSafeNet(ss.DynamicNetwork):
     For example, `ss.RandomNet(n_contacts=10, method='exact')` will give (nearly) identical results
     to `ssl.RandomSafeNet(n_edges=5)`. In addition, whereas `n_contacts` can be
     a distribution, `n_edges` can only be an integer.
+
+    Note: CRN safe.
 
     Args:
         n_edges (int): the average number of (bi-directional) edges between agents
@@ -247,6 +253,8 @@ class StaticNet(ss.Network):
 
     If "seed=True" is passed as a keyword argument or a parameter in pars, it is replaced with the built-in RNG.
     The parameter "n" is supplied automatically to be equal to n_agents.
+
+    Note: CRN safe.
 
     Examples:
         ```python

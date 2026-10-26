@@ -66,8 +66,8 @@ A numeric variable that only gates transitions (age, a counter) is either a stra
 | In the source | In Starsim |
 |---|---|
 | Homogeneous mixing | Nothing: the default; a bare state in a rate is `I.n / N` |
-| A contact matrix by age | `networks=ss.contacts(matrix, bands=[...])`, with the disease stratified by the same bins (or a coarser set; `MatrixAggregated` says how it was aggregated) |
-| A matrix for each of several dimensions | `ss.contacts(age=M1, location=M2)` |
+| A contact matrix by age | `networks=ss.contacts(matrix, ages=[...])`, with the disease stratified by the same bins (or a coarser set; `MatrixAggregated` says how it was aggregated) |
+| A matrix for each of several dimensions | `ss.contacts(dict(age=M1, location=M2))` |
 | Coupling between places | `ss.geo.Mobility(matrix=M)` (commuting), `ss.geo.Mobility(kind='force')` (the force of infection moves), `ss.geo.gravity(k=, a=, b=, c=)` |
 | A dynamic partnership network (ERGM-style targets) | `ssl.DegreeNet(n_contacts=, concurrency=, dur=, match=dict(risk=0.9))` (`import starsim.library as ssl`), or `ss.SexualNet(n_contacts=, concurrency=, max_contacts=)` for men and women (`between='mm'` for men); `ssl.DegreeNet(n_contacts=, dur=)` for lasting partnerships between anyone (`where=` for some people) |
 | A random network | `ss.RandomNet(n_contacts=)`, with `method='exact'` for a fixed number of contacts each |

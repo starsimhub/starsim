@@ -12,6 +12,7 @@ import numpy as np
 import pytest
 import sciris as sc
 import starsim as ss
+import timing
 
 ref_ns_per_agent_step = 1.1 # LASER on 20 threads, England and Wales within 150 km of Norwich (3.3M agents, 149 places); switching/laser.md, "The second week" §1
 ref_bytes_per_agent   = 30  # LASER's peak memory per agent; same section
@@ -103,9 +104,8 @@ def test_laser_speed():
     for total in [100_000, 300_000]:
         for rep in range(3): # The best of three, since the machine may be busy
             sim = make_sim(total, days=days).init()
-            T = sc.timer()
-            sim.run()
-            times[total] = min(times.get(total, np.inf), T.toc(output=True))
+            seconds, _ = timing.timed(sim.run, repeats=1) # Normalized to the reference machine, where LASER was timed (see timing.py)
+            times[total] = min(times.get(total, np.inf), seconds)
     ns = (times[300_000] - times[100_000])/(200_000*days)*1e9 # The marginal cost, which leaves out the per-step Python overhead
     assert ns < 3*ref_ns_per_agent_step, f'{ns:.1f} ns per agent-step, more than 3x LASER threaded ({ref_ns_per_agent_step} ns)'
     return ns

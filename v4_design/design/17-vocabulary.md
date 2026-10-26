@@ -192,7 +192,7 @@ Keywords are not counted above, but they are vocabulary too, so the main sets ar
 | `ss.MixingPool` | `n_contacts` `src` `dst` `beta` |
 | `ss.SexualNet` | `between` (`'mf'`, `'mm'`, or a pair of groups) `dur` `acts` `participation` `debut` `n_contacts` `concurrency` `max_contacts` `match` |
 | `ss.geo.Mobility` | `matrix` `data` `kind` `away` |
-| `ss.contacts` | `bands` `name` `source` `layer` `dims`, and a matrix for each stratification by its name |
+| `ss.contacts` | `ages` `dims` `name` `source` `layer` `unit`; a matrix, a country, or a dict of a matrix for each stratification |
 | Networks | `sides` (and `net.directions`, which follow from them; `between` on `ss.SexualNet`) |
 | `sim.fit` | `pars` `data` `weights` `likelihood` `gof` `method` `n_runs` `rand_seed`, and the method's own settings |
 | `ss.fit.optimize` | `maximize` `minimize` `at` `start` `total` `spend` `bounds` |

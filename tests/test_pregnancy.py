@@ -106,22 +106,17 @@ def test_fetus_ode():
     agents_only(lambda: dict(demographics=ss.Pregnancy(fetus=True)), match='fetus=True')
 
 
-def test_lactation_ode():
-    sc.heading('Testing ss.Lactation: agents only')
-    agents_only(lambda: dict(demographics=[ss.Pregnancy(fertility_rate=ss.freqperyear(150)), ss.Lactation(p_breastfeed=0.8)]), match='Lactation')
-
-
 def make_hiv_vertical(bf=True):
-    preg = ss.Pregnancy(fertility_rate=ss.freqperyear(120))
+    preg = ss.Pregnancy(fertility_rate=ss.freqperyear(120), p_breastfeed=0.8)
     S, I = ss.states('S I')
     beta = dict(maternalnet=ss.peryear(0.2), breastfeedingnet=ss.peryear(0.3 if bf else 0))
     hiv = ss.Disease(S, I, infection=ss.Transition(S, I, rate=beta * I), death=ss.Transition(I, ss.null, rate=ss.peryear(0.05)), init=dict(I=0.2), name='hiv')
-    return dict(demographics=[preg, ss.Lactation(p_breastfeed=0.8)], diseases=hiv, networks=[ss.MaternalNet(), ss.BreastfeedingNet()])
+    return dict(demographics=preg, diseases=hiv, networks=[ss.MaternalNet(), ss.BreastfeedingNet()])
 
 
 def test_hiv_vertical_ode():
-    sc.heading('Testing HIV vertical transmission (MaternalNet, BreastfeedingNet, ss.Lactation): agents only')
-    agents_only(make_hiv_vertical, match='Lactation')
+    sc.heading('Testing HIV vertical transmission (MaternalNet, BreastfeedingNet): agents only')
+    agents_only(make_hiv_vertical, match='MaternalNet')
 
 
 def test_delivery_shift():
@@ -207,7 +202,6 @@ if __name__ == '__main__':
     npreg = test_burnin_pregnancies()
     mmr = test_mmr()
     test_fetus_ode()
-    test_lactation_ode()
     test_hiv_vertical_ode()
     shift = test_delivery_shift()
     test_syphilis_ode()

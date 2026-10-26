@@ -1,6 +1,6 @@
 # Partnerships in compartmental STI models: a literature review (decision 2, S3.7)
 
-A review for decision 2 in [plan.md](plan.md): should v4 keep, change, or remove the partnership approximation that runs `ss.MFNet` and `ss.PartnerNet(dur=)` as compartments? It builds on [oct20/simplify/partnerships.md](../oct20/simplify/partnerships.md), which has the measurements against agents. Sources are marked **[checked]** when I read the paper, its abstract, or its code this session, and **[memory]** when the citation is from memory only (standard references I am confident of, but did not open). Nothing in `starsim/` was changed.
+A review for decision 2 in [plan.md](plan.md): should v4 keep, change, or remove the partnership approximation that runs `ss.MFNet` and `ss.PartnerNet(dur=)` as compartments? It builds on oct20/simplify/partnerships.md, which has the measurements against agents. Sources are marked **[checked]** when I read the paper, its abstract, or its code this session, and **[memory]** when the citation is from memory only (standard references I am confident of, but did not open). Nothing in `starsim/` was changed.
 
 ## Summary and recommendation
 

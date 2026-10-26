@@ -40,7 +40,7 @@ or `ss.interop.load(m)` on a live pycamdl model, if pycamdl can be imported wher
 
 ## What needs care
 
-- **Rewrite a stratified import as `stratify()`.** The IR has the dimensions spelled out, so the import is flat: right, but long. For a model like the stratified SEIR, the declared form is `seir.stratify(age=[0, 5, 50])`, `seir.stratify(patch=[...], kind='space', split=pop, mobility=ss.geo.Mobility(matrix=..., kind='migrate'))`, and `networks=ss.contacts(contacts, bands=[0, 5, 50])` (see the worked example). Check it against the flat import with the validate-import skill before replacing one with the other.
+- **Rewrite a stratified import as `stratify()`.** The IR has the dimensions spelled out, so the import is flat: right, but long. For a model like the stratified SEIR, the declared form is `seir.stratify(age=[0, 5, 50])`, `seir.stratify(patch=[...], kind='space', split=pop, mobility=ss.geo.Mobility(matrix=..., kind='migrate'))`, and `networks=ss.contacts(contacts, ages=[0, 5, 50])` (see the worked example). Check it against the flat import with the validate-import skill before replacing one with the other.
 - **A one-off move between states is a delivery that moves people.** camdl's `transfer(S --> R, fraction=0.6, at=20)` is listed; write it as `ss.Delivery(move=S >> R, coverage=0.6, at=[20])`, which moves that share of `S` at that time, under every solver.
 - **Interventions are off unless enabled**, in camdl as in pycamdl (`--enable vaccinate`, `run(enable=[...])`); events always happen.
 - **Give the solver.** The import runs as an ODE (`solver='ode'`, camdl's `--backend ode`); camdl's default backend is chain-binomial (`solver='binomial'`). At a step of a day the binomial import's mean infectious curve is within 0.9% of camdl's 200 runs; at a quarter of a day it is 12% away, since the two schemes differ by order dt.
@@ -64,7 +64,7 @@ seir = ss.Disease(
 )
 seir.stratify(age=[0, 5, 50]) # Children, adults, and elders, who age at 1/5 and 1/45 a year
 seir.stratify(patch=['north', 'south'], kind='space', split=pop, mobility=ss.geo.Mobility(matrix=[[0, 0.01], [0.01, 0]], kind='migrate'))
-sim = ss.Sim(seir, networks=ss.contacts(contacts, bands=[0, 5, 50]), total_pop=13_510, unit='day', stop=150, use_aging=True)
+sim = ss.Sim(seir, networks=ss.contacts(contacts, ages=[0, 5, 50]), total_pop=13_510, unit='day', stop=150, use_aging=True)
 ```
 
 Over camdl's own test models (85 files), 84 import and run; 54 with nothing listed, and the rest listing forcing functions of time (17), observations of numbers in states (11), ODE compartments (7), and events (7).

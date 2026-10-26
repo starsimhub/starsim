@@ -18,7 +18,7 @@ Consequences:
 
 This is Starsim's mechanism, kept. One shared stream would make every scenario comparison noisier than it needs to be.
 
-**How a draw is made.** Every draw goes through one exact library (`ss.perflib.draws`, compiled by Numba, hidden from users): each count or value is a function of one uniform, by inversion of its CDF where that is cheap (binomial and Poisson up to a mean of 30, negative binomial, exponential, Weibull, normal, lognormal, uniform, discrete choices), so it is monotone in the uniform, which suits common random numbers; otherwise (larger means, gamma, beta) by a rejection sampler whose own uniforms come from a stream seeded by that uniform, so the same uniform still gives the same draw. Uniforms are counter-based (SplitMix64 of a key and an index, the same hash as an agent's CRN uniform). A stochastic compartmental run draws one uniform a count from its generator, and for many groups (`ss.kernels.row_groups`, 50) a row of counts from one key, with vectorized code. A per-agent draw with CRN is the inverse CDF at the agent's uniform, compiled for the common distributions, and SciPy's for the rest (gamma, beta) and above a mean of 30, so it stays monotone. None of the common distributions is much slower than NumPy's own sampler (see [jax/draws.md](../oct22/jax/draws.md)).
+**How a draw is made.** Every draw goes through one exact library (`ss.perflib.draws`, compiled by Numba, hidden from users): each count or value is a function of one uniform, by inversion of its CDF where that is cheap (binomial and Poisson up to a mean of 30, negative binomial, exponential, Weibull, normal, lognormal, uniform, discrete choices), so it is monotone in the uniform, which suits common random numbers; otherwise (larger means, gamma, beta) by a rejection sampler whose own uniforms come from a stream seeded by that uniform, so the same uniform still gives the same draw. Uniforms are counter-based (SplitMix64 of a key and an index, the same hash as an agent's CRN uniform). A stochastic compartmental run draws one uniform a count from its generator, and for many groups (`ss.kernels.row_groups`, 50) a row of counts from one key, with vectorized code. A per-agent draw with CRN is the inverse CDF at the agent's uniform, compiled for the common distributions, and SciPy's for the rest (gamma, beta) and above a mean of 30, so it stays monotone. None of the common distributions is much slower than NumPy's own sampler (measured 2026-10-22; [oct25/backlog/perf_jax.md](../oct25/backlog/perf_jax.md)).
 
 The name MUST come from the declaration's path in the model spec ([14-model-spec.md](14-model-spec.md)), not from a Python object identity or the order of construction, so that the same model written in any of the three spellings produces the same draws.
 
@@ -38,6 +38,20 @@ Under a compartmental solver there are no agents, so there is no pairing by agen
 ### What CRN covers
 
 CRN holds for draws that can be made one agent at a time from that agent's own uniform. It does not hold for sampling without replacement, joint draws across agents, shuffles, or network rewiring that does these things; such draws keep their noise in a comparison, which is still valid.
+
+Each built-in module says in its docstring whether it keeps CRN. A module is CRN safe if making one agent immune, or removing one, changes the outcomes of only a handful of other agents (against hundreds with `ss.options.crn = False`):
+
+| Module | CRN |
+|---|---|
+| Declared diseases (`ss.Disease`, `ss.SIR`, `ss.SEIR`, `ss.SIS`), `ss.Pregnancy`, declared births, deaths, and migration, `ss.geo.Mobility`, mixing pools, deliveries (`ss.Delivery`, `ss.vaccinate()`, `ss.screen()`, `ss.treat()`) and their products | Safe as agents (a compartmental run has no agents to pair) |
+| Diseases written as code (`ss.Infection`, `ssl.AgentSIR` and the other `ssl` diseases), `ss.Births`, `ss.Deaths`, `ss.modify`, analyzers, `ssl.mnch` modules, `ssl.ART` | Safe |
+| `ss.PrenatalNet`, `ss.MaternalNet`, `ss.PostnatalNet`, `ss.BreastfeedingNet`, `ssl.RandomSafeNet`, `ssl.ErdosRenyiNet`, `ssl.DiskNet`, `ssl.StaticNet`, `ssl.NullNet`, `ss.Network` with its edges given | Safe |
+| `ssl.ClusterNet`, `ssl.HybridNet` | Safe, unless `dynamic=True` and people are born or die |
+| `ss.RandomNet` | Not safe when people are born or die, unless `dynamic=False`: one death rewires almost every edge (pairing by position in a list of all agents) |
+| `ss.SexualNet`, `ssl.DegreeNet` | Not safe when people are born or die: people are paired in turn, so one fewer shifts the partners of those after them |
+| `ssl.HouseholdNet` | Not safe unless `dynamic=False`: the partners who move out are drawn together, without replacement |
+
+"Born or die" means differently in the two scenarios: with the same people alive in both, every network is the same in both, except `ssl.HouseholdNet` when pregnancies differ.
 
 CRN pairs draws, not outcomes. For a small change (a few percentage points of coverage, a small change in a parameter) the two runs stay close and most of the noise cancels. For a large change, or late in an epidemic, the scenarios infect different people, so the paired draws are made for different decisions and the noise in the difference grows back towards that of independent runs. CRN reduces the number of runs a comparison needs; it does not remove the need to check it.
 

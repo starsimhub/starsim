@@ -30,10 +30,7 @@ sti = ss.Disease(infection, recovery, init_prev=0.05, name='sti')
 The chance of transmission is given per act (`ss.peract`), for each direction of the network, which has men on one side and women on the other. The diagram, from `diagram()`:
 
 ```{python}
-#| echo: false
-#| output: asis
-fence = '`' * 3
-print(fence + '{mermaid}\n' + sti.diagram() + '\n' + fence)
+sti.diagram()
 ```
 
 ## Result

@@ -97,7 +97,7 @@ secir = ss.Disease(
     init_n    = dict(E=100, INS=50, ISy=50, ISev=20, ICr=10, R=10),
 )
 secir.stratify(age=['0', '1', '2']) # Three groups of equal size, each with a third of every state
-mixing = ss.contacts(age=np.full((3, 3), 10/3)) # 10 contacts a day, spread evenly over the groups
+mixing = ss.contacts(np.full((3, 3), 10/3)) # 10 contacts a day, spread evenly over the groups
 sim = ss.Sim(secir, networks=mixing, total_pop=10_000, stop=ss.days(50), verbose=0)
 sim.run()
 sim.plot()

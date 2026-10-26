@@ -9,10 +9,12 @@ import numpy as np
 import pytest
 import sciris as sc
 import starsim as ss
+import timing
 
 kw = dict(verbose=0)
 ref_peak_50   = 11_561.6 # National peak of symptomatic people, MEmilio's MobilityGraph at 50 counties; switching/memilio.md, "The second week" §1 (memilio_50.npy)
 ref_agree     = 0.002    # National curves within 0.2% of the peak at 50 counties; same section
+v4_time_50    = 0.075    # Starsim's run at 50 counties (s), normalized to the reference machine (see timing.py), 2026-10-25
 ref_time_50   = 0.17     # MEmilio's run at 50 counties (s); same section, table
 ref_time_400  = 1.54     # MEmilio's run at 400 counties (s), i.e. its time grows with the number of edges; same section
 ref_npi_ratio = 149_298/750_843 # Peak with local NPIs over the peak without, 50 counties; "The second week" §3
@@ -76,15 +78,14 @@ def stratify(target, d):
 def make_sim(d, secir=None, on_sim=False, **kwargs):
     """ Stratified on the disease, or (on_sim=True) on the sim """
     secir = secir or stratify(make_secir(d), d)
-    sim = ss.Sim(secir, networks=ss.contacts(age=cm), total_pop=d.popsize.sum(), stop=ss.days(90), **kwargs, **kw)
+    sim = ss.Sim(secir, networks=ss.contacts(cm), total_pop=d.popsize.sum(), stop=ss.days(90), **kwargs, **kw)
     return stratify(sim, d) if on_sim else sim
 
 
 def timed_run(n):
     sim = make_sim(make_germany(n)).init()
-    T = sc.timer()
-    sim.run()
-    return sim, T.toc(output=True)
+    seconds, _ = timing.timed(sim.run, repeats=1)
+    return sim, seconds
 
 
 def test_memilio_agreement():
@@ -101,7 +102,7 @@ def test_memilio_speed():
     _, t50 = timed_run(50)
     _, t100 = timed_run(100)
     assert t100/t50 < 3, f'Doubling the counties multiplied the time by {t100/t50:.1f}; MEmilio grows with the edges ({ref_time_50} s → {ref_time_400} s for 8x the counties)'
-    assert t50 < 3*ref_time_50, f'50 counties took {t50:.2f} s, more than 3x MEmilio\'s {ref_time_50} s'
+    timing.check(t50, v4_time_50, '50 counties', other=(ref_time_50, 'MEmilio'))
     return t50, t100
 
 

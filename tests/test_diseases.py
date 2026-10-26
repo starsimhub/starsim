@@ -475,11 +475,13 @@ def test_infect():
         def step(self):
             if self.ti == 3:
                 self.infected = self.sim.diseases.sir.infect(self.sim.people.auids[:50])
-    sim = ss.Sim(n_agents=1000, diseases=ss.SIR(beta=0, init_prev=0), interventions=Import(), analyzers=ss.infection_log(), start=2000, stop=2008, verbose=0).run()
-    infected = sim.interventions[0].infected
-    log = sim.analyzers[0].to_df()
-    assert len(infected) == 50 and (sim.diseases.sir.ti_I[infected] == 3).all() and sim.results.sir.infection[3] == 50
-    assert len(log) == 50 and (log.source == -1).all()
+    for sir in [ss.SIR(beta=0, init_prev=0), ssl.AgentSIR(name='sir', beta=0, init_prev=0)]: # Declared, and written as code
+        sim = ss.Sim(n_agents=1000, diseases=sir, interventions=Import(), analyzers=ss.infection_log(), start=2000, stop=2008, verbose=0).run()
+        infected = sim.interventions[0].infected
+        log = sim.analyzers[0].to_df()
+        ti, new = ('ti_I', 'infection') if sir.graph else ('ti_infected', 'new_infections')
+        assert len(infected) == 50 and (sim.diseases.sir[ti][infected] == 3).all() and sim.results.sir[new][3] == 50
+        assert len(log) == 50 and (log.source.to_numpy(dtype=float, na_value=np.nan) == -1).all() # Not NA, which (log.source == -1).all() skips
     return sim
 
 

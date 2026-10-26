@@ -141,7 +141,7 @@ class SEIR(ss.Disease):
 
 Use the class form when there is behavior that is not a transition, or when the model is going into a library. A module that only has states, transitions, parameters, and results never needs to define a method.
 
-`ss.Disease` is the base of every disease, and whether each part of it is declared or written as code is a question about that part, not about the class. A disease may declare states and transitions (in the operator or the class form), which its engine runs under any solver; it may instead define per-agent arrays (`define_states()`) and change them in its own `step_state()`, `step()`, and other methods, as in Starsim 3; or it may mix the two in one class, e.g. a declared natural history and a coded `ss.FloatArr` that its `step()` updates after `super().step()` has taken the declared transitions. The seam is the engine: each lifecycle method of `ss.Disease` runs its engine's part, and a disease that declares nothing has an engine with nothing to run, so a coded override calls `super()` as for any module, and no method asks which kind of disease it is. A disease with no declared states and no transmission (malnutrition, contraception as a behavior, Starsim 3's `class X(ss.Disease)` with its own states and `step()`) is a plain `ss.Disease`, with no `susceptible` or `infected` states forced on it, and `describe()` prints its class, arrays, and parameters. `ss.Infection(ss.Disease)` adds transmission written as code and nothing else: the `susceptible` and `infected` states, `rel_sus`, `rel_trans`, `ti_infected`, `init_prev`, transmission over the networks for its `beta` (`infect()`, `infect_route()`), `set_prognoses()` for those infected, and the standard `prevalence` and `new_infections` results; with no `beta` it is not transmitted (as `ssl.NCD`). `isinstance(x, ss.Disease)` is true of both, and both are diseases to the sim (`sim.diseases`, the infection log, deaths, `sim.rescale()`). What cannot work is refused: a class that declares states or transitions and also defines one of `ss.Infection`'s transmission methods (`set_prognoses()`, `infect()`, ...) without subclassing `ss.Infection` raises `ss.CapabilityError`, since the declared engine never calls it. What needs structure (`describe()` in full, `equations()`, `diagram()`, `R0()`, `ss.move()`, `current_state()`, `stratify()`) works on the declared part. A disease with nothing declared runs as agents if it keeps a value for each person (`define_states()`, as Starsim 3's do), and otherwise beside the compartments, as any module written as code does; a declared one with code of its own follows the try-it rule of [12-backends.md](12-backends.md) (`compartmental = False` if its code needs agents). Starsim 3's `ss.Disease` and `ss.Infection` keep their meaning, so `python -m starsim.migrate` does not rewrite either. The verbs that act on arrays reach a disease written as code (`ss.modify` of an `ss.Infection`'s `rel_sus` and `rel_trans`, conditions on its arrays, fitting its parameters given as `ss.par` with bounds, `sim.new()`).
+`ss.Disease` is the base of every disease, and whether each part of it is declared or written as code is a question about that part, not about the class. A disease may declare states and transitions (in the operator or the class form), which its engine runs under any solver; it may instead define per-agent arrays (`define_states()`) and change them in its own `step_state()`, `step()`, and other methods, as in Starsim 3; or it may mix the two in one class, e.g. a declared natural history and a coded `ss.FloatArr` that its `step()` updates after `super().step()` has taken the declared transitions. The seam is the engine: each lifecycle method of `ss.Disease` runs its engine's part, and a disease that declares nothing has an engine with nothing to run, so a coded override calls `super()` as for any module, and no method asks which kind of disease it is. A disease with no declared states and no transmission (malnutrition, contraception as a behavior, Starsim 3's `class X(ss.Disease)` with its own states and `step()`) is a plain `ss.Disease`, with no `susceptible` or `infected` states forced on it, and `describe()` prints its class, arrays, and parameters. `ss.Infection(ss.Disease)` adds transmission written as code and nothing else: the `susceptible` and `infected` states, `rel_sus`, `rel_trans`, `ti_infected`, `init_prev`, transmission over the networks for its `beta` (`transmit()`, `transmit_route()`), `set_prognoses()` for those infected, `infect(uids)` to infect some agents now from code (their outcomes set as transmission sets them, with no source, as for a declared disease), and the standard `prevalence` and `new_infections` results; with no `beta` it is not transmitted (as `ssl.NCD`). `isinstance(x, ss.Disease)` is true of both, and both are diseases to the sim (`sim.diseases`, the infection log, deaths, `sim.rescale()`). What cannot work is refused: a class that declares states or transitions and also defines one of `ss.Infection`'s transmission methods (`set_prognoses()`, `transmit()`, ...) without subclassing `ss.Infection` raises `ss.CapabilityError`, since the declared engine never calls it. What needs structure (`describe()` in full, `equations()`, `diagram()`, `R0()`, `ss.move()`, `current_state()`, `stratify()`) works on the declared part. A disease with nothing declared runs as agents if it keeps a value for each person (`define_states()`, as Starsim 3's do), and otherwise beside the compartments, as any module written as code does; a declared one with code of its own follows the try-it rule of [12-backends.md](12-backends.md) (`compartmental = False` if its code needs agents). Starsim 3's `ss.Disease` and `ss.Infection` keep their meaning, so `python -m starsim.migrate` does not rewrite either. The verbs that act on arrays reach a disease written as code (`ss.modify` of an `ss.Infection`'s `rel_sus` and `rel_trans`, conditions on its arrays, fitting its parameters given as `ss.par` with bounds, `sim.new()`).
 
 Code can also read and write the states of a declared disease run as agents, as Starsim 3 code does: indexing (`sir.I[uids] = True`), `set()`, and in-place operators (`sir.I |= ...`) are tracked, so the counts (`sir.I.n`), the results, and other modules later in the same step see the change. Writes through the NumPy array behind a state (`sir.I.raw`) are not tracked, and the counts and results do not see them; `STARSIM_CHECK_COUNTS=1` checks the counts at every step. The time each agent entered a state (`ti_X`) is kept only where the engine needs it, unless `ss.options.keep_times = True`; reading another raises `ss.errors.TimeNotKept`. A disease written as code takes declared products and deliveries that act on the states it has (e.g. `ss.vaccinate()` on `rel_sus`).
 
@@ -295,14 +295,20 @@ Modifiers made with `ss.modify` are always listed, because they are declared; di
 Every module implements `describe()`, and `sim.describe()` covers the whole sim. For a model it prints:
 
 1. every state, with its properties, and which states are counts and not people;
-2. every transition, with its name, its kind, and its rate or dwell-time distribution as resolved (`dwell ~ exponential(mean = 10 days)`, not `dur=10`), its source of infection where there is one, and its rate with bare states expanded (`0.3 × I.n / N` under homogeneous mixing);
-3. every stratification, with its levels;
-4. the mixing: each network or pool, and how a state in a rate is read through it (homogeneous mixing is frequency-dependent: `I` is `I.n / N`);
-5. every modifier, with its target and how it combines;
-6. the solver and why it was chosen, and anything that was approximated;
-7. which parts restrict the choice of solver (custom functions, per-agent attributes);
-8. the notes given at `init()`;
-9. the sim's unit and where it came from, and the loop as a schedule: one line per group of modules in the order they run, with how often each runs (`every day: sir, random network; every year: births, deaths`). The fully unrolled list stays available as `sim.loop` ([10-execution.md](10-execution.md)).
+2. every transition, with its name, its kind, and its rate or dwell-time distribution as resolved (`time in I ~ exponential(mean = 10 days)`, not `dur=10`; a distribution as it was given, `erlang(k=4, mean=8 days)`, not by its internal parameters), its source of infection where there is one, and its rate with bare states expanded (`0.3 × I.n / N` under homogeneous mixing);
+3. every parameter that is documented or can be fitted, with its value and its bounds (`beta = 1.9 per day, between 1 and 3`); there is no separate table of parameters;
+4. every outcome, with its definition (`cases   outcome: 0.5 × onset, after 4 days (exponential)`);
+5. every stratification, with its levels, the share of people in each (`split: 0-14 0.3, 15-64 0.6, 65+ 0.1`), and its adjustments (`adjust: rel_sus × 1, 0.03`);
+6. the mixing: each network or pool, and how a state in a rate is read through it (homogeneous mixing is frequency-dependent: `I` is `I.n / N`);
+7. every modifier, with its target and how it combines;
+8. the solver and why it was chosen, and anything that was approximated;
+9. which parts restrict the choice of solver (custom functions, per-agent attributes);
+10. the notes given at `init()`;
+11. the sim's unit and where it came from, and the loop as a schedule: one line per group of modules in the order they run, with how often each runs (`every day: sir, random network; every year: births, deaths`). The fully unrolled list stays available as `sim.loop` ([10-execution.md](10-execution.md)).
+
+How the model is run, which is about the solver rather than the model (`plan: sir: as compiled code, the whole run in one call`), and each rate and dwell time per step are shown only with `describe(verbose=True)`.
+
+Under a solver that takes whole steps (agents and the chain binomial), a model with transmission also gets two `timing` lines: an infection is dated at the end of its step, and a state's count includes the step people enter it ([02-types.md](02-types.md)). The solvers that follow the rates within a step (the ODE, Gillespie, tau-leaping) do not show them.
 
 Everything guessed rather than given is marked `[guessed]`, with the rule that produced it. The description is in sections (the sim, each model, mixing and interventions, results and running, and the notes): in color in a terminal, as tables in a notebook, and as plain text otherwise (and from `describe(output=True)`), with each guess at the end of its line.
 
@@ -318,20 +324,17 @@ Disease 'sir': 3 states, 2 transitions
                I infectious
                init: init_prev = 0.01; the rest in S
 
-  infection    S -> I   contact-mediated, source I
+  infection    S -> I   transmission, from I
                beta = 0.3 per step
                rate = 0.3 × I.n / N                            [homogeneous mixing]
   recovery     I -> R   spontaneous
-               dwell ~ exponential(mean = 10 steps)            [guessed: scalar duration]
-  timing       an infection is dated at the end of its step, so what follows it starts then
-               a state's count (the result X) includes the step people enter it; they stay for their whole dwell
+               time in I ~ exponential(mean = 10 steps)          [guessed: scalar duration]
 
 Mixing and interventions
   mixing       homogeneous, 1 contact per step                 [guessed: no network given]
 
 Results and running
   results      S, I, R, and one flow per transition
-  plan         sir: in the kernels, the whole run in one call
   schedule     every step: sir
 ```
 

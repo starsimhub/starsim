@@ -129,7 +129,7 @@ def test_seir():
         name      = 'oseir',
     )
     seir.stratify(age=['0', '1'], split=[0.6, 0.4])
-    ref = ss.Sim(seir, networks=ss.contacts(age=[[4.0, 1.0], [1.0, 3.0]]), total_pop=10_000, unit='day', stop=ss.days(60), solver='ode', verbose=0).run()
+    ref = ss.Sim(seir, networks=ss.contacts([[4.0, 1.0], [1.0, 3.0]]), total_pop=10_000, unit='day', stop=ss.days(60), solver='ode', verbose=0).run()
     for s in ['Susceptible', 'Exposed', 'Infected', 'Recovered']:
         assert np.allclose(res[s].values, ref.results.oseir[s].values, rtol=1e-9), f'{s} should match the model written by hand'
     return sim
@@ -195,7 +195,7 @@ def test_graph_json():
     totals = np.array([[6000, 2000], [4000, 1000]])
     seir.stratify(age=['0', '1'], split=[8/13, 5/13])
     seir.stratify(patch=['0', '1'], split=ss.by(totals/totals.sum(), dims=['age', 'patch']), mobility=ss.geo.Mobility(matrix=[[0, 0.05], [0.1, 0]], kind='commute'))
-    ref = ss.Sim(seir, networks=ss.contacts(age=[[4.0, 1.0], [1.0, 3.0]]), total_pop=13_000, unit='day', stop=ss.days(60), solver='ode', verbose=0).run()
+    ref = ss.Sim(seir, networks=ss.contacts([[4.0, 1.0], [1.0, 3.0]]), total_pop=13_000, unit='day', stop=ss.days(60), solver='ode', verbose=0).run()
     assert np.allclose(res.Infected.values, ref.results.oseir.Infected.values, rtol=1e-9), 'The import should match the model written by hand'
     return sim
 

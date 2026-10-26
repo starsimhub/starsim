@@ -736,8 +736,6 @@ def events_in(on, graph=None):
         return [ss.conditions.Event('tr', on)]
     elif isinstance(on, ss.conditions.Event):
         return [on]
-    elif isinstance(on, ss.conditions.Cond) and on.op == 'state' and getattr(on, 'kind', None) == 'transition' and graph is not None and on.args[1] in graph.transitions: # A transition as a condition (see ss.conditions.as_cond())
-        return [ss.conditions.Event('tr', graph.transitions[on.args[1]])]
     elif isinstance(on, ss.conditions.Cond) and on.op == '|':
         return [e for arg in on.args for e in events_in(arg, graph)]
     elif isinstance(on, (list, tuple)):
@@ -1039,6 +1037,8 @@ def format_expr(expr, values=False, bare=None, mul='*', exact=False, unit=None):
             raw = e.raw
             if values == 'number' and isinstance(raw, ss.seasonal):
                 return ss.presentation.seasonal_str(raw, value_str(float(getattr(raw.mean, 'value', raw.mean))))
+            if values == 'number' and isinstance(raw, ss.timeseries):
+                return ss.presentation.timeseries_str(raw)
             if values == 'number' and unit is not None and isinstance(raw, ss.Rate) and raw.unit is not None and type(raw.unit).base.removesuffix('s') != unit:
                 return ss.presentation.quantity_str(raw, 'rate', unit)
             text = value_str(raw.value if isinstance(raw, ss.TimePar) and values == 'number' else raw)

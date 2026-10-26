@@ -106,7 +106,7 @@ class Options(sc.objdict):
         options.check_method_calls = sc.parse_env('STARSIM_CHECK_METHOD_CALLS', 'warn', str)
 
         optdesc.date_sep = 'Set separator for dates'
-        options.date_sep = sc.parse_env('STARSIM_DATE_SEP', '.', str)
+        options.date_sep = sc.parse_env('STARSIM_DATE_SEP', '-', str)
 
         optdesc.jupyter = 'Set whether to use Jupyter settings: -1=auto, 0=False, 1=True'
         options.jupyter = sc.parse_env('STARSIM_JUPYTER', -1, int)
@@ -132,7 +132,7 @@ class Options(sc.objdict):
         optdesc.threads = 'The number of threads that the passes over the agents of a large sim, and the particles of a particle filter, take: 0 (default) for as many as Numba has (by default, one per core), 1 for none. Each worker of ss.parallel() and of a calibration takes one, since the workers share the cores already'
         options.threads = sc.parse_env('STARSIM_THREADS', 0, int)
 
-        optdesc.compile = 'Whether the compartmental solvers run compiled (by Numba) or as plain Python, which gives the same results: "auto" (default) for compiled if they are compiled already (see ss.compile()), or if the runs in a session would take longer uncompiled than compiling takes (about a minute, once per install), with a note either way; "always" to always compile them first; "never" for plain Python (and the kernels, not JAX, for the chain binomial, whose draws in JAX are compiled by Numba)'
+        optdesc.compile = 'Whether the compartmental solvers run compiled (by Numba) or as plain Python, which gives the same results: "auto" (default) for compiled if they are compiled already (see ss.compile()), or if the runs in a session would take longer uncompiled than compiling takes (about two minutes, once per install), with a note either way; "always" to always compile them first; "never" for plain Python (and the kernels, not JAX, for the chain binomial, whose draws in JAX are compiled by Numba; so a long seeded chain-binomial run gives other numbers than with "auto")'
         options.compile = sc.parse_env('STARSIM_COMPILE', 'auto', str)
 
         optdesc.crn = 'If True (default), use common random numbers (CRN) for reproducibility across scenarios. Set False for faster draws (one plain uniform per agent/edge, skipping the slot machinery); statistically valid but not CRN-safe across scenarios.'

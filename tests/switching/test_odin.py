@@ -13,8 +13,11 @@ import sciris as sc
 import starsim as ss
 import starsim.fit
 import starsim.interop
+import timing
 
 ref_final_R = 532_176 # Mean final R over 1,000 odin 1.2.7 runs: switching/odin.md, "The second week" §2
+v4_step_us = 1.4 # Starsim's filter per particle-step, in µs, normalized to the reference machine (see timing.py), 2026-10-25
+v4_delay_run = 0.006 # Starsim's run of seir_array, in s, normalized; same date
 ref_step_us = 1.35 # odin's single-threaded forward run per particle-step, in µs: switching/odin.md, "The second week" §3
 ref_cases = [3, 1, 12, 10, 32, 73, 116, 129, 246, 390, 740, 1094, 1950, 1599, 2598, 3189, 4885, 4012, 5096, 5655, 7789, 4031, 9381, 8058,
              8006, 5767, 5989, 3812, 4955, 3666, 3992, 3093, 5952, 4071, 3806, 4024, 2205, 3734, 3202, 1549] # Weekly cases from one odin run (cases.csv): switching/odin.md §3
@@ -79,11 +82,10 @@ def test_odin_filter():
     pf = ss.fit.ParticleFilter(sim)
     pf(n_particles=10, seed=0) # Compile
     n = 50
-    T = sc.timer()
-    loglik = pf(n_particles=n, seed=1)
-    step_us = T.toc(output=True)/(n*sim.t.npts)*1e6
+    seconds, loglik = timing.timed(lambda: pf(n_particles=n, seed=1))
+    step_us = seconds/(n*sim.t.npts)*1e6
     assert np.isfinite(loglik)
-    assert step_us < 3*ref_step_us, f'Filter {step_us:.1f} µs per particle-step, against 3 × {ref_step_us} µs for dust'
+    timing.check(step_us, v4_step_us, 'Filter per particle-step', unit='µs', other=(ref_step_us, 'dust'))
     # The fit itself, fit = sim.fit(method='pmcmc'), is 4 chains of particle MCMC at 1,000 particles; it is too slow for CI until this passes
     return step_us
 
@@ -114,11 +116,8 @@ def test_odin_delay():
     assert n_I.argmax() == ref_delay['day'] and np.isclose(n_I.max(), ref_delay['peak'], rtol=0.003), f'Peak of {n_I.max():,.0f} on day {n_I.argmax()}, against odin\'s {ref_delay["peak"]:,} on day {ref_delay["day"]}'
     for state in 'SEIR':
         assert np.isclose(res[state][-1], ref_delay[state], rtol=0.005), f'{state} on day 365: {res[state][-1]:,.0f}, against odin\'s {ref_delay[state]:,}'
-    T = sc.timer()
-    sim.restart()
-    sim.run()
-    seconds = T.toc(output=True)
-    assert seconds < 50*ref_delay_run, f'A run took {seconds:.3f} s, against {ref_delay_run} s for odin'
+    seconds, _ = timing.timed(lambda: sim.restart().run())
+    timing.check(seconds, v4_delay_run, 'A run', other=(ref_delay_run, 'odin'))
     return sim
 
 

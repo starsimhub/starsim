@@ -282,7 +282,7 @@ fit.to_df()      # every evaluation
 fit.project(dict(baseline=None, vaccine=ss.vaccinate(...)), n=100)   # scenarios run with the posterior's draws
 ```
 
-The original `sim` is not changed. `fit.sim` is an ordinary sim: plot it, add interventions to a copy, pass it to `ss.parallel`. For methods that give a posterior, `fit.plot()` shows a band over the posterior (the 2.5th and 97.5th percentiles of the model's value over draws), and `fit.project()` runs each scenario once per draw (or with the best fit, for a method that gives no posterior: 100 runs with their own seeds, or one for a deterministic sim, an ODE), returning a MultiSim whose results have a run dimension labeled by scenario. `ss.parallel(sim, priors=True)` draws the parameters from their priors instead, for forward runs before fitting.
+The original `sim` is not changed. `fit.sim` is an ordinary sim: plot it, add interventions to a copy, pass it to `ss.parallel`. For methods that give a posterior, `fit.plot()` shows a band over the posterior (the 2.5th and 97.5th percentiles of the model's value over draws), and `fit.project()` runs each scenario once per draw, each draw with a seed of its own (the same draws and seeds in every scenario, so the scenarios are paired), so the runs vary by chance as well as by the values (or with the best fit, for a method that gives no posterior: 100 runs with their own seeds, or one for a deterministic sim, an ODE), returning a MultiSim whose results have a run dimension labeled by scenario. `ss.parallel(sim, priors=True)` draws the parameters from their priors instead, for forward runs before fitting, each draw with a seed of its own as well.
 
 ### Convergence reporting
 
@@ -343,7 +343,7 @@ comp.plot()
 ```text
 >>> comp = ss.fit.compare_models([sim_sir, sim_seir], data=df)
 >>> comp.summarize()
-held out: the last 25% of each series (cases: 2020.10.04 to 2020.12.27)
+held out: the last 25% of each series (cases: 2020-10-04 to 2020-12-27)
        fitted_pars  fit_error  prediction_error  rank
 model
 seir             3   0.075541          0.120583     1

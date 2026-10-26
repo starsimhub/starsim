@@ -12,7 +12,7 @@ _ = None
 
 
 
-def infer_rate_units(units, rates, name):
+def infer_rate_units(units, rates, name, hint=None):
     """
     What the rates of `ss.Births`, `ss.Deaths`, or `ss.Pregnancy` are per, as a factor to multiply them by: 1e-3 for per 1,000 people, 1 for per person
 
@@ -25,6 +25,7 @@ def infer_rate_units(units, rates, name):
         units (float): `rate_units` as given: None to work it out, 1000 or 1e-3 for per 1,000, 1 for per person
         rates (number/rate/dataframe): the rates, or rate data
         name (str): what the rates are, for the warning (e.g. "birth_rate")
+        hint (str): how to say which, for the warning (default: give `rate_units`)
     """
     if units is not None:
         return 1/units if units > 1 else units # rate_units=1000 means per 1,000, as rate_units=1e-3 does
@@ -41,8 +42,39 @@ def infer_rate_units(units, rates, name):
     units = 1e-3 if largest > 1 else 1.0
     if 0.1 <= largest <= 1 or largest > 1000:
         what = 'per 1,000 people' if units == 1e-3 else 'per person'
-        ss.warn(f'{name} has rates up to {largest:n}, which could be per person or per 1,000 people; assuming {what}. Give rate_units=1000 (per 1,000) or rate_units=1 (per person) to say which.')
+        hint = sc.ifelse(hint, 'Give rate_units=1000 (per 1,000) or rate_units=1 (per person) to say which.')
+        ss.warn(f'{name} has rates up to {largest:n}, which could be per person or per 1,000 people; assuming {what}. {hint}')
     return units
+
+
+def bare_rate(rate, name):
+    """
+    A crude rate of births or deaths of everyone given as a bare number, read as `ss.Births` and `ss.Deaths` read theirs: per year, and per 1,000 people if above 1, otherwise per person (see `infer_rate_units()`); anything else is returned as it is
+
+    Returns the rate, and a note saying how a bare number was read (None for anything else), which is said with `say_bare()`
+    once the module is in a sim: a bare number is the usual way to give these rates, so it is not a warning
+
+    Args:
+        rate (any): the rate as given
+        name (str): what it is, for the note (e.g. "rate")
+
+    Examples:
+        ```python
+        rate, note = ss.demographics.bare_rate(30, 'rate') # ss.peryear(0.03): 30 per 1,000 people per year
+        ```
+    """
+    if not sc.isnumber(rate):
+        return rate, None
+    units = infer_rate_units(None, rate, name, hint=f'Give a typed rate to say which, e.g. ss.peryear({rate:n}) per person or ss.peryear({rate/1000:n}) for {rate:n} per 1,000.')
+    what = ' per 1,000 people' if units == 1e-3 else ' per person'
+    return ss.peryear(rate*units), f'{name}={rate:n} is a bare number, so it is taken as {rate:n}{what} per year'
+
+
+def say_bare(note, sim):
+    """ Say the note from `bare_rate()`, if any: kept in `sim.notes`, and printed at `verbose=2` """
+    if note is not None:
+        ss.note(note, sim=sim, verbose=None if sim.pars.verbose >= 2 else 0)
+    return
 
 
 def rate_rows(data):
@@ -118,7 +150,7 @@ class Demographics(ss.Module):
     the `ss.People` population and can interact with `ss.Network` objects
     (e.g. to add newborns to contact networks).
     """
-    sets_unit = False # Its typed defaults (e.g. rates per year) do not set the unit of the model's bare numbers: see ss.Sim._init_unit()
+    sets_unit = False # Its typed defaults (e.g. rates per year) do not set the unit of the model's bare numbers: see ss.solvers.choose.init_unit()
     pass
 
 
@@ -129,9 +161,11 @@ class Flows(Demographics):
     Every declared disease's people are born and die by them, once, under every solver: they become
     transitions of the first declared disease (or the first with the state that births name), whose
     people are everyone's, since as agents the diseases share the people, and in a compartmental run
-    with several declared diseases, their states are tracked jointly (see `ss.Sim._init_flows()`).
-    With no declared disease, they are run as `ss.Births` and `ss.Deaths`. This class is not usually
-    used directly.
+    with several declared diseases, their states are tracked jointly (see `ss.solvers.choose.init_flows()`).
+    With no declared disease, the sim adds one of everyone alive to hold them (`ss.pregnancy.Population`), so
+    they are a declared model like any other. This class is not usually used directly.
+
+    Note: CRN safe as agents.
 
     Args:
         transitions (list): births (`ss.birth()`), deaths of everyone (`ss.death()` with no state), and migration (`ss.immigration()`, `ss.emigration()` with no state)
@@ -148,27 +182,14 @@ class Flows(Demographics):
         self.transitions = list(transitions)
         return
 
+    def init_pre(self, sim):
+        super().init_pre(sim)
+        for tr in self.transitions:
+            say_bare(getattr(tr, 'rate_note', None), sim) # Births and deaths given as bare numbers
+        return
+
     def step(self):
         pass # The disease that holds the transitions runs them
-
-    def as_modules(self):
-        """ With no declared disease: the births and deaths as modules of agents (`ss.Births` and `ss.Deaths`, at per-person rates) """
-        out = []
-        for tr in self.transitions:
-            rate = getattr(tr.rate, 'raw', None)
-            table = getattr(tr, 'lifetable', None)
-            if table is not None and tr.every_state: # Deaths by a life table, at the death rate of each age band
-                out.append(ss.Deaths(lifetable=table, name=tr.name or 'deaths'))
-                continue
-            if not (tr.per_capita or (tr.every_state and not tr.migration)) or not isinstance(rate, ss.TimePar):
-                kind = 'births' if tr.inflow else 'migration' if tr.migration else 'deaths'
-                errormsg = f'the {kind} "{tr.name or tr.arrow}" in demographics= need a declared disease (e.g. ss.SIR()) to run; with none, give births and deaths as ss.birth(rate=ss.peryear(...)) and ss.death(rate=ss.peryear(...)), or use ss.Births() and ss.Deaths()'
-                raise ValueError(errormsg)
-            if tr.per_capita:
-                out.append(ss.Births(birth_rate=rate, rate_units=1, name=tr.name or 'births'))
-            else:
-                out.append(ss.Deaths(death_rate=rate, rate_units=1, name=tr.name or 'deaths'))
-        return out
 
 
 class Births(Demographics):
@@ -179,6 +200,8 @@ class Births(Demographics):
     by year. The number of births per timestep is determined by applying
     the birth rate to the current population size; each newborn's parent
     (`people.parent`) is a woman of reproductive age (`min_age` to `max_age`).
+
+    Note: CRN safe.
 
     Args:
         birth_rate (float/rate/dataframe): value for birth rate, or birth rate data
@@ -237,11 +260,6 @@ class Births(Demographics):
         birth_rate = ss.utils.standardize_data(data=self.pars.birth_rate, metadata=self.metadata)
         if isinstance(birth_rate, (pd.Series, pd.DataFrame)):
             return birth_rate.xs(0,level='age')
-        if sc.isnumber(birth_rate):
-            # If the user has provided a bare number, assume it is per year
-            msg = f'Birth rate was specified as a number rather than a rate - assuming it is {birth_rate} per year'
-            ss.warn(msg)
-            return ss.peryear(birth_rate)
         return birth_rate
 
     def init_pre(self, sim):
@@ -390,6 +408,8 @@ class Deaths(Demographics):
     with a bernoulli distribution containing a constant value of function of
     your own design.
 
+    Note: CRN safe.
+
     Args:
         pars: dict with arguments including:
             rel_death: constant used to scale all death rates
@@ -449,11 +469,6 @@ class Deaths(Demographics):
             if death_rate.isna().any(axis=None):
                 errormsg = 'Death rate data has missing values; age bins must be consistent across all years. Data:\n{death_rate}'
                 raise ValueError(errormsg)
-        if sc.isnumber(death_rate):
-            # If the user has provided a bare number, assume it is per year
-            msg = f'Death rate was specified as a number rather than a rate - assuming it is {death_rate} per year'
-            ss.warn(msg)
-            return ss.peryear(death_rate)
         return death_rate
 
     def make_p_death(self):

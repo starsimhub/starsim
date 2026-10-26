@@ -162,7 +162,7 @@ class Counter(ss.Module):
 
     # More of Starsim 3 (and the prereleases), and the error for a removed name
     old = "new = ss.uids.cat(a, b); bf = preg.breastfeeding\nS = ss.State('S', infectious=False); net = ss.RandomNet(n_contacts=10, uniform_targets=True)"
-    assert migrate_text(old)[0] == "new = ss.uids.concatenate(a, b); bf = preg.lactation.L\nS = ss.State('S'); net = ss.RandomNet(n_contacts=10, method='uniform')"
+    assert migrate_text(old)[0] == "new = ss.uids.concatenate(a, b); bf = preg.lactating\nS = ss.State('S'); net = ss.RandomNet(n_contacts=10, method='uniform')"
     with pytest.raises(AttributeError, match=r'sim\.fit\(\)') as info:
         ss.Calibration
     assert info.value.obj is None # So that Python suggests no closest name ("emigration")

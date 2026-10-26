@@ -45,22 +45,10 @@ def choose_kernels(owner, runs, seconds):
         return ss.kernels if owner.compiled else ss.kernels.uncompiled()
     if owner.program is None: # Before the program is made (the events of a register at the start), as the kernels are now
         return ss.kernels.choose()
-    kn = ss.kernels.choose(runs*seconds() if ss.kernels.deciding() else 0.0)
+    kn = ss.kernels.choose(runs*seconds())
     if runs == 1:
         owner.compiled = kn is ss.kernels
     return kn
-
-
-def step_seconds(p, y, npts, dt, solver, n_sub, tables=None):
-    """ About how long a run of a program would take as plain Python, from one step of it taken so (see `ss.kernels.timed_seconds()`): with the program as the last step left it, which is kept, or at the first row of the tables of a whole run """
-    parts = (p.fixed, p.mult, p.consts, p.rel_trans)
-    kept = [part.copy() for part in parts]
-    if tables is not None:
-        ss.kernels.uncompiled().set_step(parts, 0, tables) # As plain Python, as the step is timed: compiling it would take longer than the step
-    seconds = ss.kernels.timed_seconds(p, y, npts, dt, solver, n_sub)
-    for part,old in zip(parts, kept): # As the step left them
-        part[:] = old
-    return seconds
 
 
 def step_program(owner, kn, rng, y, tables, row, engine, check_short):
@@ -89,7 +77,7 @@ def run_many_parts(owner, rngs, ys, args, per_step, n_cols, outputs, state_of, r
     stocks, flows, stocks_g, flows_g, tally, tally_g = outputs
     length = max(int(50e6//(sum(len(table) for table in [program.fixed, program.mult, program.consts, program.rel_trans])*per_step*n_cols*8)), 1) # Steps per part
     start = 0
-    kn = owner.kernels(runs=len(rngs), tables=owner.tables(start, start + 1))
+    kn = owner.kernels(runs=len(rngs))
     while True:
         end = min(start + length, npts - 1)
         kn.run_many(rngs, ys, program, dt, start, end + 1, solver, n_sub, *owner.tables(start, end), owner.register, owner.shifts, stocks, flows, stocks_g, flows_g,
@@ -110,7 +98,7 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
     and the compartments it feeds. Every solver steps the same list of flows.
     """
     max_binomial = 100 # The most substeps the chain-binomial solver chooses in a step (see substeps())
-    max_bytes = 500e6 # The most memory that run_many() may use for the values of each group, over all its runs; above it, they are kept every few steps (see ss.Sim.group_rows())
+    max_bytes = 500e6 # The most memory that run_many() may use for the values of each group, over all its runs; above it, they are kept every few steps (see ss.solvers.group_rows())
 
     def __init__(self, module, sim):
         super().__init__(module, sim)
@@ -123,7 +111,6 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
         self.jax_run = None # The run in JAX, if one has been made: see ss.gradients
         self.cross = next((c for c in sim.crossings if module.name in c.names), None)
         self._n_sub = None # The chain binomial's substeps, once chosen: see substeps()
-        self.refreshed = False # Whether the program has been set for a step (see refresh_program())
         return
 
     def define(self):
@@ -1720,7 +1707,6 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
 
     def refresh_program(self):
         """ Set the numbers in the program that hold for this step: the rates that do not depend on the compartments, and the values the others use """
-        self.refreshed = True # See plain_seconds()
         if self.func_exprs and any(self.expr_key(self.call(par.raw, par)) != key for par,out,key in self.func_exprs.values()): # A function now gives another expression
             rng = self.kernel_rng
             self.init_program()
@@ -2055,23 +2041,16 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
         self.init_shifts()
         return [self.y, self.program, self.dt, self.mod.t.npts, solver, self.substeps()], self.tables() if tables else None
 
-    def kernels(self, runs=1, tables=None):
-        """ The kernels to take the run (or `runs` runs) with, compiled or as plain Python, chosen once for a run (from the tables of a whole run, if given): see `ss.kernels.choose()` """
-        return choose_kernels(self, runs, lambda: self.plain_seconds(tables))
+    def kernels(self, runs=1):
+        """ The kernels to take the run (or `runs` runs) with, compiled or as plain Python, chosen once for a run: see `ss.kernels.choose()` """
+        return choose_kernels(self, runs, self.plain_seconds)
 
-    def plain_seconds(self, tables=None):
-        """
-        About how long the run would take as plain Python: from its first step taken so (see `ss.kernels.timed_seconds()`),
-        with the program as the step left it, or at the first row of the tables of a whole run; or, before either (the
-        events of a register at the start), estimated from the size of the program (see `ss.kernels.plain_seconds()`)
-        """
-        sim = self.sim
+    def plain_seconds(self):
+        """ About how long the run would take as plain Python, from the size of its program and its rates at the start (see `ss.kernels.plain_seconds()`) """
         p = self.program
-        solver = ss.kernels.solvers[sim.integrator if sim.solver == 'ode' else sim.solver]
-        if tables is None and not self.refreshed:
-            n_sub = ss.kernels.substeps(np.concatenate(self.start_rates() + [p.mov_rate]), self.dt, self.substeps(), solver)
-            return ss.kernels.plain_seconds(p, self.y, self.mod.t.npts, solver, n_sub)
-        return step_seconds(p, self.y, self.mod.t.npts, self.dt, solver, self.substeps(), tables)
+        solver = ss.kernels.solvers[self.sim.integrator if self.sim.solver == 'ode' else self.sim.solver]
+        n_sub = ss.kernels.substeps(np.concatenate(self.start_rates() + [p.mov_rate]), self.dt, self.substeps(), solver)
+        return ss.kernels.plain_seconds(p, self.y, self.mod.t.npts, solver, n_sub)
 
     def start_rates(self):
         """ The rates out of compartments at the start that do not depend on them, which a stiff ODE takes many substeps for, each as an array """
@@ -2116,7 +2095,7 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
         else:
             args, tables = self.run_args()
             tally = np.zeros((self.mod.t.npts, len(self.shifts.to), 2, self.n_groups))
-            out = self.kernels(tables=tables).run(self.make_rng(stream=1), *args, *tables, self.register, self.shifts, tally, self.per_step(), 0)
+            out = self.kernels().run(self.make_rng(stream=1), *args, *tables, self.register, self.shifts, tally, self.per_step(), 0)
             for k,mod in enumerate(self.deliveries):
                 mod.compartments.store_shifts(tally[:, k])
         self.y, stocks, flows, short = out
@@ -2195,7 +2174,7 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
         length = max(int(part_bytes//per_point)//every, 1)*every # Steps per part: whole rows, so each part ends at the end of one
         short = 0.0
         start = 0
-        kn = self.kernels(tables=self.tables(0, 1))
+        kn = self.kernels()
         while start < npts - 1:
             end = min(start + length, npts - 1)
             tally = np.zeros((end + 1 - start, len(self.shifts.to), 2, self.n_groups))
@@ -2213,7 +2192,7 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
 
     def store_parts(self, parts):
         """
-        The results of a whole run whose results by group are kept every few steps (see `ss.Sim.group_rows()`), from its compartments and flows at each time point, taken a part at a time
+        The results of a whole run whose results by group are kept every few steps (see `ss.solvers.group_rows()`), from its compartments and flows at each time point, taken a part at a time
 
         Args:
             parts (iterable): the time point each part starts at, and the compartments and flows at each of its time points (see `run_parts()`)
@@ -2309,7 +2288,7 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
         Returns each result that is a single series, as runs by steps, and (as `out.groups`) the
         values by group of the results that keep them, as runs by rows by groups: a row for each
         time point, or for every few steps if that would take more than `max_bytes` of memory (with
-        the time point of each row as `out.group_ti`; see `ss.Sim.group_rows()`).
+        the time point of each row as `out.group_ti`; see `ss.solvers.group_rows()`).
         """
         graph = self.graph
         res = self.mod.results
@@ -2326,7 +2305,7 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
         rows = group_ti = None
         if ng > 1 and (kept_s or kept_f or self.deliveries):
             row_bytes = len(seeds)*(len(kept_s) + len(kept_f) + 2*len(self.deliveries))*ng*8
-            rows, group_ti = self.sim.group_rows(npts, row_bytes, self.max_bytes, name=self.mod.name)
+            rows, group_ti = ss.solvers.group_rows(self.sim, npts, row_bytes, self.max_bytes, name=self.mod.name)
             rows = np.arange(npts) if rows is None else rows
         grp_state, grp_flow = np.full(len(states), -1), np.full(n_flows, -1)
         grp_state[kept_s] = np.arange(len(kept_s))

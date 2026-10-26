@@ -345,7 +345,7 @@ class SimPars(Pars):
         self.integrator = None   # The ODE integration scheme: 'rk4' (the default) or 'euler'
         self.substeps   = None   # The number of substeps per timestep: for the 'rk4' and 'euler' integrators (default: enough that no compartment turns over, or grows through its inflows, by more than a quarter in one), and the 'binomial' solver (default: enough that no more than about a tenth of the people in a compartment leave it in one; 1 takes each step whole, as discrete-time chain-binomial models do)
         self.stratify   = None   # People dimensions for every module, e.g. dict(age=[0, 15, 65])
-        self.results    = None   # The results to keep by group, by name, e.g. ['I', 'cases'] or ['sir.I']; the others keep only their totals (default: all, every few steps if every step would take more than about 100 MB: see ss.Sim.group_rows())
+        self.results    = None   # The results to keep by group, by name, e.g. ['I', 'cases'] or ['sir.I']; the others keep only their totals (default: all, every few steps if every step would take more than about 100 MB: see ss.solvers.group_rows())
 
         # Demographic parameters
         self.use_aging  = None # True if demographics, false otherwise
@@ -422,7 +422,7 @@ class SimPars(Pars):
     def validate_agents(self):
         """ Check that n_agents is supplied and convert to an integer """
         named = getattr(self.people, 'named', None)
-        if named is not None and named.n_agents is None: # A named population is made at the sim's number of agents: see sim._init_named_people()
+        if named is not None and named.n_agents is None: # A named population is made at the sim's number of agents: see ss.solvers.choose.init_named_people()
             self.n_agents = int(self.n_agents)
         elif self.people is not None:
             len_people = len(self.people)
@@ -430,11 +430,13 @@ class SimPars(Pars):
                 errormsg = f'Cannot set a custom value of n_agents ({self.n_agents}) that does not match a pre-created People object ({len_people}); use n_agents to create the People object instead'
                 raise ValueError(errormsg)
             self.n_agents = len_people
-        elif self.n_agents is not None:
-            self.n_agents = int(self.n_agents)
-        else:
-            errormsg = 'Must supply n_agents, a people object, or a popdict'
+        elif self.n_agents is None: # Not given, as if left out
+            self.n_agents = int(SimPars().n_agents)
+        elif self.n_agents == 0:
+            errormsg = 'n_agents=0 gives no agents to run; for a compartmental run, leave out n_agents (or give solver="ode")'
             raise ValueError(errormsg)
+        else:
+            self.n_agents = int(self.n_agents)
         return
 
     def validate_total_pop(self):
@@ -470,11 +472,8 @@ class SimPars(Pars):
         modules = self.convert_modules()
         modules = self.expand_modules(modules)
         flows = any(isinstance(mod, ss.demographics.Flows) for source,mod in modules)
-        if flows and not any(getattr(mod, 'graph', None) is not None for source,mod in modules): # With no declared disease, births and deaths declared for the population are run as modules of agents, or with a compartmental solver named, as compartments of everyone alive
-            if self.solver not in [None, 'auto', 'abm']:
-                modules.append(('demographics', ss.pregnancy.Population()))
-            else:
-                modules = [(source, m) for source,mod in modules for m in (mod.as_modules() if isinstance(mod, ss.demographics.Flows) else [mod])]
+        if flows and not any(getattr(mod, 'graph', None) is not None for source,mod in modules): # With no declared disease, births and deaths declared for the population are held by everyone alive, a declared module like any other
+            modules.append(('demographics', ss.pregnancy.Population()))
         self._reset_modules()
         products = []
         names = {} # Module names must be unique across all types, since they share namespaces (e.g. sim.people.<name>, sim.results.<name>)
@@ -744,6 +743,8 @@ class by:
             raise ValueError(errormsg)
         self.array = None
         self.wrap = None # The type of a typed array given as the table, e.g. ss.permonth(np.ones((2, 2)))
+        series = lambda vals: isinstance(vals, pd.Series) and not isinstance(vals.index, pd.RangeIndex) # Keyed by the levels' names
+        kwargs = {dim:(dict(vals) if series(vals) else vals.tolist() if isinstance(vals, (np.ndarray, pd.Series)) and np.ndim(vals) == 1 else vals) for dim,vals in kwargs.items()} # An array is a list, a value per level, e.g. ss.perday(ss.by(herd=np.array(b))); a Series with labels, a dict
         numeric = [dim for dim,vals in kwargs.items() if isinstance(vals, dict) and any(sc.isnumber(k) and not isinstance(k, (bool, np.bool_)) for k in vals)]
         if numeric: # Numbers as keys are the lower edges of bins, as in a table, e.g. ss.by(age={0: 0, 15: 0.3}) is ss.by(dict(age=[0, 15], value=[0, 0.3]))
             if len(kwargs) > 1:

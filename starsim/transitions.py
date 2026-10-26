@@ -475,6 +475,9 @@ class Transition(Nameable):
                 popped = {key:self.p.pop(i) for key,i in sorted(self._ends_at.items(), key=lambda item: -item[1])} # From the last, so the earlier positions still hold
                 self.p_stay = popped.get('stay')
                 self.p_die = popped.get('die')
+            given = sc.tolist(p)
+            if isinstance(dst, (list, tuple)) and not self.split and len(given) == 1 and (given[0] is None or (sc.isnumber(given[0]) and given[0] == 1)): # A split to one destination, e.g. ss.Transition(I, [F], p=[1.0], rate=r), is a plain transition, not a branch
+                self.p = None
         self.check_dimensions()
         return
 
@@ -669,6 +672,12 @@ class Transition(Nameable):
         if self.rate is not None:
             new.rate = BinOp(op, other, self.rate) if reverse else BinOp(op, self.rate, other)
         elif self.dur is not None and self.src is None: # e.g. R @ ss.days(10) * 2, which would otherwise be dropped
+            raw = self.dur.raw if isinstance(self.dur, par) else None
+            if isinstance(raw, ss.Dist) and isinstance(other, Expr) and op == '*': # e.g. S >> I @ ss.gamma(...)*I: a distribution in a rate, as with rate=ss.gamma(...)*I
+                new.dur = None
+                new.rate = as_expr(other*raw if reverse else raw*other)
+                new.check_dimensions() # e.g. a distribution of durations times I is still a duration in a rate
+                return new
             if isinstance(other, Expr): # e.g. S >> I @ ss.days(3) * I, a duration in a rate
                 raise ss.errors.WrongDimension(f'"@ {value_str(self.dur.raw)} {op} {other}" puts a duration in a rate. A duration after "@" is a dwell time on its own; in a rate, divide by it instead, e.g. @ {other} / {value_str(self.dur.raw)}.')
             errormsg = f'Cannot apply "{op}" to the transition {self}, which is driven by a duration; write the duration itself, e.g. @ ss.days(20)'
@@ -687,13 +696,13 @@ class Transition(Nameable):
 
     def __or__(self, other):
         if self.src is not None and not isinstance(other, State): # As events: the people who went through either, e.g. who=a.infection | b.infection
-            return ss.conditions.as_cond(ss.conditions.tr_event(self, other)) | other
+            return ss.conditions.as_cond(self) | other
         errormsg = 'Several sources are a sum of states: write S + I + R >> D @ rate (| on states is a condition, for where=)'
         raise TypeError(errormsg)
 
     def __ror__(self, other):
         if self.src is not None and not isinstance(other, State):
-            return other | ss.conditions.as_cond(ss.conditions.tr_event(self, other))
+            return other | ss.conditions.as_cond(self)
         return self.__or__(other)
 
     def __and__(self, other): # As an event: the people who went through it, among those meeting a condition (or in another event too)
@@ -904,7 +913,7 @@ def birth(state=None, rate=None, per=None, n=1, sex=None, name=None, label=None)
 
     Args:
         state (State): the state people are born into (default: the disease's first state; in `demographics=`, each disease's)
-        rate (any): the birth rate per person per unit time
+        rate (any): the birth rate per person per unit time, e.g. `ss.peryear(0.03)`; for the births of everyone (no `state`), a bare number is read as `ss.Births` reads it, per year and, if above 1, per 1,000 people (`30` is `ss.peryear(0.03)`); into a state, it is in the model's unit, as any bare number in a disease
         per (Transition): instead of a rate, the transition whose flow drives the births
         n (int/Dist): the number of children each time: a number, or a distribution (drawn for each parent)
         sex (float/Dist): the chance a child is female (default: as for anyone added)
@@ -914,13 +923,17 @@ def birth(state=None, rate=None, per=None, n=1, sex=None, name=None, label=None)
     Examples:
         ```python
         ss.Sim(sir, demographics=[ss.birth(rate=ss.peryear(0.02)), ss.death(rate=ss.peryear(0.01))])
+        ss.Sim(sir, demographics=[ss.birth(rate=20), ss.death(rate=10)]) # The same: per 1,000 people per year
         ```
     """
     if per is not None and rate is not None:
         errormsg = 'ss.birth() takes either rate= (a crude birth rate) or per= (a transition that drives the births), not both'
         raise ValueError(errormsg)
-    check_per_person(rate, 'birth')
+    note = None
+    if state is None: # The births of everyone, a crude birth rate (as for ss.death(): births into a disease's state are in the model's unit)
+        rate, note = crude_rate(rate, 'birth')
     out = Transition(null, state, rate=rate, name=name, label=label)
+    out.rate_note = note
     out.per_capita = per is None
     out.per = None if per is None else Per(per)
     out.n_born = n
@@ -929,14 +942,20 @@ def birth(state=None, rate=None, per=None, n=1, sex=None, name=None, label=None)
     return out
 
 
-def check_per_person(rate, kind):
-    """ Warn if the rate of a birth or death of everyone (`ss.birth()`, `ss.death()`), which is per person, is more than 1 per person per year: most likely a rate per 1,000 people (as `ss.Births` and `ss.Deaths` take it), which would grow or empty the population at once """
+def crude_rate(rate, kind):
+    """
+    The rate of a birth or death of everyone (`ss.birth()`, `ss.death()`), read as `ss.Births` and `ss.Deaths` read theirs: a bare number is per year,
+    and per 1,000 people if above 1 (see `ss.demographics.bare_rate()`). A typed rate is per person, and warns above 1 per person per year: most likely
+    a rate per 1,000 people, which would grow or empty the population at once. Returns the rate, and the note for a bare number (see `bare_rate()`)
+    """
+    if sc.isnumber(rate):
+        return ss.demographics.bare_rate(rate, 'rate')
     raw = getattr(rate, 'raw', rate)
     if isinstance(raw, ss.Rate) and raw.unit is not None and np.ndim(raw.value) == 0:
         per_year = raw.to('year').value
         if per_year > 1:
-            ss.warn(f'the rate of ss.{kind}() is {per_year:n} per person per year; it is per person, so a crude {kind} rate of {per_year:n} per 1,000 is ss.peryear({per_year/1000:n})')
-    return
+            ss.warn(f'the rate of ss.{kind}() is {per_year:n} per person per year; a typed rate is per person, so a crude {kind} rate of {per_year:n} per 1,000 is ss.peryear({per_year/1000:n}), or the bare number {per_year:n}')
+    return rate, None
 
 
 class lifetable:
@@ -1004,7 +1023,7 @@ def death(state=None, rate=None, dur=None, lifetable=None, name=None, label=None
 
     Args:
         state (State/list): the state people die from, or several (`[E, I]`); if not given, every state that is people
-        rate (any): the death rate per person per unit time
+        rate (any): the death rate per person per unit time; with no state (the deaths of everyone), a bare number is read as `ss.Deaths` reads it, per year and, if above 1, per 1,000 people (`10` is `ss.peryear(0.01)`)
         dur (any): the mean time to death (instead of `rate`)
         lifetable (`ss.lifetable`): instead of a rate, a life table: as agents, each person's age at death is drawn from it once (at the start, or at birth), given their age; in a compartmental run, which needs a stratification by age, it is a death rate for each age group
         name (str): the name of the transition
@@ -1029,9 +1048,11 @@ def death(state=None, rate=None, dur=None, lifetable=None, name=None, label=None
         out.every_state = True
         out.lifetable = lifetable
         return out
+    note = None
     if state is None: # The deaths of everyone, a crude death rate (a disease's deaths, from one state, can be faster)
-        check_per_person(rate, 'death')
+        rate, note = crude_rate(rate, 'death')
     out = Transition(state, null, rate=rate, dur=dur, name=name, label=label)
+    out.rate_note = note
     out.every_state = state is None
     return out
 

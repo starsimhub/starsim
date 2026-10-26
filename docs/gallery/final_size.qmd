@@ -27,10 +27,7 @@ def make_sir(R0):
 ```
 
 ```{python}
-#| echo: false
-#| output: asis
-fence = '`' * 3
-print(fence + '{mermaid}\n' + make_sir(2).diagram() + '\n' + fence)
+make_sir(2).diagram()
 ```
 
 ## Result

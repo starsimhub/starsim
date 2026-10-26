@@ -605,21 +605,23 @@ def save(filename, obj, **kwargs):
     While some Starsim objects have their own save methods, this function can be
     used to save any arbitrary object. It can then be loaded with ss.load(). A sim
     saved to a `.py` file is written as code that builds it again (`sim.to_code()`).
-    To write a sim in another framework's format, use `ss.interop.export()`.
+    With `format=`, a sim is written in another framework's format by `ss.interop.export()`.
 
     Args:
         filename (str/path): the name of the file to save
         obj (any): the object to save
-        kwargs (dict): passed to `sc.save()`, or to `sim.to_code()`
+        format (str): another framework's format, one of `ss.interop.exporters` ('sbml', 'odin', or 'mermaid')
+        kwargs (dict): passed to `sc.save()`, to `sim.to_code()`, or to `ss.interop.export()`
 
     **Examples**:
 
         ss.save('model.py', sim) # The model, as code
         ss.save('run.sim', sim) # The sim, with its results
+        ss.save('model.xml', sim, format='sbml') # The model, as SBML
     """
     if 'format' in kwargs: # Another framework's format is written by its exporter (sc.save() would pass format= on to pickling, which fails obscurely)
-        errormsg = f'ss.save() writes Starsim\'s own formats; to write a sim as {kwargs["format"]}, use ss.interop.export(sim, {kwargs["format"]!r}, filename={str(filename)!r})'
-        raise ValueError(errormsg)
+        ss.interop.export(obj, kwargs.pop('format'), filename=filename, **kwargs) # An unknown format is an error that lists the formats
+        return sc.path(filename)
     if str(filename).endswith('.py') and isinstance(obj, ss.Sim):
         obj.to_code(filename, **kwargs)
         return sc.path(filename)
@@ -801,7 +803,8 @@ def return_fig(fig, **kwargs):
     is_jupyter = kwargs.pop('is_jupyter', ss.options.is_jupyter)
     is_reticulate = kwargs.pop('is_reticulate', ss.options.reticulate)
     if is_jupyter or is_reticulate:
-        print(fig)
+        if is_reticulate: # Under R (rstarsim), printing the figure is what makes it appear; in Jupyter, it would only print "Figure(640x480)"
+            print(fig)
         if do_show != False:
             plt.show()
         return None

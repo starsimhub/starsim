@@ -21,6 +21,8 @@ class ClusterNet(ss.Network):
     other networks. Based on `make_microstructured_contacts()` from Covasim v3: as
     there, clusters of size 0 are skipped, and the last cluster is truncated to fit.
 
+    Note: CRN safe, unless `dynamic=True` and people are born or die.
+
     Args:
         cluster_size (int/`ss.Dist`): the size of each cluster; a number is the mean of a Poisson distribution
         age_range (list): if supplied, only agents with `age_range[0] <= age < age_range[1]` are included
@@ -111,6 +113,8 @@ class HybridNet(ss.Network):
     The default `beta` values are Covasim v3's per-layer relative transmissibility,
     and are applied to the edges of each network; for per-network transmissibility
     on the disease instead, set them to 1 and use e.g. `ss.SIS(beta=dict(h=0.3, s=0.06, w=0.06, c=0.03))`.
+
+    Note: CRN safe, unless `dynamic=True` and people are born or die.
 
     Args:
         household_size (int/`ss.Dist`): the size of each household; a number is the mean of a Poisson distribution

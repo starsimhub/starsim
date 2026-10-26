@@ -122,6 +122,17 @@ def test_multisim():
     assert ('vx_delivered', 'Vaccine') in vx.summarize().index
     plt.close('all')
 
+    # Each draw has a seed of its own, restarted or built (with a function in its loop); seeds swept are runs of their scenario
+    S, I, R = ss.states(3)
+    sir = ss.Disease(infection=S >> I @ 0.3*I, recovery=ss.Transition(I, R, dur=10), init_prev=0.01, name='sir')
+    for kw in [{}, dict(interventions=lambda sim: None)]:
+        draws = ss.parallel(ss.Sim(sir, solver='binomial', total_pop=10_000, stop=50, verbose=0, **kw), priors=dict(beta=[0.3]*3), parallel=False)
+        assert isinstance(draws.sims, ss.run.RestartedSims) == (not kw) and list(draws.runs.rand_seed) == [1, 2, 3] # They all had seed 1
+        assert len(set(draws.results.sir.infection.values.sum(axis=1))) == 3 # So they differ by chance as well as by their values
+        assert draws.sims[2].pars.rand_seed == 3 and np.array_equal(draws.sims[2].results.sir.I.values, draws.results.sir.I.values[2])
+    sweep = ss.parallel(ss.Sim(sir, solver='binomial', total_pop=10_000, stop=50, verbose=0), pars=dict(beta=[0.3, 0.3, 0.4, 0.4], rand_seed=[1, 2, 1, 2]))
+    assert list(sweep.runs.scenario) == ['beta=0.3']*2 + ['beta=0.4']*2 and list(sweep.runs.rand_seed) == [1, 2, 1, 2] # Each seed was a scenario of its own
+
     return msim
 
 

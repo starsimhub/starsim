@@ -1,6 +1,6 @@
 # Simplifying Starsim v4: a survey
 
-Written 2026-10-20 on `v4-simplify` (`79592ae6`), in response to [simplify_prompt.md](simplify_prompt.md). Read-only: nothing in `starsim/` was changed. Eight surveys, one per group of modules, are in [simplify_claude/](simplify_claude/) (A to H, with usage counts, `file:line` locations and the test scripts). This page is the synthesis. Line counts are estimates from function sizes and greps unless marked as measured; where two surveys counted the same code, it is counted once here.
+Written 2026-10-20 on `v4-simplify` (`79592ae6`), in response to [simplify_prompt.md](simplify_prompt.md). Read-only: nothing in `starsim/` was changed. Eight surveys, one per group of modules, are in simplify_claude/ (A to H, with usage counts, `file:line` locations and the test scripts). This page is the synthesis. Line counts are estimates from function sizes and greps unless marked as measured; where two surveys counted the same code, it is counted once here.
 
 ## In one page
 

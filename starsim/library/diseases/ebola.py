@@ -22,6 +22,8 @@ class Ebola(AgentSEIR):
     burials after a delay. Bodies are only removed from the population (i.e.
     counted as deaths by the sim) once they are buried.
 
+    Note: CRN safe.
+
     Args:
         init_prev (Dist):           initial prevalence
         beta (prob):                per-contact transmission probability

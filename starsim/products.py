@@ -474,6 +474,8 @@ class Vaccine(Held):
     """
     A vaccine: what `ss.vaccinate()` delivers
 
+    Note: CRN safe as agents.
+
     Args:
         efficacy (float/dict): protection against acquisition (required); or a dict of efficacy against each of 'acquisition' (scales
             `rel_sus`), 'transmission' (scales `rel_trans`), 'mortality' (scales the death transitions), or any named transition
@@ -554,6 +556,8 @@ class Treatment(Held):
     (`ss.modify(ng.cure, multiply=0.5, where=...)`) multiplies the probability for the people it applies to.
     It is then given to the people in their sources. What happens at failure (resistance) is a transition of
     the disease triggered by the outcome: `ss.Transition(I, R_res, on=drug.failed, p=0.05)`.
+
+    Note: CRN safe as agents.
 
     Args:
         cure (float/dict): the probability that treatment cures: the person leaves whichever infected state they are in for the
@@ -777,6 +781,8 @@ class Diagnostic(Product):
     `specificity`; or one of `results=`, each with its probability given the state a person is in. Each result is a
     result of each delivery of it, and an event (`screening.positive` for one delivery, `hiv_rdt.positive` for any
     delivery of the product), which triggers the steps that follow.
+
+    Note: CRN safe as agents.
 
     Args:
         sensitivity (float/dict): the probability that someone with the condition tests positive; a dict gives one for each state (each a number or an `ss.by`),

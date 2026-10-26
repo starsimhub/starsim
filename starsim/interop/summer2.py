@@ -271,8 +271,8 @@ def load_summer2(source, pars=None, verbose=None):
     if unit:
         src.config.unit = unit
     if mixing:
-        src.config.networks = ss.contacts(**mixing)
-        src.code['networks'] = 'ss.contacts(' + ', '.join(f'{k}={np.asarray(v).tolist()!r}' for k,v in mixing.items()) + ')'
+        src.config.networks = ss.contacts(mixing) # A matrix for each stratification, whose product is the mixing
+        src.code['networks'] = 'ss.contacts(dict(' + ', '.join(f'{k}={np.asarray(v).tolist()!r}' for k,v in mixing.items()) + '))'
     outs = d.get('outputs') or {}
     for c,val in byinit.items():
         src.states[c].init = val

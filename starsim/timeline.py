@@ -27,7 +27,7 @@ class Timeline(ss.utils.NoDists):
     The `Timeline` object, after initialization, has the following time vectors,
     each representing a different way of representing time:
 
-    - `tvec`: ground truth simulation time, either as absolute `ss.date` instances, or relative `ss.dur` instances, e.g. `DateArray([<2021.01.01>, <2021.01.03>, <2021.01.05>, <2021.01.07>])`
+    - `tvec`: ground truth simulation time, either as absolute `ss.date` instances, or relative `ss.dur` instances, e.g. `DateArray([<2021-01-01>, <2021-01-03>, <2021-01-05>, <2021-01-07>])`
     - `tivec`: the vector of time indices (`np.arange(len(tvec))`)
     - `timevec`: the "human-friendly" representation of `tvec`: same as `tvec` if using `ss.date`, else floats if using `ss.dur`
     - `yearvec`: time represented as floating-point years
@@ -392,7 +392,7 @@ class Timeline(ss.utils.NoDists):
             if isinstance(self.stop, ss.dur) and not ss.time.assume_cal_year(self.stop) and self.start is not None: # A duration such as ss.days(735) is the length of the run, not a date
                 self.stop = self.start + self.stop
             if self.stop  is not None: self.stop  = ss.date(self.stop)
-            self.default_start = ss.date(self.default_start) # e.g. ss.date('2000.01.01')
+            self.default_start = ss.date(self.default_start) # e.g. ss.date('2000-01-01')
         elif cal_year_like:
             if sc.isnumber(self.start): self.start = ss.years(self.start) # Year-based: wrap in ss.years regardless of dt type
             if sc.isnumber(self.stop):  self.stop  = ss.years(self.stop)
@@ -479,7 +479,7 @@ class Timeline(ss.utils.NoDists):
 
         # Handle start, stop, dt, dur
         self.reconcile_args(sim)
-        self.unitless = getattr(sim, 'unitless', False) is True # Days underneath, but with no dates: see ss.Sim._init_unit()
+        self.unitless = getattr(sim, 'unitless', False) is True # Days underneath, but with no dates: see ss.solvers.choose.init_unit()
 
         # If the sim is provided and matches the current object: copy from the sim
         tvkeys = ['start', 'stop', 'dt']

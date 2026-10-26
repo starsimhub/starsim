@@ -29,7 +29,9 @@ class infection_log(Analyzer):
 
     This analyzer activates an infection log running in each disease. This is
     different than other analyzers, but is required since the information required
-    to create an infection log isn't kept outside of the disease's `infect()` step.
+    to create an infection log isn't kept outside of the disease's `transmit()` step.
+
+    Note: CRN safe.
 
     Examples:
         ```python

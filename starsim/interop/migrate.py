@@ -14,8 +14,8 @@ and `ss.library.X` to `ssl.X`), `verbose=-1` (now `verbose=0`), `res.annualize()
 Starsim 3's SIR, SIS, and SEIR written as code (e.g. `ss.SIS` to `ssl.AgentSIS`; Starsim 3's `ss.Disease` and `ss.Infection` keep
 their meaning), a `beta` pair on `ss.MFNet` (`beta={'mf': [0.08, 0.04]}`, which was [men to women, women to men]: now
 `ss.peract(m2f=0.08, f2m=0.04)`) or on a mother-to-child network (`[b, 0]`, which is now `b`, since those networks transmit one
-way), `copy_inputs=` (removed: a sim always copies its inputs), `ss.uids.cat()` (now `ss.uids.concatenate()`), `preg.breastfeeding`
-(now `preg.lactation.L`), `ss.RandomNet(uniform_targets=True)` (now `method='uniform'`), and the counts of the states of Starsim's own
+way), `copy_inputs=` (removed: a sim always copies its inputs), `ss.uids.cat()` (now `ss.uids.concatenate()`), an override of `ss.Infection`'s `infect()` (now `transmit()`), `preg.breastfeeding`
+(now `preg.lactating`), `ss.RandomNet(uniform_targets=True)` (now `method='uniform'`), and the counts of the states of Starsim's own
 modules (`results.n_alive`, `res.n_infected`, now `results.alive`, `res.infected`). From Starsim 4's prereleases: a test's follow-ups nested in it
 (`ss.screen(test, on_positive=ss.treat(drug))`), which are now steps of their own, added beside it to the interventions (left
 in place, so that the code fails with Starsim 4's own error, when the script can't find where they go); `ss.Test`, now
@@ -58,7 +58,10 @@ renames = [
     (r'\b(\w*preg\w*)\.ti_pregnant\b', r'\1.ti_P',                   "ss.Pregnancy's ti_pregnant is ti_P, the step P was entered"),
     (r'\b(\w*preg\w*)\.(stillbirth|miscarriage|birth)s\b', r'\1.\2', "ss.Pregnancy's results are its flows: stillbirth, miscarriage, birth"),
     (r'\b(\w*preg\w*)\.pregnancies\b', r'\1.conception',            "ss.Pregnancy's pregnancies result is its flow conception"),
-    (r'\b(\w*preg\w*)\.breastfeeding\b', r'\1.lactation.L',          "ss.Pregnancy's breastfeeding is the state L of its ss.Lactation (preg.lactation)"),
+    (r'\b(\w*preg\w*)\.breastfeeding\b', r'\1.lactating',            "ss.Pregnancy's breastfeeding is preg.lactating"),
+    (r'\b(\w*preg\w*)\.lactation\.L\b', r'\1.lactating',            "ss.Lactation (a Starsim 4 prerelease) is gone: breastfeeding is ss.Pregnancy's preg.lactating"),
+    (r'\bdef infect\(\s*self\s*\)', 'def transmit(self)',         "ss.Infection's transmission pass is transmit() (infect(uids) now infects those agents at once, for every disease)"),
+    (r'\b(super\(\)|self)\.infect\(\s*\)', r'\1.transmit()',        "ss.Infection's transmission pass is transmit() (infect(uids) now infects those agents at once, for every disease)"),
     (r'\buids\.cat\(',             'uids.concatenate(',              'ss.uids.cat() is ss.uids.concatenate()'),
     (r'''(\bsolver\s*=\s*)(['"])stochastic\2''', r'\1\2binomial\2',  "solver='stochastic' (a Starsim 4 prerelease) is solver='binomial', the chain binomial"),
     (r'\bss\.people\.(?!People\b)', 'ss.ppl.',                        'ss.people (a Starsim 4 prerelease) is ss.ppl'),
@@ -93,7 +96,7 @@ flags = [
     (r'\bss\.(Dx|Tx|Vx)\b', "Starsim 3's products written as code were removed: ss.Diagnostic (a table of more than two results is results=dict(...), most severe first), ss.Treatment (cure=, or cure=dict(<state>=...) by state), ss.Vaccine (efficacy=); an administer() of your own is administer(self, uids) on a subclass of ss.Product, returning its outcomes as dict(positive=uids)"),
     (r'\.diagnosed\b', "if this is the result of an ss.screen (a Starsim 4 prerelease), it is now positive (e.g. sim.results.screening.positive)"),
     (r'\bss\.simple_vx\b', 'ss.Vaccine(efficacy=e)'),
-    (r'\bclass\s+\w+\(\s*(ss\.)?(Legacy)?Pregnancy\s*\)', "ss.Pregnancy is now the declared module (states and transitions, with Starsim 3's arguments), and Starsim 3's pregnancy written as code was removed: a subclass that overrides its methods raises. Rewrite onto its seams: conception_rate(sim) for who conceives, ss.modify() of its transitions (preg.conception, preg.miscarriage, ...), infant_rate= for infant mortality, since_birth and ss.Lactation for postpartum, ss.on(preg.birth) or preg.add_callback(preg.birth, fn) at a delivery"),
+    (r'\bclass\s+\w+\(\s*(ss\.)?(Legacy)?Pregnancy\s*\)', "ss.Pregnancy is now the declared module (states and transitions, with Starsim 3's arguments), and Starsim 3's pregnancy written as code was removed: a subclass that overrides its methods raises. Rewrite onto its seams: conception_rate(sim) for who conceives, ss.modify() of its transitions (preg.conception, preg.miscarriage, ...), infant_rate= for infant mortality, since_birth and preg.lactating for postpartum and breastfeeding, ss.on(preg.birth) or preg.add_callback(preg.birth, fn) at a delivery"),
     (r'\.add_(conception|delivery)_callback\(', "ss.Pregnancy's add_conception_callback(fn) is preg.add_callback(preg.conception, fn); add_delivery_callback(fn), which was called with (mothers, newborns), is preg.add_callback(preg.birth, fn), called with the newborns (their mothers are sim.people.parent[newborns]). Both are called at the end of the pregnancy's step"),
     (r'\bss\.(demographics\.)?PregnancyPars\b', "ss.PregnancyPars was removed: ss.Pregnancy defines its parameters itself, and ss.Pregnancy().pars has them (e.g. k in ss.Pregnancy().pars; its fertility is the conception rate, a method, so leave it out when passing the values on). A subclass of it is an ss.Pars with the keys it uses"),
     (r'\b(slot_scale|min_slots|p_survive_maternal_death|trimesters)\s*=(?!=)', "if this is a parameter of ss.Pregnancy, it was removed, since nothing read it: drop slot_scale, min_slots, and p_survive_maternal_death; for trimesters, the gestational age is preg.P.time (e.g. preg.P & (preg.P.time < ss.weeks(13)))"),
@@ -111,7 +114,7 @@ flags = [
     (r'\bss\.Debugger\b', 'ss.Debugger was removed: run the sims a part at a time with sim.run(until=...), and compare them with ss.debugtools.check_sims_match()'),
     (r'\bss\.check_version\(', "ss.check_version() was removed: compare ss.__version__ yourself, e.g. sc.compareversions(ss.__version__, '>=4.0')"),
     (r'\b(prenatal|postnatal|congenital)_death_keys\b', "Starsim 3's congenital outcomes on ss.Infection (prenatal_death_keys and the like) were removed: set_congenital(uids, sources) is called for those infected before birth, and ssl.CongenitalDisease (import starsim.library as ssl) schedules the outcomes at birth (birth_outcome_keys=, each with a ti_<key> state)"),
-    (r'\.compute_transmission\(', "Starsim 3's route.compute_transmission() was removed: a disease written as code transmits over every route in infect() (ss.Infection's, by default), or over one route with self.infect_route(i, route, betas, rel_trans, rel_sus), which returns the targets, sources, and network IDs of the new infections"),
+    (r'\.compute_transmission\(', "Starsim 3's route.compute_transmission() was removed: a disease written as code transmits over every route in transmit() (ss.Infection's, by default), or over one route with self.transmit_route(i, route, betas, rel_trans, rel_sus), which returns the targets, sources, and network IDs of the new infections"),
     (r'\b(?!(?:np|pd|jnp|torch)\b)\w+\.concat\(', "if this is the concat() of ss.uids, it is concatenate() (x.concatenate(y), or ss.uids.concatenate(x, y))"),
     (r'\bss\.(calibration\.)?(Calibration|CalibComponent|BetaBinomial|Binomial|DirichletMultinomial|GammaPoisson|Normal)\b|\bss\.calibration\b|\b(linear_interp|linear_accum|step_containing)\b', "Starsim 3's calibration was removed: bounds on the parameters (ss.par(v, bounds=[lo, hi])), the data on the sim (ss.Sim(..., data=df)), and sim.fit(); a likelihood by series (likelihood=dict(prevalence=ss.normal(scale=s)), or ss.binom, ss.nbinom, ss.poisson), or gof=fn(sim) for a measure of your own"),
     (r'\.plot_compare\(', 'msim.compare(do_plot=True) (with t= and sim_inds= as before)'),
@@ -127,6 +130,8 @@ flags = [
     (r'''(['"])(mf|mfnet|msm|msmnet)\1''', "ss.MFNet and ss.MSMNet are ss.SexualNet, named 'sexualnet' unless given a name: networks='sexual', and a beta or route= keyed 'sexual' (or ss.SexualNet(name='mf'))"),
     (r'\bfloat\([^)]*(rate|dur_)[^)]*\)', 'if this is a rate or duration (ss.peryear, ss.years, ...), its number is .value (float() of one is refused)'),
     # From Starsim 4's prereleases
+    (r'\bss\.Lactation\b|\blactation\s*=|\blact\w*\.L\b', "ss.Lactation (a Starsim 4 prerelease) is gone, with ss.Pregnancy(lactation=): breastfeeding is ss.Pregnancy's preg.lactating (a state of each woman), with p_breastfeed= and dur_breastfeed= on ss.Pregnancy; lact.L is preg.lactating"),
+    (r'\bss\.contacts\((.*,)?\s*(?!(?:ages|matrix|dims|name|source|layer|unit)\s*=)\w+\s*=(?!=)', "ss.contacts() takes a matrix and what it is over: ss.contacts(M, ages=[0, 15, 65]) for its own age groups (age= and bands= are gone), ss.contacts(M) over the model's age groups (was age=M), ss.contacts(M, dims='risk') over another stratification (was risk=M), and ss.contacts(dict(age=A, area=B)) for a product of a matrix for each (was age=A, area=B)"),
     (r'''(['"])\s*[\w.]*\s*->\s*[\w.| ]*\1|\bss\.(birth|death|immigration|emigration)\(\s*f['"]''', "arrow strings are gone: a move between states is written with the states (move=S >> V, ss.death(X), ss.birth(S)), and a move between levels as a pair (ss.transfer(risk=('low', 'high')), move=dict(risk=('low', 'high')))"),
     (r'''\bkind\s*=\s*['"]strain['"]|\.stratify\(.*\bimmunity\s*=''', 'strains are part of the disease, not a stratification: ss.Disease(..., strains=ss.Strains(...)), with the protection between them as ss.Strains(immunity=ss.immunity(due_to=...)); a change of strain is move=DS >> RIF on the strain objects'),
     (r'''\bss\.Strains\(\s*['"]|\bexclusive\s*=''', "a family of diseases is ss.Disease(name=..., strains=ss.Strains([d1, d2], shared=[...])) (was ss.Strains(name, [d1, d2], exclusive=...))"),
@@ -438,15 +443,6 @@ def migrate_ast(text, analyzers=None):
                                 obj[key] = node
                             else:
                                 setattr(obj, key, node)
-
-    # The first state: first= or a state named S or susceptible (a Starsim 4 prerelease took the first one declared)
-    if 'first=' not in text:
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Assign) and isinstance(node.value, ast.Call) and ast.unparse(node.value.func) == 'ss.states':
-                targets = node.targets[0].elts if isinstance(node.targets[0], (ast.Tuple, ast.List)) else []
-                names = [t.id for t in targets if isinstance(t, ast.Name)]
-                if names and not {'S', 'susceptible'} & set(names):
-                    found.append((node.lineno, f'none of the states {sc.strjoin(names)} is named S or susceptible, so the disease needs first= (the state people start in and are born into), e.g. ss.Disease(..., first=\'{names[0]}\'); sim.init() raises without it'))
 
     # A test with follow-ups nested in it, from Starsim 4's prereleases: each follow-up a step of its own, added after it to the interventions
     bodies = {} # Each statement's body (list of statements), to tell whether two are in the same one

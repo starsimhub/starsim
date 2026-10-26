@@ -268,7 +268,7 @@ class AgentModifiers:
     and is what a delivery for it uses as its engine (see `engine()`): its conditions, and a cure as `clear_infection()`
 
     The array becomes an `ss.arrays.ModifiableArr`, whose base values the disease's code sets as before, and
-    whose `.effective` values (with the modifiers that are active applied) `ss.Infection.infect_route()` uses.
+    whose `.effective` values (with the modifiers that are active applied) `ss.Infection.transmit_route()` uses.
     """
     cross = None # Never tracked jointly with another disease
 
@@ -319,7 +319,7 @@ class AgentModifiers:
 
     @staticmethod
     def unapplied(mod, kind):
-        """ Why a disease written as code would not apply the modifiers on its `rel_sus` or `rel_trans` (`kind`), or None if it would: a transmitted `ss.Infection` reads them in `infect_route()` (see `check_applied()`) """
+        """ Why a disease written as code would not apply the modifiers on its `rel_sus` or `rel_trans` (`kind`), or None if it would: a transmitted `ss.Infection` reads them in `transmit_route()` (see `check_applied()`) """
         if isinstance(mod, ss.Infection) and 'beta' in mod.pars:
             return None
         why = 'it is not an ss.Infection' if not isinstance(mod, ss.Infection) else 'it has no beta'
@@ -344,6 +344,8 @@ class modify(Connector):
     the value used is `(set value if any, else base) × multipliers + addends` over
     the modifiers that are currently active. It can be passed to a sim in `connectors`
     (interactions that are part of the model) or `interventions` (policy).
+
+    Note: CRN safe.
 
     Args:
         target (par/str): the quantity to change: a parameter (`sir.pars.beta`), a transition (`sir.recovery`, which
@@ -446,7 +448,7 @@ class modify(Connector):
             if kind not in ['rel_sus', 'rel_trans']:
                 raise ss.CapabilityError(f'the target of the modifier "{self.name}", {self.target}, is a parameter of "{modname}", which is written as code ({type(coded[modname]).__name__}), so its own code reads the value and a modifier cannot change it.\n'
                                  f'     Modify its rel_sus or rel_trans (e.g. ss.modify({modname}.rel_trans, multiply=0.5)), or declare the disease (see ss.Disease) to modify its parameters and transitions.')
-            if self.route is None: # On a route, it is applied to the transmission over it (see ss.Infection.infect_route())
+            if self.route is None: # On a route, it is applied to the transmission over it (see ss.Infection.transmit_route())
                 AgentModifiers.attach(coded[modname], kind, sim)
             found = True
         elif modname in mods:

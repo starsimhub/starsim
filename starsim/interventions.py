@@ -392,6 +392,8 @@ class Delivery(ss.products.EventSource, Intervention):
     (see `ss.solvers.CompartmentalDelivery`). A product whose effect is code of your own is an `ss.Product` with
     an `administer(uids)` method.
 
+    Note: CRN safe as agents.
+
     Args:
         what (`ss.Product`): what is delivered: an `ss.Vaccine`, `ss.Diagnostic`, or `ss.Treatment` (also the first argument); `ss.vaccinate()`, `ss.screen()`, and `ss.treat()` instead take the product's own keywords and make it, e.g. `ss.vaccinate(efficacy=0.9, ...)`
         who (Cond/event/list): who receives it: a condition (e.g. `ss.ppl.age < 5`), an event (e.g. `sir.infection`, `screening.positive`,
@@ -684,8 +686,8 @@ class Delivery(ss.products.EventSource, Intervention):
         def leaves(cond):
             return [] if not isinstance(cond, ss.conditions.Cond) else [cond] if cond.op in ss.conditions.leaves else [l for arg in cond.args for l in leaves(arg)]
         for leaf in leaves(self.on):
-            if getattr(leaf, 'kind', None) == 'transfer':
-                out.append(f'"{self.name}" is triggered by the transfer "{leaf.args[1]}", which only agents keep as an event (yet)')
+            if isinstance(leaf, ss.conditions.Event) and isinstance(leaf.args[1], ss.transitions.Transfer):
+                out.append(f'"{self.name}" is triggered by the transfer "{leaf.args[1].name}", which only agents keep as an event (yet)')
             elif leaf.op == 'event' and not isinstance(leaf.args[0], (ss.products.EventSource, str)):
                 out.append(f'"{self.name}" is triggered by {leaf}, an event of a module written as code')
         if self.trace is not None:
@@ -933,10 +935,10 @@ class Delivery(ss.products.EventSource, Intervention):
             self.results[key].by_edge = parts
         self.results.coverage.parts = (self.results.delivered, self.results.eligible) # Over the run, the coverage is the share of everyone eligible who received it
         ng = self.sim.groups.n_groups
-        self.rows = self.group_ti = None # As for a disease: see ss.Sim.group_rows()
+        self.rows = self.group_ti = None # As for a disease: see ss.solvers.group_rows()
         if ng > 1: # By stratum, like the results of a disease: see res.select() and res.by()
-            grouped = [res for res in results if self.sim.kept(self, res.name)]
-            self.rows, self.group_ti = self.sim.group_rows(self.sim.t.npts, len(grouped)*ng*8, ss.solvers.Engine.group_bytes, name=self.name)
+            grouped = [res for res in results if ss.solvers.kept_by_group(self.sim, self, res.name)]
+            self.rows, self.group_ti = ss.solvers.group_rows(self.sim, self.sim.t.npts, len(grouped)*ng*8, ss.solvers.Engine.group_bytes, name=self.name)
             for res in grouped:
                 res.strats = self.sim.groups.strats
                 res.dims = [strat.name for strat in self.sim.groups.strats]
@@ -1669,6 +1671,8 @@ class vaccinate(Delivery):
     """
     Deliver a vaccine; see `ss.Delivery` for the arguments
 
+    Note: CRN safe as agents.
+
     Examples:
         ```python
         S, I, R = ss.states(3)
@@ -1683,6 +1687,8 @@ class vaccinate(Delivery):
 class treat(Delivery):
     """
     Deliver a treatment; see `ss.Delivery` for the arguments
+
+    Note: CRN safe as agents.
 
     Examples:
         ```python
@@ -1703,6 +1709,8 @@ class screen(Delivery):
 
     Its outcomes, `positive` and `negative`, are events on the step the result is available (after the test's `delay`), and results:
     the number with each result on each step. What happens next is a step of its own, triggered by an outcome.
+
+    Note: CRN safe as agents.
 
     Examples:
         ```python

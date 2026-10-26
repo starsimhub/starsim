@@ -64,6 +64,8 @@ def test_random():
     # Checks
     assert np.array_equal(nw1.p2, nw2.p2), 'Implicit and explicit creation should give the same network'
     assert len(nw3) == len(nw2)*2, 'Doubling n_contacts should produce twice as many contacts'
+    s4 = ss.Sim(n_agents=small, diseases='sir', networks=ss.RandomNet(n_contacts=0)).run() # No contacts, no edges (it was a ZeroDivisionError)
+    assert len(s4.networks[0]) == 0 and s4.results.sir.infection.sum() == 0
 
     # Tidy
     o = sc.objdict(nw1=nw1, nw2=nw2, nw3=nw3)
@@ -207,7 +209,9 @@ def test_network_uids():
         nw = sim.networks[0]
         alive = set(sim.people.auids.tolist())
         refs = set(np.concatenate([np.asarray(nw.p1), np.asarray(nw.p2)]).tolist())
-        invalid = sorted(refs - alive)
+        invalid = ss.uids(sorted(refs - alive))
+        if nw.one_step: # Edges that last one step keep those who died in the last step, until the next step would end them
+            invalid = invalid[sim.people.ti_dead.raw[invalid] != sim.t.ti]
         print(f'{name}: {len(nw)} edges, {len(invalid)} references to non-living agents')
         assert not len(invalid), f'{name} formed edges with {len(invalid)} non-living agents: {invalid[:10]}'
         assert isinstance(nw.p1, ss.uids), f'{name}.p1 should be ss.uids, not {type(nw.p1)}'
@@ -610,7 +614,7 @@ def test_peract_spec():
         return ss.Sim(syph, networks=ss.SexualNet(), interventions=condoms, n_agents=500, start=2000, stop=2002, verbose=0)
     sim = make(ss.peract(m2f=0.3, f2m=0.15)).init()
     text = sim.diseases.syph.describe(output=True)
-    for line in ['source P + 0.55 EL', 'beta on sexualnet: per act, m2f 0.3, f2m 0.15', "sexualnet's sides m and f", '"condoms"']:
+    for line in ['from P + 0.55 EL', 'beta on sexualnet: per act, m2f 0.3, f2m 0.15', "sexualnet's sides m and f", '"condoms"']:
         assert line in text, line
     for beta, value in [(ss.peract(m2f=0.3, f2m=0.15), dict(type='peract', m2f=0.3, f2m=0.15)), (0.01, dict(type='peract', value=0.01))]:
         sim = make(beta)
@@ -790,11 +794,11 @@ def test_shared_pass():
     pairs = [(tr, src) for tr in eng.graph.transmissions for src in tr.src]
     rng = sim.diseases.sir.trans_rng
     ind = rng.dists[0].ind
-    together = eng.infect_together(pairs)
+    together = eng.transmit_together(pairs)
     assert together is not None and sum(map(len, together)) > 0, 'Expected the two transmissions to be worked out together, and to infect someone'
     for (tr,src),uids in zip(pairs, together):
         rng.jump(to=ind, force=True) # The draws the pass had, for each transmission alone
-        assert np.array_equal(uids, eng.infect(tr, src)), f'Expected {tr.name} to infect the same people in the shared pass as alone'
+        assert np.array_equal(uids, eng.transmit(tr, src)), f'Expected {tr.name} to infect the same people in the shared pass as alone'
     return together
 
 

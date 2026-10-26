@@ -1,5 +1,5 @@
 """
-The model spec (written by `sim.to_spec()`, for `sim.hash()` and `ss.diff()`) as code (`ss.to_code()`, for the declared parts of a model), and the parser of expressions in it
+The model spec (written by `sim.to_spec()`, here, for `sim.hash()` and `ss.diff()`) as code (`ss.to_code()`, for the declared parts of a model), and the parser of expressions in it
 """
 import ast
 import keyword
@@ -491,7 +491,17 @@ def contacts_code(net):
         if pars.get('beta') != 1.0 or pars.get('diseases') is not None: # Not arguments of ss.contacts()
             return None
         mats = net['contacts']
-        args = [f'ages={mats["ages"]!r}, matrix={mats["matrix"]!r}'] + [f'{dim}={mat!r}' for dim,mat in mats.items() if dim not in ['ages', 'matrix']] if 'ages' in mats else [f'{mats["matrix"]!r}, dims={mats["dims"]!r}'] if 'dims' in mats else [f'{dim}={mat!r}' for dim,mat in mats.items()]
+        others = {dim:mat for dim,mat in mats.items() if dim not in ['ages', 'matrix', 'dims']} # A matrix for each of the model's stratifications
+        if 'ages' in mats: # Its own age groups (with a matrix for each of other stratifications)
+            matrix = f'dict(age={mats["matrix"]!r}, ' + ', '.join(f'{dim}={mat!r}' for dim,mat in others.items()) + ')' if others else repr(mats['matrix'])
+            args = [f'{matrix}, ages={mats["ages"]!r}']
+        elif 'dims' in mats:
+            args = [f'{mats["matrix"]!r}, dims={mats["dims"]!r}']
+        elif len(others) == 1:
+            dim, mat = next(iter(others.items()))
+            args = [repr(mat)] + ([f'dims={dim!r}'] if dim != 'age' else [])
+        else:
+            args = ['dict(' + ', '.join(f'{dim}={mat!r}' for dim,mat in others.items()) + ')']
         if net.get('name') != 'contacts':
             args.append(f'name={net["name"]!r}')
         if net.get('contacts_unit') is not None:
@@ -794,6 +804,91 @@ def to_code(spec, filename=None, header=None, footer=None, code=None, missing=No
     if filename is not None:
         sc.savetext(filename, code)
     return code
+
+
+#%% The spec of a sim: to_spec(), hash(), and to_code()
+
+def built_copy(sim):
+    """ A built copy of a sim, built quietly (without the lines a run prints as it starts), for what reads the built model, e.g. `hash()` and `to_spec()` """
+    sim = sc.dcp(sim)
+    sim.pars.verbose = 0
+    return sim.init()
+
+
+def sim_hash(sim):
+    """ The model's fingerprint: see `ss.Sim.hash()` """
+    if not sim.initialized: # A copy, so that this sim is not changed
+        return built_copy(sim).hash()
+    spec = sim.to_spec()
+    digest = ss.utils.short_hash
+    model = dict(modules=spec['modules'], networks=spec['networks'], stratify=spec['stratify'], modifiers=spec['modifiers'])
+    for mod in model['modules']: # Where a value came from is not part of the model
+        if isinstance(mod.get('pars'), list): # A declared module's parameters
+            for p in mod['pars']:
+                p.pop('source', None)
+        if isinstance(mod.get('transitions'), list): # The order of the transitions is not part of the model
+            mod['transitions'] = sorted(mod['transitions'], key=lambda t: t['name'])
+        dis = sim.diseases.get(mod.get('name')) if mod.get('init_prev') else None
+        if getattr(dis, 'graph', None) is not None and dis.graph.transmissions and len(dis.graph.transmissions[0].dst) == 1: # init_prev=0.01 is init=dict(I=0.01), the same model
+            state = next(s for s in mod['states'] if s['name'] == dis.graph.transmissions[0].dst[0].name)
+            if state.get('init') is None:
+                state['init'], mod['init_prev'] = mod['init_prev'], None
+    unknown = ss.presentation.unknown_funcs(dict(model, interventions=spec['interventions']))
+    if unknown:
+        errormsg = f'sim.hash() cannot tell these functions apart from others, since their source is not available and they have no name to import them by: {sc.strjoin(unknown)}. Define each with def, or give it a version (e.g. fn.version = "1")'
+        raise ValueError(errormsg)
+    structure, values = ss.utils.split_numbers(model, unit=sim.unit, skip=['guessed', 'label', 'doc'])
+    config = {k:v for k,v in spec['config'].items() if k != 'rand_seed'}
+    data = None if sim.data is None else digest(sim.data.to_csv())
+    return sc.objdict(model=digest(structure), pars=digest(values), config=digest(config), scenario=digest(spec['interventions']), data=data, seed=sim.pars.rand_seed)
+
+
+def sim_spec(sim, filename=None, **kwargs):
+    """ The model spec of a sim: see `ss.Sim.to_spec()` """
+    if not sim.initialized: # A copy, so that this sim is not changed
+        return built_copy(sim).to_spec(filename=filename, **kwargs)
+    pars = sim.pars
+    def tstr(val):
+        if isinstance(val, ss.dur) and type(val).base != sim.unit_base + 's': # A duration in another unit than the sim's (e.g. start=2000 in years, with rates per day) is written with its unit
+            return ss.transitions.quantity_json(val, 'dur', None)
+        elif isinstance(val, ss.dur):
+            return float(val.value)
+        return val.strftime('%Y-%m-%d') if isinstance(val, ss.date) and val == val.normalize() else str(val) # Dates as ISO 8601
+    out = sc.objdict()
+    out.schema = 'lingua-franca/1.0'
+    out.modules = [mod.to_spec() for key in ['custom', 'demographics', 'diseases'] for mod in sim[key]() if not isinstance(mod, ss.demographics.Flows)] # Births and deaths declared for the population are, by now, transitions of a disease
+    out.networks = [mod.to_spec() for mod in list(sim.networks()) + getattr(sim, 'mixed', [])]
+    out.stratify = [sc.dcp(strat.spec) for strat in sim.groups.sim_strats] # Those of a module are in its own spec, and those of an intervention are part of the scenario
+    out.modifiers = [mod.to_spec() for mod in sim.connectors()]
+    out.interventions = [mod.to_spec() for mod in sim.interventions()]
+    out.config = sc.objdict(solver=pars.solver, integrator=pars.integrator, approx=pars.approx, unit=sim.unit or pars.unit, # A sim of no declared modules has only the unit it was given
+                            start=tstr(sim.t.start), stop=tstr(sim.t.stop), dt=float(sim.t.dt.to(sim.unit_base).value),
+                            total_pop=float(pars.total_pop), n_agents=int(pars.n_agents) if sim.solver == 'abm' else None, rand_seed=pars.rand_seed)
+    out.config.crn = ss.options.crn # Numerical options that change the results
+    out.config.precision = ss.options.precision
+    out.config.substeps = pars.substeps
+    out.config.use_aging = bool(pars.use_aging) if 'use_aging' in sim.given else None # Only when given, e.g. an age stratification without aging
+    if getattr(sim, 'named_people', None) is not None and sim.people_from is None: # Where a named population came from (people that come with a contact matrix come with it again)
+        out.config.people = dict(sim.named_people.ref, total=sim.named_people.total)
+    out.meta = sc.objdict(library_version=ss.__version__, solver_chosen=sim.solver, solver_reason=sim.solver_reason, notes=list(sim.notes))
+    out = sc.jsonify(out)
+    if filename is not None:
+        return sc.savejson(filename, out, **kwargs)
+    return out
+
+
+def sim_code(sim, filename=None):
+    """ The sim as a Python file that builds it again: see `ss.Sim.to_code()` """
+    header, footer, code = None, None, None
+    missing = [] if sim.data is None else [f'the data ({len(sim.data.columns)} series: {sc.strjoin(sim.data.columns)}): pass it with ss.Sim(..., data=...)']
+    imp = getattr(sim, 'imported', None)
+    if imp is not None:
+        code = imp.get('code')
+        source = sc.path(imp.file).name if imp.file else 'an object'
+        header = f'Imported from {imp.format} ({source}) by ss.interop.load()\n\nHow each rate was read:\n' + '\n'.join(imp.choices)
+        if imp.incomplete:
+            footer = ['Not translated (ImportIncomplete):'] + [f'  {name}: {why}' for name,why in imp.incomplete]
+    return ss.to_code(sim.to_spec(), filename=filename, header=header, footer=footer, code=code, missing=missing)
 
 
 #%% Comparing two models

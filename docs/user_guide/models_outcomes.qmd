@@ -96,10 +96,7 @@ sim.diseases.measles.plot('cases', 'n_hosp')
 
 An outcome is worked out from the counts of its source flows, in each group, so it never records which people were counted. In a deterministic run, the share multiplies the flow and the delay spreads it over the following steps; in a stochastic or agent-based run, those counted are a binomial draw from the step's events, and their delays are drawn too. So the reported cases of a stochastic run vary by chance, as real reporting does.
 
-::: {.callout-warning}
-## [PROPOSAL]
-`describe()` lists the outcomes by name only ("also cases, hosp, n_hosp, deaths"). It should give each one's definition, as it does for transitions: "cases = 0.5 × onset, after a delay of 4 days (exponential)" (P2: `describe()` should describe everything).
-:::
+`describe()` gives each outcome's definition, under the disease's transitions, e.g. `cases   outcome: 0.5 × onset, after 4 days (exponential)`.
 
 ### An outcome, an intervention, or a state
 

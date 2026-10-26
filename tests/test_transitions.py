@@ -144,6 +144,12 @@ def test_forms():
     many = ss.Disease(S >> I @ 0.05*I, I >> R @ 10, death, name='sir')
     assert [s.name for s in many.graph.transitions.death.src] == ['I', 'R']
 
+    # A distribution times a state after "@" is a rate, as in the keyword form; a distribution of durations is still a duration
+    S, I = ss.states(2)
+    assert repr((S >> I @ ss.gamma(a=0.5, scale=3.8)*I).rate) == repr(ss.Transition(S, I, rate=ss.gamma(a=0.5, scale=3.8)*I).rate)
+    with pytest.raises(ss.errors.WrongDimension):
+        S >> I @ ss.lognorm_ex(mean=ss.days(8), std=ss.days(2))*I
+
     # Density-dependent: the whole flow without the total is the count, and either way 1% start infected by default
     density = []
     for flow in [True, False]:
@@ -388,8 +394,14 @@ def test_time():
     S, I, R = ss.states('S I R')
     with pytest.raises(ss.errors.IncompatibleTypes):
         ss.Sim(ss.Disease(S >> I @ 0.3*I, I >> R @ ss.weeks(1), R >> S @ ss.days(100), name='mixed'), **kw).init()
-    with pytest.raises(ss.errors.IncompatibleTypes, match='rate_deaths'): # As is a bare number in demographics=
-        ss.Sim(ss.Disease(S >> I @ ss.perday(0.3)*I, I >> R @ ss.weeks(1), name='mixed'), demographics=ss.death(rate=0.01), **kw).init()
+    with pytest.raises(ss.errors.IncompatibleTypes, match='mixed.rate'): # As is a bare number in a disease's death
+        ss.Sim(ss.Disease(S >> I @ ss.perday(0.3)*I, I >> R @ ss.weeks(1), I >> ss.null @ 0.01, name='mixed'), **kw).init()
+    deaths = ss.death(rate=10) # But the deaths of everyone, as ss.Deaths reads them: per year, and above 1 per 1,000, with a note (not a warning: it is the usual spelling)
+    assert ss.birth(rate=30).rate.raw == ss.peryear(0.03) and ss.birth(rate=0.02).rate.raw == ss.peryear(0.02)
+    with pytest.warns(RuntimeWarning, match='per person per year'):
+        assert ss.birth(rate=ss.perday(0.02)).rate.raw == ss.perday(0.02) # A typed rate is per person, as given, with a warning above 1 per person per year
+    mixed = ss.Sim(ss.Disease(S >> I @ ss.perday(0.3)*I, I >> R @ ss.weeks(1), name='mixed'), demographics=deaths, **kw).init()
+    assert mixed.diseases.mixed.pars.rate_deaths.raw == ss.peryear(0.01) and 'rate=10 is a bare number, so it is taken as 10 per 1,000 people per year' in mixed.notes
     zero = ss.par(0.0, name='zero') # But 0 is 0 in any unit
     assert ss.Sim(ss.Disease(S >> I @ ss.perday(0.3)*I, I >> R @ ss.weeks(1), R >> S @ zero, name='mixed'), **kw).init().unit == 'day'
 
@@ -554,9 +566,11 @@ def test_describe():
     S, I, R = ss.states(3)
     density = ss.Sim(ss.Disease(S >> I @ ss.perday(3e-5)*I.n, I >> R @ ss.days(10), init_n=dict(I=10)), **kw).init()
     assert 'mixing' not in density.describe(output=True) # Nothing is contact-mediated, so there is no mixing to describe (it said "frequency-dependent")
+    assert 'infected: I ' in density.describe(output=True) # Density-dependent transmission is a transmission: I is its source, and R is not infected (it counted R)
+    assert np.isclose(density.diseases[0].R0(), 3e-5*10_000*10) # beta × N × the time infectious (it failed, "Singular matrix")
     S, I, R = ss.states('S I R')
     aged = ss.Disease(infection=ss.Transition(S, I, rate=0.3 * I), recovery=ss.Transition(I, R, dur=10), init_prev=0.01, name='sir').stratify(age=[0, 15])
-    births = ss.Sim(aged, demographics=[ss.birth(rate=ss.peryear(0.02)), ss.death(rate=ss.peryear(0.02))], networks=ss.contacts(age=[[3, 1], [1, 2]]), unit='day', total_pop=10_000, **kw).init().describe(output=True)
+    births = ss.Sim(aged, demographics=[ss.birth(rate=ss.peryear(0.02)), ss.death(rate=ss.peryear(0.02))], networks=ss.contacts([[3, 1], [1, 2]]), unit='day', total_pop=10_000, **kw).init().describe(output=True)
     assert '0.02 per year × (S + I + R).n' in births # A rate in another unit than the sim's keeps its own (it was "0.02", under "in total per day")
     assert 'literally' not in births # Births are in total, so the note about contacts does not apply to them
     seasonal = ss.Sim(ss.Disease(S >> I @ ss.seasonal(mean=ss.perday(17/13), amplitude=0.1, peak=0.25) * I, I >> R @ ss.perday(1/13), init=dict(I=1e-4), name='sir'), unit='day', total_pop=1.0, **kw).init()
@@ -570,7 +584,8 @@ def test_describe():
         assert string in documented, f'Expected "{string}" in describe()'
     ss.SIR().equations() # Before the disease is in a sim
 
-    assert sir.diagram().splitlines() == ['flowchart LR', '    S(["S"])', '    I(["I"])', '    R(["R"])', '    S -.->|"infection: beta * I"| I', '    I -->|"recovery: dur = dur"| R']
+    assert sir.diagram().splitlines() == ['flowchart LR', '    S(["S"])', '    I(["I"])', '    R(["R"])', '    S -.->|"infection: 0.05 × I"| I', '    I -->|"recovery: 10"| R'] # Values, not names (it was "recovery: dur = dur")
+    assert '```mermaid' in sir.diagram()._repr_markdown_() # Drawn in a notebook
 
     eqs = sir.equations(output=True)
     print(eqs)
@@ -581,9 +596,17 @@ def test_describe():
     text = fatal.describe(output=True)
     assert 'null1' in fatal.diagram() and 'I -> R | (removed)' in text # ss.null shown as leaving the model (it was "I -> ")
     assert 'beta = 0.4 per day' in text # Outside a sim, in the unit of its typed values (it was "per step")
+    assert '8 days, p = 0.002"| null1' in fatal.diagram() # Each branch with its share
+    S, I, R = ss.states(3)
+    beta = ss.par(0.3, bounds=[0.1, 1])
+    infection = S >> I @ beta*I
+    cases = ss.outcome(0.5*infection, delay=ss.days(4))
+    text = ss.Disease(infection, I >> R @ ss.erlang(k=4, mean=ss.days(8)), cases, name='sir').stratify(risk=['low', 'high'], split=[0.8, 0.2], adjust={'rel_sus': [1, 3]}).describe(output=True)
+    for string in ['beta = 0.3 per day, between 0.1 and 1', 'erlang(k=4, mean=8 days)', 'outcome: 0.5 × infection, after 4 days (exponential)']: # Bounds, a distribution as given, and an outcome's definition
+        assert string in text, f'Expected "{string}" in describe()'
     table = repr(sir.transitions)
     print(table)
-    assert 'contact-mediated, source I' in table
+    assert 'transmission, from I' in table
     spec = sim.to_spec()
     assert spec['modules'][0]['transitions'][0]['rate'] == 'beta * I'
 
@@ -823,7 +846,7 @@ def test_cross_disease_rate():
 
 
 def test_first_state():
-    sc.heading('Testing that the people left over start in the first state: first=, else the state named S')
+    sc.heading('Testing that the people left over start in the first state: first=, else the state named S, else the first made')
     for solver in ['ode', 'abm']:
         R, I, S = ss.states(3)
         make = lambda **kw: ss.Disease(infection=S >> I @ 0.3*I.frac, recovery=I >> R @ ss.days(10), init_n=dict(I=100), name='sir', **kw)
@@ -832,10 +855,11 @@ def test_first_state():
         assert sim.results.sir.S[0] == 9900 and sim.results.sir.R[0] == 0
         assert ss.Sim(make(first='R'), total_pop=10_000, n_agents=10_000, stop=1, unit='day', solver=solver, verbose=0).run().results.sir.R[0] == 9900 # Or given
 
-    # Nothing else is guessed: with no S and no first=, the sim raises
-    A, B = ss.states('A B')
-    with pytest.raises(ss.errors.UnknownState, match='first='):
-        ss.Sim(ss.Disease(prog=A >> B @ 0.1, name='d'), stop=2, verbose=0).init()
+    # With no S and no first=, the first state made, whatever the order of the transitions (it raised), and describe() says it is a guess
+    B, A = ss.states('B A')
+    sim = ss.Sim(ss.Disease(prog=A >> B @ 0.1, back=B >> A @ 0.1, name='d'), stop=2, verbose=0).run()
+    assert sim.diseases.d.graph.first.name == 'B' and sim.results.d.B[0] == 10_000
+    assert 'the first state made' in sim.describe(output=True)
 
     # The code written for a model says which state it is
     def make(**kw):
@@ -1044,6 +1068,18 @@ def test_split_timing():
         assert entry.H[-1] == 0 # Everyone started before step 10, so was split then
         assert np.isclose(exit.H[-1]/10_000, np.exp(-10/20), atol=0.03) # Those still in I at step 10
     return exit
+
+
+@sc.timer()
+def test_infection_step():
+    """ As agents, the newly infected have half a step of the rates out of an infectious state at their first draw, so R0 holds at a coarse step """
+    sc.heading('Testing the final size of an SIR as agents at a coarse step')
+    S, I, R = ss.states(3)
+    sir = ss.Disease(S, I, R, infection=S >> I @ ss.perday(0.25)*I, recovery=I >> R @ ss.perday(1/8), init_prev=0.001, name='sir') # R0 = 2
+    res = ss.Sim(sir, solver='abm', n_agents=20_000, unit='day', stop=250, dt=ss.days(4), rand_seed=1, verbose=0).run().results.sir
+    attack = 1 - res.S[-1]/20_000
+    assert np.isclose(attack, 0.797, atol=0.02), f'The attack rate at a step of half the infectious period is {attack:n}, not 0.797' # 0.61 with a whole step at the first draw, as if R0 were 1.5
+    return attack
 
 
 @sc.timer()
@@ -1263,6 +1299,11 @@ def test_split_null():
     S, E, P, A = ss.states('S E P A')
     with pytest.raises(TypeError, match=r'\[E, P, A\].*E \+ P \+ A'):
         ss.Sim(ss.Disease(S, E, P, A, x=ss.Transition(E | P | A, S, rate=0.1), name='x'), n_agents=100, verbose=0).init()
+
+    # ST48: a split to one destination is a plain transition, so several out of one state compete as rates rather than summing as branches
+    S, I, R, F = ss.states('S I R F')
+    d = ss.Disease(S >> I @ 0.3*I, a=ss.Transition(I, [F], p=[1.0], rate=0.1), b=ss.Transition(I, [R], p=[1.0], rate=0.05), name='d')
+    assert d.a.p is None and len(ss.Sim(d, n_agents=100, verbose=0).init().diseases.d.graph.exits.I.hazards) == 2
     return
 
 
@@ -1307,6 +1348,7 @@ if __name__ == '__main__':
     dexpr = test_dwell_expressions()
     sched = test_schedule()
     split = test_split_timing()
+    infst = test_infection_step()
     casc  = test_cascade()
     cascb = test_cascade_binomial()
     state = test_state_as_result()

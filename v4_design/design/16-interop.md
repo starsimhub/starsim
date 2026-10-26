@@ -104,7 +104,7 @@ An export does not fail because something cannot be carried; it writes what it c
 
 Petri nets and the other frameworks' formats are not exported (`v4_design/admin/deferred.md`, "Won't do"). SBML and odin are written from the compartmental form of the model (what `sir.equations()` prints), with the numbers in the sim's unit (SBML's `timeUnits`): a dwell time that is not exponential is written as its Erlang stages, and a stratification as one group, both listed. Both read back with `ss.interop.load()`. `ss.interop.export(sim, format)` returns the text without writing a file.
 
-The diagram is the text of a Mermaid flowchart, from `sir.diagram()`; `format='mermaid'` writes the same diagram for every declared disease in the sim, in one chart. There is no drawn (Matplotlib) diagram: Mermaid is drawn by GitHub, Quarto, and most Markdown viewers.
+The diagram is a Mermaid flowchart, from `sir.diagram()`, with each arrow labelled with its transition's name and value (`recovery: 10 days`) and, for a transition with `p=`, the share that takes it; `format='mermaid'` writes the same diagram for every declared disease in the sim, in one chart. It is a string of the flowchart's text (`print()` gives it), which a notebook draws: JupyterLab and Quarto draw it from a Markdown block. There is no drawn (Matplotlib) diagram: Mermaid is drawn by GitHub, Quarto, JupyterLab, and most Markdown viewers.
 
 ## Comparing two models
 

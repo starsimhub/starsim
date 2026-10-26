@@ -79,7 +79,7 @@ Here the summary of 50 runs was already close to this. In general, the median se
 
 ## Uncertainty in parameter values
 
-Chance is one source of uncertainty; not knowing the parameters is another. A parameter declared with `ss.par()` and bounds (or a prior) can be drawn afresh for each run with `priors=True`: each run takes a value drawn uniformly between the bounds (or from the prior), so the spread of the runs includes both. Here β is between 1.5 and 2.3 per day (R0 between 12 and 18):
+Chance is one source of uncertainty; not knowing the parameters is another. A parameter declared with `ss.par()` and bounds (or a prior) can be drawn afresh for each run with `priors=True`: each run takes a value drawn uniformly between the bounds (or from the prior), and a seed of its own, so the spread of the runs includes both. Here β is between 1.5 and 2.3 per day (R0 between 12 and 18):
 
 ```{python}
 S, I, R = ss.states('S I R')
@@ -140,12 +140,7 @@ c = ss.Sim(measles, total_pop=20_000, stop=ss.days(180), solver='binomial', rand
 print('Infections with seeds 1, 1, and 2:', a.results.measles.infection.sum(), b.results.measles.infection.sum(), c.results.measles.infection.sum())
 ```
 
-`n_runs=k` uses the seeds `rand_seed`, `rand_seed + 1`, ..., `rand_seed + k − 1`, so the first of many runs is the same as a single run, and any run can be made again on its own: run *i* (counting from 0) of a sim with seed 1 is the sim with `rand_seed=1 + i`. To run particular seeds, give them as a sweep: `ss.parallel(sim, pars=dict(rand_seed=[1, 5, 9]))`. An ODE has no random numbers, so its seed changes nothing.
-
-::: {.callout-warning}
-## [PROPOSAL]
-`msim.runs`, the table of runs, should include the seed of each run, so that a run that stands out can be made again without working out its seed by hand (P11). Today it lists each run's scenario and any parameters swept, but not its seed.
-:::
+`n_runs=k` uses the seeds `rand_seed`, `rand_seed + 1`, ..., `rand_seed + k − 1`, so the first of many runs is the same as a single run, and any run can be made again on its own: run *i* (counting from 0) of a sim with seed 1 is the sim with `rand_seed=1 + i`. To run particular seeds, give them as a sweep: `ss.parallel(sim, pars=dict(rand_seed=[1, 5, 9]))`, which gives three runs of the sim's scenario (not three scenarios). `msim.runs`, the table of runs, gives the seed of each run (`rand_seed`), so a run that stands out can be made again on its own. An ODE has no random numbers, so its seed changes nothing.
 
 ## Pitfalls
 

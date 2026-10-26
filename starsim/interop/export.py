@@ -218,7 +218,7 @@ def to_mermaid(sim):
         n_states += len(g.states)
         n_transitions += len(g.transitions)
     summary = f'exported to Mermaid: {n_states} states, {n_transitions} transitions'
-    return '\n'.join(lines) + '\n', summary, []
+    return ss.presentation.Diagram('\n'.join(lines) + '\n'), summary, []
 
 
 #%% SBML
