@@ -484,7 +484,7 @@ class CompartmentalDelivery:
         if len(sim.declared) != 1 or self.eng.cross is not None:
             return False
         product = d.product
-        moves = (product is None and d.move_states is None) or (product is not None and product.holds and getattr(product, 'take', None) is None) # Not a move between states, or an all-or-nothing vaccine, whose doses are not all held
+        moves = (product is None and (d.move_states is None or self.plain_move())) or (product is not None and product.holds and getattr(product, 'take', None) is None) # A move between states only within each group, and not an all-or-nothing vaccine, whose doses are not all held
         scheduled = d.routine or (d.in_rounds and d.on is None)
         watched = d.name in [ss.conditions.modname(leaf.args[0]) for mod in sim.interventions() if isinstance(mod, ss.Delivery) for leaf in ss.conditions.event_leaves(mod.on)] or d._needs # Its events are read, which the kernels do not keep
         static = ss.conditions.is_static(d.eligible, sim) and (sc.isnumber(d.coverage) or d.coverage is None or isinstance(d.coverage, ss.by))
@@ -492,10 +492,19 @@ class CompartmentalDelivery:
         limited = d.capacity is not None or d.queue is not None or bool(getattr(product, 'doses', None)) # Served in an order, or given in doses, which the kernels do not take
         return moves and scheduled and static and not limited and d.when is None and not watched and not past
 
+    def plain_move(self):
+        """ Whether a move between states (`move=S >> I`) keeps everyone in their group, so the kernels can take it: no strain to arrive with, no record of who was offered it, and states of the same dimensions """
+        d = self.delivery
+        states = d.dis.graph.states
+        dst = states[d.move_states[1]]
+        srcs = [states[name] for name in d.move_states[0]]
+        return d.strain_move is None and not d.remembers and dst.people and all(self.eng.dim_map(src.name, dst.name) is None for src in srcs if src.people)
+
     def shifts(self):
         """
         The delivery as the kernels take it (see `ss.kernels.Shifts`): the steps it happens on; the share of the people in each state and group
-        who are eligible, and of those, who are reached; and the group that each group's people move to if reached, and if not
+        who are eligible, and of those, who are reached; the group that each group's people move to if reached, and if not; and for a move
+        between states, the share of those reached who land in each compartment (by compartment and group; otherwise all zero)
         """
         d = self.delivery
         sim = self.sim
@@ -511,7 +520,11 @@ class CompartmentalDelivery:
         offered = {sim.groups.dim_index(d.offered):1} if d.remembers else {}
         to = eng.targets(changes | offered)
         rest = eng.targets(offered) if offered else np.arange(eng.n_groups)
-        return due, np.broadcast_to(sel, selector.shape), cov, to, rest
+        land = np.zeros((len(eng.comps), eng.n_groups))
+        if d.move_states is not None: # Into the compartments the state is entered by (see ss.solvers.Compartmental.arrive())
+            for ind,w in eng.entry[d.move_states[1]][0]:
+                land[ind] += w
+        return due, np.broadcast_to(sel, selector.shape), cov, to, rest, land
 
     def store_shifts(self, tally, start=0, done=True):
         """

@@ -1162,6 +1162,22 @@ def test_by_place_times_local_count():
         assert inf[1] > 2*inf[0], f'[{solver}] Expected about four times the infections where f is four times as high: {inf}'
     return out
 
+def test_by_series():
+    """ A value by group that varies in time, for every step at once (as a whole run tabulates it): the same as a step at a time """
+    S, I = ss.states('S I')
+    season = lambda p: ss.timeseries({ss.years(k/4): ss.perday(0.2 + 0.05*k + p) for k in range(5)}, mode='linear', period=ss.years(1))
+    beta = ss.by(patch=[season(0), season(0.1), ss.perday(0.3)], age=[1.0, ss.seasonal(mean=1.5, amplitude=0.2, peak=0.3)])
+    sis = ss.Disease(S >> I @ beta*I.frac, I >> S @ ss.days(10), init=dict(I=0.01), name='sis')
+    sis.stratify(patch=['a', 'b', 'c'], age=[0, 15])
+    sim = ss.Sim(sis, total_pop=1000, unit='day', start='2000-01-01', stop='2001-01-01', verbose=0).init()
+    eng = sim.diseases.sis.engine
+    years = np.linspace(2000, 2001.5, 17)
+    each = np.array([beta.per_group(sim, eng.convert, year=year) for year in years])
+    assert np.array_equal(beta.series(years, sim, eng.convert), each), 'All at once should give the values of each year'
+    table = ss.by(dict(age=[0, 15], value=[season(0), 2.0])) # A table: taken a year at a time
+    assert np.array_equal(table.series(years, sim, eng.convert), np.array([table.per_group(sim, eng.convert, year=year) for year in years]))
+    return each
+
 if __name__ == '__main__':
     mixing  = test_mixing()
     states  = test_states()
@@ -1182,3 +1198,4 @@ if __name__ == '__main__':
     rows    = test_rows()
     cdims   = test_contacts_dims()
     place_counts = test_by_place_times_local_count()
+    by_series = test_by_series()

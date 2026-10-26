@@ -126,13 +126,14 @@ register_fields = [
 
 Register = collections.namedtuple('Register', register_fields)
 
-# The deliveries of a whole run (see ss.solvers.CompartmentalDelivery.shifts()), as the kernels apply them: each moves some of the people in each compartment and group to another group
+# The deliveries of a whole run (see ss.solvers.CompartmentalDelivery.shifts()), as the kernels apply them: each moves some of the people in each compartment and group to another group, or (a move between states) into the compartments of another state
 shift_fields = [
     'due',  # Whether each delivery happens at each time point (deliveries by time points)
     'sel',  # The share of the people in each compartment and group who are eligible (deliveries by compartments by groups)
     'cov',  # The share of those who are reached
     'to',   # The group that each group's people go to if they are reached (deliveries by groups)
     'rest', # The group they go to if they are eligible but not reached (their own, unless the delivery records who has been offered it)
+    'land', # For a move between states (move=S >> I), the share of the people reached who land in each compartment, by the group they go to; all zero for a delivery that leaves people in their state (deliveries by compartments by groups)
 ]
 
 Shifts = collections.namedtuple('Shifts', shift_fields)
@@ -2105,9 +2106,12 @@ def apply_shifts(rng, y, sh, ti, whole, tally):
         tally (array): the number reached and the number eligible, for each delivery and group (deliveries by 2 by groups); added to
     """
     nc, ng = y.shape
+    arrived = np.zeros(ng) # For a move between states: the people reached, by the group they go to, who land in the state once all have left (as ss.solvers.Compartmental.move_states() moves them)
     for k in range(len(sh.to)):
         if not sh.due[k, ti]:
             continue
+        moves = sh.land[k].sum() > 0
+        arrived[:] = 0
         for c in range(nc):
             before = y[c].copy() # Each group's people as they were, so nobody moved into a group is moved on again (a counter up a level)
             for g in range(ng):
@@ -2124,12 +2128,44 @@ def apply_shifts(rng, y, sh, ti, whole, tally):
                 else:
                     a, b = n*e*p, n*e*(1 - p)
                 to, rest = sh.to[k, g], sh.rest[k, g]
-                if a > 0 and to != g:
+                if moves and a > 0:
+                    y[c, g] -= a
+                    arrived[to] += a
+                elif a > 0 and to != g:
                     y[c, g] -= a
                     y[c, to] += a
                 if b > 0 and rest != g:
                     y[c, g] -= b
                     y[c, rest] += b
+        if moves:
+            enter_state(rng, y, sh.land[k], arrived, whole)
+    return
+
+
+@jit
+def enter_state(rng, y, w, arrived, whole):
+    """ Put the people who have moved into a state (by group) into its compartments, by the share in each (`w`, compartments by groups): drawn one compartment after another where they are whole people, as `ss.solvers.Compartmental.move_states()` splits them """
+    nc, ng = y.shape
+    for g in range(ng):
+        left, rest = arrived[g], 1.0
+        if left <= 0:
+            continue
+        last = -1
+        for c in range(nc):
+            if w[c, g] > 0:
+                last = c
+        for c in range(nc):
+            if w[c, g] <= 0:
+                continue
+            if not whole:
+                y[c, g] += arrived[g]*w[c, g]
+            elif c == last:
+                y[c, g] += left
+            else:
+                n = binomial(rng, left, min(max(w[c, g]/rest, 0.0), 1.0))
+                y[c, g] += n
+                left -= n
+                rest -= w[c, g]
     return
 
 

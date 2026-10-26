@@ -1091,14 +1091,8 @@ class by:
             return ds, np.vectorize(lambda v: float(convert(wrap(v))))(self.array) if self.array.size else self.array.copy()
         if self.table is None:
             out = np.ones([strat.n for strat in strats])
-            for i,(strat,(dim,vals)) in enumerate(zip(strats, self.given.items())):
-                if isinstance(vals, dict): # By label, in the order of the levels
-                    vals = {str(k):v for k,v in vals.items()}
-                    vals = [vals[str(label)] for label in strat.labels]
-                if isinstance(vals, (list, tuple)): # The usual case, which NumPy need not inspect (slowly, for typed values)
-                    single, items = False, vals
-                else:
-                    single, items = np.ndim(vals) == 0, sc.toarray(vals) # One value for every level, e.g. ss.by(subpop=2.2)
+            for i,(strat,vals) in enumerate(zip(strats, self.given.values())):
+                single, items = self.level_items(strat, vals)
                 vals = np.array([convert(v) for v in items], dtype=float)
                 if single:
                     vals = np.full(strat.n, vals[0])
@@ -1120,6 +1114,41 @@ class by:
             return np.ravel_multi_index(np.array(out, dtype=int).reshape(len(strats), -1), shape)
         flat = self.cached('grid', index, sim)
         return ds, np.bincount(flat, weights=self.row_values(convert), minlength=int(np.prod(shape))).reshape(shape)
+
+    @staticmethod
+    def level_items(strat, vals):
+        """ The values given for a dimension, in the order of its levels: whether it is one value for every level, and the values """
+        if isinstance(vals, dict): # By label, in the order of the levels
+            vals = {str(k):v for k,v in vals.items()}
+            vals = [vals[str(label)] for label in strat.labels]
+        if isinstance(vals, (list, tuple)): # The usual case, which NumPy need not inspect (slowly, for typed values)
+            return False, vals
+        return np.ndim(vals) == 0, sc.toarray(vals) # One value for every level, e.g. ss.by(subpop=2.2)
+
+    def series(self, years, sim, convert=None):
+        """
+        The value for each group of the sim at each of an array of years (years by groups), as `per_group()` gives them one year at a time, with
+        each value that varies in time worked out for every year at once (a value for each level of some dimensions: otherwise a year at a time)
+        """
+        years = np.asarray(years, dtype=float)
+        ds, strats = self.check(sim)
+        if self.table is not None or self.array is not None or len(strats) < len(self.dims):
+            return np.array([self.per_group(sim, convert, year=year) for year in years], dtype=float).reshape(len(years), -1)
+        one = self.converter(sim, convert)
+        def series(v):
+            v = v.raw if isinstance(v, ss.par) else v
+            return v.series(years, sim, convert) if isinstance(v, TimeValue) else np.full(len(years), float(one(v)))
+        out = np.ones([strat.n for strat in strats] + [len(years)])
+        for i,(strat,vals) in enumerate(zip(strats, self.given.values())):
+            single, items = self.level_items(strat, vals)
+            vals = np.array([series(v) for v in items], dtype=float).reshape(len(items), len(years))
+            if single:
+                vals = np.repeat(vals[:1], strat.n, axis=0)
+            shape = [1]*len(strats) + [len(years)]
+            shape[i] = strat.n
+            out = out*vals.reshape(shape)
+        grid, index = sim.groups.grid_index(ds, out)
+        return grid[index].T
 
     def binned_grid(self, sim, strats, convert):
         """ For a table with a column of bin edges (e.g. age=[0, 15, 50]), the model's or coarser: the value for each group, that of the bin it is in. Bins that split a group raise, since a group has no one value (see `split_groups()`) """

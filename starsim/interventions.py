@@ -1215,7 +1215,7 @@ class Delivery(ss.products.EventSource, Intervention):
     def tabulated(self):
         """
         Whether the kernels can take this delivery in a whole run (see `ss.kernels.apply_shifts()`): in a compartmental run of one disease, a
-        product that people hold or a transfer, given on a schedule (routine or in rounds) to people chosen by states and stratifications only,
+        product that people hold, a transfer, or a move between states within each group (e.g. a seed, `move=S >> I`), given on a schedule (routine or in rounds) to people chosen by states and stratifications only,
         with a coverage that is a number or `ss.by`, and no capacity, `when=`, or follow-ups (see `ss.solvers.CompartmentalDelivery.shifts()`)
         """
         return self.compartments is not None and self.compartments.tabulated()

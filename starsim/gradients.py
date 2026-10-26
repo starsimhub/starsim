@@ -435,12 +435,13 @@ class Run:
 
     @staticmethod
     def deliver(y, X, ti):
-        """ The deliveries at time point ti, at the start of the step from it, in order (see `ss.kernels.apply_shifts()`): each moves some of the people in each group to another """
+        """ The deliveries at time point ti, at the start of the step from it, in order (see `ss.kernels.apply_shifts()`): each moves some of the people in each group to another, or (a move between states) into another state """
         for k in range(X['sh_due'].shape[0]):
             reached = y*X['sh_sel'][k]*X['sh_due'][k, ti]
             a = reached*X['sh_cov'][k]
             b = reached - a
-            y = y - reached + a @ X['sh_to'][k] + b @ X['sh_rest'][k]
+            moves = X['sh_moves'][k] # 1 for a move between states, whose people land in the state's compartments (sh_land)
+            y = y - reached + (1 - moves)*(a @ X['sh_to'][k]) + X['sh_land'][k]*(a.sum(axis=0) @ X['sh_to'][k]) + b @ X['sh_rest'][k]
         return y
 
     def prepare(self, X):
@@ -560,7 +561,7 @@ def capture(engine, compact=True):
     X['y'] = np.array(y, dtype=float)
     sh = engine.shifts # The deliveries, with where each group's people go as matrices
     onehot = lambda to: np.eye(engine.n_groups)[to] if len(to) else np.zeros((0, engine.n_groups, engine.n_groups))
-    X.update(sh_due=sh.due.astype(float), sh_sel=sh.sel, sh_cov=sh.cov, sh_to=onehot(sh.to), sh_rest=onehot(sh.rest))
+    X.update(sh_due=sh.due.astype(float), sh_sel=sh.sel, sh_cov=sh.cov, sh_to=onehot(sh.to), sh_rest=onehot(sh.rest), sh_land=sh.land, sh_moves=(sh.land.sum(axis=(1, 2)) > 0).astype(float))
     return program, (dt, npts, solver, n_sub, engine.per_step()), X
 
 

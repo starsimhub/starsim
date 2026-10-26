@@ -1964,14 +1964,17 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
                 vals = []
                 if per_step == 3:
                     years = times[np.arange(len(times)) // 3 * 3] if self.held(raw) else times # A held value is the one at the start of the step
-                    if isinstance(raw, ss.by):
-                        vals = [raw.per_group(sim, self.convert, year=year) for year in years]
-                    else:
-                        vals = raw.series(years, sim, self.convert)
+                    vals = raw.series(years, sim, self.convert) # Every year at once (for an ss.by, years by groups)
                 else:
+                    whens = []
                     for ti in range(npts): # The values for the step from ti, which is step ti+1 (see ss.Loop)
                         sim.t.ti = mod.t.ti = min(ti + 1, npts - 1)
-                        vals.append(raw.per_group(sim, self.convert) if isinstance(raw, ss.by) else self.convert(raw(sim))) # Not by_group(), which holds a value for the step
+                        if isinstance(raw, ss.by): # Not by_group(), which holds a value for the step
+                            whens.append(sim.t.now('year'))
+                        else:
+                            vals.append(self.convert(raw(sim)))
+                    if isinstance(raw, ss.by):
+                        vals = raw.series(whens, sim, self.convert)
                 kept = self.series[id(par)] = (raw, np.array(vals, dtype=float).reshape(len(vals), -1), per_step, inner)
             self.cache[id(par)] = kept[1] # Steps by groups, where a value is otherwise one number or a number for each group
         sim.t.ti = mod.t.ti = 0
@@ -2065,12 +2068,13 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
         due = np.zeros((K, npts), dtype=np.bool_)
         sel, cov = np.zeros((K, nc, ng)), np.zeros((K, nc, ng))
         to, rest = np.zeros((K, ng), dtype=np.int64), np.zeros((K, ng), dtype=np.int64)
+        land = np.zeros((K, nc, ng))
         for k,mod in enumerate(self.deliveries):
-            due[k], sel_k, cov_k, to[k], rest[k] = mod.compartments.shifts()
+            due[k], sel_k, cov_k, to[k], rest[k], land[k] = mod.compartments.shifts()
             for s,name in enumerate(self.selector.states):
                 for comp in self.state_comps[name]:
                     sel[k, comp], cov[k, comp] = sel_k[s], cov_k[s]
-        self.shifts = ss.kernels.Shifts(due=due, sel=sel, cov=cov, to=to, rest=rest)
+        self.shifts = ss.kernels.Shifts(due=due, sel=sel, cov=cov, to=to, rest=rest, land=land)
         return self.shifts
 
     def run_all(self, use_jax=False):
