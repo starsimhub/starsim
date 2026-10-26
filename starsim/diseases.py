@@ -1,6 +1,7 @@
 """
 Base classes for diseases
 """
+import functools
 import inspect
 import numpy as np
 import pandas as pd
@@ -11,6 +12,24 @@ import matplotlib.pyplot as plt
 ss_int = ss.dtypes.int
 _ = None # For function signatures
 
+
+
+def built_after(init):
+    """ Wrap the __init__() of a subclass of ss.Disease, so that what it declares (`define_states()`, `define_transitions()`) is built once the outermost __init__() has finished """
+    @functools.wraps(init)
+    def __init__(self, *args, **kwargs):
+        depth = self.__dict__.get('_init_depth', 0) # How many __init__()s deep: a subclass's calls its parent's
+        self.__dict__['_init_depth'] = depth + 1
+        try:
+            init(self, *args, **kwargs)
+        finally:
+            self.__dict__['_init_depth'] = depth
+        if depth == 0:
+            del self.__dict__['_init_depth']
+            if '_declared' in self.__dict__:
+                self.build_graph()
+        return
+    return __init__
 
 
 class Disease(ss.Module):
@@ -111,6 +130,9 @@ class Disease(ss.Module):
                    f'to change its default, give the value in __init__(), e.g. super().__init__(**({{"{name}": {vars(cls)[name]!r}}} | kwargs))')
             errormsg = f'{cls.__name__} defines {sc.strjoin(rebound)}, a parameter of {cls.__mro__[1].__name__}, as {"a method" if callable(vars(cls)[name]) else "a value"}, which its transitions never read; {how}'
             raise ss.CapabilityError(errormsg)
+        init = vars(cls).get('__init__')
+        if init is not None: # Its states and transitions, declared in __init__() (see define_transitions()), are built once the outermost __init__() has finished
+            cls.__init__ = built_after(init)
         infect = vars(cls).get('infect')
         if infect is not None and infection and len(inspect.signature(infect).parameters) == 1: # Starsim 3's transmission pass, infect(self), which is transmit() now: it would never be called
             errormsg = f'{cls.__name__} defines infect(self), the transmission pass, which is called transmit() now (infect(uids) infects people from code); rename it to transmit(), and infect_route() to transmit_route()'
@@ -133,16 +155,16 @@ class Disease(ss.Module):
         if given or later:
             names = (_names or ss.utils.caller_names(1)) if given else {} # The names of the variables of the code that made it; or, made by the sim from the transitions it was given, of the code that made the sim
             self._declared = sc.objdict(args=list(args), members=members, pars=pars, kwargs=kwargs, names=names, strains=strains, stratify=stratify)
-            if given:
+            if given: # Built now, so a subclass's __init__() can use it (e.g. self.pars) after super().__init__()
                 self.build_graph()
-            else: # Built when first needed, once the subclass's __init__() has declared the rest
+            else: # Built once the subclass's __init__() has declared the rest
                 self.set_metadata(**{key:kwargs.pop(key) for key in ['name', 'label'] if key in kwargs})
         else: # Written as code: its own define_pars() and define_states() follow, as in Starsim 3; or declared by define_states() and define_transitions()
             self.update_pars(pars, **kwargs)
         return
 
     @property
-    def graph(self):
+    def graph(self): # Built when the disease is made (see built_after()); here too, in case something reads it while it is being made
         """ Its declared states and transitions (`ss.transitions.Graph`), built from what was declared when first needed; None for a disease written as code """
         if '_declared' in self.__dict__:
             self.build_graph()

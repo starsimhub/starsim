@@ -3594,7 +3594,8 @@ class Agents(Engine):
         if not any(np.any(h > 0) for h in hazards.values()):
             return
         trans = times(mod.rel_trans.raw, self.mult_raw('rel_trans'), by_strain)
-        groups = sim.groups.group_raw() if any(h.ndim > 1 for h in hazards.values()) else None
+        n_slots = len(mod.rel_sus.raw)
+        groups = sim.groups.group_raw() if any(h.ndim > 1 and h.shape[1] != n_slots for h in hazards.values()) else None
         mult = lambda inds, trg: ss.connectors.route_mult(self, tr.name, route, inds, trg)
 
         def act_hazard(src, trg):
@@ -3602,7 +3603,12 @@ class Agents(Engine):
             dirs = route.edge_directions(src, trg)
             act = np.zeros(len(src))
             for state,h in hazards.items():
-                hs = h[dirs] if h.ndim == 1 else h[dirs, groups[trg]] # A value for each group is for the group of the people they would infect
+                if h.ndim == 1:
+                    hs = h[dirs]
+                elif h.shape[1] == n_slots: # A value for each agent (e.g. by a property of people, ss.by(sex=...)) is that of the person they would infect
+                    hs = h[dirs, trg]
+                else: # A value for each group is for the group of the people they would infect
+                    hs = h[dirs, groups[trg]]
                 act += mod[state.name].raw[src]*state.rel_trans*hs
             return act
 
