@@ -20,12 +20,8 @@ def convert(val, unit):
     if isinstance(val, ss.TimePar):
         if isinstance(val, ss.prob): # A probability per period becomes the hazard that gives it
             period = 1.0 if val.unit is None else val.unit.to(unit).value # With no unit, the probability is per unit of the sim's time
-            if np.any(np.asarray(val.value) >= 1): # TL12: an infinite hazard, which no solver can step (agents moved nobody, and the ODE gave NaN)
-                errormsg = f'A probability of 1 per period ({val!r}) is an infinite rate, which no solver can step. '
-                errormsg += 'A number times a probability scales its rate (so ss.probperyear(1)*0.8 is still a certainty); for an 80% chance a year, write ss.probperyear(0.8). '
-                errormsg += 'For everyone to move at once, give the transition no rate (an immediate transition).'
-                raise ValueError(errormsg)
-            return -np.log1p(-val.value)/period
+            with np.errstate(divide='ignore'): # A probability of 1 is an infinite hazard: certain within the step (FP1)
+                return -np.log1p(-np.asarray(val.value, dtype=float))[()]/period
         return val.to(unit).value
     return val
 
@@ -676,6 +672,9 @@ class Engine:
         raw = p.raw
         if route:
             out = self.route_value(p, raw)
+        elif isinstance(raw, ss.parameters.by_func): # A value for each level of a dimension, from a function of the sim (MS2)
+            out = self.by_levels(raw)
+            out = self.by_group(out) if isinstance(out, ss.by) else out
         elif isinstance(raw, ss.Dist): # Not a dwell time (those are handled separately), so use the mean
             out = ss.transitions.dwell_stats(raw, self.convert)[0]
         elif callable(raw):
@@ -867,6 +866,13 @@ class Engine:
                 out = out*self.sim.groups.group_vals(d, vals)
         return out
 
+    def by_levels(self, bf):
+        """ The values of `ss.by(dim=fn)` (`ss.parameters.by_func`) this step, as a number or an `ss.by`, once a step """
+        key = ('by_func', id(bf))
+        if key not in self.cache:
+            self.cache[key] = bf.levels(self.sim, self.convert)
+        return self.cache[key]
+
     def by_group(self, by):
         """ Expand a value for each level of one or more dimensions to a value for each group, once a step """
         key = ('by', id(by))
@@ -954,7 +960,7 @@ class Engine:
                             if ends and d != self.strain and not any(self.applies[s.name][d] for s in ends):
                                 dim = sim.groups.strats[d].name
                                 raise ss.errors.MissingDimension(f'"{name}" uses a value by level of "{dim}" ({leaf.raw}), but {sc.strjoin(s.name for s in ends)} {"has" if len(ends) == 1 else "have"} no level of "{dim}", so there is no level to take it from.\n'
-                                                          f'     Stratify {sc.strjoin(s.name for s in ends)} by "{dim}" too, or give the value without ss.by().')
+                                                          f'     Stratify {sc.strjoin(s.name for s in ends)} by "{dim}" too, or give the value without ss.by(); for a count with each person weighted by their level (e.g. how much each infectious person is bitten), weight the states inside the count: (ss.by({dim}=...)*I).n.')
         self.init_strain_weights()
         self.note_function_reads()
         return
@@ -1106,11 +1112,28 @@ class Engine:
     def count_expr(self, expr):
         """ The value of a count in a rate (`I.n`, `I.total`, `I.frac`), with another disease's states counted by that disease """
         own, others = self.split_states(expr.states)
+        if expr.weighted: # Each person counted by a value of theirs (MS3, TY6)
+            out = self.count_weighted(own, expr) if own else 0.0
+            for name,states in others.items():
+                out = out + self.sim.get_declared(name).engine.count_weighted(states, expr)
+            return out
         method = dict(n='local_count', total='total_count', frac='local_frac')[expr.kind]
         out = getattr(self, method)(own) if own else 0.0
         for name,states in others.items():
             out = out + getattr(self.sim.get_declared(name).engine, method)(states)
         return out
+
+    def count_weighted(self, states, expr):
+        """ A weighted count (`(ss.by(biting=w)*I).n`, `A.n_trans`: see `ss.expressions.Count`), in the same place as whoever it is evaluated for; by the engines """
+        raise NotImplementedError
+
+    def product_of(self, expr):
+        """ The sim's copy of the product of a coverage (`itn.coverage`, see `ss.expressions.Coverage`) """
+        product = next((p for p in self.sim.products() if p.name == expr.product.name), None)
+        if product is None or not product.holds:
+            errormsg = f'{expr} is the coverage of "{expr.product.name}", which is not a product that people hold delivered in the sim; deliver it, e.g. ss.vaccinate({expr.product.name}, ...)'
+            raise ValueError(errormsg)
+        return product
 
     #%% Dwell times
 
@@ -1141,7 +1164,8 @@ class Engine:
                 if np.isnan(mean): # A parameter is a function of the agents
                     if self.sim.solver != 'abm':
                         raise ss.CapabilityError(f'"{name}" cannot run with solver="{self.sim.solver}": its dwell time {raw} has a parameter that is a function of the agents. Run with solver="abm".')
-                    if getattr(raw, 'unit', None) is None and not any(isinstance(v, ss.TimePar) for v in raw.pars.values()): # What the function returns has no unit to say otherwise
+                    typed_factor = scaled is not None and any(isinstance(getattr(leaf, 'raw', None), ss.TimePar) for leaf in trans.as_expr(scaled[1]).leaves) # e.g. dur=d*ss.days(1), whose numbers are days (TY5)
+                    if getattr(raw, 'unit', None) is None and not typed_factor and not any(isinstance(v, ss.TimePar) for v in raw.pars.values()): # What the function returns has no unit to say otherwise
                         funcs = sc.strjoin(getattr(v, '__name__', 'a function') if callable(v) else str(v) for v in raw.pars.values() if callable(v) or isinstance(v, (ss.conditions.Cond, ss.transitions.Expr)))
                         ss.note(f'the dwell time of "{name}" comes from {funcs}, whose numbers are read in {self.sim.unit_base}s, the sim\'s unit; if they are in another unit, give it on the distribution, e.g. unit="month"', sim=self.sim)
                 elif dw.family == 'expon':
@@ -1239,6 +1263,8 @@ class Engine:
             if dw.dist is None and (callable(dw.par.raw) or isinstance(dw.par.raw, (ss.by, ss.expressions.Expr))): # Not known until the sim runs, or not one number
                 continue
             mean = dw.mean if dw.dist is not None else self.dwell_mean(name)
+            if sim.solver == 'abm' and dw.dist is not None and dw.family != 'exponential' and mean is not None and getattr(dw, 'std', None) is not None and np.all(np.asarray(mean, dtype=float) - 2*np.asarray(dw.std, dtype=float) >= dt): # As agents, a dwell drawn from a distribution that seldom reaches below a step (e.g. a pregnancy of 32 to 42 weeks, at a monthly step) loses nobody to whole steps (FP7)
+                continue
             if mean is not None and np.ndim(mean) == 0 and mean > 0 and dt/mean > 0.1: # The chain-binomial solver moves people through the stages exactly (see ss.kernels.draw_chain()), and agents draw the whole dwell time, so it is the mean that matters
                 x = dt/mean
                 share = min(x, 1) if euler else -np.expm1(-x)
@@ -1299,6 +1325,10 @@ class Engine:
                 continue
             if isinstance(init, ss.transitions.par):
                 init = init.raw
+            elif isinstance(init, ss.transitions.Expr) and ss.expressions.per_person_in(init): # An expression of people's properties and parameters, e.g. 1 - (A - age)/(k*age + A) (TY2)
+                if state.people and not is_n and self.sim.solver == 'abm': # Read for each person, as agents: see Agents.init_post()
+                    continue
+                init = np.asarray(self.eval(init), dtype=float)[()] # For each group
             elif isinstance(init, ss.transitions.Expr): # An expression of parameters, e.g. I0/2
                 init = float(self.eval(init))
             if callable(init) and not isinstance(init, (ss.by, ss.Dist)): # A function of the sim, as for init_prev

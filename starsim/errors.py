@@ -179,7 +179,7 @@ class UnknownDisease(CodedError, KeyError):
     """ An intervention needs to know which disease it is for: `disease=` names one that is not a declared disease in the sim, or is not given and the sim has more than one """
 
 class UnknownParameter(CodedError, KeyError):
-    """ A parameter name the module does not have is set, directly or through `ss.Sim(pars=...)`. Lists the closest names """
+    """ A parameter name the module does not have is set, directly or through `ss.Sim(pars=...)`; or, when the sim is initialized, a parameter was set before it (`pars.x = v`) that the module never defined (a renamed or misspelt one). Lists the closest names """
 
 class ShapeError(CodedError):
     """ A value's length does not match its stratification (four values for three age groups). Names the parameter, the transition, and both lengths """
@@ -238,8 +238,9 @@ class CapabilityError(CodedError):
 class TimeNotKept(CodedError):
     """
     A declared disease run as agents keeps the time each agent entered a state (`ti_X`) only for the states whose times
-    the engine reads (for scheduled exits, clocks, and `after=`/`before=`), unless `ss.options.keep_times = True`. Raised
-    when code reads one of the others, e.g. an analyzer or a script after the run; names the array and says to set the option
+    the engine reads (for scheduled exits, clocks, and `after=`/`before=`), those declared with `ss.State(keep_time=True)`, and
+    all of them if `ss.options.keep_times = True`. Raised when code reads one of the others, e.g. an analyzer or a script after
+    the run; names the array and says how to keep it
     """
 
 class TimeOutsideSim(CodedError):

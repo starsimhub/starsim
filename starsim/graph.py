@@ -15,9 +15,11 @@ __all__ = ['Graph']
 
 
 def inner_pars(val):
-    """ The parameters inside a value: of a value that varies in time (`ss.seasonal(mean=beta)`) or a probability per act (`ss.peract(m2f=b)`), also within a beta for each route """
+    """ The parameters inside a value: of a value that varies in time (`ss.seasonal(mean=beta)`), a probability per act (`ss.peract(m2f=b)`), or a value by level (`ss.by(sex=dict(female=p_f, male=p_m))`), also within a beta for each route """
     if isinstance(val, (TimeValue, ss.peract)):
         return val.pars
+    elif isinstance(val, ss.by):
+        return [q for v in val.items for q in ([v] if isinstance(v, par) else inner_pars(v))]
     elif isinstance(val, dict):
         return [q for v in val.values() for q in inner_pars(v)]
     return []
@@ -121,6 +123,7 @@ class Graph(Presentation):
         self._declared = [] # States that were passed in directly
         self._keywords = dict() # Values given as keywords, e.g. ss.Disease(..., beta=0.3)
         unnamed = sc.autolist()
+        given = {name for name,_ in named if name is not None}
         for name,obj in named:
             if isinstance(obj, FlowSum): # A sum or a share of flows, e.g. recovery + death or 0.5 * infection, is an outcome
                 obj = outcome(obj)
@@ -136,6 +139,8 @@ class Graph(Presentation):
                 continue
             if isinstance(obj, State) and None not in (name, obj.name) and name != obj.name: # A named state under another name, e.g. n_infected = I, is a result: the number in the state
                 self.add(self.exprs, name, ss.expressions.as_stocks(obj))
+                continue
+            if isinstance(obj, par) and name is not None and obj.name not in (None, name) and (any(p is obj for p in self.pars.values()) or obj.name in given): # Another name for a parameter declared under its own name (which a keyword may give a value), e.g. A = saturation_age in a class body: the same parameter, not a second one
                 continue
             if isinstance(obj, (Transition, outcome, par, State)):
                 if name is not None:
@@ -156,7 +161,7 @@ class Graph(Presentation):
                 self.add(self.outcomes, obj.name, obj)
             elif isinstance(obj, par):
                 self._add_par(obj, name=obj.name)
-            elif isinstance(obj, Expr) and any(isinstance(leaf, ss.expressions.attr) for leaf in obj.leaves): # A helper of attributes, e.g. gain = cd4_potential - cd4_preart, used through the objects
+            elif isinstance(obj, Expr) and ss.expressions.per_person_in(obj): # A helper with a value for each person, e.g. gain = cd4_potential - cd4_preart, age = ss.ppl.age/A, or duration = affected.time, used through the objects; not a result (TY4)
                 continue
             elif isinstance(obj, Expr): # A sum or ratio of states is a result
                 name = name or self.names.get(id(obj))
@@ -503,6 +508,7 @@ class Graph(Presentation):
                                           f'     To add a parameter, use it in a transition, e.g. infection = S >> I @ {name} * I with {name} = ss.par({value}).\n'
                                           f'     If another module reads it from this disease, add it after making the disease: {self.module.name}.define_pars({name}={value!r}).' +
                                           (f'\n     Condoms (or other protection used in some acts) are an intervention on the transmission instead, e.g. ss.modify({self.module.name}.infection, efficacy={value!r}, share=0.3, route="sexualnet").' if 'condom' in name else ''))
+            ss.parameters.replaced_dist(name, self.pars[name].value, value)
             self.pars[name].value = value
         return
 
@@ -567,7 +573,7 @@ class Graph(Presentation):
                         q.name = f'{p.name}_{field}'
 
         # Register the explicit ss.par objects used in the transitions, and in the weights and likelihoods of the outcomes
-        used = [(tr.name, expr) for tr in self.transitions.values() for expr in [tr.rate, tr.dur] + sc.tolist(tr.p) + sc.tolist(getattr(tr, 'p_given', None))]
+        used = [(tr.name, expr) for tr in self.transitions.values() for expr in [tr.rate, tr.dur] + sc.tolist(tr.p) + sc.tolist(getattr(tr, 'p_given', None)) + [getattr(tr, 'p_die', None), getattr(tr, 'p_stay', None)]] # Including the shares of ss.null and ss.stay among the destinations
         used += [(oc.name, weight) for oc in self.outcomes.values() for weight in oc.weights]
         used += [(oc.name, val) for oc in self.outcomes.values() for val in oc.likelihood_pars.values() if isinstance(val, par)]
         for oc in self.outcomes.values(): # A parameter written inside a likelihood, e.g. ss.nbinom(n=ss.par(10, bounds=[1, 100])), is named after the outcome and its keyword
@@ -576,8 +582,11 @@ class Graph(Presentation):
                     val.name = f'{oc.name}_{key}'
         used += [(f'init of {state.name}', init) for state in self.states.values() for init in [state.init, state.init_n] if isinstance(init, Expr)] # So an initial count can be fitted
         used += [(name, expr) for name,tf in self.transfers.items() for expr in [tf.rate, tf.dur] + sc.tolist(tf.p)] # And a parameter in the rate of a transfer
-        used += [(name, expr) for name,a in self.attrs.items() for expr in ([e for names,e in a.cases] if a.cases is not None else [a.value]) if isinstance(expr, Expr) and not isinstance(expr, ss.expressions.attr)] # And in an attribute
+        used += [(name, expr) for name,a in self.attrs.items() for expr in ([e for names,e in a.cases] if a.cases is not None else [e for _,e in a.by_event] if a.by_event is not None else [a.value]) if isinstance(expr, Expr) and not isinstance(expr, ss.expressions.attr)] # And in an attribute
+        used += [(name, val) for name,a in self.attrs.items() for _,v in (a.by_event or []) for p in ss.expressions.dists_in(v) for val in p.value.pars.values() if isinstance(val, par)]
         used += [(name, val) for name,a in self.attrs.items() if a.kind in ['drawn', 'trait'] for p in ss.expressions.dists_in(a.value) for val in p.value.pars.values() if isinstance(val, par)] # And a parameter of a distribution an attribute is drawn from, e.g. ss.bernoulli(ss.par(0.6, name='sero'))
+        used += [(name, a.init_value) for name,a in self.attrs.items() if isinstance(a.init_value, Expr)] # And in its value before any event (TY3)
+        used += [(name, val) for name,a in self.attrs.items() if a.init_value is not None for p in ss.expressions.dists_in(a.init_value) for val in p.value.pars.values() if isinstance(val, par)]
         used += [(name, leaf.value) for name,expr in list(used) if expr is not None for leaf in expr.leaves if isinstance(leaf, par) and isinstance(leaf.value, Expr)] # And inside a dwell time given as an expression (of attributes)
         used += [(name, inner) for name,expr in list(used) if expr is not None for leaf in expr.leaves if isinstance(leaf, par) for inner in inner_pars(leaf.value)] # And a parameter inside a value that varies in time, a probability per act, or a beta for each route
         for name,expr in used:
@@ -775,7 +784,9 @@ class Graph(Presentation):
                     errormsg = f'The attribute "{name}" of "{self.module.name}" records "{a.value}", which is not one of its attributes ({sc.strjoin(self.attrs.keys())})'
                     raise ValueError(errormsg)
                 a.value = self.attrs[a.value]
-            if isinstance(a.value, dict):
+            if isinstance(a.value, dict) and all(ss.expressions.is_event(key) for key in a.value): # A value for each event (TY1)
+                a.by_event = [(ss.expressions.events_in(key, self), val if isinstance(val, ss.Dist) else as_expr(val)) for key,val in a.value.items()]
+            elif isinstance(a.value, dict):
                 if a.on is not None:
                     errormsg = f'The attribute "{name}" is a dict by state, which is derived (worked out when it is read), so it takes no on='
                     raise ValueError(errormsg)
@@ -992,6 +1003,7 @@ class Graph(Presentation):
     def spread_pars(self):
         """ The parameters whose value is a distribution across people (e.g. `beta=ss.lognorm_ex(0.3, 0.1)`), other than dwell times, which are stages or are sampled on entry """
         dwells = [tr.dur for tr in self.transitions.values()]
+        dwells += [scaled[0] for tr in self.transitions.values() if tr.dur is not None and isinstance(tr.dur.raw, Expr) and (scaled := ss.transitions.scaled_dist(tr.dur.raw)) is not None] # A distribution times a factor, e.g. dur=d*ss.weeks(1), is drawn on entry too
         return [p for p in self.all_pars() if isinstance(p.raw, ss.Dist) and not any(p is dur for dur in dwells)]
 
 

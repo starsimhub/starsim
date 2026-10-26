@@ -127,7 +127,7 @@ vocabulary = {
     'Distributions': ('Dist normal lognorm_ex lognorm_im expon gamma weibull poisson nbinom binom uniform bernoulli constant choice erlang truncnorm', 'binom erlang truncnorm'),
     'Parameter forms': ('by timeseries seasonal', 'all'),
     'Mixing and space': ('Network RandomNet SexualNet MixingPool MixingPools contacts geo.geography geo.Mobility geo.gravity geo.radiation', 'contacts geo.geography geo.Mobility geo.gravity geo.radiation'),
-    'Interactions and interventions': ('modify change immunity Vaccine Diagnostic Treatment vaccinate screen treat', 'all'),
+    'Interactions and interventions': ('modify change immunity Vaccine Diagnostic Treatment vaccinate screen treat box', 'all'),
     'Running, comparing, saving': ('MultiSim parallel options diff load save compile', 'diff compile'),
     'Types you get back or subclass': ('Result Loop Timeline Rate TimePar', ''),
 }
@@ -147,7 +147,8 @@ show style to_code uids warn jit move
 # The counted methods and attributes, by the class they are on, and which of them the specification adds
 methods = {
     'Disease': ('describe diagram equations transitions states strats count add_callback stratify to_spec copy pars R0', 'describe diagram equations transitions states strats count add_callback stratify to_spec R0'),
-    'State': ('n frac total time progress enter exit', 'all'),
+    'State': ('n n_trans frac total time progress enter exit', 'all'),
+    'Vaccine': ('coverage', 'all'),
     'Transition': ('to incidence uids ever count since', 'all'),
     'arrays.ModifiableArr': ('effective', 'all'),
     'Sim': ('init run plot summarize to_df loop results describe stratify to_spec to_code to_json hash fit sensitivity check_dt what_modifies new gradient to_data', 'describe stratify to_spec to_code hash fit sensitivity check_dt what_modifies new gradient to_data'),

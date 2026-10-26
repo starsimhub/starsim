@@ -1,6 +1,7 @@
 """
 Plotting dates and durations with Matplotlib: Starsim's dates (`ss.date`, `ss.DateArray`) and durations (`ss.dur`) as axis values, with date ticks
 """
+import warnings
 import collections
 import datetime as dt
 import matplotlib
@@ -101,7 +102,9 @@ class FloatYearLocator(matplotlib.ticker.Locator):
 
     def tick_values(self, *args, **kwargs):
         if self._convert_dates:
-            vticks = self._date_locator() # The internal date locator will return the tick positions in matplotlib units
+            with warnings.catch_warnings(): # On a narrow axis (e.g. one of many in sim.plot()), no interval may give few enough ticks, and Matplotlib warns and takes its longest, which is what is wanted
+                warnings.filterwarnings('ignore', message='AutoDateLocator was unable to pick an appropriate interval')
+                vticks = self._date_locator() # The internal date locator will return the tick positions in matplotlib units
             yticks = [ss.date(matplotlib.dates.num2date(v)).years for v in vticks] # Convert them to float years before returning
             return np.array(yticks)
         else:

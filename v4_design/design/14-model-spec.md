@@ -231,6 +231,7 @@ Values by stratum, time series, and seasonal curves:
 {"by": ["patch", "patch2"], "array": [[1.0, 0.1], [0.1, 1.0]]}
 {"timeseries": {"2020-03-15": 0.2, "2020-06-01": 0.6}, "mode": "constant"}
 {"seasonal": {"mean": 0.05, "amplitude": 0.3, "peak": "January"}}
+{"seasonal": {"mean": 1.0, "amplitude": 0.5, "peak": "April", "period": {"type": "dur", "value": 0.5, "unit": "year"}}}
 ```
 
 Arrays are written in full. Named data (`ss.people('Kenya')`, `ss.contacts('Kenya')`, `ss.geo.geography(...)`) is stored as the provider, place, source, and version that were resolved ([04-parameters.md](04-parameters.md#named-data)).

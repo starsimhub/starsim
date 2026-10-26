@@ -572,7 +572,7 @@ class Crossing:
             errormsg = 'The deliveries of diseases tracked jointly are not taken by the kernels'
             raise RuntimeError(errormsg)
         return ss.kernels.Shifts(due=np.zeros((0, npts), dtype=np.bool_), sel=np.zeros((0, self.n_rows, self.n_cols)), cov=np.zeros((0, self.n_rows, self.n_cols)),
-                                 to=np.zeros((0, self.n_cols), dtype=np.int64), rest=np.zeros((0, self.n_cols), dtype=np.int64))
+                                 to=np.zeros((0, self.n_cols), dtype=np.int64), rest=np.zeros((0, self.n_cols), dtype=np.int64), land=np.zeros((0, self.n_rows, self.n_cols)))
 
     def numbers(self, Xs, xp=np, reps=None, keys=None):
         """
@@ -623,7 +623,7 @@ class Crossing:
                 out[key] = y.reshape(self.n_rows, self.n_cols)
             elif key.startswith('sh_'): # No deliveries: see no_shifts()
                 R = self.n_cols
-                out[key] = xp.zeros(dict(sh_due=(0, Xs[0]['sh_due'].shape[1]), sh_sel=(0, self.n_rows, R), sh_cov=(0, self.n_rows, R), sh_to=(0, R, R), sh_rest=(0, R, R))[key])
+                out[key] = xp.zeros(dict(sh_due=(0, Xs[0]['sh_due'].shape[1]), sh_sel=(0, self.n_rows, R), sh_cov=(0, self.n_rows, R), sh_to=(0, R, R), sh_rest=(0, R, R), sh_land=(0, self.n_rows, R), sh_moves=(0,))[key])
         return out
 
     def split(self, k, y, stocks, flows, xp=np):

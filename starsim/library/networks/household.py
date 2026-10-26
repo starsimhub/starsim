@@ -137,7 +137,7 @@ class HouseholdNet(ss.Network):
         # distorting the input household size distribution. (Pregnancy is a demographics module,
         # so it is initialized before networks and its states are populated by this point.)
         if self.dynamic:
-            preg = ppl.pregnancy
+            preg = self.sim.get_module(ss.Pregnancy)
             preg_uids = preg.P.uids
             self.ti_move_out_check[preg_uids] = preg.ti_P[preg_uids]
         return
@@ -307,7 +307,8 @@ class HouseholdNet(ss.Network):
         # repeated move-outs when the pregnancy module runs on a coarser dt than the sim (e.g.
         # ss.Pregnancy(dt=ss.months(3))), which otherwise over-fragments households. Bit-identical
         # to the previous logic when pregnancy dt == sim dt.
-        potential_movers = ss.uids(~self.fhoh & ppl.pregnancy.P & (self.ti_move_out_check < ppl.pregnancy.ti_P))
+        preg = self.sim.get_module(ss.Pregnancy)
+        potential_movers = ss.uids(~self.fhoh & preg.P & (self.ti_move_out_check < preg.ti_P))
         moving_out = self.pars['prob_move_out'].filter(potential_movers)
         if len(moving_out) > 0:
             self.fhoh[moving_out] = True
@@ -325,7 +326,7 @@ class HouseholdNet(ss.Network):
             self.household_ids[moving_out] = new_cids
             self.household_ids[partners] = new_cids
 
-        self.ti_move_out_check[potential_movers] = ppl.pregnancy.ti_P[potential_movers]
+        self.ti_move_out_check[potential_movers] = preg.ti_P[potential_movers]
         return
 
     @staticmethod

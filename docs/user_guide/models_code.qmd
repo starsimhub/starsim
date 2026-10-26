@@ -163,6 +163,10 @@ self.define_states(
 
 Each state becomes an attribute of the module (`self.level`) and is added to the people (`sim.people.antibodies.level`). States grow as agents are born, and a dead agent's values are kept but left out of sums and means. Keep every value that belongs to a person in a state, never in a plain NumPy array of your own, which wouldn't grow with the population. Each `ss.BoolState` also gives a result of the same name, the number of people for whom it is true. A state can also have several columns, e.g. immunity to each of several strains: see [People](populations_people.qmd#states-with-several-columns). To read and write states, see [Array indexing](models_indexing.qmd).
 
+A property of each person that several modules read, rather than a state of one module (e.g. a social determinant of health that two conditions depend on), is added to the people themselves, from `init_pre()`, with `sim.people.add_state(ss.BoolArr('housing', default=ss.bernoulli(0.2)))`. Adding one that is there already returns it, so each module that reads it can add it. A declared rate reads it as `ss.ppl.housing`, or as `ss.ppl.get('housing', 0)` to have a value when no module adds it.
+
+Code reads the same names a declaration does: a condition or an event's memory of a running sim, indexed by UID, gives its values, e.g. `preg.since_birth[uids]` (the time since each woman's last live birth) or `(hiv.I & preg.P)[uids]`, and `.values` gives them for everyone alive. A declared transition's current rate for some agents, with its modifiers, is `dis.death.hazard(uids)`.
+
 ### Aliases
 
 `define_aliases()` gives a name that stands for something else: the name of another state, or a function of the module.
@@ -201,6 +205,10 @@ def init_results(self):
 
 A module written as code that is not a disease runs before the diseases in each step, so what it does (protecting someone, say) applies to the transmission in the same step. [Build and run](../architecture/build_and_run.qmd#the-loop) lists the full order.
 
+### Exits and arrivals within a step
+
+As agents, a module written as code takes each step whole, as Starsim's own solvers do, and two habits keep its results from depending on the length of the step (see [Solvers](running_solvers.qmd#the-length-of-a-step)). Draw competing exits from a state together: if a mosquito can die or become infectious, draw one exit with the total rate and then which one it was (in proportion to the rates), rather than first the deaths and then the progression of the survivors, which counts the second against a smaller group. And let those who arrive in a state during a step face only the rest of the step: a mosquito that emerges or is infected mid-step should have, on average, half a step's chance of leaving it, not a whole one. Both biases are of the order of the rate times the step, so they matter when rates are a sizable fraction of a step; `sim.check_dt()` shows them.
+
 For anything random, give the module a distribution in `__init__()` (e.g. `self.p_isolate = ss.bernoulli(p=0.5)`) and draw from it in `step()` (`self.p_isolate.filter(uids)`), rather than calling NumPy's random numbers. Each distribution then has its own stream of random numbers, so the module's draws don't change when the rest of the model does, and comparisons between scenarios stay free of noise from the random numbers: see [Random numbers](models_random.qmd).
 
 ## When each method is called
@@ -238,7 +246,7 @@ sim.run()
 print(sim.analyzers[0].name)
 ```
 
-A function module has no parameters, states, or results of its own, and is called at every step, so it has to check the time itself if it should act only at some (e.g. `if sim.now >= ss.date('2025-03-01'):`). As soon as it needs any of these, write a class instead. `ss.Intervention.from_func(fn)` (and likewise for the other types) makes the module from a function explicitly. For analyzers, see [Analyzers](running_analyzers.qmd).
+A function module is called at every step, so it has to check the time itself if it should act only at some (e.g. `if sim.now >= ss.date('2025-03-01'):`). Its keyword arguments with defaults are its parameters, passed to it at each call, so one given as `ss.par` with bounds can be fitted and set by name like any other parameter (`def close_schools(sim, start=2025, share=ss.par(0.5, bounds=[0.2, 0.8])):`; see [Calibration](calibration_fitting.qmd#a-value-that-isnt-a-parameter)). It has no states or results of its own; as soon as it needs them, write a class instead. `ss.Intervention.from_func(fn)` (and likewise for the other types) makes the module from a function explicitly. For analyzers, see [Analyzers](running_analyzers.qmd).
 
 ## Pitfalls
 
@@ -247,5 +255,8 @@ A function module has no parameters, states, or results of its own, and is calle
 - **Keeping per-person values outside a state.** A plain array doesn't grow when agents are born; a state does, and appears in `sim.people.to_df()`.
 - **Keeping a reference to another module.** A sim copies the modules it is given when it is built, so reach the rest of the sim through `self.sim` in `step()` (e.g. `self.sim.diseases.cold`), not through an object kept from before.
 - **Comparing `self.ti` across modules with their own timelines.** A module given `start=`, `stop=`, or a `dt=` of its own runs only on its own steps, and its `self.ti` counts those steps, not the sim's. To compare times between modules, use dates or durations (`self.now`), not step indices.
+- **Writing into another module's arrays at your own `ti`.** Write into another module's results and time arrays at its index, not yours: `disease.results.treated[disease.ti]`, and `disease.ti_recovered[uids] = disease.ti`. With a yearly sim and a monthly disease, `self.ti` is the wrong row.
 - **Using NumPy's random numbers.** Draw from Starsim's distributions instead, as above, so that runs can be repeated and scenarios compared without noise from the random numbers.
+- **Reading `rel_sus` without its modifiers.** A disease written as code that is not transmitted (not an `ss.Infection` with a `beta`) and reads its own `rel_sus` or `rel_trans` reads them with `self.modified('rel_sus', uids)`, which applies `ss.modify(dis.rel_sus, ...)` and products, and says so in its class, `reads_modifiers = ('rel_sus',)`; otherwise a modifier of them is refused, since nothing would apply it.
+- **Several causes of death in one step.** If several modules request the death of the same person in a step (`sim.people.request_death(uids, cause=self)`), one cause is chosen at random; give each claim its hazard (`hazard=`) to choose in proportion to them.
 - **Writing to `.raw`.** Write to states by UID (`self.level[uids] = 1`); see [Array indexing](models_indexing.qmd).

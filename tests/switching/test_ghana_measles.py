@@ -60,7 +60,7 @@ def test_ghana_measles_fit():
     sim = make_sim(make_measles(d, beta=beta, away=away, report=report), d)
     gof = lambda sim: np.mean((monthly(sim) - data)**2)
     start = gof(sim.new().run())
-    fit = sim.fit(gof=gof, method='optuna', trials=10)
+    fit = sim.fit(gof=gof, method='optuna', n_trials=10)
     assert gof(fit.sim.new().run()) < start, 'The fit should improve the loss'
     return fit
 

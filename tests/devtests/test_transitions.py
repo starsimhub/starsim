@@ -1411,6 +1411,196 @@ def test_algebra():
     return
 
 
+def test_init_expression():
+    """ TY2: init= takes an expression of people's properties and parameters, under every solver, and its parameters can be set by name """
+    class M(ss.Disease):
+        A = ss.par(20.0)
+        k = ss.par(1.0)
+        age = ss.ppl.age # A helper, not a result
+        U = ss.State()
+        S = ss.State(init=np.minimum(1, 1 - (A - age)/(k*age + A))) # Gauld et al.'s share susceptible by age
+        first = 'U'
+        become = U >> S @ ss.peryear(0.01)
+    share = lambda sim: sim.results.m.S[0]/(sim.results.m.S[0] + sim.results.m.U[0])
+    sim = ss.Sim(diseases=M(), n_agents=20_000, dur=ss.days(3), dt=ss.days(1), verbose=0, rand_seed=1).run()
+    age = sim.people.age.raw[sim.people.auids]
+    expected = np.mean(np.minimum(1, 1 - (20 - age)/(age + 20)))
+    assert abs(share(sim) - expected) < 0.01
+    ode = ss.Sim(diseases=M(), n_agents=20_000, dur=ss.days(3), dt=ss.days(1), verbose=0, solver='ode', use_aging=True)
+    ode.stratify(age=[0, 5, 10, 15, 20, 100])
+    assert abs(share(ode.run()) - expected) < 0.03 # By age group
+    fitted = ss.Sim(diseases=M(), n_agents=20_000, dur=ss.days(3), dt=ss.days(1), verbose=0, rand_seed=1, pars={'m.A': 5}).run()
+    assert share(fitted) > share(sim) + 0.05
+    class Q(ss.Disease): # Given in __init__(), reading the class's parameters
+        U, S = ss.states('U S')
+        first = 'U'
+        A = ss.par(20.0)
+        become = U >> S @ ss.peryear(0.01)
+        def __init__(self, **kwargs):
+            super().__init__(init=dict(S=np.minimum(1, ss.ppl.age/self.A)), **kwargs)
+    q = ss.Sim(diseases=Q(), n_agents=5000, dur=ss.days(3), dt=ss.days(1), verbose=0).run()
+    assert list(q.diseases.q.pars.keys()).count('A') == 1 and 0.3 < q.results.q.S[0]/(q.results.q.S[0] + q.results.q.U[0]) < 1
+    return sim
+
+
+def test_class_helpers():
+    """ TY4, MS11: an expression per person as a class member is a helper, not a result; another name for a parameter is the same parameter; a parameter given as a result under its own name is an error """
+    class T(ss.Disease):
+        S, I = ss.states('S I')
+        p_gall = ss.par(ss.by(age={0: 0.1, 30: 0.2}))
+        p_cpg = ss.par(0.15)
+        A = ss.par(20.0)
+        A2, age = A, ss.ppl.age # Another name, and a property of people
+        p_carrier = p_cpg*p_gall # A value for each person (by age)
+        rel = age/A2
+        rec = ss.Transition(I, [S, ss.null], p=[p_carrier, None], dur=ss.days(3))
+        inf = S >> I @ ss.perday(0.01)*rel*I
+        prevalence = I/(S + I)
+    sim = ss.Sim(diseases=T(init_prev=0.1), n_agents=500, dur=ss.days(10), dt=ss.days(1), verbose=0).run()
+    res, pars = sim.results.t, sim.diseases.t.pars
+    assert 'prevalence' in res and not any(k in res for k in ['p_carrier', 'rel'])
+    assert 'A' in pars and 'A2' not in pars
+    t = ss.Sim(diseases=T(A=30.0, init_prev=0.1), n_agents=100, dur=ss.days(3), dt=ss.days(1), verbose=0).init().diseases.t # A value given to a parameter that has another name in the class (Typhoid's A = unexp2sus_saturation_age)
+    assert t.value('A') == 30 and 'A2' not in t.pars
+    eir = ss.par(ss.perday(0.01), name='eir')
+    S, I = ss.states('S I')
+    with pytest.raises(ss.errors.DuplicateDeclaration, match='a name of its own'):
+        ss.Disease(S >> I @ eir, I >> S @ ss.perday(0.1), eir=eir, name='m')
+    S, I = ss.states('S I')
+    m = ss.Disease(S >> I @ eir, I >> S @ ss.perday(0.1), eir_now=1*eir, name='m') # As the docs say: a result of a parameter is an expression
+    assert 'eir_now' in ss.Sim(diseases=m, n_agents=100, dur=ss.days(3), dt=ss.days(1), verbose=0).run().results.m
+    return sim
+
+
+def test_describe_init_func():
+    """ MS10: describe() names a function that gives an initial value """
+    class M(ss.Disease):
+        S, I = ss.states('S I')
+        inf = S >> I @ ss.peryear(0.1)
+        def start(self, sim):
+            return 0.1
+        def __init__(self, **kwargs):
+            super().__init__(init=dict(I=self.start), **kwargs)
+    sim = ss.Sim(diseases=M(), n_agents=100, verbose=0).init()
+    assert 'I = start(sim)' in str(sim.diseases.m.describe(output=True))
+    return
+
+
+def test_counter_in_expression():
+    """ TY14: a counter's level is read in a rate as a property of people, as agents and as compartments """
+    out = {}
+    for solver in ['abm', 'ode']:
+        S, I = ss.states('S I')
+        tppi = ss.par(0.5)
+        infection = ss.Transition(S, I, rate=(1 - tppi)**ss.ppl.infections*ss.perday(0.3)*I, increment='infections')
+        sis = ss.Disease(infection, I >> S @ ss.days(7), init=dict(I=0.01), name='sis')
+        sis.stratify(infections=list(range(6)))
+        sim = ss.Sim(diseases=sis, n_agents=10_000, dur=ss.days(150), dt=ss.days(1), verbose=0, solver=solver, rand_seed=1).run()
+        out[solver] = sim.results.sis.infection.sum()/10_000
+    assert abs(out['abm'] - out['ode']) < 0.1*out['ode'] and out['ode'] < 3 # Fewer than with no protection (about 5 infections per person)
+    return out
+
+
+def test_inflow_add():
+    """ TY15: ss.modify(inflow, add=) adds an amount from outside the model to an inflow from ss.null, under every solver """
+    for solver in ['abm', 'ode']:
+        S, I = ss.states('S I')
+        cfu = ss.State(people=False)
+        ty = ss.Disease(S >> I @ ss.perday(1e-9)*cfu.n, I >> S @ ss.days(10), shedding=ss.null >> cfu @ ss.perday(100)*I.n, decay=cfu >> ss.null @ ss.perday(0.5), init=dict(I=0.0), name='ty')
+        added = ss.modify('ty.shedding', add=ss.perday(1e6), start=2000.02)
+        sim = ss.Sim(diseases=ty, interventions=added, n_agents=1000, start=2000, dur=ss.days(40), dt=ss.days(1), verbose=0, solver=solver).run()
+        cfus = sim.results.ty.cfu.values
+        assert cfus[3] == 0 and 1.9e6 < cfus[-2] < 2.2e6 # Added from day 8, decaying at half a day: about 2 million at equilibrium
+    with pytest.raises(ValueError, match='inflow'):
+        S, I = ss.states('S I')
+        sir = ss.Disease(S >> I @ ss.perday(0.1)*I, name='sir')
+        ss.Sim(diseases=sir, interventions=ss.modify('sir.S_to_I', add=1), n_agents=100, verbose=0).init() # Not an inflow
+    return sim
+
+
+def test_gated_function():
+    """ FP12: a function rate times a condition is called only for the agents the condition holds for, and gives the same flows as the function taking care of it itself """
+    sc.heading('A function rate gated by a condition')
+    asked = []
+    def young_rate(sim, uids):
+        asked.append(np.asarray(sim.people.age[uids]))
+        return ss.peryear(np.full(len(uids), 0.2))
+    def young_rate_itself(sim, uids):
+        return ss.peryear(np.where(sim.people.age[uids] < 20, 0.2, 0.0))
+    def make(rate):
+        S, I = ss.states('S I')
+        return ss.Disease(dying=S >> ss.null @ rate, recovery=I >> S @ ss.years(1), name='d')
+    gated = ss.Sim(diseases=make(ss.par(young_rate, name="young")*(ss.ppl.age < 20)), n_agents=2000, start=2000, stop=2005, rand_seed=3, **kw).run()
+    itself = ss.Sim(diseases=make(young_rate_itself), n_agents=2000, start=2000, stop=2005, rand_seed=3, **kw).run()
+    seen = np.concatenate(asked)
+    assert len(seen) and np.all(seen < 20), 'The function is called only for those under 20'
+    assert np.array_equal(gated.results.d.dying.values, itself.results.d.dying.values), 'The same deaths as a function that gives 0 to the others'
+
+    # ss.Pregnancy's infant_rate, a function of the children it is asked about
+    ages = []
+    def infant_rate(sim, uids):
+        ages.append(np.asarray(sim.people.age[uids]))
+        return ss.peryear(np.full(len(uids), 0.05))
+    preg = ss.Pregnancy(fertility_rate=ss.freqperyear(100), infant_rate=infant_rate)
+    sim = ss.Sim(demographics=preg, n_agents=2000, start=2000, stop=2004, dt=ss.months(1), **kw).run()
+    ages = np.concatenate(ages)
+    assert len(ages) and np.all((ages >= 0) & (ages < 1)), 'infant_rate is called only for the children under 1'
+    assert sim.results.pregnancy.infant_mortality.sum() > 0
+    return sim
+
+
+def test_compiled_eval():
+    """ Agents evaluate a rate from a function made once (by group where a part is the same within a group, with shared parts once, and powers from a table): the same numbers as evaluating it directly """
+    sc.heading('Compiled expressions as agents')
+    S, I = ss.states('S I')
+    k = ss.par(ss.by(patch=[1.0, 2.0, 0.5]), name='k')
+    n_inf = ss.attr(1, on=I.enter, combine='sum', name='n_inf')
+    d = ss.Disease(infection=S >> I @ ss.peryear(0.4)*k*(0.5**n_inf)*I.n/(S + I).n, recovery=I >> S @ ss.years(0.5), init=dict(I=0.1), name='d')
+    sim = ss.Sim(diseases=d, n_agents=3000, start=2000, stop=2003, rand_seed=1, **kw)
+    sim.stratify(patch=ss.geo.geography(names=['A', 'B', 'C'], pop=[1000, 1000, 1000]))
+    sim.run()
+    engine = sim.diseases.d.engine
+    rate = sim.diseases.d.graph.transitions.infection.rate
+    uids = sim.people.auids
+    compiled = engine.eval_for(rate, uids)
+    with engine.evaluating(uids=uids, for_uids=True):
+        direct = ss.transitions.evaluate(rate, engine)
+    assert np.array_equal(np.broadcast_to(compiled, len(uids)), np.broadcast_to(direct, len(uids))), 'The same numbers'
+    assert np.ptp(compiled) > 0, 'Different by patch and by the number of infections'
+    power = ss.solvers.agents.power
+    whole = np.array([0, 1, 2, 3, 0, 7]*50, dtype=float)
+    assert np.array_equal(power(0.02, whole), 0.02**whole), 'Powers of whole numbers from a table'
+    part = whole + 0.5
+    assert np.array_equal(power(0.02, part), 0.02**part)
+    return sim
+
+
+@sc.timer()
+def test_certain_and_substeps():
+    sc.heading('Testing a probability of 1 under every solver (FP1), and the chain binomial\'s default substeps near threshold (TB3)')
+    # Everyone moves in the step, shared equally between two certain exits; a finite rate competing with them takes nobody
+    S, I, A, B, D = ss.states('S I A B D')
+    def make():
+        return ss.Disease(S, I, A, B, D, infection=S >> I @ ss.peryear(0.5), toa=I >> A @ ss.probperyear(1), tob=I >> B @ ss.probperyear(1)*0.5, die=I >> D @ ss.peryear(2), init=dict(I=0.5), name='d')
+    for solver in ['abm', 'ode', 'binomial', 'tau', 'gillespie']:
+        res = ss.Sim(make(), n_agents=2000, solver=solver, start=2000, stop=2001, dt=ss.years(0.1), **kw).run().results.d
+        first = res.I[0]
+        assert res.D[1] <= 0.01*first, solver # In compartments, those infected within a substep wait for the next, and a few die first
+        assert np.isclose(res.A[1] + res.B[1], first + (res.S[0] - res.S[1]), rtol=0.05) and np.isclose(res.A[1], res.B[1], rtol=0.15), (solver, res.A[1], res.B[1])
+    with pytest.raises(ValueError, match='infinite number of arrivals'):
+        ss.Sim(ss.Disease(S, I, birth=ss.birth(S, rate=ss.probperyear(1)), name='d'), n_agents=100, solver='ode', start=2000, stop=2001, **kw).run()
+
+    # An SIS just above threshold: the default substeps follow the ODE (whole steps gave 0.083 for 0.048)
+    def sis():
+        S, I = ss.states('S I')
+        return ss.Disease(S, I, infection=S >> I @ 1.05*I.frac, recovery=I >> S @ 1.0, init=dict(I=0.1), name='d')
+    pars = dict(unit='year', dt=ss.months(1), start=0, stop=50, total_pop=1e9, **kw)
+    ode = ss.Sim(sis(), solver='ode', **pars).run().results.d.I[-1]
+    sim = ss.Sim(sis(), solver='binomial', **pars).run()
+    assert sim.diseases.d.engine.substeps() >= 15 and np.isclose(sim.results.d.I[-1], ode, rtol=0.08), (sim.diseases.d.engine.substeps(), sim.results.d.I[-1]/ode)
+    return sim
+
+
 if __name__ == '__main__':
     do_plot = True
     sc.options(interactive=do_plot)
@@ -1429,3 +1619,11 @@ if __name__ == '__main__':
     branch = test_branches()
     bwhere = test_branch_where()
     test_algebra()
+    test_init_expression()
+    test_class_helpers()
+    test_describe_init_func()
+    test_counter_in_expression()
+    test_inflow_add()
+    gated = test_gated_function()
+    compiled = test_compiled_eval()
+    certain = test_certain_and_substeps()

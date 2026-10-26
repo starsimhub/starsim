@@ -55,13 +55,13 @@ def test_starsim3_fit():
     truth = ss.Sim(diseases=ss.SIS(beta=ss.peryear(0.2)), rand_seed=1, **kw()).run()
     data = truth.to_df()[['timevec', 'sis_prevalence']].iloc[1:].rename(columns=dict(timevec='t', sis_prevalence='sis.prevalence'))
     sis = ss.SIS(beta=ss.par(ss.peryear(0.1), bounds=[0.05, 1]))
-    fit = ss.Sim(diseases=sis, data=data, **kw()).fit(trials=10, rand_seed=1)
+    fit = ss.Sim(diseases=sis, data=data, **kw()).fit(n_trials=10, rand_seed=1)
     beta = fit.pars.beta.value
     assert np.isclose(beta, 0.2, rtol=0.3), f'The fitted beta, {beta:.3f}, should be near the true 0.2'
 
     # The same for the SIS written as code: bounds on a parameter of a module written as code are fitted too
     agents = ssl.AgentSIS(name='sis', beta=ss.par(ss.peryear(0.1), bounds=[0.05, 1]), waning=ss.peryear(1e6))
-    fit = ss.Sim(diseases=agents, data=data, **kw()).fit(trials=10, rand_seed=1)
+    fit = ss.Sim(diseases=agents, data=data, **kw()).fit(n_trials=10, rand_seed=1)
     beta = fit.pars.beta.value
     assert np.isclose(beta, 0.2, rtol=0.3), f'The fitted beta of the SIS written as code, {beta:.3f}, should be near the true 0.2'
     return fit
@@ -69,7 +69,7 @@ def test_starsim3_fit():
 
 def test_starsim3_port():
     sc.heading('Starsim 3: the same SIS redeclared, with the beta dict ported as the migrate-starsim3 skill says')
-    skill = sc.loadtext(sc.thispath() / '../../ai/migrate-starsim3/SKILL.md')
+    skill = sc.loadtext(sc.thispath() / '../../starsim_ai/migrate-starsim3/SKILL.md')
     assert "beta={'random': ss.prob(0.05, 'month')}" in skill # Bare numbers in a beta dict were probabilities per step in Starsim 3; core says nothing about Starsim 3, so the skill carries the rule
     S, I = ss.states('S I')
     sis = ss.Disease(infection=ss.Transition(S, I, rate=dict(randomnet=ss.prob(0.05, 'month')) * I), recovery=ss.Transition(I, S, dur=ss.years(1)), init_prev=0.01, name='sis')

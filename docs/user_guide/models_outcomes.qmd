@@ -59,6 +59,8 @@ sim.diseases.measles.plot('prevalence', 'immune')
 
 Flows can be used the same way: `infection/S` is the incidence per susceptible person. A ratio is a ratio of sums: by group or over a longer period, its numerator and denominator are each summed, and then divided, never averaged.
 
+A result needs a name of its own. A parameter over time is a result of an expression of it under another name, `eir_now = 1*eir`; giving the parameter itself (`eir=eir`) raises an error. In a class, an expression with a value for each person, such as `age = ss.ppl.age` or `duration = affected.time`, is a helper for the rates, not a result.
+
 ## Outcomes
 
 An outcome is a reported quantity: a flow worked out from the model's other flows, which moves nobody. It is how a model says what a surveillance system would see. For measles, the rash appears about 4 days after people become infectious, and suppose half of cases are reported, a tenth of reported cases are admitted to hospital (for 5 days on average), and 2% of those admitted die:

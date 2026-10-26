@@ -22,6 +22,28 @@ class NoDists:
     pass
 
 
+class skipkey(str):
+    """
+    The name of a key for `sc.search()` to skip, which is equal only to a string of that name
+
+    `sc.search()` compares each key it meets with the keys to skip, so a plain name would be compared with every key of every
+    dict in a module, including dates (e.g. an analyzer's results by date), and a date compared with a string that is not a
+    date raises (see `ss.date`). Use `skipkeys(names)` for a list of them.
+    """
+    def __eq__(self, other):
+        return isinstance(other, str) and str.__eq__(self, other)
+
+    def __ne__(self, other):
+        return not self.__eq__(other)
+
+    __hash__ = str.__hash__
+
+
+def skipkeys(names):
+    """ Names of keys for `sc.search(..., skip=dict(keys=...))` that are compared only with strings (see `skipkey`) """
+    return [skipkey(name) for name in names]
+
+
 class ndict(sc.objdict):
     """
     A dictionary-like class that provides additional functionalities for handling named items.

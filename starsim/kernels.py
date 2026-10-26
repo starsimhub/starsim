@@ -16,6 +16,7 @@ import sys
 import importlib
 import ctypes
 import contextlib
+import functools as ft
 import collections
 import multiprocessing as mp
 import numpy as np
@@ -125,13 +126,14 @@ register_fields = [
 
 Register = collections.namedtuple('Register', register_fields)
 
-# The deliveries of a whole run (see ss.solvers.CompartmentalDelivery.shifts()), as the kernels apply them: each moves some of the people in each compartment and group to another group
+# The deliveries of a whole run (see ss.solvers.CompartmentalDelivery.shifts()), as the kernels apply them: each moves some of the people in each compartment and group to another group, or (a move between states) into the compartments of another state
 shift_fields = [
     'due',  # Whether each delivery happens at each time point (deliveries by time points)
     'sel',  # The share of the people in each compartment and group who are eligible (deliveries by compartments by groups)
     'cov',  # The share of those who are reached
     'to',   # The group that each group's people go to if they are reached (deliveries by groups)
     'rest', # The group they go to if they are eligible but not reached (their own, unless the delivery records who has been offered it)
+    'land', # For a move between states (move=S >> I), the share of the people reached who land in each compartment, by the group they go to; all zero for a delivery that leaves people in their state (deliveries by compartments by groups)
 ]
 
 Shifts = collections.namedtuple('Shifts', shift_fields)
@@ -350,9 +352,9 @@ def choose(seconds=0.0):
 
 def compile(verbose=True):
     """
-    Compile the kernels now (those of the compartmental solvers, the passes over the agents, and the draws of the chain binomial in JAX), so that no run waits for them: e.g. in a Docker image, in CI, or before a calibration
+    Compile the kernels now (those of the compartmental solvers, the passes over the agents and the rest of what sims with agents use, and the draws of the chain binomial in JAX), so that no run waits for them: e.g. after installing Starsim (as `starsim compile` does), in a Docker image, in CI, or before a calibration
 
-    Compiling takes about a minute, once per install (and after an upgrade); the result is kept in Numba's cache,
+    Compiling takes about five minutes, once per install (and after an upgrade); the result is kept in Numba's cache,
     beside the package (or, if that cannot be written to, in the user's cache folder, or in `NUMBA_CACHE_DIR` if it
     is set). Until the kernels are compiled, small runs are taken as plain Python: see `ss.options.compile`.
 
@@ -384,9 +386,40 @@ def compile(verbose=True):
         if importlib.util.find_spec('jax') is not None: # The draws of the chain binomial in JAX
             importlib.import_module('starsim.perflib._chain').check()
         make('abm').run() # The passes over the agents (ss.perflib._passes), which are cached apart from the kernels
+        for sim in typical_sims(): # And the rest of what sims with agents compile on their first run
+            sim.run()
     if verbose:
         print(f'Compiled the solver kernels in {T.toc(output=True):.0f} s')
     return
+
+
+def note_uncompiled():
+    """
+    On import, say that Starsim has not been compiled yet, unless it has, or `ss.options.uncompiled_warning` is
+    False (`STARSIM_UNCOMPILED_WARNING=0`); not in the workers of `ss.parallel()`, nor for the `starsim` command
+    """
+    command = os.path.basename(getattr(sys, 'argv', [''])[0]) in ['-m', 'starsim', 'starsim.exe', 'starsim-script.py'] # The command (or python -m starsim), which says what it does itself
+    if ss.options.uncompiled_warning and mp.parent_process() is None and not command and not is_compiled():
+        print(uncompiled_note)
+    return
+
+
+uncompiled_note = 'Note: run "starsim compile" (or ss.compile()) to make Starsim 20-80 times faster for the first run of each kind of sim, and 20 times faster for compartmental runs; this takes about 5 minutes and only needs to be done once. Set STARSIM_UNCOMPILED_WARNING=0 to hide this note.' # Measured from an empty cache (2026-10-26): the first run of an SIR as 10,000 agents took 7 s, not 0.09 s; with demographics 8 s, not 0.34 s; an ODE over 10 years 0.43 s, not 0.02 s
+
+
+def typical_sims():
+    """ Short sims with agents that between them use the Numba code that sims with agents compile on their first run (networks, demographics, pregnancy, interventions, and diseases written as code), for `compile()` """
+    import starsim.library as ssl
+    small = dict(n_agents=1000, start=2000, stop=2002, verbose=0)
+    sims = [
+        ss.Sim(diseases=['sis', 'sir'], networks=['random', 'sexual'], demographics=True, **small),
+        ss.Sim(diseases=ssl.HIV(), networks='sexual', demographics=True, **small),
+        ss.Sim(diseases=ssl.AgentSIR(), networks='random', interventions=ss.vaccinate(ss.Vaccine(efficacy=0.9), coverage=0.5), **small),
+        ss.Sim(demographics=[ss.Pregnancy(), ss.Deaths()], networks='maternal', **small),
+    ]
+    if ss.options.threads != 1 and nb.get_num_threads() > 1: # The threaded passes, for a sim large enough to share among threads
+        sims.append(ss.Sim(diseases='sir', networks='random', n_agents=ss.perflib._passes.min_threaded, start=2000, stop=2001, verbose=0))
+    return sims
 
 
 @jit
@@ -1600,6 +1633,81 @@ def convey(rng, y, p, w, flows, release):
 
 
 @jit
+def certain(rng, y, p, w, rates, flows, move, solver):
+    """
+    For `step()`, when a flow has an infinite rate (a probability of 1 over the step, FP1): everyone in its compartment leaves by it
+
+    At the start of each substep (`move`), the whole compartment moves, as a transfer: shared equally between
+    the flows with an infinite rate out of it (a draw for the stochastic solvers), into their targets as the flows
+    themselves would put them. Those rates are then 0 for the rest of the substep, which the solver steps as usual,
+    so people who arrive in the compartment over it leave at the start of the next (for agents, within the step).
+    """
+    ng = y.shape[1]
+    groups, rows = w[3], w[10]
+    left, n, prob, k = np.empty(ng), np.empty(ng), np.empty(ng), np.zeros(ng)
+    for s in range(len(p.src_starts) - 1):
+        a, b = p.src_starts[s], p.src_starts[s+1]
+        if a == b or p.src[p.src_flows[a]] < 0: # The end of a disease's flows (in a crossing), or inflows, which have no compartment to empty
+            continue
+        src = p.src[p.src_flows[a]]
+        if move:
+            for g in range(ng):
+                left[g] = y[src, g]
+                k[g] = 0
+                for j in range(a, b):
+                    k[g] += rates[p.src_flows[j], g] == np.inf
+            for j in range(a, b):
+                f = p.src_flows[j]
+                some = False
+                for g in range(ng):
+                    prob[g] = 0.0
+                    if rates[f, g] == np.inf: # One of k[g] equal shares of those left: a multinomial draw, as a chain of conditional binomials
+                        prob[g] = 1.0/k[g]
+                        k[g] -= 1
+                        some = True
+                if not some:
+                    continue
+                if solver >= 2 and not p.det[f]:
+                    binomials(rng, left, prob, n, rows)
+                else:
+                    for g in range(ng):
+                        n[g] = left[g]*prob[g]
+                for g in range(ng):
+                    left[g] -= n[g]
+                    y[src, g] -= n[g]
+                if solver >= 2 and not p.det[f]: # Whole people, as draw() puts them
+                    if p.named[f]:
+                        land(rng, n, p.record[f], p.maps, flows[p.index[f]])
+                    split(rng, n, p.tgt_starts[f], p.tgt_starts[f+1], p.tgt_w, False, y, p.tgt_comp, p.tgt_map, p.maps, groups, p.tgt_rec, flows, rows)
+                    credit(rng, n, p.crd_starts[f], p.crd_starts[f+1], p.crd_parent, p.crd_w, p.crd_index, w[9], flows, rows)
+                    continue
+                for g in range(ng): # Expected numbers, as the ODE puts them
+                    if n[g] == 0:
+                        continue
+                    if p.named[f]:
+                        if p.record[f] < 0:
+                            flows[p.index[f], g] += n[g]
+                        else:
+                            for h in range(ng):
+                                flows[p.index[f], h] += n[g]*p.maps[p.record[f], g, h]
+                    for t in range(p.tgt_starts[f], p.tgt_starts[f+1]):
+                        if p.tgt_rec[t] >= 0:
+                            flows[p.tgt_rec[t], g] += n[g]*p.tgt_w[t, g]
+                        if p.tgt_map[t] < 0:
+                            y[p.tgt_comp[t], g] += n[g]*p.tgt_w[t, g]
+                        else:
+                            for h in range(ng):
+                                y[p.tgt_comp[t], h] += n[g]*p.tgt_w[t, g]*p.maps[p.tgt_map[t], g, h]
+                    for t in range(p.crd_starts[f], p.crd_starts[f+1]):
+                        flows[p.crd_index[t], g] += n[g]*p.crd_w[t, g]
+        for j in range(a, b):
+            for g in range(ng):
+                if rates[p.src_flows[j], g] == np.inf:
+                    rates[p.src_flows[j], g] = 0.0
+    return
+
+
+@jit
 def step_start(y, p, dt, solver):
     """
     For `step()`, in a program with conveyors: for the ODE, the people due to leave each conveyor over it
@@ -1717,6 +1825,11 @@ def step(rng, y, p, w, dt, n_sub, solver, flows, tables, row):
     sub = 0
     extra = len(p.starts) - nf - 1 # Conveyors, whose operations follow the flows'
     pending = step_start(y, p, dt, solver) if extra else False # Whether the people due to leave a conveyor have yet to leave
+    sure = False # Whether a flow has an infinite rate (see certain())
+    for f in range(nflows):
+        for g in range(ng):
+            flows[f, g] = 0
+    moved_in = np.zeros((nc, ng) if auto and p.n_movers else (0, 0)) # The people moving into each compartment and group from other groups, at the start of the step: left out of the growth that sets the substeps
     while True:
         for stage in range(stages):
             ys = y if stage == 0 else yt # Where the rates are worked out
@@ -1839,6 +1952,13 @@ def step(rng, y, p, w, dt, n_sub, solver, flows, tables, row):
                         for g in range(ng):
                             rates[f, g] = stack[0, g]*p.mult[f, g]
 
+            if sub == 0 and stage == 0: # A probability of 1 over the step is an infinite rate: everyone moves (see certain())
+                for f in range(nf):
+                    for g in range(ng):
+                        sure = sure or rates[f, g] == np.inf
+            if sure:
+                certain(rng, y, p, w, rates, flows, stage == 0, solver)
+
             if solver == 3: # Tau-leaping: the fastest rate at which any compartment is being left, by all its flows
                 fastest = 0.0
                 for s in range(len(p.src_starts) - 1):
@@ -1861,9 +1981,6 @@ def step(rng, y, p, w, dt, n_sub, solver, flows, tables, row):
                     n_sub = int(np.ceil(fastest*dt/0.25))
                 n_sub = max(n_sub, 1)
                 h = dt/n_sub
-                for f in range(nflows):
-                    for g in range(ng):
-                        flows[f, g] = 0
                 if extra and solver < 2:
                     release_rates(y, p, rates, dt)
             if solver >= 2: # The stochastic solvers take it from here
@@ -1910,6 +2027,8 @@ def step(rng, y, p, w, dt, n_sub, solver, flows, tables, row):
                             dy[stage, c, g] -= ys[c, g]*r
                             dy[stage, c, j] += ys[c, g]*r
                             df[stage, p.n_trans + m, g] += ys[c, g]*r
+                            if stage == 0 and sub == 0 and len(moved_in):
+                                moved_in[c, j] += ys[c, g]*r
             if solver == 1: # Euler: a compartment whose outflows would take more than everyone in it in a substep has them scaled down together, as compartmental frameworks with large steps do (yt is free, so holds the scale)
                 for c in range(nc):
                     for g in range(ng):
@@ -1956,16 +2075,17 @@ def step(rng, y, p, w, dt, n_sub, solver, flows, tables, row):
                     for g in range(ng):
                         everyone += y[c, g]
                 least = 1e-9*everyone # Not a compartment that is only starting to fill, whose growth follows another's: of everyone, not of its group (TR4: a group of 1e-13 people, of a strain only starting to emerge, took 4 million substeps a step)
-                for g in range(ng):
+                for g in range(ng): # Not through people moving in from other groups (a cohort moving through the stages of a box, MS6), which are linear and as fast as the movers' rates, which the substeps allow for already
                     for c in range(nc):
-                        if dy[0, c, g] > 0 and y[c, g] > least:
-                            growing = max(growing, dy[0, c, g]/y[c, g])
+                        gain = dy[0, c, g] - (moved_in[c, g] if len(moved_in) else 0.0)
+                        if gain > 0 and y[c, g] > least:
+                            growing = max(growing, gain/y[c, g])
                     for e in range(len(p.set_starts) - 1): # Nor a count that a rate reads, over all its compartments (RF1: the first slot of a conveyor fills from empty in each step, so the people infectious, I.n, grew tenfold in a step taken whole)
                         tot = 0.0
                         grow = 0.0
                         for k in range(p.set_starts[e], p.set_starts[e+1]):
                             tot += y[p.set_comps[k], g]
-                            grow += dy[0, p.set_comps[k], g]
+                            grow += dy[0, p.set_comps[k], g] - (moved_in[p.set_comps[k], g] if len(moved_in) else 0.0)
                         if grow > 0 and tot > least:
                             growing = max(growing, grow/tot)
                 more = int(np.ceil(growing*dt/0.25))
@@ -2104,9 +2224,12 @@ def apply_shifts(rng, y, sh, ti, whole, tally):
         tally (array): the number reached and the number eligible, for each delivery and group (deliveries by 2 by groups); added to
     """
     nc, ng = y.shape
+    arrived = np.zeros(ng) # For a move between states: the people reached, by the group they go to, who land in the state once all have left (as ss.solvers.Compartmental.move_states() moves them)
     for k in range(len(sh.to)):
         if not sh.due[k, ti]:
             continue
+        moves = sh.land[k].sum() > 0
+        arrived[:] = 0
         for c in range(nc):
             before = y[c].copy() # Each group's people as they were, so nobody moved into a group is moved on again (a counter up a level)
             for g in range(ng):
@@ -2123,12 +2246,44 @@ def apply_shifts(rng, y, sh, ti, whole, tally):
                 else:
                     a, b = n*e*p, n*e*(1 - p)
                 to, rest = sh.to[k, g], sh.rest[k, g]
-                if a > 0 and to != g:
+                if moves and a > 0:
+                    y[c, g] -= a
+                    arrived[to] += a
+                elif a > 0 and to != g:
                     y[c, g] -= a
                     y[c, to] += a
                 if b > 0 and rest != g:
                     y[c, g] -= b
                     y[c, rest] += b
+        if moves:
+            enter_state(rng, y, sh.land[k], arrived, whole)
+    return
+
+
+@jit
+def enter_state(rng, y, w, arrived, whole):
+    """ Put the people who have moved into a state (by group) into its compartments, by the share in each (`w`, compartments by groups): drawn one compartment after another where they are whole people, as `ss.solvers.Compartmental.move_states()` splits them """
+    nc, ng = y.shape
+    for g in range(ng):
+        left, rest = arrived[g], 1.0
+        if left <= 0:
+            continue
+        last = -1
+        for c in range(nc):
+            if w[c, g] > 0:
+                last = c
+        for c in range(nc):
+            if w[c, g] <= 0:
+                continue
+            if not whole:
+                y[c, g] += arrived[g]*w[c, g]
+            elif c == last:
+                y[c, g] += left
+            else:
+                n = binomial(rng, left, min(max(w[c, g]/rest, 0.0), 1.0))
+                y[c, g] += n
+                left -= n
+                rest -= w[c, g]
     return
 
 
@@ -2369,11 +2524,31 @@ def one_step(rng, y, p, dt, solver, n_sub, tables, row):
 
 #%% Threads, for the workers of ss.parallel() and of a calibration
 
-def one_thread(func, *args, **kwargs):
-    """ Run a function with one thread for the kernels (the passes over the agents, see `ss.options.threads`, and the places of a Gillespie run): for the workers of `ss.parallel()` and of a calibration, which share the cores already """
+def one_thread(func, *args, main_modules=None, **kwargs):
+    """
+    Run a function with one thread for the kernels (the passes over the agents, see `ss.options.threads`, and the places of a Gillespie run): for the workers of `ss.parallel()` and of a calibration, which share the cores already
+
+    With `main_modules` (see `worker()`), the modules imported in the main process's `__main__` are imported in this one's
+    first, for a worker started afresh (by forkserver, see `start_method()`)
+    """
     ss.options.threads = 1
     nb.set_num_threads(1)
+    if main_modules: # A function defined in a notebook or script looks up its names (e.g. cv of import covasim as cv) in __main__, which in a worker started afresh lacks them
+        main = sys.modules['__main__']
+        for alias,name in main_modules.items():
+            if not hasattr(main, alias):
+                try:
+                    setattr(main, alias, importlib.import_module(name))
+                except Exception: # A module that can't be imported by name (e.g. made at run time) is left out, as it was
+                    pass
     return func(*args, **kwargs)
+
+
+def worker(func):
+    """ A function to run in each worker of `ss.parallel()` or of a calibration: with one thread for the kernels, and the modules imported in `__main__` (see `one_thread()`) """
+    main = sys.modules.get('__main__')
+    modules = {alias:val.__name__ for alias,val in vars(main).items() if type(val) is type(sys) and not alias.startswith('_')} if main is not None else {}
+    return ft.partial(one_thread, func, main_modules=modules)
 
 
 blas_threads = [('openblas_set_num_threads', 'openblas_get_num_threads'), ('openblas_set_num_threads64_', 'openblas_get_num_threads64_'), ('scipy_openblas_set_num_threads', 'scipy_openblas_get_num_threads'),

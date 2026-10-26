@@ -391,6 +391,96 @@ def test_strains_branch_flows():
     return out
 
 
+def test_condition_by_sex():
+    """ A condition acquired at a rate by sex whose values are parameters, with its initial prevalence from a function of the agents (no transmission), given in pars= """
+    class Condition(ss.Disease):
+        p_female = ss.par(ss.probperyear(0.05))
+        p_male = ss.par(ss.probperyear(0.02))
+        susceptible, affected = ss.states('susceptible affected')
+        onset = ss.Transition(susceptible, affected, rate=ss.by(sex=dict(female=p_female, male=p_male)))
+
+    cond = Condition(pars=dict(init_prev=ss.bernoulli(p=lambda sim, uids: np.where(sim.people.female[uids], 0.3, 0.1))), p_male=ss.par(ss.probperyear(0.01), bounds=[0.001, 0.1]))
+    assert {'p_female', 'p_male'} <= set(cond.pars.keys()) and cond.pars.p_male.bounds == [0.001, 0.1] # The parameters inside ss.by are the disease's, and one given replaces the class's
+    sim = ss.Sim(diseases=cond, n_agents=10_000, start=2000, stop=2010, dt=1, verbose=0).run()
+    first = sim.results.condition.affected[0]/10_000
+    assert np.isclose(first, 0.2, atol=0.02), first # Seeded by sex through the acquisition
+    assert sim.results.condition.onset.sum() > 0
+    return sim
+
+
+
+@sc.timer()
+def test_coded_seeds():
+    sc.heading('Testing that the initial infections of a disease written as code are dated by the first step (CV2)')
+    sim = ss.Sim(diseases=ssl.AgentSIR(dur_inf=ss.constant(ss.years(2))), networks='random', n_agents=1000, start=2000, stop=2005, verbose=0).init()
+    sir = sim.diseases.agentsir
+    seeds = sir.infected.uids
+    assert len(seeds) and np.all(sir.ti_infected[seeds] == 1) and np.all(sir.ti_recovered[seeds] == 3) # As an infection in the first step is, so they are infectious for as long
+    assert sim.t.ti == 0 and sir.ti == 0 # The time is restored
+    return sim
+
+
+@sc.timer()
+def test_coded_modifiers():
+    sc.heading('Testing modifiers of rel_sus on a disease written as code that reads them (MG1), a property a module adds to the people (MG3), and the cause of death by hazard (MG8)')
+
+    class Condition(ss.Disease):
+        reads_modifiers = ('rel_sus',)
+        def __init__(self, **kwargs):
+            super().__init__()
+            self.define_pars(p_onset=ss.probperyear(0.2))
+            self.define_states(ss.BoolState('affected', label='Affected'), ss.FloatArr('rel_sus', default=1.0))
+            self.update_pars(**kwargs)
+        def init_pre(self, sim):
+            super().init_pre(sim)
+            sim.people.add_state(ss.BoolArr('housing', default=ss.bernoulli(0.5))) # Idempotent: each module that reads it adds it
+            sim.people.add_state(ss.BoolArr('housing'))
+            return
+        def step(self):
+            uids = (~self.affected).uids
+            p = -np.expm1(-self.pars.p_onset.rate*self.t.dt_year*self.modified('rel_sus', uids))
+            self.affected[uids[self.sim.people.housing[uids] | (np.random.default_rng(self.ti).random(len(uids)) < p)]] = True
+            return
+
+    cond = Condition(name='cond')
+    sim = ss.Sim(diseases=cond, interventions=ss.modify(cond.rel_sus, multiply=0.0, where=ss.ppl.female), n_agents=2000, start=2000, stop=2005, verbose=0).run()
+    ppl, d = sim.people, sim.diseases.cond
+    assert np.all(d.affected[ppl.female.uids] == ppl.housing[ppl.female.uids]) # Only those housed: the onset of women is modified away
+    assert (d.affected & ppl.male & ~ppl.housing).sum() > 100
+    assert np.isclose(ppl.housing.mean(), 0.5, atol=0.05)
+    Condition.reads_modifiers = ()
+    with pytest.raises(ss.errors.Unapplied, match='reads_modifiers'):
+        cond = Condition(name='cond')
+        ss.Sim(diseases=cond, interventions=ss.modify(cond.rel_sus, multiply=0.0), n_agents=100, start=2000, stop=2001, verbose=0).init()
+
+    # A property nobody added has the default given; added after the sim is made, it has values at once
+    S, D = ss.states('S D')
+    dis = ss.Disease(S, D, onset=S >> D @ ss.peryear(0.2)*(1 + 4*ss.ppl.get('housing', 0)), name='dep')
+    sim = ss.Sim(diseases=dis, n_agents=1000, start=2000, stop=2001, verbose=0).run()
+    assert 'housing' not in sim.people and sim.results.dep.D[-1] > 0
+    assert len(sim.people.add_state(ss.FloatArr('adherence', default=ss.uniform())).values) == len(sim.people)
+
+    # Two causes of death in the same step, weighted by their hazards; and a declared transition's hazard, with its modifiers
+    class Killer(ss.Module):
+        def __init__(self, hazard, **kwargs):
+            super().__init__(**kwargs)
+            self.hazard = hazard
+        def step(self):
+            if self.ti == 2:
+                self.sim.people.request_death(self.sim.people.auids, cause=self, hazard=self.hazard)
+    sim = ss.Sim(connectors=[Killer(9, name='a'), Killer(1, name='b')], n_agents=5000, start=2000, stop=2003, verbose=0).run()
+    codes = sim.people.cause_of_death.raw
+    share = np.mean(codes[codes >= 0] == sim.people.causes.index('a'))
+    assert np.isclose(share, 0.9, atol=0.02), share
+    S, I = ss.states('S I')
+    dis = ss.Disease(S, I, infection=S >> I @ ss.peryear(1), death=I >> ss.null @ ss.peryear(0.3), name='d')
+    sim = ss.Sim(diseases=dis, interventions=ss.modify(dis.death, multiply=0.5, where=ss.ppl.female), n_agents=500, start=2000, stop=2001, verbose=0).run()
+    uids = sim.people.auids
+    assert np.allclose(sim.diseases.d.death.hazard(uids), np.where(sim.people.female[uids], 0.15, 0.3))
+    return sim
+
+
+
 if __name__ == '__main__':
     do_plot = True
     sc.options(interactive=do_plot)
@@ -401,3 +491,6 @@ if __name__ == '__main__':
     compart = test_strains_compartmental()
     spec    = test_strains_spec()
     branch  = test_strains_branch_flows()
+    cond    = test_condition_by_sex()
+    seeds   = test_coded_seeds()
+    mods    = test_coded_modifiers()

@@ -29,7 +29,7 @@ runs = np.array([run_numpy(seed) for seed in range(200)])
 print('NumPy, 200 runs: mean peak of I', round(runs[:,:,2].max(axis=1).mean()), 'and mean final R', round(runs[:,-1,3].mean()))
 ```
 
-In Starsim, each flow is one line, with its rate; the conversion of rates to probabilities, the bookkeeping of who leaves and enters each state, and the results are done for you. `solver='binomial'` runs it as a chain binomial, and `substeps=1` takes each day whole, as the loop above does (by default, the chain binomial splits a step when more than about a tenth of a compartment would leave in it):
+In Starsim, each flow is one line, with its rate; the conversion of rates to probabilities, the bookkeeping of who leaves and enters each state, and the results are done for you. `solver='binomial'` runs it as a chain binomial, and `substeps=1` takes each day whole, as the loop above does (by default, the chain binomial splits a step when more than about 5% of a compartment would leave in it, or fewer near the epidemic threshold):
 
 ```{python}
 import starsim as ss

@@ -56,7 +56,7 @@ Starsim's rules, summarized:
 | `per` | `×` | `dur` | number | the probability of at least one event over the period, `1 − exp(−r·d)`: `ss.perday(0.1) * ss.days(3)` is 0.259 |
 | `freq` | `×` | `dur` | number | an expected count, `f·d`: `ss.freqperday(0.1) * ss.days(3)` is 0.3 |
 | `prob` | `+` `−` | `prob` | `prob` | through the underlying rates, as competing hazards: `ss.prob(0.1, 'day') + ss.prob(0.1, 'day')` is 0.19 per day, the same as `2 * ss.prob(0.1, 'day')` |
-| `prob` | `×` `÷` | number | `prob` | scales the underlying rate, not the probability: `ss.probperyear(0.8) * 0.2` is 0.275 a year, not 0.16 (a relative risk on a probability is a relative risk on its hazard). A probability of 1 is an infinite rate and stays 1; as the rate of a transition it raises, since no solver can step it |
+| `prob` | `×` `÷` | number | `prob` | scales the underlying rate, not the probability: `ss.probperyear(0.8) * 0.2` is 0.275 a year, not 0.16 (a relative risk on a probability is a relative risk on its hazard). A probability of 1 is an infinite rate and stays 1; as the rate of a transition it moves everyone in the step (as agents, arrivals in the step too; in compartments, the whole compartment at the start of each step or substep) |
 | `prob` | `×` | `dur` | number | the probability over the period |
 | rate | `÷` | rate of the same kind | number | |
 | number | `÷` | `dur` | `per` | `1 / ss.days(10)` is `ss.perday(0.1)` |

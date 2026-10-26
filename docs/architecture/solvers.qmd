@@ -83,7 +83,7 @@ Each declared module gets one engine when the sim is initialized. A module writt
 
 Three details of the compartmental engine explain most of its behavior:
 
-- **A whole run in one call.** If nothing needs Python between steps (no intervention or analyzer with a step of its own), the kernels run the whole simulation in one call; otherwise they are called once per step. The results are the same, and `sim.kernel_reason()` says why a run is stepped.
+- **A whole run in one call.** If nothing needs Python between steps (no intervention or analyzer with a step of its own), the kernels run the whole simulation in one call; otherwise they are called once per step. Values that vary in time (`ss.timeseries`, `ss.seasonal`, and `ss.by` of them, by place or age) are tabulated for every step before the run, and so are deliveries on a schedule to people chosen by state and group (`ss.Delivery.tabulated`), including a move between states such as a seed (`ss.Delivery(move=S >> I, at=...)`), so none of these makes a run stepped. The results are the same, and `sim.kernel_reason()` says why a run is stepped.
 - **Compiled or plain.** The kernels run compiled by Numba or as plain Python, with the same results. Compiling takes about a minute, once per install, so by default (`ss.options.compile = 'auto'`) it is done only when the session's runs would take longer than that as plain Python (estimated from the size of each model, not by timing it), with a note. `ss.compile()` compiles ahead of time.
 - **JAX for long runs and gradients.** `gradients.py` runs the same program with the same RK4 steps in JAX, so results can be differentiated (`sim.gradient()`) and many parameter sets run at once; `perflib/_chain.py` does the same for the chain binomial and tau-leaping. `ss.solvers.choose_engine()` uses JAX when the kernels would take more than about half a second (about what JAX takes to start), as estimated from the size of the model alone, so the same model always gets the same engine (and the same results with a seed); `sim.engine_reason` says which ran.
 
@@ -112,7 +112,7 @@ Each path below is checked against a reference where one exists: the ODE against
 
 ## Limits
 
-- Solvers that take whole steps differ from the ODE by an amount of order `dt`, which is why the agreement tests use a quarter-day step. With whole weekly steps (`substeps=1`) on an SIR with daily rates, the chain binomial's peak is about a third higher than the ODE's; by default it takes enough substeps to stay within a few percent.
+- Solvers that take whole steps differ from the ODE by an amount of order `dt`, which is why the agreement tests use a quarter-day step. With whole weekly steps (`substeps=1`) on an SIR with daily rates, the chain binomial's peak is about a third higher than the ODE's; by default it takes enough substeps to stay within a few percent (see `Compartmental.binomial_substeps()`: about x/2 for x the rate out of a compartment times the substep, amplified near the epidemic threshold).
 - Agreement is tested on simple models. For complex ones (a sexual network as an ODE), solvers are expected to differ; the guarantee is that Starsim says what it approximated.
 - Gillespie is exact but takes events one at a time; for millions of events in groups that mix, `'tau'` is the practical choice.
 - Gradients exist only for `solver='ode'` and for rates written as expressions. One model can't yet mix solvers (an ODE with rare importations as discrete events).

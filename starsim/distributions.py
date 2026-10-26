@@ -197,7 +197,7 @@ class Dists(sc.prettyobj):
             skip_ids.add(id(sim.people._states))
             skip_ids.add(id(sim.people)) # Skip checking people on the first round
             # Also skip Dists containers (the sim's and the modules'), otherwise re-initializing finds the dists again via them
-            skip = dict(keys=['module', 'inputs', '_call', '_made', '_set_after', '_made_pars', '_pars_after', 'declared'], subclasses=(Dists,) + no_dists()) # The inputs (and a subclass's call) are only for building the sim again; the declared modules are found by their type (e.g. diseases), so their streams do not depend on what else is declared
+            skip = dict(keys=ss.utils.skipkeys(['module', 'inputs', '_call', '_made', '_set_after', '_made_pars', '_pars_after', '_modules_after', 'declared']), subclasses=(Dists,) + no_dists()) # The inputs (and a subclass's call) are only for building the sim again; the declared modules are found by their type (e.g. diseases), so their streams do not depend on what else is declared
             dists = sc.search(sim, type=Dist, skip=dict(ids=list(skip_ids), **skip), flatten=True)
             skip_ids.update(id(x) for x in sim.__dict__.values()) # Exclude things we've already searched
             skip_ids.update(id(x) for x in dists.values()) # Exclude dists we've already found
@@ -1494,6 +1494,19 @@ class lognorm_im(Dist):
     def __init__(self, mean=0.0, sigma=1.0, **kwargs): # Does not accept dtype
         super().__init__(distname='lognormal', dist=sps.lognorm, mean=mean, sigma=sigma, **kwargs)
         return
+
+    @staticmethod
+    def scaled_pars(pars, factor):
+        """ Parameters (as plain numbers, or functions of the agents) whose draws are those of `pars` times `factor`: the mean of the log moves by log(factor); used for `unit=` in a declared model """
+        shift = np.log(factor)
+        mean = pars['mean']
+        if callable(mean):
+            func = mean
+            mean = lambda *args: func(*args) + shift
+            mean.__signature__ = inspect.signature(func) # The distribution passes arguments by their names
+        else:
+            mean = mean + shift
+        return pars | dict(mean=mean)
 
     def convert_timepars(self):
         for key, v in self._pars.items():

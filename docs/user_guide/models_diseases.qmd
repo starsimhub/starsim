@@ -229,6 +229,8 @@ sim.results.cholera.plot()
 
 Since nobody catches cholera from a person here, the infection is **spontaneous** (its rate has no bare state), but it is still the acquisition of the disease: it is what a vaccine or a lower susceptibility acts on.
 
+A count can weight each person: `(ss.by(biting=[0.5, 1, 2])*I).n` counts each infectious person by how much they are bitten (in a model stratified by `biting`), and `I.n_trans` by how infectious they are (their `rel_trans`, with any product or modifier on it), so a treatment that halves infectiousness also halves what the treated shed: `shedding = ss.null >> W @ xi*I.n_trans`. A weighted count works under every solver, worked out once a step in a compartmental run.
+
 ## Susceptibility and infectiousness
 
 A state can make the people in it less susceptible, or less infectious, than others, with `rel_sus` and `rel_trans`. For example, people vaccinated against measles (`V`) are 97% protected:

@@ -157,8 +157,72 @@ def test_burnin():
     return out
 
 
+def test_attr_in_rate_with_births():
+    """ A transmission whose rate reads an attribute keeps going once births grow the arrays (their spare room holds no value) """
+    class SIS(ss.Disease):
+        S = ss.State()
+        I = ss.State()
+        n_inf = ss.attr(1, on=I.enter, combine='sum')
+        infection = S >> I @ 0.5**n_inf*ss.perday(0.5)*I
+        recovery = I >> S @ ss.perday(0.1)
+
+    out = []
+    for dem in [None, ss.Births(birth_rate=ss.peryear(20))]:
+        sim = ss.Sim(start=2000, dur=ss.days(10), dt=ss.days(1), n_agents=5_000, networks=ss.RandomNet(n_contacts=5), diseases=SIS(init_prev=0.01), demographics=dem, rand_seed=2, **kw).run()
+        out.append(sim.results.sis.infection.values)
+    assert out[1][3:].sum() > 0.5*out[0][3:].sum() # Not stopped after the first growth
+    return
+
+
+def test_attr_by_event():
+    """ TY1: a dict by event records each event's own value, which a dwell time can read (Typhoid's prepatent period by dose) """
+    class M(ss.Disease):
+        S, R = ss.states('S R')
+        E, I = ss.State(keep_time=True), ss.State(keep_time=True)
+        cfu = ss.State(people=False, init=4.0)
+        hi = ss.par(10.0)
+        contact = S >> E @ ss.perday(0.05)*I
+        environment = ss.Transition(S, E, rate=ss.perday(0.01), acquisition=True)
+        dose = ss.attr({contact: hi, environment: cfu.n/2}) # By contact, a high dose; from the environment, what is there then
+        onset = ss.Transition(E, I, dur=ss.lognorm_im(mean=np.log(dose), sigma=0.01, unit='day')) # The dwell is the dose, in days
+        rec = I >> R @ ss.days(5)
+    sim = ss.Sim(diseases=M(init_prev=0), n_agents=3000, dur=ss.days(40), dt=ss.days(1), rand_seed=1, **kw).run()
+    m = sim.diseases.m
+    u = sim.people.auids
+    dose = m.dose.raw[u]
+    by_contact, by_env = sim.results.m.contact.sum(), sim.results.m.environment.sum()
+    assert by_contact > 0 and by_env > 0
+    assert np.sum(dose == 10) == by_contact and np.sum(dose == 2) == by_env # Each event's own value
+    for d in [2, 10]:
+        entered = u[(dose == d) & (m.I.raw[u] | m.R.raw[u])]
+        assert len(entered) and np.allclose(m.ti_I.raw[entered] - m.ti_E.raw[entered], d, atol=1) # The dwell read its own dose
+    with pytest.raises(ValueError):
+        ss.attr({M.contact: 1}, on=M.contact) # Its keys are its events
+    return sim
+
+
+def test_attr_init():
+    """ TY3: an attribute's value before any event can be a distribution or an expression, drawn for each person when they are made """
+    class M(ss.Disease):
+        S, I = ss.states('S I')
+        seroprev = ss.par(0.5)
+        n_inf = ss.attr(1, on=I.enter, combine='sum', init=ss.bernoulli(seroprev)*ss.poisson(lam=ss.ppl.age/20))
+        inf = S >> I @ 0.5**n_inf*ss.perday(0.01)
+        rec = I >> S @ ss.days(5)
+    sim = ss.Sim(diseases=M(init_prev=0), n_agents=20_000, dur=ss.days(5), dt=ss.days(1), rand_seed=1, **kw).init()
+    u = sim.people.auids
+    n = sim.diseases.m.n_inf.raw[u]
+    expected = 0.5*np.mean(sim.people.age.raw[u]/20)
+    assert abs(n.mean() - expected) < 0.05*expected and n.max() > 2 and np.all(n == np.round(n))
+    sim2 = ss.Sim(diseases=M(init_prev=0), n_agents=20_000, dur=ss.days(5), dt=ss.days(1), rand_seed=1, pars={'m.seroprev': 0.1}, **kw).init() # Its parameters are the model's
+    assert sim2.diseases.m.n_inf.raw[sim2.people.auids].mean() < 0.4*n.mean()
+    return sim
+
+
 if __name__ == '__main__':
     sc.options(interactive=False)
     test_hiv_cd4()
     test_attr_rules()
     test_burnin()
+    test_attr_by_event()
+    test_attr_init()

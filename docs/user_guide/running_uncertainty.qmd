@@ -66,6 +66,8 @@ res.mean()                       # The mean at each time point
 res.select(run=3)                # One run
 ```
 
+Each summary is over the runs of each scenario (the sims' labels) separately. With several scenarios, `low, mid, high = res.quantiles()` still works: each is a result with a row per scenario, e.g. `high.select(scenario='vaccine')`.
+
 ## How many runs
 
 The interval is estimated from the runs, so with few runs its ends are uncertain themselves. The ends of a 95% interval rest on the most extreme 2.5% of runs at each end: one run in 40. With 500 runs:

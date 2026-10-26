@@ -324,7 +324,8 @@ class Presentation:
         infected = [s.name for s in self.infected if s.people]
         if infected and not self.transmissions: # With a transmission, they are its destination and its source, as above
             add('', f'infected: {", ".join(infected)}', 'counted in prevalence, and cured by ss.treat')
-        inits = {s.name:s.init for s in self.states.values() if s.init is not None} | {s.name:f'{s.init_n} {"person" if s.init_n == 1 else "people"}' for s in self.states.values() if s.init_n is not None}
+        init_str = lambda v: f'{value_str(v)}(sim)' if callable(v) and not isinstance(v, (ss.Dist, Expr, ss.by, ss.parameters.TimeValue)) else v # A function by its name (MS10), e.g. Sv = mosquito_start(sim)
+        inits = {s.name:init_str(s.init) for s in self.states.values() if s.init is not None} | {s.name:f'{s.init_n} {"person" if s.init_n == 1 else "people"}' for s in self.states.values() if s.init_n is not None}
         if self.init_prev is not None and not (sc.isnumber(self.init_prev) and self.init_prev == 0):
             inits['init_prev'] = value_str(self.init_prev.raw) if isinstance(self.init_prev, par) else self.init_prev
         guesses = [self.guessed[key] for key in ['init', 'init_prev', 'first', 'rest'] if key in self.guessed]
@@ -829,7 +830,7 @@ def describe_sim(sim, output=False, verbose=False):
                     ref = strat.geo.ref
                     text += f"; places from starsim_data {ref['version']} ({ref.get('boundaries', '?')} boundaries; population: {ref.get('population', '?')})"
             elif strat.kind == 'age':
-                text += f'; split as the population of {named.place}' if getattr(strat, 'split_from', None) == 'people' else ''
+                text += (f'; split as the population of {named.place}' if named is not None else '; split as the ages of the people given') if getattr(strat, 'split_from', None) == 'people' else '' # A named population, or ss.People(age_data=...) (MA29)
                 text += '; people do not age (use_aging=False)' if not pars.use_aging else '; nobody ages, since time is in timesteps' if sim.unit is None else '; people age between the groups'
             text += sim.groups.moved_by(strat)
             if strat.name in getattr(sim.groups, 'kept', set()):
@@ -1139,7 +1140,8 @@ def partnership_lines(mod, tr, sim, name):
 
 def seasonal_str(raw, mean):
     """ An `ss.seasonal` as the textbooks write it, e.g. "1.3 per day × (1 + 0.1 cos(2π(t − 0.25)))", given its mean as text """
-    return f'{mean} × (1 + {raw.amplitude:n} cos(2π(t − {raw.peak_frac:.4g})))'
+    period = '' if raw.period_years == 1 else f'/{raw.period_years:.4g}'
+    return f'{mean} × (1 + {raw.amplitude:n} cos(2π(t − {raw.peak_frac:.4g}){period}))'
 
 
 def timeseries_str(raw, most=4):
@@ -1185,6 +1187,8 @@ def quantity_json(raw, kind, unit):
         return dict(type='peract') | {k:quantity_json(v, None, unit) for k,v in items.items()}
     elif isinstance(raw, Expr):
         return format_expr(raw, exact=True)
+    elif isinstance(raw, ss.box): # Waning as a box, then a decay (MS6)
+        return dict(box=quantity_json(raw.dur, None, unit), decay=None if raw.decay is None else quantity_json(raw.decay, None, unit), stages=raw.stages)
     elif callable(raw):
         return func_json(raw)
     elif isinstance(raw, dict): # A bare number as the default of a beta for each route stays bare, since it is per act on the routes with acts it applies to

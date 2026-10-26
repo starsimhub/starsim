@@ -120,6 +120,16 @@ People can move between the levels of a dimension, without changing their diseas
 measles.stratify(vaccinated=[False, True], adjust={'rel_sus': [1, 0.03]}, campaign=ss.transfer(vaccinated=True, rate=ss.peryear(0.2)))
 ```
 
+- **Counters.** `increment=` on a transition moves people up a dimension of whole numbers each time it happens to them, e.g. the number of infections, doses, or births. A rate reads each person's count as a property of people, `ss.ppl.infections` (in a compartmental run, each level's count), e.g. a susceptibility that falls with each past infection:
+
+```python
+S, I = ss.states('S I')
+tppi = ss.par(0.5) # Protection per past infection
+infection = ss.Transition(S, I, rate=(1 - tppi)**ss.ppl.infections*ss.perday(0.3)*I, increment='infections')
+sis = ss.Disease(infection, I >> S @ ss.days(7), init=dict(I=0.01), name='sis')
+sis.stratify(infections=[0, 1, 2, 3, 4]) # 0, 1, 2, 3, 4+
+```
+
 - **Interventions.** A delivery can move people between levels too, e.g. to vaccinate them on a date ([Products and deliveries](interventions_products.qmd)).
 
 [Stratification in depth](../tutorials/g3_strata.qmd) works through transfers, including migration and vaccination as a transfer.

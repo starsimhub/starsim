@@ -495,12 +495,18 @@ class Module(Base):
         you don't need to call this method directly. Call it explicitly when you want
         to construct the module yourself, e.g. to add it to a sim later.
 
-        Function-based modules are intentionally minimal: they have no parameters,
-        states, or results of their own. As soon as you need `define_pars()`,
-        `define_states()`, or `define_results()`, write a proper subclass instead.
+        Keyword arguments of the function with defaults are the module's parameters,
+        passed to it at each call; one given as `ss.par` with bounds can be fitted
+        (`sim.fit()`), sampled (`sim.sensitivity()`), and set by name (`ss.Sim(pars=...)`,
+        `ss.parallel(pars=...)`) as any other. This is how to fit a value that is not a
+        parameter of any module, e.g. one set in code (see the second example).
+
+        Function-based modules are otherwise minimal: they have no states or results
+        of their own. As soon as you need `define_states()` or `define_results()`,
+        write a proper subclass instead.
 
         Args:
-            func (callable): a function taking a single argument, the sim
+            func (callable): a function taking the sim, and optionally keyword arguments with defaults (its parameters)
 
         Returns:
             mod (Module): an instance of `cls` whose `step()` calls `func(sim)`
@@ -519,11 +525,19 @@ class Module(Base):
 
             # ... or equivalently, let the sim convert it automatically:
             sim = ss.Sim(diseases='sis', networks='random', interventions=knockdown)
+
+            # A value set in code, fitted: the share of transmission left in 2015
+            def knockdown(sim, share=ss.par(0.5, bounds=[0.1, 1])):
+                if sim.now == 2015:
+                    sim.diseases.sis.rel_trans[:] *= share
         """
         def step(mod): # TODO: see if this can be done more simply
-            return mod.func(mod.sim)
+            return mod.func(mod.sim, **mod.pars)
         name = func.__name__
         mod = cls(name=name)
+        defaults = {k:p.default for k,p in inspect.signature(func).parameters.items() if p.default is not inspect.Parameter.empty}
+        if defaults:
+            mod.define_pars(**sc.dcp(defaults)) # Copied, since a default is shared by every call (and sim)
         mod.func = func
         mod.step = ft.partial(step, mod)
         mod.step.__name__ = name # Manually add these in as for a regular class method
@@ -554,7 +568,7 @@ class Module(Base):
         """
         # Merge pars and kwargs
         if isinstance(pars, ss.Pars): # E.g. a package's full set of defaults for the module: those given as ss.par keep their bounds
-            pars = dict(pars) | {k:p for k,p in pars.bounded().items() if k in pars}
+            pars = pars.with_bounded()
         pars = sc.mergedicts(pars, kwargs)
 
         # Pull out the named arguments of this module's nearest __init__ (found by identity, so a wrapper or an overriding update_pars() doesn't hide it)
@@ -748,6 +762,8 @@ class Module(Base):
             self.t.init(sim=self.sim) # Initialize time vector
             self.link_timepars() # Add module dt to the timepars
             self.check_bare_units(sim)
+            if isinstance(self.pars, ss.Pars) and getattr(self, 'graph', None) is None: # A declared module checks its own, against its graph (see ss.Disease.init_pre())
+                self.pars.check_added(self.name) # A parameter set but never defined, e.g. renamed (MG7)
             if self.name in sim.pars:
                 sim.pars[self.name] = self.pars
             else: # Add a new key, which is allowed even if the sim's parameters are locked
@@ -778,7 +794,7 @@ class Module(Base):
         This is what lets a timepar resolve itself against the timestep with no
         argument, e.g. `self.pars.death_rate.to_prob()` or `self.pars.dur_inf.to_dt()`.
         """
-        timepars = sc.search(self, type=ss.TimePar, skip=dict(keys=['sim', 'module', 't'] + list(getattr(self, 'timepar_skip', [])), subclasses=ss.distributions.no_dists())) # Skip the timeline, else the module's own dt would be linked to itself
+        timepars = sc.search(self, type=ss.TimePar, skip=dict(keys=ss.utils.skipkeys(['sim', 'module', 't'] + list(getattr(self, 'timepar_skip', []))), subclasses=ss.distributions.no_dists())) # Skip the timeline, else the module's own dt would be linked to itself
 
         # Initialize them with the parent module
         dt = self.t.dt

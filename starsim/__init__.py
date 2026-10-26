@@ -77,7 +77,7 @@ from .demographics import (
     Demographics, Births, Deaths,
 )
 
-from .products import Product, Vaccine, Treatment, Diagnostic
+from .products import Product, Vaccine, Treatment, Diagnostic, box
 
 from .interventions import (
     Intervention, Event, Delivery, vaccinate, treat, screen,
@@ -161,6 +161,9 @@ def _load_fonts():
 
 # Try loading fonts
 _load_fonts()
+
+# Say if Starsim has not been compiled yet
+kernels.note_uncompiled()
 
 # Don't keep these in the module
 del sc

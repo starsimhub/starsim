@@ -43,6 +43,10 @@ class Undeclared:
         """ A parameter given as `ss.par` (e.g. with bounds, to be fitted) is its value, which the disease's code reads """
         return p.raw
 
+    def eval(self, expr):
+        """ An expression of parameters (e.g. a modifier's amount, `ss.par(2, bounds=[1, 4])`), at their values """
+        return ss.transitions.evaluate(expr, self)
+
 
 def make_engine(module, sim):
     """ Create the engine that runs a module's graph under the sim's solver; for a disease that declares nothing, one that runs nothing """
@@ -245,7 +249,8 @@ def init_compartments(sim, layouts=None):
     pars.pop_scale = 1.0
     pars.people_results = False
     staged = any(ss.dimensions.transfer_stages(sim, mod, tf, sim.groups.strats[sim.groups.dim_index(tf.dim)]) is not None for mod in sim.declared for tf in mod.graph.transfers.values()) # Erlang stages of a transfer: see ss.dimensions.transfer_stages()
-    if staged or any(ss.solvers.memory_strats(mod, sim) for mod in pars.interventions.values() if isinstance(mod, ss.Delivery)) or any(ss.strains.memory_strat(mod) is not None for mod in sim.declared): # Levels that the deliveries, transfers and strains' memory need now the solver is known: see ss.Delivery.dims()
+    boxed = any(mod.boxed(sim) for mod in pars.interventions.values() if isinstance(mod, ss.Delivery)) # Holding a product that wanes as a box: its levels (see ss.box)
+    if staged or boxed or any(ss.solvers.memory_strats(mod, sim) for mod in pars.interventions.values() if isinstance(mod, ss.Delivery)) or any(ss.strains.memory_strat(mod) is not None for mod in sim.declared): # Levels that the deliveries, transfers and strains' memory need now the solver is known: see ss.Delivery.dims()
         sim.groups.init()
         sim.mixing = ss.solvers.Mixing(sim)
 
@@ -311,7 +316,7 @@ def kernel_seconds(sim):
             seconds += ss.kernels.compiled_seconds(p, np.empty((cross.n_rows if cross is not None else engine.n_comps, groups)), mod.t.npts, solver, n_sub)
             continue
         elif sim.solver == 'tau':
-            leaps = max(np.max(rates, initial=0)*engine.dt/0.03, 1)
+            leaps = max(np.max(rates[np.isfinite(rates)], initial=0)*engine.dt/0.03, 1) # An infinite rate (a probability of 1) moves everyone at once, in no leaps (see ss.kernels.certain())
         seconds += 1.5e-7*mod.t.npts*groups*(len(p.src) + p.n_movers + 2*np.sum(p.src_chain))*leaps*max(engine.substeps(), 1)
     return seconds
 
@@ -445,17 +450,23 @@ def set_par_values(sim):
         mods = [mod for mod in sim.declared if name in mod.pars and modname in ['', mod.name]]
         if len(mods) > 1 and all(mod.graph.pars.get(name) is mods[0].graph.pars.get(name) is not None for mod in mods): # One parameter shared by several modules
             mods = mods[:1]
-        if not mods: # A parameter of a module written as code: one given with bounds (e.g. when fitting it), else any
-            mods = [mod for mod in coded if name in mod.pars.bounded() and modname in ['', mod.name]]
+        if not mods: # A parameter of a module written as code: one given with bounds (e.g. when fitting it; "cin_fn.k" for a value in a dict parameter, or "hpv16.cin_fn.k"), else any
+            found = [(mod, b) for mod in coded for b in mod.pars.bounded() if key in [b, f'{mod.name}.{b}']]
+            mods, name = ([mod for mod,b in found], found[0][1]) if found else ([], name)
             mods = mods or [mod for mod in coded if name in mod.pars and modname in ['', mod.name]]
+            if len(mods) > 1 and all(mod.pars.bounded().get(name) is mods[0].pars.bounded().get(name) is not None for mod in mods): # One ss.par shared by several modules (e.g. a beta for every genotype): set in each
+                for mod in mods:
+                    mod.pars.update({name:val})
+                continue
         if len(mods) != 1:
             options = [f'{mod.name}.{k}' for mod in sim.declared for k in mod.graph.pars] + [f'{mod.name}.{k}' for mod in coded for k in mod.pars.bounded()]
             raise ss.errors.UnknownParameter(f'pars= has a value for "{key}", which {"matches no parameter" if not mods else "is a parameter of more than one module"}. '
                                       f'Parameters are {sc.strjoin(options)}{ss.transitions.did_you_mean(key, options)}')
-        if name in mods[0].pars:
+        attrs = getattr(mods[0], '_par_attrs', {}).get(name) if name not in mods[0].pars else None
+        if attrs is None:
             mods[0].pars.update({name:val})
         else: # A setting kept as an attribute, or several holding the same ss.par (see above)
-            for attr in getattr(mods[0], '_par_attrs', {}).get(name, [name]):
+            for attr in attrs:
                 mods[0].setattribute(attr, val)
     return
 
@@ -735,6 +746,18 @@ def init_where(sim):
             if target is not None and p.name not in target.graph.pars:
                 target.graph.pars[p.name] = p
                 target.define_pars(**{p.name:p})
+    for m in list(sim.pars.interventions.values()) + list(sim.pars.connectors.values()): # An amount added to an inflow from outside the model (from ss.null), e.g. CFUs added to a reservoir: a parameter of 0 added to its rate, which the modifier adds to (TY15b)
+        if isinstance(m, ss.modify) and m.op == 'add' and m.target_kind in ['transition', None]:
+            target = next((mod for mod in sim.declared if mod.name == ss.conditions.modname(m.target_module)), None)
+            tr = target.graph.transitions.get(m.target_name) if target is not None else None
+            if tr is not None and tr.inflow and tr.rate is not None and getattr(tr, 'per', None) is None:
+                name = f'{tr.name}_added'
+                if name not in target.graph.pars: # Once, if the sim is built again
+                    p = ss.par(0.0, doc=f'Added to the inflow {tr.name} from outside the model, by ss.modify(..., add=)')
+                    target.graph._add_par(p, name)
+                    tr.rate = tr.rate + p
+                    target.define_pars(**{name:p})
+                m.target_kind, m.target_name = 'par', name
     return
 
 

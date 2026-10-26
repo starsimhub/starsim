@@ -51,7 +51,7 @@ print('Mean age of the first cases:', round(mean_ages[0]))
 print('Mean age of the last cases:', round(mean_ages[-1]))
 ```
 
-The mean age of the people infected rises as the epidemic goes on, from about 30 to over 50: children, who have the most contacts, are infected early, and people aged 65 and over, who have fewer, later. A function is good for a quick look like this, but it has no parameters, states, or results of its own, so its output is kept outside the sim, in a list that every run would add to. For anything more, write a class.
+The mean age of the people infected rises as the epidemic goes on, from about 30 to over 50: children, who have the most contacts, are infected early, and people aged 65 and over, who have fewer, later. A function is good for a quick look like this, but it has no states or results of its own, so its output is kept outside the sim, in a list that every run would add to. For anything more, write a class.
 
 ## An analyzer
 

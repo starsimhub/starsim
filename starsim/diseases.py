@@ -91,6 +91,7 @@ class Disease(ss.Module):
     engine = None # Runs the declared part (see ss.solvers.make_engine()); created when the sim is initialized
     infection_log = None # An InfectionLog, if the sim has an ss.infection_log analyzer
     code_pars = () # Parameters of a declared module that its own code reads rather than its graph (e.g. ss.Pregnancy's fertility rates)
+    reads_modifiers = () # For a disease written as code: which of rel_sus and rel_trans its own code reads, with modified(), so ss.modify() of them is applied (an ss.Infection with a beta reads both)
 
     _infection_methods = ['set_prognoses', 'transmit', 'set_outcomes', 'finalize_infections', 'compute_transmission', 'transmit_route', 'set_congenital'] # Methods of ss.Infection's transmission, which a declared transition never calls
 
@@ -103,6 +104,13 @@ class Disease(ss.Module):
             base = next((f'ssl.Agent{b.__name__}' for b in cls.__mro__ if b.__module__ == __name__ and b.__name__ in ['SIR', 'SIS', 'SEIR']), 'ss.Infection')
             errormsg = (f'{cls.__name__} declares states or transitions and defines {sc.strjoin(overridden)}, which a declared transition never calls, so it would be silently ignored.\n'
                         f'     A disease whose transmission is written as code subclasses {base} (import starsim.library as ssl); a declared one changes its transitions.')
+            raise ss.CapabilityError(errormsg)
+        rebound = [name for name in dict.fromkeys(k for base in cls.__mro__[1:] for k,v in vars(base).items() if isinstance(v, ss.par)) if name in vars(cls) and not isinstance(vars(cls)[name], (ss.par, ss.transitions.Expr))]
+        if rebound: # A declared parameter rebound to something else (a method, a number) is dropped from the model, and its transitions keep the base class's parameter, so it would be silently ignored
+            name = rebound[0]
+            how = (f'give the parameter a function as its value instead, e.g. self.pars.update({name}=self.my_{name}) in __init__(), where my_{name}(sim, uids) returns the value for those agents' if callable(vars(cls)[name]) else
+                   f'to change its default, give the value in __init__(), e.g. super().__init__(**({{"{name}": {vars(cls)[name]!r}}} | kwargs))')
+            errormsg = f'{cls.__name__} defines {sc.strjoin(rebound)}, a parameter of {cls.__mro__[1].__name__}, as {"a method" if callable(vars(cls)[name]) else "a value"}, which its transitions never read; {how}'
             raise ss.CapabilityError(errormsg)
         infect = vars(cls).get('infect')
         if infect is not None and infection and len(inspect.signature(infect).parameters) == 1: # Starsim 3's transmission pass, infect(self), which is transmit() now: it would never be called
@@ -211,11 +219,27 @@ class Disease(ss.Module):
         memo |= {key:p for key,p in pars.items() if p.module is None} | others # Parameters that came with the copied transitions are copied too, so each disease has its own; one not yet registered stays shared, e.g. one R0 for several models
         return sc.dcp((args, members), memo=memo)
 
+    def check_par_members(self, args, members, kwargs):
+        """ A parameter given by keyword under the name it already has (name=), and read by a transition, as if it were a result (e.g. eir=eir) is an error: a result needs a name of its own (MS11) """
+        for key,val in kwargs.items():
+            if isinstance(val, ss.par) and val.name_given and val.name == key:
+                exprs = [e for obj in list(args) + list(members.values()) + list(kwargs.values()) if isinstance(obj, ss.Transition) for e in [obj.rate, obj.dur] + sc.tolist(obj.p)]
+                exprs += [obj for obj in list(members.values()) + list(kwargs.values()) if isinstance(obj, ss.transitions.Expr) and obj is not val]
+                if any(part is val for part in ss.expressions.nodes(exprs)):
+                    errormsg = (f'"{key}" of "{self.name}" is given the parameter "{key}" itself, which its transitions already read, so it is not a result: a result needs a name of its own. '
+                                f'For a result of a parameter, write an expression of it under another name, e.g. {key}_now = 1*{key}')
+                    raise ss.errors.DuplicateDeclaration(errormsg)
+        return
+
     def init_graph(self, args, members, pars, kwargs, names=None):
         """ Build the graph of declared states and transitions; see `ss.transitions.Graph` """
         meta = {key:kwargs.pop(key) for key in ['name', 'label'] if key in kwargs}
         declared = (ss.State, ss.Transition, ss.outcome, ss.transitions.Expr, ss.transitions.FlowSum, ss.transitions.Transfer)
         timepars = {key:kwargs.pop(key) for key in ss.Timeline.time_args if key in kwargs and not isinstance(kwargs[key], declared)} # A transition can be called "stop"
+        pars = sc.mergedicts(pars)
+        for key in ['init_prev', 'init', 'init_n']: # The initial conditions can also be given in pars=, as the parameters are
+            if key in pars:
+                kwargs[key] = pars.pop(key)
         init_prev = kwargs.pop('init_prev', None)
         init = kwargs.pop('init', None)
         init_n = kwargs.pop('init_n', None)
@@ -223,11 +247,20 @@ class Disease(ss.Module):
         first = first if isinstance(first, str) else None
         self.set_metadata(**meta)
         self.t.update(**timepars)
-        memo = {id(leaf):leaf for val in members.values() if isinstance(val, ss.Transition) for expr in [val.rate, val.dur] + sc.tolist(getattr(val, 'p', None)) if isinstance(expr, ss.transitions.Expr) for leaf in expr.leaves if isinstance(leaf, ss.par) and not any(leaf is m for m in members.values())}
+        holds_members = lambda leaf: isinstance(leaf.raw, ss.by) and any(v is m for v in leaf.raw.items for m in members.values()) # A value by level holding the class's parameters (ss.by(sex=dict(female=p_f, male=p_m))), copied with them
+        def leaves(expr): # Including those inside a parameter that holds an expression, as a dwell time written as an expression is held (e.g. dur=d*ss.days(1), with d = ss.par(ss.lognorm_im(...)))
+            for leaf in expr.leaves:
+                yield leaf
+                if isinstance(leaf, ss.par) and isinstance(leaf.raw, ss.transitions.Expr):
+                    yield from leaves(leaf.raw)
+        holds_expr = lambda leaf: isinstance(leaf.raw, ss.transitions.Expr) and any(inner is m for inner in leaves(leaf.raw) for m in members.values()) # One holding the class's parameters, copied with them
+        memo = {id(leaf):leaf for val in members.values() if isinstance(val, ss.Transition) for expr in [val.rate, val.dur, getattr(val, 'p_die', None), getattr(val, 'p_stay', None)] + sc.tolist(getattr(val, 'p', None)) if isinstance(expr, ss.transitions.Expr) for leaf in leaves(expr) if isinstance(leaf, ss.par) and not any(leaf is m for m in members.values()) and not holds_members(leaf) and not holds_expr(leaf)}
         members = sc.dcp(members, memo=memo) # Copy class members (together, so they still refer to each other) so instances do not share them; a parameter defined outside the class (rate = ss.par(...) at module level) stays shared, as in the operator form, so it keeps its name
         kwargs = {k:ss.expressions.rebind(v, memo) for k,v in kwargs.items()} # A result given here that reads the class's states reads the copies
+        init, init_n = [{k:ss.expressions.rebind(v, memo) for k,v in d.items()} if isinstance(d, dict) else d for d in [init, init_n]] # Likewise a starting value, e.g. init=dict(S=1 - (A - age)/(k*age + A)) with the class's parameters
         for key in [key for key,val in kwargs.items() if isinstance(val, ss.par) and isinstance(members.get(key), ss.par)]: # e.g. ss.SIS(beta=ss.par(0.1, bounds=[0.05, 1])): the class's parameter, which its transitions use, takes the value and bounds
             members[key].merge(kwargs.pop(key))
+        self.check_par_members(args, members, kwargs)
         members = sc.mergedicts(members, kwargs)
         args, members = self.reuse(args, members, names)
         self.graph = ss.transitions.Graph(self, args, members, init_prev=init_prev, init=init, init_n=init_n, first=first, names=names)
@@ -450,7 +483,7 @@ class Disease(ss.Module):
         unknown = [key for key in self.pars if key not in self.graph.pars and key not in self.code_pars] if self.graph is not None else [] # Added after the disease was made, so nothing reads it (TL58: pars.init was ignored)
         if unknown:
             hint = ' The starting values are given when the disease is made, e.g. ss.Disease(..., init=dict(I=0.01)) or init_n=dict(I=100), and cannot be set through pars.' if 'init' in unknown or 'init_n' in unknown else ''
-            raise ss.errors.UnknownParameter(f'"{self.name}" has no parameter named {sc.strjoin(unknown)}, so nothing would read it. Its parameters are {sc.strjoin(self.graph.pars.keys())}.{hint}')
+            raise ss.errors.UnknownParameter(f'"{self.name}" has no parameter named {sc.strjoin(unknown)}, so nothing would read it. Its parameters are {sc.strjoin(self.graph.pars.keys())}{ss.expressions.did_you_mean(unknown[0], self.graph.pars.keys())}{hint}')
         self.engine = ss.solvers.make_engine(self, sim)
         self.engine.define()
         needs = ss.interventions.memory_needs(sim) if isinstance(sim, ss.Sim) and self.graph is not None and self.graph.transitions else {} # Not a mock sim
@@ -571,6 +604,33 @@ class Disease(ss.Module):
         if self.infection_log:
             self.infection_log.add_entries(uids, sources, self.t.tvec[self.ti]) # At the step's time point, as ti_infected is
         return
+
+    def modified(self, key, uids=None, vals=None):
+        """
+        `rel_sus` or `rel_trans` (`key`) times the modifiers active on it (`ss.modify(dis.rel_sus, ...)`, and products), for a disease written as code that reads it
+
+        An `ss.Infection` with a `beta` reads both in its transmission (`transmit_route()`). Any other disease written as
+        code that reads one says so in its class, `reads_modifiers = ('rel_sus',)`, so that modifiers of it are applied
+        rather than refused.
+
+        Args:
+            key (str): 'rel_sus' or 'rel_trans'
+            uids (uids): the agents to give the values of (default: an array of every agent, by UID)
+            vals (Arr): the values to multiply (default: the disease's own `rel_sus` or `rel_trans`)
+
+        **Example**::
+
+            class Diabetes(ss.Disease):
+                reads_modifiers = ('rel_sus',) # ss.modify(diabetes.rel_sus, ...) scales its onset
+                def step(self):
+                    uids = self.at_risk.uids
+                    onset = self.pars.p_onset.rvs(uids)*self.modified('rel_sus', uids) # ...
+        """
+        arr = self[key]
+        vals = arr if vals is None else vals
+        if isinstance(arr, ss.arrays.ModifiableArr) and arr.engine is not None:
+            vals = vals.asnew(vals.raw*arr.engine.mult_raw(key), copy=False)
+        return vals if uids is None else vals[uids]
 
     def not_naive(self):
         """ The agents who have left the first state (e.g. who are no longer susceptible), for dynamic rescaling (see `ss.Sim.rescale()`) """
@@ -756,10 +816,11 @@ class Infection(Disease):
 
     def init_post(self):
         """
-        Set initial values for states. This could involve passing in a full set of initial conditions,
-        or using init_prev, or other. Note that this is different to initialization of the Arr objects
-        i.e., creating their dynamic array, linking them to a People instance. That should have already
-        taken place by the time this method is called.
+        Set initial values for states: by default, infect `init_prev` of the people (`set_prognoses()`)
+
+        The initial infections are dated by the first step: in `set_prognoses()`, `self.ti` is 1 (not 0, the
+        start of the run), as it is for those infected in the first step, so a disease that schedules from
+        `self.ti` (e.g. `self.ti_recovered[uids] = self.ti + dur`) gives them the same course, as Starsim 3 did.
         """
         super().init_post()
         if self.pars.init_prev is None:
@@ -769,7 +830,12 @@ class Infection(Disease):
         unborn = people.unborn_uids() if isinstance(people, ss.People) else ss.uids() # E.g. the fetuses of pregnancies that ss.Pregnancy starts before the start, who are not seeded
         initial_cases = self.pars.init_prev.filter() if not len(unborn) else self.pars.init_prev.filter(people.auids[people.age.raw[people.auids] >= 0])
         if len(initial_cases):
-            self.set_prognoses(initial_cases, sources=-1)  # -1 = externally seeded infection with no source agent
+            ti = self.t.ti
+            self.t.ti = min(1, self.t.npts-1) # Dated by the first step, as an infection in it is, so code that schedules from self.ti (e.g. ti_recovered = self.ti + dur) gives them as long as Starsim 3 did, not a step less (CV2)
+            try:
+                self.set_prognoses(initial_cases, sources=-1)  # -1 = externally seeded infection with no source agent
+            finally:
+                self.t.ti = ti
         return initial_cases
 
     def init_results(self):
@@ -963,13 +1029,6 @@ class Infection(Disease):
 
         return self.finalize_infections(new_cases, sources, networks)
 
-    def modified(self, vals, key):
-        """ Values for `rel_sus` or `rel_trans` (`key`), e.g. those passed to `transmit_route()`, times the modifiers active on it, including products (see `ss.modify()`) """
-        arr = self[key]
-        if isinstance(arr, ss.arrays.ModifiableArr) and arr.engine is not None:
-            return vals.asnew(vals.raw*arr.engine.mult_raw(key), copy=False)
-        return vals
-
     def transmit_route(self, i, route, betas, rel_trans, rel_sus):
         """
         Compute the transmission along a single network (or other route)
@@ -988,8 +1047,8 @@ class Infection(Disease):
         Returns:
             A tuple of the target UIDs, the source UIDs, and the network IDs of the new infections (possibly with duplicates)
         """
-        rel_trans = self.modified(rel_trans, 'rel_trans')
-        rel_sus = self.modified(rel_sus, 'rel_sus')
+        rel_trans = self.modified('rel_trans', vals=rel_trans)
+        rel_sus = self.modified('rel_sus', vals=rel_sus)
         new_cases = []
         sources = []
         mods = self.sim.modifiers

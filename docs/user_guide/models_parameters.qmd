@@ -109,7 +109,7 @@ sim.run()
 sim.results.measles.infection.by('age').plot()
 ```
 
-The values can also be given by label (`ss.by(age={'0-14': 2.5, ...})`), as a table, or for several dimensions at once. See [Stratification](models_stratification.qmd#values-by-group).
+The values can also be given by label (`ss.by(age={'0-14': 2.5, ...})`), as a table, or for several dimensions at once. See [Stratification](models_stratification.qmd#values-by-group). They can also come from code, as a function of the sim that gives one value per level, worked out at each step: `ss.by(patch=fn)`, e.g. a biting rate in each place from mosquitoes written as code, whatever other dimensions the sim has.
 
 ## Parameters over time
 
@@ -146,7 +146,7 @@ msim.results.measles.infection.resample('month').plot()
 
 With β constant, the epidemics die down to a steady level. With school terms, they don't: the yearly forcing keeps them going, and after some years of smaller, irregular epidemics, they settle into a large epidemic every other year, as measles did in England and Wales before vaccination.
 
-**A seasonal cycle**, `ss.seasonal()`, is a smooth yearly cycle, `mean × (1 + amplitude × cos(2π(t − peak)))`: `ss.seasonal(mean=ss.perday(1.9), amplitude=0.2, peak='March')` is highest in March, at 1.2 times the mean, and lowest in September.
+**A seasonal cycle**, `ss.seasonal()`, is a smooth yearly cycle, `mean × (1 + amplitude × cos(2π(t − peak)))`: `ss.seasonal(mean=ss.perday(1.9), amplitude=0.2, peak='March')` is highest in March, at 1.2 times the mean, and lowest in September. A cycle of another length takes `period=`: `ss.seasonal(amplitude=0.5, peak='April', period=ss.years(0.5))` peaks in April and October, as with two rainy seasons.
 
 **A function of the sim** is worked out at each step, and can use anything the sim knows: the date, the number of people in a state, or a result. Measles spreads too fast for a change partway through to show, so this example is an influenza-like SIR (R0 = 3), whose transmission falls by half from 1 February. Written as a time series and as a function, it gives the same answer:
 
@@ -193,6 +193,8 @@ sim = ss.Sim(measles, n_agents=10_000, stop=ss.days(50))
 sim.run()
 sim.plot()
 ```
+
+A rate is worked out for the people who could take it at each step (everyone in its source state), so a function in a rate is called for them, every step. Multiplied by a condition, it is called only for the people the condition holds for, and is 0 for the others: with `rate = ss.par(fn, name='infant')*(ss.ppl.age < 1)`, `fn` is given only the children under 1, and need not check their ages itself.
 
 A function that uses `uids`, or anything else about individual people, needs agents, so a model with one runs as agents. Where the same thing can be said by group (`ss.by(age=...)` on a stratified model), it runs under every solver.
 

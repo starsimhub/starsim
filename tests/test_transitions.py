@@ -448,13 +448,13 @@ def test_time():
     df = ss.Sim(make_sir(), stop=10, **kw).run().results.sir.to_df()
     assert df.timevec.iloc[1] == 1 # Not a date in year 1
 
-    # A number times a probability scales its rate: 0.275 of people a year, not 0.16; a probability of 1 is an infinite rate and raises (agents moved nobody, the ODE gave NaN)
+    # A number times a probability scales its rate: 0.275 of people a year, not 0.16; a probability of 1 is an infinite rate (so still 1 when scaled), which moves everyone in the step, under every solver (FP1)
     S, I = ss.states('S I')
     res = ss.Sim(ss.Disease(S, I, onset=S >> I @ ss.probperyear(0.8)*0.2, name='d'), total_pop=10_000, solver='ode', start=2000, stop=2001, **kw).run().results.d
     assert np.isclose(res.I[-1], 10_000*(1 - 0.2**0.2), rtol=1e-3)
-    for solver in ['abm', 'ode']:
-        with pytest.raises(ValueError, match='infinite rate'):
-            ss.Sim(ss.Disease(S, I, onset=S >> I @ ss.probperyear(1)*0.8, name='d'), n_agents=1000, solver=solver, start=2000, stop=2001, **kw).run()
+    for solver in ['abm', 'ode', 'binomial']:
+        res = ss.Sim(ss.Disease(S, I, onset=S >> I @ ss.probperyear(1)*0.8, name='d'), n_agents=1000, solver=solver, start=2000, stop=2001, **kw).run().results.d
+        assert res.S[1] == 0 and res.I[1] == res.S[0] + res.I[0], solver
     return sim
 
 

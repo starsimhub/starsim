@@ -595,7 +595,7 @@ class Groups:
                 for strat in mod.dims(sim):
                     strat.owner = mod.name # Part of the scenario, not of the model
                     strats.setdefault(strat.name, strat)
-                self.dim_moves += [move for move in mod.dim_moves() if move.dim not in [m.dim for m in self.dim_moves]]
+                self.dim_moves += [move for move in mod.dim_moves(sim) if move.dim not in [m.dim for m in self.dim_moves]]
                 for dim in list(mod.move or {}) + list(getattr(mod, 'increment', None) or {}):
                     if dim not in strats:
                         raise ss.errors.MissingDimension(f'the transfer "{mod.name}" moves people along "{dim}", but the model is not stratified by it. Add e.g. sim.stratify({dim}=[...]).')
@@ -864,8 +864,10 @@ class Groups:
         sim = self.sim
         cache = getattr(self, '_group_cache', None)
         n = sim.people.uid.len_tot
+        if cache is not None and cache[0] == sim.ti and len(cache[1]) == n: # The usual case, first, since this is called at every change of a state that is counted
+            return cache[1]
         binned = any(strat.edges is not None for strat in self.strats)
-        if cache is not None and (cache[0] == sim.ti or not binned) and len(cache[1]) == n:
+        if cache is not None and not binned and len(cache[1]) == n:
             return cache[1]
         dirty = getattr(self, '_group_dirty', None)
         self._group_dirty = None
@@ -919,7 +921,12 @@ class Groups:
                 old = kept[strat.name] = (raw.copy(), level_of(strat, raw))
                 rebuild = True
             else:
-                idx = np.flatnonzero(old[0] != raw) # Usually few: those born, or who moved, since it was last worked out
+                if strat.edges is not None: # A binned property (e.g. age) changes for nearly everyone at each step, but only those who crossed an edge (or have no value) change level
+                    inner = strat.edges[1:strat.n]
+                    lo, hi = np.append(-np.inf, inner), np.append(inner, np.inf) # The bounds of each level, as digitize() bins them
+                    idx = ss.perflib._passes.crossed(raw, old[1], lo, hi)
+                else:
+                    idx = np.flatnonzero(old[0] != raw) # Usually few: those born, or who moved, since it was last worked out
                 if len(idx):
                     before = old[1][idx]
                     levels_new = old[1] # In place, as above
@@ -928,8 +935,11 @@ class Groups:
                     old = kept[strat.name] = (old[0], levels_new)
                     updates.append((idx, before, levels_new[idx], int(mult)))
             levels.append(old[1])
+        moved = None # The agents whose group changed, and their groups before and after
         if shared:
             kept[''] = levels[0] # Already up to date
+            if updates and not rebuild:
+                moved = updates[0][:3]
         elif rebuild:
             out = np.zeros(n, dtype=dtype)
             for level,mult in zip(levels, mults):
@@ -942,11 +952,34 @@ class Groups:
                 for level,mult in zip(levels, mults):
                     tail += level[n0:].astype(dtype)*int(mult)
                 out = np.concatenate([out, tail])
-            for idx,before,after,mult in updates:
-                out[idx] += (after.astype(dtype) - before)*mult
+            if updates:
+                idx = updates[0][0] if len(updates) == 1 else np.unique(np.concatenate([u[0] for u in updates]))
+                before = out[idx].copy()
+            for idx_,before_,after,mult in updates:
+                out[idx_] += (after.astype(dtype) - before_)*mult
+            if updates:
+                moved = (idx, before, out[idx])
             kept[''] = out
         self._group_cache = (sim.ti, self.folded(kept['']), levels)
+        if moved is not None:
+            self.regrouped(*moved)
+        elif rebuild and cache is not None: # Worked out again from scratch: whatever keeps counts by group counts again
+            for mod in getattr(sim, 'declared', []):
+                if isinstance(mod.engine, ss.solvers.Agents):
+                    mod.engine.regroup()
         return self._group_cache[1]
+
+    def regrouped(self, uids, before, after):
+        """ Some agents' groups have changed by themselves (e.g. they reached the next age group): the agent engines move them between the counts they keep by group (see `ss.solvers.Agents.moved_groups()`) """
+        before, after = self.folded(before), self.folded(after)
+        changed = before != after
+        if not changed.any():
+            return
+        uids, before, after = uids[changed], before[changed], after[changed]
+        for mod in getattr(self.sim, 'declared', []):
+            if isinstance(mod.engine, ss.solvers.Agents):
+                mod.engine.moved_groups(uids, before, after)
+        return
 
     def folded(self, groups):
         """ The groups that agents are counted in: see `init_ragged()` """

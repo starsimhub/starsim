@@ -35,7 +35,8 @@ class MultiSim:
         debug (bool): if True, run in serial
         kwargs (dict): how to run the sims: `parallel` (default True), `n_cpus`, `par_args` (passed to `sc.Parallel()`), `shrink`, `verbose`, and `run_args` (passed to `sim.run()`)
 
-    By default (`verbose` not given) the runs print nothing of their own, and the MultiSim shows their progress: nothing for
+    By default (`verbose` not given: the sims' own `verbose`, if they share one, else `ss.options.verbose`) the runs print
+    nothing of their own, and the MultiSim shows their progress: nothing for
     runs that are done within a second, a bar for each run if there are up to 10 that each take more than 10 seconds, and
     otherwise one bar with the number of runs done (to a file, a line every tenth); then a line on what was run.
 
@@ -123,6 +124,8 @@ class MultiSim:
         self.base_sim = base_sim
         self.label = base_sim.label if (label is None and base_sim is not None) else label
         self.run_args = sc.mergedicts(dict(n_runs=n_runs, pars=pars, priors=priors, inplace=inplace, debug=debug), kwargs)
+        verbosities = {sim.pars.verbose for sim in sc.tolist(sims) or [base_sim] if isinstance(sim, ss.Sim)}
+        self.verbose = verbosities.pop() if len(verbosities) == 1 else None # The sims' verbose, if they share one (e.g. ss.Sim(verbose=0).run(n_runs=10) prints nothing)
         self.results = None # Every result, with a run axis first
         self.runs = None # One row per run: its scenario, the values of any parameters swept, and its seed
         self.summary = None
@@ -327,7 +330,7 @@ class MultiSim:
         if kwargs.pop('debug', False):
             kwargs['parallel'] = False # Run in serial
         self.timer.start()
-        verbose = sc.ifelse(kwargs.get('verbose'), ss.options.verbose)
+        verbose = sc.ifelse(kwargs.get('verbose'), getattr(self, 'verbose', None), ss.options.verbose)
         kwargs.setdefault('verbose', 0) # The runs say nothing, unless asked to; the MultiSim says what it runs
         if self.ready: # The sim of each run was made by init_sims()
             sims = self.sims
@@ -757,7 +760,7 @@ def run_each(sims, parallel=True, n_cpus=None, par_args=None, shrink=None, verbo
     if parallel:
         par_args = sc.mergedicts({'ncpus': n_cpus, 'start_method': ss.kernels.start_method(), 'parallelizer': 'multiprocess-async', 'globaldict': {}}, par_args)
         with ss.kernels.one_blas_thread():
-            P = sc.Parallel(ft.partial(ss.kernels.one_thread, single_run), iterkwargs=dict(sim=sims, ind=np.arange(len(sims))), kwargs=kwargs, **par_args) # The runs share the cores, so each takes one thread
+            P = sc.Parallel(ss.kernels.worker(single_run), iterkwargs=dict(sim=sims, ind=np.arange(len(sims))), kwargs=kwargs, **par_args) # The runs share the cores, so each takes one thread
             try:
                 P.run_async()
                 if progress is not None:

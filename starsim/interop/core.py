@@ -453,7 +453,7 @@ def total_init(val):
         return 0
     elif sc.isnumber(val):
         return val
-    values = getattr(val, 'values', None) # ss.by of numbers
+    values = getattr(val, 'values', None) if not isinstance(val, ss.conditions.Cond) else None # ss.by of numbers (a condition's values are those of a running sim)
     return float(np.sum(values)) if values is not None and np.ndim(values) else 0
 
 

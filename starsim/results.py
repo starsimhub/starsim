@@ -384,21 +384,28 @@ class Result(ss.utils.NoDists, ss.arrays.BaseArr):
         Args:
             q (list): the quantiles
 
-        Returns a result with one row per quantile (and scenario, if there are several), e.g. `low, mid, high = res.quantiles()`.
+        Returns a result with one row per quantile, e.g. `low, mid, high = res.quantiles()`. With several scenarios, there is
+        a row for each quantile and scenario, the quantile first, so the same unpacking gives a result for each quantile
+        with a row per scenario (`low.select(scenario='vaccine')`).
         """
         self._check_runs('quantiles()')
         q = np.atleast_1d(q).astype(float).tolist()
-        rows = []
-        vals = []
-        for scenario,inds in self.scenarios().items():
-            vals.append(np.quantile(self.values[inds], q, axis=0))
-            rows += [dict(scenario=scenario, quantile=x) for x in q]
-        values = np.concatenate(vals)
+        groups = self.scenarios()
+        values = np.stack([np.quantile(self.values[inds], q, axis=0) for inds in groups.values()], axis=1) # Quantile, scenario, time
+        values = values.reshape((-1,) + values.shape[2:])
+        rows = [dict(scenario=scenario, quantile=x) for x in q for scenario in groups]
         out = self.asnew(values=values, _shape=values.shape, runs=pd.DataFrame(rows))
         if getattr(self, 'strata', None) is not None:
             out.strata = out.denom = None
             out.no_groups = 'quantiles are not kept by group; select the groups first, e.g. res.select(age=0).quantiles()'
         return out
+
+    def __iter__(self):
+        """ The values row by row; for the quantiles of several scenarios, a result for each quantile, with a row per scenario (so `low, mid, high = res.quantiles()` works with scenarios too) """
+        runs = self.runs
+        if runs is not None and 'quantile' in runs and runs['quantile'].nunique() > 1 and runs['scenario'].nunique() > 1:
+            return iter([self.take(list(inds)) for inds in runs.groupby('quantile', sort=False).indices.values()])
+        return super().__iter__()
 
     def median(self, *args, **kwargs):
         """ For a result across runs, the median over the runs of each scenario (as a result of one run, if there is one scenario); otherwise the median of the values """
@@ -886,6 +893,7 @@ class Result(ss.utils.NoDists, ss.arrays.BaseArr):
             timevec = np.floor(years + 1e-9).astype(int)
         out = self.asnew(values=values, low=low, high=high, timevec=timevec, kind=self.kind, _shape=values.shape)
         out.group_ti = None # Its values by group, if any, are at its own time points
+        out.use_years = use_years # Its times are years, which to_df() keeps (see convert_timevec())
         if strata is not None:
             out.strata, out.denom = new_strata, new_denom
         elif no_groups:
@@ -921,6 +929,8 @@ class Result(ss.utils.NoDists, ss.arrays.BaseArr):
         """ Make sure we're using a timevec that's in the right format i.e. dates """
         if self.timevec is None:
             return None
+        if getattr(self, 'use_years', False) and not force: # Resampled with use_years=True: the periods are labeled by their year
+            return np.asarray(self.timevec)
         if not self.has_dates or force:
             if not force and len(self.timevec) and sc.isnumber(self.timevec[0]) and not ss.time.assume_cal_year(self.timevec[0]): # Elapsed time (e.g. from year 0), not calendar years, so there are no dates to give
                 return np.asarray(self.timevec)
@@ -1605,6 +1615,17 @@ def match_name(sim, col):
             for key in [col] + ([rest] if first == mod.name else []):
                 if key in mod.results and isinstance(mod.results[key], ss.Result):
                     matches.append(mod.results[key])
+    if not matches and '.' in col: # A result nested deeper ("hpv.genotype.cancers"), or a column of a result with columns ("sis.new_infections.alpha"), by its path in sim.results
+        obj = sim.results
+        for part in col.split('.'):
+            if isinstance(obj, Results):
+                obj = obj.get(part)
+            elif isinstance(obj, Result) and obj.columns is not None:
+                obj = {str(c):res for c,res in obj.by_column().items()}.get(part)
+            else:
+                obj = None
+        if isinstance(obj, Result) and obj.columns is None:
+            matches.append(obj)
     return matches[0] if len(matches) == 1 else None
 
 

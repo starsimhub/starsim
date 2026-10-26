@@ -165,8 +165,13 @@ class Expr:
 
     @property
     def n(self):
-        """ The number in these states, e.g. (S + I + R).n """
-        return Count(self._sum_states(), kind='n')
+        """ The number in these states, e.g. (S + I + R).n; or a weighted count, each person counted by a value of theirs, e.g. (ss.by(biting=w)*I).n (MS3) """
+        return Count(*self._sum_states(weights=True), kind='n')
+
+    @property
+    def n_trans(self):
+        """ The number in these states, each counted by their infectiousness (`rel_trans`, with the products and modifiers on it, times the state's), e.g. what people shed into an environment: shedding*A.n_trans (TY6) """
+        return Count(*self._sum_states(weights=True), kind='n', trans=True)
 
     @property
     def frac(self):
@@ -178,14 +183,18 @@ class Expr:
         """ The number in these states in the whole population: in a model with places, in every place, not only the same one as with .n """
         return Count(self._sum_states(), kind='total')
 
-    def _sum_states(self):
-        """ The states in a plain sum of states, e.g. S + I + R """
+    def _sum_states(self, weights=False):
+        """ The states in a plain sum of states, e.g. S + I + R; with `weights=True`, also a weight for each that is not 1, which may be a value per person (e.g. `ss.by(biting=w)*I + 0.5*E`): (states, weights) """
         const, terms = linear(self)
-        ok = const is None and all(is_one(coef) for coef in terms.values())
-        if not ok:
-            errormsg = f'".n" and ".frac" need a plain sum of states such as (S + I + R), not "{self}"'
+        weighted = {state:coef for state,coef in terms.items() if not is_one(coef)}
+        if const is not None or (weighted and not weights):
+            errormsg = f'".n" needs a sum of states such as (S + I + R), each with a weight per person if any (e.g. (ss.by(biting=w)*I).n), and ".frac" and ".total" a plain sum; not "{self}"'
             raise TypeError(errormsg)
-        return list(terms.keys())
+        for state,coef in weighted.items():
+            if not state.people or any(isinstance(leaf, (ss.transitions.State, Count, Clock, Flow, Stock)) for leaf in coef.leaves):
+                errormsg = f'the weight of {state.name} in "{self}.n" is {coef}; a weighted count is of people, each counted by a value of theirs (a number, an ss.by, or a property of people), not by states or counts'
+                raise TypeError(errormsg)
+        return (list(terms.keys()), weighted or None) if weights else list(terms.keys())
 
     @property
     def leaves(self):
@@ -241,6 +250,7 @@ class par(Nameable, Expr):
         self.source = source
         self.doc = doc
         self.name = name
+        self.name_given = name is not None # Named when made (name=), not by the variable it is assigned to
         self.label = label
         self.literal = literal # An anonymous value written inline, e.g. the 0.5 in 0.5*A
         self.slot = None # The kind of slot it fills: 'rate', 'dur', or None (a plain number)
@@ -311,11 +321,21 @@ def is_one(expr):
 
 
 class Count(Expr):
-    """ The number of people (or things) in one or more states (`I.n`), that number as a fraction of the module's people (`I.frac`), or the number in the whole population (`I.total`, which in a model with places is not only the same place) """
-    def __init__(self, states, kind='n'):
+    """
+    The number of people (or things) in one or more states (`I.n`), that number as a fraction of the module's people (`I.frac`), or the number in the whole population (`I.total`, which in a model with places is not only the same place)
+
+    A weighted count (`(ss.by(biting=w)*I).n`, MS3; `A.n_trans`, TY6) counts each person by a value of theirs: `weights` by state (a value per person, e.g. an `ss.by`), and with `trans`, their infectiousness.
+    """
+    def __init__(self, states, weights=None, kind='n', trans=False):
         self.states = states
+        self.weights = weights or None # {state: expression}, for those not counted as 1
         self.kind = kind
+        self.trans = trans
         return
+
+    @property
+    def weighted(self):
+        return self.weights is not None or self.trans
 
 
 class Stock(Expr):
@@ -367,7 +387,7 @@ class Prop(Expr):
         """ The properties of people it reads, e.g. ['age'] """
         out = []
         def walk(c):
-            if c.op == 'people':
+            if c.op == 'people' and len(c.args) == 1: # Not ss.ppl.get(name, default), which need not exist
                 out.append(c.args[0])
             elif c.op not in ss.conditions.leaves:
                 for arg in c.args:
@@ -525,6 +545,68 @@ class Func(Expr):
         return [leaf for arg in self.args for leaf in arg.leaves]
 
 
+class Coverage(Expr):
+    """
+    A product's coverage, as a quantity in a rate (`itn.coverage`, MS4): the share of the people in the same place who hold it,
+    each counted by how much protection they have left (the product's `waning=`, if it is a function of time), or by a function
+    of the time since delivery: `itn.coverage(lambda t: ...)`, as `waning=` takes it (`fn(t)` or `fn(t, sim, uids)`)
+
+    In a compartmental run, the people holding it are counted at each level of holding it (see `ss.box`); a function is read
+    at the middle of each level's time, relative to the box (so a product of boxes of the same length, e.g. a bed net's usage,
+    blocking, and killing, is exact). Worked out once a step.
+
+    Args:
+        product (`ss.Product`): the product (found in the sim by its name)
+        weight (func): a function of the time since delivery, for what each holder counts as (default: the protection left)
+
+    Examples:
+        ```python
+        itn = ss.Vaccine(efficacy=dict(bite_indoor=0.6), waning=ss.box(dur=ss.years(3)), name='itn')
+        mortality = Sv >> ss.null @ 1/life + a*f_in*itn.coverage(lambda t: kill(t)) # Mosquitoes killed by nets, in proportion to the nets in use
+        ```
+    """
+    def __init__(self, product, weight=None):
+        self.product = product
+        self.weight = weight
+        return
+
+    @property
+    def name(self):
+        return f'{self.product.name}.coverage'
+
+    def __call__(self, weight):
+        """ The coverage with each holder counted by a function of the time since delivery """
+        return Coverage(self.product, weight)
+
+    def __copy__(self): return self
+    def __deepcopy__(self, memo): return self
+
+    def to_str(self, parent=False):
+        return self.name if self.weight is None else f'{self.name}({getattr(self.weight, "__name__", "weight")})'
+
+    def level_weights(self, sim):
+        """ In a compartmental run: what a person at each level of holding the product counts as (0 for none) """
+        product = self.product if getattr(self.product, 'sim', None) is sim else next(p for p in sim.products() if p.name == self.product.name)
+        b = product.box_form if product.fades else None
+        if product.fades and b is None:
+            raise ss.CapabilityError(f'{self.name} counts the people holding "{product.name}" by how much protection they have left, which fades by a function of time that only agents keep (an ss.box() has a compartmental form)')
+        if self.weight is None:
+            n = 1 + (len(b.levels()) if b is not None else 1)
+            return np.array([0.0] + [1.0]*(n - 1)) # Holding it is the protection left (the levels of a box wane as agents' protection fades)
+        if b is None:
+            raise ss.CapabilityError(f'{self.name}({getattr(self.weight, "__name__", "weight")}) counts each holder by a function of the time since delivery, which in a compartmental run needs the product to wane as an ss.box() (whose levels give the time)')
+        k = b.stages
+        times = [(i + 0.5)*b.dur/k for i in range(k)] + ([b.dur + b.decay] if b.decay is not None else [])
+        if ss.utils.n_args(self.weight) >= 2:
+            raise ss.CapabilityError(f'{self.name} counts each holder by a function of (t, sim, uids), whose uids exist only per agent; with solver="{sim.solver}", give a function of t alone')
+        unit = ss.time.get_dur_class(sim.unit_base)
+        vals = []
+        for t in times: # Each level's time, relative to the box's own waning
+            w = np.ravel(np.asarray(self.weight(unit(np.array([t.to(sim.unit_base).value]))), dtype=float))[0]
+            vals.append(w/max(float(b(t)), 1e-12))
+        return np.array([0.0] + vals)
+
+
 class Clock(Expr):
     """
     Time in a state (`X.time`), in a set of states since entering it from outside (`(A | B).time`), or the share
@@ -642,15 +724,16 @@ class attr(Expr):
 
     Which it is depends on `value` and `on=`: a distribution with `on=` is drawn when the event happens to
     someone; an expression (or the name of another attribute) with `on=` is recorded then, as it was just
-    before the move; a distribution with no `on=` is a trait; and an expression, or a dict of one by state
+    before the move; a dict of them by event (a transition, `tr.to(B)`, `X.enter`, ...) records each event's
+    own value, with no `on=`; a distribution with no `on=` is a trait; and an expression, or a dict of one by state
     (states not listed give NaN), with no `on=` is derived, worked out when it is read. Attributes set on
     the same event are set in the order they are declared, and each sees the ones before it. As agents only.
 
     Args:
-        value (Dist/Expr/str/dict): the distribution, the expression, the name of another attribute, or a dict of expressions by state (or by a sum of states)
+        value (Dist/Expr/str/dict): the distribution, the expression, the name of another attribute, a dict of expressions by state (or by a sum of states), or a dict of distributions or expressions by event
         on (Event/Transition): the event(s) that set it, joined with `|`; none for a trait or a derived attribute
         combine (str/func): how a new value is combined with the one already held: 'last' (the default), 'first', 'max', 'min', 'sum', or `fn(old, new)`
-        init (float): the value before any event (default NaN, or 0 for `combine='sum'`)
+        init (float/Dist/Expr): the value before any event (default NaN, or 0 for `combine='sum'`): a number, or a distribution or an expression (e.g. of `ss.ppl`) drawn or worked out for each person when they are made (at the start, once placed in their states, and at birth)
         name (str): the name; if not given, taken from the keyword or class attribute it is assigned to
         label (str): a human-readable name
 
@@ -660,7 +743,9 @@ class attr(Expr):
         cd4_preart = ss.attr('cd4', on=start_art)                               # Recorded, just before starting
         rel_sev    = ss.attr(ss.normal(1, 0.2))                                 # A trait
         cd4        = ss.attr({latent: cd4_latent, falling: cd4_latent*(1 - falling.progress)}) # Derived
+        dose       = ss.attr({contact: dose_hi, environment: cfu.n/N*share})        # Recorded, a value for each event
         nab        = ss.attr(ss.uniform(0.5, 0.95), on=clearance, combine='max', init=0)
+        n_inf      = ss.attr(1, on=I.enter, combine='sum', init=ss.poisson(lam=ss.ppl.age/20)) # Past infections at the start
         ```
     """
     def __init__(self, value, on=None, combine='last', init=None, name=None, label=None):
@@ -668,6 +753,12 @@ class attr(Expr):
             errormsg = f'combine= is one of {sc.strjoin(combines)}, or a function of (old, new); not {combine!r}'
             raise ValueError(errormsg)
         self.value = ss.transitions.by_dist(value) # A distribution for each group, e.g. ss.by(urban={False: h0, True: h1}), is one distribution
+        self.by_event = None # For a dict by event: (events, value) for each, set in ss.transitions.Graph.resolve_attrs() (TY1)
+        if isinstance(value, dict) and value and all(is_event(key) for key in value):
+            if on is not None:
+                errormsg = f'The attribute {name or ""} is a dict by event, whose keys are the events that set it, so it takes no on='
+                raise ValueError(errormsg)
+            on = list(value.keys())
         self.on = on
         self.combine = combine
         self.init = init
@@ -688,7 +779,7 @@ class attr(Expr):
 
     @property
     def kind(self):
-        """ 'drawn', 'recorded', 'trait', or 'derived' """
+        """ 'drawn', 'recorded', 'trait', or 'derived' (a dict by event is 'recorded', each event's value drawn or worked out) """
         random = isinstance(self.value, ss.Dist) or (isinstance(self.value, Expr) and bool(dists_in(self.value)))
         if self.on is None:
             return 'trait' if random else 'derived'
@@ -700,8 +791,13 @@ class attr(Expr):
 
     @property
     def default(self):
-        """ The value before any event """
-        return self.init if self.init is not None else 0.0 if self.combine == 'sum' else np.nan
+        """ The value before any event, as a number (one drawn for each person, `init_value`, is NaN, or 0 for `combine='sum'`, until drawn) """
+        return self.init if self.init is not None and self.init_value is None else 0.0 if self.combine == 'sum' else np.nan
+
+    @property
+    def init_value(self):
+        """ The distribution or expression the value before any event is drawn from or worked out from for each person, if it is one (TY3) """
+        return self.init if isinstance(self.init, (ss.Dist, Expr, ss.conditions.Cond)) else None
 
     def combined(self, old, new):
         """ A new value combined with the one held """
@@ -719,6 +815,13 @@ class attr(Expr):
         for k,v in self.__dict__.items():
             new.__dict__[k] = sc.dcp(v, memo=memo) if k != 'module' else memo.get(id(v), v)
         return new
+
+
+def is_event(key):
+    """ Whether a key of a dict given to `ss.attr()` is an event (a transition, `tr.to(B)`, `X.enter`, `X.exit`, or several joined with |) rather than a state """
+    if isinstance(key, (ss.transitions.Transition, ss.conditions.Event)):
+        return True
+    return isinstance(key, ss.conditions.Cond) and key.op == '|' and all(is_event(arg) for arg in key.args)
 
 
 def dists_in(expr):
@@ -745,8 +848,8 @@ def events_in(on, graph=None):
 
 
 def rebind(expr, memo):
-    """ The expression with the states and transitions it reads replaced by their copies in `memo`, e.g. `SIR(n=SIR.I + SIR.R)` reads the instance's copies of the class's states; parameters are kept, not copied """
-    if isinstance(expr, (ss.transitions.State, ss.transitions.Transition)):
+    """ The expression with the states, transitions, and parameters it reads replaced by their copies in `memo`, e.g. `SIR(n=SIR.I + SIR.R)` reads the instance's copies of the class's states; other parameters are kept, not copied """
+    if isinstance(expr, (ss.transitions.State, ss.transitions.Transition, par)):
         return memo.get(id(expr), expr)
     if not isinstance(expr, (BinOp, Func, Count, Flow, Clock)):
         return expr
@@ -765,6 +868,12 @@ def rebind(expr, memo):
 def clocks_in(obj):
     """ The clocks an expression, a condition, or a list or dict of them reads """
     return [part for part in nodes(obj) if isinstance(part, Clock)]
+
+
+def per_person_in(expr):
+    """ Whether an expression has a value for each person or group rather than one for the whole model (so it cannot be a result): it reads a property of people, a clock, an attribute, a mother, or a parameter by level (ss.by) or spread across people (a distribution) """
+    kinds = (Prop, Clock, attr, mother)
+    return any(isinstance(part, kinds) or (isinstance(part, par) and isinstance(part.value, (ss.by, ss.Dist))) for part in nodes(expr))
 
 
 class BinOp(Expr):
@@ -953,6 +1062,8 @@ def evaluate(expr, ctx):
         return expr.evaluate(ctx)
     elif isinstance(expr, Clock):
         return ctx.clock(expr)
+    elif isinstance(expr, Coverage):
+        return ctx.coverage(expr)
     elif isinstance(expr, attr):
         return ctx.attr(expr)
     elif isinstance(expr, mother):
@@ -1052,13 +1163,14 @@ def format_expr(expr, values=False, bare=None, mul='*', exact=False, unit=None):
         elif isinstance(e, Prop):
             return repr(e.cond)
         elif isinstance(e, Count):
-            names = [s.label_name for s in e.states]
-            inner = names[0] if len(names) == 1 else '(' + ' + '.join(names) + ')'
-            return f'{inner}.{e.kind}'
+            weights = e.weights or {}
+            names = [s.label_name if s not in weights else f'{fmt(weights[s])}{mul}{s.label_name}' for s in e.states]
+            inner = names[0] if len(names) == 1 and not weights else '(' + ' + '.join(names) + ')'
+            return f'{inner}.{e.kind}{"_trans" if e.trans else ""}'
         elif isinstance(e, Share):
             share = f'share({fmt(e.row.row)}, to={e.label})' # Its row's value at this destination, over the row's sum
             return share if e.row.scalar is None else f'{fmt(e.row.scalar)} {mul} {share}'
-        elif isinstance(e, (Clock, mother)):
+        elif isinstance(e, (Clock, mother, Coverage)):
             return e.to_str()
         return str(e.name) # A flow
     return fmt(expr)

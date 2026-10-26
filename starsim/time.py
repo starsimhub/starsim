@@ -985,8 +985,10 @@ class prob(Rate):
     >>> p * 2
     is `ss.prob(0.96, ss.years(1))`, the same as `p + p` (two competing hazards),
     and `p * 0.2` is 0.275, not 0.16. A probability of 1 is an infinite rate,
-    so it stays 1 whatever it is multiplied by, and cannot be used as the rate
-    of a declared transition.
+    so it stays 1 whatever it is multiplied by; as the rate of a declared
+    transition, it moves everyone in the step (as agents, those who arrive in
+    the step too; in compartments, the whole compartment at the start of each
+    step or substep).
 
     Use `per` instead if `prob` if you would prefer to directly
     specify the instantaneous rate.
@@ -1029,7 +1031,8 @@ class prob(Rate):
             elif scalar and v == 1: # Don't handle arrays, just raise the warning in the next step if it comes to it
                 self._rate = np.inf
             else:
-                self._rate = -np.log1p(-v) # Will raise a NumPy warning if it's an array with 1.0 values
+                with np.errstate(divide='ignore'): # An array with values of 1 has infinite rates there
+                    self._rate = -np.log1p(-v)
             self._value = v # Store the raw value as well
         return
 

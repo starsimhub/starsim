@@ -459,11 +459,13 @@ class date(pd.Timestamp):
             raise TypeError(errormsg)
 
     def _compare(self, other, op):
-        """ Compare with a number as a year, with each element of an array, and otherwise as a timestamp """
+        """ Compare with a number as a year, with each element of an array, with a string as the date it names (e.g. `sim.now == '2020-04-01'`), and otherwise as a timestamp """
         if sc.isnumber(other):
             return op(self.to_year(), other)
         elif isinstance(other, np.ndarray):
             return np.vectorize(lambda x: self._compare(x, op))(other)
+        elif isinstance(other, str): # A string that is not a date raises, for == as for <, rather than comparing unequal
+            return op(self, date(other))
         else:
             return getattr(pd.Timestamp, f'__{op.__name__}__')(self, other)
 

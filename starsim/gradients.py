@@ -63,6 +63,9 @@ def reason(sim):
         engine = mod.engine
         if engine.register is not None and len(engine.register.src):
             return f'"{mod.name}" has a movement register'
+        name = mod.engine.certain() if hasattr(mod.engine, 'certain') else None
+        if name is not None:
+            return f'"{mod.name}" has a probability of 1 over a period ({name}), an infinite rate, which the kernels take as everyone moving at once'
     return None
 
 
@@ -382,6 +385,10 @@ class Run:
                 if len(self.p.mov_rate):
                     fastest = jnp.maximum(fastest, jnp.max(X['mov_rate']))
                 dy0 = self.derivs(y, rates0, Xs, dt/jnp.maximum(jnp.ceil(fastest*dt/0.25), 1))[0]
+                for m in range(self.p.n_movers): # Not through people moving in from other groups, which the movers' rates allow for already (see ss.kernels.step())
+                    ent = slice(self.p.mov_starts[1, m], self.p.mov_starts[1, m+1])
+                    comps = self.p.mov_comps[self.p.mov_starts[0, m]:self.p.mov_starts[0, m+1]]
+                    dy0 = dy0.at[comps].add(-jnp.zeros((len(comps), self.ng)).at[:, self.p.mov_pair[1, ent]].add(y[comps][:, self.p.mov_pair[0, ent]]*X['mov_rate'][ent]))
                 least = 1e-9*y.sum() # Not a compartment that is only starting to fill: of everyone, not of its group (see ss.kernels.step())
                 filling = (dy0 > 0) & (y > least)
                 growing = jnp.max(jnp.where(filling, dy0/jnp.where(filling, y, 1.0), 0.0))
@@ -435,12 +442,13 @@ class Run:
 
     @staticmethod
     def deliver(y, X, ti):
-        """ The deliveries at time point ti, at the start of the step from it, in order (see `ss.kernels.apply_shifts()`): each moves some of the people in each group to another """
+        """ The deliveries at time point ti, at the start of the step from it, in order (see `ss.kernels.apply_shifts()`): each moves some of the people in each group to another, or (a move between states) into another state """
         for k in range(X['sh_due'].shape[0]):
             reached = y*X['sh_sel'][k]*X['sh_due'][k, ti]
             a = reached*X['sh_cov'][k]
             b = reached - a
-            y = y - reached + a @ X['sh_to'][k] + b @ X['sh_rest'][k]
+            moves = X['sh_moves'][k] # 1 for a move between states, whose people land in the state's compartments (sh_land)
+            y = y - reached + (1 - moves)*(a @ X['sh_to'][k]) + X['sh_land'][k]*(a.sum(axis=0) @ X['sh_to'][k]) + b @ X['sh_rest'][k]
         return y
 
     def prepare(self, X):
@@ -560,7 +568,7 @@ def capture(engine, compact=True):
     X['y'] = np.array(y, dtype=float)
     sh = engine.shifts # The deliveries, with where each group's people go as matrices
     onehot = lambda to: np.eye(engine.n_groups)[to] if len(to) else np.zeros((0, engine.n_groups, engine.n_groups))
-    X.update(sh_due=sh.due.astype(float), sh_sel=sh.sel, sh_cov=sh.cov, sh_to=onehot(sh.to), sh_rest=onehot(sh.rest))
+    X.update(sh_due=sh.due.astype(float), sh_sel=sh.sel, sh_cov=sh.cov, sh_to=onehot(sh.to), sh_rest=onehot(sh.rest), sh_land=sh.land, sh_moves=(sh.land.sum(axis=(1, 2)) > 0).astype(float))
     return program, (dt, npts, solver, n_sub, engine.per_step()), X
 
 
@@ -915,7 +923,7 @@ def time_value(raw, ctx, years):
     if any(isinstance(ss.parameters.const_value(v), ss.prob) for name in raw.fields for v in sc.tolist(getattr(raw, name))):
         raise Unsupported(f'a fitted parameter inside {raw}, which is a probability')
     if isinstance(raw, ss.seasonal):
-        return val(raw.mean)*jnp.maximum(0.0, 1 + val(raw.amplitude)*jnp.cos(2*np.pi*(years - raw.peak_frac)))
+        return val(raw.mean)*jnp.maximum(0.0, 1 + val(raw.amplitude)*jnp.cos(2*np.pi*(years - raw.peak_frac)/raw.period_years))
     elif isinstance(raw, ss.timeseries):
         _, i, j, w = raw.weights(years, ctx.engine.sim)
         vals = jnp.stack([jnp.asarray(val(v), dtype=float) for v in raw.values])

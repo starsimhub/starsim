@@ -127,7 +127,7 @@ In every stochastic run, measles dies out after the first epidemic, with about 6
 
 ### The length of a step
 
-The ODE takes as many small steps inside each time step as it needs, and Gillespie and tau-leaping work in continuous time, so for these the step only says when results are recorded. Agents, and the chain binomial with `substeps=1`, take each step whole: everyone's chance of moving is worked out at the start of the step, and someone infected during a step can't infect anyone until the next one. When rates are fast compared with the step, this slows the epidemic down.
+The ODE takes as many small steps inside each time step as it needs, and Gillespie and tau-leaping work in continuous time, so for these the step only says when results are recorded. Agents, and the chain binomial with `substeps=1`, take each step whole: everyone's chance of moving is worked out at the start of the step, and someone infected during a step can't infect anyone until the next one. When rates are fast compared with the step, this slows the epidemic down. By default the chain binomial splits each step into enough substeps to keep this bias small: no more than about 5% of a compartment leaves it in a substep, and fewer near the epidemic threshold (R0 close to 1), where a small bias in R moves the prevalence a lot. A probability of 1 over a period (e.g. `ss.probperyear(1)`) moves everyone in the step: as agents, within it, and in compartments, the whole compartment at the start of each step or substep.
 
 Measles in a town with no immunity is such a case: with β = 1.9 per day, the number infected can double in less than half a day. Here it is as an ODE, and as agents with steps of one day and of a quarter of a day:
 
@@ -165,6 +165,8 @@ daily.check_dt()
 ```
 
 A result that changes by more than a few percent when the step is halved depends on the step, and the step should be smaller. The shorter the generation time of an infection compared with the step, the more this matters: measles is extreme, and for an infection with rates of a few percent per step (as for most models with daily steps and durations of weeks), the step makes little difference. See [Time](running_time.qmd) for how to set the step.
+
+A threshold on a clock acts at the step boundaries, since the clock is read once a step. A rate that applies until 13 weeks of pregnancy (`where=preg.P.time < ss.weeks(13)`), on monthly steps, applies while the clock reads 0, 1, and 2 months, and someone who arrives during a step spends on average half of it at 0: so it applies for about 2.5 of the 3 months it should, and the event it governs happens less often than the inputs imply (11.9% of pregnancies miscarry against 14.1%, in FPsim's case). `sim.check_dt()` shows it, and a shorter step reduces it.
 
 ### Contacts between particular people
 

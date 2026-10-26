@@ -55,7 +55,7 @@ Starsim's library modules (`ss.SIR`, `ss.SIS`, `ss.SEIR`, `ss.Births`, `ss.Death
 | **`ss.transfer`** | Movement between levels of a stratification |
 | **`ss.par`** | A named parameter with `bounds`, `prior`, `source`, `doc` |
 | **`ss.pars`** | Several parameters at once, from defaults and the values given, for a disease whose transitions are made in `__init__()`: `p = ss.pars(defaults, **kwargs)` |
-| **`ss.attr`** | A value for each person: drawn or recorded at an event (`on=`), drawn once (a trait), or derived from others |
+| **`ss.attr`** | A value for each person: drawn or recorded at an event (`on=`), or a value for each event (a dict by event); drawn once (a trait); or derived from others. `init=` is the value before any event: a number, or a distribution or expression drawn for each person when they are made |
 | **`ss.outcome`** | A reported quantity: a weighted sum of flows that is delayed, given a duration, or totaled by reporting period |
 | **`ss.simdata`** | A data file or data frame with its columns matched to result names: `ss.simdata(df, aliases=..., ignore_extra=True)` |
 | **`ss.state`** | A state named by its module and name, as a condition, before the module is made: `ss.state('hiv.I')` |
@@ -102,7 +102,7 @@ Everything spatial is in the submodule `ss.geo`.
 | **`ss.geo.gravity`** | Movement model, with parameters to fit or guess |
 | **`ss.geo.radiation`** | Movement model with no parameters (Stouffer and competing destinations are deferred; a matrix covers them) |
 
-### Interactions and interventions: 9
+### Interactions and interventions: 10
 
 | Name | What it is |
 |---|---|
@@ -111,6 +111,7 @@ Everything spatial is in the submodule `ss.geo`.
 | **`ss.immunity`** | Protection between strains, combined by a rule: what protects is `due_to=` (a state, an attribute, `strains.last`, `strains.ever`), the quantity it lowers is the keyword and the protection its value, a matrix (rows from, columns against) or a number (`ss.immunity(due_to=R, rel_sus=m, combine='sum')`, `rel_trans=`, `dur=dict(In=m)`, `p=dict(to_symp=m)`); for `ss.Strains(immunity=)` |
 | **`ss.Vaccine`** **`ss.Diagnostic`** **`ss.Treatment`** | Products: nouns for things (Starsim 3's `ss.Vx`, `ss.Dx`, `ss.Tx` remain only as base classes for products written as code, not as aliases; `ss.Diagnostic` was `ss.Test`, renamed so that no product and delivery differ only by case) |
 | **`ss.vaccinate`** **`ss.screen`** **`ss.treat`** | Deliveries: verbs (`ss.Delivery` with no product is a step people attend, a visit) |
+| **`ss.box`** | A waning: full protection for a time, then an exponential decline or none (`waning=ss.box(dur=ss.days(180), decay=ss.days(730))`), under every solver |
 
 ### Running, comparing, saving: 7
 
@@ -122,12 +123,13 @@ Everything spatial is in the submodule `ss.geo`.
 
 Fitting is the submodule `ss.fit`, which `import starsim` does not import (its first use does), so its names are not counted here: `ss.fit.Fit`, what `sim.fit()` returns (called `fit` below), `ss.fit.compare_models` (fit and compare by out-of-sample prediction), and `ss.fit.optimize` (reallocate spending between programs to maximize or minimize a result). (Starsim 3's `ss.Calibration` is removed.)
 
-### Methods and attributes: 57 distinct names
+### Methods and attributes: 59 distinct names
 
 | On | Names |
 |---|---|
 | A model (`ss.Disease`, any module) | **`describe`** **`diagram`** **`equations`** **`transitions`** **`states`** **`strats`** **`count`** **`add_callback`** **`stratify`** **`to_spec`** `copy` `pars` **`R0`** |
-| A state or a sum of states | **`n`** **`frac`** **`total`** **`time`** **`progress`** **`enter`** **`exit`** |
+| A state or a sum of states | **`n`** **`n_trans`** **`frac`** **`total`** **`time`** **`progress`** **`enter`** **`exit`** |
+| A product that people hold (`ss.Vaccine`, `ss.Treatment`) | **`coverage`** |
 | A transition | **`to`** **`incidence`** **`uids`** **`ever`** **`count`** **`since`** |
 | A modifiable array (`sir.rel_sus`) | **`effective`** |
 | `ss.Sim` | `init` `run` `plot` `summarize` `to_df` `loop` `results` **`describe`** **`stratify`** **`to_spec`** **`to_code`** `to_json` **`hash`** **`fit`** **`sensitivity`** **`check_dt`** **`what_modifies`** **`new`** **`gradient`** **`to_data`** |
@@ -138,7 +140,7 @@ Fitting is the submodule `ss.fit`, which `import starsim` does not import (its f
 | `fit` | **`sim`** `pars` `plot` `summarize` `to_df` **`project`** **`samples`** |
 | What `ss.fit.compare_models` returns | **`fits`** `plot` `summarize` `to_df` |
 
-Names that repeat across rows (`plot`, `summarize`, `to_df`, `describe`, `stratify`, `to_spec`, `pars`, `run`, `results`, `count`) are counted once. The split is deliberate: `describe`, `diagram`, `equations` are about the model; `plot`, `summarize`, `to_df` are about results, as in Starsim. `values` is Starsim's name for the array behind a result; on a MultiSim result it is the full runs-by-time array. `.n` is the number in a state in each place, and `.total` in the whole population; `.frac` is the share; `.dwell` is the time each person has spent in it (in `p=` and rates out of it). On a transition with several destinations, `.X` is the flow to its destination `X` (`cin.X`, read `res.cin.X`), not a new name. Reading `sir.rel_sus` gives the base value; `.effective` gives it with the active modifiers applied (agents only). `msim.check_runs()` is deferred and not counted.
+Names that repeat across rows (`plot`, `summarize`, `to_df`, `describe`, `stratify`, `to_spec`, `pars`, `run`, `results`, `count`) are counted once. The split is deliberate: `describe`, `diagram`, `equations` are about the model; `plot`, `summarize`, `to_df` are about results, as in Starsim. `values` is Starsim's name for the array behind a result; on a MultiSim result it is the full runs-by-time array. `.n` is the number in a state in each place (`(w*I).n` with each person counted by `w`, and `.n_trans` by their infectiousness), and `.total` in the whole population; `.frac` is the share; `.dwell` is the time each person has spent in it (in `p=` and rates out of it). On a transition with several destinations, `.X` is the flow to its destination `X` (`cin.X`, read `res.cin.X`), not a new name. Reading `sir.rel_sus` gives the base value; `.effective` gives it with the active modifiers applied (agents only). `msim.check_runs()` is deferred and not counted.
 
 ## The total
 
@@ -152,12 +154,12 @@ Names that repeat across rows (`plot`, `summarize`, `to_df`, `describe`, `strati
 | Distributions | 16 | 3 |
 | Parameter forms | 3 | 3 |
 | Mixing and space | 10 | 5 |
-| Interactions and interventions | 9 | 9 |
+| Interactions and interventions | 10 | 10 |
 | Running, comparing, saving | 7 | 2 |
 | Types you get back or subclass | 5 | 0 |
-| **`ss.` names** | **109** | **46** |
-| Methods and attributes | 57 | 42 |
-| **Total** | **166** | **88** |
+| **`ss.` names** | **110** | **47** |
+| Methods and attributes | 59 | 44 |
+| **Total** | **169** | **91** |
 
 <!-- counts end -->
 
@@ -218,7 +220,8 @@ A bare number in any of these slots takes the slot's type and the sim's unit ([0
 | `coverage=` | a fraction of the eligible people | deliveries, `ss.transfer` |
 | `capacity=` | a number per round (or step), or a rate per unit time (required for routine delivery) | deliveries |
 | `efficacy=`, `sensitivity=`, `specificity=` | a probability | products; `efficacy=` also on `ss.modify` (`multiply=1 - efficacy`) |
-| `waning=` | a duration: the product is lost at an exponentially distributed time with that mean (a function of the time since delivery fades the efficacy instead, as agents only, and a new dose restarts it); other shapes are written as states ([08](08-interventions.md#products)) | products |
+| `waning=` | a duration: the product is lost at an exponentially distributed time with that mean; `ss.box(dur=, decay=)`, under every solver; a function of the time since delivery, `fn(t)` or `fn(t, sim, uids)` with `t` a duration, fades the efficacy instead, as agents only (a new dose restarts either); a dict gives each effect its own; other shapes are written as states ([08](08-interventions.md#products)) | products |
+| `during=` | the product is held, and acts, only while people are in these states | products |
 | `delay=`, `duration=` | a duration | `ss.outcome`, `ss.Diagnostic` |
 | `interval=`, `away=` | a duration; `away` is a fraction of time | deliveries, `ss.geo.Mobility` |
 | `multiply=`, `add=`, `set=`, `by=`, `to=` | a multiplier, or a value in the target's own type | `ss.modify`, `ss.change` |

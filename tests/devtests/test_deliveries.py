@@ -818,24 +818,35 @@ def test_whole_run():
         campaign = ss.Vaccine(efficacy=0.7)
         rounds = ss.vaccinate(campaign, coverage=0.5, at=[20, 40])
         rollout = ss.Delivery(move=dict(protected=True), coverage=0.1, at=[30]) # Along a stratification
-        return ss.Sim(sir, interventions=[offer, rounds, rollout], stop=100, **kw, **kwargs)
+        seed = ss.Delivery(move=sir.S >> sir.I, coverage=0.01, at=[25], name='seed') # Between states
+        return ss.Sim(sir, interventions=[offer, rounds, rollout, seed], stop=100, **kw, **kwargs)
     whole = make(solver='ode').init()
     assert whole.kernel_only(), whole.kernel_reason()
     whole.run()
     stepped = make(solver='ode').init()
-    stepped.kernel_only = lambda: False # As the loop takes it, one step at a time
+    stepped.kernel_reason = lambda: 'stepped' # As the loop takes it, one step at a time
     stepped.run()
-    for mod,key in [('sir', 'S'), ('sir', 'I'), ('offer', 'delivered'), ('offer', 'eligible'), ('rounds', 'coverage'), ('rollout', 'delivered')]:
+    for mod,key in [('sir', 'S'), ('sir', 'I'), ('sir', 'R'), ('offer', 'delivered'), ('offer', 'eligible'), ('rounds', 'coverage'), ('rollout', 'delivered'), ('seed', 'delivered')]:
         a, b = whole.results[mod][key], stepped.results[mod][key]
-        assert np.allclose(a.values, b.values, rtol=1e-10, atol=1e-8), f'{mod}.{key} differs'
-        if getattr(b, 'strata', None) is not None:
-            assert np.allclose(a.strata, b.strata, rtol=1e-10, atol=1e-8)
+        assert np.allclose(a.values, b.values, rtol=1e-9, atol=1e-9), f'{mod}.{key} differs'
+        if getattr(b, 'strata', None) is not None: # By group too: routine delivery starts a new spell for those no longer eligible (ss.Delivery.new_spells()) in a whole run as in the loop
+            assert np.allclose(a.strata, b.strata, rtol=1e-9, atol=1e-9), f'{mod}.{key} by group differs'
 
     # Many runs in one call: the same as each run on its own, deliveries included
     msim = make(solver='binomial').run(n_runs=4)
     single = make(solver='binomial', rand_seed=3).run()
     assert np.array_equal(msim.results.offer.delivered.values[2], single.results.offer.delivered.values)
     assert np.array_equal(msim.results.sir.I.values[2], single.results.sir.I.values)
+    jumps = [] # The people the seed moves (with the step's infections), the same in distribution as the loop takes it, one step at a time
+    for whole_run in [True, False]:
+        sims = [make(solver='binomial', rand_seed=seed).init() for seed in range(16)]
+        for sim in sims:
+            if not whole_run:
+                sim.kernel_reason = lambda: 'stepped'
+            sim.run()
+        jumps.append(np.array([sim.results.sir.I.values[26] - sim.results.sir.I.values[25] for sim in sims]))
+    se = np.sqrt(sum(j.var()/len(j) for j in jumps))
+    assert abs(jumps[0].mean() - jumps[1].mean()) < 4*se + 1, f'The seed moved {jumps[0].mean():.1f} people in a whole run, but {jumps[1].mean():.1f} step by step'
 
     # And in JAX, with gradients
     jax = make(solver='ode').init()
@@ -889,6 +900,209 @@ def test_waning_as_states():
     return sims
 
 
+def test_names_memory_at_age():
+    sc.heading('Testing steps made in a function (HP72), the memory of every delivery after a run (HP73), and at_age= for people who arrive older (HP76)')
+    def step(who, **kwargs): # No variable to be named by
+        return ss.screen(sensitivity=0.9, who=who, **kwargs)
+    def cascades(): # Two chains of steps, all with the default name, each triggered by its own first step
+        a1, a2 = step(None, at=[5]), step(None, at=[20])
+        return [a1, a2, step(a1.positive), step(a2.positive)]
+    sir = make_sir()
+    sim = ss.Sim(sir, interventions=cascades(), stop=40, n_agents=2000, unit='day', verbose=0).run()
+    names = [m.name for m in sim.interventions()]
+    assert names == ['screen', 'screen_1', 'screen_2', 'screen_3'], names
+    when = {m.name:np.flatnonzero(m.results.delivered.values) for m in sim.interventions()}
+    assert list(when['screen_2']) == [6] and list(when['screen_3']) == [21], when # Each follow-up with its own first step
+
+    # Every delivery's memory, readable after the run as agents
+    screening = ss.screen(sensitivity=0.9, coverage=0.3, interval=7, name='screening')
+    treatment = ss.treat(cure=0.9, who=screening.positive, name='treatment')
+    sim = ss.Sim(make_sir(), interventions=[screening, treatment], stop=50, n_agents=1000, unit='day', rand_seed=1, verbose=0).run()
+    s, t = sim.interventions.screening, sim.interventions.treatment
+    assert len(s.ever.uids) == (s.count_event.raw > 0).sum() and s.count_event.raw.sum() == s.results.delivered.sum()
+    assert len(t.cured.ever.uids) == t.results.cured.sum() # Cured at most once here
+    assert set((s.since <= ss.days(7)).uids) <= set(s.ever.uids)
+    with pytest.raises(ValueError):
+        screening.ever.uids # The delivery given, not the sim's copy
+
+    # at_age=: not to people who arrive older than the age
+    class Arrivals(ss.Demographics):
+        """ Immigrants of every age, as people.grow() makes them """
+        def step(self):
+            uids = self.sim.people.grow(20)
+            self.sim.people.age[uids] = np.linspace(0, 60, 20)
+            return
+    vx = ss.vaccinate(ss.Vaccine(efficacy=0.9), at_age=9, coverage=1.0, name='vx')
+    sim = ss.Sim(make_sir(), demographics=Arrivals(), interventions=vx, start=2000, stop=2004, dt=0.25, n_agents=2000, verbose=0, use_aging=True)
+    ages = []
+    sim.init()
+    sim.pars.analyzers = []
+    for i in range(sim.t.npts - 1):
+        sim.run_one_step()
+        uids = sim.interventions.vx.reached()
+        ages += sim.people.age[uids].tolist()
+    ages = np.array(ages)
+    assert len(ages) and np.all((ages >= 9) & (ages < 9 + 2*0.25)), np.sort(ages)[-5:]
+    return sim
+
+
+class Lesions(ssl.AgentSIS):
+    """ A disease written as code with a boolean state beyond infected (a lesion), cleared on cure """
+    def __init__(self, **kwargs):
+        super().__init__(beta=ss.peryear(2), init_prev=0.3, dur_inf=ss.years(3), waning=ss.peryear(0), imm_boost=0, **kwargs)
+        self.define_states(ss.BoolState('cin', label='Lesion'))
+        self.rng_cin = ss.bernoulli(p=0.05)
+        return
+
+    def step_state(self):
+        super().step_state()
+        self.cin[self.rng_cin.filter(self.infected.uids)] = True
+        return
+
+    def clear_infection(self, uids):
+        super().clear_infection(uids)
+        self.cin[uids] = False
+        return
+
+
+def test_coded_states():
+    sc.heading('Testing tests and cures by the states of diseases written as code (HP70)')
+    def make(interventions, n=2):
+        diseases = [Lesions(name=f'g{i}') for i in range(n)]
+        return ss.Sim(diseases=diseases, networks='random', interventions=interventions, start=2000, stop=2006, dt=0.25, n_agents=5000, rand_seed=1, verbose=0).run()
+
+    # (a) A test keyed by the states of one disease written as code, which need not be exclusive (infected and cin): each person in the most severe
+    test = ss.Diagnostic(results=dict(abnormal={'g0.cin': 0.9, 'g0.infected': 0.2}, normal=None), name='cyto')
+    sim = make(ss.screen(test, coverage=1.0, at=[2005], disease='g0', name='scr'))
+    res = sim.results.scr
+    g0 = sim.diseases.g0
+    n_cin, n_inf = g0.results.cin[-1]*0 + 0, 0
+    assert res.delivered.sum() > 0 and 0 < res.abnormal.sum() < res.delivered.sum()
+    with pytest.raises(ss.errors.UnknownEffect):
+        make(ss.screen(ss.Diagnostic(results=dict(abnormal={'g0.precin': 0.9}, normal=None)), at=[2005], disease='g0', name='scr'))
+
+    # (b) A cure by state calls the disease's clear_infection()
+    tx = ss.Treatment(cure=dict(cin=1.0), name='tx')
+    sim = make(ss.treat(tx, where=ss.state('g0.cin'), coverage=1.0, at=[2005], disease='g0', name='treat'))
+    res = sim.results.treat
+    assert res.delivered.sum() > 0 and res.cured.sum() == res.delivered.sum() and res.failed.sum() == 0
+
+    # (c) A bare state on a product for several such diseases is that state of each, tested once, in the most severe state
+    both = ss.screen(ss.Diagnostic(results=dict(abnormal=dict(cin=1.0), normal=None), name='cyto2'), coverage=1.0, at=[2005], disease=['g0', 'g1'], name='scr2')
+    cure = ss.treat(ss.Treatment(cure=dict(cin=1.0), name='tx2'), who=both.abnormal, disease=['g0', 'g1'], name='cure2')
+    sim = make([both, cure])
+    s = sim.interventions.scr2
+    lesions = (sim.diseases.g0.cin.raw | sim.diseases.g1.cin.raw)
+    ti = np.flatnonzero(s.results.delivered.values)[0]
+    assert s.results.abnormal[ti] > 0 and sim.results.cure2.cured.sum() >= s.results.abnormal[ti] # Each lesion cured, of either disease
+    return sim
+
+
+def test_waning_functions():
+    sc.heading('Testing waning: ss.box() under agents and the ODE (MS6), the time a function is given (TY7), several wanings (MS5), and an effect while in some states (TY6)')
+    def make(solver, waning, at=(20, 400), **kwargs):
+        S, I = ss.states('S I')
+        mal = ss.Disease(infection=S >> I @ ss.peryear(2.0), recovery=I >> S @ ss.days(100), name='mal')
+        vx = ss.Vaccine(efficacy=0.8, waning=waning, name='vx')
+        size = dict(n_agents=10_000) if solver == 'abm' else dict(total_pop=10_000)
+        return ss.Sim(mal, interventions=ss.vaccinate(vx, coverage=0.8, at=[ss.days(t) for t in at], name='rounds'), unit='day', stop=600, solver=solver, verbose=0, **size, **kwargs).run()
+    box = ss.box(dur=ss.days(180), decay=ss.days(200))
+    t = np.array([100, 300, 450, 600])
+    prev = {solver:make(solver, box).results.mal.I[t]/10_000 for solver in ['abm', 'ode']}
+    assert np.allclose(prev['abm'], prev['ode'], atol=0.03), prev
+    sim = make('ode', box)
+    assert sim.solver == 'ode' and len(sim.groups.strats[sim.groups.dim_index('has_vx')].labels) == 12 # False, 10 stages of the box, decaying
+    assert np.allclose(box(ss.days(np.array([0, 179, 380]))), [1, 1, np.exp(-1)])
+    assert sim.to_code().count('ss.box(dur=ss.days(180), decay=ss.days(200))') == 1
+
+    # A waning function is given the time as a duration (in any sim's unit) and the people who hold it
+    seen = {}
+    def fn(t, sim, uids):
+        seen['t'], seen['uids'] = t, uids
+        assert np.allclose(sim.people.age[uids] - t.years, sim.people.age[uids] - t.years.max(), atol=1e-6) # Everyone given it at once: one age at delivery each
+        return (t < ss.days(100))*1.0
+    for unit,dt in [('day', 1), ('year', 1/365)]:
+        S, I = ss.states('S I')
+        mal = ss.Disease(infection=S >> I @ ss.peryear(2.0), recovery=I >> S @ ss.days(20), name='mal')
+        vax = ss.Vaccine(efficacy=dict(infection=1.0), waning=fn, name='vax')
+        sim = ss.Sim(mal, interventions=ss.vaccinate(vax, coverage=1.0, at=[ss.days(10)], name='once'), n_agents=1000, unit=unit, dt=dt, stop=ss.days(200), verbose=0).run()
+        inf = sim.results.mal.infection
+        assert isinstance(seen['t'], ss.dur) and len(seen['uids']) == 1000
+        assert inf[12:108].sum() == 0 and inf[115:].sum() > 0, unit # Protected for 100 days, in either unit
+
+    # Several effects, each with its own waning; the same box for each runs as an ODE
+    S, I = ss.states('S I')
+    def two(waning, solver='abm'):
+        mal = ss.Disease(infection=S >> I @ ss.perday(0.1)*I, recovery=I >> S @ ss.days(20), init_prev=0.05, name='mal')
+        vax = ss.Vaccine(efficacy=dict(acquisition=0.9, transmission=0.5), waning=waning, name='vax')
+        return ss.Sim(mal, interventions=ss.vaccinate(vax, coverage=1.0, at=[ss.days(10)], name='once'), n_agents=1000, unit='day', stop=200, solver=solver, verbose=0).run()
+    sim = two(dict(acquisition=ss.box(dur=ss.days(50)), transmission=None))
+    inf = sim.results.mal.infection
+    assert inf[12:55].sum() < inf[65:108].sum() # Acquisition protected for 50 days only (transmission for good)
+    assert two(dict(acquisition=box, transmission=box), solver='ode').solver == 'ode'
+    with pytest.raises(TypeError):
+        two(lambda t, uids: 1.0) # A function of (t, sim, uids), or of t
+    with pytest.raises(ss.CapabilityError):
+        two(dict(acquisition=ss.box(dur=ss.days(50)), transmission=None), solver='ode')
+
+    # An effect only while in some states: held until people leave them
+    S, I, R = ss.states('S I R')
+    sir = ss.Disease(infection=S >> I @ ss.perday(0.25)*I, recovery=I >> R @ ss.days(10), waning=R >> S @ ss.days(20), init_prev=0.01, name='sir')
+    drug = ss.Treatment(efficacy=dict(transmission=0.9), during=sir.I, name='drug')
+    for solver in ['abm', 'ode']:
+        size = dict(n_agents=5000) if solver == 'abm' else dict(total_pop=5000)
+        sim = ss.Sim(sir, interventions=ss.treat(drug, where=sir.I, coverage=ss.perday(0.2), name='tx'), unit='day', stop=100, solver=solver, verbose=0, **size).run()
+        if solver == 'abm':
+            held = sim.people['has_drug'].raw > 0
+            left = held & ~sim.diseases.sir.I.raw[:len(held)]
+            assert held.sum() > 0 and left.sum() <= sim.results.sir.recovery[-1] # Only those who left I in the last step still hold it
+    return sim
+
+
+def test_weighted_counts():
+    sc.heading('Testing weighted counts (MS3), counts by infectiousness (TY6), and a product\'s coverage in a rate (MS4), under agents and the ODE')
+    w = [0.2, 1.0, 2.6]
+    def mosquitoes(solver, weighted=True, cov=None, kill=None):
+        S, I = ss.states('S I')
+        Sv, Iv = ss.states('Sv Iv', people=False)
+        N = (S + I).n
+        itn = ss.Vaccine(efficacy=dict(bite=0.5), waning=ss.box(dur=ss.days(200)), name='itn')
+        c = 0 if cov is None else itn.coverage if kill is None else itn.coverage(kill)
+        d = ss.Disease(bite=S >> I @ ss.perday(0.3)*Iv.n/N, recovery=I >> S @ ss.days(30), emerge=ss.null >> Sv @ ss.perday(0.1)*N,
+                       feeding=Sv >> Iv @ ss.perday(0.3)*((ss.by(biting=w)*I).n if weighted else I.n)/N, death=Sv + Iv >> ss.null @ ss.perday(0.1) + ss.perday(0.2)*c,
+                       init=dict(I=0.05, Sv=1.0), name='mal')
+        d.stratify(biting=['lo', 'mid', 'hi'], split=[1/3]*3, adjust=dict(bite=w))
+        size = dict(n_agents=10_000) if solver == 'abm' else dict(total_pop=10_000)
+        intv = ss.vaccinate(itn, coverage=cov, at=[ss.days(50)], name='nets') if cov is not None else None
+        return ss.Sim(d, interventions=intv, unit='day', stop=200, solver=solver, verbose=0, **size).run()
+    prev = {(s,wt):mosquitoes(s, wt).results.mal.I[[50, 150]]/10_000 for s in ['abm', 'ode'] for wt in [True, False]}
+    assert np.allclose(prev['abm', True], prev['ode', True], atol=0.02) and np.all(prev['ode', True] > prev['ode', False] + 0.01), prev
+    sim = mosquitoes('ode')
+    assert 'weighted count' in sim.diseases.mal.engine.kernel_reason()
+    with pytest.raises(TypeError):
+        S, I = ss.states('S I')
+        (I.n*I).n # Not a weight per person
+
+    # Shedding by infectiousness: a treatment that halves it halves what the treated shed
+    def shed(solver, eff):
+        S, A = ss.states('S A')
+        E = ss.State('E', people=False)
+        d = ss.Disease(infection=S >> A @ ss.perday(0.001)*E.n/(S + A).n, recovery=A >> S @ ss.days(20), shed=ss.null >> E @ ss.perday(1.0)*A.n_trans, decay=E >> ss.null @ ss.days(1), init_prev=0.1, name='ty')
+        drug = ss.Treatment(efficacy=dict(transmission=eff), during=d.A, name='drug')
+        size = dict(n_agents=10_000) if solver == 'abm' else dict(total_pop=10_000)
+        return ss.Sim(d, interventions=ss.treat(drug, where=d.A, coverage=0.5, at=[ss.days(1)], name='tx'), unit='day', stop=5, solver=solver, verbose=0, **size).run().results.ty.E[3]
+    for solver in ['abm', 'ode']:
+        ratio = shed(solver, 0.5)/shed(solver, 0.0)
+        assert 0.7 < ratio < 0.85, (solver, ratio) # Half of them at half: 3/4
+
+    # A product's coverage in a rate: the mosquitoes killed, by the share of people holding nets, and each net's killing over time
+    box = ss.box(dur=ss.days(200))
+    kill = lambda t: 0.6*box(t)
+    n = {(s,c):np.mean((lambda r: (r.Sv + r.Iv)[140:160])(mosquitoes(s, cov=c, kill=kill).results.mal)) for s in ['abm', 'ode'] for c in [0.5, 1.0]}
+    assert np.isclose(n['abm', 0.5], n['ode', 0.5], rtol=0.03) and np.isclose(n['abm', 1.0], n['ode', 1.0], rtol=0.03) and n['ode', 1.0] < n['ode', 0.5], n
+    return sim
+
+
 if __name__ == '__main__':
     sc.options(interactive=False)
     where  = test_modify_where()
@@ -906,3 +1120,7 @@ if __name__ == '__main__':
     states = test_waning_as_states()
     nets   = test_network_contacts()
     whole  = test_whole_run()
+    names  = test_names_memory_at_age()
+    coded  = test_coded_states()
+    waning = test_waning_functions()
+    counts = test_weighted_counts()

@@ -1142,6 +1142,66 @@ def test_contacts_ages():
     return
 
 
+
+def test_by_place_times_local_count():
+    """ A value by place times a count in the same place (a vector's bites per person), as agents and as an ODE, and 'patch' in people """
+    out = {}
+    for solver in ['abm', 'ode']:
+        S, I = ss.states('S I')
+        V = ss.State(people=False)
+        f = ss.par(ss.by(patch=[0.2, 0.8]), name='f')
+        sis = ss.Disease(infection=ss.Transition(S, I, rate=f*ss.perday(0.1)*V.n/(S + I).n, acquisition=True), recovery=I >> S @ ss.days(20),
+                         hatch=ss.null >> V @ ss.perday(1)*(S + I).n, death=V >> ss.null @ ss.days(1), init=dict(I=0.0, V=ss.by(patch=[500, 500])), name='sis')
+        sis.stratify(patch=['a', 'b'], kind='space')
+        pop = dict(n_agents=1000) if solver == 'abm' else dict(total_pop=1000)
+        sim = ss.Sim(sis, solver=solver, unit='day', stop=60, verbose=0, **pop).run()
+        out[solver] = sim.results.sis.I.by('patch')[-1]
+        if solver == 'abm':
+            assert 'patch' in sim.people and 'nonexistent' not in sim.people
+    for solver, inf in out.items():
+        assert inf[1] > 2*inf[0], f'[{solver}] Expected about four times the infections where f is four times as high: {inf}'
+    return out
+
+def test_by_series():
+    """ A value by group that varies in time, for every step at once (as a whole run tabulates it): the same as a step at a time """
+    S, I = ss.states('S I')
+    season = lambda p: ss.timeseries({ss.years(k/4): ss.perday(0.2 + 0.05*k + p) for k in range(5)}, mode='linear', period=ss.years(1))
+    beta = ss.by(patch=[season(0), season(0.1), ss.perday(0.3)], age=[1.0, ss.seasonal(mean=1.5, amplitude=0.2, peak=0.3)])
+    sis = ss.Disease(S >> I @ beta*I.frac, I >> S @ ss.days(10), init=dict(I=0.01), name='sis')
+    sis.stratify(patch=['a', 'b', 'c'], age=[0, 15])
+    sim = ss.Sim(sis, total_pop=1000, unit='day', start='2000-01-01', stop='2001-01-01', verbose=0).init()
+    eng = sim.diseases.sis.engine
+    years = np.linspace(2000, 2001.5, 17)
+    each = np.array([beta.per_group(sim, eng.convert, year=year) for year in years])
+    assert np.array_equal(beta.series(years, sim, eng.convert), each), 'All at once should give the values of each year'
+    table = ss.by(dict(age=[0, 15], value=[season(0), 2.0])) # A table: taken a year at a time
+    assert np.array_equal(table.series(years, sim, eng.convert), np.array([table.per_group(sim, eng.convert, year=year) for year in years]))
+    return each
+
+
+def test_by_function():
+    """ MS2: ss.by(patch=fn), with fn(sim) one value per level, is read by every solver, also with another dimension added by a held product """
+    def eir(sim):
+        return ss.perday(np.array([0.001, 0.01, 0.05]))
+    expected = np.array([0.001, 0.01, 0.05])/(np.array([0.001, 0.01, 0.05]) + 0.05) # At equilibrium
+    for solver in ['abm', 'ode']:
+        for vaccine in [False, True]:
+            S, I = ss.states('S I')
+            m = ss.Disease(S >> I @ ss.by(patch=eir), I >> S @ ss.days(20), name='m')
+            m.stratify(patch=ss.geo.geography(names=['a', 'b', 'c'], pop=[1, 1, 1]))
+            intv = [ss.vaccinate(ss.Vaccine(efficacy=dict(acquisition=0.0)), coverage=0.5, at=2000.1)] if vaccine else []
+            sim = ss.Sim(diseases=m, interventions=intv, n_agents=15_000, start=2000, dur=ss.days(200), dt=ss.days(1), verbose=0, solver=solver, rand_seed=1).run()
+            I = sim.results.m.I.by('patch').values[-2]
+            N = I + sim.results.m.S.by('patch').values[-2]
+            assert np.allclose(I/N, expected, atol=0.03), (solver, vaccine, I/N)
+    S, I = ss.states('S I')
+    m = ss.Disease(S >> I @ ss.by(patch=lambda sim: ss.perday(np.ones(2))), name='m')
+    m.stratify(patch=ss.geo.geography(names=['a', 'b', 'c']))
+    with pytest.raises(ss.errors.ShapeError, match='3 levels'):
+        ss.Sim(diseases=m, n_agents=300, dur=ss.days(3), dt=ss.days(1), verbose=0).run()
+    return sim
+
+
 if __name__ == '__main__':
     mixing  = test_mixing()
     states  = test_states()
@@ -1161,3 +1221,6 @@ if __name__ == '__main__':
     clocks  = test_clocks()
     rows    = test_rows()
     cdims   = test_contacts_dims()
+    place_counts = test_by_place_times_local_count()
+    by_series = test_by_series()
+    by_func = test_by_function()

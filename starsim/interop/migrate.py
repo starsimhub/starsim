@@ -16,7 +16,8 @@ their meaning), a `beta` pair on `ss.MFNet` (`beta={'mf': [0.08, 0.04]}`, which 
 `ss.peract(m2f=0.08, f2m=0.04)`) or on a mother-to-child network (`[b, 0]`, which is now `b`, since those networks transmit one
 way), `copy_inputs=` (removed: a sim always copies its inputs), `ss.uids.cat()` (now `ss.uids.concatenate()`), an override of `ss.Infection`'s `infect()` (now `transmit()`), `preg.breastfeeding`
 (now `preg.lactating`), `ss.RandomNet(uniform_targets=True)` (now `method='uniform'`), and the counts of the states of Starsim's own
-modules (`results.n_alive`, `res.n_infected`, now `results.alive`, `res.infected`). From Starsim 4's prereleases: a test's follow-ups nested in it
+modules after results (`results.n_alive`, `res['n_infected']`, now `results.alive`, `res['infected']`; a result the code makes
+itself keeps its name, and other counts are listed). From Starsim 4's prereleases: a test's follow-ups nested in it
 (`ss.screen(test, on_positive=ss.treat(drug))`), which are now steps of their own, added beside it to the interventions (left
 in place, so that the code fails with Starsim 4's own error, when the script can't find where they go); `ss.Test`, now
 `ss.Diagnostic`; the keywords of a delivery (`eligible=`, `years=`, now `where=`, `at=`, only in calls to `ss.screen()`,
@@ -30,6 +31,7 @@ import ast
 import sys
 import json
 import argparse
+import importlib
 import sciris as sc
 import starsim as ss
 
@@ -70,8 +72,6 @@ renames = [
     (r'\bself\.now_entry\b',       'self.t.tvec[self.ti]',           'now_entry (a Starsim 4 prerelease) is the time of the step\'s end, self.t.tvec[self.ti] (self.now is its start)'),
     (r'\bss\.geo\(',              'ss.geo.geography(',              'ss.geo (a Starsim 4 prerelease) is ss.geo.geography'),
     (r'\bss\.(gravity|Mobility)\b', r'ss.geo.\1',                     'ss.gravity and ss.Mobility (a Starsim 4 prerelease) are in ss.geo'),
-    (rf'(\bresults(?:\.\w+)*|\bres\w*)\.n_({counted})\b', r'\1.\2', 'the count of a state is the result named after the state (e.g. results.alive, res.infected)'),
-    (rf'''(['"])(\w+[._])?n_({counted})(['"])''', r'\1\2\3\4', 'the count of a state is the result named after the state (e.g. "alive", "sir.infected")'),
 ]
 
 # Internal helpers that are now only in their submodules, by submodule
@@ -94,7 +94,6 @@ flags = [
     (r'\bss\.(RoutineDelivery|CampaignDelivery|BaseTest|BaseScreening|BaseTriage|BaseTreatment|BaseVaccination)\b', "Starsim 3's delivery classes were removed: ss.screen(), ss.vaccinate(), or ss.treat() with coverage= (prob=p is coverage=ss.probperyear(p), offered at every step), start= and stop= (start_year=, end_year=; stop is not included), at= (a campaign's years=), and where= (eligibility=); a subclass that overrides step() is an ss.Intervention written as code"),
     (r'\bss\.treat_num\b', 'ss.treat(cure=e, on=dis.infection (or who=screening.positive), capacity=n, queue=True): those not served wait, and leave the queue when no longer eligible'),
     (r'\bss\.(Dx|Tx|Vx)\b', "Starsim 3's products written as code were removed: ss.Diagnostic (a table of more than two results is results=dict(...), most severe first), ss.Treatment (cure=, or cure=dict(<state>=...) by state), ss.Vaccine (efficacy=); an administer() of your own is administer(self, uids) on a subclass of ss.Product, returning its outcomes as dict(positive=uids)"),
-    (r'\.diagnosed\b', "if this is the result of an ss.screen (a Starsim 4 prerelease), it is now positive (e.g. sim.results.screening.positive)"),
     (r'\bss\.simple_vx\b', 'ss.Vaccine(efficacy=e)'),
     (r'\bclass\s+\w+\(\s*(ss\.)?(Legacy)?Pregnancy\s*\)', "ss.Pregnancy is now the declared module (states and transitions, with Starsim 3's arguments), and Starsim 3's pregnancy written as code was removed: a subclass that overrides its methods raises. Rewrite onto its seams: conception_rate(sim) for who conceives, ss.modify() of its transitions (preg.conception, preg.miscarriage, ...), infant_rate= for infant mortality, since_birth and preg.lactating for postpartum and breastfeeding, ss.on(preg.birth) or preg.add_callback(preg.birth, fn) at a delivery"),
     (r'\.add_(conception|delivery)_callback\(', "ss.Pregnancy's add_conception_callback(fn) is preg.add_callback(preg.conception, fn); add_delivery_callback(fn), which was called with (mothers, newborns), is preg.add_callback(preg.birth, fn), called with the newborns (their mothers are sim.people.parent[newborns]). Both are called at the end of the pregnancy's step"),
@@ -128,7 +127,7 @@ flags = [
     (r'\bss\.(MFNet|SexualNet)\(.*\bduration\s*=', 'dur= (as every other network); net.pars.duration is net.pars.dur'),
     (r'\brel_part_rates\s*=', 'participation= (rel_part_rates was removed: its multiplier goes in the probability, e.g. participation=0.45 for 0.9 times 0.5)'),
     (r'''(['"])(mf|mfnet|msm|msmnet)\1''', "ss.MFNet and ss.MSMNet are ss.SexualNet, named 'sexualnet' unless given a name: networks='sexual', and a beta or route= keyed 'sexual' (or ss.SexualNet(name='mf'))"),
-    (r'\bfloat\([^)]*(rate|dur_)[^)]*\)', 'if this is a rate or duration (ss.peryear, ss.years, ...), its number is .value (float() of one is refused)'),
+    (r'\bfloat\((?![^)]*(\.raw|\.values|\[|_units\b|_steps\b))[^)]*(rate|dur_)[^)]*\)', 'if this is a rate or duration (ss.peryear, ss.years, ...), its number is .value (float() of one is refused)'),
     # From Starsim 4's prereleases
     (r'\bss\.Lactation\b|\blactation\s*=|\blact\w*\.L\b', "ss.Lactation (a Starsim 4 prerelease) is gone, with ss.Pregnancy(lactation=): breastfeeding is ss.Pregnancy's preg.lactating (a state of each woman), with p_breastfeed= and dur_breastfeed= on ss.Pregnancy; lact.L is preg.lactating"),
     (r'\bss\.contacts\((.*,)?\s*(?!(?:ages|matrix|dims|name|source|layer|unit)\s*=)\w+\s*=(?!=)', "ss.contacts() takes a matrix and what it is over: ss.contacts(M, ages=[0, 15, 65]) for its own age groups (age= and bands= are gone), ss.contacts(M) over the model's age groups (was age=M), ss.contacts(M, dims='risk') over another stratification (was risk=M), and ss.contacts(dict(age=A, area=B)) for a product of a matrix for each (was age=A, area=B)"),
@@ -142,15 +141,97 @@ flags = [
     (r'\binfectious\s*=\s*True\b', 'infectious= of a state is gone: drop it (a state is infectious when it is in a transmission rate, e.g. rate=beta*I)'),
     (r'\bmatch_result_keys\b', 'ss.utils.match_result_keys() is gone: res.flatten() gives a flat dict of results'),
     (r'''\bmatch\s*=\s*r?['"][^'"]*\bE\d{3}\b''', 'error codes are gone: catch the error by its class, e.g. pytest.raises(ss.CapabilityError) for what a solver cannot run, or ss.errors.<Name>'),
-    (r'\.cum_(?!infections\b)\w+', "if this is the running total of a declared disease's transition (a Starsim 4 prerelease), it is res.<transition>.cum, e.g. res.infection.cum"),
-    (r'\b(results(\.\w+)*|res\w*)\.n_(?!agents\b|contacts\b|edges\b)\w+', "if this is the count of a state (a result made automatically, e.g. Starsim 3's n_infected), it is now named after the state: res.infected; a result the module defines itself keeps its name"),
-    (r'''\bf(['"])[^'"]*\bn_\{''', "if this makes the name of a state's count (e.g. f'n_{state}'), the count is now the result named after the state, e.g. f'{state}'"),
-    (r'''(['"])(\w+[._])?n_(?!agents\b|contacts\b|edges\b)\w+\1''', "if this names the count of a state (e.g. 'n_symptomatic'), it is now the result named after the state, e.g. 'symptomatic'"),
-    (r'\b(new|cum)_infections\b', "if this is a result of ss.SIR, ss.SIS, ss.SEIR, or another declared disease: new_infections is the flow of the transition that infects (res.infection), and cum_infections its running total (res.infection.cum; sir_infection in sim.summary); a disease written as code (ssl.AgentSIR, ss.Infection) keeps both"),
     (r'''\bmove\s*=\s*['"]''', 'move= takes the states, not a string: move=S >> V (or U + B >> B from either)'),
     (r'\bss\.transfer\(.*\bcoverage\s*=', 'ss.transfer() moves people between levels at a rate (rate=, dur=, or p=); a one-off move of a share of people is a delivery, e.g. ss.Delivery(move=dict(art=True), coverage=0.5, at=[2010], where=...)'),
     (r'\bss\.Treatment\(.*\befficacy\s*=\s*[\d.]', "ss.Treatment's efficacy= is its effects while it is held, as a dict (efficacy=dict(transmission=0.96)): the chance that it cures is cure=, and moving the treated along a transition that is not a recovery (e.g. starting treatment) is moves='diagnosis'"),
 ]
+
+# The names of results that depend on the rest of the code: the counts of states (n_<state>), the results of ss.SIR and the others, and of a test
+counts_note = 'the count of a state is the result named after the state (e.g. results.alive, res.infected, results["sir.infected"])'
+results_like = r'(?:\bresults(?:\.\w+)*|\bres\w*)' # An object of results: results, sim.results.sir, res, res_sir, ...
+fstring_pattern = r"""\bf(['"])([^'"]*\bn_\{[^'"]*)\1"""
+make_results = r'(\w*Result)$' # A call that makes a result, e.g. ss.Result('n_ill', ...)
+
+
+def find_names(texts):
+    """
+    What the code given defines, which says what its names of results mean: the names of the results it makes itself (e.g.
+    `ss.Result('n_exposed')`, with f-strings as templates, e.g. 'n_{}'), which keep their names; and the names of the boolean
+    states it declares, whose counts Starsim 3 made as results named `n_<state>`
+    """
+    own, templates, states = set(), set(), set()
+    for text in texts:
+        try:
+            tree = ast.parse(text)
+        except SyntaxError:
+            continue
+        makers = {'Result'} # Calls that make a result: ss.Result, and functions of the code that return one, e.g. def R(name, label): return ss.Result(name, ...)
+        for func in [n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.args.args]:
+            first = func.args.args[0].arg
+            for ret in [n for n in ast.walk(func) if isinstance(n, ast.Return) and isinstance(n.value, ast.Call)]:
+                call = ret.value
+                if re.search(make_results, ast.unparse(call.func)) and call.args and isinstance(call.args[0], ast.Name) and call.args[0].id == first:
+                    makers.add(func.name)
+        for call in [n for n in ast.walk(tree) if isinstance(n, ast.Call)]:
+            func = ast.unparse(call.func)
+            name = call.args[0] if call.args else next((kw.value for kw in call.keywords if kw.arg == 'name'), None)
+            if func.split('.')[-1] in makers or re.search(make_results, func):
+                if isinstance(name, ast.Constant) and isinstance(name.value, str):
+                    own.add(name.value)
+                elif isinstance(name, ast.JoinedStr):
+                    templates.add(re.sub(r'\{[^}]*\}', '{}', ast.unparse(name)[2:-1]))
+            elif func in ['ss.State', 'ss.BoolState'] and isinstance(name, ast.Constant) and isinstance(name.value, str):
+                states.add(name.value)
+    return sc.objdict(own=own, templates=templates, states=states)
+
+
+def file_context(text):
+    """ What a file uses, which says what some of its names mean: declared diseases (ss.SIR and the others), and the names of its tests (ss.screen()) """
+    declares = bool(re.search(r"""\bss\.(SIR|SIS|SEIR|states|Transition)\(|\b(type|diseases)\s*=\s*\[?\s*['"](sir|sis|seir)['"]""", text))
+    screens = set(re.findall(r'^\s*(\w+)\s*=\s*ss\.screen\(', text, re.M))
+    screens |= set(re.findall(r"""\bss\.screen\(.*\bname\s*=\s*['"](\w+)['"]""", text))
+    return sc.objdict(declares=declares, screens=screens)
+
+
+def rename_counts(line, names):
+    """ Rename the counts of the states of Starsim's own modules after results (`results.n_alive`, `res['n_infected']`), unless the code makes a result of that name itself; returns the line and whether it changed """
+    if re.search(rf"""n_({counted})['"]?\]?\[[^\]]*\]\s*[-+*/]?=(?!=)""", line):
+        return line, False # Written by the code (e.g. res.n_alive[ti] = ...): a result it makes itself, or a count it replaces, for a person
+    def drop(m): # The match without the n_ of the group named state, unless the code makes a result of that name
+        if f'n_{m.group("state")}' in names.own:
+            return m.group(0)
+        start, end = m.span('state')
+        return m.group(0)[:start - m.start() - 2] + m.group(0)[start - m.start():]
+    new = line
+    new = re.sub(rf'{results_like}\.n_(?P<state>{counted})\b', drop, new) # results.n_alive
+    new = re.sub(rf"""{results_like}\[\s*(['"])(\w+[._])?n_(?P<state>{counted})\1\s*\]""", drop, new) # results['n_alive'], res['sir.n_infected']
+    new = re.sub(rf"""(?:has|get)attr\(\s*{results_like}\s*,\s*(['"])(\w+[._])?n_(?P<state>{counted})\1""", drop, new) # hasattr(res, 'n_infected')
+    new = re.sub(rf"""(['"])(\w+[._])?n_(?P<state>{counted})\1\s+(?:not\s+)?in\s+{results_like}\b""", drop, new) # 'n_infected' in res
+    return new, new != line
+
+
+def count_flags(line, names, context):
+    """ What needs a person on a line, by what the code defines and uses (see `find_names()` and `file_context()`) """
+    out = []
+    states = set(counted.split('|')) | names.states
+    found = [m.group(1) or m.group(3) for m in re.finditer(r"""\.n_(\w+)\b|(['"])(?:\w+[._])?n_(\w+)\2""", line)]
+    found = [s for s in found if s in states and f'n_{s}' not in names.own]
+    if found:
+        out.append(f"if this is the count of a state that Starsim 3 made (n_{found[0]}: a module's results, a key of them, or a column of sim.to_df()), it is now named after the state ({found[0]}); a result the code defines itself keeps its name")
+    for m in re.finditer(fstring_pattern, line):
+        if re.sub(r'\{[^}]*\}', '{}', m.group(2)) not in names.templates:
+            out.append("if this makes the name of a state's count (e.g. f'n_{state}'), the count is now the result named after the state, e.g. f'{state}'")
+            break
+    if context.declares and re.search(r'\b(new|cum)_infections\b', line):
+        out.append("if this is a result of ss.SIR, ss.SIS, ss.SEIR, or another declared disease: new_infections is the flow of the transition that infects (res.infection), and cum_infections its running total (res.infection.cum; sir_infection in sim.summary); a disease written as code (ssl.AgentSIR, ss.Infection) keeps both")
+    if context.declares and re.search(r'\.cum_(?!infections\b)\w+', line):
+        out.append("if this is the running total of a declared disease's transition (a Starsim 4 prerelease), it is res.<transition>.cum, e.g. res.infection.cum")
+    if context.screens:
+        tests = '|'.join(sorted(context.screens))
+        if re.search(rf"""\b(results\.)?({tests})\.diagnosed\b|\bresults\[['"]({tests})['"]\]\.diagnosed\b""", line):
+            out.append('the result diagnosed of an ss.screen (a Starsim 4 prerelease) is now positive (e.g. sim.results.screening.positive)')
+    return out
+
 
 def removed(name):
     """ What replaces `ss.<name>`, a name of Starsim 3's (or a prerelease's) that Starsim 4 does not have at its root, from the tables above; or None """
@@ -371,6 +452,10 @@ def migrate_ast(text, analyzers=None):
             return False
         line = edits.line(kw.lineno)
         start, end = kw.col_offset, kw.end_col_offset
+        if not line[:start].strip() and re.fullmatch(rb'\s*,?\s*', line[end:]): # Alone on its line (a call written over several): remove the line
+            edits.add_lines(kw, '', note)
+            call.keywords.remove(kw)
+            return True
         before = re.search(rb',\s*$', line[:start])
         after = re.match(rb'\s*,\s*', line[end:])
         if before:
@@ -392,6 +477,16 @@ def migrate_ast(text, analyzers=None):
     for call in [n for n in ast.walk(tree) if isinstance(n, ast.Call) and ast.unparse(n.func) == 'ss.People']:
         if not any(kw.arg in ['age_data', None] for kw in call.keywords) and len(call.args) < 2: # No ages given (None is **kwargs)
             found.append((call.lineno, "ss.People(n) with no age_data= gives agents the world's ages (Starsim 3's were uniform from 0 to 60): for Starsim 3's, ss.People(n, age_data=ss.uniform(0, 60))"))
+
+    for node in [n for n in ast.walk(tree) if isinstance(n, ast.ImportFrom) and not n.level and (n.module or '').split('.')[0] == 'starsim']: # E.g. from starsim.interventions import treat_num
+        try:
+            module = importlib.import_module(node.module)
+        except ImportError:
+            found.append((node.lineno, f'{node.module} is not a module of Starsim 4: import starsim as ss, and see what replaces the names imported'))
+            continue
+        for alias in node.names:
+            if alias.name != '*' and not hasattr(module, alias.name):
+                found.append((node.lineno, f'{alias.name} is not in {node.module} in Starsim 4: {removed(alias.name) or "see the tables of the migrate-starsim3 skill"}'))
 
     sexualnet_classes = [cls for cls in ast.walk(tree) if isinstance(cls, ast.ClassDef) and any(ast.unparse(b) == 'ss.SexualNet' for b in cls.bases)]
     super_inits = {id(n) for cls in sexualnet_classes for n in ast.walk(cls) if isinstance(n, ast.Call) and ast.unparse(n.func) == 'super().__init__'}
@@ -536,18 +631,27 @@ def migrate_ast(text, analyzers=None):
     return text, notes, found, uses_ssl
 
 
-def migrate_text(text, analyzers=None):
+ssl_import = r'^\s*import starsim\.library as ssl'
+
+
+def migrate_text(text, analyzers=None, imported=False, names=None, context=None):
     """
     Migrate the source code of one file
 
     Args:
         text (str): the source code
         analyzers (set): the names of classes that are analyzers (see `find_analyzers()`); by default, those in this file
+        imported (bool): whether `starsim.library` is already imported as `ssl` (by an earlier cell of a notebook)
+        names (dict): the results and states the code defines (see `find_names()`); by default, those in this file
+        context (str): the code of the whole file, for what it uses (see `file_context()`), if the text is one cell of it
 
     Returns:
         A tuple of the new text, the changes made (line, note), and what needs a person (line, message)
     """
+    names = sc.ifelse(names, find_names([text]))
+    context = file_context(sc.ifelse(context, text))
     changes = []
+    declared_counts = [] # Lines with a count renamed, in a file with a declared disease
     lines = text.splitlines(keepends=True)
     for i, line in enumerate(lines):
         new = line
@@ -555,6 +659,11 @@ def migrate_text(text, analyzers=None):
             new, n = re.subn(pattern, repl, new)
             if n:
                 changes.append((i+1, note))
+        new, n = rename_counts(new, names)
+        if n:
+            changes.append((i+1, counts_note))
+            if context.declares:
+                declared_counts.append(i+1)
         lines[i] = new
     text = ''.join(lines)
 
@@ -564,7 +673,7 @@ def migrate_text(text, analyzers=None):
         return text, changes, [(E.lineno or 0, f'could not be parsed, so only renames were made: {E}')]
     changes += notes
     uses_ssl |= bool(re.search(r'\bssl\.', text))
-    if uses_ssl and not re.search(r'^\s*import starsim\.library as ssl', text, re.M):
+    if uses_ssl and not imported and not re.search(ssl_import, text, re.M):
         text, n = re.subn(r'^(\s*)import starsim as ss\s*$', r'\g<0>\n\1import starsim.library as ssl', text, count=1, flags=re.M)
         if n:
             changes.append((0, 'added import starsim.library as ssl'))
@@ -575,6 +684,8 @@ def migrate_text(text, analyzers=None):
         for pattern, message in flags:
             if re.search(pattern, line):
                 found.append((i+1, message))
+        found += [(i+1, message) for message in count_flags(line, names, context)]
+    found += [(line, "a count renamed in a file with a declared disease: a declared disease's counts are its states (res.S, res.I, res.R of ss.SIR), and the count of a disease written as code (ssl.AgentSIR) is the state's name (res.infected)") for line in declared_counts]
     return text, sorted(changes), sorted(found)
 
 
@@ -627,7 +738,7 @@ def migrate(*paths, check=False, verbose=True):
     Rewrite the Starsim 3 code in files or folders for Starsim 4, in place
 
     Args:
-        paths (str): files, or folders whose `.py`, `.ipynb`, `.qmd`, and `.md` files are migrated (the code cells only, in all but `.py`)
+        paths (str): files, or folders whose `.py`, `.ipynb`, `.qmd`, and `.md` files are migrated (the code cells only, in all but `.py`), except in hidden folders (e.g. `.jupyter_cache`)
         check (bool): only report what would change, without writing
         verbose (bool): print each change and what needs a person
 
@@ -642,15 +753,21 @@ def migrate(*paths, check=False, verbose=True):
     files = []
     for path in paths:
         path = sc.path(path)
-        files += sorted(f for ext in ['py', 'ipynb', 'qmd', 'md'] for f in path.rglob(f'*.{ext}')) if path.is_dir() else [path]
+        hidden = lambda f: any(part.startswith('.') for part in f.relative_to(path).parts[:-1]) # In a hidden folder, e.g. .jupyter_cache or .ipynb_checkpoints
+        files += sorted(f for ext in ['py', 'ipynb', 'qmd', 'md'] for f in path.rglob(f'*.{ext}') if not hidden(f)) if path.is_dir() else [path]
     texts = {f:f.read_text() for f in files}
     blocks = {f:code_blocks(f, text) for f,text in texts.items()}
-    analyzers = find_analyzers([code for b in blocks.values() for _,code in b])
+    codes = [code for b in blocks.values() for _,code in b]
+    analyzers = find_analyzers(codes)
+    names = find_names(codes)
     out = sc.objdict(changed=sc.objdict(), todo=sc.objdict())
     for f, text in texts.items():
         new, changes, todo = [], [], []
+        imported = False # Whether an earlier cell imports starsim.library as ssl
+        context = '\n'.join(code for _,code in blocks[f])
         for where, code in blocks[f]:
-            code, c, t = migrate_text(code, analyzers=analyzers)
+            code, c, t = migrate_text(code, analyzers=analyzers, imported=imported, names=names, context=context)
+            imported |= bool(re.search(ssl_import, code, re.M))
             at = (lambda line: f'{where}, line {line}') if isinstance(where, str) else (lambda line: line + where) # The line in the file, or in a notebook's cell
             new.append(code)
             changes += [(at(line), note) for line,note in c]

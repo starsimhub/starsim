@@ -4,6 +4,7 @@ Define core Sim classes
 import os
 import inspect
 import itertools
+import functools as ft
 import numpy as np
 import pandas as pd
 import sciris as sc
@@ -111,6 +112,31 @@ class Sim(ss.Base):
         sim = ss.Sim(modules=[ss.SIR(), ss.RandomNet()]) # Can supply multiple types of module with the 'modules' argument
         ```
     """
+    def __init_subclass__(cls, **kwargs):
+        """ A subclass that adds modules in its own `__init__()` (as FPsim's does): the modules are noted after it, so they are not taken as added after the sim was made (see `modules_after()`) """
+        super().__init_subclass__(**kwargs)
+        init = cls.__dict__.get('__init__')
+        if init is not None:
+            def __init__(self, *args, **kw):
+                init(self, *args, **kw)
+                if self.__dict__.get('_made_pars') is not None: # After each level, so the outermost is last
+                    self._made_pars = self._module_pars()
+                return
+            cls.__init__ = ft.wraps(init)(__init__)
+        sim_init = cls.__dict__.get('init')
+        if sim_init is not None: # A subclass whose init() builds modules of its own before Sim.init() (as STIsim's does): those made by init() are not added after the sim was made either
+            def wrapped_init(self, *args, **kw):
+                if self.__dict__.get('_in_init'):
+                    return sim_init(self, *args, **kw)
+                self.modules_after() # Noted before the subclass's init() runs
+                self._in_init = True
+                try:
+                    return sim_init(self, *args, **kw)
+                finally:
+                    self._in_init = False
+            cls.init = ft.wraps(sim_init)(wrapped_init)
+        return
+
     def __new__(cls, *args, **kwargs):
         obj = super().__new__(cls)
         if cls is not Sim: # A subclass (e.g. FPsim's), which may build its modules after Sim.__init__(): the call is kept, so that sim.new() can make it again
@@ -192,8 +218,9 @@ class Sim(ss.Base):
         self.diagnostics = None # Store diagnostics results
         self._made = self._settings() # The settings as made, to find the ones set afterwards (see set_after())
         self._set_after = {}
-        self._made_pars = self._module_pars() # The same for the modules' parameters (see pars_after())
+        self._made_pars = self._module_pars() # The same for the modules' parameters (see pars_after()), and the modules themselves (see modules_after())
         self._pars_after = {}
+        self._modules_after = {}
         return
 
     def _settings(self):
@@ -226,10 +253,23 @@ class Sim(ss.Base):
         made = self.__dict__.get('_made_pars')
         if made is not None:
             for key,(mod,before) in made.items():
-                changed = {k:sc.dcp(v) for k,v in mod.pars.items() if k not in before or v is not before[k][0] or repr(v) != before[k][1]}
+                given = mod.pars.with_bounded() if isinstance(mod.pars, ss.Pars) else mod.pars # A value given as ss.par keeps its bounds, so that it can still be fitted
+                changed = {k:given[k] for k,v in mod.pars.items() if k not in before or v is not before[k][0] or repr(v) != before[k][1]}
                 if changed:
                     self._pars_after[key] = changed
-        return self.__dict__.get('_pars_after', {})
+        return sc.dcp(self.__dict__.get('_pars_after', {})) # Copied together, so that an ss.par shared by several modules (e.g. a beta for every genotype) stays one
+
+    def modules_after(self):
+        """ The modules added after the sim was made and before it was initialized (e.g. `sim.pars.analyzers += my_analyzer`), by kind, which `sim.new()` keeps (copies) """
+        made = self.__dict__.get('_made_pars')
+        if made is not None and not self.initialized and not self.__dict__.get('_in_init'):
+            ids = {id(mod) for mod,_ in made.values()}
+            for key in ss.modules.module_types() + ['custom', 'modules']:
+                val = self.pars.get(key)
+                added = [mod for mod in (val.values() if isinstance(val, dict) else sc.tolist(val)) if isinstance(mod, ss.Module) and id(mod) not in ids]
+                if added:
+                    self._modules_after[key] = sc.dcp(added) # Copied before this sim initializes them
+        return sc.dcp(self.__dict__.get('_modules_after', {}))
 
     @staticmethod
     def _name_modules(names, *args):
@@ -251,6 +291,12 @@ class Sim(ss.Base):
                         if name is not None:
                             obj.name = obj.label = name
                             obj._default_name = False
+        steps = [mod for arg in args for mod in sc.tolist(arg) if isinstance(mod, ss.Delivery)]
+        used = [mod.name for mod in steps if not mod._default_name]
+        for mod in steps: # Steps made in a function, with no variable to be named by (HP72): numbered, e.g. screen, screen_1, here rather than when the sim copies them, since a condition refers to a step by its name
+            if mod._default_name:
+                mod.name = mod.label = sc.uniquename(mod.name, used, style='_%d')
+            used.append(mod.name)
         return
 
     @staticmethod
@@ -389,6 +435,7 @@ class Sim(ss.Base):
             if val is not None and key not in self.given and not same_value(val, made.get(key)): # A setting set before init() was given too, e.g. sim.pars.use_aging = True (but not one made a float, e.g. n_agents)
                 self.given.append(key)
         self.pars_after()
+        self.modules_after()
         self._made = self._made_pars = None # And only then
         np.random.seed(self.pars.rand_seed) # Reset the seed before the population is created -- shouldn't matter if only using Dist objects
         self.pars.lock(False) # Allow parameters to be added during initialization
@@ -520,7 +567,7 @@ class Sim(ss.Base):
             args, kw = sc.dcp(call)
             kw = sc.mergedicts(kw, kwargs)
             kw = {key:val for key,val in kw.items() if not (key in kwargs and val is None)}
-        set_after, pars_after = self.set_after(), self.pars_after()
+        set_after, pars_after, modules_after = self.set_after(), self.pars_after(), self.modules_after()
         par_values, jax, imported = sc.mergedicts(self.par_values, pars), self.jax, self.__dict__.get('imported')
         if inplace: # This sim becomes the new one
             sim = self
@@ -535,17 +582,20 @@ class Sim(ss.Base):
         for key,val in set_after.items(): # Settings changed after the sim was made, e.g. sim.pars.stop = 30
             if key not in kwargs:
                 sim.pars[key] = sc.dcp(val)
-        for name,changed in pars_after.items(): # Parameters of modules changed after the sim was made
+        for key,mods in modules_after.items(): # Modules added after the sim was made (copies), e.g. sim.pars.analyzers += my_analyzer
+            val = sim.pars[key]
+            sim.pars[key] = (list(val.values()) if isinstance(val, dict) else sc.tolist(val)) + mods
+        for name,changed in pars_after.items(): # Parameters of modules changed after the sim was made (copies)
             target = sim._module_pars().get(name)
             if target is not None:
-                target[0].pars.update(sc.dcp(changed))
+                target[0].pars.update(changed)
         sim.par_values = par_values
         sim.jax = jax
         if imported is not None: # The same import, with what it did not translate
             sim.imported = imported
         return sim
 
-    def fit(self, pars=None, data=None, weights=None, likelihood=None, gof=None, method=None, n_runs=None, rand_seed=None, verbose=None, **kwargs):
+    def fit(self, pars=None, data=None, weights=None, likelihood=None, gof=None, penalty=None, method=None, n_runs=None, reseed=None, rand_seed=None, verbose=None, **kwargs):
         """
         Fit every parameter that has bounds to every result that has data
 
@@ -553,18 +603,31 @@ class Sim(ss.Base):
         data (see `ss.Sim(data=...)`). The original sim is not changed. The fitting itself
         is in `ss.fit`, which is imported when it is first used.
 
+        A parameter can be one of a declared model, of a module written as code (`ssl.HIV(beta=ss.par(...))`,
+        also a value in a dict parameter, fitted as e.g. `cin_fn.k`, or a setting kept as an attribute),
+        a modifier's amount (`ss.modify(..., multiply=ss.par(...))`), or a keyword argument of a function
+        given as a module (`def set_testing(sim, symp_prob=ss.par(0.1, bounds=[0.01, 0.5]))`, for a value
+        set in code); one named alike in several modules is fitted with its module's name, e.g.
+        `hpv16.rel_beta`. A parameter whose value is an array, with bounds for each element
+        (`ss.par(np.array([...]), bounds=[lows, highs])`), has each element fitted, as `knots[0]`, ...,
+        except those whose bounds are equal. A data column names a result, as `sim.results` has it:
+        e.g. `prevalence`, `sir.prevalence`, an analyzer's `by_age.cancers_0_15`, a result nested deeper
+        (`hpv.genotype.cancers`), or a column of a result with columns (`sis.new_infections.alpha`).
+
         Args:
             pars (list): the names of the parameters to fit (default: all that have bounds)
             data (df): the data to fit to (default: the sim's data)
             weights (dict): the relative weight of each data series (default: equal)
             likelihood (dict): the likelihood of a data series, by its name (e.g. `dict(prevalence=ss.normal(scale=0.02))`), for series whose outcome does not declare one. If every series has a likelihood, the fit maximizes their sum (plus the log of the priors of the parameters that have one, for the methods that find a best fit: the most probable values)
             gof (str/func): the goodness of fit: 'nae' (normalized absolute error, the default), 'rmse', or a function of the sim; any other name is an error
+            penalty (func): a function of the parameter values (a dict by name, an array whole) returning a number added to what a best fit minimizes, e.g. a smoothness penalty, `lambda pars: 10*np.sum(np.diff(pars['knots'], 2)**2)`
             method (str/list): by default, a best fit (a point estimate), by the method that suits the sim, which is printed with the reason: 'l-bfgs-b' for a deterministic sim with gradients (from JAX; see `ss.gradients`), 'nelder-mead' for one without them, or with one or two fitted parameters (where it is faster than gradients), and 'optuna' for a stochastic sim, including an agent-based one. A posterior is asked for by name: 'nuts' (the No-U-Turn sampler, for a deterministic sim with gradients whose data series all have a likelihood, with each chain started from one of the best points of a scan over the bounds that are apart), 'pmcmc' (particle MCMC, for a stochastic compartmental sim whose data series all have a likelihood: a random-walk Metropolis sampler on the likelihood estimated by a particle filter; see `ss.fit.ParticleFilter`), or 'abc-smc' (approximate Bayesian computation by sequential Monte Carlo, for any sim, with no likelihood needed); the priors are the parameters' `prior=`, or uniform over their bounds. Also: 'if2' (iterated filtering, for the sims that 'pmcmc' fits: the maximum-likelihood values, from passes of a particle filter in which each particle's values are perturbed by a shrinking random walk; see `ss.fit.Swarm`), 'asd' (adaptive stochastic descent, `sc.asd()`), any other `scipy.optimize.minimize` method, or a list of methods, each started from the best fit of the one before (a stage that does not converge stops the list; see `ss.fit.fit_stages()`)
             scan (int): for the SciPy methods, NUTS, and particle MCMC, the number of points spread over the bounds to try first (default: 10 per parameter, at most 100); the search starts from each of the best `restarts=3` of them that are apart (for SciPy; 1 for a single parameter of a deterministic sim), each NUTS chain from one of the best that are apart, and particle MCMC from the best
-            n_runs (int): runs per evaluation, for a stochastic sim (default 4 for a stochastic compartmental sim, and 1 for agents and for a deterministic one); every point is scored by the mean over the same seeds (common random numbers), except under Optuna, where each point takes fresh seeds so that its search averages over chance; `fit.mismatch` is the score at the best fit over the first seeds
+            n_runs (int): runs per evaluation, for a stochastic sim (default 4 for a stochastic compartmental sim, and 1 for agents and for a deterministic one); every point is scored by the mean over the same seeds (common random numbers), except under Optuna, where each point takes fresh seeds so that its search averages over chance (see `reseed=`); `fit.mismatch` is the score at the best fit over the first seeds
+            reseed (bool): whether each point takes fresh seeds (default: True for Optuna, False otherwise); `reseed=False` with Optuna scores every point with the same seeds, e.g. for a rare outcome, where with fresh seeds the search favors values whose runs were lucky
             rand_seed (int): the random seed for the fitting method (default: the sim's, so a fit gives the same answer each time)
             verbose (bool): whether to print progress
-            kwargs (dict): passed to the fitting method, e.g. `trials=200` for Optuna (and `n_workers=4` to run trials in 4 processes at once, and `storage='fit.log'` to keep the trials in a file, so that calling it again resumes the fit; see `ss.fit.fit_optuna()`), `maxiter=500` for SciPy, `draws=500`, `warmup=500`, and `chains=4` for NUTS (the defaults; 1,000 draws and 1,000 warm-up draws for particle MCMC, whose draws are more correlated), `particles=` for particle MCMC (default: chosen by each chain in its warm-up; see `ss.fit.pmmh()`), or `parallel=False` to run its chains one after another; for IF2, `particles=1000`, `iterations=50` (passes of the filter), `cooling=0.5` (the share of the first size of the random walk's steps that is left after 50 passes, as pomp's `cooling.fraction.50`), `sd=0.05` (that first size, on the scale searched on: the logit of each value's place between its bounds, of its log for wide bounds), and `chains=4` (each from its own start: the best of the initial values and a spread of points over the bounds, by the filter)
+            kwargs (dict): passed to the fitting method, e.g. `n_trials=200` for Optuna (and `n_workers=4` to run trials in 4 processes at once, and `storage='fit.log'` to keep the trials in a file, so that calling it again resumes the fit; see `ss.fit.fit_optuna()`), `maxiter=500` for SciPy, `draws=500`, `warmup=500`, and `chains=4` for NUTS (the defaults; 1,000 draws and 1,000 warm-up draws for particle MCMC, whose draws are more correlated), `particles=` for particle MCMC (default: chosen by each chain in its warm-up; see `ss.fit.pmmh()`), or `parallel=False` to run its chains one after another; for IF2, `particles=1000`, `iterations=50` (passes of the filter), `cooling=0.5` (the share of the first size of the random walk's steps that is left after 50 passes, as pomp's `cooling.fraction.50`), `sd=0.05` (that first size, on the scale searched on: the logit of each value's place between its bounds, of its log for wide bounds), and `chains=4` (each from its own start: the best of the initial values and a spread of points over the bounds, by the filter)
 
         Returns:
             An `ss.fit.Fit`, with the calibrated sim as `fit.sim` and the best-fit values as `fit.pars`
@@ -582,13 +645,13 @@ class Sim(ss.Base):
         """
         from . import fit
         if isinstance(method, (list, tuple)): # Staged fitting: each method starts from the best fit of the one before
-            return fit.fit_stages(self, method, pars=pars, data=data, weights=weights, likelihood=likelihood, gof=gof, n_runs=n_runs, rand_seed=rand_seed, verbose=verbose, **kwargs)
+            return fit.fit_stages(self, method, pars=pars, data=data, weights=weights, likelihood=likelihood, gof=gof, penalty=penalty, n_runs=n_runs, reseed=reseed, rand_seed=rand_seed, verbose=verbose, **kwargs)
         if method is not None:
             method = method.lower()
             if method not in fit.methods:
                 errormsg = f'Unknown fitting method method="{method}"; the choices are {sc.strjoin(fit.methods.keys())}'
                 raise ValueError(errormsg)
-        problem = fit.Problem(self, pars=pars, data=data, weights=weights, likelihood=likelihood, gof=gof, n_runs=n_runs, rand_seed=rand_seed, verbose=verbose)
+        problem = fit.Problem(self, pars=pars, data=data, weights=weights, likelihood=likelihood, gof=gof, penalty=penalty, n_runs=n_runs, reseed=reseed, rand_seed=rand_seed, verbose=verbose)
         method = problem.choose(method)
         if method != 'optuna' and ('n_workers' in kwargs or 'storage' in kwargs):
             errormsg = f'n_workers= and storage= are for method="optuna", not method="{method}"'
@@ -877,7 +940,7 @@ class Sim(ss.Base):
         """
         matches = []
 
-        if self.initialized:
+        if self.initialized or 'demographics' in self.__dict__: # Initialized, or initializing: the modules have been moved to the sim (see init_module_attrs())
             modules = self.modules
         else:
             modules = sc.search(self.pars, type=ss.Module).values()

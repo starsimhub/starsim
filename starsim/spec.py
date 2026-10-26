@@ -135,6 +135,10 @@ def code_value(val):
         if val.get('type') == 'peract':
             items = {k:v for k,v in val.items() if k != 'type'}
             return f'ss.peract({code_value(items["value"])})' if 'value' in items else 'ss.peract(' + ', '.join(f'{k}={code_value(v)}' for k,v in items.items()) + ')'
+        elif 'box' in val: # Waning as a box (ss.box)
+            decay = '' if val.get('decay') is None else f', decay={code_value(val["decay"])}'
+            stages = '' if val.get('stages', 10) == 10 else f', stages={val["stages"]}'
+            return f'ss.box(dur={code_value(val["box"])}{decay}{stages})'
         elif 'type' in val:
             unit = val['unit']
             if unit is None:
@@ -167,7 +171,8 @@ def code_value(val):
             return '{' + ', '.join(f'{k!r}: {code_value(v)}' for k,v in items) + '}'
         elif 'seasonal' in val:
             f = val['seasonal']
-            return f'ss.seasonal(mean={code_value(f["mean"])}, amplitude={f["amplitude"]!r}, peak={f["peak"]!r})'
+            period = f', period={code_value(f["period"])}' if 'period' in f else ''
+            return f'ss.seasonal(mean={code_value(f["mean"])}, amplitude={f["amplitude"]!r}, peak={f["peak"]!r}{period})'
         return '{' + ', '.join(f'{k!r}: {code_value(v)}' for k,v in val.items()) + '}' # A plain dict, e.g. adjust=
     elif isinstance(val, list):
         return '[' + ', '.join(code_value(v) for v in val) + ']'
@@ -574,7 +579,7 @@ def modify_code(mod, mods):
 
 delivery_types = ['Delivery', 'vaccinate', 'treat', 'screen']
 delivery_keys = ['strain', 'at_age', 'start', 'stop', 'at', 'interval', 'where', 'coverage', 'capacity', 'on', 'delay', 'when', 'deliver', 'trace', 'disease']
-cond_keys = ['where', 'on', 'detects']
+cond_keys = ['where', 'on', 'detects', 'during']
 
 
 def owners(spec):

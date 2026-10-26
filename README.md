@@ -59,7 +59,10 @@ We recommend, but do not require, installing Starsim in a virtual environment, s
 Starsim is most easily installed via [PyPI](https://pypi.org):
 ```sh
 pip install starsim
+starsim init
 ```
+
+`starsim init` compiles Starsim (once, which takes a few minutes and makes the first runs faster) and installs its skill for AI coding agents such as Claude Code and Codex (type `/starsim` to use it). To do just one of these, run `starsim compile` or `starsim ai`.
 
 Or with [uv](https://github.com/astral-sh/uv):
 ```sh

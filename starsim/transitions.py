@@ -44,6 +44,7 @@ class State(Nameable, Expr):
         people (bool): whether this state holds people (the default), or is a count of something else (`people=False`: bacteria in the water, mosquitoes); `people=True` says so explicitly, for a group of people that only an inflow fills
         rel_sus (float): susceptibility multiplier while in this state
         rel_trans (float): infectiousness multiplier while in this state
+        keep_time (bool): as agents, keep the time each person entered the state (`ti_<name>`) for code to read, e.g. the years since onset; by default it is kept only if the model reads it (a clock, a scheduled exit), to save memory
         label (str): a human-readable name, for plots
 
     Examples:
@@ -52,11 +53,12 @@ class State(Nameable, Expr):
         I = ss.State(init=0.01)     # 1% of people
         E = ss.State(init_n=10)     # 10 people
         V = ss.State(rel_sus=0.2, label='Vaccinated')
+        A = ss.State(keep_time=True) # Code reads mod.ti_A
         ```
     """
     _counter = itertools.count() # States are ordered by when they were created
 
-    def __init__(self, name=None, init=None, init_n=None, people=None, rel_sus=1.0, rel_trans=1.0, label=None, **kwargs):
+    def __init__(self, name=None, init=None, init_n=None, people=None, rel_sus=1.0, rel_trans=1.0, keep_time=False, label=None, **kwargs):
         if kwargs:
             hint = '; infectious= is gone: a state is infectious when it is in a transmission rate (e.g. rate=beta*I)' if 'infectious' in kwargs else ''
             raise TypeError(f'ss.State() got unexpected arguments: {sc.strjoin(kwargs)}{hint}')
@@ -69,6 +71,7 @@ class State(Nameable, Expr):
         self.infectious = False # Whether it is a source of infection: in the rate of a transmission (see ss.transitions.Graph.resolve_transitions())
         self.rel_sus = rel_sus
         self.rel_trans = rel_trans
+        self.keep_time = keep_time
         self.label = label
         self.order = next(State._counter)
         self.module = None # Set by the graph
@@ -495,6 +498,26 @@ class Transition(Nameable):
             ```
         """
         return ss.conditions.Cond('incidence', self, over, by) # The transition itself, since it may be named and given its module later
+
+    def hazard(self, uids):
+        """
+        In a running sim, as agents: the current rate of the transition for some agents, with its modifiers (e.g. a treatment's
+        efficacy, `ss.modify()`), per unit of the sim's time, e.g. to weight a death requested from code (`people.request_death(uids, hazard=...)`)
+
+        It is the rate those agents would face if they were in its source state now (0 for a transition with no rate).
+
+        **Example**::
+
+            h = tb.death.hazard(uids) # The hazard of death from TB for each of these agents
+        """
+        engine = getattr(self.module, 'engine', None)
+        if not isinstance(engine, ss.solvers.Agents):
+            raise ss.CapabilityError(f'{self.name}.hazard() is a rate for each agent, in a sim initialized with solver="abm"')
+        uids = ss.uids(uids)
+        if self.rate is None:
+            return np.zeros(len(uids))
+        out = engine.eval_for(self.rate, uids)*engine.adjusted(self.name, uids)
+        return np.broadcast_to(np.maximum(np.asarray(out, dtype=float), 0), len(uids)).copy()
 
     def to(self, dst):
         """ The event of taking one branch of this transition, e.g. `precin.to(S)`: a condition, `on=`, or `.uids` """
@@ -1340,6 +1363,13 @@ def numeric_pars(dist, convert, per_agent=None):
     such a function, made by `per_agent`.
     """
     shape_pars = ['a', 'c', 'n', 'p', 'dtype']
+    unitless = [key for key in dist.pars if dist.unit is not None and key in (dist.unitless_pars or ()) and key not in shape_pars] # e.g. the mean of ss.lognorm_im(), which is of the log of the value, so is not converted as if it were a duration
+    if unitless:
+        if not hasattr(dist, 'scaled_pars'):
+            errormsg = f'The parameter "{unitless[0]}" of {dist} has no unit, so unit= cannot convert it; give the distribution with no unit, times a unit, e.g. dur=ss.{type(dist).__name__}(...)*ss.days(1)'
+            raise ValueError(errormsg)
+        bare = type(dist)(**dist.pars) # Its numbers as they are, then its draws scaled from its unit to the sim's (TY5)
+        return dist.scaled_pars(numeric_pars(bare, convert, per_agent), float(convert(dist.unit(1))))
     pars = dict()
     for key,val in dist.pars.items():
         if isinstance(val, par): # A named parameter, e.g. ss.bernoulli(ss.par(0.6, name='sero')): its current value, which the sim's pars= or a calibration sets
@@ -1404,8 +1434,9 @@ def numeric_dist(dist, convert, per_agent=None):
 
 
 def varying_pars(dist):
-    """ The parameters of a distribution that differ between people: values by group (`ss.by`), and functions """
-    return {key:val for key,val in dist.pars.items() if isinstance(val, by) or (callable(val) and not isinstance(val, (type, ss.Dist, ss.TimePar)))}
+    """ The parameters of a distribution that differ between people: values by group (`ss.by`, also as a named parameter, `ss.par(ss.by(...))`), and functions """
+    raw = {key:val.raw if isinstance(val, par) else val for key,val in dist.pars.items()}
+    return {key:val for key,val in raw.items() if isinstance(val, by) or (callable(val) and not isinstance(val, (type, ss.Dist, ss.TimePar)))}
 
 
 def by_dist(raw):

@@ -151,6 +151,15 @@ class Counter(ss.Module):
     text, changes, todo = migrate_text("hiv = ssl.HIV(beta={'mf': [0.08, 0.04], 'prenatal': [0.2, 0], 'msm': [0.1, 0.1]})") # A beta pair has direction names
     assert text == "hiv = ssl.HIV(beta={'mf': ss.peract(m2f=0.08, f2m=0.04), 'prenatal': 0.2, 'msm': [0.1, 0.1]})" and any('"msm"' in msg for line,msg in todo)
 
+    # The names of results: Starsim's own counts renamed after results, and a package's own results left alone (CV5, ST4, HP80, MG10)
+    text, changes, todo = migrate_text("a = sim.results.n_alive; b = res['sir.n_infected']; c = df['n_alive']")
+    assert text == "a = sim.results.alive; b = res['sir.infected']; c = df['n_alive']" and len(todo) == 1 # A column of a dataframe could be anything's: listed
+    own = "class Mosquito(ss.Module):\n    def init_results(self):\n        self.define_results(ss.Result('n_infected'))\n    def step(self):\n        self.results.n_infected[self.ti] = 5\nx = res['n_infected']; y = res.new_infections"
+    assert migrate_text(own)[1:] == ([], []) # A result the package makes keeps its name, and new_infections is a declared disease's only next to one
+    assert migrate_text('sir = ss.SIR()\nx = res.new_infections')[2][1][0] == 2
+    assert not migrate_text('x = hiv.results.diagnosed')[2] and migrate_text('screening = ss.screen(test)\nx = sim.results.screening.diagnosed')[2][0][0] == 2
+    assert 'ss.treat(' in migrate_text('from starsim.interventions import treat_num, Intervention')[2][0][1] # An import of a removed name
+
     # A test's follow-ups nested in it (Starsim 4's prereleases) become steps of their own, after it in the interventions
     text, changes, todo = migrate_text("screening = ss.screen(ss.Test(), interval=7, on_positive=ss.treat(ss.Treatment()))\nsim = ss.Sim(interventions=[screening])")
     assert text.splitlines() == ['screening = ss.screen(ss.Diagnostic(), interval=7)', 'screening_positive = ss.treat(ss.Treatment(), who=screening.positive)', 'sim = ss.Sim(interventions=[screening, screening_positive])']
@@ -180,6 +189,30 @@ class Counter(ss.Module):
 
 
 # %% Run as a script
+def test_cli(tmp_path, monkeypatch, capsys):
+    """ The starsim command: installing the skill for AI agents (to a temporary home folder), and showing the guide and its skills """
+    sc.heading('Testing the starsim command')
+    from starsim import cli
+    monkeypatch.setenv('HOME', str(tmp_path))
+    monkeypatch.setenv('USERPROFILE', str(tmp_path)) # The home folder on Windows
+    cli.main(['ai'])
+    skill = tmp_path / '.agents' / 'skills' / 'starsim' / 'SKILL.md'
+    assert skill.exists() and not (tmp_path / '.claude' / 'skills').exists() # Only for Claude Code if it is installed
+    other = tmp_path / '.claude' / 'skills' / 'starsim' / 'SKILL.md'
+    other.parent.mkdir(parents=True)
+    other.write_text('---\nname: starsim\n---\nSomeone else\'s skill')
+    cli.main(['ai', 'install', '--to', 'claude'])
+    assert 'Someone else' in other.read_text() # Not overwritten without --force
+    cli.main(['ai', 'show'])
+    out = capsys.readouterr().out
+    assert all(f'`{name}`' in out for name in ['import-model', 'migrate-starsim3', 'validate-import']) # The guide lists the skills
+    cli.main(['ai', 'show', 'import-model'])
+    assert 'name: import-model' in capsys.readouterr().out
+    cli.main(['ai', 'uninstall'])
+    assert not skill.exists() and other.exists()
+    return
+
+
 if __name__ == '__main__':
     do_plot = True
     sc.options(interactive=do_plot)
