@@ -8,6 +8,7 @@ import contextlib
 import unittest.mock
 import starsim as ss
 import starsim.fit
+import starsim.library as ssl
 import numpy as np
 import pandas as pd
 import scipy.special as sps
@@ -66,7 +67,7 @@ def test_particle_mcmc():
         make(data=data).fit(method='pmcmc', gof='nae')
 
     # A best fit scores each point by the mean of several runs, with fresh seeds at each point under Optuna, and reports the score of the best values over the first seeds
-    best = make(beta=0.3, data=data).fit(method='optuna', trials=8, rand_seed=1)
+    best = make(beta=0.3, data=data).fit(method='optuna', n_trials=8, rand_seed=1)
     assert len(best.scores) == 4 # The default for a stochastic compartmental sim
     assert ss.fit.Problem(make(data=data).new(solver='abm', n_agents=2000)).n_runs == 1 # But one for agents, whose runs are slow (Optuna's search learns from nearby points)
     assert np.isclose(best.mismatch, np.mean(best.scores))
@@ -146,12 +147,99 @@ def test_fit_inputs(tmp_path):
         sim.fit()
     loss = lambda sim: abs(sim.results.sis.prevalence[-1] - 0.1)
     path = tmp_path/'fit.log'
-    fit = sim.fit(gof=loss, trials=6, n_workers=2, storage=path, verbose=0)
+    fit = sim.fit(gof=loss, n_trials=6, n_workers=2, storage=path, verbose=0)
     assert list(fit.pars.keys()) == ['n_contacts', 'p'] and len(fit.trials) == 6
     assert fit.sim.diseases.sis.pars.init_prev.value == 0.2 and fit.sim.interventions.cure.p == fit.sim.interventions.cure.p_retest
     assert np.isfinite(ss.fit.mismatch(fit.sim, fit.sim.data[['sis_prevalence']])) # Before, a broadcast error
-    again = sim.fit(gof=loss, trials=8, storage=path, verbose=0) # Resumed: two more trials
+    again = sim.fit(gof=loss, n_trials=8, storage=path, verbose=0) # Resumed: two more trials
     assert len(again.trials) == 8 and np.allclose(again.trials.objective[:6], fit.trials.objective)
+    return fit
+
+
+@sc.timer()
+def test_fit_what_is_not_a_parameter():
+    sc.heading('Testing fitting a value set in code, values in a dict parameter, a modifier\'s amount, and data from an analyzer added after the sim was made')
+
+    class clearance(ss.Intervention): # A module written as code with a dict parameter, as HPVsim's cin_fn
+        def __init__(self, **kwargs):
+            super().__init__()
+            self.define_pars(cure=dict(p=0.05, start=0))
+            self.update_pars(**kwargs)
+            return
+        def step(self):
+            sis = self.sim.diseases.sis
+            p = self.pars.cure['p'] # Its code sees the value
+            cured = sis.I.uids[np.random.default_rng(self.ti).random(sis.I.count()) < p]
+            sis.I[cured] = False
+            sis.S[cured] = True
+            return
+
+    class counter(ss.Analyzer):
+        def init_results(self):
+            super().init_results()
+            self.define_results(ss.Result('infected', scale=True), ss.Result('by_age', columns=['young', 'old'], shape=(self.t.npts, 2), scale=True))
+            return
+        def step(self):
+            sis, age = self.sim.diseases.sis, self.sim.people.age
+            self.results.infected[self.ti] = sis.I.count()
+            self.results.by_age[self.ti] = [(sis.I & (age < 30)).count(), (sis.I & (age >= 30)).count()]
+            return
+
+    def set_trans(sim, rel=ss.par(1.0, bounds=[0.5, 2])): # A value set in code, as Covasim's custom_fn: a keyword argument of a function given as a module
+        sim.diseases.sis.rel_trans[:] = rel
+        return
+
+    data = pd.DataFrame({'year':np.arange(2002, 2010), 'counter.infected':60, 'counter.by_age.young':20}) # An analyzer's results, one of them a column
+    cures = [clearance(name=name, cure=dict(p=ss.par(0.05, bounds=[0.01, 0.3]), start=0)) for name in ['c1', 'c2']]
+    sim = ss.Sim(diseases=ss.SIS(), networks='random', interventions=cures + [set_trans], n_agents=300, start=2000, stop=2010, data=data, verbose=0)
+    sim.pars.analyzers += counter() # Added after the sim was made: kept by sim.new(), so the fit's runs have it
+    fit = sim.fit(method='optuna', n_trials=6, n_workers=2, verbose=0)
+    assert set(fit.pars.keys()) == {'c1.cure.p', 'c2.cure.p', 'rel'} # Named with its module where the name alone is ambiguous
+    assert fit.sim.interventions.c1.pars.cure['p'] == fit.pars['c1.cure.p'] and fit.sim.interventions.set_trans.pars.rel == fit.pars.rel
+    assert len(fit.study.trials) == 6 # Optuna's study, kept in memory although its workers shared a file
+    with pytest.raises(TypeError, match='n_trials='): # One name for the number of trials
+        sim.fit(method='optuna', trials=6, verbose=0)
+    problem = ss.fit.Problem(sim, reseed=False, verbose=0)
+    assert problem.choose('optuna') == 'optuna' and not problem.fresh # The same seeds at every point, even under Optuna
+
+    # A modifier's amount given as ss.par is among its parameters, so it is set by name and fitted whatever it changes, here a module written as code
+    def make():
+        hiv = ssl.HIV(beta=0.05, init_prev=0.1)
+        return ss.Sim(diseases=hiv, networks=ss.SexualNet(), connectors=ss.modify(hiv.rel_sus, multiply=ss.par(1.0, bounds=[0, 2])), n_agents=1000, start=2000, stop=2010, verbose=0)
+    assert list(ss.fit.bounded_pars(make().init())[0].keys()) == ['multiply']
+    assert make().run().results.hiv.new_infections.values.sum() > 0
+    assert make().new(pars=dict(multiply=0)).run().results.hiv.new_infections.values.sum() == 0
+    return fit
+
+
+@sc.timer()
+def test_fit_arrays():
+    sc.heading('Testing fitting an array, with an element fixed, and a penalty on the values')
+    target = np.array([0.2, 0.5])
+    def knots(sim, curve=ss.par(np.array([0.3, 0.3, 0.9]), bounds=[np.array([0, 0, 0.9]), np.array([1, 1, 0.9])])): # The last element fixed: its bounds are equal
+        return
+    sim = ss.Sim(n_agents=100, start=2000, stop=2002, interventions=knots, verbose=0)
+    gof = lambda sim: np.sum((sim.interventions.knots.pars.curve[:2] - target)**2)
+    fit = sim.fit(gof=gof, method='nelder-mead', verbose=0)
+    assert list(fit.table.par) == ['curve[0]', 'curve[1]']
+    assert np.allclose(fit.pars.curve, [0.2, 0.5, 0.9], atol=1e-3)
+    smooth = sim.fit(gof=gof, penalty=lambda pars: 10*np.diff(pars['curve'][:2])[0]**2, method='nelder-mead', verbose=0)
+    assert np.isclose(np.diff(smooth.pars.curve[:2])[0], 0.3/21, atol=2e-3) # The minimum of (a - 0.2)^2 + (b - 0.5)^2 + 10(b - a)^2
+    assert np.isclose(smooth.mismatch, 2*(0.15 - 0.15/21)**2 + 10*(0.3/21)**2, atol=1e-4) # The penalty is part of what is minimized
+    return fit
+
+
+@sc.timer()
+def test_fit_fresh_seeds():
+    sc.heading('Testing that a fit with fresh seeds at each point returns a value among its best trials')
+    def make(init_prev=ss.par(0.005, bounds=[0.001, 0.1]), data=None, rand_seed=1): # No transmission, so the number infected is the infections at the start (as Typhoidsim's test)
+        sis = ss.SIS(beta=0, dur_inf=ss.years(100), init_prev=init_prev)
+        return ss.Sim(diseases=sis, n_agents=2000, start=2000, stop=2002, dt=ss.months(1), data=data, rand_seed=rand_seed, verbose=0)
+    data = make(init_prev=0.02, rand_seed=2).run().to_data('sis.I')
+    fit = make(data=data).fit(method='optuna', n_trials=30, n_runs=4, verbose=0)
+    top = fit.trials.nsmallest(5, 'objective').init_prev
+    assert top.min() <= fit.pars.init_prev <= top.max(), f'{fit.pars.init_prev:n} is outside the best trials ({top.min():n} to {top.max():n})' # Before, a dense region of worse trials could pull it away
+    assert np.isclose(fit.pars.init_prev, 0.02, rtol=0.25)
     return fit
 
 
@@ -159,3 +247,6 @@ def test_fit_inputs(tmp_path):
 if __name__ == '__main__':
     test_particle_mcmc()
     test_fitted_mobility()
+    test_fit_what_is_not_a_parameter()
+    test_fit_arrays()
+    test_fit_fresh_seeds()

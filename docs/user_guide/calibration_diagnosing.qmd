@@ -91,7 +91,7 @@ What "converged" means depends on the method:
 | Method | Converged when | If not |
 |---|---|---|
 | SciPy optimizers (`'nelder-mead'`, `'l-bfgs-b'`) | The searches from the best few starting points of a scan end at the same value | More starting points (`scan=`) or searches (`restarts=`); a sign of several local optima, or a ridge |
-| Optuna | The best score improved by less than 1% over the last quarter of the trials | More trials (`trials=`) |
+| Optuna | The best score improved by less than 1% over the last quarter of the trials | More trials (`n_trials=`) |
 | NUTS, particle MCMC | The chains agree (R-hat at most 1.01) and no draws diverged | More warm-up (`warmup=`); check identifiability |
 | Iterated filtering (`'if2'`) | Chains from different starts end within 2 of the best log-likelihood | More iterations or particles |
 
@@ -115,7 +115,7 @@ import pandas as pd
 stochastic = ss.Sim(make_seir(), data=data, solver='binomial', **pars)
 rows = []
 for seed in [1, 4]:
-    fit = stochastic.fit(trials=100, rand_seed=seed, verbose=False)
+    fit = stochastic.fit(n_trials=100, rand_seed=seed, verbose=False)
     rows.append(dict(rand_seed=seed, beta=fit.pars.beta, report=fit.pars.report, converged=fit.converged))
 pd.DataFrame(rows).round(3)
 ```

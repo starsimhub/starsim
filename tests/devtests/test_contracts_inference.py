@@ -191,7 +191,7 @@ def sbc_fit(method, truth=0.35, seed=1, quick=True, verbose=False):
     kwargs = dict(
         nuts   = dict(draws=100, warmup=100, chains=2) if quick else dict(draws=500, warmup=500, chains=4),
         **{'abc-smc': dict(particles=60, generations=5) if quick else dict(particles=200, generations=8)},
-        optuna = dict(trials=40 if quick else 200),
+        optuna = dict(n_trials=40 if quick else 200),
     ).get(method, {})
     return sim.fit(method=method, rand_seed=seed, verbose=verbose, **kwargs)
 
@@ -292,7 +292,7 @@ def test_staged_and_sensitivity():
     sc.heading('Testing staged fitting, and which parameters matter')
     truth = 0.35
     sim = corpus.outcomes(beta=0.25, likelihood=ss.poisson(), data=simulate(models.outcomes, truth))
-    fit = sim.fit(method=['optuna', 'nelder-mead'], trials=20, rand_seed=1, verbose=False) # Each stage starts from the one before
+    fit = sim.fit(method=['optuna', 'nelder-mead'], n_trials=20, rand_seed=1, verbose=False) # Each stage starts from the one before
     assert fit.method == 'nelder-mead' and fit.converged and np.isclose(fit.pars.beta, truth, rtol=0.02)
 
     beta, dur, unused = ss.par(0.3, bounds=[0.1, 0.5]), ss.par(10, bounds=[5, 15]), ss.par(1.0, bounds=[0.5, 2])

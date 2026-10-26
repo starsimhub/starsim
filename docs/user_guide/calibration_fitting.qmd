@@ -90,10 +90,28 @@ Every parameter with `bounds` is fitted, wherever it is: a rate, a share, a dura
 - `pars=` fits only the parameters named, keeping the others at their values: `sim.fit(pars=['beta'])`.
 - Wide positive bounds (where the high end is 10 or more times the low end) are searched on a log scale, since going from 0.05 to 0.1 matters as much as going from 0.5 to 1. The fit says which parameters it searches this way.
 - A prior, `ss.par(1.5, bounds=[0.5, 4], prior=ss.normal(2, 0.3))`, is used by the methods that use likelihoods: a best fit is then the most probable values rather than the maximum likelihood, and a posterior uses it as its prior. Without one, the prior is uniform over the bounds.
+- In a module written as code, a parameter given as `ss.par` is fitted and its code sees the value, including a value in a dict parameter, e.g. `cin_fn=dict(k=ss.par(0.3, bounds=[0.1, 0.5]))`, fitted as `cin_fn.k`. A parameter with the same name in several modules is fitted with its module's name, e.g. `hpv16.rel_beta` and `hpv18.rel_beta`; `pars=` and `ss.Sim(pars=...)` take either name.
+- A modifier's amount, `ss.modify(hiv.rel_sus, multiply=ss.par(2.7, bounds=[1, 4]))`, is fitted as `multiply` (or with the modifier's name, if it is a parameter of a declared disease).
+- A parameter whose value is an array, with bounds for each element, has each element fitted, as `curve[0]`, `curve[1]`, ..., except those whose low and high bounds are equal, which stay as they are: `ss.par(np.array([0.1, 0.4, 0.2]), bounds=[np.array([0, 0, 0.2]), np.array([1, 1, 0.2])])`. `penalty=` adds a function of the values to what a best fit minimizes, e.g. to keep a curve smooth: `sim.fit(penalty=lambda pars: 10*np.sum(np.diff(pars['curve'], 2)**2))`.
+
+### A value that isn't a parameter
+
+A value set in code, such as a setting of an intervention that its constructor doesn't take, or anything the model works out from it, is fitted by writing a function that sets it, with the value as a keyword argument given as `ss.par`, and giving the function as a module. A function given as an intervention is called at every step, with its keyword arguments as the module's parameters:
+
+```python
+def set_testing(sim, symp_prob=ss.par(0.1, bounds=[0.01, 0.5])):
+    sim.interventions.testing.symp_prob = symp_prob
+    sim.interventions.testing.asymp_prob = symp_prob/10
+
+sim = ss.Sim(..., interventions=[set_testing, testing], data=data)
+fit = sim.fit() # Fits symp_prob, with the others
+```
+
+The value is a parameter like any other: `fit.pars.symp_prob`, `ss.Sim(pars=dict(symp_prob=0.2))`, `sim.sensitivity()`, and `ss.parallel(sim, pars=dict(symp_prob=[0.1, 0.2]))` all find it by name. A module added after the sim was made (e.g. `sim.pars.analyzers += my_analyzer`) is kept by `sim.new()`, and so by the runs of a fit.
 
 ## The data
 
-The data has a time column (`date`, `year`, `t`, or `time`; an integer `year` is a calendar year) and one column for each data series, named like the result it is compared with: here `cases`. With several modules, a column that could match more than one result is named with its module, e.g. `measles.cases`.
+The data has a time column (`date`, `year`, `t`, or `time`; an integer `year` is a calendar year) and one column for each data series, named like the result it is compared with: here `cases`. With several modules, a column that could match more than one result is named with its module, e.g. `measles.cases`. Any result can have data, including an analyzer's (`by_age.cancers_0_15`), a result nested deeper in `sim.results` (`hpv.genotype.cancers`), and a column of a result with columns (`sis.new_infections.alpha`), so `gof=` is needed only for targets worked out from the results, such as a share.
 
 The data need not be on the model's time step, and nothing needs to say how to line the two up, since each result knows what kind of quantity it is:
 
@@ -168,7 +186,7 @@ A stochastic model gives a different result on each run, so each set of values g
 
 ```{python}
 sim = ss.Sim(measles, data=data, solver='binomial', **pars)
-fit = sim.fit(trials=100, rand_seed=5)
+fit = sim.fit(n_trials=100, rand_seed=5)
 fit.summarize()
 ```
 
@@ -176,12 +194,13 @@ The estimates are less precise than those of the ODE: each score is noisy, so th
 
 The options that matter for a stochastic fit:
 
-- `trials=` is the number of sets of values to try (100 by default). Use more for more parameters.
-- `n_runs=` is the number of runs that each set of values is scored by: 4 by default for a stochastic compartmental model, and 1 for agents. Each trial uses fresh random seeds, so that the search averages over chance rather than fitting one run's luck.
+- `n_trials=` is the number of sets of values to try (100 by default). Use more for more parameters.
+- `n_runs=` is the number of runs that each set of values is scored by: 4 by default for a stochastic compartmental model, and 1 for agents. Each trial uses fresh random seeds, so that the search averages over chance rather than fitting one run's luck; the best fit is then the trial among the best tenth whose neighbors score best, rather than the luckiest. `reseed=False` scores every trial with the same seeds instead, e.g. for a rare outcome, where fresh seeds let the search favor values whose runs were lucky.
 - `rand_seed=` makes the fit itself reproducible.
 - `n_workers=4` runs the trials in 4 processes at once, and `storage='fit.log'` keeps the trials in a file, so that calling `fit()` again with the same file carries on where it stopped.
+- `fit.study` is Optuna's study, for its plots, e.g. `optuna.visualization.plot_param_importances(fit.study)`.
 
-Agents are fitted the same way, e.g. `ss.Sim(measles, data=data, n_agents=20_000, **pars).fit(trials=200)`. With agents each run is slower, and with few people in the model the noise is larger, so a fit usually needs more trials.
+Agents are fitted the same way, e.g. `ss.Sim(measles, data=data, n_agents=20_000, **pars).fit(n_trials=200)`. With agents each run is slower, and with few people in the model the noise is larger, so a fit usually needs more trials.
 
 `fit.sim` is one run with the best values. Since the model is stochastic, it is more useful to run it many times, and see whether the data lie within the range of the runs:
 

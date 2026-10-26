@@ -43,6 +43,10 @@ class Undeclared:
         """ A parameter given as `ss.par` (e.g. with bounds, to be fitted) is its value, which the disease's code reads """
         return p.raw
 
+    def eval(self, expr):
+        """ An expression of parameters (e.g. a modifier's amount, `ss.par(2, bounds=[1, 4])`), at their values """
+        return ss.transitions.evaluate(expr, self)
+
 
 def make_engine(module, sim):
     """ Create the engine that runs a module's graph under the sim's solver; for a disease that declares nothing, one that runs nothing """
@@ -445,8 +449,9 @@ def set_par_values(sim):
         mods = [mod for mod in sim.declared if name in mod.pars and modname in ['', mod.name]]
         if len(mods) > 1 and all(mod.graph.pars.get(name) is mods[0].graph.pars.get(name) is not None for mod in mods): # One parameter shared by several modules
             mods = mods[:1]
-        if not mods: # A parameter of a module written as code: one given with bounds (e.g. when fitting it), else any
-            mods = [mod for mod in coded if name in mod.pars.bounded() and modname in ['', mod.name]]
+        if not mods: # A parameter of a module written as code: one given with bounds (e.g. when fitting it; "cin_fn.k" for a value in a dict parameter, or "hpv16.cin_fn.k"), else any
+            found = [(mod, b) for mod in coded for b in mod.pars.bounded() if key in [b, f'{mod.name}.{b}']]
+            mods, name = ([mod for mod,b in found], found[0][1]) if found else ([], name)
             mods = mods or [mod for mod in coded if name in mod.pars and modname in ['', mod.name]]
             if len(mods) > 1 and all(mod.pars.bounded().get(name) is mods[0].pars.bounded().get(name) is not None for mod in mods): # One ss.par shared by several modules (e.g. a beta for every genotype): set in each
                 for mod in mods:
@@ -456,10 +461,11 @@ def set_par_values(sim):
             options = [f'{mod.name}.{k}' for mod in sim.declared for k in mod.graph.pars] + [f'{mod.name}.{k}' for mod in coded for k in mod.pars.bounded()]
             raise ss.errors.UnknownParameter(f'pars= has a value for "{key}", which {"matches no parameter" if not mods else "is a parameter of more than one module"}. '
                                       f'Parameters are {sc.strjoin(options)}{ss.transitions.did_you_mean(key, options)}')
-        if name in mods[0].pars:
+        attrs = getattr(mods[0], '_par_attrs', {}).get(name) if name not in mods[0].pars else None
+        if attrs is None:
             mods[0].pars.update({name:val})
         else: # A setting kept as an attribute, or several holding the same ss.par (see above)
-            for attr in getattr(mods[0], '_par_attrs', {}).get(name, [name]):
+            for attr in attrs:
                 mods[0].setattribute(attr, val)
     return
 

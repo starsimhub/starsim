@@ -929,9 +929,10 @@ class Fit(sc.prettyobj):
         seeds (list): the random seed of each of those runs; `sim` is the run with the first
         trials (df): every evaluation: the values, and the `objective` that the method minimized (what `measure` says; with `method='if2'`, also each pass of each chain: the middle of the swarm's values, and minus the log-likelihood of the pass, whose values were perturbed)
         samples (df): with `method='nuts'`, `'pmcmc'`, or `'abc-smc'`, the draws from the posterior: one row per draw, with its chain, its number, and a column for each parameter
+        study (`optuna.Study`): with `method='optuna'`, Optuna's study, e.g. for its plots (`optuna.visualization.plot_param_importances(fit.study)`)
         diagnostics (dict): what else the method reports: `divergences` (with `method='nuts'`, the number of draws that followed a divergent trajectory, which suggests the sampler missed part of the posterior), `acceptance` (with `method='pmcmc'`, the share of proposals that each chain accepted after its warm-up), and `band` (with a posterior, for each data series, the 2.5th and 97.5th percentiles of the model's value over draws from it, at each step, or for a flow with data at a longer period than the step, of its totals over the data's periods; with `'pmcmc'`, each from a run with a seed of its own, so the band includes chance)
     """
-    def __init__(self, sim, before, pars, table, trials, method, mismatch, mismatch_before, measure, samples, diagnostics, converged, why, scores, seeds):
+    def __init__(self, sim, before, pars, table, trials, method, mismatch, mismatch_before, measure, samples, diagnostics, converged, why, scores, seeds, study=None):
         self.sim = sim
         self.before = before
         self.pars = pars
@@ -947,6 +948,7 @@ class Fit(sc.prettyobj):
         self.why = why
         self.scores = scores
         self.seeds = seeds
+        self.study = study
         return
 
     def project(self, scenarios=None, n=None, rand_seed=None, **kwargs):
@@ -1336,16 +1338,15 @@ def bounded_pars(probe, pars=None, unused=()):
                 fitted[key] = p
     mixed = getattr(probe, 'mixed', []) if probe.solver != 'abm' else [] # Networks that a compartmental run turns into contact rates
     contacts = [] # Their parameters that are fitted, which set the contact rates when the sim is built
-    for mod in list(probe.modules) + mixed: # A parameter of a module written as code, given as ss.par with bounds, e.g. ssl.HIV(beta=ss.par(0.01, bounds=[0.001, 0.1])); see ss.Pars.bounded()
-        if getattr(mod, 'graph', None) is None and isinstance(mod.pars, ss.Pars):
-            for name,p in mod.pars.bounded().items():
-                if any(p is q for q in fitted.values()): # One ss.par shared by several modules (e.g. a beta for every genotype) is fitted once
-                    continue
-                if p.bounds is not None and (pars is None or name in pars or f'{mod.name}.{name}' in pars):
-                    taken = name in fitted or any(name in m.pars for m in probe.declared)
-                    fitted[f'{mod.name}.{name}' if taken else name] = p
-                    if any(mod is net for net in mixed):
-                        contacts.append(f'{mod.name}.{name}')
+    coded = [(mod, name, p) for mod in list(probe.modules) + mixed if getattr(mod, 'graph', None) is None and isinstance(mod.pars, ss.Pars) for name,p in mod.pars.bounded().items()] # A parameter of a module written as code, given as ss.par with bounds, e.g. ssl.HIV(beta=ss.par(0.01, bounds=[0.001, 0.1])); see ss.Pars.bounded()
+    for mod,name,p in coded:
+        if any(p is q for q in fitted.values()): # One ss.par shared by several modules (e.g. a beta for every genotype) is fitted once
+            continue
+        if p.bounds is not None and (pars is None or name in pars or f'{mod.name}.{name}' in pars):
+            taken = name in fitted or any(name in m.pars for m in probe.declared) or any(n == name and q is not p for m,n,q in coded) # Named with its module if the name alone is ambiguous, e.g. "hpv16.rel_beta"
+            fitted[f'{mod.name}.{name}' if taken else name] = p
+            if any(mod is net for net in mixed):
+                contacts.append(f'{mod.name}.{name}')
     return fitted, contacts
 
 
@@ -1446,7 +1447,7 @@ def profile(sim, par, values=None, level=0.95, **kwargs):
         ```
     """
     kwargs.setdefault('verbose', 0)
-    problem = Problem(sim, **{k:kwargs[k] for k in ['pars', 'data', 'weights', 'likelihood', 'gof', 'n_runs', 'rand_seed'] if k in kwargs}, verbose=0)
+    problem = Problem(sim, **{k:kwargs[k] for k in ['pars', 'data', 'weights', 'likelihood', 'gof', 'penalty', 'n_runs', 'reseed', 'rand_seed'] if k in kwargs}, verbose=0)
     name_of = lambda key: key.rpartition('[')[0] if key in problem.levels else key
     if par not in problem.names[:problem.n_model] and values is None:
         errormsg = f'profile() takes a parameter of the model that is fitted (one with bounds), or its values=; "{par}" is not one of {sc.strjoin(dict.fromkeys(map(name_of, problem.names)))}'
@@ -1616,7 +1617,7 @@ class Problem:
 
     Args: as for `sim.fit()`
     """
-    def __init__(self, sim, pars=None, data=None, weights=None, likelihood=None, gof=None, n_runs=None, rand_seed=None, verbose=None):
+    def __init__(self, sim, pars=None, data=None, weights=None, likelihood=None, gof=None, penalty=None, n_runs=None, reseed=None, rand_seed=None, verbose=None):
         base = sim.new(verbose=0)
         self.rand_seed = sc.ifelse(rand_seed, base.pars.rand_seed) # A fit is reproducible, as a sim is
         if data is not None:
@@ -1647,6 +1648,14 @@ class Problem:
                 for i,label in enumerate(labels):
                     fitted[f'{key}[{label}]'] = p
                     levels[f'{key}[{label}]'] = i
+        self.elements = elements = {} # For a parameter whose value is an array, with bounds for each element (ss.par(np.array([...]), bounds=[lows, highs])): each element is fitted, as "knots[0]", "knots[1]", ..., except those whose bounds are equal (fixed)
+        for key,p in list(fitted.items()):
+            if isinstance(p.raw, np.ndarray):
+                del fitted[key]
+                lows, highs = [np.broadcast_to(b, p.raw.shape) for b in p.bounds]
+                for i in np.flatnonzero(lows < highs):
+                    fitted[f'{key}[{i}]'] = p
+                    elements[f'{key}[{i}]'] = (key, i, lows.flat[i], highs.flat[i])
         self.n_model = len(fitted)
         if use_lik:
             for col,lik in liks.items(): # A parameter of a likelihood given at calibration time, with bounds, is fitted too
@@ -1663,9 +1672,9 @@ class Problem:
         self.fitted = fitted
         self.names = names = list(fitted.keys())
         self.products = product_pairs(probe, names[:self.n_model]) # Parameters that the data cannot tell apart, from the model
-        raws = [sc.tolist(p.raw.values)[levels[name]] if name in levels else p.raw for name,p in fitted.items()]
-        self.lows = np.array([bound_value(p.bounds[0], raw) for p,raw in zip(fitted.values(), raws)], dtype=float)
-        self.highs = np.array([bound_value(p.bounds[1], raw) for p,raw in zip(fitted.values(), raws)], dtype=float)
+        self.penalty_fn = penalty
+        raws = [sc.tolist(p.raw.values)[levels[name]] if name in levels else p.raw.flat[elements[name][1]] if name in elements else p.raw for name,p in fitted.items()]
+        self.lows, self.highs = [np.array([elements[name][2+k] if name in elements else bound_value(p.bounds[k], raw) for name,p,raw in zip(names, fitted.values(), raws)], dtype=float) for k in [0, 1]]
         self.x0 = np.array([raw.value if isinstance(raw, ss.TimePar) else raw for raw in raws], dtype=float)
         self.types = [type(raw) if isinstance(raw, ss.TimePar) else None for raw in raws] # Keep the unit of typed values
         self.logs = logs = (self.lows > 0) & (self.highs/np.maximum(self.lows, 1e-300) >= 10) # Wide positive bounds are searched on a log scale
@@ -1681,11 +1690,12 @@ class Problem:
         self.stochastic = probe.solver not in ['ode']
         self.n_runs = sc.ifelse(n_runs, 4 if self.stochastic and probe.solver != 'abm' else 1) # A stochastic compartmental sim is scored over several runs, so the fit is not to one draw of chance; agents, whose runs are slow, by one run a point, as Optuna's search averages over nearby points
         self.seeds = [sc.ifelse(base.pars.rand_seed, 1) + i for i in range(self.n_runs)] # The same seeds at every point (common random numbers), so the score changes only with the values
+        self.reseed = reseed
         self.fresh = False # Whether each evaluation takes seeds of its own; see choose()
         self.runner = runner = base.new() # If the sim is nothing but compartments, it is built once and restarted for each evaluation
         runner.data = base.data
         self.can_restart = runner.init().kernel_only() and not contacts # The mixing is worked out when the sim is built, so a new value needs a new sim
-        self.no_grad = ss.gradients.reason(runner) or ('a parameter has a value for each level' if levels else None) or (f'{contacts[0]} sets the mixing when the sim is built' if contacts else None) # Why there are no gradients, if there are not
+        self.no_grad = ss.gradients.reason(runner) or ('a parameter has a value for each level' if levels else 'a parameter is an array' if elements else None) or (f'{contacts[0]} sets the mixing when the sim is built' if contacts else None) # Why there are no gradients, if there are not
         self.trials = [] # Every evaluation
         return
 
@@ -1697,31 +1707,39 @@ class Problem:
             if verbose:
                 print(f'Fitting by {method} ({why}; override with method=)')
         self.use_map = self.use_lik and any(self.priors) and method not in sampling_methods and method != 'if2' # A posterior method uses the priors itself, and IF2 finds the maximum likelihood
-        self.fresh = self.stochastic and method == 'optuna' # Optuna's search learns from nearby points, so with fresh seeds at each it averages over chance, rather than fitting one seed's realization; a local method needs the same seeds, or its steps follow the noise
+        self.fresh = self.stochastic and sc.ifelse(self.reseed, method == 'optuna') # Optuna's search learns from nearby points, so with fresh seeds at each it averages over chance, rather than fitting one seed's realization; a local method needs the same seeds, or its steps follow the noise
         if verbose and self.stochastic and method not in ['pmcmc', 'abc-smc', 'if2']: # Which take a run of their own for each point
             runs = f'the mean of {self.n_runs} runs' if self.n_runs > 1 else 'one run'
             seeds = 'fresh seeds at each point' if self.fresh else ('the same seeds at every point' if self.n_runs > 1 else 'the same seed at every point')
-            print(f'Scoring each point by {runs}, with {seeds} (override with n_runs=)')
+            print(f'Scoring each point by {runs}, with {seeds} (override with n_runs= and reseed=)')
         if verbose and self.use_map:
             print(f'Minimizing the negative log-posterior, since {sc.strjoin(np.array(self.names)[self.priors])} {"has a prior" if sum(self.priors) == 1 else "have priors"}')
         filtered = ParticleFilter.reason(self.runner)
-        if method == 'nuts' and (not self.use_lik or self.no_grad):
+        if self.penalty_fn is not None and (method in sampling_methods or method == 'if2'):
+            raise ValueError(f'penalty= is added to what a best fit minimizes, but method="{method}" does not minimize; for a posterior, give the parameters priors (ss.par(..., prior=...))')
+        elif method == 'nuts' and (not self.use_lik or self.no_grad):
             why = 'not every data series has a likelihood' if not self.use_lik else f'it has no gradients, since {self.no_grad}'
             raise ss.errors.NoPosterior(f'method="nuts" gives a posterior, which needs a likelihood for every data series and the gradients of a sim run in JAX, but {why}.')
         elif method == 'pmcmc' and (not self.use_lik or filtered):
             why = 'not every data series has a likelihood' if not self.use_lik else filtered
             raise ss.errors.NoPosterior(f'method="pmcmc" gives a posterior, which needs a likelihood for every data series and a stochastic compartmental sim that the kernels run whole, but {why}.')
-        elif method == 'if2' and (not self.use_lik or filtered or self.levels or self.n_model < len(self.fitted)):
-            why = 'not every data series has a likelihood' if not self.use_lik else filtered or ('a parameter has a value for each level' if self.levels else 'a parameter of a likelihood is fitted')
+        elif method == 'if2' and (not self.use_lik or filtered or self.levels or self.elements or self.n_model < len(self.fitted)):
+            why = 'not every data series has a likelihood' if not self.use_lik else filtered or ('a parameter has several values' if self.levels or self.elements else 'a parameter of a likelihood is fitted')
             raise ValueError(f'method="if2" needs a likelihood for every data series and a stochastic compartmental sim that the kernels run whole, and fits the parameters of the model\'s rates, but {why}; use method="pmcmc"')
         return method
 
     def to_pars(self, x):
-        """ The values of the model's parameters, for `sim.new(pars=...)`; the values of a likelihood's own parameters are set on them """
-        for p,val,ext in zip(self.fitted.values(), x, self.external):
+        """ The values of the model's parameters, for `sim.new(pars=...)` (an array whole, with the elements not fitted as they were); the values of a likelihood's own parameters are set on them """
+        out = {}
+        for name,p,val,cls,ext in zip(self.names, self.fitted.values(), x, self.types, self.external):
             if ext:
                 p.value = float(val)
-        return {name:(cls(val) if cls is not None else float(val)) for name,val,cls,ext in zip(self.names, x, self.types, self.external) if not ext}
+            elif name in self.elements:
+                key, i = self.elements[name][:2]
+                out.setdefault(key, np.array(p.raw, dtype=float)).flat[i] = val
+            else:
+                out[name] = cls(val) if cls is not None else float(val)
+        return out
 
     def restart(self, x):
         """ The runner, restarted with these values """
@@ -1745,8 +1763,9 @@ class Problem:
         return sum(logprior(p, val) for p,val in zip(self.fitted.values(), x))
 
     def penalty(self, x):
-        """ Minus the log of the priors, so that with likelihoods an optimizer finds the most probable values (the maximum a posteriori) rather than ignoring the priors """
-        return -sum(logprior(p, val) for p,val,has in zip(self.fitted.values(), x, self.priors) if has) if self.use_map else 0.0
+        """ Minus the log of the priors, so that with likelihoods an optimizer finds the most probable values (the maximum a posteriori) rather than ignoring the priors; plus the penalty given on the values (`penalty=`) """
+        out = -sum(logprior(p, val) for p,val,has in zip(self.fitted.values(), x, self.priors) if has) if self.use_map else 0.0
+        return out + (float(self.penalty_fn(self.to_pars(x))) if self.penalty_fn is not None else 0.0)
 
     def objective(self, x, number=None):
         """ What an optimizer minimizes: the mean score over the runs (plus the penalty of the priors); each evaluation is recorded. With fresh seeds, evaluation `number` (default: the next) takes seeds after those of the evaluations before it """
@@ -1923,7 +1942,7 @@ class Problem:
         mismatch = float(np.mean(scores)) + self.penalty(best)
         if out.converged and self.stochastic and 'zs' not in out and mismatch > self.mismatch_before: # A best fit of a stochastic sim, whose scores are noisy, that did not find better values
             out.converged = False
-            out.why += f'; but rerun with the same seeds, the best values score {mismatch:.4g}, worse than the initial values ({self.mismatch_before:.4g}), so the best trial may have been chance; try more trials or more runs a point (n_runs=)'
+            out.why += f'; but rerun with the same seeds, the best values score {mismatch:.4g}, worse than the initial values ({self.mismatch_before:.4g}), so the best trial may have been chance; try more trials (n_trials=) or more runs a point (n_runs=)'
         if self.verbose:
             print(f'{"Converged" if out.converged else "Not converged"}: {out.why}')
             print(f'The {"negative log-posterior" if self.use_map else "negative log-likelihood" if self.use_lik else "goodness of fit"} is {mismatch:.4g} at the best values and {self.mismatch_before:.4g} at the initial values')
@@ -1934,13 +1953,16 @@ class Problem:
                 key = name.rpartition('[')[0]
                 vals = best_pars[key].values if key in best_pars else []
                 best_pars[key] = ss.by(**{p.raw.dim:list(vals) + [val]})
+            elif name in self.elements: # An array, whole
+                key, i = self.elements[name][:2]
+                best_pars.setdefault(key, np.array(p.raw, dtype=float)).flat[i] = val
             else:
                 best_pars[name] = val
         diagnostics = sc.objdict(divergences=out.get('divergences'), acceptance=out.get('acceptance'), band=out.get('band'))
         return Fit(sim=after, before=before, pars=best_pars, table=out.table, trials=pd.DataFrame(self.trials), method=method,
                    mismatch=mismatch, mismatch_before=self.mismatch_before,
                    measure='negative log-posterior' if self.use_map else 'negative log-likelihood' if self.use_lik else 'goodness of fit',
-                   samples=out.get('samples'), diagnostics=diagnostics, converged=out.converged, why=out.why, scores=scores, seeds=seeds)
+                   samples=out.get('samples'), diagnostics=diagnostics, converged=out.converged, why=out.why, scores=scores, seeds=seeds, study=out.get('study'))
 
 
 #%% The fitting methods: each a function of a Problem, returning the best values (or draws from a posterior), whether it converged, and why
@@ -1993,18 +2015,21 @@ def fit_asd(problem, scan=None, stepsize=0.1, **kwargs):
 
 def smoothed_best(zs, values):
     """
-    The index of the point whose neighbors score lowest: each score is replaced by
-    the mean of all scores weighted by a Gaussian kernel of the distance between
-    points, on the scale searched on, with a width for each parameter by Scott's
-    rule. For scores from fresh random seeds, whose lowest value picks out chance
-    as much as the values.
+    The index of the point whose neighbors score lowest, among the best tenth of the
+    points (at least 5): each of their scores is replaced by the mean of all scores
+    weighted by a Gaussian kernel of the distance between points, on the scale searched
+    on, with a width for each parameter by Scott's rule from the spread of those best
+    points (the spread of all of them, including the random first trials, would let a
+    dense region of worse points pull the choice away from the best). For scores from
+    fresh random seeds, whose lowest value picks out chance as much as the values.
     """
     n, d = zs.shape
-    width = np.maximum(zs.std(axis=0), 1e-6)*n**(-1/(d + 4)) # Scott's rule, for each parameter
-    dists = (((zs[:,None,:] - zs[None,:,:])/width)**2).sum(axis=-1)
+    best = np.argsort(values, kind='stable')[:max(5, n//10)]
+    width = np.maximum(zs[best].std(axis=0), 1e-6)*len(best)**(-1/(d + 4)) # Scott's rule, for each parameter
+    dists = (((zs[best,None,:] - zs[None,:,:])/width)**2).sum(axis=-1)
     weights = np.exp(-0.5*dists)
     smoothed = (weights*values[None,:]).sum(axis=1)/weights.sum(axis=1)
-    return int(np.argmin(smoothed))
+    return int(best[np.argmin(smoothed)])
 
 
 def optuna_study(problem, storage=None, worker=0):
@@ -2031,12 +2056,12 @@ def optuna_worker(worker, n, problem, storage, kwargs):
     return
 
 
-def fit_optuna(problem, trials=None, n_trials=100, scan=None, n_workers=None, storage=None, **kwargs): # The search starts from the initial values, not from a scan
+def fit_optuna(problem, n_trials=100, scan=None, n_workers=None, storage=None, **kwargs): # The search starts from the initial values, not from a scan
     """
-    Optuna's tree-structured Parzen estimator, from the initial values: a best fit, with the spread of the best trials
+    Optuna's tree-structured Parzen estimator, from the initial values: a best fit, with the spread of the best trials, and Optuna's study (`fit.study`)
 
     Args:
-        trials (int): the number of trials (each one point, run once for agents), including any already in `storage`
+        n_trials (int): the number of trials (each one point, run once for agents), including any already in `storage`
         n_workers (int): the number of processes that propose and run trials at once, sharing what they have learned (default 1)
         storage (str): where the trials are kept, so that a fit that stopped can be resumed by calling it again with the same storage:
             a file name (kept as an Optuna journal), a database URL (e.g. `'sqlite:///fit.db'`), or an Optuna storage
@@ -2050,7 +2075,7 @@ def fit_optuna(problem, trials=None, n_trials=100, scan=None, n_workers=None, st
     known = [key for key in inspect.signature(optuna.Study.optimize).parameters if key not in ['self', 'func', 'n_trials']]
     unknown = [key for key in kwargs if key not in known]
     if unknown:
-        errormsg = f'fit(method="optuna") takes trials= (the number of trials), n_workers=, storage=, and Optuna\'s own keywords ({sc.strjoin(known)}), not {sc.strjoin(unknown)}'
+        errormsg = f'fit(method="optuna") takes n_trials= (the number of trials), n_workers=, storage=, and Optuna\'s own keywords ({sc.strjoin(known)}), not {sc.strjoin(unknown)}'
         raise TypeError(errormsg)
     n_workers = n_workers or 1
     temp = None
@@ -2060,7 +2085,7 @@ def fit_optuna(problem, trials=None, n_trials=100, scan=None, n_workers=None, st
     if not study.trials: # The initial values, already scored by Problem.start()
         dists = {name:optuna.distributions.FloatDistribution(lo, hi, log=bool(log)) for name,lo,hi,log in zip(p.names, p.lows, p.highs, p.logs)}
         study.add_trial(optuna.trial.create_trial(params=dict(zip(p.names, p.x0)), distributions=dists, value=p.mismatch_before))
-    remaining = sc.ifelse(trials, n_trials) - len(study.trials)
+    remaining = n_trials - len(study.trials)
     if remaining > 0 and n_workers > 1:
         shares = [len(part) for part in np.array_split(np.arange(remaining), n_workers)]
         with ss.kernels.one_blas_thread(): # The workers share the cores, so each takes one thread, as in ss.parallel()
@@ -2069,7 +2094,10 @@ def fit_optuna(problem, trials=None, n_trials=100, scan=None, n_workers=None, st
     elif remaining > 0:
         study.optimize(functools.partial(optuna_trial, p), n_trials=remaining, **kwargs)
     done = [t for t in study.trials if t.value is not None] # In the order they were started, from every worker and every earlier fit with this storage
-    if temp is not None:
+    if temp is not None: # Kept in memory, since the file is deleted
+        kept = optuna.create_study(sampler=study.sampler, study_name=study.study_name)
+        kept.add_trials(study.trials)
+        study = kept
         for path in [temp, temp + '.lock']:
             if os.path.exists(path):
                 os.remove(path)
@@ -2084,17 +2112,17 @@ def fit_optuna(problem, trials=None, n_trials=100, scan=None, n_workers=None, st
     gain = (early - values.min())/max(abs(early), 1e-12)
     n_random = 10 # Optuna's first trials, which are random (TPESampler's n_startup_trials)
     if i == 0:
-        converged, why = False, f'the best of the {len(values)} trials was the initial values, so the search found nothing better; try more trials (trials=)'
+        converged, why = False, f'the best of the {len(values)} trials was the initial values, so the search found nothing better; try more trials (n_trials=)'
     elif i < n_random:
-        converged, why = False, f'the best of the {len(values)} trials was trial {i}, one of the first {n_random}, which are random, so the search did not improve on them; try more trials (trials=)'
+        converged, why = False, f'the best of the {len(values)} trials was trial {i}, one of the first {n_random}, which are random, so the search did not improve on them; try more trials (n_trials=)'
     else:
         converged = gain < 0.01
-        why = f'the best score improved by {gain:.1%} over the last quarter of the {len(values)} trials' + ('' if converged else '; try more trials (trials=)')
+        why = f'the best score improved by {gain:.1%} over the last quarter of the {len(values)} trials' + ('' if converged else '; try more trials (n_trials=)')
     spread = None
     if len(p.trials) >= 10: # Not a posterior, but some indication of the uncertainty: the spread of the best trials
         top = tried.nsmallest(max(5, len(tried)//10), 'objective')
         spread = top[p.names].min().values, top[p.names].max().values
-    return sc.objdict(best=best, converged=converged, why=why, spread=spread)
+    return sc.objdict(best=best, converged=converged, why=why, spread=spread, study=study)
 
 
 def fit_if2(problem, particles=1000, iterations=50, cooling=0.5, sd=0.05, chains=4, **kwargs):

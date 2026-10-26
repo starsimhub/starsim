@@ -238,7 +238,7 @@ sim.run()
 print(sim.analyzers[0].name)
 ```
 
-A function module has no parameters, states, or results of its own, and is called at every step, so it has to check the time itself if it should act only at some (e.g. `if sim.now >= ss.date('2025-03-01'):`). As soon as it needs any of these, write a class instead. `ss.Intervention.from_func(fn)` (and likewise for the other types) makes the module from a function explicitly. For analyzers, see [Analyzers](running_analyzers.qmd).
+A function module is called at every step, so it has to check the time itself if it should act only at some (e.g. `if sim.now >= ss.date('2025-03-01'):`). Its keyword arguments with defaults are its parameters, passed to it at each call, so one given as `ss.par` with bounds can be fitted and set by name like any other parameter (`def close_schools(sim, start=2025, share=ss.par(0.5, bounds=[0.2, 0.8])):`; see [Calibration](calibration_fitting.qmd#a-value-that-isnt-a-parameter)). It has no states or results of its own; as soon as it needs them, write a class instead. `ss.Intervention.from_func(fn)` (and likewise for the other types) makes the module from a function explicitly. For analyzers, see [Analyzers](running_analyzers.qmd).
 
 ## Pitfalls
 

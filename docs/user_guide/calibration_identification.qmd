@@ -58,7 +58,7 @@ All three are recovered closely. With a full year of data from a deterministic m
 A best fit is a single point; it doesn't show how far the values could move and still fit nearly as well. One way to see that is to look at many values and how well each fits. A search by Optuna (`method='optuna'`) spreads its trials widely before it narrows down, and each trial is kept, with its score, in `fit.to_df()`:
 
 ```{python}
-search = sim.fit(method='optuna', trials=300, rand_seed=1, verbose=False)
+search = sim.fit(method='optuna', n_trials=300, rand_seed=1, verbose=False)
 trials = search.to_df()
 trials.sort_values('objective').head()
 ```

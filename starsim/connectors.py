@@ -410,6 +410,10 @@ class modify(Connector):
             modname, arrname = self.amount.mod.name, self.amount.name
             self.amount = lambda sim: getattr(sim.get_module(modname), arrname).raw
             self.amount.__name__ = f'{modname}.{arrname}'
+        elif isinstance(self.amount, ss.par): # Also one of its parameters (multiply, add, set, or efficacy), so sim.fit(), sensitivity(), and ss.parallel(pars=) find it whatever it changes; its code uses the parameter, which keeps a value set by name
+            named = self.amount.name
+            self.define_pars(**{'efficacy' if efficacy is not None else self.op:self.amount})
+            self.amount.name = named # Named by its target when the sim is built, if it is not named (see ss.solvers.choose)
         self.where = None if where is None else ss.conditions.as_cond(where)
         self.start = start
         self.stop = stop

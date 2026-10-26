@@ -14,6 +14,11 @@ from .expressions import as_expr, evaluate, Expr, par
 atomic_classes = (str, Number, list, np.ndarray, pd.Series, pd.DataFrame, type(None), dt.date)
 
 
+def has_par(value):
+    """ Whether a value is a plain dict with a value given as `ss.par`, e.g. `dict(k=ss.par(0.3, bounds=[0.1, 0.5]))` (see `Pars.update()`) """
+    return type(value) is dict and any(isinstance(v, ss.par) for v in value.values())
+
+
 class Pars(sc.objdict):
     """
     Dict-like container of parameters
@@ -40,8 +45,19 @@ class Pars(sc.objdict):
     _bounded = None # For a module written as code: the parameters given as ss.par (e.g. with bounds, to be fitted), by name; see bounded()
 
     def bounded(self):
-        """ The parameters of a module written as code that were given as `ss.par` (e.g. `beta=ss.par(ss.peryear(0.1), bounds=[0.05, 1])`), by name; their values are used as any other's """
+        """ The parameters of a module written as code that were given as `ss.par` (e.g. `beta=ss.par(ss.peryear(0.1), bounds=[0.05, 1])`, or `cin_fn=dict(k=ss.par(0.3, bounds=[0.1, 0.5]))` as "cin_fn.k"), by name; their values are used as any other's """
         return dict(self._bounded or {})
+
+    def with_bounded(self):
+        """ The parameters as a dict, with those given as `ss.par` as they were given (in a dict parameter too), as `update()` takes them """
+        out = dict(self)
+        for key,p in self.bounded().items():
+            outer, dot, inner = key.partition('.')
+            if dot and isinstance(out.get(outer), dict):
+                out[outer] = dict(out[outer]) | {inner:p}
+            elif key in out:
+                out[key] = p
+        return out
 
     def note_bare(self, key, old, new):
         """ Note that a parameter with a unit (or a distribution of values with one) was set to a bare number, which keeps that unit """
@@ -88,7 +104,7 @@ class Pars(sc.objdict):
             else:
                 current.value = value
             return
-        if isinstance(value, ss.par) and key in self: # A parameter of a module written as code, given with bounds (say): as update() takes it
+        if (isinstance(value, ss.par) or has_par(value)) and key in self: # A parameter of a module written as code, given with bounds (say): as update() takes it
             self.update({key:value})
             return
         return super().__setitem__(key, value)
@@ -116,11 +132,13 @@ class Pars(sc.objdict):
             kwargs (dict): merged with pars
         """
         # Get parameters, and return if none
-        bounded = {k:p for k,p in pars.bounded().items() if k in pars} if isinstance(pars, Pars) else {} # Parameters given to another Pars as ss.par (e.g. a package's full set of defaults for a module) keep their bounds
-        pars = {} if pars is None else dict(pars) | bounded # Make it a simple dict, since just iterating over
+        if isinstance(pars, Pars): # Parameters given to another Pars as ss.par (e.g. a package's full set of defaults for a module) keep their bounds
+            pars = pars.with_bounded()
+        pars = {} if pars is None else dict(pars) # Make it a simple dict, since just iterating over
         pars = pars | kwargs # Merge dictionaries
         if not len(pars): # Check that new parameters are supplied, and if not return unchanged
             return self
+        nested = {key:pars.pop(key) for key in list(pars) if key not in self and key in (self._bounded or {})} # A value in a dict parameter by its name, e.g. "cin_fn.k" (see below)
         if not create: # Check if there are any mismatches, which raises an exception if there are
             self.check_key_mismatch(pars)
 
@@ -131,6 +149,14 @@ class Pars(sc.objdict):
                 new.name = new.name or key
                 object.__setattr__(self, '_bounded', (self._bounded or {}) | {key:new})
                 new = new.value
+            elif has_par(new) and key in self.keys() and not isinstance(self[key], (ss.par, Pars, ss.Module)): # The same for a value in a dict parameter, e.g. cin_fn=dict(k=ss.par(0.3, bounds=[0.1, 0.5])), kept as "cin_fn.k"
+                given = {f'{key}.{k}':v for k,v in new.items() if isinstance(v, ss.par)}
+                for name,p in given.items():
+                    p.name = p.name or name
+                object.__setattr__(self, '_bounded', (self._bounded or {}) | given)
+                new = {k:(v.value if isinstance(v, ss.par) else v) for k,v in new.items()}
+            elif key in (self._bounded or {}) and not isinstance(new, ss.par): # A new value of one given as ss.par: the parameter keeps it too, e.g. for a modifier, whose code uses the parameter (see ss.modify)
+                self._bounded[key].value = new
             if key not in self.keys(): # It's a new parameter and create=True: update directly
                 super().__setitem__(key, new) # Skip the check for locked parameters
             else:
@@ -158,6 +184,10 @@ class Pars(sc.objdict):
                     warnmsg = f'No known mechanism for handling {type(old)} → {type(new)}; using default'
                     ss.warn(warnmsg)
                     self[key] = new
+        for key,new in nested.items(): # In place, as the module's code may hold the dict
+            outer, _, inner = key.partition('.')
+            self[outer][inner] = new
+            self._bounded[key].value = new
         return self
 
     def _update_ndict(self, key, old, new):

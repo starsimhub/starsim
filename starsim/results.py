@@ -1608,6 +1608,17 @@ def match_name(sim, col):
             for key in [col] + ([rest] if first == mod.name else []):
                 if key in mod.results and isinstance(mod.results[key], ss.Result):
                     matches.append(mod.results[key])
+    if not matches and '.' in col: # A result nested deeper ("hpv.genotype.cancers"), or a column of a result with columns ("sis.new_infections.alpha"), by its path in sim.results
+        obj = sim.results
+        for part in col.split('.'):
+            if isinstance(obj, Results):
+                obj = obj.get(part)
+            elif isinstance(obj, Result) and obj.columns is not None:
+                obj = {str(c):res for c,res in obj.by_column().items()}.get(part)
+            else:
+                obj = None
+        if isinstance(obj, Result) and obj.columns is None:
+            matches.append(obj)
     return matches[0] if len(matches) == 1 else None
 
 
