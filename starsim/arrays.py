@@ -1563,23 +1563,31 @@ class uids(np.ndarray):
                 raise TypeError(f'UIDs must be integers, but got non-integer values: {arr}')
         return arr.astype(ss_int).view(cls) # Normalize integer width, or cast validated floats
 
+    @staticmethod
+    def _increasing(arr):
+        """ Whether an array is sorted with no repeats, as UIDs from `.uids` and the set operations are, so a set operation need not sort it (a check much faster than the sort) """
+        arr = np.asarray(arr)
+        return arr.ndim == 1 and (arr.size < 2 or bool((arr[1:] > arr[:-1]).all()))
+
     def remove(self, other, **kw):
         """ Remove provided UIDs from current array"""
         if isinstance(other, BoolArr):
             other = other.uids
+        kw.setdefault('assume_unique', self._increasing(self) and self._increasing(other))
         return self._ensure_int(np.setdiff1d(self, other, **kw))
 
     def intersect(self, other, **kw):
         """ Keep only UIDs that are also present in the other array """
         if isinstance(other, BoolArr):
             other = other.uids
+        kw.setdefault('assume_unique', self._increasing(self) and self._increasing(other))
         return self._ensure_int(np.intersect1d(self, other, **kw))
 
-    def union(self, other, **kw):
-        """ Return all UIDs present in both arrays """
+    def union(self, other):
+        """ Return all UIDs present in either array, sorted, without repeats (as np.union1d() gives them, faster: see unique()) """
         if isinstance(other, BoolArr):
             other = other.uids
-        return self._ensure_int(np.union1d(self, other, **kw))
+        return self._ensure_int(np.concatenate([self, np.asarray(other)])).unique()
 
     def xor(self, other, **kw):
         """ Return UIDs present in only one of the arrays """

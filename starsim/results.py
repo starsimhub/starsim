@@ -1217,13 +1217,17 @@ class Results(ss.utils.NoDists, ss.ndict):
         return None
 
     def __getitem__(self, key):
-        if key not in self and self._implicit_has(key):
+        if isinstance(key, str) and dict.__contains__(self, key): # The usual case, as fast as a dict; the rest only for a key that is not here
+            return dict.__getitem__(self, key)
+        if self._implicit_has(key):
             return self[self._implicit][key]
         if msg := self._given_msg(key):
             raise KeyError(msg)
         return super().__getitem__(key)
 
     def __getattr__(self, attr):
+        if dict.__contains__(self, attr): # As in __getitem__()
+            return dict.__getitem__(self, attr)
         if self._implicit_has(attr):
             return self[self._implicit][attr]
         if msg := self._given_msg(attr):

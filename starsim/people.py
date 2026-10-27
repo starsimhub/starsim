@@ -459,6 +459,8 @@ class People:
         if len(module.state_list):
             for state in module.state_list:
                 state.link_people(self)
+                if isinstance(state, ss.TimeArr) and state.t is None: # Times as steps of the module's timeline (see due())
+                    state.t = module.t
                 combined_name = module.name + '.' + state.name  # We will have to resolve how this works with multiple instances of the same module (e.g., for strains). The underlying machinery should be fine though, with People._states being flat and keyed by ID
                 self.states[combined_name] = state # Register the state on the user-facing side using the combined name. Within the original module, it can still be referenced by its original name
         return
