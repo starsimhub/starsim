@@ -20,6 +20,8 @@ def closest(name, options):
 
 def did_you_mean(name, options):
     """ The end of a sentence in an error message: the closest matches to a name, e.g. "; did you mean S, I?", or "." if none is close; a name with no module (beta) is matched to the options' own names (sir.beta) """
+    if not options:
+        return '.'
     short = lambda opt: opt if '.' in name else opt.rpartition('.')[2]
     dists = sc.suggest(name, [short(opt) for opt in options], n=3, fulloutput=True) or {}
     best = min(dists.values(), default=0)
@@ -107,7 +109,14 @@ def run_values(inputs):
     if not named or not all(has_values(getattr(leaf.module, 'sim', None)) for leaf in named):
         return None
     vals = [run_value(x) for x in inputs]
-    return None if any(v is None for v in vals) else vals
+    if any(v is None for v in vals):
+        return None
+    if any(isinstance(x, ss.TimePar) for x in inputs): # With a typed value, a parameter that holds one is typed too (its current value is a number in the sim's unit), so e.g. ss.weeks(40) - preg.pars.loss_threshold is a duration in weeks
+        for i,(x,v) in enumerate(zip(inputs, vals)):
+            if isinstance(x, par) and isinstance(x.raw, ss.TimePar) and sc.isnumber(v):
+                unit = x.module.sim.unit_base # E.g. 'year'
+                vals[i] = (ss.time.get_dur_class(unit) if x.raw.timepar_type == 'dur' else ss.time.get_rate_class(f'per{unit}'))(v) # A rate's current value is per unit (see ss.Module._value())
+    return vals
 
 
 def binop(op, a, b):

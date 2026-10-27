@@ -1,12 +1,7 @@
 """
-Values for the docs (e.g. {{< var version >}}): `qpyd prerender` writes them to _variables.yml.
-
-The version is read from starsim/version.py rather than by importing Starsim, since this runs on every render.
+Values for the docs, e.g. {{< var version >}}: `qpyd prerender` writes them to _variables.yml.
 """
-import runpy as _runpy
-import importlib.util as _util
-from pathlib import Path as _Path
+import quartodoc as qd
 
-_version = _runpy.run_path(_Path(_util.find_spec('starsim').origin).parent / 'version.py')
-version = _version['__version__']
-versiondate = _version['__versiondate__']
+version = qd.get_version() # Read from the Starsim source, without importing Starsim
+versiondate = qd.get_attr('__versiondate__')

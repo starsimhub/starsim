@@ -809,6 +809,8 @@ def move(*args, p=None, n=None, uids=None):
     for arg in args:
         if isinstance(getattr(arg, 'graph', None), ss.graph.Graph):
             diseases.append(arg)
+        elif isinstance(arg, ss.Module): # Written as code, with no states and transitions of its own to move people between
+            raise TypeError(f'ss.move() moves people between the states of a declared disease, and "{arg.name}" is written as code: set its states in code instead, e.g. {arg.name}.<state>[uids] = True')
         elif is_uids(arg):
             if uids is not None:
                 raise ValueError('ss.move() was given the agents to move twice')

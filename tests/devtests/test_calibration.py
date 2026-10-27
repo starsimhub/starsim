@@ -258,6 +258,20 @@ def test_fit_fresh_seeds():
     return fit
 
 
+@sc.timer()
+def test_fit_sim_setting():
+    sc.heading('Testing fitting a sim setting given as ss.par (n_agents), which builds a new sim for each value')
+    S, I = ss.states('S I')
+    make = lambda n_agents, data=None: ss.Sim(ss.Disease(S >> I @ 0.2*I, I >> S @ ss.days(20), init_prev=0.1, name='sis'), networks='random', n_agents=n_agents, start=0, stop=60, unit='day', solver='abm', data=data, verbose=0)
+    data = make(2000).run().to_data('sis.I') # With no total_pop, the counts are of agents, so they tell the number apart
+    fit = make(ss.par(1000, bounds=[500, 4000]), data=data).fit(verbose=0)
+    assert np.isclose(fit.pars.n_agents, 2000, rtol=0.1), fit.pars
+    assert len(fit.sim.new(pars=fit.pars).init().people) == int(fit.pars.n_agents) # pars= takes the setting by name
+    with pytest.raises(sc.KeyNotFoundError, match='setting of the sim'):
+        make(2000).new(pars=dict(n_agents=3000)).init() # Not given as ss.par, so not a value by name
+    return fit
+
+
 #%% Run as a script
 if __name__ == '__main__':
     test_particle_mcmc()
@@ -265,3 +279,4 @@ if __name__ == '__main__':
     test_fit_what_is_not_a_parameter()
     test_fit_arrays()
     test_fit_fresh_seeds()
+    test_fit_sim_setting()

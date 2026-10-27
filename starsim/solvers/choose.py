@@ -47,7 +47,7 @@ class Undeclared(Transmission):
     step = start_step
 
     def shrink(self):
-        ss.utils.shrink(self, ['_selector', 'cache']) # The selector holds the sim
+        ss.utils.shrink(self, ['sim', '_selector', 'cache']) # Each holds the sim (as the declared engine's shrink() drops it)
         return
 
     def update_results(self):
@@ -529,8 +529,10 @@ def set_par_values(sim):
                 continue
         if len(mods) != 1:
             options = [f'{mod.name}.{k}' for mod in sim.declared for k in mod.graph.pars] + [f'{mod.name}.{k}' for mod in coded for k in mod.pars.bounded()]
-            raise sc.KeyNotFoundError(f'pars= has a value for "{key}", which {"matches no parameter" if not mods else "is a parameter of more than one module"}. '
-                                      f'Parameters are {sc.strjoin(options)}{ss.expressions.did_you_mean(key, options)}')
+            listed = f'Parameters are {sc.strjoin(options)}{ss.expressions.did_you_mean(key, options)}' if options else 'This sim has none that pars= can set (those of a declared model, and those of a module written as code that have bounds).'
+            if key in ss.SimPars.names(): # A sim setting, given by value
+                listed += f' "{key}" is a setting of the sim: give it as sim.new({key}=...), or as ss.par in the sim (e.g. {key}=ss.par(..., bounds=[...])) to fit it.'
+            raise sc.KeyNotFoundError(f'pars= has a value for "{key}", which {"matches no parameter" if not mods else "is a parameter of more than one module"}. {listed}')
         attrs = getattr(mods[0], '_par_attrs', {}).get(name) if name not in mods[0].pars else None
         if attrs is None:
             mods[0].pars.update({name:val})

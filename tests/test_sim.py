@@ -545,9 +545,8 @@ def test_rescale():
     assert seeded(rescale=True) == 10 # A number of people is a number of agents at the start scale (it was 0.05 agents, so nobody)
     assert seeded() == 1 # Too few to be an agent: one, with a note
 
-    with pytest.warns(RuntimeWarning, match='renaming'):
-        sim = ss.Sim(n_agents=100, diseases=['sis', 'sis'], networks='random').init()
-    assert list(sim.diseases.keys()) == ['sis', 'sis_1'] # Default names are made unique
+    sim = ss.Sim(n_agents=100, diseases=['sis', 'sis'], networks='random').init()
+    assert list(sim.diseases.keys()) == ['sis', 'sis_1'] # Default names are made unique, with no warning
     return rescaled
 
 

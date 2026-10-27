@@ -1345,6 +1345,9 @@ def bounded_pars(probe, pars=None, unused=()):
             fitted[f'{mod.name}.{name}' if taken else name] = p
             if any(mod is net for net in mixed):
                 contacts.append(f'{mod.name}.{name}')
+    for name,p in probe.pars.bounded().items(): # A sim setting given as ss.par, e.g. ss.Sim(n_agents=ss.par(5000, bounds=[1000, 20000])): each value is a new sim (see ss.Sim.new())
+        if p.bounds is not None and (pars is None or name in pars) and name not in fitted:
+            fitted[name] = p
     return fitted, contacts
 
 
@@ -1638,6 +1641,7 @@ class Problem:
         used = [id(val) for lik in liks.values() if use_lik and lik is not None for val in lik_pars(lik).values()]
         unused = [id(val) for mod in probe.declared for oc in mod.graph.outcomes.values() if oc.likelihood is not None for val in lik_pars(oc.likelihood).values() if id(val) not in used]
         fitted, contacts = bounded_pars(probe, pars, unused)
+        settings = [key for key in fitted if key in probe.pars.bounded()] # Sim settings, for which the sim is built again
         self.levels = levels = {} # For a parameter with a value per level (ss.par(ss.by(patch=[...]), bounds=)): each level is fitted, with the same bounds and prior, as "beta[a]", "beta[b]", ...
         for key,p in list(fitted.items()):
             if isinstance(p.raw, ss.by):
@@ -1692,8 +1696,8 @@ class Problem:
         self.fresh = False # Whether each evaluation takes seeds of its own; see choose()
         self.runner = runner = base.new() # If the sim is nothing but compartments, it is built once and restarted for each evaluation
         runner.data = base.data
-        self.can_restart = runner.init().kernel_only() and not contacts # The mixing is worked out when the sim is built, so a new value needs a new sim
-        self.no_grad = ss.gradients.reason(runner) or ('a parameter has a value for each level' if levels else 'a parameter is an array' if elements else None) or (f'{contacts[0]} sets the mixing when the sim is built' if contacts else None) # Why there are no gradients, if there are not
+        self.can_restart = runner.init().kernel_only() and not contacts and not settings # The mixing is worked out when the sim is built, as are its settings, so a new value needs a new sim
+        self.no_grad = ss.gradients.reason(runner) or ('a parameter has a value for each level' if levels else 'a parameter is an array' if elements else None) or (f'{contacts[0]} sets the mixing when the sim is built' if contacts else None) or (f'{settings[0]} is a setting of the sim' if settings else None) # Why there are no gradients, if there are not
         self.trials = [] # Every evaluation
         return
 

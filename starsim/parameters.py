@@ -526,13 +526,13 @@ class SimPars(Pars):
         return
 
     def validate_agents(self):
-        """ Check that n_agents is supplied and convert to an integer """
+        """ Check that n_agents is supplied and convert to an integer (the nearest, e.g. for a value a fit chose) """
         named = getattr(self.people, 'named', None)
         if named is not None and named.n_agents is None: # A named population is made at the sim's number of agents: see ss.solvers.choose.init_named_people()
-            self.n_agents = int(self.n_agents)
+            self.n_agents = round(self.n_agents)
         elif self.people is not None:
             len_people = len(self.people)
-            if (len_people != self.n_agents) and not self.is_default('n_agents'):
+            if (len_people != round(self.n_agents)) and not self.is_default('n_agents'):
                 errormsg = f'Cannot set a custom value of n_agents ({self.n_agents}) that does not match a pre-created People object ({len_people}); use n_agents to create the People object instead'
                 raise ValueError(errormsg)
             self.n_agents = len_people
@@ -542,7 +542,7 @@ class SimPars(Pars):
             errormsg = 'n_agents=0 gives no agents to run; for a compartmental run, leave out n_agents (or give solver="ode")'
             raise ValueError(errormsg)
         else:
-            self.n_agents = int(self.n_agents)
+            self.n_agents = round(self.n_agents)
         return
 
     def validate_total_pop(self):
@@ -642,14 +642,12 @@ class SimPars(Pars):
             elif mod._default_name and isinstance(mod, ss.Product) and names[name] == 'interventions': # e.g. bcg = ss.vaccinate(tbsim.BCG(...)), where the delivery takes the name of its variable: the product is named for its kind, bcg_vaccine
                 kind = next((cls for cls in (ss.Vaccine, ss.Treatment, ss.Diagnostic) if isinstance(mod, cls)), ss.Product)
                 mod.name = mod.label = sc.uniquename(f'{name}_{kind.__name__.lower()}', list(names), style='_%d')
-            elif mod._default_name:
+            elif mod._default_name: # A name the user did not give is simply numbered (e.g. a second clip_edges is clip_edges_1)
                 mod.name = sc.uniquename(name, list(names), style='_%d')
                 if isinstance(mod, ss.Product): # Another product of the same default name
                     cls = type(mod)
                     cls = f'ss.{cls.__name__}' if cls.__module__.startswith('starsim.') else cls.__name__ # E.g. ss.Treatment, or a package's own hpv.dx
                     ss.warn(f'The product "{name}" is renamed "{mod.name}", since another module (in {names[name]}) is also called "{name}"; give the product a name to avoid this warning, e.g. {cls}(..., name="{name}_product")')
-                elif not isinstance(mod, ss.modify): # A modifier's default name says what it does (beta_multiply), so a second one is simply numbered
-                    ss.warn(f'Module name "{name}" is already used, so renaming this module "{mod.name}"; set the name explicitly to avoid this warning')
             else:
                 errormsg = f'Cannot add module "{name}" to {modkey}: a module with that name already exists in {names[name]}; please give one of them a different name'
                 raise ValueError(errormsg)

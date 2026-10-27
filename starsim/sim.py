@@ -497,7 +497,7 @@ class Sim(ss.Base):
         build what they need themselves.
 
         Args:
-            pars (dict): values of model parameters by name, e.g. `dict(beta=0.1)`
+            pars (dict): values of model parameters by name, e.g. `dict(beta=0.1)`, and of sim settings given as `ss.par` (e.g. `ss.Sim(n_agents=ss.par(5000, bounds=[1000, 20000]))`, so they can be fitted)
             inplace (bool): if True, this sim becomes the new one, rather than a new one being returned
             kwargs (dict): sim arguments to change, e.g. `rand_seed=2`, `solver='abm'`, or `interventions=...`; `None` goes back to the default, e.g. `n_agents=None` for a compartmental run of an agent-based sim; also `data=`. A new `solver=` puts `substeps=` back to that solver's default unless it is given too, since substeps mean a different thing to each (e.g. an importer's `substeps=1`, whole steps for the chain binomial, would be one Runge-Kutta step of the whole timestep for the ODE). A subclass's own arguments (e.g. FPsim's `location=`) are not taken again: make the subclass again for those.
         """
@@ -513,6 +513,8 @@ class Sim(ss.Base):
             self._name_modules(ss.utils.caller_names(1), *[kwargs.get(key) for key in kinds])
             if kwargs.get('interventions') is not None:
                 kwargs['interventions'] = self._order_steps(kwargs['interventions'])
+        pars = dict(pars or {})
+        kwargs |= {key:pars.pop(key) for key in list(pars) if key in base.pars.bounded()} # A sim setting given as ss.par (e.g. n_agents=ss.par(5000, bounds=...)) is a value by name too, as when fitting it
         kwargs = copy_given(kwargs) # And copied
         sim = self if inplace else object.__new__(type(base))
         state = sc.dcp(vars(base), memo={id(base):sim}) # What refers to the sim (e.g. its loop) refers to the new one
@@ -528,7 +530,7 @@ class Sim(ss.Base):
                 sim.given.append(key)
         sim.data = sc.dcp(data)
         sim.jax = jax
-        sim.par_values = sc.mergedicts(sim.par_values, pars)
+        sim.par_values = sc.mergedicts(sim.par_values, pars or None)
         return sim
 
     def fit(self, pars=None, data=None, weights=None, likelihood=None, gof=None, penalty=None, method=None, n_runs=None, reseed=None, rand_seed=None, verbose=None, **kwargs):
@@ -1366,7 +1368,7 @@ class Sim(ss.Base):
             self.init()
         self.loop.index = 0
         rebuild = lambda: self.new(pars=sc.mergedicts(self.par_values, pars), inplace=True, rand_seed=sc.ifelse(rand_seed, self.pars.rand_seed)) # With the values of earlier restarts
-        if not self.kernel_only() or any(isinstance(val, ss.Dist) for val in (pars or {}).values()): # Not run in one call to the kernels, or a distribution the compartments were not laid out for
+        if not self.kernel_only() or any(isinstance(val, ss.Dist) or key in self.pars.bounded() for key,val in (pars or {}).items()): # Not run in one call to the kernels, a distribution the compartments were not laid out for, or a sim setting (e.g. n_agents)
             return rebuild()
         base = self.__dict__.get('_before_init') # The copy that sim.new() and a rerun start from, which takes the same values
         if rand_seed is not None:
