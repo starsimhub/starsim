@@ -96,7 +96,7 @@ class Pars(sc.objdict):
 
     def check_added(self, label):
         """
-        Raise `ss.errors.UnknownParameter` for a key that was set (e.g. `mod.pars.art_efficacy = 0.9`) but never defined, before the
+        Raise a `KeyError` for a key that was set (e.g. `mod.pars.art_efficacy = 0.9`) but never defined, before the
         parameters were locked: a misspelt or renamed parameter, which would otherwise silently do nothing
         """
         added = [key for key in (self._added or []) if key in self and '.' not in key and key not in (self._bounded or {})] # Not a value inside a dict parameter by its name (e.g. "cin_fn.k"), nor one given as ss.par
@@ -105,7 +105,7 @@ class Pars(sc.objdict):
             known = [k for k in self.keys() if k not in added]
             errormsg = (f'"{label}" has no parameter named "{key}": it was set (e.g. pars.{key} = ...) but never defined, so it would do nothing. '
                         f'Its parameters are {sc.strjoin(known) or "none"}{ss.expressions.did_you_mean(key, known) if known else "."} To add a new parameter on purpose, use pars.update({key}=..., create=True).')
-            raise ss.errors.UnknownParameter(errormsg)
+            raise sc.KeyNotFoundError(errormsg)
         return
 
     def __setitem__(self, key, value):
@@ -800,12 +800,12 @@ class by_func:
         name = getattr(self.func, '__name__', 'function')
         if self.dim not in names:
             errormsg = f'ss.by({self.dim}={name}) gives a value for each level of "{self.dim}", which is not a dimension of the sim; its dimensions are {sc.strjoin(names) or "none"}'
-            raise ss.errors.ShapeError(errormsg)
+            raise ValueError(errormsg)
         strat = groups.strats[groups.dim_index(self.dim)]
         vals = np.asarray(vals, dtype=float)
         if len(vals) != strat.n:
             errormsg = f'ss.by({self.dim}={name}) gave {len(vals)} values, but "{self.dim}" has {strat.n} levels ({sc.strjoin(strat.labels)})'
-            raise ss.errors.ShapeError(errormsg)
+            raise ValueError(errormsg)
         return by(**{self.dim:list(vals)})
 
     def __call__(self, sim):
@@ -1078,7 +1078,7 @@ class by:
         return self.cached('index', index)
 
     def check(self, sim):
-        """ Check the values against the sim's dimensions (`ss.errors.ShapeError`), and that a property of people that is not one is given by value; returns the positions of the sim's dimensions it is by, and those dimensions """
+        """ Check the values against the sim's dimensions, and that a property of people that is not one is given by value; returns the positions of the sim's dimensions it is by, and those dimensions """
         names = [strat.name for strat in sim.groups.strats]
         for dim in self.dims:
             if dim not in names and self.keys(dim) is None: # By position, which needs the dimension's levels
@@ -1088,13 +1088,13 @@ class by:
                     fix = 'give a table by age with the lower edge of each bin, e.g. ss.by(dict(age=[0, 15, 50], value=[...])), or add sim.stratify(age=[...])'
                 else:
                     fix = f'give them by value, ss.by({dim}=dict(...)), which is read from people.{dim}, or add sim.stratify({dim}=[...])'
-                raise ss.errors.MissingDimension(f'ss.by({dim}=...) gives a value for each level of "{dim}" by position, but the model is not stratified by "{dim}", so the positions have no order; {fix}.')
+                raise sc.KeyNotFoundError(f'ss.by({dim}=...) gives a value for each level of "{dim}" by position, but the model is not stratified by "{dim}", so the positions have no order; {fix}.')
         ds = [names.index(dim) for dim in self.dims if dim in names]
         strats = [sim.groups.strats[d] for d in ds]
         if self.array is not None:
             shape = tuple(strat.n for strat in strats)
             if self.array.shape != shape:
-                raise ss.errors.ShapeError(f'ss.by() has an array of shape {self.array.shape}, but {sc.strjoin(self.dims)} have {shape} levels.')
+                raise ValueError(f'ss.by() has an array of shape {self.array.shape}, but {sc.strjoin(self.dims)} have {shape} levels.')
         elif self.table is None:
             for strat in strats:
                 vals = self.given[strat.name]
@@ -1102,11 +1102,11 @@ class by:
                 if isinstance(vals, dict):
                     missing = [str(label) for label in labels if str(label) not in [str(k) for k in vals]]
                     if missing:
-                        raise ss.errors.ShapeError(f'ss.by({strat.name}=dict(...)) has no value for {sc.strjoin(missing)} (the levels of "{strat.name}" are {sc.strjoin(labels)}).')
+                        raise ValueError(f'ss.by({strat.name}=dict(...)) has no value for {sc.strjoin(missing)} (the levels of "{strat.name}" are {sc.strjoin(labels)}).')
                     continue
                 n = len(vals) if isinstance(vals, (list, tuple)) else len(sc.toarray(vals)) if np.ndim(vals) else len(labels) # One value is for every level, e.g. ss.by(subpop=2.2)
                 if n != len(labels):
-                    raise ss.errors.ShapeError(f'ss.by({strat.name}=...) has {len(sc.toarray(vals))} values, but "{strat.name}" has {len(labels)} levels ({sc.strjoin(labels)}).')
+                    raise ValueError(f'ss.by({strat.name}=...) has {len(sc.toarray(vals))} values, but "{strat.name}" has {len(labels)} levels ({sc.strjoin(labels)}).')
         return ds, strats
 
     def split_groups(self, sim):
@@ -1167,7 +1167,7 @@ class by:
                 labels = [str(label) for label in strat.labels]
                 for label in self.table[strat.name]:
                     if str(label) not in labels:
-                        raise ss.errors.ShapeError(f'the table given to ss.by() has "{label}" for "{strat.name}", which is not one of its levels ({sc.strjoin(labels)}).')
+                        raise ValueError(f'the table given to ss.by() has "{label}" for "{strat.name}", which is not one of its levels ({sc.strjoin(labels)}).')
                 out.append([labels.index(str(label)) for label in self.table[strat.name]])
             return np.ravel_multi_index(np.array(out, dtype=int).reshape(len(strats), -1), shape)
         flat = self.cached('grid', index, sim)
@@ -1224,7 +1224,7 @@ class by:
                     if kind == 'keys':
                         labels = [str(label) for label in strat.labels]
                         if str(val) not in labels:
-                            raise ss.errors.ShapeError(f'the table given to ss.by() has "{val}" for "{strat.name}", which is not one of its levels ({sc.strjoin(labels)}).')
+                            raise ValueError(f'the table given to ss.by() has "{val}" for "{strat.name}", which is not one of its levels ({sc.strjoin(labels)}).')
                         ix.append([labels.index(str(val))])
                     elif isnull(val) or strat.edges is None: # People with no value, who are in no group
                         ix.append([])
@@ -1270,7 +1270,7 @@ class by:
                 return n, np.where(level >= 0, level, n)
             return plan
         if kind is None: # Values by position, but no dimension gives the positions
-            raise ss.errors.MissingDimension(f'ss.by() gives values by position along "{dim}", but the sim is not stratified by it: stratify the sim (e.g. stratify=dict({dim}=[...])), or give the values by label (e.g. ss.by({dim}={{label: value}}))')
+            raise sc.KeyNotFoundError(f'ss.by() gives values by position along "{dim}", but the sim is not stratified by it: stratify the sim (e.g. stratify=dict({dim}=[...])), or give the values by label (e.g. ss.by({dim}={{label: value}}))')
         kind, keys = kind
         n = len(keys)
         if strat is not None and strat.edges is None: # A dimension's labels, by name
@@ -1289,7 +1289,7 @@ class by:
         try:
             people[attr]
         except AttributeError:
-            raise ss.errors.UnknownState(f'ss.by() is by "{dim}", which is neither a dimension of the sim nor a property of people{ss.expressions.did_you_mean(dim, list(people.states.keys()))}') from None
+            raise sc.KeyNotFoundError(f'ss.by() is by "{dim}", which is neither a dimension of the sim nor a property of people{ss.expressions.did_you_mean(dim, list(people.states.keys()))}') from None
         if kind == 'edges':
             def plan(uids):
                 raw = some(people[attr].raw, uids)

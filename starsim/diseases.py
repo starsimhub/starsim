@@ -123,7 +123,7 @@ class Disease(ss.Module):
             errormsg = (f'{cls.__name__} declares states or transitions and defines {sc.strjoin(overridden)}, which a declared transition never calls, so it would be silently ignored.\n'
                         f'     A disease whose transmission is written as code subclasses {base} (import starsim.library as ssl); a declared one changes its transitions.')
             raise ss.CapabilityError(errormsg)
-        rebound = [name for name in dict.fromkeys(k for base in cls.__mro__[1:] for k,v in vars(base).items() if isinstance(v, ss.par)) if name in vars(cls) and not isinstance(vars(cls)[name], (ss.par, ss.transitions.Expr))]
+        rebound = [name for name in dict.fromkeys(k for base in cls.__mro__[1:] for k,v in vars(base).items() if isinstance(v, ss.par)) if name in vars(cls) and not isinstance(vars(cls)[name], (ss.par, ss.expressions.Expr))]
         if rebound: # A declared parameter rebound to something else (a method, a number) is dropped from the model, and its transitions keep the base class's parameter, so it would be silently ignored
             name = rebound[0]
             how = (f'give the parameter a function as its value instead, e.g. self.pars.update({name}=self.my_{name}) in __init__(), where my_{name}(sim, uids) returns the value for those agents' if callable(vars(cls)[name]) else
@@ -149,8 +149,8 @@ class Disease(ss.Module):
         if strains is not None and getattr(strains, 'members', None) is not None: # Strains written as diseases of their own
             return ss.strains.attach_members(self, strains, args, pars, kwargs)
         members = ss.transitions.class_members(type(self))
-        declared = (ss.State, ss.Transition, ss.outcome, ss.transitions.Expr, ss.transitions.FlowSum)
-        given = args or members or any((isinstance(v, declared) and not isinstance(v, ss.par)) or key in ss.transitions.Graph.grouped for key,v in kwargs.items()) # Its structure; a parameter's value (e.g. with bounds) is not
+        declared = (ss.State, ss.Transition, ss.outcome, ss.expressions.Expr, ss.transitions.FlowSum)
+        given = args or members or any((isinstance(v, declared) and not isinstance(v, ss.par)) or key in ss.graph.Graph.grouped for key,v in kwargs.items()) # Its structure; a parameter's value (e.g. with bounds) is not
         later = strains is not None or stratify is not None or any(key in kwargs for key in ['init', 'init_n', 'init_prev', 'first']) or any(isinstance(v, ss.par) for v in kwargs.values()) # Only for a declared disease, so its states and transitions follow, from define_states() and define_transitions()
         if given or later:
             names = (_names or ss.utils.caller_names(1)) if given else {} # The names of the variables of the code that made it; or, made by the sim from the transitions it was given, of the code that made the sim
@@ -167,7 +167,7 @@ class Disease(ss.Module):
 
     @property
     def graph(self): # Built when the disease is made (see built_after()); here too, in case something reads it while it is being made
-        """ Its declared states and transitions (`ss.transitions.Graph`), built from what was declared when first needed; None for a disease written as code """
+        """ Its declared states and transitions (`ss.graph.Graph`), built from what was declared when first needed; None for a disease written as code """
         if '_declared' in self.__dict__:
             self.build_graph()
         return self.__dict__.get('_graph')
@@ -208,9 +208,9 @@ class Disease(ss.Module):
         reserved = {key for cls in type(self).__mro__ for key,val in vars(cls).items() if callable(val) or isinstance(val, property)} | set(dir(ss.Module))
         for name,obj in kwargs.items():
             if name in reserved:
-                raise ss.errors.ReservedName(f'"{name}" cannot be used as the name of a state, transition, or result of "{self.name}", since it is an attribute of every module or of {type(self).__name__}. Please choose another name.')
+                raise ValueError(f'"{name}" cannot be used as the name of a state, transition, or result of "{self.name}", since it is an attribute of every module or of {type(self).__name__}. Please choose another name.')
             if not overwrite and (name in d.kwargs or name in d.members):
-                raise ss.errors.DuplicateDeclaration(f'"{name}" is already declared in "{self.name}"; names must be unique within a module (or give overwrite=True to replace it)')
+                raise ValueError(f'"{name}" is already declared in "{self.name}"; names must be unique within a module (or give overwrite=True to replace it)')
             d.kwargs[name] = obj
             self.setattribute(name, obj) # So the declarations that follow can use it, e.g. self.S >> self.I
         d.names.update(names)
@@ -253,7 +253,7 @@ class Disease(ss.Module):
             raise TypeError(errormsg)
         unnamed = [st for st in states if st.name is None]
         if unnamed:
-            raise ss.errors.UnnamedState(f'a state given to define_states() of "{self.name}" has no name: give it one, e.g. ss.State("S"), or give it by keyword, e.g. define_states(S=ss.State())')
+            raise ValueError(f'a state given to define_states() of "{self.name}" has no name: give it one, e.g. ss.State("S"), or give it by keyword, e.g. define_states(S=ss.State())')
         self.declare(states, named, overwrite=overwrite)
         return
 
@@ -294,7 +294,7 @@ class Disease(ss.Module):
         """
         Define results: for a declared disease, sums and ratios of states by name (e.g. `prevalence=I/(S + I + R)`, or `active=(E + I).frac`); otherwise `ss.Result` objects (see `ss.Module.define_results()`)
         """
-        declared = (ss.transitions.Expr, ss.outcome, ss.transitions.FlowSum)
+        declared = (ss.expressions.Expr, ss.outcome, ss.transitions.FlowSum)
         if not kwargs and not any(isinstance(arg, declared) for arg in args):
             return super().define_results(*args)
         if not all(isinstance(arg, declared) for arg in list(args) + list(kwargs.values())):
@@ -304,7 +304,7 @@ class Disease(ss.Module):
         for arg in args:
             if names.get(id(arg)) is None:
                 errormsg = f'a result given to define_results() of "{self.name}" has no name: give it by keyword, e.g. define_results(prevalence=I/N)'
-                raise ss.errors.UnnamedState(errormsg)
+                raise ValueError(errormsg)
         self.declare(args, kwargs, names=names)
         return
 
@@ -357,17 +357,17 @@ class Disease(ss.Module):
                 counted[id(obj)] = obj
             elif isinstance(obj, ss.par):
                 pars[id(obj)] = obj
-            elif isinstance(obj, (ss.State, ss.Transition, ss.transitions.Expr, ss.outcome, ss.transitions.FlowSum)) and depth < 6:
+            elif isinstance(obj, (ss.State, ss.Transition, ss.expressions.Expr, ss.outcome, ss.transitions.FlowSum)) and depth < 6:
                 if getattr(obj, 'module', None) is not None and isinstance(obj, (ss.State, ss.Transition)):
                     owners[id(obj.module)] = obj.module
                 if isinstance(obj, ss.Transition):
                     ends = [st for st in (obj.src or []) + (obj.dst or []) if isinstance(st, ss.State)]
                     endpoints.update(id(st) for st in ends)
                     for st in ends:
-                        ss.transitions.Graph.check_read(st)
+                        ss.graph.Graph.check_read(st)
                 elif isinstance(obj, ss.State) and depth == 0:
                     endpoints.add(id(obj))
-                elif isinstance(obj, ss.transitions.Count):
+                elif isinstance(obj, ss.expressions.Count):
                     counted.update({id(st):st for st in obj.states})
                 for key,val in vars(obj).items():
                     if key != 'module':
@@ -380,7 +380,7 @@ class Disease(ss.Module):
         if not owners:
             return args, members
         members = dict(members)
-        grouped = [obj for key in ss.transitions.Graph.grouped for obj in sc.tolist(members.pop(key, None))]
+        grouped = [obj for key in ss.graph.Graph.grouped for obj in sc.tolist(members.pop(key, None))]
         positional = []
         for obj in list(args) + grouped: # Named first, as keywords, since a copy is not bound to the variable
             name = getattr(obj, 'name', None) or (None if isinstance(obj, ss.State) else (names or {}).get(id(obj)))
@@ -398,17 +398,17 @@ class Disease(ss.Module):
         for key,val in kwargs.items():
             if isinstance(val, ss.par) and val.name_given and val.name == key:
                 exprs = [e for obj in list(args) + list(members.values()) + list(kwargs.values()) if isinstance(obj, ss.Transition) for e in [obj.rate, obj.dur] + sc.tolist(obj.p)]
-                exprs += [obj for obj in list(members.values()) + list(kwargs.values()) if isinstance(obj, ss.transitions.Expr) and obj is not val]
+                exprs += [obj for obj in list(members.values()) + list(kwargs.values()) if isinstance(obj, ss.expressions.Expr) and obj is not val]
                 if any(part is val for part in ss.expressions.nodes(exprs)):
                     errormsg = (f'"{key}" of "{self.name}" is given the parameter "{key}" itself, which its transitions already read, so it is not a result: a result needs a name of its own. '
                                 f'For a result of a parameter, write an expression of it under another name, e.g. {key}_now = 1*{key}')
-                    raise ss.errors.DuplicateDeclaration(errormsg)
+                    raise ValueError(errormsg)
         return
 
     def init_graph(self, args, members, pars, kwargs, names=None):
-        """ Build the graph of declared states and transitions; see `ss.transitions.Graph` """
+        """ Build the graph of declared states and transitions; see `ss.graph.Graph` """
         meta = {key:kwargs.pop(key) for key in ['name', 'label'] if key in kwargs}
-        declared = (ss.State, ss.Transition, ss.outcome, ss.transitions.Expr, ss.transitions.FlowSum, ss.transitions.Transfer)
+        declared = (ss.State, ss.Transition, ss.outcome, ss.expressions.Expr, ss.transitions.FlowSum, ss.dimensions.Transfer)
         timepars = {key:kwargs.pop(key) for key in ss.Timeline.time_args if key in kwargs and not isinstance(kwargs[key], declared)} # A transition can be called "stop"
         pars = sc.mergedicts(pars)
         for key in ['init_prev', 'init', 'init_n']: # The initial conditions can also be given in pars=, as the parameters are
@@ -425,10 +425,10 @@ class Disease(ss.Module):
         def leaves(expr): # Including those inside a parameter that holds an expression, as a dwell time written as an expression is held (e.g. dur=d*ss.days(1), with d = ss.par(ss.lognorm_im(...)))
             for leaf in expr.leaves:
                 yield leaf
-                if isinstance(leaf, ss.par) and isinstance(leaf.raw, ss.transitions.Expr):
+                if isinstance(leaf, ss.par) and isinstance(leaf.raw, ss.expressions.Expr):
                     yield from leaves(leaf.raw)
-        holds_expr = lambda leaf: isinstance(leaf.raw, ss.transitions.Expr) and any(inner is m for inner in leaves(leaf.raw) for m in members.values()) # One holding the class's parameters, copied with them
-        memo = {id(leaf):leaf for val in members.values() if isinstance(val, ss.Transition) for expr in [val.rate, val.dur, getattr(val, 'p_die', None), getattr(val, 'p_stay', None)] + sc.tolist(getattr(val, 'p', None)) if isinstance(expr, ss.transitions.Expr) for leaf in leaves(expr) if isinstance(leaf, ss.par) and not any(leaf is m for m in members.values()) and not holds_members(leaf) and not holds_expr(leaf)}
+        holds_expr = lambda leaf: isinstance(leaf.raw, ss.expressions.Expr) and any(inner is m for inner in leaves(leaf.raw) for m in members.values()) # One holding the class's parameters, copied with them
+        memo = {id(leaf):leaf for val in members.values() if isinstance(val, ss.Transition) for expr in [val.rate, val.dur, getattr(val, 'p_die', None), getattr(val, 'p_stay', None)] + sc.tolist(getattr(val, 'p', None)) if isinstance(expr, ss.expressions.Expr) for leaf in leaves(expr) if isinstance(leaf, ss.par) and not any(leaf is m for m in members.values()) and not holds_members(leaf) and not holds_expr(leaf)}
         members = sc.dcp(members, memo=memo) # Copy class members (together, so they still refer to each other) so instances do not share them; a parameter defined outside the class (rate = ss.par(...) at module level) stays shared, as in the operator form, so it keeps its name
         kwargs = {k:ss.expressions.rebind(v, memo) for k,v in kwargs.items()} # A result given here that reads the class's states reads the copies
         init, init_n = [{k:ss.expressions.rebind(v, memo) for k,v in d.items()} if isinstance(d, dict) else d for d in [init, init_n]] # Likewise a starting value, e.g. init=dict(S=1 - (A - age)/(k*age + A)) with the class's parameters
@@ -437,7 +437,7 @@ class Disease(ss.Module):
         self.check_par_members(args, members, kwargs)
         members = sc.mergedicts(members, kwargs)
         args, members = self.reuse(args, members, names)
-        self.graph = ss.transitions.Graph(self, args, members, init_prev=init_prev, init=init, init_n=init_n, first=first, names=names)
+        self.graph = ss.graph.Graph(self, args, members, init_prev=init_prev, init=init, init_n=init_n, first=first, names=names)
         for name,obj in list(self.graph.states.items()) + list(self.graph.transitions.items()) + list(self.graph.attrs.items()):
             self.setattribute(name, obj) # e.g. sir.S, sir.infection, hiv.cd4
         for tr in list(self.graph.transitions.values()) + list(self.graph.transfers.values()):
@@ -449,7 +449,7 @@ class Disease(ss.Module):
         self.define_pars(**self.graph.pars) # The parameters themselves, so e.g. sir.pars.beta can be the target of ss.modify()
         for key in sc.mergedicts(pars):
             if key not in self.pars:
-                raise ss.errors.UnknownParameter(f'"{self.name}" has no parameter named "{key}". Its parameters are {sc.strjoin(self.pars.keys())}{ss.transitions.did_you_mean(key, self.pars.keys())}')
+                raise sc.KeyNotFoundError(f'"{self.name}" has no parameter named "{key}". Its parameters are {sc.strjoin(self.pars.keys())}{ss.expressions.did_you_mean(key, self.pars.keys())}')
         self.pars.update(pars) # A declared parameter keeps its bounds and name: see ss.Pars
         return
 
@@ -502,7 +502,7 @@ class Disease(ss.Module):
         """
         if self.graph is None:
             errormsg = f'"{self.name}" is written as code ({type(self).__name__}), so it has no states for stratify() to divide; its own code can read a property of people instead, or a sim stratified with sim.stratify() gives people the levels (people.<name>) for a network or a declared module to use'
-            raise ss.errors.Unapplied(errormsg)
+            raise ValueError(errormsg)
         mod = self if inplace else self.copy()
         mod.graph.stratify(**kwargs)
         for strat in mod.graph.strats: # So a dimension can be used in a condition, e.g. where=~sir.vaccinated
@@ -656,7 +656,7 @@ class Disease(ss.Module):
         unknown = [key for key in self.pars if key not in self.graph.pars and key not in self.code_pars] if self.graph is not None else [] # Added after the disease was made, so nothing reads it (TL58: pars.init was ignored)
         if unknown:
             hint = ' The starting values are given when the disease is made, e.g. ss.Disease(..., init=dict(I=0.01)) or init_n=dict(I=100), and cannot be set through pars.' if 'init' in unknown or 'init_n' in unknown else ''
-            raise ss.errors.UnknownParameter(f'"{self.name}" has no parameter named {sc.strjoin(unknown)}, so nothing would read it. Its parameters are {sc.strjoin(self.graph.pars.keys())}{ss.expressions.did_you_mean(unknown[0], self.graph.pars.keys())}{hint}')
+            raise sc.KeyNotFoundError(f'"{self.name}" has no parameter named {sc.strjoin(unknown)}, so nothing would read it. Its parameters are {sc.strjoin(self.graph.pars.keys())}{ss.expressions.did_you_mean(unknown[0], self.graph.pars.keys())}{hint}')
         self.engine = ss.solvers.make_engine(self, sim)
         self.engine.define()
         needs = ss.interventions.memory_needs(sim) if isinstance(sim, ss.Sim) and self.graph is not None and self.graph.transitions else {} # Not a mock sim
@@ -864,7 +864,7 @@ class Disease(ss.Module):
         names = [s if isinstance(s, str) else s.name for s in sc.tolist(states)] if states is not None else [s.name for s in graph.people_states]
         unknown = [name for name in names if name not in graph.states]
         if unknown:
-            raise ss.errors.UnknownState(f'"{self.name}" has no state {sc.strjoin(unknown)}; its states are {sc.strjoin(graph.states.keys())}')
+            raise sc.KeyNotFoundError(f'"{self.name}" has no state {sc.strjoin(unknown)}; its states are {sc.strjoin(graph.states.keys())}')
         age = self.sim.people.age # A plain array of the people, to copy
         raw = np.full(len(age.raw), -1, dtype=ss.dtypes.int)
         for i,name in enumerate(names):
@@ -1474,7 +1474,7 @@ class InfectionLog:
             df['network'] = df['network'].map(lambda v: names.get(v, v))
         if 'network' in df.columns and df['network'].isna().all(): # No route is known (e.g. homogeneous mixing, with no networks): no column of blanks
             df = df.drop(columns='network')
-        df['t'] = [float(t.value) if isinstance(t, ss.dur) and not isinstance(t, ss.datedur) else t for t in df['t']] # Plain numbers (on the disease's own axis), or dates, rather than durations, so times can be subtracted
+        df['t'] = [float(t.value) if isinstance(t, ss.dur) else t for t in df['t']] # Plain numbers (on the disease's own axis), or dates, rather than durations, so times can be subtracted
 
         df = df.sort_values(['t', 'source', 'target'], kind='stable')
         df = df.reset_index(drop=True)

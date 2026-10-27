@@ -288,7 +288,7 @@ class Diagram(str):
 
 
 class Presentation:
-    """ How a graph (`ss.transitions.Graph`) is shown: `describe()`, `diagram()`, `equations()`, and `to_spec()`, which the graph inherits """
+    """ How a graph (`ss.graph.Graph`) is shown: `describe()`, `diagram()`, `equations()`, and `to_spec()`, which the graph inherits """
     def unit_name(self, sim=None):
         """ The unit its numbers are read in: the sim's, or outside a sim, the unit a sim would take from the typed values (as in ss.solvers.choose.init_unit()), if they agree """
         if sim is not None:
@@ -368,7 +368,7 @@ class Presentation:
                 add(name, f'{tr.arrow}   undriven: moved by {sc.strjoin(movers) if movers else "nothing" if sim is not None else "products, deliveries, or code"}')
             else:
                 guess = sc.strjoin(([f'name {tr.guessed["name"]}'] if 'name' in tr.guessed else []) + ([f'acquisition: {tr.guessed["acquisition"]}'] if 'acquisition' in tr.guessed else []), sep='; ')
-                kind = 'density-dependent' if tr.rate is not None and ss.transitions.count_power(tr.rate) > 0 else 'spontaneous' # A rate per person that grows with a number of people, e.g. beta*I.n
+                kind = 'density-dependent' if tr.rate is not None and ss.expressions.count_power(tr.rate) > 0 else 'spontaneous' # A rate per person that grows with a number of people, e.g. beta*I.n
                 if tr.inflow:
                     kind = f'inflow, in total per {unit or "step"}'
                 elif tr.acquisition:
@@ -384,7 +384,7 @@ class Presentation:
                     raw = p.raw
                     dw = engine.dwells.get(name) if engine is not None else None
                     stages = None # The guess of how many stages, if one was made
-                    scaled = ss.transitions.scaled_dist(raw) if tr.dur is not None and isinstance(raw, ss.transitions.Expr) else None # A distribution times a factor, each draw scaled (see Engine.init_dwells())
+                    scaled = ss.transitions.scaled_dist(raw) if tr.dur is not None and isinstance(raw, ss.expressions.Expr) else None # A distribution times a factor, each draw scaled (see Engine.init_dwells())
                     if scaled is not None:
                         raw = scaled[0].raw
                     within = f'time in {" | ".join(s.name for s in tr.src)} ~' # The time people spend in the state before leaving this way
@@ -418,9 +418,9 @@ class Presentation:
                 add('', f'not before {quantity_str(tr.after, "dur", unit)} in {sc.strjoin(s.name for s in tr.src)}')
             if tr.guessed.get('import'):
                 add('', f'imported as {tr.guessed["import"]}', 'guessed')
-            for expr in [tr.rate, tr.dur] + sc.tolist(tr.p): # The other parameters of the transition that are documented or can be fitted, each with its value
+            for expr in [tr.rate, tr.dur] + sc.tolist(tr.p): # The other parameters of the transition that are documented (or labelled) or can be fitted, each with its value
                 for leaf in (expr.leaves if isinstance(expr, Expr) else []):
-                    if isinstance(leaf, par) and (leaf.doc or leaf.source or leaf.bounds is not None) and id(leaf) not in shown:
+                    if isinstance(leaf, par) and (leaf.doc or leaf.source or leaf.label or leaf.bounds is not None) and id(leaf) not in shown:
                         add('', par_str(leaf, leaf.slot if leaf.slot in ['rate', 'dur'] else None, unit), midpoint_guess(leaf))
                         provenance(leaf)
         for name,oc in self.outcomes.items(): # Each outcome as it is defined, e.g. "0.5 × onset, after 4 days (exponential)"
@@ -715,7 +715,7 @@ def check_dt(sim, factor=2, output=False):
             if not isinstance(res, ss.Result) or key.startswith('cum_') or np.ndim(res.values) != 1:
                 continue
             other = fine.results[mod.name][key].values
-            if res.kind == 'flow': # A flow: total it over each of the larger steps (a flow at a time point is over the step that ends there)
+            if res.summarize_by == 'sum': # A flow: total it over each of the larger steps (a flow at a time point is over the step that ends there)
                 a, b = res.values[1:n+1], other[1:n*factor+1].reshape(n, factor).sum(axis=1)
             else: # A stock: at each of the larger steps' time points
                 b = other[::factor]
@@ -914,7 +914,7 @@ def describe_steps(sim, desc):
         for name,tr in mod.graph.transitions.items():
             if tr.contact: # The rate of each person depends on the others, so only its parameters can be converted
                 for leaf in tr.rate.leaves:
-                    if isinstance(leaf, ss.transitions.par) and not leaf.literal and (val := plain(leaf.raw)) is not None:
+                    if isinstance(leaf, ss.expressions.par) and not leaf.literal and (val := plain(leaf.raw)) is not None:
                         desc.add(name, f'{leaf.name} = {val:n} per {unit} → {val*dt:n} per step')
                 continue
             dw = mod.engine.dwells.get(name)
@@ -993,8 +993,9 @@ def edge_label(tr, p, unit):
 
 
 def par_str(p, kind, unit):
-    """ A parameter and its value, with its bounds if it can be fitted, e.g. "beta = 1.9 per day, between 1 and 3" """
-    text = f'{p.name} = {quantity_str(p.raw, kind, unit)}'
+    """ A parameter and its value, with its label if it has one and its bounds if it can be fitted, e.g. "beta (transmission rate) = 1.9 per day, between 1 and 3" """
+    label = f' ({p.label})' if getattr(p, 'label', None) else ''
+    text = f'{p.name}{label} = {quantity_str(p.raw, kind, unit)}'
     if p.bounds is not None:
         val, lo, hi = [quantity_str(v, kind, unit).partition(' ') for v in [p.raw] + list(p.bounds)] # Each as (number, ' ', unit)
         same = lo[2] == hi[2]

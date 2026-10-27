@@ -1112,7 +1112,7 @@ class Unkept(BaseArr):
     """
     A declared disease's time of entering a state (`ti_X`) that is not kept, since the engine does not need it (see `ss.options.keep_times`)
 
-    Setting it does nothing, and reading it raises `ss.errors.TimeNotKept`, which says how to keep it.
+    Setting it does nothing, and reading it raises an `AttributeError` that says how to keep it.
     It takes no memory, and is not one of the module's states.
     """
     def __init__(self, name, mod):
@@ -1120,18 +1120,22 @@ class Unkept(BaseArr):
         self.mod = mod
         return
 
-    @property
-    def values(self):
+    def unkept(self):
+        """ The error for reading it """
         errormsg = (f'{self.mod.name}.{self.name} is not kept, since the engine does not need it (to save memory).\n'
                     f'     Declare the state with ss.State(keep_time=True) to keep it, or set ss.options.keep_times = True before the sim is initialized to keep the time of entering every state.')
-        raise ss.errors.TimeNotKept(errormsg)
+        return AttributeError(errormsg)
+
+    @property
+    def values(self):
+        raise self.unkept()
 
     raw = values
 
-    def __getattr__(self, attr):
+    def __getattr__(self, attr): # Also reached when values or raw raises, since that is an AttributeError
         if attr.startswith('_'): # E.g. __deepcopy__ or __array__, which are looked for
             raise AttributeError(attr)
-        return self.values
+        raise self.unkept()
 
     def __setitem__(self, key, value):
         return # Not kept

@@ -799,9 +799,9 @@ class Module(Base):
         self.results.timevec = self.t.timevec # Store the timevec in the results for plotting; not a Result so don't use ss.ndict.append()
         results = sc.autolist()
         for state in self.auto_state_list:
-            results += ss.Result(state.name, dtype=int, scale=True, label=state.label, kind='stock')
+            results += ss.Result(state.name, dtype=int, scale=True, label=state.label, summarize_by='last')
         for name in self.derived_state_names: # A derived state has no state object, but is counted the same way
-            results += ss.Result(name, dtype=int, scale=True, label=name.capitalize(), kind='stock')
+            results += ss.Result(name, dtype=int, scale=True, label=name.capitalize(), summarize_by='last')
         self.define_results(*results)
         return
 
@@ -895,7 +895,7 @@ class Module(Base):
         """ Tasks to perform at the beginning of the step """
         if self.finalized:
             errormsg = f'The module {self._debug_name} has already been run. Did you mean to copy it before running it?'
-            raise RuntimeError(errormsg)
+            raise ss.AlreadyRunError(errormsg)
         if self.dists is not None and ss.options.crn: # Will be None if no distributions are defined; jumping is a no-op under crn=False (see Dist.jump), so skip the per-dist loop entirely
             self.dists.jump_dt() # Advance random number generators forward for calls on this step
         return
@@ -1012,7 +1012,7 @@ class Module(Base):
         results = {k:res for k,res in self.results.items() if isinstance(res, ss.Result)}
         graph = getattr(self, 'graph', None)
         states = [k for k in (graph.states if graph is not None else [s.name for s in self.auto_state_list] + self.derived_state_names) if k in results]
-        flows = [k for k,res in results.items() if res.kind == 'flow' and '.' not in k] # Not the flows to each destination of a transition with several
+        flows = [k for k,res in results.items() if res.summarize_by == 'sum' and '.' not in k] # Not the flows to each destination of a transition with several
         groups = []
         for key in keys or (['states'] if states else ['all']):
             if key == 'states':

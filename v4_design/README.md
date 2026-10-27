@@ -6,7 +6,7 @@ This folder is the design record of Starsim v4. What governs, and what is curren
 
 1. [constitution.md](constitution.md): the principles every choice is checked against.
 2. [targets.md](targets.md): what v4 has to achieve, model by model.
-3. [design/](design/): the spec, kept in line with the code by `tests/devtests/test_spec.py`.
+3. [design/](design/): the spec, kept in line with the code.
 4. The working plan, now [oct25/plan.md](oct25/plan.md), built from [oct25/backlog.md](oct25/backlog.md) (the review of everything open as of 2026-10-25).
 5. [deferred.md](deferred.md): what was set aside, and "Won't do", what was decided against. What is done is recorded in each plan.
 

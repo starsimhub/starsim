@@ -119,7 +119,7 @@ By default a fit is a best fit, by a method that suits the sim, chosen and print
 
 **Noise.** A stochastic sim is scored at each point by the mean of several runs (4 for a stochastic compartmental sim, 1 for agents), with the same seeds at every point, so the score changes with the values rather than with chance. Optuna is the exception: it takes fresh seeds at each point, since with one seed everywhere its search would find the optimum of that seed's realization.
 
-Every fit says whether it converged (`fit.converged`, `fit.why`), by what the method knows: R-hat and divergences for NUTS, whether separate searches agree for the SciPy optimizers, recent improvement for Optuna (whose spread of trials is never shown as an interval). A best fit at a bound (`AtBound`) and parameters the data can't tell apart (`Unidentifiable`, such as `beta` and the number of contacts) are noted. `method=['optuna', 'nuts']` runs stages, each starting from the last one's best fit, and stops at a stage that doesn't converge.
+Every fit says whether it converged (`fit.converged`, `fit.why`), by what the method knows: R-hat and divergences for NUTS, whether separate searches agree for the SciPy optimizers, recent improvement for Optuna (whose spread of trials is never shown as an interval). A best fit at a bound (`AtBound`) and parameters the data can't tell apart (such as `beta` and the number of contacts) are noted. `method=['optuna', 'nuts']` runs stages, each starting from the last one's best fit, and stops at a stage that doesn't converge.
 
 ## Other questions a fit leads to
 

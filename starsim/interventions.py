@@ -267,11 +267,11 @@ def movers(sim, modname, name):
 
 
 def check_undriven(sim):
-    """ An undriven transition that nothing in the sim names, so nobody moves along it unless custom code does (`ss.errors.UndrivenUnused`) """
+    """ An undriven transition that nothing in the sim names, so nobody moves along it unless custom code does """
     for mod in sim.declared:
         for name,tr in mod.graph.transitions.items():
             if tr.undriven and not movers(sim, mod.name, name):
-                ss.warn(f'"{mod.name}.{name}" ({tr.arrow}) has no rate, duration, or p=, and no product or delivery names it, so only custom code can move people along it', category=ss.errors.UndrivenUnused)
+                ss.warn(f'"{mod.name}.{name}" ({tr.arrow}) has no rate, duration, or p=, and no product or delivery names it, so only custom code can move people along it')
     return
 
 
@@ -577,7 +577,7 @@ class Delivery(ss.products.EventSource, Intervention):
 
     def dims(self, sim=None):
         """ The properties of people that this delivery needs, as stratifications where everyone starts at the first level """
-        Strat = ss.transitions.Strat
+        Strat = ss.dimensions.Strat
         out = []
         if self.holds:
             doses = self.product.doses
@@ -611,7 +611,7 @@ class Delivery(ss.products.EventSource, Intervention):
         def leaves(cond):
             return [] if not isinstance(cond, ss.conditions.Cond) else [cond] if cond.op in ss.conditions.leaves else [l for arg in cond.args for l in leaves(arg)]
         for leaf in leaves(self.on):
-            if isinstance(leaf, ss.conditions.Event) and isinstance(leaf.args[1], ss.transitions.Transfer):
+            if isinstance(leaf, ss.conditions.Event) and isinstance(leaf.args[1], ss.dimensions.Transfer):
                 out.append(f'"{self.name}" is triggered by the transfer "{leaf.args[1].name}", which only agents keep as an event (yet)')
         if self.trace is not None:
             out.append(f'"{self.name}" traces contacts, which only a network of agents keeps')
@@ -655,11 +655,11 @@ class Delivery(ss.products.EventSource, Intervention):
         missing = [n for n in names if n not in declared]
         coded = [n for n in missing if coded_disease(sim, n) is not None]
         if coded and (len(coded) < len(names) or not isinstance(self.product, (ss.Diagnostic, ss.Treatment))): # Several diseases written as code (HP70): a test or a cure by their states, as for strains with courses of their own
-            raise ss.errors.UnknownDisease(f'disease= of "{self.name}" names {sc.strjoin(coded)}, written as code; a delivery for several diseases written as code is a test or a treatment of all of them (and none declared), so give one delivery for each (e.g. disease="{coded[0]}")')
+            raise sc.KeyNotFoundError(f'disease= of "{self.name}" names {sc.strjoin(coded)}, written as code; a delivery for several diseases written as code is a test or a treatment of all of them (and none declared), so give one delivery for each (e.g. disease="{coded[0]}")')
         missing = [n for n in missing if n not in coded]
         if missing:
             known = f'the declared diseases are {sc.strjoin(declared)}' if declared else 'it has no declared diseases'
-            raise ss.errors.UnknownDisease(f'disease= of "{self.name}" names {sc.strjoin(missing)}, which {"is not a disease" if len(missing) == 1 else "are not diseases"} in the sim; {known}.')
+            raise sc.KeyNotFoundError(f'disease= of "{self.name}" names {sc.strjoin(missing)}, which {"is not a disease" if len(missing) == 1 else "are not diseases"} in the sim; {known}.')
         self.disease_list = names
         self.disease = names[0]
         self.product.key_by([sim.diseases[n] if n in coded else sim.get_declared(n) for n in names])
@@ -698,10 +698,10 @@ class Delivery(ss.products.EventSource, Intervention):
         if self.disease is None:
             own = self.product is not None and type(self.product).administer is not ss.Product.administer # A product written as code acts on what its code says, so any disease written as code can evaluate the conditions
             if len(declared) != 1 and not (not declared and (len(coded) == 1 or (own and coded))):
-                raise ss.errors.UnknownDisease(f'"{self.name}" needs to know which disease it is for, and the sim has {len(declared) or "no"} declared diseases{" (" + sc.strjoin(declared) + ")" if declared else ""}{" and " + sc.strjoin(coded) + " written as code" if coded else ""}. Use disease=.')
+                raise sc.KeyNotFoundError(f'"{self.name}" needs to know which disease it is for, and the sim has {len(declared) or "no"} declared diseases{" (" + sc.strjoin(declared) + ")" if declared else ""}{" and " + sc.strjoin(coded) + " written as code" if coded else ""}. Use disease=.')
             self.disease = declared[0] if declared else coded[0]
         elif self.disease not in declared + coded:
-            raise ss.errors.UnknownDisease(f'"{self.name}" has disease="{self.disease}", which is not a disease in the sim; these are {sc.strjoin(declared + coded)}.')
+            raise sc.KeyNotFoundError(f'"{self.name}" has disease="{self.disease}", which is not a disease in the sim; these are {sc.strjoin(declared + coded)}.')
         self._coded = self.disease in coded
         if self._coded:
             self.check_coded(sim)
@@ -710,7 +710,7 @@ class Delivery(ss.products.EventSource, Intervention):
         elif self.product is not None and self.product.disease != self.disease and not (self.holds and len(self.product.disease_effects(sim)) > 1): # One product for one disease, unless its efficacy is keyed by disease (HP7)
             errormsg = (f'the product "{self.product.name}" of "{self.name}" acts on "{self.product.disease}", so "{self.name}" cannot deliver it for "{self.disease}" alone.\n'
                         f'     For a product that acts on both, deliver it once with disease=[\'{self.product.disease}\', \'{self.disease}\'] (or key its values by disease); otherwise make one product for each disease.')
-            raise ss.errors.UnknownDisease(errormsg)
+            raise sc.KeyNotFoundError(errormsg)
         self.edges = self.product.resolve(sim, self.disease) if isinstance(self.product, ss.Treatment) else [] # What a treatment that cures moves people along
         self.init_events(sim)
         super().init_pre(sim)
@@ -720,7 +720,7 @@ class Delivery(ss.products.EventSource, Intervention):
             errormsg = (f'The capacity= of "{self.name}" is an ss.by(), but capacity is a total: the number that can be delivered across everyone, shared between strata in proportion to those eligible. '
                         f'For a capacity in each stratum (e.g. each district), make one delivery for each, with who= its stratum and its own capacity=; or give capacity= as a function of the sim.')
             raise ValueError(errormsg)
-        if self.routine and (sc.isnumber(cap) or (isinstance(cap, ss.transitions.timeseries) and all(sc.isnumber(v) for v in cap.values))): # A count per round or per step is clear; for routine delivery, which has neither, a number needs a unit of time
+        if self.routine and (sc.isnumber(cap) or (isinstance(cap, ss.parameters.timeseries) and all(sc.isnumber(v) for v in cap.values))): # A count per round or per step is clear; for routine delivery, which has neither, a number needs a unit of time
             errormsg = f'The capacity= of "{self.name}" is a bare number, but routine delivery has no rounds for it to be a number per round: give it as a rate, e.g. capacity=ss.perday({cap if sc.isnumber(cap) else "..."}) or ss.peryear(...)'
             raise ValueError(errormsg)
         if self.trace is not None:
@@ -751,7 +751,7 @@ class Delivery(ss.products.EventSource, Intervention):
             states = self.dis.graph.states
             for name in self.move_names:
                 if name not in states or not states[name].people:
-                    raise ss.errors.UnknownState(f'move= of "{self.name}" names "{name}", which is not a state of people of "{self.dis.name}"; its states are {sc.strjoin(k for k,v in states.items() if v.people)}')
+                    raise sc.KeyNotFoundError(f'move= of "{self.name}" names "{name}", which is not a state of people of "{self.dis.name}"; its states are {sc.strjoin(k for k,v in states.items() if v.people)}')
         self.strain_move = None # With strain=: the level of the disease's strain dimension that people arrive at, as (dimension index, level)
         if self.strain is not None:
             dst = self.move_states[1]
@@ -760,7 +760,7 @@ class Delivery(ss.products.EventSource, Intervention):
                 raise ss.CapabilityError(f'strain= of "{self.name}" is "{self.strain}", but people in {dst} of "{self.dis.name}" carry no strain; move them to a state of an infection, e.g. move=S >> E')
             strains = strat.strains
             if self.strain not in strains.names:
-                raise ss.errors.UnknownState(f'strain= of "{self.name}" is "{self.strain}", which is not a strain of "{self.dis.name}"; its strains are {sc.strjoin(strains.names)}')
+                raise sc.KeyNotFoundError(f'strain= of "{self.name}" is "{self.strain}", which is not a strain of "{self.dis.name}"; its strains are {sc.strjoin(strains.names)}')
             self.strain_move = (sim.groups.dim_index(strat.name), strains.level_of([strains.names.index(self.strain)]))
         self.changes = {} # For a transfer: the level in each dimension that people move to, and the one they move from (if given)
         self.sources = {}
@@ -806,7 +806,7 @@ class Delivery(ss.products.EventSource, Intervention):
             raise ss.CapabilityError(f'"{self.name}" moves people between states of "{dis.name}", which is written as code, so has no declared states; a delivery for it can test (the state "infected", or results by its states), cure (clear_infection(), of all its infected or by state), or protect (rel_sus and rel_trans)')
         for attr,what in needs:
             if not hasattr(dis, attr):
-                raise ss.errors.UnknownEffect(f'"{self.name}" is for "{dis.name}", which is written as code and has no "{attr}": {what}')
+                raise sc.KeyNotFoundError(f'"{self.name}" is for "{dis.name}", which is written as code and has no "{attr}": {what}')
         return
 
     def trigger_disease(self, sim):
@@ -832,21 +832,21 @@ class Delivery(ss.products.EventSource, Intervention):
         super().init_results()
         abm = self.sim.solver == 'abm'
         results = [
-            ss.Result('delivered', dtype=float, scale=abm, label='Number delivered', kind='flow'),
-            ss.Result('eligible', dtype=float, scale=abm, label='Number eligible', kind='flow', auto_plot=False), # Those offered it in each step, so over the run the offers made, of which coverage is the share delivered (it was summarized as a mean over every step)
+            ss.Result('delivered', dtype=float, scale=abm, label='Number delivered', summarize_by='sum'),
+            ss.Result('eligible', dtype=float, scale=abm, label='Number eligible', summarize_by='sum', auto_plot=False), # Those offered it in each step, so over the run the offers made, of which coverage is the share delivered (it was summarized as a mean over every step)
             ss.Result('coverage', dtype=float, scale=False, label='Coverage of those eligible', auto_plot=False),
         ]
         if self.cost is not None:
-            results += [ss.Result('cost', dtype=float, scale=abm, label='Cost', kind='flow')]
+            results += [ss.Result('cost', dtype=float, scale=abm, label='Cost', summarize_by='sum')]
         if self.capacity is not None:
-            results += [ss.Result('lost_capacity', dtype=float, scale=abm, label='Number not reached for lack of capacity', kind='flow', auto_plot=False)]
+            results += [ss.Result('lost_capacity', dtype=float, scale=abm, label='Number not reached for lack of capacity', summarize_by='sum', auto_plot=False)]
         labels = dict(positive='Number testing positive', negative='Number testing negative', cured='Number cured', failed='Number treated and not cured', unneeded='Number treated who were not infected', never_ran='Number who left the queue unserved')
-        results += [ss.Result(o, dtype=float, scale=abm, label=labels.get(o, f'Number with result {o}'), kind='flow', auto_plot=o in ['positive', 'cured']) for o in self.outcome_names()]
+        results += [ss.Result(o, dtype=float, scale=abm, label=labels.get(o, f'Number with result {o}'), summarize_by='sum', auto_plot=o in ['positive', 'cured']) for o in self.outcome_names()]
         if self.queue is not None:
             results += [
                 ss.Result('waiting', dtype=float, scale=abm, label='Number waiting'),
                 ss.Result('waited', dtype=float, scale=False, label='Mean time waited, of those served', auto_plot=False),
-                ss.Result('left', dtype=float, scale=abm, label='Number who left the queue when no longer eligible', kind='flow', auto_plot=False),
+                ss.Result('left', dtype=float, scale=abm, label='Number who left the queue when no longer eligible', summarize_by='sum', auto_plot=False),
             ]
         self.by_edge = dict() # For a treatment that moves people along several transitions: the results for each, as {key: {(disease, transition): result}}
         if len(self.edges) > 1:
@@ -854,7 +854,7 @@ class Delivery(ss.products.EventSource, Intervention):
             diseases = list(dict.fromkeys(e.dis for e in self.edges))
             for key in ['cured', 'failed', 'unneeded']:
                 keys = (pairs if len(pairs) > 1 else []) if key != 'unneeded' else [(dis, None) for dis in diseases] if len(diseases) > 1 else []
-                parts = {k:ss.Result(f'{key}_{"_".join(n for n in k if n)}', dtype=float, scale=abm, label=f'{labels[key]} ({".".join(n for n in k if n)})', kind='flow', auto_plot=False) for k in keys}
+                parts = {k:ss.Result(f'{key}_{"_".join(n for n in k if n)}', dtype=float, scale=abm, label=f'{labels[key]} ({".".join(n for n in k if n)})', summarize_by='sum', auto_plot=False) for k in keys}
                 results += list(parts.values())
                 self.by_edge[key] = parts
         self.define_results(*results)
@@ -1414,7 +1414,7 @@ class Delivery(ss.products.EventSource, Intervention):
         out = 0.0
         for name,val in values.items():
             if name not in states or not states[name].people:
-                raise ss.errors.UnknownState(f'{what} has a value for "{name}", which is not a state of people of "{eng.mod.name}". Its states are {sc.strjoin(k for k,v in states.items() if v.people)}.')
+                raise sc.KeyNotFoundError(f'{what} has a value for "{name}", which is not a state of people of "{eng.mod.name}". Its states are {sc.strjoin(k for k,v in states.items() if v.people)}.')
             out = out + selector.in_states([name])*selector.everyone()*selector.per_person(val)
         return out
 

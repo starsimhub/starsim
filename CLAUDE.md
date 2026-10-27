@@ -97,9 +97,9 @@ uv add starsim[dev]  # With dev dependencies
 - `strains.py`: Strains (`ss.Strains`) and immunity between them (`ss.immunity`)
 - `time.py`: Durations and rates (`ss.dur`, `ss.days`, `ss.peryear`, `ss.probperyear`, etc.), and plotting dates and durations with Matplotlib
 - `timeline.py`: Time coordination between modules (`ss.Timeline`)
-- `transitions.py`: States and transitions (`ss.State`, `ss.states()`, `ss.Transition` and its `S >> I @ rate` spelling, ...); the names of the modules above that it builds on are also `ss.transitions.X`
+- `transitions.py`: States and transitions (`ss.State`, `ss.states()`, `ss.Transition` and its `S >> I @ rate` spelling, ...); the names it builds on are spelled by their own modules (`ss.expressions.Expr`, `ss.graph.Graph`, `ss.dimensions.Strat`, ...)
 - `utils.py`: Helper functions
-- `internals/`: How Starsim works under the hood, each also at the top level (`ss.errors`, `ss.spec`, ...): `graph.py` (the graph of a declared module: its states, transitions, and parameters, completed with defaults and checked; `ss.transitions.Graph`), `presentation.py` (how it is shown: `describe()`, `diagram()`, `equations()`), `spec.py` (the model spec, and models written as code: `sim.to_code()`, `ss.diff()`), `expressions.py` (expressions in rates and results, `ss.par`, and how they are evaluated and printed), `gradients.py` (gradients and log-densities in JAX: `sim.gradient()`, `sim.log_density()`), `errors.py` (errors, warnings, and notes, as classes, e.g. `ss.errors.UnknownState`; the base classes and `ss.CapabilityError` are also at the root), `debugtools.py` (profiling, debugging, and mock objects for testing), and `cli.py` (the `starsim` command)
+- `internals/`: How Starsim works under the hood, each also at the top level (`ss.errors`, `ss.spec`, ...): `graph.py` (the graph of a declared module: its states, transitions, and parameters, completed with defaults and checked; `ss.graph.Graph`), `presentation.py` (how it is shown: `describe()`, `diagram()`, `equations()`), `spec.py` (the model spec, and models written as code: `sim.to_code()`, `ss.diff()`), `expressions.py` (expressions in rates and results, `ss.par`, and how they are evaluated and printed), `gradients.py` (gradients and log-densities in JAX: `sim.gradient()`, `sim.log_density()`), `errors.py` (the few errors and warnings that are classes, e.g. `ss.CapabilityError` and `ss.errors.AtBound`, and `ss.note()`), `debugtools.py` (profiling, debugging, and mock objects for testing), and `cli.py` (the `starsim` command)
 - `perflib/`: Machinery for speed: `kernels.py` (the Numba kernels that run compartmental models; also `ss.kernels`), `draws.py` (exact draws in Numba), `passes.py` (compiled passes over the agents), `chain.py` (the chain binomial in JAX), `jit.py` (`ss.jit`; `ss.perflib.jit` is the function), `cache.py`, and `memory.py`
 - `interop/`: Importers and exporters for other modeling frameworks
 
@@ -113,7 +113,7 @@ Core disease base classes (Disease, Infection, NCD, SIR, SIS, SEIR) live in `sta
 
 ### Testing (`tests/`)
 - `test_*.py`: Core test files (about 300 tests, under a minute in parallel); keep new tests here few and quick
-- `devtests/`: Developer tests (contracts, inference, the spec, errors, interop, and slower feature tests), in files named like the core ones
+- `devtests/`: Developer tests (contracts, inference, errors, interop, and slower feature tests), in files named like the core ones
 - `run_tests`: Main test runner script
 - `pytest.ini`: Pytest configuration
 

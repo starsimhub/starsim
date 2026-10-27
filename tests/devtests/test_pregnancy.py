@@ -132,7 +132,7 @@ def test_burnin():
     # The TFR and ASFR, as in Starsim 3: about the fertility rate over the ages women can conceive at (against compartments once P.time can run as them: Phase B1)
     tfr = abm.results.pregnancy.tfr[13:25].mean() # Per year at each step, whatever the step (with monthly steps, it was the TFR of the month)
     assert 2.5 < tfr < 3.5, f'TFR {tfr}'
-    assert abm.results.pregnancy.tfr.kind == 'ratio' # So it is averaged over time, not summed
+    assert abm.results.pregnancy.tfr.summarize_by == 'mean' # So it is averaged over time, not summed
     asfr = abm.demographics.pregnancy.asfr
     assert asfr.shape == (11, len(abm.timevec)) and asfr[:3, 24].sum() == 0 and asfr[4, 24] > 50 # None under 15; per 1000 women, over a year
 
@@ -331,7 +331,7 @@ def test_code_pars():
     base = ss.Sim(demographics=ss.Pregnancy(fertility_rate=ss.freqperyear(100)), n_agents=5000, **kw).run()
     half = ss.Sim(demographics=FP(fertility_rate=ss.freqperyear(100)), n_agents=5000, **kw).run()
     assert half.results.pregnancy.conception.sum() < 0.7*base.results.pregnancy.conception.sum()
-    with pytest.raises(ss.errors.UnknownParameter): # A misspelled parameter from the user is still an error
+    with pytest.raises(KeyError, match='has no parameter named age_scal'): # A misspelled parameter from the user is still an error
         FP(age_scal=0.3)
     with pytest.raises(ss.CapabilityError, match='conception_rate'): # A method of Starsim 3's pregnancy, which would never be called
         class V3(ss.Pregnancy):
@@ -339,7 +339,7 @@ def test_code_pars():
                 return 0
     preg = ss.Pregnancy()
     preg.pars['rel_fertilty'] = 2 # ... and so is one added later that nothing reads
-    with pytest.raises(ss.errors.UnknownParameter, match='nothing would read it'):
+    with pytest.raises(KeyError, match='nothing would read it'):
         ss.Sim(demographics=preg, n_agents=500, **kw).init()
     return half
 

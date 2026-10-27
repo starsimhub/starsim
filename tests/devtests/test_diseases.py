@@ -449,7 +449,7 @@ def test_coded_modifiers():
     assert (d.affected & ppl.male & ~ppl.housing).sum() > 100
     assert np.isclose(ppl.housing.mean(), 0.5, atol=0.05)
     Condition.reads_modifiers = ()
-    with pytest.raises(ss.errors.Unapplied, match='reads_modifiers'):
+    with pytest.raises(ValueError, match='reads_modifiers'):
         cond = Condition(name='cond')
         ss.Sim(diseases=cond, interventions=ss.modify(cond.rel_sus, multiply=0.0), n_agents=100, start=2000, stop=2001, verbose=0).init()
 

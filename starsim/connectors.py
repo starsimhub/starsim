@@ -42,7 +42,7 @@ def parse_target(target):
     """ Work out what a modifier changes: returns the module (or its name), the kind of quantity, and its name """
     if isinstance(target, ss.par):
         if target.module is None:
-            raise ss.errors.UnmodifiableTarget('the target of ss.modify() is a parameter that does not belong to a module yet; build the module first, then use e.g. sir.pars.beta.')
+            raise sc.KeyNotFoundError('the target of ss.modify() is a parameter that does not belong to a module yet; build the module first, then use e.g. sir.pars.beta.')
         return target.module, 'par', target.name
     elif isinstance(target, Target):
         return target.module, target.kind, target.name
@@ -52,7 +52,7 @@ def parse_target(target):
         return target.engine.mod, target.name, None
     elif isinstance(target, ss.Arr) and target.name in ['rel_sus', 'rel_trans'] and target.mod is not None: # Of a disease written as code, e.g. hiv.rel_trans
         return target.mod, target.name, None
-    elif isinstance(target, (ss.Transition, ss.transitions.Transfer)) and getattr(target, 'module', None) is not None: # A transfer's rate is modified as a transition's is
+    elif isinstance(target, (ss.Transition, ss.dimensions.Transfer)) and getattr(target, 'module', None) is not None: # A transfer's rate is modified as a transition's is
         return target.module, 'transition', target.name
     elif isinstance(target, ss.networks.Route) and target.name and 'n_contacts' in target.pars: # A network or a contact layer means its number of contacts, as "school.pars.n_contacts"
         return target.name, 'par', 'n_contacts'
@@ -63,7 +63,7 @@ def parse_target(target):
             return parts[0], 'transition', '.'.join(parts[1:])
         return parts[0], kind, None if kind in ['rel_sus', 'rel_trans'] else parts[-1]
     what = 'a value' if isinstance(target, (ss.TimePar, ss.Dist)) else 'a plain number' if sc.isnumber(target) else 'an object'
-    raise ss.errors.UnmodifiableTarget(f'the target of ss.modify() must be a named quantity, such as sir.pars.beta, sir.rel_sus, sir.recovery, or "sir.pars.beta", not {target} ({type(target).__name__}), which is {what} with no name to refer to.\n'
+    raise sc.KeyNotFoundError(f'the target of ss.modify() must be a named quantity, such as sir.pars.beta, sir.rel_sus, sir.recovery, or "sir.pars.beta", not {target} ({type(target).__name__}), which is {what} with no name to refer to.\n'
                                 f'     (A parameter of a network is named by its path, e.g. ss.modify("randomnet.pars.n_contacts", multiply=0.5), or its contacts by the network itself. A parameter of a disease written as code is a plain value, read by its own code, so it cannot be modified; its rel_sus and rel_trans can be, e.g. ss.modify(hiv.rel_trans, multiply=0.5).)')
 
 
@@ -124,10 +124,10 @@ def to_ti(sim, val, name='time', after=False):
         if sc.isnumber(val) and sim.t.is_absolute:
             hint = f"; a number is a time in the sim's unit ({sim.unit_base}s) since the start, or a year within the sim"
         when = f'{val}, which is {time}' if sc.isnumber(val) and not (sim.t.is_absolute and ss.time.assume_cal_year(val)) else f'{val}'
-        raise ss.errors.TimeOutsideSim(f'{name} ({when}) is outside the sim ({tvec[0]} to {tvec[-1]}){hint}.')
+        raise ValueError(f'{name} ({when}) is outside the sim ({tvec[0]} to {tvec[-1]}){hint}.')
     ti = next((ti for ti,now in enumerate(tvec) if reached(now, time)), len(tvec)) # len(tvec) if after the end
     if ti >= len(tvec) - 1 and not after: # The last time point records the end of the run: no step starts there, so nothing timed then would happen
-        raise ss.errors.TimeOutsideSim(f'{name} ({val}) is after the start of the last step ({tvec[-2]}), so it would never happen: the last time point ({tvec[-1]}) is the end of the run, where no step starts. Give an earlier time, or a later stop.')
+        raise ValueError(f'{name} ({val}) is after the start of the last step ({tvec[-2]}), so it would never happen: the last time point ({tvec[-1]}) is the end of the run, where no step starts. Give an earlier time, or a later stop.')
     return ti + 1 # The step from that time point
 
 
@@ -144,7 +144,7 @@ def combine(mods, value, engine):
     sets = [mod.name for mod in active if mod.op == 'set']
     if len(sets) > 1 and (sets[0], sets[1]) not in engine.sim.overlaps: # Said once
         engine.sim.overlaps.append((sets[0], sets[1]))
-        ss.note(f'the modifiers {sc.strjoin(sets)} both set the same quantity at the same time; the last one wins', ss.errors.OverlappingSet, sim=engine.sim)
+        ss.note(f'the modifiers {sc.strjoin(sets)} both set the same quantity at the same time; the last one wins', sim=engine.sim)
     for op in ['set', 'multiply', 'add']:
         for mod in active:
             if mod.op == op:
@@ -204,7 +204,7 @@ def route_mult(engine, name, route, inds, trg):
 
 def check_applied(sim):
     """
-    Raise `ss.errors.Unapplied` for any modifier, change, or efficacy of a product that nothing in the sim would apply, naming it and why
+    Raise a `ValueError` for any modifier, change, or efficacy of a product that nothing in the sim would apply, naming it and why
 
     Called once by `sim.init()`, after every module has registered its modifiers in `sim.modifiers` (by module, kind of
     quantity, and name). For each quantity modified, the module it belongs to says whether it reads it: a declared module
@@ -224,7 +224,7 @@ def check_applied(sim):
             continue
         if why:
             path = f'{modname}.pars.{name}' if kind == 'par' else f'{modname}.{name or kind}'.split('@')[0]
-            raise ss.errors.Unapplied(f'{sc.strjoin(describe_mod(m) for m in mods)} on {path} would not be applied by any solver: {why}')
+            raise ValueError(f'{sc.strjoin(describe_mod(m) for m in mods)} on {path} would not be applied by any solver: {why}')
     return
 
 
@@ -459,9 +459,9 @@ class modify(Connector):
                 kind = 'transition' if (name in graph.transitions or name in graph.transfers) else 'attr' if name in graph.attrs else 'par'
             found = kind in ['rel_sus', 'rel_trans'] or (kind == 'par' and name in mods[modname].pars) or (kind == 'transition' and (name in graph.transitions or name in graph.transfers or graph.destination(name) is not None)) or (kind == 'attr' and name in graph.attrs)
         if not found:
-            raise ss.errors.UnmodifiableTarget(f'the target of the modifier "{self.name}", {self.target}, was not found. Quantities that can be modified: {sc.strjoin(options)}{ss.transitions.did_you_mean(self.target, options)}')
+            raise sc.KeyNotFoundError(f'the target of the modifier "{self.name}", {self.target}, was not found. Quantities that can be modified: {sc.strjoin(options)}{ss.expressions.did_you_mean(self.target, options)}')
         if kind == 'transition' and getattr(graph.transitions.get(name), 'trigger', None) is not None:
-            raise ss.errors.UnmodifiableTarget(f'the modifier "{self.name}" targets {self.target}, which is triggered by {graph.transitions[name].trigger} and has no rate to scale; use where= on the transition, or a p= branch.')
+            raise sc.KeyNotFoundError(f'the modifier "{self.name}" targets {self.target}, which is triggered by {graph.transitions[name].trigger} and has no rate to scale; use where= on the transition, or a p= branch.')
         if kind == 'transition' and name in graph.transitions:
             ss.strains.refuse_by_strain(next((s for s in graph.strats if s.kind == 'strain'), None), graph.transitions[name], self.amount, f'the modifier "{self.name}" of {self.target}')
         if kind == 'transition' and not getattr(self, 'on_rate', False):
@@ -479,7 +479,7 @@ class modify(Connector):
             routes = list(sim.all_networks())
             for route in self.route:
                 if route not in routes:
-                    raise ss.errors.RouteMismatch(f'route= of the modifier "{self.name}" names "{route}", which is not a route of the sim; the routes are {sc.strjoin(routes) or "none"}')
+                    raise ValueError(f'route= of the modifier "{self.name}" names "{route}", which is not a route of the sim; the routes are {sc.strjoin(routes) or "none"}')
             kind = 'route'
         if self.op != 'multiply' and kind != 'par': # A per-person quantity or a rate is a multiplier on each person's own value, which set= or add= would replace
             what = 'each person\'s own value' if kind in ['rel_sus', 'rel_trans'] else 'the rate (or probability) worked out for each person and group'
@@ -512,8 +512,8 @@ class modify(Connector):
     @property
     def fixed_amount(self):
         """ Whether the amount depends at most on time: not a function of the sim, nor an expression that reads states (e.g. `1 - 0.7*b.R.frac`), which is worked out at each step """
-        timed = lambda val: not callable(val) or isinstance(val, ss.transitions.TimeValue)
-        if isinstance(self.amount, ss.transitions.Expr):
+        timed = lambda val: not callable(val) or isinstance(val, ss.parameters.TimeValue)
+        if isinstance(self.amount, ss.expressions.Expr):
             return all(isinstance(leaf, ss.par) and timed(leaf.raw) for leaf in self.amount.leaves)
         return timed(self.amount)
 
@@ -574,7 +574,7 @@ class modify(Connector):
     @property
     def per_edge(self):
         """ Whether its share is a function of the network, one value per edge """
-        return self.route is not None and callable(self.share) and not isinstance(self.share, (ss.transitions.TimeValue, ss.Dist))
+        return self.route is not None and callable(self.share) and not isinstance(self.share, (ss.parameters.TimeValue, ss.Dist))
 
     def apply(self, value, engine):
         """ Apply the modifier to a value, for the people it applies to """
@@ -585,7 +585,7 @@ class modify(Connector):
             if engine.selector.abm: # Only the people alive now: the spare slots in the arrays, for people not yet born, hold NaN
                 check = check[engine.sim.people.auids]
             if np.isnan(check).any():
-                raise ss.errors.ClockOutsideDomain(f'the amount of the modifier "{self.name}" is NaN for some of the people it applies to: {self.nan_sources()}')
+                raise ValueError(f'the amount of the modifier "{self.name}" is NaN for some of the people it applies to: {self.nan_sources()}')
         if mask is not None and self.hold is not None:
             mask = self.held_mask(mask, engine)
         if mask is None:
@@ -639,7 +639,7 @@ class modify(Connector):
         out = super().to_spec()
         out.update(type=type(self).__name__, target=self.target, multiply=None, add=None, set=None,
                    start=None if self.start is None else str(self.start), stop=None if self.stop is None else str(self.stop))
-        spec = lambda val: val if sc.isnumber(val) else ss.presentation.quantity_json(val, None, None) if callable(val) or isinstance(val, (ss.transitions.TimeValue, ss.by)) else str(val) # A function with its source, as in a disease
+        spec = lambda val: val if sc.isnumber(val) else ss.presentation.quantity_json(val, None, None) if callable(val) or isinstance(val, (ss.parameters.TimeValue, ss.by)) else str(val) # A function with its source, as in a disease
         out['efficacy' if self.efficacy is not None else self.op] = spec(self.amount)
         if self.share is not None:
             out['share'] = spec(self.share)

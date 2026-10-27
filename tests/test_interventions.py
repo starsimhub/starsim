@@ -161,7 +161,7 @@ def test_campaign_delivery():
     assert np.all(np.diff(n_screened[on]) > 0), 'Expected each round to reach its own coverage'
 
     # A campaign after the sim ends
-    with pytest.raises(ss.errors.TimeOutsideSim):
+    with pytest.raises(ValueError, match='is outside the sim'):
         ss.Sim(pars, interventions=ss.screen(make_dx(), coverage=0.5, at=[2030], name='screening')).init()
     return sim
 

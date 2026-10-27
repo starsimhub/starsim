@@ -62,13 +62,13 @@ def test_clocks():
 
     # Errors: outside the domain, and no scheduled dwell; as compartments, see test_conveyor.py
     S, A, B, C = ss.states('S A B C')
-    with pytest.raises(ss.errors.ClockOutsideDomain):
+    with pytest.raises(ValueError, match='which has a value only for people in B, but moves people from S'):
         ss.Disease(S, A, B, C, ab=A >> B @ ss.days(4), sc_=ss.Transition(S, C, rate=ss.perday(1)*(B.time > 1)))
     d, ab = make()
-    with pytest.raises(ss.errors.ClockOutsideDomain):
+    with pytest.raises(ValueError, match='but applies to everyone'):
         ss.Sim(d, connectors=ss.modify(d.bc, multiply=ab.time/ss.days(1)), n_agents=100, **kw).init()
     S, A, B, C = ss.states('S A B C')
-    with pytest.raises(ss.errors.NoScheduledDwell):
+    with pytest.raises(ValueError, match='so no dwell time is scheduled'):
         ss.Disease(S, A, B, C, ab=A >> B @ ss.perday(0.2), bc=ss.Transition(A, C, rate=ss.perday(1)*A.progress))
     d, ab = make()
     with pytest.raises(ss.CapabilityError):

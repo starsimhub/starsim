@@ -453,7 +453,7 @@ class MultiSim:
         """
         A table of each result over the whole of each run, across the runs: the median, an interval, the mean, and the standard deviation
 
-        Each result is first summarized over each run by its kind (see `sim.summarize()`): a flow (e.g. infections) by its
+        Each result is first summarized over each run by its `summarize_by` (see `sim.summarize()`): a flow (e.g. infections) by its
         total, a stock (e.g. the number recovered) by its final value, and a ratio (e.g. prevalence) by its mean. Results
         that are 0 throughout are left out.
 
@@ -489,6 +489,8 @@ class MultiSim:
             if not np.any(res.values): # E.g. deaths in a model without them
                 continue
             func = how.get(key, how.get(''))
+            if func is None and res.summarize_by is None: # Not summarized over time
+                continue
             if func is None:
                 arr = np.asarray(res.summarize(), dtype=float) # One value per run
             else:
@@ -547,6 +549,8 @@ class MultiSim:
         resdict = {label:{} for label in labels}
         for key,res in self.results.flatten(sep='_', columns=True).items():
             if t is None:
+                if res.summarize_by is None: # Not summarized over time
+                    continue
                 vals = np.asarray(res.summarize())
             else:
                 ti = t if sc.isnumber(t) else sc.findnearest(res.convert_timevec().years, year) # Nearest timestep to the date, using the result's own timevec since modules can have different dt
@@ -853,7 +857,7 @@ class MultiResults(ss.Results):
         times = [sim.t.tvec for sim in sims]
         if any(len(t) != len(times[0]) or np.any(t != times[0]) for t in times[1:]): # Results at different times cannot be stacked as runs of one thing
             steps = sc.strjoin(f'"{sim.label}": {len(t)} steps of {sim.t.dt}' for sim,t in zip(sims, times))
-            raise ss.errors.ShapeError(f'the sims have results at different times ({steps}), so they cannot be put together as runs of one MultiSim. Give them the same start, stop, and dt.')
+            raise ValueError(f'the sims have results at different times ({steps}), so they cannot be put together as runs of one MultiSim. Give them the same start, stop, and dt.')
         entries = {}
         for sim in sims: # Every result of any run, e.g. of an intervention only one scenario has
             entries |= {(None, key):res for key,res in sim.results.items() if isinstance(res, ss.Result) and (None, key) not in entries}

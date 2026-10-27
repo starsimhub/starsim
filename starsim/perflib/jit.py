@@ -101,7 +101,7 @@ class Function:
         """ Say once, in one line, how it runs instead, and why """
         if not self.said:
             self.said = True
-            ss.note(f'ss.jit: {self.py_func.__qualname__}() runs {runs}, since {why}', ss.errors.NotCompiled)
+            ss.note(f'ss.jit: {self.py_func.__qualname__}() runs {runs}, since {why}')
         return
 
     def __call__(self, *args, **kwargs):

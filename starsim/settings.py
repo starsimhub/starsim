@@ -128,7 +128,7 @@ class Options(sc.objdict):
         optdesc.crn = 'If True (default), use common random numbers (CRN) for reproducibility across scenarios. Set False for faster draws (one plain uniform per agent/edge, skipping the slot machinery); statistically valid but not CRN-safe across scenarios.'
         options.crn = sc.parse_env('STARSIM_CRN', True, bool)
 
-        optdesc.keep_times = 'If True, a declared disease run as agents keeps the time each agent entered every state (e.g. ti_S); by default (False), only those the engine needs, to save memory (reading another raises ss.errors.TimeNotKept)'
+        optdesc.keep_times = 'If True, a declared disease run as agents keeps the time each agent entered every state (e.g. ti_S); by default (False), only those the engine needs, to save memory (reading another raises an AttributeError)'
         options.keep_times = sc.parse_env('STARSIM_KEEP_TIMES', False, bool)
 
         optdesc.max_joint = 'The most compartments that the diseases tracked jointly in a compartmental run may take (their joint states times the groups of the other dimensions; see ss.solvers.Crossing): above it, solver="auto" runs agents, and a compartmental solver that was asked for stops before anything is made. 0 for no limit'

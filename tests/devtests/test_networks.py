@@ -272,7 +272,7 @@ def test_route_modifiers():
         si = ss.Disease(infection=ss.Transition(S, I, rate=dict(sexualnet=ss.peract(0.05), randomnet=beta) * I), init_prev=0.05, name='si')
         return ss.Sim(si, networks=[ss.SexualNet(), ss.RandomNet(n_contacts=2)], connectors=mods, n_agents=2000, start=2000, stop=2005, verbose=0).run().results.si.I[-1]
     assert run(condoms(multiply=0, share=1)) > run(condoms(multiply=0, share=1), beta=0) > 0 # Infections only over the random network
-    with pytest.raises(ss.errors.RouteMismatch, match='not a route'):
+    with pytest.raises(ValueError, match='not a route'):
         run(condoms(multiply=0, share=1) + [ss.modify('si.infection', multiply=0.5, route='needles')])
     with pytest.raises(ValueError, match='transmission'):
         run([ss.modify('si.rel_sus', multiply=0.5, route='sexualnet')])
@@ -398,7 +398,7 @@ def test_between():
     assert list(OwnMSM().pars.keys()) == ['memory', 'between'] # And memory=, of every dynamic network
     sim = ss.Sim(diseases=ss.SIS(beta=ss.peract(0.01)), networks=OwnMSM(name='msm'), n_agents=500, verbose=0).init()
     assert len(sim.networks.msm) == 0
-    with pytest.raises(ss.errors.RouteMismatch, match="between='mm'"):
+    with pytest.raises(ValueError, match="between='mm'"):
         ss.Sim(diseases=ss.SIS(beta=ss.peract(0.01)), networks=OwnMSM(name='msm'), n_agents=500, verbose=0).run()
     assert len(ss.Sim(diseases=ss.SIS(beta=ss.peract(0.01)), networks=OwnMSM(name='msm', between='mm'), n_agents=500, stop=2002, verbose=0).run().networks.msm)
     return

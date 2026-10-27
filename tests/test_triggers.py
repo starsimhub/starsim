@@ -79,7 +79,7 @@ def test_syphilis_stay():
             tertiary = ss.Transition(LL, [T, ss.stay], p=[0.35, None], dur=dur)
         return ss.Disease(LL, T, Sp, tertiary=tertiary, cure=(LL + T) >> Sp, first='LL', name='syph') # Everyone starts in LL; cure is undriven, so not the remainder
     out = sc.objdict()
-    with pytest.raises(ss.errors.BadBranchSplit, match='ss.stay'): # The rest stay only if asked to, with ss.stay
+    with pytest.raises(ValueError, match='ss.stay'): # The rest stay only if asked to, with ss.stay
         make('implicit')
     for solver in ['abm', 'ode']:
         size = dict(n_agents=10_000) if solver == 'abm' else dict(total_pop=10_000)
@@ -101,7 +101,7 @@ def test_syphilis_stay():
         size = dict(n_agents=10_000) if solver == 'abm' else dict(total_pop=10_000)
         ns = [ss.Sim(branches(p), solver=solver, start=2000, stop=2010, unit='year', **size, **kw).run().results.d.H[-1] for p in [0.3, lambda sim: 0.3]]
         assert np.isclose(ns[1]/1e4, 0.3, atol=0.02) and np.isclose(ns[0], ns[1], rtol=0.05), f'{solver}: {ns}'
-    with pytest.raises(ss.errors.BadBranchSplit):
+    with pytest.raises(ValueError, match='has ss.stay as its only destination'):
         S, A = ss.states('S A')
         ss.Disease(S, A, x=ss.Transition(S, ss.stay, p=0.5))
     return out

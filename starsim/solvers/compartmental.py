@@ -389,7 +389,7 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
                 else:
                     tracks += [Bunch(tr=tr, p=None, immediate=False, apart=apart) for tr in (staged or [None])]
             if exits.held: # People who took ss.stay, with no exit of their own (p=0, entered only from the split)
-                tracks.append(Bunch(tr=None, p=ss.transitions.par(0.0, literal=True), immediate=False, stay=True))
+                tracks.append(Bunch(tr=None, p=ss.expressions.par(0.0, literal=True), immediate=False, stay=True))
             for tr in exits.triggered: # Passed straight through in the groups where the trigger holds: see update_targets()
                 if tr.trigger.outcome: # Moved when the outcome happens: see ss.interventions.trigger_moves()
                     continue
@@ -440,7 +440,7 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
             flow.expr = None if (flow.kind in ['stage', 'conveyor'] or (flow.kind != 'contact' and tr.dur is not None)) else tr.rate
             if flow.strain and tr.const is not None: # A part of the rate with no source of infection has no strain, so is counted once, with the first
                 flow.expr = flow.expr - tr.const
-            flow.dynamic = flow.expr is not None and any(isinstance(leaf, (ss.State, ss.transitions.Count, ss.expressions.Coverage)) for leaf in flow.expr.leaves)
+            flow.dynamic = flow.expr is not None and any(isinstance(leaf, (ss.State, ss.expressions.Count, ss.expressions.Coverage)) for leaf in flow.expr.leaves)
 
         self.n_comps = len(self.comps)
         self.n_trans = len(self.tr_index)
@@ -482,7 +482,7 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
         for val in trans.varying_pars(raw).values():
             for dim in val.dims:
                 if dim not in dims:
-                    raise ss.errors.MissingDimension(f'the dwell time of "{name}" is given by "{dim}", but the model is not stratified by it. Add e.g. sim.stratify({dim}={["female", "male"] if dim in ["sex", "female"] else [...]}).')
+                    raise sc.KeyNotFoundError(f'the dwell time of "{name}" is given by "{dim}", but the model is not stratified by it. Add e.g. sim.stratify({dim}={["female", "male"] if dim in ["sex", "female"] else [...]}).')
         dw.varying = True
         grids = {key:val.per_group(self.sim, to_unit) for key,val in trans.varying_pars(raw).items()}
         plain = {k:v for k,v in trans.numeric_pars(raw, to_unit, per_agent=lambda val: None).items() if k not in grids}
@@ -521,7 +521,7 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
                                      f'     Run with solver="abm", give stages= on the transition, or allow the approximation.')
         else:
             fixed = ' (nearly fixed, not exponential)' if dw.std < dw.mean/2 else '' # e.g. ss.SIR(dur_inf=ss.days(7)), whose std is 1 day
-            ss.note(f'{name} has a {dw.family} dwell time{fixed}, approximated by {what}', ss.errors.StagesUnderAuto, sim=sim, verbose=0 if approx else None)
+            ss.note(f'{name} has a {dw.family} dwell time{fixed}, approximated by {what}', sim=sim, verbose=0 if approx else None)
             if dw.std > ss.solvers.choose.max_cv*dw.mean: # solver='auto' runs it as agents (FP53)
                 ss.warn(f'{name} has a {dw.family} dwell time whose coefficient of variation is {dw.std/dw.mean:.3g}, so one exponential stage keeps only its mean, and its long tail is lost; run with solver="abm" to keep it')
         return
@@ -533,14 +533,14 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
     def whole_steps(self, tr, what, dur, lowest, nearest=False):
         """ A time as a number of whole steps (up, or to the nearest with `nearest=True`; at least `lowest`), with a note if it is not one """
         step = getattr(getattr(self.mod, 't', None), 'dt', None) or getattr(getattr(self.sim, 'pars', None), 'dt', None) # The sim's, if the module has no timeline yet (see init_crossings())
-        if not isinstance(step, ss.dur): # Laid out before the module is in a sim, for its equations (see ss.transitions.Graph.flow_terms()): one slot
+        if not isinstance(step, ss.dur): # Laid out before the module is in a sim, for its equations (see ss.graph.Graph.flow_terms()): one slot
             return max(lowest, 1)
         x = float(self.convert(dur))/step.to(self.sim.unit_base).value
         n = max(lowest, int(np.ceil(x - (0.5 if nearest else 0) - 1e-9)))
         if abs(x - round(x)) > 1e-6:
             unit = self.sim.unit_name
             dt = float(self.convert(dur))/x
-            ss.note(f'{tr.name} has {what} of {x*dt:n} {unit}s, which is {n} step{"s" if n != 1 else ""} ({n*dt:n} {unit}s) here (agents round each dwell to whole steps at random, keeping its mean); a step that divides it makes it exact', ss.errors.LargeStep, sim=self.sim)
+            ss.note(f'{tr.name} has {what} of {x*dt:n} {unit}s, which is {n} step{"s" if n != 1 else ""} ({n*dt:n} {unit}s) here (agents round each dwell to whole steps at random, keeping its mean); a step that divides it makes it exact', sim=self.sim)
         return n
 
     def delay_steps(self, tr):
@@ -1172,7 +1172,7 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
         def enter(name, weight, comps, credits, path=(), parent=-1):
             if name in path: # The same-step cascade, by construction: see ss.solvers.Agents.junctions
                 cycle = ' -> '.join(path[path.index(name):] + (name,))
-                raise ss.errors.TriggerLoop(f'moves with no wait out of the states of "{self.mod.name}" form a loop: {cycle}.\n'
+                raise ValueError(f'moves with no wait out of the states of "{self.mod.name}" form a loop: {cycle}.\n'
                                      f'     Give one of them a rate or a duration, or change the branches so they do not lead back.')
             for track,p in zip(self.tracks[name], probs[name]):
                 if track.immediate: # Nobody waits in this branch: pass straight through to its destination
@@ -1473,21 +1473,21 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
 
         def check(p):
             raw = getattr(p, 'raw', None) # None for a property of people (ss.ppl.age), which does not change
-            varies = isinstance(raw, ss.transitions.TimeValue) or (isinstance(raw, ss.by) and raw.varies)
+            varies = isinstance(raw, ss.parameters.TimeValue) or (isinstance(raw, ss.by) and raw.varies)
             if varies and not any(p is par for par in self.time_pars):
                 self.time_pars.append(p)
 
         def flatten(expr, strain, routes=None, rtr=None):
             """ Add the operations for an expression, and return the size of stack they need (`rtr`: the transmission and its source state, if modifiers act on it on some routes) """
-            if isinstance(expr, ss.transitions.BinOp):
+            if isinstance(expr, ss.expressions.BinOp):
                 a = flatten(expr.a, strain, routes, rtr)
                 b = flatten(expr.b, strain, routes, rtr)
                 ops.append(kn.opcodes[expr.op])
                 args.append(0)
                 return max(a, b + 1)
-            elif isinstance(expr, ss.transitions.Func) and expr.name == 'expit': # As 1/(1 + exp(-x)), which the kernels have
+            elif isinstance(expr, ss.expressions.Func) and expr.name == 'expit': # As 1/(1 + exp(-x)), which the kernels have
                 return flatten(1/(1 + np.exp(-expr.args[0])), strain, routes, rtr)
-            elif isinstance(expr, ss.transitions.Func):
+            elif isinstance(expr, ss.expressions.Func):
                 depths = [flatten(arg, strain, routes, rtr) + i for i,arg in enumerate(expr.args)]
                 ops.append(kn.opcodes[expr.name])
                 args.append(0)
@@ -1498,15 +1498,15 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
                 check(expr)
                 ops.append(kn.CONST)
                 args.append(add(pars, id(expr), expr))
-            elif isinstance(expr, ss.transitions.Count) and (self.split_states(expr.states)[1] or expr.weighted): # Another disease's states, or a weighted count (MS3, TY6), counted once a step, as a function of the sim is
+            elif isinstance(expr, ss.expressions.Count) and (self.split_states(expr.states)[1] or expr.weighted): # Another disease's states, or a weighted count (MS3, TY6), counted once a step, as a function of the sim is
                 if id(expr) not in self.foreign_pars:
-                    self.foreign_pars[id(expr)] = ss.par((lambda e: lambda sim: self.count_expr(e))(expr), name=f'{ss.transitions.format_expr(expr)} (counted by its disease)', literal=True)
+                    self.foreign_pars[id(expr)] = ss.par((lambda e: lambda sim: self.count_expr(e))(expr), name=f'{ss.expressions.format_expr(expr)} (counted by its disease)', literal=True)
                 return flatten(self.foreign_pars[id(expr)], strain, routes, rtr)
             elif isinstance(expr, ss.expressions.Coverage): # A product's coverage (MS4), worked out once a step
                 if id(expr) not in self.foreign_pars:
                     self.foreign_pars[id(expr)] = ss.par((lambda e: lambda sim: self.coverage(e))(expr), name=f'{expr} (worked out each step)', literal=True)
                 return flatten(self.foreign_pars[id(expr)], strain, routes, rtr)
-            elif isinstance(expr, ss.transitions.Count):
+            elif isinstance(expr, ss.expressions.Count):
                 ops.append(kn.COUNT if expr.kind == 'n' else kn.TOTAL if expr.kind == 'total' else kn.FRAC)
                 args.append(add(sets, tuple(ind for state in expr.states for ind in self.state_comps[state.name])))
             elif isinstance(expr, ss.expressions.Prop): # A value for each group, which does not change (a condition on states: for the state the flow leaves)
@@ -1532,10 +1532,10 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
         self.func_exprs = dict() # For a function of the sim that gives an expression of the model's states (I.n), by the id of its parameter: the parameter, the expression, and its key (see expr_key())
         for flow in self.flows:
             for leaf in ([] if flow.expr is None else flow.expr.leaves):
-                if isinstance(leaf, ss.par) and callable(leaf.raw) and not isinstance(leaf.raw, (ss.Dist, ss.transitions.TimeValue)):
+                if isinstance(leaf, ss.par) and callable(leaf.raw) and not isinstance(leaf.raw, (ss.Dist, ss.parameters.TimeValue)):
                     if id(leaf) not in self.func_exprs:
                         out = self.call(leaf.raw, leaf)
-                        if isinstance(out, ss.transitions.Expr):
+                        if isinstance(out, ss.expressions.Expr):
                             self.func_exprs[id(leaf)] = (leaf, out, self.expr_key(out))
                     if id(leaf) in self.func_exprs: # Worked out within the step, as the expression is
                         flow.dynamic = True
@@ -1690,9 +1690,9 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
     @staticmethod
     def expr_key(out):
         """ What a function's expression is made of, to tell when it changes: its text, and the exact value of each number in it (None if it is not an expression) """
-        if not isinstance(out, ss.transitions.Expr):
+        if not isinstance(out, ss.expressions.Expr):
             return None
-        return (ss.transitions.format_expr(out), tuple(repr(leaf.raw) for leaf in out.leaves if isinstance(leaf, ss.par)))
+        return (ss.expressions.format_expr(out), tuple(repr(leaf.raw) for leaf in out.leaves if isinstance(leaf, ss.par)))
 
     def prog_value(self, par):
         """ The value of a parameter in the program: a beta for each route is 1 here (with any modifiers), since it is applied to the exposure through each (see `set_contacts()`) """
@@ -1763,7 +1763,7 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
         """ Whether any parameter varies smoothly in time (not as a step function), so is worked out at each stage of an ODE step """
         if getattr(self, '_smooth', None) is None:
             raws = [p.raw for p in self.graph.all_pars()]
-            self._smooth = any(isinstance(raw, (ss.transitions.TimeValue, ss.by)) and not self.held(raw) for raw in raws)
+            self._smooth = any(isinstance(raw, (ss.parameters.TimeValue, ss.by)) and not self.held(raw) for raw in raws)
         return self._smooth
 
     def step_tables(self, dt, smooth=True):
@@ -1842,7 +1842,7 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
             found = set(states)
             for flow in self.flows: # A count that infection depends on, such as a water reservoir, and the states that infection leads to
                 if flow.src is not None and id(flow.state) not in states and flow.expr is not None:
-                    single = [leaf.states[0] for leaf in flow.expr.leaves if isinstance(leaf, ss.transitions.Count) and len(leaf.states) == 1]
+                    single = [leaf.states[0] for leaf in flow.expr.leaves if isinstance(leaf, ss.expressions.Count) and len(leaf.states) == 1]
                     counts = {id(s) for s in single if not s.people}
                     by_infected = not flow.state.people and any(id(s) in states for s in single) # A count moved by the number infected, e.g. mosquitoes biting them
                     if counts or by_infected:
@@ -1923,9 +1923,9 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
             return f'the modifier "{stepped[0].name}" is applied each step (it has where=, when=, or a function as its amount, or changes a value that varies by person)'
         if self.net_mods: # The contacts are set once for a whole run
             return 'a modifier changes the contacts of a network'
-        weighted = next((leaf for tr in graph.transitions.values() if tr.rate is not None for leaf in tr.rate.leaves if (isinstance(leaf, ss.transitions.Count) and leaf.weighted) or isinstance(leaf, ss.expressions.Coverage)), None)
+        weighted = next((leaf for tr in graph.transitions.values() if tr.rate is not None for leaf in tr.rate.leaves if (isinstance(leaf, ss.expressions.Count) and leaf.weighted) or isinstance(leaf, ss.expressions.Coverage)), None)
         if weighted is not None: # Counted in Python once a step (see init_program())
-            return f'{weighted} is {"a weighted count" if isinstance(weighted, ss.transitions.Count) else "the coverage of a product"}, which is worked out at each step'
+            return f'{weighted} is {"a weighted count" if isinstance(weighted, ss.expressions.Count) else "the coverage of a product"}, which is worked out at each step'
         if any(key[:2] == (mod.name, 'route') for key,mods in sim.modifiers.items() if mods): # Likewise
             return f'a modifier acts on a transmission of "{mod.name}" on one route'
         if any(key[:2] == (mod.name, 'branch') for key,mods in sim.modifiers.items() if mods): # Where arrivals go is set once for a whole run
@@ -1938,8 +1938,8 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
             self.whole = False # No reason
             own = [name for name in ['start_step', 'step_state', 'step', 'step_die', 'update_results', 'finish_step'] if getattr(type(mod), name) is not getattr(ss.Disease, name)]
             exprs = [p for tr in graph.transitions.values() for p in sc.tolist(tr.p) if p is not None] # The values that are read once for the whole run
-            exprs += [w for info in self.outcomes.values() for key,w in info.sources if isinstance(w, ss.transitions.Expr)]
-            funcs = [p for p in graph.all_pars() if callable(p.raw) and not isinstance(p.raw, (ss.Dist, ss.transitions.TimeValue))] # Called each step
+            exprs += [w for info in self.outcomes.values() for key,w in info.sources if isinstance(w, ss.expressions.Expr)]
+            funcs = [p for p in graph.all_pars() if callable(p.raw) and not isinstance(p.raw, (ss.Dist, ss.parameters.TimeValue))] # Called each step
             funcs += [leaf for expr in exprs for leaf in expr.leaves if not (isinstance(leaf, ss.par) and (isinstance(leaf.raw, ss.Dist) or not callable(leaf.raw)))]
             transfers = [name for name,tf in graph.transfers.items() if not self.constant_transfer(tf)]
             if self.program is None:
@@ -2001,7 +2001,7 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
         for par in self.time_pars:
             raw = par.raw
             kept = self.series.get(id(par))
-            inner = tuple(p.raw for p in (raw.pars if isinstance(raw, ss.transitions.TimeValue) else [])) # The values of any parameters inside it, which can change between runs
+            inner = tuple(p.raw for p in (raw.pars if isinstance(raw, ss.parameters.TimeValue) else [])) # The values of any parameters inside it, which can change between runs
             if kept is None or kept[0] is not raw or kept[2] != per_step or kept[3] != inner:
                 vals = []
                 if per_step == 3:
@@ -2071,7 +2071,7 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
     def held(raw):
         """ Whether a value that varies in time is a step function (so is held for each step, as `ss.change()` would) """
         items = raw.items if isinstance(raw, ss.by) else [raw]
-        return all(not isinstance(v, ss.transitions.TimeValue) or (isinstance(v, ss.timeseries) and v.mode == 'constant') for v in items)
+        return all(not isinstance(v, ss.parameters.TimeValue) or (isinstance(v, ss.timeseries) and v.mode == 'constant') for v in items)
 
     def run_args(self, tables=True):
         """ What the kernels need for a whole run, apart from the seed (and the tables, unless `tables=False`) """
@@ -2235,7 +2235,7 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
         pos_s, pos_f = {i:j for j,i in enumerate(kept_s)}, {i:j for j,i in enumerate(kept_f)}
         grouped = self.outcomes and ng > 1 # Outcomes are then worked out by group, from the flows they come from by group at each step
         sources = sorted({key for info in self.outcomes.values() for key,weight in info.sources if key in self.tr_index}) if grouped else []
-        whole = grouped and not any(isinstance(weight, ss.transitions.Expr) for info in self.outcomes.values() for key,weight in info.sources) # For the whole run at once (see derived_outcomes()), unless a weight is an expression, which can change in time: then a step at a time, as a stepped run does
+        whole = grouped and not any(isinstance(weight, ss.expressions.Expr) for info in self.outcomes.values() for key,weight in info.sources) # For the whole run at once (see derived_outcomes()), unless a weight is an expression, which can change in time: then a step at a time, as a stepped run does
         src = sc.objdict({key:np.zeros((npts, ng)) for key in sources}) if whole else None # The flows the outcomes come from, by step and group
         if grouped:
             for name in self.outcomes:
@@ -2284,9 +2284,9 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
             ctx = StockCtx(self, sc.objdict({name:stock_g(i) for i,name in enumerate(states)}), sc.objdict({name:flow_g(ind) for name,ind in self.tr_index.items()}))
             for name in stratified:
                 if name in self.ratios:
-                    res[name].strata[:], res[name].denom[:] = [ss.transitions.evaluate(part, ctx) for part in self.ratios[name]]
+                    res[name].strata[:], res[name].denom[:] = [ss.expressions.evaluate(part, ctx) for part in self.ratios[name]]
                 else:
-                    res[name].strata[:] = ss.transitions.evaluate(graph.exprs[name], ctx)
+                    res[name].strata[:] = ss.expressions.evaluate(graph.exprs[name], ctx)
         for key,vals in derived.items():
             res[key][:] = vals
         self.cache.clear()
@@ -2385,9 +2385,9 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
                 ctx = StockCtx(self, sc.objdict({name:groups[name] for name in states}), sc.objdict({name:groups[name] for name in self.tr_index if name in groups}))
                 for name in stratified:
                     if name in self.ratios:
-                        groups[name], denoms[name] = [ss.transitions.evaluate(part, ctx) for part in self.ratios[name]]
+                        groups[name], denoms[name] = [ss.expressions.evaluate(part, ctx) for part in self.ratios[name]]
                     else:
-                        groups[name] = ss.transitions.evaluate(graph.exprs[name], ctx)
+                        groups[name] = ss.expressions.evaluate(graph.exprs[name], ctx)
         outcomes = None # With the flows by group at every step: the outcomes by group, and their totals as the sums of them
         if (by_group or grouped is not None) and group_ti is None and self.outcomes:
             new_g = {name:np.moveaxis(flows_g[:, :, pos[ind], :], -1, 1) for name,ind in self.tr_index.items() if ind in pos} # Runs by groups by steps
@@ -2434,7 +2434,7 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
         if graph.exprs:
             ctx = StockCtx(self, n, new)
             for name,expr in graph.exprs.items():
-                out[name] = ss.transitions.evaluate(expr, ctx)
+                out[name] = ss.expressions.evaluate(expr, ctx)
         return out
 
     def derived_outcomes(self, new, expected=False, names=None, seeds=None):
@@ -2456,7 +2456,7 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
             amount = 0.0
             for key,weight in info.sources:
                 flow = new[key] if key in new else out[key]
-                if isinstance(weight, ss.transitions.Expr):
+                if isinstance(weight, ss.expressions.Expr):
                     weight = self.eval(weight)
                     if np.ndim(weight) == 1 and np.ndim(flow) >= 2 and np.shape(flow)[-2] == len(weight): # A weight for each group, with the flows by group
                         weight = weight[:, None]
@@ -2489,7 +2489,7 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
             bufs[name] = sc.objdict(pending=np.zeros((len(info.kernel) + 1, width)), leaving=None if info.stay is None else np.zeros((len(info.stay) + 1, width)), n=np.zeros(width))
             weights[name] = []
             for key,weight in info.sources:
-                weight = self.eval(weight) if isinstance(weight, ss.transitions.Expr) else weight
+                weight = self.eval(weight) if isinstance(weight, ss.expressions.Expr) else weight
                 if np.ndim(weight) == 1 and len(shape) >= 2 and shape[-2] == len(weight): # A weight for each group, with the flows by group
                     weight = flat(weight[:, None])[:, 0]
                 weights[name].append(weight)
@@ -2564,7 +2564,7 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
             n_sub = self.max_binomial
             unit = self.sim.unit_name
             near = f' (R0 = {R0:.3g}, near the epidemic threshold, where a small bias in R moves the prevalence a lot)' if R0 is not None and x_max < self.binomial_bias else ''
-            ss.note(f'"{self.mod.name}" has a rate of {fastest:.3g} per {unit} out of a state{near}, so the chain-binomial solver would take {need} substeps a step to keep its step bias small; it takes {n_sub}, with rate × dt = {fastest*self.dt/n_sub:.2g} in each. A smaller dt, substeps=, or solver="tau" follows it more closely', ss.errors.LargeStep, sim=self.sim)
+            ss.note(f'"{self.mod.name}" has a rate of {fastest:.3g} per {unit} out of a state{near}, so the chain-binomial solver would take {need} substeps a step to keep its step bias small; it takes {n_sub}, with rate × dt = {fastest*self.dt/n_sub:.2g} in each. A smaller dt, substeps=, or solver="tau" follows it more closely', sim=self.sim)
         return n_sub
 
     def step_state(self):

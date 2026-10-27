@@ -444,14 +444,14 @@ def bounding_states(cond):
 
 
 def check_clocks(amount, where, what):
-    """ A modifier whose amount reads a clock needs a where= inside the clock's states, where the clock has a value (`ss.errors.ClockOutsideDomain`) """
+    """ A modifier whose amount reads a clock needs a where= inside the clock's states, where the clock has a value """
     for clock in ss.expressions.clocks_in(amount):
         names = set(clock.names)
         if where is not None and callable(where) and not isinstance(where, Cond): # Checked when it runs instead: see ss.modify.apply()
             continue
         inside = bounding_states(where)
         if inside is None or not inside <= names:
-            raise ss.errors.ClockOutsideDomain(f'{what} reads {clock}, which has a value only for people in {sc.strjoin(sorted(names))}, but applies to {"everyone" if where is None else where}.\n'
+            raise ValueError(f'{what} reads {clock}, which has a value only for people in {sc.strjoin(sorted(names))}, but applies to {"everyone" if where is None else where}.\n'
                                         f'     Add where={clock.to_str().rsplit(".", 1)[0]} (or a condition inside it).')
     return
 
@@ -565,15 +565,15 @@ def as_cond(obj):
         return as_cond(obj.state)
     elif isinstance(obj, ss.State): # Looked up by name when the sim runs, since the sim works on copies
         return Cond('state', getattr(obj, 'module', None), obj.name)
-    elif isinstance(obj, (ss.Transition, ss.transitions.Transfer)): # An event, since people go through it
+    elif isinstance(obj, (ss.Transition, ss.dimensions.Transfer)): # An event, since people go through it
         return Event('tr', obj)
     elif isinstance(obj, ss.Arr):
         return from_arr(obj)
     elif isinstance(obj, ss.expressions.Expr) and not isinstance(obj, ss.expressions.par): # A declared sum of states (infected = P + A + C): being in any of them (TY15)
-        try:
-            const, terms = ss.expressions.linear(obj)
-        except ss.errors.NonlinearExposure:
+        split = ss.expressions.linear(obj, die=False)
+        if split is None:
             return obj
+        const, terms = split
         states = list(terms)
         if const is None and states and all(isinstance(s, ss.State) and s.people and ss.expressions.is_one(c) for s,c in terms.items()):
             return join('|', [as_cond(s) for s in states])
@@ -1092,12 +1092,12 @@ class Selector:
     def per_person(self, val, convert=None):
         """ A value (a number, `ss.by`, or a function of the sim) as a scalar or one value per agent or per group """
         sim = self.sim
-        if isinstance(val, ss.transitions.Expr) and any(isinstance(leaf, (ss.State, ss.expressions.Prop)) for leaf in val.leaves): # Of people's properties or states (of any module), read for each person as where= reads them, e.g. multiply=1 - 0.9*meth.on
+        if isinstance(val, ss.expressions.Expr) and any(isinstance(leaf, (ss.State, ss.expressions.Prop)) for leaf in val.leaves): # Of people's properties or states (of any module), read for each person as where= reads them, e.g. multiply=1 - 0.9*meth.on
             val = person_cond(val)
         if isinstance(val, Cond): # E.g. multiply=ss.ppl.age/50
             val = val.eval(self)
             val = val.astype(float) if isinstance(val, np.ndarray) and val.dtype == bool else val
-        if isinstance(val, ss.transitions.Expr) and self.mod is not None: # A parameter (e.g. one that is fitted), or an expression of parameters
+        if isinstance(val, ss.expressions.Expr) and self.mod is not None: # A parameter (e.g. one that is fitted), or an expression of parameters
             val = self.expr(val) if ss.expressions.clocks_in(val) else self.mod.engine.eval(val) # One that reads a clock has a value for each agent
         if isinstance(val, ss.by):
             if self.abm and val.on_people(sim): # Read from each person

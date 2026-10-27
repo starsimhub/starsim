@@ -20,7 +20,6 @@ The tests are in `tests/`, in two sets. The core tests (`tests/test_*.py`, about
 | `test_contracts_inference.py` | The same for fitting: the JAX log-density equals the sim's log-likelihood, the particle filter matches direct runs, and each fitting method recovers known values from simulated data. |
 | `test_kernels.py`, `test_gradients.py` | The compartmental engine's paths agree with each other: a whole run with a stepped run, compiled kernels with plain Python, and JAX with the kernels. Gradients agree with finite differences. |
 | `test_fast_draws.py`, `test_jit.py` | The exact random draws match their distributions, and the same uniforms give the same draws compiled or not; `ss.jit` gives the same results as the code run as Python. |
-| `test_spec.py` | The error catalog in the design record matches the error classes. |
 | `test_baselines.py` | A standard agent-based sim (two diseases, three networks, births and deaths) gives exactly its recorded results (`baseline.yaml`); and `test_performance_guard` fails if any of a set of timed cases is more than 1.5 times slower than its record (`perf_guard.yaml`). |
 | Feature tests | One file per area (`test_transitions.py`, `test_deliveries.py`, `test_dimensions.py`, ...), and `test_composition.py` for plain NumPy modules beside declared ones. |
 | `devtests/interop/` | Each importer and exporter against the framework it reads or writes. Tests that need R, or the repository of translated examples, are skipped when it isn't available. |
@@ -47,7 +46,7 @@ The performance guard is timing-sensitive, so run it on its own on a quiet machi
 
 | If you change | These parts see it | Run at least |
 |---|---|---|
-| How states, transitions or rates are declared (`transitions.py`, `expressions.py`, `graph.py`) | Every engine, `describe()`, the model spec and hash, `to_code()`, and the exporters | `test_transitions.py`, `test_contracts.py`, `test_spec.py` |
+| How states, transitions or rates are declared (`transitions.py`, `expressions.py`, `graph.py`) | Every engine, `describe()`, the model spec and hash, `to_code()`, and the exporters | `test_transitions.py`, `test_contracts.py` |
 | Parameters, time or units (`parameters.py`, `time.py`, `dates.py`) | Every engine, fitting (which reads bounds and priors), and the spec | `test_time.py`, `test_transitions.py`, `test_contracts_inference.py` |
 | Stratification or strains (`dimensions.py`, `strains.py`) | The compartment layout, mixing, agents' properties, and results by group | `test_dimensions.py`, `test_contracts.py` |
 | The compartmental engine or the kernels (`solvers/compartmental.py`, `kernels.py`) | All four compartmental solvers, the JAX runs that follow the kernels step for step, and the particle filter | `test_kernels.py`, `test_gradients.py`, `test_contracts.py` |
@@ -59,7 +58,7 @@ The performance guard is timing-sensitive, so run it on its own on a quiet machi
 | Fitting (`fit.py`, `gradients.py`) | `sim.fit()` and every fitting method | `test_contracts_inference.py`, `test_calibration.py`, `test_gradients.py` |
 | The model spec or code writer (`spec.py`, `presentation.py`) | Hashes, `diff()`, `to_code()`, and the exporters | `test_contracts.py::test_code_round_trip`, `test_transitions.py`, `devtests/interop/` |
 | An importer or exporter (`interop/`) | That framework's users, and its switching demo | its file in `devtests/interop/`, and its demo in `switching/` |
-| An error, warning or note (`errors.py`) | The catalog in the spec | `test_errors.py`, `test_spec.py::test_error_catalog` |
+| An error, warning or note | Its message | `test_errors.py` |
 | Anything on a hot path | Run time | `test_baselines.py::test_performance_guard` |
 
 Files are named by area, so `test_networks.py` means both `tests/test_networks.py` and `tests/devtests/test_networks.py`. When in doubt, run both sets: `./run_tests`, then `pytest devtests -n auto`.
@@ -72,7 +71,7 @@ The design record is in `v4_design/` in the repository. It has three parts that 
 - **The spec** (`design/`, files 00 to 19): what the language is and how each part behaves, with a reason for each choice and a list of what was rejected. This section of the docs is a short translation of it.
 - **What was set aside** (`admin/deferred.md`): ideas deferred or decided against, so they aren't proposed again without new reasons.
 
-`test_spec.py` checks that the error catalog in `15-errors.md` matches the classes in `starsim/internals/errors.py` (each with a docstring saying when it is raised). Where the spec and the code disagree, the code is the truth and the spec is fixed. The user documentation is executed when it is built, so its examples run against the current code too.
+Where the spec and the code disagree, the code is the truth and the spec is fixed. The user documentation is executed when it is built, so its examples run against the current code too.
 
 ## What the tests don't show
 

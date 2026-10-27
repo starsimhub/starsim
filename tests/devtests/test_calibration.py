@@ -63,7 +63,7 @@ def test_particle_mcmc():
     assert fit.method == 'pmcmc'
     assert len(fit.samples) == 200 and len(fit.diagnostics.acceptance) == 2
     assert table.lower.beta < 0.5 < table.upper.beta # The posterior covers the value that made the data
-    with pytest.raises(ss.errors.NoPosterior): # A posterior needs a likelihood
+    with pytest.raises(ValueError, match='not every data series has a likelihood'): # A posterior needs a likelihood
         make(data=data).fit(method='pmcmc', gof='nae')
 
     # A best fit scores each point by the mean of several runs, with fresh seeds at each point under Optuna, and reports the score of the best values over the first seeds
@@ -118,7 +118,7 @@ def test_fit_inputs(tmp_path):
         sir = ss.Disease(S >> I @ beta*I, I >> R @ ss.years(2), ss.Transition(R, S, dur=ss.years(3)), init_prev=0.01, name='sir')
         return ss.Sim(sir, start=2000, stop=2020, dt=ss.years(0.05), data=data, verbose=0)
     res = make().run().results.sir
-    flows, stocks = res.S_to_I.resample('year'), res.I.resample('year', kind='ratio') # A flow summed over each year, a stock averaged over it
+    flows, stocks = res.S_to_I.resample('year'), res.I.resample('year', summarize_by='mean') # A flow summed over each year, a stock averaged over it
     df = pd.DataFrame(dict(year=flows.timevec, S_to_I=flows.values, I=stocks.values)).iloc[1:-1]
     fit = make(beta=0.5, data=df).fit(verbose=0)
     assert np.isclose(fit.pars.beta, 0.3, rtol=1e-3) # Before, 0.279, from data compared a year off
@@ -143,7 +143,7 @@ def test_fit_inputs(tmp_path):
     data = pd.DataFrame(dict(year=np.arange(2002, 2010), sis_prevalence=0.1, notes=1))
     sim = ss.Sim(diseases=ss.SIS(dt=ss.years(1)), networks=net, interventions=cure(p=ss.par(0.1, bounds=[0.01, 0.5])), n_agents=300, start=2000, stop=2010, data=data, verbose=0)
     sim.pars.diseases.pars.init_prev = 0.2 # Changed after the sim was built: the fit's runs use it too
-    with pytest.raises(ss.errors.UnknownDataColumn): # Compared with the results, the column must match one
+    with pytest.raises(KeyError, match='the data column "notes" matches no result'): # Compared with the results, the column must match one
         sim.fit()
     loss = lambda sim: abs(sim.results.sis.prevalence[-1] - 0.1)
     path = tmp_path/'fit.log'

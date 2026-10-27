@@ -228,7 +228,7 @@ class Network(Route):
         return out
 
     def edge_directions(self, src, trg):
-        """ The direction of each edge from `src` to `trg`, as a position in `directions` (0 for a network with no sides); raises `ss.errors.RouteMismatch` for an edge with no direction """
+        """ The direction of each edge from `src` to `trg`, as a position in `directions` (0 for a network with no sides); raises a `ValueError` for an edge with no direction """
         if not self.sides or self.one_way:
             return np.zeros(len(src), dtype=np.int8) # One direction, or edges from p1 to p2
         dirs = self.directions
@@ -244,7 +244,7 @@ class Network(Route):
         if np.any(out < 0):
             k = np.flatnonzero(out < 0)[0]
             hint = "; for partnerships between men, give between='mm' (in a subclass, e.g. super().__init__(between='mm'))" if isinstance(self, ss.SexualNet) else ''
-            raise ss.errors.RouteMismatch(f'"{self.name}" has a partnership from {src[k]} to {trg[k]}, whose sides give no direction it has ({sc.strjoin(dirs)}; {self.name} has {self.sides_str()}){hint}')
+            raise ValueError(f'"{self.name}" has a partnership from {src[k]} to {trg[k]}, whose sides give no direction it has ({sc.strjoin(dirs)}; {self.name} has {self.sides_str()}){hint}')
         return out
 
     @property
@@ -1122,7 +1122,7 @@ class DegreeTargets:
         Reports, for each target (the mean number of partners, the share with two or
         more, the maximum, and with `match=`, the share of partnerships at the same
         level), the target, the mean over the second half of each run, and the spread
-        across runs; a target that is missed by more than the spread is an `ss.errors.TargetStatsNotRecovered` warning.
+        across runs; a target that is missed by more than the spread is a warning.
         With a number of partners for each level (`n_contacts=ss.by(...)`), each level has
         a row of its own (e.g. `mean_degree[high]`), and these and the rows for everyone are
         at the end of each run, with the targets for everyone those of the mix of levels then
@@ -1176,7 +1176,7 @@ class DegreeTargets:
                 continue
             missed = row.realized > row.target if name == 'max_contacts' else abs(row.realized - row.target) > max(2*row.spread, 0.02*abs(row.target))
             if missed:
-                ss.warn(f'the network "{self.name}" has {name} {row.realized:.3g}, against a target of {row.target:.3g}', ss.errors.TargetStatsNotRecovered)
+                ss.warn(f'the network "{self.name}" has {name} {row.realized:.3g}, against a target of {row.target:.3g}')
         if not output:
             print(table)
         return table
@@ -1806,13 +1806,13 @@ class MixingPools(Route):
         names = [strat.name for strat in sim.groups.strats]
         for dim in full.dims:
             if dim not in names:
-                raise ss.errors.MissingDimension(f'the contacts "{self.name}" are given by "{dim}", but the model is not stratified by it. Add e.g. sim.stratify({dim}=[...]).')
+                raise sc.KeyNotFoundError(f'the contacts "{self.name}" are given by "{dim}", but the model is not stratified by it. Add e.g. sim.stratify({dim}=[...]).')
         strats = [sim.groups.strats[names.index(dim)] for dim in full.dims]
         counts = tuple(strat.n for strat in strats)
         if (full.levels is not None and tuple(full.levels) != counts) or len(full.matrix) != np.prod(counts):
             levels = '; '.join(f'"{strat.name}" has {strat.n} ({sc.strjoin(strat.labels)})' for strat in strats)
             shape = full.matrix.shape if full.levels is None else tuple(full.levels)*2
-            raise ss.errors.ShapeError(f'the contact matrix of "{self.name}" has shape {shape}, but {levels}, so it needs shape {counts*2} (or {(int(np.prod(counts)),)*2}, the first stratification slowest)')
+            raise ValueError(f'the contact matrix of "{self.name}" has shape {shape}, but {levels}, so it needs shape {counts*2} (or {(int(np.prod(counts)),)*2}, the first stratification slowest)')
         groups = {}
         for combo in itertools.product(*[range(n) for n in counts]):
             group = LevelGroup(**dict(zip(full.dims, combo)))

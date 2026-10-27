@@ -187,7 +187,7 @@ def test_datearray_operations():
     assert len(ss.date.arange('2020-03-01', '2020-01-01', ss.months(1))) == 0
 
     # A rate cannot be subtracted from a number
-    with pytest.raises(ss.errors.IncompatibleTypes, match='cannot be subtracted'):
+    with pytest.raises(TypeError, match='cannot be subtracted'):
         1 - ss.peryear(0.1)
 
     a = ss.DateArray([ss.date('2020-01-01'), ss.date('2021-01-01')])
@@ -215,8 +215,8 @@ def test_datearray_operations():
         (lambda: b - m1, ss.DateArray([ss.months(11), ss.months(23)])),
         (lambda: m1 - c, ss.months([-11, -23])),
         (lambda: c - m1, ss.years([1 - 1/12, 2 - 1/12])),
-        (lambda: d0 - a, ss.DateArray([ss.datedur(years=0), ss.datedur(years=-1)])),
-        (lambda: a - d0, ss.DateArray([ss.datedur(years=0), ss.datedur(years=1)])),
+        (lambda: d0 - a, ss.DateArray([ss.days(0), ss.days(-366)])), # The time between dates is in days
+        (lambda: a - d0, ss.DateArray([ss.days(0), ss.days(366)])),
         (lambda: d0 - b, dates_minus),
         (lambda: d0 - c, dates_minus),
     ]
@@ -436,8 +436,8 @@ def test_arithmetic():
         (p(0.1), '*', d(2), 0.19),
         (r(0.2), '/', r(0.1), 2),
         (1, '/', d(10), r(0.1)),  (2, '/', r(0.1), d(20)),  (2, '/', f(0.1), d(20)),
-        (r(0.1), '+', p(0.1), ss.errors.IncompatibleTypes),  (r(0.1), '-', f(0.1), ss.errors.IncompatibleTypes),  (r(0.1), '+', 1, ss.errors.IncompatibleTypes),  (1, '-', r(0.1), ss.errors.IncompatibleTypes),  (d(3), '+', r(0.1), ss.errors.IncompatibleTypes),  (1, '/', p(0.1), ss.errors.IncompatibleTypes),
-        (r(0.1), '*', r(0.1), ss.errors.WrongDimension),  (r(0.1), '/', d(3), ss.errors.WrongDimension),  (d(3), '*', d(3), ss.errors.WrongDimension),  (d(3), '/', r(0.1), ss.errors.WrongDimension),
+        (r(0.1), '+', p(0.1), TypeError),  (r(0.1), '-', f(0.1), TypeError),  (r(0.1), '+', 1, TypeError),  (1, '-', r(0.1), TypeError),  (d(3), '+', r(0.1), TypeError),  (1, '/', p(0.1), TypeError),
+        (r(0.1), '*', r(0.1), TypeError),  (r(0.1), '/', d(3), TypeError),  (d(3), '*', d(3), TypeError),  (d(3), '/', r(0.1), TypeError),
     ]
     for a, op, b, expected in rows:
         row = f'{a!r} {op} {b!r}'
@@ -452,14 +452,14 @@ def test_arithmetic():
                 assert np.isclose(out, expected), f'{row} gave {out}, not {expected}'
     ts = ss.timeseries({'2020-01-01': 1.0, '2020-03-01': 0.5})
     for out in [r(0.1) * ts, ts * r(0.1)]:
-        assert isinstance(out, ss.transitions.Expr) # A rate times a time series is a rate that varies in time, in either order
+        assert isinstance(out, ss.expressions.Expr) # A rate times a time series is a rate that varies in time, in either order
 
     # The slot is checked: a rate times a duration, or a duration, is not a rate, and a rate is not a dwell time
     S, I, R = ss.states('S I R')
     for slip in [lambda: ss.Transition(I, R, rate=ss.peryear(0.1) * ss.days(3)), lambda: I >> R @ (ss.peryear(0.1) * ss.days(3)),
                  lambda: ss.Transition(I, R, rate=ss.days(10)), lambda: ss.Transition(I, R, dur=ss.prob(0.1, 'day')),
                  lambda: ss.Disease(S >> I @ ss.perday(0.3) * I * ss.days(3), I >> R @ ss.days(10), name='sir')]:
-        with pytest.raises(ss.errors.WrongDimension):
+        with pytest.raises(TypeError, match=r'not a (rate|duration)'):
             slip()
     sir = ss.Disease(S >> I @ 2.5 * I / ss.days(10), I >> R @ (1/ss.days(10)), name='sir') # A duration that divides is fine
     assert ss.Transition(I, R, dur=2/ss.perday(0.1)).dur.raw == ss.days(20)
@@ -475,7 +475,7 @@ def test_bare_units():
         return ss.Disease(inf=S >> I @ ss.permonth(0.0)*I, rec=I >> S @ rec, init_n=dict(I=1000), name='d')
 
     # A bare dt beside calendar years is in years, with a warning, though the model's unit is months (before, 2,881 points instead of 241)
-    with pytest.warns(ss.errors.UnitInferred):
+    with pytest.warns(RuntimeWarning, match='is read in years'):
         sim = ss.Sim(sis(ss.months(6)), start=2000, stop=2020, dt=1/12, n_agents=1000, verbose=0).init()
     assert sim.t.npts == 241
 
@@ -532,7 +532,7 @@ def test_time_text():
     assert np.flatnonzero(sim.interventions[0].results.delivered.values).tolist() == [13] # The step from 2001
 
     # The step count warning says where the unit came from (it said "from None" with unit='day')
-    with pytest.warns(ss.errors.UnitInferred, match="unit='day'"):
+    with pytest.warns(RuntimeWarning, match="unit='day'"):
         ss.Sim(make(), total_pop=1e5, stop=ss.years(30), unit='day', verbose=0).init()
 
     # The model's hash and spec build a quiet copy (they printed the lines a run starts with)

@@ -25,9 +25,9 @@ def combine_protection(p, rule):
     if callable(rule):
         out = np.asarray(rule(p), dtype=float)
         if out.shape != p.shape[1:]:
-            raise ss.errors.ShapeError(f'combine= gave an array of shape {out.shape} from protections of shape {p.shape}; it takes the protections with the sources on the first axis, and returns one protection for each of the rest, e.g. lambda p: p.max(0)')
+            raise ValueError(f'combine= gave an array of shape {out.shape} from protections of shape {p.shape}; it takes the protections with the sources on the first axis, and returns one protection for each of the rest, e.g. lambda p: p.max(0)')
         if np.any(out < -1e-9) or np.any(out > 1 + 1e-9):
-            raise ss.errors.OutOfBounds(f'combine= gave a protection of {out.min():n} to {out.max():n}; a protection is between 0 and 1')
+            raise ValueError(f'combine= gave a protection of {out.min():n} to {out.max():n}; a protection is between 0 and 1')
         return np.clip(out, 0, 1)
     elif rule == 'max':
         return p.max(axis=0)
@@ -97,9 +97,9 @@ class immunity:
             if val is not None:
                 val = np.array(val, dtype=float)
                 if val.ndim not in [0, 2] or (val.ndim == 2 and val.shape[0] != val.shape[1]):
-                    raise ss.errors.ShapeError(f'the protection on {key} has shape {val.shape}; it is a square matrix (rows from the strain held, columns against the strain) or a single number')
+                    raise ValueError(f'the protection on {key} has shape {val.shape}; it is a square matrix (rows from the strain held, columns against the strain) or a single number')
                 if np.any(val < 0) or np.any(val > 1):
-                    raise ss.errors.OutOfBounds(f'the protection on {key} is {val.min():n} to {val.max():n}; a protection is between 0 (none) and 1 (complete)')
+                    raise ValueError(f'the protection on {key} is {val.min():n} to {val.max():n}; a protection is between 0 (none) and 1 (complete)')
                 self.values[key] = val
         if not self.values:
             errormsg = 'ss.immunity() needs the quantity it lowers, with the protection, e.g. rel_sus=matrix, rel_trans=0.5, or dur=dict(In=matrix)'
@@ -128,7 +128,7 @@ class immunity:
         if val.ndim == 0:
             return np.full((n, n), float(val))
         if val.shape != (n, n):
-            raise ss.errors.ShapeError(f'the protection on {key} has shape {val.shape}, but there are {n} strains, so it needs to be {n}×{n} (rows from the strain held, columns against the strain).')
+            raise ValueError(f'the protection on {key} has shape {val.shape}, but there are {n} strains, so it needs to be {n}×{n} (rows from the strain held, columns against the strain).')
         return val
 
     def largest(self, key, n):
@@ -316,9 +316,9 @@ class Strains:
         for key,vals in values.items():
             vals = np.array(vals, dtype=float)
             if vals.shape != (n,):
-                raise ss.errors.ShapeError(f'the values of "{key}" for the strains of "{name}" are {vals.tolist()}; give one for each strain ({sc.strjoin(names)})')
+                raise ValueError(f'the values of "{key}" for the strains of "{name}" are {vals.tolist()}; give one for each strain ({sc.strjoin(names)})')
             if np.any(vals < 0):
-                raise ss.errors.InvalidAdjustment(f'the values of "{key}" for the strains of "{name}" are multipliers, so cannot be negative ({vals.tolist()})')
+                raise ValueError(f'the values of "{key}" for the strains of "{name}" are multipliers, so cannot be negative ({vals.tolist()})')
             self.values[key] = vals
         if shared is None:
             shared = self.members is None
@@ -343,7 +343,7 @@ class Strains:
             split = None
         self.split = None if split is None else np.array(split, dtype=float)
         if self.split is not None and self.split.shape != (n,):
-            raise ss.errors.BadSplit(f'split= of "{name}" has {len(self.split)} entries, but there are {n} strains ({sc.strjoin(names)}); for sets of strains carried together, give it by label, e.g. split={{"{names[0]}": 0.5, "{"+".join(names[:2])}": 0.5}}')
+            raise ValueError(f'split= of "{name}" has {len(self.split)} entries, but there are {n} strains ({sc.strjoin(names)}); for sets of strains carried together, give it by label, e.g. split={{"{names[0]}": 0.5, "{"+".join(names[:2])}": 0.5}}')
         self.immunity = immunity
         self._init_sets()
         return
@@ -461,7 +461,7 @@ class Strains:
                 parts = label.split('+')
                 unknown = [p for p in parts if p not in self.names]
                 if unknown:
-                    raise ss.errors.BadSplit(f'split= of "{self.name}" names {sc.strjoin(unknown)}, which {"is" if len(unknown) == 1 else "are"} not among its strains ({sc.strjoin(self.names)})')
+                    raise ValueError(f'split= of "{self.name}" names {sc.strjoin(unknown)}, which {"is" if len(unknown) == 1 else "are"} not among its strains ({sc.strjoin(self.names)})')
                 split[self.level_of([self.names.index(p) for p in parts], what=f'split= of "{self.name}" at "{label}"')] += share
         else:
             split[:len(self.names)] = self.split if self.split is not None else 1/len(self.names)
@@ -506,7 +506,7 @@ class Strains:
                     entry.setdefault(kind, {})[sub] = val.tolist()
                 else:
                     entry[key] = val.tolist()
-            entry.combine = ss.transitions.quantity_json(imm.combine, None, None) if callable(imm.combine) else imm.combine
+            entry.combine = ss.presentation.quantity_json(imm.combine, None, None) if callable(imm.combine) else imm.combine
             immunity.append(entry)
         return sc.objdict(name=self.name, strains=list(self.names), members=None if self.members is None else list(self.names), shared=self.shared,
                           max_strains=self.max_strains, transmit=self.transmit, split=self.split_sets if self.split_sets is not None else None if self.split is None else self.split.tolist(),
@@ -527,7 +527,7 @@ def attach(dis, strains):
     chances = {tr.per_given['p'] for tr in graph.transitions.values() if isinstance(getattr(tr, 'per_given', {}).get('p'), str)} # Values named by p= of a transition with an outcome for each strain
     unknown = [key for key in strains.values if key != 'rel_trans' and key not in graph.transitions and key not in chances]
     if unknown:
-        raise ss.errors.UnknownTransition(f'the values of the strains of "{dis.name}" are for {sc.strjoin(unknown)}, which {"is" if len(unknown) == 1 else "are"} not among its transitions ({sc.strjoin(graph.transitions.keys())}); a value of a strain multiplies a transition (its rate, a duration divided, or a branch\'s probability), or rel_trans')
+        raise sc.KeyNotFoundError(f'the values of the strains of "{dis.name}" are for {sc.strjoin(unknown)}, which {"is" if len(unknown) == 1 else "are"} not among its transitions ({sc.strjoin(graph.transitions.keys())}); a value of a strain multiplies a transition (its rate, a duration divided, or a branch\'s probability), or rel_trans')
     if strains.shared is True:
         attach_shared(dis, strains)
     else:
@@ -578,7 +578,7 @@ def prepare(strains, trs):
                 errormsg = f'p= of "{name}" with per="strain" is the chance of each strain taking the first destination: a number, or the name of values of the strains; not {given!r}'
                 raise TypeError(errormsg)
             if np.any(c < 0) or np.any(c > 1):
-                raise ss.errors.OutOfBounds(f'the chance of each strain taking the first destination of "{name}" is {np.round(c, 4).tolist()}; each is between 0 and 1')
+                raise ValueError(f'the chance of each strain taking the first destination of "{name}" is {np.round(c, 4).tolist()}; each is between 0 and 1')
             none = np.zeros(L)
             for l,s in enumerate(strains.sets):
                 none[l] = np.prod(c[list(s)])
@@ -598,7 +598,7 @@ def attach_shared(dis, strains):
     """ Strains with shared states: a strain dimension, with the transmissions that let people carry another strain as well where an `ss.immunity` protects only in part in a state they are infected in (superinfection) """
     graph = dis.graph
     if any(strat.kind == 'strain' for strat in graph.strats):
-        raise ss.errors.DuplicateStructuralDimension(f'"{dis.name}" has strains already')
+        raise ValueError(f'"{dis.name}" has strains already')
     strat = strains._strat()
     strat.carried = strains._carriers(graph) # A strain belongs to an infection: people carry it while infected, and in the states that lead back to infection without a new one
     protecting = [name for imm in strains.immunity for name in imm.names] # States whose people are protected by the strains they had there (due_to=R)
@@ -618,9 +618,9 @@ def attach_shared(dis, strains):
                 errormsg = f'an ss.immunity of the strains of "{dis.name}" is due to the attribute "{name}", but the strains share their states, so it would scale no one strain\'s protection; give due_to= a state (e.g. due_to=R), or give the strains courses of their own (shared=False)'
                 raise ValueError(errormsg)
             if name not in graph.states or not graph.states[name].people:
-                raise ss.errors.UnknownState(f'an ss.immunity of the strains of "{dis.name}" is due to "{name}", which is not a state of people of it; its states are {sc.strjoin(s.name for s in graph.people_states)}')
+                raise sc.KeyNotFoundError(f'an ss.immunity of the strains of "{dis.name}" is due to "{name}", which is not a state of people of it; its states are {sc.strjoin(s.name for s in graph.people_states)}')
             if name not in strat.states:
-                raise ss.errors.InvalidAdjustment(f'an ss.immunity of the strains of "{dis.name}" is due to "{name}", in which people carry no strain (they have never been infected), so it protects against none')
+                raise ValueError(f'an ss.immunity of the strains of "{dis.name}" is due to "{name}", in which people carry no strain (they have never been infected), so it protects against none')
             other = [key for key in imm.values if key != 'rel_sus']
             if other:
                 raise ss.CapabilityError(f'an ss.immunity of the strains of "{dis.name}" due to "{name}" lowers {sc.strjoin(other)}; the people in a shared state carry its strains, so it lowers only rel_sus (their protection against another strain)')
@@ -649,7 +649,7 @@ def refuse_by_strain(strat, tr, val, what):
     for part in ss.expressions.nodes(val):
         by = part.value if isinstance(part, ss.par) else part
         if isinstance(by, ss.by) and strat.name in by.dims:
-            raise ss.errors.InvalidAdjustment(f'{what} is by "{strat.name}", but a transmission is worked out for the people it infects, who carry no strain yet, so it would apply to none.\n'
+            raise ValueError(f'{what} is by "{strat.name}", but a transmission is worked out for the people it infects, who carry no strain yet, so it would apply to none.\n'
                                               f'     Give how much more one strain transmits with the strains, e.g. ss.Strains(..., {tr.name}=[...]) (or rel_trans=[...]).')
     return
 
@@ -679,7 +679,7 @@ def attach_own(dis, strains):
     shared = [] if strains.shared is False else strains.shared
     missing = [name for name in shared if name not in graph.states]
     if missing:
-        raise ss.errors.UnknownState(f'shared= of the strains of "{dis.name}" names {sc.strjoin(missing)}, which {"is" if len(missing) == 1 else "are"} not a state of it; its states are {sc.strjoin(graph.states.keys())}')
+        raise sc.KeyNotFoundError(f'shared= of the strains of "{dis.name}" names {sc.strjoin(missing)}, which {"is" if len(missing) == 1 else "are"} not a state of it; its states are {sc.strjoin(graph.states.keys())}')
     init_prev = graph.init_prev
     members = []
     for k,name in enumerate(strains.names):
@@ -752,7 +752,7 @@ class Protection:
             return value*(1 - p)
         inside = engine.mod[self.state].raw
         if np.any(p[inside] >= 1):
-            raise ss.errors.OutOfBounds(f'the protection on the time in {self.state} of "{engine.mod.name}" reached 1, which would make its exits infinitely fast; combine= or the matrix needs to keep it below 1')
+            raise ValueError(f'the protection on the time in {self.state} of "{engine.mod.name}" reached 1, which would make its exits infinitely fast; combine= or the matrix needs to keep it below 1')
         return value*np.where(inside, 1/(1 - np.where(inside, p, 0)), 1.0)
 
     def describe(self):
@@ -765,7 +765,7 @@ def stock_sum(expr):
     """ The states in a result that is a plain sum of states (e.g. `S + I + R`), or None """
     if isinstance(expr, ss.expressions.Stock):
         return [expr.state]
-    elif isinstance(expr, ss.transitions.BinOp) and expr.op == '+':
+    elif isinstance(expr, ss.expressions.BinOp) and expr.op == '+':
         a, b = stock_sum(expr.a), stock_sum(expr.b)
         return a + b if a is not None and b is not None else None
     return None
@@ -821,7 +821,7 @@ class Family(ss.Module):
         self.init_prev = init_prev
         if strains.split_sets is not None: # Each strain has its own course, so a person carries any of them at once: the split is by strain
             if any('+' in label for label in strains.split_sets):
-                raise ss.errors.BadSplit(f'split= of "{name}" gives sets of strains ({sc.strjoin(l for l in strains.split_sets if "+" in l)}), but its strains have courses of their own, each seeded alone; give one share for each strain')
+                raise ValueError(f'split= of "{name}" gives sets of strains ({sc.strjoin(l for l in strains.split_sets if "+" in l)}), but its strains have courses of their own, each seeded alone; give one share for each strain')
             strains.split = np.array([strains.split_sets.get(n, 0.0) for n in names])
         self.split = None if strains.split is None else strains.split.copy()
         self.guessed = sc.objdict()
@@ -953,7 +953,7 @@ class Family(ss.Module):
                 gives = any(np.any(imm.matrix(key, n)[k] > 0) for key in imm.values)
                 if states is None and gives:
                     lacking = [m.name for m in members if self.states_of(m, imm.names) is None]
-                    raise ss.errors.UnknownState(f'an ss.immunity of "{self.name}" is due to "{imm.source}", which {sc.strjoin(lacking)} {"has" if len(lacking) == 1 else "have"} no state or named sum of states for; add it, or give that strain a row of zeros')
+                    raise sc.KeyNotFoundError(f'an ss.immunity of "{self.name}" is due to "{imm.source}", which {sc.strjoin(lacking)} {"has" if len(lacking) == 1 else "have"} no state or named sum of states for; add it, or give that strain a row of zeros')
                 sources.append(states if gives else None)
             self.sources.append(sources)
             for key in imm.values:
@@ -964,10 +964,10 @@ class Family(ss.Module):
                     if key.startswith('dur.'):
                         state = key.split('.', 1)[1]
                         if state not in mod.graph.states or not mod.graph.states[state].people:
-                            raise ss.errors.UnknownState(f'an ss.immunity of "{self.name}" shortens the time in "{state}", which "{mod.name}" has no state of people called; its states are {sc.strjoin(s.name for s in mod.graph.people_states)}')
+                            raise sc.KeyNotFoundError(f'an ss.immunity of "{self.name}" shortens the time in "{state}", which "{mod.name}" has no state of people called; its states are {sc.strjoin(s.name for s in mod.graph.people_states)}')
                         largest = imm.largest(key, n)[g] if not callable(imm.combine) else 0
                         if largest >= 1:
-                            raise ss.errors.OutOfBounds(f'an ss.immunity of "{self.name}" can give a protection of {largest:n} on the time in {state} of "{mod.name}" (combine={imm.combine!r}), which would make its exits infinitely fast; scale the matrix, or combine="multiply", so it stays below 1')
+                            raise ValueError(f'an ss.immunity of "{self.name}" can give a protection of {largest:n} on the time in {state} of "{mod.name}" (combine={imm.combine!r}), which would make its exits infinitely fast; scale the matrix, or combine="multiply", so it stays below 1')
                         exits = mod.graph.exits[state]
                         for tr in exits.branches + sc.tolist(exits.remainder) + exits.timed + exits.hazards:
                             sim.modifiers[(mod.name, 'transition', tr.name)].append(Protection(self, i, key, g, state=state))
@@ -980,14 +980,14 @@ class Family(ss.Module):
             for state in self.exclusive:
                 lacking = [mod.name for mod in members if state not in mod.graph.states]
                 if lacking:
-                    raise ss.errors.UnknownState(f'shared=["{state}"] of "{self.name}" is not a state of {sc.strjoin(lacking)}')
+                    raise sc.KeyNotFoundError(f'shared=["{state}"] of "{self.name}" is not a state of {sc.strjoin(lacking)}')
             self.blocked = []
             for mod in members:
                 graph = mod.graph
                 exits = lambda state: [tr for key in ['branches', 'timed', 'hazards', 'contact'] for tr in graph.exits[state][key]] + sc.tolist(graph.exits[state].remainder)
                 ends = [s.name for s in graph.people_states if s.name not in self.exclusive and all(tr.outflow for tr in exits(s.name))] # No way out but leaving the population (deaths)
                 if not ends:
-                    raise ss.errors.UnknownState(f'"{mod.name}" has no state with no exits for people with {sc.strjoin(self.exclusive)} in another strain of "{self.name}" to move to; add one, e.g. ss.Disease(..., X=ss.State(people=True))')
+                    raise sc.KeyNotFoundError(f'"{mod.name}" has no state with no exits for people with {sc.strjoin(self.exclusive)} in another strain of "{self.name}" to move to; add one, e.g. ss.Disease(..., X=ss.State(people=True))')
                 self.blocked.append(ends[-1])
 
         # Under the compartmental solvers: the members side by side, seeded from their shares (members that affect each other need agents: see ss.solvers.init_capabilities())
@@ -1037,8 +1037,8 @@ class Family(ss.Module):
 
     def init_results(self):
         super().init_results()
-        results = [ss.Result(key, dtype=float, scale=True, label=f'{key} (any member)', kind='stock') for key in self.stocks]
-        results += [ss.Result(key, dtype=float, scale=True, label=f'{key} (all members)', kind='flow', auto_plot='.' not in key) for key in self.flows] # The flow to each destination is res.<transition>.<state>
+        results = [ss.Result(key, dtype=float, scale=True, label=f'{key} (any member)', summarize_by='last') for key in self.stocks]
+        results += [ss.Result(key, dtype=float, scale=True, label=f'{key} (all members)', summarize_by='sum', auto_plot='.' not in key) for key in self.flows] # The flow to each destination is res.<transition>.<state>
         self.define_results(*results)
         return
 
@@ -1108,7 +1108,7 @@ class Family(ss.Module):
         """ The value of a member's attribute for each agent (by UID), as a level of protection between 0 and 1; none (0) where it is NaN """
         vals = np.nan_to_num(mod.engine.attr_values(a, ss.uids(np.arange(n_agents))), nan=0.0)
         if np.any(vals < 0) or np.any(vals > 1):
-            raise ss.errors.OutOfBounds(f'the attribute "{a.name}" of "{mod.name}" scales a protection of "{self.name}", so it needs to be between 0 and 1, but it is {vals.min():n} to {vals.max():n}; scale it, e.g. with a derived attribute')
+            raise ValueError(f'the attribute "{a.name}" of "{mod.name}" scales a protection of "{self.name}", so it needs to be between 0 and 1, but it is {vals.min():n} to {vals.max():n}; scale it, e.g. with a derived attribute')
         return vals
 
     def protection(self, index, key, g):
@@ -1215,7 +1215,7 @@ class Family(ss.Module):
     def to_spec(self, filename=None, **kwargs):
         """ The model spec of the strains: the members by name (each has its own node, before it), and the strains' options as data (as `sim.to_spec()` holds it, for `sim.hash()`, `ss.diff()`, and `sim.to_code()`) """
         unit = self.sim.unit if self.sim is not None else None
-        out = sc.objdict(type='Family', name=self.name, label=self.label, members=list(self.member_names), init_prev=None if self.init_prev is None else ss.transitions.quantity_json(self.init_prev, None, unit),
+        out = sc.objdict(type='Family', name=self.name, label=self.label, members=list(self.member_names), init_prev=None if self.init_prev is None else ss.presentation.quantity_json(self.init_prev, None, unit),
                          strains=self.strains_spec)
         if filename is not None:
             return sc.savejson(filename, out, **kwargs)

@@ -60,7 +60,7 @@ class Parser:
             return ~ev(node.operand)
         elif isinstance(node, ast.Compare) and len(node.ops) == 1 and type(node.ops[0]) in comparisons:
             a, b = ev(node.left), ev(node.comparators[0])
-            a = a if isinstance(a, ss.conditions.Cond) else ss.transitions.as_expr(a) # A condition on people's properties stays one
+            a = a if isinstance(a, ss.conditions.Cond) else ss.expressions.as_expr(a) # A condition on people's properties stays one
             return {'<':a.__lt__, '<=':a.__le__, '>':a.__gt__, '>=':a.__ge__}[comparisons[type(node.ops[0])]](b)
         elif isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and not node.keywords:
             name = node.func.id
@@ -68,7 +68,7 @@ class Parser:
             if name in time_names:
                 return getattr(ss, name)(*args)
             elif name in func_names:
-                return ss.transitions.Func(name, *args)
+                return ss.expressions.Func(name, *args)
         errormsg = f'ss.load() cannot read "{ast.unparse(node)}" in a model spec'
         raise ValueError(errormsg)
 
@@ -848,7 +848,7 @@ def sim_spec(sim, filename=None, **kwargs):
     pars = sim.pars
     def tstr(val):
         if isinstance(val, ss.dur) and type(val).base != sim.unit_base + 's': # A duration in another unit than the sim's (e.g. start=2000 in years, with rates per day) is written with its unit
-            return ss.transitions.quantity_json(val, 'dur', None)
+            return ss.presentation.quantity_json(val, 'dur', None)
         elif isinstance(val, ss.dur):
             return float(val.value)
         return val.strftime('%Y-%m-%d') if isinstance(val, ss.date) and val == val.normalize() else str(val) # Dates as ISO 8601

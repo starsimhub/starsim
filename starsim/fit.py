@@ -1065,12 +1065,12 @@ def product_pairs(sim, names):
             uses += [oc.source, oc.delay, oc.duration]
         uses += list(graph.exprs.values()) + [init for state in graph.states.values() for init in [state.init, state.init_n]]
     uses += [m.amount for mods in sim.modifiers.values() for m in mods]
-    uses = [use for use in uses if isinstance(use, ss.transitions.Expr)]
+    uses = [use for use in uses if isinstance(use, ss.expressions.Expr)]
 
     def signs(expr, sign=1, out=None):
         """ The parameters that are factors of an expression: +1 for one it is multiplied by, -1 for one it is divided by """
         out = {} if out is None else out
-        if isinstance(expr, ss.transitions.BinOp) and expr.op in ['*', '/']:
+        if isinstance(expr, ss.expressions.BinOp) and expr.op in ['*', '/']:
             signs(expr.a, sign, out)
             signs(expr.b, sign if expr.op == '*' else -sign, out)
         elif isinstance(expr, ss.par):
@@ -1195,7 +1195,7 @@ def optimize(sim, total=None, maximize=None, minimize=None, at=None, start=None,
     for name in names:
         found = [mod.pars[name] for mod in probe.declared if name in mod.pars]
         if not found:
-            raise ss.errors.UnknownParameter(f'ss.fit.optimize() has spend="{name}", which is not a parameter of the model')
+            raise sc.KeyNotFoundError(f'ss.fit.optimize() has spend="{name}", which is not a parameter of the model')
         current[name] = found[0].raw if isinstance(found[0], ss.par) else found[0]
     t0 = float(probe.t.yearvec[0])
     begin = None if start is None else (ss.date(start).years if isinstance(start, (str, ss.date)) else float(start))
@@ -1369,7 +1369,7 @@ def sensitivity(sim, pars=None, results=None, n=100, rand_seed=None, verbose=Non
     probe = sim.new(verbose=0).init()
     bounded = bounded_pars(probe, pars)[0]
     if not bounded:
-        raise ss.errors.NothingToFit('sensitivity() needs parameters with bounds, e.g. beta = ss.par(0.3, bounds=[0.1, 0.5]).')
+        raise ValueError('sensitivity() needs parameters with bounds, e.g. beta = ss.par(0.3, bounds=[0.1, 0.5]).')
     names = list(bounded.keys())
     lows, highs = [np.array([float(p.bounds[k]) for p in bounded.values()]) for k in [0, 1]]
     logs = (lows > 0) & (highs/np.maximum(lows, 1e-300) >= 10) # Wide positive bounds are sampled on a log scale, as fit() searches them
@@ -1389,11 +1389,11 @@ def sensitivity(sim, pars=None, results=None, n=100, rand_seed=None, verbose=Non
             continue
         if results is not None and key not in results:
             continue
-        if results is None and not ((modname, key) in counts or res.kind == 'flow'):
+        if results is None and not ((modname, key) in counts or res.summarize_by == 'sum'):
             continue
         vals = np.asarray(res.values)
         summaries[f'{modname}.{key} peak'] = vals.max(axis=1)
-        summaries[f'{modname}.{key} {"total" if res.kind == "flow" else "final"}'] = vals.sum(axis=1) if res.kind == 'flow' else vals[:, -1]
+        summaries[f'{modname}.{key} {"total" if res.summarize_by == "sum" else "final"}'] = vals.sum(axis=1) if res.summarize_by == 'sum' else vals[:, -1]
     ranks = lambda v: sps.rankdata(v)
     RX = np.column_stack([ranks(X[:, j]) for j in range(len(names))])
     table = sc.dataframe(index=names)
@@ -1548,7 +1548,7 @@ def fit_stages(sim, stages, verbose=None, **kwargs):
     Staged fitting: run each method in turn, each starting from the best fit of the one before; see `sim.fit()` with `method=` a list
 
     Each stage is a method's name, or a dict with `method=` and that method's settings. A stage
-    that does not converge stops the sequence (`ss.errors.StageStopped`), and the fit returned is that
+    that does not converge stops the sequence (with a warning), and the fit returned is that
     of the last stage that did, or the first stage's best attempt if it was the one that failed.
     """
     verbose = sc.ifelse(verbose, ss.options.verbose)
@@ -1562,7 +1562,7 @@ def fit_stages(sim, stages, verbose=None, **kwargs):
         fit = current.fit(method=method, verbose=verbose, **sc.mergedicts(kwargs, stage))
         if not fit.converged:
             if i < len(stages) - 1:
-                ss.warn(f'stage {i+1} ({method}) did not converge ({fit.why}), so the stages after it were not run; returning {"stage " + str(i) if good is not None else "its best attempt"}', ss.errors.StageStopped)
+                ss.warn(f'stage {i+1} ({method}) did not converge ({fit.why}), so the stages after it were not run; returning {"stage " + str(i) if good is not None else "its best attempt"}')
             return good if good is not None else fit
         good = fit
         current = fit.sim.new() # With the best-fit values
@@ -1625,7 +1625,7 @@ class Problem:
             probe.data = data
         probe.init()
         if probe.data is None and not callable(gof): # A loss that is a function of the sim brings its own data
-            raise ss.errors.NoData('fit() needs data: attach it to the sim with ss.Sim(..., data=...), with one column named like each result to fit; or give gof= as a function of the sim that returns the loss.')
+            raise ValueError('fit() needs data: attach it to the sim with ss.Sim(..., data=...), with one column named like each result to fit; or give gof= as a function of the sim that returns the loss.')
         self.verbose = verbose = sc.ifelse(verbose, ss.options.verbose)
         check_gof(gof)
         if probe.data is not None and not callable(gof): # Every column is compared with its result, so one that matches none is an error; a loss that is a function of the sim reads what it needs
@@ -1666,7 +1666,7 @@ class Problem:
             why = f'gof="{gof}" was given' if gof is not None else 'not every data series has a likelihood'
             print(f'Note: {why}, so the likelihoods of {sc.strjoin([k for k,v in liks.items() if v is not None])} are not used')
         if not fitted:
-            raise ss.errors.NothingToFit('fit() found no parameter with bounds; give the parameters to fit bounds, e.g. beta = ss.par(0.1, bounds=[0.01, 0.5]).')
+            raise ValueError('fit() found no parameter with bounds; give the parameters to fit bounds, e.g. beta = ss.par(0.1, bounds=[0.01, 0.5]).')
         self.fitted = fitted
         self.names = names = list(fitted.keys())
         self.products = product_pairs(probe, names[:self.n_model]) # Parameters that the data cannot tell apart, from the model
@@ -1717,10 +1717,10 @@ class Problem:
             raise ValueError(f'penalty= is added to what a best fit minimizes, but method="{method}" does not minimize; for a posterior, give the parameters priors (ss.par(..., prior=...))')
         elif method == 'nuts' and (not self.use_lik or self.no_grad):
             why = 'not every data series has a likelihood' if not self.use_lik else f'it has no gradients, since {self.no_grad}'
-            raise ss.errors.NoPosterior(f'method="nuts" gives a posterior, which needs a likelihood for every data series and the gradients of a sim run in JAX, but {why}.')
+            raise ValueError(f'method="nuts" gives a posterior, which needs a likelihood for every data series and the gradients of a sim run in JAX, but {why}.')
         elif method == 'pmcmc' and (not self.use_lik or filtered):
             why = 'not every data series has a likelihood' if not self.use_lik else filtered
-            raise ss.errors.NoPosterior(f'method="pmcmc" gives a posterior, which needs a likelihood for every data series and a stochastic compartmental sim that the kernels run whole, but {why}.')
+            raise ValueError(f'method="pmcmc" gives a posterior, which needs a likelihood for every data series and a stochastic compartmental sim that the kernels run whole, but {why}.')
         elif method == 'if2' and (not self.use_lik or filtered or self.levels or self.elements or self.n_model < len(self.fitted)):
             why = 'not every data series has a likelihood' if not self.use_lik else filtered or ('a parameter has several values' if self.levels or self.elements else 'a parameter of a likelihood is fitted')
             raise ValueError(f'method="if2" needs a likelihood for every data series and a stochastic compartmental sim that the kernels run whole, and fits the parameters of the model\'s rates, but {why}; use method="pmcmc"')
@@ -1854,6 +1854,14 @@ class Problem:
                 break
         return points[chosen]
 
+    def par_table(self, best):
+        """ The table of the fitted parameters: each one's starting value, best value, and bounds, with its label if any has one """
+        table = pd.DataFrame(dict(par=self.names, initial=self.x0, best=best, low=self.lows, high=self.highs))
+        labels = [getattr(p, 'label', None) or '' for p in self.fitted.values()]
+        if any(labels):
+            table.insert(1, 'label', labels)
+        return table
+
     def posterior(self, method, out):
         """ The draws of a sampler, as the best values, a table, and the samples, with the R-hat and effective sample size; and the band of the results over them """
         names = self.names
@@ -1867,7 +1875,7 @@ class Problem:
         samples.insert(0, 'chain', np.repeat(np.arange(n_chains), n_draws))
         samples.insert(1, 'draw', np.tile(np.arange(n_draws), n_chains))
         out.divergences = divergences = int(out.divergent.sum()) if 'divergent' in out else None
-        out.table = table = pd.DataFrame(dict(par=names, initial=self.x0, best=out.best, low=self.lows, high=self.highs))
+        out.table = table = self.par_table(out.best)
         table['median'] = np.median(samples[names].values, axis=0)
         table['lower'], table['upper'] = np.percentile(samples[names].values, [2.5, 97.5], axis=0)
         table['rhat'], table['ess'] = rhat, n_eff
@@ -1922,7 +1930,7 @@ class Problem:
         if 'zs' in out: # Draws from a posterior
             self.posterior(method, out)
         else:
-            out.table = pd.DataFrame(dict(par=names, initial=self.x0, best=out.best, low=self.lows, high=self.highs))
+            out.table = self.par_table(out.best)
             if out.get('spread') is not None: # Not a posterior, but some indication of the uncertainty
                 out.table['spread_lower'], out.table['spread_upper'] = out.spread
         best = out.best
@@ -1932,7 +1940,7 @@ class Problem:
         after = self.run(best, seed=seeds[0], fresh=True) # A run at the best values, for plotting; also the last, so a likelihood's own parameters keep their best values
         scores = [self.measure(after)] + [self.measure(self.run(best, seed=seed)) for seed in seeds[1:]] # The score of the best values, as in the search
         for msg in notes:
-            ss.note(msg, ss.errors.Unidentifiable, sim=after, verbose=self.verbose)
+            ss.note(msg, sim=after, verbose=self.verbose)
         zs, zlo, zhi = self.encode(best), self.encode(self.lows), self.encode(self.highs) # On the scale searched on, so a value near the low end of a log scale is not at its bound
         for name,z,lo,hi,val,low,high in zip(names, zs, zlo, zhi, best, self.lows, self.highs):
             if min(z - lo, hi - z) < 0.01*(hi - lo):
@@ -2387,7 +2395,7 @@ def compare_models(sims, data=None, holdout=0.25, folds=None, **kwargs):
         probes.append(probe.init())
     dfs = [probe.data for probe in probes]
     if any(df is None for df in dfs):
-        raise ss.errors.NoData('compare_models() needs data: pass data=, or attach the same data to every sim.')
+        raise ValueError('compare_models() needs data: pass data=, or attach the same data to every sim.')
     if data is None and not all(df.equals(dfs[0]) for df in dfs[1:]):
         errormsg = 'The sims have different data; pass data= to compare them on the same data'
         raise ValueError(errormsg)

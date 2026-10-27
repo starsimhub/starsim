@@ -38,13 +38,15 @@ print('Infectious at the end:', round(res.I[-1]))
 print('First time points:', res.I.timevec[:3])
 ```
 
-Each result is one of three kinds, which says how it is added up over time:
+Each result says how it is added up over time, as its `summarize_by`:
 
-| Kind | What it is | Examples | Over a period |
-|---|---|---|---|
-| Stock | A number at each time point | `S`, `I`, `R` | The value at the end |
-| Flow | A number of events during each step | `infection`, `recovery`, `cases` | The total |
-| Ratio | One number divided by another | `prevalence` | Worked out again from the totals of its parts |
+| Kind | `summarize_by` | What it is | Examples | Over a period |
+|---|---|---|---|---|
+| Stock | `'last'` | A number at each time point | `S`, `I`, `R` | The value at the end |
+| Flow | `'sum'` | A number of events during each step | `infection`, `recovery`, `cases` | The total |
+| Ratio | `'mean'` | One number divided by another | `prevalence` | Worked out again from the totals of its parts (the mean, for one with no parts) |
+
+A result of your own gives it as `ss.Result('n_protected', summarize_by='last')`; if it isn't given, it is guessed from the name (`new_...` is summed, `n_...` and `cum_...` take the last value, and anything else is averaged), and `summarize_by=None` is for a result that isn't summarized over time.
 
 A flow's running total is `.cum`, so `res.infection.cum[-1]` is the number of infections over the whole run.
 
@@ -81,7 +83,7 @@ Each result is named after its variable (`prevalence`, `cases`). See [Outcomes a
 
 ## Changing the time step of a result
 
-`resample()` gives a result over longer periods, adding it up by its kind without being told: weekly cases are the total over each week, monthly numbers infectious are the value at the end of each month. `to_series()` gives a pandas series with the dates as its index:
+`resample()` gives a result over longer periods, adding it up by its `summarize_by` without being told: weekly cases are the total over each week, monthly numbers infectious are the value at the end of each month. `to_series()` gives a pandas series with the dates as its index:
 
 ```{python}
 res.cases.resample('week').to_series().head()
@@ -138,7 +140,7 @@ sim.results.measles.prevalence.plot()
 
 ## Summaries and export
 
-`sim.summarize()` gives each result over the whole run, by its kind: the total of a flow, the final value of a stock, and the mean of a ratio.
+`sim.summarize()` gives each result over the whole run, by its `summarize_by`: the total of a flow (`'sum'`), the final value of a stock (`'last'`), and the mean of a ratio (`'mean'`).
 
 ```{python}
 sim.summarize()

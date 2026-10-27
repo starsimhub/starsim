@@ -41,7 +41,7 @@ All three give the same model hash (`sim.hash().model`). This is a rule of the d
 
 When you write `0.3 * I`, nothing is computed. `I` is a state, so the result is an expression: a small tree whose leaves are parameters, states, counts (`I.n`), and properties of people (`ss.ppl.age`), joined by arithmetic and NumPy functions. Each engine evaluates the same tree in its own terms: a value for each group of a compartmental model, for each agent, or as JAX arrays so a gradient can be taken through the run. This is what lets a model written once be run by any solver.
 
-Two kinds of leaf differ. **`I.n`** is the number of people in `I`, used literally. A **bare `I`** means contact with people in `I`: with no network that's `I.n / N`, so `beta * I` is the textbook `beta * S * I / N`, and with a network each engine works it out from who actually meets whom, which no single formula can say. Since that is a sum over contacts, a rate must be linear in its bare states (`beta * I * I` raises `ss.errors.NonlinearExposure`).
+Two kinds of leaf differ. **`I.n`** is the number of people in `I`, used literally. A **bare `I`** means contact with people in `I`: with no network that's `I.n / N`, so `beta * I` is the textbook `beta * S * I / N`, and with a network each engine works it out from who actually meets whom, which no single formula can say. Since that is a sum over contacts, a rate must be linear in its bare states (`beta * I * I` raises a `ValueError`).
 
 The **kind** of a transition is derived from its rate, not declared: if the rate mentions a bare state, the transition is contact-mediated and that state is a source of infection; otherwise it is spontaneous. You can see this on the transition itself:
 
@@ -53,7 +53,7 @@ sir.recovery.contact      # False
 
 ## Parameters
 
-A number written inline becomes a parameter of the module, named after its slot: above, `sir.pars` has `beta` (the coefficient of `I`) and `dur` (the dwell time of recovery), qualified by the transition if two would clash (`dur_recovery`). Wrap a value in `ss.par()` when it needs a name, bounds, or a source; bounds are what make it fittable, since `sim.fit()` fits every parameter with bounds to every result with data. A value may also vary by group (`ss.by(age=[...])`), in time (`ss.timeseries()`), or between people (a distribution): the slot decides what a value means, and the form is free. Setting a parameter the module doesn't have raises `ss.errors.UnknownParameter`, since a misspelling that is silently ignored is one of the hardest bugs to find. See [Parameters](../user_guide/models_parameters.qmd).
+A number written inline becomes a parameter of the module, named after its slot: above, `sir.pars` has `beta` (the coefficient of `I`) and `dur` (the dwell time of recovery), qualified by the transition if two would clash (`dur_recovery`). Wrap a value in `ss.par()` when it needs a name, bounds, or a source; bounds are what make it fittable, since `sim.fit()` fits every parameter with bounds to every result with data. A value may also vary by group (`ss.by(age=[...])`), in time (`ss.timeseries()`), or between people (a distribution): the slot decides what a value means, and the form is free. Setting a parameter the module doesn't have raises a `KeyError`, since a misspelling that is silently ignored is one of the hardest bugs to find. See [Parameters](../user_guide/models_parameters.qmd).
 
 ## Dimensions
 
@@ -68,9 +68,9 @@ Stratifying doesn't copy the states: `sir` still has `S`, `I`, and `R`, and the 
 
 ## The graph: resolve, complete, check
 
-When `ss.Disease(...)` is called, it builds the module's graph (`ss.transitions.Graph`, in `starsim/internals/graph.py`). The graph is where the objects you wrote become a model:
+When `ss.Disease(...)` is called, it builds the module's graph (`ss.graph.Graph`, in `starsim/internals/graph.py`). The graph is where the objects you wrote become a model:
 
-1. **Collect and name.** It gathers the states, transitions, parameters, and results, and names any that have no name: from the keyword they were passed under, then a `name=` argument, then the variable they're bound to in the calling code. A transition with none of these gets a name built from its endpoints (`S_to_I`); a state with none raises `ss.errors.UnnamedState`, since a made-up state name would leak into results.
+1. **Collect and name.** It gathers the states, transitions, parameters, and results, and names any that have no name: from the keyword they were passed under, then a `name=` argument, then the variable they're bound to in the calling code. A transition with none of these gets a name built from its endpoints (`S_to_I`); a state with none raises a `ValueError`, since a made-up state name would leak into results.
 2. **Resolve.** It finds which states are people and which are plain counts (a water reservoir, a mosquito population), derives the kind of each transition from its rate, marks the sources of infection, works out which transitions are acquisitions of the disease, and finds the first state (where people start and are born into).
 3. **Complete.** It turns inline values into named parameters, and groups the exits of each state into those that compete (rates, resolved together in one draw, so declaration order never matters) and those that split on entry (`p=`).
 4. **Check.** It checks what can be checked without a sim: the time dimension of every rate, that branch probabilities add up, that exposure is linear, and that keywords name real parameters.

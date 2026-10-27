@@ -30,7 +30,7 @@ class BySex(ss.Analyzer):
     """ Record a 2D result of infections by sex """
     def init_results(self):
         super().init_results()
-        self.define_results(ss.Result('infected', columns=['female', 'male'], label='Infected', kind='stock'))
+        self.define_results(ss.Result('infected', columns=['female', 'male'], label='Infected', summarize_by='last'))
 
     def step(self):
         infected = self.sim.diseases.sis.I

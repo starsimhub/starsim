@@ -159,7 +159,7 @@ def test_states():
         other = staged[solver].results.hiv
         assert np.allclose(other.I.by('stage').values[-1], res.I.by('stage').values[-1], rtol=0.15), f'Expected {solver} to match the ODE'
 
-    with pytest.raises(ss.errors.UnknownState):
+    with pytest.raises(KeyError, match='states= names a state "Evv"'):
         make_malaria().stratify(species=['gambiae', 'funestus'], states=['Sv', 'Evv'])
 
     # A dimension of some states only, entered with a split that depends on age, as summer2's clinical strata
@@ -186,7 +186,7 @@ def test_states():
     assert np.isclose(res.I.select(clinical='mild').values[0], 10) and np.isclose(res.I.values[0], 10)
     assert np.isclose(res.S.values[0], 990)
 
-    with pytest.raises(ss.errors.InvalidAdjustment): # People in E have no clinical level, so an adjustment of their onset cannot apply
+    with pytest.raises(ValueError, match='have no level of "clinical"'): # People in E have no clinical level, so an adjustment of their onset cannot apply
         ss.Sim(clinical(adjust={'onset': [1, 2]}), **kw).init()
 
     # Infectiousness by clinical level: none at all stops transmission, and the solvers agree on the rest
@@ -194,9 +194,9 @@ def test_states():
     sizes = [ss.Sim(clinical(adjust={'rel_trans': [0.5, 2]}), solver=solver, stop=150, total_pop=20_000, **agents, **kw).run().results.seir.R.values[-1]
              for solver,agents in [('ode', {}), ('abm', dict(n_agents=20_000))]]
     assert np.isclose(*sizes, rtol=0.05)
-    with pytest.raises(ss.errors.InvalidAdjustment): # Susceptible people have no clinical level
+    with pytest.raises(ValueError, match=r'the people it is for \(S\) have no level of "clinical"'): # Susceptible people have no clinical level
         ss.Sim(clinical(adjust={'rel_sus': [1, 2]}), **kw).init()
-    with pytest.raises(ss.errors.MissingDimension): # Nor is there a level to take a value by clinical level from (before, it took the first)
+    with pytest.raises(KeyError, match='so there is no level to take it from'): # Nor is there a level to take a value by clinical level from (before, it took the first)
         S, E, I, R = ss.states('S E I R')
         seir = ss.Disease(infection=ss.Transition(S, E, rate=0.4 * I), onset=ss.Transition(E, I, rate=ss.by(clinical=[0.2, 0.4])), recovery=ss.Transition(I, R, dur=7), init=dict(I=0.01), name='seir')
         seir.stratify(clinical=['mild', 'severe'], states=['I'], split=[0.8, 0.2])
@@ -250,7 +250,7 @@ def test_strains():
         assert total(np.eye(2), combine=combine, kwargs=dict(solver='abm', n_agents=10_000)) == abm
     with pytest.raises(ss.CapabilityError): # A function has no compartmental form (nor a gradient)
         total(np.ones((2, 2)), combine=lambda p: p.max(0), kwargs=dict(solver='ode'))
-    with pytest.raises(ss.errors.ShapeError):
+    with pytest.raises(ValueError, match='but there are 2 strains'):
         total(np.eye(3))
 
     # A declared ratio whose denominator has no strain (susceptibles carry none) keeps its strata: the denominator is the whole of it for each strain
@@ -368,10 +368,10 @@ def test_strain_carriers():
     plain = run(staged(), 'ode', start=2000, stop=2010, total_pop=1e5).results.d
     superinfected = run(staged(ss.immunity(due_to=N, rel_sus=0.5)), 'ode', start=2000, stop=2010, total_pop=1e5).results.d
     assert np.isclose(superinfected.N[-1], plain.N[-1]) and superinfected.N.select(strain='A+B')[-1] > 0 # People in N carry another strain as well, and stay in N
-    with pytest.raises(ss.errors.BadSplit): # A share by strain would be of people at a level of the strains, where nobody is before they are infected
+    with pytest.raises(ValueError, match='is given by "strain", the strains people carry'): # A share by strain would be of people at a level of the strains, where nobody is before they are infected
         run(ss.Disease(S, I, infection=S >> I @ ss.peryear(1)*I, init=dict(I=ss.by(strain=[0.1, 0, 0.1])), name='d', strains=ss.Strains(['A', 'B'], max_strains=2)), 'ode', stop=2001)
     for way in ['rate', 'modifier']: # A transmission is worked out for the people it infects, who carry no strain yet: ss.Strains(..., infection=[...]) says it
-        with pytest.raises(ss.errors.InvalidAdjustment):
+        with pytest.raises(ValueError, match='who carry no strain yet, so it would apply to none'):
             d = ss.Disease(S, I, infection=S >> I @ (ss.by(strain=[1, 1.5]) if way == 'rate' else 1)*ss.peryear(1)*I, init=dict(I=0.01), name='d', strains=ss.Strains(['A', 'B']))
             run(d, 'ode', stop=2001, connectors=ss.modify(d.infection, multiply=ss.by(strain=[1, 1.5])) if way == 'modifier' else None)
 
@@ -529,7 +529,7 @@ def test_space():
     assert np.allclose(restarted, ss.Sim(commuters(0.05), solver='ode', **pars).run().results.sir.I.values)
 
     # A gravity model needs a geography
-    with pytest.raises(ss.errors.NoGeography):
+    with pytest.raises(ValueError, match='which has no geography'):
         I, R = ss.states('I R')
         sir = ss.Disease(recovery=ss.Transition(I, R, dur=3)).stratify(patch=['a', 'b'], mobility=ss.geo.gravity())
         ss.Sim(sir, **kw).init()
@@ -544,7 +544,7 @@ def test_space():
     sim.loop.insert(seed_north, label='sim.start_step')
     peaks = sim.run().results.sir.I.by('patch').values.argmax(axis=0)
     assert peaks[0] < peaks[1] < peaks[2] # South is nearer to the north than east is, and bigger
-    with pytest.raises(ss.errors.NoGeography):
+    with pytest.raises(ValueError, match='which has no geography'):
         ss.Sim(ss.Disease(recovery=ss.Transition(I, R, dur=3)).stratify(patch=['a', 'b'], mobility=ss.geo.radiation()), **kw).init()
 
     # Places from your own shapes (a GeoDataFrame, or a file of them), each at the centroid of its shape
@@ -619,7 +619,7 @@ def test_mixing():
     for solver in ['binomial', 'abm']:
         assert np.isclose(sims[solver].results.sir.R[-1], res.R[-1], rtol=0.1), f'Expected {solver} to match the ODE'
     assert sims.abm.results.sir.I[0] <= 10 # As agents, the number who start in each state is exact (less anyone who has already recovered)
-    with pytest.raises(ss.errors.ShapeError):
+    with pytest.raises(ValueError, match='has 3 rows, but "location" has 2 levels'):
         ss.Sim(make(), networks=ss.contacts(np.ones((3, 3)), dims='location'), **kw).init()
     assert mixing.pars.n_contacts[1, 2] == 0.5*0.2 # From (old, urban) to (young, rural)
     T = sc.timer()
@@ -723,7 +723,7 @@ def test_mixing():
         d = ss.Disease(A, B, ab=A >> B @ ss.peryear(0), init=dict(B=ss.by(np.array(table), dims=['age', 'ever'])), first='A', name='d')
         d.stratify(ever=[False, True], split=[1, 0])
         return ss.Sim(d, total_pop=1000, stratify=dict(age=[0, 30]), stop=1, **kw)
-    with pytest.raises(ss.errors.InitWhereNobodyIs, match='ever=True'):
+    with pytest.raises(ValueError, match='ever=True'):
         make_init([[0, 0.5], [0, 0.5]]).init()
     assert any('ever=True' in note for note in make_init([[0, 0.5], [0.2, 0.5]]).init().notes) # Some of it: a note
     return sims
@@ -764,11 +764,11 @@ def test_ragged():
     sim = ss.Sim(sir, stratify=[dict(sex=['female', 'male']), dict(age=[15, 25, 35, 50], where=dict(sex='female')), dict(parity=['0', '1+'], split=[0.4, 0.6], where=dict(age=['25-34', '35-49']))], total_pop=10_000, unit='day', stop=50, **kw).run()
     split = next(strat for strat in sim.groups.strats if strat.name == 'age').split
     assert (sim.groups.group_levels[:, 2] >= 0).sum() == 4 and np.isclose(sim.results.sir.S.by('parity').values[0].sum(), 5_000*split[1:3].sum(), rtol=0.01) # Women aged 25 to 49
-    with pytest.raises(ss.errors.PartialStratificationMixing):
+    with pytest.raises(ValueError, match='so there is no level for the others to mix as'):
         ss.Sim(make(), networks=ss.contacts([[3, 1, 1, 1], [1, 3, 1, 1], [1, 1, 3, 1], [1, 1, 1, 3]], ages=[15, 25, 35, 50]), **kw).init()
-    with pytest.raises(ss.errors.PartialStratificationMixing): # So do contacts by a dimension that the infectious state does not have
+    with pytest.raises(ValueError, match='so there is no level of it for the people in I to mix as'): # So do contacts by a dimension that the infectious state does not have
         ss.Sim(sir.copy().stratify(age=[0, 15], states=['S', 'R']), networks=ss.contacts([[3, 1], [1, 3]], ages=[0, 15]), **kw).init()
-    with pytest.raises(ss.errors.MissingDimension):
+    with pytest.raises(KeyError, match='but the model is not stratified by "sex"'):
         ss.Sim(sir.copy().stratify(age=[0, 15], where=dict(sex='female')), **kw).init()
 
     # As agents, a sex dimension is people.female, which a sexual network pairs on
@@ -822,7 +822,7 @@ def test_properties_in_rates():
 
     # A property that is not one of the people's says what is
     bad = ss.Disease(S, I, R, infection=S >> I @ 0.3*I, recovery=I >> R @ ss.peryear(1)*ss.ppl.agee, name='bad')
-    with pytest.raises(ss.errors.UnknownState, match='age'):
+    with pytest.raises(KeyError, match='age'):
         ss.Sim(bad, n_agents=100, verbose=0).init()
     return sim
 
@@ -849,9 +849,9 @@ def test_by_properties():
         make(mu, solver='ode', total_pop=20_000).init()
     ode = make(mu, solver='ode', total_pop=20_000, dims=dict(sex=['female', 'male'])).run() # The same keys, by a dimension
     assert np.allclose(ode.results.d.D.by('sex').values[-1], 10_000*(1 - np.exp(-10*np.array([0.02, 0.05]))), rtol=1e-3)
-    with pytest.raises(ss.errors.MissingDimension, match=r'dict\(female='):
+    with pytest.raises(KeyError, match=r'dict\(female='):
         make(ss.by(sex=[ss.peryear(0.02), ss.peryear(0.05)]), n_agents=100).init()
-    with pytest.raises(ss.errors.MissingDimension, match='lower edge'):
+    with pytest.raises(KeyError, match='lower edge'):
         make(ss.by(age=[ss.peryear(0.02), ss.peryear(0.05)]), n_agents=100).init()
 
     # A table with bin edges: each person's own age as agents; as compartments, only bins that each group is inside (bins that split a group need agents)
@@ -962,7 +962,7 @@ def test_counters():
     with pytest.raises(ValueError, match='whole number'):
         I, R = ss.states('I R')
         ss.Transition(I, R, dur=10, increment=dict(episodes=0.5))
-    with pytest.raises(ss.errors.MissingDimension, match='stratify'):
+    with pytest.raises(KeyError, match='stratify'):
         I, R = ss.states('I R')
         ss.Sim(ss.Disease(ss.Transition(I, R, dur=10, increment='episodes'), init=dict(I=0.1), first='I', name='d'), n_agents=100, verbose=0).run()
     return abm
@@ -1019,7 +1019,7 @@ def test_contacts_dims():
     assert np.allclose(ode, run(ss.contacts(m.reshape(4, 4), dims=['sex', 'risk'])))
     abm = np.mean([run(ss.contacts(m, dims=['sex', 'risk']), 'abm', seed) for seed in range(3)], axis=0)
     assert np.isclose(abm[-1], ode[-1], rtol=0.1), (abm[-1], ode[-1]) # As with any contact matrix (about 7% apart for the product form here too)
-    with pytest.raises(ss.errors.ShapeError, match='risk'):
+    with pytest.raises(ValueError, match='risk'):
         run(ss.contacts(np.ones((6, 6)), dims=['sex', 'risk']))
     return
 
@@ -1106,7 +1106,7 @@ def test_by_function():
     S, I = ss.states('S I')
     m = ss.Disease(S >> I @ ss.by(patch=lambda sim: ss.perday(np.ones(2))), name='m')
     m.stratify(patch=ss.geo.geography(names=['a', 'b', 'c']))
-    with pytest.raises(ss.errors.ShapeError, match='3 levels'):
+    with pytest.raises(ValueError, match='3 levels'):
         ss.Sim(diseases=m, n_agents=300, dur=ss.days(3), dt=ss.days(1), verbose=0).run()
     return sim
 

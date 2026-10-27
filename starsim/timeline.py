@@ -416,7 +416,7 @@ class Timeline(ss.utils.NoDists):
                 start = stop - dur # e.g. ss.years(2020) or ss.date(2020)
 
             case (start, stop, None): # e.g. ss.Sim(start=2010, stop=2030)
-                dur = stop - start # e.g. ss.years(20) or ss.datedur(years=20) (actually usually days)
+                dur = stop - start # e.g. ss.years(20), or ss.days(7305) between dates
 
             case (start, stop, dur): # e.g. ss.Sim(start=2010, stop=2030, dur=50)
                 if dur != stop - start: # This is fine unless they don't match

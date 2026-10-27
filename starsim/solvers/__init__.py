@@ -1,7 +1,7 @@
 """
 Solvers: how a module's declared states and transitions are run.
 
-The same `ss.transitions.Graph` can be run as compartments (`ode`, `binomial`, `gillespie`,
+The same `ss.graph.Graph` can be run as compartments (`ode`, `binomial`, `gillespie`,
 `tau`) or as agents (`abm`). Each module with a graph gets one engine, which is called from
 the sim's loop like any other module code.
 

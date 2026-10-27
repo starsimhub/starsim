@@ -412,7 +412,7 @@ def test_strains_errors():
     build = lambda hpv, **kwargs: ss.Sim(diseases=hpv, n_agents=100, stop=2001, verbose=0, **kwargs).init()
     with pytest.raises(ss.CapabilityError): # A strain written as code, whose states the others cannot see
         family([make_genotype('hpv16'), ssl.AgentSIS()])
-    with pytest.raises(ss.errors.UnknownState): # A state the members do not have
+    with pytest.raises(KeyError, match='have no state or named sum of states for'): # A state the members do not have
         build(pair(immunity=ss.immunity(due_to='nab', rel_sus=0.5)))
     with pytest.raises(ss.CapabilityError): # A combine= function under sim.gradient()
         ss.Sim(diseases=pair(immunity=ss.immunity(due_to='R', rel_sus=0.5, combine=lambda p: p.max(0))), stop=2001, verbose=0).gradient()
@@ -420,16 +420,16 @@ def test_strains_errors():
         build(ss.Disease(name='hpv', strains=ss.Strains([make_genotype('hpv16').stratify(risk=['low', 'high']), make_genotype('hpv18')], name='risk')))
     with pytest.raises(ValueError): # A strain with its own initial values in a disease that seeds
         family([make_genotype('hpv16', init_prev=0.1), make_genotype('hpv18')], init_prev=0.1)
-    with pytest.raises(ss.errors.OutOfBounds): # A protection of 1 on a time spent
+    with pytest.raises(ValueError, match='which would make its exits infinitely fast'): # A protection of 1 on a time spent
         build(pair(immunity=ss.immunity(due_to='R', dur=dict(I=0.6), combine='sum')))
-    with pytest.raises(ss.errors.UnknownState): # A shared state with no state to move to
+    with pytest.raises(KeyError, match='to move to; add one'): # A shared state with no state to move to
         def sis(name):
             S, I = ss.states('S I')
             return ss.Disease(infection=ss.Transition(S, I, rate=0.1 * I), recovery=ss.Transition(I, S, dur=10), name=name)
         build(family([sis('a'), sis('b')], name='flu', shared='I'))
     with pytest.raises(TypeError): # The protection is the value of what it lowers, not a positional matrix
         ss.immunity(np.eye(2), due_to='R')
-    with pytest.raises(ss.errors.ShapeError):
+    with pytest.raises(ValueError, match='but there are 2 strains'):
         build(pair(immunity=ss.immunity(due_to='R', rel_sus=np.eye(3))))
     with pytest.raises(ValueError): # The disease's own states as well as strains with natural histories of their own
         S, I = ss.states('S I')
@@ -457,7 +457,7 @@ def test_current_state():
     assert sub.labels == ['R', 'I'] and sub[ss.uids([0, 2, 3])].tolist() == [1, 0, -1]
     with pytest.raises(ValueError): # Read-only
         cs.raw[0] = 2
-    with pytest.raises(ss.errors.UnknownState):
+    with pytest.raises(KeyError, match='"sir" has no state X'):
         sir.current_state(['X'])
     res = sim.run().results.sir
     assert (res.I[0], res.R[0]) == (2, 1) # The start counts the agents moved before the first step

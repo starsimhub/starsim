@@ -207,7 +207,7 @@ def test_posterior():
     assert rhat[0] < 1.01 and np.isclose(ess[0], chains.size/3, rtol=0.05)
     assert ss.fit.diagnose(chains[:, :, None] + np.array([0, 0, 0, 1.0])[:, None, None])[0][0] > 1.05 # One chain apart from the others
     assert fit.diagnostics.band['cases'].shape == (2, len(data)) # Over the weeks of the data, as the fit compares them
-    with pytest.raises(ss.errors.NoPosterior): # A posterior needs a likelihood
+    with pytest.raises(ValueError, match='not every data series has a likelihood'): # A posterior needs a likelihood
         make_sir(data=data).fit(pars=['beta'], method='nuts')
     return fit
 
@@ -304,7 +304,7 @@ def test_posterior_data():
     rows = [dict(t=t, age=age, I=n, n_hosp=h) for age in ['0-14', '15-64', '65+'] for t,n,h in zip(truth.timevec[::10], truth.I.select(age=age).values[::10], truth.n_hosp.select(age=age).values[::10])]
     sim = make(data=pd.DataFrame(rows)).init()
     assert 'I[age=15-64]' in sim.data.columns
-    with pytest.raises(ss.errors.UnknownDataColumn): # Not a level of age
+    with pytest.raises(KeyError, match='which is not a level of "age"'): # Not a level of age
         make(data=pd.DataFrame([dict(t=10, age='0-4', I=1)])).init()
 
     # Fitted with the log-density in JAX: it is checked against runs of the sim, and sampled again with Python in the loop if they differ

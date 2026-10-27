@@ -45,7 +45,7 @@ class Undeclared:
 
     def eval(self, expr):
         """ An expression of parameters (e.g. a modifier's amount, `ss.par(2, bounds=[1, 4])`), at their values """
-        return ss.transitions.evaluate(expr, self)
+        return ss.expressions.evaluate(expr, self)
 
 
 def make_engine(module, sim):
@@ -272,7 +272,7 @@ def check_model(sim):
     # The notes on what was chosen, kept in sim.notes whatever the verbosity
     if sim.unit_source: # Said only if it may surprise: not when it is the unit of the model's own typed values, or of dates
         obvious = sim.unit_source in ['the typed values in the model', 'start and stop dates']
-        ss.note(f"unit='{sim.unit}' (from {sim.unit_source})", ss.errors.UnitInferred, sim=sim, verbose=0 if obvious else None)
+        ss.note(f"unit='{sim.unit}' (from {sim.unit_source})", sim=sim, verbose=0 if obvious else None)
     return
 
 
@@ -403,7 +403,7 @@ def init_flows(sim):
             holder.graph.add_flow(tr)
     holders = [mod.name for mod in sim.declared if flows_of(mod)]
     if len(holders) > 1:
-        raise ss.errors.DuplicateDeclaration(f'births or deaths of everyone are declared in {sc.strjoin(holders)}; people are born and die once, whatever their diseases, so this would count them twice.\n'
+        raise ValueError(f'births or deaths of everyone are declared in {sc.strjoin(holders)}; people are born and die once, whatever their diseases, so this would count them twice.\n'
                                       f'     Declare them once, for the population: ss.Sim(..., demographics=[ss.birth(rate=...), ss.death(rate=...)]).')
     return
 
@@ -460,8 +460,8 @@ def set_par_values(sim):
                 continue
         if len(mods) != 1:
             options = [f'{mod.name}.{k}' for mod in sim.declared for k in mod.graph.pars] + [f'{mod.name}.{k}' for mod in coded for k in mod.pars.bounded()]
-            raise ss.errors.UnknownParameter(f'pars= has a value for "{key}", which {"matches no parameter" if not mods else "is a parameter of more than one module"}. '
-                                      f'Parameters are {sc.strjoin(options)}{ss.transitions.did_you_mean(key, options)}')
+            raise sc.KeyNotFoundError(f'pars= has a value for "{key}", which {"matches no parameter" if not mods else "is a parameter of more than one module"}. '
+                                      f'Parameters are {sc.strjoin(options)}{ss.expressions.did_you_mean(key, options)}')
         attrs = getattr(mods[0], '_par_attrs', {}).get(name) if name not in mods[0].pars else None
         if attrs is None:
             mods[0].pars.update({name:val})
@@ -478,25 +478,25 @@ def by_levels(sim, key, given, whole=None):
     raw = whole if whole is not None else (mods[0].pars.get(name) if mods else None)
     raw = raw.raw if isinstance(raw, ss.par) else raw # E.g. given as pars=dict(beta=ss.par(ss.by(patch=[...]), bounds=...))
     if not isinstance(raw, ss.by) or raw.dim is None:
-        raise ss.errors.UnknownParameter(f'pars= has values for levels of "{key}" ({sc.strjoin(given.keys())}), which is not a parameter with a value for each level of one stratification, e.g. ss.par(ss.by(patch=[0.2, 0.3]))')
+        raise sc.KeyNotFoundError(f'pars= has values for levels of "{key}" ({sc.strjoin(given.keys())}), which is not a parameter with a value for each level of one stratification, e.g. ss.par(ss.by(patch=[0.2, 0.3]))')
     strats = [strat for mod in sim.declared for strat in mod.graph.strats] + list(sim.groups.sim_strats)
     strat = next((strat for strat in strats if strat.name == raw.dim), None)
     labels = [str(label) for label in strat.labels] if strat is not None else [str(i) for i in range(len(raw.values))]
     vals = list(sc.tolist(raw.values))
     for label,val in given.items():
         if label not in labels:
-            raise ss.errors.UnknownParameter(f'pars= has a value for "{key}[{label}]", but "{raw.dim}" has no level "{label}"; its levels are {sc.strjoin(labels)}')
+            raise sc.KeyNotFoundError(f'pars= has a value for "{key}[{label}]", but "{raw.dim}" has no level "{label}"; its levels are {sc.strjoin(labels)}')
         vals[labels.index(label)] = val
     return ss.by(**{raw.dim:vals})
 
 
 def check_par_values(sim):
-    """ Check that every parameter of the model has a value (`ss.errors.UnvaluedParameter`), inside its bounds (`ss.errors.OutOfBounds`) """
+    """ Check that every parameter of the model has a value, inside its bounds """
     for mod in sim.declared:
         for name,p in mod.graph.pars.items():
             raw = p.raw
             if raw is None:
-                raise ss.errors.UnvaluedParameter(f'the parameter "{name}" of "{mod.name}" has no value. Give it one (ss.par(0.1)), or bounds to start from (ss.par(bounds=[0.01, 0.5])), or a value by name (ss.Sim(pars=dict({name}=...))).')
+                raise ValueError(f'the parameter "{name}" of "{mod.name}" has no value. Give it one (ss.par(0.1)), or bounds to start from (ss.par(bounds=[0.01, 0.5])), or a value by name (ss.Sim(pars=dict({name}=...))).')
             if p.bounds is None:
                 continue
             val = raw.value if isinstance(raw, ss.TimePar) else raw.array if isinstance(raw, ss.by) else raw
@@ -506,7 +506,7 @@ def check_par_values(sim):
             tol = 1e-9*abs(high - low) # For rounding, e.g. on a log scale
             val = np.asarray(val, dtype=float)
             if np.any(val < low - tol) or np.any(val > high + tol):
-                raise ss.errors.OutOfBounds(f'the parameter "{name}" of "{mod.name}" is {ss.transitions.value_str(raw)}, outside its bounds [{low:n}, {high:n}].')
+                raise ValueError(f'the parameter "{name}" of "{mod.name}" is {ss.expressions.value_str(raw)}, outside its bounds [{low:n}, {high:n}].')
     return
 
 
@@ -589,7 +589,7 @@ def init_unit(sim):
     setters = [mod for mod in mods if getattr(mod, 'sets_unit', True) and (mod in sim.declared or isinstance(mod, ss.Disease))] # The model's own numbers; the typed values of networks, demographics, interventions and ss.Pregnancy say nothing of them
     def mod_units(mod):
         if mod in sim.declared: # Births and deaths of the population held by a disease (see init_flows()) are typed, and like demographics say nothing of the unit of its bare numbers
-            flows = {id(leaf) for tr in flows_of(mod) for expr in [tr.rate, tr.dur] + sc.tolist(tr.p) if isinstance(expr, ss.transitions.Expr) for leaf in expr.leaves}
+            flows = {id(leaf) for tr in flows_of(mod) for expr in [tr.rate, tr.dur] + sc.tolist(tr.p) if isinstance(expr, ss.expressions.Expr) for leaf in expr.leaves}
             vals = ss.graph.unit_values([p.raw for p in mod.graph.all_pars() if id(p) not in flows] + [val for oc in mod.graph.outcomes.values() for val in [oc.delay, oc.duration]])
             vals = vals or mod.graph.unit_values() # ... unless they are its only typed values
         else:
@@ -612,9 +612,9 @@ def init_unit(sim):
             disagree = sorted(set(units), key=order.index) # The units of the typed values, which differ, with nothing else to give the unit
             bare = [name for mod in setters for name in bare_in(mod)]
             if bare: # Which unit they are in cannot be guessed
-                raise ss.errors.IncompatibleTypes(f'the typed values in the model have different units ({sc.strjoin(disagree)}), so the unit of the bare numbers {sc.strjoin(bare)} is not known. Set it with unit=, e.g. ss.Sim(..., unit=\'{unit}\').')
+                raise TypeError(f'the typed values in the model have different units ({sc.strjoin(disagree)}), so the unit of the bare numbers {sc.strjoin(bare)} is not known. Set it with unit=, e.g. ss.Sim(..., unit=\'{unit}\').')
             if pars.dt is None: # The finest, as the most likely, but the step is then that small
-                ss.warn(f'the typed values in the model have different units ({sc.strjoin(disagree)}), so its unit is the finest, {unit}s, and it steps by one {unit}; give dt= (e.g. dt=ss.{disagree[-1]}s(1)) or unit= to say otherwise', ss.errors.UnitInferred)
+                ss.warn(f'the typed values in the model have different units ({sc.strjoin(disagree)}), so its unit is the finest, {unit}s, and it steps by one {unit}; give dt= (e.g. dt=ss.{disagree[-1]}s(1)) or unit= to say otherwise')
     elif dates:
         unit, source = 'day', 'start and stop dates'
     elif is_dur(pars.dt) or isinstance(pars.dt, str):
@@ -627,7 +627,7 @@ def init_unit(sim):
         unit = sorted(set(defaults), key=['day', 'week', 'month', 'year'].index)[0]
         source = 'the typed values of the networks, demographics, and interventions'
     if years and pars.unit is None and unit not in [None, 'year'] and sc.isnumber(pars.dt) and not isinstance(pars.dt, bool): # A bare step beside calendar years is in years, as start and stop are
-        ss.warn(f'dt={pars.dt:n} is read in years, since start and stop are years, though the model\'s unit is {unit}s (from {source}); give dt=ss.{unit}s(...) or unit= to say otherwise', ss.errors.UnitInferred)
+        ss.warn(f'dt={pars.dt:n} is read in years, since start and stop are years, though the model\'s unit is {unit}s (from {source}); give dt=ss.{unit}s(...) or unit= to say otherwise')
         pars.dt = ss.years(pars.dt)
     sim.unit = unit
     sim.unit_source = source
@@ -774,7 +774,7 @@ def check_routes(sim):
                     if unknown:
                         ss.note(f'the beta of "{mod.name}.{tr.name}" names {sc.strjoin(unknown)}, which {"is not a route" if len(unknown) == 1 else "are not routes"} of the sim, so {"it is" if len(unknown) == 1 else "they are"} not used; the routes are {sc.strjoin(routes) or "none"}, and those not named take the default', sim=sim)
                 elif unknown or missing:
-                    raise ss.errors.RouteMismatch(f'the beta of "{mod.name}.{tr.name}" is given for each route, as {sc.strjoin(p.raw.keys())}, but the routes are {sc.strjoin(routes) or "none (homogeneous mixing)"}: '
+                    raise ValueError(f'the beta of "{mod.name}.{tr.name}" is given for each route, as {sc.strjoin(p.raw.keys())}, but the routes are {sc.strjoin(routes) or "none (homogeneous mixing)"}: '
                                            f'{"no route is called " + sc.strjoin(unknown) if unknown else ""}{"; " if unknown and missing else ""}{sc.strjoin(missing) + " " + ("has" if len(missing) == 1 else "have") + " no value" if missing else ""}.')
     check_betas(sim, nets)
     for net in nets: # beta times the number of contacts is a hazard, so only one of them may carry a time unit
@@ -785,19 +785,19 @@ def check_routes(sim):
                 for tr in mod.graph.transmissions:
                     typed = [leaf for leaf in tr.rate.leaves if isinstance(leaf, ss.par) and isinstance(leaf.raw, ss.Rate)]
                     if typed:
-                        raise ss.errors.WrongDimension(f'the beta of "{mod.name}.{tr.name}" ({typed[0].raw!r}) and the n_contacts of "{net.name}" ({rate!r}) both carry a time unit, so their product is not a hazard; give one of them as a bare number, e.g. a probability per contact for beta.')
+                        raise TypeError(f'the beta of "{mod.name}.{tr.name}" ({typed[0].raw!r}) and the n_contacts of "{net.name}" ({rate!r}) both carry a time unit, so their product is not a hazard; give one of them as a bare number, e.g. a probability per contact for beta.')
     if all(getattr(dis, 'graph', None) is not None for dis in sim.pars.diseases.values()):
         for net in nets:
             beta = net.pars.get('beta', 1.0) if isinstance(net, (ss.MixingPool, ss.MixingPools)) else 1.0
             if not (sc.isnumber(beta) and beta == 1):
-                raise ss.errors.RouteMismatch(f'the route "{net.name}" has beta={beta}, but in a declared model the beta belongs to the transmission; give it there, e.g. S >> I @ dict({net.name}=...) * I.')
+                raise ValueError(f'the route "{net.name}" has beta={beta}, but in a declared model the beta belongs to the transmission; give it there, e.g. S >> I @ dict({net.name}=...) * I.')
 
     # A count of people in a rate is literal, so the routes do not apply to it (said of no inflow, such as births, which is in total and never exposure)
     for mod in sim.declared if routes else []:
         for name,tr in mod.graph.transitions.items():
             if tr.inflow:
                 continue
-            counts = [leaf for leaf in (tr.rate.leaves if tr.rate is not None else []) if isinstance(leaf, ss.transitions.Count) and any(getattr(s, 'people', True) for s in leaf.states)]
+            counts = [leaf for leaf in (tr.rate.leaves if tr.rate is not None else []) if isinstance(leaf, ss.expressions.Count) and any(getattr(s, 'people', True) for s in leaf.states)]
             if counts:
                 ss.note(f'"{mod.name}.{name}" uses {counts[0]} literally, so {sc.strjoin(routes)} {"does" if len(routes) == 1 else "do"} not apply to it; write the bare state (e.g. {counts[0].states[0].label_name}) for exposure through the routes', sim=sim)
     return
@@ -834,10 +834,10 @@ def check_betas(sim, nets):
                             hint = f'give ss.peract() with a value for each of its directions ({sc.strjoin(dirs) or "it has none, so one value"})'
                         else:
                             hint = f'"{net.name}" has no acts, so give one rate or probability per contact' + (', which goes from the mother to the child only' if getattr(net, 'one_way', False) else '')
-                        raise ss.errors.RouteMismatch(f'{where} is a pair, {list(val)}, which has no direction names: {hint}. In Starsim 3, a pair was [p1 to p2, p2 to p1], which depends on who the network puts in p1.')
+                        raise ValueError(f'{where} is a pair, {list(val)}, which has no direction names: {hint}. In Starsim 3, a pair was [p1 to p2, p2 to p1], which depends on who the network puts in p1.')
                     if isinstance(val, ss.peract):
                         if not acts:
-                            raise ss.errors.RouteMismatch(f'{where} is {val}, a probability per act, but "{net.name}" has no acts, so there is no act to be per; give a probability (or rate) per contact as a bare number, or give the network acts=')
+                            raise ValueError(f'{where} is {val}, a probability per act, but "{net.name}" has no acts, so there is no act to be per; give a probability (or rate) per contact as a bare number, or give the network acts=')
                         val.resolve(net)
                     elif acts and ss.expressions.value_dimension(val) == -1 and getattr(p, 'library_default', False): # The default of ss.SIR, ss.SIS, or ss.SEIR: a probability per act, as in Starsim 3
                         value = getattr(val, 'value', val)
@@ -846,7 +846,7 @@ def check_betas(sim, nets):
                         p.value[net.name].resolve(net)
                         ss.note(f'the default beta of "{mod.name}" ({val!r}) is read as ss.peract({value}) on "{net.name}", which has acts; give beta= to set it', sim=sim)
                     elif acts and ss.expressions.value_dimension(val) == -1:
-                        raise ss.errors.WrongDimension(f'{where} is {val!r}, a rate per unit time, but "{net.name}" has acts per unit time, so the two would multiply to a rate squared; give the probability per act, e.g. ss.peract({getattr(val, "value", val)}), or leave out acts=')
+                        raise TypeError(f'{where} is {val!r}, a rate per unit time, but "{net.name}" has acts per unit time, so the two would multiply to a rate squared; give the probability per act, e.g. ss.peract({getattr(val, "value", val)}), or leave out acts=')
     return
 
 
@@ -965,7 +965,7 @@ def joint_layout(sim, group):
                                          f'     Run with solver="abm".')
         split = np.zeros(len(labels))
         split[engine.people_comps.index(tracks[0].first)] = 1.0 # Where people born to (or arriving in) the others start: in this disease's first state, as agents do, or where it places them
-        strat = ss.transitions.Strat(name, labels, split=split, kind='disease')
+        strat = ss.dimensions.Strat(name, labels, split=split, kind='disease')
         strat.holders = [n for n in members if n != name] # The diseases whose people have this dimension
         strat.state_levels = {state.name:[engine.people_comps.index(ind) for ind in engine.state_comps[state.name]] for state in engine.graph.people_states}
         strats.append(strat)

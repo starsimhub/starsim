@@ -48,7 +48,7 @@ Give times with their units (`stop=ss.years(2)`), or as dates (`start='2025-01-0
 vaccination = ss.vaccinate(efficacy=0.9, coverage=0.5, at=2026)
 try:
     ss.Sim(make_measles(), interventions=vaccination, start='2025-01-01', stop='2025-07-01').run()
-except ss.errors.TimeOutsideSim as error:
+except ValueError as error:
     print(error)
 ```
 
@@ -60,7 +60,7 @@ A date within a year is written as a string: `at='2025-02-01'`.
 S, I, R = ss.states('S I R')
 try:
     ss.Disease(S >> I @ 1.9*I, I >> R @ ss.peryear(0.1)*ss.days(3))
-except ss.errors.WrongDimension as error:
+except TypeError as error:
     print(error)
 ```
 
@@ -132,7 +132,7 @@ measles = make_measles()
 measles.stratify(age={0: 0.3, 15: 0.6, 65: 0.1})
 try:
     measles.stratify(age={0: 0.5, 20: 0.5})
-except ss.errors.DuplicateStructuralDimension as error:
+except ValueError as error:
     print(error)
 ```
 

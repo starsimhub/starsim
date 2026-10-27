@@ -371,7 +371,7 @@ def disease(source, total=None):
             text, how, rule = rates.classify(flow)
             try:
                 rate = parse(text)
-            except (ValueError, SyntaxError) as E: # Something only the source's own language can say: listed, and the rest is built
+            except (ValueError, KeyError, TypeError, SyntaxError) as E: # Something only the source's own language can say: listed, and the rest is built
                 source.skip(arrow, f'the rate "{flow.rate}" could not be translated ({E})')
                 continue
             tr = ss.Transition(*endpoints, rate=rate, p=p, after=flow.get('after'), name=name, label=flow.label)

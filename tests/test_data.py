@@ -37,9 +37,9 @@ def test_contacts():
     assert sims[0].pars.total_pop == 10_000 and sims[0].groups.strats[0].split[:2].sum() > 0.4 # The ages of Kenya, but not its size
 
     # A place a source does not have says which do
-    with pytest.raises(ss.errors.UnknownLocation, match='mistry2021'):
+    with pytest.raises(KeyError, match='mistry2021'):
         ss.contacts('Japan')
-    with pytest.raises(ss.errors.UnknownLocation):
+    with pytest.raises(KeyError, match='the place "Kenyaa" was not found'):
         ss.contacts('Kenyaa')
 
     # The spec says where the matrices came from, so the sim can be rebuilt, as data or code
@@ -69,7 +69,7 @@ def test_geo():
     assert two.names == ['Kiambu', 'Nairobi'] and two.adjacency[0, 1]
     both = ss.geo.geography(['Kenya', 'Uganda'], level=1)
     assert len(both) == 47 + len(ssd.load_nodes('Uganda', level=1)) and both.names[0].startswith('Kenya:')
-    with pytest.raises(ss.errors.UnknownLocation):
+    with pytest.raises(KeyError, match='the unit "Atlantis" was not found'):
         ss.geo.geography('Kenya', places=['Atlantis'])
 
     # As the places of a model, with travel between them
@@ -149,7 +149,7 @@ def test_people():
     assert sim.to_spec()['config']['people']['year'] == 1990
     assert sim.hash() == rebuild(sim.to_code()).hash()
     assert "people=ss.people('Kenya', year=1990" in sim.to_code()
-    with pytest.raises(ss.errors.UnknownLocation):
+    with pytest.raises(KeyError, match='the place "Kenyaa" was not found'):
         ss.people('Kenyaa')
     return ode, abm
 
@@ -185,7 +185,7 @@ def test_us_states(us_states):
     sim = ss.Sim(make_sir(), people=ss.people(state), networks=school, stratify=dict(age=[0, 5, 18, 65]), unit='day', stop=30, **kw).run()
     assert sim.pars.total_pop == ppl.named.total and sim.results.sir.I[-1] > sim.results.sir.I[0]
     assert sim.hash() == rebuild(sim.to_code()).hash() # Looked up again
-    with pytest.raises(ss.errors.UnknownLocation):
+    with pytest.raises(KeyError, match='the place "Kenya:Nairobi" was not found'):
         ss.people('Kenya:Nairobi') # Other countries have no data by unit
     return sim
 

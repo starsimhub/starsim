@@ -90,7 +90,7 @@ def test_syphilis_latent():
     late = s.LL.uids[s.ti_EL[s.LL.uids] > 0]
     latent = s.states.EL | s.states.LL
     assert np.allclose(s.engine.eval_for(latent.time, late), (s.ti - 1 - s.ti_EL.internal(late))/12) # From latent onset to the start of the last step, as the workaround meant
-    with pytest.raises(ss.errors.ClockOutsideDomain): # The workaround with seeds in LL is NaN for them
+    with pytest.raises(ValueError, match='is NaN for some of the people it applies to'): # The workaround with seeds in LL is NaN for them
         make('old').run()
     return sim
 
@@ -129,7 +129,7 @@ def test_keep_time():
     u = c.I.uids
     assert len(u) and np.all(c.ti - c.ti_I[u] >= 0)
     sim = ss.Sim(diseases=make(False), n_agents=200, dur=ss.days(20), dt=ss.days(1), **kw).run()
-    with pytest.raises(ss.errors.TimeNotKept, match='keep_time'):
+    with pytest.raises(AttributeError, match='keep_time'):
         sim.diseases.c.ti_I.values
     return
 

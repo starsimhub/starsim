@@ -303,7 +303,9 @@ class par(Nameable, Expr):
 
     def __repr__(self):
         bounds = f', bounds={self.bounds}' if self.bounds is not None else ''
-        return f'par({value_str(self.raw)}{bounds})'
+        label = f', label={self.label!r}' if self.label else ''
+        doc = f', doc={self.doc!r}' if self.doc and len(self.doc) < 40 else '' # A short description only
+        return f'par({value_str(self.raw)}{bounds}{label}{doc})'
 
 
 def value_str(val):
@@ -662,7 +664,7 @@ class attr(Expr):
             errormsg = f'combine= is one of {sc.strjoin(combines)}, or a function of (old, new); not {combine!r}'
             raise ValueError(errormsg)
         self.value = ss.transitions.by_dist(value) # A distribution for each group, e.g. ss.by(urban={False: h0, True: h1}), is one distribution
-        self.by_event = None # For a dict by event: (events, value) for each, set in ss.transitions.Graph.resolve_attrs() (TY1)
+        self.by_event = None # For a dict by event: (events, value) for each, set in ss.graph.Graph.resolve_attrs() (TY1)
         if isinstance(value, dict) and value and all(is_event(key) for key in value):
             if on is not None:
                 errormsg = f'The attribute {name or ""} is a dict by event, whose keys are the events that set it, so it takes no on='
@@ -674,7 +676,7 @@ class attr(Expr):
         self.name = name
         self.label = label
         self.module = None # Set by the graph
-        self.events = [] # The events that set it, as ss.conditions.Event: see ss.transitions.Graph.resolve_attrs()
+        self.events = [] # The events that set it, as ss.conditions.Event: see ss.graph.Graph.resolve_attrs()
         self.cases = None # For a derived attribute: (state names, expression) for each case
         if self.kind == 'derived' and (combine != 'last' or init is not None):
             errormsg = f'A derived attribute ({self.label_name}) is worked out when it is read, so takes no combine= or init=; give it on= to record it at an event'
@@ -818,56 +820,63 @@ def join_binop(e, fmt, op=None):
     return f'{a} {op or e.op} {b}'
 
 
-def linear(expr):
+def linear(expr, die=True):
     """
     Split an expression into a constant part and a coefficient for each bare state
 
     Returns `(const, terms)`, where `const` is an expression with no bare states
-    (or None) and `terms` is a dict of `{state: coefficient}`. Raises `ss.errors.NonlinearExposure` if
-    the expression is not linear in its bare states.
+    (or None) and `terms` is a dict of `{state: coefficient}`. If the expression is not
+    linear in its bare states, raises a `ValueError`, or returns None if `die=False`.
     """
-    def nonlinear():
-        raise ss.errors.NonlinearExposure(f'the expression "{expr}" is not linear in its states. Write the rate per person, where a bare state means contact with people in it (beta*I) and I.n is the number in it (beta*I.n); or the whole flow, with the source of the transition as a factor (beta*S*I/N, frequency-dependent, or beta*S*I, density-dependent).')
-
-    if isinstance(expr, ss.transitions.State):
-        return None, {expr: par(1, literal=True)}
-    elif isinstance(expr, BinOp):
-        ca, ta = linear(expr.a)
-        cb, tb = linear(expr.b)
-        op = expr.op
-        if op in '+-':
-            sign = (lambda x: x) if op == '+' else (lambda x: -x)
-            const = ca if cb is None else (sign(cb) if ca is None else BinOp(op, ca, cb))
-            terms = dict(ta)
-            for state,coef in tb.items():
-                terms[state] = BinOp(op, terms[state], coef) if state in terms else sign(coef)
-            return const, terms
-        elif op == '*':
-            if ta and tb:
-                nonlinear()
-            elif not ta and not tb:
+    def split(expr):
+        """ As linear(), with None for an expression that is not linear """
+        if isinstance(expr, ss.transitions.State):
+            return None, {expr: par(1, literal=True)}
+        elif isinstance(expr, BinOp):
+            a, b = split(expr.a), split(expr.b)
+            if a is None or b is None:
+                return None
+            (ca, ta), (cb, tb) = a, b
+            op = expr.op
+            if op in '+-':
+                sign = (lambda x: x) if op == '+' else (lambda x: -x)
+                const = ca if cb is None else (sign(cb) if ca is None else BinOp(op, ca, cb))
+                terms = dict(ta)
+                for state,coef in tb.items():
+                    terms[state] = BinOp(op, terms[state], coef) if state in terms else sign(coef)
+                return const, terms
+            elif op == '*':
+                if ta and tb:
+                    return None
+                elif not ta and not tb:
+                    return expr, {}
+                const, terms, other = (ca, ta, expr.b) if ta else (cb, tb, expr.a) # "other" is the side with no states
+                terms = {state: (other if is_one(coef) else BinOp('*', other, coef)) for state,coef in terms.items()}
+                const = None if const is None else BinOp('*', const, other)
+                return const, terms
+            elif op == '/':
+                if tb:
+                    return None
+                elif not ta:
+                    return expr, {}
+                terms = {state: BinOp('/', coef, expr.b) for state,coef in ta.items()}
+                const = None if ca is None else BinOp('/', ca, expr.b)
+                return const, terms
+            else:
+                if ta or tb:
+                    return None
                 return expr, {}
-            const, terms, other = (ca, ta, expr.b) if ta else (cb, tb, expr.a) # "other" is the side with no states
-            terms = {state: (other if is_one(coef) else BinOp('*', other, coef)) for state,coef in terms.items()}
-            const = None if const is None else BinOp('*', const, other)
-            return const, terms
-        elif op == '/':
-            if tb:
-                nonlinear()
-            elif not ta:
-                return expr, {}
-            terms = {state: BinOp('/', coef, expr.b) for state,coef in ta.items()}
-            const = None if ca is None else BinOp('/', ca, expr.b)
-            return const, terms
-        else:
-            if ta or tb:
-                nonlinear()
+        elif isinstance(expr, Func):
+            args = [split(arg) for arg in expr.args]
+            if any(arg is None or arg[1] for arg in args):
+                return None
             return expr, {}
-    elif isinstance(expr, Func):
-        if any(linear(arg)[1] for arg in expr.args):
-            nonlinear()
-        return expr, {}
-    return expr, {} # A parameter or a count
+        return expr, {} # A parameter or a count
+
+    out = split(expr)
+    if out is None and die:
+        raise ValueError(f'the expression "{expr}" is not linear in its states. Write the rate per person, where a bare state means contact with people in it (beta*I) and I.n is the number in it (beta*I.n); or the whole flow, with the source of the transition as a factor (beta*S*I/N, frequency-dependent, or beta*S*I, density-dependent).')
+    return out
 
 
 def factors(expr):

@@ -13,11 +13,11 @@ kw = dict(verbose=0, unit='day')
 
 
 def w209(sim):
-    """ The ss.errors.UndrivenUnused warnings raised when a sim is initialized """
+    """ The warnings raised when a sim is initialized that a transition has nothing to drive it """
     with warnings.catch_warnings(record=True) as w:
         warnings.simplefilter('always')
         sim.init()
-    return [str(x.message) for x in w if issubclass(x.category, ss.errors.UndrivenUnused)]
+    return [str(x.message) for x in w if 'so only custom code can move people along it' in str(x.message)]
 
 
 # %% Define the tests
@@ -194,7 +194,7 @@ def test_syphilis_stages():
 
     # A person who could match two transitions of one disease is an error
     syph = make_syph()
-    with pytest.raises(ss.errors.OverlappingSources):
+    with pytest.raises(ValueError, match='each person treated can move along only one transition'):
         ss.Sim(syph, interventions=ss.treat(ss.Treatment(moves=[syph.cure_early, syph.late])), **kw).init()
     return sims
 

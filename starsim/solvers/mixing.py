@@ -388,7 +388,7 @@ class Mixing:
         strat = next((s for s in self.sim.groups.strats if s.kind == 'age'), None)
         for (how,n),names in self.regrouped.items():
             which = f'contact matrix "{names[0]}"' if len(names) == 1 else 'contact matrices ' + sc.strjoin(f'"{name}"' for name in names)
-            ss.note(f'{which} {how.format(n)} the model\'s {strat.n} ({sc.strjoin(strat.labels)})', ss.errors.MatrixAggregated, sim=self.sim)
+            ss.note(f'{which} {how.format(n)} the model\'s {strat.n} ({sc.strjoin(strat.labels)})', sim=self.sim)
         self.regrouped = {}
         return
 
@@ -400,7 +400,7 @@ class Mixing:
             ends = np.append(ages, ages[-1] + 5)
             below = np.append(0, np.cumsum(counts))/np.sum(counts)
         else:
-            ends = np.append(strat.edges, max(100, strat.edges[-1] + 10)) # As in ss.transitions.Strat: the last group ends at 100
+            ends = np.append(strat.edges, max(100, strat.edges[-1] + 10)) # As in ss.dimensions.Strat: the last group ends at 100
             below = np.append(0, np.cumsum(strat.split))
         return lambda x: np.interp(x, ends, below)
 
@@ -410,7 +410,7 @@ class Mixing:
         strat = sim.groups.strats[d]
         if not sim.groups.group_inside[:, d].all():
             where = ', '.join(f'{k}={sc.strjoin(sc.tolist(v))}' for k,v in strat.where.items())
-            raise ss.errors.PartialStratificationMixing(f'the contacts "{net.name}" are given by "{strat.name}", but only people where {where} have a level of it, so there is no level for the others to mix as.\n'
+            raise ValueError(f'the contacts "{net.name}" are given by "{strat.name}", but only people where {where} have a level of it, so there is no level for the others to mix as.\n'
                                                  f'     Fix: leave out where=, or use contacts that do not depend on "{strat.name}".')
         for mod in sim.declared:
             own = [s for s in mod.graph.strats if s.name == strat.name and s.states is not None]
@@ -419,7 +419,7 @@ class Mixing:
             mixing = [s.name for tr in mod.graph.transmissions for s in tr.src] + [s.name for s in mod.graph.infectious]
             missing = [name for name in dict.fromkeys(mixing) if name not in own[0].states]
             if missing:
-                raise ss.errors.PartialStratificationMixing(f'the contacts "{net.name}" are given by "{strat.name}", but "{mod.name}" is stratified by it in {sc.strjoin(own[0].states)} only, so there is no level of it for the people in {sc.strjoin(missing)} to mix as.\n'
+                raise ValueError(f'the contacts "{net.name}" are given by "{strat.name}", but "{mod.name}" is stratified by it in {sc.strjoin(own[0].states)} only, so there is no level of it for the people in {sc.strjoin(missing)} to mix as.\n'
                                                      f'     Fix: leave out states= to stratify every state, or use contacts that do not depend on "{strat.name}".')
         return
 
@@ -461,10 +461,10 @@ class Mixing:
         for dim,mat in mats.items():
             names = [strat.name for strat in sim.groups.strats]
             if dim not in names:
-                raise ss.errors.MissingDimension(f'the contacts "{net.name}" are given by "{dim}", but the model is not stratified by it. Add e.g. sim.stratify({dim}=[...]).')
+                raise sc.KeyNotFoundError(f'the contacts "{net.name}" are given by "{dim}", but the model is not stratified by it. Add e.g. sim.stratify({dim}=[...]).')
             strat = sim.groups.strats[names.index(dim)]
             if len(mat) != strat.n:
-                raise ss.errors.ShapeError(f'the contact matrix of "{net.name}" for "{dim}" has {len(mat)} rows, but "{dim}" has {strat.n} levels ({sc.strjoin(strat.labels)}).')
+                raise ValueError(f'the contact matrix of "{net.name}" for "{dim}" has {len(mat)} rows, but "{dim}" has {strat.n} levels ({sc.strjoin(strat.labels)}).')
             self.check_ragged(names.index(dim), net)
             if not (dim == 'age' and edges is not None): # Checked over its own age groups already
                 self.check_reciprocal(net, strat, np.asarray(mat, dtype=float))

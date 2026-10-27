@@ -95,7 +95,7 @@ def test_test_diseases():
 
     g16, g18 = make_hpv('hpv16'), make_hpv('hpv18') # A state the disease does not have: the message names it, and that disease's states
     bad = ss.screen(ss.Diagnostic(sensitivity={g16.I: 0.6, 'hpv18.X': 0.5}), at=[2005])
-    with pytest.raises(ss.errors.UnknownEffect, match='for "X", which is not a state of "hpv18". Its states are S, I, CIN, CA'):
+    with pytest.raises(KeyError, match='for "X", which is not a state of "hpv18". Its states are S, I, CIN, CA'):
         ss.Sim([g16, g18], interventions=bad, solver='abm', **kw).run()
     return sims
 
@@ -245,7 +245,7 @@ def test_disease_list():
     # One product for one disease, delivered for another, says to give both
     g16, g18 = make_geno('hpv16'), make_geno('hpv18')
     test = ss.Diagnostic(sensitivity=0.9)
-    with pytest.raises(ss.errors.UnknownDisease, match=r"disease=\['hpv16', 'hpv18'\]"):
+    with pytest.raises(KeyError, match=r"disease=\['hpv16', 'hpv18'\]"):
         ss.Sim([g16, g18], interventions=[ss.screen(test, at=[2005], disease=g16, name='a'), ss.screen(test, at=[2006], disease=g18, name='b')], solver='abm', **kw).init()
     return sim
 

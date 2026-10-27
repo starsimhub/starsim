@@ -215,7 +215,7 @@ class Agents(Engine):
             add('burnin', ss.random()) # Who starts part way through, and since when: see backfill_burnin()
         for state in graph.people_states:
             init = state.init.raw if isinstance(state.init, ss.par) else state.init
-            if isinstance(init, ss.by) or (isinstance(init, ss.transitions.Expr) and ss.expressions.per_person_in(init)): # For a share given for each person's own properties: see init_post()
+            if isinstance(init, ss.by) or (isinstance(init, ss.expressions.Expr) and ss.expressions.per_person_in(init)): # For a share given for each person's own properties: see init_post()
                 add(f'init_{state.name}', ss.random())
         for state in graph.people_states:
             add(f'branch_{state.name}', ss.random())
@@ -477,7 +477,7 @@ class Agents(Engine):
         people = self.sim.people
         for name in sorted({name for leaf in self.graph.leaves() if isinstance(leaf, ss.expressions.Prop) for name in leaf.names}): # The properties of people that its rates read (ss.ppl.<name>)
             if not hasattr(people, name):
-                raise ss.errors.UnknownState(f'"{mod.name}" reads people.{name}, which is not a property of the people{ss.expressions.did_you_mean(name, list(people.states.keys()))}')
+                raise sc.KeyNotFoundError(f'"{mod.name}" reads people.{name}, which is not a property of the people{ss.expressions.did_you_mean(name, list(people.states.keys()))}')
         fracs, counts = self.init_fractions()
         for name,count in counts.items():
             self.counts[name] = count*self.state_split[name]
@@ -513,7 +513,7 @@ class Agents(Engine):
                     self.stamp(name, chosen, self.seed_ti(name))
             for state in self.graph.people_states: # A share given for each person's own properties (e.g. init=dict(I=ss.by(dict(age=[0, 15], value=[0, 0.1])))): drawn for each agent of the first state
                 init = state.init.raw if isinstance(state.init, ss.par) else state.init
-                per_person = isinstance(init, ss.transitions.Expr) and ss.expressions.per_person_in(init) # e.g. init=dict(S=1 - (A - age)/(k*age + A)) (TY2)
+                per_person = isinstance(init, ss.expressions.Expr) and ss.expressions.per_person_in(init) # e.g. init=dict(S=1 - (A - age)/(k*age + A)) (TY2)
                 if per_person or (isinstance(init, ss.by) and init.on_people(self.sim)):
                     first = self.members(self.graph.first)
                     share = self.values_for(init, first) if per_person else init.lookup(self.sim, self.convert)[first]
@@ -569,7 +569,7 @@ class Agents(Engine):
         `ss.bernoulli()` with a probability for each agent, a function of the sim (and the agents), or `ss.by` over a property of people that is not a dimension
         """
         init_prev = self.graph.init_prev
-        if isinstance(init_prev, ss.transitions.par):
+        if isinstance(init_prev, ss.expressions.par):
             init_prev = init_prev.raw
         trs = self.seed_transmissions() # With no transmission, the acquisition (e.g. the onset of a condition that is not transmitted)
         if not len(trs):
@@ -1052,7 +1052,7 @@ class Agents(Engine):
         out = super().call(func, p)
         if isinstance(out, ss.Arr):
             out = out.raw
-        if np.ndim(out) != 1 or isinstance(out, ss.uids) or isinstance(func, ss.transitions.TimeValue) or self.n_args(func) >= 2:
+        if np.ndim(out) != 1 or isinstance(out, ss.uids) or isinstance(func, ss.parameters.TimeValue) or self.n_args(func) >= 2:
             return out
         people = self.sim.people
         n, alive = people.uid.len_tot, people.auids
@@ -1082,17 +1082,17 @@ class Agents(Engine):
         strat = self.derived_strat(by)
         if strat is not None: # By the level of an attribute
             raw = by.values
-            vals = self.convert(raw) if isinstance(raw, ss.TimePar) else [self.convert(v(sim) if isinstance(v, ss.transitions.TimeValue) else v) for v in sc.tolist(raw)]
+            vals = self.convert(raw) if isinstance(raw, ss.TimePar) else [self.convert(v(sim) if isinstance(v, ss.parameters.TimeValue) else v) for v in sc.tolist(raw)]
             vals = np.asarray(vals, dtype=float).ravel()
             if len(vals) != strat.n:
-                raise ss.errors.ShapeError(f'ss.by({strat.name}=...) has {len(vals)} values, but "{strat.name}" has {strat.n} levels ({sc.strjoin(strat.labels)}).')
+                raise ValueError(f'ss.by({strat.name}=...) has {len(vals)} values, but "{strat.name}" has {strat.n} levels ({sc.strjoin(strat.labels)}).')
             return vals[self.derived_level(strat, uids)]
         if by.on_people(sim): # Read from each person's own properties, e.g. ss.by(sex=dict(female=..., male=...))
             return self.by_people(by, uids)
         if by.dim in ['sex', 'female'] and by.dim not in [strat.name for strat in sim.groups.strats]:
-            vals = [self.convert(v(sim) if isinstance(v, ss.transitions.TimeValue) else v) for v in sc.tolist(by.values)]
+            vals = [self.convert(v(sim) if isinstance(v, ss.parameters.TimeValue) else v) for v in sc.tolist(by.values)]
             if len(vals) != 2:
-                raise ss.errors.ShapeError(f'ss.by({by.dim}=...) has {len(vals)} values; sex has two levels, women and then men.')
+                raise ValueError(f'ss.by({by.dim}=...) has {len(vals)} values; sex has two levels, women and then men.')
             return np.where(sim.people.female.raw[uids], vals[0], vals[1])
         return np.asarray(super().by_group(by))[self.groups(uids)]
 
@@ -1122,7 +1122,7 @@ class Agents(Engine):
         if by.table is not None or not all(dim in ['sex', 'female'] for dim in by.dims):
             return False
         vals = [v for given in by.given.values() for v in (given.values() if isinstance(given, dict) else sc.tolist(given))]
-        return not any(isinstance(v, ss.transitions.TimeValue) or (callable(v) and not isinstance(v, ss.TimePar)) for v in vals)
+        return not any(isinstance(v, ss.parameters.TimeValue) or (callable(v) and not isinstance(v, ss.TimePar)) for v in vals)
 
     def is_fixed(self, x):
         """
@@ -1231,7 +1231,7 @@ class Agents(Engine):
 
     def eval(self, expr):
         """
-        Evaluate an expression, as `ss.transitions.evaluate()` does, from a function of it made the first time it is
+        Evaluate an expression, as `ss.expressions.evaluate()` does, from a function of it made the first time it is
         evaluated (see `compile()`), so that each step does only the arithmetic and reads the values
         """
         entry = self.compiled.get(id(expr))
@@ -1244,7 +1244,7 @@ class Agents(Engine):
     def compile(self, expr):
         """
         An expression as a function of no arguments that evaluates it for the agents being evaluated, with what to do at each
-        part decided once, rather than at each step. It gives the same numbers as `ss.transitions.evaluate()`, and:
+        part decided once, rather than at each step. It gives the same numbers as `ss.expressions.evaluate()`, and:
 
         - a part that has one value for each group (made of numbers, values in time, values by the sim's dimensions, and counts:
           see `groupwise()`) is worked out for the groups, and then taken for each agent from their group, which is much less
@@ -1306,7 +1306,7 @@ class Agents(Engine):
             return lambda: self.clock(expr)
         elif isinstance(expr, E.attr):
             return lambda: self.attr(expr)
-        return lambda: ss.transitions.evaluate(expr, self) # Anything else (a share of a row, a mother's value) as it evaluates itself
+        return lambda: ss.expressions.evaluate(expr, self) # Anything else (a share of a row, a mother's value) as it evaluates itself
 
     def memoized(self, expr, func):
         """ A compiled part of an expression whose value is kept in `self._memo`, while it is kept, for the same agents and the same route and strain """
@@ -1346,7 +1346,7 @@ class Agents(Engine):
                 return self.groupwise(raw)
             elif isinstance(raw, ss.by):
                 return type(raw) is ss.by and not raw.on_people(self.sim) and self.derived_strat(raw) is None
-            elif isinstance(raw, ss.transitions.TimeValue):
+            elif isinstance(raw, ss.parameters.TimeValue):
                 return True
             return not callable(raw)
         return False
@@ -1392,7 +1392,7 @@ class Agents(Engine):
         conds = [f for f in factors if self.is_condition(f)]
         if not conds:
             return False
-        funcs = [leaf for f in factors if not self.is_condition(f) for leaf in f.leaves if isinstance(leaf, ss.expressions.par) and callable(leaf.raw) and not isinstance(leaf.raw, (ss.transitions.TimeValue, ss.Dist))]
+        funcs = [leaf for f in factors if not self.is_condition(f) for leaf in f.leaves if isinstance(leaf, ss.expressions.par) and callable(leaf.raw) and not isinstance(leaf.raw, (ss.parameters.TimeValue, ss.Dist))]
         return bool(funcs)
 
     @staticmethod
@@ -1498,7 +1498,7 @@ class Agents(Engine):
             name = names[0]
             exits = self.graph.exits[name]
             if not (exits.branches or exits.remainder or exits.timed):
-                raise ss.errors.NoScheduledDwell(f'{clock} needs a dwell time scheduled when people enter {name}, and {name} has only rates out of it.')
+                raise ValueError(f'{clock} needs a dwell time scheduled when people enter {name}, and {name} has only rates out of it.')
             end = np.asarray(mod[f'ti_exit_{name}'].internal(uids), dtype=float) # The step the exit is due in (from its start)
             if isinstance(leaving, tuple) and 'left_exit' in mod.__dict__: # Leaving it now: the exit they had
                 end = np.where(np.isnan(end), mod.left_exit.raw[uids], end)
@@ -1706,7 +1706,7 @@ class Agents(Engine):
         """ The level of a stratification by a derived attribute for some agents """
         vals = self.attr_values(strat.attr_of, uids)
         if np.isnan(vals).any():
-            raise ss.errors.ClockOutsideDomain(f'"{strat.name}" is read for people for whom {strat.attr_of.name} has no value (it is NaN in {sc.strjoin(sorted({s.name for s in self.graph.people_states if self.mod[s.name].raw[uids[np.isnan(vals)]].any()}))}); give it a value there, or read it only inside the states that have one.')
+            raise ValueError(f'"{strat.name}" is read for people for whom {strat.attr_of.name} has no value (it is NaN in {sc.strjoin(sorted({s.name for s in self.graph.people_states if self.mod[s.name].raw[uids[np.isnan(vals)]].any()}))}); give it a value there, or read it only inside the states that have one.')
         return np.clip(np.searchsorted(strat.edges, vals, side='right') - 1, 0, strat.n - 1)
 
     def derived_flows(self, tr, src, uids):
@@ -1844,7 +1844,7 @@ class Agents(Engine):
             timed = sorted({tr.name for tr,_,_ in items if tr.name in self.dwells})
             hint = (f'{sc.strjoin(timed)} {"has a dwell time" if len(timed) == 1 else "have dwell times"} shorter than a step, so for many people it rounds to no steps and they go round again within the step (a dwell is rounded to whole steps at random, keeping its mean). Use a smaller dt, or a longer dwell time.' if timed else
                     'Give one of them a rate or a duration, or change the branches so they do not lead back.')
-            raise ss.errors.TriggerLoop(f'moves with no wait out of the states of "{mod.name}" did not settle within a step: {cycle}.\n     {hint}')
+            raise ValueError(f'moves with no wait out of the states of "{mod.name}" did not settle within a step: {cycle}.\n     {hint}')
         if self._news:
             self._news = False
             self.notify(ti)
@@ -2242,7 +2242,7 @@ class Agents(Engine):
         depth = getattr(sim, '_trigger_depth', 0)
         limit = sum(len(m.graph.people_states) for m in sim.declared) + 1
         if depth > limit:
-            raise ss.errors.TriggerLoop(f'triggers in {sc.strjoin(m.name for m in sim.declared)} kept moving people back and forth within a step (from "{self.mod.name}").\n'
+            raise ValueError(f'triggers in {sc.strjoin(m.name for m in sim.declared)} kept moving people back and forth within a step (from "{self.mod.name}").\n'
                                  f'     Change the conditions so they do not lead back.')
         sim._trigger_depth = depth + 1
         try:
@@ -2309,7 +2309,7 @@ class Agents(Engine):
             def walk(name, path=()): # People passed through at once must reach a state they wait in
                 if name in path:
                     cycle = ' -> '.join(path[path.index(name):] + (name,))
-                    raise ss.errors.TriggerLoop(f'moves with no wait out of the states of "{self.mod.name}" form a loop: {cycle}.\n'
+                    raise ValueError(f'moves with no wait out of the states of "{self.mod.name}" form a loop: {cycle}.\n'
                                          f'     Give one of them a rate or a duration, or change the branches so they do not lead back.')
                 if name in self._junctions:
                     exits = self.graph.exits[name]
@@ -2410,7 +2410,7 @@ class Agents(Engine):
         step, n = self.round
         self.round = (ti, n + 1 if step == ti else 0)
         if self.round[1] >= ROUND_MAX:
-            raise ss.errors.TriggerLoop(f'"{self.mod.name}" took more than {ROUND_MAX} rounds of moves in step {ti}')
+            raise ValueError(f'"{self.mod.name}" took more than {ROUND_MAX} rounds of moves in step {ti}')
         self._drawn = {}
         return
 
@@ -3168,7 +3168,7 @@ class Agents(Engine):
             edges = None # Worked out in the compiled pass below, unless it can't be taken
         if np.isnan(total).any():
             bad = [tr.name for tr,h in zip(competing, hazards) if np.isnan(h).any()]
-            raise ss.errors.ClockOutsideDomain(f'the rate of {sc.strjoin(bad)} out of {state.name} is NaN for some people: it reads a clock or an attribute where it has no value.')
+            raise ValueError(f'the rate of {sc.strjoin(bad)} out of {state.name} is NaN for some people: it reads a clock or an attribute where it has no value.')
         crn = self.crn_key(f'exit_{state.name}', uids) if key is None and len(uids) else None
         if crn is not None: # The usual case: each agent's draw is made in one compiled pass, as rvs() would make it, so only those who leave are listed
             if same:
@@ -3502,7 +3502,7 @@ class Agents(Engine):
                     return any(not state.people for state in leaf.states)
                 if isinstance(leaf, ss.transitions.State):
                     return not leaf.people
-                return isinstance(leaf, E.par) and (isinstance(leaf.raw, E.Expr) or (callable(leaf.raw) and not isinstance(leaf.raw, ss.transitions.TimeValue))) # A function of the sim can give an expression of counts
+                return isinstance(leaf, E.par) and (isinstance(leaf.raw, E.Expr) or (callable(leaf.raw) and not isinstance(leaf.raw, ss.parameters.TimeValue))) # A function of the sim can give an expression of counts
             known = self.count_exprs[id(expr)] = (expr, any(changes(leaf) for leaf in expr.leaves))
         if not known[1]:
             val = self.eval(expr)
@@ -3910,10 +3910,10 @@ class Agents(Engine):
         """ Whether the rate of a transmission is the same for everyone in a group, apart from their own susceptibility """
         if tr.name not in self.by_groups:
             leaves = [leaf.raw for leaf in tr.rate.leaves if isinstance(leaf, ss.par)]
-            funcs = [raw for raw in leaves if callable(raw) and not isinstance(raw, (ss.Dist, ss.transitions.TimeValue))]
+            funcs = [raw for raw in leaves if callable(raw) and not isinstance(raw, (ss.Dist, ss.parameters.TimeValue))]
             spread = any(id(leaf) in self.spread for leaf in tr.rate.leaves if isinstance(leaf, ss.par)) # As does a distribution across people
             mods = [m for leaf in tr.rate.leaves if isinstance(leaf, ss.par) and leaf.name and not leaf.literal for m in self.sim.modifiers.get((self.mod.name, 'par', leaf.name), [])]
-            per_agent = any(m.where is not None or isinstance(m.amount, ss.by) or (callable(m.amount) and not isinstance(m.amount, ss.transitions.TimeValue)) for m in mods) # As does a modifier of a parameter for some people
+            per_agent = any(m.where is not None or isinstance(m.amount, ss.by) or (callable(m.amount) and not isinstance(m.amount, ss.parameters.TimeValue)) for m in mods) # As does a modifier of a parameter for some people
             props = any(isinstance(leaf, (ss.expressions.Prop, ss.expressions.attr)) or (isinstance(leaf, ss.par) and isinstance(leaf.raw, ss.by) and leaf.raw.on_people(self.sim)) for leaf in tr.rate.leaves) # As does a property or attribute of people
             self.by_groups[tr.name] = not spread and not per_agent and not props and not any(ss.utils.n_args(func) >= 2 for func in funcs) and not ss.expressions.clocks_in(tr.rate) # A function of the agents, or a clock, can give each a rate of their own
         return self.by_groups[tr.name] and np.ndim(self.mult_raw('transition', tr.name)) == 0 and np.ndim(self.mult_raw('rel_sus')) == 0

@@ -194,14 +194,14 @@ def test_vaccinate():
         ss.Sim(make_sir(), interventions=ss.vaccinate(ss.Vaccine(efficacy=0.9), capacity=100, start=10), **kw).init()
 
     # Errors
-    with pytest.raises(ss.errors.UnknownEffect):
+    with pytest.raises(KeyError, match='which is not something it can act on'):
         ss.Sim(make_sir(), interventions=ss.vaccinate(ss.Vaccine(efficacy=dict(aquisition=0.5))), **kw).init()
     with pytest.raises(TypeError):
         ss.vaccinate(ss.Diagnostic())
     S, I = ss.states('S I')
     a, b = [ss.Disease(infection=ss.Transition(S, I, rate=0.3 * I), init_prev=0.01, name=name) for name in 'ab']
     vx = ss.Vaccine(efficacy=0.9)
-    with pytest.raises(ss.errors.UnknownDisease): # A product acts on one disease, so delivered for a second it would protect against nothing
+    with pytest.raises(KeyError, match='cannot deliver it for "b" alone'): # A product acts on one disease, so delivered for a second it would protect against nothing
         ss.Sim([a, b], interventions=[ss.vaccinate(vx, at=[5], disease='a', name='d1'), ss.vaccinate(vx, at=[5], disease='b', name='d2')], **kw).init()
 
     # Coverage and capacity that vary in time
@@ -270,7 +270,7 @@ def test_treat():
     assert fades.results.sird.death.sum() > 1.2*sims.abm.results.sird.death.sum()
     check_agents(rates, waning=lambda t: np.exp(-t/5), **kw)
 
-    with pytest.raises(ss.errors.UnknownEffect):
+    with pytest.raises(KeyError, match='has transition="cure", which "sird" does not have'):
         ss.Sim(make_sird(), interventions=ss.treat(ss.Treatment(cure=0.5, transition='cure')), **kw).init()
 
     # A cure takes people out of every infected state, not only the sources of the transition named (before, those in Y stayed)
@@ -280,7 +280,7 @@ def test_treat():
         tx = ss.treat(ss.Treatment(transition='clear_a'), at=[5], name='tx')
         res = ss.Sim(sti, interventions=tx, unit='day', stop=10, solver=solver, n_agents=2000, verbose=0).run().results.sti
         assert res.A[-1] == 0 and res.Y[-1] == 0 # Was 995 left in Y
-    with pytest.raises(ss.errors.UnknownEffect): # Its recoveries go to Y and S, so it does not guess which (to= says)
+    with pytest.raises(KeyError, match='its recoveries lead to several'): # Its recoveries go to Y and S, so it does not guess which (to= says)
         S, I, C, R = ss.states('S I C R')
         ss.Sim(ss.Disease(infection=ss.Transition(S, I, rate=0.1 * I), carrier=ss.Transition(I, C, dur=5), recovery=ss.Transition(I, R, dur=10), name='sic'), interventions=ss.treat(ss.Treatment(cure=0.5)), **kw).init()
     with pytest.raises(TypeError): # A value of the sim's time, not of the time since delivery
@@ -804,7 +804,7 @@ def test_network_contacts():
     assert [net.name for net in ss.contacts('Kenya', layer=['home', 'school'])] == ['home', 'school'] # A layer for each setting
 
     # Only a network's contacts can be targeted
-    with pytest.raises(ss.errors.UnmodifiableTarget):
+    with pytest.raises(KeyError, match='school.pars.dur, was not found'):
         make('ode', ss.modify('school.pars.dur', multiply=0.5))
     return halved
 
@@ -978,7 +978,7 @@ def test_coded_states():
     g0 = sim.diseases.g0
     n_cin, n_inf = g0.results.cin[-1]*0 + 0, 0
     assert res.delivered.sum() > 0 and 0 < res.abnormal.sum() < res.delivered.sum()
-    with pytest.raises(ss.errors.UnknownEffect):
+    with pytest.raises(KeyError, match='which is not a state of "g0"'):
         make(ss.screen(ss.Diagnostic(results=dict(abnormal={'g0.precin': 0.9}, normal=None)), at=[2005], disease='g0', name='scr'))
 
     # (b) A cure by state calls the disease's clear_infection()

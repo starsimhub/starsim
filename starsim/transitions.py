@@ -7,10 +7,10 @@ them. A transition can be written with operators or in full, which build the sam
     S >> I @ 0.3 * I                                # Operators
     ss.Transition(S, I, rate=0.3 * I)               # In full
 
-The `ss.transitions.Graph` class (in `graph.py`) collects the states and transitions of one module, names
-them, fills in defaults (recording each guess), and checks them. The expressions are in `expressions.py`,
-the values that vary (`ss.by`, `ss.timeseries`, `ss.seasonal`) in `parameters.py`, how a model is shown in
-`presentation.py`, and its stratifications in `dimensions.py`; their names are also found here.
+The `ss.graph.Graph` class (in `internals/graph.py`) collects the states and transitions of one module, names
+them, fills in defaults (recording each guess), and checks them. The expressions are in `ss.expressions`,
+the values that vary (`ss.by`, `ss.timeseries`, `ss.seasonal`) in `ss.parameters`, how a model is shown in
+`ss.presentation`, and its stratifications in `ss.dimensions`.
 """
 import re
 import copy
@@ -20,12 +20,11 @@ import itertools
 import numpy as np
 import sciris as sc
 import starsim as ss
-from .internals.expressions import as_expr, BinOp, closest, dists_in, Count, count_power, did_you_mean, dimension, evaluate, Expr, Flow, format_expr, Func, is_one, linear, Nameable, par, value_str
-from .parameters import by, seasonal, Static, timeseries, TimeValue
+from .internals.expressions import as_expr, BinOp, dists_in, Count, did_you_mean, dimension, Expr, Flow, format_expr, is_one, linear, Nameable, par, value_str
+from .parameters import by, TimeValue
 
-__all__ = ['Expr', 'par', 'pars', 'State', 'states', 'null',
-           'Transition', 'move', 'birth', 'death', 'lifetable', 'immigration', 'emigration', 'outcome', 'Graph',
-           'by', 'timeseries', 'seasonal', 'Strat', 'Transfer', 'transfer']
+__all__ = ['pars', 'State', 'states', 'null',
+           'Transition', 'move', 'birth', 'death', 'lifetable', 'immigration', 'emigration', 'outcome']
 
 
 #%% States
@@ -65,10 +64,10 @@ class State(Nameable, Expr):
         self.name = name
         self.init = init
         self.init_n = init_n
-        self.declared_init = (init, init_n) # As declared, before a disease's init= or init_n= (see ss.transitions.Graph), so a copy for another disease starts from these
+        self.declared_init = (init, init_n) # As declared, before a disease's init= or init_n= (see ss.graph.Graph), so a copy for another disease starts from these
         self.people = people is not False
-        self.people_given = people is not None # Said explicitly, so not checked (see ss.transitions.Graph.check_counts())
-        self.infectious = False # Whether it is a source of infection: in the rate of a transmission (see ss.transitions.Graph.resolve_transitions())
+        self.people_given = people is not None # Said explicitly, so not checked (see ss.graph.Graph.check_counts())
+        self.infectious = False # Whether it is a source of infection: in the rate of a transmission (see ss.graph.Graph.resolve_transitions())
         self.rel_sus = rel_sus
         self.rel_trans = rel_trans
         self.keep_time = keep_time
@@ -199,7 +198,7 @@ def pars(defaults, **kwargs):
     unknown = [key for key in kwargs if key not in defaults]
     if unknown:
         errormsg = f'Unknown parameter(s) {sc.strjoin(unknown)}; the parameters are {sc.strjoin(defaults.keys())}{did_you_mean(unknown[0], list(defaults))}'
-        raise ss.errors.UnknownParameter(errormsg)
+        raise sc.KeyNotFoundError(errormsg)
     out = sc.objdict()
     for key,default in defaults.items():
         given = kwargs.get(key)
@@ -413,7 +412,7 @@ class Transition(Nameable):
         self.label = label
         self.where = where # Who it applies to: the sim adds a modifier that sets the rate to 0 for everyone else
         self.acquisition_given = acquisition # Whether it is an acquisition of the disease, if given
-        self.acquisition = acquisition # Whether it is, as worked out when the module is built: see ss.transitions.Graph.resolve_acquisition()
+        self.acquisition = acquisition # Whether it is, as worked out when the module is built: see ss.graph.Graph.resolve_acquisition()
         self.after = after # A minimum stay in the source state before this transition can happen
         self.move = None # A change of level in some dimensions: {dim: level}
         if move is not None and not isinstance(move, dict) and isinstance(move, ss.strains.StrainMove): # A change of the strains people carry, e.g. move=DS >> (DS, RIF)
@@ -648,7 +647,7 @@ class Transition(Nameable):
     def check_dimensions(self):
         """
         Check the typed values in the rate and the dwell time: the rate must be per unit time, and
-        the dwell time a duration; otherwise raise `ss.errors.WrongDimension`, e.g. for rate=ss.peryear(0.1) * ss.days(3)
+        the dwell time a duration; otherwise raise a `TypeError`, e.g. for rate=ss.peryear(0.1) * ss.days(3)
         """
         words = {-1:'a rate', 1:'a duration', 0:'a plain number (a rate times a duration)'}
         hints = {
@@ -665,7 +664,7 @@ class Transition(Nameable):
             given = f'{raw.src[0]!r} * {raw.src[1]!r} = {raw:n}' if isinstance(raw, ss.time.dimless) and raw.src else format_expr(expr, values=True)
             word = words.get(dim, 'a sum of values with different time dimensions' if np.isnan(dim) else f'in units of time to the power {dim:n}')
             label = self.name or (self.arrow if self.src is not None else f'... {self.arrow}') # Before its source is known, e.g. R @ rate in I >> R @ rate
-            raise ss.errors.WrongDimension(f'the {slot} of the transition "{label}" is {word}, not {words[want]}:\n       {slot} = {given}\n     {hints.get((slot, dim), "")}'.rstrip())
+            raise TypeError(f'the {slot} of the transition "{label}" is {word}, not {words[want]}:\n       {slot} = {given}\n     {hints.get((slot, dim), "")}'.rstrip())
         return
 
     def _copy(self):
@@ -697,7 +696,7 @@ class Transition(Nameable):
                 new.check_dimensions() # e.g. a distribution of durations times I is still a duration in a rate
                 return new
             if isinstance(other, Expr): # e.g. S >> I @ ss.days(3) * I, a duration in a rate
-                raise ss.errors.WrongDimension(f'"@ {value_str(self.dur.raw)} {op} {other}" puts a duration in a rate. A duration after "@" is a dwell time on its own; in a rate, divide by it instead, e.g. @ {other} / {value_str(self.dur.raw)}.')
+                raise TypeError(f'"@ {value_str(self.dur.raw)} {op} {other}" puts a duration in a rate. A duration after "@" is a dwell time on its own; in a rate, divide by it instead, e.g. @ {other} / {value_str(self.dur.raw)}.')
             errormsg = f'Cannot apply "{op}" to the transition {self}, which is driven by a duration; write the duration itself, e.g. @ ss.days(20)'
             raise TypeError(errormsg)
         elif op != '*':
@@ -808,7 +807,7 @@ def move(*args, p=None, n=None, uids=None):
     # Tell the arguments apart
     diseases, ends = [], []
     for arg in args:
-        if isinstance(getattr(arg, 'graph', None), Graph):
+        if isinstance(getattr(arg, 'graph', None), ss.graph.Graph):
             diseases.append(arg)
         elif is_uids(arg):
             if uids is not None:
@@ -826,7 +825,7 @@ def move(*args, p=None, n=None, uids=None):
             if home is None:
                 raise ValueError(f'ss.move() was given the state "{x}" by name, so it needs the disease too, e.g. sir.move(..., "{x}")')
             if x not in home.graph.states:
-                raise ss.errors.UnknownState(f'"{x}" is not a state of "{home.name}". Its states are {sc.strjoin(home.graph.states.keys())}')
+                raise sc.KeyNotFoundError(f'"{x}" is not a state of "{home.name}". Its states are {sc.strjoin(home.graph.states.keys())}')
             x = getattr(home, x)
         return run_state(x)
     to = None if ends[-1] is null else find(ends[-1])
@@ -852,9 +851,9 @@ def move(*args, p=None, n=None, uids=None):
     people = [state.name for state in states if state.people]
     if people and len(people) < len(states):
         counts = [state.name for state in states if not state.people]
-        raise ss.errors.PeopleAndCounts(f'ss.move() would move between people ({sc.strjoin(people)}) and counts ({sc.strjoin(counts)}, declared with people=False) of "{mod.name}"')
+        raise ValueError(f'ss.move() would move between people ({sc.strjoin(people)}) and counts ({sc.strjoin(counts)}, declared with people=False) of "{mod.name}"')
     if people and (not srcs or to is None):
-        raise ss.errors.PeopleAndCounts(f'ss.move() moves people between states, so the number of people stays the same; people come into the model and leave it by births, deaths, and migration, which are declared (e.g. ss.birth(), ss.death(), ss.immigration())')
+        raise ValueError(f'ss.move() moves people between states, so the number of people stays the same; people come into the model and leave it by births, deaths, and migration, which are declared (e.g. ss.birth(), ss.death(), ss.immigration())')
     if not srcs and n is None:
         raise ValueError(f'ss.move() from outside the model adds a number: give n=')
     if uids is not None and (mod.sim.solver != 'abm' or not people):
@@ -1480,9 +1479,3 @@ def class_members(cls):
                 del members[key]
     return members
 
-
-#%% Names that are now in the modules built on this one, also found here (e.g. ss.transitions.Graph); imported last, since those modules import the classes above
-
-from .internals.presentation import TransitionTable, quantity_str, quantity_json, func_source, func_json, func_values
-from .internals.graph import Graph
-from .dimensions import Strat, Transfer, transfer, parse_stratify

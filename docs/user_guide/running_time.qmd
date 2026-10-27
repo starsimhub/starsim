@@ -123,7 +123,10 @@ A duration added to a date counts time exactly, with a year as 365 days and a mo
 ```{python}
 print(d + ss.years(0.5))            # Half of 365 days later
 print(d + ss.datedur(months=6))     # Six calendar months later
+print(ss.date('2025-07-01') - d)    # The time between two dates, in days
 ```
+
+`ss.datedur` takes whole numbers of years, months, weeks, and days (it is a thin wrapper of `pd.DateOffset`, which a date also accepts), and `dt=ss.datedur(months=1)` steps a sim by calendar months.
 
 ## The timeline
 

@@ -70,19 +70,19 @@ The policy is: **prefer guessing a default and printing it to raising an error.*
 sim = ss.Sim(sir, pars=dict(betta=0.2), verbose=0)
 try:
     sim.init()
-except ss.errors.UnknownParameter as e:
+except KeyError as e:
     print(f'{type(e).__name__}: {e}')
 ```
 
 There are three levels:
 
-| Level | Base class | What happens |
+| Level | Type | What happens |
 |---|---|---|
-| Error | `ss.CodedError` (a `ValueError`) | raises; caught by name, e.g. `except ss.errors.UnknownParameter` |
-| Warning | `ss.StarsimWarning` | issued through Python's warnings, so filters (and `ss.options.warnings='error'`) apply; the run continues |
-| Note | `ss.Note` | kept in `sim.notes` whatever the verbosity, and printed as one line when `verbose` is 1 or more |
+| Error | a built-in exception: a `KeyError` for a name that is not found, a `TypeError` for a value of the wrong kind, a `ValueError` for the rest | raises; caught by type, e.g. `except KeyError` |
+| Warning | a `RuntimeWarning` | issued through Python's warnings, so filters (and `ss.options.warnings='error'`) apply; the run continues |
+| Note | `ss.note()` | kept in `sim.notes` whatever the verbosity, and printed as one line when `verbose` is 1 or more |
 
-Each named message is a class in `ss.errors` (67 of them: 50 errors, 7 warnings, and 10 notes), with a docstring that says when it is raised. The catalog in the design record is generated from those docstrings by `ss.errors.catalog()`, and `tests/devtests/test_spec.py` checks that the two match, so the documentation can't fall behind the code.
+Five errors and four warnings are classes of their own in `ss.errors`, since code catches or filters them by kind: `ss.CapabilityError` (the solver asked for can't run part of the model, which `solver='auto'` catches to run as agents), `ss.AlreadyRunError`, the distribution errors `DistNotInitializedError` and `DistSeedRepeatError`, and `BooleanOperationError`; and the warnings `AtBound`, `NotConverged`, `LossyExport`, and `ImportIncomplete`. The tests check each error, warning, and note by its message (`tests/devtests/test_errors.py`).
 
 ## Importers and exporters
 
@@ -133,6 +133,6 @@ The code is in `starsim/internals/spec.py` (the spec, hashing, `ss.diff()`, and 
 ## In the design record
 
 - [The model spec](https://github.com/starsimhub/starsim/blob/v4/v4_design/design/14-model-spec.md): its structure, rate expressions, normalization, hashing, and saved forms
-- [Errors, warnings, and notes](https://github.com/starsimhub/starsim/blob/v4/v4_design/design/15-errors.md): the policy, message shape, and the full catalog
+- [Errors, warnings, and notes](https://github.com/starsimhub/starsim/blob/v4/v4_design/design/15-errors.md): the policy, the message shape, and the errors and warnings that are classes
 - [Working with other frameworks](https://github.com/starsimhub/starsim/blob/v4/v4_design/design/16-interop.md): importers, classifying rates, exports, and the vignette test
 - [The complete vocabulary](https://github.com/starsimhub/starsim/blob/v4/v4_design/design/17-vocabulary.md): every public name, with keywords and slot types

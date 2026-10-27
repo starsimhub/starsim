@@ -36,7 +36,7 @@ def test_bv_debut():
 
     # A trigger has no rate to modify
     bv = make()
-    with pytest.raises(ss.errors.UnmodifiableTarget):
+    with pytest.raises(KeyError, match='has no rate to scale'):
         ss.Sim(bv, connectors=ss.modify(bv.debut, multiply=2), n_agents=100, **kw).init()
 
     # As compartments: the compartments of women 15+ in U are empty at the start, and aging into them is moved on at each step

@@ -86,7 +86,7 @@ def test_2d_results():
     class BySex(ss.Analyzer):
         def init_results(self):
             super().init_results()
-            self.define_results(ss.Result('infected', columns=['female', 'male'], label='Infected', kind='stock'))
+            self.define_results(ss.Result('infected', columns=['female', 'male'], label='Infected', summarize_by='last'))
 
         def step(self):
             infected = self.sim.diseases.sis.I
@@ -98,7 +98,7 @@ def test_2d_results():
         def init_results(self):
             super().init_results()
             self.results['nested'] = ss.Results(self)
-            self.results.nested += ss.Result('infected', shape=self.t.npts, timevec=self.t.timevec, kind='stock')
+            self.results.nested += ss.Result('infected', shape=self.t.npts, timevec=self.t.timevec, summarize_by='last')
 
         def step(self):
             self.results.nested.infected[self.ti] = np.count_nonzero(self.sim.diseases.sis.I)
@@ -162,6 +162,25 @@ def test_flow_ratios():
         assert res.share[0] == 0 and res.share[-1] == 1
 
     return sim
+
+
+@sc.timer()
+def test_summarize_by():
+    sc.heading('Testing summarize_by: guessed from the name, given, None, and added')
+    res = ss.Result('new_infections', values=np.arange(5.0))
+    assert res.summarize_by == 'sum' and res.summarize() == 10 and ss.Result('n_infected').summarize_by == 'last' and ss.Result('prevalence').summarize_by == 'mean'
+    assert ss.Result('x', values=np.arange(5.0), summarize_by='last').summarize() == 4
+    none = ss.Result('timer', values=np.arange(5.0), summarize_by=None)
+    with pytest.raises(ValueError):
+        none.summarize()
+    with pytest.raises(ValueError):
+        ss.Result('x', summarize_by='median')
+    ss.Result.summarizers['max'] = lambda arr, starts, ends: np.maximum.reduceat(arr, starts, axis=0)
+    try:
+        assert ss.Result('x', values=np.array([1.0, 5, 2]), summarize_by='max').summarize() == 5
+    finally:
+        del ss.Result.summarizers['max']
+    return res
 
 
 def test_result_exprs():
@@ -306,6 +325,7 @@ if __name__ == '__main__':
     sim4b = test_flow_ratios()
     sim5 = test_time_points()
     res6 = test_destinations()
+    res6b = test_summarize_by()
     res7 = test_result_exprs()
     res8 = test_standard_prevalence()
     res9 = test_compare_data()

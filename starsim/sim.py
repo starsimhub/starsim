@@ -60,7 +60,7 @@ def time_str(x, unit_name, plural=False):
     """ A time point as text, for what a run prints: a date as a date (without a time of day, e.g. 2020-01-08), a duration with its own unit (e.g. year 2000.02, as on a timeline in calendar years), or a number in the sim's unit (e.g. day 27) """
     if isinstance(x, (ss.date, pd.Timestamp)):
         return str(ss.date(x)).partition(' ')[0]
-    if isinstance(x, ss.dur) and not isinstance(x, ss.datedur):
+    if isinstance(x, ss.dur):
         unit_name = type(x).base.removesuffix('s')
     return f'{unit_name}{"s"*plural} {num_str(x)}'
 
@@ -78,7 +78,7 @@ class Sim(ss.Base):
         model (Module/list/dict): the model: a module or a list of modules, which are sorted by type as for `modules`; transitions, alone or in a list (or in `diseases=`), are one disease, named from its states (e.g. `sim.sir`).
             Alternatively, the sim parameters as an `ss.SimPars` object or a nested dictionary, which can include all other arguments
         pars (dict): the values of model parameters by name, e.g. `pars=dict(beta=0.1)` or `pars=fit.pars` (see `ss.par`), and of sim
-            settings by their own names (e.g. `stop`) where no parameter of the model has the name; a name that is neither raises `ss.errors.UnknownParameter`
+            settings by their own names (e.g. `stop`) where no parameter of the model has the name; a name that is neither raises a `KeyError`
         label (str): the human-readable name of the simulation
         people (People): if provided, use this `ss.People` object
         demographics (str/Demographics/list/bool): births, deaths, and migration of everyone: declared (`ss.birth()`, `ss.death()`, for every solver), or modules (e.g. `ss.Births()`, `ss.Pregnancy()`), or a list; True for births and deaths at default rates
@@ -177,7 +177,7 @@ class Sim(ss.Base):
             given = [mod for arg in [modules, demographics, connectors, networks, interventions, diseases, analyzers, custom] for mod in sc.tolist(arg) if isinstance(mod, ss.Module)]
             names = {name for mod in given for name in (mod.pars.keys() if getattr(mod, 'graph', None) is not None else mod.pars.bounded())}
             settings = [key for key in pars if key in self.pars and key not in names]
-            values = {key:val for key,val in pars.items() if key not in settings} # A name that is neither raises ss.errors.UnknownParameter when the sim is initialized
+            values = {key:val for key,val in pars.items() if key not in settings} # A name that is neither raises a KeyError when the sim is initialized
             self.par_values, pars = values or None, {key:pars[key] for key in settings} or None
             if pars and pars.get('interventions') is not None: # Modules given in pars (e.g. by a subclass of ss.Sim): in order too, before they are copied
                 pars['interventions'] = self._order_steps(pars['interventions'])
@@ -700,6 +700,7 @@ class Sim(ss.Base):
         if self.initialized:
             errormsg = 'Cannot stratify a sim that has already been initialized; stratify it first'
             raise RuntimeError(errormsg)
+        ss.dimensions.check_kind(kwargs.get('kind'))
         if repr(kwargs) in [repr(call) for call in sc.tolist(self.pars.stratify)]: # The same line run twice
             ss.note(f'the sim is already stratified by {sc.strjoin(kwargs)} in the same way, so this stratify() does nothing', sim=self)
             return self
@@ -970,7 +971,7 @@ class Sim(ss.Base):
         self.t.init(self)
         if self.t.npts > 3001 and 'dt' not in self.given: # The step was not asked for
             why = f"the model's unit, from {self.unit_source}" if self.unit_source else f"unit='{self.pars.unit}'" if self.pars.unit is not None else "the model's unit" # The unit given (source None) is said as given
-            ss.warn(f'the sim has {self.t.npts:n} steps of one {self.unit} ({why}); give dt= for a longer step, e.g. dt=ss.weeks(1)', ss.errors.UnitInferred)
+            ss.warn(f'the sim has {self.t.npts:n} steps of one {self.unit} ({why}); give dt= for a longer step, e.g. dt=ss.weeks(1)')
         self.results.timevec = self.timevec # Store the timevec in the results for plotting
         return
 
@@ -1007,7 +1008,7 @@ class Sim(ss.Base):
             self.groups.kept = {strat.name for strat in self.groups.strats if strat.kind != 'age' and strat.female is None and strat.attr in people.states} # People who come with a property keep it: it is binned into the levels, not drawn from the split
             for strat in self.groups.strats:
                 if strat.name in self.groups.kept and strat.split_given:
-                    raise ss.errors.BadSplit(f'"{strat.name}" is a property the people already have, so their own values are kept and binned into its levels; split= would overwrite them. Leave out split=, or set people.{strat.attr} instead.')
+                    raise ValueError(f'"{strat.name}" is a property the people already have, so their own values are kept and binned into its levels; split= would overwrite them. Leave out split=, or set people.{strat.attr} instead.')
                 if strat.name in self.groups.kept:
                     strat.guessed.pop('split', None) # Not "everyone at the first level" (TL3): the people's own values are used
                 if strat.attr not in people.states:
@@ -1128,7 +1129,7 @@ class Sim(ss.Base):
             known = [f'{mod.name}.{key}' for mod in self.modules for key,res in mod.results.items() if isinstance(res, ss.Result)]
             for name in sc.tolist(self.pars.results):
                 if name not in known and not any(key.split('.', 1)[1] == name for key in known):
-                    errormsg = f'results= names "{name}", which is not a result of this sim; the closest are {ss.transitions.closest(name, known)}'
+                    errormsg = f'results= names "{name}", which is not a result of this sim; the closest are {ss.expressions.closest(name, known)}'
                     raise sc.KeyNotFoundError(errormsg)
         return
 
@@ -1491,7 +1492,7 @@ class Sim(ss.Base):
             before = [float(p) for p in moving]
             self.par_values = sc.mergedicts(self.par_values, pars)
             ss.solvers.set_par_values(self)
-            varies = lambda raw: isinstance(raw, ss.transitions.TimeValue) or (isinstance(raw, ss.by) and raw.varies)
+            varies = lambda raw: isinstance(raw, ss.parameters.TimeValue) or (isinstance(raw, ss.by) and raw.varies)
             for mod in self.declared: # The kernels' program knows which values vary in time from when it was built
                 built = getattr(mod.engine, 'time_pars', None)
                 if built is not None and any(varies(p.raw) != any(p is q for q in built) for p in mod.graph.pars.values()):
@@ -1567,14 +1568,14 @@ class Sim(ss.Base):
 
     def summarize(self, how=None):
         """
-        Provide a quick summary of the sim: each result over the whole run, by its kind
+        Provide a quick summary of the sim: each result over the whole run, by its `summarize_by`
 
         By default, a flow (e.g. new infections) is totaled, a stock (e.g. the number
         infected) takes its final value, and a ratio (e.g. prevalence) is averaged; see
         `ss.Result.summarize()`.
 
         Args:
-            how (str/dict): 'mean', 'median', 'last', 'sum', or a function, to summarize every result that way; or a dict of these by result key (e.g. `dict(sir_infected='mean')`), with the rest by kind
+            how (str/dict): 'mean', 'median', 'last', 'sum', or a function, to summarize every result that way; or a dict of these by result key (e.g. `dict(sir_infected='mean')`), with the rest by their `summarize_by`
         """
         funcs = dict(mean=np.mean, median=np.median, sum=np.sum, last=lambda res: res[-1])
         if not isinstance(how, dict):
@@ -1583,10 +1584,10 @@ class Sim(ss.Base):
         summary = sc.objdict()
         flat = self.results.flatten(sep='_', only_results=False, columns=True) # Summarize each column of 2D results separately
         for key, res in flat.items():
-            if 'timevec' in key: # Skip module-specific time vectors
+            func = how.get(key, how.get(''))
+            if 'timevec' in key or (func is None and getattr(res, 'summarize_by', '') is None): # Skip module-specific time vectors, and results not summarized over time
                 continue
             try:
-                func = how.get(key, how.get(''))
                 if func is None:
                     entry = res.summarize() if isinstance(res, ss.Result) else np.mean(res)
                 else:
@@ -1739,7 +1740,7 @@ class Sim(ss.Base):
             if res is None:
                 errormsg = f'The sim has no result "{name}" (or more than one); results are named as in sim.results, e.g. "cases", or "sir.cases"'
                 raise KeyError(errormsg)
-            if noise is not None and res.kind == 'ratio':
+            if noise is not None and res.summarize_by == 'mean':
                 errormsg = f'"{name}" is a ratio, which has no Poisson noise; give noise=None for its values'
                 raise ValueError(errormsg)
             series = res.to_series(resample=resample)
@@ -1899,7 +1900,7 @@ class Sim(ss.Base):
             style (str): the plotting style to use
             show_data (bool): plot the data, if available
             show_skipped (bool): show even results that are skipped by default
-            annualize (bool): if True, resample results to annual values before plotting (each by its kind; see `ss.Result.resample()`)
+            annualize (bool): if True, resample results to annual values before plotting (each by its `summarize_by`; see `ss.Result.resample()`)
             fig_kw (dict): passed to `sc.getrowscols()`, then `plt.subplots()` and `plt.figure()`
             plot_kw (dict): passed to `plt.plot()`
             data_kw (dict): passed to `plt.scatter()`, for plotting the data

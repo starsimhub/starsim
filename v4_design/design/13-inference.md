@@ -111,12 +111,12 @@ Data is attached to the sim and matched to results by name, as in Covasim:
 sim = ss.Sim(sir, data='cases.csv')       # a path, a dataframe, or ss.simdata(...)
 ```
 
-- The time column is `date`, `year`, `t`, or `time`. Every other column is matched to a result with the same name (`cases`, or `sir.cases` when the short name is ambiguous), which can be any result: an analyzer's (`by_age.cancers_0_15`), one nested deeper in `sim.results` (`hpv.genotype.cancers`), or a column of a result with columns (`sis.new_infections.alpha`). A `gof=` function is needed only for a target worked out from the results (a share, a ratio of two results). A column that matches nothing is an error that lists the closest result names (`UnknownDataColumn`).
+- The time column is `date`, `year`, `t`, or `time`. Every other column is matched to a result with the same name (`cases`, or `sir.cases` when the short name is ambiguous), which can be any result: an analyzer's (`by_age.cancers_0_15`), one nested deeper in `sim.results` (`hpv.genotype.cancers`), or a column of a result with columns (`sis.new_infections.alpha`). A `gof=` function is needed only for a target worked out from the results (a share, a ratio of two results). A column that matches nothing is an error that lists the closest result names (a `KeyError`).
 - Headers that do not match are renamed on the way in, and columns that are not wanted are dropped: `data=ss.simdata(df, aliases=dict(cases='Reported Cases', year='Years'), ignore_extra=True)` ([09-results.md](09-results.md#data)).
 - Results that have data are plotted against it by `sim.plot()` without being asked.
 - **Alignment is automatic.** A result that is a state of the system at a point in time (a count, a prevalence) is compared at the data's dates, interpolating if needed. A result that is a flow (new infections, reported cases, deaths) is summed over the interval ending at each data date. The library knows which is which because results are declared ([09-results.md](09-results.md)).
 - Stratified data uses extra columns named after the stratification (`age`, `sex`), matched to the result's coordinates.
-- Data wholly outside the simulated period is an error (`DataMisaligned`); data partly outside is used where it overlaps.
+- Data wholly outside the simulated period is an error (a `ValueError`); data partly outside is used where it overlaps.
 - Data drawn from a run of the model itself, to check that a fit finds values that are known, is `truth.to_data('cases', resample='week')`: a column for each result named, as Poisson counts with the run's values as their means (`noise=None` for the values themselves), drawn from the run's seed, in the form `ss.Sim(data=...)` takes. Give the true sim another seed than the one fitted (`rand_seed=2`).
 
 ## Goodness of fit
@@ -200,7 +200,7 @@ Scoring each point by the mean of 4 runs, with the same seeds at every point (ov
 Converged: the best value improved by 0.4% over the last quarter of the 100 trials
 ```
 
-Parameters that the data cannot tell apart are noted when the fit ends (`Unidentifiable`; see [Fitting a product of parameters](#fitting-a-product-of-parameters)), and so is a best fit at a bound (`AtBound`).
+Parameters that the data cannot tell apart are noted when the fit ends (a note; see [Fitting a product of parameters](#fitting-a-product-of-parameters)), and so is a best fit at a bound (`AtBound`).
 
 **Optuna gives a best fit, not a posterior.** It is the right tool when each run is expensive and nothing else is affordable, and the output says what it is. The spread of trial values MUST NOT be presented as an interval, but as an indication of the uncertainty the fit gives the range of the best 10% of the trials (`spread_lower` and `spread_upper` in `fit.table`), labeled as such by `fit.summarize()`.
 
@@ -251,12 +251,12 @@ Converged: R-hat at most 1.003 and effective sample size at least 2,146, with 0 
 
 What "starts from the previous best fit" means depends on the stage that follows: an optimizer and NUTS start from it (it is the best point of the scan, and the other searches or chains start from the next best points apart from it), particle MCMC starts its chains from the best of it and a spread of points over the bounds, and ABC-SMC draws its first generation from the prior, so for ABC-SMC an earlier stage changes nothing.
 
-**A stage that fails to converge stops the sequence.** Each method has its own convergence check ([Convergence reporting](#convergence-reporting)). If a stage does not pass it, the stages after it are not run, a warning says which stage stopped and why (`StageStopped`), and the fit returned is the last good one: the result of the last stage that did converge. So a poor starting point is never fed into an expensive sampler. If the first stage is the one that fails, its best attempt is returned, labeled as not converged.
+**A stage that fails to converge stops the sequence.** Each method has its own convergence check ([Convergence reporting](#convergence-reporting)). If a stage does not pass it, the stages after it are not run, a warning says which stage stopped and why (a `RuntimeWarning`), and the fit returned is the last good one: the result of the last stage that did converge. So a poor starting point is never fed into an expensive sampler. If the first stage is the one that fails, its best attempt is returned, labeled as not converged.
 
 ```text
 Stage 1 of 2: optuna
 Not converged: the best value improved by 4.1% over the last quarter of the 500 trials; try more trials (n_trials=)
-StageStopped: stage 1 (optuna) did not converge (the best value improved by 4.1% over the last quarter of the 500 trials; try more trials (n_trials=)), so the stages after it were not run; returning its best attempt
+RuntimeWarning: stage 1 (optuna) did not converge (the best value improved by 4.1% over the last quarter of the 500 trials; try more trials (n_trials=)), so the stages after it were not run; returning its best attempt
 ```
 
 A single method is the one-stage case: `method='optuna'` and `method=['optuna']` are the same.
@@ -301,7 +301,7 @@ In practice both live in the same script, which is fine and avoids the two drift
 
 ## Fitting a product of parameters
 
-With a network or mixing pool, `beta` is per contact and the number of contacts belongs to the network, so incidence data determine only their product. The library notes this when it can see it (`Unidentifiable`), with the product (or ratio) the data determine: from the model, when two fitted parameters appear in its rates only multiplied together (or one divided by the other); over a posterior, when two are almost perfectly correlated; and in a fit by gradients, when two change the fitted results in almost the same way at the best fit.
+With a network or mixing pool, `beta` is per contact and the number of contacts belongs to the network, so incidence data determine only their product. The library notes this when it can see it, with the product (or ratio) the data determine: from the model, when two fitted parameters appear in its rates only multiplied together (or one divided by the other); over a posterior, when two are almost perfectly correlated; and in a fit by gradients, when two change the fitted results in almost the same way at the best fit.
 
 The remedy is to fit one of the two and fix the other, which is what the note says. Fitting a product as one free quantity (`pars=[beta * contacts]`) is not built.
 

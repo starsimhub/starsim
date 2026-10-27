@@ -150,4 +150,4 @@ Each epidemic is a little different (the total number of reported cases ranges f
 | A best value at a bound | The data don't constrain it, or the bounds are too narrow | Check the trials; widen the bounds only if larger values are plausible |
 | Estimates from known data far from the truth | Too little data, or the wrong data | Recover known values before fitting real data |
 
-Starsim notes the first two cases itself (`ss.errors.Unidentifiable`). To draw values from the priors of the parameters (or uniformly over their bounds) and run the model for each, for a Bayesian workflow of your own, use `ss.parallel(sim, priors=True, n_runs=200)`. [Diagnosing a fit](calibration_diagnosing.qmd) covers the other checks to make after a fit.
+Starsim notes the first two cases itself. To draw values from the priors of the parameters (or uniformly over their bounds) and run the model for each, for a Bayesian workflow of your own, use `ss.parallel(sim, priors=True, n_runs=200)`. [Diagnosing a fit](calibration_diagnosing.qmd) covers the other checks to make after a fit.

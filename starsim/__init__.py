@@ -22,7 +22,7 @@ from .utils import (
     return_fig,
 )
 
-from .internals import errors # Errors, warnings, and notes, as classes (e.g. ss.errors.UnknownState); the base classes and ss.CapabilityError also here
+from .internals import errors # Errors, warnings, and notes (e.g. ss.errors.AtBound); ss.CapabilityError, ss.AlreadyRunError, and ss.note() also here
 from .internals.errors import *
 
 from .internals import debugtools
@@ -92,7 +92,7 @@ from .transitions import (
     Transition, move, birth, death, lifetable, immigration, emigration, outcome,
 )
 
-from .internals import graph, presentation # The graph of a declared module (ss.transitions.Graph), and how it is shown
+from .internals import graph, presentation # The graph of a declared module (ss.graph.Graph), and how it is shown
 
 from .dimensions import transfer # Also ss.dimensions.Strat, ss.dimensions.Groups
 

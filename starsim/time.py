@@ -58,15 +58,12 @@ def normalize_unit(base):
     return base
 
 
-# Conversion factors from each base to every unit, e.g. factors.years.days = 365; the smaller units are only for the remainders of ss.datedur
+# Conversion factors from each base to every unit, e.g. factors.years.days = 365
 base_factors = dict(
     years   = 1, # Note 'years' instead of 'year', since referring to a quantity instead of a unit
     months  = 12,
     weeks   = 365/7, # If 52, then day/week conversion is incorrect
     days    = 365,
-    hours   = 365*24,
-    minutes = 365*24*60,
-    seconds = 365*24*60*60,
 )
 factors = sc.dictobj({base:sc.dictobj({k:v/base_factors[base] for k,v in base_factors.items()}) for base in valid_bases}) # Use dictobj since slightly faster than objdict
 
@@ -83,7 +80,7 @@ class dimless(np.float64):
 
     It behaves exactly as a NumPy float (and any arithmetic on it gives one), but remembers
     the two values it came from, so that a `rate=` or `dur=` slot can refuse it with
-    `ss.errors.WrongDimension` rather than taking it as a rate or a duration.
+    a `TypeError` rather than taking it as a rate or a duration.
     """
     __slots__ = ('src',)
 
@@ -115,14 +112,14 @@ def type_str(obj):
 
 
 def incompatible(a, op, b, hint=''):
-    """ Raise `ss.errors.IncompatibleTypes` for two values that cannot be combined, e.g. `ss.perday(0.1) + ss.prob(0.1, 'day')` """
-    raise ss.errors.IncompatibleTypes(f'cannot compute {a!r} {op} {b!r}: {type_str(a)} {op} {type_str(b)} has no meaning. {hint}'.strip())
+    """ Raise a `TypeError` for two values that cannot be combined, e.g. `ss.perday(0.1) + ss.prob(0.1, 'day')` """
+    raise TypeError(f'cannot compute {a!r} {op} {b!r}: {type_str(a)} {op} {type_str(b)} has no meaning. {hint}'.strip())
 
 
 def wrong_dimension(a, op, b):
-    """ Raise `ss.errors.WrongDimension` for arithmetic whose result has a time dimension that no type has, e.g. a rate times a rate """
+    """ Raise a `TypeError` for arithmetic whose result has a time dimension that no type has, e.g. a rate times a rate """
     units = 'per time squared' if isinstance(a, Rate) else 'time squared'
-    raise ss.errors.WrongDimension(f'cannot compute {a!r} {op} {b!r}: {type_str(a)} {op} {type_str(b)} is in units of {units}, which no value in a model can be.')
+    raise TypeError(f'cannot compute {a!r} {op} {b!r}: {type_str(a)} {op} {type_str(b)} is in units of {units}, which no value in a model can be.')
 
 
 #%% Define TimePars
@@ -162,7 +159,7 @@ class TimePar:
                 elif isinstance(other, ss.by):
                     return other.map(lambda v: func(self, v))
                 elif isinstance(other, (types.FunctionType, ft.partial)):
-                    return getattr(ss.transitions.as_expr(other), swap)(self)
+                    return getattr(ss.expressions.as_expr(other), swap)(self)
                 return func(self, other)
             return ft.wraps(func)(wrapper)
 
@@ -189,8 +186,6 @@ class TimePar:
         """
         if cls.base is not None:
             cls.factors = factors[cls.base]
-            cls.factor_keys = list(cls.factors.keys())
-            cls.factor_vals = np.array(list(cls.factors.values()))
         return
 
     def __iter__(self):
@@ -466,7 +461,7 @@ class dur(TimePar):
                 else:
                     errormsg = f'Cannot change the base of `ss.dur` from {self.base} to {base}. To reinterpret the value in the new base, construct it directly, e.g. ss.{base}({value}); to convert it, use e.g. ss.{self.base}({value}).to({base!r}).'
                     raise AttributeError(errormsg)
-        elif isinstance(value, (ss.transitions.Expr, ss.by, ss.Dist)): # E.g. ss.days(ss.par(10)), ss.days(ss.by(age=[...])), or ss.days(ss.normal(10, 2))
+        elif isinstance(value, (ss.expressions.Expr, ss.by, ss.Dist)): # E.g. ss.days(ss.par(10)), ss.days(ss.by(age=[...])), or ss.days(ss.normal(10, 2))
             cls = type(self).__name__
             errormsg = f'ss.{cls}() takes a number or an array, not {type(value).__name__}; put the type inside instead, e.g. ss.par(ss.{cls}(10), bounds=[ss.{cls}(5), ss.{cls}(20)]), ss.by(age=[ss.{cls}(5), ss.{cls}(10)]), or ss.normal(ss.{cls}(10), ss.{cls}(2))'
             raise TypeError(errormsg)
@@ -581,7 +576,7 @@ class dur(TimePar):
         if self.years == 0:
             raise ZeroDivisionError('Cannot divide by a duration of zero') # TODO: consider Rate(dur(np.inf))
         rate_class = get_rate_class('per' + self.base.removesuffix('s')) # e.g. ss.perday
-        return rate_class(other/getattr(self, self.base)) # The value in its base, which for a datedur is years
+        return rate_class(other/getattr(self, self.base)) # The value in its base, which for a datedur is years (its .value is a pd.DateOffset)
 
     def __neg__(self):
         return -1*self
@@ -702,7 +697,7 @@ class Rate(TimePar):
             value = np.array(value)
 
         if not (sc.isnumber(value) or isinstance(value, np.ndarray)) and value is not None:
-            if isinstance(value, (ss.transitions.Expr, ss.by, ss.parameters.TimeValue, ss.Dist)): # E.g. ss.perday(ss.par(2.4)), ss.days(ss.by(age=[...])), or ss.perday(ss.poisson(2))
+            if isinstance(value, (ss.expressions.Expr, ss.by, ss.parameters.TimeValue, ss.Dist)): # E.g. ss.perday(ss.par(2.4)), ss.days(ss.by(age=[...])), or ss.perday(ss.poisson(2))
                 cls = type(self).__name__
                 errormsg = f'ss.{cls}() takes a number or an array, not {type(value).__name__}; put the type inside instead, e.g. ss.par(ss.{cls}(2.4), bounds=[ss.{cls}(1), ss.{cls}(5)]) or ss.by(age=[ss.{cls}(1), ss.{cls}(2)]), or multiply by it, e.g. ss.{cls}(1) * trend for a trend in time'
             else:
@@ -1199,7 +1194,7 @@ class peract:
     `ss.by` over a dimension of the susceptible. A direction can also be written as a pair of sides,
     `{('m', 'f'): 0.3}`, which is the same as `m2f=0.3`. Every direction of the network needs a value
     (unless one is given for all), and a direction it does not have raises; both are checked when the sim
-    is initialized. On a route without acts (`ss.RandomNet`, mixing pools), it raises `ss.errors.RouteMismatch`.
+    is initialized. On a route without acts (`ss.RandomNet`, mixing pools), it raises a `ValueError`.
 
     Examples:
         ```python
@@ -1242,7 +1237,7 @@ class peract:
     @property
     def pars(self):
         """ The parameters in its values, so they can be fitted """
-        leaves = [leaf for val in self.values if isinstance(val, ss.transitions.Expr) for leaf in val.leaves if isinstance(leaf, ss.par) and not leaf.literal]
+        leaves = [leaf for val in self.values if isinstance(val, ss.expressions.Expr) for leaf in val.leaves if isinstance(leaf, ss.par) and not leaf.literal]
         return list({id(leaf):leaf for leaf in leaves}.values())
 
     @staticmethod
@@ -1250,7 +1245,7 @@ class peract:
         """ A probability per act must be in [0, 1] """
         if isinstance(val, ss.TimePar):
             errormsg = f'ss.peract() takes a probability per act, which has no time unit, not {val}{where}'
-            raise ss.errors.WrongDimension(errormsg)
+            raise TypeError(errormsg)
         raw = val.raw if isinstance(val, ss.par) else val
         raw = raw.values if isinstance(raw, ss.by) else raw
         try:
@@ -1259,7 +1254,7 @@ class peract:
             return
         if np.any(vals < 0) or np.any(vals > 1):
             errormsg = f'A probability per act must be between 0 and 1, not {val}{where}'
-            raise ss.errors.OutOfBounds(errormsg)
+            raise ValueError(errormsg)
         return
 
     def resolve(self, net):
@@ -1271,16 +1266,16 @@ class peract:
         if not dirs:
             fix = "between= when it is made, e.g. between='mf' for men and women" if isinstance(net, ss.SexualNet) else 'sides= when it is made, or in its class, e.g. sides = dict(m="male", f="female")'
             errormsg = f'"{name}" has no sides, so one beta is used in every direction: give ss.peract({sc.strjoin(self.directions.values())}) a single value, or give the network sides ({fix})'
-            raise ss.errors.RouteMismatch(errormsg)
+            raise ValueError(errormsg)
         sides = f"{name}'s {net.sides_str()}"
         for key in self.directions:
             if key not in dirs:
                 errormsg = f'beta for "{name}" has a direction "{key}", which {name} does not have; its directions are {sc.strjoin(dirs, sep=" and ")} ({sides}: see {name}.directions)'
-                raise ss.errors.RouteMismatch(errormsg)
+                raise ValueError(errormsg)
         missing = [d for d in dirs if d not in self.directions]
         if missing:
             errormsg = f'beta for "{name}" has no value for the direction{"s" if len(missing) > 1 else ""} {sc.strjoin(missing, sep=" and ")}; its directions are {sc.strjoin(dirs, sep=" and ")} ({sides}). Give each one, or one value for all, e.g. ss.peract(0.01)'
-            raise ss.errors.RouteMismatch(errormsg)
+            raise ValueError(errormsg)
         return [self.directions[d] for d in dirs]
 
     def __repr__(self):
@@ -1569,8 +1564,6 @@ class DateConverter(matplotlib.units.ConversionInterface):
     def _convert_single(v):
         """ Convert a single date-like or duration value to a number; pass through numeric values unchanged """
         if isinstance(v, ss.date):
-            return v.years
-        elif isinstance(v, ss.datedur): # Has no magnitude of its own, so use years
             return v.years
         elif isinstance(v, ss.dur): # Use the magnitude in the duration's own units, e.g. days(100) -> 100
             return v.value

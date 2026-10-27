@@ -75,7 +75,7 @@ def test_vaccine_diseases():
     check_close(sims, lambda sim: sim.results.hpv18.infection.sum(), rtol=0.15)
     assert sims.abm.people.has_vx.sum() > 0 and 'has_vx' not in [s.name for s in sims.abm.diseases.hpv16.graph.strats]
 
-    with pytest.raises(ss.errors.UnknownEffect): # Keyed by a disease and by something else
+    with pytest.raises(KeyError, match='is keyed by diseases and by acquisition'): # Keyed by a disease and by something else
         make(lambda a, b: {a: 0.9, 'acquisition': 0.5}, solver='abm', **kw).init()
     return sims
 
