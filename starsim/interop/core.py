@@ -395,6 +395,10 @@ def code_value(val, pars=None):
         if all(isinstance(k, str) and k.isidentifier() and not keyword.iskeyword(k) for k in val):
             return f'dict({kwargs(val)})'
         return '{' + ', '.join(f'{cv(k)}: {cv(v)}' for k,v in val.items()) + '}'
+    elif isinstance(val, ss.datedur):
+        return f'ss.datedur({kwargs(val.kwds)})'
+    elif type(val) is ss.Rate: # A rate with no class of its own keeps its unit, e.g. ss.Rate(0.3, ss.weeks(2))
+        return f'ss.Rate({cv(val.value)}, {cv(val.unit)})'
     elif isinstance(val, (ss.dur, ss.Rate)):
         return f'ss.{type(val).__name__}({cv(val.value)})'
     elif isinstance(val, ss.peract):
@@ -423,8 +427,15 @@ def code_value(val, pars=None):
         given = val.given.toarray() if hasattr(val.given, 'toarray') else val.given
         args = dict(matrix=given, data=val.data, kind=val.kind, away=val.away)
         return f'ss.geo.Mobility({kwargs({k:v for k,v in args.items() if v is not None})})'
+    elif isinstance(val, pd.Timestamp):
+        return f'pd.Timestamp({str(val)!r})'
     elif isinstance(val, pd.DataFrame):
-        return f'pd.DataFrame({cv({col:val[col].tolist() for col in val.columns})})'
+        cols = cv({col:val[col].tolist() for col in val.columns})
+        idx = val.index
+        if idx.equals(pd.RangeIndex(len(val))) and idx.name is None: # The default index
+            return f'pd.DataFrame({cols})'
+        name = '' if idx.name is None else f', name={cv(idx.name)}'
+        return f'pd.DataFrame({cols}, index=pd.Index({cv(idx.tolist())}{name}))'
     errormsg = f'An importer gave {type(val).__name__} ({val!r}), which cannot be written as code: give it as ss.interop.Code(), the Python that makes it'
     raise TypeError(errormsg)
 
@@ -633,6 +644,11 @@ def total_init(val):
     return float(np.sum(values)) if values is not None and np.ndim(values) else 0
 
 
+def assigned(lines):
+    """ The names that lines of code assign """
+    return {node.id for node in ast.walk(ast.parse('\n'.join(lines))) if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store)}
+
+
 def write(sources, **kwargs):
     """
     The Starsim code of one or more models read from another framework
@@ -657,9 +673,15 @@ def write(sources, **kwargs):
     if 'total_pop' not in cfg:
         cfg.total_pop = max(sum(total_init(s.init) for s in src.states.values() if s.people) for src in sources) or cfg.get('n_agents')
     lines, choices, guessed, diseases = [], [], sc.objdict(), []
+    placeholder = '_disease_'
+    taken = reserved.union(*(assigned(disease_code(s, placeholder)[0]) for s in sources if s.states)) - {placeholder} # Every name the diseases' code defines, which no disease's variable may take
     for source in sources:
         if source.states:
-            var = source.name if source.name.isidentifier() and not keyword.iskeyword(source.name) and source.name not in reserved | set(diseases) else f'disease{len(diseases) + 1}'
+            var, n = source.name, len(diseases)
+            while not var.isidentifier() or keyword.iskeyword(var) or var in taken:
+                n += 1
+                var = f'disease{n}'
+            taken.add(var)
             dis_lines, source.choices, guessed[source.name] = disease_code(source, var, total=cfg.total_pop)
             lines += dis_lines
             diseases.append(var)

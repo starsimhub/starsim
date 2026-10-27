@@ -1148,6 +1148,11 @@ class Result(ss.utils.NoDists, ss.arrays.BaseArr):
         return
 
 
+def resamplable(res, kwargs=None):
+    """ Whether a result can be resampled as part of all the results: not if it is not summarized over time and no `summarize_by=` is given """
+    return not (isinstance(res, Result) and res.summarize_by is None and (kwargs or {}).get('summarize_by') is None)
+
+
 class Results(ss.utils.NoDists, ss.ndict):
     """ Container for storing results """
     def __init__(self, module=None, *args, **kwargs):
@@ -1275,9 +1280,7 @@ class Results(ss.utils.NoDists, ss.ndict):
             out = split
         if 'resample' in kwargs and kwargs['resample'] is not None:
             resample = kwargs.pop('resample')
-            for k,v in out.items():
-                if isinstance(v, Result):
-                    out[k] = v.resample(new_unit=resample, **kwargs)
+            out = {k:(v.resample(new_unit=resample, **kwargs) if isinstance(v, Result) else v) for k,v in out.items() if resamplable(v, kwargs)}
         if only_results:
             out = sc.objdict({k:v for k,v in out.items() if isinstance(v, Result)})
             if only_auto:
@@ -1285,11 +1288,13 @@ class Results(ss.utils.NoDists, ss.ndict):
         return out
 
     def resample(self, new_unit, **kwargs):
-        """ Resample all the results to a longer time unit (e.g. 'year'), each by its `summarize_by`, returning a new Results object; see `ss.Result.resample()` """
+        """ Resample all the results to a longer time unit (e.g. 'year'), each by its `summarize_by`, returning a new Results object; see `ss.Result.resample()`; results not summarized over time (`summarize_by=None`) are left out, as in `sim.summarize()` """
         new = Results(self._module)
         timevec = None
         for key, res in self.items():
-            if isinstance(res, (Results, Result)):
+            if not resamplable(res, kwargs):
+                continue
+            elif isinstance(res, (Results, Result)):
                 new[key] = res.resample(new_unit, **kwargs)
                 if isinstance(res, Result) and timevec is None:
                     timevec = new[key].timevec # Store the resampled timevec
@@ -1359,7 +1364,7 @@ class Results(ss.utils.NoDists, ss.ndict):
         else:
             groups = [[res] for res in match_result_keys(self, key, show_skipped=(show_skipped or key)).values()] # Always show skipped with a custom key
         if annualize:
-            groups = [[res.resample('year') if isinstance(res, Result) else res for res in group] for group in groups]
+            groups = [[res.resample('year') if isinstance(res, Result) and resamplable(res) else res for res in group] for group in groups]
         n_cols,_ = sc.getrowscols(len(groups)) # Number of columns of axes
         figsize = np.array([8, 6])*np.clip((n_cols-3)/6+1, 1, 1.5) # Scale the default figure size with the number of columns
         kw = ss.plot_args(kwargs, figsize=figsize, alpha=0.8, data_alpha=0.3, data_color='k')

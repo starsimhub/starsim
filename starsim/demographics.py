@@ -1017,7 +1017,7 @@ class Pregnancy(Demographics, ss.Disease):
         w = np.where(pre, np.divide(u, q, out=np.zeros(len(u)), where=q>0)*p_pre, p_pre + np.divide(u - q, 1 - q, out=np.zeros(len(u)), where=q<1)*(1 - p_pre)) # Where in the given distribution
         inds = np.minimum(np.searchsorted(np.cumsum(p), w, side='right'), len(a) - 1)
         steps = np.asarray(ss.weeks(weeks[inds])/self.t.dt, dtype=float)
-        self.set_delivery(uids, self.ti_P.internal(uids) + 1 + self.engine.whole_steps('P', uids, steps, dt=1.0), weeks=weeks[inds]) # Rounded up or down at random, as the engine rounds a dwell time (see ss.solvers.Agents.whole_steps())
+        self.set_delivery(uids, self.ti_P.raw[uids] + 1 + self.engine.whole_steps('P', uids, steps, dt=1.0), weeks=weeks[inds]) # Rounded up or down at random, as the engine rounds a dwell time (see ss.solvers.Agents.whole_steps())
         return
 
     def lactate(self, moms, ti):
@@ -1092,7 +1092,7 @@ class Pregnancy(Demographics, ss.Disease):
         uids, ti = uids[keep], ti[keep]
         past = ti < self.ti + 1 # A step already past (e.g. a duration drawn again during the pregnancy, shorter than she has been pregnant): the next step, the first it can be taken in
         ti = np.where(past, self.ti + 1, ti)
-        steps = (ti - 1 - self.ti_P.internal(uids))*self.t.dt.weeks # From the engine's times: the exit is taken at the start of step ti
+        steps = (ti - 1 - self.ti_P.raw[uids])*self.t.dt.weeks # From the engine's times: the exit is taken at the start of step ti
         self.ti_exit_P[uids] = ti
         self.dur_gestation[uids] = steps if weeks is None else np.where(past, steps, np.broadcast_to(np.asarray(weeks, dtype=float), keep.shape)[keep])
         return

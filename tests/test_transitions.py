@@ -378,9 +378,9 @@ def test_time():
     assert ss.Sim(ss.Disease(recovery=ss.Transition(I, R, rate=0), first='I'), stop=10, n_agents=100, **kw).run().diseases[0].results.I[-1] == 100
     assert ss.Sim(make_sir(), people=ss.People(1000, age_data=ss.uniform(20, 30)), stop=2, **kw).init().people.age.min() >= 20
 
-    # Times of entering a state are step numbers, kept as 16-bit integers when the run fits; read, they are steps as floats, NaN if never
+    # Times of entering a state are step numbers (ss.TimeArr), NaN if never
     sir = ss.Sim(make_sir(), stop=100, unit='day', n_agents=1000, **kw).run().diseases[0]
-    assert sir.ti_I.raw.dtype == np.int16 and sir.exit_I.raw.dtype == np.int8 # 2 bytes and 1, not 4 and 4
+    assert isinstance(sir.ti_I, ss.TimeArr) and sir.ti_I.raw.dtype == np.float32 and sir.exit_I.raw.dtype == np.int8 # 4 bytes and 1
     infected = sir.ti_I.notnan.uids
     assert np.isnan(sir.ti_I[sir.S.uids]).all() and (sir.ti_I[infected] <= sir.ti).all() # Never infected is NaN, not a large negative number
     assert np.allclose(sir.ti_I.years[infected], sir.t.yearvec[sir.ti_I[infected].astype(int)]) # The year at the end of the step of infection

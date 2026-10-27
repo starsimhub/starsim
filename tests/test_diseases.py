@@ -4,6 +4,7 @@ Run tests of disease models
 
 # %% Imports and settings
 import textwrap
+import warnings
 import pytest
 import sciris as sc
 import matplotlib.pyplot as plt
@@ -483,6 +484,12 @@ def test_infect():
         ti, new = ('ti_I', 'infection') if sir.graph else ('ti_infected', 'new_infections')
         assert len(infected) == 50 and (sim.diseases.sir[ti][infected] == 3).all() and sim.results.sir[new][3] == 50
         assert len(log) == 50 and (log.source.to_numpy(dtype=float, na_value=np.nan) == -1).all() # Not NA, which (log.source == -1).all() skips
+
+    # Only the seeded cases, who are dated by the first step: no warning that set_prognoses() is missing super()
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter('always')
+        ss.Sim(n_agents=200, diseases=ssl.AgentSIS(beta=0), start=2000, stop=2002, verbose=0).run()
+    assert not any('super()' in str(x.message) for x in w)
     return sim
 
 

@@ -60,7 +60,7 @@ def test_people():
     assert 'auids' not in sim._before_init.pars.people.__dict__
     ppl, sir = sim.people, sim.diseases.sir
     assert ppl.slot.shared is ppl.uid and ppl.parent.shared and ppl.scale.shared and sir.rel_sus.shared # No memory of their own
-    assert ppl.auids.dtype == np.int64 and ppl.ti_dead.raw.dtype == np.int16
+    assert ppl.auids.dtype == np.int64 and ppl.ti_dead.raw.dtype == np.float32
     assert '_raw' not in ppl.uid.__dict__ and np.array_equal(ppl.uid.raw[:ppl.n_uids], np.arange(ppl.n_uids)) and ppl.slot.raw[5] == 5 # people.uid is the index, with no array
     assert ppl.age[ppl.auids[0]] == ppl.age.raw[0] and len(ppl.age[ppl.auids.view(np.ndarray)]) == len(ppl) # One UID, or a plain array of them, indexes as before
     assert np.array_equal(sim.new().run().results.sir.I, sim.results.sir.I) # sim.new() rebuilds the same sim

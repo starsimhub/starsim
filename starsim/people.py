@@ -131,8 +131,8 @@ class People:
             ss.BoolState('alive', default=True),  # Time index for death
             ss.FloatArr('age', default=self.get_age_dist(age_data)),  # NaN until conceived
             ss.BoolState('female', default=ss.bernoulli(name='female', p=p_female)),
-            ss.arrays.StepArr('ti_dead', late=True),  # Time index for death, as 16-bit integers if the run fits
-            ss.arrays.StepArr('ti_removed', late=True),  # Time index for removal (e.g. emigration)
+            ss.TimeArr('ti_dead'),  # Time index for death
+            ss.TimeArr('ti_removed'),  # Time index for removal (e.g. emigration)
             AgentScale('scale', default=1.0, shared=True), # The scale factor for the agents (multiplied for making results); no memory until one is set
             ss.Arr('cause_of_death', dtype=np.int16, default=-1, nan=-1, label='Cause of death', shared=True), # Its position in people.causes (-1 for none); no memory until someone dies
         ]
@@ -382,7 +382,7 @@ class People:
             raise RuntimeError(errormsg)
         self.sim = sim # Store the sim
         for arr in [self.ti_dead, self.ti_removed]:
-            arr.fit(sim.t) # 16-bit step numbers if the run fits
+            arr.t = sim.t
         ss.distributions.link_dists(obj=self.states, sim=sim, module=self, skip=[ss.Sim, ss.Module], init=init)
         return
 
@@ -545,7 +545,7 @@ class People:
         """
         n = self.n_uids
         raw = np.zeros(self.uid.len_tot, dtype=bool)
-        raw[:n] = ~self.alive.raw[:n] & (self.ti_dead.raw[:n] != self.ti_dead.nan)
+        raw[:n] = ~self.alive.raw[:n] & ~np.isnan(self.ti_dead.raw[:n])
         dead = self.alive.asnew(raw, cls=ss.BoolArr, name='dead', copy=False)
         dead.people = sc.objdict(auids=ss.uids(np.arange(n))) # Cover all agents, not just active ones
         return dead

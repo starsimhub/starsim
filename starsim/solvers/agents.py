@@ -235,10 +235,10 @@ class Agents(Engine, Transmission):
             name = state.name
             arrs += [ss.BoolState(name, label=state.label or name)]
             if name not in unkept: # Only if something reads it, to save memory
-                arrs.append(ss.arrays.StepArr(f'ti_{name}', label=f'Time of entering {name}')) # Step numbers, as 16-bit integers if the run fits
+                arrs.append(ss.TimeArr(f'ti_{name}', label=f'Time of entering {name}'))
                 arrs.append(ss.Arr(f'shift_{name}', dtype=np.int8, nan=0, default=0, label=f'Steps from the engine\'s time of entering {name} to the step\'s index')) # See stamp()
             if name in self.scheduled: # Only for a state with scheduled exits, to save memory
-                arrs += [ss.arrays.StepArr(f'ti_exit_{name}', wide=rescalable, label=f'Scheduled time of leaving {name}'), # 32-bit if it can be rescaled, since a slow exit (e.g. adjust=1e-4) can be far beyond the run (ST29)
+                arrs += [ss.TimeArr(f'ti_exit_{name}', label=f'Scheduled time of leaving {name}'),
                          ss.Arr(f'exit_{name}', dtype=np.int8, nan=-1, label=f'Scheduled exit from {name}')] # Which of the exits, as 8-bit integers
                 if rescalable: # Only needed if a rate can change after dwell times are drawn: see rescale_exits()
                     arrs.append(ss.FloatArr(f'mult_{name}', default=1.0, label=f'Speed of the scheduled exit from {name}, when it was scheduled'))
@@ -263,7 +263,7 @@ class Agents(Engine, Transmission):
                 key = tuple(sorted(set(names), key=people.index))
                 if key not in self.sets:
                     self.sets[key] = f'ti_{"_or_".join(key)}'
-                    arrs.append(ss.arrays.StepArr(self.sets[key], label=f'Time of entering {" | ".join(key)} from outside it'))
+                    arrs.append(ss.TimeArr(self.sets[key], label=f'Time of entering {" | ".join(key)} from outside it'))
         self.sets_of = {name:[(arr, [self.state_index[k] for k in key]) for key,arr in self.sets.items() if name in key] for name in people} # For each state, the sets with a clock it is in, and their states
         strains = next((strat.strains for strat in graph.strats if strat.strains is not None), None)
         self.spread = dict() # A parameter that is a distribution across people: each agent's own value, drawn when they are made
@@ -272,10 +272,10 @@ class Agents(Engine, Transmission):
             arrs.append(ss.FloatArr(f'par_{p.name}', default=ss.transitions.numeric_dist(p.raw, self.convert), label=f'Value of {p.name}'))
         self.delays = {tr.name:tr.trigger.delay for tr in self.triggers if tr.trigger.delay is not None} # after= an event, with dur=: each person's time after it (see triggered())
         for name in self.delays:
-            arrs.append(ss.arrays.StepArr(f'ti_after_{name}', label=f'Scheduled time of {name}, after its event'))
+            arrs.append(ss.TimeArr(f'ti_after_{name}', label=f'Scheduled time of {name}, after its event'))
         self.tf_dists = {name:dist for name,tf in graph.transfers.items() if (dist := self.transfer_dist(tf, per_agent=self.agent_values)) is not None} # A transfer whose dur= is a distribution: each person's time is drawn when they can first move, and they move when it is up (see step_transfers())
         for name in self.tf_dists:
-            arrs.append(ss.arrays.StepArr(f'ti_move_{name}', label=f'Scheduled time of the transfer {name}'))
+            arrs.append(ss.TimeArr(f'ti_move_{name}', label=f'Scheduled time of the transfer {name}'))
         mod.define_states(*arrs, overwrite=True) # Overwrite, since in the class form the declarations are class attributes
         for state in graph.people_states:
             if state.name not in unkept:
@@ -399,8 +399,8 @@ class Agents(Engine, Transmission):
         self.init_results()
         self.note_steps()
         for arr in self.mod.state_list:
-            if isinstance(arr, ss.arrays.StepArr):
-                arr.fit(self.mod.t) # 16-bit step numbers if the run fits
+            if isinstance(arr, ss.TimeArr):
+                arr.t = self.mod.t
         return
 
     def groups(self, uids, state=None):
@@ -1591,7 +1591,7 @@ class Agents(Engine, Transmission):
         if isinstance(arr, ss.arrays.Unkept):
             errormsg = f'{clock} reads the time of entering {names[0]}, which was not kept since no clock of it was known when the sim was built; make the clock before the sim, or set ss.options.keep_times = True'
             raise ValueError(errormsg)
-        start = np.asarray(arr.internal(uids), dtype=float)
+        start = np.asarray(arr.raw[uids], dtype=float)
         ti = self.ti
         if clock.kind == 'time':
             out = np.maximum(ti - start, 0)*self.dt # In the sim's unit; someone who entered at the end of this step (by transmission) has had none of it
@@ -1600,7 +1600,7 @@ class Agents(Engine, Transmission):
             exits = self.graph.exits[name]
             if not (exits.branches or exits.remainder or exits.timed):
                 raise ValueError(f'{clock} needs a dwell time scheduled when people enter {name}, and {name} has only rates out of it.')
-            end = np.asarray(mod[f'ti_exit_{name}'].internal(uids), dtype=float) # The step the exit is due in (from its start)
+            end = np.asarray(mod[f'ti_exit_{name}'].raw[uids], dtype=float) # The step the exit is due in (from its start)
             if isinstance(leaving, tuple) and 'left_exit' in mod.__dict__: # Leaving it now: the exit they had
                 end = np.where(np.isnan(end), mod.left_exit.raw[uids], end)
             with np.errstate(divide='ignore', invalid='ignore'):
@@ -2156,11 +2156,11 @@ class Agents(Engine, Transmission):
         """ For a trigger with a delay: draw the time after the event for those it has just happened to (`uids`), forget it for those who left the source, and return those whose time is up """
         mod = self.mod
         due = mod[f'ti_after_{tr.name}']
-        pending = np.flatnonzero(due.raw != due.nan)
+        pending = np.flatnonzero(~np.isnan(due.raw))
         inside = self.in_states_for(names, pending)
         due.raw[pending[~inside]] = due.nan
         pending = pending[inside]
-        new = ss.uids(uids[due.raw[uids] == due.nan])
+        new = ss.uids(uids[np.isnan(due.raw[uids])])
         if len(new):
             dur = self.draw(f'after_{tr.name}', new)
             if not isinstance(ss.transitions.by_dist(getattr(self.delays[tr.name], 'raw', None)), ss.Dist): # A scalar: an exponential with that mean
@@ -2367,7 +2367,7 @@ class Agents(Engine, Transmission):
             for name in key:
                 uids = self.members(self.graph.states[name])
                 uids = uids[np.isnan(np.asarray(mod[arr][uids], dtype=float))]
-                mod[arr][uids] = mod[f'ti_{name}'].internal(uids)
+                mod[arr][uids] = mod[f'ti_{name}'].raw[uids]
         if self.on_event:
             self.fire_placed()
         moved = False
@@ -2604,12 +2604,12 @@ class Agents(Engine, Transmission):
         """
         Date some agents' entering a state, at the engine's time `ti` (the start of the step for a move made then, `ti`
         of the loop less 1; its end for an infection by contact), and record the steps from it to the loop's index, so
-        that `ti_X` reads as the step the move happened in (see `ss.arrays.StepArr.internal()`)
+        that `ti_X` reads as the step the move happened in (see `ss.TimeArr`), while `.raw` has the engine's time
         """
         arr = self.mod[f'ti_{name}']
         if isinstance(arr, ss.arrays.Unkept):
             return
-        arr.set_internal(uids, ti)
+        arr.raw[uids] = ti
         arr.shift.raw[uids] = self.index_of(ti) - ti if ti == ti else 0
         return
 
@@ -2632,16 +2632,16 @@ class Agents(Engine, Transmission):
         mod = self.mod
         entered = np.broadcast_to(np.asarray(entered, dtype=float), len(uids))
         arr = mod[f'ti_{name}']
-        before = None if isinstance(arr, ss.arrays.Unkept) else arr.internal(uids)
+        before = None if isinstance(arr, ss.arrays.Unkept) else arr.raw[uids]
         if before is not None:
-            arr.set_internal(uids, entered)
+            arr.raw[uids] = np.ceil(entered) # A time between steps, at the next step
         if name in self.scheduled:
             ti_exit = mod[f'ti_exit_{name}']
             if exit is None:
                 start = before if before is not None else self.ti
-                exit = ti_exit.internal(uids) - (start - entered)
+                exit = ti_exit.raw[uids] - (start - entered)
             exit = np.broadcast_to(np.asarray(exit, dtype=float), len(uids))
-            ti_exit.set_internal(uids, np.maximum(exit, self.ti))
+            ti_exit.raw[uids] = np.ceil(np.maximum(exit, self.ti))
         return
 
     def index_of(self, ti):
@@ -2767,13 +2767,13 @@ class Agents(Engine, Transmission):
         if not candidates:
             return None
         ti_exit = mod[f'ti_exit_{name}']
-        is_new = ti_exit.raw[members] == ti_exit.nan
+        is_new = np.isnan(ti_exit.raw[members])
         new = members[is_new]
         if not len(new):
             return None
         missed = None
         if entered is None:
-            entered = mod[f'ti_{name}'].internal(new)
+            entered = mod[f'ti_{name}'].raw[new]
             if self.competing[name]:
                 late = entered < self.ti # NaN (undated) is not
                 if late.any():
@@ -2808,7 +2808,7 @@ class Agents(Engine, Transmission):
         if loops.any(): # Back to this state: taken again no sooner than the next step, so a dwell shorter than a step does not go round within one
             again = (which >= 0) & loops[np.maximum(which, 0)] & (best > 0)
             steps[again] = np.maximum(steps[again], 1)
-        ti_exit.set_internal(new, entered + steps) # Exits happen at the start of a step
+        ti_exit.raw[new] = entered + steps # Exits happen at the start of a step
         mod[f'exit_{name}'][new] = which
         modified = self.rescaled_of(name)
         if modified and f'mult_{name}' in mod.__dict__: # How fast each exit ran when its dwell time was drawn, so a later change can rescale what is left of it: see rescale_exits()
@@ -2912,17 +2912,17 @@ class Agents(Engine, Transmission):
                 changed = np.where(stalled, raw > 0, changed)
             if changed.any():
                 sel, now, before, stalled = sel[changed], now[changed], before[changed], stalled[changed]
-                ti_exit = mod[f'ti_exit_{name}'].internal(sel)
+                ti_exit = mod[f'ti_exit_{name}'].raw[sel]
                 new_exit = np.empty(len(sel))
                 ok = ~stalled
-                new_exit[ok] = ti + np.maximum(ti_exit[ok] - 0.5 - ti, 0)*before[ok]/now[ok] # A scheduled exit is a whole step, rounded up (see ss.arrays.StepArr), so what is left is taken from the middle of it
+                new_exit[ok] = ti + np.maximum(ti_exit[ok] - 0.5 - ti, 0)*before[ok]/now[ok] # A scheduled exit is a whole step, so what is left is taken from the middle of it
                 if stalled.any(): # Now that their rate is not 0, a dwell is drawn from now
                     new_exit[stalled] = ti + self.whole_steps(name, sel[stalled], self.sample_dwell(candidates[i], sel[stalled]))
-                lost = ok & np.isinf(ti_exit) # Scheduled beyond even 32-bit steps (e.g. adjust=1e-9), so the dwell time is gone: drawn again from now, less what has passed of it since entering (as if it had stalled)
+                lost = ok & np.isinf(ti_exit) # Never (a rate of 0, which has changed), so the dwell time is gone: drawn again from now, less what has passed of it since entering (as if it had stalled)
                 if lost.any():
-                    passed = (ti - mod[f'ti_{name}'].internal(sel[lost]))*before[lost]/now[lost]
+                    passed = (ti - mod[f'ti_{name}'].raw[sel[lost]])*before[lost]/now[lost]
                     new_exit[lost] = ti + self.whole_steps(name, sel[lost], np.maximum(self.sample_dwell(candidates[i], sel[lost]) - passed*self.dt, 0))
-                mod[f'ti_exit_{name}'].set_internal(sel, new_exit)
+                mod[f'ti_exit_{name}'].raw[sel] = np.ceil(new_exit) # The step it falls in
                 mod[f'mult_{name}'][sel] = now
         return
 
@@ -3187,8 +3187,8 @@ class Agents(Engine, Transmission):
         candidates = self.exits_of[name]
         if uids is None:
             exits = mod[f'ti_exit_{name}']
-            due = ss.uids(np.flatnonzero(mod[name].raw & (exits.raw <= self.ti))) # Not set is stored as the lowest step, so those put in the state through its NumPy array (which is not watched) are among them
-            unset = exits.raw[due] == exits.nan
+            due = ss.uids(np.flatnonzero(mod[name].raw & ~(exits.raw > self.ti))) # And not set (NaN), so those put in the state through its NumPy array (which is not watched) are among them
+            unset = np.isnan(exits.raw[due])
             if unset.any(): # Scheduled now, as at the start of the step (see schedule()), and taken if that is due
                 self.schedule(state, due[unset])
                 due = due[exits.raw[due] <= self.ti]
@@ -3298,7 +3298,7 @@ class Agents(Engine, Transmission):
         after = self.after_of(tr)
         if not after:
             return 1.0
-        stay = (self.ti - self.mod[f'ti_{state.name}'].internal(uids))*self.dt
+        stay = (self.ti - self.mod[f'ti_{state.name}'].raw[uids])*self.dt
         return (stay >= after - 1e-9).astype(float)
 
     def step_lifetables(self):
@@ -3462,8 +3462,8 @@ class Agents(Engine, Transmission):
                 due = mod[f'ti_move_{name}']
                 held = np.zeros(len(due.raw), dtype=bool)
                 held[uids] = True
-                due.raw[(due.raw != due.nan) & ~held] = due.nan # Those who can no longer move (they left the level or the states) forget their time
-                self.schedule_transfer(name, uids[due.raw[uids] == due.nan], dt, self.ti) # Those who can move now, who arrived in this step (or the one before, after it)
+                due.raw[~np.isnan(due.raw) & ~held] = np.nan # Those who can no longer move (they left the level or the states) forget their time
+                self.schedule_transfer(name, uids[np.isnan(due.raw[uids])], dt, self.ti) # Those who can move now, who arrived in this step (or the one before, after it)
             if len(uids):
                 if timed:
                     now = due.raw[uids] <= self.ti
@@ -3647,7 +3647,7 @@ class Agents(Engine, Transmission):
             self._infecting = False
         self.step_per(mod.ti)
         self.write_derived(self.sim.people.auids)
-        self.cache.clear() # Who is in each state has changed (including by the same-step cascade), so values read after the step (e.g. rel_sus.effective) are worked out again
+        self.cache.clear() # Who is in each state has changed (including by the same-step cascade), so values read after the step (e.g. dis.effective('rel_sus')) are worked out again
         if self.sim.mixing.register is not None and mod is self.sim.declared[-1]: # The events dated at the end of the step, after every module's transmissions; the people are the same for every module, so it is done once
             self.step_register(mod.ti)
         self.record_stocks() # Deaths later in the step are taken out of them: see die()

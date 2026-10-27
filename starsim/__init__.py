@@ -28,7 +28,7 @@ from .internals.errors import *
 from .internals import debugtools
 
 from .arrays import (
-    Arr, FloatArr, IntArr, BoolArr, BoolState, IndexArr, uids, # Also ss.arrays.BaseArr
+    Arr, FloatArr, TimeArr, IntArr, BoolArr, BoolState, IndexArr, uids, # Also ss.arrays.BaseArr
 )
 
 from .distributions import ( # Also ss.distributions.Dists, link_dists, make_dist, dist_list

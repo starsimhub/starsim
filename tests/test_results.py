@@ -180,6 +180,18 @@ def test_summarize_by():
         assert ss.Result('x', values=np.array([1.0, 5, 2]), summarize_by='max').summarize() == 5
     finally:
         del ss.Result.summarizers['max']
+
+    # A result not summarized over time is left out when all the results are resampled, as in summarize()
+    class Timer(ss.Analyzer):
+        def init_results(self):
+            super().init_results()
+            self.define_results(ss.Result('timer', summarize_by=None))
+        def step(self):
+            self.results.timer[self.ti] = self.ti
+    sim = ss.Sim(ss.SIS(), solver='ode', analyzers=Timer(name='a'), start=2000, stop=2002, dt=ss.months(1), verbose=0).run()
+    annual = sim.results.resample('year')
+    assert 'timer' not in annual.a and len(annual.sis.I) == 2
+    assert 'a_timer' not in sim.to_df(resample='year') and 'a_timer' in sim.to_df()
     return res
 
 

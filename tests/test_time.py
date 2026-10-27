@@ -536,6 +536,31 @@ def test_time_text():
     return
 
 
+@sc.timer()
+def test_calendar_months():
+    sc.heading('Test calendar months: dates from the 31st, sims stepped by them, and what ss.datedur takes')
+    from dateutil.relativedelta import relativedelta
+
+    # Each date is a whole number of months from the start, so the end of a month stays the end of a month
+    dates = ss.date.arange('2020-01-31', '2020-05-31', ss.datedur(months=1))
+    assert [str(d) for d in dates] == ['2020-01-31', '2020-02-29', '2020-03-31', '2020-04-30', '2020-05-31']
+
+    # A calendar duration as a plain one, in either spelling of the unit
+    assert ss.datedur(months=6).to('year') == ss.years(0.5) and ss.datedur(months=6).years == 0.5
+
+    # A declared disease stepped by calendar months runs as with ss.months(1)
+    kw = dict(solver='ode', start='2020-01-01', stop='2022-01-01', verbose=0)
+    a, b = [ss.Sim(ss.SIR(beta=ss.peryear(3)), dt=dt, **kw).run() for dt in [ss.datedur(months=1), ss.months(1)]]
+    assert np.allclose(a.results.sir.I, b.results.sir.I)
+
+    # Hours or an absolute day are not calendar units, so they are refused rather than dropped
+    assert ss.datedur(relativedelta(months=2, days=3)) == ss.datedur(months=2, days=3)
+    for bad in [relativedelta(months=2, hours=3), relativedelta(day=31)]:
+        with pytest.raises(ValueError):
+            ss.datedur(bad)
+    return a
+
+
 if __name__ == '__main__':
     T = sc.timer('\nTotal time')
 
@@ -551,5 +576,6 @@ if __name__ == '__main__':
     o10 = test_prob_conversion()
     o11 = test_arithmetic()
     o12 = test_bare_units()
+    o13 = test_calendar_months()
 
     T.toc()

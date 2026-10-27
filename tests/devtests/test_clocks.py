@@ -73,7 +73,7 @@ def test_syphilis_latent():
         if form == 'old': # The workaround: relies on ti_EL being kept after people leave EL for LL, and is NaN for seeds in LL
             def latent_decay(sim):
                 s = sim.diseases.syph
-                return np.exp(-np.log(2)/hl*(sim.ti - 1 - s.ti_EL.internal(slice(None)))*sim.t.dt.years) # The engine's own times (NaN if never in EL), from the start of the step, as the clock reads them; ti_EL itself reads as the step of entering, a step later for a move at a step's end
+                return np.exp(-np.log(2)/hl*(sim.ti - 1 - s.ti_EL.raw)*sim.t.dt.years) # The engine's own times (NaN if never in EL), from the start of the step, as the clock reads them; ti_EL itself reads as the step of entering, a step later for a move at a step's end
             amount = latent_decay
         else:
             amount = 0.5**((EL | LL).time/ss.years(hl))
@@ -89,7 +89,7 @@ def test_syphilis_latent():
     assert not np.isnan(eff).any() and eff.min() < 0.3
     late = s.LL.uids[s.ti_EL[s.LL.uids] > 0]
     latent = s.states.EL | s.states.LL
-    assert np.allclose(s.engine.eval_for(latent.time, late), (s.ti - 1 - s.ti_EL.internal(late))/12) # From latent onset to the start of the last step, as the workaround meant
+    assert np.allclose(s.engine.eval_for(latent.time, late), (s.ti - 1 - s.ti_EL.raw[late])/12) # From latent onset to the start of the last step, as the workaround meant
     with pytest.raises(ValueError, match='is NaN for some of the people it applies to'): # The workaround with seeds in LL is NaN for them
         make('old').run()
     return sim

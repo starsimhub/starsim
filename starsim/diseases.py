@@ -1367,7 +1367,7 @@ class Infection(Disease):
         res = self.results
         res.cum_infections[:] = np.cumsum(res.new_infections[:]) # Computed after scaling, since the scale can vary over time (see ss.Sim.rescale())
         ti_infected = getattr(self, 'ti_infected', None) # A subclass can remove it (define_states(reset=...))
-        if ti_infected is not None and not res.new_infections.values.any() and np.any(ti_infected.raw > 0): # People were infected during the run, but none were counted
+        if ti_infected is not None and not res.new_infections.values.any() and np.any(ti_infected.raw > 1): # People were infected during the run, but none were counted (not those seeded, which are dated by the first step: see init_post())
             ss.warn(f'"{self.name}": people were infected during the run, but new_infections is 0 at every time point. Infection.set_prognoses() counts them, '
                     f'so an override of it ({type(self).__name__}.set_prognoses()) should call super().set_prognoses(uids, sources)')
         return

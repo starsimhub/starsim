@@ -107,7 +107,7 @@ def test_strain_clearance():
     before = d16.current_state()[both].copy(), d16.ti_I.raw[both].copy(), d16.ti_exit_I.raw[both].copy()
     ss.move(d18.I, d18.S, uids=both)
     assert len(both) and not d18.I.raw[both].any()
-    assert all(np.array_equal(a, b) for a,b in zip(before, (d16.current_state()[both], d16.ti_I.raw[both], d16.ti_exit_I.raw[both])))
+    assert all(np.array_equal(a, b, equal_nan=True) for a,b in zip(before, (d16.current_state()[both], d16.ti_I.raw[both], d16.ti_exit_I.raw[both])))
     return sim
 
 

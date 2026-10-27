@@ -6,6 +6,7 @@ Test importing models from other frameworks (ss.interop.load()), as the Starsim 
 import tempfile
 import pytest
 import numpy as np
+import pandas as pd
 import sciris as sc
 import starsim as ss
 import starsim.interop
@@ -214,6 +215,26 @@ def test_code(tmp_path):
         ss.interop.build(src, verbose=False)
     src.config.networks = ss.interop.Code('ss.RandomNet()')
     assert 'networks=ss.RandomNet()' in ss.interop.write(src).code
+
+    # Values written as code keep what they are: a table's index (so data is compared at its own times), and a rate's unit
+    code_value = ss.interop.core.code_value
+    for val in [pd.DataFrame(dict(I=[5.0, 20, 40]), index=[10, 20, 30]), pd.DataFrame(dict(I=[1.0, 2]), index=pd.to_datetime(['2020-01-01', '2020-02-01']))]:
+        assert eval(code_value(val), dict(pd=pd)).equals(val)
+    rate = eval(code_value(ss.Rate(0.3, ss.weeks(2))), dict(ss=ss))
+    assert rate.value == 0.3 and rate.unit == ss.weeks(2)
+
+    # Several sources: a disease's variable is not a name another source defines (here a state)
+    host = ss.interop.Source('host', format='test')
+    for state in 'SIR':
+        host.add_state(state, init=990 if state == 'S' else 10*(state == 'I'))
+    host.add_par('beta', 0.3)
+    host.add_flow('S', 'I', 'beta*S*I/(S+I+R)', per='total', name='infection')
+    vector = ss.interop.Source('vector', format='test')
+    vector.add_state('V', init=100)
+    vector.add_state('host', init=0)
+    vector.add_flow('V', 'host', 0.05, name='bite')
+    sim = ss.interop.build([host, vector], verbose=False, stop=10, unit='day').run()
+    assert sim.results.host.I[-1] > 10 and sim.results.vector.host[-1] > 0
     return code
 
 

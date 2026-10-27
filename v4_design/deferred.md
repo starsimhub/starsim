@@ -222,6 +222,7 @@ Looked at whether v4 should support modeling paradigms beyond the ODE, chain-bin
 - **Owned random streams** (oct27/architecture_simplicity_review.md §2; Cliff skeptical): a distribution reachable under two attribute names takes the name the search finds first, so adding an alias can change its seed. If it matters, name a distribution when it is first set as a module's attribute (later aliases then don't change it), rather than a registry. S.
 - **`ssl.DegreeNet`** (oct27/plan.md): kept, since the EpiModel importer and three user-guide pages use it; Cliff asked to drop it. Move what the importer needs into `ss.SexualNet` (EpiModel's networks have no sexes) or keep it. S.
 - **A compartmental form for an escape** (oct27/plan.md): with `ss.Transition(before=)` removed, `rate*(X.time < d)` runs as agents only. S–M.
+- **A whole JAX ODE run of births with a fixed delay** (oct27 review, `review/solvers.md`): it differs from the kernels (the a7 `births` model: `M0` by up to 38 in about 668, `NP` ends at 1,673 against 1,773), already so at `acef3c7b`. Find which step of the delay or the births the JAX run takes differently. S–M.
 
 ## Won't do
 

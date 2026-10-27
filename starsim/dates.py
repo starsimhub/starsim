@@ -10,7 +10,7 @@ import numpy as np
 import pandas as pd
 import sciris as sc
 import starsim as ss
-from .time import dur, factors, get_dur_class, Rate, valid_bases, wrong_dimension
+from .time import dur, factors, get_dur_class, get_unit_class, normalize_unit, Rate, valid_bases, wrong_dimension
 
 __all__ = ['DateArray', 'date', 'datedur']
 
@@ -575,7 +575,7 @@ class date(pd.Timestamp):
             t = start
             while compare(t):
                 tvec.append(t)
-                t += step
+                t = start + (len(tvec))*step # Each from the start, not from the one before, so a month from the 31st stays at the end of each month
             return DateArray(tvec)
 
         # We're converting them from float years, do it approximately
@@ -630,6 +630,10 @@ class datedur(dur):
         if isinstance(value, datedur):
             value = value.value
         elif isinstance(value, drd.relativedelta):
+            other = {k:v for k,v in vars(value).items() if k not in ['years', 'months', 'days', '_has_time'] and v not in (0, None)} # e.g. hours, or an absolute day
+            if other:
+                errormsg = f'ss.datedur() takes whole numbers of {sc.strjoin(self.units)}, not {value}; for a duration that is not on the calendar, use e.g. ss.days(1.5)'
+                raise ValueError(errormsg)
             kwargs = dict(years=value.years, months=value.months, days=value.days)
         elif isinstance(value, dur):
             kwargs = {value.base: value.value} # e.g. ss.days(7) is 7 calendar days
@@ -677,7 +681,7 @@ class datedur(dur):
     def to_dur(self):
         """ As a plain duration, in the finest unit it has, e.g. ss.datedur(years=1, days=10).to_dur() = ss.days(375) """
         unit = next((k for k in reversed(self.units) if self.kwds.get(k)), None)
-        return get_dur_class(unit)(self.to(unit)) if unit is not None else ss.years(0)
+        return self.to(unit) if unit is not None else ss.years(0)
 
     def replace(self, value):
         """
@@ -688,29 +692,34 @@ class datedur(dur):
         """
         return self.to_dur().replace(value)
 
+    def _number(self, unit):
+        """ The approximate number of a unit ('years', 'months', 'weeks', or 'days') """
+        return sum(self.kwds.get(k, 0)/v for k,v in factors[normalize_unit(unit)].items())
+
     def to(self, unit):
-        """ The approximate number of a unit ('years', 'months', 'weeks', or 'days'), e.g. ss.datedur(months=6).to('years') is 0.5 """
-        return sum(self.kwds.get(k, 0)/v for k,v in factors[unit].items())
+        """ As a plain duration in a unit (e.g. 'year' or ss.years), approximately, as other durations are, e.g. ss.datedur(months=6).to('years') is ss.years(0.5) """
+        cls = get_unit_class('dur', unit)
+        return cls(self._number(cls.base))
 
     @property
     def years(self):
-        """ Shortcut to datedur.to('years') """
-        return self.to('years')
+        """ The approximate number of years, e.g. ss.datedur(months=6).years is 0.5 """
+        return self._number('years')
 
     @property
     def months(self):
-        """ Shortcut to datedur.to('months') """
-        return self.to('months')
+        """ The approximate number of months """
+        return self._number('months')
 
     @property
     def weeks(self):
-        """ Shortcut to datedur.to('weeks') """
-        return self.to('weeks')
+        """ The approximate number of weeks """
+        return self._number('weeks')
 
     @property
     def days(self):
-        """ Shortcut to datedur.to('days') """
-        return self.to('days')
+        """ The approximate number of days """
+        return self._number('days')
 
     def _combine(self, kwds):
         """ A calendar duration with these numbers of each unit added to its own """

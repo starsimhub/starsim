@@ -938,29 +938,17 @@ class FloatArr(Arr):
         return
 
 
-class StepArr(Arr):
+class TimeArr(FloatArr):
     """
-    Step numbers (time indices), stored compactly: a declared disease's `ti_X` and `ti_exit_X`, as agents, and `people.ti_dead` and `people.ti_removed`
+    Times, as step numbers of the module's timeline: when something happened or is due for each agent, e.g. a declared disease's `ti_X` (when each entered state X) and `ti_exit_X`, as agents, and `people.ti_dead`
 
-    The values are stored as 16-bit integers when the module's run has fewer than
-    32,000 steps (and 32-bit otherwise), which is a quarter of the memory of a
-    float time and half of a float32. Reading them gives float32 step numbers, with
-    NaN for "never" (not set) and `inf` for a time after the end of the run, so
-    `ti_I == sim.ti`, `ti_I > 0`, and `(sim.ti - ti_I)*sim.t.dt` all give the right
-    answer. A time between two steps is stored as the first step at or after it.
-    `.years` converts them to years; `.raw` has the stored integers, where `.nan`
-    means not set and `.never` means after the end of the run.
+    Stored as float32 step numbers, NaN for "never" (not set), so `ti_I == sim.ti`, `ti_I > 0`, and `(sim.ti - ti_I)*sim.t.dt`
+    all give the right answer. `due()` gives whose time has come, to the nearest step (so a time drawn between steps keeps
+    its mean), and `.years` converts them to years.
 
-    A declared state's time of entering (`ti_X`) reads as the index of the step the
-    move happened in, whatever kind of move it was (a progression at the step's start,
-    an infection by contact at its end), so `ti_X == sim.ti` is "entered this step".
-    The engine keeps its own time of the move, which `.raw` and `internal()` give.
-
-    With `late=True` (as for `people.ti_dead`), "not set" is stored as the largest
-    integer, the same as after the end of the run, so `raw <= ti` is whether the time
-    has come, with no special case; both read as NaN. With `wide=True`, they are always
-    32-bit, for times that can lie far beyond the run and still be needed (a scheduled
-    exit that a change of speed can bring back into it).
+    A declared state's time of entering (`ti_X`) reads as the index of the step the move happened in, whatever kind of
+    move it was (a progression at the step's start, an infection by contact at its end), so `ti_X == sim.ti` is "entered
+    this step". The engine keeps its own time of the move, which `.raw` gives (see `shift`).
 
     Example:
         ```python
@@ -968,69 +956,17 @@ class StepArr(Arr):
         sir = sim.diseases.sir
         infected_today = (sir.ti_I == sim.ti).uids
         years = sir.ti_I.years # The year of infection of each agent (NaN if never infected)
+
+        # In a disease written as code
+        self.define_states(ss.BoolState('exposed'), ss.TimeArr('ti_infectious'))
+        self.ti_infectious[uids] = self.ti + dur # In steps
+        mask = self.exposed & self.ti_infectious.due() # Those whose time has come
         ```
     """
-    def __init__(self, name=None, dtype=np.int32, late=False, wide=False, **kwargs):
-        self.late = late
-        self.wide = wide
-        super().__init__(name=name, dtype=dtype, nan=self.sentinels(dtype)[0], **kwargs)
-        self.lowest, self.never = self.sentinels(dtype)[1:]
-        self.nan_eq = False # Read as floats, so NaN is found with np.isnan()
-        self.t = None # The module's timeline, for .years; set by the engine
-        self.shift = None # Steps added when read, from the engine's time to the step's index (see `internal()`): by agent (an Arr) for a declared state's time of entering, 1 for a scheduled exit
-        return
-
-    def sentinels(self, dtype):
-        """ The stored integers for not set, the lowest step, and after the end of the run """
-        info = np.iinfo(dtype)
-        return (info.max if self.late else info.min), info.min + (0 if self.late else 1), info.max
-
-    def fit(self, t):
-        """ Use 16-bit integers if the module's run (on timeline `t`) fits in them """
-        self.t = t
-        dtype = np.int16 if t.npts < 32_000 and not self.wide else np.int32
-        if dtype != self.dtype:
-            nan = self.raw == self.nan
-            self.dtype = dtype
-            self.nan, self.lowest, self.never = self.sentinels(dtype)
-            self.raw = self.raw.astype(dtype)
-            self.raw[nan] = self.nan
-        return
-
-    def to_float(self, vals):
-        """ Convert stored step numbers to float32: NaN where not set, and inf after the end of the run """
-        vals = np.asarray(vals)
-        out = vals.astype(ss_float)
-        out[vals == self.never] = np.inf
-        out[vals == self.nan] = np.nan # After inf, since with late=True they are the same
-        return out if out.ndim else out[()]
-
-    def from_float(self, vals):
-        """ Convert step numbers to the stored integers: NaN to not set, a time between steps to the next step, and inf (or beyond the integers) to after the end of the run """
-        if isinstance(vals, numbers.Integral): # The usual case, e.g. the step now
-            return min(max(int(vals), self.lowest), self.never)
-        elif isinstance(vals, float) and vals != vals: # NaN, e.g. a scheduled exit forgotten
-            return self.nan
-        vals = np.asarray(vals)
-        if vals.dtype.kind in 'iub':
-            return np.clip(vals, self.lowest, self.never)
-        out = np.ceil(vals, out=np.empty(vals.shape)) # An array, even for one value
-        np.clip(out, self.lowest, self.never, out=out) # NaN stays NaN here
-        out[np.isnan(out)] = self.nan
-        return out.astype(self.dtype)
-
-    def internal(self, key):
-        """
-        The stored step numbers as floats, without the shift that reading them adds: the engine's own time (for a
-        declared state's time of entering, the start of the step for a move made then, `ti - 1`, and its end for an
-        infection by contact, `ti`; for a scheduled exit, the start of the step it is taken in), from which its clocks
-        and dwell times are worked out
-        """
-        return self.to_float(super().__getitem__(key))
-
-    def set_internal(self, key, value):
-        """ Set the stored step numbers to the engine's own time (see `internal()`) """
-        super().__setitem__(key, self.from_float(value))
+    def __init__(self, name=None, **kwargs):
+        super().__init__(name=name, **kwargs)
+        self.t = None # The timeline the steps are of (the module's), for due() and .years; set when its states are linked to the people
+        self.shift = None # Steps added when read, from the engine's time of a move to the index of the step it happened in: by agent (an Arr) for a declared state's time of entering, 1 for a scheduled exit
         return
 
     def shifted(self, vals, key=None):
@@ -1041,52 +977,46 @@ class StepArr(Arr):
             return vals + self.shift
         return vals + (self.shift.raw if key is None else self.shift.values if key is Ellipsis else self.shift[key])
 
-    def floats(self):
-        """ The values as a `FloatArr` of step numbers, for arithmetic and comparisons """
-        new = self.asnew(self.shifted(self.to_float(self.raw)), cls=FloatArr)
-        new.dtype, new.nan, new.nan_eq = ss_float, np.nan, False
-        return new
+    def due(self):
+        """ Whose time has come by the current step, as a boolean array (e.g. `mask = self.exposed & self.ti_infectious.due()`): a time between steps is due at the nearest step """
+        return self.asnew(self.shifted(self.raw) < self.t.ti + 0.5, cls=BoolArr)
 
     @property
     def years(self):
         """ The values as years (e.g. 2020.5), with NaN where not set """
-        steps = self.to_float(self.values).astype(float)
-        return self.t.yearvec[0] + steps*self.t.dt_year
+        return self.t.yearvec[0] + self.values.astype(float)*self.t.dt_year
 
     def __getitem__(self, key):
-        return self.shifted(self.to_float(super().__getitem__(key)), key)
+        vals = super().__getitem__(key)
+        return vals if self.shift is None else self.shifted(vals, key)
 
     def __setitem__(self, key, value): # A step number as read (e.g. sim.ti)
         if isinstance(self.shift, int):
             value = np.asarray(value, dtype=float) - self.shift if not isinstance(value, numbers.Integral) else value - self.shift
-        super().__setitem__(key, self.from_float(value))
+        super().__setitem__(key, value)
         if isinstance(self.shift, Arr):
             self.shift[key] = 0
         return
 
     @property
     def values(self):
-        return self.shifted(self.to_float(super().values), Ellipsis)
-
-    def set(self, uids, new_vals=None):
-        new_vals = self.nan if new_vals is None and self.default is None else self.from_float(new_vals if new_vals is not None else self.default)
-        self.raw[uids] = new_vals
-        return new_vals
+        vals = super().values
+        return vals if self.shift is None else self.shifted(vals, Ellipsis)
 
     def _boolmath(self, op, other=None, inplace=False):
+        if self.shift is None or not self.initialized:
+            return super()._boolmath(op, other, inplace=inplace)
         if inplace:
             errormsg = f'"{self.name}" holds step numbers, which cannot be changed in place by a comparison'
             raise TypeError(errormsg)
-        if not self.initialized:
-            return super()._boolmath(op, other)
-        return self.floats()._boolmath(op, other)
+        return self.asnew(self.shifted(self.raw), cls=FloatArr)._boolmath(op, other)
 
     def _math(self, op, other, reverse=False, inplace=False):
-        if not self.initialized and not inplace:
-            return super()._math(op, other, reverse=reverse)
-        result = self.floats()._math(op, other, reverse=reverse)
+        if self.shift is None or not self.initialized:
+            return super()._math(op, other, reverse=reverse, inplace=inplace)
+        result = self.asnew(self.shifted(self.raw), cls=FloatArr)._math(op, other, reverse=reverse)
         if inplace:
-            self.raw[:] = self.from_float(result.raw)
+            self.raw[:] = result.raw - self.shifted(np.zeros(len(self.raw), dtype=ss_float))
             return self
         return result
 
