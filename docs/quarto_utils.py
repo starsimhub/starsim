@@ -4,15 +4,19 @@ Utilities for processing docs (notebooks mostly)
 
 import os
 import sys
+import runpy
+import hashlib
 import importlib
+import importlib.util
 import subprocess
-import sciris as sc
-import starsim as ss
+import sciris as sc # NB: starsim is imported only where needed, since importing it is slow
 
 default_folders = ['tutorials', 'user_guide'] # Folders with Jupyter notebooks
 temp_patterns = ['**/my-*.*', '**/example*.*'] # Temporary files to be removed
 temp_items = ['user_guide/results'] # Temporary files/folders to be removed
 
+api_hash_file = '.quarto/api-build-hash' # Hash of the inputs to the last API build (see api_build_hash())
+api_outputs = ['objects.json', 'objects.inv', 'api.json', 'llms.txt', 'llms-full.txt', 'api/sim.qmd'] # Files the API build creates
 timeout = 600 # Maximum time for notebook execution
 yay = '✓'
 boo = '😢'
@@ -24,11 +28,17 @@ def run(cmd):
     return subprocess.run(cmd, check=True, shell=True)
 
 
+def package_dir(name):
+    """ Folder of an installed package, found without importing it """
+    return sc.path(importlib.util.find_spec(name).submodule_search_locations[0])
+
+
 @sc.timer('Update version')
-def update_version(pkg=ss):
+def update_version():
     sc.heading('Updating docs version number...')
     filename = '_variables.yml'
-    data = dict(version=ss.__version__, versiondate=ss.__versiondate__)
+    version = runpy.run_path(package_dir('starsim') / 'version.py') # Much faster than importing Starsim
+    data = dict(version=version['__version__'], versiondate=version['__versiondate__'])
     orig = sc.loadyaml(filename)
     if data != orig:
         sc.saveyaml(filename, data)
@@ -92,10 +102,28 @@ def customize_aliases(mod_name='starsim', json_path='objects.json'):
     return
 
 
-@sc.timer('Build interlinks')
-def build_interlinks():
-    sc.heading('Building docs links...')
-    return run('python -m quartodoc interlinks')
+def api_build_hash():
+    """
+    Hash of everything the API build depends on: the Starsim and quartodoc sources,
+    the docs config, and the scripts that build it
+    """
+    md5 = hashlib.md5()
+    files = [sc.path('_quarto.yml'), sc.path('make_api.py'), sc.path(__file__)]
+    for pkg in ['starsim', 'quartodoc']:
+        files += sorted(package_dir(pkg).rglob('*.py'))
+    for file in files:
+        md5.update(str(file).encode())
+        md5.update(file.read_bytes())
+    return md5.hexdigest()
+
+
+def api_up_to_date():
+    """ Whether the API docs from the last build are current (set STARSIM_DOCS_REBUILD_API=1 to always rebuild) """
+    if os.environ.get('STARSIM_DOCS_REBUILD_API'):
+        return False
+    if not all(os.path.exists(f) for f in api_outputs) or not os.path.exists(api_hash_file):
+        return False
+    return sc.loadtext(api_hash_file).strip() == api_build_hash()
 
 
 @sc.timer('Build objects.inv')
@@ -109,7 +137,7 @@ def build_objects_inv(json_path='objects.json', inv_path='objects.inv'):
     data = sc.loadjson(json_path)
     inv = soi.Inventory()
     inv.project = data.get('project', 'starsim')
-    inv.version = str(data.get('version', ss.__version__))
+    inv.version = str(data.get('version') or runpy.run_path(package_dir('starsim') / 'version.py')['__version__'])
     for item in data['items']:
         inv.objects.append(soi.DataObjStr(
             name=item['name'],
@@ -325,17 +353,21 @@ if __name__ == '__main__':
             sys.exit()
         sc.heading('Starting Quarto docs build', divider='★')
         update_version()
-        build_api_docs()
-        customize_aliases()
-        build_interlinks()
-        build_objects_inv()
-        build_api_index()
+        if api_up_to_date():
+            print('Starsim, quartodoc and the docs config are unchanged, so not rebuilding the API docs (set STARSIM_DOCS_REBUILD_API=1 to force)')
+        else:
+            build_api_docs()
+            customize_aliases()
+            build_objects_inv()
+            build_api_index()
+            os.makedirs(os.path.dirname(api_hash_file), exist_ok=True)
+            sc.savetext(api_hash_file, api_build_hash())
 
     elif 'post' in sys.argv:
         if not os.environ.get('QUARTO_PROJECT_RENDER_ALL'): # As above
             print('Rendering selected pages only, so not cleaning outputs')
             sys.exit()
-        clean_outputs()
+        clean_outputs(sleep=0) # No need to pause before deleting: these are the notebooks' own temporary files
 
     elif len(sys.argv) > 1:
         errormsg = f'Argument must be "pre" or "post", not {sys.argv}'

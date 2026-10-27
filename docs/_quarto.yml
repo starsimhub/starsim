@@ -362,26 +362,9 @@ filters:
   - assets/authorship.lua
 
 interlinks:
-  fast: false
-  sources:
-    python:
-      url: https://docs.python.org/3/
-    numpy:
-      url: https://numpy.org/doc/stable/
-    pandas:
-      url: https://pandas.pydata.org/pandas-docs/stable/
-    scipy:
-      url: https://docs.scipy.org/doc/scipy/
-    matplotlib:
-      url: https://matplotlib.org/stable/
-    sciris:
-      url: https://docs.sciris.org/
+  sources: {} # Only link to Starsim itself (objects.json); external inventories made every page slower to render
   autolink: true
   aliases:
-    numpy: [np]
-    pandas: [pd]
-    matplotlib: [plt]
-    sciris: [sc]
     starsim: [null, ss]
     starsim.library: [ssl]
 
