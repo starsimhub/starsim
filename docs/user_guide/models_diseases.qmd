@@ -284,6 +284,30 @@ sim.results.measles.plot()
 
 A class can also have methods, for behavior that isn't a transition: override `step()`, and call `super().step()` to run the declared transitions ([Modules written as code](models_code.qmd)).
 
+## Declaring in `__init__()`
+
+A class body runs once, for the class, so it can't hold a state or transition that only some versions of the model have. Such a model declares them in its `__init__()`, on `self`, with `define_states()`, `define_transitions()`, and `define_results()`. Each one is an attribute at once (`self.R`), and they are built together once the model is made:
+
+```{python}
+class SIRS(ss.Disease):
+    def __init__(self, waning=None, **kwargs):
+        super().__init__(init=dict(I=0.001), **kwargs)
+        beta = ss.par(ss.perday(0.3))
+        self.define_states(ss.states('S I R'))
+        self.define_transitions(
+            infection = self.S >> self.I @ beta*self.I,
+            recovery  = self.I >> self.R @ ss.days(10),
+        )
+        if waning is not None: # Immunity wanes only if asked for
+            self.define_transitions(waning=self.R >> self.S @ waning)
+        self.define_results(prevalence=self.I.frac) # A share of everyone in the model
+
+sims = [ss.Sim(SIRS(waning=w), total_pop=100_000, stop=ss.days(365), verbose=0).run() for w in [None, ss.days(90)]]
+print([f'{sim.results.sirs.prevalence[-1]:.4f}' for sim in sims])
+```
+
+States and transitions can also be given as lists, or one at a time with `name=` (e.g. in a loop over strains); `overwrite=True` replaces one that was declared already, e.g. with its rate changed.
+
 ## Pitfalls
 
 - **A bare number after `@` is a rate.** `I >> R @ 8` is a rate of 8 per day, not 8 days; write `ss.days(8)`.

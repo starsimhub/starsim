@@ -20,7 +20,7 @@ import itertools
 import numpy as np
 import sciris as sc
 import starsim as ss
-from .expressions import as_expr, BinOp, closest, dists_in, Count, count_power, did_you_mean, dimension, evaluate, Expr, Flow, format_expr, Func, is_one, linear, Nameable, par, value_str
+from .internals.expressions import as_expr, BinOp, closest, dists_in, Count, count_power, did_you_mean, dimension, evaluate, Expr, Flow, format_expr, Func, is_one, linear, Nameable, par, value_str
 from .parameters import by, seasonal, Static, timeseries, TimeValue
 
 __all__ = ['Expr', 'par', 'pars', 'State', 'states', 'null',
@@ -1488,6 +1488,6 @@ def class_members(cls):
 
 #%% Names that are now in the modules built on this one, also found here (e.g. ss.transitions.Graph); imported last, since those modules import the classes above
 
-from .presentation import TransitionTable, quantity_str, quantity_json, func_source, func_json, func_values
-from .graph import Graph
+from .internals.presentation import TransitionTable, quantity_str, quantity_json, func_source, func_json, func_values
+from .internals.graph import Graph
 from .dimensions import Strat, Transfer, transfer, parse_stratify

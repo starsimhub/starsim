@@ -12,7 +12,7 @@ import numpy as np
 import sciris as sc
 import starsim as ss
 from .expressions import BinOp, Expr, format_expr, par, value_str
-from .parameters import by, TimeValue
+from ..parameters import by, TimeValue
 
 __all__ = ['Presentation', 'Description', 'Diagram']
 

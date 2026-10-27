@@ -26,9 +26,11 @@ from .utils import (
     return_fig,
 )
 
-from .errors import *
+from .internals import errors # Errors, warnings, and notes, as classes (e.g. ss.errors.UnknownState); the base classes and ss.CapabilityError also here
+from .internals.errors import *
 
-from .debugtools import check_requires # Also ss.debugtools.Profile, the mock_* objects for testing, and Diagnostics
+from .internals import debugtools
+from .internals.debugtools import check_requires # Also ss.debugtools.Profile, the mock_* objects for testing, and Diagnostics
 
 from .arrays import (
     Arr, FloatArr, IntArr, BoolArr, BoolState, IndexArr, uids, # Also ss.arrays.BaseArr and ss.arrays.ModifiableArr
@@ -50,7 +52,6 @@ from .time import (
 )
 
 from .dates import DateArray, date, datedur
-from . import timeplot # Registers Starsim's dates and durations with Matplotlib
 
 from .timeline import Timeline
 
@@ -73,10 +74,6 @@ from . import geo # Places and the movement between them: ss.geo.geography, ss.g
 
 from .results import Result, Results, simdata
 
-from .demographics import (
-    Demographics, Births, Deaths,
-)
-
 from .products import Product, Vaccine, Treatment, Diagnostic, box
 
 from .interventions import (
@@ -90,14 +87,17 @@ from .connectors import Connector, modify, change
 from . import conditions
 from .conditions import state, child # Conditions on a state by path, and on a mother when her child goes through an event
 from . import perflib # Hidden machinery for speed (exact draws in Numba), which the kernels use
-from . import kernels
-from .kernels import compile # Compile the solver kernels ahead of time
+from .perflib import kernels
+from .perflib.kernels import compile # Compile the solver kernels ahead of time
 
-from .expressions import par, mother, attr
+from .internals import expressions
+from .internals.expressions import par, mother, attr
 from .transitions import (
     State, states, pars, null, stay, on,
     Transition, move, birth, death, lifetable, immigration, emigration, outcome,
 )
+
+from .internals import graph, presentation # The graph of a declared module (ss.transitions.Graph), and how it is shown
 
 from .dimensions import transfer # Also ss.dimensions.Strat, ss.dimensions.Groups
 
@@ -106,16 +106,16 @@ from . import solvers # The engines are internal: ss.solvers.Compartmental, ss.s
 from .diseases import Disease, Infection, SIR, SEIR, SIS
 from .strains import immunity, Strains
 
-from . import pregnancy
-from .pregnancy import Pregnancy
+from .demographics import Demographics, Births, Deaths, Pregnancy # After the diseases, since a pregnancy is one
 
 from .loop import Loop
 
-from .spec import to_code, diff
+from .internals import spec
+from .internals.spec import to_code, diff
 
 from . import data # Data by place, from starsim_data: ss.data.age('Kenya'), ss.data.population(), ss.data.contacts(), ss.data.geography(); starsim_data is imported only when they are used
 
-from . import gradients # Used as ss.gradients; JAX is imported only when it is used
+from .internals import gradients # Used as ss.gradients; JAX is imported only when it is used
 
 from .perflib import jit # Compile users' own code; the machinery for speed is hidden in ss.perflib
 
@@ -139,28 +139,6 @@ def __getattr__(name):
             errormsg = f'module "starsim" has no attribute "{name}" (removed in Starsim 4): {note}. The migration script rewrites Starsim 3 code: python -m starsim.interop.migrate mypackage/'
             raise AttributeError(errormsg, name=name, obj=None) # No object, so Python suggests no closest name (e.g. "emigration" for "Calibration")
     raise AttributeError(f'module "starsim" has no attribute "{name}"{hint}')
-
-# Load fonts
-def _load_fonts():
-    """ Try installing and loading fonts, but fail silently if folder is not writable """
-    if options.install_fonts:
-        test_file = root / 'starsim' / 'assets' / 'fonts_installed_successfully'
-
-        # Check if fonts have already been installed
-        if not test_file.exists():
-            try:
-                test_file.touch()  # Mark that fonts were installed
-                settings.load_fonts(rebuild=True)
-                if options.verbose:
-                    print('\nNote: rebuilding the font cache only happens once on first import, or set the environment variable STARSIM_INSTALL_FONTS=0 to disable.')
-            except Exception: # Not writable or something else went wrong; ignore
-                pass
-        else:
-            settings.load_fonts(rebuild=False)
-    return
-
-# Try loading fonts
-_load_fonts()
 
 # Say if Starsim has not been compiled yet
 kernels.note_uncompiled()

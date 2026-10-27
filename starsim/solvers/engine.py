@@ -685,6 +685,10 @@ class Engine:
             elif p.slot in ['rate', 'dur'] and not isinstance(out, ss.TimePar) and not isinstance(raw, ss.transitions.TimeValue) and self.inferred_unit: # An expression has the units of its own values
                 self.bare_return(p, raw, out)
             return self.modified(p, self.convert(out)) # Not cached, since it can depend on the current state
+        elif isinstance(raw, dict) and self._routes is None and not len(self.sim.networks): # A beta for each route, under homogeneous mixing: the value of the routes it does not name
+            if 'default' not in raw:
+                raise ss.errors.RouteMismatch(f'beta for "{self.mod.name}" has a value for each of the routes {sc.strjoin(raw.keys())}, but there are none (homogeneous mixing); give default= for the routes it does not name, or give the sim its networks')
+            out = self.plain_value(raw['default'])
         elif isinstance(raw, dict): # A beta for each route; in a compartmental run it is applied to the exposure through each instead (see Compartmental.route_betas())
             out = 1.0 if self._routes is not None else {k:self.convert_beta(v) for k,v in raw.items()}
         elif self._routes is not None and key in self.routed: # A beta applied to the exposure through each route (see Compartmental.route_betas())
@@ -711,7 +715,7 @@ class Engine:
     def modified(self, p, value):
         """ Apply the modifiers that are active on a parameter: set, then multiply, then add """
         mods = self.sim.modifiers.get((self.mod.name, 'par', p.name)) if (p.name and not p.literal) else None
-        if not mods:
+        if not mods or getattr(self, '_unmodified', False): # See note_steps()
             return value
         out = self.reduce(ss.connectors.combine(mods, value, self), what=p.name)
         return self.clip(out, f'{self.mod.name}.pars.{p.name}') if p.slot in ['rate', 'dur'] else out
@@ -1233,7 +1237,14 @@ class Engine:
         return ss.transitions.numeric_dist(raw, lambda val: convert(val, unit), per_agent=per_agent)
 
     def note_steps(self):
-        """ In a run that takes whole steps, say which transitions are fast compared with the timestep """
+        """ In a run that takes whole steps, say which transitions are fast compared with the timestep: by the parameters' own values, without their modifiers, which may read what does not exist until the run (e.g. a property of people another module adds) """
+        with self.evaluating(unmodified=True):
+            self.note_fast_steps()
+        self.cache.clear() # Values worked out without their modifiers
+        return
+
+    def note_fast_steps(self):
+        """ See `note_steps()` """
         sim = self.sim
         for tr in self.graph.transitions.values(): # A rate per person that grows with a count of people, which is often a count written for a share
             if tr.people and not tr.inflow and tr.rate is not None and tr.flow_given is None and ss.transitions.count_power(tr.rate) > 0 and not self.plausible_density(tr): # Not for the whole flow written without a total (beta*S*I), which says so
@@ -1542,7 +1553,8 @@ class Engine:
             if stages is not None and not stages.dwell.exact: # Erlang stages: see ss.dimensions.transfer_stages()
                 self.note_stages(name, stages.dwell)
         mod.define_results(*results)
-        ss.results.in_people(*[r for r in mod.results.values() if isinstance(r, ss.Result)]) # Scaled when written: see update_results()
+        written = {r.name for r in results if isinstance(r, ss.Result)} | set(graph.states) | set(graph.transitions) # Those the engine writes, which are scaled when written (see update_results()); not those of the disease's own code, which are counted in agents and scaled at the end
+        ss.results.in_people(*[r for key,r in mod.results.items() if isinstance(r, ss.Result) and (key in written or key.partition('.')[0] in graph.transitions)])
 
         # Stratified results are one result with a dimension for each stratification: see res.select() and res.by()
         ng = self.sim.groups.n_groups

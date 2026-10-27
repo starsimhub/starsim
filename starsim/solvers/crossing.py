@@ -705,7 +705,7 @@ class Crossing:
         """ The output of a whole run for one engine: the first engine to ask takes the run for all of them """
         if not self.outs:
             if use_jax:
-                outs = ss.gradients.run_crossing(self) if self.sim.solver not in ['binomial', 'tau'] else importlib.import_module('starsim.perflib._chain').run_crossing(self)
+                outs = ss.gradients.run_crossing(self) if self.sim.solver not in ['binomial', 'tau'] else importlib.import_module('starsim.perflib.chain').run_crossing(self)
             else:
                 outs = self.run()
             self.outs = dict(zip(self.names, outs))
@@ -780,7 +780,7 @@ class Crossing:
         ys = np.repeat(y0[None], n_runs, axis=0)
         if self.sim.solver in ['binomial', 'tau'] and ss.solvers.choose_engine(self.sim)[0]: # In JAX, as a single run would be (see ss.solvers.choose_engine())
             kept = (range(nc), range(nflows)) if grouped else ([], [])
-            stocks, flows, stocks_g, flows_g = importlib.import_module('starsim.perflib._chain').run_many(self, seeds, np.arange(nc), *kept, rows)[:4]
+            stocks, flows, stocks_g, flows_g = importlib.import_module('starsim.perflib.chain').run_many(self, seeds, np.arange(nc), *kept, rows)[:4]
         else:
             run_many_parts(self, rngs, ys, args, per_step, R, (stocks, flows, stocks_g, flows_g, tally, tally_g), np.arange(nc), rows, grp_state, grp_flow)
         outs = []

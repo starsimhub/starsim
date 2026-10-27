@@ -13,7 +13,7 @@ This document provides the foundational guidance for how v4 should be built. Pri
 
 1. **Understandability:** Avoid having hundreds of concepts users need to learn, or complex and brittle subsystems. However, this should not come at a (big) cost to flexibility.
 2. **Maintainability:** Limit duplication and interdependencies, e.g. multiple solvers reimplementing the same thing that can drift apart. However, some duplication may be necessary to achieve high performance.
-3. **Composability:** Users should be able to use as much or as little of v4 as they want; for example using only its integration loop with custom modules (ODE/ABM, in NumPy or otherwise).
+3. **Composability:** Users should be able to use as much or as little of v4 as they want; for example using only its integration loop with custom modules (ODE/ABM, in NumPy or otherwise). This includes within a module: declared and coded parts should coexist peacefully, so if part of a disease (e.g. HIV's continuous CD4) is hard to declare, ideally only that part needs to be code.
 4. **Startup time:** Running a simple model should not take a long pre-compilation step. However, explicit compilation is an option for big runs (e.g. calibration). One-time compilation is more acceptable, but be careful about environments that don't support caching, and should be opt-in rather than required.
 5. **AI-friendliness:** Features of v4 (and their documentation) should be written in a way that AI tools find them easy to work with. However, this should not come at a cost to human-readability and simplicity.
 

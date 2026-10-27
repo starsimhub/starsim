@@ -150,11 +150,13 @@ class Disease(ss.Module):
             return ss.strains.attach_members(self, strains, args, pars, kwargs)
         members = ss.transitions.class_members(type(self))
         declared = (ss.State, ss.Transition, ss.outcome, ss.transitions.Expr, ss.transitions.FlowSum)
-        given = args or members or any(isinstance(v, declared) or key in ss.transitions.Graph.grouped for key,v in kwargs.items())
-        later = strains is not None or stratify is not None or any(key in kwargs for key in ['init', 'init_n', 'init_prev', 'first']) # Only for a declared disease, so its states and transitions follow, from define_states() and define_transitions()
+        given = args or members or any((isinstance(v, declared) and not isinstance(v, ss.par)) or key in ss.transitions.Graph.grouped for key,v in kwargs.items()) # Its structure; a parameter's value (e.g. with bounds) is not
+        later = strains is not None or stratify is not None or any(key in kwargs for key in ['init', 'init_n', 'init_prev', 'first']) or any(isinstance(v, ss.par) for v in kwargs.values()) # Only for a declared disease, so its states and transitions follow, from define_states() and define_transitions()
         if given or later:
             names = (_names or ss.utils.caller_names(1)) if given else {} # The names of the variables of the code that made it; or, made by the sim from the transitions it was given, of the code that made the sim
-            self._declared = sc.objdict(args=list(args), members=members, pars=pars, kwargs=kwargs, names=names, strains=strains, stratify=stratify)
+            if not given: # A parameter's value given by keyword (e.g. with bounds) sets the parameter of that name that the transitions declared next use, as pars= does
+                pars = sc.mergedicts(pars, {key:kwargs.pop(key) for key in list(kwargs) if isinstance(kwargs[key], ss.par)})
+            self._declared = sc.objdict(args=list(args), members=members, pars=pars, kwargs=kwargs, names=names, strains=strains, stratify=stratify, code_pars=[])
             if given: # Built now, so a subclass's __init__() can use it (e.g. self.pars) after super().__init__()
                 self.build_graph()
             else: # Built once the subclass's __init__() has declared the rest
@@ -180,6 +182,7 @@ class Disease(ss.Module):
         if d.strains is not None and getattr(d.strains, 'shared', None) is True: # An outcome for each strain carried, before the transitions are built
             ss.strains.prepare(d.strains, [(x.name, x) for x in d.args + sc.tolist(d.kwargs.get('transitions'))] + list(d.kwargs.items()) + list(d.members.items()))
         self.init_graph(d.args, d.members, d.pars, d.kwargs, names=d.names)
+        self.add_code_pars(d.code_pars)
         if d.strains is not None:
             ss.strains.attach(self, d.strains)
         for call in sc.tolist(d.stratify):
@@ -193,7 +196,7 @@ class Disease(ss.Module):
             raise ss.CapabilityError(errormsg)
         d = self.__dict__.get('_declared')
         if d is None: # The first declaration of a disease that called super().__init__() with none
-            d = self._declared = sc.objdict(args=[], members=ss.transitions.class_members(type(self)), pars=None, kwargs={}, names={}, strains=None, stratify=None)
+            d = self._declared = sc.objdict(args=[], members=ss.transitions.class_members(type(self)), pars=None, kwargs={}, names={}, strains=None, stratify=None, code_pars=[])
         names = names or {}
         kwargs = kwargs or {}
         for obj in args: # Positional members, named by name= or by the variable they were assigned to
@@ -325,9 +328,16 @@ class Disease(ss.Module):
         that nothing reads. A parameter set any other way (e.g. a misspelling in `pars=`) is still rejected.
         """
         out = super().define_pars(inherit=inherit, **kwargs)
-        if self.graph is not None:
-            self.code_pars = list(self.code_pars) + [k for k in kwargs if k not in self.graph.pars and k not in self.code_pars]
+        if '_declared' in vars(self): # Being declared: sorted once it is built, so more can still be declared after this
+            self._declared.code_pars += list(kwargs)
+        elif self.graph is not None:
+            self.add_code_pars(kwargs)
         return out
+
+    def add_code_pars(self, keys):
+        """ Parameters its own code reads, not its graph's: see `define_pars()` """
+        self.code_pars = list(self.code_pars) + [k for k in keys if k not in self.graph.pars and k not in self.code_pars]
+        return
 
     @staticmethod
     def reuse(args, members, names=None):

@@ -2,7 +2,7 @@
 Numba's on-disk cache, made stale by the files a module's functions call into, and saying when something is compiled
 
 Numba checks only the file of a cached function, so a change to a function it calls in
-another file (e.g. a draw in `_draws.py`, called by the kernels) would leave the old
+another file (e.g. a draw in `draws.py`, called by the kernels) would leave the old
 compiled code in use. `depends()` adds those files to the stamp Numba checks.
 
 Compiling takes seconds the first time (and after a change to the code), so `compiling()` says
@@ -20,13 +20,13 @@ deps = {} # The extra files each source file's cache depends on
 
 # Starsim's functions that take long enough to compile to say so, by module and function (or by module): what they are, and how long compiling them takes on a laptop (s)
 slow = {
-    'starsim.kernels.run':             ('the compartmental solvers', 30, 90),
-    'starsim.kernels.run_many':        ('the compartmental solvers for many runs', 4, 15),
-    'starsim.kernels.one_step':        ('a step of the compartmental solvers', 3, 10),
-    'starsim.kernels.advance':         ("the particle filter's steps", 10, 30),
-    'starsim.kernels.advance_threads': ("the particle filter's steps in threads", 15, 45),
-    'starsim.perflib._passes':         ('the agent solver', 2, 10),
-    'starsim.perflib._jit':            ('the random draws of ss.jit', 1, 4),
+    'starsim.perflib.kernels.run':             ('the compartmental solvers', 30, 90),
+    'starsim.perflib.kernels.run_many':        ('the compartmental solvers for many runs', 4, 15),
+    'starsim.perflib.kernels.one_step':        ('a step of the compartmental solvers', 3, 10),
+    'starsim.perflib.kernels.advance':         ("the particle filter's steps", 10, 30),
+    'starsim.perflib.kernels.advance_threads': ("the particle filter's steps in threads", 15, 45),
+    'starsim.perflib.passes':         ('the agent solver', 2, 10),
+    'starsim.perflib.jit':            ('the random draws of ss.jit', 1, 4),
 }
 said = set() # What has been said to be compiling, this session
 

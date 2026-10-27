@@ -1,4 +1,4 @@
-""" Run the starsim command as python -m starsim: see starsim/cli.py """
-from starsim.cli import main
+""" Run the starsim command as python -m starsim: see starsim/internals/cli.py """
+from starsim.internals.cli import main
 
 main()

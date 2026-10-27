@@ -148,7 +148,7 @@ Every default the library guessed appears in `describe()`, marked `[guessed]` wi
 
 ### 11. Errors
 
-The catalog in [15-errors.md](15-errors.md) is generated from the classes in `starsim/errors.py` (their docstrings), and `test_spec.py::test_error_catalog` checks that the page matches the code and that each class is `ss.errors.<Name>` with a docstring. Each class SHOULD have a minimal example that triggers exactly it, with a message that contains the name the user gave the thing and a suggested fix; about half have one today (as `pytest.raises(ss.errors.<Name>)` in the feature tests), and there is not yet one parametrized test over every class.
+The catalog in [15-errors.md](15-errors.md) is generated from the classes in `starsim/internals/errors.py` (their docstrings), and `test_spec.py::test_error_catalog` checks that the page matches the code and that each class is `ss.errors.<Name>` with a docstring. Each class SHOULD have a minimal example that triggers exactly it, with a message that contains the name the user gave the thing and a suggested fix; about half have one today (as `pytest.raises(ss.errors.<Name>)` in the feature tests), and there is not yet one parametrized test over every class.
 
 ### 12. Calibration
 

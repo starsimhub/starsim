@@ -9,7 +9,7 @@ import scipy.stats as sps
 import scipy.special as sp_special
 import starsim as ss
 import matplotlib.pyplot as plt
-from .perflib import _draws as draws, _cache
+from .perflib import draws, cache as _cache
 ss_int = ss.dtypes.int
 
 
@@ -1252,7 +1252,7 @@ class Dist:
 
     def crn_key(self):
         """
-        For a compiled loop that draws the uniforms itself (e.g. `ss.perflib._passes.infect()`, or a method compiled by `ss.jit`), in place of `rvs(uids)`: the seed and
+        For a compiled loop that draws the uniforms itself (e.g. `ss.perflib.passes.infect()`, or a method compiled by `ss.jit`), in place of `rvs(uids)`: the seed and
         index of this call's draws, which are `hash_uniforms(seed, ind, slots)` at `dtype`, with the bookkeeping of one call to
         `rvs()`; not for the user. None if they cannot be drawn that way (without common random numbers, or while the draws
         are being recorded or debugged), in which case `rvs()` is called instead.

@@ -192,7 +192,7 @@ class Counter(ss.Module):
 def test_cli(tmp_path, monkeypatch, capsys):
     """ The starsim command: installing the skill for AI agents (to a temporary home folder), and showing the guide and its skills """
     sc.heading('Testing the starsim command')
-    from starsim import cli
+    from starsim.internals import cli
     monkeypatch.setenv('HOME', str(tmp_path))
     monkeypatch.setenv('USERPROFILE', str(tmp_path)) # The home folder on Windows
     cli.main(['ai'])

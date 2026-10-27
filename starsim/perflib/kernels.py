@@ -23,7 +23,7 @@ import numpy as np
 import numba as nb
 import sciris as sc
 import starsim as ss
-from .perflib import _draws as draws, _cache
+from . import draws, cache as _cache
 
 __all__ = ['Program', 'Register', 'Shifts', 'opcodes']
 
@@ -103,7 +103,7 @@ The flows of a compartmental model, as the kernels take them (see `fields`)
 
 A new field must reach every engine that takes a program, or be refused by its `reason()`: the ODE (`step()`), the
 stochastic solvers (`draw()`, `place_rates()` and `sparse_events()`), the ODE in JAX (`ss.gradients.Run`, and
-`ss.gradients.reason()`), and the chain binomial in JAX (`ss.perflib._chain`, and its `reason()`).
+`ss.gradients.reason()`), and the chain binomial in JAX (`ss.perflib.chain`, and its `reason()`).
 """
 
 # A movement register (see ss.geo.Mobility), as the kernels apply it
@@ -138,7 +138,7 @@ shift_fields = [
 
 Shifts = collections.namedtuple('Shifts', shift_fields)
 
-plain = __name__ == 'starsim.plain_kernels' # Whether this is the copy of the kernels that runs as plain Python: see uncompiled()
+plain = __name__ == 'starsim.perflib.plain_kernels' # Whether this is the copy of the kernels that runs as plain Python: see uncompiled()
 if plain:
     draws = draws.plain_copy() # The draws as plain Python too
 else:
@@ -218,7 +218,7 @@ def uncompiled():
     """
     global plain_copy
     if plain_copy is None:
-        spec = importlib.util.spec_from_file_location('starsim.plain_kernels', __file__)
+        spec = importlib.util.spec_from_file_location('starsim.perflib.plain_kernels', __file__)
         copy = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(copy)
         for name in entries:
@@ -384,8 +384,8 @@ def compile(verbose=True):
         apply_shifts(engine.make_rng(), y, engine.shifts, 0, True, np.zeros((0, 2, y.shape[1])))
         settle_places(y, p, engine.dt, np.zeros((p.n_trans + p.n_movers, y.shape[1])))
         if importlib.util.find_spec('jax') is not None: # The draws of the chain binomial in JAX
-            importlib.import_module('starsim.perflib._chain').check()
-        make('abm').run() # The passes over the agents (ss.perflib._passes), which are cached apart from the kernels
+            importlib.import_module('starsim.perflib.chain').check()
+        make('abm').run() # The passes over the agents (ss.perflib.passes), which are cached apart from the kernels
         for sim in typical_sims(): # And the rest of what sims with agents compile on their first run
             sim.run()
     if verbose:
@@ -418,7 +418,7 @@ def typical_sims():
         ss.Sim(demographics=[ss.Pregnancy(), ss.Deaths()], networks='maternal', **small),
     ]
     if ss.options.threads != 1 and nb.get_num_threads() > 1: # The threaded passes, for a sim large enough to share among threads
-        sims.append(ss.Sim(diseases='sir', networks='random', n_agents=ss.perflib._passes.min_threaded, start=2000, stop=2001, verbose=0))
+        sims.append(ss.Sim(diseases='sir', networks='random', n_agents=ss.perflib.passes.min_threaded, start=2000, stop=2001, verbose=0))
     return sims
 
 

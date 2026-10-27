@@ -465,9 +465,18 @@ def load_fonts(folder=None, name='Mulish', rebuild=False, verbose=False, **kwarg
 options = Options()
 options.set_precision(refresh=False) # Other modules are not loaded yet, so nothing to refresh
 
-# Load the fonts
+# Load the fonts, rebuilding Matplotlib's font cache the first time (marked by a file in assets/; if it can't be written, the cache isn't rebuilt)
 if options.install_fonts:
-    load_fonts()
+    marker = sc.thispath(__file__) / 'assets' / 'fonts_installed_successfully'
+    first = not marker.exists()
+    try:
+        if first:
+            marker.touch()
+        load_fonts(rebuild=first)
+        if first and options.verbose:
+            print('\nNote: rebuilding the font cache only happens once on first import, or set the environment variable STARSIM_INSTALL_FONTS=0 to disable.')
+    except Exception: # Not writable, or something else went wrong: plot without them
+        pass
 
 # Set the style
 options.set_style()

@@ -14,7 +14,7 @@ compartmental kernels (`ss.kernels`), so a change to either does not make Numba 
 import numpy as np
 import numba as nb
 import starsim as ss
-from . import _cache, _draws as draws
+from . import draws, cache as _cache
 
 _cache.depends(__file__, draws.__file__) # The uniforms come from the draws
 

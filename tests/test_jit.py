@@ -160,9 +160,10 @@ def test_class():
     for key in ['exposed', 'infectious', 'recovered', 'tested', 'new_infections', 'mean_level']:
         assert np.array_equal(r0[key], r1[key]), f'{key} differs when compiled'
     assert r1.tested[-1] > 0 and s1.people.n_uids > s1.people.n_alive
+    from starsim.perflib.jit import Segment # The module; ss.perflib.jit is the function
     parts = {name:getattr(Compiled, name).plan.parts for name in ['step_state', 'set_prognoses', 'step_die', 'update_results']}
     for name, p in parts.items():
-        assert any(isinstance(x, ss.perflib._jit.Segment) and not x.failed for x in p), f'{name}() has no compiled part'
+        assert any(isinstance(x, Segment) and not x.failed for x in p), f'{name}() has no compiled part'
     assert Compiled.step_die.plan.whole is not None # With self.clear_infection() compiled in
     assert Compiled.set_prognoses.plan.whole is None # Starsim's own super().set_prognoses() runs as Python, the rest is compiled
     return
