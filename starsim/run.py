@@ -419,11 +419,12 @@ class MultiSim:
         n_runs = len(self.sims)
         combined_sim = sc.dcp(self.sims[0])
         combined_sim.metadata = dict(parallelized=True, combined=True, n_runs=n_runs) # Store how this was parallelized
-        pars = combined_sim.pars
+        pars = combined_sim.pars.freeze(False) # Its settings say what it combines (it is not run again)
         pops = np.array([sim.pars.total_pop for sim in self.sims]) # Used to weight the non-count results
         pars.n_agents = sum(sim.pars.n_agents for sim in self.sims)
         pars.total_pop = pops.sum()
         pars.pop_scale = pars.total_pop/pars.n_agents
+        pars.freeze()
 
         # Combine the results
         flats = [sim.results.flatten() for sim in self.sims]

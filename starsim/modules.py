@@ -529,32 +529,23 @@ class Module(Base):
             self.pars = ss.Pars(**kwargs)
         return self.pars
 
-    def value(self, name):
+    def _value(self, p):
         """
-        The current value of a parameter, as code reads it
+        The current value of a parameter, as arithmetic on it reads it once the sim is initialized (see `ss.expressions.run_value()`)
 
-        Once the module is in a sim: a typed value as a number in the sim's unit (a duration in its units, a rate per unit), a value
-        that varies in time (`ss.timeseries`, `ss.seasonal`) at the current time, a value by level of one dimension (`ss.by(patch=[...])`)
-        as one value for each level (of several, one for each group of the sim), and the modifiers active on a declared parameter applied
-        (if they differ between groups or agents, one value for each). Anything else (a distribution, a function, a dict) is as it was given.
-        Before the module is in a sim, the value it was given. This is the same for a declared module and one written as code; once the sim
-        is initialized, arithmetic on a declared parameter (e.g. `1 - disease.pars.eff_condom`) uses this value too.
+        In the sim's unit: a typed value as a number (a duration in its units, a rate per unit), a value that varies in time
+        at the current time, a value by level of one dimension as one value for each level (of several, one for each group of
+        the sim), and the modifiers active on a declared parameter applied (if they differ between groups or agents, one value
+        for each). Before the module is in a sim, the value it was given.
 
         Args:
-            name (str): the name of the parameter (or the `ss.par` itself)
-
-        Examples:
-            ```python
-            eff = disease.value('eff_condom')
-            bites = self.sim.diseases.malaria.value('bites_per_female_per_day') # Per day, in a sim in days
-            ```
+            p (par): the parameter
         """
-        p = self.pars[name] if isinstance(name, str) else name
-        raw = p.raw if isinstance(p, ss.par) else p
+        raw = p.raw
         if self.sim is None or getattr(self.sim, 'unit_base', None) is None: # Not in a sim yet, or its unit is not yet known
             return raw
         engine = getattr(self, 'engine', None)
-        if isinstance(p, ss.par) and engine is not None: # A declared parameter: as the engine reads it, with its modifiers, unless a value by level with none
+        if engine is not None: # A declared parameter: as the engine reads it, with its modifiers, unless a value by level with none
             if not isinstance(raw, (ss.by, ss.parameters.by_func)) or self.sim.modifiers.get((self.name, 'par', p.name)):
                 return engine.value(p)
         return ss.parameters.current_value(raw, self.sim, cache=self.__dict__.setdefault('_converted', {}))
@@ -763,6 +754,8 @@ class Module(Base):
             self.check_bare_units(sim)
             if isinstance(self.pars, ss.Pars) and getattr(self, 'graph', None) is None: # A declared module checks its own, against its graph (see ss.Disease.init_pre())
                 self.pars.check_added(self.name) # A parameter set but never defined, e.g. renamed (MG7)
+            if isinstance(self.pars, ss.Pars):
+                self.pars.bind(self) # Arithmetic on a value that varies is on its value now, once the sim is initialized
             if self.name in sim.pars:
                 sim.pars[self.name] = self.pars
             else: # Add a new key, which is allowed even if the sim's parameters are locked

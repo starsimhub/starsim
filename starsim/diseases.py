@@ -540,7 +540,7 @@ class Disease(ss.Module):
             desc.add('arrays', ', '.join(s.name for s in self.state_list))
             desc.add('parameters', ', '.join(self.pars.keys()))
             if self.strains is not None:
-                desc.add('strains', f'{sc.strjoin(self.strains.names)}, one carried at a time, each transmitted in turn')
+                desc.add('strains', f'{sc.strjoin(self.strains.names)}, one carried at a time')
         if out is not None:
             return desc
         return str(desc) if output else desc.show()
@@ -903,11 +903,11 @@ class Infection(Disease):
 
     With `strains=ss.Strains(...)`, each person carries one strain at a time (`self.strain`, the index of the
     strain of their current or last infection, -1 if none), which the disease's code reads (e.g. in
-    `set_prognoses()`, and `strain_value()` for a strain's values). Each strain is transmitted in turn, by those
-    infectious with it, at its `rel_trans`, to those it can infect (`strain_sus()`: protection from
-    `ss.immunity(due_to=<state>, rel_sus=matrix)` by the strain they had, or the disease's own); someone reached
-    by several in a step takes the first in the order of the strains. A declared disease's strains, run as
-    agents, are instead passed on in one pass, each new case taking the strain of one of its sources at random.
+    `set_prognoses()`, and `strain_value()` for a strain's values). The strains are transmitted in one pass, each
+    by those infectious with it at its `rel_trans`; each new case is infected by one of those who reached them in
+    the step, at random, and takes their strain, unless protected against it (`strain_sus()`: protection from
+    `ss.immunity(due_to=<state>, rel_sus=matrix)` by the strain they had, or the disease's own), as a declared
+    disease's strains are passed on, by the same code (`ss.solvers.Transmission`).
 
     Note: CRN safe.
 
@@ -918,16 +918,30 @@ class Infection(Disease):
 
     Examples:
         ```python
-        class SI(ss.Infection):
+        class SIRS(ss.Infection):
             def __init__(self, **kwargs):
                 super().__init__()
-                self.define_pars(beta=ss.peryear(0.5), init_prev=ss.bernoulli(0.01))
+                self.define_pars(beta=ss.perday(0.05), init_prev=ss.bernoulli(0.01), dur_inf=10)
+                self.define_states(ss.BoolState('recovered'), ss.FloatArr('ti_recovered'))
                 self.update_pars(**kwargs)
 
-        class Flu(SI): # Two strains, the second more transmissible; recovering from one protects partly against the other
-            def __init__(self, **kwargs):
-                super().__init__(**kwargs)
-                self.define_strains(ss.Strains(['H1', 'H3'], rel_trans=[1, 1.5], immunity=ss.immunity(due_to='recovered', rel_sus=[[1, 0.5], [0.5, 1]])))
+            def step_state(self):
+                done = (self.infected & (self.ti_recovered <= self.ti)).uids
+                self.infected[done] = False
+                self.recovered[done] = True
+                self.susceptible[done] = True # Protected only by the immunity of their strain, if any
+
+            def set_prognoses(self, uids, sources=None):
+                super().set_prognoses(uids, sources)
+                self.infected[uids] = True
+                self.recovered[uids] = False
+                self.ti_infected[uids] = self.ti
+                self.ti_recovered[uids] = self.ti + self.pars.dur_inf
+
+        # Two strains, the second more transmissible; recovering from one protects fully against it, and partly against the other
+        strains = ss.Strains(['H1', 'H3'], rel_trans=[1, 1.5], immunity=ss.immunity(due_to='recovered', rel_sus=[[1, 0.5], [0.5, 1]]))
+        sim = ss.Sim(diseases=SIRS(strains=strains, name='flu'), networks='random', n_agents=2000, unit='day', stop=100).run()
+        sim.diseases.flu.strain # The strain of each person's current or last infection
         ```
     """
 
@@ -945,26 +959,32 @@ class Infection(Disease):
         self.define_pars(
             init_prev = None, # Replace None with a ss.bernoulli to seed infections
         )
-        self.update_pars(pars, **kwargs)
+        self.update_pars(pars, strains=strains, **kwargs)
 
         # Define random number generator for determining transmission
         self.trans_rng = ss.multi_random('source', 'target')
-        if strains is not None:
-            self.define_strains(strains)
         return
 
     def define_strains(self, strains):
-        """ Give the disease strains (`ss.Strains`), carried one at a time: the strain of each person (`self.strain`, set for those infected by transmission, at the start, and by `infect()`; code that infects people itself sets it), and the strain of those infected at the start, by its split """
+        """ Give the disease strains (`ss.Strains`, also as `strains=` to the disease), carried one at a time: the strain of each person (`self.strain`, added when the sim is initialized, set for those infected by transmission, at the start, and by `infect()`; code that infects people itself sets it), and the strain of those infected at the start, by its split """
         n = len(strains)
         why = ('its strains are diseases of their own' if strains.members is not None else f'max_strains={strains.max_strains}' if strains.max_strains > 1 else
                'it has states of its own for each strain (shared=False)' if strains.shared is not True else
                next((f'ss.immunity lowers {sc.strjoin(imm.values)}, not only rel_sus' for imm in strains.immunity if list(imm.values) != ['rel_sus']), None))
         if why:
             raise ss.CapabilityError(f'"{self.name}" is written as code, so its strains are carried one at a time, sharing its states, with protection on rel_sus due to its own states; but {why}. Declare the disease (see ss.Disease) for more.')
-        self.strains = strains
-        self.define_states(ss.IntArr('strain', default=-1, label='Strain of the current or last infection'))
-        self.strain_dist = ss.choice(a=n, p=strains.split if strains.split is not None else np.full(n, 1/n)) # The strain of each person infected at the start
+        self.strains = strains # Its arrays are added when the sim is initialized (see init_pre()), so a subclass may define its own states after this, even with reset=True
         return
+
+    def update_pars(self, pars=None, **kwargs):
+        """ As `ss.Module.update_pars()`, and `strains=` for `define_strains()`, so a subclass that passes its keywords on here takes it too (e.g. `ssl.AgentSIR(strains=...)`) """
+        if isinstance(pars, dict) and 'strains' in pars: # Also in a dict of parameters
+            pars = dict(pars)
+            kwargs['strains'] = pars.pop('strains')
+        strains = kwargs.pop('strains', None)
+        if strains is not None:
+            self.define_strains(strains)
+        return super().update_pars(pars, **kwargs)
 
     def strain_value(self, key, uids):
         """ The value of `key` (given to `ss.Strains`, e.g. `rel_trans=[1, 1.5]`) for the strain each of some agents carries (1 if it has none) """
@@ -988,6 +1008,10 @@ class Infection(Disease):
     @ss.required()
     def init_pre(self, sim):
         """ Link the disease to the sim and initialize results; see `ss.Module.init_pre()` """
+        if self.strains is not None and not isinstance(getattr(self, 'strain', None), ss.IntArr): # The strain of each person, and of those infected at the start, by the split
+            n = len(self.strains)
+            self.define_states(ss.IntArr('strain', default=-1, label='Strain of the current or last infection'))
+            self.strain_dist = ss.choice(a=n, p=self.strains.split if self.strains.split is not None else np.full(n, 1/n))
         super().init_pre(sim)
         if 'beta' in self.pars: # A disease that is not transmitted, such as ssl.NCD, has no beta
             self.validate_beta()
@@ -1201,8 +1225,10 @@ class Infection(Disease):
 
         Computes the effective transmissibility and susceptibility, calls `transmit_route()`
         for each network (or other route), and keeps the first infection of each agent
-        (`ss.solvers.Transmission.first_infections()`). With strains, each strain is transmitted
-        in turn, and each new case is given the strain that reached them first (`self.strain`).
+        (`ss.solvers.Transmission.first_infections()`). With strains, every strain is transmitted
+        in one pass, and each new case is infected by one of those who reached them, at random,
+        whose strain they take (`self.strain`), unless protected against it (`strain_sus()`), as
+        for a declared disease (`ss.solvers.Transmission.pick_sources()`).
         """
         if 'beta' not in self.pars: # A disease that is not transmitted, such as ssl.NCD, has no beta
             return self.finalize_infections([], [], [])
@@ -1214,20 +1240,32 @@ class Infection(Disease):
         # living agents, so stale raw values for inactive agents are never used.
         trans = self.infectious.raw * self.rel_trans.raw # The modifiers are applied by transmit_route()
         sus   = self.susceptible.raw * self.rel_sus.raw
+        if self.strains is not None: # The infectiousness of the strain each carries (none for someone without one)
+            held = self.strain.raw
+            rel = self.strains.values.rel_trans if 'rel_trans' in self.strains.values else np.ones(len(self.strains))
+            trans = trans*np.where(held >= 0, rel[np.maximum(held, 0)], 0.0)
+        rel_trans, rel_sus = self.rel_trans.asnew(trans, copy=False), self.rel_sus.asnew(sus, copy=False)
         pairs = []
-        for k in range(len(self.strains)) if self.strains is not None else [None]:
-            if k is None:
-                rel_trans, rel_sus = self.rel_trans.asnew(trans, copy=False), self.rel_sus.asnew(sus, copy=False)
-            else: # Those infectious with the strain, and how much of their susceptibility to it each keeps
-                rel = self.strains.values.rel_trans[k] if 'rel_trans' in self.strains.values else 1.0
-                rel_trans, rel_sus = self.rel_trans.asnew(trans*(self.strain.raw == k)*rel, copy=False), self.rel_sus.asnew(sus*self.strain_sus(k), copy=False)
-            for i, (nkey,route) in enumerate(self.sim.networks.items()):
-                target_uids, source_uids, network_ids = self.transmit_route(i, route, betamap[ss.utils.standardize_netkey(nkey)], rel_trans, rel_sus)
-                pairs.append((source_uids, target_uids, network_ids) + ((k,) if k is not None else ()))
+        for i, (nkey,route) in enumerate(self.sim.networks.items()):
+            betas = betamap[ss.utils.standardize_netkey(nkey)]
+            if self.strains is None or isinstance(route, ss.Network): # On a network, each case has a source, whose strain they take
+                target_uids, source_uids, network_ids = self.transmit_route(i, route, betas, rel_trans, rel_sus)
+                pairs.append((source_uids, target_uids, network_ids) + ((held[source_uids],) if self.strains is not None else ()))
+            else: # Another route gives no sources, so each strain is transmitted over it by those who carry it
+                for k in range(len(self.strains)):
+                    target_uids, source_uids, network_ids = self.transmit_route(i, route, betas, self.rel_trans.asnew(trans*(held == k), copy=False), rel_sus)
+                    pairs.append((source_uids, target_uids, network_ids, k))
 
-        new_cases, sources, networks, *strain = ss.solvers.Transmission.first_infections(pairs)
-        if strain:
-            self.strain[new_cases] = strain[0]
+        if self.strains is None or not pairs:
+            return ss.solvers.Transmission.first_infections(pairs)
+        eng = self.engine # Each case is infected by one of those who reached them, at random, and takes their strain unless protected against it, as for a declared disease
+        new_cases, sources, networks, strain = eng.pick_sources(pairs, 'infection')
+        kept = np.ones(len(new_cases))
+        for k in np.unique(strain):
+            kept[strain == k] = np.broadcast_to(self.strain_sus(k), trans.shape)[new_cases[strain == k]]
+        ok = eng.unprotected('infection', new_cases, kept)
+        new_cases, sources, networks, strain = new_cases[ok], sources[ok], networks[ok], strain[ok]
+        self.strain[new_cases] = strain
         return new_cases, sources, networks
 
     def transmit_route(self, i, route, betas, rel_trans, rel_sus):

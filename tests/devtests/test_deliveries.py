@@ -935,7 +935,6 @@ def test_names_memory_at_age():
     sim = ss.Sim(make_sir(), demographics=Arrivals(), interventions=vx, start=2000, stop=2004, dt=0.25, n_agents=2000, verbose=0, use_aging=True)
     ages = []
     sim.init()
-    sim.pars.analyzers = []
     for i in range(sim.t.npts - 1):
         sim.run_one_step()
         uids = sim.interventions.vx.reached()

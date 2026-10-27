@@ -382,6 +382,8 @@ class Sim(ss.Base):
                 self.given.append(key)
         np.random.seed(self.pars.rand_seed) # Reset the seed before the population is created -- shouldn't matter if only using Dist objects
         self.pars.lock(False) # Allow parameters to be added during initialization
+        self.pars.freeze(False) # And set (frozen again once it is initialized)
+        self.__dict__.pop('_valued', None) # Arithmetic on a parameter builds the model until it is built (see below)
         self.pars.validate() # Validate parameters
         ss.solvers.choose_solver(self) # Build the declared model, and choose the unit and the solver
         self._init_time() # Initialize time
@@ -402,6 +404,7 @@ class Sim(ss.Base):
         self._init_dists() # Initialize distributions
         self._init_people_vals() # Initialize the values in all the states and networks
         ss.solvers.init_group_values(self) # The people's levels of each dimension, or each group's age and sex
+        self._valued = True # From here, arithmetic on a parameter is on its value (see ss.expressions.has_values())
         self._init_modules_post() # Initialize the module values
         ss.solvers.settle_start(self) # The declared modules' people, once every module has its own
         self.init_results() # Initialize the results
@@ -414,6 +417,8 @@ class Sim(ss.Base):
 
         # It's initialized
         self.initialized = True
+        self.__dict__.pop('_valued', None)
+        self.pars.freeze() # Its settings are this run's: a change is made with sim.new()
         held, self._held = self._held, None
         if self.verbose and self.__dict__.pop('_quiet', False): # Initialized by sim.describe(): said when it is run
             self._unsaid = held
@@ -483,8 +488,9 @@ class Sim(ss.Base):
         A new, uninitialized sim: a copy of this one as it was when it was initialized, optionally with other values
 
         A sim that has not been initialized is copied as it is, with any changes made to it since it
-        was made. Changes made to a sim once it has been initialized (e.g. `sim.pars.stop = 30` after
-        `sim.run()`) belong to that run only, and are not kept: give them here instead (`sim.new(stop=30)`).
+        was made. Once a sim is initialized, its settings are those of its run: setting one (e.g. `sim.pars.stop = 30`
+        after `sim.run()`) raises, so give it here instead (`sim.new(stop=30)`). Other changes made to it then (e.g. to a
+        module's parameters) belong to that run only, and are not kept.
 
         A sim that has run is run again this way, so it is seldom needed: `sim.run()` runs a
         finished sim again from the start, and `sim.run(solver='abm')` or `sim.run(n_runs=10)`
@@ -501,7 +507,7 @@ class Sim(ss.Base):
             raise ValueError(errormsg)
         if kwargs.get('solver') is not None and kwargs['solver'] != base.pars.solver and 'substeps' not in kwargs:
             kwargs['substeps'] = None
-        data = {'data':kwargs.pop('data')} if 'data' in kwargs else {} # Data is not a sim parameter
+        data, jax = kwargs.pop('data', self.data), self.jax # Not sim parameters: taken from this sim, as they may be set once it is initialized
         kinds = ss.modules.module_types() + ['custom', 'modules']
         if any(key in kinds for key in kwargs): # Modules given here are named and ordered as ss.Sim() does
             self._name_modules(ss.utils.caller_names(1), *[kwargs.get(key) for key in kinds])
@@ -520,8 +526,8 @@ class Sim(ss.Base):
                 sim.given.remove(key)
             elif val is not None and key not in sim.given:
                 sim.given.append(key)
-        if data:
-            sim.data = sc.dcp(data['data'])
+        sim.data = sc.dcp(data)
+        sim.jax = jax
         sim.par_values = sc.mergedicts(sim.par_values, pars)
         return sim
 
@@ -1208,7 +1214,7 @@ class Sim(ss.Base):
             return ss.parallel(self.new(solver=solver) if new_solver else self, n_runs=n_runs)
         if new_solver and self.initialized: # Built for another solver, so built again
             self.new(solver=solver, inplace=True)
-        elif solver is not None:
+        elif solver is not None and not self.initialized:
             self.pars.solver = solver
         if self.complete and until is None: # Run again from the start
             self.new(inplace=True)
@@ -1362,12 +1368,17 @@ class Sim(ss.Base):
         rebuild = lambda: self.new(pars=sc.mergedicts(self.par_values, pars), inplace=True, rand_seed=sc.ifelse(rand_seed, self.pars.rand_seed)) # With the values of earlier restarts
         if not self.kernel_only() or any(isinstance(val, ss.Dist) for val in (pars or {}).values()): # Not run in one call to the kernels, or a distribution the compartments were not laid out for
             return rebuild()
+        base = self.__dict__.get('_before_init') # The copy that sim.new() and a rerun start from, which takes the same values
         if rand_seed is not None:
-            self.pars.rand_seed = rand_seed
+            dict.__setitem__(self.pars, 'rand_seed', rand_seed) # The seed of this run, which is set while the sim is initialized (see ss.SimPars.freeze())
+            if isinstance(base, Sim):
+                base.pars.rand_seed = rand_seed
         if pars:
             moving = [p for mod in self.declared for strat in mod.graph.strats if strat.mobility is not None for p in strat.mobility.fitted().values()]
             before = [float(p) for p in moving]
             self.par_values = sc.mergedicts(self.par_values, pars)
+            if isinstance(base, Sim):
+                base.par_values = sc.mergedicts(base.par_values, pars)
             ss.solvers.set_par_values(self)
             varies = lambda raw: isinstance(raw, ss.parameters.TimeValue) or (isinstance(raw, ss.by) and raw.varies)
             for mod in self.declared: # The kernels' program knows which values vary in time from when it was built

@@ -700,7 +700,7 @@ def test_condoms():
     sim = make(share=0.5).init()
     mf, si = sim.networks.mf, sim.diseases.si
     assert np.all(mf.edges.condoms == 0.5)
-    assert si.value('beta') == si.engine.value(si.pars.beta), 'The current value of a declared parameter is a number'
+    assert 1*si.pars.beta == si.engine.value(si.pars.beta), 'The current value of a declared parameter is a number'
     none, half, full = [make(share=s).run().results.si.infection.sum() for s in [0.0, 0.5, 1.0]]
     assert none > half > full, f'Condoms should reduce infections: {none}, {half}, {full}'
     assert make(share=1.0, eff=0.0).run().results.si.infection.sum() == none, 'With no efficacy, condoms do nothing'

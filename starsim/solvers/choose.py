@@ -29,7 +29,16 @@ class Undeclared(Transmission):
     def nothing(self):
         """ Nothing to run: each step of the lifecycle is the disease's own code """
         return
-    define = init_pre = init_post = step_state = step_funcs = finalize_results = nothing
+    init_pre = init_post = step_state = step_funcs = finalize_results = nothing
+
+    def define(self):
+        """ With strains, the distributions of who infects whom and of protection (see `Transmission.pick_sources()`), by the names a declared disease's transmission called `infection` (e.g. `ss.SIR`'s) gives them, so the same model draws the same numbers both ways """
+        self.dists = sc.objdict()
+        if getattr(self.mod, 'strains', None) is not None:
+            for key in ['pick_infection', 'protect_infection']:
+                self.dists[key] = ss.random(name=f'rng_{key}')
+                self.mod.setattribute(f'rng_{key}', self.dists[key])
+        return
 
     def start_step(self):
         """ Values held for a step (e.g. the modifiers of a network's contacts) are worked out again: at the step's start, and once the interventions have run (the disease's step()) """

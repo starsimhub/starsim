@@ -76,9 +76,14 @@ arith = {'+':operator.add, '-':operator.sub, '*':operator.mul, '/':operator.true
 
 
 def run_value(x):
-    """ The value of an expression of parameters alone (e.g. 1 - dis.pars.eff_condom), with each parameter's current value (see `ss.Module.value()`); None if it reads anything else (a state, a count) """
+    """ The value of an expression of parameters alone (e.g. 1 - dis.pars.eff_condom), with each parameter's current value (see `ss.Module._value()`); None if it reads anything else (a state, a count) """
     if isinstance(x, par):
-        return x.raw if (x.literal or x.module is None) else x.module.value(x)
+        if x.literal or x.module is None:
+            return x.raw
+        elif isinstance(x.raw, ss.Dist): # Its engine reads it as its mean, which code should say if it means it
+            errormsg = f'The parameter "{x.name}" of "{x.module.name}" is a distribution ({value_str(x.raw)}), which has no single value: use {x.name}.mean() for its mean, or draw from it'
+            raise TypeError(errormsg)
+        return x.module._value(x)
     elif isinstance(x, BinOp):
         a, b = run_value(x.a), run_value(x.b)
         return None if a is None or b is None else arith[x.op](a, b)
@@ -87,27 +92,32 @@ def run_value(x):
     return x
 
 
+def has_values(sim):
+    """ Whether a sim's parameters have values for code (see `run_values()`): once the model is built and its modules are being given their values (`init_post()`), and from then on """
+    return sim is not None and (sim.initialized or sim.__dict__.get('_valued', False))
+
+
 def run_values(inputs):
     """
-    The values to do arithmetic with, once the sim is initialized: before then, arithmetic on a parameter builds an expression (part of
+    The values to do arithmetic with, once the model is built: before then, arithmetic on a parameter builds an expression (part of
     the model); after, it is done on the parameters' current values, as code means it (e.g. `acts*(1 - disease.pars.eff_condom)`).
-    None to build an expression: before the sim is initialized, or if an input reads anything but parameters.
+    None to build an expression: before the model is built (see has_values()), or if an input reads anything but parameters.
     """
     named = [leaf for x in inputs if isinstance(x, Expr) for leaf in x.leaves if isinstance(leaf, par) and not leaf.literal]
-    if not named or not all(getattr(getattr(leaf.module, 'sim', None), 'initialized', False) for leaf in named):
+    if not named or not all(has_values(getattr(leaf.module, 'sim', None)) for leaf in named):
         return None
     vals = [run_value(x) for x in inputs]
     return None if any(v is None for v in vals) else vals
 
 
 def binop(op, a, b):
-    """ Arithmetic on an expression: another expression, or a value once the sim is initialized (see run_values()) """
+    """ Arithmetic on an expression: another expression, or a value once the model is built (see run_values()) """
     vals = run_values([a, b])
     return BinOp(op, a, b) if vals is None else arith[op](*vals)
 
 
 def compare(name, a, b):
-    """ A comparison of an expression, which is 1 or 0: another expression, or a value once the sim is initialized (see run_values()) """
+    """ A comparison of an expression, which is 1 or 0: another expression, or a value once the model is built (see run_values()) """
     vals = run_values([a, b])
     return Func(name, a, b) if vals is None else getattr(np, name)(*vals)
 
@@ -125,7 +135,7 @@ class Expr:
         if method != '__call__' or kwargs:
             return NotImplemented
         vals = run_values(inputs)
-        if vals is not None: # On the values, once the sim is initialized, e.g. a coded network's np.maximum(acts*(1 - disease.pars.eff_condom), 0)
+        if vals is not None: # On the values, once the model is built, e.g. a coded network's np.maximum(acts*(1 - disease.pars.eff_condom), 0)
             return ufunc(*vals)
         elif name in binops:
             return BinOp(binops[name], *inputs)
@@ -235,7 +245,7 @@ class par(Nameable, Expr):
     def __eq__(self, other):
         """ A parameter is only equal to itself; compared with a number it raises, rather than silently being False """
         if isinstance(other, (int, float, np.number)) and not isinstance(other, bool):
-            errormsg = f'Cannot compare the parameter "{self.name or self}" with the number {other}: it is a parameter, not its value. Use mod.value("{self.name}") for its current value'
+            errormsg = f'Cannot compare the parameter "{self.name or self}" with the number {other}: it is a parameter, not its value. Compare the value it holds, par.raw, or its current value, which arithmetic on it gives once the model is built (e.g. 1*par)'
             raise TypeError(errormsg)
         return self is other
 
@@ -273,10 +283,10 @@ class par(Nameable, Expr):
         raise AttributeError(f"'par' object has no attribute '{attr}'")
 
     def __float__(self):
-        """ A parameter that holds a number is that number, e.g. float(sir.pars.beta): the value it holds. For its current value (in the sim's unit, with the modifiers on it applied), use `mod.value(name)`, or arithmetic on it once the sim is initialized """
+        """ A parameter that holds a number is that number, e.g. float(sir.pars.beta): the value it holds. Arithmetic on it, once the model is built, is its current value (in the sim's unit, with the modifiers on it applied) """
         if sc.isnumber(self.raw):
             return float(self.raw)
-        errormsg = f'The parameter {self.name or ""} is {value_str(self.raw)}, which is not a plain number; use its value, e.g. .raw, or mod.value("{self.name}") for its current value'
+        errormsg = f'The parameter {self.name or ""} is {value_str(self.raw)}, which is not a plain number; use its value, e.g. .raw, or arithmetic on it once the model is built for its current value'
         raise TypeError(errormsg)
 
     @property

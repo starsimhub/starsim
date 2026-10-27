@@ -51,10 +51,12 @@ class Transmission(Effects):
       or, on a network with acts, works out a hazard per act (`Agents.transmit_acts()`); one written as code gives its beta as the probability in
       the step, converting a rate the same way (`ss.Rate.to_prob()`).
     - **Order and attribution.** The routes are taken in the order of `sim.networks`, and on each, p1 to p2 and then p2 to p1; someone reached by
-      several is infected by the first (`first_infections()`), which is the source in the infection log. With strains, a declared disease instead
-      gives someone reached by several the strain of one drawn at random (see `Agents.transmit_from()`).
+      several is infected by the first (`first_infections()`), which is the source in the infection log. With strains, every strain is passed on
+      in one pass, and someone reached by several is infected by one of them drawn at random, whose strain they take (`pick_sources()`), and
+      then only if they are not protected against it (`unprotected()`): declared or written as code, by the same code.
     - **Random numbers.** Each edge's is drawn by its source and target from the disease's `trans_rng`, so the same disease, by the same name,
-      gives the same edges the same numbers, declared or written as code.
+      gives the same edges the same numbers, declared or written as code; and so are the draws of who infects whom, and of protection, which
+      are keyed by the step alone (`step_draw()`).
     """
     def effective(self, kind, *factors):
         """ `rel_sus` or `rel_trans` (`kind`) of every agent (by UID), times the factors (e.g. whether each is susceptible), with the modifiers and products active on it applied; may be the array itself, so it is not to be changed """
@@ -109,6 +111,34 @@ class Transmission(Effects):
         srcs = ss.uids.concatenate([pair[0] for pair in pairs])[first]
         rest = [np.concatenate([np.broadcast_to(np.asarray(pair[c], dtype=ss.dtypes.int), len(pair[1])) for pair in pairs])[first] for c in range(2, len(pairs[0]))]
         return trgs, srcs, *rest
+
+    def step_draw(self, key, uids):
+        """ Uniforms for some agents from one of the transmission's distributions (`self.dists[key]`), keyed by the step alone, so the same agents get the same numbers, declared or written as code; without common random numbers, its next draws """
+        dist = self.dists[key]
+        if not len(uids):
+            return np.empty(0)
+        elif not ss.options.crn:
+            return dist.rvs(uids)
+        slots = self.sim.people.slot_raw()
+        return ss.distributions.hash_uniforms(dist.seed, ROUNDS + self.mod.t.ti*ROUND_MAX, uids if slots is None else slots[uids], dtype=dist.hash_dtype)
+
+    def pick_sources(self, pairs, name):
+        """
+        With strains, each agent reached in the step, once, with who infected them and the rest of that pair's values: one of those who reached
+        them, each as likely (the first to happen is as likely to be any of them), drawn from `pick_<name>`. Each pair is the sources, the
+        targets, the index of the route (one, or one for each), and any more values (e.g. a strain), as for `first_infections()`
+        """
+        trgs = ss.uids.concatenate([pair[1] for pair in pairs])
+        cols = [ss.uids.concatenate([pair[0] for pair in pairs])] + [np.concatenate([np.broadcast_to(np.asarray(pair[c], dtype=ss.dtypes.int), len(pair[1])) for pair in pairs]) for c in range(2, len(pairs[0]))]
+        order = np.argsort(trgs, kind='stable')
+        trgs, first, counts = np.unique(trgs[order], return_index=True, return_counts=True)
+        if np.any(counts > 1): # Reached by several in the step
+            first = first + np.minimum((self.step_draw(f'pick_{name}', ss.uids(trgs))*counts).astype(int), counts - 1)
+        return ss.uids(trgs), *[col[order][first] for col in cols]
+
+    def unprotected(self, name, uids, kept):
+        """ Which of some agents reached by a strain are infected by it: each with the chance `kept`, the share of the force of infection of the strain that reaches them (1 − their protection against it), drawn from `protect_<name>` """
+        return self.step_draw(f'protect_{name}', uids) < kept
 
 
 class Agents(Engine, Transmission):
@@ -3861,27 +3891,23 @@ class Agents(Engine, Transmission):
                             pool_hazard[k][dst] += pool.pars.beta*ref*trans*pool.eff_contacts.raw[dst]*route_sus.raw[dst]*mult(None, dst)
             else: # Any other route works out its own transmission
                 new_cases.append(ss.uids(route.compute_transmission(route_sus, rel_trans, beta, disease=mod)))
-        if self.strain is not None and pairs: # Each new case takes the strain of whoever infected them
-            srcs = np.concatenate([pair[0] for pair in pairs])
-            trgs = np.concatenate([pair[1] for pair in pairs])
-            order = np.argsort(trgs, kind='stable')
-            trgs, first, counts = np.unique(trgs[order], return_index=True, return_counts=True)
-            if np.any(counts > 1): # Reached by several in the step: the first to happen, so each as likely as the others
-                first = first + np.minimum((self.draw(f'pick_{tr.name}', ss.uids(trgs))*counts).astype(int), counts - 1)
-            strain = strain_raw[srcs[order][first]]
+        if self.strain is not None and pairs: # Each new case takes the strain of whoever infected them, one of those who reached them (see Transmission)
+            trgs, srcs, nets = self.pick_sources(pairs, tr.name)
+            strain = strain_raw[srcs]
             if self.carriage is not None: # Someone who carries several strains passes on one of them
                 weights = np.cumsum(self.strain_weights[strain], axis=1)
-                rvs = self.draw(f'pass_{tr.name}', ss.uids(trgs))
+                rvs = self.draw(f'pass_{tr.name}', trgs)
                 strain = np.minimum((weights <= rvs[:, None]).sum(axis=1), weights.shape[1] - 1)
             ok = np.ones(len(trgs), dtype=bool)
             if superinfects: # Infected with a strain they carry already: no change
                 ok &= self.can_take(strain_raw[trgs], strain)
             if protects: # Protected in part against the strain that reached them (HP14)
-                ok &= self.draw(f'protect_{tr.name}', ss.uids(trgs)) < self.protection(src, ss.uids(trgs), strain)
+                ok &= self.unprotected(tr.name, trgs, self.protection(src, trgs, strain))
             if not ok.all():
                 drop = trgs[~ok]
-                trgs, strain = trgs[ok], strain[ok]
+                trgs, srcs, nets, strain = trgs[ok], srcs[ok], nets[ok], strain[ok]
                 new_cases = [cases[~np.isin(cases, drop)] for cases in new_cases]
+            pairs = [(srcs, trgs, nets)] # Who infected whom, for the infection log
             self.set_strain(trgs, strain, carried)
         self._pairs = pairs
         if any_pools:

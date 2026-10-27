@@ -194,7 +194,7 @@ Clocks are not conveyors (decided 2026-10-20): a rate, `p=`, or condition that r
 | Courses of their own, independent | One declared disease per strain, side by side: k copies of the states, not `2^k` | All (below) |
 | Courses of their own, coupled (`immunity=`, a shared state) | Agents, one disease per strain | Agents; a compartmental solver raises `CapabilityError` |
 
-Under networks, protection against the incoming strain is drawn for each pair that would transmit (HP14), with a random stream of its own, so it is evaluated only for those reached; when several strains reach one person in a step, each contact is as likely as the others to be the one that infects. A product's efficacy by strain multiplies each strain's force of infection under every solver.
+Under networks, protection against the incoming strain is drawn for each pair that would transmit (HP14), with a random stream of its own, so it is evaluated only for those reached; when several strains reach one person in a step, each contact is as likely as the others to be the one that infects. A disease written as code with strains is passed on the same way, by the same code; the draws of which contact infects and of protection are keyed by the step and the person alone, so the same model gives the same results declared or written as code. A product's efficacy by strain multiplies each strain's force of infection under every solver.
 
 ### Strains with courses of their own, side by side
 

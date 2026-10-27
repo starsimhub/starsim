@@ -212,6 +212,7 @@ def test_plain_estimate():
     engine = sim.diseases[0].engine
     engine.init_program()
     seconds = []
+    sim.pars.freeze(False) # To ask the engine of this sim, with each setting
     for n_sub in [1, None]: # As if no substeps were taken, then as the run takes them
         sim.pars.substeps = n_sub
         seconds.append(engine.plain_seconds())

@@ -44,6 +44,18 @@ class Pars(sc.objdict):
     _bare = None # The parameters set to a bare number, with the unit it is read in: see bare_units()
     _bounded = None # For a module written as code: the parameters given as ss.par (e.g. with bounds, to be fitted), by name; see bounded()
     _added = None # Keys added by setting them (pars.x = v) rather than defined (define_pars(), or update(create=True)); see check_added()
+    _module = None # The module whose parameters these are, once it is in a sim: see bind()
+
+    def bind(self, module):
+        """
+        Bind the values that vary (`ss.timeseries`, `ss.seasonal`, `ss.by`) to the module, now and when set later, so that once its model is
+        built (from `init_post()` on), arithmetic on one (`self.pars.emergence * n`, `np.exp(-self.pars.k)`) is done on its value now (see `now()`), as for a
+        declared parameter (`ss.par`); before then, it builds an expression, as in a rate
+        """
+        object.__setattr__(self, '_module', module)
+        for key,val in self.items():
+            bind(val, module, key)
+        return self
 
     def bounded(self):
         """ The parameters of a module written as code that were given as `ss.par` (e.g. `beta=ss.par(ss.peryear(0.1), bounds=[0.05, 1])`, or `cin_fn=dict(k=ss.par(0.3, bounds=[0.1, 0.5]))` as "cin_fn.k"), by name; their values are used as any other's """
@@ -125,6 +137,8 @@ class Pars(sc.objdict):
         if (isinstance(value, ss.par) or has_par(value)) and key in self: # A parameter of a module written as code, given with bounds (say): as update() takes it
             self.update({key:value})
             return
+        if self._module is not None: # E.g. a new time series set by an intervention
+            bind(value, self._module, key)
         return super().__setitem__(key, value)
 
     def __reduce_ex__(self, protocol):
@@ -437,6 +451,19 @@ class SimPars(Pars):
         return
 
     _names = None # The names of the sim parameters: see names()
+    _frozen = False # Whether the sim is initialized: see freeze()
+
+    def freeze(self, frozen=True):
+        """ Once the sim is initialized, its settings belong to that run (`sim.new()` copies the sim as it was before), so setting one raises; but not its label, which only names it """
+        object.__setattr__(self, '_frozen', frozen)
+        return self
+
+    def __setitem__(self, key, value):
+        if self._frozen and key in self and key != 'label': # A key that does not exist raises as for any locked parameters
+            val = repr(value) if len(repr(value)) < 40 else '...'
+            errormsg = f'Cannot set sim.pars.{key} once the sim is initialized, since a run (and a rerun) uses the settings it had then; make a new sim with it instead, e.g. sim.new({key}={val})'
+            raise RuntimeError(errormsg)
+        return super().__setitem__(key, value)
 
     removed = dict( # Sim parameters that have been removed (or that are often guessed), and what replaces them
         track_writes = 'track_writes= has been removed: sim.what_modifies() lists the modifiers on a quantity, which are declared; code that assigns rel_sus or rel_trans directly is not tracked',
@@ -951,7 +978,10 @@ class by:
         over different dimensions (each group's value the product); otherwise an expression (e.g. tables by different bins, or a table times a count)
         """
         func = arith[op] if not reflected else (lambda a,b: arith[op](b, a))
-        if sc.isnumber(other) and not self.varies and (self.table is not None or self.array is not None or len(self.dims) == 1): # A value that varies in time times a number is an expression, so the whole is (below)
+        val = now(self)
+        if val is not None: # In a module's parameters, once the model is built: its value now (see Pars.bind())
+            return func(val, other)
+        elif sc.isnumber(other) and not self.varies and (self.table is not None or self.array is not None or len(self.dims) == 1): # A value that varies in time times a number is an expression, so the whole is (below)
             return self.map(lambda v: func(v, other))
         elif isinstance(other, by) and op == '*' and self.given and other.given and not set(self.dims) & set(other.dims): # A product over different dimensions, given as keywords, e.g. by(age=...) * by(sex=...)
             return by(**self.given, **other.given)
@@ -979,7 +1009,10 @@ class by:
         return ss.expressions.BinOp(op, other, self) if reflected else ss.expressions.BinOp(op, self, other)
 
     def __array_ufunc__(self, ufunc, method, *inputs, **kwargs):
-        """ NumPy arithmetic as above, and a NumPy function of it an expression, e.g. np.minimum(by, 1) """
+        """ NumPy arithmetic as above, and a NumPy function of it an expression, e.g. np.minimum(by, 1); or of its value now (see Pars.bind()) """
+        val = now(self)
+        if val is not None:
+            return getattr(ufunc, method)(*[val if x is self else x for x in inputs], **kwargs)
         name = ufunc.__name__
         if method == '__call__' and not kwargs and name in ss.expressions.binops and len(inputs) == 2:
             return self._op(inputs[1], ss.expressions.binops[name]) if inputs[0] is self else self._op(inputs[0], ss.expressions.binops[name], reflected=True)
@@ -1399,8 +1432,27 @@ def const_value(val):
     return evaluate(val, Static) if isinstance(val, Expr) else val
 
 
+def bind(val, module, key):
+    """ Bind a value that varies (`ss.timeseries`, `ss.seasonal`, `ss.by`), or a parameter that its module's model does not use (e.g. one kept for its code), to the module whose parameter it is (see `Pars.bind()`) """
+    if isinstance(val, (TimeValue, by)):
+        val.__dict__['module'] = module
+    elif isinstance(val, ss.par) and val.module is None:
+        val.module = module
+        val.name = val.name or key
+    return
+
+
+def now(val):
+    """ The value now of a value that varies, bound to a module (see `Pars.bind()`) whose sim is initialized, as `current_value()` gives it; else None """
+    mod = val.__dict__.get('module')
+    sim = getattr(mod, 'sim', None)
+    if not ss.expressions.has_values(sim):
+        return None
+    return current_value(val, sim, cache=mod.__dict__.setdefault('_converted', {}))
+
+
 def current_value(val, sim, cache=None):
-    """ A value as code reads it now, in the sim's unit (see `ss.Module.value()`): a typed value as a number, a value that varies in time at the current time, and a value by level for each level; `cache` keeps the typed values converted (see `ss.solvers.convert()`) """
+    """ A value as code reads it now, in the sim's unit (see `ss.Module._value()`): a typed value as a number, a value that varies in time at the current time, and a value by level for each level; `cache` keeps the typed values converted (see `ss.solvers.convert()`) """
     convert = lambda v: ss.solvers.convert(v, sim.unit_base, cache)
     if isinstance(val, by_func):
         val = val.levels(sim, convert)
@@ -1440,22 +1492,35 @@ class TimeValue:
         """ The typed quantities it holds, used to infer the sim's unit """
         return []
 
-    # Arithmetic gives an expression, for a rate, e.g. 2 * ss.seasonal(...) or beta * ss.timeseries(...)
-    def __mul__(self, other):      return as_expr(self) * other
-    def __rmul__(self, other):     return other * as_expr(self)
-    def __truediv__(self, other):  return as_expr(self) / other
-    def __rtruediv__(self, other): return other / as_expr(self)
-    def __add__(self, other):      return as_expr(self) + other
-    def __radd__(self, other):     return other + as_expr(self)
-    def __sub__(self, other):      return as_expr(self) - other
-    def __rsub__(self, other):     return other - as_expr(self)
-    def __pow__(self, other):      return as_expr(self) ** other
-    def __rpow__(self, other):     return other ** as_expr(self)
-    def __neg__(self):             return -1 * as_expr(self)
+    def _operand(self):
+        """ What arithmetic is done on: its value now, in a module's parameters once the sim is initialized (see `Pars.bind()`), else itself, in an expression """
+        val = now(self)
+        return as_expr(self) if val is None else val
+
+    # Arithmetic gives an expression, for a rate, e.g. 2 * ss.seasonal(...) or beta * ss.timeseries(...); or a value (see _operand())
+    def __mul__(self, other):      return self._operand() * other
+    def __rmul__(self, other):     return other * self._operand()
+    def __truediv__(self, other):  return self._operand() / other
+    def __rtruediv__(self, other): return other / self._operand()
+    def __add__(self, other):      return self._operand() + other
+    def __radd__(self, other):     return other + self._operand()
+    def __sub__(self, other):      return self._operand() - other
+    def __rsub__(self, other):     return other - self._operand()
+    def __pow__(self, other):      return self._operand() ** other
+    def __rpow__(self, other):     return other ** self._operand()
+    def __neg__(self):             return -1 * self._operand()
+    def __lt__(self, other):       return self._operand() < other
+    def __le__(self, other):       return self._operand() <= other
+    def __gt__(self, other):       return self._operand() > other
+    def __ge__(self, other):       return self._operand() >= other
+    def __float__(self):           return float(self._operand())
 
     def __array_ufunc__(self, ufunc, method, *inputs, **kwargs):
-        """ A NumPy function of it is an expression, e.g. np.minimum(ss.timeseries(...), 1) """
-        return as_expr(self).__array_ufunc__(ufunc, method, *[as_expr(x) if x is self else x for x in inputs], **kwargs)
+        """ A NumPy function of it is an expression, e.g. np.minimum(ss.timeseries(...), 1); or of its value now (see _operand()) """
+        val = self._operand()
+        if not isinstance(val, Expr):
+            return getattr(ufunc, method)(*[val if x is self else x for x in inputs], **kwargs)
+        return val.__array_ufunc__(ufunc, method, *[val if x is self else x for x in inputs], **kwargs)
 
 
 class timeseries(TimeValue):
@@ -1567,6 +1632,8 @@ class timeseries(TimeValue):
     def __deepcopy__(self, memo): # The cached times belong to one sim
         new = object.__new__(type(self))
         new.__dict__.update(times=list(self.times), values=sc.dcp(self.values, memo=memo), mode=self.mode, period=self.period, _years=None)
+        if 'module' in self.__dict__: # Bound to a module (see Pars.bind()), as its copy is
+            new.__dict__['module'] = sc.dcp(self.module, memo=memo)
         return new
 
     def to_json(self):

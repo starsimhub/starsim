@@ -340,7 +340,7 @@ def test_odin2(tmp_path):
     data = pd.DataFrame(dict(cases=np.round(weekly), deaths=np.round(0.5*weekly)), index=a.timevec[7:99:7])
     lik = ss.fit.loglik(two, df=data, by_series=True)
     assert np.isclose(lik.cases, ss.fit.loglik(one, df=data[['cases']].rename(columns=dict(cases='incidence')), likelihood=dict(incidence=ss.poisson())))
-    assert np.isfinite(lik.deaths) and two.diseases[0].value("rho") == 0.5
+    assert np.isfinite(lik.deaths) and 1*two.diseases[0].pars.rho == 0.5
     return two
 
 

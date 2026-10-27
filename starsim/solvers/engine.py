@@ -977,7 +977,7 @@ class Engine(Telling, Effects):
             source = ss.presentation.func_source(func) or ''
             read = [name for name in modified if re.search(rf'\bpars\.{name}\b|\[[\'"]{name}[\'"]\]', source)]
             if read:
-                ss.note(f'{sc.strjoin(read)} of "{self.mod.name}" {"is" if len(read) == 1 else "are"} changed by a modifier and read inside {fname}: {self.mod.name}.value("{read[0]}") (or arithmetic on the parameter) there gives the changed value, but float(par), par.value, and par.raw give the value without the change', sim=self.sim)
+                ss.note(f'{sc.strjoin(read)} of "{self.mod.name}" {"is" if len(read) == 1 else "are"} changed by a modifier and read inside {fname}: arithmetic on the parameter there (e.g. 1 - {self.mod.name}.pars.{read[0]}) gives the changed value, but float(par), par.value, and par.raw give the value without the change', sim=self.sim)
         return
 
     def strain_rate(self, tr, rate, strain):

@@ -1082,8 +1082,8 @@ def test_cascade_binomial():
 @sc.timer()
 def test_change_in_function():
     sc.heading('Testing that a function that reads a parameter sees a change to it')
-    def initiation(sim, uids): # A logistic rate with an intercept, read with value() (float() gives the value it holds, without the change)
-        b0 = sim.diseases.meth.value('b0')
+    def initiation(sim, uids): # A logistic rate with an intercept: arithmetic on it gives its value now (float() gives the value it holds, without the change)
+        b0 = sim.diseases.meth.pars.b0
         return ss.peryear(1/(1 + np.exp(-b0))*np.ones(len(uids)))
     def meth_model(rate):
         none, on = ss.states('none on')
@@ -1100,7 +1100,7 @@ def test_change_in_function():
 
 @sc.timer()
 def test_value():
-    sc.heading('Testing that a parameter has one value for code: arithmetic, float(), and mod.value(), declared or written as code')
+    sc.heading('Testing that a parameter has one value for code: arithmetic on self.pars.x, declared or written as code')
     sir = ss.SIR(beta=0.3)
     p = sir.pars.beta
     assert all(isinstance(x - p, ss.expressions.BinOp) for x in [1., np.array(1.), np.ones(2)]), 'Before the sim is initialized, arithmetic on a parameter is part of the model'
@@ -1108,16 +1108,28 @@ def test_value():
     for x in [1., np.array(1.), np.ones(2)]: # After, it is a value, whatever the shape of the other operand
         assert np.all(x - p == 0.7) and not isinstance(x - p, ss.expressions.Expr)
 
-    class Mosquitoes(ss.Module): # Typed values, read from code, in the sim's unit
+    class Mosquitoes(ss.Module): # Read from code: values that vary as their value now, in the sim's unit; a typed value stays typed
         def __init__(self):
             super().__init__()
-            self.define_pars(bites=ss.perday(0.3), life=ss.days(10), f=ss.by(sex=[0.6, 0.8]), em=ss.timeseries({'2000-01-01':ss.peryear(1), '2002-01-01':ss.peryear(2)}))
+            self.define_pars(bites=ss.perday(0.3), f=ss.by(sex=[0.6, 0.8]), em=ss.timeseries({'2000-01-01':ss.peryear(1), '2002-01-01':ss.peryear(2)}))
         def step(self):
-            self.read = [self.value(k) for k in self.pars] + [self.sim.diseases.sir.value('beta'), float(self.sim.diseases.sir.pars.beta)]
+            sir = self.sim.diseases.sir
+            self.read = [self.pars.bites, 1*self.pars.f, np.exp(self.pars.em) - 1, float(self.pars.em), self.pars.em > 0, 1*sir.pars.beta, float(sir.pars.beta)]
     sim = ss.Sim(ss.SIR(beta=0.3), modules=Mosquitoes(), interventions=ss.change('sir.pars.beta', at='2001-01-01', to=0.1), start='2000-01-01', stop='2003-01-01', unit='day', dt=ss.years(1), n_agents=200, verbose=0).run()
-    bites, life, f, em, beta, raw = [m for m in sim.modules if isinstance(m, Mosquitoes)][0].read
-    assert np.isclose(bites, 0.3) and np.isclose(life, 10) and np.allclose(f, [0.6, 0.8]) and np.isclose(em, 2/365)
-    assert np.isclose(beta, 0.1) and raw == 0.3, 'value() applies the change (to 0.1 per day); float() is the value the parameter holds'
+    bites, f, em, em_float, positive, beta, raw = [m for m in sim.modules if isinstance(m, Mosquitoes)][0].read
+    assert isinstance(bites, ss.perday) and np.allclose(f, [0.6, 0.8]) and np.isclose(em, np.expm1(2/365)) and np.isclose(em_float, 2/365) and positive
+    assert np.isclose(beta, 0.1) and raw == 0.3, 'Arithmetic applies the change (to 0.1 per day); float() is the value the parameter holds'
+    assert isinstance(ss.timeseries({2000:1, 2001:2})*2, ss.expressions.Expr), 'Outside a sim, it is an expression'
+
+    # A distribution has no single value, and the sim's settings are frozen once it is initialized
+    S, I, R = ss.states(3)
+    sim = ss.Sim(ss.Disease(S >> I @ 0.3*I, ss.Transition(I, R, dur=ss.lognorm_ex(8, 2)), init=dict(I=0.01), name='d'), unit='day', stop=10, verbose=0).init()
+    with pytest.raises(TypeError, match='no single value'):
+        1/sim.diseases.d.pars.dur
+    with pytest.raises(RuntimeError, match=r'sim.new\(stop='):
+        sim.pars.stop = 30
+    sim.label = 'renamed' # Not a setting of the run
+    assert sim.new(stop=30).run().t.tvec[-1] == 30
     return
 
 
