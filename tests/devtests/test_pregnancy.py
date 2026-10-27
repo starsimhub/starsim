@@ -526,7 +526,7 @@ def test_coded_reads():
     p = sim.demographics.pregnancy
     for ti in range(sim.t.npts - 1):
         sim.run_one_step()
-        same.append((p.P & (p.ti_P == p.ti_delivered)).sum())
+        same.append((p.P & p.ti_P.eq(p.ti_delivered)).sum())
     assert sum(same) == 0 and p.results.birth.sum() > 300, same
     assert not any('delivery: people leave after' in str(note) for note in sim.notes) # A dwell of 32 to 42 weeks loses nobody to monthly steps (FP7)
 

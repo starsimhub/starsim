@@ -789,7 +789,7 @@ class Disease(ss.Module):
 
     def infect(self, uids, strain=None):
         """
-        Infect some agents now, from code (e.g. a strain introduced on a date): those in the first state move where its transmission puts them, counted in its flow and dated as its infections are (`ti_I == sim.ti`), with a source of -1 in an `ss.infection_log`
+        Infect some agents now, from code (e.g. a strain introduced on a date): those in the first state move where its transmission puts them, counted in its flow and dated as its infections are (`ti_I.isclose(sim.ti)`), with a source of -1 in an `ss.infection_log`
 
         Args:
             uids (uids): the agents; those not in the first state are left where they are

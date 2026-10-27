@@ -882,15 +882,14 @@ class Agents(Engine, Transmission):
         self.n_counted = sim.people.uid.len_used
         return {name:ss.uids(found[offsets[k]:offsets[k+1]]) for name,k in order.items()}
 
-    def wrote(self, name, uids, old, new):
-        """ Some agents (each once) have been put in or taken out of a state of people (by anything: see `ss.BoolState`): keep its count by group """
-        changed = old != new
-        if not changed.any():
+    def wrote(self, name, entered, left):
+        """ Some agents have been put in a state of people, or taken out of it, by anything (see `ss.BoolState`): keep its count by group (each counted once) """
+        if not len(entered) and not len(left):
             return
-        entered = uids[changed & new]
+        unique = lambda u: u if len(u) < 2 or (u[1:] > u[:-1]).all() else np.unique(u)
+        entered, left = unique(entered), unique(left)
         if len(entered) and self.unscheduled is not None:
             self.unscheduled.add(name) # Put in it other than by the engine's moves, so perhaps with no exit scheduled: see step_state()
-        left = uids[changed & old]
         ng = self.sim.groups.n_groups
         if ng == 1:
             self.live[name] = self.live[name] + (len(entered) - len(left))

@@ -389,7 +389,7 @@ def test_time():
         sir.ti_R.notnan
     class Recovered(ss.Analyzer): # A Starsim 3-style module that reads it, which needs it kept
         def step(self):
-            self.n = (self.sim.diseases.sir.ti_R == self.ti - 1).sum() # Progressions are dated at the start of their step
+            self.n = self.sim.diseases.sir.ti_R.isclose(self.ti - 1).sum() # Progressions are dated at the start of their step
     with ss.options.context(keep_times=True):
         sim = ss.Sim(make_sir(), stop=100, unit='day', n_agents=1000, analyzers=Recovered(), **kw).run()
     assert np.array_equal(sim.diseases.sir.results.I, sir.results.I) and sim.analyzers[0].n == sim.results.sir.recovery[-1] # The same run, and the recoveries of the last step

@@ -438,7 +438,9 @@ class Arr(BaseArr):
         return self._index(self.raw, key)
 
     def __setitem__(self, key, value):
-        if not isinstance(key, uids):
+        if isinstance(key, slice) and key == slice(None) and np.ndim(value) == 0 and not isinstance(self, BoolArr): # One value for everyone (e.g. rel_sus[:] = 1): every agent's place, since the inactive's values are never read as theirs (a state's are its members, so not for one)
+            pass
+        elif not isinstance(key, uids):
             if isinstance(key, str): # Named column for all active agents, e.g. arr['mutant'] = 0.5
                 key = (slice(None), key)
             key = self._convert_key(key)
@@ -562,12 +564,7 @@ class Arr(BaseArr):
         return self.asnew(result, cls=BoolArr, copy=False)
 
     def _math(self, op, other=None, inplace=False, reverse=False):
-        """
-        Helper function for numeric operations
-
-        The main purpose of this function is to handle in-place operations where the
-        result of the operation needs to be applied to active agents only.
-        """
+        """ Helper function for numeric operations, on the raw arrays (an array of values for the active agents only is spread to their places) """
 
         if not self.initialized and not inplace and op in ss.conditions.ops: # Before the sim exists, this builds a lazy condition instead, as a comparison does (or, with a typed value, an expression for a rate): see ss.conditions.Cond
             arr = ss.conditions.from_arr(self)
@@ -575,15 +572,19 @@ class Arr(BaseArr):
         if isinstance(other, (ss.TimePar, ss.date)):
             return NotImplemented # Not implemented here, at least for now. But allow falling back to the other classes if they have an implementation
 
-        inds = self.auids
-        a = self._index(self.raw, inds)
-
+        if inplace and self.shared is not None:
+            self.own()
+        a = self.raw # On every agent's value, as _boolmath() does: those of the inactive (the dead, and room for births) are never read as theirs
         if isinstance(other, Arr):
-            b = other._index(other.raw, inds)
+            b = other.raw
         elif isinstance(other, BaseArr):
             b = other.values
         else:
             b = other
+        if isinstance(b, np.ndarray) and b.shape[:1] != a.shape[:1]: # Values for the active agents only (e.g. arr.values*2): spread to every agent's place
+            full = np.zeros(a.shape[:1] + b.shape[1:], dtype=b.dtype)
+            full[self.auids] = b
+            b = full
 
         if reverse:
             a, b = b, a
@@ -600,22 +601,14 @@ class Arr(BaseArr):
             raise ValueError(errormsg)
 
         if inplace:
-            out = np.empty(a.shape, dtype=self.raw.dtype) # In-place operations cannot change the dtype
-            ufunc(a, b, out=out) # Calling the ufunc this way ensures in-place operations will raise the same error for Arr as for np.array
-            if self.shared is not None:
-                self.own()
-            self.raw[inds] = out # Write the values back to the existing raw array in-place
+            ufunc(a, b, out=self.raw) # In place, so the dtype cannot change, and an operation that would change it raises as it does for a NumPy array
             return self
-        else:
-            c = ufunc(a, b) # Evaluate the ufunc. Unlike the in-place operation above, the dtype is now allowed to change
-            result_dtype = np.asarray(c).dtype # The resulting dtype will dictate the return class e.g., BoolArr * FloatArr = FloatArr, with np.bool * np.float = np.float
-            result_raw = self.raw.astype(result_dtype, copy=True) # Cast the existing values to the new dtype
-            result_raw[inds] = c # Write the new values into the raw array (with the updated dtype)
-            result_cls, result_nan = self._math_result_type(result_dtype) # Work out which Arr class the new dtype corresponds to
-            result = self.asnew(result_raw, cls=result_cls, copy=False) # Wrap the new result array in an Arr subclass of the appropriate type e.g., a raw `float` array gets wrapped in FloatArr
-            result.nan = result_nan # Since asnew() does not set the .nan or .nan_eq attributes because it does not call __init__, set them now
-            result.nan_eq = (result.nan == result.nan)
-            return result
+        c = ufunc(a, b) # The dtype can change: it dictates the class, e.g. BoolArr*FloatArr is a FloatArr
+        result_cls, result_nan = self._math_result_type(c.dtype)
+        result = self.asnew(c, cls=result_cls, copy=False)
+        result.nan = result_nan # Since asnew() does not call __init__, which sets them
+        result.nan_eq = (result.nan == result.nan)
+        return result
 
     @staticmethod
     def _math_result_type(dtype):
@@ -942,19 +935,20 @@ class TimeArr(FloatArr):
     """
     Times, as step numbers of the module's timeline: when something happened or is due for each agent, e.g. a declared disease's `ti_X` (when each entered state X) and `ti_exit_X`, as agents, and `people.ti_dead`
 
-    Stored as float32 step numbers, NaN for "never" (not set), so `ti_I == sim.ti`, `ti_I > 0`, and `(sim.ti - ti_I)*sim.t.dt`
-    all give the right answer. `due()` gives whose time has come, to the nearest step (so a time drawn between steps keeps
-    its mean), and `.years` converts them to years.
+    Stored as float32 step numbers, NaN for "never" (not set), so `ti_I > 0` and `(sim.ti - ti_I)*sim.t.dt` give the right
+    answer. `due()` gives whose time has come, to the nearest step (so a time drawn between steps keeps its mean),
+    `isclose(sim.ti)` whose time is at this step, and `.years` converts them to years. `==` and `!=` raise, since a time
+    between steps never equals a step: `eq()` is exact equality.
 
     A declared state's time of entering (`ti_X`) reads as the index of the step the move happened in, whatever kind of
-    move it was (a progression at the step's start, an infection by contact at its end), so `ti_X == sim.ti` is "entered
-    this step". The engine keeps its own time of the move, which `.raw` gives (see `shift`).
+    move it was (a progression at the step's start, an infection by contact at its end), so `ti_X.isclose(sim.ti)` is
+    "entered this step". The engine keeps its own time of the move, which `.raw` gives (see `shift`).
 
     Example:
         ```python
         sim = ss.Sim(ss.SIR(), unit='day', stop=100).run()
         sir = sim.diseases.sir
-        infected_today = (sir.ti_I == sim.ti).uids
+        infected_today = sir.ti_I.isclose(sim.ti).uids
         years = sir.ti_I.years # The year of infection of each agent (NaN if never infected)
 
         # In a disease written as code
@@ -980,6 +974,22 @@ class TimeArr(FloatArr):
     def due(self):
         """ Whose time has come by the current step, as a boolean array (e.g. `mask = self.exposed & self.ti_infectious.due()`): a time between steps is due at the nearest step """
         return self.asnew(self.shifted(self.raw) < self.t.ti + 0.5, cls=BoolArr)
+
+    def isclose(self, other):
+        """ Whose time is at the step nearest `other` (e.g. `self.ti_infectious.isclose(self.ti)`, those who became infectious this step, as `due()` counts them), as a boolean array """
+        vals = self.shifted(self.raw)
+        return self.asnew((vals >= other - 0.5) & (vals < other + 0.5), cls=BoolArr)
+
+    def eq(self, other):
+        """ Whose time is exactly `other`, as a boolean array (`==` and `!=` are refused: see `__eq__()`) """
+        return self._boolmath('==', other)
+
+    def __eq__(self, other):
+        errormsg = f'Exact matches to continuous time are fraught; use {self.name}.due() or {self.name}.isclose() instead, or {self.name}.eq() if you want exact equality.'
+        raise TypeError(errormsg)
+
+    def __ne__(self, other):
+        return self.__eq__(other)
 
     @property
     def years(self):
@@ -1280,13 +1290,17 @@ class BoolState(BoolArr):
         if not isinstance(key, uids):
             key = self._convert_key(key)
         inds = np.atleast_1d(np.asarray(key))
-        if len(inds) > 1 and not np.all(inds[1:] > inds[:-1]): # Each agent once, so a change is counted once
-            inds = np.unique(inds)
         if engine.sim.groups.n_groups > 1:
             engine.sim.groups.group_raw() # Any changes of group (e.g. by age) are counted before this one
         old = self.raw[inds]
         self.raw[key] = value
-        engine.wrote(self.name, inds, old, self.raw[inds])
+        if np.ndim(value) == 0 and value: # One value (the usual case): those it changes are those not at it before
+            engine.wrote(self.name, inds[~old], uids())
+        elif np.ndim(value) == 0:
+            engine.wrote(self.name, uids(), inds[old])
+        else:
+            new = self.raw[inds]
+            engine.wrote(self.name, inds[~old & new], inds[old & ~new])
         return
 
     def set(self, uids, new_vals=None):
@@ -1299,7 +1313,8 @@ class BoolState(BoolArr):
             engine.sim.groups.group_raw() # As in __setitem__()
         old = self.raw[inds]
         out = super().set(uids, new_vals=new_vals)
-        engine.wrote(self.name, inds, old, self.raw[inds])
+        new = self.raw[inds]
+        engine.wrote(self.name, inds[~old & new], inds[old & ~new])
         return out
 
     def grow(self, new_uids=None, new_vals=None):
@@ -1315,7 +1330,7 @@ class BoolState(BoolArr):
             self.watch = watch
         if new_vals is not None or self.default: # Otherwise they start out of the state (the usual case)
             inds = np.atleast_1d(np.asarray(new_uids))
-            engine.wrote(self.name, inds, np.zeros(len(inds), dtype=bool), self.raw[inds])
+            engine.wrote(self.name, inds[self.raw[inds]], uids())
         return
 
     def _changed_all(self):

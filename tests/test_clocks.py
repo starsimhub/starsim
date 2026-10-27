@@ -109,13 +109,13 @@ def test_bv_recurrence():
 
 @sc.timer()
 def test_stamps():
-    sc.heading('A time of entering reads as the step it happened in: ti_X == sim.ti for a move at the start of the step and an infection at its end')
+    sc.heading('A time of entering reads as the step it happened in: ti_X.isclose(sim.ti) for a move at the start of the step and an infection at its end')
     S, E, I, R = ss.states('S E I R')
     d = ss.Disease(inf=S >> E @ ss.perday(0.4)*I, lat=E >> I @ ss.days(2), rec=I >> R @ ss.days(3), init=dict(E=0.01), name='d')
     def check(sim):
         d, ti = sim.diseases.d, sim.ti
         if ti > 0:
-            assert (d.ti_E == ti).count() == d.results.inf[ti] and (d.ti_I == ti).count() == d.results.lat[ti] # Infected, then moved on, in this step
+            assert d.ti_E.isclose(ti).count() == d.results.inf[ti] and d.ti_I.isclose(ti).count() == d.results.lat[ti] # Infected, then moved on, in this step
     sim = ss.Sim(d, networks=ss.RandomNet(), analyzers=check, n_agents=5000, unit='day', stop=30, **kw).run()
     assert sim.results.d.inf.sum() > 100 and sim.results.d.lat.sum() > 100
     return
