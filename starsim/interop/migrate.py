@@ -66,7 +66,7 @@ moved = dict(
     results       = 'validate_sim_data',
     debugtools    = 'metadata diff_sims check_sims_match Profile Diagnostics mock_time mock_sim mock_people mock_module',
     utils         = 'find_contacts standardize_data standardize_netkey shrink',
-    arrays        = 'BaseArr ModifiableArr',
+    arrays        = 'BaseArr',
 )
 for submodule, names in moved.items():
     renames.append((rf"\bss\.({'|'.join(names.split())})\b", rf'ss.{submodule}.\1', f'internal helpers are in their submodule (ss.{submodule}.)'))

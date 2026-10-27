@@ -3,7 +3,7 @@ title: The model as data
 jupyter: python3
 ---
 
-A disease written as code, as a class whose `step()` method changes arrays of agents, can be run but not read: Starsim can't describe the model, draw it, or run it any other way. A *declared* disease is instead a set of objects (states, transitions, parameters) that describe the model without running it. Everything else is derived from them: the description, the diagram and equations, the stratified model, the run's hash, the saved spec, and the engines that run it as an ODE, a stochastic compartmental model, or agents.
+A disease written as code, as a class whose `step()` method changes arrays of agents, can be run but not read: Starsim can't describe the model, draw it, or run it any other way. A *declared* disease is instead a set of objects (states, transitions, parameters) that describe the model without running it. Everything else is derived from them: the description, the diagram and equations, the stratified model, the exports to other frameworks, and the engines that run it as an ODE, a stochastic compartmental model, or agents.
 
 This page covers those objects, what Starsim does with them when a module is built, and how it fills in what you left out. [From model to run](build_and_run.qmd) covers what happens next.
 
@@ -35,7 +35,7 @@ class SIR(ss.Disease):
     recovery  = I >> R @ ss.days(10)
 ```
 
-All three give the same model hash (`sim.hash().model`). This is a rule of the design: a keyword means the same thing in every form, and subclassing adds behavior, not vocabulary. A transition takes the state objects themselves, never their names as strings, so nothing is inferred from a name.
+All three are the same model, and give the same results. This is a rule of the design: a keyword means the same thing in every form, and subclassing adds behavior, not vocabulary. A transition takes the state objects themselves, never their names as strings, so nothing is inferred from a name.
 
 ## Rates are expressions
 
@@ -107,7 +107,7 @@ sir.equations()
 sir.transitions
 ```
 
-`sir.diagram()` gives the same graph as a Mermaid flowchart, and `sim.to_spec()` as JSON (see [The model spec, errors, and interop](spec_and_interop.qmd)).
+`sir.diagram()` gives the same graph as a Mermaid flowchart, and `ss.interop.export()` as odin or SBML (see [Errors and interop](spec_and_interop.qmd)).
 
 ## Limits
 

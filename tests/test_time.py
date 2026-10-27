@@ -500,12 +500,11 @@ def test_bare_units():
         ss.seasonal(peak=142)
     assert np.isclose(ss.seasonal(peak=ss.days(142)).peak_frac, 142/365)
 
-    # A cycle of another period (TY15f): two peaks a year, in a declared rate and in its spec
+    # A cycle of another period (TY15f): two peaks a year, in a declared rate
     rains = ss.seasonal(mean=ss.perday(0.2), amplitude=0.5, peak='April', period=ss.years(0.5))
     assert np.allclose(rains.factor(np.array([3.5, 9.5])/12), 1.5) and np.allclose(rains.factor(np.array([0.5, 6.5])/12), 0.5)
     sis = ss.Disease(S >> I @ rains*I, I >> S @ ss.days(10), init_prev=0.1, name='sis')
-    sim = ss.Sim(sis, start='2000', stop='2002', verbose=0)
-    assert 'period=ss.years(0.5)' in sim.to_code()
+    ss.Sim(sis, start='2000', stop='2002', verbose=0).run()
     return
 
 
@@ -534,13 +533,6 @@ def test_time_text():
     # The step count warning says where the unit came from (it said "from None" with unit='day')
     with pytest.warns(RuntimeWarning, match="unit='day'"):
         ss.Sim(make(), total_pop=1e5, stop=ss.years(30), unit='day', verbose=0).init()
-
-    # The model's hash and spec build a quiet copy (they printed the lines a run starts with)
-    sim = ss.Sim(make(), total_pop=1e5, stop=ss.days(20))
-    with contextlib.redirect_stdout(io.StringIO()) as out:
-        sim.hash()
-        sim.to_code()
-    assert out.getvalue() == '' and not sim.initialized
     return
 
 

@@ -78,6 +78,7 @@ class Result(ss.utils.NoDists, ss.arrays.BaseArr):
         summarize_by (str): how the result is summarized over time, which also decides how it is resampled and compared with data: 'sum' for a flow (a number of events in each step, e.g. new infections), 'last' for a stock (a quantity at each time point, e.g. the number infected), 'mean' for a ratio (one quantity divided by another, e.g. prevalence; a ratio that keeps its numerator and denominator sums each over the period, then divides), any other key of `ss.Result.summarizers`, or None for a result that is not summarized over time. By default ('auto') it is guessed from the name (`new_...` is summed; `n_...`, `cum_...`, and `cumulative` take the last value; anything else is averaged)
         columns (list): if provided, make a 2D result of shape `(npts, len(columns))`, with these names for the columns, e.g. `['wild', 'alpha']`
         runs (dataframe): for a result across the runs of a MultiSim: one row per run, with its `scenario` (and the values of any parameters swept); the values then have a run axis first, of shape `(n_runs, npts)`
+        groups (bool): for a module written as code in a stratified sim: keep the values by group too, so they can be selected (`res.select(sex='female')`, `res.by('age')`) as a declared module's are; set them with `set_groups()`
 
     In most cases, [`ss.Result`](`starsim.results.Result`) behaves exactly like `np.array()`, except with
     the additional fields listed above. To see everything contained in a result,
@@ -116,7 +117,7 @@ class Result(ss.utils.NoDists, ss.arrays.BaseArr):
         return super().__getattr__(attr)
 
     def __init__(self, name=None, label=None, dtype=float, shape=None, scale=True, auto_plot=True,
-                 module=None, values=None, timevec=None, low=None, high=None, summarize_by='auto', columns=None, runs=None, **kwargs):
+                 module=None, values=None, timevec=None, low=None, high=None, summarize_by='auto', columns=None, runs=None, groups=False, **kwargs):
         # Copy inputs
         self.name = name
         self.label = label
@@ -135,6 +136,7 @@ class Result(ss.utils.NoDists, ss.arrays.BaseArr):
         self.summarize_by = self.get_summarize_by(name, summarize_by)
         self.columns = columns
         self.runs = runs
+        self.groups = groups
         self.validate_columns()
         self.init_values()
         return
@@ -534,6 +536,50 @@ class Result(ss.utils.NoDists, ss.arrays.BaseArr):
             strata[rows[ti]] += vals
         else:
             strata[rows[ti]] = vals
+        return
+
+    def set_groups(self, ti, vals, denom=None):
+        """
+        Set the value at time point ti from values by group (one for each of `sim.groups`, e.g. from `sim.groups.count()`), and keep them, for a result made with `groups=True`
+
+        The value is their total; or, given the denominator of each group, a ratio: the total of the values over the total of the
+        denominators (e.g. the prevalence among everyone), with both kept, so that selecting groups adds up each before dividing.
+
+        Args:
+            ti (int): the time point
+            vals (array): the value of each group (for a ratio, its numerator)
+            denom (array): for a ratio, the denominator of each group
+
+        Examples:
+            ```python
+            # In a module written as code, in a sim stratified by sex and age
+            def init_results(self):
+                super().init_results()
+                self.define_results(ss.Result('n_infected', groups=True), ss.Result('prevalence', scale=False, groups=True))
+
+            def update_results(self):
+                super().update_results()
+                alive, infected = self.sim.groups.count(), self.sim.groups.count(self.infected)
+                self.results.n_infected.set_groups(self.ti, infected)
+                self.results.prevalence.set_groups(self.ti, infected, alive)
+
+            sim.results.sis.prevalence.select(sex='female', age='15-24') # Women aged 15-24 infected, over all women aged 15-24
+            ```
+        """
+        if getattr(self, 'strata', None) is None:
+            errormsg = f'The result "{self.name}" does not keep values by group: make it with ss.Result(..., groups=True), in a module of a sim'
+            raise ValueError(errormsg)
+        vals = np.asarray(vals, dtype=float)
+        self.strata[ti] = vals
+        if denom is None:
+            self[ti] = vals.sum()
+        else:
+            if getattr(self, 'denom', None) is None:
+                self.denom = np.zeros(self.strata.shape)
+            denom = np.asarray(denom, dtype=float)
+            self.denom[ti] = denom
+            total = denom.sum()
+            self[ti] = vals.sum()/total if total else 0.0
         return
 
     @property

@@ -484,7 +484,7 @@ class Graph(Presentation):
     @staticmethod
     def set_slots(tr):
         """
-        Record the kind of value each parameter of a transition is, as `par.slot` (which describe() and the model spec use):
+        Record the kind of value each parameter of a transition is, as `par.slot` (which describe() uses):
         'rate' or 'dur', or None for a plain number (e.g. a factor of a rate); returns the standard slots it fills, as (slot name, parameter)
         """
         slots = []

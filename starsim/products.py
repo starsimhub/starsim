@@ -212,14 +212,6 @@ class Product(EventSource, ss.Module):
         super().init_pre(sim)
         return
 
-    spec_keys = [] # The keywords that make the product, for the model spec
-
-    def spec(self):
-        """ The product as plain data, for the model spec of its delivery: its type, its name, and the keywords that make it """
-        out = dict(type=type(self).__name__, name=self.name)
-        out.update({key:ss.interventions.spec_value(getattr(self, key)) for key in self.spec_keys if getattr(self, key) is not None})
-        return out
-
 
 #%% Products for declared models: what is delivered by ss.vaccinate(), ss.screen(), and ss.treat()
 
@@ -512,7 +504,6 @@ class Held(Product):
                     kind = dict(acquisition='rel_sus', transmission='rel_trans').get(key)
                     if kind is None:
                         raise sc.KeyNotFoundError(f'the efficacy of "{self.name}" has the key "{key}", but "{disname}" is written as code, so a product acts only on its acquisition (rel_sus) and transmission (rel_trans)')
-                    ss.connectors.AgentModifiers.attach(coded, kind, sim)
                     sim.modifiers[(disname, kind, None)].append(Effect(self, key, eff))
                 continue
             dis = sim.get_declared(disname)
@@ -599,7 +590,7 @@ class Held(Product):
         uids = (arr == 1).uids
         if len(uids):
             dis = ss.interventions.coded_disease(sim, self.disease) or sim.get_declared(self.disease)
-            eng = dis.engine if dis.graph is not None else ss.connectors.AgentModifiers.engine(dis, sim)
+            eng = dis.engine
             p = -np.expm1(-eng.dt/eng.convert(self.waning))
             lost = uids[self.rng_wane.rvs(uids) < p]
             arr[lost] = 0
@@ -661,14 +652,6 @@ class Vaccine(Held):
         self.leaky = leaky
         self.take = take
         return
-
-    spec_keys = ['efficacy', 'waning', 'doses', 'during', 'cost']
-
-    def spec(self):
-        out = super().spec()
-        if self.take is not None: # All or nothing
-            out.update(efficacy=self.take, leaky=False)
-        return out
 
     def describe(self):
         out = super().describe()
@@ -734,8 +717,6 @@ class Treatment(Held):
         kit = ss.Treatment(moves={ng.cure: 0.95, ct.cure: 0.95}) # Two diseases, one product
         ```
     """
-    spec_keys = ['cure', 'efficacy', 'transition', 'to', 'moves', 'waning', 'during', 'cost']
-
     def __init__(self, cure=None, efficacy=None, transition=None, to=None, moves=None, **kwargs):
         if efficacy is not None and not isinstance(efficacy, dict):
             errormsg = f'The efficacy= of ss.Treatment() is its effects while it is held, as a dict (e.g. efficacy=dict(transmission=0.96)); the probability that it cures is cure= (e.g. ss.Treatment(cure={efficacy}))'
@@ -972,7 +953,6 @@ class Diagnostic(Product):
     compartmental = True
     waning = None
     doses = None
-    spec_keys = ['sensitivity', 'specificity', 'delay', 'detects', 'cost']
 
     def __init__(self, sensitivity=1.0, specificity=1.0, results=None, delay=None, detects=None, cost=None, name=None, label=None, **kwargs):
         super().__init__(name=name, label=label, **kwargs)
@@ -1194,9 +1174,3 @@ class Diagnostic(Product):
             return f'{self.name}: test with results {sc.strjoin(self.outcome_names())}, by {sc.strjoin(label(k) for k in self.state_keys()) or "what it detects"}{delay}'
         detects = sc.strjoin(label(k) for k in self.sensitivity) if isinstance(self.sensitivity, dict) else 'infection' if self.detects is None else self.detects
         return f'{self.name}: test for {detects} (sensitivity {self.sensitivity}, specificity {self.specificity}{delay})'
-
-    def spec(self):
-        out = super().spec()
-        if self.results_given is not None:
-            out['results'] = ss.interventions.spec_value(self.results_given)
-        return out

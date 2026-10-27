@@ -924,7 +924,7 @@ class by:
 
 
     def to_json(self):
-        """ The value as it is written in the model spec """
+        """ The value as plain data, for `sim.to_json()` """
         if self.array is not None:
             return dict(by=self.dims, array=self.array.tolist())
         elif self.table is not None:
@@ -1397,6 +1397,21 @@ class Static:
 def const_value(val):
     """ The value of a number or of an expression of parameters (e.g. (1 + smin)/2), as it is now """
     return evaluate(val, Static) if isinstance(val, Expr) else val
+
+
+def current_value(val, sim, cache=None):
+    """ A value as code reads it now, in the sim's unit (see `ss.Module.value()`): a typed value as a number, a value that varies in time at the current time, and a value by level for each level; `cache` keeps the typed values converted (see `ss.solvers.convert()`) """
+    convert = lambda v: ss.solvers.convert(v, sim.unit_base, cache)
+    if isinstance(val, by_func):
+        val = val.levels(sim, convert)
+    if isinstance(val, by):
+        if val.dim is None or val.values is None: # Several dimensions, or a table: for each group of the sim
+            return val.per_group(sim, convert)
+        values = val.values
+        return np.array([val.converter(sim, convert)(v) for v in (values.values() if isinstance(values, dict) else sc.tolist(values))], dtype=float)
+    if isinstance(val, TimeValue):
+        return val.series([sim.t.now('year')], sim, convert)[0]
+    return convert(val)
 
 
 class TimeValue:

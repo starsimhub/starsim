@@ -13,7 +13,7 @@ import ast
 import numpy as np
 import sciris as sc
 import starsim as ss
-from .core import Source, build
+from .core import Source, Code, build
 
 __all__ = ['load_summer2', 'outputs']
 
@@ -271,8 +271,7 @@ def load_summer2(source, pars=None, verbose=None):
     if unit:
         src.config.unit = unit
     if mixing:
-        src.config.networks = ss.contacts(mixing) # A matrix for each stratification, whose product is the mixing
-        src.code['networks'] = 'ss.contacts(dict(' + ', '.join(f'{k}={np.asarray(v).tolist()!r}' for k,v in mixing.items()) + '))'
+        src.config.networks = Code('ss.contacts(dict(' + ', '.join(f'{k}={np.asarray(v).tolist()!r}' for k,v in mixing.items()) + '))') # A matrix for each stratification, whose product is the mixing
     outs = d.get('outputs') or {}
     for c,val in byinit.items():
         src.states[c].init = val

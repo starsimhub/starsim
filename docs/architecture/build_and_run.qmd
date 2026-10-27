@@ -12,7 +12,7 @@ Creating a sim only stores what it was given (as copies, so one `sir` can go int
 1. **Values.** Values given by name (`pars=dict(beta=0.1)`) are set, and each parameter is checked against its bounds (a `ValueError`).
 2. **Groups.** The stratifications of the sim and its modules are collected into `sim.groups`.
 3. **Unit.** The unit of bare numbers is chosen ([below](#units-and-time)).
-4. **Solver.** Under `solver='auto'`, Starsim tries to lay the model out as compartments (which runs none of its code) and chooses an ODE if every part has a compartmental form, agents otherwise. For a compartmental run, networks become contact rates between groups, and the population becomes one row per group. See [Solvers](solvers.qmd).
+4. **Solver.** Under `solver='auto'`, Starsim lays the model out as compartments (which runs none of its code) and chooses an ODE if every part has a compartmental form, agents otherwise; a compartmental run uses that layout, so it is made once. For a compartmental run, networks become contact rates between groups, and the population becomes one row per group. See [Solvers](solvers.qmd).
 5. **Objects.** The timeline, the people, and for each declared disease an *engine*, the object that runs its transitions under the chosen solver. This is the one place where the solver changes which objects exist.
 6. **Starting values.** Random number streams ([Randomness and fitting](randomness_and_fitting.qmd)), people's attributes, then each state's initial conditions.
 7. **Results and the loop.** Results are allocated, data is attached to them by name, and the loop's functions are collected. Parameters are locked, so setting one that doesn't exist raises an error.
@@ -32,7 +32,7 @@ sim = ss.Sim(sir, start='2020-01-01', stop='2020-07-01')
 sim.init()
 ```
 
-Errors are raised at the earliest point that can detect them: a mistake in the model's structure when the module is built, a value out of bounds at step 1, and a function that asks for something the solver can't give when it is first called. The model spec and `sim.hash()` are built only when asked for, since a run doesn't need them.
+Errors are raised at the earliest point that can detect them: a mistake in the model's structure when the module is built, a value out of bounds at step 1, and a function that asks for something the solver can't give when it is first called.
 
 ## Units and time
 

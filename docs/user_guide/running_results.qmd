@@ -110,6 +110,23 @@ res.I.by('age').plot()
 
 A ratio such as prevalence is never averaged over groups: its numerator and denominator are each added up over the groups selected, and then divided. Here the groups mix at random, so the curves differ only by the size of each group; with a contact matrix, they differ in shape too.
 
+A module written as code can keep its results by group too, rather than one result for each group (`prevalence_f_15_20` and so on). Stratify the sim, make the result with `groups=True`, and set it at each step from `sim.groups.count()`, which counts the people alive in each group for whom a condition holds, in one pass. As agents, stratifying by a property people already have, such as sex or age, changes nothing in the run, so it can be done for the results alone:
+
+```{python}
+class ByGroup(ss.Analyzer):
+    def init_results(self):
+        super().init_results()
+        self.define_results(ss.Result('prevalence', scale=False, groups=True))
+
+    def step(self):
+        groups = self.sim.groups
+        self.results.prevalence.set_groups(self.ti, groups.count(self.sim.diseases.sis.I), groups.count()) # The infected over everyone, in each group
+
+sim = ss.Sim(ss.SIS(), networks='random', analyzers=ByGroup(), stratify=dict(sex=['female', 'male'], age=[0, 15, 50]), stop=2010, verbose=0)
+sim.run()
+sim.results.bygroup.prevalence.select(sex='female', age='15-49').plot()
+```
+
 ## Comparing with data
 
 Data is matched to results by name: a column called `cases` in a table given as `data=` is compared with the result `cases`, and plotted with it. Weekly data is compared with the total of the result over each week. Here the data is drawn from a run of the model itself with `sim.to_data()`, as weekly counts with random noise:

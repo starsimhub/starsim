@@ -638,8 +638,8 @@ class Delivery(ss.products.EventSource, Intervention):
 
     @property
     def eng(self):
-        dis = self.dis
-        return dis.engine if not self.__dict__.get('_coded') else ss.connectors.AgentModifiers.engine(dis, self.sim)
+        """ The engine of the disease, which applies its effects (see `ss.solvers.Effects`) """
+        return self.dis.engine
 
     @property
     def selector(self):
@@ -1443,7 +1443,7 @@ class Delivery(ss.products.EventSource, Intervention):
         several = len(diseases) > 1
         for dis in diseases:
             coded = coded_disease(sim, dis)
-            eng = self.eng if dis == self.disease else ss.connectors.AgentModifiers.engine(coded, sim) if coded is not None else sim.get_declared(dis).engine
+            eng = self.eng if dis == self.disease else (coded or sim.get_declared(dis)).engine
             mod = eng.mod
             edges = [e for e in self.edges if e.dis == dis]
             insides = [np.logical_or.reduce([mod[s.name].raw[uids] for s in e.srcs]) for e in edges] # Before anyone moves
@@ -1558,57 +1558,6 @@ class Delivery(ss.products.EventSource, Intervention):
         added = f'; adds {sc.strjoin(dims)} as {"a property" if len(dims) == 1 else "properties"} of people' if dims else ''
         waiting = '; nobody waiting for a result is tested again' if self.waits else ''
         return f'{self.name}: {what}; delivery {how}{waiting}{added}'
-
-    def to_spec(self):
-        """ Its part of the model spec (`sim.to_spec()`), for `sim.hash()`, `ss.diff()`, and `sim.to_code()` """
-        out = super().to_spec()
-        out.pop('pars', None)
-        move = self.move_arrow if self.move_states is not None else None if self.move is None else {k:ss.presentation.move_json(v) for k,v in self.move.items()}
-        names = [d if isinstance(d, str) else d.name for d in self.disease_list] if self.disease_list else None
-        out.update(type=type(self).__name__, product=None if self.product is None else self.product.describe(), move=move, disease=names or self.disease)
-        if self.strain is not None:
-            out['strain'] = self.strain
-        if self.increment:
-            out['increment'] = dict(self.increment)
-        if self.product is not None: # What makes it, so that sim.to_code() can write it
-            out['product_spec'] = self.product.spec()
-            if getattr(self.product, '_from_keywords', False): # Made from the delivery's keywords, so sim.to_code() writes it in one call
-                out['product_spec']['made'] = True
-        if self.at_age is not None:
-            out['at_age'] = spec_value(self.at_age)
-        for key in delivery_keys:
-            val = getattr(self, dict(at='rounds', where='eligible').get(key, key))
-            if val is None or (key == 'at' and not val):
-                continue
-            out[key] = spec_value(val)
-        return out
-
-
-def spec_value(val):
-    """ A value of a delivery or its product as plain data, for the model spec: typed values as in the rest of the spec, a function with its source, a module (e.g. a follow-up) by name, and a condition as text """
-    if val is None or isinstance(val, (bool, str)):
-        return val
-    elif isinstance(val, ss.Module):
-        return val.name
-    elif isinstance(val, (ss.conditions.Cond, ss.date)):
-        return str(val)
-    elif isinstance(val, (ss.State, ss.Transition)):
-        return spec_key(val)
-    elif isinstance(val, (list, tuple)):
-        return [spec_value(v) for v in val]
-    elif isinstance(val, dict): # Keyed by name, or by a module, a state, or a transition (e.g. efficacy by disease, moves=)
-        return {spec_key(k):spec_value(v) for k,v in val.items()}
-    return ss.presentation.quantity_json(val, None, None)
-
-
-def spec_key(key):
-    """ A key of a dict in a delivery or its product, as text: a module by name, and a state or transition as module.name """
-    if isinstance(key, ss.Module):
-        return key.name
-    elif isinstance(key, (ss.State, ss.Transition)):
-        mod = ss.conditions.modname(getattr(key, 'module', None))
-        return f'{mod}.{key.name}' if mod else key.name
-    return key
 
 
 class vaccinate(Delivery):

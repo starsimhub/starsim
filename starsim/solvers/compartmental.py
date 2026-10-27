@@ -51,22 +51,6 @@ def choose_kernels(owner, runs, seconds):
     return kn
 
 
-def step_program(owner, kn, rng, y, tables, row, engine, check_short):
-    """
-    One step of a program taken from Python (see `ss.kernels.one_step()`), for an engine or a crossing (`owner`, which has the program and the
-    register), with the step and substeps of `engine` (for a crossing, its first); then the events of a register dated at the end of the step (with
-    `check_short()` on what they could not take), and under Gillespie, the counts by place settled after them, as in SimInf. Returns the compartments and the flows.
-    """
-    sim, p, dt = engine.sim, owner.program, engine.dt
-    solver = sim.integrator if sim.solver == 'ode' else sim.solver
-    y, flows = kn.one_step(rng, y, p, dt, ss.kernels.solvers[solver], engine.substeps(), tables, row)
-    if sim.mixing.register is not None: # The events dated at the end of the step
-        check_short(kn.apply_events(rng, y, owner.register, engine.mod.ti, engine.integer))
-    if solver == 'gillespie' and p.local and p.has_det: # By place, the counts are settled after the events
-        kn.settle_places(y, p, dt, flows)
-    return y, flows
-
-
 def run_many_parts(owner, rngs, ys, args, per_step, n_cols, outputs, state_of, rows, grp_state, grp_flow):
     """
     Many runs of a program that differ only in their seed (`rngs`), in calls to the kernels that take all of them (see `ss.kernels.run_many()`), for an
@@ -102,9 +86,10 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
     binomial_bias = 0.05 # The most rate × substep (x) the chain-binomial solver takes by default: people who arrive in a compartment within a substep leave from the next, so it holds about x/2 too many (TC1, TB3; see binomial_substeps())
     max_bytes = 500e6 # The most memory that run_many() may use for the values of each group, over all its runs; above it, they are kept every few steps (see ss.solvers.group_rows())
 
-    def __init__(self, module, sim):
-        super().__init__(module, sim)
+    def __init__(self, module, sim, solver=None):
+        super().__init__(module, sim, solver)
         self.n_groups = sim.groups.n_groups
+        self.laid_out = None # The groups it was laid out for, once it is: see build()
         self.last_flows = dict() # The flow along each transition in the last step, by group
         self.forced = dict() # People moved along a transition by an intervention (see force()) this step, by group, until the step is recorded
         self.program = None # The flows as arrays, for the kernels: see init_program()
@@ -112,12 +97,14 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
         self.given = None # The output of a run taken elsewhere, for run_all() to use: see ss.gradients
         self.jax_run = None # The run in JAX, if one has been made: see ss.gradients
         self.cross = next((c for c in sim.crossings if module.name in c.names), None)
+        self.rated = None # The time point it last worked out its rates for: see step_rates()
         self._n_sub = None # The chain binomial's substeps, once chosen: see substeps()
         return
 
     def define(self):
         """ Replace the declared states on the module with their run-time form """
-        self.init_dims()
+        if self.laid_out is None: # Laid out already, with its dimensions, if it was when the solver was chosen
+            self.init_dims()
         for state in self.graph.states.values():
             self.mod.setattribute(state.name, CountState(self, state))
         return
@@ -125,10 +112,11 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
     def init_pre(self):
         for name,tr in self.graph.transitions.items():
             if tr.dies and tr.stays and self.integer:
-                ss.note(f'"{name}" of "{self.mod.name}" splits between ss.null and ss.stay: with solver="{self.sim.solver}", the count of its deaths is drawn apart from the move, so agrees with the number who died on average, not in each run; run with solver="abm" or "ode" for counts that agree in each run', sim=self.sim)
-        self.init_dwells()
-        self.init_immunity()
-        self.build_layout()
+                ss.note(f'"{name}" of "{self.mod.name}" splits between ss.null and ss.stay: with solver="{self.solver}", the count of its deaths is drawn apart from the move, so agrees with the number who died on average, not in each run; run with solver="abm" or "ode" for counts that agree in each run', sim=self.sim)
+        if self.laid_out is None:
+            self.build()
+        self.say()
+        self.init_dwell_mods()
         self.init_syncs()
         self.init_adjust()
         self.init_movers()
@@ -301,6 +289,18 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
                 out.append(matrix)
         return out
 
+    def build(self):
+        """ Lay out the compartments (after `init_dims()`): the dwell times, the protection between strains, and the compartments and flows; raises a `CapabilityError` for what has no compartmental form yet """
+        self.init_dwells()
+        self.init_immunity()
+        self.build_layout()
+        self.laid_out = (self.sim.groups, self.sim.groups.version)
+        return self
+
+    def current(self, solver=None):
+        """ Whether the layout holds for the sim's groups now, and for its solver (or the one given): one made to choose the solver is used by the run unless the groups changed since (see `ss.solvers.make_engine()`) """
+        return self.laid_out == (self.sim.groups, self.sim.groups.version) and self.solver == (solver or self.sim.solver)
+
     def build_layout(self):
         """ Expand the states into compartments and the transitions into flows """
         graph = self.graph
@@ -414,7 +414,7 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
                 track.first = (slots + inds)[0]
                 kg = getattr(dwell, 'kg', None)
                 track.starts = None if (kg is None or slots) else (inds, k - kg) # Ragged: a group with fewer stages enters further along, so it passes through its own number
-                acting = slots if (fixed and self.sim.solver == 'ode') else slots[:-1] # The last slot is left by the people due to leave in the next step: in the ODE, over the step, with the other exits acting on them until they do (see ss.kernels.release_rates()); the stochastic solvers release them at a point in the step (see ss.kernels.convey()), which already keeps the delay's exits exact
+                acting = slots if (fixed and self.solver == 'ode') else slots[:-1] # The last slot is left by the people due to leave in the next step: in the ODE, over the step, with the other exits acting on them until they do (see ss.kernels.release_rates()); the stochastic solvers release them at a point in the step (see ss.kernels.convey()), which already keeps the delay's exits exact
                 for i,ind in enumerate(acting):
                     add_exits(ind, state, exits, competing, stays, slot=i)
                 if slots:
@@ -431,7 +431,7 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
 
         for tr in graph.inflows:
             add_flow(tr, None, 'inflow')
-        if self.sim.solver != 'ode': # The stochastic solvers draw in the order of the flows: by the names of their states and transitions, so the draws do not depend on the order these are declared in (the ODE keeps the order given, so its sums are as they were)
+        if self.solver != 'ode': # The stochastic solvers draw in the order of the flows: by the names of their states and transitions, so the draws do not depend on the order these are declared in (the ODE keeps the order given, so its sums are as they were)
             rank = lambda c: (1, '', 0) if c is None else (0, self.comps[c].state.name, self.state_comps[self.comps[c].state.name].index(c))
             self.flows.sort(key=lambda flow: (*rank(flow.src), flow.tr.name, -1 if flow.strain is None else flow.strain))
 
@@ -477,7 +477,7 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
         dw.staged = True
         funcs = [key for key,val in trans.varying_pars(raw).items() if not isinstance(val, ss.by)]
         if funcs:
-            raise ss.CapabilityError(f'"{name}" cannot run with solver="{self.sim.solver}": its {dw.family} dwell time has a function as its parameter "{funcs[0]}". Run with solver="abm".')
+            raise ss.CapabilityError(f'"{name}" cannot run with solver="{self.solver}": its {dw.family} dwell time has a function as its parameter "{funcs[0]}". Run with solver="abm".')
         dims = [strat.name for strat in self.sim.groups.strats]
         for val in trans.varying_pars(raw).values():
             for dim in val.dims:
@@ -495,10 +495,10 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
         else:
             dw.kg = np.array([trans.erlang_stages(m, s) for m,s in zip(dw.mean, dw.std)])
             dw.exact = False
-            ss.note(f'{name} has a {dw.family} dwell time that differs by group, approximated by {sc.strjoin(sorted(set(dw.kg.tolist())), sep="|")} Erlang stages (each group keeps its mean)', sim=self.sim)
+            self.tell(ss.note, f'{name} has a {dw.family} dwell time that differs by group, approximated by {sc.strjoin(sorted(set(dw.kg.tolist())), sep="|")} Erlang stages (each group keeps its mean)', sim=self.sim)
             cv = np.max(np.divide(dw.std, dw.mean, out=np.zeros(len(dw.mean)), where=np.asarray(dw.mean) > 0))
             if cv > ss.solvers.choose.max_cv: # solver='auto' runs it as agents (FP53, FP83)
-                ss.warn(f'{name} has a {dw.family} dwell time whose coefficient of variation is up to {cv:.3g}, so one exponential stage keeps only its mean, and its long tail is lost; run with solver="abm" to keep it')
+                self.tell(ss.warn, f'{name} has a {dw.family} dwell time whose coefficient of variation is up to {cv:.3g}, so one exponential stage keeps only its mean, and its long tail is lost; run with solver="abm" to keep it')
         dw.k = int(dw.kg.max())
         if np.all(dw.kg == dw.k):
             dw.kg = None # Not ragged
@@ -516,18 +516,18 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
             kept = f'mean {dw.mean:n}{unit} kept; std {std:.3g}{unit}, against {dw.std:.3g}{unit} given'
         what = f'{dw.k} Erlang stage{"s" if dw.k > 1 else ""} ({kept})'
         if approx is False:
-            raise ss.CapabilityError(f'"{name}" cannot run with solver="{sim.solver}" and approx=False.\n'
+            raise ss.CapabilityError(f'"{name}" cannot run with solver="{self.solver}" and approx=False.\n'
                                      f'     It has a {dw.family} dwell time, which would be approximated by {what}.\n'
                                      f'     Run with solver="abm", give stages= on the transition, or allow the approximation.')
         else:
             fixed = ' (nearly fixed, not exponential)' if dw.std < dw.mean/2 else '' # e.g. ss.SIR(dur_inf=ss.days(7)), whose std is 1 day
-            ss.note(f'{name} has a {dw.family} dwell time{fixed}, approximated by {what}', sim=sim, verbose=0 if approx else None)
+            self.tell(ss.note, f'{name} has a {dw.family} dwell time{fixed}, approximated by {what}', sim=sim, verbose=0 if approx else None)
             if dw.std > ss.solvers.choose.max_cv*dw.mean: # solver='auto' runs it as agents (FP53)
-                ss.warn(f'{name} has a {dw.family} dwell time whose coefficient of variation is {dw.std/dw.mean:.3g}, so one exponential stage keeps only its mean, and its long tail is lost; run with solver="abm" to keep it')
+                self.tell(ss.warn, f'{name} has a {dw.family} dwell time whose coefficient of variation is {dw.std/dw.mean:.3g}, so one exponential stage keeps only its mean, and its long tail is lost; run with solver="abm" to keep it')
         return
 
     def unsupported(self, tr, what):
-        raise ss.CapabilityError(f'"{tr.name}" cannot run with solver="{self.sim.solver}": {what} has no compartmental form yet.\n'
+        raise ss.CapabilityError(f'"{tr.name}" cannot run with solver="{self.solver}": {what} has no compartmental form yet.\n'
                                  f'     Run with solver="abm".')
 
     def whole_steps(self, tr, what, dur, lowest, nearest=False):
@@ -540,7 +540,7 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
         if abs(x - round(x)) > 1e-6:
             unit = self.sim.unit_name
             dt = float(self.convert(dur))/x
-            ss.note(f'{tr.name} has {what} of {x*dt:n} {unit}s, which is {n} step{"s" if n != 1 else ""} ({n*dt:n} {unit}s) here (agents round each dwell to whole steps at random, keeping its mean); a step that divides it makes it exact', sim=self.sim)
+            self.tell(ss.note, f'{tr.name} has {what} of {x*dt:n} {unit}s, which is {n} step{"s" if n != 1 else ""} ({n*dt:n} {unit}s) here (agents round each dwell to whole steps at random, keeping its mean); a step that divides it makes it exact', sim=self.sim)
         return n
 
     def delay_steps(self, tr):
@@ -685,7 +685,21 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
 
     @property
     def integer(self):
-        return self.sim.solver in ['gillespie', 'tau', 'binomial']
+        return self.solver in ['gillespie', 'tau', 'binomial']
+
+    @property
+    def owner(self):
+        """ What holds the people and the program that runs them: this engine, or the crossing its disease is tracked jointly in (see `ss.solvers.Crossing`), whose program steps them all """
+        return self if self.cross is None else self.cross
+
+    @property
+    def engines(self):
+        """ The engines whose people its program holds, as a crossing's: this one """
+        return [self]
+
+    def flows_of(self, flows):
+        """ The flows of each engine its program holds, as a crossing's: this one's """
+        return [flows]
 
     #%% The context used to evaluate expressions
 
@@ -704,13 +718,6 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
             self.y[inds] = current*(value/total)
         else:
             self.y[inds[0]] = value*self.state_split[state.name]
-        self.changed()
-        return
-
-    def changed(self):
-        """ After something in Python has changed the people (e.g. an intervention): in a crossing, the program of the diseases together and the other diseases take the change """
-        if self.cross is not None:
-            self.cross.put(self)
         return
 
     def n_people(self, total=True):
@@ -729,7 +736,7 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
             if value.shape[0] == 1 or np.all(value == value[0]):
                 return value[0]
             elif state is None or not state.people:
-                raise ss.CapabilityError(f'a modifier of "{what}" has a condition on the state people are in, which cannot run with solver="{self.sim.solver}" for a quantity that is not tied to one state.\n'
+                raise ss.CapabilityError(f'a modifier of "{what}" has a condition on the state people are in, which cannot run with solver="{self.solver}" for a quantity that is not tied to one state.\n'
                                          f'     Run with solver="abm".')
             return value[self.selector.states.index(state.name)]
         return value
@@ -766,11 +773,12 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
         moved = np.zeros(self.n_groups)
         for s,name in enumerate(self.selector.states):
             for comp in self.state_comps[name]:
-                n = self.take(self.y[comp], frac[s])*moving
-                self.y[comp] -= n
-                np.add.at(self.y[comp], target, n)
+                y = self.y[comp] # A copy, for an engine whose compartments are a view (see ss.solvers.Joint)
+                n = self.take(y, frac[s])*moving
+                y -= n
+                np.add.at(y, target, n)
+                self.y[comp] = y
                 moved += n
-        self.changed()
         return moved
 
     def force(self, frac, tr, dst, srcs=None, y=None):
@@ -787,8 +795,7 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
 
     def move_states(self, frac, srcs, dst, syn=None, y=None, move=None, given=None):
         """ Move a fraction of the people in each of some states, and each group, to a state: along a transition (see `force()`), or along none, as a one-off move (`ss.vaccinate(move=S >> V)`); with `syn` (synchronized flows), also returns the moves in this module's own groups; with `y`, of those people rather than the engine's; with `given`, the number to move from each compartment instead (see `move_some()`) """
-        own = y is None
-        y = self.y if own else y
+        y = self.y if y is None else y
         total = np.zeros(self.n_groups)
         recorded = np.zeros(self.n_groups)
         entry = self.entry[dst.name][0]
@@ -812,8 +819,6 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
             y[entry[-1][0]] += left
         else:
             self.arrive(dst.name, total, y)
-        if own:
-            self.changed()
         return (total, recorded) if syn is not None else total
 
     def move_some(self, srcs, dst, p=None, n=None):
@@ -829,7 +834,6 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
                 self.y[comp] -= amount
             if dst is not None:
                 self.arrive(dst.name, moved.sum(axis=0) if srcs else moved, self.y)
-            self.changed()
             return float(moved.sum())
         given = None
         if n is not None and self.integer: # Exactly n whole people, chosen at random from those there
@@ -937,20 +941,20 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
     def call_uids(self, func, p=None):
         """ A function that takes uids, which a compartmental run does not have (see `Agents.call_uids()`) """
         name = getattr(func, '__name__', 'function')
-        raise ss.CapabilityError(f'the function "{name}" cannot run with solver="{self.sim.solver}".\n'
+        raise ss.CapabilityError(f'the function "{name}" cannot run with solver="{self.solver}".\n'
                                  f'     It takes uids, which exist only per agent. Run with solver="abm".')
 
     def clock(self, clock):
         """ A clock, which a compartmental run does not keep (see `Agents.clock()`) """
-        raise ss.CapabilityError(f'{clock} cannot run with solver="{self.sim.solver}" yet: a clock is kept per agent, and its compartmental form (levels of elapsed time) is not built yet.\n'
+        raise ss.CapabilityError(f'{clock} cannot run with solver="{self.solver}" yet: a clock is kept per agent, and its compartmental form (levels of elapsed time) is not built yet.\n'
                                  f'     Run with solver="abm".')
 
     def mother(self, expr):
         """ `ss.mother(x)`, which needs agents (see `Agents.mother()`) """
         if expr.born:
-            raise ss.CapabilityError(f'{expr} cannot run with solver="{self.sim.solver}": it reads each agent\'s mother, and compartments do not know who anyone\'s mother is.\n'
+            raise ss.CapabilityError(f'{expr} cannot run with solver="{self.solver}": it reads each agent\'s mother, and compartments do not know who anyone\'s mother is.\n'
                                      f'     Run with solver="abm", or leave the solver as "auto".')
-        raise ss.CapabilityError(f'{expr} cannot run with solver="{self.sim.solver}": the mother of an unborn person is kept per agent, and compartments have no fetuses.\n'
+        raise ss.CapabilityError(f'{expr} cannot run with solver="{self.solver}": the mother of an unborn person is kept per agent, and compartments have no fetuses.\n'
                                  f'     Run with solver="abm", or leave the solver as "auto".')
 
     def stay_comp(self, name):
@@ -1110,7 +1114,7 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
         for tr in self.triggers:
             tr.static = ss.conditions.is_static(tr.trigger.x, sim) and ss.conditions.is_static(tr.where, sim)
             if tr.static:
-                ss.note(f'{tr.name} is triggered by {tr.trigger}: arrivals where it holds go straight to {sc.strjoin(d.name for d in tr.dst)}; people who come to meet it by aging, a transfer, or another disease are moved at the next step', sim=sim)
+                self.tell(ss.note, f'{tr.name} is triggered by {tr.trigger}: arrivals where it holds go straight to {sc.strjoin(d.name for d in tr.dst)}; people who come to meet it by aging, a transfer, or another disease are moved at the next step', sim=sim)
         return
 
     def trigger_frac(self, tr):
@@ -1272,8 +1276,6 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
             if self.integer: # Whole children
                 born = self.rng.poisson(born).astype(float)
             self.arrive(tr.dst[0].name, born, self.y)
-            if self.cross is not None: # Into the joint states, where the other diseases' children start by their dimensions' splits
-                self.cross.put(self)
             for engine,other in self.births_of(tr): # Counted as this module's births, and as the children other modules place (ss.birth(per=) of this transition)
                 engine.flowcounts[other.name] += np.sum(born)
                 engine.last_flows[other.name] = engine.last_flows.get(other.name, 0.0) + born
@@ -1413,7 +1415,7 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
         """ An attribute in a compartmental run: a trait is the mean of its distribution, as a parameter that is a distribution is (see `trait_mean()`) """
         mod = a.module if isinstance(a.module, ss.Module) else self.mod
         if not self.trait_mean(mod, a, self.sim):
-            raise ss.CapabilityError(f'the attribute "{a.name}" is kept per agent, so cannot run with solver="{self.sim.solver}"; run with solver="abm"')
+            raise ss.CapabilityError(f'the attribute "{a.name}" is kept per agent, so cannot run with solver="{self.solver}"; run with solver="abm"')
         return ss.transitions.dwell_stats(a.value, self.convert)[0]
 
     def flow_mult(self, flow):
@@ -1423,7 +1425,7 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
         if flow.kind == 'conveyor': # When people leave a conveyor is fixed
             mods = [m for m in self.sim.modifiers.get((self.mod.name, 'transition', tr.name), []) if not (m.name == f'where_{self.mod.name}_{tr.name}' and self.branch_where(tr))] # A branch's own where= closes it at entry instead: see branch_mult()
             if flow.named and mods:
-                raise ss.CapabilityError(f'"{tr.name}" has a fixed delay and a modifier, which cannot run with solver="{self.sim.solver}": a compartmental run keeps the delay as a conveyor of whole steps, so cannot shorten or lengthen it.\n'
+                raise ss.CapabilityError(f'"{tr.name}" has a fixed delay and a modifier, which cannot run with solver="{self.solver}": a compartmental run keeps the delay as a conveyor of whole steps, so cannot shorten or lengthen it.\n'
                                          f'     Run with solver="abm".')
             return mult
         elif flow.kind == 'contact':
@@ -2093,7 +2095,7 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
     def plain_seconds(self):
         """ About how long the run would take as plain Python, from the size of its program and its rates at the start (see `ss.kernels.plain_seconds()`) """
         p = self.program
-        solver = ss.kernels.solvers[self.sim.integrator if self.sim.solver == 'ode' else self.sim.solver]
+        solver = ss.kernels.solvers[self.sim.integrator if self.solver == 'ode' else self.solver]
         n_sub = ss.kernels.substeps(np.concatenate(self.start_rates() + [p.mov_rate]), self.dt, self.substeps(), solver)
         return ss.kernels.plain_seconds(p, self.y, self.mod.t.npts, solver, n_sub)
 
@@ -2133,11 +2135,11 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
     def run_all(self, use_jax=False):
         """ Take every step of the run in one call to the kernels (or to JAX: see `ss.gradients`), and fill in the results from what comes back """
         tally = None
-        if self.given is not None: # The run has been taken already, by ss.gradients
+        if self.given is None and self.cross is not None: # Together with the other diseases in the crossing, by one program: the first to be asked takes the run, and gives each its part
+            self.cross.run(use_jax=use_jax)
+        if self.given is not None: # The run has been taken already, by ss.gradients or the crossing
             out, self.given = self.given, None
-        elif self.cross is not None: # Together with the other diseases in the crossing, by one program
-            out = self.cross.whole_run(self, use_jax=use_jax)
-        elif use_jax and self.sim.solver in ['binomial', 'tau']: # The chain binomial or tau-leaping in JAX: see ss.perflib.chain
+        elif use_jax and self.solver in ['binomial', 'tau']: # The chain binomial or tau-leaping in JAX: see ss.perflib.chain
             *out, tally = importlib.import_module('starsim.perflib.chain').run(self)
             for k,mod in enumerate(self.deliveries):
                 mod.compartments.store_shifts(tally[:, self.shift_of[k]])
@@ -2152,7 +2154,11 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
             out = self.kernels().run(self.make_rng(stream=1), *args, *tables, self.register, self.shifts, tally, self.per_step(), 0)
             for k,mod in enumerate(self.deliveries):
                 mod.compartments.store_shifts(tally[:, self.shift_of[k]])
-        self.y, stocks, flows, short = out
+        y, stocks, flows, short = out
+        if self.cross is None:
+            self.y = y
+        else: # Into the crossing's compartments, of which this engine's are a view
+            self.y[:] = y
         if tally is None and getattr(self, 'deliveries', None): # The ODE taken in JAX: the deliveries' results, from the compartments at each time point they happened at
             self.store_replayed(stocks)
         self.check_short(short)
@@ -2341,7 +2347,7 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
         stocks_g, flows_g = np.zeros((n_runs, n_rows, len(kept_s), ng)), np.zeros((n_runs, n_rows, len(kept_f), ng))
         tally, tally_g = np.zeros((n_runs, npts, nd, 2, 1)), np.zeros((n_runs, n_rows, nd, 2, ng))
         ys = np.repeat(y0[None], n_runs, axis=0) # The compartments of each run
-        if self.sim.solver in ['binomial', 'tau'] and ss.solvers.choose_engine(self.sim)[0]: # In JAX, as a single run would be (see ss.solvers.choose_engine())
+        if self.solver in ['binomial', 'tau'] and ss.solvers.choose_engine(self.sim)[0]: # In JAX, as a single run would be (see ss.solvers.choose_engine())
             stocks, flows, stocks_g, flows_g, tally, tally_g = importlib.import_module('starsim.perflib.chain').run_many(self, seeds, state_of, kept_s, kept_f, rows)
         else:
             run_many_parts(self, rngs, ys, args, self.per_step(), ng, (stocks, flows, stocks_g, flows_g, tally, tally_g), state_of, rows, grp_state, grp_flow)
@@ -2522,7 +2528,7 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
         models) do.
         """
         n_sub = self.sim.pars.substeps
-        if n_sub is None and self.sim.solver == 'binomial':
+        if n_sub is None and self.solver == 'binomial':
             if self._n_sub is None:
                 self._n_sub = self.binomial_substeps()
             n_sub = self._n_sub
@@ -2576,19 +2582,31 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
             self.cache.clear()
             self.update_targets()
             self.sweep_triggers()
-        if self.cross is not None: # Together with the other diseases in the crossing, once each has worked out its rates
-            return self.cross.step(self)
         self.step_rates()
-        sim = self.sim
-        dt = self.dt
+        owner = self.owner
+        if owner is not self and self is not owner.engines[-1]: # In a crossing, the last disease to step takes the step for all of them, once each has worked out its rates
+            return
+        first = owner.engines[0] # Whose step and substeps the program takes (the diseases of a crossing have the same step)
+        sim, dt, kn, rng = self.sim, first.dt, owner.kernels(), owner.kernel_rng
         solver = sim.integrator if sim.solver == 'ode' else sim.solver
-        tables, row = self.step_tables(dt, smooth=solver != 'euler') # Euler holds values that vary in time for the step
-        self.y, flows = step_program(self, self.kernels(), self.kernel_rng, self.y, tables, row, self, self.check_short)
-        self.record_flows(flows)
+        tables, row = owner.step_tables(dt, smooth=solver != 'euler') # Euler holds values that vary in time for the step
+        y, flows = kn.one_step(rng, owner.y, owner.program, dt, ss.kernels.solvers[solver], first.substeps(), tables, row)
+        if sim.mixing.register is not None: # The events dated at the end of the step
+            owner.check_short(kn.apply_events(rng, y, owner.register, first.mod.ti, first.integer))
+        if solver == 'gillespie' and owner.program.local and owner.program.has_det: # By place, the counts are settled after the events, as in SimInf
+            kn.settle_places(y, owner.program, dt, flows)
+        owner.y = y
+        parts = owner.flows_of(flows)
+        for engine,part in zip(owner.engines, parts):
+            engine.record_flows(part)
+        for engine,part in zip(owner.engines, parts): # Synchronized flows, once every engine has recorded its own
+            if engine.syncs:
+                engine.pass_syncs(part)
         return
 
     def step_rates(self):
         """ The rates of the step, worked out again since the interventions have run since it started, and the program, the first time """
+        self.rated = self.mod.ti
         self.cache.clear()
         self.update_targets()
         self._mover_rates = self.mover_rates()
@@ -2629,6 +2647,4 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
                 self.flow_groups[mover.name] = flows[self.n_trans + i]
         self.record_stocks()
         self.stepped = self.mod.ti
-        if self.syncs and self.cross is None:
-            self.pass_syncs(flows)
         return

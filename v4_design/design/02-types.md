@@ -217,6 +217,6 @@ Adding a type is a real cost to every user who has to learn it, so the set shoul
 
 ## Open questions
 
-- Whether `ss.prob` keeps its period in the model spec or is normalized to a per-step value at build time. The first is more faithful; the second is smaller.
+- Whether `ss.prob` keeps its period in the built model or is normalized to a per-step value at build time. The first is more faithful; the second is smaller.
 - **The rest of the type lattice.** Adding an `ss.per` to an `ss.freq` or `ss.prob` is an error (above). The rules for every other pair of types need writing down once rather than discovering per operator.
 - **Can the Timeline be simpler?** Three views seem irreducible: the step index, time in the sim's own unit, and the calendar date. The other vectors (`yearvec`, `relvec`, `tvec`) could become conversions on request, `sim.t.to('year')`. Whether that is a real simplification needs trying in Starsim.

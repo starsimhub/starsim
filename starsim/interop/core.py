@@ -1,12 +1,15 @@
 """
 The shared part of every importer: a neutral description of the source model, and the rules that turn its rates into transitions
 """
+import re
 import ast
+import keyword
 import numpy as np
+import pandas as pd
 import sciris as sc
 import starsim as ss
 
-__all__ = ['Source', 'build']
+__all__ = ['Source', 'Code', 'write', 'build']
 
 funcs = dict(exp='exp', log='log', sqrt='sqrt', abs='absolute', fabs='absolute', sin='sin', cos='cos', min='minimum', max='maximum', pmin='minimum', pmax='maximum') # Names in other languages, and the names allowed in a rate
 total = '__total__' # A placeholder for the number of people in the model
@@ -16,8 +19,8 @@ class Source:
     """
     A model read from another framework, before it is built into a sim
 
-    An importer fills this in from the source, then `build()` turns it into a sim.
-    Every rate is an expression in Python syntax, in which a state's name means the
+    An importer fills this in from the source, then `build()` writes it as Starsim
+    code (`write()`) and runs the code to make the sim. Every rate is an expression in Python syntax, in which a state's name means the
     number of people in it.
 
     Args:
@@ -38,8 +41,7 @@ class Source:
         self.strats = [] # Arguments to stratify(), applied in order
         self.outcomes = sc.objdict() # Reported quantities; see add_outcome()
         self.notes = [] # Other things the importer chose, printed with how each flow was read
-        self.code = sc.objdict() # Python for objects given to ss.Sim in config (e.g. networks), for sim.to_code()
-        self.config = sc.objdict() # Arguments to ss.Sim
+        self.config = sc.objdict() # Arguments to ss.Sim (an object that is not a plain value, e.g. a network, as the Code that makes it)
         self.choices = [] # How each flow was read, as printed
         self.incomplete = [] # What could not be translated, as (name, why)
         self.declared = False # Whether the format says which states are people; if not, they are worked out here (see linked_states())
@@ -317,7 +319,115 @@ class Rates:
         return ast.unparse(self.counts_of(node)), how, 5
 
 
-#%% Building the sim
+#%% Writing the code
+
+# What a rate can use besides the model's states and parameters: typed quantities from Starsim (perday(0.5)), and functions from NumPy (and SciPy's expit)
+time_names = ['days', 'weeks', 'months', 'years', 'perday', 'perweek', 'permonth', 'peryear',
+              'probperday', 'probperweek', 'probpermonth', 'probperyear', 'freqperday', 'freqperweek', 'freqpermonth', 'freqperyear']
+func_names = ['exp', 'log', 'sqrt', 'absolute', 'sin', 'cos', 'expit', 'minimum', 'maximum']
+reserved = {'ss', 'ssl', 'np', 'pd', 'expit', 'sim'} # Names the code uses for itself
+
+
+class Code(str):
+    """ Python to write as it is, for a value an importer gives that `code_value()` does not write, e.g. a network """
+    pass
+
+
+def expr_code(text, names):
+    """
+    A rate, a share, or a result as Python: each name in it must be a state or parameter of the model (in names);
+    functions are NumPy's (and SciPy's expit), typed quantities Starsim's, and people's properties (people.age) ss.ppl's.
+    Anything else raises a ValueError, so that a flow the code cannot say is listed as not translated
+    """
+    def visit(n):
+        if isinstance(n, ast.Constant) and sc.isnumber(n.value):
+            return n
+        elif isinstance(n, ast.Name):
+            if n.id not in names:
+                errormsg = f'"{n.id}" is not a state or parameter of the model'
+                raise ValueError(errormsg)
+            return n
+        elif isinstance(n, ast.Attribute) and isinstance(n.value, ast.Name) and n.value.id == 'people':
+            return ast.Attribute(ast.Attribute(ast.Name('ss'), 'ppl'), n.attr)
+        elif isinstance(n, ast.Attribute) and n.attr in ['n', 'frac', 'total', 'dwell']:
+            return ast.Attribute(visit(n.value), n.attr)
+        elif isinstance(n, ast.BinOp) and isinstance(n.op, (ast.Add, ast.Sub, ast.Mult, ast.Div, ast.Pow, ast.BitAnd, ast.BitOr)):
+            return ast.BinOp(visit(n.left), n.op, visit(n.right))
+        elif isinstance(n, ast.UnaryOp) and isinstance(n.op, (ast.USub, ast.Invert)):
+            return ast.UnaryOp(n.op, visit(n.operand))
+        elif isinstance(n, ast.Compare) and len(n.ops) == 1 and isinstance(n.ops[0], (ast.Lt, ast.LtE, ast.Gt, ast.GtE)):
+            return ast.Compare(visit(n.left), n.ops, [visit(n.comparators[0])])
+        elif isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and not n.keywords and n.func.id in time_names + func_names:
+            name = n.func.id
+            func = ast.Name(name) if name == 'expit' else ast.Attribute(ast.Name('ss' if name in time_names else 'np'), name)
+            return ast.Call(func, [visit(a) for a in n.args], [])
+        errormsg = f'"{ast.unparse(n)}" has no form in Starsim'
+        raise ValueError(errormsg)
+    return ast.unparse(visit(ast.parse(str(text).strip(), mode='eval').body))
+
+
+def code_value(val, pars=None):
+    """
+    The Python for a value an importer gives: numbers, text, lists, dicts, arrays, tables, and Starsim's
+    typed values, distributions, `ss.by`, `ss.timeseries`, `ss.seasonal`, and movement between places;
+    a parameter of the model (one of pars, by name) is written as its name
+    """
+    pars = pars or {}
+    cv = lambda v: code_value(v, pars)
+    kwargs = lambda d: ', '.join(f'{k}={cv(v)}' for k,v in d.items())
+    if isinstance(val, Code):
+        return str(val)
+    elif isinstance(val, ss.par):
+        return val.name if pars.get(val.name) is val else f'ss.par({cv(val.raw)})'
+    elif isinstance(val, np.generic):
+        return cv(val.item())
+    elif isinstance(val, float) and not np.isfinite(val):
+        return 'np.nan' if np.isnan(val) else f'{"-" if val < 0 else ""}np.inf'
+    elif isinstance(val, (bool, str, type(None))) or sc.isnumber(val):
+        return repr(val)
+    elif isinstance(val, np.ndarray):
+        return cv(val.tolist())
+    elif isinstance(val, list):
+        return '[' + ', '.join(cv(v) for v in val) + ']'
+    elif isinstance(val, tuple):
+        return '(' + ', '.join(cv(v) for v in val) + (',)' if len(val) == 1 else ')')
+    elif isinstance(val, dict):
+        if all(isinstance(k, str) and k.isidentifier() and not keyword.iskeyword(k) for k in val):
+            return f'dict({kwargs(val)})'
+        return '{' + ', '.join(f'{cv(k)}: {cv(v)}' for k,v in val.items()) + '}'
+    elif isinstance(val, (ss.dur, ss.Rate)):
+        return f'ss.{type(val).__name__}({cv(val.value)})'
+    elif isinstance(val, ss.peract):
+        return f'ss.peract({cv(val.value) if val.value is not None else kwargs(val.directions)})'
+    elif isinstance(val, ss.date):
+        return f'ss.date({str(val)!r})'
+    elif isinstance(val, ss.Dist):
+        unit = '' if val.unit is None else f", unit='{val.unit.base.removesuffix('s')}'"
+        return f'ss.{type(val).__name__}({kwargs(val.pars)}{unit})'
+    elif isinstance(val, ss.by):
+        if val.array is not None:
+            array = cv(val.array) if val.wrap is None else f'ss.{val.wrap.__name__}(np.array({cv(val.array)}))'
+            return f'ss.by({array}, dims={list(val.dims)!r})'
+        elif val.table is not None:
+            return f'ss.by({cv({col:list(vals) for col,vals in val.table.items()})})'
+        return f'ss.by({kwargs(val.given)})'
+    elif isinstance(val, ss.timeseries):
+        items = ', '.join(f'{cv(t)}: {cv(v)}' for t,v in zip(val.times, val.values))
+        mode = '' if val.mode == 'constant' else f', mode={val.mode!r}'
+        period = '' if val.period is None else f', period={cv(val.period)}'
+        return f'ss.timeseries({{{items}}}{mode}{period})'
+    elif isinstance(val, ss.seasonal):
+        period = '' if val.period is None else f', period={cv(val.period)}'
+        return f'ss.seasonal(mean={cv(val.mean)}, amplitude={cv(val.amplitude)}, peak={cv(val.peak)}{period})'
+    elif isinstance(val, ss.geo.Mobility) and val.model is None:
+        given = val.given.toarray() if hasattr(val.given, 'toarray') else val.given
+        args = dict(matrix=given, data=val.data, kind=val.kind, away=val.away)
+        return f'ss.geo.Mobility({kwargs({k:v for k,v in args.items() if v is not None})})'
+    elif isinstance(val, pd.DataFrame):
+        return f'pd.DataFrame({cv({col:val[col].tolist() for col in val.columns})})'
+    errormsg = f'An importer gave {type(val).__name__} ({val!r}), which cannot be written as code: give it as ss.interop.Code(), the Python that makes it'
+    raise TypeError(errormsg)
+
 
 def linked_states(source):
     """
@@ -334,89 +444,139 @@ def linked_states(source):
     return linked | (set(source.states) - touched)
 
 
-def disease(source, total=None):
-    """ The disease for one source, and how each of its flows was read (total is the number of people, for initial numbers of people below one) """
+def disease_code(source, var, total=None):
+    """
+    The Python for the disease of one source, as the variable var: its parameters, states, transitions, outcomes, and
+    results, declared as an `ss.Disease` (total is the number of people, for initial numbers of people below one)
+
+    Returns the lines, how each flow was read, and what was guessed about each transition (by its name)
+    """
     rates = Rates(source)
-    states = sc.objdict()
-    people = set(source.states) if source.declared else linked_states(source)
+    linked = linked_states(source)
+    people = set(source.states) if source.declared else linked
+    names = set(source.states) | set(source.pars) # What a rate can use
+    taken = names | reserved
+    lines = []
+    add = lines.append
+    choices = []
+    guessed = sc.objdict()
+
+    # Parameters, including the shares of outcomes that are not parameters of the source
+    shares = sc.objdict()
+    for name,o in source.outcomes.items():
+        if not (o.p is None or isinstance(o.p, str) or (sc.isnumber(o.p) and o.p == 1)):
+            shares[f'p_{name}'] = sc.objdict(value=o.p, doc=o.doc)
+    for name,p in {**source.pars, **shares}.items():
+        extra = ''.join(f', {k}={code_value(p.get(k))}' for k in ['doc', 'bounds', 'prior'] if p.get(k) is not None)
+        add(f'{name} = ss.par({code_value(p.value)}{extra})')
+    if lines:
+        lines[:0] = ['# Parameters']
+        add('')
+
+    # States, with a run of plain ones declared together
+    add('# States')
+    plain = []
+    def flush():
+        if len(plain) > 1:
+            add(f"{', '.join(plain)} = ss.states({' '.join(plain)!r})")
+        elif plain:
+            add(f'{plain[0]} = ss.State({plain[0]!r})')
+        plain.clear()
     for name,s in source.states.items():
-        states[name] = ss.State(name=name, people=bool(s.people) and name in people, label=s.label)
-    pars = sc.objdict({name:ss.par(p.value, doc=p.doc, bounds=p.get('bounds'), prior=p.get('prior'), name=name) for name,p in source.pars.items()})
-    taken = set(states) | set(pars)
-    parse = ss.spec.Parser({**states, **pars})
+        kw = dict(people=False) if not (s.people and name in people) else dict(people=True) if name not in linked else {} # People not joined to the first state by a flow, e.g. those born into another place, are said to be
+        if s.label is not None:
+            kw['label'] = s.label
+        if kw:
+            flush()
+            add(f'{name} = ss.State({name!r}, {", ".join(f"{k}={v!r}" for k,v in kw.items())})')
+        else:
+            plain.append(name)
+    flush()
+    add('')
 
     # Transitions
-    named = sc.objdict()
-    lines = []
+    members = [] # Transitions and outcomes, each as a variable named as it is
     for flow in source.flows:
         branch = isinstance(flow.dst, list)
         arrow = f'{flow.src or ""} -> {"/".join(flow.dst) if branch else flow.dst or ""}'.strip()
-        endpoints = [ss.null if flow.src is None else states[flow.src], [states[d] for d in flow.dst] if branch else ss.null if flow.dst is None else states[flow.dst]]
-        p = None if flow.get('p') is None else [None if v is None else parse(str(v)) for v in flow.p]
+        src = 'ss.null' if flow.src is None else flow.src
+        dst = '[' + ', '.join(flow.dst) + ']' if branch else 'ss.null' if flow.dst is None else flow.dst
         name = flow.name
         if name is None and flow.rate in source.exprs and flow.rate not in taken: # A rate given by a named expression names its transition
             name = flow.rate
-        guessed = name is None or name in taken
-        if guessed: # Named from its endpoints, as Starsim would
+        guess = name is None or name in taken
+        if guess: # Named from its endpoints, as Starsim would
             base = f'{flow.src or "in"}_to_{flow.dst or "out"}'
             name = base
             for i in range(2, len(source.flows) + 2):
                 if name not in taken:
                     break
                 name = f'{base}_{i}'
+        kw = sc.objdict()
         if flow.dur is not None:
-            tr = ss.Transition(*endpoints, dur=flow.dur, after=flow.get('after'), name=name, label=flow.label)
-            lines.append(f'  {arrow:16s} a dwell time of {flow.dur}')
+            kw.dur = code_value(flow.dur)
+            choices.append(f'  {arrow:16s} a dwell time of {flow.dur}')
         else:
             text, how, rule = rates.classify(flow)
             try:
-                rate = parse(text)
-            except (ValueError, KeyError, TypeError, SyntaxError) as E: # Something only the source's own language can say: listed, and the rest is built
+                kw.rate = expr_code(text, names)
+            except (ValueError, SyntaxError) as E: # Something only the source's own language can say: listed, and the rest is written
                 source.skip(arrow, f'the rate "{flow.rate}" could not be translated ({E})')
                 continue
-            tr = ss.Transition(*endpoints, rate=rate, p=p, after=flow.get('after'), name=name, label=flow.label)
             if rule in (2, 3, 5):
-                tr.guessed['import'] = how[-1]
-            lines.append(f'  {arrow:16s} {flow.rate} : {"; ".join(how)} => {text}')
-        if guessed:
-            tr.guessed['name'] = 'built from its endpoints'
-        named[name] = tr
+                guessed.setdefault(name, {})['import'] = how[-1]
+            choices.append(f'  {arrow:16s} {flow.rate} : {"; ".join(how)} => {text}')
+        if flow.get('p') is not None:
+            kw.p = '[' + ', '.join('None' if v is None else expr_code(v, names) for v in flow.p) + ']'
+        if flow.get('after') is not None:
+            kw.after = code_value(flow.after)
+        if flow.label is not None:
+            kw.label = repr(flow.label)
+        if guess:
+            guessed.setdefault(name, {})['name'] = 'built from its endpoints'
+        rate = ast.parse(kw.rate, mode='eval').body if list(kw.keys()) == ['rate'] else None
+        bare = isinstance(rate, ast.Name) and isinstance(getattr(source.pars.get(rate.id), 'value', None), (ss.dur, ss.Dist)) # A dwell time written with @
+        if rate is not None and not branch and not bare: # In the operator form
+            members.append((name, f'{src} >> {dst} @ {kw.rate if isinstance(rate, (ast.Name, ast.Constant, ast.Call, ast.Attribute)) else f"({kw.rate})"}'))
+        else:
+            members.append((name, f'ss.Transition({src}, {dst}, {", ".join(f"{k}={v}" for k,v in kw.items())})'))
         taken.add(name)
 
     # Outcomes, which may refer to the transitions and to each other
-    outcomes = sc.objdict()
+    objs = {name:ss.par(1.0, name=name) for name in list(source.pars) + list(shares)} # For a likelihood that uses them
     for name,o in source.outcomes.items():
-        parts = [named.get(k, outcomes.get(k)) for k in sc.tolist(o.source)]
-        if any(part is None for part in parts):
+        parts = sc.tolist(o.source)
+        if any(part not in taken - names - reserved for part in parts):
             errormsg = f'The outcome "{name}" refers to {o.source}, which is not a transition or an earlier outcome'
             raise ValueError(errormsg)
-        base = parts[0]
-        for part in parts[1:]:
-            base = base + part
-        p = o.p
-        whole = p is None or (sc.isnumber(p) and p == 1) # All of the source
-        if isinstance(p, str):
-            p = pars[p]
-        elif not whole:
-            p = ss.par(p, doc=o.doc, name=f'p_{name}')
-        kw = {k:o[k] for k in ['delay', 'duration'] if o[k] is not None}
+        whole = o.p is None or (sc.isnumber(o.p) and o.p == 1) # All of the source
+        share = o.p if isinstance(o.p, str) else f'p_{name}'
+        base = ' + '.join(parts)
+        expr = base if whole else f'{share}*{base if len(parts) == 1 else f"({base})"}'
+        kw = {k:code_value(o[k]) for k in ['delay', 'duration'] if o[k] is not None}
         if o.get('likelihood') is not None:
-            kw['likelihood'] = o.likelihood(pars)
-        outcomes[name] = ss.outcome(base if whole else p*base, name=name, **kw)
-        lines.append(f'  {name:16s} an outcome: {"" if whole else f"{p.name} × "}{" + ".join(sc.tolist(o.source))}' + ''.join(f', {k} {v}' for k,v in kw.items()))
-    named.update(outcomes)
-    lines += [f'  {note}' for note in source.notes]
+            kw['likelihood'] = code_value(o.likelihood(objs), pars=objs)
+        members.append((name, f'ss.outcome({expr}{"".join(f", {k}={v}" for k,v in kw.items())})'))
+        taken.add(name)
+        choices.append(f'  {name:16s} an outcome: {"" if whole else f"{share} × "}{" + ".join(parts)}' + ''.join(f', {k} {o[k]}' for k in ['delay', 'duration'] if o[k] is not None))
+    choices += [f'  {note}' for note in source.notes]
+    if members:
+        add('# Transitions and outcomes')
+        for name,code in members:
+            add(f'{name} = {code}')
+        add('')
 
     # Results, as expressions of counts
+    results = sc.objdict()
     for name,text in source.results.items():
         if name not in taken:
             node = rates.parse(text)
-            if isinstance(node, ast.Name) and node.id in states: # One state: its count is the result X already, and also kept under the source's name (as 1 * X, which would otherwise be taken as the state itself under another name)
-                named[name] = 1*states[node.id]
-                lines.append(f'  {name:16s} a result: {node.id}')
+            if isinstance(node, ast.Name) and node.id in source.states: # One state: its count is the result X already, and also kept under the source's name (as 1*X, which would otherwise be taken as the state itself under another name)
+                results[name] = f'1*{node.id}'
+                choices.append(f'  {name:16s} a result: {node.id}')
                 continue
-            named[name] = parse(ast.unparse(rates.bare_of(node)))
-            lines.append(f'  {name:16s} a result: {text}')
+            results[name] = expr_code(ast.unparse(rates.bare_of(node)), names)
+            choices.append(f'  {name:16s} a result: {text}')
 
     # Initial numbers
     init, init_n = {}, {} # Shares of people (and the amounts of states that are not people), and numbers of people
@@ -435,16 +595,32 @@ def disease(source, total=None):
             else:
                 init_n[name] = val
     first = next((k for k,s in source.states.items() if s.people), None) # Where the rest of the people start, as in the formats read
+
+    # Strains, which are part of the disease (their states are those of infection)
     strains = None
-    for kwargs in [kw for kw in source.strats if kw.get('kind') == 'strain']: # Strains are part of the disease (their states are those of infection)
-        dim = next(k for k in kwargs if k not in ss.dimensions.strat_options)
-        split = kwargs.get('split')
-        strains = ss.Strains(list(kwargs[dim]), name=dim, split=None if isinstance(split, ss.by) else split, **(kwargs.get('adjust') or {}))
-    dis = ss.Disease(*states.values(), **named, init=init or None, init_n=init_n or None, first=first, name=source.name, strains=strains)
+    for kw in [kw for kw in source.strats if kw.get('kind') == 'strain']:
+        dim = next(k for k in kw if k not in ss.dimensions.strat_options)
+        split = kw.get('split')
+        strains = dict(name=dim, split=None if isinstance(split, ss.by) else split, **(kw.get('adjust') or {}))
+        add(f'strains = ss.Strains({code_value(list(kw[dim]))}, {", ".join(f"{k}={code_value(v)}" for k,v in strains.items())})')
+        add('')
+
+    # The disease, and its stratifications
+    args = list(source.states) + [name for name,code in members]
+    kw = sc.objdict(results)
+    kw.update(init=code_value(init) if init else None, init_n=code_value(init_n) if init_n else None, first=None if first is None else repr(first), name=repr(source.name), strains='strains' if strains else None)
+    add(f'{var} = ss.Disease(')
+    for i in range(0, len(args), 8):
+        add(f'    {", ".join(args[i:i+8])},')
+    for k,v in kw.items():
+        if v is not None:
+            add(f'    {k} = {v},')
+    add(')')
     for kwargs in source.strats:
         if kwargs.get('kind') != 'strain':
-            dis.stratify(**kwargs)
-    return dis, lines
+            add(f'{var}.stratify({", ".join(f"{k}={code_value(v)}" for k,v in kwargs.items())})')
+    add('')
+    return lines, choices, guessed
 
 
 def total_init(val):
@@ -457,13 +633,63 @@ def total_init(val):
     return float(np.sum(values)) if values is not None and np.ndim(values) else 0
 
 
+def write(sources, **kwargs):
+    """
+    The Starsim code of one or more models read from another framework
+
+    Each source becomes a declared disease (`ss.Disease`), with its parameters, states,
+    and transitions as variables; the code ends with the sim (`sim = ss.Sim(...)`).
+    It says where the model came from, how each rate was read, and what was not
+    translated. This is the code `build()` runs, kept as `sim.imported.code`.
+
+    Args:
+        sources (Source/list): the model, as read by an importer, or several (e.g. one for each state machine)
+        kwargs (dict): passed to `ss.Sim()`, after each source's `config`
+
+    Returns:
+        An `sc.objdict` of the code, how each flow was read (`choices`, a line each), and what was guessed about each transition (`guessed`, by disease and transition)
+    """
+    sources = sc.tolist(sources)
+    cfg = sc.objdict()
+    for source in sources:
+        cfg.update(source.config)
+    cfg.update(kwargs)
+    if 'total_pop' not in cfg:
+        cfg.total_pop = max(sum(total_init(s.init) for s in src.states.values() if s.people) for src in sources) or cfg.get('n_agents')
+    lines, choices, guessed, diseases = [], [], sc.objdict(), []
+    for source in sources:
+        if source.states:
+            var = source.name if source.name.isidentifier() and not keyword.iskeyword(source.name) and source.name not in reserved | set(diseases) else f'disease{len(diseases) + 1}'
+            dis_lines, source.choices, guessed[source.name] = disease_code(source, var, total=cfg.total_pop)
+            lines += dis_lines
+            diseases.append(var)
+        else: # Nothing to declare (e.g. a model of modules written by hand), only its configuration
+            source.choices = [f'  {note}' for note in source.notes]
+        choices += [f'{source.name}:'] + source.choices if len(sources) > 1 else source.choices
+    args = ([f'diseases=[{", ".join(diseases)}]'] if diseases else []) + [f'{k}={code_value(v)}' for k,v in cfg.items()]
+    lines.append(f'sim = ss.Sim({", ".join(args)})')
+
+    # Where it came from, how it was read, and what was not translated
+    first = sources[0]
+    header = [f'Imported from {first.format} ({sc.path(first.file).name if first.file else "an object"}) by ss.interop.load()', '', 'How each rate was read:'] + choices
+    incomplete = [item for source in sources for item in source.incomplete]
+    footer = ['Not translated (ImportIncomplete):'] + [f'  {name}: {why}' for name,why in incomplete] if incomplete else []
+    body = '\n'.join(lines)
+    imports = ['import numpy as np'] * bool(re.search(r'\bnp\.', body)) + ['import pandas as pd'] * bool(re.search(r'\bpd\.', body)) + ['import starsim as ss'] \
+            + ['import starsim.library as ssl'] * bool(re.search(r'\bssl\.', body)) + ['from scipy.special import expit'] * bool(re.search(r'\bexpit\(', body))
+    text = '\n'.join([f'# {line}'.rstrip() for line in header] + [''] + imports + [''] + lines + [''] + [f'# {line}' for line in footer] + ([''] if footer else [])
+                     + ["if __name__ == '__main__':", '    sim.run()', '    sim.plot()', ''])
+    return sc.objdict(code=text, choices=choices, guessed=guessed)
+
+
 def build(sources, verbose=None, **kwargs):
     """
-    Build a sim from one or more models read from another framework
+    Build a sim from one or more models read from another framework, by running the code `write()` gives
 
     Each source becomes a disease. Prints how each flow was read and, as
     `ss.errors.ImportIncomplete`, what could not be translated; both are kept in
-    `sim.imported`.
+    `sim.imported`, with the code (`sim.imported.code`), which is the user's to keep
+    and change (e.g. `sc.savetext('model.py', sim.imported.code)`).
 
     Args:
         sources (Source/list): the model, as read by an importer, or several (e.g. one for each state machine)
@@ -476,36 +702,24 @@ def build(sources, verbose=None, **kwargs):
     quiet = verbose is not None and not verbose
     verbose = sc.ifelse(verbose, ss.options.verbose)
     sources = sc.tolist(sources)
-    diseases = []
-    lines = []
-    incomplete = []
-    cfg = sc.objdict()
-    for source in sources:
-        cfg.update(source.config)
-    cfg.update(kwargs)
-    if quiet:
-        cfg.setdefault('verbose', 0) # A quiet import is a quiet sim
-    if 'total_pop' not in cfg:
-        cfg.total_pop = max(sum(total_init(s.init) for s in src.states.values() if s.people) for src in sources) or cfg.get('n_agents')
-    for source in sources:
-        if source.states:
-            dis, choices = disease(source, total=cfg.total_pop)
-            diseases.append(dis)
-        else: # Nothing to declare (e.g. a model of modules written by hand), only its configuration
-            choices = [f'  {note}' for note in source.notes]
-        source.choices = choices
-        lines += [f'{source.name}:'] + choices if len(sources) > 1 else choices
-        incomplete += source.incomplete
-        if verbose:
+    sim_verbose = kwargs.pop('verbose', 0 if quiet else None) # A quiet import is a quiet sim; not part of the model's code
+    out = write(sources, **kwargs)
+    if verbose:
+        for source in sources:
             print(f'Imported "{source.name}" from {source.format}: {len(source.states)} states, {len(source.flows)} transitions, {len(source.pars)} parameters')
-            for line in choices:
+            for line in source.choices:
                 print(line)
-    sim = ss.Sim(diseases=diseases, **cfg)
     first = sources[0]
-    code = sc.objdict()
-    for source in sources:
-        code.update(source.code)
-    sim.imported = sc.objdict(format=first.format, file=first.file, choices=lines, incomplete=incomplete, code=code, prompt=None, warned=False)
+    space = dict(__name__='imported')
+    exec(compile(out.code, f'<imported from {first.format}>', 'exec'), space)
+    sim = space['sim']
+    if sim_verbose is not None:
+        sim.pars.verbose = sim_verbose
+    for dis in sc.tolist(sim.pars.diseases): # What was guessed in reading each flow, which describe() shows
+        for name,guess in out.guessed.get(dis.name, {}).items():
+            dis.transitions[name].guessed.update(guess)
+    incomplete = [item for source in sources for item in source.incomplete]
+    sim.imported = sc.objdict(format=first.format, file=first.file, choices=out.choices, incomplete=incomplete, code=out.code, prompt=None, warned=False)
     if incomplete:
         sim.imported.prompt = handoff(sim.imported)
         items = '\n'.join(f'  {name}: {why}' for name,why in incomplete)
@@ -523,6 +737,6 @@ def handoff(imported):
     import-model skill is for.
     """
     source = sc.path(imported.file).name if imported.file else 'the model'
-    prompt = (f'Finish importing {source} ({imported.format}) into Starsim: write it with sim.to_code(), translate each part listed in '
-              f'sim.imported.incomplete (or the code\'s "Not translated" comments), and check the result against the original with the validate-import skill.')
+    prompt = (f'Finish importing {source} ({imported.format}) into Starsim: save its code, sim.imported.code, to a file, translate each part listed in '
+              f'sim.imported.incomplete (the code\'s "Not translated" comments), and check the result against the original with the validate-import skill.')
     return f'To finish the import, ask an AI assistant with the import-model skill loaded (skills/import-model in the Starsim repo, "Finishing an incomplete import"): "{prompt}"'

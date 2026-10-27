@@ -18,7 +18,7 @@ import tempfile
 import numpy as np
 import sciris as sc
 import starsim as ss
-from .core import Source, build
+from .core import Source, Code, build
 
 __all__ = ['load_epimodel']
 
@@ -150,7 +150,7 @@ def network(net, src, name, acts=None):
         codes['acts'] = f'ss.{acts!r}'
     code = 'ssl.DegreeNet(' + ', '.join(f'{k}={v}' for k,v in codes.items()) + ')'
     src.notes.append(f'{name}: {net["formation"]} with targets {targets} and partnerships lasting {kw.dur} steps => {code} [guessed: the same targets, not an ERGM fit]')
-    return ssl.DegreeNet(**kw, name=name), code
+    return code[:-1] + f', name={name!r})'
 
 
 def load_epimodel(source, unit='day', verbose=None, **kwargs):
@@ -255,21 +255,17 @@ def load_epimodel(source, unit='day', verbose=None, **kwargs):
     # Networks
     cfg = src.config
     if kind == 'netsim':
-        nets = sc.objdict()
         codes = []
         for i,net in enumerate(r['networks']):
             name = 'net' if len(r['networks']) == 1 else f'net{i+1}'
-            nets[name], code = network(net, src, name, acts=getattr(ss, f'freqper{unit}')(act_rate) if builtin else None)
-            codes.append(f'{name}={code}')
+            codes.append(network(net, src, name, acts=getattr(ss, f'freqper{unit}')(act_rate) if builtin else None))
             if net['d_rate']:
                 src.notes.append(f'{name}: d.rate = {net["d_rate"]} needs nothing: ssl.DegreeNet allows for partnerships ended by departures')
-        if len(nets) == 1:
-            cfg.networks = nets[0]
-            src.code['networks'] = codes[0].split('=', 1)[1]
+        if len(codes) == 1:
+            cfg.networks = Code(codes[0])
         else:
-            cfg.networks = list(nets.values())
-            src.code['networks'] = 'dict(' + ', '.join(codes) + ')'
-            src.notes.append(f'{len(nets)} networks: transmission over each, with the same beta [guessed]')
+            cfg.networks = Code('[' + ', '.join(codes) + ']')
+            src.notes.append(f'{len(codes)} networks: transmission over each, with the same beta [guessed]')
         cfg.n_agents = r['networks'][0]['n']
         cfg.solver = 'abm'
     elif kind == 'icm':

@@ -118,7 +118,7 @@ Subclassing adds behavior. It does not add vocabulary.
 
 ## Four properties the design aims for
 
-1. **The model is data.** States and transitions are objects, so the diagram, the equations, the stratified model, the hash, and the saved file are all derived from them. The serialized form is the model spec ([14-model-spec.md](14-model-spec.md)).
+1. **The model is data.** States and transitions are objects, so the diagram, the equations, the stratified model, and the exports are all derived from them. The model itself is its code; there is no serialized form besides a saved sim ([14-model-spec.md](14-model-spec.md)).
 2. **The solver is chosen for you, and can be changed.** `solver='auto'` picks the simplest, fastest representation that runs the model faithfully: an ODE if every part has a compartmental form, agents otherwise. `solver='ode' | 'binomial' | 'gillespie' | 'abm'` asks for one. For simple models this is a free run-time choice; for complex models the solver is effectively part of the specification. [12-backends.md](12-backends.md)
 3. **Approximations are stated.** `'auto'` never approximates the mixing and never drops individual-level structure; the one thing it does unasked is represent a non-exponential dwell time by Erlang sub-stages, and it says so. When a solver is asked for that the model does not natively fit, the library uses the standard approximation where one exists and says so in one line; it stops only when there is no sensible approximation. `approx=False` makes any approximation an error, and `approx=True` keeps the note in `sim.notes` without printing it. `sir.solvers()` shows which solvers can run a model before anything runs.
 4. **Defaults are guessed and printed.** `describe()` shows every guessed dwell-time distribution, unit, and mixing assumption, and which states are people and which are counts. [01-objects.md §`describe()`](01-objects.md#describe)
@@ -131,13 +131,11 @@ Nothing is computed when a model is written. `sim.init()`, which `sim.run()` (an
 2. **Pick the unit and the solver.** The sim's unit comes from the model ([02-types.md](02-types.md#the-sims-unit)). Under `solver='auto'`, the library checks whether every part has a compartmental form (trying any user functions on groups, and turning a non-exponential dwell time into sub-stages) and chooses an ODE or agents accordingly; under an explicit solver it works out what, if anything, has to be approximated. The choice and its reason are printed (`solver: ode (every part of the model has a compartmental form)`), with a note for the unit if it was inferred and one for each approximation.
 3. **Build the population and the results.** The people (agents, or one row per group in a compartmental run), the initial values of every state, the results, and the loop. For a compartmental run with transmission, it prints R0 and the number infectious at the start (`sir: R0 = 3, with 100 infectious at the start`), as a check that the model and its seed are what was meant.
 
-The model spec ([14-model-spec.md](14-model-spec.md)), which is what gets hashed, compared, and saved as code, is built from the resolved model when it is asked for (`sim.to_spec()`, `sim.hash()`, `ss.diff()`, `sim.to_code()`), not at `init()`.
-
 Then `sim.run()` steps through the loop ([10-execution.md](10-execution.md)), in which modules run in a defined, printable order.
 
 ## Reading order
 
 - Writing models: this page → [03](03-states-and-transitions.md) → [04](04-parameters.md) → [06](06-routes.md) → [08](08-interventions.md) → [09](09-results.md).
-- Implementing the language: [01](01-objects.md) → [02](02-types.md) → [03](03-states-and-transitions.md) → [14](14-model-spec.md) → [10](10-execution.md) → [12](12-backends.md).
-- Adding a solver: [14](14-model-spec.md) → [12](12-backends.md) → [10](10-execution.md) → [18](18-conformance.md).
+- Implementing the language: [01](01-objects.md) → [02](02-types.md) → [03](03-states-and-transitions.md) → [10](10-execution.md) → [12](12-backends.md).
+- Adding a solver: [12](12-backends.md) → [10](10-execution.md) → [18](18-conformance.md).
 - Reviewing the design: [17-vocabulary.md](17-vocabulary.md) for the total surface, then [19-open-questions.md](19-open-questions.md) for what is not settled.

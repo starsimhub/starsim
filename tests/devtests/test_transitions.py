@@ -138,7 +138,7 @@ def test_counts():
     kernel = sim.results.capped.I.values
     agents = ss.Sim(capped(), unit='day', stop=150, n_agents=10_000, **kw).run().results.capped.I.values
     assert np.allclose(agents[60], kernel[60], rtol=0.1)
-    assert 'minimum(maximum(0.5 * I.frac, 0), 0.02)' in str(sim.to_spec()['modules'][0]['transitions'][0]['rate'])
+    assert 'minimum(maximum(0.5 * I.frac, 0), 0.02)' in ss.expressions.format_expr(sim.diseases.capped.graph.transitions[0].rate, exact=True)
 
     # A transition for some people only
     ppl = ss.People(1)
@@ -352,8 +352,8 @@ def test_stratify():
         return ss.Disease(infection=ss.Transition(S, I, rate=beta * I), recovery=ss.Transition(I, S, dur=dur), init_prev=0.01, name=name)
     pars = dict(unit='day', stop=100, **kw)
     both = ss.Sim([make('flu', 0.4, 5), make('rsv', 0.3, 8)], **pars).stratify(age=[0, 5, 18, 65]).run()
-    same = ss.Sim([make('flu', 0.4, 5), make('rsv', 0.3, 8)], stratify=dict(age=[0, 5, 18, 65]), **pars).init()
-    assert both.hash().model == same.hash().model
+    same = ss.Sim([make('flu', 0.4, 5), make('rsv', 0.3, 8)], stratify=dict(age=[0, 5, 18, 65]), **pars).run()
+    assert ss.debugtools.check_sims_match(both, same)
     for key in ['flu', 'rsv']:
         assert both.results[key].I.by('age').values.shape == (101, 4)
     assert both.new().run().results.flu.I.by('age').values.shape == (101, 4) # A new sim is stratified too
@@ -605,16 +605,7 @@ def test_modify():
     assert np.allclose(n_R.select(scenario='masks').values[0, :20], n_R.select(scenario='baseline').values[0, :20]) # The same until it starts
     assert 'masks' in msim.sims[1].interventions # Named from its variable
     assert np.isclose(sir.pars.beta.value, 0.3) # The base value is never overwritten
-    assert msim.sims[0].hash().scenario != msim.sims[1].hash().scenario
-    def early(sim): return sim.ti > 3
-    def late(sim): return sim.ti > 50
     timed = lambda when: ss.Sim(sir, interventions=ss.modify(sir.pars.beta, multiply=0.5, when=when), **pars)
-    assert timed(early).hash().scenario != timed(late).hash().scenario # when= is in the spec, with its source
-    assert 'when=early' in timed(early).to_code()
-    ns = {}
-    exec('def unseen(sim): return sim.ti > 3', ns) # A function whose source cannot be read is written by its name, to be defined, not left out (which would apply the modifier from the start)
-    with pytest.warns(ss.errors.LossyExport, match='unseen'):
-        assert 'when=unseen' in timed(ns['unseen']).to_code()
     with pytest.raises(AttributeError, match='typo'): # A mistake in the function is reported as itself, not as the modifier having no "active"
         timed(lambda sim: sim.results.sir.typo).run()
 
@@ -672,7 +663,6 @@ def test_modify():
     fast, slow = timed(), timed()
     assert fast.kernel_only()
     assert np.allclose(fast.run().results.sir.I, slow.run(profile=True).results.sir.I)
-    assert msim.sims[0].hash().model == msim.sims[1].hash().model
 
     # A modifier can also be given as a path, and combines with others by multiplication
     both = [ss.modify('sir.pars.beta', multiply=0.5, start=20, name='a'), ss.modify('sir.pars.beta', multiply=0.5, start=20, name='b')]
@@ -930,7 +920,7 @@ def test_time_values():
     changed = ss.Sim(sis, interventions=ss.change(sis.pars.beta, at=['2020-02-01', '2020-04-01'], to=[0.1, 0.3]), **dates).run()
     assert series.solver == 'ode' # A value that varies in time does not make a model agent-based
     assert np.allclose(series.results.sis.I, changed.results.sis.I)
-    assert series.to_spec()['modules'][0]['pars'][0]['value']['mode'] == 'constant'
+    assert series.diseases.sis.pars.beta.raw.mode == 'constant'
 
     # With no dates, the times are in the sim's unit; and it can be the amount of a modifier
     sis = make(0.3)

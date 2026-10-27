@@ -50,7 +50,7 @@ An `ss.par` behaves like its value in arithmetic, so it can be used anywhere a n
 - **`bounds`** is what makes a parameter fittable: `sim.fit()` fits every parameter that has bounds to every result that has data, wherever it is used (a rate, an initial value, a seasonal mean, a modifier's amount) ([13-inference.md](13-inference.md)). Bounds that are positive and span a factor of 10 or more are searched on a log scale, and others on a linear one. Bounds given as bare numbers are in the unit of the value, and typed bounds are converted (`ss.par(ss.days(8), bounds=[ss.days(3), ss.weeks(4)])`). A value outside its bounds raises a `ValueError` when the sim is initialized.
 - **A value per level.** `ss.par(ss.by(patch=[...]), bounds=[...])` is fitted level by level, each with the same bounds and prior; the fitted value is an `ss.by`, and one level is set by name, `pars={'beta[a]': 0.3}`.
 - **`prior`** is needed only for posterior methods. Without one, a parameter with bounds is treated as uniform over them. `bounds` and `prior` are separate fields: bounds say which values are valid and where to search, a prior says what is believed. Whether they should be one field is an open question ([19-open-questions.md](19-open-questions.md)); both are kept.
-- **`source`** is one optional line that answers the question every reviewer asks. It is shown by `describe()` and saved in the model spec.
+- **`source`** is one optional line that answers the question every reviewer asks. It is shown by `describe()`.
 - **The type** of a parameter (rate, duration, probability) comes from the slot it is used in ([02-types.md](02-types.md)) or from its typed value. There is no `kind=` argument.
 - **No value.** An `ss.par` with bounds and no value starts at the middle of its bounds (on the search scale), and `describe()` says so. One with neither a value nor bounds, and no value supplied through `ss.Sim(pars=...)`, raises a `ValueError` when the sim is initialized.
 
@@ -72,7 +72,7 @@ A value given for a parameter (as a keyword, in `pars=`, or by `pars.update()`) 
 
 To change one parameter of a distribution and keep the others, use the distribution's own method, `pars.dur_inf.set(mean=8)`. A list or another dict given for a distribution raises `TypeError` and names that method, since it could mean the distribution's arguments or the values themselves.
 
-The value of a parameter in the current context, with the modifiers that are active on it applied, is `mod.value(name)`: a number in the sim's unit, or one for each group or agent when the modifiers differ between them. `float(sir.pars.beta)` is the same number when it is one number, so a function that reads a parameter sees an `ss.change` to it; when the modifiers give it different values for different people, `float()` raises rather than averaging them. `par.raw` is the value without the modifiers.
+The current value of a parameter, as code reads it, is `mod.value(name)`, on any module, declared or written as code: a typed value as a number in the sim's unit, a value that varies in time at the current time, a value by level of one dimension as one value for each level, and the modifiers active on a declared parameter applied (one value for each group or agent when they differ between them). Before the module is in a sim, it is the value given. Arithmetic on a declared parameter builds an expression before the sim is initialized and uses this value after, whatever the other operand (`1 - p` and `np.ones(2) - p` alike), so code beside a model (`acts*(1 - disease.pars.eff_condom)`) reads the current value. `float(sir.pars.beta)` and `par.raw` are the value the parameter holds, without the modifiers; a function that should see an `ss.change` to a parameter reads `mod.value(name)`.
 
 ## The ladder
 
@@ -119,7 +119,7 @@ A compartmental run has no individuals to draw for, so variation between people 
 
 To keep heterogeneity in `beta` or `rel_sus` in a compartmental run, bin it into a dimension (`sir.stratify(rel_sus=[...])`, [05-dimensions.md](05-dimensions.md)). Replacing a distribution by its mean is an approximation, so `approx=False` makes it `CapabilityError` and `approx=True` silences the note ([12-backends.md](12-backends.md)).
 
-The distributions are Starsim's, under Starsim's names: `ss.normal`, `ss.lognorm_ex` (given the mean and standard deviation of the result), `ss.lognorm_im` (given those of the underlying normal), `ss.expon`, `ss.gamma`, `ss.weibull`, `ss.poisson`, `ss.nbinom`, `ss.uniform`, `ss.bernoulli`, `ss.constant`, and `ss.choice`. Starsim's other distributions, and any SciPy distribution through `ss.Dist`, remain available. Two are added: `ss.erlang(k=3, mean=...)`, which is `ss.gamma` with an integer shape (`ss.gamma(a=3, scale=...)`), given by its number of stages and its mean (sub-stages are also `stages=3` on the transition); and `ss.truncnorm`, a normal between `low` and `high`, as flepiMoP draws its parameters.
+The distributions are Starsim's, under Starsim's names: `ss.normal`, `ss.lognorm_ex` (given the mean and standard deviation of the result), `ss.lognorm_im` (given those of the underlying normal), `ss.expon`, `ss.gamma`, `ss.weibull`, `ss.poisson`, `ss.nbinom`, `ss.uniform`, `ss.bernoulli`, `ss.constant`, and `ss.choice`. Starsim's other distributions, and any SciPy distribution through `ss.Dist`, remain available. Two are added: `ss.erlang(k=3, mean=...)`, which is `ss.gamma` with an integer shape (`ss.gamma(a=3, scale=...)`), given by its number of stages and its mean (sub-stages are also `stages=3` on the transition); and `ss.truncnorm`, a normal between `low` and `high`, as flepiMoP draws its parameters. `ss.choice` takes `p` as a row of probabilities per agent (a 2D array, or a function returning one; each row normalized), drawn with one random number per agent through the inverse CDF of that agent's row, so a choice whose probabilities differ by agent is one draw that keeps common random numbers.
 
 The unit of a distribution is given once, either with `unit=` or on one of its parameters; the other parameters of the same dimension take it:
 
@@ -165,15 +165,6 @@ sim = ss.Sim(sir, pars=sc.loadjson('params/kenya_2024.json'), unit='day')
 
 `pars=` takes a dict of values by name (`beta`, or `sir.beta` when there is more than one module); values kept in a file are read into one first (`sc.loadjson()`, `pd.read_csv()`), since reading files is not the sim's job. One level of a value per level is named with brackets (`beta[a]`). Names it does not recognize raise a `KeyError`.
 
-Either way, `sim.hash()` returns the parts of the run's identity as an `sc.objdict` ([11-random.md](11-random.md)):
-
-```text
->>> sim.hash()
-objdict(model='8f3a21', pars='c47e90', config='1b6d55', scenario='baseline', data='a90f3e', seed=1)
-```
-
-A change of values changes `pars` and nothing else, so the question "did the model change, or did the numbers?" has an answer whether or not the values were in a separate file. The hash is a cheap by-product, useful for telling apart the many runs of a sweep or a calibration made from one commit; the git hash or tag of the code remains the main record of what was run.
-
 ## Named data
 
 A reference to data is part of the model: not just a contact matrix, but which one, from which source, for which place.
@@ -202,7 +193,7 @@ A named population gives the sim its size and the split of an age stratification
 
 The library does not depend on other frameworks' packages (LASER's migration module, `epydemix-data`, `socialmixr`) for generators or data. A data set is adapted once, with its provenance recorded, and then it is ours to keep working.
 
-- Where the data came from is shown by `describe()` and written in the model spec, so it is part of `sim.hash()` and `sim.to_code()` looks it up again.
+- Where the data came from is shown by `describe()`.
 - Providers are pluggable, so a group can add its own sources, and a geography can always come from the user's own table instead ([06-routes.md](06-routes.md#geography)).
 - Place names are forgiving (`'Kenya'`, `'kenya'`, `'KE'`, `'KEN'`), but a name that cannot be resolved is never matched to the nearest guess: it raises a `KeyError`, listing near matches.
 

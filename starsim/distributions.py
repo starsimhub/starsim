@@ -206,7 +206,7 @@ class Dists(sc.prettyobj):
             skip_ids.add(id(sim.people._states))
             skip_ids.add(id(sim.people)) # Skip checking people on the first round
             # Also skip Dists containers (the sim's and the modules'), otherwise re-initializing finds the dists again via them
-            skip = dict(keys=ss.utils.skipkeys(['module', 'inputs', '_call', '_made', '_set_after', '_made_pars', '_pars_after', '_modules_after', 'declared']), subclasses=(Dists,) + no_dists()) # The inputs (and a subclass's call) are only for building the sim again; the declared modules are found by their type (e.g. diseases), so their streams do not depend on what else is declared
+            skip = dict(keys=ss.utils.skipkeys(['module', '_before_init', 'declared']), subclasses=(Dists,) + no_dists()) # The copy of the sim before it was initialized is only for sim.new(); the declared modules are found by their type (e.g. diseases), so their streams do not depend on what else is declared
             dists = sc.search(sim, type=Dist, skip=dict(ids=list(skip_ids), **skip), flatten=True)
             skip_ids.update(id(x) for x in sim.__dict__.values()) # Exclude things we've already searched
             skip_ids.update(id(x) for x in dists.values()) # Exclude dists we've already found
@@ -1000,7 +1000,7 @@ class Dist:
             mapping = self._callable_args
         keys = self._callable_keys.get(parkey)
         if keys is None: # Inspect isn't that fast, so only do this once per parameter
-            keys = self._callable_keys[parkey] = list(inspect.signature(func).parameters.keys()) # Get the input arguments of the function
+            keys = self._callable_keys[parkey] = [k for k,p in inspect.signature(func).parameters.items() if p.default is inspect.Parameter.empty or k in mapping] # Its arguments; one with a default that isn't one of these (e.g. event=event, to fix a loop variable) keeps its default
 
         # We have to update this every time
         for key in ['uids', 'size']:
@@ -2011,11 +2011,18 @@ class choose_n(Dist):
 
 class choice(Dist):
     """
-    Random choice between discrete options (note: dynamic parameters not supported)
+    Random choice between discrete options
+
+    The probabilities can differ by agent: give `p` as a 2D array with one row
+    per agent drawn for (or a function returning one), and one column per choice.
+    Each row is normalized to sum to 1. Each agent's choice is found from their
+    own random number by the inverse CDF of their own row, so the draw is one
+    vectorized call, and keeps common random numbers: an agent's choice doesn't
+    depend on who else is drawn for, or on other agents' probabilities.
 
     Args:
         a (int or array): the number of choices, or the choices themselves (default 2)
-        p (array): if supplied, the probability of each choice (default, 1/a for a choices)
+        p (array/func): if supplied, the probability of each choice (default, 1/a for a choices); or a 2D array (or a function returning one) with a row of probabilities (or weights) for each agent
 
     Examples:
         ```python
@@ -2024,6 +2031,13 @@ class choice(Dist):
 
         # Choose between specified options each with a specified probability (must sum to 1)
         ss.choice(a=[30, 70], p=[0.3, 0.7], strict=False)(10)
+
+        # A row of probabilities per agent: here by age group, from a table of age groups × choices
+        table = np.array([[0.7, 0.2, 0.1], [0.3, 0.4, 0.3]])
+        def p_by_age(self, sim, uids):
+            return table[(sim.people.age[uids] >= 18).astype(int)]
+        method = ss.choice(a=['none', 'pill', 'iud'], p=p_by_age) # In a module's __init__()
+        chosen = self.method.rvs(uids) # In its step()
         ```
     Note: although Bernoulli trials can be generated using a=2, it is much faster
     to use ss.bernoulli() instead.
@@ -2079,10 +2093,29 @@ class choice(Dist):
         if pars.p is None: # Uniform over the choices
             n = len(a)
             inds = np.minimum((rands*n).astype(int), n - 1) # minimum guards against rands == 1.0
+        elif np.ndim(pars.p) == 2: # A row of probabilities per agent: each agent's uniform through their own row's CDF
+            pcum = np.cumsum(pars.p, axis=1)
+            if pcum.shape != (len(rands), len(a)):
+                errormsg = f'{self} has p with shape {pcum.shape}, but needs one row per agent drawn for and one column per choice, i.e. {(len(rands), len(a))}'
+                raise ValueError(errormsg)
+            total = pcum[:, -1:]
+            if np.any(total <= 0):
+                errormsg = f'{self} has a row of probabilities that sums to 0; each agent needs at least one choice with a positive probability'
+                raise ValueError(errormsg)
+            inds = np.minimum((pcum <= rands[:, None]*total).sum(axis=1), len(a) - 1) # Normalizing each row by its total; the first choice whose cumulative probability exceeds the uniform
         else:
             pcum = np.cumsum(pars.p)
             inds = np.minimum(np.searchsorted(pcum, rands, side='right'), len(a) - 1)
         return a[inds]
+
+    def make_rvs(self):
+        """ Draws without UIDs (a size, or replace=False) when p is a row per draw: the same inverse CDF as ppf(); not for the user """
+        if np.ndim(self._pars.p) == 2:
+            if not self._pars.replace:
+                errormsg = f'{self} has a row of probabilities per agent, which needs replace=True'
+                raise ValueError(errormsg)
+            return self.ppf(self.rand(self._size))
+        return super().make_rvs()
 
 
 class histogram(Dist):

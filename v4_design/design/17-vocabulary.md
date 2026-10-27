@@ -114,7 +114,7 @@ Everything spatial is in the submodule `ss.geo`.
 
 ### Running, comparing, saving
 
-`ss.MultiSim` (several runs of a sim, or several sims, whose results have a run dimension), `ss.parallel` (run them in parallel: `ss.parallel(sim, n_runs=100)` for replicates, with `sim.run(n_runs=100)` as its shortcut, and `ss.parallel(baseline=..., vaccine=...)` for scenarios), `ss.options` (Starsim's global options; `ss.options.crn = False` turns common random numbers off), **`ss.diff`** (what differs between two models), `ss.load` (a sim saved by `ss.save`, or a model in another framework's format), `ss.save` (a sim with its results, or a model as code with `ss.save('model.py', sim)`, or in another format), **`ss.compile`** (compile the compartmental solvers' kernels ahead of time, e.g. in a Docker image or before a calibration; until then, small runs are taken uncompiled, with the same results).
+`ss.MultiSim` (several runs of a sim, or several sims, whose results have a run dimension), `ss.parallel` (run them in parallel: `ss.parallel(sim, n_runs=100)` for replicates, with `sim.run(n_runs=100)` as its shortcut, and `ss.parallel(baseline=..., vaccine=...)` for scenarios), `ss.options` (Starsim's global options; `ss.options.crn = False` turns common random numbers off), `ss.load` (a sim saved by `ss.save`, or a model in another framework's format), `ss.save` (a sim with its results), **`ss.compile`** (compile the compartmental solvers' kernels ahead of time, e.g. in a Docker image or before a calibration; until then, small runs are taken uncompiled, with the same results).
 
 ### Types you get back or subclass
 
@@ -126,12 +126,12 @@ Fitting is the submodule `ss.fit`, which `import starsim` does not import (its f
 
 | On | Names |
 |---|---|
-| A model (`ss.Disease`, any module) | **`describe`** **`diagram`** **`equations`** **`transitions`** **`states`** **`strats`** **`count`** **`add_callback`** **`stratify`** **`to_spec`** `copy` `pars` **`R0`** |
+| A model (`ss.Disease`, any module) | **`describe`** **`diagram`** **`equations`** **`transitions`** **`states`** **`strats`** **`count`** **`add_callback`** **`stratify`** `copy` `pars` **`R0`** |
 | A state or a sum of states | **`n`** **`n_trans`** **`frac`** **`total`** **`time`** **`progress`** **`enter`** **`exit`** |
 | A product that people hold (`ss.Vaccine`, `ss.Treatment`) | **`coverage`** |
 | A transition | **`to`** **`incidence`** **`uids`** **`ever`** **`count`** **`since`** |
 | A modifiable array (`sir.rel_sus`) | **`effective`** |
-| `ss.Sim` | `init` `run` `plot` `summarize` `to_df` `loop` `results` **`describe`** **`stratify`** **`to_spec`** **`to_code`** `to_json` **`hash`** **`fit`** **`sensitivity`** **`check_dt`** **`what_modifies`** **`new`** **`gradient`** **`to_data`** |
+| `ss.Sim` | `init` `run` `plot` `summarize` `to_df` `loop` `results` **`describe`** **`stratify`** `to_json` **`fit`** **`sensitivity`** **`check_dt`** **`what_modifies`** **`new`** **`gradient`** **`to_data`** |
 | `sim.loop` | `insert` `to_df` `plot` |
 | A result | **`select`** **`by`** **`cum`** `resample` `sum` |
 | A result of an `ss.MultiSim`, which has a run dimension | **`quantiles`** `values` |
@@ -139,7 +139,7 @@ Fitting is the submodule `ss.fit`, which `import starsim` does not import (its f
 | `fit` | **`sim`** `pars` `plot` `summarize` `to_df` **`project`** **`samples`** |
 | What `ss.fit.compare_models` returns | **`fits`** `plot` `summarize` `to_df` |
 
-The split is deliberate: `describe`, `diagram`, `equations` are about the model; `plot`, `summarize`, `to_df` are about results, as in Starsim. `values` is Starsim's name for the array behind a result; on a MultiSim result it is the full runs-by-time array. `.n` is the number in a state in each place (`(w*I).n` with each person counted by `w`, and `.n_trans` by their infectiousness), and `.total` in the whole population; `.frac` is the share; `.dwell` is the time each person has spent in it (in `p=` and rates out of it). On a transition with several destinations, `.X` is the flow to its destination `X` (`cin.X`, read `res.cin.X`), not a new name. Reading `sir.rel_sus` gives the base value; `.effective` gives it with the active modifiers applied (agents only). `msim.check_runs()` is deferred and not listed.
+The split is deliberate: `describe`, `diagram`, `equations` are about the model; `plot`, `summarize`, `to_df` are about results, as in Starsim. `values` is Starsim's name for the array behind a result; on a MultiSim result it is the full runs-by-time array. `.n` is the number in a state in each place (`(w*I).n` with each person counted by `w`, and `.n_trans` by their infectiousness), and `.total` in the whole population; `.frac` is the share; `.dwell` is the time each person has spent in it (in `p=` and rates out of it). On a transition with several destinations, `.X` is the flow to its destination `X` (`cin.X`, read `res.cin.X`), not a new name. Reading `sir.rel_sus` gives the base value; `sir.effective('rel_sus')` gives it with the active modifiers applied (agents only). `msim.check_runs()` is deferred and not listed.
 
 A simple SIR uses four of these names: `ss.states`, `ss.Disease`, `ss.Sim`, and `run` (five with `plot`, and `ss.days` if the duration is typed). A stratified, calibrated national model with interventions uses perhaps forty.
 
@@ -227,7 +227,7 @@ A bare number in any of these slots takes the slot's type and the sim's unit ([0
 | `ss.Stage`, `fit.apply()` | Simpler spellings | `fit(method=[...])`; `fit.sim` |
 | `capabilities()`, `closure=`, `to_ode()`, `scale=` | The closure ladder and per-transition hybrid solvers are out of v1 | `describe()`, `solver=`, printed approximations |
 | `jacobian()`, `fixed_points()`, `sim.equations()` | Symbolic analysis is not a v1 feature | `sir.equations()` |
-| `summary()` on a model, `to_dict()` | `summarize` is about results in Starsim; the model as data is its model spec, and `to_json` is a sim's results | `describe()`, `to_spec()` |
+| `summary()` on a model, `to_dict()` | `summarize` is about results in Starsim; the model is its code, and `to_json` is a sim's results | `describe()` |
 | The dict tuple shorthand `dict(infection=('S -> I', 0.05))` | Ambiguous: it guesses the kind of transition from a bare value | The operator form |
 | `ss.transmission`, `ss.progression` (arrow strings) | A second spelling of a transition, with states made from their names and the source of infection guessed | `S >> I @ beta * I`, `ss.Transition(I, R, dur=10)` |
 | `rate=ss.on(...)`, `after=` an event, `undriven=` | Duplicates of `on=` (`on=event, dur=delay`), and a flag that only silenced a warning | `on=`; a transition with no driver |
@@ -247,7 +247,7 @@ The second draft's names that went in this revision:
 | `method=` on `ss.Sim` and `sim.run`, `methods()`, `'ctmc'` as the name | "Solver" is the word; `method=` stays on `sim.fit` for the fitting method | `solver=`, `'gillespie'`; `integrator=` for the ODE scheme |
 | `n_reps` on `ss.Sim`, `.trajectories`, `check_reps` | A sim is one run | `ss.MultiSim(sim, n_runs=100)` or `ss.parallel(sim, n_runs=100)`; `.values` and `.quantiles` on its results; `check_runs` (deferred) |
 | `crn_key` | No case found where keying common random numbers on agent attributes beats Starsim's slots | Slots; `ss.options.crn = False` to turn CRN off |
-| `ss.export` | A model is a Python script, which is already the thing to share | The script, which `ss.save('model.py', sim)` writes (`sim.to_code()`); `ss.save` of the sim |
+| `ss.export` | A model is a Python script, which is already the thing to share | The script; `ss.save` of the sim |
 | `ss.Needs`, `sim.needs()` (later `ss.Requires`, `sim.requires()`) | Metadata that was never enforced and that no model used (removed 2026-10-21) | A docstring; `doc=` and `source=` on `ss.par` |
 | `ss.People('Kenya')` | A loader is lowercase, like `ss.contacts` | `ss.people('Kenya')` |
 | `.sel()` | Spelled out | `.select()`, and `.by()` for one series per group |
@@ -270,11 +270,11 @@ Since the review of October 2026, these names went, or were promised and never b
 | `sim.crn_report()` | Never built | `ss.options.crn`, and paired runs ([11-random.md](11-random.md)) |
 | `dependence=` and `n_ref=` on `ss.MixingPool` | Never built; density dependence is a count in the rate | `beta * I.n` |
 | `.prev` on a state | The code's name is `.frac` | `.frac`, and `.n` or `.total` for counts |
-| `.base` on a modifiable array | Reading the array gives the base value | `sir.rel_sus` for the base, `sir.rel_sus.effective` for the value with modifiers applied |
+| `.base` on a modifiable array | Reading the array gives the base value | `sir.rel_sus` for the base, `sir.effective('rel_sus')` for the value with modifiers applied |
 | `ss.rate`, `ss.time_prob`, `ss.rate_prob` | Starsim 2 names, deprecated in Starsim 3 (Starsim's other time names are kept) | `ss.peryear(x)`, `ss.probperyear(x)` |
 | `solver='sde'`, `'stochastic'`, `'ctmc'` | One solver per method | `'gillespie'` (exact), `'tau'` (tau-leaping), `'binomial'` |
 | `ss.Calibration` as the result of a fit | `sim.fit()` returns an `ss.fit.Fit` | `ss.fit.Fit` (Starsim 3's `ss.Calibration` is removed) |
-| `ss.from_spec()`, and `ss.load()` of a model spec | The spec is the normalized form for `sim.hash()` and `ss.diff()`, and is not read back | `ss.save('model.py', sim)` and `ss.save('run.sim', sim)` |
+| `sim.to_spec()`, `sim.to_code()`, `sim.hash()`, `ss.diff()` (removed 2026-10-27) | The model is its code: there is nothing to translate a sim back into, and two models are compared by their results or a text diff | The script, `describe()`, and `ss.save('run.sim', sim)`; an import gives code (`sim.imported.code`) |
 | `msim.reduce()`, `msim.mean()`, `msim.median()`, `ss.MultiResult`, `ss.multi_run()` | A MultiSim is its results, with a run dimension | `msim.results.sir.I.quantiles()` (and `.median()`, `.mean()`); `ss.parallel(pars=...)` |
 | `ss.outcome(every=)`, `annualize()` | Resampling belongs to a result | `result.resample('year')` |
 | `ss.routine_vx`, `ss.campaign_vx`, `ss.simple_vx`, `ss.routine_screening`, `ss.campaign_screening`, `ss.routine_triage`, `ss.campaign_triage`, `ss.seasonality`, `ss.rate`, `ss.time_prob`, `ss.rate_prob` | Starsim 3 and 2 duplicates of the language | Products with deliveries, `ss.seasonal`, `ss.per` and `ss.prob`; each is mapped in `skills/migrate-starsim3` |
@@ -296,7 +296,7 @@ Each of these exists in at least one reviewed framework. The reasons are in [bes
 | Not included | Instead |
 |---|---|
 | A standalone modeling language with its own syntax | Python objects |
-| Models written in YAML, JSON, or spreadsheets | Python; the model spec is produced from it |
+| Models written in YAML, JSON, or spreadsheets | Python |
 | Many named flow kinds | One transition class whose kind follows from its rate |
 | A separate class per solver | `solver=` |
 | A sim that is many runs | `ss.MultiSim` |

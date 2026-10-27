@@ -50,6 +50,38 @@ def make_disease(arg, names):
     disease.setattribute('_implicit', True)
     return [obj for obj in flat if not declared(obj)] + [disease]
 
+def copy_given(*inputs):
+    """ The sim's inputs merged and copied together, so the modules given are never run themselves and can be given to other sims, and refer to each other as given """
+    for mod in given_modules(*inputs): # Marked, so that what is added to them later, which this sim would never see, raises (see ss.Module.check_not_given())
+        mod.setattribute('_given', True)
+    out = sc.mergedicts(*inputs, _copy=True)
+    for mod in given_modules(out): # The sim's own copies are its to change
+        mod.setattribute('_given', False)
+    for mod in given_modules(*inputs): # The modules given hold no results (the sim runs its copies), so reading one says where they are
+        if isinstance(getattr(mod, 'results', None), ss.Results) and not len(mod.results):
+            mod.results.setattribute('_given_to', mod.name)
+    return out
+
+
+def outermost(init):
+    """ The outermost call to a sim's init() (Sim's, or a subclass's that calls it) first keeps a copy of the sim as it is, which `sim.new()` copies """
+    @ft.wraps(init)
+    def wrapper(sim, *args, **kwargs):
+        if sim.initialized or sim.__dict__.get('_in_init'):
+            return init(sim, *args, **kwargs)
+        if '_before_init' not in sim.__dict__: # Not again after an init() that failed
+            try:
+                sim._before_init = sc.dcp(sim)
+            except Exception as E: # Something in the sim cannot be copied: it still runs, but new() says why it cannot copy it
+                sim._before_init = f'sim.new() copies the sim as it was before it was initialized, but this {type(sim).__name__} could not be copied ({type(E).__name__}: {E}); make it again instead'
+        sim._in_init = True
+        try:
+            return init(sim, *args, **kwargs)
+        finally:
+            sim.__dict__.pop('_in_init', None)
+    return wrapper
+
+
 def num_str(x):
     """ A time as text: a number (or a duration, by its value) without a needless decimal point (100, not 100.0), or a date """
     x = x.value if isinstance(x, ss.TimePar) else x
@@ -113,38 +145,11 @@ class Sim(ss.Base):
         ```
     """
     def __init_subclass__(cls, **kwargs):
-        """ A subclass that adds modules in its own `__init__()` (as FPsim's does): the modules are noted after it, so they are not taken as added after the sim was made (see `modules_after()`) """
+        """ A subclass whose init() builds modules of its own before Sim.init() (as STIsim's does): the sim is copied before it runs (see `outermost()`) """
         super().__init_subclass__(**kwargs)
-        init = cls.__dict__.get('__init__')
-        if init is not None:
-            def __init__(self, *args, **kw):
-                init(self, *args, **kw)
-                if self.__dict__.get('_made_pars') is not None: # After each level, so the outermost is last
-                    self._made_pars = self._module_pars()
-                return
-            cls.__init__ = ft.wraps(init)(__init__)
-        sim_init = cls.__dict__.get('init')
-        if sim_init is not None: # A subclass whose init() builds modules of its own before Sim.init() (as STIsim's does): those made by init() are not added after the sim was made either
-            def wrapped_init(self, *args, **kw):
-                if self.__dict__.get('_in_init'):
-                    return sim_init(self, *args, **kw)
-                self.modules_after() # Noted before the subclass's init() runs
-                self._in_init = True
-                try:
-                    return sim_init(self, *args, **kw)
-                finally:
-                    self._in_init = False
-            cls.init = ft.wraps(sim_init)(wrapped_init)
+        if 'init' in cls.__dict__:
+            cls.init = outermost(cls.__dict__['init'])
         return
-
-    def __new__(cls, *args, **kwargs):
-        obj = super().__new__(cls)
-        if cls is not Sim: # A subclass (e.g. FPsim's), which may build its modules after Sim.__init__(): the call is kept, so that sim.new() can make it again
-            try:
-                obj._call = (sc.dcp(args), sc.dcp(kwargs))
-            except Exception:
-                obj._call = None
-        return obj
 
     def __init__(self, *models, label=None, people=None, demographics=None, connectors=None,
                  networks=None, diseases=None, interventions=None, analyzers=None, custom=None,
@@ -160,7 +165,7 @@ class Sim(ss.Base):
                 errormsg = f'ss.Sim() takes the model (modules or transitions, or lists of them) or a dict of parameters as positional arguments, not {type(arg).__name__}; give everything else by keyword, e.g. label="..."'
                 raise TypeError(errormsg)
         mods = dict(demographics=demographics, connectors=connectors, networks=networks, diseases=diseases, interventions=interventions, analyzers=analyzers, custom=custom, modules=modules)
-        if any(val is None and key in kwargs for key,val in mods.items()): # Modules given in a dict of parameters (as sim.new() does) are named and ordered as if given by keyword
+        if any(val is None and key in kwargs for key,val in mods.items()): # Modules given in a dict of parameters are named and ordered as if given by keyword
             mods = {key:(kwargs.pop(key) if val is None and key in kwargs else val) for key,val in mods.items()}
             demographics, connectors, networks, diseases, interventions, analyzers, custom, modules = mods.values()
         names = ss.utils.caller_names(1)
@@ -185,16 +190,8 @@ class Sim(ss.Base):
                     networks=networks, interventions=interventions, diseases=diseases, 
                     analyzers=analyzers, custom=custom, modules=modules)
         args = {key:val for key,val in args.items() if val is not None} # Remove None inputs
-        for mod in given_modules(pars, args, kwargs): # Marked, so that what is added to them later, which this sim would never see, raises (see ss.Module.check_not_given())
-            mod.setattribute('_given', True)
-        input_pars = sc.mergedicts(pars, args, kwargs, _copy=True) # Copied together, so the modules given are never run themselves and can be given to other sims, and refer to each other as given
-        for mod in given_modules(input_pars): # The sim's own copies are its to change
-            mod.setattribute('_given', False)
-        for mod in given_modules(pars, args, kwargs): # The modules given hold no results (the sim runs its copies), so reading one says where they are
-            if isinstance(getattr(mod, 'results', None), ss.Results) and not len(mod.results):
-                mod.results.setattribute('_given_to', mod.name)
+        input_pars = copy_given(pars, args, kwargs)
         self.pars.update(input_pars)  # Update the parameters
-        self.inputs = sc.dcp(input_pars) # Kept so the sim can be rebuilt (see sim.new()), e.g. with other parameter values for calibration
         self.given = [key for key,val in input_pars.items() if val is not None] # Which parameters were supplied, as opposed to defaults
         self.notes = [] # Notes on what was assumed or approximated when the sim was built
         self.solver = None # Set in init()
@@ -216,60 +213,12 @@ class Sim(ss.Base):
         self.summary = None  # For storing a summary of the results
         self.filename = None # Store the filename, if saved
         self.diagnostics = None # Store diagnostics results
-        self._made = self._settings() # The settings as made, to find the ones set afterwards (see set_after())
-        self._set_after = {}
-        self._made_pars = self._module_pars() # The same for the modules' parameters (see pars_after()), and the modules themselves (see modules_after())
-        self._pars_after = {}
-        self._modules_after = {}
         return
 
     def _settings(self):
         """ The sim settings, not the modules or people (which would be found again by the search for distributions) """
         skip = ss.modules.module_types() + ['custom', 'modules', 'people']
         return {key:val for key,val in self.pars.items() if key not in skip}
-
-    def set_after(self):
-        """ The sim settings set after the sim was made and before it was initialized, or after it ran (e.g. `sim.pars.stop = 30`), which `sim.new()` keeps """
-        made = self.__dict__.get('_made')
-        if made is not None:
-            for key,val in self._settings().items():
-                before = made.get(key)
-                plain = isinstance(val, (int, float, str, bool)) and type(val) is type(before) # Compared by value, since a sim run in another process comes back with copies of them
-                if val is not before and not (plain and val == before):
-                    self._set_after[key] = sc.dcp(val)
-        return self.__dict__.get('_set_after', {})
-
-    def _module_pars(self):
-        """ The parameters of the modules, by name, as they are now """
-        if self.initialized: # The sim's own modules
-            mods = list(self.modules)
-        else:
-            vals = [self.pars.get(key) for key in ss.modules.module_types() + ['custom', 'modules']]
-            mods = [mod for val in vals for mod in (val.values() if isinstance(val, dict) else sc.tolist(val))]
-        return {mod.name:(mod, {k:(v, repr(v)) for k,v in mod.pars.items()}) for mod in mods if isinstance(mod, ss.Module)} # A value set in place (e.g. an ss.par given a new value) keeps its identity, so its repr is kept too
-
-    def pars_after(self):
-        """ The parameters of modules set after the sim was made and before it was initialized, or after it ran (e.g. `sim.pars.diseases.pars.init_prev = 0.5`), which `sim.new()` keeps """
-        made = self.__dict__.get('_made_pars')
-        if made is not None:
-            for key,(mod,before) in made.items():
-                given = mod.pars.with_bounded() if isinstance(mod.pars, ss.Pars) else mod.pars # A value given as ss.par keeps its bounds, so that it can still be fitted
-                changed = {k:given[k] for k,v in mod.pars.items() if k not in before or v is not before[k][0] or repr(v) != before[k][1]}
-                if changed:
-                    self._pars_after[key] = changed
-        return sc.dcp(self.__dict__.get('_pars_after', {})) # Copied together, so that an ss.par shared by several modules (e.g. a beta for every genotype) stays one
-
-    def modules_after(self):
-        """ The modules added after the sim was made and before it was initialized (e.g. `sim.pars.analyzers += my_analyzer`), by kind, which `sim.new()` keeps (copies) """
-        made = self.__dict__.get('_made_pars')
-        if made is not None and not self.initialized and not self.__dict__.get('_in_init'):
-            ids = {id(mod) for mod,_ in made.values()}
-            for key in ss.modules.module_types() + ['custom', 'modules']:
-                val = self.pars.get(key)
-                added = [mod for mod in (val.values() if isinstance(val, dict) else sc.tolist(val)) if isinstance(mod, ss.Module) and id(mod) not in ids]
-                if added:
-                    self._modules_after[key] = sc.dcp(added) # Copied before this sim initializes them
-        return sc.dcp(self.__dict__.get('_modules_after', {}))
 
     @staticmethod
     def _name_modules(names, *args):
@@ -411,6 +360,7 @@ class Sim(ss.Base):
             ):
             yield module
 
+    @outermost
     def init(self, force=False, **kwargs):
         """
         Perform all initializations for the sim
@@ -426,13 +376,10 @@ class Sim(ss.Base):
         self._held = [] if self.pars.verbose else None # Notes are said after the line that starts the run
 
         # Validation and initialization -- this is "pre"
-        made = self.__dict__.get('_made') or {}
-        for key,val in self.set_after().items(): # Before the settings are converted
-            if val is not None and key not in self.given and not same_value(val, made.get(key)): # A setting set before init() was given too, e.g. sim.pars.use_aging = True (but not one made a float, e.g. n_agents)
+        defaults = ss.SimPars()
+        for key,val in self._settings().items():
+            if val is not None and key not in self.given and not same_value(val, defaults.get(key)): # A setting set before init() was given too, e.g. sim.pars.use_aging = True (but not one made a float, e.g. n_agents)
                 self.given.append(key)
-        self.pars_after()
-        self.modules_after()
-        self._made = self._made_pars = None # And only then
         np.random.seed(self.pars.rand_seed) # Reset the seed before the population is created -- shouldn't matter if only using Dist objects
         self.pars.lock(False) # Allow parameters to be added during initialization
         self.pars.validate() # Validate parameters
@@ -445,6 +392,7 @@ class Sim(ss.Base):
         self.init_module_attrs(force=force) # Load specified modules from parameters, initialize them, and move them to the Sim object
         self.init_data(check=False) # Load the data before the modules, which read it (e.g. data by group keeps their results by group at every step)
         self._init_modules_pre()
+        self.groups.check_used() # A stratification that nothing uses
         ss.interventions.check_undriven(self)
         ss.connectors.check_applied(self) # Nothing accepted, then ignored
 
@@ -532,7 +480,11 @@ class Sim(ss.Base):
 
     def new(self, pars=None, inplace=False, **kwargs):
         """
-        A new, uninitialized sim built from the same inputs as this one, optionally with other values
+        A new, uninitialized sim: a copy of this one as it was when it was initialized, optionally with other values
+
+        A sim that has not been initialized is copied as it is, with any changes made to it since it
+        was made. Changes made to a sim once it has been initialized (e.g. `sim.pars.stop = 30` after
+        `sim.run()`) belong to that run only, and are not kept: give them here instead (`sim.new(stop=30)`).
 
         A sim that has run is run again this way, so it is seldom needed: `sim.run()` runs a
         finished sim again from the start, and `sim.run(solver='abm')` or `sim.run(n_runs=10)`
@@ -541,52 +493,36 @@ class Sim(ss.Base):
         Args:
             pars (dict): values of model parameters by name, e.g. `dict(beta=0.1)`
             inplace (bool): if True, this sim becomes the new one, rather than a new one being returned
-            kwargs (dict): sim arguments to change, e.g. `rand_seed=2` or `solver='abm'`; `None` goes back to the default, e.g. `n_agents=None` for a compartmental run of an agent-based sim; also `data=`. A new `solver=` puts `substeps=` back to that solver's default unless it is given too, since substeps mean a different thing to each (e.g. an importer's `substeps=1`, whole steps for the chain binomial, would be one Runge-Kutta step of the whole timestep for the ODE)
+            kwargs (dict): sim arguments to change, e.g. `rand_seed=2`, `solver='abm'`, or `interventions=...`; `None` goes back to the default, e.g. `n_agents=None` for a compartmental run of an agent-based sim; also `data=`. A new `solver=` puts `substeps=` back to that solver's default unless it is given too, since substeps mean a different thing to each (e.g. an importer's `substeps=1`, whole steps for the chain binomial, would be one Runge-Kutta step of the whole timestep for the ODE). A subclass's own arguments (e.g. FPsim's `location=`) are not taken again: make the subclass again for those.
         """
-        if not hasattr(self, 'inputs'):
-            errormsg = 'sim.new() needs the inputs the sim was built from, which this sim (e.g. one saved by an earlier version) does not have'
+        base = self.__dict__.get('_before_init', None if self.initialized else self)
+        if not isinstance(base, Sim):
+            errormsg = base or 'sim.new() copies the sim as it was before it was initialized, and this one has no such copy (e.g. it was saved by an earlier version); make it again instead'
             raise ValueError(errormsg)
-        if kwargs.get('solver') is not None and kwargs['solver'] != self.pars.solver and 'substeps' not in kwargs:
+        if kwargs.get('solver') is not None and kwargs['solver'] != base.pars.solver and 'substeps' not in kwargs:
             kwargs['substeps'] = None
-        data = sc.dcp(kwargs.pop('data', self.data)) # Data is not a sim parameter, so it is passed on separately
-        call = self.__dict__.get('_call')
-        if type(self) is Sim:
-            inputs = sc.mergedicts(sc.dcp(self.inputs), kwargs)
-            inputs = {key:val for key,val in inputs.items() if not (key in kwargs and val is None)} # As if it had not been given
-            args, kw = [inputs], dict(data=data)
-        else: # A subclass is made again by the call that made it
-            if call is None:
-                errormsg = f'sim.new() cannot make this {type(self).__name__} again, since the arguments it was made with were not kept (its arguments cannot be copied). Make it again by calling {type(self).__name__}(...)'
-                raise ValueError(errormsg)
-            args, kw = sc.dcp(call)
-            kw = sc.mergedicts(kw, kwargs)
-            kw = {key:val for key,val in kw.items() if not (key in kwargs and val is None)}
-        set_after, pars_after, modules_after = self.set_after(), self.pars_after(), self.modules_after()
-        par_values, jax, imported = sc.mergedicts(self.par_values, pars), self.jax, self.__dict__.get('imported')
-        if inplace: # This sim becomes the new one
-            sim = self
-            vars(sim).clear()
-            if call is not None:
-                sim._call = call
-            type(sim).__init__(sim, *args, **kw)
-        else:
-            sim = type(self)(*args, **kw)
-        if type(self) is not Sim:
-            sim.data = data
-        for key,val in set_after.items(): # Settings changed after the sim was made, e.g. sim.pars.stop = 30
-            if key not in kwargs:
-                sim.pars[key] = sc.dcp(val)
-        for key,mods in modules_after.items(): # Modules added after the sim was made (copies), e.g. sim.pars.analyzers += my_analyzer
-            val = sim.pars[key]
-            sim.pars[key] = (list(val.values()) if isinstance(val, dict) else sc.tolist(val)) + mods
-        for name,changed in pars_after.items(): # Parameters of modules changed after the sim was made (copies)
-            target = sim._module_pars().get(name)
-            if target is not None:
-                target[0].pars.update(changed)
-        sim.par_values = par_values
-        sim.jax = jax
-        if imported is not None: # The same import, with what it did not translate
-            sim.imported = imported
+        data = {'data':kwargs.pop('data')} if 'data' in kwargs else {} # Data is not a sim parameter
+        kinds = ss.modules.module_types() + ['custom', 'modules']
+        if any(key in kinds for key in kwargs): # Modules given here are named and ordered as ss.Sim() does
+            self._name_modules(ss.utils.caller_names(1), *[kwargs.get(key) for key in kinds])
+            if kwargs.get('interventions') is not None:
+                kwargs['interventions'] = self._order_steps(kwargs['interventions'])
+        kwargs = copy_given(kwargs) # And copied
+        sim = self if inplace else object.__new__(type(base))
+        state = sc.dcp(vars(base), memo={id(base):sim}) # What refers to the sim (e.g. its loop) refers to the new one
+        vars(sim).clear()
+        vars(sim).update(state)
+        sim.pars.check_key_mismatch(kwargs)
+        defaults = ss.SimPars()
+        for key,val in kwargs.items():
+            sim.pars[key] = sc.dcp(defaults.get(key)) if val is None else val
+            if val is None and key in sim.given:
+                sim.given.remove(key)
+            elif val is not None and key not in sim.given:
+                sim.given.append(key)
+        if data:
+            sim.data = sc.dcp(data['data'])
+        sim.par_values = sc.mergedicts(sim.par_values, pars)
         return sim
 
     def fit(self, pars=None, data=None, weights=None, likelihood=None, gof=None, penalty=None, method=None, n_runs=None, reseed=None, rand_seed=None, verbose=None, **kwargs):
@@ -705,8 +641,6 @@ class Sim(ss.Base):
             ss.note(f'the sim is already stratified by {sc.strjoin(kwargs)} in the same way, so this stratify() does nothing', sim=self)
             return self
         self.pars.stratify = sc.mergelists(self.pars.stratify, kwargs)
-        if hasattr(self, 'inputs'): # So that sim.new() is stratified too
-            self.inputs['stratify'] = sc.dcp(self.pars.stratify)
         return self
 
     @property
@@ -759,62 +693,6 @@ class Sim(ss.Base):
             verbose (bool): also show what each rate and dwell time is per step: the probability of leaving in a step, as the solvers that take whole steps use it, and the stages of a dwell time
         """
         return ss.presentation.describe_sim(self, output=output, verbose=verbose)
-
-    def hash(self):
-        """
-        The model's fingerprint: short hashes of its structure, its parameter values, the run settings, the scenario, and the data, plus the seed
-
-        Two sims with the same `model` hash have the same states, transitions, and
-        modifiers (including the source of any function in them); the same `pars` hash,
-        the same values. `config` covers the run settings and the numerical options
-        (e.g. `ss.options.crn`), `scenario` the interventions, and `data` the data
-        attached for fitting. This tells apart the many runs that come from one script
-        (a sweep, a calibration), and tests whether two models written differently are
-        the same model. Each is SHA-256 of the canonical model spec (`sim.to_spec()`), so it is
-        the same in every process and on every machine. A sim that is not initialized
-        is hashed without initializing it. Running and fitting a sim do not need it.
-
-        A function is known by its source text and the plain values it uses (see
-        `ss.presentation.func_json()`), or by where it can be imported from if its source
-        is not available. User code can give its own identity, which is used in place
-        of the source: a `version` attribute on a function (`fn.version = '2'`) or on
-        the class of a module written as code. A module written as code is seen through
-        its class and its parameters, not its code (see `ss.Module.to_spec()`). A function
-        with none of these (e.g. a `functools.partial`) cannot be told apart from another,
-        so the hash raises an error rather than treat two such sims as the same model.
-        """
-        return ss.spec.sim_hash(self)
-
-    def to_spec(self, filename=None, **kwargs):
-        """
-        The model spec: the model (modules, networks, stratifications, interventions, and run settings) as plain, canonical data
-
-        The spec is the normalized form of the model that `sim.hash()` fingerprints and
-        `ss.diff()` compares, and that `sim.to_code()` writes as code for the declared parts.
-        It holds no results and no state of a run, and is not read back into a sim. For
-        the results as JSON, see `sim.to_json()`; to save a sim with its state and results
-        (including partway through a run, to continue it), see `sim.save()`.
-
-        A sim that is not initialized is described without initializing it, as for `sim.hash()`.
-
-        Args:
-            filename (str): if provided, save to this file
-            kwargs (dict): passed to `sc.savejson()`
-        """
-        return ss.spec.sim_spec(self, filename=filename, **kwargs)
-
-    def to_code(self, filename=None):
-        """
-        The sim as a Python file that builds it again, from its model spec (see `ss.spec.to_code()`)
-
-        Only the declared parts are written; what is not (e.g. a module written as code)
-        is listed in the file and in an `ss.errors.LossyExport` warning. A sim imported from another framework (`ss.interop.load(..., format=...)`) also says
-        where it came from, how each rate was read, and what was not translated.
-
-        Args:
-            filename (str): if provided, write the code to this file
-        """
-        return ss.spec.sim_code(self, filename=filename)
 
     def add_module(self, module, key=None):
         """
@@ -1317,7 +1195,7 @@ class Sim(ss.Base):
             solver (str): the solver to use, if different from the sim's (a sim already built for another is built again)
             n_runs (int): if provided, run the sim this many times with different seeds, and return an `ss.MultiSim`; a shortcut for `ss.parallel(sim, n_runs=n_runs)`
 
-        A sim that has finished is run again from the start, with any values changed since.
+        A sim that has finished is run again from the start, as it was before it was initialized (see `sim.new()`).
         """
         imp = getattr(self, 'imported', None)
         unwarned = imp is not None and imp.get('incomplete') and not imp.get('warned') # Once per import: the runs and copies share it
@@ -1332,7 +1210,7 @@ class Sim(ss.Base):
             self.new(solver=solver, inplace=True)
         elif solver is not None:
             self.pars.solver = solver
-        if self.complete and until is None: # Run again from the start, with any values changed since
+        if self.complete and until is None: # Run again from the start
             self.new(inplace=True)
 
         # Initialization steps
@@ -1377,7 +1255,6 @@ class Sim(ss.Base):
                 self.finalize()
                 if not kernels:
                     self.check_method_calls()
-                self._made, self._made_pars = self._settings(), self._module_pars() # So that values set after the run are kept when it is run again (see new())
                 if shrink:
                     self.shrink(full=False)
                 if self.progress is not None:
@@ -1482,7 +1359,7 @@ class Sim(ss.Base):
         if not self.initialized:
             self.init()
         self.loop.index = 0
-        rebuild = lambda: self.new(pars=pars, inplace=True, **({} if rand_seed is None else dict(rand_seed=rand_seed)))
+        rebuild = lambda: self.new(pars=sc.mergedicts(self.par_values, pars), inplace=True, rand_seed=sc.ifelse(rand_seed, self.pars.rand_seed)) # With the values of earlier restarts
         if not self.kernel_only() or any(isinstance(val, ss.Dist) for val in (pars or {}).values()): # Not run in one call to the kernels, or a distribution the compartments were not laid out for
             return rebuild()
         if rand_seed is not None:
@@ -1802,9 +1679,8 @@ class Sim(ss.Base):
 
         This is the checkpoint of a sim: saved before it has finished, it keeps its full
         state (it is not shrunk), so the loaded sim can continue the run. A pickle needs the
-        same code (Starsim and any modules written as code) to be read. For the model
-        as plain data, see `sim.to_spec()`; for the results as JSON, `sim.to_json()`; for the
-        model as Python, `sim.to_code()`.
+        same code (Starsim and any modules written as code) to be read. For the results
+        as JSON, see `sim.to_json()`.
 
         Args:
             filename (str or None): the name or path of the file to save to; if None, uses stored
@@ -1838,8 +1714,8 @@ class Sim(ss.Base):
         """
         Export the results and the sim's parameters as JSON
 
-        This is a record of a run's output, for reading elsewhere; it is not the model
-        (see `sim.to_spec()`), and cannot be loaded back into a sim (see `sim.save()`).
+        This is a record of a run's output, for reading elsewhere; it cannot be loaded
+        back into a sim (see `sim.save()`).
 
         Args:
             filename (str): if None, return string; else, write to file

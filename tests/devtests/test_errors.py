@@ -259,8 +259,8 @@ def _():
     S, I = ss.states('S I')
     ode(ss.Disease(infection=ss.Transition(S, I, rate=0.3 * I), cure=ss.Transition(I, S), init_prev=0.01, name='sis')).init()
 
-@trigger('the code builds a different model until these are added by hand', ss.errors.LossyExport)
-def _(): ss.Sim(sir(), networks='random', n_agents=100, **kw).to_code()
+@trigger('not exported: network', ss.errors.LossyExport)
+def _(): ss.interop.export(ss.Sim(sir(), networks='random', n_agents=100, **kw), 'odin')
 
 @trigger('season: a time function', ss.errors.ImportIncomplete)
 def _():

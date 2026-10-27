@@ -71,6 +71,24 @@ res.prevalence.select(risk='high')
 
 A ratio is never averaged over groups. It keeps its numerator and denominator, each is summed over the selected groups, and then they are divided: prevalence among women is the women in `I` over the women in `N` (see [Ratios and combinations](#ratios-and-combinations)). In an agent-based run, selecting on a continuous property uses the bins it was stratified with ([05-dimensions.md](05-dimensions.md)).
 
+A module written as code keeps a result by group in the same way when it is made with `groups=True`, so it can be selected as a declared module's is, instead of one result per stratum (`prevalence_f_15_20`). As agents, stratifying the sim by a property people already have (`sex`, `age`) changes no draws, so it can be done for the results alone. `sim.groups.count(where)` counts the people alive for whom a condition holds, in each group, in one pass (each agent by its weight, if they differ), and `res.set_groups(ti, vals, denom=None)` writes a count by group, or a ratio from its numerator and denominator by group:
+
+```python
+sim.stratify(sex=['female', 'male'], age=[0, 15, 20, 25, 30, 35, 50, 65])
+
+def init_results(self):                             # in the module written as code
+    super().init_results()
+    self.define_results(ss.Result('infected', groups=True), ss.Result('prevalence', scale=False, groups=True))
+
+def update_results(self):
+    super().update_results()
+    alive, infected = self.sim.groups.count(), self.sim.groups.count(self.infected)
+    self.results.infected.set_groups(self.ti, infected)
+    self.results.prevalence.set_groups(self.ti, infected, alive)
+
+sim.results.ng.prevalence.select(sex='female', age='15-19')   # infected women aged 15-19 over all women aged 15-19
+```
+
 ## Declaring more results
 
 Extra results are declared with the model. There is no separate observation step.
@@ -184,7 +202,6 @@ sim.plot()
 - For a disease whose strains have courses of their own, a strain's own result is its column (`hpv16.cancer`), and in long form a column named after the strains (`strain`, or the name given to `ss.Strains`) gives it: `cancer` in a row for `strain=hpv16` is `hpv16.cancer`. `hpv.cancer[strain=hpv16]` is an error naming `hpv16.cancer`.
 - The data need not be on the model's time step. A flow (weekly reported cases) is compared with the model's flow summed over each data interval; a stock or ratio (a prevalence survey) is compared with the model's value at the data's time. The result already knows which it is. The interval assumed for flow data is the spacing of the data. Data by calendar year, an integer `year` column (as in UNAIDS-style data and `res.resample('year')`), is the year each row names, not 1 January of it: a flow is summed over the year and a stock or ratio averaged over it, with a note; only whole years inside the run are compared. A result of a module with a timestep of its own is compared on that module's timeline.
 - Results that have data are plotted with it automatically: `sim.plot()` (and `msim.plot()`, with the data of its sims) draws the model as a line and the data as points. A flow with data at a longer period than the step (weekly cases from a daily model) is drawn as the fit compares it, its total over each period of the data, so a good fit looks like one; `fit.plot()` and its posterior band do the same.
-- The data's content is hashed as a part of `sim.hash()` of its own (`data`), apart from the model's ([11-random.md](11-random.md#run-identity)).
 
 Real files rarely arrive with matching headers, so `ss.data` renames on the way in:
 

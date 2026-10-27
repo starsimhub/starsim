@@ -14,21 +14,6 @@ module_args = ['name', 'label']  # Define allowable module arguments
 custom_modules = []  # Allow the user to register custom modules
 
 
-def par_spec(val):
-    """ A parameter of a module written as code, as plain data: typed values, distributions, and functions as in the rest of the model spec """
-    if isinstance(val, ss.par):
-        val = val.raw
-    if isinstance(val, ss.Dist):
-        return dict(dist=type(val).__name__) | {k:par_spec(v) for k,v in val.pars.items()}
-    elif isinstance(val, (ss.dur, ss.Rate, ss.parameters.TimeValue, ss.by)) or inspect.isroutine(val) or isinstance(val, (ft.partial, np.ufunc)): # A function, but not any object that can be called
-        return ss.presentation.quantity_json(val, None, None)
-    elif isinstance(val, dict):
-        return {k:par_spec(v) for k,v in val.items()}
-    elif isinstance(val, (list, tuple)):
-        return [par_spec(v) for v in val]
-    return sc.jsonify(val)
-
-
 def module_map(key=None):
     """
     Map modules to standard types
@@ -544,6 +529,36 @@ class Module(Base):
             self.pars = ss.Pars(**kwargs)
         return self.pars
 
+    def value(self, name):
+        """
+        The current value of a parameter, as code reads it
+
+        Once the module is in a sim: a typed value as a number in the sim's unit (a duration in its units, a rate per unit), a value
+        that varies in time (`ss.timeseries`, `ss.seasonal`) at the current time, a value by level of one dimension (`ss.by(patch=[...])`)
+        as one value for each level (of several, one for each group of the sim), and the modifiers active on a declared parameter applied
+        (if they differ between groups or agents, one value for each). Anything else (a distribution, a function, a dict) is as it was given.
+        Before the module is in a sim, the value it was given. This is the same for a declared module and one written as code; once the sim
+        is initialized, arithmetic on a declared parameter (e.g. `1 - disease.pars.eff_condom`) uses this value too.
+
+        Args:
+            name (str): the name of the parameter (or the `ss.par` itself)
+
+        Examples:
+            ```python
+            eff = disease.value('eff_condom')
+            bites = self.sim.diseases.malaria.value('bites_per_female_per_day') # Per day, in a sim in days
+            ```
+        """
+        p = self.pars[name] if isinstance(name, str) else name
+        raw = p.raw if isinstance(p, ss.par) else p
+        if self.sim is None or getattr(self.sim, 'unit_base', None) is None: # Not in a sim yet, or its unit is not yet known
+            return raw
+        engine = getattr(self, 'engine', None)
+        if isinstance(p, ss.par) and engine is not None: # A declared parameter: as the engine reads it, with its modifiers, unless a value by level with none
+            if not isinstance(raw, (ss.by, ss.parameters.by_func)) or self.sim.modifiers.get((self.name, 'par', p.name)):
+                return engine.value(p)
+        return ss.parameters.current_value(raw, self.sim, cache=self.__dict__.setdefault('_converted', {}))
+
     # Warning: do not try to use a decorator with this function, that will break argument passing!
     def update_pars(self, pars=None, **kwargs):
         """
@@ -720,6 +735,9 @@ class Module(Base):
 
             # Update with module information
             result.update(module=self.label, shape=self.t.npts, timevec=self.t.timevec)
+            if getattr(result, 'groups', False): # Its values by group too, as a declared module's are: see ss.Result.set_groups()
+                groups = self.sim.groups
+                result.init_groups(groups.strats, [strat.name for strat in groups.strats], (self.t.npts, groups.n_groups))
 
             # Add the result to the dict of results; does automatic checking
             if result.name in self.results and result.name in auto_names:
@@ -811,11 +829,6 @@ class Module(Base):
         for state in self.state_list:
             if not state.initialized:
                 state.init_vals()
-        if getattr(self, 'graph', None) is None: # The parameters as they are now, for the model spec, since code can change them as it runs (FP56)
-            try:
-                self._spec_pars = {k:par_spec(v) for k,v in self.pars.items()}
-            except Exception: # A value the spec cannot write (e.g. a calendar duration): to_spec() raises about it, if it is asked for
-                pass
         self.initialized = True
         return
 
@@ -955,25 +968,8 @@ class Module(Base):
                 res.apply_scale(scale)
         return
 
-    def to_spec(self):
-        """
-        The module's part of the model spec (`sim.to_spec()`): for a module written as code, its type, the factory that makes it, and its parameters, as plain data
-
-        A module written as code is seen through its parameters and the class that makes
-        it (`factory`, as `module.Class`), not through its code: a value it keeps elsewhere
-        (e.g. a grid set in its `__init__()`) is not seen, and neither is a change to its
-        methods. Give such a value with `define_pars()`, and give the class a `version`
-        (e.g. `version = '2'`) to change when its code does, so that `sim.hash()` tells the
-        two apart. Its parameters are taken as they were at `init()`, so that a module that
-        changes them as it runs has the same spec (and hash) before and after the run. Declared modules (`ss.Disease`), interventions, and modifiers write more.
-        """
-        cls = type(self)
-        out = sc.objdict(type=cls.__name__, name=self.name, label=self.label, factory=f'{cls.__module__}.{cls.__qualname__}', version=getattr(self, 'version', None))
-        out.pars = self.__dict__.get('_spec_pars') or {k:par_spec(v) for k,v in self.pars.items()} # As they were at init, not as the code has changed them since
-        return out
-
     def to_json(self):
-        """ The module as a reference by its type and name, for `sc.jsonify()`: e.g. a module among the parameters in `sim.to_json()`, or in a parameter of another module; its definition is `to_spec()` """
+        """ The module as a reference by its type and name, for `sc.jsonify()`: e.g. a module among the parameters in `sim.to_json()`, or in a parameter of another module """
         return dict(type=type(self).__name__, name=self.name)
 
     def shrink(self):

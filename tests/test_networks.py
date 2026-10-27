@@ -604,8 +604,8 @@ def test_beta_readings():
 
 
 @sc.timer()
-def test_peract_spec():
-    sc.heading('Testing how a probability per act is described, written in the model spec, and written as code')
+def test_peract_describe():
+    sc.heading('Testing how a probability per act is described')
     def make(beta):
         S, P, EL = ss.states('S P EL')
         syph = ss.Disease(S, P, EL, infection=ss.Transition(S, P, rate=beta * (P + 0.55*EL)),
@@ -616,17 +616,6 @@ def test_peract_spec():
     text = sim.diseases.syph.describe(output=True)
     for line in ['from P + 0.55 EL', 'beta on sexualnet: per act, m2f 0.3, f2m 0.15', "sexualnet's sides m and f", '"condoms"']:
         assert line in text, line
-    for beta, value in [(ss.peract(m2f=0.3, f2m=0.15), dict(type='peract', m2f=0.3, f2m=0.15)), (0.01, dict(type='peract', value=0.01))]:
-        sim = make(beta)
-        spec = sim.to_spec()['modules'][0]
-        assert next(p['value'] for p in spec['pars'] if p['name'] == 'beta') == value
-        assert ('transitions.infection.beta' in spec['guessed']) == sc.isnumber(beta) # A bare number on a network with acts is read as per act, which the spec says
-        with pytest.warns(ss.errors.LossyExport): # The network is not written
-            code = sim.to_code()
-        assert "efficacy=0.5, share=ss.timeseries" in code and "route=['sexualnet']" in code
-        ns = {}
-        exec(code.replace('sim = ss.Sim(', 'sim = None and ss.Sim('), ns) # The disease, without the sim the code builds
-        assert ns['syph'].pars.beta.raw == (beta if isinstance(beta, ss.peract) else ss.peract(beta))
     return
 
 
@@ -670,13 +659,6 @@ def test_beta_default():
     assert sim.results.d.I[-1] > 0
     with pytest.raises(ValueError, match='homogeneous mixing'):
         ss.Sim(make(sexualnet=ss.peract(0.01)), **kw).run()
-
-    # The default is kept in the model spec, and written as code
-    sim = ss.Sim(make(sexualnet=ss.peract(0.01), msm=ss.peract(0.1), default=0), networks=[ss.SexualNet(), ss.MaternalNet()], **kw)
-    beta = next(p['value'] for p in sim.to_spec()['modules'][0]['pars'] if p['name'] == 'beta')
-    assert beta['default'] == 0 and 'msm' in beta # Bare, since it is per act on a route with acts
-    with pytest.warns(ss.errors.LossyExport):
-        assert "'default': 0" in sim.to_code() # Whole numbers as integers
 
     # A disease written as code reads the default too
     sim = ss.Sim(diseases=ssl.AgentSIS(beta=dict(random=0.05, msm=0.1, default=0)), networks=['random', ss.SexualNet()], **kw).run()
@@ -869,7 +851,7 @@ if __name__ == '__main__':
     cond = test_condoms()
     same = test_coded_declared_transmission()
     read = test_beta_readings()
-    spec = test_peract_spec()
+    peract = test_peract_describe()
     default = test_beta_default()
     person = test_beta_by_person()
     sources = test_infection_sources()

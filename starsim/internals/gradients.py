@@ -592,8 +592,8 @@ def joint_runner(cross, captured, n_max=None):
     programs = [program for program,how in captured]
     if cross.program is None or cross.built != [id(p) for p in programs]:
         cross.build(programs)
-    per_step, reps = cross.per_step()
-    how = captured[0][1][:4] + (per_step,)
+    reps = cross.reps()
+    how = captured[0][1][:4] + (cross.per_step(),)
     if n_max is not None:
         return CrossRun(cross, Run(cross.program, *how, n_max=n_max), reps)
     key = (Run.key(cross.program, *how), tuple(reps)) + tuple(Run.key(program, *eng_how) for program,eng_how in captured) # The engines' programs fix where each one's numbers go in the crossing's

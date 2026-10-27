@@ -224,11 +224,6 @@ class StrainMove:
                 out[l] = st.level_of(new, what=f'{self} for people carrying {st.labels[l]}')
         return out
 
-    @property
-    def spec(self):
-        """ As data, for the model spec """
-        return dict(strains=dict(src=[s.name for s in self.src], dst=[s.name for s in self.dst]))
-
 
 class Strains:
     """
@@ -494,24 +489,6 @@ class Strains:
         out.add('', 'solvers: ' + (f'agents only ({reason})' if reason else 'all'))
         return out
 
-    @property
-    def spec(self):
-        """ As data, for the model spec """
-        immunity = []
-        for imm in self.immunity:
-            entry = sc.objdict(due_to=imm.names)
-            for key,val in imm.values.items():
-                kind, _, sub = key.partition('.')
-                if sub:
-                    entry.setdefault(kind, {})[sub] = val.tolist()
-                else:
-                    entry[key] = val.tolist()
-            entry.combine = ss.presentation.quantity_json(imm.combine, None, None) if callable(imm.combine) else imm.combine
-            immunity.append(entry)
-        return sc.objdict(name=self.name, strains=list(self.names), members=None if self.members is None else list(self.names), shared=self.shared,
-                          max_strains=self.max_strains, transmit=self.transmit, split=self.split_sets if self.split_sets is not None else None if self.split is None else self.split.tolist(),
-                          values={k:v.tolist() for k,v in self.values.items()}, immunity=immunity)
-
 
 immunity_class = immunity
 
@@ -663,7 +640,7 @@ def add_superinfection(dis, strat, tr, state):
     new.contact = True
     new.acquisition = True
     new.people = True
-    new.generated = True # Made from the strains, so the model spec leaves it out (see ss.Disease.to_spec())
+    new.generated = True # Made from the strains, not given
     new.module = dis
     graph.add(graph.transitions, name, new)
     dis.setattribute(name, new)
@@ -807,7 +784,6 @@ class Family(ss.Module):
             errormsg = f'the strains of "{name}" need names of their own, different from each other and from the disease; they are {sc.strjoin(names)}'
             raise ValueError(errormsg)
         self.dim = strains.name # The name that gives each member's own results, res.by(...)
-        self.strains_spec = strains.spec # As data, not the strains themselves, which refer to the members (and would name their random numbers: see ss.Dist)
         self.member_names = names
         self._members = members # Until the sim takes them: see expand()
         self.immunity = []
@@ -1211,15 +1187,6 @@ class Family(ss.Module):
 
     def make_naive(self, uids, skip_states=None):
         return
-
-    def to_spec(self, filename=None, **kwargs):
-        """ The model spec of the strains: the members by name (each has its own node, before it), and the strains' options as data (as `sim.to_spec()` holds it, for `sim.hash()`, `ss.diff()`, and `sim.to_code()`) """
-        unit = self.sim.unit if self.sim is not None else None
-        out = sc.objdict(type='Family', name=self.name, label=self.label, members=list(self.member_names), init_prev=None if self.init_prev is None else ss.presentation.quantity_json(self.init_prev, None, unit),
-                         strains=self.strains_spec)
-        if filename is not None:
-            return sc.savejson(filename, out, **kwargs)
-        return out
 
     def describe(self, output=False, out=None):
         """ The family: its members, protection, seeding, and results; as for `ss.Disease.describe()` """

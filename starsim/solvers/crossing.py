@@ -7,9 +7,45 @@ import numba as nb
 import sciris as sc
 import starsim as ss
 from .engine import by_level, no_tables
-from .compartmental import Compartmental, choose_kernels, step_program, run_many_parts
+from .compartmental import Compartmental, choose_kernels, run_many_parts
 
-__all__ = ['Crossing']
+__all__ = ['Crossing', 'Joint']
+
+
+class Joint:
+    """
+    An engine's compartments by its groups (`engine.y`), when its disease is tracked jointly with others: a view of the
+    compartments of their program (`Crossing.y`), so there is one copy of the people. Reading some of them gathers them,
+    and writing them (e.g. an intervention that moves people) changes the program's, which every engine then sees. A
+    group that the engine keeps empty (see `Crossing.init_layout()`) reads as nobody, and writing to it changes nothing.
+
+    Args:
+        cross (Crossing): the crossing
+        idx (array): where each of the engine's compartments, in each of its groups, is in the program's (flattened), or -1
+    """
+    def __init__(self, cross, idx):
+        self.cross = cross
+        self.idx = np.maximum(idx, 0)
+        self.valid = idx >= 0
+        self.shape = idx.shape
+        return
+
+    def __repr__(self):
+        return f'Joint({self.cross}, shape={self.shape})'
+
+    def __getitem__(self, key):
+        return np.where(self.valid[key], self.cross.y.ravel()[self.idx[key]], 0.0)
+
+    def __setitem__(self, key, value):
+        idx, keep = self.idx[key], self.valid[key]
+        self.cross.y.flat[idx[keep]] = np.broadcast_to(value, idx.shape)[keep]
+        return
+
+    def __array__(self, dtype=None, copy=None):
+        return np.asarray(self[:], dtype=dtype)
+
+    def copy(self):
+        return self[:]
 
 
 class Crossing:
@@ -30,8 +66,11 @@ class Crossing:
     in turn), and a whole run, many runs, a particle filter, and a run in JAX take a crossing as they
     take one disease. The solvers that draw whole events in steps draw each disease's in turn, from
     those rates, so each disease's moves (e.g. through the stages of a dwell time) are drawn as they
-    would be for it alone. The program's compartments (`y`) are the one copy of the people: each engine
-    takes its view of them again after each step, and after anything in Python changes them (`put()`).
+    would be for it alone. The program's compartments (`y`) are the one copy of the people: each engine's
+    (`engine.y`) are a view of them (`Joint`), so a change made in Python (e.g. by an intervention) is
+    seen by all of them at once. The crossing is run as one engine is (see `ss.solvers.Compartmental.step()`
+    and `run_all()`, where it is the engine's `owner`): the last disease to step takes the step for all of
+    them, and the first to take a whole run takes it for all of them, and gives each its part.
     Its size is counted before it is made (see `ss.solvers.choose.joint_layout()`), and kept within
     `ss.options.max_joint`; `sim.describe()` shows it, with the memory a whole run takes.
 
@@ -49,8 +88,6 @@ class Crossing:
         self.program = None # The program of the diseases together: see build()
         self.built = None # What it was built from
         self.y = None # Its compartments, by group
-        self.pending = dict() # The tables of each engine that has worked out its rates for the current step: see step()
-        self.outs = None # The output of a whole run, for each engine that has not taken it yet: see whole_run()
         self.compiled = None # Whether the run is taken by the compiled kernels or as plain Python, once chosen: see kernels()
         self._lead = None
         return
@@ -72,14 +109,12 @@ class Crossing:
 
     def reset(self):
         """ Forget any step half taken, and any whole run not yet handed out, before the run starts again """
-        self.pending.clear()
-        self.outs = None
         self.compiled = None
         return
 
     def shrink(self):
         """ Drop the arrays the run worked in, for saving """
-        ss.utils.shrink(self, ['sim', 'program', 'y', 'layout', 'pieces', 'register', 'shifts', 'outs'])
+        ss.utils.shrink(self, ['sim', 'program', 'y', 'layout', 'pieces', 'register', 'shifts'])
         return
 
     def describe(self):
@@ -136,17 +171,18 @@ class Crossing:
             joint = Compartmental.round_preserving(joint)
         self.set_joint(joint, self.engines[0])
         self.y = np.zeros((self.n_rows, self.n_cols))
-        self.scatter(self.engines[0]) # The people, from the first, and the other compartments from each
-        for engine in self.engines[1:]:
-            self.scatter(engine, people=False)
+        for k,(engine,L) in enumerate(zip(self.engines, self.layout)): # The people, from the first, and the other compartments from each; from now on, each engine's compartments are a view of these
+            rows = slice(None) if k == 0 else L.counts
+            view = Joint(self, L.idx)
+            view[rows] = engine.y[rows]
+            engine.y = view
         if sim.mixing.register is not None: # The events dated at the start, for everyone
             lead = sim.get_declared(self.lead).engine
             self.register = self.join_register(lead.init_register())
-            lead.check_short(self.kernels().apply_events(lead.make_rng(stream=2), self.y, self.register, 0, lead.integer))
+            self.check_short(self.kernels().apply_events(lead.make_rng(stream=2), self.y, self.register, 0, lead.integer))
         for engine in self.engines:
-            engine.y = self.gather(engine)
             engine.record_stocks()
-        self.rng = self.engines[0].make_rng(stream=1) # As a whole run starts with, so stepping gives the same run
+        self.kernel_rng = self.engines[0].make_rng(stream=1) # As a whole run starts with, so stepping gives the same run
         self.reset()
         return
 
@@ -250,28 +286,6 @@ class Crossing:
             mine[slice(None) if k == 0 else L.counts] = True
             E = np.flatnonzero(mine & (L.idx >= 0))
             self.pieces.y.append((L.idx.ravel()[E], E))
-        return
-
-    def gather(self, engine):
-        """ An engine's view of the people (and its other compartments), from the program's compartments """
-        L = self.layout[self.engines.index(engine)]
-        return np.where(L.idx >= 0, self.y.ravel()[np.maximum(L.idx, 0)], 0.0)
-
-    def scatter(self, engine, people=True):
-        """ Put an engine's compartments into the program's: all of them (each engine has every person), or only those that are not people """
-        L = self.layout[self.engines.index(engine)]
-        rows = slice(None) if people else L.counts
-        idx = L.idx[rows]
-        keep = idx >= 0
-        self.y.ravel()[idx[keep]] = engine.y[rows][keep]
-        return
-
-    def put(self, engine):
-        """ After something in Python has changed the people of one engine (e.g. an intervention moved some): give the change to the program and to the other engines """
-        self.scatter(engine)
-        for other in self.engines:
-            if other is not engine:
-                other.y = self.gather(other)
         return
 
     #%% The program
@@ -653,33 +667,27 @@ class Crossing:
     #%% Running it
 
     def per_step(self):
-        """ The rows of the program's tables for each step, and how many of them each row of each engine's is (see `numbers()`) """
-        per = [engine.per_step() for engine in self.engines]
-        return max(per), [max(per)//p for p in per]
+        """ The rows of the program's tables for each step (see `ss.solvers.Compartmental.per_step()`) """
+        return max(engine.per_step() for engine in self.engines)
 
-    def engine_numbers(self, args, tables=None):
-        """ The numbers of an engine's run, from what `ss.solvers.Compartmental.run_args()` gives: see `numbers()` """
-        y, program = args[0], args[1]
-        X = {key:getattr(program, key) for key in ['inflow', 'contacts', 'tgt_w', 'crd_w', 'maps', 'mov_rate']}
-        X['y'] = y
-        if tables is not None:
-            X.update(zip(['fixed', 'mult', 'consts', 'rel_trans'], tables))
-        return X
+    def reps(self):
+        """ How many rows of the program's tables each row of each engine's is (see `numbers()`) """
+        return [self.per_step()//engine.per_step() for engine in self.engines]
 
     def run_args(self, tables=True):
-        """ What the kernels need for a whole run of the program, as `ss.solvers.Compartmental.run_args()` gives it for one engine, and the rows of its tables for each step """
+        """ What the kernels need for a whole run of the program, as `ss.solvers.Compartmental.run_args()` gives it for one engine """
         setups = [engine.run_args(tables=tables) for engine in self.engines]
-        self.build([args[1] for args,_ in setups])
-        per_step, reps = self.per_step()
-        J = self.numbers([self.engine_numbers(args, tabs) for args,tabs in setups], reps=reps)
+        progs = [args[1] for args,_ in setups]
+        self.build(progs)
+        Xs = [{key:getattr(prog, key) for key in ['inflow', 'contacts', 'tgt_w', 'crd_w', 'maps', 'mov_rate']} | dict(zip(['fixed', 'mult', 'consts', 'rel_trans'], tabs or [])) for prog,(_,tabs) in zip(progs, setups)]
+        J = self.numbers(Xs, reps=self.reps())
         program = self.program._replace(**{key:J[key] for key in ['inflow', 'contacts', 'tgt_w', 'crd_w', 'maps', 'mov_rate']})
-        args = [J['y']] + [program] + setups[0][0][2:]
-        return args, ([np.ascontiguousarray(J[key]) for key in ['fixed', 'mult', 'consts', 'rel_trans']] if tables else None), per_step
+        args = [self.y.copy(), program] + setups[0][0][2:]
+        return args, ([np.ascontiguousarray(J[key]) for key in ['fixed', 'mult', 'consts', 'rel_trans']] if tables else None)
 
     def tables(self, start=0, stop=None):
         """ The program's tables for some steps (see `ss.solvers.Compartmental.tables()`) """
-        per_step, reps = self.per_step()
-        J = self.numbers([dict(zip(['fixed', 'mult', 'consts', 'rel_trans'], engine.tables(start, stop))) for engine in self.engines], reps=reps)
+        J = self.numbers([dict(zip(['fixed', 'mult', 'consts', 'rel_trans'], engine.tables(start, stop))) for engine in self.engines], reps=self.reps())
         return [np.ascontiguousarray(J[key]) for key in ['fixed', 'mult', 'consts', 'rel_trans']]
 
     def kernels(self, runs=1):
@@ -693,41 +701,27 @@ class Crossing:
         n_sub = ss.kernels.substeps(np.concatenate([rate for e in self.engines for rate in e.start_rates()] + [self.program.mov_rate]), first.dt, first.substeps(), solver)
         return ss.kernels.plain_seconds(self.program, self.y, first.mod.t.npts, solver, n_sub)
 
-    def run(self):
-        """ A whole run of the diseases together, in one call to the kernels: returns, for each engine, what `ss.kernels.run()` does """
-        args, tables, per_step = self.run_args()
-        tally = np.zeros((args[3], 0, 2, self.n_cols))
-        y, stocks, flows, short = self.kernels().run(self.engines[0].make_rng(stream=1), *args, *tables, self.register, self.shifts, tally, per_step, 0)
-        self.y = y
-        return [self.split(k, y, stocks, flows) + (short if k == 0 else 0.0,) for k in range(len(self.engines))]
+    def run(self, use_jax=False):
+        """ A whole run of the diseases together, in one call to the kernels (or to JAX): gives each engine its part of the output (as `ss.gradients` does; see `ss.solvers.Compartmental.run_all()`) """
+        if use_jax:
+            parts = ss.gradients.run_crossing(self) if self.sim.solver not in ['binomial', 'tau'] else importlib.import_module('starsim.perflib.chain').run_crossing(self)
+        else:
+            args, tables = self.run_args()
+            tally = np.zeros((args[3], 0, 2, self.n_cols))
+            y, stocks, flows, short = self.kernels().run(self.engines[0].make_rng(stream=1), *args, *tables, self.register, self.shifts, tally, self.per_step(), 0)
+            parts = [self.split(k, y, stocks, flows) + (short if k == 0 else 0.0,) for k in range(len(self.engines))]
+        for engine,part in zip(self.engines, parts):
+            engine.given = part
+        return
 
-    def whole_run(self, engine, use_jax=False):
-        """ The output of a whole run for one engine: the first engine to ask takes the run for all of them """
-        if not self.outs:
-            if use_jax:
-                outs = ss.gradients.run_crossing(self) if self.sim.solver not in ['binomial', 'tau'] else importlib.import_module('starsim.perflib.chain').run_crossing(self)
-            else:
-                outs = self.run()
-            self.outs = dict(zip(self.names, outs))
-        return self.outs.pop(engine.mod.name)
-
-    def step(self, engine):
-        """
-        An engine's part of a step taken in Python: it works out its rates (as `ss.solvers.Compartmental.step()` does), and once
-        every disease in the crossing has, they take the step together, and each records its flows and its people
-        """
-        sim = self.sim
-        solver = sim.integrator if sim.solver == 'ode' else sim.solver
-        engine.step_rates()
-        ti = engine.mod.ti
-        stale = [t for t,tables in self.pending.values() if t != ti]
+    def step_tables(self, dt, smooth=True):
+        """ For a step taken from Python: the program's tables, from those of each engine, which has worked out its rates for the step (see `ss.solvers.Compartmental.step()`), as an engine's `step_tables()` gives them """
+        ti = self.engines[-1].mod.ti
+        stale = [e.mod.name for e in self.engines if e.rated != ti]
         if stale:
-            errormsg = f'The diseases {sc.strjoin(self.names)} are tracked jointly, so they step together, but {sc.strjoin(n for n in self.names if n not in self.pending)} did not step at time point {stale[0]} (does it define its own step() that does not call the one it replaces?)'
+            errormsg = f'The diseases {sc.strjoin(self.names)} are tracked jointly, so they step together, but {sc.strjoin(stale)} did not step at time point {ti} (does it define its own step() that does not call the one it replaces?)'
             raise RuntimeError(errormsg)
-        self.pending[engine.mod.name] = (ti, engine.step_tables(engine.dt, smooth=solver != 'euler')) # Euler holds values that vary in time for the step
-        if len(self.pending) < len(self.engines):
-            return
-        steps = [self.pending.pop(name)[1] for name in self.names]
+        steps = [engine.step_tables(dt, smooth=smooth) for engine in self.engines]
         progs = [e.program for e in self.engines]
         p = self.build(progs)
         row = 0 if any(r >= 0 for tables,r in steps) else -1
@@ -741,21 +735,16 @@ class Crossing:
         p.mov_rate[:] = J['mov_rate']
         if row < 0:
             p.fixed[:], p.mult[:], p.consts[:], p.rel_trans[:] = [J[key][0] for key in ['fixed', 'mult', 'consts', 'rel_trans']]
-            tables = no_tables
-        else:
-            tables = tuple(np.ascontiguousarray(J[key]) for key in ['fixed', 'mult', 'consts', 'rel_trans'])
-        first = self.engines[0]
-        self.y, flows = step_program(self, self.kernels(), self.rng, self.y, tables, row, first, sim.get_declared(self.lead).engine.check_short)
-        recorded = []
-        for k,e in enumerate(self.engines):
-            L = self.layout[k]
-            e.y = self.gather(e)
-            recorded.append(np.where(L.fidx >= 0, flows.ravel()[np.maximum(L.fidx, 0)], 0.0))
-            e.record_flows(recorded[-1])
-        for e,f in zip(self.engines, recorded): # Synchronized flows, once every engine has recorded its own
-            if getattr(e, 'syncs', None):
-                e.pass_syncs(f)
-        return
+            return no_tables, row
+        return tuple(np.ascontiguousarray(J[key]) for key in ['fixed', 'mult', 'consts', 'rel_trans']), row
+
+    def flows_of(self, flows):
+        """ Each engine's flows over a step, by its groups, from the program's """
+        return [np.where(L.fidx >= 0, flows.ravel()[np.maximum(L.fidx, 0)], 0.0) for L in self.layout]
+
+    def check_short(self, short):
+        """ Warn if events of a movement register asked for more people than there were: by the disease that moves people for the sim (see `lead`) """
+        return self.sim.get_declared(self.lead).engine.check_short(short)
 
     def run_many(self, seeds):
         """ Many runs that differ only in their seed, as `ss.solvers.Compartmental.run_many()` takes them for one engine: returns, for each engine, its name and its results """
@@ -763,7 +752,8 @@ class Crossing:
         for engine in engines:
             engine.restart()
         self.init()
-        args, _, per_step = self.run_args(tables=False)
+        args, _ = self.run_args(tables=False)
+        per_step = self.per_step()
         y0, npts = args[0], args[3]
         rngs = nb.typed.List([engines[0].make_rng(stream=1, seed=seed) for seed in seeds]) # The random numbers that each run would have
         R, nc, nflows, n_runs = self.n_cols, self.n_rows, self.n_trans + self.n_movers, len(seeds)

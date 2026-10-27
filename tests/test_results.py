@@ -219,6 +219,45 @@ def test_standard_prevalence():
     return res
 
 
+@sc.timer()
+def test_results_by_group():
+    sc.heading('Testing results by group in a module written as code: counts by sex and age among the living, weighted')
+    edges = [0, 15, 25, 50]
+    class ByGroup(ss.Analyzer):
+        def init_results(self):
+            super().init_results()
+            self.define_results(ss.Result('n_infected', groups=True), ss.Result('prevalence', scale=False, groups=True))
+
+        def step(self):
+            groups, dis = self.sim.groups, self.sim.diseases[0]
+            infected = groups.count(dis.I if dis.states else dis.infected) # Declared, or written as code
+            self.results.n_infected.set_groups(self.ti, infected)
+            self.results.prevalence.set_groups(self.ti, infected, groups.count())
+
+    # Alongside a declared disease, whose results are kept by group already; agents of different weights, and people born and dying
+    kw = dict(networks='random', demographics=[ss.Births(birth_rate=20), ss.Deaths(death_rate=15)], analyzers=ByGroup(name='bygroup'), n_agents=medium, start=2000, stop=2010, verbose=0)
+    sim = ss.Sim(ss.SIS(beta=ss.peryear(0.3), init_prev=0.1), stratify=dict(sex=['female', 'male'], age=edges), **kw).init()
+    sim.people.scale[sim.people.auids[::3]] = 3
+    sim.run()
+    sis, res = sim.results.sis, sim.results.bygroup
+    assert np.array_equal(res.n_infected.strata[1:], sis.I.strata[1:]) # Each group, at each step after the start (whose weights were set after it)
+    assert np.allclose(res.prevalence.select(sex='female', age='15-24')[1:], sis.prevalence.select(sex='female', age='15-24')[1:]) # Summed over the groups, then divided
+    assert np.allclose(res.prevalence.by('age')[1:], sis.prevalence.by('age')[1:])
+    ppl = sim.people
+    age = ppl.age.raw - sim.t.dt_year # As counted, before the people aged at the end of the last step
+    women = ppl.alive.raw & ppl.female.raw & (age >= 15) & (age < 25)
+    assert np.isclose(res.n_infected.select(sex='female', age='15-24')[-1], ppl.scale.raw[women & sim.diseases.sis.I.raw].sum()) # A direct count, by weight
+
+    # With only modules written as code: the stratification is used by the results kept by group
+    sim = ss.Sim(ssl.AgentSIS(beta=ss.peryear(0.3), init_prev=0.1), stratify=dict(sex=['female', 'male']), **kw).run()
+    res = sim.results.bygroup
+    ppl, dis = sim.people, sim.diseases.agentsis
+    assert res.n_infected[-1] == (ppl.alive.raw & dis.infected.raw).sum() and res.n_infected.by('sex').shape == (sim.t.npts, 2)
+    with pytest.raises(ValueError, match='groups=True'):
+        ss.Sim(ssl.AgentSIS(), stratify=dict(sex=['female', 'male']), n_agents=small, verbose=0).init() # Nothing uses it
+    return sim
+
+
 def test_time_points():
     sc.heading('Testing results by time point: the start, then the end of each step')
     # Deaths requested during a step of a declared model are counted in it
@@ -328,6 +367,7 @@ if __name__ == '__main__':
     res6b = test_summarize_by()
     res7 = test_result_exprs()
     res8 = test_standard_prevalence()
+    sim8b = test_results_by_group()
     res9 = test_compare_data()
     sim10 = test_plot()
 

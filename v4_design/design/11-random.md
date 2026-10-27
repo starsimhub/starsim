@@ -20,7 +20,7 @@ This is Starsim's mechanism, kept. One shared stream would make every scenario c
 
 **How a draw is made.** Every draw goes through one exact library (`ss.perflib.draws`, compiled by Numba, hidden from users): each count or value is a function of one uniform, by inversion of its CDF where that is cheap (binomial and Poisson up to a mean of 30, negative binomial, exponential, Weibull, normal, lognormal, uniform, discrete choices), so it is monotone in the uniform, which suits common random numbers; otherwise (larger means, gamma, beta) by a rejection sampler whose own uniforms come from a stream seeded by that uniform, so the same uniform still gives the same draw. Uniforms are counter-based (SplitMix64 of a key and an index, the same hash as an agent's CRN uniform). A stochastic compartmental run draws one uniform a count from its generator, and for many groups (`ss.kernels.row_groups`, 50) a row of counts from one key, with vectorized code. A per-agent draw with CRN is the inverse CDF at the agent's uniform, compiled for the common distributions, and SciPy's for the rest (gamma, beta) and above a mean of 30, so it stays monotone. None of the common distributions is much slower than NumPy's own sampler (measured 2026-10-22; [oct25/backlog/perf_jax.md](../oct25/backlog/perf_jax.md)).
 
-The name MUST come from the declaration's path in the model spec ([14-model-spec.md](14-model-spec.md)), not from a Python object identity or the order of construction, so that the same model written in any of the three spellings produces the same draws.
+The name MUST come from the declaration's path in the model (its module and attribute names), not from a Python object identity or the order of construction, so that the same model written in any of the three spellings produces the same draws.
 
 ## Common random numbers
 
@@ -63,45 +63,7 @@ Births, deaths, and migration make two scenarios' populations diverge even from 
 
 ## Run identity
 
-A seed makes a run repeatable. It does not say what was run. The main record of that is the code: the commit, or better a tag, of the script that built the sim, together with the Starsim version and git information that Starsim already stores with a saved sim. `sim.hash()` adds to that record; it does not replace it.
-
-```text
->>> sim.hash()
-objdict(model='91316a', pars='d718fe', config='748a9a', scenario='4f53cd', data=None, seed=1)
-```
-
-It returns a plain `sc.objdict` of five hashes and the seed, so `sim.hash().pars` is a string that can go in a file name or a column of a data frame:
-
-| Part | Covers | Changes when |
-|---|---|---|
-| `model` | the structure: states, transitions, stratifications, networks, modifiers (including the source of any function in them), declared results | the model changes |
-| `pars` | resolved parameter values, at full precision (where a value came from is not part of either hash) | a number changes |
-| `config` | solver, integrator, `approx`, unit, start, stop, `dt`, `total_pop`, `n_agents`, whether CRN is on, the precision | how it is run changes |
-| `scenario` | the interventions in this sim | the scenario changes |
-| `data` | the data attached for fitting (`None` if there is none) | the data changes |
-| `seed` | `rand_seed`, as given | another run of the same thing |
-
-The hashes are a cheap by-product of the model being data. They are worked out when asked for (a sim that is not initialized is hashed from an initialized copy). What they add to a commit hash:
-
-- **Many runs come from one commit.** A sweep or a calibration produces hundreds of runs from the same code. The `pars` hash tells them apart, the runs of a MultiSim differ only in `seed`, and a saved result carries the hash of what produced it.
-- **Not everything is committed.** Notebooks and exploratory scripts are run with uncommitted changes. The hashes are computed from the model that actually ran.
-- **Two models written differently can be the same model.** The `model` hash is computed from the normalized model spec, so it is the test for "do these two scripts describe the same model" ([18-conformance.md](18-conformance.md)).
-
-Comparing two runs:
-
-```text
->>> ss.diff(sim_a, sim_b)
-model:    same
-pars:     beta 0.05/day -> 0.08/day
-config:   same
-scenario: none -> vx
-```
-
-The hashes are computed from the model spec, whose canonical form is in [14-model-spec.md](14-model-spec.md), with SHA-256 of its canonical JSON, so they are the same in every process and on every machine. Custom Python code is hashed by its source text and the plain values it closes over, which is a best effort: code that depends on something else outside its own source can change behavior without changing the hash. A function without source is known by where it can be imported from, and user code can give a function, or the class of a module written as code, a `version` that is used as its identity; a module written as code is otherwise seen through its class and parameters, not its code. A function that cannot be identified at all (a `functools.partial`) makes `sim.hash()` raise an error, rather than hash two different models the same ([14-model-spec.md](14-model-spec.md#functions)). Running and fitting do not use the hash.
-
-A likelihood attached to a result is declared with the model and is part of `model`. Fitting settings (weights, fitting method, number of trials) do not change the model, so they are not in `sim.hash()` (the data is, as its own part), and changing the number of trials does not look like a change to the model.
-
-Caching results by hash, so that an identical re-run is served from disk, is deferred: see [Rejected](#rejected).
+A seed makes a run repeatable. It does not say what was run. The record of that is the code: the commit, or better a tag, of the script that built the sim, together with the Starsim version and git information that Starsim stores with a saved sim. There is no hash of the model (decided 2026-10-27: `sim.hash()` and `ss.diff()` were removed with the model spec, [14-model-spec.md](14-model-spec.md)); two models are compared by their results, by `describe()`, or by a text diff of their code, and the runs of a sweep are told apart by their parameters and seeds, which a MultiSim keeps.
 
 ## Convergence checks
 
@@ -123,11 +85,11 @@ A companion `msim.check_runs()` on a MultiSim, estimating from the variance betw
 ## Rejected
 
 - **One global random number stream.** Adding a module changes everyone's draws.
-- **Reporting only the seed.** Necessary, but it does not say which model or parameters were run. The version, the commit, and the hashes do.
-- **The hashes as the main record of what was run.** For an analysis that is a script in a repository, the commit or tag already says it. The hashes cover what a commit does not distinguish.
+- **Reporting only the seed.** Necessary, but it does not say which model or parameters were run. The version and the commit do.
+- **A hash of the model as a record of what was run** (`sim.hash()`, removed 2026-10-27). For an analysis that is a script in a repository, the commit or tag already says it, and keeping a normalized form of every model to hash cost more than it told apart.
 - **Common random numbers keyed on agent attributes** (Vivarium's `key_columns: ['entrance_time', 'age']`). The case made for it is comparing populations of different sizes, but a 10,000-agent run and a 100,000-agent run have 90,000 agents with no counterpart, so the runs differ whatever the key. Within one population size the slot already identifies the same agent across scenarios, including agents born during the run. No case was found where attribute keys do better; if one turns up, this can be revisited.
 - **Mandatory CRN.** Some analyses want independent runs; `ss.options.crn = False`.
 - **A strict mode that makes unpaired draws an error.** An unpaired draw keeps its noise, and the comparison is still valid.
-- **Caching results by hash in v1** (camdl's content-addressed runs). With the hashes in place it is easy to add: an identical re-run becomes a cache hit. It also surprises people who expect a re-run to run, the hash cannot see everything custom code depends on, and nobody has asked for it. Deferred.
-- **Exporting a run as a folder or a package** (SimInf's `package_skeleton()`). A model here is a Python script, which is already the thing to share; `ss.save` and `sim.to_code()` cover the rest.
+- **Caching results by hash** (camdl's content-addressed runs). It surprises people who expect a re-run to run, a hash cannot see everything custom code depends on, and nobody has asked for it.
+- **Exporting a run as a folder or a package** (SimInf's `package_skeleton()`). A model here is a Python script, which is already the thing to share; `ss.save` covers the rest.
 - **A rule for one draw or many** (odin distinguishes `x[] <- Normal(0, 1)`, one draw per element, from drawing once and assigning). In Python the difference is visible in the code: a distribution object in a parameter slot draws per agent, and a number is a number. What a compartmental solver does with a distribution is in [12-backends.md](12-backends.md#the-standard-approximations).

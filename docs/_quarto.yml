@@ -175,7 +175,6 @@ website:
             - user_guide/calibration_diagnosing.qmd
           - section: "Interoperability"
             contents:
-            - user_guide/interop_spec.qmd
             - user_guide/interop_import.qmd
             - user_guide/interop_library.qmd
           - section: "Troubleshooting"
@@ -256,7 +255,6 @@ website:
             - api/internals.expressions.qmd
             - api/internals.graph.qmd
             - api/internals.presentation.qmd
-            - api/internals.spec.qmd
             - api/internals.errors.qmd
             - api/internals.debugtools.qmd
 
@@ -287,7 +285,6 @@ quartodoc:
         - internals.gradients
         - internals.graph
         - internals.presentation
-        - internals.spec
         - interventions
         - loop
         - modules

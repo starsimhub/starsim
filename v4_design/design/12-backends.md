@@ -82,7 +82,7 @@ Everything else has a compartmental form: homogeneous mixing, an `ss.MixingPool`
 
 `ss.Pregnancy` runs as agents under `'auto'`. A compartmental solver named explicitly runs a small form of it, with a note that says what it leaves out (decided 2026-10-20): its own states (`NP`, `P`), conception, abortion and maternal deaths, the delivery at the end of `dur_pregnancy` (a fixed delay, or Erlang stages for a distribution), and `n` children for each delivery (`ss.birth(per=preg.delivery)`, also into another module's state). Its losses do not read the gestational age (`P.time`): the loss rate is split between miscarriage and stillbirth by the share of the mean gestation below `loss_threshold`. Its burn-in (`burnin=True`) puts the women pregnant at the start evenly over gestation, less the abortions and losses they would have had. It has no fetuses, no links between mothers and children, no breastfeeding, no preterm risk, and no deaths at delivery. Against agents (`burnin=False`, weekly to three-monthly steps), deliveries, births and the number pregnant agree within 3%, and people are conserved exactly; with burn-in, the number pregnant at the start agrees within 10%. A module declares such a form by defining `compartmental_form(sim)`, which is called only when a compartmental solver is named; solver choice knows nothing else about pregnancy. It is a module's approximation of itself; a compartmental form written outside Starsim (a shape of waning, a dwell more variable than an exponential as a mixture of exponential branches, an outcome that depends on the time spent as bins of it) is written as declared states instead ([08-interventions.md](08-interventions.md#products), decided 2026-10-22).
 
-The reasons are kept in one record, which `describe()` and the `CapabilityError` read.
+The reasons are kept in one record, which `describe()` and the `CapabilityError` read. What the layout of the compartments refuses (a race with a fixed delay, a network with no approximation, too many states tracked jointly) is found by making the layout, which runs none of the model's code, once: a compartmental run uses the layout made to choose its solver (made again only if the groups change after, as for diseases tracked jointly), and its notes are said only if it is used (decided 2026-10-27).
 
 For simple models the solver is a free choice made when the sim is built. For complex models it is in effect part of the specification: a model built around a sexual network is an agent-based model, and running it another way gives a different, coarser model.
 
@@ -144,7 +144,7 @@ A network model run as an ODE is a different, coarser model, not an invalid one,
 
 - Under `solver='auto'`, `approx=False` rules out the Erlang stages too: a model with a dwell time that has no exact compartmental form then runs as agents, where the dwell time is sampled directly, and the printed reason names the transition.
 - `verbose=0` hides everything printed at run time, the notes included.
-- Whatever is printed, the notes are kept in `sim.notes` (and in the model spec's metadata), so they survive into saved output; `sim.describe()` shows what would be approximated as compartments.
+- Whatever is printed, the notes are kept in `sim.notes`, so they survive into a saved sim; `sim.describe()` shows what would be approximated as compartments.
 
 ### The standard approximations
 
@@ -327,7 +327,7 @@ The agent-based solver is Starsim's, and its architecture is kept: typed per-age
 | a transition with `dur=` | sample a duration on entry and schedule the exit |
 | competing rates out of one state | one draw per agent ([10-execution.md](10-execution.md)) |
 | `sir.stratify(risk=[...])` | an agent property; continuous ones stay continuous |
-| `ss.modify(target, multiply=, where=)` | applied where the quantity is used; `sir.rel_sus` reads the base value and `sir.rel_sus.effective` the value with the active modifiers |
+| `ss.modify(target, multiply=, where=)` | applied where the quantity is used; `sir.rel_sus` reads the base value and `sir.effective('rel_sus')` the value with the active modifiers |
 | `ss.outcome(...)` | a thinned, delayed draw from the source events |
 
 - **Custom code** is ordinary Starsim: boolean state arrays, `dist.filter(uids)` to select with a probability, and direct reads and writes of other modules' state ([07-effects.md](07-effects.md)).

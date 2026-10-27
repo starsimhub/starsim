@@ -228,13 +228,11 @@ Requirement 2 rules out one random number stream shared across workers, and is o
 8. Allocate state, set initial conditions, and initialize the random number streams.
 9. Print the solver with its reason, any approximations, where the sim's unit came from if it was not given as `unit=`, and, for each disease with a transmission, R0 (in a population with no immunity; with the reproduction number at the start too, if immunity at the start changes it by more than 1%) and the number infectious at the start, one line each (`verbose=0` hides them; `approx=True` hides the approximation notes only). The notes are kept in `sim.notes` whatever is printed. `sim.describe()` prints the full resolved model, including the schedule, at any time.
 
-The model spec ([14-model-spec.md](14-model-spec.md)) and `sim.hash()` ([11-random.md](11-random.md#run-identity)) are worked out when asked for, not at `init()`, since a run does not need them.
-
 Problems are reported at the earliest step that can detect them ([15-errors.md](15-errors.md)): a typo in a state name is an error at step 1, not at the first timestep. The exception is user functions, which are not analyzed in advance; a function that asks for something the solver cannot provide is reported when it is first called ([12-backends.md](12-backends.md) §Functions).
 
 ## Finishing
 
-After the last step, `sim.finalize()` calls each module's `finalize()` once, in module order, and then finalizes the results (scaling, summary statistics). This is Starsim's behavior. Calling `run()` again on a completed sim runs it again from the start, built again as `sim.new()` would (with any settings or parameters changed since the run); stepping or finalizing it again raises `AlreadyRunError`.
+After the last step, `sim.finalize()` calls each module's `finalize()` once, in module order, and then finalizes the results (scaling, summary statistics). This is Starsim's behavior. Calling `run()` again on a completed sim runs it again from the start, built again as `sim.new()` would: a copy of the sim as it was before it was initialized, so changes made since belong to that run only; stepping or finalizing it again raises `AlreadyRunError`.
 
 ## Rejected
 

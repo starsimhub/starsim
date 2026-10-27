@@ -15,13 +15,6 @@ def make_sir():
     return ss.Disease(infection=ss.Transition(S, I, rate=ss.perday(0.3) * I), recovery=ss.Transition(I, R, dur=ss.days(7)), init_prev=0.001, name='sir')
 
 
-def rebuild(code):
-    """ The sim that code written by sim.to_code() builds """
-    ns = {}
-    exec(code, ns)
-    return ns['sim']
-
-
 @sc.timer()
 def test_contacts():
     sc.heading('Testing contact matrices by name')
@@ -41,14 +34,6 @@ def test_contacts():
         ss.contacts('Japan')
     with pytest.raises(KeyError, match='the place "Kenyaa" was not found'):
         ss.contacts('Kenyaa')
-
-    # The spec says where the matrices came from, so the sim can be rebuilt, as data or code
-    sim = ss.Sim(make_sir(), networks=[home, ss.contacts('Kenya', layer='school')], stratify=dict(age=[0, 5, 18, 65]), unit='day', stop=60, **kw)
-    spec = sim.to_spec()
-    assert spec['networks'][1]['data']['layer'] == 'school'
-    code = ss.spec.to_code(spec)
-    assert sim.hash() == rebuild(code).hash()
-    assert "ss.contacts('Kenya', layer='school')" in code
     return sims
 
 
@@ -93,14 +78,9 @@ def test_geo():
     capped = G*np.minimum(1, 0.07/G.sum(axis=1))[:, None]
     assert np.allclose(1 - home(ss.geo.Mobility(matrix=capped)), capped.sum(axis=1)) and G.sum(axis=1).max() > 0.07 >= capped.sum(axis=1).max() - 1e-12
 
-    # The spec says where the places came from
-    spec = sim.to_spec()
-    strat = spec['modules'][0]['stratifications'][0]
-    assert strat['geo']['place'] == 'Kenya' and strat['geo']['level'] == 1
-    sir = make_sir()
-    sir.stratify(patch=ss.geo.geography('Kenya', level=1))
-    code = ss.Sim(sir, unit='day', stop=60, **kw).to_code()
-    assert "patch=ss.geo.geography('Kenya', level=1)" in code
+    # The places say where they came from
+    ref = sim.diseases.sir.graph.strats[0].geo.ref
+    assert ref['place'] == 'Kenya' and ref['level'] == 1
     return sim
 
 
@@ -143,12 +123,10 @@ def test_people():
         ages = ss.Sim(make_sir(), n_agents=20_000, stratify=stratify, unit='day', stop=10, **kw).init().people.age.values
         assert 0.08 < (ages >= 65).mean() < 0.12 and 0.23 < (ages < 15).mean() < 0.27 # Not uniform from 0 to 60 (no one over 65) or to 100 (35%)
 
-    # The year the sim starts, if it has dates; and the spec says where the people came from
+    # The year the sim starts, if it has dates, and the people say where they came from
     sim = ss.Sim(make_sir(), people=ss.people('Kenya'), start='1990-01-01', stop='1990-03-01', unit='day', **kw)
     sim.init()
-    assert sim.to_spec()['config']['people']['year'] == 1990
-    assert sim.hash() == rebuild(sim.to_code()).hash()
-    assert "people=ss.people('Kenya', year=1990" in sim.to_code()
+    assert sim.named_people.ref['year'] == 1990
     with pytest.raises(KeyError, match='the place "Kenyaa" was not found'):
         ss.people('Kenyaa')
     return ode, abm
@@ -184,7 +162,6 @@ def test_us_states(us_states):
     assert school.ref['source'] == 'mistry2021_us' and len(school.edges) == 85 # By single year of age, from its own study
     sim = ss.Sim(make_sir(), people=ss.people(state), networks=school, stratify=dict(age=[0, 5, 18, 65]), unit='day', stop=30, **kw).run()
     assert sim.pars.total_pop == ppl.named.total and sim.results.sir.I[-1] > sim.results.sir.I[0]
-    assert sim.hash() == rebuild(sim.to_code()).hash() # Looked up again
     with pytest.raises(KeyError, match='the place "Kenya:Nairobi" was not found'):
         ss.people('Kenya:Nairobi') # Other countries have no data by unit
     return sim

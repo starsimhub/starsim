@@ -46,7 +46,7 @@ class geography:
         ```
     """
     def __init__(self, data=None, names=None, pop=None, x=None, y=None, lat=None, lon=None, distances=None, adjacency=None, level=1, year=None, places=None):
-        self.ref = None # Where a named geography came from, for the model spec
+        self.ref = None # Where a named geography came from, for describe()
         self.area = None
         self.codes = None
         named = isinstance(data, str) and not data.endswith(('.csv', '.xlsx') + shapefiles) or (isinstance(data, (list, tuple)) and all(isinstance(d, str) for d in data))

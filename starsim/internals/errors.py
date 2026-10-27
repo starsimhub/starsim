@@ -94,7 +94,7 @@ class NotConverged(RuntimeWarning):
     """ The chains of a posterior disagree (R-hat above 1.01), or some draws diverged """
 
 class LossyExport(RuntimeWarning):
-    """ An export to another format, or to code, left something out or changed it. Lists each item """
+    """ An export to another format left something out or changed it. Lists each item """
 
 class ImportIncomplete(RuntimeWarning):
     """

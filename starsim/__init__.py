@@ -28,7 +28,7 @@ from .internals.errors import *
 from .internals import debugtools
 
 from .arrays import (
-    Arr, FloatArr, IntArr, BoolArr, BoolState, IndexArr, uids, # Also ss.arrays.BaseArr and ss.arrays.ModifiableArr
+    Arr, FloatArr, IntArr, BoolArr, BoolState, IndexArr, uids, # Also ss.arrays.BaseArr
 )
 
 from .distributions import ( # Also ss.distributions.Dists, link_dists, make_dist, dist_list
@@ -104,9 +104,6 @@ from .strains import immunity, Strains
 from .demographics import Demographics, Births, Deaths, Pregnancy # After the diseases, since a pregnancy is one
 
 from .loop import Loop
-
-from .internals import spec
-from .internals.spec import diff # Also ss.spec.to_code, which sim.to_code() uses
 
 from . import data # Data by place, from starsim_data: ss.data.age('Kenya'), ss.data.population(), ss.data.contacts(), ss.data.geography(); starsim_data is imported only when they are used
 

@@ -383,9 +383,9 @@ def test_odin_examples():
     # Ages from flows between levels, and a delay as a fixed dwell time; the delay's history is listed
     ex = lfd / 'examples' / 'odin' / 'seir_array'
     sim = load_odin(ex / 'original' / 'seir_array_odin.R', stop=365, **kw)
-    assert sim.to_spec()['modules'][0]['stratifications'][0]['levels'] == [0, 1, 5, 15, 30]
+    assert '.stratify(age=[0, 1, 5, 15, 30]' in sim.imported.code
     assert [name for name,why in sim.imported.incomplete] == ['lag_inf (history)']
-    code = sim.to_code().replace('    init', f'    history = ss.null >> I @ ss.timeseries({{0: ss.perday({np.exp(-14/(365*50))}), 14: 0}}),\n    init', 1)
+    code = sim.imported.code.replace('    init', f'    history = ss.null >> I @ ss.timeseries({{0: ss.perday({np.exp(-14/(365*50))}), 14: 0}}),\n    init', 1)
     ns = {}
     exec(code, ns) # With the workaround that the import lists
     res = ns['sim'].run().results[ns['sim'].diseases[0].name]
@@ -411,7 +411,7 @@ def test_sbml():
     # What is not translated is listed by name
     missing = sc.strjoin(name for name,why in sim.imported.incomplete)
     assert 'event lockdown' in missing and 'reaction dimer' in missing
-    code = sim.to_code()
+    code = sim.imported.code
     assert 'Not translated' in code and 'infection = S >> I @ ' in code
     return sim
 

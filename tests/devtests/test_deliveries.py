@@ -139,7 +139,6 @@ def test_vaccinate():
         assert np.isclose(res.cost.sum(), 2*res.delivered.sum())
         assert sim.results.sir.infection.cum[-1] < 0.5*base.results.sir.infection.cum[-1]
         assert [strat.name for strat in sim.groups.strats] == ['has_vaccine'] # Holding the vaccine is a property of people
-    assert sims.ode.hash().model == base.hash().model # The scenario is not part of the model
     assert 'has_vaccine' in sims.ode.describe(output=True)
 
     # Routine delivery: each person is offered it once, and half accept
@@ -1013,7 +1012,6 @@ def test_waning_functions():
     sim = make('ode', box)
     assert sim.solver == 'ode' and len(sim.groups.strats[sim.groups.dim_index('has_vx')].labels) == 12 # False, 10 stages of the box, decaying
     assert np.allclose(box(ss.days(np.array([0, 179, 380]))), [1, 1, np.exp(-1)])
-    assert sim.to_code().count('ss.box(dur=ss.days(180), decay=ss.days(200))') == 1
 
     # A waning function is given the time as a duration (in any sim's unit) and the people who hold it
     seen = {}

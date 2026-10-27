@@ -53,8 +53,8 @@ def test_epimodel_netsim():
     assert len(res.I) == 500, 'EpiModel\'s 500 times are 499 steps'
     prev = res.I[-200:].mean() # EpiModel: 227.5, against 234 over 200 runs (its recovery in the step of infection makes it lower)
     assert 180 < prev < 290, f'the equilibrium should be near EpiModel\'s, not {prev}'
-    code = sim.to_code()
-    assert 'ssl.DegreeNet(n_contacts=0.7, concurrency=0.22, max_contacts=3, dur=50, acts=ss.freqperday(2))' in code
+    code = sim.imported.code
+    assert "ssl.DegreeNet(n_contacts=0.7, concurrency=0.22, max_contacts=3, dur=50, acts=ss.freqperday(2), name='net')" in code
     return sim
 
 

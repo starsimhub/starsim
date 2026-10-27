@@ -1008,10 +1008,14 @@ import starsim.interop
 ```{python}
 sim = ss.interop.load('data/measles_seir.R', stop=50, verbose=False)
 sim15 = ss.interop.load('data/measles_seir.R', stop=50, pars=dict(beta=1.5), verbose=False)
-ss.diff(sim, sim15)
+changed = [line for line in sim15.imported.code.splitlines() if line not in sim.imported.code.splitlines()]
+print('\n'.join(changed))
+for s in [sim, sim15]:
+    res = s.run().results.measles_seir
+    print('Peak on day', res.I.values.argmax())
 ```
 
-`ss.diff()` reports that the model (its states and transitions) is the same, and that the parameters differ only in β, from 1.9 to 1.5 a day.
+The code is the same but for β, from 1.9 to 1.5 a day, and with less transmission the peak comes later.
 
 **2. Outbreaks that don't happen.**
 
@@ -1024,7 +1028,7 @@ print('Runs with no outbreak:', (final_R < 50).sum(), 'of 100')
 
 In a few of the 100 runs (about 4 to 7, depending on chance), the first person recovers, or their few infections recover, before the chain of transmission takes off, and there is no outbreak. In the other runs, almost everyone in the village is infected. In a branching process, the chance that the chain of transmission from one infection dies out is 1/R0 = 1/15.2, about 7%, so about 7 of 100 runs would be expected to have no outbreak.
 
-**3. Stratifying the imported model.** The code that `sim.to_code()` writes, with a stratification by age and the contact matrix added:
+**3. Stratifying the imported model.** The code of the import (`sim.imported.code`), with a stratification by age and the contact matrix added:
 
 ```{python}
 beta  = ss.par(ss.perday(1.9))

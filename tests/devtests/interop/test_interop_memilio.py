@@ -164,8 +164,9 @@ def test_secir():
     assert np.allclose(alive + dead, 10_000), 'Everyone is alive or has died'
     assert res.InfectedCritical.values.max() < 15, 'The ICU should not be overfilled'
     ns = {}
-    exec(sim.to_code(), ns)
-    assert ns['sim'].hash() == sim.hash(), 'The code should build the same model'
+    exec(sim.imported.code, ns) # The code stands alone, and gives the same results
+    ns['sim'].pars.verbose = 0
+    assert np.array_equal(ns['sim'].run().results.osecir.Susceptible, res.Susceptible), 'The code should build the same model'
     return sim
 
 

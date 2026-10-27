@@ -220,25 +220,6 @@ class Strat:
         return ss.FloatArr(self.attr, default=0, label=self.name)
 
     @property
-    def spec(self):
-        """ The stratification as it is written in the model spec """
-        levels = self.edges.tolist() if self.edges is not None else list(self.labels)
-        mobility = None
-        if self.mobility is not None:
-            mob = self.mobility
-            away = mob.away if mob.away is None else mob.away.name if isinstance(mob.away, ss.par) and mob.away.name else float(mob.away) # A fitted share by its parameter's name
-            mobility = dict(kind=mob.kind, away=away)
-            if mob.data is None:
-                mobility['matrix'] = mob.matrix(self).tolist()
-            else: # A register of movements, by its size and a hash of its contents
-                mobility['register'] = dict(events=len(mob.data), hash=sc.sha(mob.data.astype(str).to_csv()).hexdigest())
-        out = dict(geo=self.geo.ref if self.geo is not None else None, split_from=getattr(self, 'split_from', None) or None, # Where a named geography or split came from
-                   name=self.name, kind=self.kind, levels=levels, split=self.split.tolist() if self.joint is None else repr(self.joint), adjust={k:v.tolist() for k,v in self.adjust.items()}, states=self.states, where=self.where, mobility=mobility)
-        if self.strains is not None: # As ss.Strains takes it
-            out['strains'] = self.strains.spec
-        return out
-
-    @property
     def mids(self):
         """ The middle of each bin, for a binned property """
         if self.edges is None:
@@ -488,11 +469,13 @@ class Groups:
         self.sim_strats = [] # The ones given to the sim, which apply to every module
         self.cross_strats = [] # The dimensions for diseases whose states are tracked jointly: see ss.solvers.init_crossings()
         self.dim_moves = [] # Movement between levels that belongs to no one module, e.g. the protection of a product waning
+        self.version = 0 # How many times the groups were worked out, so a layout knows whether it holds for them (see ss.solvers.Compartmental.current())
         return
 
     def init(self):
         """ Collect the stratifications of the sim and its modules, and work out the groups they give """
         sim = self.sim
+        self.version += 1
         strats = sc.objdict()
         self.sim_strats = [] # The ones given to the sim, which apply to every module
         for call in sc.tolist(sim.pars.stratify):
@@ -504,13 +487,6 @@ class Groups:
         for strat in strats.values(): # An age group nobody is in: the edges are lower edges, so [0, 15, 120] has a group 120+
             if strat.kind == 'age' and strat.edges is not None and strat.edges[-1] >= 100:
                 ss.note(f'the age group {strat.labels[-1]} of "{strat.name}" is empty, since ages run to 100; the edges are the lower edges of each group, so the last is open-ended', sim=sim)
-        if self.sim_strats and not sim.declared: # Only modules written as code, which keep their own results: used only if a module's values are by it
-            mods = [mod for key in ss.modules.module_types() + ['custom'] for mod in sim.pars[key].values() if isinstance(mod, ss.Module)]
-            byvals = [val for mod in mods for val in [*mod.pars.values(), *vars(mod).values()] if isinstance(val, ss.by)] # Its parameters, and options such as a delivery's coverage
-            unused = [strat.name for strat in self.sim_strats if not any(strat.name in val.dims for val in byvals)]
-            if unused:
-                raise ValueError(f'the sim is stratified by {sc.strjoin(unused)}, but none of its modules is declared and none has values by it, so nothing would use it: modules written as code keep their own results, not by group. '
-                                          f'Declare a disease (ss.Disease) to have results by group, or leave the stratification out.')
         for mod in sim.declared:
             for strat in mod.graph.strats:
                 if strat.name in strats:
@@ -655,6 +631,21 @@ class Groups:
             sim.pars.use_aging = sim.has_demography()
         return
 
+    def check_used(self):
+        """ That a sim with only modules written as code, once they are initialized, uses each stratification it is given: in a module's values, or in results it keeps by group (`ss.Result(..., groups=True)`) """
+        sim = self.sim
+        if not self.sim_strats or sim.declared:
+            return
+        mods = [mod for key in ss.modules.module_types() + ['custom'] for mod in sim.pars[key].values() if isinstance(mod, ss.Module)]
+        if any(getattr(res, 'strata', None) is not None for mod in sim.modules for res in mod.results.values()):
+            return
+        byvals = [val for mod in mods for val in [*mod.pars.values(), *vars(mod).values()] if isinstance(val, ss.by)] # Its parameters, and options such as a delivery's coverage
+        unused = [strat.name for strat in self.sim_strats if not any(strat.name in val.dims for val in byvals)]
+        if unused:
+            raise ValueError(f'the sim is stratified by {sc.strjoin(unused)}, but none of its modules is declared, has values by it, or keeps results by group, so nothing would use it. '
+                             f'Declare a disease (ss.Disease) to have results by group, keep a result by group in a module written as code (ss.Result(..., groups=True)), or leave the stratification out.')
+        return
+
     def moved_by(self, strat):
         """ For describe(): what moves people along a dimension, e.g. '; counter: +1 by delivery; +2 by twins' """
         sim = self.sim
@@ -770,6 +761,39 @@ class Groups:
             errormsg = f'The model is not stratified by "{name}"; its dimensions are {names}. Add e.g. sim.stratify({example}), which as agents adds no compartments'
             raise KeyError(errormsg)
         return names.index(name)
+
+    def count(self, where=None):
+        """
+        As agents: the number of people alive in each group for whom a condition holds, in one pass (each agent counted by its weight, `people.scale`, if they differ; not scaled by the population)
+
+        For a module written as code that keeps its results by group (`ss.Result(..., groups=True)`; see `ss.Result.set_groups()`).
+
+        Args:
+            where (BoolArr/uids/array): who to count: a boolean array of people (e.g. `sis.infected`, or one by UID), or some UIDs (default: everyone alive)
+
+        Examples:
+            ```python
+            sim.stratify(sex=['female', 'male'], age=[0, 15, 25, 50])
+            infected = sim.groups.count(sim.diseases.sis.infected) # One number for each of the 8 groups
+            ```
+        """
+        people = self.sim.people
+        mask = people.alive.raw.copy()
+        if where is not None:
+            if isinstance(where, ss.uids):
+                keep = np.zeros(len(mask), dtype=bool)
+                keep[where] = True
+            else:
+                keep = np.asarray(where.raw if isinstance(where, ss.Arr) else where, dtype=bool)
+                if len(keep) == len(people.auids) and len(keep) != len(mask): # Of the people alive, in order
+                    full = np.zeros(len(mask), dtype=bool)
+                    full[people.auids] = keep
+                    keep = full
+            mask &= keep[:len(mask)]
+        inds = np.flatnonzero(mask)
+        groups = self.group_raw()[inds] if self.n_groups > 1 else np.zeros(len(inds), dtype=np.int64)
+        weights = ss.results.agent_weights(self.sim)
+        return np.bincount(groups, weights=None if weights is None else weights[inds], minlength=self.n_groups).astype(float)
 
     def groups_changed(self, uids=None):
         """

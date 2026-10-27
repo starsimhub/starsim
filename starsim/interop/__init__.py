@@ -3,13 +3,14 @@ Import models from other frameworks
 
 `ss.interop.load(filename, format=...)` (after `import starsim.interop`) reads another framework's model into a sim; see
 `v4_design/design/16-interop.md`. Each importer reads its format into an
-`ss.interop.Source`, and `ss.interop.build()` turns that into a sim by the same
-rules for every format: how each rate was read is printed, and what could not be
-translated is listed as `ss.errors.ImportIncomplete` and kept in `sim.imported`.
+`ss.interop.Source`, and `ss.interop.build()` writes that as Starsim code by the
+same rules for every format (`ss.interop.write()`) and runs the code to make the sim:
+the code is kept in `sim.imported.code`, how each rate was read is printed, and what
+could not be translated is listed as `ss.errors.ImportIncomplete` and kept in `sim.imported`.
 """
 import re
 import sciris as sc
-from .core import Source, build
+from .core import Source, Code, write, build
 from .camdl import load_camdl
 from .emulsion import load_emulsion
 from .epimodel import load_epimodel
@@ -23,7 +24,7 @@ from .siminf import load_siminf
 from .summer2 import load_summer2
 from .export import exporters, export, to_hub
 
-__all__ = ['Source', 'build', 'formats', 'sniff', 'load', 'exporters', 'export', 'to_hub']
+__all__ = ['Source', 'Code', 'write', 'build', 'formats', 'sniff', 'load', 'exporters', 'export', 'to_hub']
 
 formats = dict(
     atomica  = load_atomica,

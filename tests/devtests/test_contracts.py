@@ -5,7 +5,6 @@ Contract tests: properties every model and solver must have, checked on the mode
 
 # %% Imports and settings
 import os
-import runpy
 import pytest
 import numpy as np
 import sciris as sc
@@ -170,21 +169,6 @@ def test_crn_pairing():
     assert np.median(changed[True]) <= 2, f'With CRN, making one agent immune changed the outcomes of {changed[True]} other agents' # 0 to 4
     assert np.median(changed[False]) > 50, f'Without CRN, making one agent immune changed only {changed[False]} other agents' # About 300 of 800 infected
     return changed
-
-
-# %% The code of a model builds it again
-
-@pytest.mark.parametrize('name', corpus.models.keys())
-def test_code_round_trip(name, tmp_path):
-    sc.heading(f'Testing that the code written for the corpus model "{name}" builds the same model, or says what it leaves out')
-    sim = corpus.models[name]()
-    path = tmp_path/'model.py'
-    sim.to_code(path)
-    if 'Not written as code' in path.read_text(): # A network, a function, data, or a module written as code, listed to add by hand
-        return
-    rebuilt = runpy.run_path(str(path))['sim'] # From a file, as a user runs it, so the source of a function in it can be read
-    assert rebuilt.hash() == sim.hash(), f'{name}: the code builds a different model'
-    return
 
 
 # %% The solvers agree

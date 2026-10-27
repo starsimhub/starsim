@@ -76,9 +76,9 @@ arith = {'+':operator.add, '-':operator.sub, '*':operator.mul, '/':operator.true
 
 
 def run_value(x):
-    """ The number an expression of parameters is while a sim runs (e.g. 1 - dis.pars.eff_condom); None if it is not one: it reads a state, or a parameter that is not a number """
+    """ The value of an expression of parameters alone (e.g. 1 - dis.pars.eff_condom), with each parameter's current value (see `ss.Module.value()`); None if it reads anything else (a state, a count) """
     if isinstance(x, par):
-        return float(x) if sc.isnumber(x.raw) else None
+        return x.raw if (x.literal or x.module is None) else x.module.value(x)
     elif isinstance(x, BinOp):
         a, b = run_value(x.a), run_value(x.b)
         return None if a is None or b is None else arith[x.op](a, b)
@@ -89,23 +89,27 @@ def run_value(x):
 
 def run_values(inputs):
     """
-    For arithmetic between an expression of parameters and an array during a run: the values to do it with, as code means it
-    (a module written as code reading a declared parameter, e.g. `acts*(1 - disease.pars.eff_condom)`); None to build an expression
+    The values to do arithmetic with, once the sim is initialized: before then, arithmetic on a parameter builds an expression (part of
+    the model); after, it is done on the parameters' current values, as code means it (e.g. `acts*(1 - disease.pars.eff_condom)`).
+    None to build an expression: before the sim is initialized, or if an input reads anything but parameters.
     """
-    if not any(isinstance(x, np.ndarray) and x.ndim for x in inputs):
-        return None
-    exprs = [x for x in inputs if isinstance(x, Expr)]
-    named = [leaf for x in exprs for leaf in x.leaves if isinstance(leaf, par) and not leaf.literal]
-    if not named or not all(getattr(getattr(getattr(leaf, 'module', None), 'sim', None), 'initialized', False) for leaf in named): # Only once the sim is initialized: before then, an array in a rate is part of the model
+    named = [leaf for x in inputs if isinstance(x, Expr) for leaf in x.leaves if isinstance(leaf, par) and not leaf.literal]
+    if not named or not all(getattr(getattr(leaf.module, 'sim', None), 'initialized', False) for leaf in named):
         return None
     vals = [run_value(x) for x in inputs]
     return None if any(v is None for v in vals) else vals
 
 
 def binop(op, a, b):
-    """ Arithmetic on an expression: another expression, or numbers for code during a run (see run_values()) """
+    """ Arithmetic on an expression: another expression, or a value once the sim is initialized (see run_values()) """
     vals = run_values([a, b])
     return BinOp(op, a, b) if vals is None else arith[op](*vals)
+
+
+def compare(name, a, b):
+    """ A comparison of an expression, which is 1 or 0: another expression, or a value once the sim is initialized (see run_values()) """
+    vals = run_values([a, b])
+    return Func(name, a, b) if vals is None else getattr(np, name)(*vals)
 
 
 class Expr:
@@ -121,7 +125,7 @@ class Expr:
         if method != '__call__' or kwargs:
             return NotImplemented
         vals = run_values(inputs)
-        if vals is not None: # Arithmetic on arrays by code during a run, e.g. a coded network's acts*(1 - disease.pars.eff_condom)
+        if vals is not None: # On the values, once the sim is initialized, e.g. a coded network's np.maximum(acts*(1 - disease.pars.eff_condom), 0)
             return ufunc(*vals)
         elif name in binops:
             return BinOp(binops[name], *inputs)
@@ -148,16 +152,16 @@ class Expr:
     def __rtruediv__(self, other): return binop('/', other, self)
     def __pow__(self, other):      return binop('**', self, other)
     def __rpow__(self, other):     return binop('**', other, self)
-    def __neg__(self):             return BinOp('*', -1, self)
+    def __neg__(self):             return binop('*', -1, self)
     def __and__(self, other):      return ss.conditions.Cond('&', self, other) # As a condition, e.g. hiv.on_art & (hiv.on_art.time >= ss.months(6))
     def __rand__(self, other):     return ss.conditions.Cond('&', other, self)
     def __or__(self, other):       return ss.conditions.Cond('|', self, other)
     def __ror__(self, other):      return ss.conditions.Cond('|', other, self)
     def __invert__(self):          return ss.conditions.Cond('~', self)
-    def __lt__(self, other):       return Func('less', self, other) # Comparisons are 1 or 0, e.g. a capacity: rate * (Q.n < 20)
-    def __le__(self, other):       return Func('less_equal', self, other)
-    def __gt__(self, other):       return Func('greater', self, other)
-    def __ge__(self, other):       return Func('greater_equal', self, other)
+    def __lt__(self, other):       return compare('less', self, other) # Comparisons are 1 or 0, e.g. a capacity: rate * (Q.n < 20)
+    def __le__(self, other):       return compare('less_equal', self, other)
+    def __gt__(self, other):       return compare('greater', self, other)
+    def __ge__(self, other):       return compare('greater_equal', self, other)
 
     def __bool__(self):
         errormsg = f'Cannot use the expression "{self}" where Python needs a single True or False; it has no value until the model runs'
@@ -216,7 +220,7 @@ class par(Nameable, Expr):
         value (any): a number, typed quantity (e.g. `ss.perday(0.1)`), distribution, or function
         bounds (list): the lower and upper bounds; a parameter with bounds can be calibrated
         prior (`ss.Dist`): the prior distribution, for calibration
-        source (str): where the value came from (shown under the parameter by `describe()`, and kept in the model spec)
+        source (str): where the value came from (shown under the parameter by `describe()`)
         doc (str): a description of the parameter (likewise)
         name (str): the name; if not given, taken from the keyword or variable it is assigned to
         label (str): a human-readable name
@@ -269,22 +273,10 @@ class par(Nameable, Expr):
         raise AttributeError(f"'par' object has no attribute '{attr}'")
 
     def __float__(self):
-        """
-        A parameter that holds a number is that number, e.g. float(sir.pars.beta); during a run, with the modifiers on it applied (e.g. ss.change),
-        so a function that reads it sees the change. If the modifiers give it a different value for different people or groups, it is not one number,
-        so this raises: use `mod.value(name)`, the value in the current context (one for each group or agent)
-        """
-        raw = self.raw
-        if sc.isnumber(raw):
-            engine = getattr(self.module, 'engine', None)
-            if engine is not None and self.name and not self.literal and engine.sim.modifiers.get((self.module.name, 'par', self.name)):
-                vals = np.asarray(engine.modified(self, raw), dtype=float)
-                if np.any(vals != vals.flat[0]):
-                    errormsg = f'The parameter {self.name} of "{self.module.name}" has modifiers that give it a value for each group or agent, so it is not one number; use {self.module.name}.value("{self.name}") for its values'
-                    raise ValueError(errormsg)
-                return float(vals.flat[0])
-            return float(raw)
-        errormsg = f'The parameter {self.name or ""} is {value_str(raw)}, which is not a plain number; use its value, e.g. .raw'
+        """ A parameter that holds a number is that number, e.g. float(sir.pars.beta): the value it holds. For its current value (in the sim's unit, with the modifiers on it applied), use `mod.value(name)`, or arithmetic on it once the sim is initialized """
+        if sc.isnumber(self.raw):
+            return float(self.raw)
+        errormsg = f'The parameter {self.name or ""} is {value_str(self.raw)}, which is not a plain number; use its value, e.g. .raw, or mod.value("{self.name}") for its current value'
         raise TypeError(errormsg)
 
     @property
@@ -1048,7 +1040,7 @@ def format_expr(expr, values=False, bare=None, mul='*', exact=False, unit=None):
         values (bool): whether to print the values of parameters rather than their names
         bare (func): how to write a bare state (a function of the state, returning a string); by default, its name
         mul (str): the multiplication sign
-        exact (bool): write numbers at full precision (for the model spec, so its hash and code are exact), rather than to six significant figures
+        exact (bool): write numbers at full precision (e.g. for `sim.to_json()`), rather than to six significant figures
         unit (str): with `values='number'`, the unit the numbers are read in (e.g. 'day'): a rate written in another unit keeps its own (`0.02 per year`)
     """
     def fmt(e):

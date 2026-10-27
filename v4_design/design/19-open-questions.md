@@ -54,14 +54,14 @@ Sources: the open-questions sections of the documents in [best-practices](../bes
 | Parameter names and time types | `ss.par` lowercase; Starsim's time types and distribution names unchanged (`ss.per` is not renamed) | [02](02-types.md), [04](04-parameters.md) |
 | Population size | Starsim's `total_pop` (people represented) and `n_agents` (agents simulated) | [01](01-objects.md#total_pop-and-n_agents) |
 | Named data | `ss.people('Kenya', year=2024)` and `ss.contacts('Kenya')`. What is small and common is bundled, the rest is fetched with a cache (`starsim_data`). No dependence on other frameworks' packages for data or generators | [04](04-parameters.md#named-data) |
-| The serialized form | A model is saved as code (`ss.save('model.py', sim)`, which writes `sim.to_code()`), and a sim with its results as a pickle (`ss.save('run.sim', sim)`). The model spec (`sim.to_spec()`, JSON) is the normalized form that `sim.hash()` and `ss.diff()` use, with functions recorded by name and source text; it is not read back, and there is no consumer of it outside Python | [14](14-model-spec.md) |
-| Reproducibility | Starsim's per-distribution streams, and common random numbers keyed on slots only (`ss.options.crn` turns them off). `sim.hash()` returns an objdict of five hashes and the seed; it is a by-product for telling runs apart, and the commit or tag remains the main record | [11](11-random.md) |
+| The serialized form | A model is its code; an import gives code (`sim.imported.code`). A sim with its results is saved as a pickle (`ss.save('run.sim', sim)`). There is no model spec, hash, or comparison function (decided 2026-10-27) | [14](14-model-spec.md) |
+| Reproducibility | Starsim's per-distribution streams, and common random numbers keyed on slots only (`ss.options.crn` turns them off). the commit or tag of the code is the record of what was run | [11](11-random.md) |
 | Unit of a bare number | The model's unit, so how the run is written does not change what its numbers mean. It comes from `unit=`, then the typed values in the model, then calendar dates for `start` and `stop` (days), then a typed `dt`, `start`, or `stop`, then year-like numbers for `start` and `stop` (years); if none of these, time is in timesteps and no unit is assumed. Where it came from is printed. Typed values with different units give the smallest, unless the model also has bare numbers, whose unit is then not known: a `TypeError` asks for `unit=` | [02](02-types.md#bare-numbers) |
 | `p=` | Always a branch probability: the probabilities of the branches out of a state sum to 1 (a `ValueError` if not). A probability per period is a rate, `rate=ss.prob(0.1, 'day')` | [03](03-states-and-transitions.md) |
 | First positional argument of `ss.Sim` | The model (a module, or a list of modules); Starsim's `pars` dict is a keyword | [01](01-objects.md) |
 | Inflow rates | The rate of a transition out of `ss.null` is a number per unit time; `ss.birth(rate=r)` is per person (a bare number per year, and above 1 per 1,000, as `ss.Births` reads it), and multiplies by the population for the user. No special type is required on an inflow (`ss.time.freq` remains for modules written as code) | [03](03-states-and-transitions.md) |
 | Where a disease's transitions run in the loop | All of a declared disease's transitions are taken in its `step()`, after the interventions, under every solver: those that are not contact-mediated, then those that are. So a delivery reaches the same people as agents as in compartments | [10](10-execution.md) |
-| Reading and writing a modified quantity | A modifier acts where the engine uses the quantity, each time it is used; its condition is evaluated then. Reading `sir.rel_sus` from custom code gives the base value, `sir.rel_sus.effective` the value with the modifiers applied (agents only); there is no `.base`. `sim.what_modifies()` is kept, and lists the declared modifiers (code that assigns the array directly is not tracked) | [07](07-effects.md) |
+| Reading and writing a modified quantity | A modifier acts where the engine uses the quantity, each time it is used; its condition is evaluated then. Reading `sir.rel_sus` from custom code gives the base value, `sir.effective('rel_sus')` the value with the modifiers applied (agents only); there is no `.base`. `sim.what_modifies()` is kept, and lists the declared modifiers (code that assigns the array directly is not tracked) | [07](07-effects.md) |
 | A condition whose threshold cuts through a bin | A lazy condition (`ss.ppl.age > 70`, with bins at 65) stops a compartmental run with a `CapabilityError` saying to add the edge or run as agents, and `'auto'` runs such a model as agents. A function of the sim that compares ages is not checked, and sees each group's midpoint | [07](07-effects.md#conditions) |
 | `sim.people.age` in a compartmental run | The age group's midpoint | [12](12-backends.md) |
 | Erlang stages for an approximated dwell time | `k = round((mean/std)²)`, from 1 to 50, with a note naming the mean and standard deviation kept | [12](12-backends.md#approximations) |
@@ -75,8 +75,6 @@ Sources: the open-questions sections of the documents in [best-practices](../bes
 | A likelihood on a result that is not an outcome | No wrapping is needed: `sim.fit(likelihood=dict(prevalence=...))` gives one by the name of the data series | [13](13-inference.md) |
 | Agents in places with coupling between places (LASER) | A stratification by place with `ss.geo.Mobility(kind='force')`, which moves the force of infection between places rather than people; checked on LASER's England and Wales model | [06](06-routes.md) |
 | Tolerance for agreement between solvers | Stated per test, with the population and number of runs (`tests/devtests/test_contracts.py`) | [18](18-conformance.md) |
-| A probability per period in the model spec | Kept as written (`prob(0.1, 'day')`): rates are strings in the spec | [14](14-model-spec.md) |
-| Loading a spec that contains functions | Moot: the spec is not read back; a model is saved as code | [14](14-model-spec.md) |
 | Arithmetic across the time types | Written down once, as a table ([02](02-types.md#arithmetic)): `number / dur` is a rate and `number / rate` a duration, adding probabilities combines their rates, and meaningless arithmetic raises a `TypeError` | [02](02-types.md#arithmetic) |
 | Vocabulary trimmed | Gone: `ss.Compartments`, `ss.export`, `crn_key`, `n_reps` on a sim, `min_duration=`, `p=` on an outcome. Removed: `ss.Needs` (later `ss.Requires`) and `sim.requires()`. Deferred: movement models beyond `ss.geo.gravity`, `msim.check_runs()` | [17](17-vocabulary.md), section C below |
 
@@ -127,7 +125,7 @@ A dwell-time distribution becomes stages. A distribution on `beta` or `rel_sus` 
 ### B6. Stratification details
 
 - **Cross-immunity** is one mechanism, `ss.immunity(due_to=...)`, for strains in shared states and with courses of their own (`ss.Strains(immunity=)`). Between two unrelated diseases it is an `ss.modify`. (Resolved; S7.4, 2026-10-22.)
-- **Strains with courses of their own under the compartmental solvers.** As agents they are exact. Under the compartmental solvers, strains that do not affect each other run side by side; strains that affect each other (`immunity=`, a shared state) need agents (decided 2026-10-20: the coupling from the members' shares, marked `approx`, was built and removed), and the crossing is the exact form for explicit `ss.modify(..., where=)` between members. Products over a family (`disease=` a family, `ss.by(<family>=...)` in `efficacy=`), and the family in `to_spec()` and `to_code()`, come with it.
+- **Strains with courses of their own under the compartmental solvers.** As agents they are exact. Under the compartmental solvers, strains that do not affect each other run side by side; strains that affect each other (`immunity=`, a shared state) need agents (decided 2026-10-20: the coupling from the members' shares, marked `approx`, was built and removed), and the crossing is the exact form for explicit `ss.modify(..., where=)` between members. Products over a family (`disease=` a family, `ss.by(<family>=...)` in `efficacy=`) come with it.
 - **The exact compartmental form of a strain dimension with partial immunity**: a history of the strains had (`2^k` levels). Until it is built, a compartmental solver raises for it.
 - **Stratifying only some transitions**, not just some states. It may be a sign the model wanted two transitions.
 
@@ -158,12 +156,9 @@ A dwell-time distribution becomes stages. A distribution on `beta` or `rel_sus` 
 - **What is the CRN guarantee when the population differs between scenarios?** Births, deaths, and migration make the agent sets diverge. There is probably a statable guarantee ("agents alive at the divergence point keep their draws") worth writing down.
 - **How much contact history should a network keep by default** for contact tracing? (`trace=` on a delivery uses the network's current contacts.)
 
-### B11. The model spec
+### B11. The model as code
 
-- Should a people property stratified on the only disease in a sim and the same stratification on the sim normalize to one document (and so one hash)?
-- Priors and likelihoods are written into the spec as text, so are not in `to_code()`'s output, which lists them for adding by hand ([deferred](../admin/deferred.md)). Whether priors belong in the hash is not decided.
-
-Writing out expanded strata and sub-stages for readers that cannot apply the rules is moot: the spec has no consumer outside Python.
+- Should a people property stratified on the only disease in a sim and the same stratification on the sim be one model? They give the same results, written in two places.
 
 ### B12. Names and spellings that may change
 
@@ -200,7 +195,7 @@ The open questions of the [best-practices](../best-practices) documents that are
 | **Joint likelihoods with correlation between data series** | Series are treated as independent |
 | **Edge-level eligibility** | Networks already say who is in contact with whom, and `trace=` on a delivery reaches the contacts of the people it selects (agents only) |
 | **Preallocated agent arrays** | An optimization to benchmark before building; it would not change what the user writes |
-| **Result caching** | With the hashes in place, an identical re-run could be a cache hit. It surprises people who expect a re-run to run, and nobody has asked for it |
+| **Result caching** | An identical re-run could be a cache hit. It surprises people who expect a re-run to run, and nobody has asked for it |
 | **`msim.check_runs()`** | Estimating how many runs a comparison needs. `check_dt()` stays |
 | **Movement models beyond gravity and radiation** (`ss.stouffer`, `ss.competing_destinations`) | A matrix or a movement register covers them until a vignette needs one by name. Radiation (`ss.geo.radiation`) is built, since it has no parameters to fit: it gives movement between places with no data to calibrate it to |
 

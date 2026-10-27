@@ -3,9 +3,7 @@ Test models written as declared states and transitions, and the solvers that run
 """
 
 # %% Imports and settings
-import re
 import sys
-import types
 import time
 import _thread
 import functools
@@ -20,6 +18,11 @@ import starsim.fit
 import starsim.library as ssl
 
 kw = dict(verbose=0)
+
+
+def same(*sims):
+    """ Whether sims give the same results: two spellings of one model """
+    return ss.debugtools.check_sims_match(*[sim.run() for sim in sims])
 
 
 def make_sir(name='sir', **kwargs):
@@ -85,57 +88,12 @@ def test_forms():
     recovery = ss.Transition(I, R, dur=10)
     forms.flow = ss.Disease(infection, recovery, name='sir')
 
-    hashes = sc.objdict()
+    sims = sc.objdict()
     for key,sir in forms.items():
-        sim = ss.Sim(sir, stop=50, **kw)
-        hashes[key] = sim.hash()
+        sims[key] = ss.Sim(sir, stop=50, **kw)
         assert list(sir.states.keys()) == ['S', 'I', 'R']
         assert {key:p.value for key,p in sir.pars.items()} == dict(beta=0.05, dur=10, init_prev=0.01) # init_prev by default
-    for key,val in hashes.items():
-        assert val == hashes[0], f'Expected the "{key}" form to match the operator form, but {val} ≠ {hashes[0]}'
-
-    # A different value changes the parameter hash but not the model hash
-    S, I, R = ss.states('S I R')
-    other = ss.Disease(infection=ss.Transition(S, I, rate=0.08 * I), recovery=ss.Transition(I, R, dur=10), name='sir')
-    sim = ss.Sim(other, stop=50, **kw)
-    assert sim.hash().model == hashes[0].model
-    assert sim.hash().pars != hashes[0].pars
-
-    # Everything that changes the results changes the hash: a modifier, a value inside a function, a literal, a numerical option, and the data
-    def make(rate, mods=None, **kwargs):
-        S, I, R = ss.states(3)
-        return ss.Sim(ss.Disease(infection=S >> I @ rate*I, recovery=I >> R @ ss.days(10), name='sir'), connectors=mods, stop=50, **kwargs, **kw)
-    def fn(val):
-        return lambda sim: val
-    base = make(0.05)
-    assert not base.initialized and base.hash() != make(0.05, ss.modify('sir.infection', multiply=0.2)).hash() and not base.initialized
-    assert base.to_spec() and not base.initialized # Neither initializes the sim, so it can still be changed and run
-    assert make(fn(0.1)).hash().pars != make(fn(0.5)).hash().pars
-    assert make(0.05*(1 + 1e-9)).hash() != base.hash()
-    config = base.hash().config
-    with ss.options.context(crn=False):
-        assert make(0.05).hash().config != config
-    assert base.hash().data is None and make(0.05, data=pd.DataFrame(dict(t=[10], I=[5]))).hash().data is not None
-
-    # A module written as code is told apart by its callbacks, by where a function without source comes from, and by a version; a function with none of these is refused
-    class Coded(ss.Disease):
-        def __init__(self, fn=None):
-            super().__init__()
-            self.define_pars(fn=fn)
-        def step(self):
-            pass
-    def coded(fn):
-        return ss.Sim(diseases=Coded(fn), n_agents=100, **kw).hash()
-    def low(sim, uids):
-        return 0.1
-    def high(sim, uids):
-        return 0.2
-    assert coded(low).model != coded(high).model and coded(np.exp).model != coded(np.log).model
-    partial = functools.partial(low, None)
-    with pytest.raises(ValueError, match='cannot tell these functions apart'):
-        coded(partial)
-    partial.version = '1'
-    assert coded(partial).model != coded(low).model
+    assert same(*sims.values()), 'Expected every form to give the results of the operator form'
 
     # Several sources as a sum of states, in the explicit form
     S, I, R, D = ss.states(4)
@@ -155,8 +113,8 @@ def test_forms():
     for flow in [True, False]:
         S, I, R = ss.states(3)
         density.append(ss.Sim(ss.Disease(S >> I @ (3e-5*S*I if flow else 3e-5*I.n), I >> R @ 10, name='sir'), stop=50, **kw))
-    assert density[0].hash() == density[1].hash()
-    assert density[0].run().results.sir.I[0] == 100 # init_prev=0.01 by default
+    assert same(*density)
+    assert density[0].results.sir.I[0] == 100 # init_prev=0.01 by default
     return forms
 
 
@@ -283,7 +241,7 @@ def test_names():
         ss.Sim(sir(init=dict(I=1)), total_pop=1000, **kw).init() # A whole number is still a share, with a warning
     with pytest.raises(ValueError, match='init_n'):
         ss.Sim(sir(init=dict(I=10)), total_pop=1000, **kw).init()
-    assert ss.Sim(seeded[1], **kw).hash() == ss.Sim(seeded[2], **kw).hash() # Two spellings of one model
+    assert same(ss.Sim(seeded[1], **kw), ss.Sim(seeded[2], **kw)) # Two spellings of one model
     S, I, R = ss.states('S I R')
     given = ss.Sim(ss.Disease(S >> I @ ss.perday(0.5)*I, I >> R @ ss.days(7), init=dict(S=0.1, I=1e-4), name='sir'), total_pop=10_000, **kw).init().diseases.sir.engine.y
     assert np.isclose(given[0].sum(), 1000) # A given S is kept (K&R 2.2 starts 10% susceptible) ...
@@ -610,8 +568,7 @@ def test_describe():
     table = repr(sir.transitions)
     print(table)
     assert 'transmission, from I' in table
-    spec = sim.to_spec()
-    assert spec['modules'][0]['transitions'][0]['rate'] == 'beta * I'
+    assert ss.expressions.format_expr(sir.graph.transitions.infection.rate, exact=True) == 'beta * I'
 
     # R0 from the next-generation matrix: beta × the mean time infectious, with a competing death; the contact matrix's largest eigenvalue; and through a reservoir
     assert np.isclose(sir.R0(), 0.5)
@@ -635,7 +592,7 @@ def test_describe():
 
 @sc.timer()
 def test_load():
-    sc.heading('Testing ss.load() of a model spec')
+    sc.heading('Testing ss.save() and ss.load()')
     S, I, R = ss.states(3)
     W = ss.State(people=False) # Bacteria in the water
     infection = S >> I @ ss.perday(0.5) * W.n / (W.n + 1e5)
@@ -651,38 +608,9 @@ def test_load():
     cholera.stratify(age=[0, 15], adjust={'recovery': [1.5, 1]})
     sim = ss.Sim(cholera, unit='day', start='2020-01-01', stop='2020-07-01', total_pop=1000, solver='gillespie', **kw)
     sim.stratify(risk=['low', 'high'], split=[0.8, 0.2])
-    ns = {} # The model as code builds the same model again
-    exec(sim.to_code(), ns)
-    sim2 = ns['sim']
-    sim2.pars.verbose = 0
-    a, b = [{k:v for k,v in s.to_spec().items() if k != 'meta'} for s in [sim, sim2]]
-    assert a == b # The same spec, so the same hash
-    assert sim2.hash() == sim.hash()
-    sim.run()
-    sim2.run()
-    assert np.array_equal(sim.results.cholera.cases.values, sim2.results.cholera.cases.values)
-    k = ss.par(10, bounds=[1, 100], name='k') # A likelihood is written into the code too, so the model it builds is the same
-    S, I, R = ss.states(3)
-    infection = S >> I @ 0.3*I.frac
-    lik = ss.Sim(ss.Disease(infection=infection, recovery=I >> R @ ss.days(10), cases=ss.outcome(0.5*infection, likelihood=ss.nbinom(n=k)), init_n=dict(I=10), name='sir'), stop=30, **kw)
-    ns = {}
-    exec(lik.to_code(), ns)
-    assert ns['sim'].hash() == lik.hash()
-    class mydist(ss.lognorm_ex): pass # A distribution of the user's own is written by its name, and listed, since it is not ss.mydist
-    with pytest.warns(ss.errors.LossyExport, match='mydist'):
-        S, I, R = ss.states(3)
-        code = ss.Sim(ss.Disease(infection=S >> I @ 0.3*I, recovery=I >> R @ mydist(10, 2), init_n=dict(I=10), name='sir'), stop=30, **kw).to_code()
-    assert ' mydist(' in code and 'ss.mydist' not in code
-    assert 'beta' in ss.diff(*[ss.Sim(diseases=ssl.AgentSIR(beta=b), networks='random', n_agents=1000, start=2000, stop=2003, **kw) for b in [0.1, 0.2]], output=True) # ss.diff() of modules written as code
-    def vaxsim(dur): # A product made by its delivery is written in one call, whole numbers as integers, and the default first state is left out
-        S, I, R = ss.states('S I R')
-        return ss.Sim(ss.Disease(S >> I @ 0.3*I, I >> R @ ss.days(dur), name='sir'), interventions=ss.vaccinate(efficacy=0.9, coverage=0.5, at=[10]), unit='day', stop=60, total_pop=1000, solver='ode', **kw)
-    code = vaxsim(8).to_code()
-    assert 'ss.vaccinate(efficacy=0.9, at=[10]' in code and 'ss.Vaccine' not in code and 'ss.days(8)' in code and 'first' not in code
-    ns = {}
-    exec(code.replace("if __name__ == '__main__':", 'if False:'), ns)
-    assert ns['sim'].hash() == vaxsim(8).hash()
-    assert '8 days -> 10 days' in ss.diff(vaxsim(8), vaxsim(10), output=True) # Not "8 day"
+    sim.save('temp.sim') # Before it has run
+    sim2 = ss.load('temp.sim').run()
+    assert np.array_equal(sim2.results.cholera.cases.values, sim.run().results.cholera.cases.values)
 
     # A sim that has run can be saved and loaded under every solver
     for solver in ['ode', 'binomial', 'gillespie', 'abm']:
@@ -696,12 +624,6 @@ def test_load():
     S, I, W = ss.State(name='S'), ss.State(name='I'), ss.State(name='W')
     rate = 1 - (1 - 0.5*I.frac)**3 / (2*W.n) - (I.n - W.n)
     assert ss.expressions.format_expr(rate) == '1 - (1 - 0.5 * I.frac) ** 3 / (2 * W.n) - (I.n - W.n)'
-
-    # A model spec is not read back, and says what to do instead
-    sim.to_spec('temp_spec.json')
-    with pytest.raises(ValueError, match='model.py'):
-        ss.load('temp_spec.json')
-    sc.rmpath('temp_spec.json')
     return sim2
 
 
@@ -864,17 +786,13 @@ def test_first_state():
     assert sim.diseases.d.graph.first.name == 'B' and sim.results.d.B[0] == 10_000
     assert 'the first state made' in sim.describe(output=True)
 
-    # The code written for a model says which state it is
-    def make(**kw):
-        S, I, V = ss.states('S I V')
-        trs = dict(infection=S >> I @ ss.perday(0.3)*I, vax=S >> V @ ss.perday(0.01), breakthrough=V >> I @ ss.perday(0.1)*I)
-        sir = ss.Disease(**{k:trs[k] for k in reversed(trs)}, init_n=dict(I=100), name='sir', **kw)
-        return ss.Sim(sir, total_pop=10_000, stop=10, unit='day', solver='ode', verbose=0)
-    sim = make(first='V')
-    rebuilt = types.SimpleNamespace()
-    exec(sim.to_code(), rebuilt.__dict__)
-    assert re.search(r"first\s*= 'V'", sim.to_code()) and list(rebuilt.sir.graph.transitions.keys()) == ['breakthrough', 'vax', 'infection'] # In the order given
-    assert sim.run().results.sir.V[0] == rebuilt.sim.run().results.sir.V[0] == 9900
+    # The first state given, whatever the order of the transitions
+    S, I, V = ss.states('S I V')
+    trs = dict(infection=S >> I @ ss.perday(0.3)*I, vax=S >> V @ ss.perday(0.01), breakthrough=V >> I @ ss.perday(0.1)*I)
+    sir = ss.Disease(**{k:trs[k] for k in reversed(trs)}, init_n=dict(I=100), name='sir', first='V')
+    sim = ss.Sim(sir, total_pop=10_000, stop=10, unit='day', solver='ode', verbose=0)
+    assert list(sir.graph.transitions.keys()) == ['breakthrough', 'vax', 'infection'] # In the order given
+    assert sim.run().results.sir.V[0] == 9900
     return
 
 
@@ -1164,8 +1082,8 @@ def test_cascade_binomial():
 @sc.timer()
 def test_change_in_function():
     sc.heading('Testing that a function that reads a parameter sees a change to it')
-    def initiation(sim, uids): # A logistic rate with an intercept, read with float() (it saw the base value, so the change did nothing)
-        b0 = float(sim.diseases.meth.pars.b0)
+    def initiation(sim, uids): # A logistic rate with an intercept, read with value() (float() gives the value it holds, without the change)
+        b0 = sim.diseases.meth.value('b0')
         return ss.peryear(1/(1 + np.exp(-b0))*np.ones(len(uids)))
     def meth_model(rate):
         none, on = ss.states('none on')
@@ -1177,13 +1095,29 @@ def test_change_in_function():
         sim = ss.Sim(m, interventions=intv, start=2000, stop=2010, dt=1/12, n_agents=2000, verbose=0).run()
         starts.append(sim.results.meth.start[61:].sum())
     assert starts[0] > 100 and starts[1] == 0
+    return
 
-    # A change that differs between groups is not one number, so float() raises rather than averaging; mod.value() gives the value of each
-    m = meth_model(initiation)
-    m.stratify(risk=['low', 'high'])
-    intv = ss.modify('meth.pars.b0', multiply=ss.by(risk=[1, 2]))
-    with pytest.raises(ValueError, match='not one number'):
-        ss.Sim(m, interventions=intv, start=2000, stop=2002, n_agents=500, verbose=0).run()
+
+@sc.timer()
+def test_value():
+    sc.heading('Testing that a parameter has one value for code: arithmetic, float(), and mod.value(), declared or written as code')
+    sir = ss.SIR(beta=0.3)
+    p = sir.pars.beta
+    assert all(isinstance(x - p, ss.expressions.BinOp) for x in [1., np.array(1.), np.ones(2)]), 'Before the sim is initialized, arithmetic on a parameter is part of the model'
+    p = ss.Sim(sir, n_agents=200, verbose=0).init().diseases.sir.pars.beta
+    for x in [1., np.array(1.), np.ones(2)]: # After, it is a value, whatever the shape of the other operand
+        assert np.all(x - p == 0.7) and not isinstance(x - p, ss.expressions.Expr)
+
+    class Mosquitoes(ss.Module): # Typed values, read from code, in the sim's unit
+        def __init__(self):
+            super().__init__()
+            self.define_pars(bites=ss.perday(0.3), life=ss.days(10), f=ss.by(sex=[0.6, 0.8]), em=ss.timeseries({'2000-01-01':ss.peryear(1), '2002-01-01':ss.peryear(2)}))
+        def step(self):
+            self.read = [self.value(k) for k in self.pars] + [self.sim.diseases.sir.value('beta'), float(self.sim.diseases.sir.pars.beta)]
+    sim = ss.Sim(ss.SIR(beta=0.3), modules=Mosquitoes(), interventions=ss.change('sir.pars.beta', at='2001-01-01', to=0.1), start='2000-01-01', stop='2003-01-01', unit='day', dt=ss.years(1), n_agents=200, verbose=0).run()
+    bites, life, f, em, beta, raw = [m for m in sim.modules if isinstance(m, Mosquitoes)][0].read
+    assert np.isclose(bites, 0.3) and np.isclose(life, 10) and np.allclose(f, [0.6, 0.8]) and np.isclose(em, 2/365)
+    assert np.isclose(beta, 0.1) and raw == 0.3, 'value() applies the change (to 0.1 per day); float() is the value the parameter holds'
     return
 
 
@@ -1214,12 +1148,9 @@ def test_given_dwell():
     cleared = make('abm', rate=lambda P: ss.peryear(0.5)*P.time).run().results.d.R[-1]/n
     assert np.isclose(cleared, 0.841, atol=0.01), cleared
 
-    # The model spec writes it, and a branch with p= (decided on entry) cannot read it
+    # describe() says so, and a branch with p= (decided on entry) cannot read it
     sim = make('abm', p=lambda P: 1 - np.exp(-P.time), dur=ss.lognorm_ex(ss.years(3), ss.years(9))).init()
-    assert 'P.time' in str(sim.to_spec()) and 'decided as people leave' in sim.describe(output=True)
-    ns = {}
-    exec(ss.spec.to_code(sim.to_spec()).replace("if __name__ == '__main__'", 'if False'), ns)
-    assert ns['sim'].hash() == sim.hash()
+    assert 'decided as people leave' in sim.describe(output=True)
     P, C, R = ss.states('P C R')
     with pytest.raises(ss.CapabilityError, match='decided when people enter'):
         ss.Disease(P, C, R, a=ss.Transition(P, C, dur=ss.years(3), p=P.time/10), b=ss.Transition(P, R, dur=ss.years(3), p=None), init_n=dict(P=10))

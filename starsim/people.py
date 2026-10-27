@@ -158,7 +158,7 @@ class People:
         numbers, AUIDs for tracking alive agents, and agents' parents
 
         They are made on first use rather than in `__init__()`, so that a People not yet in
-        a sim (such as the copy `sim.inputs` keeps for `sim.new()`) holds no arrays per agent.
+        a sim (such as the copy a sim keeps of itself before it is initialized, for `sim.new()`) holds no arrays per agent.
         The slots read the UIDs, and the parents are all none, until one is set (see `shared`
         in `ss.Arr`), so they take no memory unless something (e.g. `ss.Pregnancy`, with fetuses as agents) sets them.
         """
@@ -1029,7 +1029,7 @@ def people(place, year=None, n_agents=None, revision=None):
     sim takes its population size (`total_pop`) from them, unless it is given one, and
     the split of an age stratification that is not given one, so a compartmental model
     can use a named population as well as agents can. Where the population came from is
-    written in the model spec, so `sim.to_code()` looks it up again.
+    shown by `sim.describe()`.
 
     Args:
         place (str): a country, by name or code ('Kenya', 'KE', 'KEN'), or a US state ('United States:Massachusetts')

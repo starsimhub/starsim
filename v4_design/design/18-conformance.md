@@ -10,7 +10,7 @@ Each claim the specification makes ([README.md](README.md#what-the-specification
 
 The tests are of three kinds:
 
-- **Asserted**: the test fails if the behavior is wrong (the three spellings give the same model spec; a modifier restores the base value).
+- **Asserted**: the test fails if the behavior is wrong (the three spellings give the same results; a modifier restores the base value).
 - **Recorded**: the result is a published number or table, not a pass or fail (how far an ODE approximation of a network model is from the agent-based run).
 - **Measured against the original**: lines of code and run time for each vignette, compared with the framework it came from.
 
@@ -20,7 +20,7 @@ An implementation can be complete in stages. Each level includes the ones before
 
 | Level | Covers |
 |---|---|
-| **Core** | Objects ([01](01-objects.md)), types ([02](02-types.md)), states and transitions ([03](03-states-and-transitions.md)), parameters ([04](04-parameters.md)), the ordered loop ([10](10-execution.md)), the model spec ([14](14-model-spec.md)), errors as classes ([15](15-errors.md)), and `solver='abm'` |
+| **Core** | Objects ([01](01-objects.md)), types ([02](02-types.md)), states and transitions ([03](03-states-and-transitions.md)), parameters ([04](04-parameters.md)), the ordered loop ([10](10-execution.md)), the model as code ([14](14-model-spec.md)), errors as classes ([15](15-errors.md)), and `solver='abm'` |
 | **Compartmental** | `solver='ode'` and `'auto'`; mixing pools and contact matrices; Erlang stages; `equations()`; states that are not people |
 | **Stochastic** | `'gillespie'` (exact), `'tau'` (tau-leaping), and `'binomial'`; `ss.MultiSim` for many runs |
 | **Structured** | Stratification ([05](05-dimensions.md)), `ss.modify` and conditions ([07](07-effects.md)), interventions ([08](08-interventions.md)), results and data ([09](09-results.md)) |
@@ -34,19 +34,17 @@ Each suite ends with what tests it now. "Not yet tested" means the claim is a ho
 
 ### 1. Form equivalence
 
-For every corpus model, the two spellings of its transitions (operators and explicit `ss.Transition`) and the two ways of building the module (constructor and class) MUST produce the same model spec and the same model hash, once names agree. ([01-objects.md](01-objects.md#the-equivalence-rule)) The same holds for:
+For every corpus model, the two spellings of its transitions (operators and explicit `ss.Transition`) and the two ways of building the module (constructor and class) MUST give the same results, once names agree. ([01-objects.md](01-objects.md#the-equivalence-rule)) The same holds for:
 
 - the ways of declaring states: `S, I, R = ss.states(3)`, `ss.states('S I R')`, and `S = ss.State()` one at a time;
 - results and outcomes passed as keywords and passed through `transitions=`, `results=`, and `outcomes=`.
 
-Tested by `test_transitions.py::test_forms` on the SIR (the spellings, a class, and the ways of declaring states, by their hashes). Not yet tested on the rest of the corpus.
+Tested by `test_transitions.py::test_forms` on the SIR (the spellings, a class, and the ways of declaring states, by their results). Not yet tested on the rest of the corpus.
 
-### 2. The model spec and the saved form
+### 2. The code and the saved form
 
-- Reordering keywords, and the order in which transitions and parameters are passed, does not change the spec or any hash. Reordering states, modules, or stratifications does, because that order has meaning ([14-model-spec.md](14-model-spec.md#normalization)).
-- The code `sim.to_code()` writes builds a sim with an identical spec and hash, and the same results (`test_transitions.py::test_load`, on a stratified cholera model under `gillespie`, and with a likelihood). Over every corpus model, the code builds the same hash or lists what it leaves out, such as a network or a function (`test_contracts.py::test_code_round_trip`).
-- A sim saved with `ss.save('run.sim', sim)` after a run loads with the same results, under every solver (`test_transitions.py::test_load`).
-- A saved model spec is not read back, and `ss.load()` of one says what to do instead (`test_transitions.py::test_load`).
+- The code an import writes builds the same sim, run on its own, with the same results (`test_interop.py::test_code`, on an EMULSION import and on a source with every kind of value an importer gives); an import and its hand translation give the same results (`test_interop.py::test_hand`).
+- A sim saved with `ss.save('run.sim', sim)`, before a run or after one, loads with the same results, under every solver (`test_transitions.py::test_load`), and so does every corpus model (`test_interop.py::test_save_load`).
 - Each export lists what it changed and left out (`ss.errors.LossyExport`): `test_interop_export.py` checks the list for Erlang stages, a network, an agent-based sim, and a stratification, and that SBML and odin exports read back with the same results. That the list matches everything missing from the file is not checked.
 
 ### 3. Agreement between solvers, on simple models
@@ -110,7 +108,7 @@ Tested by `test_transitions.py::test_functions` and `test_auto`, `test_deliverie
 
 ### 7. `ss.modify`
 
-- **Base and effective.** While a modifier is active, reading the array (`sir.rel_sus`) gives the base, and `sir.rel_sus.effective` the value with the active modifiers applied (agents only). When the modifier's condition stops holding, or `stop=` passes, the value the engine uses is the base again, exactly, with no bookkeeping by the user (`test_deliveries.py::test_effective`, `test_change`).
+- **Base and effective.** While a modifier is active, reading the array (`sir.rel_sus`) gives the base, and `sir.effective('rel_sus')` the value with the active modifiers applied (agents only). When the modifier's condition stops holding, or `stop=` passes, the value the engine uses is the base again, exactly, with no bookkeeping by the user (`test_deliveries.py::test_effective`, `test_change`).
 - **Combination.** Set, then multiply, then add, whatever order the modifiers were declared in. Two `set=` modifiers active at the same time give a note, and the later one in the loop is used (`test_deliveries.py::test_modify_where`).
 - **Assignment goes to the base.** `arr[uids] = x` while a modifier is active changes the base, and the modifier still applies on top (not yet tested).
 - **Any named numeric quantity.** A parameter, `rel_sus` and `rel_trans`, a transition, and a network parameter as a path (`'school.pars.n_contacts'`) work as targets (`test_deliveries.py::test_modify_where`, `test_network_contacts`); a boolean state or a plain number raises a `KeyError` (`test_transitions.py::test_modify`, `test_deliveries.py::test_network_contacts`).
@@ -121,8 +119,8 @@ Tested by `test_transitions.py::test_functions` and `test_auto`, `test_deliverie
 ### 8. Stratification
 
 - **In place by default.** After `sir.stratify(age=[0, 15, 65])`, `sir` is stratified, and the call returned `sir` itself, so `ss.Sim(sir.stratify(age=[0, 15, 65]))` works. Running the same line again does nothing more (with a note); stratifying by the same dimension in another way raises a `ValueError`.
-- **A copy on request.** After `sir_age = sir.stratify(age=[0, 15, 65], inplace=False)`, the spec and hash of `sir` are what they were before, and `sir_age` is identical to a model stratified in place.
-- **Stratifying the sim.** `sim.stratify(age=[0, 5, 18, 65])` and `ss.Sim(..., stratify=dict(age=[0, 5, 18, 65]))` give the same spec, and every module in the sim has the same age groups. Two diseases stratified by age with different groups raise a `ValueError`.
+- **A copy on request.** After `sir_age = sir.stratify(age=[0, 15, 65], inplace=False)`, `sir` is what it was before, and `sir_age` is identical to a model stratified in place.
+- **Stratifying the sim.** `sim.stratify(age=[0, 5, 18, 65])` and `ss.Sim(..., stratify=dict(age=[0, 5, 18, 65]))` give the same model, and every module in the sim has the same age groups. Two diseases stratified by age with different groups raise a `ValueError`.
 - **States that are not people** are not split by a people dimension (age, sex, risk), are split by `patch`, and are split by their own dimensions when named in `states=`.
 - **A contact matrix with other age groups** is aggregated to the model's groups by population in a compartmental run, a note.
 - **Coverage delivers `f`.** `coverage=0.7` on a model with `P` strata reaches 70% of the eligible people in total, not `1 − (1 − 0.7)^P`; realized coverage is read from the delivery's results.
@@ -144,7 +142,6 @@ Every default the library guessed appears in `describe()`, marked `[guessed]` wi
 - Adding an unrelated module (an analyzer, or a disease that shares no states) does not change another module's draws, whether the run is whole or stepped; two identical modules with different names have streams of their own (`test_contracts.py::test_streams`).
 - With common random numbers, which are keyed on each agent's slot and nothing else, the variance of the difference between a baseline and an intervention scenario is lower than with `ss.options.crn = False` for small perturbations; the pairing weakens once trajectories diverge (`test_randomness.py` checks the streams and `ss.options.crn`; `test_contracts.py::test_crn_pairing` checks, for a declared disease as agents, that the pairing makes the variance of the difference well below that of independent runs. Against `ss.options.crn = False` it is not yet shown: for a declared disease, plain streams keep the scenarios in step too, and over 30 seeds of a small change the two variances were about the same).
 - A sim is one run. `ss.parallel(sim, n_runs=100)`, `sim.run(n_runs=100)`, and `ss.MultiSim(sim, n_runs=100).run()` give runs of the base sim with different seeds, and a result has a run dimension (`.values` is runs by time, `.quantiles()` summarizes across runs) (`test_run.py`, `test_results.py`).
-- `sim.hash()` returns an `sc.objdict` with `model`, `pars`, `config`, `scenario`, `data`, and `seed`, and changes in exactly the part that was changed: a parameter value changes `pars` only, an added state changes `model`, a numerical option changes `config`, an added intervention changes `scenario`, attached data changes `data`, and a different `rand_seed` changes `seed` (`test_transitions.py::test_forms`, `test_modify`).
 
 ### 11. Errors
 

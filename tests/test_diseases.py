@@ -486,6 +486,79 @@ def test_infect():
 
 
 @sc.timer()
+def test_same_transmission():
+    sc.heading('Testing that an SIR declared and one written as code transmit the same, by the same code: the same infections, sources, and networks, CRN included')
+    seeds = lambda self, sim, uids: (uids % 50 == 0).astype(float) # Every 50th agent, so seeding takes no random numbers
+
+    class CodedSIR(ss.Infection):
+        def __init__(self, **kwargs):
+            super().__init__()
+            self.define_pars(beta=ss.perday(0.1), dur_inf=10, init_prev=ss.bernoulli(seeds))
+            self.define_states(ss.BoolState('recovered'), ss.FloatArr('ti_recovered'))
+            self.update_pars(**kwargs)
+        def step_state(self):
+            done = (self.infected & (self.ti_recovered < self.ti)).uids # At the start of the step after dur_inf, as a declared dwell time ends
+            self.infected[done] = False
+            self.recovered[done] = True
+        def set_prognoses(self, uids, sources=None):
+            super().set_prognoses(uids, sources)
+            self.infected[uids] = True
+            self.ti_infected[uids] = self.ti
+            self.ti_recovered[uids] = self.ti + self.pars.dur_inf - (not self.sim.initialized) # The seeds are infected at the start, as a declared state's are, not in the first step
+
+    kw = dict(n_agents=n_agents, stop=50, unit='day', verbose=0, analyzers=ss.infection_log(), networks=[ss.RandomNet(n_contacts=4), ss.RandomNet(n_contacts=2, name='other')],
+              connectors=[ss.modify('sir.rel_sus', multiply=0.5, where=lambda sim: sim.people.age > 40), ss.modify('other.pars.n_contacts', multiply=0.5)],
+              interventions=ss.vaccinate(ss.Vaccine(efficacy=0.7), coverage=0.3, at=10))
+    dec = ss.Sim(diseases=ss.SIR(name='sir', beta=ss.perday(0.1), dur_inf=ss.constant(ss.days(10)), init_prev=ss.bernoulli(seeds)), solver='abm', **kw).run()
+    cod = ss.Sim(diseases=CodedSIR(name='sir'), **kw).run()
+    d, c = dec.results.sir, cod.results.sir
+    assert np.array_equal(d.infection, c.new_infections) and np.array_equal(d.I, c.infected) and np.array_equal(d.R, c.recovered) and d.infection.sum() > 500
+    logs = [sim.analyzers[0].to_df().sort_values('target')[['target', 'source', 'network']].fillna('-').astype(str).values for sim in [dec, cod]]
+    assert np.array_equal(*logs) # Who infected whom, and over which network
+    return dec, cod
+
+
+@sc.timer()
+def test_coded_strains():
+    sc.heading('Testing strains of a disease written as code: each strain transmitted in turn, by the shared transmission, with protection between them')
+    class SIRS(ss.Infection):
+        def __init__(self, strains=None, **kwargs):
+            super().__init__(strains=strains)
+            self.define_pars(beta=ss.perday(0.08), dur_inf=8, dur_imm=30, init_prev=ss.bernoulli(0.02))
+            self.define_states(ss.BoolState('recovered'), ss.FloatArr('ti_recovered'), ss.FloatArr('ti_waned'))
+            self.update_pars(**kwargs)
+        def step_state(self):
+            done = (self.infected & (self.ti_recovered <= self.ti)).uids
+            self.infected[done] = False
+            self.recovered[done] = True
+            self.ti_waned[done] = self.ti + self.pars.dur_imm
+            waned = (self.recovered & (self.ti_waned <= self.ti)).uids
+            self.recovered[waned] = False
+            self.susceptible[waned] = True
+        def set_prognoses(self, uids, sources=None):
+            super().set_prognoses(uids, sources)
+            self.infected[uids] = True
+            self.recovered[uids] = False
+            self.ti_infected[uids] = self.ti
+            self.ti_recovered[uids] = self.ti + self.pars.dur_inf*self.strain_value('dur', uids)
+
+    strains = ss.Strains(['a', 'b'], rel_trans=[1, 2], dur=[0.5, 1], split=[0.9, 0.1], immunity=ss.immunity(due_to='recovered', rel_sus=[[1, 0.2], [0.2, 1]]))
+    sim = ss.Sim(diseases=SIRS(strains=strains, name='flu'), networks=ss.RandomNet(n_contacts=4), analyzers=ss.infection_log(), n_agents=n_agents, stop=60, unit='day', verbose=0).run()
+    flu = sim.diseases.flu
+    log = sim.analyzers[0].to_df()
+    src = log.source.to_numpy(dtype=float, na_value=np.nan)
+    ok = src >= 0
+    assert ok.sum() > 1000 and np.array_equal(flu.strain.raw[log.target[ok].astype(int)], flu.strain.raw[src[ok].astype(int)]) # Each case has its source's strain
+    counts = np.bincount(flu.strain[flu.strain >= 0], minlength=2)
+    assert counts[1] > counts[0] # The more transmissible strain overtakes the commoner one
+    new = flu.infect(flu.susceptible.uids[:5], strain='b')
+    assert len(new) == 5 and (flu.strain[new] == 1).all() and np.allclose(flu.ti_recovered[new] - flu.ti, 8)
+    with pytest.raises(ss.CapabilityError, match='max_strains'):
+        SIRS(strains=ss.Strains(['a', 'b'], max_strains=2))
+    return sim
+
+
+@sc.timer()
 def test_mixed_disease():
     sc.heading('Testing a disease with declared and coded parts')
     class Mixed(ss.Disease):
@@ -634,6 +707,8 @@ if __name__ == '__main__':
     mtct  = test_mtct()
     current = test_current_state()
     infect  = test_infect()
+    same  = test_same_transmission()
+    coded_strains = test_coded_strains()
     mixed = test_mixed_disease()
     seams = test_code_seams()
     cong  = test_congenital()

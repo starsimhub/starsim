@@ -5,12 +5,12 @@ import numpy as np
 import scipy.sparse as sps
 import sciris as sc
 import starsim as ss
-from .engine import convert
+from .engine import Telling, convert
 
 __all__ = ['Mixing']
 
 
-class Mixing:
+class Mixing(Telling):
     """
     Who meets whom in a compartmental run
 
@@ -48,7 +48,7 @@ class Mixing:
             strat = sim.groups.strats[self.space]
             self.places = sim.groups.group_coords[:, self.space] # The place of each group
             if strat.mobility is not None and strat.mobility.guessed:
-                ss.note(f'the movement between the levels of "{strat.name}": {strat.mobility.guessed}', sim=sim)
+                self.tell(ss.note, f'the movement between the levels of "{strat.name}": {strat.mobility.guessed}', sim=sim)
         self.init_movement()
         return
 
@@ -124,9 +124,11 @@ class Mixing:
             return ss.transitions.dwell_stats(val, lambda x: convert(x, unit))[0]
         return float(convert(val, unit))
 
-    def init(self, approx=None):
-        """ Turn the sim's networks into contact rates between groups """
+    def init(self, approx=None, solver=None):
+        """ Turn the sim's networks into contact rates between groups, for the sim's solver (or the one given: the ODE, when the mixing is laid out to choose the solver, see `ss.solvers.choose.lay_out()`) """
         sim = self.sim
+        self.solver = solver or sim.solver
+        self.laid_out = (sim.groups, sim.groups.version) # The groups it is laid out for, as for an engine (see ss.solvers.Compartmental.current())
         nets = list(sim.pars.networks.values())
         if not nets:
             return
@@ -136,7 +138,7 @@ class Mixing:
             key = ss.utils.standardize_netkey(net.name)
             betas = [val for mod in sim.declared for tr in mod.graph.transmissions for coef in (getattr(tr, 'terms', None) or {}).values() for k,val in getattr(coef, 'raw', coef).items() if ss.utils.standardize_netkey(k) == key] if named else None
             if betas and not any(self.carries(val, sim.unit_base) for val in betas): # Named by transmissions, but none over it
-                ss.note(f'"{net.name}" carries no transmission (every beta for it is 0), so it adds no contacts', sim=sim)
+                self.tell(ss.note, f'"{net.name}" carries no transmission (every beta for it is 0), so it adds no contacts', sim=sim)
                 continue
             beta = net.pars.get('beta', 1.0) if isinstance(net, (ss.MixingPool, ss.MixingPools)) else 1.0
             if isinstance(net, ss.MixingPools) and (getattr(net, 'dims', None) or getattr(net, 'full', None) is not None):
@@ -149,19 +151,19 @@ class Mixing:
                 terms = self.partnerships(net)
                 what = f'"{net.name}" ({type(net).__name__}) uses the partner-change model: partnerships formed at {terms[0].partnership.formed:.3g} per person per {sim.unit_name}, each with the chance it transmits over its whole length, from people drawn from the population (Anderson and May\'s model: it counts at most one transmission in each partnership, from a partner in the source state when it forms, so it leaves out reinfection within a partnership and concurrency, and runs low when a curable infection passes within a partnership faster than it is cleared, or with concurrency; it runs high for a long infection in long partnerships, where infection stays within pairs)'
                 if approx is False:
-                    raise ss.CapabilityError(f'cannot run with solver="{sim.solver}" and approx=False: {what}. Run with solver="abm".')
-                ss.note(what, sim=sim, verbose=0 if approx else None)
+                    raise ss.CapabilityError(f'cannot run with solver="{self.solver}" and approx=False: {what}. Run with solver="abm".')
+                self.tell(ss.note, what, sim=sim, verbose=0 if approx else None)
                 self.terms.extend(terms)
             elif isinstance(net, ss.Network):
                 kind = type(net).__name__
                 contacts, source = net.mean_contacts(sim)
                 if contacts is None:
-                    raise ss.CapabilityError(f'cannot run with solver="{sim.solver}": {kind} has no compartmental approximation yet{source}. Run with solver="abm".')
+                    raise ss.CapabilityError(f'cannot run with solver="{self.solver}": {kind} has no compartmental approximation yet{source}. Run with solver="abm".')
                 what = f'{kind} approximated by homogeneous mixing with {contacts:n} contacts per {sim.unit_name} ({source})'
                 if approx is False:
-                    raise ss.CapabilityError(f'cannot run with solver="{sim.solver}" and approx=False: {what[0].lower() + what[1:]}. Run with solver="abm".')
+                    raise ss.CapabilityError(f'cannot run with solver="{self.solver}" and approx=False: {what[0].lower() + what[1:]}. Run with solver="abm".')
                 else:
-                    ss.note(what, sim=sim, verbose=0 if approx else None)
+                    self.tell(ss.note, what, sim=sim, verbose=0 if approx else None)
                 self.terms.append(sc.objdict(kind='homogeneous', contacts=contacts, name=net.name))
         self.note_regrouped()
         if not self.terms: # Every network skipped (each carries no contacts here): none, under a network's name, so a beta by route finds it
@@ -171,6 +173,7 @@ class Mixing:
             for term in self.terms:
                 if term.kind == 'matrix':
                     self.within_places(term)
+        self.laid_out = (sim.groups, sim.groups.version)
         return
 
     def partnerships(self, net):
@@ -192,21 +195,21 @@ class Mixing:
         unit = sim.unit_base
         fix = 'Run with solver="abm".'
         if p.get('where') is not None:
-            raise ss.CapabilityError(f'cannot run "{net.name}" with solver="{sim.solver}": the partner-change model takes partnerships between everyone, or by sex (ss.SexualNet), not among some people (where=). {fix}')
+            raise ss.CapabilityError(f'cannot run "{net.name}" with solver="{self.solver}": the partner-change model takes partnerships between everyone, or by sex (ss.SexualNet), not among some people (where=). {fix}')
 
         # The side of each group: by sex on a sexual network, whose partnerships are a man and a woman (between='mf') or two men ('mm')
         sexual = isinstance(net, ss.SexualNet)
         if sexual and net.forms_own:
-            raise ss.CapabilityError(f'cannot run "{net.name}" with solver="{sim.solver}": {type(net).__name__} forms its own partnerships (its own step()), which only agents follow. {fix}')
+            raise ss.CapabilityError(f'cannot run "{net.name}" with solver="{self.solver}": {type(net).__name__} forms its own partnerships (its own step()), which only agents follow. {fix}')
         if sexual and not set(net.groups) <= {'male', 'female'}:
-            raise ss.CapabilityError(f'cannot run "{net.name}" with solver="{sim.solver}": the partner-change model takes partnerships by sex (between="mf" or "mm"), not between {net.groups[0]} and {net.groups[1]}. {fix}')
+            raise ss.CapabilityError(f'cannot run "{net.name}" with solver="{self.solver}": the partner-change model takes partnerships by sex (between="mf" or "mm"), not between {net.groups[0]} and {net.groups[1]}. {fix}')
         two_sided = sexual and net.sides is not None # Each partnership has one person of each side
         side = np.zeros(sim.groups.n_groups, dtype=int) # The position in net.sides of each group's side, -1 for neither
         n_sides = 1
         if sexual:
             d = next((d for d,s in enumerate(strats) if s.female is not None), None)
             if d is None:
-                raise ss.CapabilityError(f'"{net.name}" has partnerships by sex, which with solver="{sim.solver}" must be a dimension of the model: add sim.stratify(sex=["female", "male"]). Or {fix[0].lower() + fix[1:]}')
+                raise ss.CapabilityError(f'"{net.name}" has partnerships by sex, which with solver="{self.solver}" must be a dimension of the model: add sim.stratify(sex=["female", "male"]). Or {fix[0].lower() + fix[1:]}')
             female = coords[:, d] == strats[d].female
             side = np.where(female, net.groups.index('female'), net.groups.index('male')) if two_sided else np.where(female == (net.groups[0] == 'female'), 0, -1) # Its sides are m (0) and f (1); within one sex, the other takes no part
             n_sides = 2 if two_sided else 1
@@ -220,7 +223,7 @@ class Mixing:
         n_lev = 1
         if keys:
             if keys[0] not in names:
-                raise ss.CapabilityError(f'"{net.name}" counts or matches partners by "{keys[0]}", which with solver="{sim.solver}" must be a dimension of the model: add e.g. sim.stratify({keys[0]}=[...]). Or {fix[0].lower() + fix[1:]}')
+                raise ss.CapabilityError(f'"{net.name}" counts or matches partners by "{keys[0]}", which with solver="{self.solver}" must be a dimension of the model: add e.g. sim.stratify({keys[0]}=[...]). Or {fix[0].lower() + fix[1:]}')
             dl = names.index(keys[0])
             self.check_ragged(dl, net)
             lev, n_lev = coords[:, dl], strats[dl].n
@@ -322,7 +325,7 @@ class Mixing:
         pars = net.pars
         groups = list(pars.src.values())
         if not all(isinstance(g, ss.AgeGroup) for g in groups + list(pars.dst.values())):
-            raise ss.CapabilityError(f'cannot run "{net.name}" with solver="{sim.solver}": only mixing pools between age groups have a compartmental form so far. Run with solver="abm".')
+            raise ss.CapabilityError(f'cannot run "{net.name}" with solver="{self.solver}": only mixing pools between age groups have a compartmental form so far. Run with solver="abm".')
         top = np.inf # The last group is open: everyone older than its lower edge
         bands = np.array([[g.low, top if g.high is None else g.high] for g in groups], dtype=float)
         dst_bands = np.array([[g.low, top if g.high is None else g.high] for g in pars.dst.values()], dtype=float)
@@ -349,7 +352,7 @@ class Mixing:
             edges = sorted(bands[:, 0])
             sim.pars.stratify = sc.mergelists(sim.pars.stratify, dict(age=edges))
             sim.groups.init()
-            ss.note(f'stratified by the age groups of "{net.name}" ({sc.strjoin(sim.groups.strats[-1].labels)}), since no age groups were given', sim=sim)
+            self.tell(ss.note, f'stratified by the age groups of "{net.name}" ({sc.strjoin(sim.groups.strats[-1].labels)}), since no age groups were given', sim=sim)
         d = [strat.kind for strat in sim.groups.strats].index('age')
         self.check_ragged(d, net)
         strat = sim.groups.strats[d]
@@ -388,7 +391,7 @@ class Mixing:
         strat = next((s for s in self.sim.groups.strats if s.kind == 'age'), None)
         for (how,n),names in self.regrouped.items():
             which = f'contact matrix "{names[0]}"' if len(names) == 1 else 'contact matrices ' + sc.strjoin(f'"{name}"' for name in names)
-            ss.note(f'{which} {how.format(n)} the model\'s {strat.n} ({sc.strjoin(strat.labels)})', sim=self.sim)
+            self.tell(ss.note, f'{which} {how.format(n)} the model\'s {strat.n} ({sc.strjoin(strat.labels)})', sim=self.sim)
         self.regrouped = {}
         return
 
@@ -433,7 +436,7 @@ class Mixing:
         gap = np.abs(flows - flows.T)/scale
         if np.max(gap[scale > 1e-12*flows.max()], initial=0) > 0.05:
             i, j = np.unravel_index(np.argmax(np.where(scale > 1e-12*flows.max(), gap, 0)), gap.shape)
-            ss.note(f'the contact matrix of "{net.name}" for "{strat.name}" is not reciprocal for its split: {strat.labels[i]} have {mat[i, j]:.3g} contacts each with {strat.labels[j]} ({flows[i, j]:.3g} per person of the population), '
+            self.tell(ss.note, f'the contact matrix of "{net.name}" for "{strat.name}" is not reciprocal for its split: {strat.labels[i]} have {mat[i, j]:.3g} contacts each with {strat.labels[j]} ({flows[i, j]:.3g} per person of the population), '
                     f'but {strat.labels[j]} have {mat[j, i]:.3g} each with {strat.labels[i]} ({flows[j, i]:.3g}); it is used as given, with rows as the contacts of a person in each level', sim=self.sim)
         return
 
@@ -520,6 +523,7 @@ class Mixing:
         each pair of groups would give, without making one.
         """
         sim = self.sim
+        self.solver = sim.solver
         self.pool_terms = sc.objdict()
         def by_dims(net): # A matrix from ss.contacts() over the model's dimensions
             return isinstance(net, ss.MixingPools) and net.constant and (getattr(net, 'dims', None) or getattr(net, 'full', None) is not None)

@@ -233,7 +233,7 @@ class MultiSim:
                 if not sim.label:
                     sim.label = f'Sim {i}'
         many = n_runs is not None or pars is not None or draws
-        sims = [sim.new(rand_seed=sim.pars.rand_seed, label=sim.label) if hasattr(sim, 'inputs') and (sim.results_ready or (many and sim.initialized)) else sim for sim in sims] # A sim that has been run (e.g. fit.sim), or that would be run more than once after init(), is built again
+        sims = [sim.new(rand_seed=sim.pars.rand_seed, label=sim.label) if sim.results_ready or (many and sim.initialized) else sim for sim in sims] # A sim that has been run (e.g. fit.sim), or that would be run more than once after init(), is built again
         if draws:
             if pars is not None:
                 errormsg = 'ss.parallel() takes pars= or priors=, not both'
@@ -257,9 +257,6 @@ class MultiSim:
         out = []
         rows = []
         for sim in sims:
-            if n_runs is not None and sim.initialized and not hasattr(sim, 'inputs'):
-                errormsg = f'Sim "{sim.label}" is already initialized, so its runs would all be the same; pass an uninitialized sim to run it with n_runs'
-                raise ValueError(errormsg)
             for j,p in enumerate(sets):
                 for i in range(sc.ifelse(n_runs, 1)):
                     seed = run_seed(sim.pars.rand_seed, p, j, i, n_runs, draws)
@@ -269,7 +266,7 @@ class MultiSim:
 
     def make_run(self, sim, values, seed):
         """
-        The sim of one run: a copy of a sim that has not been initialized, otherwise one built again (see `sim.new()`), with a seed and values of model parameters
+        The sim of one run: a new one (see `sim.new()`), with a seed and values of model parameters
 
         A subclass can override this to change the sim of each run, e.g. to add noise to a parameter; the options it adds to
         `run_options` are passed to it as keywords.
@@ -281,13 +278,7 @@ class MultiSim:
         """
         values = dict(values or {})
         seed = values.pop('rand_seed', seed)
-        if sim.initialized:
-            new = sim.new(pars=values or None, rand_seed=seed)
-        else: # A copy, which keeps any changes made to the sim after it was made
-            new = sim.copy()
-            new.pars.rand_seed = seed
-            if values:
-                new.par_values = sc.mergedicts(new.par_values, values)
+        new = sim.new(pars=values or None, rand_seed=seed)
         new.label = sim.label
         return new
 
@@ -1040,8 +1031,8 @@ def restart_runs(sims, n_runs, pars=None, draws=False):
     with at least `jax_runs` runs (and JAX installed) takes them all in one call to JAX
     (see `ss.gradients`), which is faster than the kernels for that many.
     """
-    declared = lambda sim: any(getattr(mod, 'graph', None) is not None for val in sim.inputs.values() for mod in sc.tolist(val)) # Only a sim with a declared module can be run whole
-    if not all(hasattr(sim, 'inputs') and declared(sim) for sim in sims): # A sim that has been initialized or run is rebuilt from its inputs too
+    declared = lambda sim: any(getattr(mod, 'graph', None) is not None for mod in ss.sim.given_modules(sim.pars)) # Only a sim with a declared module can be run whole
+    if not all(declared(sim) for sim in sims):
         return None
     sets = par_sets(pars)
     runners = []

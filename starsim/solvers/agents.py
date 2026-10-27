@@ -6,10 +6,10 @@ import operator
 import numpy as np
 import sciris as sc
 import starsim as ss
-from .engine import Bunch, CountState, Engine, times
+from .engine import Bunch, CountState, Effects, Engine, times
 from .compartmental import Compartmental
 
-__all__ = ['Agents']
+__all__ = ['Transmission', 'Agents']
 
 check_counts = sc.parse_env('STARSIM_CHECK_COUNTS', False, bool) # Whether the agent engine checks the counts it keeps against a new count at each step: see ss.solvers.Agents.check_counts()
 check_draws = sc.parse_env('STARSIM_CHECK_DRAWS', False, bool) # Whether the agent engine checks that no agent is drawn twice from a stream in a round: see ss.solvers.Agents.draw()
@@ -39,7 +39,79 @@ def member(a, b):
     return b[np.minimum(np.searchsorted(b, a), len(b) - 1)] == a
 
 
-class Agents(Engine):
+class Transmission(Effects):
+    """
+    Transmission as agents, the same for a declared disease (`Agents`, for its transmissions) and one written as code (`ss.Infection.transmit_route()`,
+    through its engine, `ss.solvers.Undeclared`): who can transmit and be infected, with the modifiers and products on `rel_trans` and `rel_sus`
+    applied (`effective()`); who is infected over a network (`over_network()`); and who infected whom (`first_infections()`)
+
+    Where the two differ, the caller says how:
+
+    - **Hazard or probability.** `over_network()` takes the chance of an edge in the step. A declared disease gives 1 − exp(−β·dt) from its rate,
+      or, on a network with acts, works out a hazard per act (`Agents.transmit_acts()`); one written as code gives its beta as the probability in
+      the step, converting a rate the same way (`ss.Rate.to_prob()`).
+    - **Order and attribution.** The routes are taken in the order of `sim.networks`, and on each, p1 to p2 and then p2 to p1; someone reached by
+      several is infected by the first (`first_infections()`), which is the source in the infection log. With strains, a declared disease instead
+      gives someone reached by several the strain of one drawn at random (see `Agents.transmit_from()`).
+    - **Random numbers.** Each edge's is drawn by its source and target from the disease's `trans_rng`, so the same disease, by the same name,
+      gives the same edges the same numbers, declared or written as code.
+    """
+    def effective(self, kind, *factors):
+        """ `rel_sus` or `rel_trans` (`kind`) of every agent (by UID), times the factors (e.g. whether each is susceptible), with the modifiers and products active on it applied; may be the array itself, so it is not to be changed """
+        return times(self.mod[kind].raw, *factors, self.mult_raw(kind))
+
+    def route_mult(self, name, route):
+        """ The multiplier on a transmission over a route, as a function of the edges and of the people who would be infected (see `ss.connectors.route_mult()`); `name` is that of a declared disease's transmission, or `rel_sus` for a disease written as code """
+        mods = self.sim.modifiers
+        if mods.get((route.name, 'par', 'n_contacts')) or mods.get((self.mod.name, 'route', f'{name}@{route.name}')):
+            return lambda inds, trg: ss.connectors.route_mult(self, name, route, inds, trg)
+        return lambda inds, trg: 1.0
+
+    def over_network(self, i, route, rel_trans, rel_sus, betas, name):
+        """
+        Who is infected over a network in the step: an edge from `u` to `v` transmits with probability `rel_trans[u]·rel_sus[v]·net_beta(beta)`,
+        times the modifiers on the route for `v` (see `ss.Network.transmit()`)
+
+        Args:
+            i (int): the index of the route in `sim.networks`, recorded for who infected whom
+            route (`ss.Network`): the network
+            rel_trans (array): the effective transmissibility of each agent, by UID (0 if not infectious)
+            rel_sus (array): the effective susceptibility of each agent, by UID (0 if not susceptible)
+            betas (list): the probability of transmission over an edge in the step, p1 to p2 and p2 to p1: each a number (0 for none, so no random
+                numbers are drawn), a rate (`ss.Rate.to_prob()`), or an array of one for each of the network's directions by sides (see `ss.peract`)
+            name (str): what the modifiers on the route are under (see `route_mult()`)
+
+        Returns:
+            A list of (sources, targets, i), for each direction that transmits
+        """
+        mult = self.route_mult(name, route)
+        def edge_beta(d, inds, src, trg): # For the edges that might transmit
+            beta = betas[d]
+            if isinstance(beta, np.ndarray): # A probability per act for each direction of the network
+                beta = beta[route.edge_directions(*(route.ends(d) if route.custom_beta else (src, trg)))] # For every edge, for a net_beta() of its own
+            elif not beta: # No random numbers are drawn
+                return None
+            if isinstance(beta, ss.Rate): # A disease written as code can give its beta as a rate
+                beta = beta.to_prob(self.mod.t.dt)
+            return route.edge_net_beta(inds, disease_beta=beta, disease=self.mod)*mult(inds, trg)
+        return [(srcs, trgs, i) for srcs,trgs in route.transmit(rel_trans, rel_sus, edge_beta, self.mod.trans_rng)]
+
+    @staticmethod
+    def first_infections(pairs):
+        """
+        Each agent infected, once, with who infected them and over which route: the first of `pairs` to reach them. Each pair is the sources, the
+        targets, and the index of the route (one, or one for each), and any more values (e.g. a strain); returns the targets (sorted), and for
+        each, the source (`ss.dtypes.int_nan` where not known), the route, and the more values, of the first pair to reach them
+        """
+        if not pairs:
+            return ss.uids(), ss.uids(), np.empty(0, dtype=ss.dtypes.int)
+        trgs, first = ss.uids.concatenate([pair[1] for pair in pairs]).unique(return_index=True)
+        srcs = ss.uids.concatenate([pair[0] for pair in pairs])[first]
+        rest = [np.concatenate([np.broadcast_to(np.asarray(pair[c], dtype=ss.dtypes.int), len(pair[1])) for pair in pairs])[first] for c in range(2, len(pairs[0]))]
+        return trgs, srcs, *rest
+
+
+class Agents(Engine, Transmission):
     """
     Runs a graph as agents
 
@@ -101,13 +173,14 @@ class Agents(Engine):
         self._for_uids = False
         self._memo = None # Values of parts of expressions kept while several are evaluated for the same agents: see compile()
         self.compiled = dict() # Each expression evaluated, as a function: see eval()
-        arrs = [ss.arrays.ModifiableArr('rel_sus', default=1.0, label='Relative susceptibility', shared=True), # No memory until something sets them
-                ss.arrays.ModifiableArr('rel_trans', default=1.0, label='Relative transmission', shared=True)]
+        arrs = [ss.FloatArr('rel_sus', default=1.0, label='Relative susceptibility', shared=True), # No memory until something sets them; the modifiers on them are applied by effective()
+                ss.FloatArr('rel_trans', default=1.0, label='Relative transmission', shared=True)]
         self.exits_of = {state.name: graph.exits[state.name].branches + sc.tolist(graph.exits[state.name].remainder) + graph.exits[state.name].timed for state in graph.people_states} # The exits scheduled when people enter each state: its branches, and its timed exits (the earliest is taken), by index
         self.scheduled = [name for name,exits in self.exits_of.items() if exits] # The states with exits that are scheduled when people enter them
         self.loops_of = {name:np.array([any(getattr(dst, 'name', None) == name for dst in (tr.dst or [])) for tr in exits], dtype=bool) for name,exits in self.exits_of.items()} # Which exits lead back to the state: a decision taken again, e.g. FPsim's choice of method
         self._rescaled = None # Which exits of each state are rescaled when their speed changes: see rescaled_of()
         self.init_dwells()
+        self.init_dwell_mods()
         modifies = lambda m: isinstance(m, ss.modify) or bool(getattr(getattr(m, 'product', None), 'effects', None)) # A modifier, or a delivery of a product with an efficacy (TL17: these were left out, so a product did nothing against a dwell time)
         rescalable = any(modifies(m) for m in list(self.sim.interventions()) + list(self.sim.connectors())) or any(self.varies(dw) for dw in self.dwells.values()) # Whether a dwell time can change after it is drawn: see rescale_exits()
         rescalable = rescalable or any(isinstance(fam, ss.strains.Family) and any(key.startswith('dur.') for imm in fam.immunity for key in imm.values) for fam in self.sim.diseases()) # Or protection on the time in a state, from a family
@@ -183,8 +256,6 @@ class Agents(Engine):
             mod.setattribute(f'ti_{name}', ss.arrays.Unkept(f'ti_{name}', mod))
         for state in graph.people_states: # Each change to who is in a state is counted: see wrote()
             mod[state.name].watch = ss.arrays.Watch(self)
-        for key in ['rel_sus', 'rel_trans']: # So .effective can apply the modifiers
-            mod[key].engine = self
         self.counts = dict()
         self.count_exprs = dict() # Whether each part of a rate of counts uses them: see count_rate()
         for state in graph.count_states:
@@ -2465,7 +2536,7 @@ class Agents(Engine):
             if dist._use_ppf is False or dist.unit is not None or dist.round:
                 return None
             bys = [getattr(v, 'by', None) for v in dist.pars.values() if callable(v) and not isinstance(v, type)]
-            if not bys or not all(by is not None and by.on_people(self.sim) and self.is_lifelong(by) for by in bys):
+            if not bys or not all(by is not None and self.is_lifelong(by) for by in bys): # Read from each person or by group (when the sim is stratified by sex), the same for the run
                 return None
         def pars(uids):
             dist.process_size(uids)
@@ -3282,10 +3353,10 @@ class Agents(Engine):
             self.live_total = self.live_total - (np.bincount(self.sim.groups.group_raw()[counted], minlength=self.sim.groups.n_groups) if self.sim.groups.n_groups > 1 else len(counted))
         for state in self.graph.people_states:
             inds = uids[self.mod[state.name][uids]]
-            if len(inds):
-                self.stocks[state.name] = self.stocks.get(state.name, 0) - len(inds)
+            if len(inds): # Each by their weight, as record_stocks() counted them
+                self.stocks[state.name] = self.stocks.get(state.name, 0) - self.n_of(inds)
                 if state.name in self.stock_groups:
-                    self.stock_groups[state.name] = self.stock_groups[state.name] - np.bincount(self.groups(inds, state), minlength=self.sim.groups.n_groups)
+                    self.stock_groups[state.name] = self.stock_groups[state.name] - np.bincount(self.groups(inds, state), weights=self.weights(inds), minlength=self.sim.groups.n_groups)
             self.mod[state.name][uids] = False
         return
 
@@ -3687,6 +3758,11 @@ class Agents(Engine):
                 engine.enter(mod.graph.states[name], new[choice == name], ti)
         return new
 
+    def susceptibility(self, tr, src):
+        """ The effective susceptibility of each agent (by UID) to a transmission from a state: `rel_sus` for those in the state, with the state's own, the modifiers on it and on the transmission, and the adjust= of the stratifications """
+        out = times(self.effective('rel_sus', self.mod[src.name].raw, src.rel_sus), self.mult_raw('transition', tr.name))
+        return out if self.adjust[tr.name] is None else out*self.adjust[tr.name][self.sim.groups.group_raw()]
+
     def transmit(self, tr, src):
         """ Work out who in a state is infected this step """
         self._route_memo = {} # See route_beta()
@@ -3721,9 +3797,7 @@ class Agents(Engine):
             return self.draw_infections(tr, sus, hazards, dt, carried, superinfects)
 
         # Otherwise, transmit over each route. Mixing pools give each person a hazard, and networks a chance for each contact
-        sus_raw = times(mod[src.name].raw*mod.rel_sus.raw, src.rel_sus, self.mult_raw('rel_sus'), self.mult_raw('transition', tr.name))
-        if self.adjust[tr.name] is not None:
-            sus_raw = sus_raw*self.adjust[tr.name][sim.groups.group_raw()]
+        sus_raw = self.susceptibility(tr, src)
         rel_sus = mod.rel_sus.asnew(sus_raw, copy=False)
         new_cases = []
         pairs = [] # Who infected whom, where that is known, so the strain can be passed on
@@ -3748,19 +3822,18 @@ class Agents(Engine):
             ref = max([np.max(c) for c in coefs.values()] + [0])
             if ref <= 0:
                 continue
-            mult = lambda inds, trg: ss.connectors.route_mult(self, tr.name, route, inds, trg) # From the modifiers of its contacts and of the transmission on it
+            mult = self.route_mult(tr.name, route) # From the modifiers of its contacts and of the transmission on it
             weights = None
             for state,c in coefs.items():
                 share = (c/ref)*state.rel_trans
                 w = mod[state.name].raw if np.ndim(share) == 0 and share == 1 else mod[state.name].raw*share # The usual case, one source state, needs no product
                 weights = w if weights is None else weights + w
-            rel_trans = mod.rel_trans.asnew(times(weights*mod.rel_trans.raw, self.mult_raw('rel_trans'), by_strain), copy=False)
+            rel_trans = mod.rel_trans.asnew(times(self.effective('rel_trans', weights), by_strain), copy=False)
             beta = -np.expm1(-ref*dt)
             if isinstance(route, ss.Network):
-                edge_beta = lambda d, inds, src, trg: route.edge_net_beta(inds, disease_beta=beta, disease=mod)*mult(inds, trg) # For the edges that might transmit (see ss.Network.transmit()), and the people they would infect
-                for srcs, trgs in route.transmit(rel_trans.raw, route_sus.raw, edge_beta, mod.trans_rng):
-                    new_cases.append(trgs)
-                    pairs.append((srcs, trgs, i))
+                for pair in self.over_network(i, route, rel_trans.raw, route_sus.raw, [beta, beta], tr.name):
+                    new_cases.append(pair[1])
+                    pairs.append(pair)
             elif isinstance(route, (ss.MixingPool, ss.MixingPools)) and route.name in sim.mixing.pool_terms: # A contact matrix within each place: see ss.solvers.Mixing.init_pools()
                 any_pools = True
                 groups = sim.groups.group_raw()
@@ -3839,8 +3912,7 @@ class Agents(Engine):
                 return None
         sus = [] # Each pair's susceptibility, by UID, as transmit() works it out
         for tr,src in pairs:
-            raw = times(mod[src.name].raw*mod.rel_sus.raw, src.rel_sus, self.mult_raw('rel_sus'), self.mult_raw('transition', tr.name))
-            sus.append(raw if self.adjust[tr.name] is None else raw*self.adjust[tr.name][sim.groups.group_raw()])
+            sus.append(self.susceptibility(tr, src))
         everyone = ss.uids(np.arange(len(sus[0])))
         dt = self.dt
         new = [[] for pair in pairs]
@@ -3862,10 +3934,9 @@ class Agents(Engine):
             weights = mod.rel_trans.raw*0
             for state in pairs[0][0].terms:
                 weights = weights + mod[state.name].raw*(first[state.name]/ref)*state.rel_trans
-            rel_trans = times(weights*mod.rel_trans.raw, self.mult_raw('rel_trans'), 1.0)
+            rel_trans = self.effective('rel_trans', weights)
             route_sus = sum(s*(b/top) for s,b in zip(sus, betas)) # Each transmission's chance, as a share of the largest
-            edge_beta = lambda d, inds, src, trg: route.edge_net_beta(inds, disease_beta=top, disease=mod)*ss.connectors.route_mult(self, None, route, inds, trg)
-            for _, trgs in route.transmit(rel_trans, route_sus, edge_beta, mod.trans_rng):
+            for _, trgs, _ in self.over_network(0, route, rel_trans, route_sus, [top, top], None):
                 for i,(tr,src) in enumerate(pairs):
                     new[i].append(trgs[mod[src.name].raw[trgs]])
         self._pairs = []
@@ -3884,15 +3955,12 @@ class Agents(Engine):
         networks = np.full(len(uids), np.nan)
         pairs = self._step_pairs # Of every transmission so far in this step
         if len(uids) and pairs:
-            srcs = np.concatenate([pair[0] for pair in pairs])
-            trgs = np.concatenate([pair[1] for pair in pairs])
-            nets = np.concatenate([np.full(len(pair[1]), pair[2]) for pair in pairs])
-            trgs, first = np.unique(trgs, return_index=True) # The first infection of each agent
+            trgs, srcs, nets = self.first_infections(pairs)
             if len(trgs):
                 inds = np.minimum(np.searchsorted(trgs, uids), len(trgs) - 1)
                 found = trgs[inds] == uids
-                sources[found] = srcs[first[inds[found]]]
-                networks[found] = nets[first[inds[found]]]
+                sources[found] = srcs[inds[found]]
+                networks[found] = nets[inds[found]]
         return sources, networks
 
     def log_infections(self, uids, seeds=False):
@@ -4039,10 +4107,10 @@ class Agents(Engine):
         hazards = {state: np.asarray(self.route_beta(coef, nkey, route), dtype=float) for state,coef in tr.terms.items()} # Directions (by groups) for each source state
         if not any(np.any(h > 0) for h in hazards.values()):
             return
-        trans = times(mod.rel_trans.raw, self.mult_raw('rel_trans'), by_strain)
+        trans = times(self.effective('rel_trans'), by_strain)
         n_slots = len(mod.rel_sus.raw)
         groups = sim.groups.group_raw() if any(h.ndim > 1 and h.shape[1] != n_slots for h in hazards.values()) else None
-        mult = lambda inds, trg: ss.connectors.route_mult(self, tr.name, route, inds, trg)
+        mult = self.route_mult(tr.name, route)
         shared = {} # The source states that share a hazard (e.g. every infectious state of an STI: see route_beta()), with their weights summed once, so each edge takes one
         for state,h in hazards.items():
             w = mod[state.name].raw*state.rel_trans

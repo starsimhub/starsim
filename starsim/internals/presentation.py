@@ -1,5 +1,5 @@
 """
-How a model is shown: `describe()`, `diagram()`, `equations()`, and its part of the model spec (`to_spec()`); and how a sim is (`sim.describe()`, `sim.what_modifies()`, `sim.check_dt()`)
+How a model is shown: `describe()`, `diagram()`, and `equations()`; and how a sim is (`sim.describe()`, `sim.what_modifies()`, `sim.check_dt()`)
 """
 import os
 import sys
@@ -288,7 +288,7 @@ class Diagram(str):
 
 
 class Presentation:
-    """ How a graph (`ss.graph.Graph`) is shown: `describe()`, `diagram()`, `equations()`, and `to_spec()`, which the graph inherits """
+    """ How a graph (`ss.graph.Graph`) is shown: `describe()`, `diagram()`, and `equations()`, which the graph inherits """
     def unit_name(self, sim=None):
         """ The unit its numbers are read in: the sim's, or outside a sim, the unit a sim would take from the typed values (as in ss.solvers.choose.init_unit()), if they agree """
         if sim is not None:
@@ -424,7 +424,7 @@ class Presentation:
                         add('', par_str(leaf, leaf.slot if leaf.slot in ['rate', 'dur'] else None, unit), midpoint_guess(leaf))
                         provenance(leaf)
         for name,oc in self.outcomes.items(): # Each outcome as it is defined, e.g. "0.5 × onset, after 4 days (exponential)"
-            source = oc.to_spec(unit)['source'].replace(' * ', ' × ')
+            source = oc.source_str().replace(' * ', ' × ')
             text = f'outcome: {source}' + (f', after {delay_str(oc.delay, unit)}' if oc.delay is not None else '')
             if oc.duration is not None:
                 text += f'; n_{name} for {delay_str(oc.duration, unit)}'
@@ -608,99 +608,11 @@ class Presentation:
         names = [comp_name(i) for i in range(len(engine.comps))]
         return names, out
 
-    def to_spec(self, sim=None):
-        """ The model spec of one module: its states, parameters, and transitions as plain data; see `ss.Disease.to_spec()` """
-        mod = self.module
-        unit = sim.unit if sim is not None else None
-        out = sc.objdict()
-        out.name = mod.name
-        out.type = 'Disease' if isinstance(mod, ss.Disease) else type(mod).__name__
-        out.dt = None if (mod.t.dt is None or sim is None or mod.t.dt == sim.t.dt) else float(mod.t.dt.to(sim.unit_base).value)
-        out.init_prev = self.init_prev.raw if isinstance(self.init_prev, par) else self.init_prev
-        out.first = self.first.name if self.first is not None else None # The state that people not put elsewhere start in
-        out.states = [dict(name=s.name, people=bool(s.people), init=s.init if s.init is None or sc.isnumber(s.init) else quantity_json(s.init, None, unit), init_n=s.init_n if s.init_n is None or sc.isnumber(s.init_n) else quantity_json(s.init_n, None, unit), infectious=bool(s.infectious), rel_sus=s.rel_sus, rel_trans=s.rel_trans, label=s.label) for s in self.states.values()]
-
-        def par_json(p, kind):
-            prior = None if p.prior is None else str(p.prior)
-            if isinstance(p.prior, ss.Dist): # A distribution of the value, as data (so that sim.to_code() can write it)
-                prior = dict(dist=type(p.prior).__name__) | {k:quantity_json(v, None, None) for k,v in p.prior.pars.items()}
-            return dict(name=p.name, value=quantity_json(p.raw, kind, unit), bounds=p.bounds, prior=prior, source=p.source, doc=p.doc)
-
-        transitions = []
-        for name,tr in self.transitions.items(): # In the order given (sim.hash() sorts them)
-            if getattr(tr, 'generated', False): # Made from the strains (superinfection), which the spec holds
-                continue
-            entry = sc.objdict(name=name, kind='contact-mediated' if tr.contact else 'spontaneous')
-            entry.src = [s.name for s in tr.src] or None
-            entry.dst = [s.name for s in tr.dst] or None
-            entry.rate = None
-            entry.dur = None
-            if tr.dur is not None:
-                raw = tr.dur.raw
-                entry.dur = quantity_json(raw, 'dur', unit) if isinstance(raw, ss.Dist) else dict(dist='expon', mean=['par', tr.dur.name])
-            elif isinstance(tr.rate, par): # A constant hazard is an exponential dwell time
-                entry.dur = dict(dist='expon', rate=['par', tr.rate.name])
-            elif tr.rate is not None:
-                entry.rate = format_expr(tr.rate, exact=True)
-            ps = tr.p
-            ends = [(name, p) for name,p,given in [('ss.null', tr.p_die, tr.dies), ('ss.stay', tr.p_stay, tr.stays)] if given] # Written after the states, as ss.Transition() takes them, when given
-            if ends:
-                entry.dst = (entry.dst or []) + [name for name,_ in ends]
-                ps = None if ps is None else list(ps) + [p for _,p in ends]
-            entry.p = None if ps is None else [None if p is None else format_expr(p, exact=True) for p in ps]
-            entry.stages = tr.stages
-            entry.label = tr.label
-            entry.migration = tr.migration or None # None when not used, which sim.hash() leaves out (see ss.utils.short_hash()), so that other specs hash as they did
-            entry.after = quantity_json(getattr(tr, 'after', None), 'dur', unit)
-            acquisition = getattr(tr, 'acquisition_given', None)
-            entry.acquisition = None if acquisition is None else bool(acquisition)
-            entry.move = {k:move_json(v, unit) for k,v in (getattr(tr, 'move_given', None) or {}).items()} or None
-            entry.increment = dict(getattr(tr, 'increment', None) or {}) or None
-            per = getattr(tr, 'per_given', None) # An outcome for each strain carried, as given (see ss.strains.prepare())
-            if per is not None:
-                entry.per = dict(per)
-                entry.p = [per['p']] if 'p' in per else None
-            transitions.append(entry)
-        out.pars = [par_json(self.pars[name], self.pars[name].slot) for name in sorted(self.pars.keys())] # Only the factor of a rate that carries its unit is a rate: R0 in R0 * gamma * I is a number (see set_slots())
-        per_act = [] # Betas read as probabilities per act, which the spec says were guessed
-        nets = {ss.utils.standardize_netkey(k):net for k,net in sim.all_networks().items()} if sim is not None and hasattr(sim, 'all_networks') else {}
-        acts = lambda key: getattr(nets.get(ss.utils.standardize_netkey(key)), 'has_acts', False)
-        for name,tr in self.transitions.items(): # A bare number on a network with acts is a probability per act, written as one, so the spec is read the same without the network
-            leaf = beta_leaf(tr) if tr.contact else None
-            spec = next((p for p in out.pars if leaf is not None and p['name'] == leaf.name), None)
-            if spec is None or not nets:
-                continue
-            raw = leaf.raw
-            if isinstance(raw, dict) and any(sc.isnumber(v) and acts(k) for k,v in raw.items()):
-                spec['value'] = {k:(dict(type='peract', value=float(v)) if sc.isnumber(v) and acts(k) else spec['value'][k]) for k,v in raw.items()}
-                per_act.append(f'transitions.{name}.beta')
-            elif sc.isnumber(raw) and all(acts(k) for k in nets):
-                spec['value'] = dict(type='peract', value=float(raw))
-                per_act.append(f'transitions.{name}.beta')
-        out.transitions = transitions
-        out.stratifications = [sc.dcp(s.spec) for s in self.strats]
-        results = [dict(name=name, type='result', source=format_expr(expr, exact=True)) for name,expr in self.exprs.items()]
-        results += [oc.to_spec(unit) for oc in self.outcomes.values()]
-        out.results = sorted(results, key=lambda r: r['name'])
-        out.functions = sorted([dict(name=name, **func_json(func)) for name,func in self.funcs.items()], key=lambda f: f['name'])
-        expr = lambda e: None if e is None else format_expr(e, exact=True)
-        out.transfers = [dict(name=name, dim=tf.dim, src=tf.src, dst=tf.dst, rate=expr(tf.rate), dur=expr(tf.dur), states=tf.states, label=tf.label, increment=tf.increment, p=None if tf.p is None else [expr(v) for v in tf.p]) for name,tf in self.transfers.items()] or None
-        guessed = list(self.guessed.keys())
-        for name,state in self.states.items():
-            guessed += [f'states.{name}.{key}' for key in state.guessed.keys()]
-        for name,tr in self.transitions.items():
-            guessed += [f'transitions.{name}.{key}' for key in tr.guessed.keys()]
-        out.guessed = sorted(guessed + per_act)
-        return out
-
 
 #%% A sim: describe(), what_modifies(), and check_dt()
 
 def check_dt(sim, factor=2, output=False):
     """ Rerun the sim with a smaller timestep, and report how much each result changes: see `ss.Sim.check_dt()` """
-    if not hasattr(sim, 'inputs'):
-        errormsg = 'sim.check_dt() is only available for sims with declared states and transitions'
-        raise ValueError(errormsg)
     coarse = sim if sim.results_ready else sim.new(verbose=0).run()
     fine = sim.new(dt=coarse.t.dt/factor, verbose=0)
     for val in fine.pars.values(): # A module with its own timestep takes a smaller one too
@@ -937,7 +849,7 @@ def describe_steps(sim, desc):
     return desc
 
 
-#%% Helpers for the text and the model spec
+#%% Helpers for the text
 
 def strat_rows(strat, most=6):
     """ For describe(): the share of people in each level of a dimension (up to `most` levels), and the multipliers it adjusts by """
@@ -1142,17 +1054,8 @@ def timeseries_str(raw, most=4):
     return f'timeseries({", ".join(items)})'
 
 
-def move_json(level, unit=None):
-    """ A move along a dimension as it is written in the model spec: a level, a pair of levels (from, to), or a change of strains (`DS >> RIF`) """
-    if isinstance(level, ss.strains.StrainMove):
-        return level.spec
-    elif isinstance(level, tuple):
-        return dict(src=sc.tolist(level[0]), dst=level[1])
-    return quantity_json(level, None, unit)
-
-
 def quantity_json(raw, kind, unit):
-    """ A value as it is written in the model spec: a typed quantity, a distribution, or a plain number """
+    """ A value as plain data, for `sim.to_json()`: a typed quantity, a distribution, or a plain number """
     if isinstance(raw, ss.dur):
         return dict(type='dur', value=float(raw.value), unit=type(raw).base.removesuffix('s'))
     elif isinstance(raw, ss.Rate):
@@ -1229,47 +1132,9 @@ def func_source(func):
 
 
 def func_json(func):
-    """
-    A function in the model spec: its name, source, and the values it uses, so that the hash changes with what the function does
-
-    A function whose source is not available (e.g. NumPy's `np.exp`) is known by where
-    it can be imported from (`ref`, e.g. "numpy.exp"); one that has neither source nor
-    such a name (a lambda typed at a prompt, a `functools.partial`) cannot be told apart
-    from another, and `sim.hash()` says so. `version` is what the user code gives as the
-    function's identity (e.g. `fn.version = '2'`), which is used in place of its source.
-    """
-    version = getattr(func, 'version', None)
-    source = func_source(func) if version is None else None
+    """ A function as plain data, for `sim.to_json()`: its name, and its source, or where it can be imported from if its source is not available (e.g. "numpy.exp") """
+    source = func_source(func)
     name = getattr(func, '__qualname__', '')
     module = getattr(func, '__module__', None)
     ref = f'{module}.{name}' if source is None and module and name and '<' not in name else None
-    return dict(fn=getattr(func, '__name__', type(func).__name__), source=source, values=func_values(func), ref=ref, version=version)
-
-
-def unknown_funcs(obj, where=''):
-    """ The functions in a model spec that cannot be told apart from another function: no source, no name to import them by, and no version """
-    if isinstance(obj, dict):
-        if 'fn' in obj and 'source' in obj:
-            return [] if obj['source'] or obj.get('ref') or obj.get('version') is not None else [f'{obj["fn"]} (in {where})']
-        return [f for k,v in obj.items() for f in unknown_funcs(v, f'{where}.{k}' if where else k)]
-    elif isinstance(obj, list):
-        return [f for i,v in enumerate(obj) for f in unknown_funcs(v, f'{where}[{v["name"]}]' if isinstance(v, dict) and 'name' in v else f'{where}[{i}]')]
-    return []
-
-
-def func_values(func):
-    """ The plain values (numbers, strings, and lists of them) that a function takes from outside its source: the variables it closes over, the global ones it uses, and its defaults """
-    simple = lambda v: isinstance(v, (bool, int, float, str, type(None))) or (isinstance(v, (list, tuple)) and all(isinstance(x, (bool, int, float, str)) for x in v))
-    code = getattr(func, '__code__', None)
-    if code is None:
-        return None
-    out = {}
-    for name,cell in zip(code.co_freevars, func.__closure__ or ()):
-        try:    val = cell.cell_contents
-        except: continue # A variable not yet assigned
-        if simple(val):
-            out[name] = val
-    glob = getattr(func, '__globals__', {})
-    out.update({name:glob[name] for name in code.co_names if name in glob and simple(glob[name])})
-    out.update({f'default_{i}':v for i,v in enumerate(func.__defaults__ or ()) if simple(v)})
-    return out or None
+    return dict(fn=getattr(func, '__name__', type(func).__name__), source=source, ref=ref)

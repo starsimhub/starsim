@@ -31,18 +31,16 @@ class Particles:
         per_step (int): the rows of the tables for each step (see `ss.solvers.Compartmental.per_step()`)
     """
     def __init__(self, engine, n, rng, by_group=False):
+        args, tables = engine.run_args()
+        self.per_step = engine.per_step()
+        self.engines = engine.engines
         if isinstance(engine, Crossing):
-            args, tables, self.per_step = engine.run_args()
             state_of = np.arange(engine.n_rows)
             n_states, n_groups = engine.n_rows, engine.n_cols
-            self.engines = engine.engines
         else:
-            args, tables = engine.run_args()
-            self.per_step = engine.per_step()
             states = list(engine.graph.states)
             state_of = np.array([states.index(comp.state.name) for comp in engine.comps])
             n_states, n_groups = len(states), engine.n_groups
-            self.engines = [engine]
         y0, self.program, self.dt, self.npts, self.solver, self.n_sub = args
         p = self.program
         self.state_of, self.register, self.shifts = state_of, engine.register, engine.shifts

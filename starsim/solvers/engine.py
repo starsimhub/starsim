@@ -9,14 +9,22 @@ import sciris as sc
 import starsim as ss
 from types import SimpleNamespace as Bunch # A plain object with attributes; much faster to read than an objdict, which matters inside the ODE's right-hand side
 
-__all__ = ['Engine', 'CountState', 'StockCtx', 'convert', 'add_rows', 'at_ends', 'by_level', 'no_tables', 'kept_by_group', 'group_rows', 'people_results']
+__all__ = ['Effects', 'Engine', 'CountState', 'StockCtx', 'convert', 'add_rows', 'at_ends', 'by_level', 'no_tables', 'kept_by_group', 'group_rows', 'people_results']
 
 
 no_tables = ss.kernels.no_tables # For a step whose program holds for the whole step: see ss.kernels.step()
 
 
-def convert(val, unit):
-    """ Convert a typed quantity to a plain number in a unit: a duration to units, a rate to per unit """
+def convert(val, unit, cache=None):
+    """ Convert a typed quantity to a plain number in a unit: a duration to units, a rate to per unit; with a `cache` (a dict), each is converted once, unless its number is changed """
+    if cache is not None and isinstance(val, ss.TimePar):
+        known = cache.get(id(val))
+        if known is None or known[0] is not val or changed(known[1], val.value):
+            if len(cache) > 10_000: # Values made as the sim runs (e.g. by a time series) are kept with the others, so are let go of now and then
+                cache.clear()
+            number = np.copy(val.value) if isinstance(val.value, np.ndarray) else val.value
+            known = cache[id(val)] = (val, number, convert(val, unit))
+        return known[2]
     if isinstance(val, ss.TimePar):
         if isinstance(val, ss.prob): # A probability per period becomes the hazard that gives it
             period = 1.0 if val.unit is None else val.unit.to(unit).value # With no unit, the probability is per unit of the sim's time
@@ -244,25 +252,115 @@ class Evaluating:
         return False
 
 
-class Engine:
+class Telling:
+    """ The notes and warnings about a layout (of an engine, or of the mixing), which are held while it is made to choose the solver (see `ss.solvers.choose.lay_out()`), and said only once it is used """
+    unsaid = None # The notes and warnings held, as calls; None to say them at once
+
+    def tell(self, func, *args, **kwargs):
+        """ Say a note (`ss.note`) or warning (`ss.warn`) about the layout, or hold it until it is used (see `say()`) """
+        if self.unsaid is None:
+            func(*args, **kwargs)
+        else:
+            self.unsaid.append((func, args, kwargs))
+        return
+
+    def say(self):
+        """ Say the notes and warnings held from making the layout, now that it is used """
+        unsaid, self.unsaid = self.unsaid or [], None
+        for func,args,kwargs in unsaid:
+            func(*args, **kwargs)
+        return
+
+
+class Effects:
+    """
+    What the engine of every disease gives the modules that act on it, whether the disease is declared or written as code: the modifiers
+    and products active on its quantities (`mult_raw()`, `contact_mult()`), for the people their conditions select (`selector`), in the sim's unit
+
+    Args:
+        module (`ss.Module`): the module
+        sim (`ss.Sim`): the sim
+    """
+    cross = None # In a compartmental run, the diseases whose states are tracked jointly with this one's, if any: see ss.solvers.Crossing
+
+    def __init__(self, module, sim):
+        self.mod = module
+        self.sim = sim
+        self.cache = dict() # Values for the current step
+        self.converted = dict() # Typed values converted to the sim's unit: see convert()
+        return
+
+    @property
+    def dt(self):
+        """ The module's timestep, in the sim's unit (worked out again only if the timestep is replaced) """
+        dt = self.mod.t.dt
+        cached = self.__dict__.get('_dt')
+        if cached is None or cached[0] is not dt:
+            cached = self._dt = (dt, dt.to(self.sim.unit_base).value)
+        return cached[1]
+
+    def convert(self, val):
+        """ Convert a typed quantity to a plain number in the sim's unit: a duration to units, a rate to per unit; each is converted once, unless its number is changed """
+        return convert(val, self.sim.unit_base, self.converted)
+
+    @property
+    def selector(self):
+        """ Evaluates conditions for this module: see `ss.conditions.Selector` """
+        if getattr(self, '_selector', None) is None:
+            self._selector = ss.conditions.Selector(self.sim, self.mod)
+        return self._selector
+
+    def contact_mult(self, name):
+        """ The multiplier on the contacts of a network from the modifiers of its `n_contacts` (e.g. `ss.modify('school.pars.n_contacts', multiply=0.2)`): 1 if it has none """
+        mods = self.sim.modifiers.get((name, 'par', 'n_contacts')) if name is not None else None
+        if not mods:
+            return 1.0
+        key = ('contacts', name, None)
+        if key not in self.cache:
+            self.cache[key] = ss.connectors.contact_mult(self, name, mods)
+        return self.cache[key]
+
+    def clip(self, value, path):
+        """ A modified rate, duration, or multiplier that has gone below 0 (e.g. by add=) is 0; the first time, a note says so, and sim.what_modifies() reports it """
+        if isinstance(value, dict): # A value for each route, e.g. beta=dict(random=..., sexualnet=[...])
+            return {k:[self.clip(x, path) for x in v] if isinstance(v, (list, tuple)) else self.clip(v, path) for k,v in value.items()}
+        if np.any(np.asarray(value) < 0):
+            if path not in self.sim.clipped:
+                self.sim.clipped.add(path)
+                ss.note(f'the modifiers of {path} made it negative, so it was set to 0 where it was', sim=self.sim)
+            value = np.maximum(value, 0)
+        return value
+
+    def reduce(self, value, state=None, what=None):
+        """ A modified value as the engine uses it; see the subclasses """
+        return value
+
+    def mult_raw(self, kind, name=None, state=None):
+        """ The multiplier on a quantity that is not a parameter (`rel_sus`, `rel_trans`, or a transition's rate) from the modifiers active on it, at least 0 (1 if there are none) """
+        mods = self.sim.modifiers.get((self.mod.name, kind, name))
+        if not mods:
+            return 1.0
+        return self.clip(self.reduce(ss.connectors.combine(mods, 1.0, self), state=state, what=name or kind), f'{self.mod.name}.{name or kind}')
+
+
+class Engine(Telling, Effects):
     """
     Base class for the engines that run a graph
 
     Args:
         module (`ss.Module`): the module whose graph is run
         sim (`ss.Sim`): the sim
+        solver (str): the solver it is laid out for, if not the sim's (the ODE, when it is laid out to choose the solver: see `ss.solvers.choose.lay_out()`)
     """
     max_map_bytes = 2e9 # The most memory a map between groups may take in a compartmental run (see dim_map())
     group_bytes = 100e6 # The most memory that a module's results may take by group in one run; above it, they are kept every few steps (see ss.solvers.group_rows())
 
-    def __init__(self, module, sim):
-        self.mod = module
-        self.sim = sim
+    def __init__(self, module, sim, solver=None):
+        super().__init__(module, sim)
+        self.solver = solver or sim.solver
         self.graph = module.graph
-        self.cache = dict() # Parameter values for the current step
         self.fixed = dict() # Converted values of plain parameters, which hold for the whole run
         self.arities = dict() # The number of arguments of each user function: see n_args()
-        self.converted = dict() # Typed values converted to the sim's unit: see convert()
         self.held_series = dict() # Values that vary in time, at the start of each step of the sim: see held_value()
         self.rng = self.make_rng() # For draws that are not per agent
         self.dwells = sc.objdict() # Dwell-time information for each transition that has one
@@ -280,7 +378,6 @@ class Engine:
         self.year = None # The year in the step that values that vary smoothly in time are taken at, for its stages (None for its start, sim.now)
         self.immune_states = [] # Protection between strains: the states whose people can be infected again, and the protection by level in a state (see init_immunity())
         self.protect = {}
-        self.cross = None # In a compartmental run, the diseases whose states are tracked jointly with this one's, if any: see ss.solvers.Crossing
         self.kernel_rng = None # The random numbers of a run stepped by the kernels: see init_program()
         self.compiled = None # Whether the run is taken by the compiled kernels or as plain Python, once chosen: see Compartmental.kernels()
         return
@@ -429,8 +526,8 @@ class Engine:
             out = None
             if strain is not None or moved or not np.array_equal(a, b):
                 ng = self.sim.groups.n_groups
-                if self.sim.solver != 'abm' and 8*ng**2 > self.max_map_bytes: # A dense matrix of groups by groups (FP84: 25.7 GB for 3,264 × 18 groups)
-                    raise ss.CapabilityError(f'"{self.mod.name}" cannot run with solver="{self.sim.solver}": people moving from {src or "outside"} to {dst} change group, and the map between its {ng:,} groups would take {8*ng**2/1e9:.3g} GB (a dense matrix of groups by groups).\n'
+                if self.solver != 'abm' and 8*ng**2 > self.max_map_bytes: # A dense matrix of groups by groups (FP84: 25.7 GB for 3,264 × 18 groups)
+                    raise ss.CapabilityError(f'"{self.mod.name}" cannot run with solver="{self.solver}": people moving from {src or "outside"} to {dst} change group, and the map between its {ng:,} groups would take {8*ng**2/1e9:.3g} GB (a dense matrix of groups by groups).\n'
                                              f'     Run with solver="abm", or with fewer groups (fewer dimensions, or fewer diseases tracked jointly).')
                 out = np.ones((1, 1))
                 for d,strat in enumerate(self.sim.groups.strats):
@@ -500,7 +597,7 @@ class Engine:
             return
         graph = self.graph
         reason = strains.needs_agents(graph)
-        if reason and self.sim.solver != 'abm':
+        if reason and self.solver != 'abm':
             raise ss.CapabilityError(f'the strains of "{self.mod.name}" need agents: {reason}. Run with solver="abm" (or "auto").')
         sources = {id(src) for tr in graph.transmissions for src in tr.src}
         infected = {id(s) for s in graph.people_states if s.name in (strat.carried or [])} # Carrying strains as an infection (see ss.Strains._carriers())
@@ -587,31 +684,10 @@ class Engine:
         return max(self.mod.t.ti - 1, 0) if ti is None else ti
 
     @property
-    def dt(self):
-        """ The module's timestep, in the sim's unit (worked out again only if the timestep is replaced) """
-        dt = self.mod.t.dt
-        cached = self.__dict__.get('_dt')
-        if cached is None or cached[0] is not dt:
-            cached = self._dt = (dt, dt.to(self.sim.unit_base).value)
-        return cached[1]
-
-    @property
     def total_pop(self):
         return self.sim.pars.total_pop
 
     #%% Values
-
-    def convert(self, val):
-        """ Convert a typed quantity to a plain number in the sim's unit: a duration to units, a rate to per unit; each is converted once, unless its number is changed """
-        if not isinstance(val, ss.TimePar):
-            return val
-        known = self.converted.get(id(val))
-        if known is None or known[0] is not val or changed(known[1], val.value):
-            if len(self.converted) > 10_000: # Values made as the sim runs (e.g. by a time series) are kept with the others, so are let go of now and then
-                self.converted.clear()
-            number = np.copy(val.value) if isinstance(val.value, np.ndarray) else val.value
-            known = self.converted[id(val)] = (val, number, convert(val, self.sim.unit_base))
-        return known[2]
 
     def value(self, p):
         """ The value of a parameter, as a number in the sim's unit """
@@ -659,13 +735,6 @@ class Engine:
         self.cache[key] = out
         return out
 
-    @property
-    def selector(self):
-        """ Evaluates conditions for this module: see `ss.conditions.Selector` """
-        if getattr(self, '_selector', None) is None:
-            self._selector = ss.conditions.Selector(self.sim, self.mod)
-        return self._selector
-
     def modified(self, p, value):
         """ Apply the modifiers that are active on a parameter: set, then multiply, then add """
         mods = self.sim.modifiers.get((self.mod.name, 'par', p.name)) if (p.name and not p.literal) else None
@@ -681,16 +750,6 @@ class Engine:
             nets = self.sim.all_networks()
             self._net_mods = [m for (modname,kind,name),mods in self.sim.modifiers.items() if modname in nets and name == 'n_contacts' for m in mods]
         return self._net_mods
-
-    def contact_mult(self, name):
-        """ The multiplier on the contacts of a network from the modifiers of its `n_contacts` (e.g. `ss.modify('school.pars.n_contacts', multiply=0.2)`): 1 if it has none """
-        mods = self.sim.modifiers.get((name, 'par', 'n_contacts')) if name is not None else None
-        if not mods:
-            return 1.0
-        key = ('contacts', name, None)
-        if key not in self.cache:
-            self.cache[key] = ss.connectors.contact_mult(self, name, mods)
-        return self.cache[key]
 
     def branch_mult(self, tr, uids=None):
         """ The multiplier on a branch's probability from its modifiers (for some agents, if `uids` are given), or None if it has none """
@@ -785,30 +844,14 @@ class Engine:
                 out.append(div(q, denom))
         return out
 
-    def clip(self, value, path):
-        """ A modified rate, duration, or multiplier that has gone below 0 (e.g. by add=) is 0; the first time, a note says so, and sim.what_modifies() reports it """
-        if isinstance(value, dict): # A value for each route, e.g. beta=dict(random=..., sexualnet=[...])
-            return {k:[self.clip(x, path) for x in v] if isinstance(v, (list, tuple)) else self.clip(v, path) for k,v in value.items()}
-        if np.any(np.asarray(value) < 0):
-            if path not in self.sim.clipped:
-                self.sim.clipped.add(path)
-                ss.note(f'the modifiers of {path} made it negative, so it was set to 0 where it was', sim=self.sim)
-            value = np.maximum(value, 0)
-        return value
-
-    def reduce(self, value, state=None, what=None):
-        """ A modified value as the engine uses it; see the subclasses """
-        return value
-
     def mult_raw(self, kind, name=None, state=None):
-        """ The multiplier on a quantity that is not a parameter (`rel_sus`, `rel_trans`, or a transition's rate) from its modifiers, and from the adjust= of the stratifications """
-        mods = self.sim.modifiers.get((self.mod.name, kind, name))
+        """ The multiplier on a quantity that is not a parameter (`rel_sus`, `rel_trans`, or a transition's rate) from its modifiers (once a step), and from the adjust= of the stratifications """
         out = 1.0
-        if mods:
+        if self.sim.modifiers.get((self.mod.name, kind, name)):
             key = (kind, name, state.name if state is not None else None)
             if key not in self.cache:
                 with self.evaluating(for_uids=False): # For everyone, even when asked while a rate is evaluated for some agents (CV23)
-                    self.cache[key] = self.clip(self.reduce(ss.connectors.combine(mods, 1.0, self), state=state, what=name or kind), f'{self.mod.name}.{name or kind}')
+                    self.cache[key] = super().mult_raw(kind, name, state)
             out = self.cache[key]
         if getattr(self, 'rel_adjust', None) and self.rel_adjust.get(kind):
             out = out*self.adjusted_rel(kind, state)
@@ -934,7 +977,7 @@ class Engine:
             source = ss.presentation.func_source(func) or ''
             read = [name for name in modified if re.search(rf'\bpars\.{name}\b|\[[\'"]{name}[\'"]\]', source)]
             if read:
-                ss.note(f'{sc.strjoin(read)} of "{self.mod.name}" {"is" if len(read) == 1 else "are"} changed by a modifier and read inside {fname}: float(par) there gives the changed value, but par.value and par.raw give the value without the change', sim=self.sim)
+                ss.note(f'{sc.strjoin(read)} of "{self.mod.name}" {"is" if len(read) == 1 else "are"} changed by a modifier and read inside {fname}: {self.mod.name}.value("{read[0]}") (or arithmetic on the parameter) there gives the changed value, but float(par), par.value, and par.raw give the value without the change', sim=self.sim)
         return
 
     def strain_rate(self, tr, rate, strain):
@@ -1110,8 +1153,8 @@ class Engine:
                 raw = trans.by_dist(scaled[0].raw)
             if tr.dur is not None and callable(raw) and not isinstance(raw, (ss.Dist, ss.TimePar, ss.by, trans.TimeValue)): # ST18: a function's value is the mean of an exponential, not each person's own time
                 fname = getattr(raw, '__name__', 'the function')
-                ss.warn(f'"{self.mod.name}.{name}" has dur={fname}, whose value is the mean of an exponential dwell time, so people leave at a constant rate; for each person to leave at the time it gives, write dur=ss.constant({fname})')
-            dw = Bunch(par=p, dist=None, k=tr.stages or 1, exact=True, is_rate=tr.dur is None, family='exponential', std=None, fixed=False, kg=None, scale=None if scaled is None else scaled[1])
+                self.tell(ss.warn, f'"{self.mod.name}.{name}" has dur={fname}, whose value is the mean of an exponential dwell time, so people leave at a constant rate; for each person to leave at the time it gives, write dur=ss.constant({fname})')
+            dw = Bunch(par=p, raw=raw, dist=None, k=tr.stages or 1, exact=True, is_rate=tr.dur is None, family='exponential', std=None, fixed=False, kg=None, scale=None if scaled is None else scaled[1])
             if isinstance(raw, ss.Dist) and tr.dur is not None and any(isinstance(v, ss.by) for v in trans.varying_pars(raw).values()): # Parameters by group
                 self.varying_dwell(name, tr, raw, dw, to_unit)
             elif isinstance(raw, ss.Dist) and tr.dur is not None:
@@ -1120,12 +1163,12 @@ class Engine:
                 dw.mean, dw.std = mean, std
                 dw.dist = trans.numeric_dist(raw, to_unit)
                 if np.isnan(mean): # A parameter is a function of the agents
-                    if self.sim.solver != 'abm':
-                        raise ss.CapabilityError(f'"{name}" cannot run with solver="{self.sim.solver}": its dwell time {raw} has a parameter that is a function of the agents. Run with solver="abm".')
+                    if self.solver != 'abm':
+                        raise ss.CapabilityError(f'"{name}" cannot run with solver="{self.solver}": its dwell time {raw} has a parameter that is a function of the agents. Run with solver="abm".')
                     typed_factor = scaled is not None and any(isinstance(getattr(leaf, 'raw', None), ss.TimePar) for leaf in trans.as_expr(scaled[1]).leaves) # e.g. dur=d*ss.days(1), whose numbers are days (TY5)
                     if getattr(raw, 'unit', None) is None and not typed_factor and not any(isinstance(v, ss.TimePar) for v in raw.pars.values()): # What the function returns has no unit to say otherwise
                         funcs = sc.strjoin(getattr(v, '__name__', 'a function') if callable(v) else str(v) for v in raw.pars.values() if callable(v) or isinstance(v, (ss.conditions.Cond, ss.expressions.Expr)))
-                        ss.note(f'the dwell time of "{name}" comes from {funcs}, whose numbers are read in {self.sim.unit_base}s, the sim\'s unit; if they are in another unit, give it on the distribution, e.g. unit="month"', sim=self.sim)
+                        self.tell(ss.note, f'the dwell time of "{name}" comes from {funcs}, whose numbers are read in {self.sim.unit_base}s, the sim\'s unit; if they are in another unit, give it on the distribution, e.g. unit="month"', sim=self.sim)
                 elif dw.family == 'expon':
                     dw.family = 'exponential'
                 elif dw.family == 'constant' and tr.stages is None: # A fixed delay: a conveyor in a compartmental run (see Compartmental.build_layout())
@@ -1142,20 +1185,27 @@ class Engine:
             tr.guessed.pop('dwell', None)
             if dw.family == 'exponential' and not isinstance(raw, ss.Dist) and tr.stages is None and tr.dur is not None:
                 tr.guessed['dwell'] = 'scalar duration'
-            self.dwell_mods(name, raw, dw, to_unit)
             self.dwells[name] = dw
         return
 
-    def dwell_mods(self, name, raw, dw, to_unit):
+    def init_dwell_mods(self):
+        """ The modifiers of each dwell time (see `dwell_mods()`), once the modifiers are known: after the layout, which may be made before them, to choose the solver """
+        for name,dw in self.dwells.items():
+            self.dwell_mods(name, dw)
+        return
+
+    def dwell_mods(self, name, dw):
         """
         The modifiers of a dwell time's parameter when it is a distribution (e.g. `ss.modify('sir.pars.dur_inf', set=ss.constant(ss.years(5)))`), as agents:
         `dw.mods` are the modifiers, and `dw.sets` the distribution each set= draws from, by the modifier's index (not its id, which would be in the path its seed is made from) (a duration is the mean of an exponential, as for dur=), with its mean.
         People who enter the state while one is active draw from it; those already there have what is left of their dwell rescaled by the change in its mean (see `Agents.rescale_exits()`).
         """
-        p = dw.par
+        p, raw = dw.par, dw.raw
         mods = getattr(self.sim, 'modifiers', {}).get((self.mod.name, 'par', p.name)) if (p.name and not p.literal) else None
         if not mods:
             return
+        unit = self.sim.unit_base
+        to_unit = lambda val: convert(val, unit) # Without holding the engine, as in init_dwells()
         path = f'{self.mod.name}.pars.{p.name}'
         if dw.dist is None and not getattr(dw, 'varying', False): # A duration or rate, which value() modifies
             for m in mods:
@@ -1163,8 +1213,8 @@ class Engine:
                     raise ValueError(f'the modifier "{m.name}" sets {path} to a distribution ({m.amount}), but {path} is a duration, the mean of an exponential dwell time for "{name}", so it can only be set to another duration.\n'
                                      f'     Give a duration (e.g. set=ss.years(5)), or make the parameter a distribution (e.g. ss.expon(ss.years(1))) so it can be set to another.')
             return
-        if self.sim.solver != 'abm':
-            raise ss.CapabilityError(f'the modifier "{mods[0].name}" changes {path}, the dwell time of "{name}", which is a distribution ({raw}); with solver="{self.sim.solver}" it is laid out in compartments once, at the start, so it cannot change during the run.\n'
+        if self.solver != 'abm':
+            raise ss.CapabilityError(f'the modifier "{mods[0].name}" changes {path}, the dwell time of "{name}", which is a distribution ({raw}); with solver="{self.solver}" it is laid out in compartments once, at the start, so it cannot change during the run.\n'
                                      f'     Run with solver="abm", or modify the transition instead (e.g. ss.modify("{self.mod.name}.{name}", multiply=0.5)), which scales its rate.')
         if getattr(dw, 'varying', False) or np.isnan(dw.mean):
             raise ss.CapabilityError(f'the modifier "{mods[0].name}" changes {path}, the dwell time of "{name}", whose distribution ({raw}) differs between people, which a modifier cannot change yet; modify the transition instead (e.g. ss.modify("{self.mod.name}.{name}", multiply=0.5)).')
@@ -1291,7 +1341,7 @@ class Engine:
             if isinstance(init, ss.expressions.par):
                 init = init.raw
             elif isinstance(init, ss.expressions.Expr) and ss.expressions.per_person_in(init): # An expression of people's properties and parameters, e.g. 1 - (A - age)/(k*age + A) (TY2)
-                if state.people and not is_n and self.sim.solver == 'abm': # Read for each person, as agents: see Agents.init_post()
+                if state.people and not is_n and self.solver == 'abm': # Read for each person, as agents: see Agents.init_post()
                     continue
                 init = np.asarray(self.eval(init), dtype=float)[()] # For each group
             elif isinstance(init, ss.expressions.Expr): # An expression of parameters, e.g. I0/2
@@ -1302,7 +1352,7 @@ class Engine:
                 strat = self.sim.groups.strats[self.strain]
                 errormsg = f'init= of "{state.name}" in "{self.mod.name}" is given by "{strat.name}", the strains people carry; give how many start infected in init= (e.g. init=dict({state.name}=0.1)), and the share of each strain, or set of strains carried together, in ss.Strains(split=...), e.g. split={{"{strat.labels[0]}": 0.5, "{strat.labels[-1]}": 0.5}}'
                 raise ValueError(errormsg)
-            if isinstance(init, ss.by) and state.people and not is_n and self.sim.solver == 'abm' and init.on_people(self.sim): # Read from each person's own properties, as agents: see Agents.init_post()
+            if isinstance(init, ss.by) and state.people and not is_n and self.solver == 'abm' and init.on_people(self.sim): # Read from each person's own properties, as agents: see Agents.init_post()
                 continue
             if isinstance(init, ss.by): # A value for each level of one or more dimensions: a number of people, or a fraction of the people at that level
                 sim = self.sim
@@ -1342,7 +1392,7 @@ class Engine:
         init_prev = graph.init_prev
         share = 1.0
         family = getattr(graph, 'seeded_by', None)
-        if family is not None and self.sim.solver != 'abm': # A strain with its own course, seeded by the disease (ss.Strains(shared=...)): the disease's share, times this member's split (independently of the other members, so unlike agents some are seeded with two)
+        if family is not None and self.solver != 'abm': # A strain with its own course, seeded by the disease (ss.Strains(shared=...)): the disease's share, times this member's split (independently of the other members, so unlike agents some are seeded with two)
             family = self.sim.diseases[family]
             init_prev, share = family.init_prev, family.split[family.member_names.index(self.mod.name)]
         if isinstance(init_prev, ss.expressions.par): # A parameter (e.g. sir.pars.init_prev), whose value can be a distribution
@@ -1479,7 +1529,7 @@ class Engine:
         """ One count per state, one flow per transition (`res.infection.cum` is its cumulative total), and for the library's diseases, Starsim's standard disease results """
         mod = self.mod
         graph = self.graph
-        abm = self.sim.solver == 'abm'
+        abm = self.solver == 'abm'
         results = sc.autolist()
         for state in graph.states.values():
             key = state.name
@@ -1604,7 +1654,7 @@ class Engine:
         """ Work out the sources and delay of each outcome, and the order to compute them in """
         graph = self.graph
         trans = ss.transitions
-        abm = self.sim.solver == 'abm'
+        abm = self.solver == 'abm'
         dt = self.dt
         self.outcomes = sc.objdict()
         todo = dict(graph.outcomes)
@@ -1671,7 +1721,7 @@ class Engine:
         res = self.mod.results
         ti = self.mod.ti
         ng = self.sim.groups.n_groups
-        integer = self.sim.solver in ['abm', 'gillespie', 'tau', 'binomial']
+        integer = self.solver in ['abm', 'gillespie', 'tau', 'binomial']
 
         def flow_of(key):
             if key in self.outcomes:

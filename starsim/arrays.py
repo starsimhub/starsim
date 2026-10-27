@@ -938,23 +938,6 @@ class FloatArr(Arr):
         return
 
 
-class ModifiableArr(FloatArr):
-    """
-    A float array that modifiers act on: a declared disease's `rel_sus` and `rel_trans`, as agents
-
-    Reading it gives the base values, which a modifier never changes; `.effective` gives
-    the values with the modifiers that are active now applied, which is what the model
-    uses. `sim.what_modifies()` lists the modifiers.
-    """
-    engine = None # The engine that applies the modifiers; set by it
-
-    @property
-    def effective(self):
-        """ The values with the modifiers that are active now applied """
-        mult = 1.0 if self.engine is None else self.engine.mult_raw(self.name)
-        return self.asnew(self.raw*mult, cls=FloatArr, copy=False)
-
-
 class StepArr(Arr):
     """
     Step numbers (time indices), stored compactly: a declared disease's `ti_X` and `ti_exit_X`, as agents, and `people.ti_dead` and `people.ti_removed`

@@ -103,6 +103,7 @@ A module keeps common random numbers if it draws every random number from a Star
 3. **Draw for people, not for a number.** Pass the UIDs of the people the draw is for, or a boolean state with a value for each person, so that each person gets their own random number.
 4. **Put what varies in the parameter.** If a probability differs by person or by time, give the distribution a function as its parameter, rather than setting it anew each step.
 5. **Choose a fixed number of people with `ss.choose_n()`.** To pick exactly 20 people, `ss.choose_n(20)` keeps the pairing: if the candidates change slightly, most of the same people are still chosen. `ss.choice()` and NumPy's random choice don't.
+6. **Choose one of several options per person with a row each.** If the probabilities of the options differ by person (e.g. a contraceptive method by age group and current method), give `ss.choice()` a function that returns a row of probabilities for each person, `p=lambda self, sim, uids: table[group[uids]]`, and draw once for all of them, rather than setting `p` and drawing for each group.
 
 In code:
 
@@ -122,6 +123,12 @@ def __init__(self):
     self.dist = ss.bernoulli(p=p_by_age)
 
 uids = self.dist.filter(eligible) # filter() gives the UIDs for whom the draw is true
+
+# One of several options, with a row of probabilities (or weights) for each person: one draw for everyone
+table = np.array([[0.7, 0.2, 0.1],  # Under 18: none, pill, IUD
+                  [0.3, 0.4, 0.3]]) # 18 and over
+self.method = ss.choice(a=3, p=lambda self, sim, uids: table[(sim.people.age[uids] >= 18).astype(int)])
+methods = self.method.rvs(uids)
 ```
 
 And what to avoid:

@@ -82,10 +82,10 @@ def test_syphilis_latent():
     old, new = [make(form, ll=False).run().results.syph for form in ['old', 'new']] # With no seeds in LL, the workaround is right, and the same
     assert np.array_equal(old.infection, new.infection) and old.infection.sum() > 100
     sim = make('new').init()
-    assert sim.diseases.syph.rel_trans.effective[sim.diseases.syph.LL.uids].min() == 1 # Seeds in LL start their latent clock at the start
+    assert sim.diseases.syph.effective('rel_trans', sim.diseases.syph.LL.uids).min() == 1 # Seeds in LL start their latent clock at the start
     sim.run()
     s = sim.diseases.syph
-    eff = s.rel_trans.effective[s.LL.uids]
+    eff = s.effective('rel_trans', s.LL.uids)
     assert not np.isnan(eff).any() and eff.min() < 0.3
     late = s.LL.uids[s.ti_EL[s.LL.uids] > 0]
     latent = s.states.EL | s.states.LL

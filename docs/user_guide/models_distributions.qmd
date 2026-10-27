@@ -76,7 +76,7 @@ A value that differs by group, rather than at random between people, is better g
 | Random integer | `ss.randint` | `low`, `high` | |
 | Bernoulli | `ss.bernoulli` | `p` | True with probability `p`: whether something happens to each person |
 | Choose n | `ss.choose_n` | `n`, `weights` | Exactly `n` people; see [below](#a-fixed-number-of-people) |
-| Choice | `ss.choice` | `a` (the options), `p` (their probabilities) | One of a list of values |
+| Choice | `ss.choice` | `a` (the options), `p` (their probabilities, or a row of them per person) | One of a list of values |
 | Histogram | `ss.histogram` | `values`, `bins` | From a histogram of data |
 | Random | `ss.random` | | Between 0 and 1 |
 

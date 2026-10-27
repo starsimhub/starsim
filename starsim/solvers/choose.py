@@ -2,9 +2,6 @@
 Choosing the solver: which engine runs a declared model, and why (`choose_solver()`), and the steps that build a declared model before it is run (parameters by name, births and deaths of the population, a named population, the unit, life tables)
 """
 import inspect
-import warnings
-import contextlib
-import functools
 import importlib
 import importlib.util
 import math
@@ -12,7 +9,7 @@ import numpy as np
 import sciris as sc
 import starsim as ss
 from .compartmental import Compartmental
-from .agents import Agents
+from .agents import Agents, Transmission
 from .engine import convert
 
 __all__ = ['solver_names', 'integrators', 'Undeclared', 'make_engine', 'choose_solver', 'choose_engine', 'kernel_seconds', 'init_crossings', 'init_capabilities', 'auto_reasons', 'set_par_values', 'flows_of', 'init_group_values', 'settle_start', 'group_people']
@@ -22,17 +19,27 @@ solver_names = ['auto', 'ode', 'binomial', 'gillespie', 'tau', 'abm'] # The solv
 integrators = ['rk4', 'euler'] # The schemes of the ODE
 
 
-class Undeclared:
-    """ The engine of a disease that declares no states or transitions: there is nothing for it to run, so the disease's own code is all of it (see `ss.Disease`) """
-    def __init__(self, module, sim):
-        self.mod = module
-        self.sim = sim
-        return
-
+class Undeclared(Transmission):
+    """
+    The engine of a disease that declares no states or transitions (see `ss.Disease`): there is nothing for it to run, so the disease's own
+    code is all of it. It gives that code what a declared disease's engine gives its own, as agents: the modifiers and products on its
+    `rel_sus` and `rel_trans` (`dis.effective()`), transmission over the networks (`ss.Infection.transmit_route()`; see `Transmission`),
+    and, for a delivery, the people its conditions select and a cure (`force()`)
+    """
     def nothing(self):
         """ Nothing to run: each step of the lifecycle is the disease's own code """
         return
-    define = init_pre = init_post = start_step = step_state = step = step_funcs = finalize_results = shrink = nothing
+    define = init_pre = init_post = step_state = step_funcs = finalize_results = nothing
+
+    def start_step(self):
+        """ Values held for a step (e.g. the modifiers of a network's contacts) are worked out again: at the step's start, and once the interventions have run (the disease's step()) """
+        self.cache.clear()
+        return
+    step = start_step
+
+    def shrink(self):
+        ss.utils.shrink(self, ['_selector', 'cache']) # The selector holds the sim
+        return
 
     def update_results(self):
         """ The count of each `ss.BoolState`, as for any module """
@@ -47,14 +54,32 @@ class Undeclared:
         """ An expression of parameters (e.g. a modifier's amount, `ss.par(2, bounds=[1, 4])`), at their values """
         return ss.expressions.evaluate(expr, self)
 
+    def force(self, uids, tr, dst, srcs=None):
+        """ A cure by a delivery (see `ss.Delivery.cure()`): the disease's own `clear_infection()` """
+        if len(uids):
+            self.mod.clear_infection(uids)
+        return len(uids)
+
+    def unapplied(self, kind):
+        """ Why the disease would not apply the modifiers on its `rel_sus` or `rel_trans` (`kind`), or None if it would: a transmitted `ss.Infection` reads them in `transmit_route()` (see `ss.connectors.check_applied()`) """
+        mod = self.mod
+        if (isinstance(mod, ss.Infection) and 'beta' in mod.pars) or kind in getattr(mod, 'reads_modifiers', ()): # Or its own code reads them, with mod.effective()
+            return None
+        why = 'it is not an ss.Infection' if not isinstance(mod, ss.Infection) else 'it has no beta'
+        return (f'"{mod.name}" is written as code and is not transmitted ({why}), so nothing reads its rel_sus or rel_trans; a product or modifier acts on it only through its transmission. '
+                f'If its own code reads {kind} with {mod.name}.effective(\'{kind}\', uids), say so in its class: reads_modifiers = (\'{kind}\',).')
+
 
 def make_engine(module, sim):
-    """ Create the engine that runs a module's graph under the sim's solver; for a disease that declares nothing, one that runs nothing """
+    """ Create the engine that runs a module's graph under the sim's solver: in a compartmental run, the one laid out to choose the solver (see `lay_out()`), unless the groups changed since; for a disease that declares nothing, one that runs nothing """
     if module.graph is None:
         return Undeclared(module, sim)
     if sim.solver == 'abm':
         return Agents(module, sim)
-    return Compartmental(module, sim)
+    engine = sim.__dict__.get('layouts', {}).pop(module.name, None)
+    if engine is None or engine.mod is not module or not engine.current():
+        engine = Compartmental(module, sim)
+    return engine
 
 
 class MixedNetworks(ss.ndict):
@@ -93,12 +118,20 @@ def choose_solver(sim):
     `choose_engine()`.
 
     The steps: the modules are gathered and the declared model is built (`init_model()`); what
-    matters to the choice is recorded (`try_compartments()`); the solver is chosen; and the
+    matters to the choice is recorded (`init_capabilities()`), with what the layout of the
+    compartments refuses, found by making it (`init_layouts()`); the solver is chosen; and the
     population is made ready for it (`init_agents()` or `init_compartments()`), and checked.
+    The layouts are made once: a compartmental run uses them, unless its groups changed since.
     """
     modules = gather_modules(sim)
     init_model(sim)
-    layouts = try_compartments(sim, modules)
+    if sim.pars.solver not in ['auto', 'abm']: # A module's own compartmental form, used only when a compartmental solver is named (e.g. ss.Pregnancy's)
+        for mod in sim.declared:
+            note = mod.compartmental_form(sim)
+            if note is not None:
+                ss.note(note, sim=sim)
+    init_capabilities(sim, modules)
+    joints, mixing = init_layouts(sim)
 
     # The choice
     solver = sim.pars.solver
@@ -121,7 +154,8 @@ def choose_solver(sim):
     if solver == 'abm':
         init_agents(sim, reason)
     else:
-        init_compartments(sim, layouts)
+        init_compartments(sim, joints, mixing)
+    sim.layouts = {name:engine for name,engine in sim.layouts.items() if solver != 'abm' and engine.current()} # Those the run uses (see make_engine())
     check_model(sim)
     return
 
@@ -154,6 +188,7 @@ def init_model(sim):
     sim.overlaps = [] # Pairs of modifiers that set the same quantity at once, which is noted
     sim.clipped = set() # Quantities whose modifiers took them out of their range, which were clipped to it
     sim.crossings = [] # Diseases whose states are tracked jointly in a compartmental run: see init_crossings()
+    sim.layouts = {} # The engines of the declared modules, laid out as compartments to choose the solver, by name: see lay_out()
     sim.groups = ss.dimensions.Groups(sim) # The groups of people that the stratifications give: see ss.dimensions.Groups
     for key in [key for key in pars.keys() if key not in ss.SimPars.names()]: # A model parameter assigned on the sim's parameters, e.g. sim.pars.beta = 0.1, is a value by name
         if any(key in mod.pars for mod in sim.declared):
@@ -167,42 +202,62 @@ def init_model(sim):
     return
 
 
-def try_compartments(sim, modules):
+def init_layouts(sim):
     """
-    What matters to which solvers can run the model, as `sim.capabilities` (see `init_capabilities()`); and, under `auto` or
-    `abm` with nothing yet that needs agents, what the layout of the compartments refuses, found by making it (which runs none
-    of the model's code), so that it is said in one place. Returns the layouts of the diseases to track jointly, if they were
-    worked out (see `joint_layout()`).
+    Under `auto` or `abm`, with nothing yet that needs agents: what the layout of the compartments refuses, found by making it
+    as the ODE would (which runs none of the model's code), and added to `sim.capabilities`, so that it is said in one place:
+    the layout of each declared module (see `lay_out()`), of the mixing, and, under `auto`, of the diseases to track jointly
+    (see `joint_layout()`). What is made is kept, for a compartmental run to use; its notes are said only then.
+
+    Returns the layouts of the diseases to track jointly, and the mixing, if they were made.
     """
     pars = sim.pars
     solver = pars.solver
-    if solver not in ['auto', 'abm']: # A module's own compartmental form, used only when a compartmental solver is named (e.g. ss.Pregnancy's)
-        for mod in sim.declared:
-            note = mod.compartmental_form(sim)
-            if note is not None:
-                ss.note(note, sim=sim)
-    init_capabilities(sim, modules)
-    layouts = None
-    if solver in ['auto', 'abm'] and not auto_reasons(sim):
-        with trying(sim):
-            tries = {f'module: {mod.name}':functools.partial(layout, sim, mod) for mod in sim.declared}
-            tries['networks'] = lambda: ss.solvers.Mixing(sim).init(approx=pars.approx)
-            for ingredient,make in tries.items():
-                try:
-                    make()
-                except ss.CapabilityError as e:
-                    sim.capabilities.append(sc.objdict(ingredient=ingredient, reason=str(e).split('\n')[0], fatal=False))
-            if solver == 'auto' and not auto_reasons(sim) and len(sim.declared) > 1: # Diseases tracked jointly, counted before anything is made: agents, if they cannot be, or take more than the budget
-                layouts = []
-                for group in crossing_groups(sim):
-                    try:
-                        layouts.append(joint_layout(sim, group))
-                        reason = over_budget(layouts[-1])
-                    except ss.CapabilityError as e:
-                        reason = str(e).split('\n')[0]
-                    if reason:
-                        sim.capabilities.append(sc.objdict(ingredient=f'jointly: {" × ".join(sorted(group.names))}', reason=reason, fatal=False))
-    return layouts
+    joints = mixing = None
+    if solver not in ['auto', 'abm'] or auto_reasons(sim):
+        return joints, mixing
+    def refused(ingredient, e):
+        sim.capabilities.append(sc.objdict(ingredient=ingredient, reason=str(e).split('\n')[0], fatal=False))
+        return
+    for mod in sim.declared:
+        try:
+            lay_out(sim, mod, 'ode')
+        except ss.CapabilityError as e:
+            refused(f'module: {mod.name}', e)
+    try:
+        mixing = ss.solvers.Mixing(sim)
+        mixing.unsaid = [] # Said if it is used (see init_compartments())
+        mixing.init(approx=pars.approx, solver='ode')
+    except ss.CapabilityError as e:
+        mixing = None
+        refused('networks', e)
+    if solver == 'auto' and not auto_reasons(sim) and len(sim.declared) > 1: # Diseases tracked jointly, counted before anything is made: agents, if they cannot be, or take more than the budget
+        joints = []
+        for group in crossing_groups(sim):
+            try:
+                joints.append(joint_layout(sim, group, 'ode'))
+                reason = over_budget(joints[-1])
+            except ss.CapabilityError as e:
+                reason = str(e).split('\n')[0]
+            if reason:
+                sim.capabilities.append(sc.objdict(ingredient=f'jointly: {" × ".join(sorted(group.names))}', reason=reason, fatal=False))
+    return joints, mixing
+
+
+def lay_out(sim, mod, solver):
+    """
+    The engine of a declared module laid out as compartments for a solver (see `Compartmental.build()`), made once for the
+    sim's groups and kept in `sim.layouts` for the run (see `make_engine()`), with its notes held until then; raises a
+    `CapabilityError` for what has no compartmental form yet
+    """
+    engine = sim.layouts.get(mod.name)
+    if engine is None or not engine.current(solver):
+        engine = Compartmental(mod, sim, solver=solver)
+        engine.unsaid = []
+        engine.init_dims()
+        engine.build()
+        sim.layouts[mod.name] = engine
+    return engine
 
 
 def init_agents(sim, reason):
@@ -217,14 +272,15 @@ def init_agents(sim, reason):
     return
 
 
-def init_compartments(sim, layouts=None):
+def init_compartments(sim, joints=None, mixing=None):
     """
     Once the model runs as compartments: refuse what has no compartmental form, note the variation between people that is
     lost, and lay out the groups, the diseases tracked jointly, and the mixing, which replaces the networks
 
     Args:
         sim (`ss.Sim`): the sim
-        layouts (list): the layouts already worked out for the diseases to track jointly (see `try_compartments()`), if any
+        joints (list): the layouts already made for the diseases to track jointly (see `init_layouts()`), if any
+        mixing (`ss.solvers.Mixing`): the mixing already laid out (see `init_layouts()`), if any, used if the groups are the same
     """
     pars = sim.pars
     solver = sim.solver
@@ -254,8 +310,12 @@ def init_compartments(sim, layouts=None):
         sim.groups.init()
         sim.mixing = ss.solvers.Mixing(sim)
 
-    init_crossings(sim, layouts)
-    sim.mixing.init(approx=pars.approx)
+    init_crossings(sim, joints)
+    if mixing is not None and mixing.laid_out == (sim.groups, sim.groups.version):
+        sim.mixing = mixing
+        mixing.say()
+    else:
+        sim.mixing.init(approx=pars.approx)
     sim.mixed = list(pars.networks.values()) # The networks are replaced by contact rates between groups, so are not run themselves
     pars.networks = MixedNetworks(names=[net.name for net in sim.mixed])
     pars.n_agents = sim.groups.n_groups
@@ -910,30 +970,7 @@ def crossing_groups(sim):
     return groups
 
 
-@contextlib.contextmanager
-def trying(sim):
-    """ Lay out the compartments to see whether they can be, before the solver is chosen: as the ODE, keeping none of the notes or warnings, since the model may still run as agents """
-    solver, notes, verbose = getattr(sim, 'solver', None), list(sim.notes), sim.pars.verbose
-    sim.solver, sim.pars.verbose = 'ode', 0
-    try:
-        with warnings.catch_warnings():
-            warnings.simplefilter('ignore')
-            yield
-    finally:
-        sim.solver, sim.notes[:], sim.pars.verbose = solver, notes, verbose
-    return
-
-
-def layout(sim, mod):
-    """ The layout of a declared module's compartments, as its engine makes it (see `Compartmental.build_layout()`), which raises a `CapabilityError` for what has no compartmental form yet """
-    engine = ss.solvers.Compartmental(mod, sim) # Only to lay out the compartments; the module's own engine is made later
-    engine.init_dims()
-    engine.init_dwells()
-    engine.build_layout()
-    return engine
-
-
-def joint_layout(sim, group):
+def joint_layout(sim, group, solver):
     """
     For a group of diseases to track jointly (see `crossing_groups()`): a dimension for each, whose levels are its compartments of people,
     and the size of the program that runs them: its compartments in each group (`rows`: the product of the diseases' compartments of people,
@@ -944,7 +981,7 @@ def joint_layout(sim, group):
     members = [mod.name for mod in sim.declared if mod.name in group.names] # In the order of the sim
     strats, people, others = [], [], []
     for name in members:
-        engine = layout(sim, sim.get_declared(name))
+        engine = lay_out(sim, sim.get_declared(name), solver)
         labels = []
         for ind in engine.people_comps: # A state with several compartments (branches, or the stages of a dwell time) has a level for each
             state = engine.comps[ind].state.name
@@ -954,14 +991,14 @@ def joint_layout(sim, group):
         entered = lambda track: not track.immediate and not (getattr(track, 'stay', False) and track.p is not None) # Not those who took ss.stay in a split, which only the split enters
         tracks = [track for track in engine.tracks[first] if entered(track)]
         if len(tracks) != 1:
-            raise ss.CapabilityError(f'the states of "{name}" cannot be tracked jointly with those of {sc.strjoin(n for n in members if n != name)} with solver="{sim.solver}" yet, since people entering its first state ("{first}") are split between branches.\n'
+            raise ss.CapabilityError(f'the states of "{name}" cannot be tracked jointly with those of {sc.strjoin(n for n in members if n != name)} with solver="{solver}" yet, since people entering its first state ("{first}") are split between branches.\n'
                                      f'     Run with solver="abm".')
         placed = [tr for tr in engine.graph.inflows if getattr(tr, 'per', None) is not None and ss.conditions.modname(tr.per.module) in members and ss.conditions.modname(tr.per.module) != name]
         if placed: # Its own state for the children of another disease's transition (ss.birth(per=)), which are all the births there are
             into = placed[0].dst[0].name
             tracks = [track for track in engine.tracks[into] if entered(track)]
             if len(tracks) != 1 or len({(ss.conditions.modname(tr.per.module), tr.per.name, tr.dst[0].name) for tr in placed}) > 1:
-                raise ss.CapabilityError(f'"{name}" places the children of another disease in "{into}", which cannot be done with its states tracked jointly with solver="{sim.solver}" yet (people entering it are split between branches, or it places several transitions\' children).\n'
+                raise ss.CapabilityError(f'"{name}" places the children of another disease in "{into}", which cannot be done with its states tracked jointly with solver="{solver}" yet (people entering it are split between branches, or it places several transitions\' children).\n'
                                          f'     Run with solver="abm".')
         split = np.zeros(len(labels))
         split[engine.people_comps.index(tracks[0].first)] = 1.0 # Where people born to (or arriving in) the others start: in this disease's first state, as agents do, or where it places them
@@ -997,14 +1034,14 @@ def init_crossings(sim, layouts=None):
 
     Args:
         sim (`ss.Sim`): the sim
-        layouts (list): the layouts already worked out for the sim's groups (see `joint_layout()`), if any
+        layouts (list): the layouts already made for the sim's groups (see `joint_layout()`), if any
     """
     groups = crossing_groups(sim)
     if not groups:
         return
     cols = int(np.prod([strat.n for strat in sim.groups.strats if strat.kind != 'disease']))
     if layouts is None or any(layout.cols != cols for layout in layouts): # The groups changed once the solver was known (e.g. the stages of a transfer)
-        layouts = [joint_layout(sim, group) for group in groups]
+        layouts = [joint_layout(sim, group, sim.solver) for group in groups]
     for layout in layouts:
         reason = over_budget(layout)
         if reason:
@@ -1046,7 +1083,7 @@ def init_capabilities(sim, modules):
     and functions of a declared module run beside the compartments (and raise a `CapabilityError` if they ask for agents);
     other modules written as code (diseases, networks, demographics, interventions, connectors) need agents. What the layout of
     the compartments refuses (a minimum stay it has no form for, a race with a fixed delay, a network's partnerships, a network with no approximation) is not
-    predicted here: `choose_solver()` makes the layout, which runs none of the model's code, and adds its refusal as a record.
+    predicted here: `init_layouts()` makes the layout, which runs none of the model's code, and adds its refusal as a record.
     """
     caps = []
     def add(ingredient, reason, fatal=False):
@@ -1072,7 +1109,7 @@ def init_capabilities(sim, modules):
     for mod in modules:
         graph = getattr(mod, 'graph', None)
         flag = getattr(mod, 'compartmental', None) # Whether it works on groups, if the module says
-        reasons = mod.agent_reasons() if hasattr(mod, 'agent_reasons') else [] # What needs agents, which needs no trying (see ss.Delivery.agent_reasons())
+        reasons = mod.agent_reasons() if hasattr(mod, 'agent_reasons') else [] # What needs agents, which needs no layout to find (see ss.Delivery.agent_reasons())
         for reason in reasons: # A priority per agent is ignored by a compartmental solver that was asked for, with a note (see ss.Delivery.key())
             add(f'module: {mod.name}', reason, fatal=not (reason.startswith('priority=') and approx is not False))
         for cond in [getattr(mod, key, None) for key in ['on', 'eligible', 'where'] if not (key == 'where' and graph is not None)]: # The conditions of a delivery or a modifier

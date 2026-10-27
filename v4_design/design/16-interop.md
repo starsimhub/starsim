@@ -10,12 +10,12 @@ People have to want to write models in this language for any of this to matter. 
 
 ## One build step for every importer
 
-An importer reads another framework's model into an `ss.interop.Source`: its states, parameters, flows as rate expressions in the source's own terms, stratifications, outcomes, and what it could not translate. `ss.interop.build()` turns a source into a sim by the same rules for every format (below), so each framework needs one reader. An exporter writes a sim's compartmental form in another format. There are no direct framework-to-framework converters.
+An importer reads another framework's model into an `ss.interop.Source`: its states, parameters, flows as rate expressions in the source's own terms, stratifications, outcomes, and what it could not translate. `ss.interop.write()` writes a source as Starsim code (a declared `ss.Disease` and its `ss.Sim`) by the same rules for every format (below), and `ss.interop.build()` runs that code to make the sim, so each framework needs one reader, and there is one path: the foreign model, then code, then the sim. Starsim never turns a sim back into code. An exporter writes a sim's compartmental form in another format, read from the built model. There are no direct framework-to-framework converters.
 
 ```
-EMULSION, odin, SBML, SimInf,                                                        ┌─▶ SBML, odin (ss.interop.export(sim, format))
-flepiMoP, summer2, Atomica, camdl,  ─▶ reader ─▶ ss.interop.Source ─▶ build() ─▶ sim ┤
-EpiModel, epydemix, MEmilio                                                          └─▶ Python that builds it again (sim.to_code())
+EMULSION, odin, SBML, SimInf,
+flepiMoP, summer2, Atomica, camdl,  ─▶ reader ─▶ ss.interop.Source ─▶ write() ─▶ code ─▶ run ─▶ sim ─▶ SBML, odin (ss.interop.export(sim, format))
+EpiModel, epydemix, MEmilio                                                (sim.imported.code)
 ```
 
 ## Import
@@ -28,14 +28,14 @@ sim = ss.interop.load('framework.xlsx', format='atomica', databook='databook.xls
 sim = ss.interop.load(summer_model)                 # a Python object from another framework; format taken from its type
 ```
 
-The result is an ordinary sim (`ss.interop.formats` lists the importers; the format is told from the file or object where it can be). `sim.describe()` prints it, it can be stratified, run, and fitted like one written by hand, and `sim.to_code()` writes it as a Python script that builds it again, which is the usual next step. `sim.imported` records how it was read: the format and file, how each rate was read (`choices`), what could not be translated (`incomplete`), and the prompt for finishing it (`prompt`). A framework with no importer can still fill in an `ss.interop.Source` by hand and call `ss.interop.build()`.
+The result is an ordinary sim (`ss.interop.formats` lists the importers; the format is told from the file or object where it can be). `sim.describe()` prints it, it can be stratified, run, and fitted like one written by hand, and its code (`sim.imported.code`, which says where the model came from, how each rate was read, and what was not translated) is the user's to save and change, which is the usual next step. `sim.imported` records how it was read: the format and file, the code (`code`), how each rate was read (`choices`), what could not be translated (`incomplete`), and the prompt for finishing it (`prompt`). A rate is checked before it is written (only arithmetic, comparisons, a few functions, and the names the model declares), so a source's expression is never run as it is; a value the writer cannot write as code (e.g. a network) is given by the importer as `ss.interop.Code`, the Python that makes it. A framework with no importer can still fill in an `ss.interop.Source` by hand and call `ss.interop.build()`.
 
 An importer SHOULD:
 
 1. **Keep names.** A transition called `infection` in the source is called `infection` here.
 2. **Mark what it guessed.** Values the importer filled in are marked `[guessed]` in `describe()`, exactly as for a hand-written model.
 3. **Keep going.** Something that does not map onto a built-in piece is kept as a literal expression or a function (below), not dropped and not refused.
-4. **List what it could not translate at all**, by name (`ImportIncomplete`), in `sim.imported.incomplete`, and in the code `sim.to_code()` writes. Every key of the source the importer does not read is listed, not dropped.
+4. **List what it could not translate at all**, by name (`ImportIncomplete`), in `sim.imported.incomplete`, and at the end of the code it writes. Every key of the source the importer does not read is listed, not dropped.
 
 An incomplete import is not refused. It runs without the listed parts, warning again when it is first run, and it is finished by a person or an AI assistant with the `import-model` skill: the warning ends with the instruction to give the assistant (also kept as `sim.imported.prompt`), and the skill's "Finishing an incomplete import" works through the list and checks the result with the `validate-import` skill. A part that needs a feature Starsim does not have is left listed and reported as a gap, not forced.
 
@@ -82,12 +82,11 @@ S, I, R = ss.states('S I R')
 sir = ss.Disease(infection=ss.Transition(S, I, rate=0.3 * I), recovery=ss.Transition(I, R, dur=10), init_prev=0.01, name='sir')
 sim = ss.Sim(sir, unit='day')
 
-ss.save('model.py', sim)                     # Python that builds the sim again (sim.to_code())
 ss.interop.export(sim, 'sbml', filename='model.xml')
 ss.interop.export(sim, 'odin', filename='model.R')
 ```
 
-The code is the complete form of a declared model; `to_code()` writes only the declared parts, and what it does not write (a network or module written as code, named by the class that makes it, a prior that is not a distribution) it lists in the file and as `LossyExport` ([14-model-spec.md](14-model-spec.md#saved-forms)). The model spec (`sim.to_spec()`, [14-model-spec.md](14-model-spec.md)) is the normalized form for `sim.hash()` and `ss.diff()`, and is not read back. Every other format carries less, and each export MUST print what was left out or changed, one line per declaration (`LossyExport`):
+The code is the complete form of a model ([14-model-spec.md](14-model-spec.md)). The exporters read the built model (each disease's graph and engine), not a serialized form; every other format carries less, and each export MUST print what was left out or changed, one line per declaration (`LossyExport`):
 
 ```text
 >>> ss.interop.export(sim, 'sbml', filename='model.xml')    # stratified by age, with a lognormal dwell time and a random network
@@ -98,7 +97,7 @@ LossyExport: exported to SBML: 3 states, 2 transitions, as 13 species and 12 rea
   not exported: network "randomnet" (contacts written as homogeneous mixing)
 ```
 
-An export does not fail because something cannot be carried; it writes what it can and lists the rest. A model with functions in it exports its declared parts and lists the functions as not exported ([14-model-spec.md](14-model-spec.md#functions)).
+An export does not fail because something cannot be carried; it writes what it can and lists the rest. A model with functions in it exports its declared parts and lists the functions as not exported.
 
 Petri nets and the other frameworks' formats are not exported (`v4_design/admin/deferred.md`, "Won't do"). SBML and odin are written from the compartmental form of the model (what `sir.equations()` prints), with the numbers in the sim's unit (SBML's `timeUnits`): a dwell time that is not exponential is written as its Erlang stages, and a stratification as one group, both listed. Both read back with `ss.interop.load()`. `ss.interop.export(sim, format)` returns the text without writing a file.
 
@@ -106,23 +105,7 @@ The diagram is a Mermaid flowchart, from `sir.diagram()`, with each arrow labell
 
 ## Comparing two models
 
-Since both are data, comparing them is mechanical:
-
-```python
-S, I, R = ss.states('S I R')
-sim_a = ss.Sim(ss.Disease(infection=ss.Transition(S, I, rate=0.05 * I), recovery=ss.Transition(I, R, dur=10), init_prev=0.01, name='sir'), unit='day')
-sim_b = ss.Sim(ss.Disease(infection=ss.Transition(S, I, rate=0.08 * I), recovery=ss.Transition(I, R, dur=ss.gamma(a=3, scale=10/3)), init_prev=0.01, name='sir'), unit='day')
-ss.diff(sim_a, sim_b)
-```
-
-```text
-model:    transition 'recovery' dwell exponential, mean 10 day -> dwell gamma(a=3, scale=3.33333 day)
-pars:     beta 0.05/day -> 0.08/day
-config:   same
-scenario: same
-```
-
-The report is in the user's terms (states, transitions, parameters), not a diff of JSON text, and its four lines are the model, parameter, run-setting, and scenario parts of `sim.hash()` ([14-model-spec.md](14-model-spec.md#hashing); the hash also has a part for the data, and the seed). The same function compares an imported model with its hand-written translation.
+Two models are compared by their results (run both, as the importers' tests do with an import and its hand translation), by `describe()`, or by a text diff of their code; there is no comparison function, since the code is the model.
 
 ## The vignette test
 

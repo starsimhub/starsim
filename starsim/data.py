@@ -12,8 +12,7 @@ These are tables. The model objects that take a place by name read them from her
 and `ss.Births(birth_rate='Kenya')`. The data comes from
 `starsim_data` (https://github.com/starsimhub/starsim_data), which bundles what is
 small and common and fetches the rest on demand. Each lookup returns the data with a
-record of where it came from (`ref`), which is written into the model spec, so the
-sim's hash changes if the data does.
+record of where it came from (`ref`), which `sim.describe()` shows.
 """
 import numpy as np
 import sciris as sc

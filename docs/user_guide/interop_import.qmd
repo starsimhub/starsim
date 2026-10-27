@@ -80,13 +80,13 @@ Here everything was translated. When something isn't, `sim.imported.prompt` is a
 
 ## Keeping an imported model
 
-`sim.to_code()` writes the imported model as Python, which can be kept, read, and changed like a model written by hand. The file starts with how each rate was read:
+An import gives Starsim code: the importer writes the model as Python, and the sim is that code run. The code is kept as `sim.imported.code`, to be kept, read, and changed like a model written by hand. It starts with how each rate was read, and ends with anything that wasn't translated:
 
 ```{python}
-print(sim.to_code())
+print(sim.imported.code)
 ```
 
-`ss.save('measles.py', sim)` writes the same to a file. See [The model spec, `to_code()`, and `diff()`](interop_spec.qmd).
+`sc.savetext('measles.py', sim.imported.code)` writes it to a file. From then on, the file is the model: to compare it with another version, compare their results or their `describe()`, or the two files in a text editor.
 
 ## The formats
 
@@ -152,4 +152,4 @@ hub.head()
 
 A target named "cum ..." is the total since the start, and "peak size ..." the largest value of a period; `by=` gives a location for each level of a stratification (such as each place), and `output_type='sample'` gives the runs instead of quantiles.
 
-How importers and exporters are built is explained in [The model spec, errors, and interop](../architecture/spec_and_interop.qmd).
+How importers and exporters are built is explained in [Errors and interop](../architecture/spec_and_interop.qmd).

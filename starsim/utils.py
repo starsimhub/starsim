@@ -4,8 +4,6 @@ Numerical utilities and other helper functions
 import os
 import re
 import sys
-import json
-import hashlib
 import warnings
 import numpy as np
 import numba as nb
@@ -283,7 +281,7 @@ def caller_names(depth=1):
     """
     The names of the variables in the code that called the caller (`depth` levels above it), as a dict of the name of
     each object by its id: its local variables, else its global ones, and only for an object bound to exactly one of
-    them. A declared disease (`ss.Disease(infection, recovery)`) and a sim (`ss.Sim(diseases=sir)`) look up the names of
+    them. A declared disease (`ss.Disease(infection, recovery)`) and a sim (`ss.Sim(diseases=sir)`, `sim.new(interventions=campaign)`) look up the names of
     what they are given once, here; nothing else does. Empty if the stack is not that deep (e.g. from R via reticulate)
     """
     frame = getframe(depth + 1)
@@ -304,54 +302,6 @@ def n_args(func):
     import inspect
     kinds = [inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD]
     return sum(1 for p in inspect.signature(func).parameters.values() if p.kind in kinds and p.default is inspect.Parameter.empty)
-
-
-def short_hash(obj, n=6):
-    """
-    A short hash of a JSON-compatible object, e.g. for telling model specs apart
-
-    The keys of a dict whose value is None are left out, so that a key a new feature
-    writes as None when it is not used does not change the hash of any other object.
-    The hash is SHA-256 of the canonical JSON (keys sorted), so it is the same in every
-    process and on every machine.
-    """
-    def drop(item):
-        if isinstance(item, dict):
-            return {k:drop(v) for k,v in item.items() if v is not None}
-        elif isinstance(item, (list, tuple)):
-            return [drop(v) for v in item]
-        return item
-    string = json.dumps(drop(sc.jsonify(obj)), sort_keys=True)
-    return hashlib.sha256(string.encode()).hexdigest()[:n]
-
-
-def split_numbers(obj, unit=None, skip=None):
-    """
-    Split a JSON-compatible object into its structure (with every number replaced by a placeholder) and a list of its numbers
-
-    Used to hash a model's structure separately from its parameter values.
-
-    Args:
-        obj (dict): the object to split
-        unit (str): if provided, convert typed quantities to this unit, so e.g. 7 days and 1 week give the same number
-        skip (list): keys to leave out, e.g. labels
-    """
-    numbers = []
-    def walk(item):
-        if isinstance(item, dict):
-            if unit and item.get('type') in ['dur', 'per', 'prob', 'freq'] and item.get('unit'): # A typed quantity
-                factor = ss.time.get_dur_class(item['unit'])(1).to(unit).value
-                numbers.append(float(item['value']*factor if item['type'] == 'dur' else item['value']/factor))
-                return dict(type=item['type'], value='#')
-            return {key:walk(val) for key,val in item.items() if key not in sc.tolist(skip)}
-        elif isinstance(item, (list, tuple)):
-            return [walk(val) for val in item]
-        elif sc.isnumber(item) and not isinstance(item, bool):
-            numbers.append(float(item))
-            return '#'
-        return item
-    structure = walk(obj)
-    return structure, numbers
 
 
 @nb.jit(cache=True)
@@ -585,8 +535,7 @@ def load(filename, **kwargs):
     Alias to Sciris `sc.loadany()`, for Starsim's own objects
 
     Since Starsim uses Sciris for saving objects, they can be loaded back using
-    this function, e.g. a sim saved with `ss.save('run.sim', sim)`. A model saved as
-    code (`ss.save('model.py', sim)`) is a script: run or import it. Another
+    this function, e.g. a sim saved with `ss.save('run.sim', sim)`. Another
     framework's model is read with `ss.interop.load()`.
 
     Args:
@@ -597,12 +546,6 @@ def load(filename, **kwargs):
 
         sim = ss.load('run.sim') # A sim saved with ss.save()
     """
-    if str(filename).endswith('.json'):
-        spec = sc.loadjson(filename)
-        if isinstance(spec, dict) and str(spec.get('schema', '')).startswith('lingua-franca/'):
-            errormsg = f'{filename} is a model spec, which is the normalized form of a model for sim.hash() and ss.diff(), and is not read back into a sim. Save a model as code with ss.save("model.py", sim), or a sim with its results with ss.save("run.sim", sim)'
-            raise ValueError(errormsg)
-        return spec
     return sc.loadany(filename, **kwargs)
 
 
@@ -611,26 +554,21 @@ def save(filename, obj, **kwargs):
     Alias to Sciris `sc.save()`
 
     While some Starsim objects have their own save methods, this function can be
-    used to save any arbitrary object. It can then be loaded with ss.load(). A sim
-    saved to a `.py` file is written as code that builds it again (`sim.to_code()`).
+    used to save any arbitrary object. It can then be loaded with ss.load().
     Another framework's format is written by `ss.interop.export()`.
 
     Args:
         filename (str/path): the name of the file to save
         obj (any): the object to save
-        kwargs (dict): passed to `sc.save()`, or to `sim.to_code()`
+        kwargs (dict): passed to `sc.save()`
 
     **Examples**:
 
-        ss.save('model.py', sim) # The model, as code
         ss.save('run.sim', sim) # The sim, with its results
     """
     if 'format' in kwargs: # Otherwise passed on to pickling, which fails obscurely
         errormsg = f'ss.save() writes Starsim\'s own formats; for another framework\'s, use ss.interop.export(sim, "{kwargs["format"]}", filename="{filename}")'
         raise ValueError(errormsg)
-    if str(filename).endswith('.py') and isinstance(obj, ss.Sim):
-        obj.to_code(filename, **kwargs)
-        return sc.path(filename)
     return sc.save(filename=filename, obj=obj, **kwargs)
 
 

@@ -1135,9 +1135,6 @@ class DegreeTargets:
         Returns:
             The table, as a dataframe
         """
-        if not hasattr(self.sim, 'inputs'):
-            errormsg = f'net.check() reruns the sim, which can only be rebuilt from the inputs it was made with; the network\'s results (mean_degree, concurrency) show how close it is to the targets'
-            raise ValueError(errormsg)
         rows = []
         mixes = [] # With a number of partners for each level, the share of people at each level at the end of each run
         for i in range(n_runs):
@@ -1755,25 +1752,6 @@ class MixingPools(Route):
         try:    return len(self.pools)
         except: return 0
 
-    def to_spec(self):
-        """ The mixing pools' part of the model spec (see `ss.Module.to_spec()`): a contact matrix from `ss.contacts()` as its numbers, or a named one as where it came from """
-        out = super().to_spec()
-        ref = getattr(self, 'ref', None)
-        if ref is not None: # Named data, e.g. ss.contacts('Kenya'): the parameters that are single values (the rest come from the data)
-            out.pars = {k:v for k,v in out.pars.items() if self.pars[k] is None or isinstance(self.pars[k], (str, bool, int, float, ss.dur, ss.Rate, ss.Dist))}
-            out.data = sc.jsonify(ref)
-        if getattr(self, 'dims', None) is not None: # A matrix over each of the model's stratifications
-            out.contacts = {dim:mat.tolist() for dim,mat in self.dims.items()}
-            if getattr(self, 'age_edges', None) is not None: # The one by age with its own age groups
-                out.contacts = dict(ages=self.age_edges.tolist(), matrix=out.contacts.pop('age')) | out.contacts
-        elif getattr(self, 'full', None) is not None: # One matrix over several stratifications together
-            out.contacts = dict(matrix=self.full.matrix.tolist(), dims=self.full.dims)
-        elif getattr(self, 'ages', None) is not None: # A matrix with its own age groups
-            out.contacts = dict(matrix=self.pars.n_contacts.T.tolist(), ages=self.ages)
-        if self.unit is not None and ref is None: # Not yet put in the sim's unit (a named one says its own)
-            out.contacts_unit = self.unit
-        return out
-
     def validate_pars(self):
         """ Check that src and dst have correct types, and contacts is the correct shape """
         p = self.pars
@@ -2173,7 +2151,7 @@ def contacts(matrix=None, ages=None, dims=None, name=None, source=None, layer='a
             if len(ages) != len(mat) or mat.ndim != 2 or mat.shape[0] != mat.shape[1] or np.any(np.diff(np.array(ages, dtype=float)) <= 0):
                 errormsg = f'ss.contacts() needs a square matrix and the lower edge of each of its age groups, increasing, e.g. ss.contacts(matrix, ages=[0, 15, 65]); got a matrix of shape {mat.shape} and ages={list(ages)}'
                 raise ValueError(errormsg)
-            age_edges = np.asarray(ages) # As given (e.g. whole numbers), for the model spec
+            age_edges = np.asarray(ages) # As given (e.g. whole numbers)
             ages = None
     if isinstance(matrix, dict): # A matrix for each of the model's own dimensions
         mats = {dim:np.array(mat, dtype=float) for dim,mat in matrix.items()}
@@ -2212,8 +2190,7 @@ def contacts(matrix=None, ages=None, dims=None, name=None, source=None, layer='a
     groups = {(f'{lo}-{hi}' if hi is not None else f'{lo}+'): AgeGroup(lo, hi) for lo,hi in zip(ages, highs)}
     out = MixingPools(src=groups, dst=sc.dcp(groups), n_contacts=matrix.T, name=name) # ss.MixingPools is indexed [source, destination]
     out.constant = True # Everyone in a group has the same number of contacts
-    out.ref = ref # Where a named matrix came from, for the model spec
-    out.ages = None if ref is not None else np.asarray(ages).tolist() # A matrix given with its own age groups, for the model spec (as given, since they name the groups)
+    out.ref = ref # Where a named matrix came from
     out.edges = np.asarray(ages, dtype=float)
     out.unit = unit or ('day' if ref is not None else None) # S7.8: a country's matrix is contacts a day, whatever the sim's unit
     return out

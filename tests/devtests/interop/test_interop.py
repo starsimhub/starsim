@@ -1,9 +1,8 @@
 """
-Test importing models from other frameworks (ss.interop.load()), writing a sim as code, and comparing two models
+Test importing models from other frameworks (ss.interop.load()), as the Starsim code it writes
 """
 
 # %% Imports and settings
-import runpy
 import tempfile
 import pytest
 import numpy as np
@@ -168,111 +167,77 @@ def test_emulsion(tmp_path):
     return sim
 
 
-def test_to_code(tmp_path):
-    sc.heading('Testing sim.to_code(): the code builds the same model')
-    def same(sim):
-        code = sim.to_code()
-        ns = {}
-        exec(code, ns)
-        a, b = [{k:v for k,v in s.to_spec().items() if k != 'meta'} for s in [sim, ns['sim']]]
-        for m in a['modules'] + b['modules']:
-            m['guessed'] = sorted(g for g in m['guessed'] if not g.endswith(('.name', '.import'))) # Named explicitly in the code
-        assert a == b
-        return code
-
-    # A hand-written model with a branch, a distribution, an outcome, a result, and a stratification
-    S, I, R, D = ss.states('S I R D')
-    V = ss.State(rel_sus=0.2, label='Vaccinated')
-    dur = ss.par(ss.lognorm_ex(mean=ss.days(10), std=ss.days(3)), name='dur')
-    sir = ss.Disease(S, I, R, D, V, infection=S >> I @ ss.par(ss.perday(0.3), bounds=[0.1, 1], name='beta') * I,
-                     recovery=ss.Transition(I, [R, D], dur=dur, p=[0.9, None]), vax=S >> V @ ss.perday(0.01),
-                     cases=ss.outcome('infection', delay=ss.days(3)), prev=I/(S + I + R), init_n=dict(I=10), name='sir')
-    sir.stratify(age=[0, 15, 65], split=[0.3, 0.5, 0.2])
-    same(ss.Sim(sir, total_pop=1000, stop=ss.days(50), unit='day', **kw))
+def test_code(tmp_path):
+    sc.heading('Testing the code of an import: it builds the sim, and stands alone')
+    def check(sim):
+        """ The code builds the same sim, run on its own """
+        space = {}
+        exec(sim.imported.code, space)
+        new = space['sim']
+        new.pars.verbose = 0
+        assert ss.debugtools.check_sims_match(sim.run(), new.run()), 'The code should give the same results'
+        return sim.imported.code
 
     # An imported model: the code says how it was read and what was not translated
     with pytest.warns(ss.errors.ImportIncomplete):
         sim = ss.interop.load(emulsion_file(tmp_path), **kw)
-    code = same(sim)
-    assert 'Imported from EMULSION' in code and '# Not translated (ImportIncomplete):' in code
+    code = check(sim)
+    assert 'Imported from EMULSION' in code and '# Not translated (ImportIncomplete):' in code and 'force_of_infection = S >> E @ ' in code
 
-    # Every Starsim name is written with ss., and a function from its source, with the values it uses, so the code builds the same model
-    def make(beta=0.3, recovery=ss.days(10)):
-        S, I, R = ss.states('S I R')
-        return ss.Disease(infection=S >> I @ beta*I, recovery=I >> R @ recovery, init_prev=0.01, name='sir')
-    same(ss.Sim(make(beta=ss.by(age=[0.3, 0.15])), stratify=dict(age=[0, 15]), unit='day', stop=20, **kw))
-    sim = ss.Sim(make(recovery=clearance), unit='day', stop=20, **kw)
-    sim.to_code(tmp_path/'clearance.py')
-    assert runpy.run_path(tmp_path/'clearance.py')['sim'].hash() == sim.hash()
+    # Every kind of value an importer gives: bounds and a prior, a time series, a seasonal value, values by group, a dwell time as a distribution, a branch, an outcome with a delay and a likelihood, a result, and a stratification
+    src = ss.interop.Source('model', format='test')
+    src.add_state('S', init=950)
+    src.add_state('I', init=ss.by(risk=[30, 20]), label='Infectious')
+    src.add_state('R')
+    src.add_state('D')
+    src.add_par('beta', ss.timeseries({0: 0.3, 20.5: 0.2}, mode='linear'), bounds=[0.1, 1], prior=ss.uniform(0.1, 1))
+    src.add_par('season', ss.seasonal(mean=1.0, amplitude=0.2, peak=0.25))
+    src.add_par('k', 5.0)
+    src.add_flow('S', 'I', 'beta * season * S * I / N', per='total', name='infection')
+    src.add_flow('I', ['R', 'D'], dur=ss.lognorm_ex(mean=ss.days(10), std=ss.days(3)), p=['0.99', None], name='recovery')
+    src.add_outcome('cases', 'infection', p=0.5, delay=ss.days(3), likelihood=lambda ps: ss.nbinom(n=ps['k']))
+    src.results['prev'] = 'I / N'
+    src.totals = ['N']
+    src.stratify(risk=['lo', 'hi'], split=[0.6, 0.4], adjust={'rel_sus': [1, 2]})
+    src.config.update(unit='day', stop=ss.days(60), solver='ode')
+    sim = ss.interop.build(src, verbose=False)
+    code = check(sim)
+    for text in ["beta = ss.par(ss.timeseries({0: 0.3, 20.5: 0.2}, mode='linear'), bounds=[0.1, 1], prior=ss.uniform(low=0.1, high=1))",
+                 'infection = S >> I @ (beta * season * I)', 'p=[0.99, None]', 'likelihood=ss.nbinom(n=k, p=0.5)', 'cases = ss.outcome(p_cases*infection, delay=ss.days(3)',
+                 "model.stratify(risk=['lo', 'hi'], split=[0.6, 0.4], adjust=dict(rel_sus=[1, 2]))"]:
+        assert text in code, f'Expected "{text}" in the code'
+    assert sim.results.model.cases.sum() > 0
 
-    # Only a rate as a whole has a unit: R0 in R0 * gamma * I is written as a number, so the code gives the same epidemic in any unit
-    R0, gamma = ss.par(2.5, name='R0'), ss.par(0.2, name='gamma')
-    sim = ss.Sim(make(beta=R0*gamma, recovery=gamma), total_pop=1000, unit='day', stop=100, **kw)
-    ns = {}
-    exec(sim.to_code(), ns)
-    peak = lambda s: s.run().results.sir.I.max()
-    assert np.isclose(peak(ns['sim'].new(unit='week', dt=ss.days(1))), peak(sim), rtol=1e-3)
-
-    # What cannot be written is listed in the code and in a warning
-    with pytest.warns(ss.errors.LossyExport):
-        code = ss.Sim(make(beta=0.05), networks=ss.RandomNet(), n_agents=100, **kw).to_code()
-    assert 'network "randomnet"' in code
+    # A value the code cannot say is refused, with what to do instead
+    src.config.networks = ss.RandomNet()
+    with pytest.raises(TypeError, match='ss.interop.Code'):
+        ss.interop.build(src, verbose=False)
+    src.config.networks = ss.interop.Code('ss.RandomNet()')
+    assert 'networks=ss.RandomNet()' in ss.interop.write(src).code
     return code
 
 
-def test_round_trip(tmp_path):
-    sc.heading('Testing the round trip of every corpus model: to_code(), then save() and load()')
+def test_save_load(tmp_path):
+    sc.heading('Testing that every corpus model can be saved and loaded after a run')
     def results(sim):
         return {k:np.asarray(v.values, dtype=float) for k,v in sim.results.flatten().items() if isinstance(v, ss.Result)}
-
-    def check(name, sim):
-        fn = tmp_path/f'{name}.py'
-        sim.to_code(fn)
-        new = runpy.run_path(fn)['sim'] # From a file, so that the functions in it have their source
-        assert new.hash() == sim.hash(), f'{name}: {ss.diff(sim, new, output=True)}'
-        a, b = results(sim.run()), results(new.run())
-        assert all(np.allclose(a[k], b[k]) for k in a), f'{name}: the code gives different results'
+    for name,make in corpus.models.items():
+        sim = make().run()
+        a = results(sim)
         sim.save(tmp_path/f'{name}.sim') # After a run, so that every module shrinks
         loaded = results(ss.load(tmp_path/f'{name}.sim'))
         assert all(np.allclose(a[k], loaded[k]) for k in a), f'{name}: the loaded sim has different results'
-        return
-
-    # Every corpus model that to_code() can write in full: deliveries, contact matrices, transfers, a duration with no unit
-    lossy = ['coinfection', 'network', 'threshold', 'starsim3', 'poisson_weekly'] # Networks of agents, a lambda, and data
-    for name,make in corpus.models.items():
-        if name in lossy:
-            with pytest.warns(ss.errors.LossyExport):
-                make().to_code()
-        else:
-            check(name, make())
-
-    # What the fuzzer found: time series keys and a modifier's times as numbers (not dates), conditions, a matrix with its own age groups, and a start in years; and a prior
-    S, I, R = ss.states('S I R')
-    beta = ss.par(ss.timeseries({0: 0.3, 20.5: 0.2}), name='beta')
-    dur = ss.par(ss.days(10), bounds=[5, 15], prior=ss.uniform(5, 15), name='dur')
-    sir = ss.Disease(infection=S >> I @ beta * I, recovery=I >> R @ dur, init_n=dict(I=50), name='sir').stratify(risk=['lo', 'hi'])
-    mixing = ss.contacts([[3, 1], [1, 2]], ages=[0, 15])
-    distancing = ss.modify(sir.pars.beta, multiply=0.5, start=12.5, stop=30, where=sir.risk == 'hi')
-    vaccine = ss.vaccinate(ss.Vaccine(efficacy=0.8, waning=ss.days(50), name='vx'), coverage=0.3, interval=ss.days(7), start=5, where=ss.ppl.age < 15)
-    check('fuzzed', ss.Sim(sir, networks=mixing, interventions=[distancing, vaccine], stratify=dict(age=[0, 15]), unit='day', stop=60, total_pop=10_000, **kw))
-    check('years', ss.Sim(corpus.make_sir(beta=ss.perday(0.3), dur=ss.days(10)), start=2000, stop=2001, total_pop=10_000, **kw)) # Rates per day, so the unit is days and 2000 is in years
     return
 
 
-clearance_rate = 0.2
-def clearance(sim):
-    """ A rate given as a function, for test_to_code() """
-    return clearance_rate
-
-
-def test_diff(tmp_path):
-    sc.heading('Testing ss.diff(): an import and a hand translation are the same model')
+def test_hand(tmp_path):
+    sc.heading('Testing that an import and a hand translation give the same results')
     with pytest.warns(ss.errors.ImportIncomplete):
         sim = ss.interop.load(emulsion_file(tmp_path), **kw)
     def hand(beta=0.5):
         S, E, I, Q, R = ss.states('S E I Q R')
         seirq = ss.Disease(
-            infection  = S >> E @ ss.perday(beta) * I,
+            force_of_infection = S >> E @ ss.perday(beta) * I,
             onset      = E >> I @ -np.log(1 - 0.2),
             recovery   = I >> R @ ss.perday(0.1),
             detection  = I >> Q @ (0.05 * (Q.n < 20)),
@@ -282,14 +247,11 @@ def test_diff(tmp_path):
             name       = 'seirq',
         )
         return ss.Sim(seirq, total_pop=1000, stop=ss.days(100), solver='binomial', substeps=1, **kw)
-    text = ss.diff(sim, hand(), output=True)
-    lines = dict(line.split(':', 1) for line in text.splitlines())
-    assert "'force_of_infection' (called 'infection'): the same" in lines['model']
-    assert 'removed' not in lines['model'].replace("result 'prevalence_pct' removed", '') # Only the extra result differs
-    assert lines['pars'].strip() == 'same' and lines['config'].strip() == 'same'
-    changed = ss.diff(hand(), hand(beta=0.8), output=True)
-    assert 'model:    same' in changed and '0.5/day -> 0.8/day' in changed
-    return text
+    a, b = [s.new(solver='ode').run().results.seirq for s in [sim, hand()]] # As an ODE, since the import's random numbers are drawn for its other parts too
+    for state in 'SEIQR':
+        assert np.allclose(a[state], b[state]), state
+    assert not np.allclose(hand(beta=0.8).new(solver='ode').run().results.seirq.I, b.I)
+    return a
 
 
 def test_no_disease():
@@ -297,8 +259,6 @@ def test_no_disease():
     S = ss.State(init_n=100) # A disease with no transitions, as an import of a fully custom model may give, runs and stays as it is
     sim = ss.Sim(ss.Disease(S, name='d'), solver='binomial', total_pop=100, stop=10, verbose=0).run()
     assert np.ptp(sim.results.d.S.values) == 0
-    sim = ss.Sim(networks=ss.SexualNet(), n_agents=100, unit='week', stop=10, verbose=0) # A sim of networks only keeps its unit in code
-    assert "unit='week'" in sim.to_code()
     return sim
 
 
@@ -308,8 +268,8 @@ if __name__ == '__main__':
         folder = sc.path(tmp)
         test_rates()
         test_emulsion(folder)
-        test_to_code(folder)
-        test_round_trip(folder)
-        test_diff(folder)
+        test_code(folder)
+        test_save_load(folder)
+        test_hand(folder)
         test_no_disease()
     T.toc()

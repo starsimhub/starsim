@@ -107,15 +107,6 @@ def seed_north(sim):
     return
 
 
-def check_code(sim, spec=None):
-    """ Write the sim to the model spec and back as code, which gives the same hash """
-    code = ss.spec.to_code(spec or sim.to_spec())
-    ns = {}
-    exec(code.replace("if __name__ == '__main__':", 'if False:'), ns)
-    assert ns['sim'].hash() == sim.hash()
-    return code
-
-
 # %% Define the tests
 
 @sc.timer()
@@ -521,7 +512,6 @@ def test_space():
         fit = ss.Sim(commuters(away), data=data, solver=solver, **pars).fit(verbose=0)
         rtol = 0.05 if solver == 'ode' else 0.5 # A stochastic fit takes fresh seeds at each point, so it does not reproduce the data's own draws (0.023 to 0.029 over three seeds of the fit)
         assert np.isclose(fit.pars.away, 0.02, rtol=rtol), f'Expected to recover away=0.02 with {solver}, not {fit.pars.away}' # Before, a TypeError at init
-    assert 'away=away' in ss.Sim(commuters(away), **pars).to_code() # The saved form keeps the fitted parameter, with its bounds, not its value
     sim = ss.Sim(commuters(away), n_agents=3000, solver='abm', **pars).init()
     shares = [sim.new(pars=dict(away=val)).init().mixing.time_share.diagonal() for val in [0.01, 0.2]] # As agents too: the share of time at home
     assert np.allclose(shares[0], 0.99) and np.allclose(shares[1], 0.8)
@@ -813,12 +803,9 @@ def test_properties_in_rates():
     with pytest.raises(TypeError, match=r'0.3\*\(Ia \+ Is\)'):
         ss.Disease(S, I, R, infection=S >> I @ 0.3*(S | I))
 
-    # Written to the model spec as people.urban and expit(), and back as code with the same hash
+    # Shown as people.urban and expit()
     sim = make('abm')
-    spec = sim.to_spec()
-    assert 'expit(b0 + b_urban * people.urban)' in spec['modules'][0]['transitions'][0]['rate']
-    code = check_code(sim, spec)
-    assert 'from scipy.special import expit' in code and 'ss.ppl.urban' in code
+    assert 'expit(b0 + b_urban * people.urban)' in ss.expressions.format_expr(sim.diseases[0].graph.transitions[0].rate, exact=True)
 
     # A property that is not one of the people's says what is
     bad = ss.Disease(S, I, R, infection=S >> I @ 0.3*I, recovery=I >> R @ ss.peryear(1)*ss.ppl.agee, name='bad')
@@ -955,10 +942,6 @@ def test_counters():
     lost = np.array([1 - sum(np.exp(-m)*m**k/math.factorial(k) for k in range(3))] + [np.exp(-m)*m**k/math.factorial(k) for k in [2, 1, 0]])
     assert np.allclose(total(ode, 'immunity'), 20_000*lost, rtol=1e-3) and np.allclose(total(abm, 'immunity'), 20_000*lost, rtol=0.05)
     assert np.isclose(total(ode, 'episodes')[1], ode.results.sir.recovery.values.sum())
-
-    # Written to the spec and back as code
-    code = check_code(abm)
-    assert "increment='episodes'" in code and 'increment=dict(immunity=-1)' in code and "increment='doses'" in code
     with pytest.raises(ValueError, match='whole number'):
         I, R = ss.states('I R')
         ss.Transition(I, R, dur=10, increment=dict(episodes=0.5))
@@ -992,9 +975,7 @@ def test_rows():
     expected = 20_000*np.array([1 - use] + list(use*(young*np.array([0.6, 0.6, 0.1])/1.3 + (1 - young)*np.array([0.2, 1.0, 0.3])/1.5)))
     assert np.allclose(n(ode), expected, rtol=0.01) and np.allclose(n(abm), expected, rtol=0.05)
     assert np.allclose(n(make('abm', fn=True, n_agents=20_000).run()), 20_000*np.array([0.5, 0.2, 0.2, 0.1]), rtol=0.06)
-    spec = abm.to_spec()
-    assert spec['modules'][0]['transitions'][0]['p'][1] == 'expit(b0 + (1.0 * people.urban)) * mix_pill'
-    check_code(abm, spec)
+    assert ss.expressions.format_expr(abm.diseases.contra.graph.transitions[0].p[1], exact=True) == 'expit(b0 + (1.0 * people.urban)) * mix_pill'
     return abm
 
 

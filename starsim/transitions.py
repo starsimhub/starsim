@@ -417,7 +417,7 @@ class Transition(Nameable):
         self.move = None # A change of level in some dimensions: {dim: level}
         if move is not None and not isinstance(move, dict) and isinstance(move, ss.strains.StrainMove): # A change of the strains people carry, e.g. move=DS >> (DS, RIF)
             move = {move.strains.name: move}
-        self.move_given = dict(move) if move else None # As given, for the model spec
+        self.move_given = dict(move) if move else None # As given
         self.move_from = {} # The levels it applies to, from a pair (from, to) in move=: {dim: [levels]}
         if move:
             self.move = sc.objdict()
@@ -1162,8 +1162,8 @@ class outcome(Nameable):
         """ The weights of its sources that are expressions, e.g. the rho in rho * infection """
         return [weight for base,weight in self.flows if isinstance(weight, Expr)]
 
-    def to_spec(self, unit=None):
-        """ The outcome as it is written in the model spec """
+    def source_str(self):
+        """ The flows it is worked out from, as text, e.g. "rho * infection" """
         def flow_str(base, weight):
             if isinstance(base, ss.conditions.Event) and base.args[0] == 'to': # One branch, written as it is given
                 kind, tr, dst = base.args
@@ -1175,30 +1175,12 @@ class outcome(Nameable):
             if isinstance(weight, Expr):
                 weight = format_expr(weight, exact=True)
             return name if sc.isnumber(weight) and weight == 1 else f'{weight} * {name}'
-        source = ' + '.join(flow_str(base, weight) for base,weight in self.flows)
-        return dict(name=self.name, type='outcome', source=source, delay=ss.presentation.quantity_json(self.delay, 'dur', unit),
-                    duration=ss.presentation.quantity_json(self.duration, 'dur', unit), likelihood=self.likelihood_json())
+        return ' + '.join(flow_str(base, weight) for base,weight in self.flows)
 
     @property
     def likelihood_pars(self):
         """ The parameters of its likelihood: a distribution's, or none for a function or no likelihood """
         return self.likelihood.pars if isinstance(self.likelihood, ss.Dist) else {}
-
-    def likelihood_json(self):
-        """ The likelihood as data: its distribution, and each parameter as a model parameter (by name) or a number """
-        lik = self.likelihood
-        if lik is None:
-            return None
-        elif not isinstance(lik, ss.Dist): # A function
-            return ss.presentation.func_json(lik)
-        pars = {}
-        for key,val in lik.pars.items():
-            if isinstance(val, par) and val.name is not None:
-                pars[key] = dict(par=val.name)
-            else:
-                val = val.raw if isinstance(val, par) else val
-                pars[key] = float(val) if sc.isnumber(val) else str(val)
-        return dict(type=type(lik).__name__, pars=pars)
 
 
 class Destination:

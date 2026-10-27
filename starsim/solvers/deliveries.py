@@ -466,7 +466,6 @@ class CompartmentalDelivery:
         untouched[sources] = 0
         cured = np.clip(after - failed - untouched, 0, None)
         eng.y[rows] += after - C
-        eng.changed()
         return after, cured, failed
 
     def test(self, chosen, tails):
