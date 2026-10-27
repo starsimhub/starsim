@@ -80,6 +80,7 @@ class Agents(Engine):
         self._backfill = None # While people are back-dated: see backfill()
         self.round = (None, 0) # The step and the round of moves within it that the engine's draws are keyed by: see new_round()
         self._drawn = {} # With STARSIM_CHECK_DRAWS, who has been drawn from each stream in this round: see draw()
+        self._route_memo = None # The coefficients worked out on each route in a transmission: see route_beta()
         self._died = [] # Deaths by its transitions in the step: see uncount_deaths()
         self._fired_seen = {} # For each trigger on a coded module's event, who it has seen it for: see unseen_fired()
         self._row = None # Who has had half a step of the competing rates of the state they entered in the state-change row: see finish_moves()
@@ -1735,41 +1736,112 @@ class Agents(Engine):
 
     def finish_moves(self, ti):
         """
-        The same-step cascade, in rounds: in each, the agents who left a state (see `move()`) arrive at their destinations, and
-        those who move on at once (an exit due already, a trigger, or a competing rate drawn on entry) leave for the next round,
-        until nobody moves, as in the ODE, rather than being held for a step
+        The same-step cascade, as one sweep over the transitions in their order (see `sweep()`), as the code of a model would take them: at each,
+        those its trigger moves now, then those whose exit by it is due already among those who arrived in its source, leave, and everyone who
+        left by it arrives at their destinations. Someone who reaches a transition the sweep has passed (across a loop whose wait rounds to no
+        steps) is taken by another sweep, as are the triggers on an event that happened after them, until nobody moves.
 
         Args:
             ti (int): the time of entry: the start of the step (`self.ti`) for the transitions that are not contact-mediated, and its end (the
                 loop's `ti`) for infections, which have happened by then (so an infected person transmits over their whole dwell time, as in the ODE)
         """
-        limit = (len(self.graph.people_states) + 1)*(1 if self._row is None else 2) # A rate drawn on entry, once a step each, can start one more chain of moves
-        depth = 0
-        while True:
+        mod = self.mod
+        order, position, back = self.sweep()
+        sent = {} # Who has left by each transition, to be sent on: (transition, state, uids)
+        def collect():
             moved, self._moved = self._moved, []
-            self.new_round()
-            arrived = self.send(moved, ti)
-            if self._row is not None and moved and self._backfill is None: # Births driven by a flow (e.g. at a delivery) before the arrivals face the rates of where they arrived, so those rates see the event that brought them (its children and records, e.g. ss.Pregnancy's since_birth: FP2)
-                if self._news: # The modules that react to the event first, as they would at the end of the step (e.g. a fetus that dies at the delivery is stillborn, not born)
-                    self._news = False
-                    self.notify(ti)
-                self.step_per(ti)
-            onward = self.onward(arrived, ti)
-            if not (onward or self._moved): # Or left by a competing rate on entry
+            for item in moved:
+                sent.setdefault(item[0].name, []).append(item)
+        collect()
+        triggers = {tr.name for tr in self.triggers} if self._started else set()
+        limit = len(self.graph.people_states) + 1
+        arrived = {} # Who arrived in each state, whose exit may be due already
+        for n in range(limit + 1):
+            again = False
+            for tr in order:
+                name = tr.name
+                self.new_round()
+                if name in triggers:
+                    for t,state,uids in self.triggered([tr]):
+                        self.move(t, state, uids)
+                for src in tr.src: # Those whose exit by it is due already
+                    uids = arrived.get(src.name)
+                    if uids is not None and tr in self.exits_of[src.name]:
+                        uids = uids[mod[src.name].raw[uids]]
+                        now = uids[(mod[f'ti_exit_{src.name}'].raw[uids] <= ti) & (mod[f'exit_{src.name}'].raw[uids] == self.exits_of[src.name].index(tr))]
+                        if len(now):
+                            self.move(tr, src, now)
+                collect()
+                items = sent.pop(name, None)
+                if not items:
+                    continue
+                got = self.send(items, ti)
+                if self._row is not None and self._backfill is None: # Births driven by a flow (e.g. at a delivery) before the arrivals face the rates of where they arrived, so those rates see the event that brought them (its children and records, e.g. ss.Pregnancy's since_birth: FP2)
+                    if self._news: # The modules that react to the event first, as they would at the end of the step (e.g. a fetus that dies at the delivery is stillborn, not born)
+                        self._news = False
+                        self.notify(ti)
+                    self.step_per(ti)
+                for state,uids in self.arrive(got, ti):
+                    arrived[state] = uids if state not in arrived else ss.uids.concatenate([arrived[state], uids]).unique()
+                    again |= any(position[e.name] <= position[name] for e in self.exits_of[state]) # Its exits have been passed
+                again |= name in back # A trigger on it has been passed
+                collect()
+            if not (sent or again):
                 break
-            if depth > limit:
-                cycle = sc.strjoin(sorted({f'{tr.name} ({state.name} -> {sc.strjoin([d.name for d in tr.dst]) or "out"})' for tr,state,_ in onward}))
-                timed = sorted({tr.name for tr,_,_ in onward if tr.name in self.dwells})
-                hint = (f'{sc.strjoin(timed)} {"has a dwell time" if len(timed) == 1 else "have dwell times"} shorter than a step, so for many people it rounds to no steps and they go round again within the step (a dwell is rounded to whole steps at random, keeping its mean). Use a smaller dt, or a longer dwell time.' if timed else
-                        'Give one of them a rate or a duration, or change the branches so they do not lead back.')
-                raise ss.errors.TriggerLoop(f'moves with no wait out of the states of "{self.mod.name}" did not settle within a step: {cycle}.\n     {hint}')
-            for tr,state,uids in onward:
-                self.move(tr, state, uids)
-            depth += 1
+        else:
+            items = [item for v in sent.values() for item in v]
+            cycle = sc.strjoin(sorted({f'{tr.name} ({state.name} -> {sc.strjoin([d.name for d in tr.dst]) or "out"})' for tr,state,_ in items})) or sc.strjoin(sorted(arrived))
+            timed = sorted({tr.name for tr,_,_ in items if tr.name in self.dwells})
+            hint = (f'{sc.strjoin(timed)} {"has a dwell time" if len(timed) == 1 else "have dwell times"} shorter than a step, so for many people it rounds to no steps and they go round again within the step (a dwell is rounded to whole steps at random, keeping its mean). Use a smaller dt, or a longer dwell time.' if timed else
+                    'Give one of them a rate or a duration, or change the branches so they do not lead back.')
+            raise ss.errors.TriggerLoop(f'moves with no wait out of the states of "{mod.name}" did not settle within a step: {cycle}.\n     {hint}')
         if self._news:
             self._news = False
             self.notify(ti)
         return
+
+    def sweep(self):
+        """
+        The order in which the same-step cascade takes the transitions (see `finish_moves()`), worked out once: each after those that take people
+        into its source and, for a trigger on an event of this module, after the transition of the event; and the triggers out of a state ahead
+        of its scheduled exits, so a trigger moves people ahead of an exit due at the same time. A loop is broken at the transition declared first.
+        Returns the order, each transition's position in it, and the transitions whose event a trigger before them waits for
+        """
+        if self.__dict__.get('_sweep') is None:
+            trs = list(self.graph.transitions.values())
+            after = {tr.name:set() for tr in trs} # The transitions each comes after
+            events = {tr.name:self.event_transitions(tr) for tr in trs}
+            for t in trs:
+                srcs = {s.name for s in t.src}
+                after[t.name] |= {u.name for u in trs if u is not t and any(getattr(d, 'name', None) in srcs for d in (u.dst or []))}
+                after[t.name] |= events[t.name] - {t.name}
+                if t.trigger is not None:
+                    for s in t.src:
+                        after.update({u.name:after[u.name] | {t.name} for u in self.exits_of.get(s.name, []) if u is not t and u.trigger is None})
+            order, done = [], set()
+            while len(order) < len(trs):
+                ready = [t for t in trs if t.name not in done and after[t.name] <= done]
+                t = ready[0] if ready else next(t for t in trs if t.name not in done) # A loop: broken at the first declared
+                order.append(t)
+                done.add(t.name)
+            position = {t.name:i for i,t in enumerate(order)}
+            back = {u for t in trs for u in events[t.name] if position[u] > position[t.name]}
+            self._sweep = (order, position, back)
+        return self._sweep
+
+    def event_transitions(self, tr):
+        """ The transitions of this module whose moves are the event a trigger is on (none for another module's event, or a condition) """
+        if tr.trigger is None or not tr.trigger.event:
+            return set()
+        event = tr.trigger.x
+        if ss.conditions.modname(event.module) not in [None, self.mod.name]:
+            return set()
+        spec = event.spec()
+        if 'tr' in spec:
+            return {spec['tr']}
+        names = set(spec.get('enter', ()) or spec.get('exit', ()))
+        key = 'dst' if 'enter' in spec else 'src'
+        return {t.name for t in self.graph.transitions.values() if any(getattr(s, 'name', None) in names for s in (getattr(t, key) or []))}
 
     def send(self, moved, ti):
         """
@@ -1846,37 +1918,26 @@ class Agents(Engine):
                 ps.append(np.broadcast_to(self.die_share(tr, ps, lambda p: self.eval_for(p, uids)), len(uids)))
         return np.cumsum([np.zeros(len(uids))] + ps, axis=0)
 
-    def onward(self, arrived, ti):
+    def arrive(self, arrived, ti):
         """
-        Who moves on at once after a round, as (transition, state, uids): those a trigger moves now, ahead of an exit due now; and those
-        whose exit is due already when they enter (a branch nobody waits in, or a dwell time that rounds to no steps). In the state-change
-        row, those who arrived in a state with competing rates have half a step of them now (who leave are moved, for the next round).
+        Of those who arrived in each state (from `send()`), those still there, as (state name, uids); in the state-change row, those who arrived
+        in a state with competing rates, and whose exit is not due already, have half a step of them now (those who leave are moved)
         """
         mod = self.mod
         row = self._row
-        onward = []
-        staying = [] # Entered in the state-change row, into a state with competing rates
+        out = []
         for name,uidlist in arrived.items():
             uids = ss.uids.concatenate(uidlist) if len(uidlist) > 1 else uidlist[0]
             uids = uids[mod[name].raw[uids]] # Those still there
-            now = self.due(name, uids, ti)
-            if row is not None and self.competing[name]:
-                staying.append((self.graph.states[name], uids[~np.isin(uids, now[1])] if now is not None else uids))
-            if now is not None:
-                onward += now[0]
-        trig = self.triggered() # A trigger moves people at once, ahead of an exit due now
-        moving = None
-        if trig and (onward or staying):
-            moving = np.zeros(len(mod.rel_sus.raw), dtype=bool)
-            for _,_,uids in trig:
-                moving[uids] = True
-            onward = [(tr, state, uids[~moving[uids]]) for tr,state,uids in onward]
-        for state,uids in staying: # Half a step of the competing rates of the state now, as for people who arrive during a step in a compartmental run (once a step each)
-            hz = uids[~row[uids] & (True if moving is None else ~moving[uids])]
-            row[hz] = True
-            if len(hz):
-                self.draw_competing(state, hz, 0.5*self.dt, key=f'entry_{state.name}')
-        return [item for item in trig + onward if len(item[2])]
+            out.append((name, uids))
+            if row is not None and self.competing[name]: # Half a step of the competing rates of the state now, as for people who arrive during a step in a compartmental run (once a step each)
+                now = self.due(name, uids, ti)
+                stay = uids[~np.isin(uids, now[1])] if now is not None else uids
+                hz = stay[~row[stay]]
+                row[hz] = True
+                if len(hz):
+                    self.draw_competing(self.graph.states[name], hz, 0.5*self.dt, key=f'entry_{name}')
+        return out
 
     def due(self, name, uids, ti):
         """ Of some agents in a state, those whose scheduled exit is due by `ti`: (transition, state, uids) for each exit, and all of them; or None if none are """
@@ -1895,17 +1956,18 @@ class Agents(Engine):
         self.flow_groups[key] = self.flow_groups.get(key, 0) + np.bincount(groups, weights=self.weights(uids), minlength=self.sim.groups.n_groups)
         return
 
-    def triggered(self):
+    def triggered(self, triggers=None):
         """
         The agents that `ss.on()` moves now, as (transition, state, uids): those in its source for whom its condition holds, or to whom its
-        event has happened since it last looked; with a delay (`dur=`), once the time drawn for each of them is up, if they are still there
+        event has happened since it last looked; with a delay (`dur=`), once the time drawn for each of them is up, if they are still there.
+        For all the triggers, or some (as `finish_moves()` takes them, each in its place)
         """
         if not self.triggers or not self._started:
             return []
         mod = self.mod
         out = []
         taken = None # Whom an earlier trigger moves now, by UID
-        for tr in self.triggers:
+        for tr in (self.triggers if triggers is None else triggers):
             srcs = [s for s in tr.src if s.people]
             names = [s.name for s in srcs]
             if tr.trigger.event:
@@ -2166,8 +2228,8 @@ class Agents(Engine):
             for i,tr in enumerate(exits.branches + sc.tolist(exits.remainder)):
                 self.move(tr, state, uids[which == i])
             moved = True
-        if self.triggers: # Seeds a trigger holds for move on before the start
-            moved = moved or bool(self.triggered())
+        if self.triggers: # Seeds a trigger holds for move on before the start (see finish_moves())
+            moved = True
         if moved: # Counted at the start (the results at the first time point), and news to the deliveries of the first step only
             self.finish_moves(self.ti)
             for b in self.batches[n_batches:]:
@@ -3569,6 +3631,14 @@ class Agents(Engine):
 
     def transmit(self, tr, src):
         """ Work out who in a state is infected this step """
+        self._route_memo = {} # See route_beta()
+        try:
+            return self.transmit_from(tr, src)
+        finally:
+            self._route_memo = None
+
+    def transmit_from(self, tr, src):
+        """ As `transmit()` """
         mod = self.mod
         sim = self.sim
         dt = self.dt
@@ -3902,13 +3972,24 @@ class Agents(Engine):
         return imm.protect(p)
 
     def route_beta(self, coef, nkey, route, uids=None):
-        """ The coefficient of a source state in a transmission's rate on one route: a rate per contact, or, on a network with acts, the hazard per act in each of its directions (see `ss.peract`); with `uids`, a value that differs between agents is for those agents """
+        """
+        The coefficient of a source state in a transmission's rate on one route: a rate per contact, or, on a network with acts, the hazard per act
+        in each of its directions (see `ss.peract`); with `uids`, a value that differs between agents is for those agents. Worked out once for
+        each in a transmission (see transmit()), since the source states often share it (e.g. every infectious state of an STI)
+        """
+        memo = self._route_memo
+        key = (id(coef), nkey, None if uids is None else len(uids))
+        if memo is not None and key in memo:
+            val, self._per_act = memo[key]
+            return val
         self._per_act = False
         with self.evaluating(route=(nkey, route)):
             val = self.eval(coef) if uids is None else self.eval_for(coef, uids)
         acts = getattr(route, 'has_acts', False)
         if acts and not self._per_act: # A beta that is an expression of parameters (beta=b*rel), worked out as a probability per act
             val = self.act_hazards(val, route)
+        if memo is not None:
+            memo[key] = (val, self._per_act)
         return val
 
     def by_target(self, coefs, route):
@@ -3954,26 +4035,34 @@ class Agents(Engine):
         n_slots = len(mod.rel_sus.raw)
         groups = sim.groups.group_raw() if any(h.ndim > 1 and h.shape[1] != n_slots for h in hazards.values()) else None
         mult = lambda inds, trg: ss.connectors.route_mult(self, tr.name, route, inds, trg)
+        shared = {} # The source states that share a hazard (e.g. every infectious state of an STI: see route_beta()), with their weights summed once, so each edge takes one
+        for state,h in hazards.items():
+            w = mod[state.name].raw*state.rel_trans
+            if id(h) in shared:
+                shared[id(h)][1] = shared[id(h)][1] + w
+            else:
+                shared[id(h)] = [h, w]
+        shared = list(shared.values())
 
         def act_hazard(src, trg):
             """ The hazard per act of each edge, for the state its infectious end is in """
             dirs = route.edge_directions(src, trg)
             act = np.zeros(len(src))
-            for state,h in hazards.items():
+            for h,w in shared:
                 if h.ndim == 1:
                     hs = h[dirs]
                 elif h.shape[1] == n_slots: # A value for each agent (e.g. by a property of people, ss.by(sex=...)) is that of the person they would infect
                     hs = h[dirs, trg]
                 else: # A value for each group is for the group of the people they would infect
                     hs = h[dirs, groups[trg]]
-                act += mod[state.name].raw[src]*state.rel_trans*hs
+                act += w[src]*hs
             return act
 
         if route.custom_beta: # Starsim 3's contract, whose net_beta() is for every edge
             edge_beta = lambda d, inds, src, trg: route.edge_net_beta(inds, disease_beta=-np.expm1(-act_hazard(*route.ends(d))), disease=mod)*mult(inds, trg)
             out = route.transmit(trans, rel_sus.raw, edge_beta, mod.trans_rng)
         else:
-            source = functools.reduce(operator.add, [mod[state.name].raw*state.rel_trans for state in hazards]) # Whether each agent is infectious, with the rel_trans of their state
+            source = functools.reduce(operator.add, [w for h,w in shared]) # Whether each agent is infectious, with the rel_trans of their state
             weight = lambda inds: route.edges.beta[inds]*route.edges.acts[inds]
             prob = lambda d, inds, src, trg: -np.expm1(-weight(inds)*act_hazard(src, trg)*trans[src]*rel_sus.raw[trg]*mult(inds, trg))
             out = route.transmit(trans*source, rel_sus.raw, lambda d, inds, src, trg: weight(inds), mod.trans_rng, prob=prob)
