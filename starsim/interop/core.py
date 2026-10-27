@@ -538,7 +538,7 @@ def disease_code(source, var, total=None):
                 guessed.setdefault(name, {})['import'] = how[-1]
             choices.append(f'  {arrow:16s} {flow.rate} : {"; ".join(how)} => {text}')
         if flow.get('p') is not None:
-            kw.p = '[' + ', '.join('None' if v is None else expr_code(v, names) for v in flow.p) + ']'
+            kw.p = '[' + ', '.join('None' if v is None else expr_code(ast.unparse(rates.counts_of(rates.parse(v))), names) for v in flow.p) + ']' # With the named expressions written out, and states as their counts (a share that changes with them)
         if flow.get('after') is not None:
             kw.after = code_value(flow.after)
         if flow.label is not None:

@@ -59,7 +59,7 @@ def sniff(source):
             sheets = openpyxl.load_workbook(path, read_only=True).sheetnames
         except Exception:
             return None
-        return 'atomica' if {'Compartments', 'Transitions'} <= set(sheets) else None
+        return 'atomica' if {'compartments', 'transitions'} <= {name.lower() for name in sheets} else None # In any case, as Atomica reads them
     elif ext == '.camdl':
         return 'camdl'
     text = path.read_text(errors='ignore') if ext in ['.yaml', '.yml', '.r', '.xml', '.sbml', '.json'] else ''

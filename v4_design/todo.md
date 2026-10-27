@@ -36,4 +36,4 @@
 - [ ] Rewrite/retake Starsim exam
 - [ ] Write AI chat/pipelines
 - [ ] Turn disease models into natural language write-ups and back again
-- [ ] Test AI parts on open weight models
+- [ ] Test AI parts on open weight models (Claude, Codex, DeepSeek, Qwen, Kimi)
