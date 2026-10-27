@@ -31,6 +31,14 @@ def power(a, b):
     return a ** b
 
 
+def member(a, b):
+    """ Which of the UIDs `a` are in `b`, as np.isin(), for the few agents of a round of moves (whose fixed cost np.isin() is several times) """
+    if not len(b):
+        return np.zeros(len(a), dtype=bool)
+    b = np.sort(b)
+    return b[np.minimum(np.searchsorted(b, a), len(b) - 1)] == a
+
+
 class Agents(Engine):
     """
     Runs a graph as agents
@@ -81,6 +89,7 @@ class Agents(Engine):
         self.round = (None, 0) # The step and the round of moves within it that the engine's draws are keyed by: see new_round()
         self._drawn = {} # With STARSIM_CHECK_DRAWS, who has been drawn from each stream in this round: see draw()
         self._route_memo = None # The coefficients worked out on each route in a transmission: see route_beta()
+        self._draw_how = {} # How each of the engine's distributions is drawn from: see draw()
         self._died = [] # Deaths by its transitions in the step: see uncount_deaths()
         self._fired_seen = {} # For each trigger on a delivery's or product's event, who it has seen it for: see unseen_fired()
         self._row = None # Who has had half a step of the competing rates of the state they entered in the state-change row: see finish_moves()
@@ -314,6 +323,8 @@ class Agents(Engine):
     def adjusted(self, name, uids):
         """ The multiplier on a transition for each agent, from the adjust= of the stratifications (1 if there is none), and their susceptibility if it is an acquisition that is not contact-mediated (see `transmit()` for those) """
         adjust = self.adjust[name]
+        if adjust is None and not self.sim.modifiers.get((self.mod.name, 'transition', name)) and not self.mult_raw_extra('transition') and not self.graph.transitions[name].acquisition: # The usual case
+            return 1.0
         out = 1.0 if adjust is None else adjust[self.groups(uids)]
         tr = self.graph.transitions[name]
         if tr.acquisition and not tr.contact:
@@ -346,6 +357,10 @@ class Agents(Engine):
                 out = out*np.where(inside, self.sim.groups.group_vals(d, vals)[self.sim.groups.group_raw()], 1.0)
             self.cache[key] = out
         return self.cache[key]
+
+    def mult_raw_extra(self, kind):
+        """ Whether mult_raw() has a multiplier on a kind of quantity other than its modifiers: the adjust= of the stratifications, or a strain's own value """
+        return bool(getattr(self, 'rel_adjust', None) and self.rel_adjust.get(kind)) or kind in self.__dict__.get('rel_scale', ())
 
     def mult(self, kind, name, uids):
         """ The multiplier on a quantity for some agents, from its modifiers """
@@ -1108,6 +1123,45 @@ class Agents(Engine):
             return False
         vals = [v for given in by.given.values() for v in (given.values() if isinstance(given, dict) else sc.tolist(given))]
         return not any(isinstance(v, ss.transitions.TimeValue) or (callable(v) and not isinstance(v, ss.TimePar)) for v in vals)
+
+    def is_fixed(self, x):
+        """
+        Whether a value (an expression of parameters, or a condition) is the same for each person for the whole run, so it can be worked out for
+        everyone once (see fixed_edges()): numbers, parameters with no modifiers whose values are numbers or values by sex (see is_lifelong()), and
+        conditions on sex
+        """
+        E = ss.expressions
+        for part in E.nodes(x):
+            if part is None or isinstance(part, (int, float, np.number, E.BinOp, E.Prop)):
+                continue
+            elif isinstance(part, E.par):
+                v = part.value
+                if part.name and not part.literal and self.sim.modifiers.get((self.mod.name, 'par', part.name)):
+                    return False
+                if isinstance(v, ss.by):
+                    if not self.is_lifelong(v):
+                        return False
+                elif not isinstance(v, (int, float, np.number, E.Expr, ss.conditions.Cond)):
+                    return False
+            elif isinstance(part, ss.conditions.Cond):
+                if part.op in ss.conditions.leaves and not (part.op == 'people' and tuple(part.args) in [('female',), ('male',)]):
+                    return False
+            elif not (isinstance(part, ss.by) and self.is_lifelong(part)):
+                return False
+        return True
+
+    def fixed_edges(self, key, fixed, edges, uids):
+        """
+        Cumulative probabilities (one row for each, then each agent: see dest_edges() and branch_edges()) for some agents: if they depend only
+        on fixed values (`fixed`, see is_fixed()), from a table for everyone kept for the run, else from `edges(uids)`
+        """
+        if not fixed:
+            return edges(uids)
+        return self.lifelong_table(key, lambda new: edges(new).T)[uids].T
+
+    def unmodified(self, kind, name):
+        """ Whether a branch (or one destination of a transition) has no modifiers and no adjust= of the stratifications """
+        return not self.sim.modifiers.get((self.mod.name, kind, name)) and self.branch_adjust.get(name) is None
 
     def lifelong_table(self, key, values):
         """ Values for everyone, by UID, kept for the run (see is_lifelong()), from `values(uids)`; those for agents added since are worked out as they are needed """
@@ -1907,6 +1961,14 @@ class Agents(Engine):
 
     def dest_edges(self, tr, uids, frm):
         """ Where each destination of a transition with several starts, as a cumulative probability, for some agents leaving by it from the states `frm` (one row per destination, ss.null last if it is one, and its end); what is beyond is ss.stay """
+        key = ('dest', tr.name)
+        fixed = self.__dict__.setdefault('_fixed', {}).get(key)
+        if fixed is None:
+            fixed = self._fixed[key] = not tr.dies and all(self.is_fixed(p) for p in tr.p) and all(self.unmodified('branch', f'{tr.name}.{dst.name}') for dst in tr.dst)
+        return self.fixed_edges(key, fixed, lambda u: self.dest_edges_for(tr, u, frm if u is uids else np.full(len(u), -1)), uids)
+
+    def dest_edges_for(self, tr, uids, frm):
+        """ As dest_edges(), worked out for these agents """
         self._uids = uids
         with self.evaluating(leaving=(uids, frm)): # Decided as they leave: the time in a clock is the time they spent there (see clock_values())
             ps = [np.broadcast_to(p, len(uids)) for p in self.branch_probs_for(tr, uids)]
@@ -2003,7 +2065,7 @@ class Agents(Engine):
             if not isinstance(ss.transitions.by_dist(getattr(self.delays[tr.name], 'raw', None)), ss.Dist): # A scalar: an exponential with that mean
                 dur = ss.distributions.inverse('expon', dur, np.broadcast_to(np.asarray(self.eval_for(self.delays[tr.name], new), dtype=float), len(new)))
             due[new] = self.ti + self.whole_steps(f'after_{tr.name}', new, dur) # As for a dwell time
-            pending = np.union1d(pending, new)
+            pending = np.sort(np.concatenate([pending, new])) # As np.union1d(), since none of the new ones is pending
         now = pending[due.raw[pending] <= self.ti]
         if taken is not None: # Those another trigger moves now keep their time, so it is taken in the next step if they are still in the source
             now = now[~taken[now]]
@@ -2281,17 +2343,17 @@ class Agents(Engine):
             return
         if tr.name in self.events: # Nor are they its event (e.g. who=dis.seek_care), as they are not its flow
             moved = self.events[tr.name]
-            self.events[tr.name] = moved[~np.isin(moved, uids)]
+            self.events[tr.name] = moved[~member(moved, uids)]
         mod = self.mod
         names = list(self.state_index.keys())
         for i in np.unique(src_idx):
             inds = uids[src_idx == i]
             state = self.graph.states[names[i]]
-            mod[state.name][inds] = True
+            self.put(state.name, inds, True)
             if state.name in self.scheduled:
                 if tr.trigger is not None:
                     for moved,exits in kept:
-                        mine = np.isin(moved, inds)
+                        mine = member(moved, inds)
                         mod[f'ti_exit_{state.name}'].raw[moved[mine]] = exits[mine]
                 else:
                     mod[f'ti_exit_{state.name}'][inds] = np.inf
@@ -2367,16 +2429,18 @@ class Agents(Engine):
             return dist.rvs(uids)
         if check_draws:
             self.check_drawn(key, uids)
-        plain = type(dist) is ss.random or (type(dist) is ss.expon and dist.unit is None and not dist.round and dist.pars.scale == 1) # Most of them: the uniforms themselves, or the unit exponential of a dwell time (see sample_dwell()), as rvs() would give them without its bookkeeping
-        by_agent = None if plain else self.agent_pars(key, dist)
-        if (plain or by_agent is not None) and self.crn_key(key) is not None:
+        how = self._draw_how.get(key)
+        if how is None: # Most of them: the uniforms themselves, the unit exponential of a dwell time (see sample_dwell()), or a distribution with values by sex (see agent_pars()), as rvs() would give them without its bookkeeping; worked out once for each
+            how = self._draw_how[key] = 'uniform' if type(dist) is ss.random else 'expon' if (type(dist) is ss.expon and dist.unit is None and not dist.round and dist.pars.scale == 1) else 'agent' if self.agent_pars(key, dist) is not None else 'rvs'
+        by_agent = self.agent_pars(key, dist, checked=True) if how == 'agent' else None
+        if how != 'rvs' and self.crn_key(key) is not None:
             if not len(uids):
                 return np.array([], dtype=dist.hash_dtype or ss.dtypes.float) # Uniforms, as below
             slots = self.sim.people.slot_raw()
             rvs = ss.distributions.hash_uniforms(dist.seed, self.draw_ind(), uids if slots is None else slots[uids], dtype=dist.hash_dtype)
-            if type(dist) is ss.random:
+            if how == 'uniform':
                 return rvs
-            elif by_agent is None:
+            elif how == 'expon':
                 return ss.perflib.draws.many['expon'](1.0, np.asarray(rvs, dtype=np.float64), np.empty(len(rvs))) # As dist.ppf(), without its checks
             n, pars, kwds = by_agent
             pick = lambda d: {k:(v[uids] if isinstance(v, np.ndarray) and v.shape == (n,) else v) for k,v in d.items()} # These agents' values
@@ -2391,17 +2455,18 @@ class Agents(Engine):
         finally:
             dist.jump(to=ind, force=True)
 
-    def agent_pars(self, key, dist):
+    def agent_pars(self, key, dist, checked=False):
         """
         For one of the engine's distributions whose parameters are values by sex (see agent_values() and is_lifelong()), its parameters for
         everyone (by UID), worked out as rvs() would and kept for the run, so a draw is the uniforms and the inverse; None for any other
         (whose draws rvs() makes)
         """
-        if dist._use_ppf is False or dist.unit is not None or dist.round:
-            return None
-        bys = [getattr(v, 'by', None) for v in dist.pars.values() if callable(v) and not isinstance(v, type)]
-        if not bys or not all(by is not None and by.on_people(self.sim) and self.is_lifelong(by) for by in bys):
-            return None
+        if not checked: # Once, for draw()
+            if dist._use_ppf is False or dist.unit is not None or dist.round:
+                return None
+            bys = [getattr(v, 'by', None) for v in dist.pars.values() if callable(v) and not isinstance(v, type)]
+            if not bys or not all(by is not None and by.on_people(self.sim) and self.is_lifelong(by) for by in bys):
+                return None
         def pars(uids):
             dist.process_size(uids)
             dist.process_pars()
@@ -2656,6 +2721,15 @@ class Agents(Engine):
 
     def branch_edges(self, state, uids):
         """ Where each branch out of a state starts, as a cumulative probability, for some agents entering it (one row per branch, and its end): with their modifiers, and each branch's where= closed to the others """
+        key = ('branch', state.name)
+        fixed = self.__dict__.setdefault('_fixed', {}).get(key)
+        if fixed is None:
+            branches = self.branches_of(state.name)
+            fixed = self._fixed[key] = all(tr is None or ((tr.p is None or self.is_fixed(tr.p[0])) and self.unmodified('branch', tr.name) and self.is_fixed(getattr(tr, 'where', None))) for tr in branches)
+        return self.fixed_edges(key, fixed, lambda u: self.branch_edges_for(state, u), uids)
+
+    def branch_edges_for(self, state, uids):
+        """ As branch_edges(), worked out for these agents """
         branches = self.branches_of(state.name)
         ps = [None if tr.p is None or tr.split else np.broadcast_to(self.eval_for(tr.p[0], uids), len(uids)) for tr in branches] # A split between several destinations takes what the branches leave over
         mults = self.where_mults(branches, state, [self.branch_mult(tr, uids) for tr in branches], uids)
