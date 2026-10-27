@@ -1321,7 +1321,6 @@ def test_state_as_result():
     assert np.array_equal(r.n_infected.select(sex='female'), r.I.select(sex='female'))
     return
 
-
 if __name__ == '__main__':
     do_plot = True
     sc.options(interactive=do_plot)

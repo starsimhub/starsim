@@ -42,7 +42,7 @@ from numba.core.errors import NumbaError
 from numba.extending import overload, typeof_impl
 from numba.np.random.distributions import random_loggam
 import starsim as ss
-from . import _draws as draws, _cache
+from . import draws, cache as _cache
 
 _cache.depends(__file__, draws.__file__) # The cached helpers below call into the draws
 

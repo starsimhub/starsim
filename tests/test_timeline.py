@@ -327,6 +327,19 @@ def test_coded_unit():
     return sim
 
 
+def test_sim_start_stop_dur():
+    sc.heading('A sim given a stop and dur starts at stop - dur, and raises if start, stop, and dur disagree')
+    kw = dict(diseases='sis', networks='random', n_agents=small, verbose=0)
+    sim = ss.Sim(stop=2035, dur=10, **kw).init()
+    assert sim.t.start == ss.years(2025) and sim.t.stop == ss.years(2035)
+    sim = ss.Sim(stop=100, dur=30, unit='day', **kw).init() # Also in a unit other than years
+    assert sim.t.start == ss.days(70)
+    sim = ss.Sim(start=2000, stop=2010, dur=10, **kw).init() # Three that agree are fine
+    with pytest.raises(ValueError, match='disagree'):
+        ss.Sim(start=2000, stop=2035, dur=10, **kw).init()
+    return sim
+
+
 # Run as a script
 if __name__ == '__main__':
     do_plot = True
@@ -341,5 +354,6 @@ if __name__ == '__main__':
     o5 = test_multi_timestep(do_plot)
     o8 = test_step_count()
     o9 = test_coded_unit()
+    o10 = test_sim_start_stop_dur()
 
     T.toc()

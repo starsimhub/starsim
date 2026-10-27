@@ -101,7 +101,7 @@ def test_jax_binomial():
 @sc.timer()
 def test_jax_engine():
     sc.heading('Testing the choice of JAX or the kernels, and the guard on the FFI handler')
-    chain = importlib.import_module('starsim.perflib._chain')
+    chain = importlib.import_module('starsim.perflib.chain')
     assert chain.check() == chain.api_version() # The handler reports the XLA FFI API version of the installed JAX
     make, pars = models.towns
     sim = ss.Sim(make(), **sc.mergedicts(pars, kw), solver='binomial').run()

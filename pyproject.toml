@@ -129,7 +129,7 @@ lock = [
 optuna = ["scikit-learn"]
 
 [project.scripts]
-starsim = "starsim.cli:main"
+starsim = "starsim.internals.cli:main"
 
 [project.urls]
 "Website" = "https://starsim.org"

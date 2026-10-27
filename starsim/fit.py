@@ -1338,12 +1338,12 @@ def bounded_pars(probe, pars=None, unused=()):
                 fitted[key] = p
     mixed = getattr(probe, 'mixed', []) if probe.solver != 'abm' else [] # Networks that a compartmental run turns into contact rates
     contacts = [] # Their parameters that are fitted, which set the contact rates when the sim is built
-    coded = [(mod, name, p) for mod in list(probe.modules) + mixed if getattr(mod, 'graph', None) is None and isinstance(mod.pars, ss.Pars) for name,p in mod.pars.bounded().items()] # A parameter of a module written as code, given as ss.par with bounds, e.g. ssl.HIV(beta=ss.par(0.01, bounds=[0.001, 0.1])); see ss.Pars.bounded()
+    coded = [(mod, name, p) for mod in list(probe.modules) + mixed if isinstance(mod.pars, ss.Pars) for name,p in mod.pars.bounded().items()] # A parameter that a module's code reads (written as code, or the coded part of a declared one), given as ss.par with bounds, e.g. ssl.HIV(beta=ss.par(0.01, bounds=[0.001, 0.1])); see ss.Pars.bounded()
     for mod,name,p in coded:
         if any(p is q for q in fitted.values()): # One ss.par shared by several modules (e.g. a beta for every genotype) is fitted once
             continue
         if p.bounds is not None and (pars is None or name in pars or f'{mod.name}.{name}' in pars):
-            taken = name in fitted or any(name in m.pars for m in probe.declared) or any(n == name and q is not p for m,n,q in coded) # Named with its module if the name alone is ambiguous, e.g. "hpv16.rel_beta"
+            taken = name in fitted or any(name in m.pars for m in probe.declared if m is not mod) or any(n == name and q is not p for m,n,q in coded) # Named with its module if the name alone is ambiguous, e.g. "hpv16.rel_beta"
             fitted[f'{mod.name}.{name}' if taken else name] = p
             if any(mod is net for net in mixed):
                 contacts.append(f'{mod.name}.{name}')

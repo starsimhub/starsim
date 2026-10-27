@@ -1,6 +1,7 @@
 """
 Base classes for diseases
 """
+import functools
 import inspect
 import numpy as np
 import pandas as pd
@@ -11,6 +12,24 @@ import matplotlib.pyplot as plt
 ss_int = ss.dtypes.int
 _ = None # For function signatures
 
+
+
+def built_after(init):
+    """ Wrap the __init__() of a subclass of ss.Disease, so that what it declares (`define_states()`, `define_transitions()`) is built once the outermost __init__() has finished """
+    @functools.wraps(init)
+    def __init__(self, *args, **kwargs):
+        depth = self.__dict__.get('_init_depth', 0) # How many __init__()s deep: a subclass's calls its parent's
+        self.__dict__['_init_depth'] = depth + 1
+        try:
+            init(self, *args, **kwargs)
+        finally:
+            self.__dict__['_init_depth'] = depth
+        if depth == 0:
+            del self.__dict__['_init_depth']
+            if '_declared' in self.__dict__:
+                self.build_graph()
+        return
+    return __init__
 
 
 class Disease(ss.Module):
@@ -87,7 +106,6 @@ class Disease(ss.Module):
                 self.anemic[self.pars.p_onset.filter()] = True
         ```
     """
-    graph = None # The declared states and transitions, built when the disease is made; None if it declares none
     engine = None # Runs the declared part (see ss.solvers.make_engine()); created when the sim is initialized
     infection_log = None # An InfectionLog, if the sim has an ss.infection_log analyzer
     code_pars = () # Parameters of a declared module that its own code reads rather than its graph (e.g. ss.Pregnancy's fertility rates)
@@ -112,6 +130,9 @@ class Disease(ss.Module):
                    f'to change its default, give the value in __init__(), e.g. super().__init__(**({{"{name}": {vars(cls)[name]!r}}} | kwargs))')
             errormsg = f'{cls.__name__} defines {sc.strjoin(rebound)}, a parameter of {cls.__mro__[1].__name__}, as {"a method" if callable(vars(cls)[name]) else "a value"}, which its transitions never read; {how}'
             raise ss.CapabilityError(errormsg)
+        init = vars(cls).get('__init__')
+        if init is not None: # Its states and transitions, declared in __init__() (see define_transitions()), are built once the outermost __init__() has finished
+            cls.__init__ = built_after(init)
         infect = vars(cls).get('infect')
         if infect is not None and infection and len(inspect.signature(infect).parameters) == 1: # Starsim 3's transmission pass, infect(self), which is transmit() now: it would never be called
             errormsg = f'{cls.__name__} defines infect(self), the transmission pass, which is called transmit() now (infect(uids) infects people from code); rename it to transmit(), and infect_route() to transmit_route()'
@@ -129,16 +150,162 @@ class Disease(ss.Module):
             return ss.strains.attach_members(self, strains, args, pars, kwargs)
         members = ss.transitions.class_members(type(self))
         declared = (ss.State, ss.Transition, ss.outcome, ss.transitions.Expr, ss.transitions.FlowSum)
-        if strains is not None and getattr(strains, 'shared', None) is True: # An outcome for each strain carried, before the transitions are built
-            ss.strains.prepare(strains, [(x.name, x) for x in list(args) + sc.tolist(kwargs.get('transitions'))] + list(kwargs.items()) + list(members.items()))
-        if args or members or any(isinstance(v, declared) or key in ss.transitions.Graph.grouped for key,v in kwargs.items()):
-            self.init_graph(args, members, pars, kwargs, names=_names or ss.utils.caller_names(1)) # The names of the variables of the code that made it; or, made by the sim from the transitions it was given, of the code that made the sim
-        else: # Written as code: its own define_pars() and define_states() follow, as in Starsim 3
+        given = args or members or any((isinstance(v, declared) and not isinstance(v, ss.par)) or key in ss.transitions.Graph.grouped for key,v in kwargs.items()) # Its structure; a parameter's value (e.g. with bounds) is not
+        later = strains is not None or stratify is not None or any(key in kwargs for key in ['init', 'init_n', 'init_prev', 'first']) or any(isinstance(v, ss.par) for v in kwargs.values()) # Only for a declared disease, so its states and transitions follow, from define_states() and define_transitions()
+        if given or later:
+            names = (_names or ss.utils.caller_names(1)) if given else {} # The names of the variables of the code that made it; or, made by the sim from the transitions it was given, of the code that made the sim
+            if not given: # A parameter's value given by keyword (e.g. with bounds) sets the parameter of that name that the transitions declared next use, as pars= does
+                pars = sc.mergedicts(pars, {key:kwargs.pop(key) for key in list(kwargs) if isinstance(kwargs[key], ss.par)})
+            self._declared = sc.objdict(args=list(args), members=members, pars=pars, kwargs=kwargs, names=names, strains=strains, stratify=stratify, code_pars=[])
+            if given: # Built now, so a subclass's __init__() can use it (e.g. self.pars) after super().__init__()
+                self.build_graph()
+            else: # Built once the subclass's __init__() has declared the rest
+                self.set_metadata(**{key:kwargs.pop(key) for key in ['name', 'label'] if key in kwargs})
+        else: # Written as code: its own define_pars() and define_states() follow, as in Starsim 3; or declared by define_states() and define_transitions()
             self.update_pars(pars, **kwargs)
-        if strains is not None:
-            ss.strains.attach(self, strains)
-        for call in sc.tolist(stratify):
+        return
+
+    @property
+    def graph(self): # Built when the disease is made (see built_after()); here too, in case something reads it while it is being made
+        """ Its declared states and transitions (`ss.transitions.Graph`), built from what was declared when first needed; None for a disease written as code """
+        if '_declared' in self.__dict__:
+            self.build_graph()
+        return self.__dict__.get('_graph')
+
+    @graph.setter
+    def graph(self, graph):
+        self.__dict__['_graph'] = graph
+
+    def build_graph(self):
+        """ Build the graph from what was declared: when the disease is made, or for one declared in its __init__() (see `define_transitions()`), when the graph is first needed """
+        d = self.__dict__.pop('_declared')
+        if d.strains is not None and getattr(d.strains, 'shared', None) is True: # An outcome for each strain carried, before the transitions are built
+            ss.strains.prepare(d.strains, [(x.name, x) for x in d.args + sc.tolist(d.kwargs.get('transitions'))] + list(d.kwargs.items()) + list(d.members.items()))
+        self.init_graph(d.args, d.members, d.pars, d.kwargs, names=d.names)
+        self.add_code_pars(d.code_pars)
+        if d.strains is not None:
+            ss.strains.attach(self, d.strains)
+        for call in sc.tolist(d.stratify):
             self.stratify(**call)
+        return
+
+    def declare(self, args=(), kwargs=None, names=None, overwrite=False):
+        """ Add declared members (states, transitions, results), to be built with the rest; see `define_transitions()` """
+        if self.__dict__.get('_graph') is not None:
+            errormsg = f'"{self.name}" has already been built, so nothing more can be declared in it: declare its states, transitions, and results while it is being made, in __init__()'
+            raise ss.CapabilityError(errormsg)
+        d = self.__dict__.get('_declared')
+        if d is None: # The first declaration of a disease that called super().__init__() with none
+            d = self._declared = sc.objdict(args=[], members=ss.transitions.class_members(type(self)), pars=None, kwargs={}, names={}, strains=None, stratify=None, code_pars=[])
+        names = names or {}
+        kwargs = kwargs or {}
+        for obj in args: # Positional members, named by name= or by the variable they were assigned to
+            name = getattr(obj, 'name', None) or names.get(id(obj))
+            if name is None:
+                d.args.append(obj)
+            else:
+                kwargs = {name:obj} | kwargs # By name, so it can replace one
+        reserved = {key for cls in type(self).__mro__ for key,val in vars(cls).items() if callable(val) or isinstance(val, property)} | set(dir(ss.Module))
+        for name,obj in kwargs.items():
+            if name in reserved:
+                raise ss.errors.ReservedName(f'"{name}" cannot be used as the name of a state, transition, or result of "{self.name}", since it is an attribute of every module or of {type(self).__name__}. Please choose another name.')
+            if not overwrite and (name in d.kwargs or name in d.members):
+                raise ss.errors.DuplicateDeclaration(f'"{name}" is already declared in "{self.name}"; names must be unique within a module (or give overwrite=True to replace it)')
+            d.kwargs[name] = obj
+            self.setattribute(name, obj) # So the declarations that follow can use it, e.g. self.S >> self.I
+        d.names.update(names)
+        return
+
+    def define_states(self, *args, overwrite=False, **kwargs):
+        """
+        Define its states: declared states (`ss.State`), or for a disease written as code, arrays (see `ss.Module.define_states()`)
+
+        Declared states are given while the disease is being made, in its `__init__()`, together with
+        its transitions (`define_transitions()`), so that which states it has can depend on its
+        arguments. Each is an attribute at once (`self.susceptible`), for the transitions to use.
+
+        Args:
+            args (list): the states (`ss.State('S')`, named), or lists of them; or arrays (`ss.BoolState`, ...)
+            overwrite (bool): replace a state of the same name, rather than raising
+            kwargs (dict): states by name (`S=ss.State(label='Susceptible')`); or for arrays, aliases
+
+        Examples:
+            ```python
+            class TB(ss.Disease):
+                def __init__(self, relapse=False, **kwargs):
+                    super().__init__(**kwargs)
+                    self.define_states(
+                        ss.State('susceptible', label='Susceptible'),
+                        ss.State('infection',   label='Latent infection'),
+                        ss.State('active',      label='Active TB'),
+                    )
+                    if relapse: # A state only some versions of the model have
+                        self.define_states(ss.State('relapsing', label='Will relapse'))
+            ```
+        """
+        flat = [x for arg in args for x in (arg if isinstance(arg, list) and all(isinstance(y, ss.State) for y in arg) else [arg])]
+        states = [x for x in flat if isinstance(x, ss.State)]
+        named = {k:v for k,v in kwargs.items() if isinstance(v, ss.State)}
+        if not states and not named: # Arrays, for a disease written as code
+            return super().define_states(*args, overwrite=overwrite, **kwargs)
+        if len(states) + len(named) < len(flat) + len(kwargs):
+            errormsg = f'define_states() of "{self.name}" takes declared states (ss.State) or arrays (ss.BoolState, ...), not both in one call'
+            raise TypeError(errormsg)
+        unnamed = [st for st in states if st.name is None]
+        if unnamed:
+            raise ss.errors.UnnamedState(f'a state given to define_states() of "{self.name}" has no name: give it one, e.g. ss.State("S"), or give it by keyword, e.g. define_states(S=ss.State())')
+        self.declare(states, named, overwrite=overwrite)
+        return
+
+    def define_transitions(self, *args, overwrite=False, **kwargs):
+        """
+        Define its transitions, while the disease is being made (in its `__init__()`), after its states
+
+        For a declared disease whose structure depends on its arguments, so that it cannot be written
+        in a class body: the states (`define_states()`), transitions, and results (`define_results()`)
+        are declared on `self`, and built together when the disease is first used. Each is an
+        attribute at once (`self.infection`).
+
+        Args:
+            args (list): transitions and outcomes, or lists of them, named by `name=` or by the variable they were assigned to
+            overwrite (bool): replace a transition of the same name (e.g. one whose rate is changed), rather than raising
+            kwargs (dict): transitions by name
+
+        Examples:
+            ```python
+            class SIRS(ss.Disease):
+                def __init__(self, waning=True, **kwargs):
+                    super().__init__(init_prev=0.01, **kwargs)
+                    self.define_states(ss.states('S I R'))
+                    beta = ss.par(0.3)
+                    self.define_transitions(
+                        infection = self.S >> self.I @ beta*self.I,
+                        recovery  = self.I >> self.R @ ss.days(10),
+                    )
+                    if waning:
+                        self.define_transitions(waning=self.R >> self.S @ ss.days(100))
+            ```
+        """
+        flat = [x for arg in args for x in (arg if isinstance(arg, (list, tuple)) else [arg])]
+        self.declare(flat, kwargs, names=ss.utils.caller_names(1), overwrite=overwrite)
+        return
+
+    def define_results(self, *args, **kwargs):
+        """
+        Define results: for a declared disease, sums and ratios of states by name (e.g. `prevalence=I/(S + I + R)`, or `active=(E + I).frac`); otherwise `ss.Result` objects (see `ss.Module.define_results()`)
+        """
+        declared = (ss.transitions.Expr, ss.outcome, ss.transitions.FlowSum)
+        if not kwargs and not any(isinstance(arg, declared) for arg in args):
+            return super().define_results(*args)
+        if not all(isinstance(arg, declared) for arg in list(args) + list(kwargs.values())):
+            errormsg = f'define_results() of "{self.name}" takes expressions of states (e.g. prevalence=I/(S + I + R)) or ss.Result objects, not both in one call'
+            raise TypeError(errormsg)
+        names = ss.utils.caller_names(1)
+        for arg in args:
+            if names.get(id(arg)) is None:
+                errormsg = f'a result given to define_results() of "{self.name}" has no name: give it by keyword, e.g. define_results(prevalence=I/N)'
+                raise ss.errors.UnnamedState(errormsg)
+        self.declare(args, kwargs, names=names)
         return
 
     def __getattr__(self, attr):
@@ -161,9 +328,16 @@ class Disease(ss.Module):
         that nothing reads. A parameter set any other way (e.g. a misspelling in `pars=`) is still rejected.
         """
         out = super().define_pars(inherit=inherit, **kwargs)
-        if self.graph is not None:
-            self.code_pars = list(self.code_pars) + [k for k in kwargs if k not in self.graph.pars and k not in self.code_pars]
+        if '_declared' in vars(self): # Being declared: sorted once it is built, so more can still be declared after this
+            self._declared.code_pars += list(kwargs)
+        elif self.graph is not None:
+            self.add_code_pars(kwargs)
         return out
+
+    def add_code_pars(self, keys):
+        """ Parameters its own code reads, not its graph's: see `define_pars()` """
+        self.code_pars = list(self.code_pars) + [k for k in keys if k not in self.graph.pars and k not in self.code_pars]
+        return
 
     @staticmethod
     def reuse(args, members, names=None):

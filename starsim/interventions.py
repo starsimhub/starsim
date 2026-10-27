@@ -279,7 +279,8 @@ def trigger_moves(owner, outcome, sel, eng=None, before=None):
             if not len(uids):
                 continue
             ps = [np.broadcast_to(p, len(uids)) for p in (tgt.branch_probs_for(tr, uids) if tr.split else [tgt.eval_for(tr.p[0], uids) if tr.p else 1.0])]
-            rvs = tgt.dists[f'trig_{tr.name}'].rvs(uids)
+            tgt.new_round() # A way in from code: see ss.solvers.Agents.new_round()
+            rvs = tgt.draw(f'trig_{tr.name}', uids)
             edges = np.cumsum([np.zeros(len(uids))] + ps, axis=0)
             for k,dst in enumerate(tr.dst):
                 tgt.force(uids[(rvs >= edges[k]) & (rvs < edges[k+1])], tr, dst, srcs=srcs)

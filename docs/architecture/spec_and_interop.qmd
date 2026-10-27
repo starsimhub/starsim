@@ -122,7 +122,7 @@ A language nobody can hold in their head is one nobody uses correctly, so Starsi
 
 The capitalization rule is Starsim's existing one: modules, containers, and base classes are CamelCase (`ss.Sim`, `ss.Disease`, `ss.Vaccine`); the pieces you put inside them are lowercase (`ss.days`, `ss.normal`, `ss.modify`, `ss.vaccinate`). Before a name is added: does Starsim already have one; can it be written with what exists (a bednet is an `ss.modify`, a metapopulation a stratification by patch); would more than one kind of model use it; is a keyword enough?
 
-The code is in `starsim/spec.py` (the spec, hashing, `ss.diff()`, and `to_code()`), `starsim/errors.py`, and `starsim/interop/` (`core.py` holds `Source` and `build()`, with one file per framework).
+The code is in `starsim/internals/spec.py` (the spec, hashing, `ss.diff()`, and `to_code()`), `starsim/internals/errors.py`, and `starsim/interop/` (`core.py` holds `Source` and `build()`, with one file per framework).
 
 ## Limits
 

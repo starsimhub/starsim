@@ -13,14 +13,12 @@
 - [ ] Auto-import for EMOD (HIV?)
 - [ ] New TB model ensemble
 - [ ] Atomica applications
-- [ ] Additional camdl examples
-- [ ] MIGHTI
+- [ ] malariasimple: https://github.com/mrc-ide/malariasimple
 
 ## Refactoring
 
 - [ ] Figure out why sc.asd() doesn't work better for ODE models
 - [ ] Settle NUM_THREADS pros/cons across platforms
-- [ ] Use `sc.obj` / replace Bunch with sc.obj()
 - [ ] Atomica example, fix `foi  = (1 - (1 - prev * transpercontact)**contacts) * (1 - 0.008)`
 - [ ] Dan: too confusing to have beta * I vs beta * I.n, hidden and not the obvious thing
 
@@ -31,6 +29,7 @@
 - [ ] Consider differentiable ABM
 - [ ] Think about vectors
 - [ ] Think about variance minimization and other old moonshot issues
+- [ ] Eventually do /home/cliffk/idm/ssv4/v4_design/oct26/open_issues.md
 
 ## AI
 

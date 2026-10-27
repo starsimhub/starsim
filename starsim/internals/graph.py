@@ -7,8 +7,8 @@ import numpy as np
 import sciris as sc
 import starsim as ss
 from .expressions import as_expr, BinOp, Count, count_power, did_you_mean, Expr, is_one, linear, par, per_person, Row, Share, to_pars
-from .parameters import by, TimeValue
-from .transitions import FlowSum, outcome, State, Transition
+from ..parameters import by, TimeValue
+from ..transitions import FlowSum, outcome, State, Transition
 from .presentation import Presentation, TransitionTable
 
 __all__ = ['Graph']

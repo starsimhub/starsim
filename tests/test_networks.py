@@ -665,6 +665,12 @@ def test_beta_default():
         assert np.array_equal(res[solver], pools(solver, pool=ss.perday(0.03), default=ss.par(ss.perday(0.02), name='other'))), solver
     assert np.isclose(res['abm'][-1], res['ode'][-1], rtol=0.15), (res['abm'][-1], res['ode'][-1])
 
+    # With no networks (homogeneous mixing), the default is the beta, and with none, that is an error
+    sim = ss.Sim(make(sexualnet=ss.peract(0.01), default=ss.peryear(2)), **kw).run()
+    assert sim.results.d.I[-1] > 0
+    with pytest.raises(ss.errors.RouteMismatch, match='homogeneous mixing'):
+        ss.Sim(make(sexualnet=ss.peract(0.01)), **kw).run()
+
     # The default is kept in the model spec, and written as code
     sim = ss.Sim(make(sexualnet=ss.peract(0.01), msm=ss.peract(0.1), default=0), networks=[ss.SexualNet(), ss.MaternalNet()], **kw)
     beta = next(p['value'] for p in sim.to_spec()['modules'][0]['pars'] if p['name'] == 'beta')
@@ -767,6 +773,39 @@ def test_coded_declared_transmission():
 
 
 @sc.timer()
+def test_beta_by_person():
+    sc.heading('Testing a beta per act that differs between the people who would be infected')
+    def make(beta):
+        S, I = ss.states('S I')
+        return ss.Disease(infection=S >> I @ beta * I, recovery=I >> S @ ss.years(1), init_prev=0.2, name='d')
+    def male_infections(beta):
+        sim = ss.Sim(make(beta), networks=ss.SexualNet(), n_agents=2000, stop=3, rand_seed=1, verbose=0).run()
+        d = sim.diseases.d
+        return np.count_nonzero(d.I & sim.people.male & (d.ti_I > 0)) # Infected during the run, not seeded
+
+    # By the sex of the susceptible, as by direction: men are infected only by f2m, so with f2m = 0 never
+    m2f = ss.par(0.2, name='m2f')
+    assert male_infections(m2f * ss.by(sex=dict(female=1.0, male=0.0))) == 0
+    assert male_infections(ss.peract(m2f=0.2, f2m=0.1)) == male_infections(m2f * ss.by(sex=dict(female=1.0, male=0.5)))
+    return
+
+
+def test_infection_sources():
+    sc.heading('Testing who infected whom, for a module\'s own code (engine.sources())')
+    found = []
+    def check(sim):
+        d = sim.diseases.d
+        new = d.infection.uids | d.mtct.uids
+        sources, nets = d.engine.sources(new)
+        found.append((len(new), np.count_nonzero(~np.isnan(sources))))
+    S, I = ss.states('S I')
+    d = ss.Disease(infection=S >> I @ dict(sexualnet=ss.peract(0.2), default=0) * I, mtct=S >> I @ dict(maternalnet=ss.peryear(2), default=0) * I, recovery=I >> S @ ss.years(1), init_prev=0.2, name='d')
+    sim = ss.Sim(d, networks=[ss.SexualNet(), ss.MaternalNet()], demographics=ss.Pregnancy(fertility_rate=ss.freqperyear(100)), n_agents=2000, stop=3, analyzers=check, rand_seed=1, verbose=0).run()
+    n_new, n_found = np.sum(found, axis=0)
+    assert n_new > 0 and n_found == n_new # Each infection over a network has its source, whichever transmission it was by
+    return sim
+
+
 def test_transmit_candidates():
     sc.heading('Testing that the edges that might transmit are found exactly, by a byte for each agent for many edges, or directly for a few')
     rng = np.random.default_rng(1)
@@ -776,7 +815,7 @@ def test_transmit_candidates():
     rel_sus[:5] = np.nan # A candidate, ruled out later by the chance itself
     for n_edges in [50, 5000]: # Under an eighth of the agents, read directly
         p1, p2 = rng.integers(n, size=(2, n_edges))
-        found = ss.perflib._passes.candidates(p1, p2, rel_trans, rel_sus)
+        found = ss.perflib.passes.candidates(p1, p2, rel_trans, rel_sus)
         for (src, trg), inds in zip([(p1, p2), (p2, p1)], found):
             assert np.array_equal(inds, np.flatnonzero((rel_trans[src] != 0) & (rel_sus[trg] != 0))), f'Wrong candidates with {n_edges} edges'
     return
@@ -832,6 +871,8 @@ if __name__ == '__main__':
     read = test_beta_readings()
     spec = test_peract_spec()
     default = test_beta_default()
+    person = test_beta_by_person()
+    sources = test_infection_sources()
     cand = test_transmit_candidates()
     shared = test_shared_pass()
 

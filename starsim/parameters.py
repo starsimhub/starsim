@@ -7,7 +7,7 @@ import pandas as pd
 import sciris as sc
 import starsim as ss
 import datetime as dt
-from .expressions import as_expr, evaluate, Expr, par
+from .internals.expressions import as_expr, evaluate, Expr, par
 
 
 # Define classes to not descend into further -- based on sciris.sc_nested
@@ -551,7 +551,7 @@ class SimPars(Pars):
         modules = self.expand_modules(modules)
         flows = any(isinstance(mod, ss.demographics.Flows) for source,mod in modules)
         if flows and not any(getattr(mod, 'graph', None) is not None for source,mod in modules): # With no declared disease, births and deaths declared for the population are held by everyone alive, a declared module like any other
-            modules.append(('demographics', ss.pregnancy.Population()))
+            modules.append(('demographics', ss.demographics.Population()))
         self._reset_modules()
         products = []
         names = {} # Module names must be unique across all types, since they share namespaces (e.g. sim.people.<name>, sim.results.<name>)
@@ -1294,46 +1294,63 @@ class by:
 
     def positions(self, sim, dim, uids=None):
         """ As agents: the number of levels along one dimension, and each agent's position along it (indexed by UID, or for `uids`), with that number for people with no value """
+        plan = self.cached(('positions', dim), lambda: self.position_plan(sim, dim), sim) # Worked out once for the sim, since it is asked for often for few people (e.g. a dwell time by sex)
+        return plan(uids)
+
+    def position_plan(self, sim, dim):
+        """ How to find agents' positions along one dimension: a function of the UIDs (None for everyone) that gives the number of levels and the positions; see `positions()` """
         people = sim.people
         names = [strat.name for strat in sim.groups.strats]
         kind = self.keys(dim)
         strat = sim.groups.strats[names.index(dim)] if dim in names else None
-        some = (lambda arr: arr) if uids is None else (lambda arr: arr[uids]) # Everyone's, or only those asked for
+        some = lambda arr, uids: arr if uids is None else arr[uids] # Everyone's, or only those asked for
         if strat is not None and kind is None: # By level of a dimension of the sim
-            level = some(sim.groups.level(names.index(dim))).astype(int)
-            return strat.n, np.where(level >= 0, level, strat.n)
+            d, n = names.index(dim), strat.n
+            def plan(uids):
+                level = some(sim.groups.level(d), uids).astype(int)
+                return n, np.where(level >= 0, level, n)
+            return plan
         if kind is None: # Values by position, but no dimension gives the positions
             raise ss.errors.MissingDimension(f'ss.by() gives values by position along "{dim}", but the sim is not stratified by it: stratify the sim (e.g. stratify=dict({dim}=[...])), or give the values by label (e.g. ss.by({dim}={{label: value}}))')
         kind, keys = kind
-        if strat is not None and strat.edges is None: # A dimension's labels, by name
-            level = some(sim.groups.level(names.index(dim))).astype(int)
-            order = np.array([keys.index(str(label)) for label in strat.labels] + [len(keys)])
-            return len(keys), order[np.where(level >= 0, level, strat.n)]
-        if dim == 'sex' and strat is None: # people.female: a key is for women if it says so (as for a dimension called sex), and otherwise for men
-            raw = some(people.female.raw)
-            keys = [str(key.lower() in ['female', 'females', 'f', 'women', 'woman']) for key in keys]
-        else:
-            if strat is not None:
-                dim = strat.attr
-            try:
-                raw = some(people[dim].raw)
-            except AttributeError:
-                raise ss.errors.UnknownState(f'ss.by() is by "{dim}", which is neither a dimension of the sim nor a property of people{ss.expressions.did_you_mean(dim, list(people.states.keys()))}') from None
         n = len(keys)
+        if strat is not None and strat.edges is None: # A dimension's labels, by name
+            d = names.index(dim)
+            order = np.array([keys.index(str(label)) for label in strat.labels] + [n])
+            def plan(uids):
+                level = some(sim.groups.level(d), uids).astype(int)
+                return n, order[np.where(level >= 0, level, strat.n)]
+            return plan
+        if dim == 'sex' and strat is None: # people.female: a key is for women if it says so (as for a dimension called sex), and otherwise for men
+            lookup = np.full(2, n) # The position of men (False) and women (True)
+            for i,key in enumerate(keys):
+                lookup[int(key.lower() in ['female', 'females', 'f', 'women', 'woman'])] = i
+            return lambda uids: (n, lookup[some(people.female.raw, uids).astype(int)])
+        attr = strat.attr if strat is not None else dim
+        try:
+            people[attr]
+        except AttributeError:
+            raise ss.errors.UnknownState(f'ss.by() is by "{dim}", which is neither a dimension of the sim nor a property of people{ss.expressions.did_you_mean(dim, list(people.states.keys()))}') from None
         if kind == 'edges':
-            pos = np.digitize(raw, keys) - 1
-            return n, np.where((pos < 0) | np.isnan(raw.astype(float)), n, pos)
-        out = np.full(len(raw), n)
-        if raw.dtype == bool:
-            vals = [key.lower() in ['true', '1'] for key in keys]
-        elif raw.dtype.kind in 'iuf':
-            vals = [float(key) if sc.isnumber(key) or key.replace('.', '', 1).lstrip('-').isdigit() else np.nan for key in keys]
-        else:
-            vals = keys
-            raw = raw.astype(str)
-        for i,val in enumerate(vals):
-            out[raw == val] = i
-        return n, out
+            def plan(uids):
+                raw = some(people[attr].raw, uids)
+                pos = np.digitize(raw, keys) - 1
+                return n, np.where((pos < 0) | np.isnan(raw.astype(float)), n, pos)
+            return plan
+        def plan(uids):
+            raw = some(people[attr].raw, uids)
+            out = np.full(len(raw), n)
+            if raw.dtype == bool:
+                vals = [key.lower() in ['true', '1'] for key in keys]
+            elif raw.dtype.kind in 'iuf':
+                vals = [float(key) if sc.isnumber(key) or key.replace('.', '', 1).lstrip('-').isdigit() else np.nan for key in keys]
+            else:
+                vals = keys
+                raw = raw.astype(str)
+            for i,val in enumerate(vals):
+                out[raw == val] = i
+            return n, out
+        return plan
 
     def lookup(self, sim, convert=None, year=None, cache=None):
         """
@@ -1372,7 +1389,10 @@ class by:
             return cache[key]
         convert = self.converter(sim, convert, year)
         sizes, index = zip(*[positions(dim) if uids is None else self.positions(sim, dim, uids) for dim in self.dims])
-        missing = [uids is None or bool(np.any(ind == n)) for ind,n in zip(index, sizes)] # Whether the value for people with no value is needed
+        missing = [uids is None or bool((ind == n).any()) for ind,n in zip(index, sizes)] # Whether the value for people with no value is needed
+        key = ('grid', id(self), year, tuple(missing)) # The grid does not depend on who is asked for, so it is kept while the values are unchanged
+        if cache is not None and key in cache:
+            return cache[key], index
         if self.table is None:
             out = np.ones([n + 1 for n in sizes])
             for i,(dim,n) in enumerate(zip(self.dims, sizes)):
@@ -1391,6 +1411,8 @@ class by:
                 if missing[i] and not np.any(rows[i] == n): # No row gives the value for people with no value
                     inner = np.take(out, range(n), axis=i)
                     np.put_along_axis(out, np.full([1 if j == i else s + 1 for j,s in enumerate(sizes)], n), np.expand_dims(np.average(inner, axis=i, weights=weights(i, self.dims[i])), i), axis=i)
+        if cache is not None:
+            cache[key] = out
         return out, index
 
     def per_group(self, sim, convert=None, year=None):

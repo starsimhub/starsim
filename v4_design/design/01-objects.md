@@ -141,6 +141,35 @@ class SEIR(ss.Disease):
 
 Use the class form when there is behavior that is not a transition, or when the model is going into a library. A module that only has states, transitions, parameters, and results never needs to define a method.
 
+### Declared in `__init__()`
+
+A model whose structure depends on its arguments (a state or transition that only some versions have, or transitions made in a loop, one for each strain or drug) cannot be written in a class body, which runs once for the class. Its `__init__()` declares the states, transitions, and results on `self`, with `define_states()`, `define_transitions()`, and `define_results()`, which take them positionally (named by `name=` or by their variable), as lists, or by keyword:
+
+```python
+class TB(ss.Disease):
+    def __init__(self, relapse=False, **kwargs):
+        super().__init__(init=dict(infection=0.05), **kwargs)
+        p = ss.pars(tb_pars())
+        self.define_states(
+            ss.State('susceptible', label='Susceptible'),
+            ss.State('infection',   label='Latent infection'),
+            ss.State('active',      label='Active TB'),
+            ss.State('recovered',   label='Recovered'),
+        )
+        foi = p.beta*self.active
+        self.define_transitions(
+            transmission = self.susceptible >> self.infection @ foi,
+            progression  = self.infection >> self.active @ p.progression,
+            recovery     = self.active >> self.recovered @ p.recovery,
+        )
+        if relapse: # Only some versions of the model have it
+            self.define_states(ss.State('relapsing', label='Will relapse'))
+            self.define_transitions(...)
+        self.define_results(prevalence=self.active.frac)
+```
+
+Each is an attribute at once (`self.active`), for the declarations that follow. They are the same members as the same keywords given to `ss.Disease` and build the same model; `overwrite=True` replaces one of the same name (e.g. a transition whose rate is changed for each strain). They are given while the module is made, and built together when it is first used (by the sim, or by `tb.transitions`, `describe()`, ...); declaring more after that raises `CapabilityError`. `define_states()` also still defines the arrays of a module written as code (`ss.BoolState`), and `define_results()` its `ss.Result` objects: what is given says which.
+
 `ss.Disease` is the base of every disease, and whether each part of it is declared or written as code is a question about that part, not about the class. A disease may declare states and transitions (in the operator or the class form), which its engine runs under any solver; it may instead define per-agent arrays (`define_states()`) and change them in its own `step_state()`, `step()`, and other methods, as in Starsim 3; or it may mix the two in one class, e.g. a declared natural history and a coded `ss.FloatArr` that its `step()` updates after `super().step()` has taken the declared transitions. The seam is the engine: each lifecycle method of `ss.Disease` runs its engine's part, and a disease that declares nothing has an engine with nothing to run, so a coded override calls `super()` as for any module, and no method asks which kind of disease it is. A disease with no declared states and no transmission (malnutrition, contraception as a behavior, Starsim 3's `class X(ss.Disease)` with its own states and `step()`) is a plain `ss.Disease`, with no `susceptible` or `infected` states forced on it, and `describe()` prints its class, arrays, and parameters. `ss.Infection(ss.Disease)` adds transmission written as code and nothing else: the `susceptible` and `infected` states, `rel_sus`, `rel_trans`, `ti_infected`, `init_prev`, transmission over the networks for its `beta` (`transmit()`, `transmit_route()`), `set_prognoses()` for those infected, `infect(uids)` to infect some agents now from code (their outcomes set as transmission sets them, with no source, as for a declared disease), and the standard `prevalence` and `new_infections` results; with no `beta` it is not transmitted (as `ssl.NCD`). `isinstance(x, ss.Disease)` is true of both, and both are diseases to the sim (`sim.diseases`, the infection log, deaths, `sim.rescale()`). What cannot work is refused: a class that declares states or transitions and also defines one of `ss.Infection`'s transmission methods (`set_prognoses()`, `transmit()`, ...) without subclassing `ss.Infection` raises `ss.CapabilityError`, since the declared engine never calls it. What needs structure (`describe()` in full, `equations()`, `diagram()`, `R0()`, `ss.move()`, `current_state()`, `stratify()`) works on the declared part. A disease with nothing declared runs as agents if it keeps a value for each person (`define_states()`, as Starsim 3's do), and otherwise beside the compartments, as any module written as code does; a declared one with code of its own follows the try-it rule of [12-backends.md](12-backends.md) (`compartmental = False` if its code needs agents). Starsim 3's `ss.Disease` and `ss.Infection` keep their meaning, so `python -m starsim.migrate` does not rewrite either. The verbs that act on arrays reach a disease written as code (`ss.modify` of an `ss.Infection`'s `rel_sus` and `rel_trans`, conditions on its arrays, fitting its parameters given as `ss.par` with bounds, `sim.new()`).
 
 Code can also read and write the states of a declared disease run as agents, as Starsim 3 code does: indexing (`sir.I[uids] = True`), `set()`, and in-place operators (`sir.I |= ...`) are tracked, so the counts (`sir.I.n`), the results, and other modules later in the same step see the change. Writes through the NumPy array behind a state (`sir.I.raw`) are not tracked, and the counts and results do not see them; `STARSIM_CHECK_COUNTS=1` checks the counts at every step. The time each agent entered a state (`ti_X`) is kept only where the engine needs it, for a state declared `ss.State(keep_time=True)` (for code that reads it, e.g. the years since onset), or for every state if `ss.options.keep_times = True`; reading another raises `ss.errors.TimeNotKept`. A disease written as code takes declared products and deliveries that act on the states it has (e.g. `ss.vaccinate()` on `rel_sus`).
@@ -352,7 +381,7 @@ Give the sim a unit (`unit='day'`, a typed `dt`, or dates) and the same lines re
 ## Not included
 
 - **The dict tuple shorthand** and its coercion rules (above).
-- **Builder methods that change structure after construction** (`m.add_transition_flow(...)`). A model's states and transitions are given once, at construction; `stratify()` is the one operator applied afterwards.
+- **Builder methods that change structure after construction** (`m.add_transition_flow(...)`). A model's states and transitions are given once, while it is made (as keywords, in a class body, or with `define_states()` and `define_transitions()` in its `__init__()`); `stratify()` is the one operator applied afterwards.
 - **States named in strings** (arrow strings, `ss.transmission('S -> I', beta=0.3)` and `ss.progression('I -> R', dur=10)`). A transition takes the states themselves, so nothing is inferred from a name, including the source of infection, which is in the rate (`S >> I @ beta * I`).
 - **Required `reads`/`writes` declarations, read-only views, and queued updates.** See the module contract and lifecycle above.
 - **A separate `Model` and `ModelBuilder`.** One class, constructed once.

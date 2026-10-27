@@ -155,10 +155,15 @@ def test_commuting():
     I = sim.results.sir.I.by('home').values # By home, wherever people are
     assert np.allclose(I, y.reshape(3, 2, 2, -1)[1].sum(axis=1).T, rtol=1e-4, atol=0.1)
 
-    # As agents, the share of time away is kept, and the epidemic reaches b
+    # As agents, the share of time away is that of the steps: the two transfers are taken one after the other in each daily step, so someone who
+    # leaves can come back in the same step, which with a return rate of 0.45 a day gives 7.9% away for the residents of a and 12.4% for those of b
+    # (the stationary shares of the daily chain, rather than the ODE's 10%), and the epidemic reaches b
     sim = make(solver='abm', n_agents=10_000).run()
     home, now = sim.people.home.raw, sim.people.patch.raw
-    assert abs((now[home == 0] == 1).mean() - away) < 0.02 and abs((now[home == 1] == 0).mean() - away) < 0.03
+    p_l, p_r = -np.expm1(-l), -np.expm1(-r) # The chances of leaving and of coming back in a step
+    away_a = p_l*(1 - p_r)/(1 - (1 - p_l)*(1 - p_r)) # Leaving (the transfer out), then perhaps back
+    away_b = p_l/(p_r + p_l - p_l*p_r) # Coming back (out), then perhaps leaving again
+    assert abs((now[home == 0] == 1).mean() - away_a) < 0.012 and abs((now[home == 1] == 0).mean() - away_b) < 0.025 # About 4 standard deviations
     assert sim.results.sir.infection.cum.by('home').values[-1, 1] > 1000
     with pytest.raises(TypeError, match='one movement'): # Several on one dimension (it was a bare TypeError)
         ss.SIR().stratify(patch=['a', 'b'], mobility=[ss.geo.Mobility(matrix=T), ss.geo.Mobility(matrix=T)])

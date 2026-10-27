@@ -68,7 +68,7 @@ Stratifying doesn't copy the states: `sir` still has `S`, `I`, and `R`, and the 
 
 ## The graph: resolve, complete, check
 
-When `ss.Disease(...)` is called, it builds the module's graph (`ss.transitions.Graph`, in `starsim/graph.py`). The graph is where the objects you wrote become a model:
+When `ss.Disease(...)` is called, it builds the module's graph (`ss.transitions.Graph`, in `starsim/internals/graph.py`). The graph is where the objects you wrote become a model:
 
 1. **Collect and name.** It gathers the states, transitions, parameters, and results, and names any that have no name: from the keyword they were passed under, then a `name=` argument, then the variable they're bound to in the calling code. A transition with none of these gets a name built from its endpoints (`S_to_I`); a state with none raises `ss.errors.UnnamedState`, since a made-up state name would leak into results.
 2. **Resolve.** It finds which states are people and which are plain counts (a water reservoir, a mosquito population), derives the kind of each transition from its rate, marks the sources of infection, works out which transitions are acquisitions of the disease, and finds the first state (where people start and are born into).

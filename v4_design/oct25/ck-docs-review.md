@@ -5,7 +5,7 @@ Review of Codex's and Claude's pass at reworking the docs.
 
 ## Codex review
 
-Located in /tmp/ssv4-docs-oct24/docs/_site/index.html
+Located in `/tmp/ssv4-docs-oct24/docs/_site/index.html`
 
 ### Structure
 
@@ -104,12 +104,4 @@ Located in /tmp/ssv4-docs-oct24/docs/_site/index.html
 - Other
   - Too many headings, don't fit
   - Merge "In ten minutes" into the home/readme
-
-## Claude review
-
-Located in Located in /home/cliffk/idm/ssv4/docs/_site/index.html
-
-### Structure
-
-- 
-
+  

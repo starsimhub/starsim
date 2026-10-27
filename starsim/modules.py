@@ -552,7 +552,8 @@ class Module(Base):
         calling function (which is almost always a module's `__init__()` method)
         """
         if inherit: # Merge with existing
-            given = {k:v for k,v in kwargs.items() if isinstance(v, ss.par)} if getattr(self, 'graph', None) is None else {} # In a module written as code, a parameter given as ss.par (e.g. with bounds, to be fitted) is kept as one, and its code uses the value, as for update_pars()
+            declared = '_declared' in vars(self) or getattr(self, 'graph', None) is not None # Declared, or being declared (see ss.Disease.define_transitions()), without building it
+            given = {k:v for k,v in kwargs.items() if isinstance(v, ss.par)} if not declared else {} # In a module written as code, a parameter given as ss.par (e.g. with bounds, to be fitted) is kept as one, and its code uses the value, as for update_pars()
             self.pars.update(**{k:(v.value if k in given else v) for k,v in kwargs.items()}, create=True)
             if given:
                 self.pars.update(**given)

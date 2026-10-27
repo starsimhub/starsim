@@ -20,7 +20,7 @@ The framework follows a modular design with these key components:
 - **Diseases**: Models disease transmission and progression (`starsim/diseases.py`)
 - **Interventions**: Implements prevention/treatment strategies (`starsim/interventions.py`)
 - **Demographics**: Handles population dynamics like births/deaths (`starsim/demographics.py`)
-- **Pregnancy**: Pregnancy as declared states and transitions (Demographics+Disease hybrid) that provides events/states for other modules (`starsim/pregnancy.py`)
+- **Pregnancy**: Pregnancy as declared states and transitions (Demographics+Disease hybrid) that provides events/states for other modules (`starsim/demographics.py`)
 - **Connectors**: Modules that link other modules, e.g. disease interactions (`starsim/connectors.py`)
 - **Analyzers**: Custom result collection and analysis (`starsim/analyzers.py`)
 - **Results**: Stores simulation outputs (`starsim/results.py`)
@@ -78,32 +78,29 @@ uv add starsim[dev]  # With dev dependencies
 - `connectors.py`: Connectors between modules (e.g. `ss.modify`)
 - `data.py`: Data by place (`ss.data.population('Kenya')`, `ss.data.contacts(...)`), read by `ss.people('Kenya')`, `ss.contacts('Kenya')`, and `ss.geo.geography('Kenya')`
 - `dates.py`: Dates and calendar durations (`ss.date`, `ss.DateArray`, `ss.datedur`)
-- `debugtools.py`: Profiling, debugging, and mock objects for testing
+- `demographics.py`: Births, deaths, and migration (`ss.Births`, `ss.Deaths`), and pregnancy as declared states and transitions (`ss.Pregnancy`, which provides events such as `conception` and `delivery`, and states such as `P`, for other modules)
 - `dimensions.py`: Stratifications (`ss.dimensions.Strat`, `ss.transfer`) and the groups they give (`sim.groups`, an `ss.dimensions.Groups`)
+- `diseases.py`: Diseases, declared (states and transitions, in the class form or with `define_states()` and `define_transitions()` in `__init__()`), written as code, or both (`ss.Disease`, `ss.Infection`, `ss.SIR`, ...)
 - `distributions.py`: Statistical distributions and random number generation
-- `errors.py`: Errors, warnings, and notes, as classes (e.g. `ss.errors.UnknownState`; the base classes and `ss.CapabilityError` are also at the root)
-- `expressions.py`: Expressions in rates and results (`ss.par`, `ss.transitions.Expr`), and how they are evaluated and printed
 - `fit.py`: Fitting to data, as `ss.fit` (imported when first used; `sim.fit()` is the entry point)
 - `geo.py`: Places and the movement between them (`ss.geo.geography`, `ss.geo.Mobility`, `ss.geo.gravity`)
-- `gradients.py`: Gradients and log-densities in JAX (`sim.gradient()`, `sim.log_density()`)
-- `graph.py`: The graph of a declared module: its states, transitions, and parameters, completed with defaults and checked (`ss.transitions.Graph`)
-- `kernels.py`: The Numba kernels that run compartmental models
 - `loop.py`: Main simulation integration loop
 - `modules.py`: Base module classes and update logic
 - `networks.py`: Networks and mixing pools
 - `parameters.py`: Parameter containers (`ss.Pars`, `ss.SimPars`) and values that vary by level or in time (`ss.by`, `ss.timeseries`, `ss.seasonal`)
-- `presentation.py`: How a declared model is shown: `describe()`, `diagram()`, `equations()`, and its model spec
+- `people.py`: The people (`ss.People`, `ss.people()`, `ss.ppl`)
 - `products.py`: Vaccine and treatment deployment
-- `pregnancy.py`: Pregnancy as declared states and transitions; provides events (`conception`, `delivery`) and states (`P`) for other modules
 - `run.py`: Running multiple simulations (`ss.MultiSim`, `ss.parallel`)
 - `settings.py`: Global options (`ss.options`) and plotting style
+- `sim.py`: The sim (`ss.Sim`)
 - `solvers/`: The engines that run declared models: `engine.py` (what they share), `mixing.py` (who meets whom in a compartmental run), `compartmental.py`, `agents.py`, `crossing.py` (diseases tracked jointly), and `choose.py` (which solver, and why: `ss.solvers.choose_solver()`); every name is also `ss.solvers.X`
-- `spec.py`: The model spec, and models written as code (`ss.to_code()`, `ss.diff()`)
-- `time.py`: Durations and rates (`ss.dur`, `ss.days`, `ss.peryear`, `ss.probperyear`, etc.)
+- `strains.py`: Strains (`ss.Strains`) and immunity between them (`ss.immunity`)
+- `time.py`: Durations and rates (`ss.dur`, `ss.days`, `ss.peryear`, `ss.probperyear`, etc.), and plotting dates and durations with Matplotlib
 - `timeline.py`: Time coordination between modules (`ss.Timeline`)
-- `timeplot.py`: Plotting dates and durations with Matplotlib
 - `transitions.py`: States and transitions (`ss.State`, `ss.states()`, `ss.Transition` and its `S >> I @ rate` spelling, ...); the names of the modules above that it builds on are also `ss.transitions.X`
 - `utils.py`: Helper functions
+- `internals/`: How Starsim works under the hood, each also at the top level (`ss.errors`, `ss.spec`, ...): `graph.py` (the graph of a declared module: its states, transitions, and parameters, completed with defaults and checked; `ss.transitions.Graph`), `presentation.py` (how it is shown: `describe()`, `diagram()`, `equations()`), `spec.py` (the model spec, and models written as code: `ss.to_code()`, `ss.diff()`), `expressions.py` (expressions in rates and results, `ss.par`, and how they are evaluated and printed), `gradients.py` (gradients and log-densities in JAX: `sim.gradient()`, `sim.log_density()`), `errors.py` (errors, warnings, and notes, as classes, e.g. `ss.errors.UnknownState`; the base classes and `ss.CapabilityError` are also at the root), `debugtools.py` (profiling, debugging, and mock objects for testing), and `cli.py` (the `starsim` command)
+- `perflib/`: Machinery for speed: `kernels.py` (the Numba kernels that run compartmental models; also `ss.kernels`), `draws.py` (exact draws in Numba), `passes.py` (compiled passes over the agents), `chain.py` (the chain binomial in JAX), `jit.py` (`ss.jit`; `ss.perflib.jit` is the function), `cache.py`, and `memory.py`
 - `interop/`: Importers and exporters for other modeling frameworks
 
 ### Library (`starsim/library/`)

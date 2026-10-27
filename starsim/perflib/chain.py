@@ -29,7 +29,7 @@ from numba.extending import intrinsic
 from numba.core.caching import FunctionCache
 from numba.core.ccallback import CFunc
 import starsim as ss
-from . import _draws as draws, _cache
+from . import draws, cache as _cache
 
 _cache.depends(__file__, draws.__file__) # The handler compiles in the draws
 

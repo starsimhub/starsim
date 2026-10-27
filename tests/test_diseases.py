@@ -496,6 +496,7 @@ def test_mixed_disease():
         def __init__(self, **kwargs):
             super().__init__(init_prev=0.05, **kwargs)
             self.define_states(ss.FloatArr('years_infected', default=0.0)) # A coded per-agent array beside the declared states
+            self.define_pars(rate=1.0) # A parameter that only its code reads
 
         def step(self):
             super().step() # The declared transitions
@@ -506,8 +507,33 @@ def test_mixed_disease():
     assert sim.solver == 'abm' # The coded array needs agents
     assert mixed.results.infection.sum() > 0 and mixed.years_infected.sum() > 0 # Both parts ran
     assert np.isclose(mixed.years_infected.sum(), mixed.results.I[1:].sum()*sim.t.dt_year) # One step for each step spent infected
+    fitted, _ = ss.fit.bounded_pars(ss.Sim(diseases=Mixed(rate=ss.par(1.0, bounds=[0.5, 2])), n_agents=100, verbose=0).init())
+    assert list(fitted.keys()) == ['rate'] # Its code's parameter can be fitted too
     with pytest.raises(ss.CapabilityError, match='never calls'): # A declared transition never calls set_prognoses()
         type('Bad', (ss.SIS,), dict(set_prognoses=lambda self, uids, sources=None: None))
+
+    # Its code sees those infected from code (disease.infect()) among the infection's events, in the step; and its own results are scaled as the declared ones are
+    class Seen(Mixed):
+        def init_results(self):
+            super().init_results()
+            self.define_results(ss.Result('n_seen', dtype=float))
+        def step(self):
+            super().step()
+            self.results.n_seen[self.ti] = len(self.infection.uids)
+    class Seed(ss.Intervention):
+        def step(self):
+            if self.ti == 3:
+                self.sim.diseases.seen.infect(self.sim.people.auids[:10])
+    seen = ss.Sim(diseases=Seen(name='seen'), interventions=Seed(), n_agents=500, total_pop=5000, dt=ss.days(7), stop=2001, verbose=0).run().diseases.seen
+    assert seen.results.n_seen[3] >= 10*10 # The 10 seeded, as people
+    assert np.allclose(seen.results.n_seen, seen.results.infection) # Each step's infections, seeded or not, in the same scale
+
+    # A modifier that reads what exists only once the sim runs is not worked out before it does
+    S, I = ss.states('S I')
+    rec = ss.par(ss.peryear(2))
+    sis = ss.Disease(infection=S >> I @ ss.peryear(4)*I, recovery=ss.Transition(I, S, rate=rec), init_prev=0.1, name='sis')
+    late = lambda sim: ss.peryear(np.full(len(sim.people), 2.0)) if sim.initialized else 1/0 # Fails if read at init
+    ss.Sim(diseases=sis, interventions=ss.modify('sis.pars.rec', set=late), n_agents=200, stop=2002, verbose=0).run()
     return sim
 
 
@@ -542,6 +568,58 @@ def test_code_seams():
     return sim
 
 
+def test_define_transitions():
+    sc.heading('A declared disease whose structure depends on its arguments, declared on self in __init__()')
+
+    class SIRS(ss.Disease):
+        def __init__(self, waning=True, **kwargs):
+            super().__init__(init_prev=0.01, **kwargs)
+            self.define_states(ss.states('S I R'))
+            beta = ss.par(0.3)
+            self.define_transitions(
+                infection = self.S >> self.I @ beta*self.I,
+                recovery  = self.I >> self.R @ ss.days(10),
+            )
+            if waning: # A transition only some versions have
+                self.define_transitions(waning=self.R >> self.S @ ss.days(100))
+            self.define_results(prevalence=self.I.frac)
+
+    class ClassSIRS(ss.Disease): # The same model in a class body
+        S, I, R = ss.states(3)
+        beta = ss.par(0.3)
+        infection = S >> I @ beta*I
+        recovery  = I >> R @ ss.days(10)
+        waning    = R >> S @ ss.days(100)
+        prevalence = I.frac
+
+    assert list(SIRS(waning=False).transitions) == ['infection', 'recovery']
+    kw = dict(unit='day', stop=100, verbose=0)
+    sim = ss.Sim(SIRS(name='sirs'), **kw).run()
+    ref = ss.Sim(ClassSIRS(init_prev=0.01, name='sirs'), **kw).run()
+    assert np.allclose(sim.results.sirs.prevalence, ref.results.sirs.prevalence)
+
+    class Extra(SIRS): # A subclass declares more after its parent's __init__(), including after a parameter for its own code
+        def __init__(self, **kwargs):
+            super().__init__(**kwargs)
+            self.define_pars(code_par=1.0)
+            self.define_transitions(extra=self.R >> self.I @ ss.peryear(0.1))
+    extra = Extra()
+    assert 'extra' in extra.transitions and 'code_par' in extra.code_pars
+
+    class Fitted(ss.Disease): # A parameter given with bounds is a value, not a declaration, so the states and transitions can follow
+        def __init__(self, **kwargs):
+            super().__init__(**kwargs)
+            self.define_states(ss.states('S I'))
+            self.define_transitions(infection=self.S >> self.I @ 0.1*self.I)
+    assert Fitted(init_prev=ss.par(0.1, bounds=[0, 0.2])).pars.init_prev.bounds == [0, 0.2]
+
+    with pytest.raises(ss.CapabilityError): # Declared once, while it is made
+        sirs = SIRS()
+        sirs.graph
+        sirs.define_states(ss.State('V'))
+    return sim
+
+
 if __name__ == '__main__':
     do_plot = True
     sc.options(interactive=do_plot)
@@ -561,3 +639,4 @@ if __name__ == '__main__':
     cong  = test_congenital()
     seeded = test_strains_seeding()
     test_strains_errors()
+    define = test_define_transitions()

@@ -217,19 +217,14 @@ website:
           contents:
             - api/transitions.qmd
             - api/conditions.qmd
-            - api/expressions.qmd
             - api/dimensions.qmd
             - api/strains.qmd
-            - api/graph.qmd
-            - api/presentation.qmd
-            - api/spec.qmd
         - section: "**Modules**"
           contents:
             - api/modules.qmd
             - api/diseases.qmd
             - api/networks.qmd
             - api/demographics.qmd
-            - api/pregnancy.qmd
             - api/interventions.qmd
             - api/products.qmd
             - api/analyzers.qmd
@@ -238,7 +233,7 @@ website:
           contents:
             - api/run.qmd
             - api/fit.qmd
-            - api/gradients.qmd
+            - api/internals.gradients.qmd
             - api/geo.qmd
             - api/data.qmd
             - api/interop.qmd
@@ -254,10 +249,16 @@ website:
             - api/dates.qmd
             - api/timeline.qmd
             - api/distributions.qmd
-            - api/errors.qmd
             - api/settings.qmd
-            - api/debugtools.qmd
             - api/utils.qmd
+        - section: "**Internals**"
+          contents:
+            - api/internals.expressions.qmd
+            - api/internals.graph.qmd
+            - api/internals.presentation.qmd
+            - api/internals.spec.qmd
+            - api/internals.errors.qmd
+            - api/internals.debugtools.qmd
 
 quartodoc:
   package: starsim
@@ -274,31 +275,30 @@ quartodoc:
         - connectors
         - data
         - dates
-        - debugtools
         - demographics
         - dimensions
         - diseases
         - distributions
-        - errors
-        - expressions
         - fit
         - geo
-        - gradients
-        - graph
+        - internals.debugtools
+        - internals.errors
+        - internals.expressions
+        - internals.gradients
+        - internals.graph
+        - internals.presentation
+        - internals.spec
         - interventions
         - loop
         - modules
         - networks
         - parameters
         - people
-        - pregnancy
-        - presentation
         - products
         - results
         - run
         - settings
         - sim
-        - spec
         - strains
         - time
         - timeline

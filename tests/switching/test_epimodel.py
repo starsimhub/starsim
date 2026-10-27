@@ -58,10 +58,10 @@ def test_epimodel_fit():
     data = pd.DataFrame(dict(t=[50, 62, 75, 87, 100], prevalence=ref_target))
     net = lambda: ssl.DegreeNet(n_contacts=0.7, concurrency=0.22, max_contacts=3, dur=50)
     sim = ss.Sim(make_sis(beta=ss.par(ss.prob(0.64), bounds=[0.05, 0.95])), networks=net(), n_agents=300, stop=100, data=data, verbose=0)
-    fit = sim.fit(n_trials=40, rand_seed=1, verbose=0) # Optuna's first 10 trials are random draws, so it needs more to settle
+    fit = sim.fit(n_trials=40, n_runs=4, rand_seed=1, verbose=0) # Optuna's first 10 trials are random draws, so it needs more to settle; one run of 300 agents has a spread of about 8 points, so each trial takes the mean of 4
     reruns = [fit.sim.new(networks=net(), rand_seed=100+i).run().results.sis.prevalence[50:].mean() for i in range(20)] # The mean of 5 runs has a spread of about 3.6 points at this size
     prev = np.mean(reruns)
-    assert abs(prev - ref_target) < 0.06, f'Fresh runs at the fitted beta give a prevalence of {prev:.1%}, not the {ref_target:.0%} it was fitted to' # Within 6 points: a fit on 300 agents gave 29% to 37% over seeds (2026-10-25)
+    assert abs(prev - ref_target) < 0.06, f'Fresh runs at the fitted beta give a prevalence of {prev:.1%}, not the {ref_target:.0%} it was fitted to' # Within 6 points: with 4 runs per trial, a fit on 300 agents gave 27% to 31% over seeds (with 1, 27% to 38%; 2026-10-26)
     return fit
 
 

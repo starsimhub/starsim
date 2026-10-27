@@ -1,5 +1,5 @@
 """
-Test the exact draws in starsim/perflib/_draws.py against their distributions
+Test the exact draws in starsim/perflib/draws.py against their distributions
 """
 
 # %% Imports and settings

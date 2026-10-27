@@ -19,7 +19,7 @@ Every named error SHOULD have:
 3. **What to do about it**, as code the user could paste where possible, with the closest matching names for anything misspelled (and none when nothing is close).
 
 ```text
-starsim.errors.WrongDimension: the rate of the transition "recovery" is a plain number (a rate times a duration), not a rate:
+starsim.internals.errors.WrongDimension: the rate of the transition "recovery" is a plain number (a rate times a duration), not a rate:
        rate = peryear(0.1) * days(3) = 0.00082158
      A rate times a duration is a probability over that duration, not a rate; give the rate itself, e.g. rate=ss.peryear(0.1).
 ```

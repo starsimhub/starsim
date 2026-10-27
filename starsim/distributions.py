@@ -9,7 +9,7 @@ import scipy.stats as sps
 import scipy.special as sp_special
 import starsim as ss
 import matplotlib.pyplot as plt
-from .perflib import _draws as draws, _cache
+from .perflib import draws, cache as _cache
 ss_int = ss.dtypes.int
 
 
@@ -66,6 +66,15 @@ def inverse(name, rands, *pars, big=None, fallback=None):
         inds = np.flatnonzero(np.broadcast_to(big, u.shape))
         out[inds] = fallback(u[inds], inds)
     return out
+
+
+def every(x):
+    """ np.all(x), for a parameter's check: a number (or the bool of one) is tested in Python, since np.all() of one costs more than a small draw """
+    return x.all() if isinstance(x, np.ndarray) else bool(x)
+
+def some(x):
+    """ np.any(x), likewise """
+    return x.any() if isinstance(x, np.ndarray) else bool(x)
 
 
 static_types = (int, float, bool, type(None), np.number, type) # Parameter values that cannot change without being replaced
@@ -840,10 +849,7 @@ class Dist:
                         slots = uids.view(np.ndarray)
                     else:
                         slots = ss.Arr.__getitem__(self.slots, uids) if isinstance(self.slots, ss.IndexArr) else self.slots[uids] # The slots as stored (32-bit), rather than as UIDs
-                    if len(slots): # Handle case where uids is boolean
-                        size = slots.max() + 1
-                    else:
-                        size = 0
+                    size = len(slots) # One uniform each (a distribution drawn without its inverse draws for every slot up to the largest: see rvs())
             else:
                 slots = np.array([])
                 size = 0
@@ -907,7 +913,9 @@ class Dist:
         - Rates are multiplied by `dt` (so the result will be a number of events, or else the equivalent multiplicate value for the timestep)
         """
         # Check through and see if anything is a timepar
-        timepar_dict = {key:type(timepar_of(val)) for key,val in self._pars.items() if timepar_of(val) is not None}
+        timepar_dict = {key:type(tp) for key,val in self._pars.items() if (tp := timepar_of(val)) is not None}
+        if not timepar_dict and self.unit is None: # Plain numbers (the usual case, e.g. values worked out for agents): nothing to check or convert
+            return
 
         # Check for e.g. ss.normal(ss.years(3), ss.years(2), unit=ss.days)
         if self.unit is not None and len(timepar_dict):
@@ -1038,7 +1046,7 @@ class Dist:
 
     def convert_callable(self, parkey, func, size, uids):
         """ Method to handle how callable parameters are processed; not for the user """
-        size_par = sc.ifelse(uids, size, ss.uids()) # Allow none size
+        size_par = uids if uids is not None else size if size is not None else ss.uids() # Allow none size
         if not getattr(self, '_callable_keys', None):
             module = self.module
             mapping = {
@@ -1132,7 +1140,7 @@ class Dist:
     def ppf(self, rands):
         """ Return default random numbers for array parameters; not for the user """
         scale = self.dist.kwds.get('scale')
-        if scale is not None and np.any(scale == 0): # SciPy gives NaN (and a warning) for scale=0, but NumPy (and the limit) gives loc
+        if scale is not None and some(scale == 0): # SciPy gives NaN (and a warning) for scale=0, but NumPy (and the limit) gives loc
             with np.errstate(invalid='ignore'):
                 rvs = self.dist.ppf(rands)
             return np.where(scale == 0, self.dist.kwds.get('loc', 0), rvs)
@@ -1197,6 +1205,8 @@ class Dist:
                 rands = rands[slots] # Get random values
             rvs = self.ppf(rands) # Convert to actual values via the PPF
         else:
+            if slots is not None: # For every slot up to the largest, so that each agent's draw is their slot's
+                self._size = slots.max() + 1 if len(slots) else 0
             rvs = self.make_rvs() # Or, just get regular values
             if self._slots is not None:
                 rvs = ss.arrays.nb_indexer(rvs, self._slots) if self._slots.size >= ss.arrays.numba_indexing else rvs[self._slots] # Numba indexer is ~1.3x faster for large gathers
@@ -1252,7 +1262,7 @@ class Dist:
 
     def crn_key(self):
         """
-        For a compiled loop that draws the uniforms itself (e.g. `ss.perflib._passes.infect()`, or a method compiled by `ss.jit`), in place of `rvs(uids)`: the seed and
+        For a compiled loop that draws the uniforms itself (e.g. `ss.perflib.passes.infect()`, or a method compiled by `ss.jit`), in place of `rvs(uids)`: the seed and
         index of this call's draws, which are `hash_uniforms(seed, ind, slots)` at `dtype`, with the bookkeeping of one call to
         `rvs()`; not for the user. None if they cannot be drawn that way (without common random numbers, or while the draws
         are being recorded or debugged), in which case `rvs()` is called instead.
@@ -1433,7 +1443,7 @@ class normal(Dist):
     def ppf(self, rands):
         """ The inverse CDF: the same arithmetic as SciPy's, without its checking of the arguments, which is most of the cost of a small draw """
         scale = np.asarray(self.dist.kwds['scale'])
-        if not np.all(scale > 0): # Leave the unusual cases to SciPy
+        if not every(scale > 0): # Leave the unusual cases to SciPy
             return super().ppf(rands)
         return sp_special.ndtri(rands)*scale + np.asarray(self.dist.kwds['loc'])
 
@@ -1520,20 +1530,17 @@ class lognorm_im(Dist):
         if call:
             self.call_pars()
         p = self._pars
-        spars = sc.dictobj()
-        spars.s = p.sigma
-        spars.scale = np.exp(p.mean)
-        spars.loc = 0
+        spars = dict(s=p.sigma, scale=np.exp(p.mean), loc=0)
         self.update_dist_pars(spars)
         return spars
 
     def ppf(self, rands):
         s = np.asarray(self.dist.kwds['s'])
         scale = np.asarray(self.dist.kwds['scale'])
-        if np.all(s > 0) and np.all(scale > 0): # The same arithmetic as SciPy's, without its checking of the arguments, which is most of the cost of a small draw
+        if every(s > 0) and every(scale > 0): # The same arithmetic as SciPy's, without its checking of the arguments, which is most of the cost of a small draw
             return np.exp(s*sp_special.ndtri(rands))*scale + np.asarray(self.dist.kwds['loc'])
         rvs = Dist.ppf(self, rands)
-        if np.any(s == 0): # SciPy gives NaN for sigma=0, but NumPy (and the limit) gives exp(mean)
+        if some(s == 0): # SciPy gives NaN for sigma=0, but NumPy (and the limit) gives exp(mean)
             rvs = np.where(s == 0, self.dist.kwds['scale'], rvs)
         return rvs
 
@@ -1569,8 +1576,9 @@ class lognorm_ex(Dist):
         parameters of the underlying (implicit) distribution, which are the form expected by NumPy's
         and SciPy's lognorm() distributions.
         """
-        self.call_pars() # Since can't work with functions
         p = self._pars
+        if any(callable(v) and not isinstance(v, type) for v in p.values()): # Since can't work with functions (process_pars() has called them already, when drawing)
+            self.call_pars()
         mean = p.pop('mean')
         std = p.pop('std')
         if np.isscalar(mean) and mean <= 0:
@@ -1609,10 +1617,10 @@ class expon(Dist):
     def ppf(self, rands):
         """ The inverse CDF, compiled (see `ss.perflib.draws`); SciPy's for unusual parameters """
         scale, loc = self.dist.kwds.get('scale', 1.0), self.dist.kwds.get('loc', 0.0)
-        if not np.all(np.asarray(scale) > 0):
+        if not every(np.asarray(scale) > 0):
             return super().ppf(rands)
         rvs = inverse('expon', rands, scale)
-        return rvs + loc if np.any(loc) else rvs
+        return rvs + loc if some(loc) else rvs
 
 
 class poisson(Dist):
@@ -1658,7 +1666,7 @@ class poisson(Dist):
                 self._ppf_cdf = sps.poisson.cdf(np.arange(kmax + 1), lam)
                 self._ppf_lam = lam
             rvs = np.searchsorted(self._ppf_cdf, rands, side='left') # side='left' matches sps.poisson.ppf
-        elif np.all(lam >= 0):
+        elif every(lam >= 0):
             rvs = inverse('poisson', rands, lam, big=lam > ss.perflib.draws.INV_MAX, fallback=lambda u, i: sps.poisson.ppf(u, lam[i]))
         else:
             rvs = self.dist.ppf(rands)
@@ -1741,7 +1749,7 @@ class nbinom(Dist):
     def ppf(self, rands):
         """ The inverse CDF, compiled (see `ss.perflib.draws`); SciPy's above a mean of 30, and for unusual parameters """
         n, p = np.asarray(self.dist.kwds['n']), np.asarray(self.dist.kwds['p'])
-        if not (np.all(n > 0) and np.all(p > 0) and np.all(p <= 1)):
+        if not (every(n > 0) and every(p > 0) and every(p <= 1)):
             return super().ppf(rands)
         big = n*(1 - p)/p > ss.perflib.draws.INV_MAX
         return inverse('nbinom', rands, n, p, big=big, fallback=lambda u, i: sps.nbinom.ppf(u, n if n.ndim == 0 else n[i], p if p.ndim == 0 else p[i]))
@@ -1764,7 +1772,7 @@ class binom(Dist):
     def ppf(self, rands):
         """ The inverse CDF, compiled (see `ss.perflib.draws`); SciPy's above a mean of 30 (on the smaller side of 1/2), and for unusual parameters """
         n, p = np.asarray(self.dist.kwds['n']), np.asarray(self.dist.kwds['p'])
-        if not (np.all(n >= 0) and np.all(n == np.floor(n)) and np.all(p >= 0) and np.all(p <= 1)):
+        if not (every(n >= 0) and every(n == np.floor(n)) and every(p >= 0) and every(p <= 1)):
             return super().ppf(rands)
         big = n*np.minimum(p, 1 - p) > ss.perflib.draws.INV_MAX
         return inverse('binomial', rands, n, p, big=big, fallback=lambda u, i: sps.binom.ppf(u, n if n.ndim == 0 else n[i], p if p.ndim == 0 else p[i]))
@@ -1864,10 +1872,10 @@ class weibull(Dist):
         """ The inverse CDF, compiled (see `ss.perflib.draws`); SciPy's for unusual parameters """
         kw = self.dist.kwds
         c, scale, loc = kw['c'], kw.get('scale', 1.0), kw.get('loc', 0.0)
-        if not (np.all(np.asarray(c) > 0) and np.all(np.asarray(scale) > 0)):
+        if not (every(np.asarray(c) > 0) and every(np.asarray(scale) > 0)):
             return super().ppf(rands)
         rvs = inverse('weibull', rands, c, scale)
-        return rvs + loc if np.any(loc) else rvs
+        return rvs + loc if some(loc) else rvs
 
     def make_rvs(self):
         """ Use SciPy rather than NumPy to include the scale parameter """

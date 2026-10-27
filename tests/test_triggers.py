@@ -204,6 +204,33 @@ def test_after_event():
     return
 
 
+@sc.timer()
+def test_stay_keeps_course():
+    sc.heading('Testing that the rest of a split on an event (ss.stay) keep their course, and that two times after an event in the same step both happen')
+    common = dict(n_agents=2000, start=2000, stop=2004, dt=ss.months(1), **kw)
+
+    # A share move to P a month after infection, and the rest stay in A, where they still clear 6 months after infection
+    S, A, P = ss.states('S A P')
+    infection = S >> A @ ss.peryear(1.0)
+    clearance = A >> S @ ss.constant(ss.months(6))
+    progress = ss.Transition(A, [P, ss.stay], p=[0.0, None], on=infection, dur=ss.constant(ss.months(1)))
+    res = ss.Sim(ss.Disease(infection, clearance, progress, name='d'), **common).run().results.d
+    assert np.array_equal(res.clearance.values[6:], res.infection.values[:-6]) # Everyone clears exactly 6 months after infection
+
+    # A share seek care 3 months after symptoms and stay symptomatic; everyone clears 3 months after symptoms, in the same step or, if seeking care then, the next
+    S, P, Y = ss.states('S P Y')
+    infection = S >> P @ ss.peryear(1.0)
+    symptoms = P >> Y @ ss.constant(ss.months(1))
+    seek = ss.Transition(Y, [Y, ss.stay], p=[0.5, None], on=symptoms, dur=ss.constant(ss.months(3)))
+    clearance = ss.Transition(Y, S, on=symptoms, dur=ss.constant(ss.months(3)))
+    sought = []
+    count = lambda sim: sought.append(len(sim.diseases.d.seek.uids)) # Its event: those who sought care, not those who stayed
+    res = ss.Sim(ss.Disease(infection, symptoms, seek, clearance, name='d'), analyzers=count, **common).run().results.d
+    assert res.Y[-1] <= res.symptoms.values[-4:].sum() # Nobody is left symptomatic for good: only those whose symptoms began in the last 4 months
+    assert sum(sought) == res.seek.sum() > 0
+    return
+
+
 def treated_event(solver):
     S, I = ss.states('S I')
     a = ss.Disease(inf=ss.Transition(S, I, rate=ss.peryear(0.5)), cure=ss.Transition(I, S), name='a')
@@ -262,5 +289,6 @@ if __name__ == '__main__':
     test_ct_by_sex()
     test_with_conveyor()
     test_after_event()
+    test_stay_keeps_course()
     test_treated_event()
     test_hpv_cancel_event()

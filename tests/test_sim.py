@@ -468,8 +468,8 @@ def test_rescale():
     def make_sim(init_inf, **kwargs):
         sir = ss.SIR(beta=ss.perday(0.025), dur_inf=ss.days(10), init_prev=ss.choose_n(init_inf), p_death=0)
         return ss.Sim(n_agents=5e3, pop_scale=10, diseases=sir, networks=ss.RandomNet(n_contacts=10), dt=ss.days(1), dur=ss.days(150), verbose=0, **kwargs)
-    fixed = make_sim(init_inf=2).run()
-    rescaled = make_sim(init_inf=20, rescale=True).run()
+    fixed = make_sim(init_inf=5).run() # Enough seeds that the epidemic seldom dies out (with 2, a run in 6 does)
+    rescaled = make_sim(init_inf=50, rescale=True).run()
     scale = rescaled.results.pop_scale
     assert scale[0] == 1 and scale[-1] == 10 # Scale starts at 1 and ends at pop_scale
     assert make_sim(init_inf=20, rescale=True).current_scale == 1 # Available before the sim is initialized

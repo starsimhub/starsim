@@ -12,10 +12,10 @@ the common draws are all fast and none is a performance cliff, plus `ss.jit` for
     ss.perflib.compiling()                      # Say what is being compiled, and about how long it takes
 """
 import starsim as ss
-from . import _draws as draws
-from . import _passes
-from ._memory import keep as keep_memory, release as release_memory
+from . import draws
+from . import passes
+from .memory import keep as keep_memory, release as release_memory
 if ss.options.keep_memory:
-    keep_memory() # Large arrays freed are kept for reuse, so new ones take no page faults: see _memory.py
-from ._jit import jit, key, uniform, binomial, poisson
-from ._cache import compiling
+    keep_memory() # Large arrays freed are kept for reuse, so new ones take no page faults: see memory.py
+from .jit import jit, key, uniform, binomial, poisson # ss.perflib.jit is the function; its module is starsim.perflib.jit
+from .cache import compiling

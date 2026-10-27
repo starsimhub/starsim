@@ -685,6 +685,10 @@ class Engine:
             elif p.slot in ['rate', 'dur'] and not isinstance(out, ss.TimePar) and not isinstance(raw, ss.transitions.TimeValue) and self.inferred_unit: # An expression has the units of its own values
                 self.bare_return(p, raw, out)
             return self.modified(p, self.convert(out)) # Not cached, since it can depend on the current state
+        elif isinstance(raw, dict) and self._routes is None and not len(self.sim.networks): # A beta for each route, under homogeneous mixing: the value of the routes it does not name
+            if 'default' not in raw:
+                raise ss.errors.RouteMismatch(f'beta for "{self.mod.name}" has a value for each of the routes {sc.strjoin(raw.keys())}, but there are none (homogeneous mixing); give default= for the routes it does not name, or give the sim its networks')
+            out = self.plain_value(raw['default'])
         elif isinstance(raw, dict): # A beta for each route; in a compartmental run it is applied to the exposure through each instead (see Compartmental.route_betas())
             out = 1.0 if self._routes is not None else {k:self.convert_beta(v) for k,v in raw.items()}
         elif self._routes is not None and key in self.routed: # A beta applied to the exposure through each route (see Compartmental.route_betas())
@@ -711,7 +715,7 @@ class Engine:
     def modified(self, p, value):
         """ Apply the modifiers that are active on a parameter: set, then multiply, then add """
         mods = self.sim.modifiers.get((self.mod.name, 'par', p.name)) if (p.name and not p.literal) else None
-        if not mods:
+        if not mods or getattr(self, '_unmodified', False): # See note_steps()
             return value
         out = self.reduce(ss.connectors.combine(mods, value, self), what=p.name)
         return self.clip(out, f'{self.mod.name}.pars.{p.name}') if p.slot in ['rate', 'dur'] else out
@@ -759,8 +763,8 @@ class Engine:
         """ For a branch with where=: 1 for the people it is open to and 0 for the others (agents: for `uids`; compartments: for each group of `state`, if the condition is on states and strata), or None """
         sel = self.selector
         if sel.abm:
-            mask = np.asarray(sel.select(tr.where), dtype=float)
-            return mask[uids] if uids is not None else mask
+            mask = np.asarray(sel.select(tr.where))
+            return (mask[uids] if uids is not None else mask).astype(float) # For the agents asked for only
         if not ss.conditions.is_static(tr.where, self.sim):
             return None
         frac = np.broadcast_to(np.asarray(sel.select(tr.where), dtype=float), (len(sel.states), self.n_groups))
@@ -1191,7 +1195,7 @@ class Engine:
     def dwell_mods(self, name, raw, dw, to_unit):
         """
         The modifiers of a dwell time's parameter when it is a distribution (e.g. `ss.modify('sir.pars.dur_inf', set=ss.constant(ss.years(5)))`), as agents:
-        `dw.mods` are the modifiers, and `dw.sets` the distribution each set= draws from (a duration is the mean of an exponential, as for dur=), with its mean.
+        `dw.mods` are the modifiers, and `dw.sets` the distribution each set= draws from, by the modifier's index (not its id, which would be in the path its seed is made from) (a duration is the mean of an exponential, as for dur=), with its mean.
         People who enter the state while one is active draw from it; those already there have what is left of their dwell rescaled by the change in its mean (see `Agents.rescale_exits()`).
         """
         p = dw.par
@@ -1221,7 +1225,7 @@ class Engine:
             if new is None or ss.transitions.varying_pars(new):
                 raise ss.CapabilityError(f'the modifier "{m.name}" sets {path}, the dwell time of "{name}", to {m.amount}; a dwell time that is a distribution can be set to another distribution with fixed parameters, or to a duration (the mean of an exponential).')
             mean, std = ss.transitions.dwell_stats(new, to_unit)
-            dw.sets[id(m)] = Bunch(key=f'dwell_{name}_{i}', dist=ss.transitions.numeric_dist(new, to_unit), mean=mean)
+            dw.sets[i] = Bunch(key=f'dwell_{name}_{i}', dist=ss.transitions.numeric_dist(new, to_unit), mean=mean)
         return
 
     def transfer_dist(self, tf, per_agent=None):
@@ -1233,7 +1237,14 @@ class Engine:
         return ss.transitions.numeric_dist(raw, lambda val: convert(val, unit), per_agent=per_agent)
 
     def note_steps(self):
-        """ In a run that takes whole steps, say which transitions are fast compared with the timestep """
+        """ In a run that takes whole steps, say which transitions are fast compared with the timestep: by the parameters' own values, without their modifiers, which may read what does not exist until the run (e.g. a property of people another module adds) """
+        with self.evaluating(unmodified=True):
+            self.note_fast_steps()
+        self.cache.clear() # Values worked out without their modifiers
+        return
+
+    def note_fast_steps(self):
+        """ See `note_steps()` """
         sim = self.sim
         for tr in self.graph.transitions.values(): # A rate per person that grows with a count of people, which is often a count written for a share
             if tr.people and not tr.inflow and tr.rate is not None and tr.flow_given is None and ss.transitions.count_power(tr.rate) > 0 and not self.plausible_density(tr): # Not for the whole flow written without a total (beta*S*I), which says so
@@ -1542,7 +1553,8 @@ class Engine:
             if stages is not None and not stages.dwell.exact: # Erlang stages: see ss.dimensions.transfer_stages()
                 self.note_stages(name, stages.dwell)
         mod.define_results(*results)
-        ss.results.in_people(*[r for r in mod.results.values() if isinstance(r, ss.Result)]) # Scaled when written: see update_results()
+        written = {r.name for r in results if isinstance(r, ss.Result)} | set(graph.states) | set(graph.transitions) # Those the engine writes, which are scaled when written (see update_results()); not those of the disease's own code, which are counted in agents and scaled at the end
+        ss.results.in_people(*[r for key,r in mod.results.items() if isinstance(r, ss.Result) and (key in written or key.partition('.')[0] in graph.transitions)])
 
         # Stratified results are one result with a dimension for each stratification: see res.select() and res.by()
         ng = self.sim.groups.n_groups
@@ -1797,7 +1809,9 @@ class Engine:
         res = mod.results
         ti = mod.ti
         scale = ss.results.people_scale(self.sim) # As agents, counts of people are written in people
-        people = [r for r in res.values() if getattr(r, 'in_people', False)]
+        if getattr(self, '_in_people', (None, None))[0] != len(res): # The results counted in people, found once (results are not added during the run)
+            self._in_people = (len(res), [r for r in res.values() if getattr(r, 'in_people', False)])
+        people = self._in_people[1]
         for r in people: # The values by group, as they are kept
             r.write_scale = scale
         if getattr(getattr(self.sim.people, 'scale', None), 'weighted', False): # Agents of different weights (people.scale) make fractions of people
