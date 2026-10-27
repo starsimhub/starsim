@@ -30,3 +30,5 @@ Other commands:
 - `./check_notebooks.py` runs every tutorial and user guide page and reports any errors, without building the site.
 - `./publish` builds the site and publishes it to GitHub Pages.
 - `./clean_all` deletes the build files and outputs.
+- `./qrender` is a faster `./render` for working on the docs: it runs notebooks and renders pages in parallel, keeps going if a notebook fails, and only re-renders pages that changed. It needs a Quarto build with the `--jobs`, `--keep-going` and `--incremental` options (set `QUARTO` to its path).
+- `quarto clean` (with the same Quarto build) removes the `*_files` folders that interrupted renders leave next to the pages.
