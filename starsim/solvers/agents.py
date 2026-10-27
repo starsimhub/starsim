@@ -321,7 +321,6 @@ class Agents(Engine, Transmission):
         for state in graph.people_states:
             add(f'branch_{state.name}', ss.random())
             add(f'exit_{state.name}', ss.random())
-            add(f'round_{state.name}', ss.random()) # Whether a dwell time is rounded up or down to whole steps: see whole_steps()
         carriage = any(getattr(strat, 'carries', None) is not None for strat in self.sim.groups.strats)
         self.lifetables = {name:None for name,tr in graph.transitions.items() if getattr(tr, 'lifetable', None) is not None} # Who dies in each step by each life table: see step_lifetables()
         for name in self.lifetables:
@@ -346,10 +345,8 @@ class Agents(Engine, Transmission):
         for name,delay in self.delays.items():
             raw = ss.transitions.by_dist(getattr(delay, 'raw', None))
             add(f'after_{name}', ss.transitions.numeric_dist(raw, self.convert, per_agent=self.agent_values) if isinstance(raw, ss.Dist) else ss.random()) # A scalar is the mean of an exponential, as for any dur=
-            add(f'round_after_{name}', ss.random())
         for name,tf in graph.transfers.items():
             add(f'transfer_{name}', self.tf_dists.get(name, ss.random()))
-            add(f'round_transfer_{name}', ss.random())
             if tf.p is not None:
                 add(f'transfer_to_{name}', ss.random()) # Which level they move to
         if self.sim.mixing.migration is not None:
@@ -2163,7 +2160,7 @@ class Agents(Engine, Transmission):
             dur = self.draw(f'after_{tr.name}', new)
             if not isinstance(ss.transitions.by_dist(getattr(self.delays[tr.name], 'raw', None)), ss.Dist): # A scalar: an exponential with that mean
                 dur = ss.distributions.inverse('expon', dur, np.broadcast_to(np.asarray(self.eval_for(self.delays[tr.name], new), dtype=float), len(new)))
-            due[new] = self.ti + self.whole_steps(f'after_{tr.name}', new, dur) # As for a dwell time
+            due[new] = self.ti + self.whole_steps(new, dur) # As for a dwell time
             pending = np.sort(np.concatenate([pending, new])) # As np.union1d(), since none of the new ones is pending
         now = pending[due.raw[pending] <= self.ti]
         if taken is not None: # Those another trigger moves now keep their time, so it is taken in the next step if they are still in the source
@@ -2487,17 +2484,13 @@ class Agents(Engine, Transmission):
 
         return self.dest_shares(tr, ps, uids, stay=self.ends_given(tr, lambda p: self.eval_for(p, uids))) # With ss.stay or ss.null, what the states leave over stays or dies
 
-    def whole_steps(self, key, uids, dur, dt=None):
+    def whole_steps(self, uids, dur, dt=None):
         """
-        Dwell times (in a state, by its name, or before a delayed move or a transfer) as whole numbers of steps, rounded up or down at random
-        in proportion (FP55: 0.2 steps is 0 steps 80% of the time and 1 step 20%), so their mean is kept; a dwell of 0 (dur=0) stays 0, a move in the step people enter
+        Dwell times (in a state, or before a delayed move or a transfer) as whole numbers of steps, rounded up or down at random in proportion
+        by each agent's phase, as `ss.TimeArr.due()` rounds a time (see `ss.People.phase()`; FP55: 0.2 steps is 0 steps for 80% of agents and
+        1 step for 20%), so their mean is kept; a dwell of 0 (dur=0) stays 0, a move in the step people enter
         """
-        steps = np.asarray(dur, dtype=float)/(dt or self.dt)
-        whole = np.floor(steps)
-        part = np.isfinite(steps) & (steps != whole)
-        if part.any():
-            whole[part] += self.draw(f'round_{key}', uids[part]) < steps[part] - whole[part]
-        return whole
+        return np.floor(np.asarray(dur, dtype=float)/(dt or self.dt) + self.sim.people.phase(uids))
 
     def new_round(self):
         """
@@ -2801,7 +2794,7 @@ class Agents(Engine, Transmission):
             best[earlier] = dur[earlier]
             which[earlier] = i
 
-        steps = self.whole_steps(name, new, best)
+        steps = self.whole_steps(new, best)
         loops = self.loops_of[name]
         if loops.any(): # Back to this state: taken again no sooner than the next step, so a dwell shorter than a step does not go round within one
             again = (which >= 0) & loops[np.maximum(which, 0)] & (best > 0)
@@ -2915,11 +2908,11 @@ class Agents(Engine, Transmission):
                 ok = ~stalled
                 new_exit[ok] = ti + np.maximum(ti_exit[ok] - 0.5 - ti, 0)*before[ok]/now[ok] # A scheduled exit is a whole step, so what is left is taken from the middle of it
                 if stalled.any(): # Now that their rate is not 0, a dwell is drawn from now
-                    new_exit[stalled] = ti + self.whole_steps(name, sel[stalled], self.sample_dwell(candidates[i], sel[stalled]))
+                    new_exit[stalled] = ti + self.whole_steps(sel[stalled], self.sample_dwell(candidates[i], sel[stalled]))
                 lost = ok & np.isinf(ti_exit) # Never (a rate of 0, which has changed), so the dwell time is gone: drawn again from now, less what has passed of it since entering (as if it had stalled)
                 if lost.any():
                     passed = (ti - mod[f'ti_{name}'].raw[sel[lost]])*before[lost]/now[lost]
-                    new_exit[lost] = ti + self.whole_steps(name, sel[lost], np.maximum(self.sample_dwell(candidates[i], sel[lost]) - passed*self.dt, 0))
+                    new_exit[lost] = ti + self.whole_steps(sel[lost], np.maximum(self.sample_dwell(candidates[i], sel[lost]) - passed*self.dt, 0))
                 mod[f'ti_exit_{name}'].raw[sel] = np.ceil(new_exit) # The step it falls in
                 mod[f'mult_{name}'][sel] = now
         return
@@ -3443,7 +3436,7 @@ class Agents(Engine, Transmission):
         if len(uids):
             with np.errstate(divide='ignore'): # Stopped by a modifier: never
                 dur = self.draw(f'transfer_{name}', uids)/self.mult('transition', name, uids)
-            self.mod[f'ti_move_{name}'][uids] = ti + self.whole_steps(f'transfer_{name}', uids, dur, dt) # As for a dwell time
+            self.mod[f'ti_move_{name}'][uids] = ti + self.whole_steps(uids, dur, dt) # As for a dwell time
         return
 
     def step_transfers(self, dt):

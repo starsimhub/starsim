@@ -1,13 +1,17 @@
 # Run downstream tests on Starsim models.
 #
-# Note: this test runs on pushes/merges to main
-# and on PRs targeting main.
+# Note: this test runs on pushes/merges to main or v4
+# and on PRs targeting them.
+#
+# For now, each package's v4 branch is tested (it is an error if a package
+# has no v4 branch); set `ref` back to main once Starsim 4 is released.
 #
 # Current supported models are:
 #   1. STIsim
 #   2. FPsim
 #   3. HPVsim
 #   4. TBsim
+#   5. malariasim
 #
 # TBC:
 # - Typhoidsim (still in beta)
@@ -20,24 +24,27 @@ on:
   push:
     branches:
       - main
+      - v4
   pull_request:
     branches:
       - main
+      - v4
 
 jobs:
 
   test_downstream:
     name: ${{ matrix.model }} tests
-    timeout-minutes: 10
+    timeout-minutes: 30
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         include:
-          - {model: STIsim, repo: starsimhub/stisim, dir: stisim, install: pip install -e . -r tests/requirements.txt}
-          - {model: HPVsim, repo: starsimhub/hpvsim, dir: hpvsim, install: 'pip install -e ".[hiv]" -r tests/requirements.txt && hpvsim-download-data'} # [hiv] pulls in stisim, which the HIV tests need
-          - {model: TBsim,  repo: starsimhub/tbsim,  dir: tbsim,  install: pip install -e . -r tests/requirements.txt}
-          - {model: FPsim,  repo: starsimhub/fpsim,  dir: fpsim,  install: pip install -e . -r tests/requirements.txt}
+          - {model: STIsim,     repo: starsimhub/stisim,          ref: v4, dir: stisim,     install: pip install -e . -r tests/requirements.txt}
+          - {model: HPVsim,     repo: starsimhub/hpvsim,          ref: v4, dir: hpvsim,     install: 'pip install -e ".[hiv]" -r tests/requirements.txt && hpvsim-download-data'} # [hiv] pulls in stisim, which the HIV tests need
+          - {model: TBsim,      repo: starsimhub/tbsim,           ref: v4, dir: tbsim,      install: pip install -e . -r tests/requirements.txt}
+          - {model: FPsim,      repo: starsimhub/fpsim,           ref: v4, dir: fpsim,      install: pip install -e . -r tests/requirements.txt}
+          - {model: malariasim, repo: starsimhub/starsim-malaria, ref: v4, dir: malariasim, install: 'pip install -e ".[dev]" pytest-xdist'}
 
     steps:
       - name: Checkout Starsim
@@ -49,19 +56,26 @@ jobs:
       - name: Install Starsim
         run: pip install -e .
 
-      - name: Check out ${{ matrix.model }}
-        uses: actions/checkout@v7
+      - name: Check out ${{ matrix.model }} (${{ matrix.ref }})
+        uses: actions/checkout@v7 # Fails if the branch doesn't exist
         with:
           repository: ${{ matrix.repo }}
+          ref: ${{ matrix.ref }}
           path: ${{ matrix.dir }}
 
       - name: Install ${{ matrix.model }}
         working-directory: ./${{ matrix.dir }}
         run: ${{ matrix.install }}
 
+      - name: Reinstall Starsim # In case the package's requirements pulled in a released Starsim
+        run: pip install --no-deps -e .
+
       - name: Run ${{ matrix.model }} tests
         working-directory: ./${{ matrix.dir }}/tests
-        run: pytest test_*.py -n auto --durations=0 --junitxml=results.xml # Run actual tests
+        env:
+          SCIRIS_BACKEND: agg
+          STARSIM_SHOW: 0
+        run: pytest test_*.py -n auto --durations=0 --junitxml=results.xml
       - name: Upload test results
         uses: actions/upload-artifact@v7
         if: failure()

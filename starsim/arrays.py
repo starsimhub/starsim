@@ -936,9 +936,11 @@ class TimeArr(FloatArr):
     Times, as step numbers of the module's timeline: when something happened or is due for each agent, e.g. a declared disease's `ti_X` (when each entered state X) and `ti_exit_X`, as agents, and `people.ti_dead`
 
     Stored as float32 step numbers, NaN for "never" (not set), so `ti_I > 0` and `(sim.ti - ti_I)*sim.t.dt` give the right
-    answer. `due()` gives whose time has come, to the nearest step (so a time drawn between steps keeps its mean),
-    `isclose(sim.ti)` whose time is at this step, and `.years` converts them to years. `==` and `!=` raise, since a time
-    between steps never equals a step: `eq()` is exact equality.
+    answer. `due()` gives whose time has come, with a time between steps rounded up or down at random in proportion (by
+    each agent's phase, as the agent engine rounds a dwell time: see `ss.People.phase()`), so it keeps its mean;
+    `isclose(sim.ti)` gives whose time is taken at this step, and `.years` converts them to years. `==` and `!=` raise,
+    since a time between steps never equals a step: `eq()` is exact equality. For plain arithmetic on the times, compare
+    them: e.g. `ti_x < sim.ti + 0.5` is due at the nearest step, and `ti_x <= sim.ti` at the first step at or after it.
 
     A declared state's time of entering (`ti_X`) reads as the index of the step the move happened in, whatever kind of
     move it was (a progression at the step's start, an infection by contact at its end), so `ti_X.isclose(sim.ti)` is
@@ -972,13 +974,13 @@ class TimeArr(FloatArr):
         return vals + (self.shift.raw if key is None else self.shift.values if key is Ellipsis else self.shift[key])
 
     def due(self):
-        """ Whose time has come by the current step, as a boolean array (e.g. `mask = self.exposed & self.ti_infectious.due()`): a time between steps is due at the nearest step """
-        return self.asnew(self.shifted(self.raw) < self.t.ti + 0.5, cls=BoolArr)
+        """ Whose time has come by the current step, as a boolean array (e.g. `mask = self.exposed & self.ti_infectious.due()`): a time between steps is rounded up or down at random in proportion, by each agent's phase (see `ss.People.phase()`) """
+        return self.asnew(self.shifted(self.raw) + self.people.phase() < self.t.ti + 1, cls=BoolArr)
 
     def isclose(self, other):
-        """ Whose time is at the step nearest `other` (e.g. `self.ti_infectious.isclose(self.ti)`, those who became infectious this step, as `due()` counts them), as a boolean array """
-        vals = self.shifted(self.raw)
-        return self.asnew((vals >= other - 0.5) & (vals < other + 0.5), cls=BoolArr)
+        """ Whose time is taken at step `other` (e.g. `self.ti_infectious.isclose(self.ti)`, those who became infectious this step, as `due()` counts them), as a boolean array """
+        vals = self.shifted(self.raw) + self.people.phase()
+        return self.asnew((vals >= other) & (vals < other + 1), cls=BoolArr)
 
     def eq(self, other):
         """ Whose time is exactly `other`, as a boolean array (`==` and `!=` are refused: see `__eq__()`) """

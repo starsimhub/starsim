@@ -95,7 +95,7 @@ def test_sti_failure():
         return ss.Sim(ng, interventions=ss.treat(drug, where=ng.C, interval=ss.days(30), name='clinic'), **kwargs)
     for solver,sim in run_both(make_resist).items():
         res = sim.results
-        assert np.isclose(res.ng.fail.sum(), 0.05*res.clinic.failed.sum(), rtol=0.01 if solver == 'ode' else 0.3), f'{solver}: {res.ng.fail.sum()} of {res.clinic.failed.sum()} failures'
+        assert np.isclose(res.ng.fail.sum(), 0.05*res.clinic.failed.sum(), rtol=0.01 if solver == 'ode' else 0.5), f'{solver}: {res.ng.fail.sum()} of {res.clinic.failed.sum()} failures' # As agents, about 25 of 500 failures: a relative sd of 0.2
 
     # A transfer for those who failed, as a step of its own: resistance acquired
     def make_amr(**kwargs):

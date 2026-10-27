@@ -176,6 +176,34 @@ class People:
         """ The slot of every agent, by UID, for a kernel; or None while the slots are the UIDs (see `make_uids()`), which have no array of their own """
         return None if isinstance(self.slot.shared, ss.arrays.UIDArr) else self.slot.raw
 
+    def phase(self, uids=None):
+        """
+        Each agent's phase, in [0, 1), by UID: a time between steps, t, is taken at step floor(t + phase), so it is rounded up
+        or down at random in proportion (2.3 steps is 2 for 70% of agents and 3 for the rest), keeping its mean, with no draws:
+        both a time due in a disease written as code (`ss.TimeArr.due()`) and a dwell time of the agent engine. Spread evenly
+        over the slots (so an agent has the same phase in every scenario), and shifted by the sim's seed
+
+        Args:
+            uids (uids): the agents to give the phases of (worked out for them alone); by default, every agent's, kept until agents are made
+        """
+        if getattr(self, '_phase_shift', None) is None:
+            seed = getattr(getattr(self, 'sim', None), 'pars', {}).get('rand_seed', 0)
+            self._phase_shift = np.random.default_rng(seed).random()
+        of = lambda slot: (slot*0.6180339887498949 + self._phase_shift) % 1 # The golden ratio's fractional part spreads consecutive slots evenly
+        slots = self.slot_raw()
+        if uids is not None:
+            return of(uids if slots is None else slots[uids])
+        n, used = self.uid.len_tot, self.uid.len_used
+        phase, done = getattr(self, '_phase', (None, 0))
+        if phase is None or len(phase) != n: # The arrays have grown: keep the phases worked out so far
+            old, phase = phase, np.zeros(n, dtype=np.float32)
+            if old is not None:
+                phase[:done] = old[:done]
+        if used > done: # Slots are set when agents are made, so only the new agents' phases are worked out
+            phase[done:used] = of(np.arange(done, used) if slots is None else slots[done:used])
+        self._phase = (phase, used)
+        return phase
+
     def _link_state(self, state, die=True):
         """
         Link a state with the People instance for dynamic resizing; usually called by

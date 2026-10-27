@@ -16,7 +16,7 @@ Checks the "Starsim-family models" targets in `v4_design/targets.md` for this mo
 | covasim | `/home/cliffk/idm/covasim` | `main` (Covasim 4.0.1, on Starsim 3.7.2) | `v4` branch, and the prototypes in `v4port/` | `oct21/covasim_review.md` | Works, except with networks, including with strains |
 | fpsim | `/home/cliffk/idm/fpsim` | `main` | `v4` branch, and `v4port/` | `oct17/fpsim_review.md`, `oct21/fpsim_recheck.md` | Not required; report whether it works or how close it is |
 | hpvsim | `/home/cliffk/idm/hpvsim` | `main` | `v4` branch, and `v4port/` | `oct17/hpvsim_review.md`, `oct21/hpvsim_recheck.md` | Works, except with networks, including with strains (genotypes) |
-| malariasim | `/home/cliffk/idm/ngm/starsim-ngm` | `main` | `v4` branch, and `v4port/` | `oct17/malaria_review.md`, `oct21/malaria_recheck.md` | Unified compartmental and ABM representations, for both mosquitoes and humans |
+| malariasim | `/home/cliffk/idm/starsim-malaria` | `main` | `v4` branch, and `v4port/` | `oct17/malaria_review.md`, `oct21/malaria_recheck.md` | Unified compartmental and ABM representations, for both mosquitoes and humans |
 | stisim | `/home/cliffk/idm/stisim` | `main` | `v4` branch, and `v4port/` | `oct17/stisim_review.md`, `oct21/stisim_port.md` | Compartmental works for each disease alone; networks and some combinations of diseases may not be expressible |
 | tbsim | `/home/cliffk/idm/tbsim` | `main` | `v1.0.0` branch (the first real port to v4) | `oct21/tbsim_recheck.md` | Unified compartmental and ABM representation, except for households and the like |
 

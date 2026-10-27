@@ -1017,7 +1017,7 @@ class Pregnancy(Demographics, ss.Disease):
         w = np.where(pre, np.divide(u, q, out=np.zeros(len(u)), where=q>0)*p_pre, p_pre + np.divide(u - q, 1 - q, out=np.zeros(len(u)), where=q<1)*(1 - p_pre)) # Where in the given distribution
         inds = np.minimum(np.searchsorted(np.cumsum(p), w, side='right'), len(a) - 1)
         steps = np.asarray(ss.weeks(weeks[inds])/self.t.dt, dtype=float)
-        self.set_delivery(uids, self.ti_P.raw[uids] + 1 + self.engine.whole_steps('P', uids, steps, dt=1.0), weeks=weeks[inds]) # Rounded up or down at random, as the engine rounds a dwell time (see ss.solvers.Agents.whole_steps())
+        self.set_delivery(uids, self.ti_P.raw[uids] + 1 + self.engine.whole_steps(uids, steps, dt=1.0), weeks=weeks[inds]) # Rounded up or down at random, as the engine rounds a dwell time (see ss.solvers.Agents.whole_steps())
         return
 
     def lactate(self, moms, ti):

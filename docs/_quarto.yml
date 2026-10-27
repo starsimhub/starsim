@@ -1,7 +1,7 @@
 project:
   type: website
-  pre-render: python quarto_utils.py pre
-  post-render: python quarto_utils.py post
+  pre-render: qpyd prerender # API docs etc. (see the qpyd section below); skipped if Starsim and the config are unchanged
+  post-render: qpyd clean # Remove the files the notebooks write (see qpyd.clean below)
   output-dir: _site
   title: "Starsim"
   execute-dir: file
@@ -367,6 +367,18 @@ interlinks:
   aliases:
     starsim: [null, ss]
     starsim.library: [ssl]
+
+qpyd:
+  prerender:
+    commands: [python make_api.py] # The machine-readable API index (api.json, llms.txt, llms-full.txt)
+    inputs: [make_api.py]
+    outputs: [api.json, llms.txt, llms-full.txt]
+  clean: # Temporary files the tutorials and user guide pages write
+    - 'tutorials/**/my-*.*'
+    - 'tutorials/**/example*.*'
+    - 'user_guide/**/my-*.*'
+    - 'user_guide/**/example*.*'
+    - 'user_guide/results'
 
 execute:
   freeze: auto # Only re-execute notebooks that have changed
