@@ -49,7 +49,6 @@ There are two ways to construct a module, and inside either one, three ways to s
 
 ### The constructor form
 
-<!-- fragment -->
 ```python
 ss.Disease(
     *transitions,            # positional: transitions and outcomes, named from their variable names
@@ -192,7 +191,6 @@ Concretely:
 
 ## `ss.Sim`
 
-<!-- fragment -->
 ```python
 ss.Sim(
     modules,                     # a module, transitions, or a list of them; diseases=, demographics=, etc. also work
@@ -310,7 +308,6 @@ A module that only has states, transitions, parameters, and results does not def
 
 A module is not required to declare what it reads or writes. Declarations of that kind get forgotten and drift from the code, so the library observes instead:
 
-<!-- fragment -->
 ```python
 sim.what_modifies(hiv.rel_trans)     # the ss.modify() modifiers on it
 ```

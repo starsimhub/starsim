@@ -6,7 +6,6 @@ format; see `v4_design/design/16-interop.md`. Only the model spec (`sim.to_spec(
 is complete: the other formats carry less, and what is left out or changed is listed
 as `ss.errors.LossyExport`. An export does not fail because something cannot be carried.
 
-- `mermaid`: a diagram of each disease's states and transitions, labelled with their rates
 - `sbml`: the compartmental form as species and reactions (https://sbml.org), for any SBML tool
 - `odin`: the compartmental form as `deriv()` equations (https://mrc-ide.github.io/odin)
 
@@ -25,7 +24,7 @@ import pandas as pd
 import sciris as sc
 import starsim as ss
 
-__all__ = ['exporters', 'export', 'flatten', 'to_mermaid', 'to_sbml', 'to_odin', 'to_hub']
+__all__ = ['exporters', 'export', 'flatten', 'to_sbml', 'to_odin', 'to_hub']
 
 math_funcs = dict(exp='exp', log='ln', sqrt='root', abs='abs', absolute='abs', minimum='min', maximum='max', min='min', max='max', sin='sin', cos='cos', floor='floor', ceiling='ceiling')
 
@@ -193,34 +192,6 @@ def flatten(sim):
     return out
 
 
-#%% Mermaid
-
-def to_mermaid(sim):
-    """ A Mermaid flowchart of each disease's states and transitions, labelled with their rates; transmissions are dashed """
-    sim = initialized(sim)
-    diseases = [mod for mod in sim.diseases.values() if getattr(mod, 'graph', None) is not None]
-    many = len(diseases) > 1
-    lines = ['flowchart LR']
-    n_states = n_transitions = 0
-    for mod in diseases:
-        g = mod.graph
-        pre = f'{mod.name}_' if many else ''
-        indent = '    '*(2 if many else 1)
-        strats = strata(sim, mod)
-        title = mod.name + (f' (stratified by {"; ".join(strats)})' if strats else '')
-        if many:
-            lines.append(f'    subgraph {mod.name}["{title}"]')
-        elif strats: # A title above the chart
-            lines = ['---', f'title: {title}', '---'] + lines
-        lines += g.diagram(prefix=pre, indent=indent)
-        if many:
-            lines.append('    end')
-        n_states += len(g.states)
-        n_transitions += len(g.transitions)
-    summary = f'exported to Mermaid: {n_states} states, {n_transitions} transitions'
-    return ss.presentation.Diagram('\n'.join(lines) + '\n'), summary, []
-
-
 #%% SBML
 
 def mathml(node):
@@ -347,7 +318,6 @@ def to_odin(sim):
 #%% Exporting
 
 exporters = dict(
-    mermaid = to_mermaid,
     sbml    = to_sbml,
     odin    = to_odin,
 )
@@ -362,8 +332,8 @@ def export(sim, format, filename=None, verbose=None):
 
     Args:
         sim (`ss.Sim`): the sim, with declared diseases
-        format (str): one of `ss.interop.exporters`: 'mermaid', 'sbml', or 'odin'
-        filename (str): the file to write, if any (for Mermaid, a `.md` file has the diagram in a fenced block)
+        format (str): one of `ss.interop.exporters`: 'sbml' or 'odin'
+        filename (str): the file to write, if any
         verbose (bool): whether to print what was exported (by default, unless something was lost)
 
     Returns:
@@ -372,7 +342,7 @@ def export(sim, format, filename=None, verbose=None):
     **Examples**:
 
         ss.interop.export(sim, 'sbml', filename='sir.xml')
-        print(ss.interop.export(sim, 'mermaid'))
+        print(ss.interop.export(sim, 'odin'))
     """
     key = str(format).lower()
     if key not in exporters:
@@ -384,8 +354,7 @@ def export(sim, format, filename=None, verbose=None):
     elif verbose is not False:
         print(summary)
     if filename is not None:
-        out = f'```mermaid\n{text}```\n' if key == 'mermaid' and str(filename).endswith('.md') else text
-        sc.savetext(filename, out)
+        sc.savetext(filename, text)
     return text
 
 

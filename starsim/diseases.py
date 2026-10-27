@@ -484,7 +484,7 @@ class Disease(ss.Module):
         Args:
             split (list): the share of the population in each level, unless the levels are a dict of them (if not given: from a named population or geography; for age groups, the world's ages; for a boolean dimension, or one that people are moved along, everyone at the first level; otherwise equal)
             adjust (dict): multipliers on named transitions, one per level, e.g. `{'recovery': [1.5, 1.0, 0.5]}`: on its rate (a duration is divided), or on its probability for a branch chosen with p=
-            kind (str): 'age', 'space', 'clock' (the time since an event, e.g. `since_birth=ss.months([0, 3, 12]), kind='clock'`), or 'plain'; if not given, from the value: 'space' for an `ss.geo.geography` or with `mobility=`, 'age' for `age=`, and otherwise 'plain' (whatever the name); strains are `strains=ss.Strains(...)` on the disease
+            kind (str): 'age', 'space', or 'plain'; if not given, from the value: 'space' for an `ss.geo.geography` or with `mobility=`, 'age' for `age=`, and otherwise 'plain' (whatever the name); strains are `strains=ss.Strains(...)` on the disease
             states (list): the states the dimension applies to (default: every state that is people)
             where (dict): the groups the dimension applies to, e.g. `dict(sex='female')`; people in other groups have no level of it, so selecting a level of it leaves them out (default: every group)
             mobility (gravity/radiation/Mobility/array): for a place (e.g. `patch=`), the movement between its levels: `ss.geo.gravity()`, `ss.geo.radiation()`, `ss.geo.Mobility()`, or a matrix
@@ -584,7 +584,6 @@ class Disease(ss.Module):
         People states are rounded and counts slanted; transmissions are dashed; each
         arrow is labelled with its transition's name and value (`recovery: 10 days`), and
         the share that takes it for a transition with `p=`. `print(sir.diagram())` gives the text.
-        `ss.interop.export(sim, 'mermaid', filename='sir.md')` writes the diagram of every disease in a sim.
 
         **Example**:
 
@@ -638,7 +637,7 @@ class Disease(ss.Module):
 
     def to_spec(self, filename=None, **kwargs):
         """
-        The disease's part of the model spec (`sim.to_spec()`): its states, parameters, and transitions as plain data, for `sim.hash()`, `ss.diff()`, and `ss.to_code()`
+        The disease's part of the model spec (`sim.to_spec()`): its states, parameters, and transitions as plain data, for `sim.hash()`, `ss.diff()`, and `sim.to_code()`
 
         Args:
             filename (str): if provided, save to this file

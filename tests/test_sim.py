@@ -50,6 +50,11 @@ def test_capabilities_two_modules():
             self.pars.update(h=lambda sim: ss.peryear(0.1))
     sim = ss.Sim(diseases=[A(name='a'), B(name='b')], n_agents=100, start=2000, stop=2001, verbose=0).run()
     assert sim.results.b.go.sum() >= 0
+    assert all(cap.reason for cap in sim.capabilities) # Only what changes the choice is recorded
+
+    # People given to a compartmental solver are where the population size came from, not a guess
+    sim2 = ss.Sim(diseases=A(name='a'), people=ss.People(100), solver='ode', stop=2001, verbose=0).init()
+    assert sim2.pop_from == 'people'
     return sim
 
 

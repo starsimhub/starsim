@@ -61,7 +61,7 @@ def inverse(name, rands, *pars, big=None, fallback=None):
     """
     u = np.asarray(rands, dtype=np.float64)
     pars = [float(p) if np.ndim(p) == 0 else np.asarray(p, dtype=np.float64) for p in pars]
-    out = ss.perflib.draws.many[name].from_u(*pars, u, np.empty(len(u)))
+    out = ss.perflib.draws.many[name](*pars, u, np.empty(len(u)))
     if big is not None and np.any(big):
         inds = np.flatnonzero(np.broadcast_to(big, u.shape))
         out[inds] = fallback(u[inds], inds)
@@ -155,7 +155,7 @@ def make_dist(pars=None, **kwargs):
     if dist_type not in dist_list:
         errormsg = f'"{dist_type}" is not a valid distribution; valid types are {dist_list}'
         raise AttributeError(errormsg)
-    dist_class = globals()[dist_type] # Not ss., since rand_raw is only here
+    dist_class = globals()[dist_type]
     dist = dist_class(**pars) # Actually create the distribution
     return dist
 
@@ -284,16 +284,22 @@ class Dists(sc.prettyobj):
         return new
 
 
-class scale_types(sc.prettyobj):
-    """ Define how distributions scale
+class Dist:
+    """
+    Base class for tracking one random number generator associated with one distribution,
+    i.e. one decision per timestep.
 
-    Distributions scale in different ways, such as converting between time units.
+    See `ss.distributions.dist_list` for a full list of supported distributions. Parameter inputs
+    tend to follow SciPy's, rather than NumPy's, definitions (although in most
+    cases they're the same).
+
+    Distributions scale in different ways, such as converting between time units, given by `scaling`.
     Some distributions can't be scaled at all (e.g. `ss.beta_dist()` or `ss.choice()`).
     For distributions that can be scaled, some distributions can only be (linearly)
     scaled *before* the random numbers are generated (called "predraw"), some can only be
-    scaled after (called "postdraw"), and some can be scaled in either way ("both").
+    scaled after (called "postdraw"), and some can be scaled in either way (both).
 
-    For example, a normal distribution is "both" since 2*Normal(a, b) = Normal(2*a, 2*b).
+    For example, a normal distribution is both since 2*Normal(a, b) = Normal(2*a, 2*b).
     A Poisson distribution is "predraw" since 2*Poisson(λ) ≠ Poisson(2*λ), and
     there is no way to get the correct shape of a different Poisson distribution
     once the numbers have been drawn. Finally, distributions with unitless shape
@@ -302,61 +308,12 @@ class scale_types(sc.prettyobj):
     all input parameters is invalid (i.e. 2*Gamma(shape, scale) ≠ Gamma(2*shape, 2*scale)),
     but they can still be scaled (i.e. 2*Gamma(shape, scale) = Gamma(1*shape, 2*scale)).
 
-    To summarize, options for `dist.scaling` are:
+    So `scaling` is one of:
 
         - 'postdraw' (after the random numbers are drawn, e.g. `ss.weibull()`)
         - 'predraw' (before the draw, e.g. `ss.poisson()`)
-        - 'both' (either pre or post draw, e.g. `ss.normal()`)
-        - False (not at all, e.g. `ss.beta_dist()`)
-
-    Use `ss.distributions.scale_types.show()` to show how each distribution scales
-    with time.
-    """
-    both = ['predraw', 'postdraw']
-    postdraw = 'postdraw'
-    predraw = 'predraw'
-    false = None
-
-    @classmethod
-    def check_predraw(cls, dist):
-        """ Check if the supplied distribution supports pre-draw (parameter) scaling """
-        return cls.predraw in sc.tolist(dist.scaling)
-
-    @classmethod
-    def check_postdraw(cls, dist):
-        """ Check if the supplied distribution supports post-draw (results) scaling """
-        return cls.postdraw in sc.tolist(dist.scaling)
-
-    @classmethod
-    def show(cls, to_df=False):
-        """ Show which distributions have which scale types """
-        data = []
-        for distname in ss.distributions.dist_list:
-            dist = getattr(ss.distributions, distname)
-            predraw = cls.check_predraw(dist)
-            postdraw = cls.check_postdraw(dist)
-            both = predraw and postdraw
-            none = not predraw and not postdraw
-            row = dict(name=distname, predraw=predraw, postdraw=postdraw, both=both, none=none)
-            data.append(row)
-        df = sc.dataframe(data)
-        if to_df:
-            return df
-        else:
-            print('Distribution scale types (see the ss.distributions.scale_types docstring for more info):')
-            df.disp()
-        return
-
-
-class Dist:
-    """
-    Base class for tracking one random number generator associated with one distribution,
-    i.e. one decision per timestep.
-
-    See `ss.distributions.dist_list` for a full list of supported distributions. Parameter inputs
-    tend to follow SciPy's, rather than NumPy's, definitions (although in most
-    cases they're the same). See also `ss.distributions.scale_types` for more information
-    on how different distributions scale by time.
+        - ['predraw', 'postdraw'] (either, e.g. `ss.normal()`)
+        - None (not at all, e.g. `ss.beta_dist()`)
 
     Note: by default, `ss.Dist` is initialized with an `ss.Sim` object to ensure
     random number reproducibility. You can override this with either `ss.Dist(strict=False)`
@@ -378,12 +335,10 @@ class Dist:
         round (bool/str): if True (or 'stochastic'), randomly round each value up or down to an integer; if 'nearest', round to the nearest integer (see `dist.rvs()`)
         seed (int): the user-chosen random seed (e.g. 3)
         offset (int): the seed offset; will be automatically assigned (based on hashing the name) if None
-        strict (bool): if True, require initialization and invalidate after each call to rvs()
-        auto (bool): whether to auto-reset the state after each draw
+        strict (bool): if True, require initialization
         sim (Sim): usually determined on initialization; the sim to use as input to callable parameters
         module (Module): usually determined on initialization; the module to use as input to callable parameters
         mock (int): if provided, then initialize with a mock Sim object (of size `mock`) for debugging purposes
-        debug (bool): print out additional detail
         kwargs (dict): parameters of the distribution
 
     Examples:
@@ -424,13 +379,13 @@ class Dist:
     def __abs__(self):             return ss.expressions.Func('absolute', self) # E.g. abs(ss.normal(1, 0.2)) or np.abs() of it, in ss.attr()
 
     valid_pars = None
-    scaling = None # See "scale_types" above
+    scaling = None # See "scaling" above
     unit_pars = None # Parameters that must share the same time units, e.g. ('mean', 'std') for ss.lognorm_ex(); None means no check
     unitless_pars = None # Parameters that cannot have time units, e.g. ('c',), the shape parameter, for ss.weibull(); None means no check
     hash_dtype = None # The dtype of the CRN uniforms passed to ppf(); None for ss.dtypes.float
 
     def __init__(self, dist=None, distname=None, name=None, unit=None, round=False, seed=None, offset=None,
-                 strict=True, auto=True, sim=None, module=None, mock=False, debug=False, **kwargs):
+                 strict=True, sim=None, module=None, mock=False, **kwargs):
         # If a string is provided as "dist" but there's no distname, swap the dist and the distname
         if isinstance(dist, str) and distname is None:
             distname = dist
@@ -448,8 +403,6 @@ class Dist:
         self.sim = sim
         self.slots = None # Created on initialization with a sim
         self.strict = strict
-        self.auto = auto
-        self.debug = debug
         self.scaling = sc.tolist(self.scaling) # Convert e.g. 'predraw' to ['predraw'] so can use "if x in y" later
 
         # Auto-generated
@@ -468,16 +421,15 @@ class Dist:
         self.ind = 0 # The index of the RNG (usually updated on each timestep)
         self.called = 0 # The number of times the distribution has been called
         self.history = [] # Previous states
-        self.ready = True
         self.initialized = False
         if self.valid_pars is not None:
             self.validate_pars()
 
         # Finalize
         if self.unit is not None:
-            if scale_types.postdraw not in self.scaling:
+            if 'postdraw' not in self.scaling:
                 errormsg = 'You can only specify a distribution-level time unit for distributions that can be scaled post-draw, e.g. ss.normal(). '
-                if scale_types.predraw in self.scaling:
+                if 'predraw' in self.scaling:
                     errormsg += f'{self} can only be scaled pre-draw, meaning you must convert the input parameters to TimePars.'
                 else:
                     errormsg += f'Distributions ({type(self)} cannot be scaled.'
@@ -506,19 +458,6 @@ class Dist:
     def disp(self):
         """ Return full display of object """
         return sc.pr(self)
-
-    def show_state(self, output=False):
-        """ Show the state of the object """
-        keys = ['pars', 'trace', 'offset', 'seed', 'ind', 'called', 'ready', 'state_int']
-        data = {key:getattr(self,key) for key in keys}
-        s = f'{self}'
-        for key,val in data.items():
-            s += f'\n{key:9s} = {val}'
-        if output:
-            return data
-        else:
-            print(s)
-            return
 
     def __call__(self, n=1):
         """ Alias to self.rvs() """
@@ -659,7 +598,6 @@ class Dist:
             self._rng._bit_generator.state = state.copy()
         else: # An index, stored before the generator had been moved to it
             self.sync(state)
-        self.ready = True
         return self.state
 
     def jump(self, to=None, delta=1, force=False):
@@ -671,7 +609,6 @@ class Dist:
         # under crn=False -- auto-jumps in rvs(), Module.start_step, and the manual jumps in
         # networks.py / multi_random. force=True (explicit reset / manual jump) still jumps.
         if not ss.options.crn and not force:
-            self.ready = True
             return self.state
 
         # Validation
@@ -685,7 +622,6 @@ class Dist:
         # Do the jumping: the generator itself is moved when it is next needed (see rng)
         self.ind = jumps
         self._synced = False
-        self.ready = True
         return
 
     def jump_dt(self, ti=None, force=False):
@@ -744,7 +680,6 @@ class Dist:
         if not any(type(v).__name__ == 'by' for v in self.pars.values()): # A value for each group (ss.by) is resolved by the engine that uses the distribution: see ss.transitions.numeric_dist()
             self.process_dist()
             self.process_pars(call=False)
-        self.ready = True
         none_dict = dict(trace=self.trace, sim=self.sim, slots=self.slots)
         none_dict = {k:v for k,v in none_dict.items() if v is None}
         if len(none_dict):
@@ -923,7 +858,7 @@ class Dist:
             raise ValueError(errormsg)
 
         # Check for e.g. ss.poisson(3, unit=ss.years) (valid, warning) or ss.gamma(0.5, 1, unit=ss.years) (invalid, error)
-        if self.unit is not None and not ss.distributions.scale_types.check_postdraw(self):
+        if self.unit is not None and 'postdraw' not in self.scaling:
             msg = f'You have supplied a distribution-level timepar {self.unit}, but {self} can only be scaled pre-draw. '
             if len(self._pars) == 1:
                 self.pars[0] = self._pars[0] = self.unit(self._pars[0]) # Try to convert to a time unit (NB, may fail for functions); store in pars so it persists
@@ -1162,8 +1097,6 @@ class Dist:
         # Check for readiness
         if not self.initialized:
             raise ss.errors.DistNotInitializedError(self)
-        if not self.ready and self.strict:
-            raise ss.errors.DistNotReadyError(self)
 
         # Figure out size, UIDs, and slots
         size, slots = self.process_size(n)
@@ -1174,10 +1107,8 @@ class Dist:
             self.called += 1
             if reset:
                 self.reset(-1)
-            elif self.auto:
+            else:
                 self.jump()
-            elif self.strict:
-                self.ready = False
             return np.array([], dtype=ss.dtypes.int) # int dtype allows use as index, e.g. when filtering
         elif isinstance(size, ss.uids) and self.initialized == 'partial': # This point can be reached if and only if strict=False and UIDs are used as input
             errormsg = f'Distribution {self} is only partially initialized; cannot generate random numbers to match UIDs'
@@ -1213,7 +1144,7 @@ class Dist:
 
         # Handle unit if provided
         if self.unit is not None:
-            if scale_types.check_postdraw(self): # It can be scaled post-draw, proceed
+            if 'postdraw' in self.scaling: # It can be scaled post-draw, proceed
                 rvs = self.unit(rvs)
                 if isinstance(rvs, ss.dur):
                     rvs = rvs/self.module.dt
@@ -1224,10 +1155,10 @@ class Dist:
                     raise NotImplementedError(errormsg)
             else:  # It can't, raise an error
                 errormsg = f'You have provided a timepar {self.unit} to scale {self} by, but this distribution cannot be scaled postdraw. '
-                if scale_types.check_predraw(self):
+                if 'predraw' in self.scaling:
                     errormsg += 'Since this distribution supports pre-draw scaling, please scale the individual input parameters instead. '
                 else:
-                    errormsg += 'Not all distributions can be scaled; see ss.distributions.scale_types for information how different distributions scale. '
+                    errormsg += 'Not all distributions can be scaled; see the ss.Dist docstring for how different distributions scale. '
                 raise ValueError(errormsg)
 
         # Round if needed
@@ -1242,43 +1173,26 @@ class Dist:
         self.called += 1
         if reset:
             self.reset(-1)
-        elif self.auto: # TODO: check
+        else:
             self.jump()
-        elif self.strict:
-            self.ready = False
-        if self.debug:
-            tistr   = f'on ti={self.module.ti} ' if self.module else ''
-            sizestr = f'with size={self._size}, '
-            slotstr = f'Σ(slots)={np.asarray(self._slots).sum()}, ' if self._slots is not None else '<no slots>, '
-            rvstr   = f'Σ(rvs)={rvs.sum():0.2f}, |rvs|={rvs.mean():0.4f}'
-            pre_state = str(self.history[-1]['state']['state'])[-5:] if isinstance(self.history[-1], dict) else f'index {self.history[-1]}'
-            post_state = str(self.state_int)[-5:]
-            statestr = f"state {pre_state}→{post_state}"
-            print(f'Debug: {self} called {tistr}{sizestr}{slotstr}{rvstr}, {statestr}')
-            assert pre_state != post_state # Always an error if the state doesn't change after drawing random numbers
         self._n = self._uids = self._slots = None # So a draw for every agent does not keep their UIDs or slots after it
 
         return rvs
 
     def crn_key(self):
         """
-        For a compiled loop that draws the uniforms itself (e.g. `ss.perflib.passes.infect()`, or a method compiled by `ss.jit`), in place of `rvs(uids)`: the seed and
+        For a compiled loop that draws the uniforms itself (e.g. `ss.perflib.passes.infect()`), in place of `rvs(uids)`: the seed and
         index of this call's draws, which are `hash_uniforms(seed, ind, slots)` at `dtype`, with the bookkeeping of one call to
         `rvs()`; not for the user. None if they cannot be drawn that way (without common random numbers, or while the draws
-        are being recorded or debugged), in which case `rvs()` is called instead.
+        are being recorded), in which case `rvs()` is called instead.
         """
         diagnostics = self.sim.diagnostics if self.sim is not None else None
-        if not ss.options.crn or self.initialized is not True or self.slots is None or self.debug or (diagnostics and diagnostics.rvs is not None):
+        if not ss.options.crn or self.initialized is not True or self.slots is None or (diagnostics and diagnostics.rvs is not None):
             return None
-        if not self.ready and self.strict:
-            raise ss.errors.DistNotReadyError(self)
         self.make_history()
         key = (self.seed, self.ind, np.dtype(self.hash_dtype or ss.dtypes.float))
         self.called += 1
-        if self.auto:
-            self.jump()
-        elif self.strict:
-            self.ready = False
+        self.jump()
         return key
 
     @staticmethod
@@ -1374,14 +1288,14 @@ class Dist:
 # Add common distributions so they can be imported directly; assigned to a variable since used in help messages
 dist_list = ['random', 'uniform', 'normal', 'truncnorm', 'lognorm_ex', 'lognorm_im', 'expon',
              'poisson', 'nbinom', 'binom', 'beta_dist', 'beta_mean', 'weibull', 'gamma', 'constant',
-             'randint', 'rand_raw', 'bernoulli', 'choose_n', 'choice', 'histogram']
+             'randint', 'bernoulli', 'choose_n', 'choice', 'histogram']
 
 
 
 class random(Dist):
     """ Random distribution, with values on the interval (0, 1) """
     valid_pars = ['dtype']
-    scaling = scale_types.false # Always (0,1), can't be scaled
+    scaling = None # Always (0,1), can't be scaled
     def __init__(self, dtype=None, **kwargs):
         super().__init__(distname='random', dtype=ss.dtypes.float if dtype is None else dtype, **kwargs)
         return
@@ -1399,7 +1313,7 @@ class uniform(Dist):
         high (float): the upper bound of the distribution (default 1.0)
     """
     valid_pars = ['low', 'high']
-    scaling = scale_types.both
+    scaling = ['predraw', 'postdraw']
     unit_pars = ('low', 'high')
 
     def __init__(self, low=None, high=None, **kwargs):
@@ -1434,7 +1348,7 @@ class normal(Dist):
         scale (float) the standard deviation of the distribution (default 1.0)
 
     """
-    scaling = scale_types.both
+    scaling = ['predraw', 'postdraw']
     unit_pars = ('loc', 'scale')
     def __init__(self, loc=0.0, scale=1.0, **kwargs): # Does not accept dtype
         super().__init__(distname='normal', dist=sps.norm, loc=loc, scale=scale, **kwargs)
@@ -1463,7 +1377,7 @@ class truncnorm(Dist):
         ss.truncnorm(loc=2.5, scale=0.5, low=1.0, high=4.0, strict=False).rvs(1000)
         ```
     """
-    scaling = scale_types.both
+    scaling = ['predraw', 'postdraw']
     unit_pars = ('loc', 'scale', 'low', 'high')
 
     def __init__(self, loc=0.0, scale=1.0, low=-np.inf, high=np.inf, **kwargs):
@@ -1498,7 +1412,7 @@ class lognorm_im(Dist):
         ss.lognorm_im(mean=2, sigma=1, strict=False).rvs(1000).mean() # Should be roughly 10
         ```
     """
-    scaling = scale_types.postdraw
+    scaling = 'postdraw'
     unitless_pars = ('mean', 'sigma')
 
     def __init__(self, mean=0.0, sigma=1.0, **kwargs): # Does not accept dtype
@@ -1561,7 +1475,7 @@ class lognorm_ex(Dist):
         ss.lognorm_ex(mean=2, std=1, strict=False).rvs(1000).mean() # Should be close to 2
         ```
     """
-    scaling = scale_types.both
+    scaling = ['predraw', 'postdraw']
     unit_pars = ('mean', 'std')
 
     def __init__(self, mean=1.0, std=1.0, **kwargs): # Does not accept dtype
@@ -1609,7 +1523,7 @@ class expon(Dist):
     Args:
         scale (float): the scale of the distribution (default 1.0)
     """
-    scaling = scale_types.both
+    scaling = ['predraw', 'postdraw']
     def __init__(self, scale=1.0, **kwargs):
         super().__init__(distname='exponential', dist=sps.expon, scale=scale, **kwargs)
         return
@@ -1634,7 +1548,7 @@ class poisson(Dist):
     Args:
         lam (float): the scale of the distribution (default 1.0)
     """
-    scaling = scale_types.predraw
+    scaling = 'predraw'
     def __init__(self, lam=1.0, **kwargs):
         super().__init__(distname='poisson', dist=sps.poisson, lam=lam, **kwargs)
         self._ppf_lam = None # Cached lambda for the fast ppf (see ppf())
@@ -1681,7 +1595,7 @@ class beta_dist(Dist):
         a (float): shape parameter, must be > 0 (default 1.0)
         b (float): shape parameter, must be > 0 (default 1.0)
     """
-    scaling = scale_types.false
+    scaling = None
     unitless_pars = ('a', 'b')
     def __init__(self, a=1.0, b=1.0, **kwargs):
         super().__init__(distname="beta", dist=sps.beta, a=a, b=b, **kwargs)
@@ -1699,7 +1613,7 @@ class beta_mean(Dist):
         var (float): variance of distribution, must be > 0 (default 0.05)
         force (bool): if True, scale the parameters to the valid range
     """
-    scaling = scale_types.false
+    scaling = None
     unitless_pars = ('mean', 'var')
     def __init__(self, mean=0.5, var=0.05, force=False, **kwargs):  # Does not accept dtype
         # Validation
@@ -1740,7 +1654,7 @@ class nbinom(Dist):
         p (float): the probability of success in [0,1], (default 0.5)
 
     """
-    scaling = scale_types.predraw
+    scaling = 'predraw'
     unitless_pars = ('n',)
     def __init__(self, n=1, p=0.5, **kwargs):
         super().__init__(distname='negative_binomial', dist=sps.nbinom, n=n, p=p, **kwargs)
@@ -1763,7 +1677,7 @@ class binom(Dist):
         n (int): the number of trials (default 1)
         p (float): the probability of success in [0,1], (default 0.5)
     """
-    scaling = scale_types.predraw
+    scaling = 'predraw'
     unitless_pars = ('n',)
     def __init__(self, n=1, p=0.5, **kwargs):
         super().__init__(distname='binomial', dist=sps.binom, n=n, p=p, **kwargs)
@@ -1786,7 +1700,7 @@ class randint(Dist):
         low (int): the lower bound of the distribution (default 0)
         high (int): the upper bound of the distribution (default of maximum integer size: 9,223,372,036,854,775,807)
     """
-    scaling = scale_types.predraw
+    scaling = 'predraw'
     unit_pars = ('low', 'high')
     valid_pars = ['low', 'high', 'dtype']
 
@@ -1830,22 +1744,6 @@ class randint(Dist):
         rvs = np.minimum(rvs, p.high - 1)  # Clamp guards against rands rounding up to high
         return rvs
 
-class rand_raw(Dist):
-    """
-    Directly sample raw integers (uint64) from the random number generator.
-    Typicaly only used with ss.combine_rands().
-    """
-    valid_pars = []
-    scaling = scale_types.false
-
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        self._use_ppf = False # There is no ppf, so draw natively (with a slot gather for CRN)
-        return
-
-    def make_rvs(self):
-        return self.bitgen.random_raw(self._size) # TODO: figure out how to make accept dtype, or check speed
-
 
 class weibull(Dist):
     """
@@ -1861,7 +1759,7 @@ class weibull(Dist):
         ss.weibull(c=1.4, scale=ss.days(8))
         ```
     """
-    scaling = scale_types.postdraw
+    scaling = 'postdraw'
     unitless_pars = ('c',)
     unit_pars = ('scale', 'loc')
     def __init__(self, c=1.0, scale=1.0, *, loc=0.0, **kwargs):
@@ -1903,7 +1801,7 @@ class gamma(Dist):
         ss.par(1800, prior=ss.gamma(mean=1800, std=400))
         ```
     """
-    scaling = scale_types.postdraw
+    scaling = 'postdraw'
     unitless_pars = ('a',)
     unit_pars = ('scale', 'loc')
     def __init__(self, a=None, scale=None, *, loc=0.0, mean=None, std=None, **kwargs):
@@ -1955,7 +1853,7 @@ class constant(Dist):
         v (float): the value to return
     """
     valid_pars = ['v']
-    scaling = scale_types.both
+    scaling = ['predraw', 'postdraw']
 
     def __init__(self, v=0.0, **kwargs):
         super().__init__(distname='const', v=v, **kwargs)
@@ -1979,7 +1877,7 @@ class bernoulli(Dist):
         p (float): the probability of returning True (default 0.5)
     """
     valid_pars = ['p']
-    scaling = scale_types.predraw
+    scaling = 'predraw'
 
     def __init__(self, p=0.5, **kwargs):
         super().__init__(distname='bernoulli', p=p, **kwargs)
@@ -2049,7 +1947,7 @@ class choose_n(Dist):
         ```
     """
     valid_pars = ['n', 'weights']
-    scaling = scale_types.false
+    scaling = None
     unitless_pars = ('n', 'weights')
 
     def __init__(self, n=1, weights=None, die=False, **kwargs):
@@ -2131,7 +2029,7 @@ class choice(Dist):
     to use ss.bernoulli() instead.
     """
     valid_pars = ['a', 'p', 'replace', 'dtype']
-    scaling = scale_types.postdraw # A choice is one of its values, so values with a unit (unit=, or typed values) are the numbers times the unit
+    scaling = 'postdraw' # A choice is one of its values, so values with a unit (unit=, or typed values) are the numbers times the unit
     unitless_pars = ('p',)
 
     def __init__(self, a=2, p=None, replace=True, **kwargs):
@@ -2224,7 +2122,7 @@ class histogram(Dist):
         ```
     """
     valid_pars = ['values', 'bins', 'density', 'data', 'group']
-    scaling = scale_types.postdraw # Its draws are within its bins, so bins with a unit (unit=) are the numbers times the unit
+    scaling = 'postdraw' # Its draws are within its bins, so bins with a unit (unit=) are the numbers times the unit
 
     def __init__(self, values=None, bins=None, density=False, data=None, **kwargs):
         if data is not None:

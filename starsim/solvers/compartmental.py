@@ -328,8 +328,7 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
             for other in competing:
                 if stayed and other.stays:
                     continue
-                first, stop = stays.get(other.name, (0, None))
-                if (stop is None and slot is None) or (slot is not None and first <= slot and (stop is None or slot < stop)):
+                if slot is None or stays.get(other.name, 0) <= slot:
                     add_flow(other, ind, 'hazard')
             for other in exits.contact:
                 add_flow(other, ind, 'contact')
@@ -374,7 +373,7 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
             staged = [tr for tr in exits.timed if self.dwells[tr.name].staged]
             competing += [tr for tr in exits.timed if not self.dwells[tr.name].staged]
             branches = exits.branches + sc.tolist(exits.remainder)
-            stays = self.stays(name, exits, competing, staged, branches) # The slots of a conveyor that each transition with after= or before= acts on
+            stays = self.stays(name, exits, competing, staged, branches) # The slots of a conveyor that each transition with after= acts on
             if branches: # Split on entry: one track per branch
                 if staged:
                     self.unsupported(staged[0], f'a non-exponential dwell time out of "{name}" alongside branches with p=')
@@ -384,7 +383,7 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
             else:
                 apart = len(staged) > 1 # Several, each for other people (where=, e.g. by sex): a track for each, which each group enters by the one it has (see apart_shares())
                 if apart and (stays or any(self.dwells[tr.name].fixed for tr in staged)):
-                    self.unsupported(staged[1], f'two non-exponential dwell times out of "{name}" when one is a fixed delay or the state has after= or before=')
+                    self.unsupported(staged[1], f'two non-exponential dwell times out of "{name}" when one is a fixed delay or the state has after=')
                 if apart and any(tr.where is None for tr in staged): # For the same people: they race, as one track of stages by each (see add_raced())
                     tracks.append(Bunch(tr=None, p=None, immediate=False, raced=staged))
                 else:
@@ -408,7 +407,7 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
                     continue
                 dwell = self.dwells.get(tr.name) if tr is not None else None # None for a branch whose rate changes with time: a hazard out of its own compartment
                 fixed = dwell is not None and dwell.fixed # A fixed delay: a conveyor, out of which people leave by it
-                n_slots = self.delay_steps(tr) if fixed else max([n for pair in stays.values() for n in pair if n is not None], default=0) # Or a minimum stay: a conveyor, then the rest of the state
+                n_slots = self.delay_steps(tr) if fixed else max(stays.values(), default=0) # Or a minimum stay: a conveyor, then the rest of the state
                 slots = [add_comp(state, j, None) for i in range(n_slots + 1)] if n_slots else []
                 k = 0 if fixed else dwell.k if dwell is not None else 1
                 inds = [add_comp(state, j, i) for i in range(k)]
@@ -551,7 +550,7 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
 
     def stays(self, name, exits, competing, staged, branches):
         """
-        For each transition out of a state with a minimum stay (`after=`) or a limit (`before=`): the first slot of a conveyor it acts on, and the slot it stops at (None if it does not)
+        For each transition out of a state with a minimum stay (`after=`): the first slot of a conveyor it acts on
 
         A person in slot j has been in the state j whole steps, and agents count a stay as whole steps
         too (see `Agents.stayed()`). A dwell time with a minimum stay starts after it, so its stages come
@@ -559,20 +558,19 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
         """
         stays = sc.objdict()
         for tr in competing + staged + exits.contact:
-            after, before = getattr(tr, 'after', None), getattr(tr, 'before', None)
-            if after is None and before is None:
+            after = getattr(tr, 'after', None)
+            if after is None:
                 continue
             if branches:
-                self.unsupported(tr, f'a minimum stay (after=) or a limit (before=) out of "{name}", which splits on entry (p=),')
+                self.unsupported(tr, f'a minimum stay (after=) out of "{name}", which splits on entry (p=),')
             elif tr in exits.contact:
-                self.unsupported(tr, 'a minimum stay (after=) or a limit (before=) on a transmission')
+                self.unsupported(tr, 'a minimum stay (after=) on a transmission')
             elif tr in staged and self.dwells[tr.name].fixed:
                 continue
-            first = 0 if after is None else self.whole_steps(tr, 'a minimum stay', after, lowest=0)
-            stays[tr.name] = (first, None if before is None else self.whole_steps(tr, 'a limit (before=)', before, lowest=0))
+            stays[tr.name] = self.whole_steps(tr, 'a minimum stay', after, lowest=0)
         for tr in staged:
-            if tr.name in stays and stays[tr.name][0] != max(n for pair in stays.values() for n in pair if n is not None):
-                self.unsupported(tr, f'a dwell time that starts after a minimum stay, out of "{name}" with a longer stay or limit,')
+            if tr.name in stays and stays[tr.name] != max(stays.values()):
+                self.unsupported(tr, f'a dwell time that starts after a minimum stay, out of "{name}" with a longer stay,')
         return stays
 
     def init_post(self):
@@ -751,7 +749,7 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
         out = np.arange(self.n_groups)
         for d,level in changes.items():
             coords = sim.groups.group_coords[:, d]
-            level = sim.groups.strats[d].target(level)[coords] # A level, a counter's ('+', amount), or a clock's ('=', time)
+            level = sim.groups.strats[d].target(level)[coords] # A level, or a counter's ('+', amount)
             out = out + (level - coords)*int(sim.groups.group_mults[d])
         return sim.groups.folded(out)
 
@@ -1434,8 +1432,6 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
                 mult = mult*self.strain_adjust[tr.name][flow.strain]
             if flow.state.name in self.protect: # Protected in part by the strains they carry
                 mult = mult*self.protection(flow.state, self.sim.groups.group_coords[:, self.strain], flow.strain)
-            if self.memory and flow.strain is not None: # And by those they remember
-                mult = mult*self.memory_mult(flow.state, flow.strain)
             if flow.strain is not None and self.sim.modifiers.get((self.mod.name, 'strain_sus', None)): # By a product against acquiring the strain
                 mult = mult*self.strain_effect(flow.strain, state=flow.state)
             if flow.strain is not None and self.carriage is not None and self.applies[flow.state.name][self.strain] and self.superinfects(tr, flow.state): # Infected with another strain while staying in the same state: only if they do not carry it already
@@ -1909,10 +1905,6 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
             return 'a parameter'
         return None
 
-    def kernel_only(self):
-        """ Whether the whole run can be taken in one call to the kernels: see `kernel_reason()` """
-        return self.kernel_reason() is None
-
     def kernel_reason(self):
         """ Why the whole run cannot be taken in one call to the kernels (something in Python needs to see the model between one step and the next), in a few words, or None if it can """
         sim = self.sim
@@ -2140,9 +2132,6 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
 
     def run_all(self, use_jax=False):
         """ Take every step of the run in one call to the kernels (or to JAX: see `ss.gradients`), and fill in the results from what comes back """
-        mod = self.mod
-        graph = self.graph
-        res = mod.results
         tally = None
         if self.given is not None: # The run has been taken already, by ss.gradients
             out, self.given = self.given, None
@@ -2164,40 +2153,10 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
             for k,mod in enumerate(self.deliveries):
                 mod.compartments.store_shifts(tally[:, self.shift_of[k]])
         self.y, stocks, flows, short = out
-        flows = self.count_deaths(flows)
         if tally is None and getattr(self, 'deliveries', None): # The ODE taken in JAX: the deliveries' results, from the compartments at each time point they happened at
             self.store_replayed(stocks)
-        if self.rows is not None:
-            self.check_short(short)
-            self.store_parts([(0, stocks, flows)])
-            return
         self.check_short(short)
-        self.sim.t.ti = mod.t.ti = mod.t.npts - 1 # At the last time point, as after a run step by step
-        store = lambda key, vals: self.store_run(key, vals.sum(axis=1), vals) # The total, and the values by group
-        n = sc.objdict({name:store(name, stocks[:, self.state_comps[name]].sum(axis=1)) for name in graph.states})
-        new = sc.objdict({name:store(name, flows[:, ind]) for name,ind in self.tr_index.items()})
-        for name,ind in self.transfer_index.items():
-            store(name, flows[:, ind])
-        grouped = self.outcomes and self.n_groups > 1 # Outcomes are then worked out by group, and summed: a weight can be one per group
-        derived = self.derived(n, new, outcomes=not grouped)
-        stratified = [name for name in self.ratio_names() if getattr(res[name], 'strata', None) is not None]
-        if stratified: # Sums and ratios of states by group
-            ctx = StockCtx(self, sc.objdict({name:stocks[:, self.state_comps[name]].sum(axis=1) for name in graph.states}), sc.objdict({name:flows[:, ind] for name,ind in self.tr_index.items()}))
-            for name in stratified:
-                if name in self.ratios:
-                    res[name].strata[:], res[name].denom[:] = [ss.transitions.evaluate(part, ctx) for part in self.ratios[name]]
-                else:
-                    res[name].strata[:] = ss.transitions.evaluate(graph.exprs[name], ctx)
-        if grouped: # Outcomes by group: the same, from the flows of each group
-            grouped = self.derived_outcomes(sc.objdict({name:flows[:, ind].T for name,ind in self.tr_index.items()}))
-            for key,vals in grouped.items():
-                derived[key] = vals.T
-        for key,vals in derived.items():
-            if np.ndim(vals) == 2:
-                store(key, vals)
-            else:
-                res[key][:] = vals
-        self.cache.clear()
+        self.store_parts([(0, stocks, flows)])
         return
 
     def ratio_names(self):
@@ -2257,7 +2216,8 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
 
     def store_parts(self, parts):
         """
-        The results of a whole run whose results by group are kept every few steps (see `ss.solvers.group_rows()`), from its compartments and flows at each time point, taken a part at a time
+        The results of a whole run, from its compartments and flows at each time point, taken in one part or a part at a time;
+        the results by group are kept at each time point, or every few steps (see `ss.solvers.group_rows()`)
 
         Args:
             parts (iterable): the time point each part starts at, and the compartments and flows at each of its time points (see `run_parts()`)
@@ -2266,7 +2226,7 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
         graph = self.graph
         res = mod.results
         npts, ng = mod.t.npts, self.n_groups
-        rows, ends = self.rows, self.group_ti
+        rows, ends = (self.rows, self.group_ti) if self.rows is not None else (np.arange(npts), np.arange(npts)) # A row for each time point, unless kept every few steps
         states = list(graph.states)
         n_flows = self.n_trans + len(self.movers)
         kept_s, kept_f = self.group_needs()

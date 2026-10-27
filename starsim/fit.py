@@ -923,16 +923,15 @@ class Fit(sc.prettyobj):
         before (`ss.Sim`): the sim with the initial values, already run
         mismatch (float): the goodness of fit of the calibrated sim, or its negative log-likelihood if the fit used likelihoods
         measure (str): what `mismatch` measures
-        converged (bool): whether the searches from the best few points of the scan that are apart end at the same value (for SciPy; with a single search, SciPy's own stopping rule), the fitting method reached its own stopping rule (for adaptive stochastic descent), stopped improving (for Optuna: by less than 1% over the last quarter of the trials), or has chains that agree (for NUTS and particle MCMC: an R-hat of at most 1.01, and no divergent draws; for IF2: chains from different starts that end within 2 of the best log-likelihood)
+        converged (bool): whether the searches from the best few points of the scan that are apart end at the same value (for SciPy; with a single search, SciPy's own stopping rule), stopped improving (for Optuna: by less than 1% over the last quarter of the trials), or has chains that agree (for NUTS and particle MCMC: an R-hat of at most 1.01, and no divergent draws; for IF2: chains from different starts that end within 2 of the best log-likelihood)
         why (str): what `converged` is based on
         scores (list): the score of the best-fit values in each run (one for a deterministic sim); `mismatch` is their mean, so it is the score that was minimized
-        seeds (list): the random seed of each of those runs; `sim` is the run with the first
         trials (df): every evaluation: the values, and the `objective` that the method minimized (what `measure` says; with `method='if2'`, also each pass of each chain: the middle of the swarm's values, and minus the log-likelihood of the pass, whose values were perturbed)
         samples (df): with `method='nuts'`, `'pmcmc'`, or `'abc-smc'`, the draws from the posterior: one row per draw, with its chain, its number, and a column for each parameter
         study (`optuna.Study`): with `method='optuna'`, Optuna's study, e.g. for its plots (`optuna.visualization.plot_param_importances(fit.study)`)
         diagnostics (dict): what else the method reports: `divergences` (with `method='nuts'`, the number of draws that followed a divergent trajectory, which suggests the sampler missed part of the posterior), `acceptance` (with `method='pmcmc'`, the share of proposals that each chain accepted after its warm-up), and `band` (with a posterior, for each data series, the 2.5th and 97.5th percentiles of the model's value over draws from it, at each step, or for a flow with data at a longer period than the step, of its totals over the data's periods; with `'pmcmc'`, each from a run with a seed of its own, so the band includes chance)
     """
-    def __init__(self, sim, before, pars, table, trials, method, mismatch, mismatch_before, measure, samples, diagnostics, converged, why, scores, seeds, study=None):
+    def __init__(self, sim, before, pars, table, trials, method, mismatch, mismatch_before, measure, samples, diagnostics, converged, why, scores, study=None):
         self.sim = sim
         self.before = before
         self.pars = pars
@@ -947,7 +946,6 @@ class Fit(sc.prettyobj):
         self.converged = converged
         self.why = why
         self.scores = scores
-        self.seeds = seeds
         self.study = study
         return
 
@@ -1962,7 +1960,7 @@ class Problem:
         return Fit(sim=after, before=before, pars=best_pars, table=out.table, trials=pd.DataFrame(self.trials), method=method,
                    mismatch=mismatch, mismatch_before=self.mismatch_before,
                    measure='negative log-posterior' if self.use_map else 'negative log-likelihood' if self.use_lik else 'goodness of fit',
-                   samples=out.get('samples'), diagnostics=diagnostics, converged=out.converged, why=out.why, scores=scores, seeds=seeds, study=out.get('study'))
+                   samples=out.get('samples'), diagnostics=diagnostics, converged=out.converged, why=out.why, scores=scores, study=out.get('study'))
 
 
 #%% The fitting methods: each a function of a Problem, returning the best values (or draws from a posterior), whether it converged, and why
@@ -2002,15 +2000,6 @@ def fit_scipy(problem, method='nelder-mead', scan=None, restarts=None, **options
         if not p.use_lik and 0 <= result.fun < results[1].fun/10:
             why += '. The best is far below the others, which may have stalled where the fit is flat (e.g. where there is no epidemic), so it is likely the best there is'
     return sc.objdict(best=p.decode(result.x), converged=converged, why=why)
-
-
-def fit_asd(problem, scan=None, stepsize=0.1, **kwargs):
-    """ Adaptive stochastic descent (`sc.asd()`), from the best of a scan """
-    p = problem
-    start = p.scan(scan)
-    result = sc.asd(lambda z: p.objective(p.decode(z)), p.encode(start), xmin=p.encode(p.lows), xmax=p.encode(p.highs), stepsize=stepsize, randseed=p.rand_seed, verbose=0, **kwargs)
-    converged = not any(word in result.exitreason for word in ['Maximum', 'limit', 'Unknown'])
-    return sc.objdict(best=p.decode(result.x), converged=converged, why=result.exitreason)
 
 
 def smoothed_best(zs, values):
@@ -2261,7 +2250,7 @@ def fit_nuts(problem, draws=500, warmup=500, chains=4, scan=None, **kwargs):
 
 grad_methods = ['l-bfgs-b', 'bfgs', 'cg', 'tnc', 'slsqp', 'trust-constr'] # The SciPy methods that use gradients, when the sim has them
 sampling_methods = ['nuts', 'pmcmc', 'abc-smc'] # The methods that give a posterior
-methods = {'nuts':fit_nuts, 'pmcmc':fit_pmcmc, 'abc-smc':fit_abc_smc, 'if2':fit_if2, 'optuna':fit_optuna, 'asd':fit_asd} | {name:functools.partial(fit_scipy, method=name) for name in scipy_methods} # The methods that sim.fit() knows, by name
+methods = {'nuts':fit_nuts, 'pmcmc':fit_pmcmc, 'abc-smc':fit_abc_smc, 'if2':fit_if2, 'optuna':fit_optuna} | {name:functools.partial(fit_scipy, method=name) for name in scipy_methods} # The methods that sim.fit() knows, by name
 
 
 def split_data(df, holdout=0.25, folds=None):

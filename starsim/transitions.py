@@ -331,7 +331,7 @@ class on:
     def outcome(self):
         """ Whether it is an outcome of a delivery or a product (e.g. `drug.failed`), which moves the people it happened to as it happens (see `ss.interventions.trigger_moves()`) """
         x = self.x
-        return isinstance(x, ss.conditions.Cond) and any(leaf.op == 'event' and isinstance(leaf.args[0], ss.products.EventSource) for leaf in ss.conditions.event_leaves(x)) # Not an event a module written as code records (e.g. an ss.Event of a coded module)
+        return isinstance(x, ss.conditions.Cond) and any(leaf.op == 'event' and isinstance(leaf.args[0], ss.products.EventSource) for leaf in ss.conditions.event_leaves(x))
 
     def __repr__(self):
         return f'ss.on({getattr(self.x, "__name__", self.x)})'
@@ -360,7 +360,6 @@ class Transition(Nameable):
         increment (str/dict): a counter that goes up as well: its name, which adds 1 (`increment='parity'`), or a dict of the amount for each
             (`increment=dict(parity=2)` for twins, `dict(doses=-1)`); a counter is a dimension with integer levels, whose last level is open-ended
         after (dur): a minimum stay: nobody leaves by this transition until they have been in its source state this long (a rate applies from then on, and a dwell time starts then)
-        before (dur): the opposite, for a rate: it applies only until people have been in its source state this long, as EMULSION's escape during a minimum stay
         acquisition (bool): whether it is an acquisition of the disease, which `rel_sus`, a product's efficacy against acquisition, and `ss.treat` act on. If not given: a
             contact-mediated transition is, and so is any other transition out of the disease's first state if none out of it is contact-mediated (an infection by a bite rate or an EIR)
         on (Cond/Event/func): a trigger, instead of a rate or a dwell time (see `ss.on`): people move as soon as a condition holds, or when an event happens to them (`on=preg.delivery`), or `dur=` after it (a time drawn for each person), as agents
@@ -381,13 +380,13 @@ class Transition(Nameable):
         recovery  = ss.Transition(I, R, dur=ss.days(10))
         maturing  = ss.Transition(J, A, rate=ss.perday(1), where=ppl.age > 1) # Only adults
         failure   = ss.Transition(Tx, I, rate=ss.peryear(0.1), move=DS >> (DS, RIF)) # Treatment fails, and the strain acquires resistance (DS, RIF = strains)
-        twins     = ss.Transition(P, PP, dur=ss.months(9), p=0.02, increment=dict(parity=2), move=dict(since_birth=0)) # Parity goes up by 2, and a clock is set to 0
+        twins     = ss.Transition(P, PP, dur=ss.months(9), p=0.02, increment=dict(parity=2)) # Parity goes up by 2
         weaning   = ss.Transition(NB, W, rate=ss.perday(0.5), after=ss.days(21)) # At least 21 days old first, as EMULSION's duration
         postpartum = ss.Transition(PP, NP, on=preg.delivery, dur=ss.months(6)) # Six months after each woman's own delivery
         importation = ss.Transition(S, I, rate=ss.perday(1e-4), acquisition=True) # An infection from outside, alongside one by contact
         ```
     """
-    def __init__(self, src=None, dst=None, rate=None, dur=None, p=None, stages=None, name=None, label=None, where=None, move=None, increment=None, after=None, before=None, acquisition=None, on=None, per=None, alone=False):
+    def __init__(self, src=None, dst=None, rate=None, dur=None, p=None, stages=None, name=None, label=None, where=None, move=None, increment=None, after=None, acquisition=None, on=None, per=None, alone=False):
         delay = None # With on= an event: the time after it that people move, if dur= is given
         if on is not None and dur is not None and ss.conditions.is_event(ss.on(on).x): # e.g. on=preg.delivery, dur=ss.months(6)
             delay, dur = dur, None
@@ -415,11 +414,7 @@ class Transition(Nameable):
         self.where = where # Who it applies to: the sim adds a modifier that sets the rate to 0 for everyone else
         self.acquisition_given = acquisition # Whether it is an acquisition of the disease, if given
         self.acquisition = acquisition # Whether it is, as worked out when the module is built: see ss.transitions.Graph.resolve_acquisition()
-        if before is not None and rate is None:
-            errormsg = 'before= limits a rate to the first part of a stay, so it goes with rate=, not dur='
-            raise ValueError(errormsg)
         self.after = after # A minimum stay in the source state before this transition can happen
-        self.before = before # Or the time in it after which it cannot
         self.move = None # A change of level in some dimensions: {dim: level}
         if move is not None and not isinstance(move, dict) and isinstance(move, ss.strains.StrainMove): # A change of the strains people carry, e.g. move=DS >> (DS, RIF)
             move = {move.strains.name: move}

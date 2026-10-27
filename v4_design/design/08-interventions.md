@@ -11,7 +11,6 @@ An intervention has two parts.
 - **What**: a product (a vaccine, a test, a treatment) or a change to a quantity. This part is cleanly separable and reusable.
 - **Delivery**: who gets it, when, and how many. These are often not separable from each other ("send drugs to the 100 clinics with the most positive tests, while stocks last"), so delivery is written either with simple keywords or as one function that returns who gets it this step.
 
-<!-- fragment -->
 ```python
 bcg = ss.Vaccine(efficacy=0.85)                                                 # what
 ss.vaccinate(who=ppl.age < 5, what=bcg, coverage=0.7, at=[2021, 2025])          # delivery, by keywords
@@ -24,14 +23,12 @@ Interventions are passed to the sim with `interventions=`.
 
 **A change to a parameter over time** is `ss.change` ([below](#sschange)):
 
-<!-- fragment -->
 ```python
 ss.change(sir.pars.beta, at=['2020-03-15', '2020-06-01'], by=[0.5, 1.0])
 ```
 
 **A change that applies to some people, or under a condition,** is `ss.modify` ([07-effects.md](07-effects.md)):
 
-<!-- fragment -->
 ```python
 ss.modify('school.pars.n_contacts', multiply=0.2, start='2020-03-15', stop='2020-06-01')
 ss.modify(sir.rel_sus, multiply=0.6, where=sir.has_net)
@@ -39,7 +36,6 @@ ss.modify(sir.rel_sus, multiply=0.6, where=sir.has_net)
 
 **Vaccination as a move between strata** is `ss.transfer` ([05-dimensions.md](05-dimensions.md#moving-between-coordinates-sstransfer)). The disease does not mention vaccination; protection is declared on the dimension and delivery is a transfer:
 
-<!-- fragment -->
 ```python
 sir.stratify(vaccinated=[False, True], adjust={'infection': [1.0, 0.15]})    # 85% protection, declared once
 rollout = ss.Delivery(move=dict(vaccinated=True), who=ppl.age > 65, coverage=0.7, at=[2021, 2022])
@@ -95,7 +91,6 @@ Protection that is lost from one stage to the next at random times gives the sam
 
 ## Delivery
 
-<!-- fragment -->
 ```python
 ss.vaccinate(vaccine, who=None, **delivery)
 ss.screen(diagnostic, who=None, **delivery)
@@ -109,11 +104,11 @@ ss.Delivery(who=None, **delivery)               # a step people attend, with no 
 |---|---|
 | a condition: `ppl.age < 5`, `~diagnosed` | eligibility: the people who meet it, offered the product by the delivery's schedule (routine, `at=`, `interval=`) |
 | an event: `sir.infection`, `screening.positive`, `anc_visit` | a trigger: the people it happened to on this step ([events](#events)) |
-| events joined: `a \| b`, or a list `[a, b]` | anyone in either, each person once (`operator='any'`, the default) |
-| events together: `a & b`, or `[a, b], operator='all'` | anyone in both on the same step |
+| events joined: `a \| b` | anyone in either, each person once |
+| events together: `a & b` | anyone in both on the same step |
 | an event and a condition: `preg.delivery & hiv_rdt.positive.ever` | those the event happened to who meet the condition |
 
-With an event in it, delivery is triggered; otherwise it is routine or in rounds. An event joined to a condition with `|` (or in a list with `operator='any'`) raises, since it is neither: it says to use `&` for "the event, among those meeting the condition", or two steps. `on=` and `where=` are the same thing as `who=` (the event part and the condition part), and are joined to it with `&`; the examples use `who=`.
+With an event in it, delivery is triggered; otherwise it is routine or in rounds. An event joined to a condition with `|` raises, since it is neither: it says to use `&` for "the event, among those meeting the condition", or two steps. `on=` and `where=` are the same thing as `who=` (the event part and the condition part), and are joined to it with `&`; the examples use `who=`.
 
 ### Delivery keywords
 
@@ -123,7 +118,6 @@ With an event in it, delivery is triggered; otherwise it is routine or in rounds
 | `at=` | deliver in rounds at these times (a campaign), given as for `at=` of `ss.change`: in a sim with dates, a calendar year is written as a date (`'2030'`) |
 | `interval=` | deliver in rounds this far apart, between `start` and `stop` |
 | `who=` | who receives it: a condition, an event, or both ([above](#delivery)) |
-| `operator=` | for a list in `who=`: `'any'` (the default, the same as `\|`) or `'all'` (the same as `&`) |
 | `where=` | the condition part of `who=`: a [condition](07-effects.md#conditions), as for `where=` of `ss.modify` |
 | `coverage=` | the fraction of eligible people reached |
 | `capacity=` | the number that can be delivered |
@@ -136,7 +130,6 @@ With an event in it, delivery is triggered; otherwise it is routine or in rounds
 | `deliver=` | a function of the sim returning who receives it this step ([below](#the-deliver-function)) |
 | `disease=` | the disease the product acts on (default: the only one; for a step with no product, the disease of its trigger, or the first). A list, or a disease whose strains have courses of their own (HP7), delivers it for each: a vaccine's efficacy against each disease, a test detecting each one's infected (or each one's state of a name, `results=dict(high=dict(cin=0.9))`), the worst result over them per person, and a cure of each one's infected; as if its values were keyed by disease, which they then are. A list is agents only (decided 2026-10-20); a product keyed by the diseases itself (`ss.Vaccine(efficacy=dict(hpv16=0.9, hpv18=0.9))`, `ss.Treatment(moves={ng.cure: 0.95, ct.cure: 0.95})`, or a test's `sensitivity=` by their states, whose diseases are then tracked jointly) has a compartmental form. A disease written as code (PL2) is a `disease=` too, as agents: a test detects its `infected`, a cure calls its `clear_infection(uids)`, and a vaccine scales its `rel_sus` and `rel_trans`; a missing part raises naming it |
 
-<!-- fragment -->
 ```python
 ss.vaccinate(bcg, who=ppl.age < 5, coverage=0.7, at=[2021, 2025])                    # two campaign rounds
 ss.vaccinate(bcg, who=ppl.age < 5, coverage=0.7, interval=ss.years(1), start=2021)   # a yearly round
@@ -197,7 +190,6 @@ sim.results.treatment.lost_capacity     # who each step lost to capacity; eligib
 - **The steps are a list.** They are passed to `interventions=` like any other module, in any number and order, and are named from their variables.
 - **A visit is a step with no product**, `ss.Delivery(who=...)`: an antenatal visit, a clinic visit for symptoms. Its attendees are its event, so several steps triggered by the same visit reach the same people (one visit, several tests).
 
-<!-- fragment -->
 ```python
 anc_visit = ss.Delivery(who=preg.conception, coverage=0.85)          # preg = ss.Pregnancy(): its events are conception, delivery, and loss
 anc_hiv   = ss.screen(hiv_rdt, who=anc_visit, disease='hiv')
@@ -207,7 +199,7 @@ newborn   = ss.screen(pcr, who=preg.delivery & anc_hiv.positive.ever, trace='pos
 
 #### Events
 
-An event is the set of people something happened to on the current step. These are events: a transition (`sir.infection`), and a transfer (agents only); a step (`anc_visit`: the people it reached); an outcome of a step (`screening.positive`, `treatment.failed`); a product (`hiv_rdt`, `hiv_rdt.positive`: the union over every step that delivers it); and an `ss.Event` of a module written as code (`preg.conception`), defined with its states and fired with the people (`self.conception.fire(uids)`), agents only. A misspelled outcome raises `AttributeError`, listing the outcomes. In a compartmental run an event is a share of each state and group, carried along the moves that later steps of the step make: two outcomes of one step (and the events that follow from them) are disjoint, and an event that follows from another is within it. Events combined with `|` or `&` (`a.positive | b.positive`, or a list) are agents only, since who is in both is not known from their shares (decided 2026-10-20).
+An event is the set of people something happened to on the current step. These are events: a transition (`sir.infection`), and a transfer (agents only); a step (`anc_visit`: the people it reached); an outcome of a step (`screening.positive`, `treatment.failed`); and a product (`hiv_rdt`, `hiv_rdt.positive`: the union over every step that delivers it). A module written as code can trigger a step with a function of the sim that returns the people. A misspelled outcome raises `AttributeError`, listing the outcomes. In a compartmental run an event is a share of each state and group, carried along the moves that later steps of the step make: two outcomes of one step (and the events that follow from them) are disjoint, and an event that follows from another is within it. Events combined with `|` or `&` (`a.positive | b.positive`) are agents only, since who is in both is not known from their shares (decided 2026-10-20).
 
 #### Memory: `.ever`, `.count`, `.since`
 
@@ -217,11 +209,10 @@ Every event remembers, per person, whether (`ev.ever`, a condition), how often (
 
 `who=` with an event delivers to the people something has just happened to, instead of on a schedule:
 
-<!-- fragment -->
 ```python
 ss.screen(hiv_test, who=anc.visit, coverage=0.9)                             # test at antenatal visits
 ss.treat(drug, who=tb.diagnosis, coverage=0.85)                              # treat on diagnosis
-ss.treat(drug, who=[ng.careseek, ct.careseek])                               # either, each person once
+ss.treat(drug, who=ng.careseek | ct.careseek)                                # either, each person once
 ```
 
 The event can also be a function of the sim returning UIDs (`on=`). A state or condition given as `on=` is not an event, and raises an error that points to `where=`: the people in a state on each step are `who=sir.I, interval=1`. The condition part of `who=`, `coverage=`, and `capacity=` then apply to those people. The worked example in [07-effects.md](07-effects.md#plain-code-in-step) shows an event-triggered delivery next to the same logic written as `step()` code.
@@ -236,7 +227,6 @@ Each outcome is a result of its name too: a test's `positive` and `negative`, co
 
 **Reported cases, when testing is modeled.** `ss.outcome` ([09-results.md](09-results.md)) is a shortcut for a reporting process the model does not represent: "about half of infections are reported, five days later". When the model does represent testing, through one or more interventions, the outcome is not used for cases. Each testing intervention reports the diagnoses it made, and reported cases are their sum:
 
-<!-- fragment -->
 ```python
 symptomatic_testing = ss.screen(pcr, who=sir.symptom_onset, coverage=0.6)
 screening           = ss.screen(rapid_test, coverage=0.1, interval=ss.weeks(1))
@@ -260,7 +250,6 @@ An intervention marks individuals (a positive result triggers the next step, and
 
 The simplest time-varying intervention is a list of times and a list of values:
 
-<!-- fragment -->
 ```python
 ss.change(sir.pars.beta, at=['2020-03-15', '2020-06-01'], by=[0.5, 1.0])
 ss.change('school.pars.n_contacts', at=[2020.2, 2020.6], by=[0.2, 1.0])
@@ -323,7 +312,6 @@ The class decides and remembers; the modifier applies the effect, so the base co
 
 ## Scenarios
 
-<!-- fragment -->
 ```python
 base = ss.Sim(hiv, networks=ss.SexualNet(), interventions=art_program)                 # what is really in place
 prep = ss.Sim(hiv, networks=ss.SexualNet(), interventions=[art_program, prep_rollout])
@@ -348,7 +336,7 @@ Conditions, coverage functions, and `deliver=` functions are tried on what the s
 | `ss.Delivery(move=dict(dim=...), coverage=)` | a flow between the dimension's compartments | select eligible agents, thin to coverage, change the property |
 | `ss.vaccinate`, `ss.treat` with a product | adds a `has_<product>` dimension to the model (printed) and moves people along it; waning given as a duration is a flow back (a function of time since delivery is agents only) | records who holds the product and when they got it |
 | `ss.screen` | flows thinned by sensitivity and specificity (a `delay=` is agents only) | a result per agent |
-| an event in `who=` (a step, an outcome, a product, a transition) | the share of each state and group it happened to on the step, carried along the moves of later steps in the step; a transfer, or an `ss.Event` of a module written as code, needs agents | UIDs |
+| an event in `who=` (a step, an outcome, a product, a transition) | the share of each state and group it happened to on the step, carried along the moves of later steps in the step; a transfer needs agents | UIDs |
 | `\|` and `&` of events | agents only | union and intersection of UIDs |
 | `.ever`, `.count`, `.since` | `.ever` a property of people with two levels (`ever_<event>`), added only if read; `.count` and `.since` agents only | a time and a count per agent |
 | `when=fn(sim)` | called once per step | called once per step |

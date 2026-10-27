@@ -276,11 +276,7 @@ class date(pd.Timestamp):
 
     def __repr__(self, bracket=True):
         """ Show the date in brackets, e.g. <2024-04-04> """
-        _ = ss.options.date_sep
-        y = f'{self.year:04d}'
-        m = f'{self.month:02d}'
-        d = f'{self.day:02d}'
-        string = y + _ + m + _ + d
+        string = f'{self.year:04d}-{self.month:02d}-{self.day:02d}'
 
         if self._time_repr != '00:00:00':
             string += ' ' + self._time_repr[:8]

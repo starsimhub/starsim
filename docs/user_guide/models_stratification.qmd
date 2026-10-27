@@ -173,7 +173,7 @@ A ratio, such as prevalence (`I/N`), is never averaged over groups: its numerato
 
 ## Compartments and agents
 
-Run as compartments, each state has one compartment for each combination of levels, so the number of compartments is the product of the numbers of levels: 3 age groups, 2 vaccination levels, and 3 states are 18 compartments. Run as agents, each person has their own value of the property (an age, or a level), and the groups are used for the contacts, adjustments, and results. A stratified model gives the same results by group either way. The one exception is a dimension of time since an event (`kind='clock'`, e.g. the time since birth), which only agents can hold.
+Run as compartments, each state has one compartment for each combination of levels, so the number of compartments is the product of the numbers of levels: 3 age groups, 2 vaccination levels, and 3 states are 18 compartments. Run as agents, each person has their own value of the property (an age, or a level), and the groups are used for the contacts, adjustments, and results. A stratified model gives the same results by group either way.
 
 ## Pitfalls
 

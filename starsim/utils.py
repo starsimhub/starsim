@@ -48,11 +48,10 @@ class ndict(sc.objdict):
     """
     A dictionary-like class that provides additional functionalities for handling named items.
 
+    Each item is added under its `name` (or the key given), and a key can be added only once.
+
     Args:
-        nameattr (str): The attribute of the item to use as the dict key (i.e., all items should have this attribute defined)
         type (type): The expected type of items.
-        strict (bool): If True, only items with the specified attribute will be accepted.
-        overwrite (bool): whether to allow adding a key when one has already been added
 
     Examples:
         ```python
@@ -61,12 +60,9 @@ class ndict(sc.objdict):
         networks = ss.ndict({'sexual':ss.SexualNet(), 'prenatal':ss.PrenatalNet()})
         ```
     """
-    def __init__(self, *args, nameattr='name', type=None, strict=True, overwrite=False, **kwargs):
+    def __init__(self, *args, type=None, **kwargs):
         super().__init__()
-        self.setattribute('_nameattr', nameattr)  # Since otherwise treated as keys
-        self.setattribute('_type', type)
-        self.setattribute('_strict', strict)
-        self.setattribute('_overwrite', overwrite)
+        self.setattribute('_type', type)  # Since otherwise treated as keys
         self.extend(*args, **kwargs)
         return
 
@@ -74,55 +70,45 @@ class ndict(sc.objdict):
         """ Shortcut for returning values """
         return self.values()
 
-    def append(self, arg, key=None, overwrite=None):
+    def append(self, arg, key=None):
         valid = False
         if arg is None:
             return  # Nothing to do
-        elif hasattr(arg, self._nameattr):
-            key = key or getattr(arg, self._nameattr)
+        elif hasattr(arg, 'name'):
+            key = key or arg.name
             valid = True
         elif isinstance(arg, dict):
-            if self._nameattr in arg:
-                key = key or arg[self._nameattr]
+            if 'name' in arg:
+                key = key or arg['name']
                 valid = True
             else:
                 for k, v in arg.items():
                     self.append(v, key=k)
                 valid = None  # Skip final processing
-        elif not self._strict:
-            key = key or f'item{len(self) + 1}'
-            valid = True
-        else:
-            valid = False
 
         if valid is True:
-            if self._strict:
-                self._check_type(arg)
-                self._check_key(key, overwrite=overwrite)
+            self._check_type(arg)
+            self._check_key(key)
             self[key] = arg # Actually add to the ndict!
         elif valid is None:
             pass  # Nothing to do
         else:
-            if isinstance(arg, ss.Module) and not hasattr(arg, self._nameattr):
+            if isinstance(arg, ss.Module):
                 # A Module missing its name attribute almost always means super().__init__() was not called
-                errormsg = (f'Could not add module of type "{type(arg).__name__}": it is missing the "{self._nameattr}" attribute. '
+                errormsg = (f'Could not add module of type "{type(arg).__name__}": it is missing the "name" attribute. '
                             f'This usually means super().__init__() was not called in the module\'s __init__() method; '
                             f'please ensure your __init__() calls super().__init__(*args, **kwargs).')
             else:
-                errormsg = f'Could not interpret argument {arg}: does not have expected attribute "{self._nameattr}"'
+                errormsg = f'Could not interpret argument {arg}: does not have expected attribute "name"'
             raise TypeError(errormsg)
         return self
 
-    def _check_key(self, key, overwrite=None):
-        """ Validate that a key can be added; raise ValueError or warn if it already exists """
-        if overwrite is None: overwrite = self._overwrite
+    def _check_key(self, key):
+        """ Validate that a key can be added; raise ValueError if it already exists """
         if key in self:
-            if not overwrite:
-                typestr = f' "{self._type}"' if self._type else ''
-                errormsg = f'Cannot add object "{key}" since already present in ndict{typestr} with keys:\n{sc.newlinejoin(self.keys())}'
-                raise ValueError(errormsg)
-            else:
-                ss.warn(f'Overwriting existing ndict entry "{key}"')
+            typestr = f' "{self._type}"' if self._type else ''
+            errormsg = f'Cannot add object "{key}" since already present in ndict{typestr} with keys:\n{sc.newlinejoin(self.keys())}'
+            raise ValueError(errormsg)
         return
 
     def _check_type(self, arg):
@@ -192,7 +178,7 @@ class ndict(sc.objdict):
 
     def copy(self):
         """ Shallow copy """
-        new = self.__class__(nameattr=self._nameattr, type=self._type, strict=self._strict, overwrite=self._overwrite)
+        new = self.__class__(type=self._type)
         new.update(self)
         return new
 
@@ -576,7 +562,7 @@ def combine_rands(a, b):
     the array. To reinterpret existing bits for free, use `arr.view(np.uint64)`.
 
     Args:
-        a (array): array of random uint64 integers between 0 and np.iinfo(np.uint64).max, as from ss.distributions.rand_raw()
+        a (array): array of random uint64 integers between 0 and np.iinfo(np.uint64).max, as from ss.randint(low=0, high=np.iinfo('uint64').max, dtype=np.uint64)
         b (array): ditto, same size as a
 
     Returns:
@@ -585,7 +571,7 @@ def combine_rands(a, b):
     a_dtype = getattr(a, 'dtype', type(a).__name__)
     b_dtype = getattr(b, 'dtype', type(b).__name__)
     if a_dtype != np.uint64 or b_dtype != np.uint64:
-        errormsg = f'combine_rands() requires uint64 arrays, not a={a_dtype} and b={b_dtype}. Signed integers give output in [-0.5, 0.5] instead of [0, 1]. Use ss.distributions.rand_raw(), or arr.view(np.uint64) to reinterpret the bits without copying.'
+        errormsg = f'combine_rands() requires uint64 arrays, not a={a_dtype} and b={b_dtype}. Signed integers give output in [-0.5, 0.5] instead of [0, 1]. Use ss.randint(low=0, high=np.iinfo(np.uint64).max, dtype=np.uint64), or arr.view(np.uint64) to reinterpret the bits without copying.'
         raise TypeError(errormsg)
     c = np.bitwise_xor(a*b, a-b)
     u = c / np.iinfo(np.uint64).max
@@ -627,23 +613,21 @@ def save(filename, obj, **kwargs):
     While some Starsim objects have their own save methods, this function can be
     used to save any arbitrary object. It can then be loaded with ss.load(). A sim
     saved to a `.py` file is written as code that builds it again (`sim.to_code()`).
-    With `format=`, a sim is written in another framework's format by `ss.interop.export()`.
+    Another framework's format is written by `ss.interop.export()`.
 
     Args:
         filename (str/path): the name of the file to save
         obj (any): the object to save
-        format (str): another framework's format, one of `ss.interop.exporters` ('sbml', 'odin', or 'mermaid')
-        kwargs (dict): passed to `sc.save()`, to `sim.to_code()`, or to `ss.interop.export()`
+        kwargs (dict): passed to `sc.save()`, or to `sim.to_code()`
 
     **Examples**:
 
         ss.save('model.py', sim) # The model, as code
         ss.save('run.sim', sim) # The sim, with its results
-        ss.save('model.xml', sim, format='sbml') # The model, as SBML
     """
-    if 'format' in kwargs: # Another framework's format is written by its exporter (sc.save() would pass format= on to pickling, which fails obscurely)
-        ss.interop.export(obj, kwargs.pop('format'), filename=filename, **kwargs) # An unknown format is an error that lists the formats
-        return sc.path(filename)
+    if 'format' in kwargs: # Otherwise passed on to pickling, which fails obscurely
+        errormsg = f'ss.save() writes Starsim\'s own formats; for another framework\'s, use ss.interop.export(sim, "{kwargs["format"]}", filename="{filename}")'
+        raise ValueError(errormsg)
     if str(filename).endswith('.py') and isinstance(obj, ss.Sim):
         obj.to_code(filename, **kwargs)
         return sc.path(filename)

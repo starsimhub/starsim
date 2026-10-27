@@ -1215,7 +1215,7 @@ def test_given_dwell():
     sim = make('abm', p=lambda P: 1 - np.exp(-P.time), dur=ss.lognorm_ex(ss.years(3), ss.years(9))).init()
     assert 'P.time' in str(sim.to_spec()) and 'decided as people leave' in sim.describe(output=True)
     ns = {}
-    exec(ss.to_code(sim.to_spec()).replace("if __name__ == '__main__'", 'if False'), ns)
+    exec(ss.spec.to_code(sim.to_spec()).replace("if __name__ == '__main__'", 'if False'), ns)
     assert ns['sim'].hash() == sim.hash()
     P, C, R = ss.states('P C R')
     with pytest.raises(ss.CapabilityError, match='decided when people enter'):

@@ -53,7 +53,7 @@ Each document starts with a pointer to the `best-practices` document that justif
 
 ### Discipline
 
-- [17-vocabulary.md](17-vocabulary.md): every public name, counted; the capitalization rule; keywords and slots; what was removed since the first draft.
+- [17-vocabulary.md](17-vocabulary.md): every public name; the capitalization rule; keywords and slots; what was removed since the first draft.
 - [18-conformance.md](18-conformance.md): the test suites, including the north-star test, and the corpus of models they run on.
 - [19-open-questions.md](19-open-questions.md): what this revision settled, what is open, what is deferred, and the risks.
 

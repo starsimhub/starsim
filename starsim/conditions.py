@@ -12,7 +12,7 @@ import numpy as np
 import sciris as sc
 import starsim as ss
 
-__all__ = ['Cond', 'Event', 'state', 'child']
+__all__ = ['Cond', 'Event', 'state']
 
 ops = {
     '>':operator.gt, '<':operator.lt, '>=':operator.ge, '<=':operator.le, '==':operator.eq, '!=':operator.ne,
@@ -158,7 +158,7 @@ class Cond:
 
     def memory(self, kind):
         if self.op != 'event' and not (isinstance(self, Event) and self.args[0] == 'tr'):
-            errormsg = f'.{kind} is the memory of an event (a delivery, an outcome of one such as screening.positive, a product, a declared transition such as tb.diagnosis, or an ss.Event), not of {self!r}'
+            errormsg = f'.{kind} is the memory of an event (a delivery, an outcome of one such as screening.positive, a product, or a declared transition such as tb.diagnosis), not of {self!r}'
             raise TypeError(errormsg)
         return Cond('memory', self, kind)
 
@@ -365,49 +365,6 @@ class Named:
     def __deepcopy__(self, memo): return self
 
 
-class child(Event):
-    """
-    An event on a mother, when one of her children goes through an event (e.g. `ss.child(preg.birth)`); agents only
-
-    Args:
-        event (Event/Transition): the event that happens to the child
-        under (dur): only children younger than this
-    """
-    def __init__(self, event, under=None):
-        if isinstance(event, ss.Transition):
-            event = Event('tr', event)
-        if not isinstance(event, Event):
-            errormsg = f'ss.child() takes an event (a transition, or e.g. preg.birth), not {event}'
-            raise TypeError(errormsg)
-        Cond.__init__(self, 'move', 'child', event, under)
-        return
-
-    @property
-    def label(self):
-        return f'child({self.args[1].label})'
-
-    @property
-    def module(self):
-        return self.args[1].module
-
-    def spec(self):
-        return self.args[1].spec()
-
-    def mothers(self, sim, uids):
-        """ The mothers of the children an event happened to """
-        ppl = sim.people
-        under = self.args[2]
-        uids = ss.uids(uids)
-        if under is not None:
-            uids = uids[ppl.age.raw[uids] < ss.dur(under).years]
-        parent = ppl.parent.raw[uids]
-        return ss.uids(np.unique(parent[parent != ppl.parent.nan]))
-
-    @property
-    def uids(self):
-        return self.mothers(self.module.sim, self.args[1].uids)
-
-
 def set_states(cond):
     """ The states a condition is a set of (`A | B`, or one state), as (module, name) pairs; None if it is anything else """
     if cond.op == 'state':
@@ -520,7 +477,7 @@ def state_refs(obj):
         if cond.op == 'state':
             if modname(cond.args[0]) is not None:
                 out.append((modname(cond.args[0]), cond.args[1]))
-        elif isinstance(cond, Event) and not isinstance(cond, child): # The transition, or the states entered or left
+        elif isinstance(cond, Event): # The transition, or the states entered or left
             kind, obj, dst = cond.args
             name = modname(cond.module)
             if name is not None:
@@ -604,8 +561,6 @@ def as_cond(obj):
         return obj
     elif isinstance(obj, (ss.Delivery, ss.Product)): # A delivery (or product) as an event: the people who received it this step
         return Cond('event', obj, None)
-    elif isinstance(obj, ss.Event):
-        return Cond('event', obj.mod, obj.name)
     elif isinstance(obj, ss.solvers.CountState): # A declared state after a compartmental run (e.g. sir.S once sir has run): the state it counts
         return as_cond(obj.state)
     elif isinstance(obj, ss.State): # Looked up by name when the sim runs, since the sim works on copies
@@ -731,24 +686,19 @@ def check_path_events(sim, cond, owner):
     return
 
 
-def split_who(who, operator='any', where=None, on=None):
+def split_who(who, where=None, on=None):
     """
     Split who= of a delivery into its trigger (the events in it) and its condition (the rest)
 
-    who= takes a condition, an event, or a combination with &, |, or a list (with `operator='any'`, the same as |, or `'all'`, the same as &).
+    who= takes a condition, an event, or a combination with & and |.
     With an event in it, delivery is triggered: it reaches the people the event happened to on this step who meet the condition parts.
     `on=` and `where=` are the same thing, joined to it by &. Returns (trigger, condition), either of which may be None.
     """
-    if operator not in ['any', 'all']:
-        errormsg = f'operator= is "any" (the default: anyone in any of them, the same as |) or "all" (the same as &), not {operator!r}'
-        raise ValueError(errormsg)
     parts = []
     for val in [who, on, where]:
         if isinstance(val, (list, tuple)):
-            if any(isinstance(v, (list, tuple)) for v in val):
-                errormsg = 'who= takes a list of events or conditions, not a list of lists; write the inner ones with | or &, e.g. who=[(a | b), c]'
-                raise TypeError(errormsg)
-            val = join('|' if operator == 'any' else '&', [as_cond(v) for v in val])
+            errormsg = 'who=, on=, and where= of a delivery take one condition or event, not a list; join them with | (any of them) or & (all of them), e.g. who=a.positive | b.positive'
+            raise TypeError(errormsg)
         elif val is not None:
             val = as_cond(val)
         if val is not None and not isinstance(val, Cond) and not callable(val):
@@ -784,9 +734,7 @@ def split_who(who, operator='any', where=None, on=None):
 
 
 def from_arr(arr):
-    """ The leaf for an array that has not been initialized: one of the people's own arrays, or a module's (an event, for an `ss.Event`) """
-    if isinstance(arr, ss.Event):
-        return Cond('event', arr.mod, arr.name)
+    """ The leaf for an array that has not been initialized: one of the people's own arrays, or a module's """
     people = getattr(arr, 'people', None)
     if people is not None and people.states.get(arr.name) is arr:
         return Cond('people', arr.name)
@@ -1001,16 +949,16 @@ class Selector:
         mod = self.mod if event.module is None else self.module(modname(event.module))
         engine = mod.engine
         spec = event.spec()
-        name = None if isinstance(event, child) else spec.get('tr')
+        name = spec.get('tr')
         graph = getattr(mod, 'graph', None)
         if isinstance(name, str) and graph is not None and (name in graph.transitions or name in graph.transfers) and not (self.abm and 'to' in spec): # A declared transition or transfer (as compartments, also a branch of one)
             return self.event(mod, name, to=spec.get('to'))
         if self.abm:
             out = np.zeros(self.shape, dtype=bool)
             uids = engine.event_uids(**spec)
-            out[event.mothers(self.sim, uids) if isinstance(event, child) else uids] = True
+            out[uids] = True
             return out
-        if isinstance(event, child) or 'tr' in spec:
+        if 'tr' in spec:
             raise ss.CapabilityError(f'the condition {event} cannot run with solver="{self.sim.solver}" yet: it is an event that only agents record. Run with solver="abm".')
         raise ss.CapabilityError(f'the condition {event} cannot run with solver="{self.sim.solver}" yet: entering or leaving a state as an event is agents only for now. Run with solver="abm".')
 

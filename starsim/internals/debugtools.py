@@ -170,20 +170,6 @@ class Diagnostics(sc.quickobj):
         return
 
 
-def check_requires(sim, requires, *args):
-    """ Check that the module's requirements (of other modules) are met """
-    errs = sc.autolist()
-    all_classes = [m.__class__ for m in sim.modules]
-    all_names = [m.name for m in sim.modules]
-    for req in sc.mergelists(requires, *args):
-        if req not in all_classes + all_names:
-            errs += req
-    if len(errs):
-        errormsg = f'The following module(s) are required, but the Sim does not contain them: {sc.strjoin(errs)}'
-        raise AttributeError(errormsg)
-    return
-
-
 def metadata(comments=None):
     """ Store metadata; like `sc.metadata()`, but optimized for speed """
     md = sc.objdict(

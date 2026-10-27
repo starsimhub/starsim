@@ -92,6 +92,13 @@ Each row is one infection: the time (`t`), the infected agent (`target`), and th
 sim.analyzers.infection_log.plot()
 ```
 
+`animate()` shows the same infections as they happen, one frame per time point: each agent infected is a dot on a grid, colored by when it was infected. It draws each frame in turn, so run it in a Python session rather than a notebook:
+
+```{python}
+#| eval: false
+sim.analyzers.infection_log.animate(framerate=20)
+```
+
 From the log, the generation interval (the time from a person's infection to the infection of each person they infect) is the time of each infection minus the time its source was infected:
 
 ```{python}

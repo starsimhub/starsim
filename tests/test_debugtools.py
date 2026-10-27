@@ -58,17 +58,6 @@ def test_diagnostics_states():
 
 
 @sc.timer()
-def test_check_requires():
-    sc.heading('Testing check_requires')
-    s1 = ss.Sim(diseases='sis', networks='random', n_agents=small).init()
-    ss.check_requires(s1, 'sis')
-    ss.check_requires(s1, ss.SIS)
-    with pytest.raises(AttributeError):
-        ss.check_requires(s1, ss.SIR)
-    return s1
-
-
-@sc.timer()
 def test_mock_objects():
     sc.heading('Testing mock objects')
     o = sc.objdict()
@@ -113,7 +102,6 @@ if __name__ == '__main__':
     prof = test_profile()
     rvs = test_diagnostics_rvs()
     states = test_diagnostics_states()
-    sim = test_check_requires()
     objs = test_mock_objects()
 
     sc.toc(T)

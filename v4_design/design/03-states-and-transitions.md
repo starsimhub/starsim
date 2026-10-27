@@ -38,7 +38,6 @@ The first reads like the equations and is the recommended form. The second is fo
 
 ## `ss.State`
 
-<!-- fragment -->
 ```python
 ss.State(
     name       = None,      # taken from the keyword or the variable name if omitted
@@ -108,7 +107,6 @@ sir = ss.Disease(infection, recovery, init_n=dict(I=1))    # exactly one person
 
 ## `ss.Transition`
 
-<!-- fragment -->
 ```python
 ss.Transition(
     src,                # a state, several states (a list, or a sum I + R), or ss.null for an inflow
@@ -131,7 +129,7 @@ ss.Transition(
 
 At most one of `rate`, `dur`, and `on` is given (with `on=` an event, `dur=` is the time after it), and `stages=` goes with `dur=`. A transmission is a rate with the source of infection in it, `rate=beta * I`: there is no `beta=`. `dur=ss.days(10)` and `rate=ss.perday(0.1)` say the same thing and produce the same model spec.
 
-`after=` and `before=` are for models that count time in a state, as EMULSION's minimum durations and escapes do (`weaning = ss.Transition(NB, W, rate=ss.perday(0.5), after=ss.days(21))`); a litter is a birth driven by the transition, `ss.birth(NB, per=farrowing, n=10)` ([below](#births-deaths-and-migration)). A compartmental run takes `after=` and `before=` by a conveyor of whole steps, as it takes a fixed delay ([below](#a-fixed-delay)), except on a transmission or out of a state that splits on entry (`p=`), which need agents. A dwell time with `after=` starts after the stay. A wait for an event, of this module or another, is `on=` the event (`on=preg.delivery`, or any event `ss.on()` takes): people in the source move when it happens to them, or with `dur=` that long after it (drawn for each person when the event happens, a scalar being the mean of an exponential as for any `dur=`), unless they leave the source first; so "until delivery" is `ss.Transition(X, Y, on=preg.delivery)` and "a month after delivery" adds `dur=ss.constant(ss.months(1))`. As agents only, as for `ss.on()`. A function as `dur=` (`dur=fn`) is the mean of an exponential, which warns, since each person's own time from a function is `dur=ss.constant(fn)`.
+`after=` is for models that count time in a state, as EMULSION's minimum durations do (an escape is a rate times a condition on the time in the state, `rate*(X.time < d)`, as agents) (`weaning = ss.Transition(NB, W, rate=ss.perday(0.5), after=ss.days(21))`); a litter is a birth driven by the transition, `ss.birth(NB, per=farrowing, n=10)` ([below](#births-deaths-and-migration)). A compartmental run takes `after=` by a conveyor of whole steps, as it takes a fixed delay ([below](#a-fixed-delay)), except on a transmission or out of a state that splits on entry (`p=`), which need agents. A dwell time with `after=` starts after the stay. A wait for an event, of this module or another, is `on=` the event (`on=preg.delivery`, or any event `ss.on()` takes): people in the source move when it happens to them, or with `dur=` that long after it (drawn for each person when the event happens, a scalar being the mean of an exponential as for any `dur=`), unless they leave the source first; so "until delivery" is `ss.Transition(X, Y, on=preg.delivery)` and "a month after delivery" adds `dur=ss.constant(ss.months(1))`. As agents only, as for `ss.on()`. A function as `dur=` (`dur=fn`) is the mean of an exponential, which warns, since each person's own time from a function is `dur=ss.constant(fn)`.
 
 **The kind of a transition is derived, not chosen.** If the rate mentions a bare state, the transition is *contact-mediated* and that state is the source of infection; otherwise it is *spontaneous*. `describe()` prints the kind of every transition.
 
@@ -173,7 +171,6 @@ The arrow in `ss.transfer()` and `move=` is between the levels of a dimension, w
 
 **`beta` may differ by route and direction.** Infectiousness belongs to the disease and contact to the network, and where the pathogen transmits differently through different kinds of contact the disease gives one value per network, as in Starsim:
 
-<!-- fragment -->
 ```python
 infection = S >> I @ dict(sexual=ss.peract(m2f=0.008, f2m=0.004), needles=ss.peract(0.006)) * I
 sim = ss.Sim(hiv, networks=[ss.SexualNet(), needles])
@@ -275,7 +272,6 @@ States that are a source of any contact-mediated transition are marked infectiou
 
 `I.n` is the plain number of people in a state (the number represented, after any scaling from `n_agents` to `total_pop`), and `I.frac` is that number as a fraction of the module's people. For a state that is not people, `W.n` is simply its value. A sum of states has them too: `N = S + I + R` then `N.n`. Rates may be arbitrary expressions of counts and parameters, and they are used literally, with no routes involved:
 
-<!-- fragment -->
 ```python
 S >> I  @ beta * W.n / (W.n + K)      # environmental: saturating dose-response to a reservoir W
 Sh >> Eh @ a * b * Iv.n / Nh          # vector-borne: bites per person from infectious mosquitoes
@@ -315,7 +311,7 @@ How it is realized follows from the solver:
 
 When the distribution has no exact compartmental form, a compartmental run uses Erlang stages matched to the mean and variance (`k = round((mean / std)²)`, at least 1) and says so in one line (`ss.errors.StagesUnderAuto`: `note: recovery has a lognorm_ex dwell time, approximated by 11 Erlang stages (mean 10 days kept; std 3.02 instead of 3 days)`). This is the one approximation `solver='auto'` makes without being asked: a non-exponential dwell time does not by itself make a model agent-based. A user who wants the distribution sampled exactly asks for `solver='abm'`. `approx=True` hides the note. With `approx=False` nothing is approximated: `'auto'` runs the model as agents, where the dwell time is sampled directly, and an explicit compartmental solver raises `CapabilityError`. The approximation policy as a whole is in [12-backends.md](12-backends.md).
 
-**Several non-exponential dwell times out of one state** have a compartmental form when each is for other people, by `where=` (durations by sex: `ss.Transition(A, R, dur=ss.lognorm_ex(...), where=ss.ppl.female)` and another `where=ss.ppl.male`): each gets its own stages, and each group enters those of the one it has, worked out from the groups the `where=` holds for when the run starts. Two for the same people (with no `where=`, e.g. clearance against seeking care) race: a compartmental run keeps a compartment for each combination of their Erlang stages (k1 × k2 for two, up to 400 per group), a stage of one clock moves people along its own axis, and its last stage is its exit whatever stage the other is in, which is the exact form of the race between the Erlang dwells (the share leaving by each, and the time to leave, match the integral). A fixed delay alongside another non-exponential dwell time, `after=`/`before=` on the state, or two with the same `where=` have no compartmental form yet: `solver='auto'` runs the model as agents, and a compartmental solver raises `CapabilityError` naming them. A distribution whose parameters differ by group (`ss.lognorm_ex(mean=ss.by(sex=...), std=...)`) is one dwell time with stages for each group.
+**Several non-exponential dwell times out of one state** have a compartmental form when each is for other people, by `where=` (durations by sex: `ss.Transition(A, R, dur=ss.lognorm_ex(...), where=ss.ppl.female)` and another `where=ss.ppl.male`): each gets its own stages, and each group enters those of the one it has, worked out from the groups the `where=` holds for when the run starts. Two for the same people (with no `where=`, e.g. clearance against seeking care) race: a compartmental run keeps a compartment for each combination of their Erlang stages (k1 × k2 for two, up to 400 per group), a stage of one clock moves people along its own axis, and its last stage is its exit whatever stage the other is in, which is the exact form of the race between the Erlang dwells (the share leaving by each, and the time to leave, match the integral). A fixed delay alongside another non-exponential dwell time, `after=` on the state, or two with the same `where=` have no compartmental form yet: `solver='auto'` runs the model as agents, and a compartmental solver raises `CapabilityError` naming them. A distribution whose parameters differ by group (`ss.lognorm_ex(mean=ss.by(sex=...), std=...)`) is one dwell time with stages for each group.
 
 **The user can say how explicitly** with `stages=k`: a compartmental run uses `k` sub-stages with the given mean, and agents draw their dwell time from the Erlang distribution with `k` stages and that mean, which is the way to make an agent-based and a compartmental run of a model match.
 
@@ -331,13 +327,12 @@ Generated sub-stages appear in `describe()` and are summed in results, so `I` me
 
 `ss.constant` is a fixed delay, as odin's `delay()` and a reporting lag are: `onset = E >> I @ ss.constant(ss.days(14))`. As agents, everyone's exit is scheduled 14 days after they arrive, rounded to whole steps (see below). A compartmental run does not approximate it by stages (a fixed delay is the one dwell time whose Erlang stages never converge: 200 of them are stiff and still 1.6% off); it keeps a conveyor of whole steps instead. With a delay of `K` steps, the state has `K + 1` compartments, one for the people who arrived in each of the last `K` steps and one for those who arrived during this one; at the end of each step everyone moves along one, and those who have been there `K` steps leave in the next step. The chain-binomial solver lets them leave at its start, once the step's rates are worked out from the people as they were, as agents' scheduled exits come first; Gillespie and tau-leaping, at its middle; and the ODE, at a constant rate over it. So the number in each compartment at each time point is exact for a delay of whole steps, the ODE's release within a step is exact to second order, and the solvers agree with agents step for step. The other exits of the state (deaths, aging) act on everyone in it; in the ODE they act on those leaving until they leave, whose release over the step is lowered to the share those exits leave (h·dt/(exp(h·dt) − 1) for a total rate h), so that a delay of K steps keeps exp(−h·K·dt) of its people, as agents and the stochastic solvers do (it kept exp(−h·(K − ½)·dt): MA7's 12-day incubation with mortality 0.1 a day gave 5,279 infectious mosquitoes for the exact 5,020). Nothing in a conveyor has a rate, so it is not stiff: odin's 14-day SEIR runs in 8 ms and agrees with odin's delay differential equation within 0.25% of the peak at a step of a day (0.06% at half a day).
 
-A delay that is not a whole number of steps is rounded to the nearest one here, with a note (`ss.errors.LargeStep`). As agents, every dwell time (drawn or fixed, and a delay after an event or before a transfer) is rounded to whole steps at random, up or down in proportion, so its mean is kept: 0.2 steps is no steps for 80% of people and one step for 20%, on the module's own random numbers (FP55, decided 2026-10-22; rounding to the nearest step made a dwell under half a step end in the step it began, for everyone). An explicit `dur=0` is no steps, an exit in the step people enter. The people who start in the state are taken to have just arrived, as agents are. `R0()` takes the conveyor as stages whose stays add up to its length. A minimum stay (`after=`) and a limit (`before=`) are conveyors of the same kind: a transition with `after=` acts on the people who have been in the state that many whole steps or more, and one with `before=`, on those who have been there fewer.
+A delay that is not a whole number of steps is rounded to the nearest one here, with a note (`ss.errors.LargeStep`). As agents, every dwell time (drawn or fixed, and a delay after an event or before a transfer) is rounded to whole steps at random, up or down in proportion, so its mean is kept: 0.2 steps is no steps for 80% of people and one step for 20%, on the module's own random numbers (FP55, decided 2026-10-22; rounding to the nearest step made a dwell under half a step end in the step it began, for everyone). An explicit `dur=0` is no steps, an exit in the step people enter. The people who start in the state are taken to have just arrived, as agents are. `R0()` takes the conveyor as stages whose stays add up to its length. A minimum stay (`after=`) is a conveyor of the same kind: a transition with `after=` acts on the people who have been in the state that many whole steps or more.
 
 ## Branching
 
 One source, several destinations, as a list with `p=` for the share of each:
 
-<!-- fragment -->
 ```python
 ss.Transition(S, [Lfast, Lslow], p=[p, 1 - p], rate=beta * I)
 ```
@@ -350,7 +345,7 @@ A branching transition is one named transition with several destinations. Its re
 
 - `p` accepts everything a parameter accepts ([04-parameters.md](04-parameters.md)): a constant, `ss.by(age=[...])`, a time series, or a function of the sim returning one value per agent or per group. In real models the split is rarely two constants.
 - The probabilities out of one state MUST sum to 1. One entry MAY be left out (`None` in a list, or one transition with no `p=`) and gets the remainder, which `describe()` marks as guessed; with two destinations a single value is the first one's probability. A constant split that does not sum to 1, or `ss.null` as one of several destinations (a branch out of the model is a transition of its own), raises `BadBranchSplit`. A list of one destination with `p=[1]` (or `p=[None]`) is a plain transition, not a branch: `ss.Transition(I, [F], p=[1.0], rate=r)` is `ss.Transition(I, F, rate=r)`, and several of them out of one state compete as hazards.
-- **An entry with a `to` axis covers several destinations.** An entry of `p=` may hold an `ss.by` over `to`, whose labels are destination states (a table with a `to` column, or `ss.by(to=dict(pill=..., iud=...))`; by position, `ss.by(to=[...])` follows the destinations the entry covers). It covers the destinations it names, and the product of its factors with a `to` axis is normalized over them each time it is evaluated, while its other factors are kept: `p=[1 - p_use, p_use*mix*w]`, with `mix` a switching row by age and `to` and `w` weights by method, gives `none` the probability `1 - p_use` and each method `p_use*mix[j]*w[j]/sum(mix*w)`. The other entries are one destination each, in order, skipping those named by a `to` axis. A destination it does not name gets 0 from it, a label that is not a destination raises `UnknownState`, and a row that sums to 0 raises `BadBranchSplit`. A function is one entry, for one destination (a function giving a row for several destinations, normalized, is gone: give one function for each). `describe()` prints the entry as given and says what it is normalized over; the model spec writes the entries as given.
+- Each entry of `p=` is one destination's probability. A function is one entry, for one destination (a function giving a row for several destinations, normalized, is gone: give one function for each).
 - A modifier on a branch ([07-effects.md](07-effects.md)), a vaccine's efficacy against it, and `where=` on it change its probability, and the other branches share the rest; they do not change how long people take to leave. One destination of a transition with several is named `'<transition>.<state>'` (`ss.modify('hpv.progression.C', multiply=0.5)`, or `efficacy={'progression.C': 0.5}`), and a modifier or efficacy on it changes that destination's probability in the same way; one on the transition itself scales its rate.
 
 **Each branch may have its own dwell time**: decide the branch on entry, then wait. Write two transitions out of the same state, each with `p=` and its own `dur=`:
@@ -382,7 +377,6 @@ Under every solver an unconditional `dur=0` exit has no compartment and no rate:
 
 **Clocks** are elapsed time, as expressions:
 
-<!-- fragment -->
 ```python
 EL.time                  # time since this person last entered EL
 (EL | LL).time           # since they entered the set from outside it: moving from EL to LL does not reset it
@@ -393,7 +387,6 @@ A clock is a duration in the sim's unit (`EL.time / ss.years(1)` is a number of 
 
 ## Many-to-one
 
-<!-- fragment -->
 ```python
 S + I + R >> D @ mu           # one transition, several sources
 ss.death(rate=mu)               # every state that is people, to outside the model

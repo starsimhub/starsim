@@ -6,7 +6,6 @@ Justified by [best-practices/population-and-mixing.md](../best-practices/populat
 
 ## What a state in a rate means
 
-<!-- fragment -->
 ```python
 S, I, R   = ss.states(3)
 infection = S >> I @ beta * I
@@ -81,7 +80,6 @@ The product form for `p[v]` MUST be used; adding the per-edge probabilities over
 
 Infectiousness belongs to the disease and contact to the routes, but infectiousness can itself depend on the route: HIV is far more transmissible through a shared needle than through sex, and more from men to women than the reverse. Those are still facts about the pathogen, so they stay on the disease, as one `beta` per network. This is Starsim's existing convention:
 
-<!-- fragment -->
 ```python
 S, I = ss.states('S I')
 infection = ss.Transition(S, I, rate=dict(sexual=ss.peract(m2f=0.008, f2m=0.004), needles=ss.peract(0.006)) * I)
@@ -105,7 +103,6 @@ sim = ss.Sim(hiv, networks=[ss.SexualNet(), needles])
 
 `I.n` is the plain number in a state (the same number as the result `I`), and `I.frac` is its fraction of the population. A rate may be any arithmetic expression of counts and parameters, and it is then used exactly as written, without going through the routes:
 
-<!-- fragment -->
 ```python
 S >> I @ beta * I                      # exposure to I through the routes (the usual case)
 S >> I @ beta * I.n / N.n              # the same thing written out for homogeneous mixing; N = S + I + R
@@ -302,7 +299,6 @@ sir.stratify(patch=kenya, mobility=ss.geo.gravity(away=0.1, a=1.0, b=1.0, c=2.0)
 
 Movement models are given by name and parameters; a matrix or a data file is also accepted:
 
-<!-- fragment -->
 ```python
 ss.geo.gravity(away=0.1, a=1.0, b=1.0, c=2.0)    # distances and populations come from the geography
 ss.geo.Mobility(matrix=M)                     # a matrix you already have
@@ -334,7 +330,6 @@ This is the standard time-share form of a commuting model. It needs no change to
 
 The time-share form is the limit in which commuters come back at once. Commuters who come back at a finite rate (Keeling and Rohani's commuter model 7.3, whose `X[i,j]` are the residents of `i` now in `j`) are written with the general pieces: home is a dimension of its own, where people are now is the spatial one, and they move between its levels at rates by home. Results by home count people by home, wherever they are (`res.I.by('home')`), as the book's `Y_i = Σ_j Y_ij` does:
 
-<!-- fragment -->
 ```python
 l, r = 0.05, 0.45 # Leaving home, and coming back, per day: 10% of time away
 sir.stratify(home=['a', 'b'])
@@ -357,7 +352,6 @@ Travelers in transit (in neither their home patch nor their destination) are out
 
 ## Geography
 
-<!-- fragment -->
 ```python
 ss.geo.geography('Kenya', level=1)                       # its 47 counties, bundled
 ss.geo.geography('Kenya', level=1, places=['Nairobi', 'Kiambu'])

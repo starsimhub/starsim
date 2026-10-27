@@ -1,5 +1,5 @@
 """
-The model spec (written by `sim.to_spec()`, here, for `sim.hash()` and `ss.diff()`) as code (`ss.to_code()`, for the declared parts of a model), and the parser of expressions in it
+The model spec (written by `sim.to_spec()`, here, for `sim.hash()` and `ss.diff()`) as code (`sim.to_code()`, for the declared parts of a model), and the parser of expressions in it
 """
 import ast
 import keyword
@@ -21,7 +21,7 @@ comparisons = {ast.Lt:'<', ast.LtE:'<=', ast.Gt:'>', ast.GtE:'>='}
 
 def unknown(what):
     """ Refuse to write a part of a declared module that to_code() does not write, rather than write a different model """
-    errormsg = f'ss.to_code() cannot write {what}: only the declared parts of a model are written as code. Save the sim with ss.save("run.sim", sim) instead'
+    errormsg = f'sim.to_code() cannot write {what}: only the declared parts of a model are written as code. Save the sim with ss.save("run.sim", sim) instead'
     raise NotImplementedError(errormsg)
 
 
@@ -93,14 +93,12 @@ def strat_kwargs(strat):
     levels = strat['levels']
     if strat.get('geo'): # A named geography, looked up again; the split is as the spec has it
         levels = ss.geo.geography(strat['geo']['place'], **named_args(strat['geo'], geo_keys))
-    if strat['kind'] == 'clock' and strat.get('unit'): # Durations
-        levels = Code(f"ss.{strat['unit']}s({levels})")
     kind = strat['kind']
     implied = 'age' if strat['name'] == 'age' else 'plain' # The kind stratify() gives when none is given
     out = {strat['name']:levels, 'split':split, 'adjust':strat['adjust'] or None, 'kind':None if (kind == implied and not strat.get('geo')) else kind}
     if strat.get('split_from'): # Taken from the named population again
         out.pop('split')
-    elif isinstance(levels, list) and isinstance(split, list) and len(levels) == len(split) and kind != 'clock': # Each level with its share, e.g. age={0: 0.3, 15: 0.6, 65: 0.1}
+    elif isinstance(levels, list) and isinstance(split, list) and len(levels) == len(split): # Each level with its share, e.g. age={0: 0.3, 15: 0.6, 65: 0.1}
         out[strat['name']] = {int(k) if sc.isnumber(k) and not isinstance(k, bool) and float(k).is_integer() else k: v for k,v in zip(levels, split)}
         out.pop('split')
     if strat['states'] is not None:
@@ -338,7 +336,7 @@ def disease_code(spec, lines, left):
                 dur = held[0]['name'] if held else code_value(d)
         src, dst = endpoint(t['src']), endpoint(t['dst'])
         untyped = dur in pars and unitless_dur(pars[dur]['value']) # Written as a number, which @ would read as a rate
-        simple = not untyped and len(t['src'] or []) <= 1 and len(t['dst'] or []) <= 1 and t['p'] is None and t['stages'] is None and t['label'] is None and not t.get('migration') and t.get('after') is None and t.get('before') is None and t.get('acquisition') is None and not t.get('move') and not t.get('increment') and not t.get('per')
+        simple = not untyped and len(t['src'] or []) <= 1 and len(t['dst'] or []) <= 1 and t['p'] is None and t['stages'] is None and t['label'] is None and not t.get('migration') and t.get('after') is None and t.get('acquisition') is None and not t.get('move') and not t.get('increment') and not t.get('per')
         if simple:
             members.append((t['name'], f'{src} >> {dst} @ {operand(rate if rate is not None else dur)}'))
         else:
@@ -354,9 +352,8 @@ def disease_code(spec, lines, left):
             for k in ['stages', 'label']:
                 if t[k] is not None:
                     args.append(f'{k}={t[k]!r}')
-            for k in ['after', 'before']:
-                if t.get(k) is not None:
-                    args.append(f'{k}={code_value(t[k])}')
+            if t.get('after') is not None:
+                args.append(f'after={code_value(t["after"])}')
             if t.get('acquisition') is not None:
                 args.append(f'acquisition={t["acquisition"]}')
             if t.get('move'):
@@ -442,10 +439,8 @@ def strains_lines(spec, var, left, members=None):
     immunity = []
     for imm in spec['immunity']:
         due = imm['due_to']
-        due = Code(f'{var}.{due.rpartition(".")[2]}') if isinstance(due, str) else Code(due[0]) if members is None and len(due) == 1 else due[0] if len(due) == 1 else due # The memory, or the state (a variable of the disease), or a name of each strain's state
-        imm_kwargs = dict(due_to=due, scale=imm.get('scale'), rel_sus=imm.get('rel_sus'), rel_trans=imm.get('rel_trans'), dur=imm.get('dur'), p=imm.get('p'), combine=None if imm['combine'] == 'max' else imm['combine'])
-        if imm.get('curve') is not None:
-            left.append(f'the curve of an ss.immunity of the strains "{spec["name"]}" ({imm["curve"]})')
+        due = Code(due[0]) if members is None and len(due) == 1 else due[0] if len(due) == 1 else due # The state (a variable of the disease), or a name of each strain's state
+        imm_kwargs = dict(due_to=due, rel_sus=imm.get('rel_sus'), rel_trans=imm.get('rel_trans'), dur=imm.get('dur'), combine=None if imm['combine'] == 'max' else imm['combine'])
         immunity.append(f'ss.immunity({kwargs_code(imm_kwargs)})')
     if immunity:
         out.append(f"{var}.immunity = [{', '.join(immunity)}]")
@@ -719,7 +714,7 @@ def to_code(spec, filename=None, header=None, footer=None, code=None, missing=No
     functions of the disease) raises `NotImplementedError` rather than write a different model.
 
     Args:
-        spec (dict/str): the spec (from `sim.to_spec()`), or a JSON file holding one
+        spec (dict): the spec (from `sim.to_spec()`)
         filename (str): if given, write the code to this file
         header (str): a docstring for the top of the file
         footer (list): comments to add at the end, one line each (e.g. what an import did not translate)
@@ -729,8 +724,6 @@ def to_code(spec, filename=None, header=None, footer=None, code=None, missing=No
     Returns:
         The code, as a string
     """
-    if not isinstance(spec, dict):
-        spec = sc.loadjson(spec)
     left = list(missing or []) # What is not written, listed at the end rather than failing (as for an export)
     funcs = [] # The definitions of the functions used in the model
     spec = dict(spec, modules=with_functions(spec['modules'], funcs, left))
@@ -893,7 +886,7 @@ def sim_code(sim, filename=None):
         header = f'Imported from {imp.format} ({source}) by ss.interop.load()\n\nHow each rate was read:\n' + '\n'.join(imp.choices)
         if imp.incomplete:
             footer = ['Not translated (ImportIncomplete):'] + [f'  {name}: {why}' for name,why in imp.incomplete]
-    return ss.to_code(sim.to_spec(), filename=filename, header=header, footer=footer, code=code, missing=missing)
+    return to_code(sim.to_spec(), filename=filename, header=header, footer=footer, code=code, missing=missing)
 
 
 #%% Comparing two models
@@ -1002,7 +995,7 @@ def diff(a, b, output=False):
                     for i,(ix,iy) in enumerate(zip(vx, vy)):
                         for k in sorted(set(ix) | set(iy)):
                             if ix.get(k) != iy.get(k):
-                                (pars if k in ['rel_sus', 'rel_trans', 'dur', 'p'] and k in ix and k in iy else model).append(f'{prefix}immunity[{i}].{k} {shown(ix.get(k))} -> {shown(iy.get(k))}')
+                                (pars if k in ['rel_sus', 'rel_trans', 'dur'] and k in ix and k in iy else model).append(f'{prefix}immunity[{i}].{k} {shown(ix.get(k))} -> {shown(iy.get(k))}')
                 elif vx != vy:
                     (pars if key in ['init_prev', 'split', 'values'] and None not in (vx, vy) else model).append(f'{prefix}{key} {shown(vx, unit)} -> {shown(vy, unit)}')
             continue

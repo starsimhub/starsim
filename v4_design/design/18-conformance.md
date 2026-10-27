@@ -178,10 +178,6 @@ The acceptance test is the thirteen switching demos in `tests/switching/` (run w
 
 Three notes on fairness. Time is compared for the solver closest to the original's (an ODE against an ODE, a network model against agents); where the original is compiled C++ or Rust, matching its speed from Python is a real requirement, which is why the compartmental solvers run in compiled kernels ([12-backends.md](12-backends.md)). The allowance for built-ins is there because the comparison is of what each framework lets a modeler say, not of its library of ready-made cases. And the line count is of the model, not of the surrounding analysis, since that is what the claim is about.
 
-### 14. Documentation
-
-Every python block in this folder (chapters 00 to 19) is run by `test_spec.py::test_spec`, in order within each chapter, with each disease example checked to grow; a block that cannot run is marked as a fragment, and a block that fails because of a known library bug is listed in the test. The counts in [17-vocabulary.md](17-vocabulary.md) are generated from the names `ss` exports and compared by `test_spec.py`. The user documentation (`docs/`) is executed when it is built. Comparing printed output with what a page shows is not yet done.
-
 ### Performance
 
 Not one of the claims, but checked: `test_baselines.py::test_performance_guard` compares the time of a set of runs with `tests/perf_guard.yaml`, and the `benchmark_*.py` scripts (with their `.yaml` records) time the larger cases. A slowdown is treated as a bug.

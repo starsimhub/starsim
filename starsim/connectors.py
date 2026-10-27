@@ -243,10 +243,6 @@ def unapplied(graph, modname, kind, name, mods):
         if name not in graph.pars:
             return (f'"{name}" is a plain parameter of "{modname}", not one of its model\'s parameters (ss.par), so only the module\'s own code reads it, and a modifier cannot change it. '
                     f'Modify a parameter or transition of its model instead (e.g. {modname}.{next(iter(graph.transitions), "transition")}), or give the value when the module is made.')
-        tables = [tr.name for tr in graph.transitions.values() for p in getattr(tr, 'p_given', None) or [] for leaf in ss.expressions.to_pars(p) if leaf.name == name]
-        if tables:
-            dsts = sc.strjoin(f"'{modname}.{tables[0]}.{dst.name}'" for dst in graph.transitions[tables[0]].dst)
-            return f'it is a value over "to" in the p= table of "{tables[0]}", which is built once, when the sim is made (a change to the table is not yet supported). To change the probability of one destination, modify it by name: {dsts}.'
     elif kind in ['rel_sus', 'rel_trans']:
         trans_read = kind == 'rel_trans' and any(isinstance(leaf, ss.expressions.Count) and leaf.trans for tr in graph.transitions.values() if tr.rate is not None for leaf in tr.rate.leaves) # Read by a count weighted by infectiousness (A.n_trans)
         if not (graph.acquisitions if kind == 'rel_sus' else graph.infectious) and not trans_read:
@@ -639,7 +635,7 @@ class modify(Connector):
         pass
 
     def to_spec(self):
-        """ Its part of the model spec (`sim.to_spec()`), for `sim.hash()`, `ss.diff()`, and `ss.to_code()` """
+        """ Its part of the model spec (`sim.to_spec()`), for `sim.hash()`, `ss.diff()`, and `sim.to_code()` """
         out = super().to_spec()
         out.update(type=type(self).__name__, target=self.target, multiply=None, add=None, set=None,
                    start=None if self.start is None else str(self.start), stop=None if self.stop is None else str(self.stop))

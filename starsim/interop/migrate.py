@@ -17,14 +17,7 @@ their meaning), a `beta` pair on `ss.MFNet` (`beta={'mf': [0.08, 0.04]}`, which 
 way), `copy_inputs=` (removed: a sim always copies its inputs), `ss.uids.cat()` (now `ss.uids.concatenate()`), an override of `ss.Infection`'s `infect()` (now `transmit()`), `preg.breastfeeding`
 (now `preg.lactating`), `ss.RandomNet(uniform_targets=True)` (now `method='uniform'`), and the counts of the states of Starsim's own
 modules after results (`results.n_alive`, `res['n_infected']`, now `results.alive`, `res['infected']`; a result the code makes
-itself keeps its name, and other counts are listed). From Starsim 4's prereleases: a test's follow-ups nested in it
-(`ss.screen(test, on_positive=ss.treat(drug))`), which are now steps of their own, added beside it to the interventions (left
-in place, so that the code fails with Starsim 4's own error, when the script can't find where they go); `ss.Test`, now
-`ss.Diagnostic`; the keywords of a delivery (`eligible=`, `years=`, now `where=`, `at=`, only in calls to `ss.screen()`,
-`ss.treat()`, `ss.vaccinate()`, `ss.Delivery()`, and `ss.transfer()`, never in a `def`); `ss.SexualNet(sides=)`, now `between=`;
-`init=` given as numbers of people, now `init_n=`; arrow strings between levels (`ss.transfer(risk='low -> high')`, now
-`risk=('low', 'high')`); `infectious=` of `ss.State()`, removed; `solver='stochastic'`, now `'binomial'`; and `ti_entry`, now `ti` (one time index in every phase of a step). Read the diff afterwards: each
-change is listed with its line.
+itself keeps its name, and other counts are listed). Read the diff afterwards: each change is listed with its line.
 """
 import re
 import ast
@@ -33,7 +26,6 @@ import json
 import argparse
 import importlib
 import sciris as sc
-import starsim as ss
 
 __all__ = ['migrate']
 
@@ -54,48 +46,40 @@ renames = [
     (r'\bss\.InfectionLog\b',      'ss.diseases.InfectionLog',       'ss.InfectionLog is ss.diseases.InfectionLog'),
     (r'\.annualize\(\)',           ".resample('year')",              "res.annualize() is res.resample('year') (a flow is summed, a stock taken at the year's end, a ratio averaged)"),
     (r'''(\bverbose['"]?\s*[=:]\s*)(-1|['"]brief['"])(?![\w.])''', r'\g<1>0', 'verbose=-1 ("brief") is verbose=0'),
-    (r'\bss\.Test\b',             'ss.Diagnostic',                  'ss.Test (a Starsim 4 prerelease) is ss.Diagnostic, the same class, so a subclass of it needs only the rename'),
-    (r'\bss\.(demographics\.Pregnancy|LegacyPregnancy)\b', 'ss.Pregnancy', "Starsim 3's pregnancy written as code is now ss.Pregnancy, the declared pregnancy (with Starsim 3's arguments; its states and results have v4's names)"),
+    (r'\bss\.demographics\.Pregnancy\b', 'ss.Pregnancy', "Starsim 3's pregnancy written as code is now ss.Pregnancy, the declared pregnancy (with Starsim 3's arguments; its states and results have v4's names)"),
     (r'\b(\w*preg\w*)\.pregnant\b',  r'\1.P',                        "ss.Pregnancy's pregnant is its state P"),
     (r'\b(\w*preg\w*)\.ti_pregnant\b', r'\1.ti_P',                   "ss.Pregnancy's ti_pregnant is ti_P, the step P was entered"),
     (r'\b(\w*preg\w*)\.(stillbirth|miscarriage|birth)s\b', r'\1.\2', "ss.Pregnancy's results are its flows: stillbirth, miscarriage, birth"),
     (r'\b(\w*preg\w*)\.pregnancies\b', r'\1.conception',            "ss.Pregnancy's pregnancies result is its flow conception"),
     (r'\b(\w*preg\w*)\.breastfeeding\b', r'\1.lactating',            "ss.Pregnancy's breastfeeding is preg.lactating"),
-    (r'\b(\w*preg\w*)\.lactation\.L\b', r'\1.lactating',            "ss.Lactation (a Starsim 4 prerelease) is gone: breastfeeding is ss.Pregnancy's preg.lactating"),
     (r'\bdef infect\(\s*self\s*\)', 'def transmit(self)',         "ss.Infection's transmission pass is transmit() (infect(uids) now infects those agents at once, for every disease)"),
     (r'\b(super\(\)|self)\.infect\(\s*\)', r'\1.transmit()',        "ss.Infection's transmission pass is transmit() (infect(uids) now infects those agents at once, for every disease)"),
     (r'\buids\.cat\(',             'uids.concatenate(',              'ss.uids.cat() is ss.uids.concatenate()'),
-    (r'''(\bsolver\s*=\s*)(['"])stochastic\2''', r'\1\2binomial\2',  "solver='stochastic' (a Starsim 4 prerelease) is solver='binomial', the chain binomial"),
-    (r'\bss\.people\.(?!People\b)', 'ss.ppl.',                        'ss.people (a Starsim 4 prerelease) is ss.ppl'),
     (r'\bss\.library\.',          'ssl.',                           'ss.library is imported by itself: import starsim.library as ssl, then ssl.X'),
-    (r'\b(\w+)\.ti_entry\b',       r'\1.ti',                        'ti_entry (a Starsim 4 prerelease) is ti: the time index is the same in every phase of a step, and an infection is dated with it'),
-    (r'\bself\.now_entry\b',       'self.t.tvec[self.ti]',           'now_entry (a Starsim 4 prerelease) is the time of the step\'s end, self.t.tvec[self.ti] (self.now is its start)'),
-    (r'\bss\.geo\(',              'ss.geo.geography(',              'ss.geo (a Starsim 4 prerelease) is ss.geo.geography'),
-    (r'\bss\.(gravity|Mobility)\b', r'ss.geo.\1',                     'ss.gravity and ss.Mobility (a Starsim 4 prerelease) are in ss.geo'),
 ]
 
 # Internal helpers that are now only in their submodules, by submodule
 moved = dict(
-    distributions = 'link_dists make_dist dist_list scale_types rand_raw Dists',
+    distributions = 'link_dists make_dist dist_list Dists',
     settings      = 'load_fonts',
     modules       = 'module_map module_types find_modules',
     results       = 'validate_sim_data',
     debugtools    = 'metadata diff_sims check_sims_match Profile Diagnostics mock_time mock_sim mock_people mock_module',
     utils         = 'find_contacts standardize_data standardize_netkey shrink',
     arrays        = 'BaseArr ModifiableArr',
-    errors        = ' '.join(cls.__name__ for cls in ss.errors.classes() if cls.__name__ not in ss.errors.__all__), # Errors, warnings, and notes (a Starsim 4 prerelease), except the base classes and ss.CapabilityError
 )
 for submodule, names in moved.items():
     renames.append((rf"\bss\.({'|'.join(names.split())})\b", rf'ss.{submodule}.\1', f'internal helpers are in their submodule (ss.{submodule}.)'))
 
 # What needs a person: a regular expression, and what to write instead
 flags = [
+    (r'\bss\.(distributions\.)?(scale_types|rand_raw)\b', "ss.scale_types and ss.rand_raw were removed: a distribution's scaling is a string on the class ('predraw', 'postdraw', both as a list, or None; see the ss.Dist docstring), and raw uint64 draws for ss.combine_rands() are ss.randint(low=0, high=np.iinfo('uint64').max, dtype=np.uint64)"),
     (r'\bss\.(routine|campaign)_(vx|screening|triage)\b', "a delivery: ss.vaccinate(efficacy=e, coverage=p, start=y, interval=ss.years(1)) for routine (Starsim 3's prob= was a share reached each year), at=[...] for a campaign; ss.screen() for screening, and for triage a second ss.screen(who=screening.positive) of its own"),
     (r'\bss\.(RoutineDelivery|CampaignDelivery|BaseTest|BaseScreening|BaseTriage|BaseTreatment|BaseVaccination)\b', "Starsim 3's delivery classes were removed: ss.screen(), ss.vaccinate(), or ss.treat() with coverage= (prob=p is coverage=ss.probperyear(p), offered at every step), start= and stop= (start_year=, end_year=; stop is not included), at= (a campaign's years=), and where= (eligibility=); a subclass that overrides step() is an ss.Intervention written as code"),
     (r'\bss\.treat_num\b', 'ss.treat(cure=e, on=dis.infection (or who=screening.positive), capacity=n, queue=True): those not served wait, and leave the queue when no longer eligible'),
     (r'\bss\.(Dx|Tx|Vx)\b', "Starsim 3's products written as code were removed: ss.Diagnostic (a table of more than two results is results=dict(...), most severe first), ss.Treatment (cure=, or cure=dict(<state>=...) by state), ss.Vaccine (efficacy=); an administer() of your own is administer(self, uids) on a subclass of ss.Product, returning its outcomes as dict(positive=uids)"),
     (r'\bss\.simple_vx\b', 'ss.Vaccine(efficacy=e)'),
-    (r'\bclass\s+\w+\(\s*(ss\.)?(Legacy)?Pregnancy\s*\)', "ss.Pregnancy is now the declared module (states and transitions, with Starsim 3's arguments), and Starsim 3's pregnancy written as code was removed: a subclass that overrides its methods raises. Rewrite onto its seams: conception_rate(sim) for who conceives, ss.modify() of its transitions (preg.conception, preg.miscarriage, ...), infant_rate= for infant mortality, since_birth and preg.lactating for postpartum and breastfeeding, ss.on(preg.birth) or preg.add_callback(preg.birth, fn) at a delivery"),
+    (r'\bclass\s+\w+\(\s*(ss\.)?Pregnancy\s*\)', "ss.Pregnancy is now the declared module (states and transitions, with Starsim 3's arguments), and Starsim 3's pregnancy written as code was removed: a subclass that overrides its methods raises. Rewrite onto its seams: conception_rate(sim) for who conceives, ss.modify() of its transitions (preg.conception, preg.miscarriage, ...), infant_rate= for infant mortality, since_birth and preg.lactating for postpartum and breastfeeding, ss.on(preg.birth) or preg.add_callback(preg.birth, fn) at a delivery"),
     (r'\.add_(conception|delivery)_callback\(', "ss.Pregnancy's add_conception_callback(fn) is preg.add_callback(preg.conception, fn); add_delivery_callback(fn), which was called with (mothers, newborns), is preg.add_callback(preg.birth, fn), called with the newborns (their mothers are sim.people.parent[newborns]). Both are called at the end of the pregnancy's step"),
     (r'\bss\.(demographics\.)?PregnancyPars\b', "ss.PregnancyPars was removed: ss.Pregnancy defines its parameters itself, and ss.Pregnancy().pars has them (e.g. k in ss.Pregnancy().pars; its fertility is the conception rate, a method, so leave it out when passing the values on). A subclass of it is an ss.Pars with the keys it uses"),
     (r'\b(slot_scale|min_slots|p_survive_maternal_death|trimesters)\s*=(?!=)', "if this is a parameter of ss.Pregnancy, it was removed, since nothing read it: drop slot_scale, min_slots, and p_survive_maternal_death; for trimesters, the gestational age is preg.P.time (e.g. preg.P & (preg.P.time < ss.weeks(13)))"),
@@ -128,25 +112,12 @@ flags = [
     (r'\brel_part_rates\s*=', 'participation= (rel_part_rates was removed: its multiplier goes in the probability, e.g. participation=0.45 for 0.9 times 0.5)'),
     (r'''(['"])(mf|mfnet|msm|msmnet)\1''', "ss.MFNet and ss.MSMNet are ss.SexualNet, named 'sexualnet' unless given a name: networks='sexual', and a beta or route= keyed 'sexual' (or ss.SexualNet(name='mf'))"),
     (r'\bfloat\((?![^)]*(\.raw|\.values|\[|_units\b|_steps\b))[^)]*(rate|dur_)[^)]*\)', 'if this is a rate or duration (ss.peryear, ss.years, ...), its number is .value (float() of one is refused)'),
-    # From Starsim 4's prereleases
-    (r'\bss\.Lactation\b|\blactation\s*=|\blact\w*\.L\b', "ss.Lactation (a Starsim 4 prerelease) is gone, with ss.Pregnancy(lactation=): breastfeeding is ss.Pregnancy's preg.lactating (a state of each woman), with p_breastfeed= and dur_breastfeed= on ss.Pregnancy; lact.L is preg.lactating"),
-    (r'\bss\.contacts\((.*,)?\s*(?!(?:ages|matrix|dims|name|source|layer|unit)\s*=)\w+\s*=(?!=)', "ss.contacts() takes a matrix and what it is over: ss.contacts(M, ages=[0, 15, 65]) for its own age groups (age= and bands= are gone), ss.contacts(M) over the model's age groups (was age=M), ss.contacts(M, dims='risk') over another stratification (was risk=M), and ss.contacts(dict(age=A, area=B)) for a product of a matrix for each (was age=A, area=B)"),
-    (r'''(['"])\s*[\w.]*\s*->\s*[\w.| ]*\1|\bss\.(birth|death|immigration|emigration)\(\s*f['"]''', "arrow strings are gone: a move between states is written with the states (move=S >> V, ss.death(X), ss.birth(S)), and a move between levels as a pair (ss.transfer(risk=('low', 'high')), move=dict(risk=('low', 'high')))"),
-    (r'''\bkind\s*=\s*['"]strain['"]|\.stratify\(.*\bimmunity\s*=''', 'strains are part of the disease, not a stratification: ss.Disease(..., strains=ss.Strains(...)), with the protection between them as ss.Strains(immunity=ss.immunity(due_to=...)); a change of strain is move=DS >> RIF on the strain objects'),
-    (r'''\bss\.Strains\(\s*['"]|\bexclusive\s*=''', "a family of diseases is ss.Disease(name=..., strains=ss.Strains([d1, d2], shared=[...])) (was ss.Strains(name, [d1, d2], exclusive=...))"),
-    (r'\bprotected\s*=', 'ss.immunity(due_to=...) replaces protected=: a state (due_to=R), an attribute (due_to=\'nab\'), or the memory of the strains (due_to=dis.strains.last, dis.strains.ever)'),
     (r'\bclass\s+\w+\(.*\bss\.SexualNet\b', 'ss.SexualNet has parameters and forms partnerships itself (between=, n_contacts=, dur=, ...): a subclass that forms its own overrides step(), and the base then starts none for it'),
-    (r'\bsides\s*=', "ss.SexualNet's sides= is between=: 'mf' (the default), 'mm', or two groups, e.g. ('fsw', 'client')"),
     (r'\bkeep_case\s*=', 'Results.flatten() always keeps the case of keys now (as to_df() does): drop keep_case='),
-    (r'\binfectious\s*=\s*True\b', 'infectious= of a state is gone: drop it (a state is infectious when it is in a transmission rate, e.g. rate=beta*I)'),
     (r'\bmatch_result_keys\b', 'ss.utils.match_result_keys() is gone: res.flatten() gives a flat dict of results'),
-    (r'''\bmatch\s*=\s*r?['"][^'"]*\bE\d{3}\b''', 'error codes are gone: catch the error by its class, e.g. pytest.raises(ss.CapabilityError) for what a solver cannot run, or ss.errors.<Name>'),
-    (r'''\bmove\s*=\s*['"]''', 'move= takes the states, not a string: move=S >> V (or U + B >> B from either)'),
-    (r'\bss\.transfer\(.*\bcoverage\s*=', 'ss.transfer() moves people between levels at a rate (rate=, dur=, or p=); a one-off move of a share of people is a delivery, e.g. ss.Delivery(move=dict(art=True), coverage=0.5, at=[2010], where=...)'),
-    (r'\bss\.Treatment\(.*\befficacy\s*=\s*[\d.]', "ss.Treatment's efficacy= is its effects while it is held, as a dict (efficacy=dict(transmission=0.96)): the chance that it cures is cure=, and moving the treated along a transition that is not a recovery (e.g. starting treatment) is moves='diagnosis'"),
 ]
 
-# The names of results that depend on the rest of the code: the counts of states (n_<state>), the results of ss.SIR and the others, and of a test
+# The names of results that depend on the rest of the code: the counts of states (n_<state>), and the results of ss.SIR and the others
 counts_note = 'the count of a state is the result named after the state (e.g. results.alive, res.infected, results["sir.infected"])'
 results_like = r'(?:\bresults(?:\.\w+)*|\bres\w*)' # An object of results: results, sim.results.sir, res, res_sir, ...
 fstring_pattern = r"""\bf(['"])([^'"]*\bn_\{[^'"]*)\1"""
@@ -186,11 +157,9 @@ def find_names(texts):
 
 
 def file_context(text):
-    """ What a file uses, which says what some of its names mean: declared diseases (ss.SIR and the others), and the names of its tests (ss.screen()) """
+    """ What a file uses, which says what some of its names mean: declared diseases (ss.SIR and the others) """
     declares = bool(re.search(r"""\bss\.(SIR|SIS|SEIR|states|Transition)\(|\b(type|diseases)\s*=\s*\[?\s*['"](sir|sis|seir)['"]""", text))
-    screens = set(re.findall(r'^\s*(\w+)\s*=\s*ss\.screen\(', text, re.M))
-    screens |= set(re.findall(r"""\bss\.screen\(.*\bname\s*=\s*['"](\w+)['"]""", text))
-    return sc.objdict(declares=declares, screens=screens)
+    return sc.objdict(declares=declares)
 
 
 def rename_counts(line, names):
@@ -224,17 +193,11 @@ def count_flags(line, names, context):
             break
     if context.declares and re.search(r'\b(new|cum)_infections\b', line):
         out.append("if this is a result of ss.SIR, ss.SIS, ss.SEIR, or another declared disease: new_infections is the flow of the transition that infects (res.infection), and cum_infections its running total (res.infection.cum; sir_infection in sim.summary); a disease written as code (ssl.AgentSIR, ss.Infection) keeps both")
-    if context.declares and re.search(r'\.cum_(?!infections\b)\w+', line):
-        out.append("if this is the running total of a declared disease's transition (a Starsim 4 prerelease), it is res.<transition>.cum, e.g. res.infection.cum")
-    if context.screens:
-        tests = '|'.join(sorted(context.screens))
-        if re.search(rf"""\b(results\.)?({tests})\.diagnosed\b|\bresults\[['"]({tests})['"]\]\.diagnosed\b""", line):
-            out.append('the result diagnosed of an ss.screen (a Starsim 4 prerelease) is now positive (e.g. sim.results.screening.positive)')
     return out
 
 
 def removed(name):
-    """ What replaces `ss.<name>`, a name of Starsim 3's (or a prerelease's) that Starsim 4 does not have at its root, from the tables above; or None """
+    """ What replaces `ss.<name>`, a name of Starsim 3's that Starsim 4 does not have at its root, from the tables above; or None """
     for text in [f'ss.{name}(', f'ss.{name}.']:
         for pattern, repl, note in renames:
             if re.search(pattern, text):
@@ -311,46 +274,6 @@ class Edits:
             notes.append((lineno, note))
         return ''.join(self.lines), sorted(notes)
 
-
-followup_keys = ['on_positive', 'on_negative']
-delivery_funcs = ['ss.screen', 'ss.treat', 'ss.vaccinate', 'ss.Delivery', 'ss.transfer'] # Whose keywords from the prereleases are renamed, only in calls to them
-delivery_keywords = dict(eligible='where', years='at', dates='at') # years= and dates= not on ss.transfer(), which is movement at a rate
-
-
-def split_followups(var, call, found, lineno, by_name):
-    """
-    A test with its follow-ups nested in it (`v = ss.screen(test, on_positive=ss.treat(drug))`), as statements: the test,
-    and each follow-up as a step of its own triggered by its result (`v_positive = ss.treat(drug, who=v.positive)`), to any
-    depth. A follow-up given as a name (`on_positive=confirm`) for which `by_name(name)` is true is taken out too, and
-    returned with its `who=`, for the caller to add to its definition; any other (e.g. a function) is left in place, so that
-    the code fails with Starsim 4's own error rather than running without it. Returns the statements, the names of the
-    steps to add beside the test, and the follow-ups given by name, as (name, who)
-    """
-    stmts, steps, named = [], [], []
-    children = []
-    for kw in list(call.keywords):
-        if kw.arg in followup_keys:
-            key = kw.arg.removeprefix('on_')
-            child = kw.value
-            who = ast.keyword(arg='who', value=ast.Attribute(ast.Name(var), key))
-            if isinstance(child, ast.Call) and not any(k.arg == 'who' for k in child.keywords):
-                call.keywords.remove(kw)
-                child.keywords.append(who)
-                children.append((key, child))
-            elif isinstance(child, ast.Name) and by_name(child.id):
-                call.keywords.remove(kw)
-                named.append((child.id, who))
-            else:
-                found.append((lineno, f'{kw.arg}={ast.unparse(child)} is left in place (Starsim 4 raises on it): a follow-up is a step of its own now, with who={var}.{key}, added to the interventions after {var} (a function of (sim, uids) is a module with step(), or a delivery with deliver=)'))
-    stmts.append(ast.Assign(targets=[ast.Name(var)], value=call))
-    for key,child in children:
-        name = f'{var}_{key}'
-        steps.append(name)
-        more, names, more_named = split_followups(name, child, found, lineno, by_name)
-        stmts += more
-        steps += names
-        named += more_named
-    return stmts, steps, named
 
 
 def find_analyzers(texts):
@@ -438,14 +361,7 @@ def migrate_ast(text, analyzers=None):
             else:
                 found.append((val.lineno, f'the beta pair {ast.unparse(val)} on "{key}" was [p1 to p2, p2 to p1]: on a network with acts, give ss.peract() with a value for each of its directions (net.directions, e.g. m2f and f2m for sides m and f); on any other network, one value'))
 
-    # Keywords from the prereleases, only in calls to the functions that took them (never in a def, whose parameters are its own)
-    def rename_kw(kw, new, note):
-        """ Rename a keyword, in the text and in the tree (in case its statement is rewritten below) """
-        line = edits.line(kw.lineno)
-        if line[kw.col_offset:kw.col_offset+len(kw.arg)].decode() == kw.arg:
-            edits.replace(kw.lineno, kw.col_offset, kw.col_offset + len(kw.arg), new, note)
-            kw.arg = new
-
+    # Keywords of Starsim 3 that are removed or renamed, only in calls to the functions that took them (never in a def, whose parameters are its own)
     def remove_kw(call, kw, note):
         """ Remove a keyword and its comma from a call written on one line """
         if kw.lineno != kw.end_lineno:
@@ -466,14 +382,6 @@ def migrate_ast(text, analyzers=None):
         call.keywords.remove(kw)
         return True
 
-    def counts(node):
-        """ Whether a starting value is a number of people: a whole number of 1 or more, or a number above 1 (True), a share (False), or unknown (None) """
-        if isinstance(node, ast.Constant) and isinstance(node.value, (int, float)) and not isinstance(node.value, bool):
-            return (isinstance(node.value, int) and node.value >= 1) or node.value > 1
-        if any(isinstance(n, ast.Constant) and isinstance(n.value, (int, float)) and not isinstance(n.value, bool) and n.value > 1 for n in ast.walk(node)):
-            return None # E.g. ss.by(age=[10, 0, 0]): probably numbers of people, but check
-        return False
-
     for call in [n for n in ast.walk(tree) if isinstance(n, ast.Call) and ast.unparse(n.func) == 'ss.People']:
         if not any(kw.arg in ['age_data', None] for kw in call.keywords) and len(call.args) < 2: # No ages given (None is **kwargs)
             found.append((call.lineno, "ss.People(n) with no age_data= gives agents the world's ages (Starsim 3's were uniform from 0 to 60): for Starsim 3's, ss.People(n, age_data=ss.uniform(0, 60))"))
@@ -488,19 +396,10 @@ def migrate_ast(text, analyzers=None):
             if alias.name != '*' and not hasattr(module, alias.name):
                 found.append((node.lineno, f'{alias.name} is not in {node.module} in Starsim 4: {removed(alias.name) or "see the tables of the migrate-starsim3 skill"}'))
 
-    sexualnet_classes = [cls for cls in ast.walk(tree) if isinstance(cls, ast.ClassDef) and any(ast.unparse(b) == 'ss.SexualNet' for b in cls.bases)]
-    super_inits = {id(n) for cls in sexualnet_classes for n in ast.walk(cls) if isinstance(n, ast.Call) and ast.unparse(n.func) == 'super().__init__'}
     for call in [n for n in ast.walk(tree) if isinstance(n, ast.Call)]:
         func = ast.unparse(call.func)
         for kw in list(call.keywords):
-            if func in delivery_funcs and kw.arg in delivery_keywords and not (func == 'ss.transfer' and kw.arg != 'eligible'):
-                new = delivery_keywords[kw.arg]
-                rename_kw(kw, new, f'{kw.arg}= of a delivery (a Starsim 4 prerelease) is {new}=')
-            elif kw.arg == 'sides' and (func == 'ss.SexualNet' or id(call) in super_inits):
-                rename_kw(kw, 'between', "sides= of ss.SexualNet (a Starsim 4 prerelease) is between=: 'mf' (the default), 'mm', or two groups")
-            elif kw.arg == 'infectious' and func == 'ss.State':
-                remove_kw(call, kw, 'infectious= of a state is removed: a state is infectious when it is in a transmission rate, e.g. rate=beta*I')
-            elif kw.arg == 'uniform_targets' and func == 'ss.RandomNet' and isinstance(kw.value, ast.Constant):
+            if kw.arg == 'uniform_targets' and func == 'ss.RandomNet' and isinstance(kw.value, ast.Constant):
                 if kw.value.value is True:
                     edits.add(kw, "method='uniform'", "uniform_targets=True of ss.RandomNet is method='uniform'")
                 elif kw.value.value is False:
@@ -508,117 +407,6 @@ def migrate_ast(text, analyzers=None):
             elif kw.arg == 'copy_inputs':
                 if remove_kw(call, kw, 'copy_inputs= is removed: a sim always copies the modules it is given'):
                     found.append((kw.lineno, 'a sim copies the modules it is given (copy_inputs= is removed): read them, and their results, from the sim (sim.diseases.sir, sim.analyzers.myanalyzer), not from the objects given'))
-            elif kw.arg == 'init' and (isinstance(kw.value, ast.Dict) or (isinstance(kw.value, ast.Call) and ast.unparse(kw.value.func) == 'dict') or func == 'ss.State'):
-                if func == 'ss.State' and any(k.arg == 'people' for k in call.keywords):
-                    continue # A state that may not be people, whose init= is an amount
-                values = kw.value.values if isinstance(kw.value, ast.Dict) else [k.value for k in kw.value.keywords] if isinstance(kw.value, ast.Call) and ast.unparse(kw.value.func) == 'dict' else [kw.value]
-                kinds = [counts(v) for v in values]
-                if kinds and all(k is True for k in kinds):
-                    rename_kw(kw, 'init_n', 'init= is a share of people (a Starsim 4 prerelease took counts too): numbers of people are init_n= (if one of these is a state that is not people, ss.State(people=False), keep init=)')
-                elif any(k is not False for k in kinds):
-                    found.append((kw.lineno, 'init= is a share of people (1.0 is everyone, and a whole number 1 is read as a share too): numbers of people go in init_n= (e.g. init=dict(R=0.1), init_n=dict(I=10)), and the first state, given no value, takes the rest; a value above 1 in init= is an error'))
-            if func == 'ss.transfer' or (func in delivery_funcs and kw.arg == 'move'):
-                if func == 'ss.transfer':
-                    slots = [(kw, 'value')]
-                elif isinstance(kw.value, ast.Dict):
-                    slots = [(kw.value.values, i) for i in range(len(kw.value.values))]
-                elif isinstance(kw.value, ast.Call) and ast.unparse(kw.value.func) == 'dict':
-                    slots = [(k, 'value') for k in kw.value.keywords]
-                else:
-                    slots = []
-                for obj, key in slots:
-                    val = obj[key] if isinstance(obj, list) else getattr(obj, key)
-                    if isinstance(val, ast.Constant) and isinstance(val.value, str) and val.value.count('->') == 1:
-                        src, dst = [s.strip() for s in val.value.split('->')]
-                        dst = [d.strip() for d in dst.split('|')] if '|' in dst else dst
-                        new = repr((src, dst))
-                        if edits.add(val, new, 'an arrow string between levels (a Starsim 4 prerelease) is a pair, (from, to)'):
-                            node = ast.parse(new, mode='eval').body # Replaced in the tree too, in case its statement is rewritten below
-                            if isinstance(obj, list):
-                                obj[key] = node
-                            else:
-                                setattr(obj, key, node)
-
-    # A test with follow-ups nested in it, from Starsim 4's prereleases: each follow-up a step of its own, added after it to the interventions
-    bodies = {} # Each statement's body (list of statements), to tell whether two are in the same one
-    for node in ast.walk(tree):
-        for field in ['body', 'orelse', 'finalbody']:
-            stmts = getattr(node, field, None)
-            for stmt in stmts if isinstance(stmts, list) else []:
-                if isinstance(stmt, ast.stmt):
-                    bodies[id(stmt)] = id(node), field
-    defs = {} # Names assigned once, to a call
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name) and isinstance(node.value, ast.Call):
-            defs.setdefault(node.targets[0].id, []).append(node)
-    defs = {var:nodes[0] for var,nodes in defs.items() if len(nodes) == 1}
-    nested = {var:node for var,node in defs.items() if any(kw.arg in followup_keys for kw in node.value.keywords)}
-    children = {kw.value.id for node in nested.values() for kw in node.value.keywords if kw.arg in followup_keys and isinstance(kw.value, ast.Name)}
-
-    def anchors(var):
-        """ Where a step is listed: a list or tuple with its name in it (e.g. interventions=[screening, ...]), or interventions=<name> (bare) """
-        out = []
-        for node in ast.walk(tree):
-            if isinstance(node, (ast.List, ast.Tuple)) and isinstance(node.ctx, ast.Load):
-                out += [(e, False, {n.id for n in node.elts if isinstance(n, ast.Name)}) for e in node.elts if isinstance(e, ast.Name) and e.id == var]
-            elif isinstance(node, ast.keyword) and node.arg == 'interventions' and isinstance(node.value, ast.Name) and node.value.id == var:
-                out.append((node.value, True, {var}))
-        return out
-
-    def expand(var, done):
-        """ The statements of the test assigned to var, with its follow-ups after it, and the names of the steps they add """
-        done.add(var)
-        node = defs[var]
-        def by_name(name): # A follow-up given by name, defined once by a call in the same body, and not already triggered
-            child = defs.get(name)
-            return child is not None and name not in done and bodies.get(id(child)) == bodies.get(id(node)) and not any(k.arg == 'who' for k in child.value.keywords)
-        stmts, steps, named = split_followups(var, node.value, found, node.lineno, by_name) if var in nested else ([node], [], [])
-        for name, who in named:
-            child = defs[name]
-            child.value.keywords.append(who)
-            steps.append(name)
-            if name not in nested and child.lineno > node.lineno: # Defined after the test: give it who= where it is
-                call = child.value
-                last = max(call.args + call.keywords, key=lambda a: (a.end_lineno, a.end_col_offset), default=None)
-                if last is None:
-                    edits.replace(call.end_lineno, call.end_col_offset - 1, call.end_col_offset - 1, ast.unparse(who), f'{name} is a follow-up of {var}, triggered by its results')
-                else:
-                    edits.replace(last.end_lineno, last.end_col_offset, last.end_col_offset, f', {ast.unparse(who)}', f'{name} is a follow-up of {var}, triggered by its results')
-            else: # Defined before the test, which it now refers to (or with follow-ups of its own): moved after it
-                more, names = expand(name, done)
-                edits.add_lines(child, '', f'{name} is a follow-up of {var}, triggered by its results: moved after it')
-                stmts += more
-                steps += names
-        return stmts, steps
-
-    done = set()
-    for var in nested:
-        if var in done or var in children:
-            continue # Done, or a follow-up of another test, done with it
-        where = anchors(var)
-        if not where:
-            found.append((nested[var].lineno, f'the follow-ups of {var} (on_positive=, on_negative=) are steps of their own now, with who={var}.positive (or .negative), added to the interventions after {var}: left in place (Starsim 4 raises on them), since {var} is not in a list of interventions in this file'))
-            continue
-        node = nested[var]
-        line = edits.lines[node.lineno-1]
-        indent = line[:len(line) - len(line.lstrip())]
-        stmts, steps = expand(var, done)
-        edits.add_lines(node, ''.join(f'{indent}{ast.unparse(ast.fix_missing_locations(stmt))}\n' for stmt in stmts), f'the follow-ups of {var} are steps of their own, triggered by its results (who={var}.positive)')
-        for anchor, bare, listed in where:
-            new = [s for s in steps if s not in listed]
-            if new:
-                note = f'the follow-ups of {var} ({sc.strjoin(new)}) are steps of their own, after it in the interventions'
-                if bare:
-                    edits.add(anchor, f"[{', '.join([var] + new)}]", note)
-                else:
-                    edits.replace(anchor.end_lineno, anchor.end_col_offset, anchor.end_col_offset, ''.join(f', {s}' for s in new), note)
-
-    # Follow-ups left nested in a test that is not assigned to a name (e.g. returned by a function): for a person
-    reported = {line for line, msg in found if 'follow-up' in msg}
-    for call in [n for n in ast.walk(tree) if isinstance(n, ast.Call) and ast.unparse(n.func) in delivery_funcs]:
-        keys = [kw.arg for kw in call.keywords if kw.arg in followup_keys]
-        if keys and call.lineno not in reported:
-            found.append((call.lineno, f'{sc.strjoin(f"{k}=" for k in keys)} nested in a test (a Starsim 4 prerelease) are steps of their own now: assign the test to a name, e.g. screen = ss.screen(...), and give each follow-up who=screen.positive (or .negative), listed after it in the interventions (Starsim 4 raises on the nested form)'))
 
     # Calls to the methods of the base written as code, e.g. ss.SIS.set_prognoses(self, ...)
     for node in ast.walk(tree):

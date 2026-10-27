@@ -819,7 +819,7 @@ class MultiResults(ss.Results):
             runs (dataframe): one row per run: its scenario, and the values of any parameters swept
             timevec (array): the sim's time points
         """
-        out = cls('MultiSim', strict=False)
+        out = cls('MultiSim')
         for (modname,key),arr in arrays.items():
             like = arr['like']
             values = np.asarray(arr['values'])
@@ -834,7 +834,7 @@ class MultiResults(ss.Results):
                 out[key] = res
             else:
                 if modname not in out:
-                    out[modname] = ss.Results(modname, strict=False)
+                    out[modname] = ss.Results(modname)
                 out[modname][key] = res
         if timevec is not None:
             out['timevec'] = timevec

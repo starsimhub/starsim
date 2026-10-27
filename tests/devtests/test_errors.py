@@ -231,12 +231,7 @@ def _(): fittable().fit(method='nuts')
 def _(): ode(sir(), stop=5).run().finalize()
 
 @trigger(ss.errors.DistNotInitializedError)
-def _(): ss.random(strict=True, auto=False)(5)
-
-@trigger(ss.errors.DistNotReadyError)
-def _():
-    dist = ss.random(strict=True, auto=False).init(trace='x', sim=ss.Sim(n_agents=100, **kw).init())
-    dist(5), dist(5)
+def _(): ss.random(strict=True)(5)
 
 @trigger(ss.errors.DistSeedRepeatError)
 def _():
@@ -323,11 +318,12 @@ def _():
 
 @trigger(ss.errors.NotCompiled, note='runs as Python')
 def _():
-    class Coded(ssl.AgentSIR):
-        @ss.jit
-        def step_state(self):
-            self.sim.people.request_death((self.ti_dead <= self.ti).uids, cause=self) # Compiled code can't call into the sim
-    return ss.Sim(n_agents=100, diseases=Coded(), networks='random', stop=2002, **kw).run()
+    @ss.jit
+    def uncompilable(x):
+        return sc.findinds(x > 0) # Numba can't call Sciris
+    with ss.options.context(verbose=1), sc.capture() as said: # With no sim, the note is printed, not kept
+        uncompilable(np.arange(3))
+    return sc.objdict(notes=said.splitlines()) # In place of the sim's notes
 
 
 # %% Define the tests

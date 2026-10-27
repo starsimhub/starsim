@@ -4,7 +4,6 @@ All options should be set using set() or directly, e.g.:
 
     ss.options(verbose=False)
 """
-import os
 import numpy as np
 import numba as nb
 import sciris as sc
@@ -90,9 +89,6 @@ class Options(sc.objdict):
         optdesc.verbose = 'Set default level of verbosity: 0 prints nothing, 1 the solver, notes, and progress, and 2 everything (e.g. each step).'
         options.verbose = sc.parse_env('STARSIM_VERBOSE', 1, int)
 
-        optdesc.license = 'Whether to print the license on import'
-        options.license = sc.parse_env('STARSIM_LICENSE', False, bool)
-
         optdesc.warnings = 'How warnings are handled: options are "warn" (default), "print", and "error"'
         options.warnings = sc.parse_env('STARSIM_WARNINGS', 'warn', str)
 
@@ -101,12 +97,6 @@ class Options(sc.objdict):
 
         optdesc.max_steps = 'The number of timesteps above which a sim warns that it may be slow (0 to never warn)'
         options.max_steps = sc.parse_env('STARSIM_MAX_STEPS', 50_000, int) # More than a century at a daily step, which the textbooks' models run
-
-        optdesc.check_method_calls = 'How to handle missing required method calls: options are "warn" (default), "die", and "" (False)'
-        options.check_method_calls = sc.parse_env('STARSIM_CHECK_METHOD_CALLS', 'warn', str)
-
-        optdesc.date_sep = 'Set separator for dates'
-        options.date_sep = sc.parse_env('STARSIM_DATE_SEP', '-', str)
 
         optdesc.jupyter = 'Set whether to use Jupyter settings: -1=auto, 0=False, 1=True'
         options.jupyter = sc.parse_env('STARSIM_JUPYTER', -1, int)
@@ -125,9 +115,6 @@ class Options(sc.objdict):
 
         optdesc.precision = 'Set arithmetic precision'
         options.precision = sc.parse_env('STARSIM_PRECISION', 32, int)
-
-        optdesc.numba_indexing = 'Threshold for the number of indices at which to switch to using Numba (rather than NumPy) for indexing arrays'
-        options.numba_indexing = sc.parse_env('STARSIM_NUMBA_INDEXING', 2000, int) # Numba wins for both gather and compaction above ~2k; see https://github.com/starsimhub/starsim/issues/1005
 
         optdesc.threads = 'The number of threads that the passes over the agents of a large sim, and the particles of a particle filter, take: 0 (default) for as many as Numba has (by default, one per core), 1 for none. Each worker of ss.parallel() and of a calibration takes one, since the workers share the cores already'
         options.threads = sc.parse_env('STARSIM_THREADS', 0, int)
@@ -149,9 +136,6 @@ class Options(sc.objdict):
 
         optdesc.keep_memory = 'If True (default), large arrays that a sim frees are kept by the process for reuse, rather than given back to the system, which makes sims with networks 15-30% faster, but the process keeps its peak memory until it ends (Linux only). Set False (before importing Starsim, via the environment variable) to give memory back as it is freed; ss.perflib.release_memory() gives back what is free now'
         options.keep_memory = sc.parse_env('STARSIM_KEEP_MEMORY', True, bool)
-
-        optdesc.jax_cache = 'The folder where JAX keeps what it compiles (e.g. for a posterior from NUTS), so that it need not compile it again in a later session; "" for none. Set before Starsim first uses JAX'
-        options.jax_cache = sc.parse_env('STARSIM_JAX_CACHE', os.path.join(os.path.expanduser('~'), '.cache', 'starsim', 'jax'), str)
 
         return optdesc, options
 
@@ -324,8 +308,6 @@ class Options(sc.objdict):
                     self.set_jupyter()
                 elif key == 'precision':
                     self.set_precision()
-                elif key == 'numba_indexing':
-                    self.refresh_references()
                 elif key == 'style':
                     self.set_style()
 
@@ -362,13 +344,6 @@ class Options(sc.objdict):
     def get_default(self, key):
         """ Helper function to get the original default options """
         return self.orig_options[key]
-
-    def changed(self, key):
-        """ Check if current setting has been changed from default """
-        if key in self.orig_options:
-            return self[key] != self.orig_options[key]
-        else:
-            return None
 
     @property
     def is_jupyter(self):
@@ -408,9 +383,6 @@ class Options(sc.objdict):
     def refresh_references(self):
         """ Many modules copy settings into them for speed; here we refresh those """
         files = ['arrays', 'demographics', 'diseases', 'distributions', 'networks']
-
-        # Update Numba threshold
-        ss.arrays.numba_indexing = self.numba_indexing
 
         # Update precision
         for file in files:

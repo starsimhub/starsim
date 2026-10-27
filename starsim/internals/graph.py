@@ -6,7 +6,7 @@ import itertools
 import numpy as np
 import sciris as sc
 import starsim as ss
-from .expressions import as_expr, BinOp, Count, count_power, did_you_mean, Expr, is_one, linear, par, per_person, Row, Share, to_pars
+from .expressions import as_expr, BinOp, Count, count_power, did_you_mean, Expr, is_one, linear, par, per_person
 from ..parameters import by, TimeValue
 from ..transitions import FlowSum, outcome, State, Transition
 from .presentation import Presentation, TransitionTable
@@ -97,7 +97,6 @@ class Graph(Presentation):
         self.resolve_states()
         self.resolve_transitions()
         self.resolve_init_prev()
-        self.expand_rows()
         self.resolve_people()
         self.resolve_attrs()
         self.resolve_acquisition()
@@ -327,36 +326,6 @@ class Graph(Presentation):
             self.module.pars.pop('init_prev', None)
         return
 
-    def expand_rows(self):
-        """
-        Entries of `p=` with a `to` axis (an `ss.by` over `to`, whose labels are destination states): one `Share` of the entry for each destination it covers
-
-        Entries without one are one destination each, in order, skipping the destinations that a `to` axis names; an entry whose
-        `to` axis gives values by position only covers the destinations left. The entries as given are kept as `tr.p_given`.
-        """
-        for name,tr in self.transitions.items():
-            if not tr.p or len(tr.dst or []) < 2 or not any(to_pars(p) for p in tr.p):
-                continue
-            names = [s.name for s in tr.dst]
-            rows = {i:[lab for q in to_pars(p) for lab in (q.raw.to_labels() or [])] for i,p in enumerate(tr.p) if to_pars(p)}
-            named = [lab for labs in rows.values() for lab in labs]
-            for lab in named:
-                if lab not in names:
-                    raise ss.errors.UnknownState(f'p= of "{name}" has a value over "to" for "{lab}", which is not one of its destinations ({sc.strjoin(names)}){did_you_mean(lab, names)}')
-            plain = [i for i in range(len(tr.p)) if i not in rows]
-            free = [n for n in names if n not in named]
-            unlabeled = [i for i,labs in rows.items() if not labs]
-            if len(unlabeled) > 1 or (not unlabeled and len(free) != len(plain)) or len(free) < len(plain):
-                raise ss.errors.BadBranchSplit(f'"{name}" has {len(names)} destinations, but its p= has {len(plain)} entries of one destination each and values over "to" for {sc.strjoin(named) or "the others"}; give one entry for each destination that no value over "to" names')
-            for i in unlabeled:
-                rows[i] = free[len(plain):]
-            covered = {lab:i for i,labs in rows.items() for lab in dict.fromkeys(labs)}
-            built = {i:Row(tr.p[i], list(dict.fromkeys(labs))) for i,labs in rows.items()}
-            entries = iter(plain)
-            tr.p_given = list(tr.p)
-            tr.p = [Share(built[covered[n]], n) if n in covered else tr.p[next(entries)] for n in names]
-        return
-
     def transmitted_from(self):
         """ The states of people that transmission (by contact, or at a rate on counts of others) takes people from """
         out = {}
@@ -573,7 +542,7 @@ class Graph(Presentation):
                         q.name = f'{p.name}_{field}'
 
         # Register the explicit ss.par objects used in the transitions, and in the weights and likelihoods of the outcomes
-        used = [(tr.name, expr) for tr in self.transitions.values() for expr in [tr.rate, tr.dur] + sc.tolist(tr.p) + sc.tolist(getattr(tr, 'p_given', None)) + [getattr(tr, 'p_die', None), getattr(tr, 'p_stay', None)]] # Including the shares of ss.null and ss.stay among the destinations
+        used = [(tr.name, expr) for tr in self.transitions.values() for expr in [tr.rate, tr.dur] + sc.tolist(tr.p) + [getattr(tr, 'p_die', None), getattr(tr, 'p_stay', None)]] # Including the shares of ss.null and ss.stay among the destinations
         used += [(oc.name, weight) for oc in self.outcomes.values() for weight in oc.weights]
         used += [(oc.name, val) for oc in self.outcomes.values() for val in oc.likelihood_pars.values() if isinstance(val, par)]
         for oc in self.outcomes.values(): # A parameter written inside a likelihood, e.g. ss.nbinom(n=ss.par(10, bounds=[1, 100])), is named after the outcome and its keyword

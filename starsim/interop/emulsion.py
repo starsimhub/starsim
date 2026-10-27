@@ -126,7 +126,7 @@ def translate(src, text, exprs, values, docs):
     return text
 
 
-def load_emulsion(filename, machines=None, verbose=None):
+def load_emulsion(filename, verbose=None):
     """
     Read an EMULSION model (a YAML file) into a sim
 
@@ -137,7 +137,6 @@ def load_emulsion(filename, machines=None, verbose=None):
 
     Args:
         filename (str): the YAML file
-        machines (list): the state machines to import (default: all)
         verbose (bool): whether to print how each transition was read
 
     Returns:
@@ -213,8 +212,6 @@ def load_emulsion(filename, machines=None, verbose=None):
     removes = [] # The machines with births or deaths
     all_machines = yml.get('state_machines') or {}
     for mname,machine in all_machines.items():
-        if machines is not None and mname not in machines:
-            continue
         src = Source(mname if len(all_machines) > 1 else name, format='EMULSION', file=str(filename))
         states = listed(machine.get('states'))
         snames = [s for s,_ in states]

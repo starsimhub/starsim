@@ -125,12 +125,7 @@ def test_change():
 
 def test_applied():
     sc.heading('Testing that every modifier and product is applied, or refused when the sim is made')
-    # Refused: a value over "to" in a p= table, and an efficacy on a transition with several destinations
-    none, pill, iud = ss.states('none pill iud')
-    w = ss.par(ss.by(to=dict(pill=1.0, iud=1.0)))
-    contra = ss.Disease(none, pill, iud, switch=ss.Transition(none, [none, pill, iud], dur=ss.months(6), p=[0.5, 0.5*w]), w=w, first='none', name='contra')
-    with pytest.raises(ss.errors.Unapplied, match='p= table'):
-        ss.Sim(contra, interventions=ss.change('contra.w', at=10, to=ss.by(to=dict(pill=3.0, iud=1.0))), **kw).init()
+    # Refused: an efficacy on a transition with several destinations
     P, C, R = ss.states('P C R')
     hpv = ss.Disease(precin=ss.Transition(P, [C, R], dur=ss.years(2), p=[0.2, 0.8]), init=dict(P=1.0), first='P', name='hpv')
     with pytest.raises(ss.errors.Unapplied, match="'precin.C'"):

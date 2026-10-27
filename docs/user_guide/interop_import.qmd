@@ -123,7 +123,7 @@ sir = ss.interop.build(src, stop=100)
 
 ## Exporting a model
 
-`ss.interop.export()` writes a model in another format: SBML (for tools such as COPASI), odin, or a Mermaid diagram. Each is written from the model's compartmental form:
+`ss.interop.export()` writes a model in another format: SBML (for tools such as COPASI) or odin. Each is written from the model's compartmental form:
 
 ```{python}
 print(ss.interop.export(sim, 'odin'))

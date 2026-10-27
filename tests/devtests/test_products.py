@@ -58,25 +58,25 @@ def run_abm(make, pop=10_000, n_agents=10_000, **kwargs):
 
 
 def test_test_diseases():
-    sc.heading('Testing a test keyed by states of several diseases: independent detection, or the highest sensitivity')
+    sc.heading('Testing a test keyed by states of several diseases: each detected independently')
     s16, s18 = [0, 0.6, 0.9, 0], [0, 0.5, 0.8, 0] # By S, I, CIN, CA
     seen = sc.objdict()
-    def make(combine='worst', **kwargs):
+    def make(**kwargs):
         g16, g18 = make_hpv('hpv16'), make_hpv('hpv18')
-        dna = ss.Diagnostic(sensitivity={g16.I: 0.6, g16.CIN: 0.9, 'hpv18.I': 0.5, g18.CIN: 0.8}, specificity=0.95, combine=combine)
+        dna = ss.Diagnostic(sensitivity={g16.I: 0.6, g16.CIN: 0.9, 'hpv18.I': 0.5, g18.CIN: 0.8}, specificity=0.95)
         def look(sim): # As agents: the expected positives, from each agent's states when tested
             if sim.solver == 'abm':
                 d, u = sim.diseases, sim.people.auids
                 p16, p18 = [np.select([d[g].I.raw[u], d[g].CIN.raw[u]], s[1:3], 0) for g,s in [('hpv16', s16), ('hpv18', s18)]]
-                pos = 1 - (1 - p16)*(1 - p18) if combine == 'worst' else np.maximum(p16, p18)
-                seen[combine] = np.where((p16 == 0) & (p18 == 0), 0.05, pos).sum()
+                pos = 1 - (1 - p16)*(1 - p18)
+                seen.pos = np.where((p16 == 0) & (p18 == 0), 0.05, pos).sum()
             return True
         prog = ss.screen(dna, at=[2005], when=look)
         return ss.Sim([g16, g18], interventions=prog, **kwargs)
-    def expected(sim, combine):
+    def expected(sim):
         """ As an ODE: the diseases do not interact, so each person's states are independent, and the expected positives come from the marginals """
         if sim.solver == 'abm':
-            return seen[combine]
+            return seen.pos
         r = sim.results
         k = int(np.flatnonzero(r.prog.delivered)[0])
         n = {g:np.array([r[g][x][k-1] for x in ['S', 'I', 'CIN', 'CA']]) for g in ['hpv16', 'hpv18']} # At the start of the step it was delivered in
@@ -84,18 +84,14 @@ def test_test_diseases():
         p = 0.0
         for x in range(4):
             for y in range(4):
-                pos = 0.05 if x in [0, 3] and y in [0, 3] else 1 - (1 - s16[x])*(1 - s18[y]) if combine == 'worst' else max(s16[x], s18[y])
+                pos = 0.05 if x in [0, 3] and y in [0, 3] else 1 - (1 - s16[x])*(1 - s18[y])
                 p += n['hpv16'][x]/N*n['hpv18'][y]/N*pos
         return p*N
-    for combine in ['worst', 'max']:
-        sims = run_both(make, combine=combine)
-        for solver,sim in sims.items():
-            exp, got = expected(sim, combine), sim.results.prog.positive.sum()
-            assert np.isclose(got, exp, rtol=1e-5 if solver == 'ode' else 0.03), f'{solver} {combine}: {got:.1f} vs {exp:.1f}' # v4's joint stepping moves the marginals by about 1e-6
-        assert any('tracked jointly: 4 × 4 = 16 joint states per group' in note for note in sims.ode.notes)
-        if combine == 'worst':
-            worst = sims.ode.results.prog.positive.sum()
-    assert sims.ode.results.prog.positive.sum() < worst
+    sims = run_both(make)
+    for solver,sim in sims.items():
+        exp, got = expected(sim), sim.results.prog.positive.sum()
+        assert np.isclose(got, exp, rtol=1e-5 if solver == 'ode' else 0.03), f'{solver}: {got:.1f} vs {exp:.1f}' # v4's joint stepping moves the marginals by about 1e-6
+    assert any('tracked jointly: 4 × 4 = 16 joint states per group' in note for note in sims.ode.notes)
 
     g16, g18 = make_hpv('hpv16'), make_hpv('hpv18') # A state the disease does not have: the message names it, and that disease's states
     bad = ss.screen(ss.Diagnostic(sensitivity={g16.I: 0.6, 'hpv18.X': 0.5}), at=[2005])
@@ -111,7 +107,7 @@ def test_outcomes():
     def make(delay=None, **kwargs):
         genos = [make_hpv('hpv16'), make_hpv('hpv18', beta=1.2)]
         results = {res:{g[x]:p for g in genos for x,p in probs.items()} for res,probs in reversed(table.items())} | dict(normal=None) # Most severe first
-        colpo = ss.Diagnostic(results=results, combine='worst', delay=delay)
+        colpo = ss.Diagnostic(results=results, delay=delay)
         excise = ss.Treatment(moves={g.excised: 0.9 for g in genos}) # Across genotypes, with no fan-out
         def look(sim): # As agents: each result expected, from each agent's states when tested
             if sim.solver == 'abm':

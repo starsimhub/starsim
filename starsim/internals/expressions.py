@@ -424,97 +424,6 @@ class Flow(Expr):
         return self.tr.name
 
 
-class Row:
-    """
-    An entry of `p=` with a `to` axis (an `ss.by` with a `to` column or keyword, whose labels are destination states), for the destinations it covers
-
-    Its factors without a `to` axis (`p_use` in `p_use*mix*w`) are kept as they are, and the product of those with one
-    (`mix*w`) is normalized over the destinations, so each destination's probability is `p_use*mix[j]*w[j]/sum(mix*w)`;
-    an entry that is not a product (a sum) is normalized as a whole.
-    See `Share`, one destination's part, which is what the transition's `p=` holds once the graph is built.
-
-    Args:
-        expr (Expr): the entry as given
-        labels (list): the names of the destinations it covers
-    """
-    def __init__(self, expr, labels):
-        self.expr = expr
-        self.labels = list(labels)
-        scalar, row = [], []
-        def split(e): # The factors of a product, each with or without a to axis
-            if isinstance(e, BinOp) and e.op == '*':
-                split(e.a)
-                split(e.b)
-            elif isinstance(e, BinOp) and e.op == '/' and not to_pars(e.b):
-                split(e.a)
-                scalar.append(BinOp('/', 1, e.b))
-            elif to_pars(e):
-                row.append(e)
-            else:
-                scalar.append(e)
-            return
-        split(expr)
-        self.scalar = None
-        for e in scalar:
-            self.scalar = e if self.scalar is None else BinOp('*', self.scalar, e)
-        self.row = row[0]
-        for e in row[1:]:
-            self.row = BinOp('*', self.row, e)
-        self._parts = None
-        return
-
-    def parts(self):
-        """ The row's value for each destination, as an expression with each `ss.by` over `to` taken at it; made again if one of them has a new value """
-        tos = to_pars(self.row)
-        key = tuple(id(p.raw) for p in tos)
-        if self._parts is None or self._parts[0] != key:
-            out = {}
-            for label in self.labels:
-                subs = {id(p):as_expr(p.raw.at(label, self.labels)) for p in tos}
-                out[label] = substitute(self.row, subs)
-            self._parts = (key, out)
-        return self._parts[1]
-
-    def __repr__(self):
-        return f'{format_expr(self.expr)}, normalized over {sc.strjoin(self.labels)}'
-
-
-class Share(Expr):
-    """ One destination's part of an entry of `p=` with a `to` axis (see `Row`): the row's value for it over its sum over the destinations, times the factors without a `to` axis """
-    def __init__(self, row, label):
-        self.row = row
-        self.label = label
-        return
-
-    @property
-    def leaves(self):
-        out = [leaf for part in self.row.parts().values() for leaf in part.leaves]
-        return out + (self.row.scalar.leaves if self.row.scalar is not None else [])
-
-    def evaluate(self, ctx):
-        memo = getattr(ctx, 'memo', None) # A context can keep the row's values for its other destinations, evaluated for the same people (see Agents.branch_probs_for())
-        if memo is not None and id(self.row) in memo:
-            vals, den, scalar = memo[id(self.row)]
-        else:
-            vals = {label:evaluate(part, ctx) for label,part in self.row.parts().items()}
-            den = sum(vals.values())
-            if np.any(np.asarray(den) <= 0):
-                raise ss.errors.BadBranchSplit(f'the row {self.row} sums to 0 for some people or groups, so it has no shares to normalize')
-            scalar = None if self.row.scalar is None else evaluate(self.row.scalar, ctx)
-            if memo is not None:
-                memo[id(self.row)] = (vals, den, scalar)
-        out = vals[self.label]/den
-        return out if scalar is None else scalar*out
-
-
-def to_pars(expr):
-    """ The parameters in an expression whose value is an `ss.by` with a `to` axis (over the destinations of a transition) """
-    if not isinstance(expr, Expr):
-        return []
-    leaves = expr.leaves if not isinstance(expr, Share) else []
-    return [leaf for leaf in leaves if isinstance(leaf, par) and isinstance(leaf.raw, ss.by) and 'to' in leaf.raw.dims]
-
-
 def substitute(expr, subs):
     """ An expression with some parameters replaced, by id """
     if isinstance(expr, BinOp):
@@ -1058,8 +967,6 @@ def evaluate(expr, ctx):
         return ctx.stock(expr.state)
     elif isinstance(expr, Flow):
         return ctx.flow(expr)
-    elif isinstance(expr, Share):
-        return expr.evaluate(ctx)
     elif isinstance(expr, Clock):
         return ctx.clock(expr)
     elif isinstance(expr, Coverage):
@@ -1167,9 +1074,6 @@ def format_expr(expr, values=False, bare=None, mul='*', exact=False, unit=None):
             names = [s.label_name if s not in weights else f'{fmt(weights[s])}{mul}{s.label_name}' for s in e.states]
             inner = names[0] if len(names) == 1 and not weights else '(' + ' + '.join(names) + ')'
             return f'{inner}.{e.kind}{"_trans" if e.trans else ""}'
-        elif isinstance(e, Share):
-            share = f'share({fmt(e.row.row)}, to={e.label})' # Its row's value at this destination, over the row's sum
-            return share if e.row.scalar is None else f'{fmt(e.row.scalar)} {mul} {share}'
         elif isinstance(e, (Clock, mother, Coverage)):
             return e.to_str()
         return str(e.name) # A flow

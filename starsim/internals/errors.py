@@ -163,8 +163,7 @@ class UnmodifiableTarget(CodedError):
 class Unapplied(CodedError):
     """
     A modifier, change, or efficacy of a product on a quantity that no solver would apply: a plain parameter of a declared module
-    (read only by its own code), a value over "to" in a `p=` table, the `rel_sus` or `rel_trans` of a disease that is not
-    transmitted, a condition on people on an inflow or a transition of counts, or an efficacy on a transition with several
+    (read only by its own code), the `rel_sus` or `rel_trans` of a disease that is not transmitted, a condition on people on an inflow or a transition of counts, or an efficacy on a transition with several
     destinations (rather than on one of them); or a stratification of a sim in which nothing uses it. Names it and why
     """
 
@@ -238,7 +237,7 @@ class CapabilityError(CodedError):
 class TimeNotKept(CodedError):
     """
     A declared disease run as agents keeps the time each agent entered a state (`ti_X`) only for the states whose times
-    the engine reads (for scheduled exits, clocks, and `after=`/`before=`), those declared with `ss.State(keep_time=True)`, and
+    the engine reads (for scheduled exits, clocks, and `after=`), those declared with `ss.State(keep_time=True)`, and
     all of them if `ss.options.keep_times = True`. Raised when code reads one of the others, e.g. an analyzer or a script after
     the run; names the array and says how to keep it
     """
@@ -266,13 +265,6 @@ class DistNotInitializedError(CodedError, RuntimeError):
     def __init__(self, dist=None, msg=None):
         if msg is None:
             msg = f'{dist} has not been initialized; please set strict=False when creating the distribution, or call dist.mock() or dist.init().'
-        super().__init__(msg)
-
-class DistNotReadyError(CodedError, RuntimeError):
-    """ A distribution made with `strict=True` is sampled twice in one step, which would reuse its random numbers; `dist.jump()` resets it """
-    def __init__(self, dist=None, msg=None):
-        if msg is None:
-            msg = f'{dist} is not ready. This is likely caused by calling a distribution multiple times in a single step. Call dist.jump() to reset.'
         super().__init__(msg)
 
 class DistSeedRepeatError(CodedError, RuntimeError):
@@ -355,7 +347,7 @@ class ClippedToRange(Note):
     """
 
 class NotCompiled(Note):
-    """ A function or method given to `ss.jit` can't be compiled (or traced by JAX), so it runs as written; says why (e.g. what Numba couldn't compile, or what a method reads that compiled code can't take). Said once per function, or once per sim for a method (in `sim.notes`) """
+    """ A function given to `ss.jit` can't be compiled (or traced by JAX), so it runs as written; says why (e.g. what Numba couldn't compile). Said once per function """
 
 class SmallCounts(Note):
     """ `ode` with a disease that starts with only a few infected, so that whether it takes off is a matter of chance """

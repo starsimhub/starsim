@@ -84,7 +84,6 @@ The number remembers the rate and the duration it was made from, which is how th
 
 **A bare Python number is accepted in every slot**, with no warning. The slot gives the dimension and the sim gives the unit.
 
-<!-- fragment -->
 ```python
 S, I, R = ss.states('S I R')
 ss.Transition(S, I, rate=0.05 * I)        # beta, the factor of I, takes the rate's -> 0.05 per unit time

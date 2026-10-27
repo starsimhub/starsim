@@ -11,14 +11,12 @@ There are two ways to write an interaction, and both are first-class:
 
 ## `ss.modify`
 
-<!-- fragment -->
 ```python
 ss.modify(target, multiply=None, add=None, set=None,     # exactly one of these three (or efficacy=, which is multiply=1 - efficacy)
           efficacy=None, share=None, route=None,
           where=None, start=None, stop=None, when=None, hold=None, name=None)
 ```
 
-<!-- fragment -->
 ```python
 ss.modify(hiv.rel_trans, multiply=2.0, where=syphilis.active)
 ```
@@ -40,7 +38,6 @@ Read as: *for people with active syphilis, multiply HIV transmissibility by 2.*
 
 Condoms and similar per-act protection are modifiers of each disease's transmission on a route, with the share of acts they are used in; the efficacy differs by pathogen, so there is one modifier for each disease:
 
-<!-- fragment -->
 ```python
 use = ss.timeseries({2000: 0.05, 2020: 0.3})                                       # share of acts with a condom
 condoms = [ss.modify(ng.infection, efficacy=0.9, share=use, route='sexualnet'),    # gonorrhea
@@ -50,7 +47,6 @@ nsp = ss.modify(hiv.infection, multiply=0.2, share=0.5, route='needles', start=2
 
 A modifier is passed to the sim like any other module, in `connectors=` (interactions that are part of the biology) or `interventions=` (policy). Which list holds it does not change what it does, `when=` included: a modifier is evaluated where the engine reads the quantity it acts on in a step, whichever list it is in (the lists differ in order only for modules with a `step()` of their own). There is no separate `modifiers=` list.
 
-<!-- fragment -->
 ```python
 coinfection = [
     ss.modify(hiv.rel_trans,      multiply=2.0, where=syphilis.active),
@@ -82,7 +78,7 @@ A target is a reference to the quantity, not a copy of its current value: `ss.mo
 
 A modifier on a transition chosen with `p=`, one of several branches out of a state, changes its probability, and the other branches share the rest. If the target cannot be resolved when the sim is built (a plain number, a boolean state, a name that does not exist), `UnmodifiableTarget` is raised, listing the quantities that can be modified. Boolean flips and anything else that is not "change a number" belong in `step()` code.
 
-Nothing is accepted and then ignored. When the sim is built, after every modifier, change, and efficacy of a product has been registered against the quantity it changes, one pass asks the module each quantity belongs to whether it reads it, and raises `ss.errors.Unapplied` if not, naming the modifier, the quantity, and why. A declared module answers from its graph: a plain parameter (not an `ss.par` of its model, so only its own code reads it), a value over `to` in a `p=` table (built once; changing the table is not yet supported, so modify one destination by name), the `rel_sus` or `rel_trans` of a module with no acquisition or transmission, a condition on people (`where=`, or holding a product) on an inflow or a transition of counts, and an efficacy on a transition with several destinations (name the destination, e.g. `'precin.C'`) are refused. A disease written as code reads its `rel_sus` and `rel_trans` only if it is a transmitted `ss.Infection`; they are applied in `transmit_route()`, so a disease that overrides `transmit()` (e.g. to loop over variants) has them too. A modifier of an inflow (`ss.change(mal.emergence, by=0.5)`) applies under every solver. Likewise `stratify()` on a disease written as code, and a sim stratification that nothing uses (no declared module, and no network with values by it), raise `Unapplied`.
+Nothing is accepted and then ignored. When the sim is built, after every modifier, change, and efficacy of a product has been registered against the quantity it changes, one pass asks the module each quantity belongs to whether it reads it, and raises `ss.errors.Unapplied` if not, naming the modifier, the quantity, and why. A declared module answers from its graph: a plain parameter (not an `ss.par` of its model, so only its own code reads it), the `rel_sus` or `rel_trans` of a module with no acquisition or transmission, a condition on people (`where=`, or holding a product) on an inflow or a transition of counts, and an efficacy on a transition with several destinations (name the destination, e.g. `'precin.C'`) are refused. A disease written as code reads its `rel_sus` and `rel_trans` only if it is a transmitted `ss.Infection`; they are applied in `transmit_route()`, so a disease that overrides `transmit()` (e.g. to loop over variants) has them too. A modifier of an inflow (`ss.change(mal.emergence, by=0.5)`) applies under every solver. Likewise `stratify()` on a disease written as code, and a sim stratification that nothing uses (no declared module, and no network with values by it), raise `Unapplied`.
 
 ### How modifiers combine
 
@@ -106,18 +102,16 @@ Stratification adjustments ([05-dimensions.md](05-dimensions.md)), product effic
 
 Protection from several strains a person holds is combined by a rule before it multiplies, which a set of modifiers cannot do (each has one target and one condition; HPVsim's `(1 − clip(Σ))·(1 − vaccine)` is 0.35 where modifiers give 0.2). `ss.immunity` is that rule, given to the strains of a disease (`ss.Strains(immunity=...)`, [05-dimensions.md](05-dimensions.md#strains)):
 
-<!-- fragment -->
 ```python
-ss.immunity(due_to=None, scale=None, curve=None, rel_sus=None, rel_trans=None, dur=None, p=None, combine='max')
+ss.immunity(due_to=None, rel_sus=None, rel_trans=None, dur=None, combine='max')
 ```
 
-**What protects, `due_to=`** (decided 2026-10-22, D3; objects, not strings, for memory):
+**What protects, `due_to=`** (decided 2026-10-22, D3):
 
 - a state (`due_to=R`): the people in it, by the strains they carry there. A shared state people are infected in (`due_to=L`) protects in part against another strain, and the rest is superinfection; one they are not infected in (`R`) protects against reinfection while people are in it. With strains that have courses of their own, the state of each strain protects, by its row.
 - an attribute of each strain's own course (`due_to='nab'`, an `ss.attr` between 0 and 1): its value scales each strain's row, `m[k][g]·nab_k`.
-- the last strain a person had (`due_to=strains.last`) or every strain they have had (`due_to=strains.ever`), wherever they are now; `scale=` names an attribute that scales the row (Covasim's antibody level), which is agents only.
 
-**What it lowers** is the keyword, and the protection is its value: `rel_sus=` (being infected, against the incoming strain, on networks too), `rel_trans=` (infecting others), `dur=dict(In=m, Ic=m)` (time spent in states, by the state's name: every exit of the state is faster by `1/(1 − protection)`, HPVsim's severity immunity), and `p=dict(to_symp=m)` (a branch probability, by the transition's name, which the other branches take the rest of: Covasim's protection against symptoms and severity). Shortening a stay is not preventing severe disease, so the endpoints stay separate. Several keywords may be given together. A value is a matrix, `m[k][g]` the protection that holding strain `k` gives against strain `g` (rows from, columns against; 1 is complete), or one number, the same from any strain against every strain. Protection due to a shared state lowers `rel_sus` only; protection due to memory lowers the others for the course of an infection, against the strain carried, from the strains remembered from before it. For each strain `g` and person, the level of protection is the combination over the strains `k` that protect of `m[k][g]` (times `scale=`), by `combine=`:
+**What it lowers** is the keyword, and the protection is its value: `rel_sus=` (being infected, against the incoming strain, on networks too), `rel_trans=` (infecting others), `dur=dict(In=m, Ic=m)` (time spent in states, by the state's name: every exit of the state is faster by `1/(1 − protection)`, HPVsim's severity immunity). Shortening a stay is not preventing severe disease, so the endpoints stay separate. Several keywords may be given together. A value is a matrix, `m[k][g]` the protection that holding strain `k` gives against strain `g` (rows from, columns against; 1 is complete), or one number, the same from any strain against every strain. Protection due to a shared state lowers `rel_sus` only. For each strain `g` and person, the protection is the combination over the strains `k` that protect of `m[k][g]`, by `combine=`:
 
 | `combine=` | Protection |
 |---|---|
@@ -125,8 +119,6 @@ ss.immunity(due_to=None, scale=None, curve=None, rel_sus=None, rel_trans=None, d
 | `'sum'` | the sum, at most 1 (HPVsim) |
 | `'multiply'` | independent sources: `1 − Π(1 − p)` |
 | a function | of one array of protections, with the sources on the first axis (0 for those not held), returning the protection; e.g. the strongest plus half the rest, `lambda p: np.minimum(1, p.max(0) + 0.5*(p.sum(0) - p.max(0)))`. It needs agents and has no gradient (`sim.gradient()` and a NUTS fit raise `CapabilityError`) |
-
-`curve=` maps the level to the protection, as Covasim's logistic `calc_VE` of antibodies times the matrix (D8); one `ss.immunity` per endpoint when the curves differ. It runs under every solver where the level does (a table by level is worked out once), and has a gradient if the function is JAX-friendly.
 
 The quantity is multiplied by `1 − protection`, and several `ss.immunity` objects, `ss.modify`, and product efficacies on the same quantity multiply, so a vaccine's `1 − efficacy` multiplies it, which is HPVsim's rule exactly. A product's efficacy by strain (`ss.Vaccine(efficacy=ss.by(strain=[...]))`) is against acquiring each strain, on the same per-strain force of infection. With courses of their own, the protection is worked out from the strains' states at the start of each step, before anything moves, and an attribute when the quantity is read. A protection on a time spent that the matrix can bring to 1 raises (an infinite rate). `what_modifies()` lists each protection with the modifiers of its quantity.
 
@@ -147,7 +139,6 @@ These are arrays of agents, so `.effective` exists only in an agent-based run; i
 
 A modifier never changes the base, which is why nothing has to be restored when it ends. One person, followed through a campaign that halves susceptibility (`ss.modify(sir.rel_sus, multiply=0.5, where=campaign.protected)`):
 
-<!-- fragment -->
 ```python
 sir.rel_sus[uid] = 0.8              # assign: the base is 0.8
 sir.rel_sus.effective[uid]          # 0.8   nothing modifies it yet
@@ -224,7 +215,6 @@ The function is called when the condition is needed and returns a boolean array 
 
 With the objects in scope, the same condition can be written without the lambda:
 
-<!-- fragment -->
 ```python
 ppl = ss.People(n_agents=10_000)
 sir = ss.Disease(...)
@@ -282,7 +272,6 @@ def diagnose(sim, uids):                           # what a positive test does
 
 **As an event-triggered delivery** ([08-interventions.md](08-interventions.md#event-triggered-delivery)):
 
-<!-- fragment -->
 ```python
 hiv_test = ss.Diagnostic(sensitivity=0.99, specificity=0.99)
 

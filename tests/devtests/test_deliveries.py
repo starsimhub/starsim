@@ -405,19 +405,19 @@ def test_screen():
 def test_triggered():
     sc.heading('Testing steps triggered by each other\'s events, in any order')
 
-    # A union of events fires once per person, written as | or as a list; an intersection is those in both (agents only)
+    # A union of events fires once per person; an intersection is those in both (agents only)
     def union(key, who, **kwargs):
         a = ss.screen(ss.Diagnostic(sensitivity=1.0, name='dx_a'), coverage=0.5, at=[20], name='a')
         b = ss.screen(ss.Diagnostic(sensitivity=1.0, name='dx_b'), coverage=0.5, at=[20], name='b')
-        tx = ss.treat(ss.Treatment(cure=1.0), who=who(a, b), operator='all' if key == 'both' else 'any', name='tx')
+        tx = ss.treat(ss.Treatment(cure=1.0), who=who(a, b), name='tx')
         return ss.Sim(make_sir(), interventions=[tx, a, b], stop=30, **kwargs) # In any order: each step after its triggers
     out = {}
-    for key,who in dict(union=lambda a,b: a.positive | b.positive, list=lambda a,b: [a.positive, b.positive], both=lambda a,b: [a.positive, b.positive]).items():
+    for key,who in dict(union=lambda a,b: a.positive | b.positive, both=lambda a,b: a.positive & b.positive).items():
         res = union(key, who, **kw).run().results
         out[key] = res.tx.delivered[21]/res.sir.I[20]
         check_agents(lambda **kwargs: union(key, who, **kwargs), **kw)
     print(out)
-    assert np.isclose(out['union'], 0.75, atol=0.03) and out['list'] == out['union'] # Half of the infected tested by each, independently: 75% by either, once each (not 100%)
+    assert np.isclose(out['union'], 0.75, atol=0.03) # Half of the infected tested by each, independently: 75% by either, once each (not 100%)
     assert np.isclose(out['both'], 0.25, atol=0.03)
 
     # Several steps on the same event, in the step of the test, under agents and the ODE (each finds the people where the others moved them)
@@ -462,7 +462,7 @@ def test_triggered():
         ss.Sim(make_sis(), interventions=ss.treat(ss.Treatment(), who=a.positive), **kw)
     with pytest.raises(TypeError, match='use &'):
         ss.treat(ss.Treatment(), who=a.positive | (ss.ppl.age > 5))
-    with pytest.raises(TypeError, match='use &'):
+    with pytest.raises(TypeError, match='not a list'):
         ss.treat(ss.Treatment(), who=[a.positive, ss.ppl.age > 5])
     with pytest.raises(AttributeError, match='positive, negative'):
         a.postive
@@ -491,7 +491,7 @@ def test_memory():
     first = (sim.interventions.screening.count_positive.raw > 0).sum() # Ever positive
     assert np.isclose(sim.results.retest.delivered.sum(), 0.5*first, rtol=0.1) # Retested once, at the first positive
 
-    # An ss.Event of a module written as code (agents): one visit, both tests on the same attendees, and memory of a test at delivery
+    # A declared transition as an event (agents): one visit, both tests on the same attendees, and memory of a test at delivery
     S, I = ss.states('S I')
     sis = ss.Disease(infection=ss.Transition(S, I, rate=ss.peryear(0.5) * I), recovery=ss.Transition(I, S, dur=ss.years(2)), init_prev=0.1, name='sis')
     preg = ss.Pregnancy(fertility_rate=50)

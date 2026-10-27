@@ -854,7 +854,7 @@ def test_functions():
     d2 = ss.Disease(infection=ss.Transition(S, I, rate=0.3 * I), recovery=ss.Transition(I, R, rate=clearance), init_prev=0.01, name='d2')
     sim2 = ss.Sim(d2, stop=100, unit='day', **kw).run()
     assert sim2.solver == 'abm' and 'clearance' in sim2.solver_reason
-    assert 'no as compartments (takes uids)' in sim2.describe(output=True)
+    assert 'takes uids' in sim2.describe(output=True)
 
     # A rate given as a function of the sim with one value per person alive, once people have died (it raised IndexError)
     A, B = ss.states('A B')
@@ -1068,12 +1068,10 @@ def test_stays_and_offspring():
     ode = ss.Sim(growth, unit='day', stop=40, total_pop=5000, verbose=0).run()
     assert ode.solver == 'ode' and ode.results.growth.W[21] == 0 < ode.results.growth.W[22]
     assert np.max(binomial[:, 21]) == 0 and np.isclose(np.mean(binomial[:, 22]), n_W[22], rtol=0.05) # The same as agents, step for step
-    E, D, I = ss.states(3) # An escape during a minimum stay (before=), as EMULSION's
-    x = ss.Disease(onset=ss.Transition(E, I, rate=ss.perday(0.3), after=ss.days(10)), death=ss.Transition(E, D, rate=ss.perday(0.5), before=ss.days(10)), first='E', name='x')
-    for solver in ['abm', 'ode', 'binomial']:
-        size = dict(n_agents=5000) if solver == 'abm' else dict(total_pop=5000)
-        r = ss.Sim(x, unit='day', stop=30, solver=solver, verbose=0, **size).run().results.x
-        assert r.I[10] == 0 and r.I[11] > 0 and r.D[11] == r.D[30] > 0, f'{solver}: nobody should become infectious before day 10, or die after it'
+    E, D, I = ss.states(3) # An escape during a minimum stay, as EMULSION's: a rate only while the time in the state is short (agents)
+    x = ss.Disease(onset=ss.Transition(E, I, rate=ss.perday(0.3), after=ss.days(10)), death=ss.Transition(E, D, rate=ss.perday(0.5)*(E.time < ss.days(10))), first='E', name='x')
+    r = ss.Sim(x, unit='day', stop=30, n_agents=5000, verbose=0).run().results.x
+    assert r.I[10] == 0 and r.I[11] > 0 and r.D[11] == r.D[30] > 0, 'nobody should become infectious before day 10, or die after it'
     S, I, R = ss.states('S I R') # A stay on a transmission is not built yet, and no engine ignores it
     for solver in ['abm', 'ode']:
         infection = ss.Transition(S, I, rate=0.3 * I)

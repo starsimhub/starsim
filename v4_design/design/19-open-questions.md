@@ -133,7 +133,7 @@ A dwell-time distribution becomes stages. A distribution on `beta` or `rel_sus` 
 
 ### B7. Conditions and custom code
 
-- **Is `who=` with an event enough for event-triggered logic in custom modules?** Deliveries can be triggered by another module's events (a transition, a delivery or its outcome, or an `ss.Event` a module written as code fires), and every event is remembered per person (`.ever`, `.count`, `.since`). Whether custom `step()` code needs a helper for "at this person's next visit", or a boolean flag is enough, should be decided against a few real models.
+- **Is `who=` with an event enough for event-triggered logic in custom modules?** Deliveries can be triggered by another module's events (a transition, or a delivery or its outcome), and every event is remembered per person (`.ever`, `.count`, `.since`). Whether custom `step()` code needs a helper for "at this person's next visit", or a boolean flag is enough, should be decided against a few real models.
 - **Stock that carries over.** `capacity=` per round or per unit time does not express a stock that arrives in batches and is drawn down. A time series covers simple cases; otherwise `deliver=fn`.
 - **Within-host state** (viral load, CD4 count, waning immunity). Today a float agent property updated in `step()`, which can be a stratification once binned. More native support, such as declaring a trajectory as a function of time since infection, is worth pursuing and its shape is not settled.
 - **Dose response.** A rate can be a function, which covers it in principle. A worked example with viral load is needed to confirm.

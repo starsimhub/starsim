@@ -28,7 +28,6 @@ class Mixing:
         self.terms = [sc.objdict(kind='homogeneous', contacts=1.0, name=None)]
         self.pool_terms = sc.objdict() # As agents: the contact matrices of mixing pools, within each place (see init_pools())
         self.regrouped = {} # The contact matrices given over other age groups than the model's, by how they were regrouped: see note_regrouped()
-        self.dependence = 'frequency'
         self.init_space()
         return
 

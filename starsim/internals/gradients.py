@@ -39,8 +39,8 @@ def jax():
     if 'jax' not in sys.modules and 'xla_force_host_platform_device_count' not in os.environ.get('XLA_FLAGS', ''):
         os.environ['XLA_FLAGS'] = f'{os.environ.get("XLA_FLAGS", "")} --xla_force_host_platform_device_count={os.cpu_count() or 1}'.strip()
     import jax
-    if ss.options.jax_cache and jax.config.jax_compilation_cache_dir is None: # Keep what is compiled for later sessions, unless told otherwise
-        jax.config.update('jax_compilation_cache_dir', ss.options.jax_cache)
+    if jax.config.jax_compilation_cache_dir is None: # Keep what is compiled for later sessions, unless told otherwise (e.g. by JAX_COMPILATION_CACHE_DIR)
+        jax.config.update('jax_compilation_cache_dir', os.path.join(os.path.expanduser('~'), '.cache', 'starsim', 'jax'))
         jax.config.update('jax_persistent_cache_min_compile_time_secs', 0.25)
     return jax
 

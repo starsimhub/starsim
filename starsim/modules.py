@@ -142,16 +142,13 @@ def find_modules(key=None, flat=False, verbose=False):
     return modules if key is None else modules[key]
 
 
-def required(val=True):
+def required():
     """
     Decorator to mark module methods as required.
 
     A common gotcha in Starsim is to forget to call super(), or to mistype a method
     name so it's never called. This decorator lets you mark methods (of Modules only)
     to be sure that they are called either on sim initialization or on sim run.
-
-    Args:
-        val (True/'disable'): by default, mark method as required; if set to 'disable', then disable method checking for parent classes as well (i.e. remove previous "required" calls)
 
     Examples:
         ```python
@@ -171,7 +168,7 @@ def required(val=True):
     """
     # Wrap the function
     def decorator(func):
-        func._call_required = val  # Mark for collection
+        func._call_required = True  # Mark for collection
 
         @ft.wraps(func)
         def wrapper(self, *args, **kwargs):
@@ -284,7 +281,6 @@ class Module(Base):
         ```
     """
     _state_aliases = {} # Default state aliases; defined on the class so it always exists, e.g. while unpickling. See define_aliases()
-    requires = None # Other modules this one needs, by class or name, as in Starsim 3; not checked (see ss.check_requires())
 
     def __init__(self, name=None, label=None, **kwargs):
         # Housekeeping
@@ -408,26 +404,12 @@ class Module(Base):
     def _collect_required(self):
         """ Collect all methods marked as required """
         reqs = {}
-        disabled = []
         for cls in inspect.getmro(type(self)):
             for attr,method in cls.__dict__.items():
-                req = getattr(method, '_call_required', False)
-                if req:
-                    valid = [True, 'disable']
-                    if req not in valid:
-                        errormsg = f'ss.required() must be True or "disable", not "{req}"'
-                        raise ValueError(errormsg)
-                    elif req == 'disable':
-                        disabled.append(attr)
+                if getattr(method, '_call_required', False):
                     key = f'{cls.__qualname__}.{attr}'
                     reqs[key] = 0 # Meaning it's been called 0 times
-
-        # Collate and manually increment any that are set to be disabled
         self._call_required = reqs
-        if disabled:
-            for k in self._call_required.keys():
-                if k.split('.')[-1] in disabled: # Look for matches for disabled, omitting the class name
-                    self._call_required[k] += 1 # Manually increment the call to pass checking
         return reqs
 
     def check_method_calls(self):
@@ -663,8 +645,6 @@ class Module(Base):
             # Add it to the list of auto states, if needed
             if isinstance(state, ss.BoolState):
                 self._auto_states.append(state)
-            elif isinstance(state, ss.Event): # With the count of how often it happened to each person
-                self.define_states(state.counts, lock=lock, overwrite=overwrite)
 
         # Handle any aliases
         if kwargs:

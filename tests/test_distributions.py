@@ -46,7 +46,6 @@ def test_dist(m=m):
     assert 0 < rvs.min() < 1, 'Values should be between 0 and 1'
 
     # Test other options
-    dist.show_state()
     dist.plot_hist()
     return rvs
 
@@ -141,15 +140,11 @@ def test_exceptions(m=m):
     sc.heading('Testing exceptions and strict')
 
     # Create a strict distribution
-    dist = ss.random(strict=True, auto=False)
+    dist = ss.random(strict=True)
     with pytest.raises(ss.errors.DistNotInitializedError):
         dist(m) # Check that we can't call an uninitialized
-
-    # Initialize and check we can't call repeatedly
     dist.init(trace='test', sim=make_sim())
     rvs = dist(m)
-    with pytest.raises(ss.errors.DistNotReadyError):
-        dist(m) # Check that we can't call an already-used distribution
 
     # Check that we can with a non-strict Dist
     dist2 = ss.random(strict=False)

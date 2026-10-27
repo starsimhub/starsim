@@ -92,7 +92,7 @@ Every importer reads another framework's model into one intermediate object, `ss
 %%| echo: false
 flowchart LR
   F["odin, SBML, EMULSION, SimInf,<br>flepiMoP, summer2, Atomica, camdl,<br>EpiModel, epydemix, MEmilio"] --> R[reader] --> S["ss.interop.Source"] --> B["ss.interop.build()"] --> Sim[sim]
-  Sim --> E["SBML, odin, Mermaid"]
+  Sim --> E["SBML, odin"]
   Sim --> C["Python: sim.to_code()"]
 ```
 
@@ -118,7 +118,7 @@ Each importer is tested against its framework's own examples (`tests/devtests/in
 
 ## The vocabulary
 
-A language nobody can hold in their head is one nobody uses correctly, so Starsim's is counted: the design record lists every public name (109 at `ss.`, plus 56 methods and attributes). `tests/devtests/test_spec.py` checks that each exists, that everything exported at `ss.` is counted or in a named second tier (the classes for writing modules as code), and that the counts match.
+A language nobody can hold in their head is one nobody uses correctly, so the design record lists every public name in one place.
 
 The capitalization rule is Starsim's existing one: modules, containers, and base classes are CamelCase (`ss.Sim`, `ss.Disease`, `ss.Vaccine`); the pieces you put inside them are lowercase (`ss.days`, `ss.normal`, `ss.modify`, `ss.vaccinate`). Before a name is added: does Starsim already have one; can it be written with what exists (a bednet is an `ss.modify`, a metapopulation a stratification by patch); would more than one kind of model use it; is a keyword enough?
 
@@ -135,4 +135,4 @@ The code is in `starsim/internals/spec.py` (the spec, hashing, `ss.diff()`, and 
 - [The model spec](https://github.com/starsimhub/starsim/blob/v4/v4_design/design/14-model-spec.md): its structure, rate expressions, normalization, hashing, and saved forms
 - [Errors, warnings, and notes](https://github.com/starsimhub/starsim/blob/v4/v4_design/design/15-errors.md): the policy, message shape, and the full catalog
 - [Working with other frameworks](https://github.com/starsimhub/starsim/blob/v4/v4_design/design/16-interop.md): importers, classifying rates, exports, and the vignette test
-- [The complete vocabulary](https://github.com/starsimhub/starsim/blob/v4/v4_design/design/17-vocabulary.md): every public name, counted, with keywords and slot types
+- [The complete vocabulary](https://github.com/starsimhub/starsim/blob/v4/v4_design/design/17-vocabulary.md): every public name, with keywords and slot types

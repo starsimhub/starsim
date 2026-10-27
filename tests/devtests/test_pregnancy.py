@@ -144,7 +144,7 @@ def test_burnin():
 
 @sc.timer()
 def test_events():
-    sc.heading('Testing preg.* events: ss.on() in another module, on= on deliveries, ss.child(), and ANC at a visit after conception')
+    sc.heading('Testing preg.* events: ss.on() in another module, on= on deliveries, the mothers of births, and ANC at a visit after conception')
     preg = ss.Pregnancy(fertility_rate=ss.freqperyear(100), p_loss=ss.bernoulli(0.01))
     anc_ga = preg.attr('anc_ga', ss.uniform(ss.months(1), ss.months(8))) # Per pregnancy: ss.attr(..., on=preg.conception)
     S, F, I = ss.states('S F I')
@@ -160,7 +160,7 @@ def test_events():
     seen = sc.objdict(child=0, flagged=0, fresh=0, gap=[])
     def check(sim):
         p = sim.demographics.pregnancy
-        moms = ss.child(p.birth).uids
+        moms = np.unique(sim.people.parent[p.birth.uids]) # The mothers of the children born
         assert set(moms) == set(p.live_birth.uids)
         seen.child += len(moms)
         lost = p.loss.uids # Since the last live birth, through a later loss

@@ -408,18 +408,14 @@ class Presentation:
                     add('', 'happens immediately on entry')
             if tr.p is not None:
                 at_exit = f'decided as people leave, from their time in {tr.src[0].name}' if name in self.dwell_trs else None
-                ps = getattr(tr, 'p_given', None) or tr.p # As given: an entry with a to axis is one entry
-                rows = {id(p.row):p.row for p in tr.p if isinstance(p, ss.expressions.Share)}
-                how = [f'{format_expr(row.row)} normalized over {sc.strjoin(row.labels)}' for row in rows.values()]
                 stays = [f'{label}: ' + ('the rest' if p is None else format_expr(p, values=True)) for label,p,given in [('null', tr.p_die, tr.dies), ('stay', tr.p_stay, tr.stays)] if given]
-                add('', f'p = {", ".join(["the rest" if p is None else format_expr(p, values=True) for p in ps] + stays)}', '; '.join(how) or at_exit)
+                add('', f'p = {", ".join(["the rest" if p is None else format_expr(p, values=True) for p in tr.p] + stays)}', at_exit)
             elif 'p' in tr.guessed:
                 add('', f'p = {tr.guessed["p"]}', 'guessed: what the other branches leave')
             if tr.ends: # A result for each destination, e.g. res.cin.X
                 add('', 'flows: ' + ', '.join([f'{name} (total)'] + [f'{name}.{end}' for end in tr.ends]))
-            for key,what in [('after', 'not before'), ('before', 'only before')]: # A minimum stay, or a limit
-                if getattr(tr, key, None) is not None:
-                    add('', f'{what} {quantity_str(getattr(tr, key), "dur", unit)} in {sc.strjoin(s.name for s in tr.src)}')
+            if getattr(tr, 'after', None) is not None: # A minimum stay
+                add('', f'not before {quantity_str(tr.after, "dur", unit)} in {sc.strjoin(s.name for s in tr.src)}')
             if tr.guessed.get('import'):
                 add('', f'imported as {tr.guessed["import"]}', 'guessed')
             for expr in [tr.rate, tr.dur] + sc.tolist(tr.p): # The other parameters of the transition that are documented or can be fitted, each with its value
@@ -462,32 +458,26 @@ class Presentation:
                     out.append((src, dst, name, kind, p))
         return out
 
-    def diagram(self, prefix='', indent='    '):
-        """
-        The state-transition diagram, as the lines of a Mermaid flowchart (without its first line); see `ss.Disease.diagram()`
-
-        Args:
-            prefix (str): put before each node's name, so that several diseases can be drawn in one chart (`ss.interop.to_mermaid()`)
-            indent (str): put before each line
-        """
+    def diagram(self):
+        """ The state-transition diagram, as the lines of a Mermaid flowchart (without its first line); see `ss.Disease.diagram()` """
         sim = getattr(self.module, 'sim', None)
         unit = self.unit_name(sim if getattr(sim, 'initialized', False) else None)
         lines = []
         nulls = 0
         for state in self.states.values():
             shape = ('(["', '"])') if state.people else ('[/"', '"/]')
-            lines.append(f'{indent}{prefix}{state.name}{shape[0]}{state.label_name}{shape[1]}')
+            lines.append(f'    {state.name}{shape[0]}{state.label_name}{shape[1]}')
         for src,dst,name,kind,p in self.edges():
             ends = []
             for state in [src, dst]:
                 if state is None:
                     nulls += 1
-                    ends.append(f'{prefix}null{nulls}(( ))')
+                    ends.append(f'null{nulls}(( ))')
                 else:
-                    ends.append(prefix + state.name)
+                    ends.append(state.name)
             arrow = '-.->' if kind == 'contact' else '-->'
             text = edge_label(self.transitions[name], p, unit).replace('"', '#quot;')
-            lines.append(f'{indent}{ends[0]} {arrow}|"{text}"| {ends[1]}')
+            lines.append(f'    {ends[0]} {arrow}|"{text}"| {ends[1]}')
         return lines
 
     def equations(self, engine=None):
@@ -632,7 +622,7 @@ class Presentation:
 
         def par_json(p, kind):
             prior = None if p.prior is None else str(p.prior)
-            if isinstance(p.prior, ss.Dist): # A distribution of the value, as data (so that ss.to_code() can write it)
+            if isinstance(p.prior, ss.Dist): # A distribution of the value, as data (so that sim.to_code() can write it)
                 prior = dict(dist=type(p.prior).__name__) | {k:quantity_json(v, None, None) for k,v in p.prior.pars.items()}
             return dict(name=p.name, value=quantity_json(p.raw, kind, unit), bounds=p.bounds, prior=prior, source=p.source, doc=p.doc)
 
@@ -652,7 +642,7 @@ class Presentation:
                 entry.dur = dict(dist='expon', rate=['par', tr.rate.name])
             elif tr.rate is not None:
                 entry.rate = format_expr(tr.rate, exact=True)
-            ps = getattr(tr, 'p_given', None) or tr.p # As given: an entry with a to axis is one entry (see Graph.expand_rows())
+            ps = tr.p
             ends = [(name, p) for name,p,given in [('ss.null', tr.p_die, tr.dies), ('ss.stay', tr.p_stay, tr.stays)] if given] # Written after the states, as ss.Transition() takes them, when given
             if ends:
                 entry.dst = (entry.dst or []) + [name for name,_ in ends]
@@ -661,8 +651,7 @@ class Presentation:
             entry.stages = tr.stages
             entry.label = tr.label
             entry.migration = tr.migration or None # None when not used, which sim.hash() leaves out (see ss.utils.short_hash()), so that other specs hash as they did
-            for key in ['after', 'before']:
-                entry[key] = quantity_json(getattr(tr, key, None), 'dur', unit)
+            entry.after = quantity_json(getattr(tr, 'after', None), 'dur', unit)
             acquisition = getattr(tr, 'acquisition_given', None)
             entry.acquisition = None if acquisition is None else bool(acquisition)
             entry.move = {k:move_json(v, unit) for k,v in (getattr(tr, 'move_given', None) or {}).items()} or None
@@ -802,7 +791,7 @@ def describe_sim(sim, output=False, verbose=False):
         guessed = pars.solver == 'auto'
         add('solver', sim.solver, f'guessed: {sim.solver_reason}' if guessed else 'requested')
         for cap in sim.capabilities: # What matters to which solvers can run it: see ss.solvers.init_capabilities()
-            add('', f'{cap.ingredient}: {cap.groups} as compartments ({cap.how})')
+            add('', f'{cap.ingredient}: {cap.reason}')
         if not guessed: # What auto would have done
             reasons = ss.solvers.auto_reasons(sim)
             add('', f'auto would choose: ' + (f'abm ({reasons[0]})' if reasons else 'ode (every part of the model has a compartmental form)'))
@@ -957,7 +946,7 @@ def strat_rows(strat, most=6):
     rows = []
     if strat.joint is not None:
         rows.append(f'split: by {sc.strjoin([d for d in strat.joint.dims if d != strat.name] or strat.joint.dims)}, as given')
-    elif strat.kind != 'clock' and strat.split is not None:
+    elif strat.split is not None:
         rows.append('split: ' + short([f'{label} {share:.3g}' for label,share in zip(strat.labels, strat.split)]))
     if strat.adjust and strat.kind != 'strain': # A strain's are shown with its strains
         rows.append('adjust: ' + '; '.join(f'{key} × {short([f"{v:n}" for v in vals])}' for key,vals in strat.adjust.items()))

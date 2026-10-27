@@ -954,10 +954,8 @@ class Diagnostic(Product):
             probability for people in each state (a dict by state, of any disease, as for `sensitivity`; a number is for those with what
             `detects=` says); the last is `None`, everyone the others do not take. A key `None` in a result's dict is for people in
             none of the states keyed in any result (of any disease the test is keyed by), e.g. a false positive: it is counted once,
-            whereas a result for a state (`susceptible=0.1`) is one for each disease, which `combine='worst'` then combines
-        combine (str): for someone in states of several diseases, 'worst' (a result for each disease, and the most severe of them is theirs;
-            for a positive and a negative result, each disease is detected independently), or 'max' (the highest probability of each result
-            or a more severe one, so for a positive and a negative result, the highest sensitivity)
+            whereas a result for a state (`susceptible=0.1`) is one for each disease. For someone in states of several diseases, there is a
+            result for each disease, and the most severe of them is theirs (for a positive and a negative result, each disease is detected independently)
         delay (dur/dict): the time from the test to the result (agents only); a dict gives one for each result
         detects (Cond/func): the condition the test detects (default: being in an infected state of the disease)
         cost (float): the cost of each delivery
@@ -976,11 +974,8 @@ class Diagnostic(Product):
     doses = None
     spec_keys = ['sensitivity', 'specificity', 'delay', 'detects', 'cost']
 
-    def __init__(self, sensitivity=1.0, specificity=1.0, results=None, combine='worst', delay=None, detects=None, cost=None, name=None, label=None, **kwargs):
+    def __init__(self, sensitivity=1.0, specificity=1.0, results=None, delay=None, detects=None, cost=None, name=None, label=None, **kwargs):
         super().__init__(name=name, label=label, **kwargs)
-        if combine not in ['worst', 'max']:
-            errormsg = f'combine= is "worst" or "max", not {combine!r}'
-            raise ValueError(errormsg)
         if results is not None:
             names = list(results)
             if len(names) < 2 or results[names[-1]] is not None or any(v is None for v in list(results.values())[:-1]):
@@ -1000,7 +995,6 @@ class Diagnostic(Product):
         self.sensitivity = sensitivity
         self.specificity = specificity
         self.results_given = results # results is the module's own results
-        self.combine = combine
         self.delay = delay
         self.detects = None if detects is None else ss.conditions.as_cond(detects)
         self.cost = cost
@@ -1112,7 +1106,7 @@ class Diagnostic(Product):
         """
         The probability that each person's result is each one or a more severe one, for each but the least severe (so for a
         positive and a negative result, the probability of a positive one). For each disease, from the state they are in;
-        combined over diseases as the worst result (P(worst ≥ k) = 1 − ∏(1 − P_d(≥ k))) or the highest
+        combined over diseases as the worst result (P(worst ≥ k) = 1 − ∏(1 − P_d(≥ k)))
 
         Args:
             selector (`ss.conditions.Selector`): the selector of the delivery's disease
@@ -1123,9 +1117,8 @@ class Diagnostic(Product):
         sim = selector.sim
         groups, rest = self.layout(sim, home)
         groups = self.by_family(sim, groups, family)
-        worst = self.combine == 'worst'
         none = 1.0
-        combined = [1.0 if worst else 0.0]*len(rest)
+        combined = [1.0]*len(rest) # The probability of no result this severe or more, from any disease
         for name,rows in groups.items():
             inside = 0.0
             tail = [0.0]*len(rest)
@@ -1149,9 +1142,9 @@ class Diagnostic(Product):
                 for k in range(len(rest)):
                     tail[k] = tail[k] + sel*sum(vals[k:])
             none = none*(1 - inside)
-            combined = [c*(1 - t) if worst else np.maximum(c, t) for c,t in zip(combined, tail)]
+            combined = [c*(1 - t) for c,t in zip(combined, tail)]
         rest = [1 - selector.per_person(self.specificity) if v is self.specificity else selector.per_person(v) for v in rest]
-        return [(1 - c if worst else c) + none*sum(rest[k:]) for k,c in enumerate(combined)]
+        return [1 - c + none*sum(rest[k:]) for k,c in enumerate(combined)]
 
     @staticmethod
     def severity(vals):
@@ -1206,6 +1199,4 @@ class Diagnostic(Product):
         out = super().spec()
         if self.results_given is not None:
             out['results'] = ss.interventions.spec_value(self.results_given)
-        if self.combine != 'worst':
-            out['combine'] = self.combine
         return out

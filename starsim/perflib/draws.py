@@ -30,7 +30,6 @@ The functions run as plain Python too (in the copy `plain_copy()` makes, used by
 
 import math
 import importlib
-import collections
 import numpy as np
 import numba as nb
 import sciris as sc
@@ -600,23 +599,13 @@ def nbinom(n, p, u):
 
 #%% Many draws at once, with parameters that are numbers or arrays (one per draw)
 
-Arrays = collections.namedtuple('Arrays', ['from_u', 'from_key'])
-
 def arrays(f, npars):
-    """
-    For a draw f(*pars, u) with one or two parameters: from_u(*pars, u, out), which sets out[i] = f(*pars, u[i]), and
-    from_key(*pars, k, out), with the uniforms uniform(k, i) made on the way. Each parameter is a number or an array (one value per draw).
-    """
+    """ For a draw f(*pars, u) with one or two parameters: from_u(*pars, u, out), which sets out[i] = f(*pars, u[i]); each parameter is a number or an array (one value per draw) """
     if npars == 1:
         @jit()
         def from_u(a, u, out):
             for i in range(out.size):
                 out[i] = f(at(a, i), u[i])
-            return out
-        @jit()
-        def from_key(a, k, out):
-            for i in range(out.size):
-                out[i] = f(at(a, i), uniform(k, i))
             return out
     else:
         @jit()
@@ -624,12 +613,7 @@ def arrays(f, npars):
             for i in range(out.size):
                 out[i] = f(at(a, i), at(b, i), u[i])
             return out
-        @jit()
-        def from_key(a, b, k, out):
-            for i in range(out.size):
-                out[i] = f(at(a, i), at(b, i), uniform(k, i))
-            return out
-    return Arrays(from_u, from_key)
+    return from_u
 
-many = sc.objdict({name: arrays(f, n) for name, f, n in [ # E.g. many.weibull.from_key(c, scale, k, out)
+many = sc.objdict({name: arrays(f, n) for name, f, n in [ # E.g. many.weibull(c, scale, u, out)
     ('expon', expon, 1), ('weibull', weibull, 2), ('binomial', binomial, 2), ('poisson', poisson, 1), ('nbinom', nbinom, 2)]})

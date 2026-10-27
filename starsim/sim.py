@@ -411,22 +411,18 @@ class Sim(ss.Base):
             ):
             yield module
 
-    def init(self, force=False, timer=False, **kwargs):
+    def init(self, force=False, **kwargs):
         """
         Perform all initializations for the sim
 
         Args:
             force (bool): whether to overwrite sim attributes even if they already exist
-            timer (bool): if True, count the time required for initialization (otherwise just count run time)
             kwargs (dict): passed to ss.People()
         """
         if self.initialized and not force: # E.g. after sim.describe(), which initializes it
             return self
 
-        # Handle the timer
         self.timer = sc.timer() # Store a timer for keeping track of how long the run takes
-        if timer:
-            self.timer.start()
         self._held = [] if self.pars.verbose else None # Notes are said after the line that starts the run
 
         # Validation and initialization -- this is "pre"
@@ -475,8 +471,6 @@ class Sim(ss.Base):
             self._unsaid = held
         elif self.verbose:
             print('\n'.join(self.start_lines(held)))
-        if timer:
-            self.elapsed = self.timer.toc(label='init', output=True, verbose=self.verbose)
         if self.diagnostics and self.diagnostics.states is not None: # Need not None since dict is empty at this point
             self.diagnostics.store_states(key='init')
         return self
@@ -621,7 +615,7 @@ class Sim(ss.Base):
             likelihood (dict): the likelihood of a data series, by its name (e.g. `dict(prevalence=ss.normal(scale=0.02))`), for series whose outcome does not declare one. If every series has a likelihood, the fit maximizes their sum (plus the log of the priors of the parameters that have one, for the methods that find a best fit: the most probable values)
             gof (str/func): the goodness of fit: 'nae' (normalized absolute error, the default), 'rmse', or a function of the sim; any other name is an error
             penalty (func): a function of the parameter values (a dict by name, an array whole) returning a number added to what a best fit minimizes, e.g. a smoothness penalty, `lambda pars: 10*np.sum(np.diff(pars['knots'], 2)**2)`
-            method (str/list): by default, a best fit (a point estimate), by the method that suits the sim, which is printed with the reason: 'l-bfgs-b' for a deterministic sim with gradients (from JAX; see `ss.gradients`), 'nelder-mead' for one without them, or with one or two fitted parameters (where it is faster than gradients), and 'optuna' for a stochastic sim, including an agent-based one. A posterior is asked for by name: 'nuts' (the No-U-Turn sampler, for a deterministic sim with gradients whose data series all have a likelihood, with each chain started from one of the best points of a scan over the bounds that are apart), 'pmcmc' (particle MCMC, for a stochastic compartmental sim whose data series all have a likelihood: a random-walk Metropolis sampler on the likelihood estimated by a particle filter; see `ss.fit.ParticleFilter`), or 'abc-smc' (approximate Bayesian computation by sequential Monte Carlo, for any sim, with no likelihood needed); the priors are the parameters' `prior=`, or uniform over their bounds. Also: 'if2' (iterated filtering, for the sims that 'pmcmc' fits: the maximum-likelihood values, from passes of a particle filter in which each particle's values are perturbed by a shrinking random walk; see `ss.fit.Swarm`), 'asd' (adaptive stochastic descent, `sc.asd()`), any other `scipy.optimize.minimize` method, or a list of methods, each started from the best fit of the one before (a stage that does not converge stops the list; see `ss.fit.fit_stages()`)
+            method (str/list): by default, a best fit (a point estimate), by the method that suits the sim, which is printed with the reason: 'l-bfgs-b' for a deterministic sim with gradients (from JAX; see `ss.gradients`), 'nelder-mead' for one without them, or with one or two fitted parameters (where it is faster than gradients), and 'optuna' for a stochastic sim, including an agent-based one. A posterior is asked for by name: 'nuts' (the No-U-Turn sampler, for a deterministic sim with gradients whose data series all have a likelihood, with each chain started from one of the best points of a scan over the bounds that are apart), 'pmcmc' (particle MCMC, for a stochastic compartmental sim whose data series all have a likelihood: a random-walk Metropolis sampler on the likelihood estimated by a particle filter; see `ss.fit.ParticleFilter`), or 'abc-smc' (approximate Bayesian computation by sequential Monte Carlo, for any sim, with no likelihood needed); the priors are the parameters' `prior=`, or uniform over their bounds. Also: 'if2' (iterated filtering, for the sims that 'pmcmc' fits: the maximum-likelihood values, from passes of a particle filter in which each particle's values are perturbed by a shrinking random walk; see `ss.fit.Swarm`), any other `scipy.optimize.minimize` method, or a list of methods, each started from the best fit of the one before (a stage that does not converge stops the list; see `ss.fit.fit_stages()`)
             scan (int): for the SciPy methods, NUTS, and particle MCMC, the number of points spread over the bounds to try first (default: 10 per parameter, at most 100); the search starts from each of the best `restarts=3` of them that are apart (for SciPy; 1 for a single parameter of a deterministic sim), each NUTS chain from one of the best that are apart, and particle MCMC from the best
             n_runs (int): runs per evaluation, for a stochastic sim (default 4 for a stochastic compartmental sim, and 1 for agents and for a deterministic one); every point is scored by the mean over the same seeds (common random numbers), except under Optuna, where each point takes fresh seeds so that its search averages over chance (see `reseed=`); `fit.mismatch` is the score at the best fit over the first seeds
             reseed (bool): whether each point takes fresh seeds (default: True for Optuna, False otherwise); `reseed=False` with Optuna scores every point with the same seeds, e.g. for a rare outcome, where with fresh seeds the search favors values whose runs were lucky
@@ -810,7 +804,7 @@ class Sim(ss.Base):
 
     def to_code(self, filename=None):
         """
-        The sim as a Python file that builds it again, from its model spec (see `ss.to_code()`)
+        The sim as a Python file that builds it again, from its model spec (see `ss.spec.to_code()`)
 
         Only the declared parts are written; what is not (e.g. a module written as code)
         is listed in the file and in an `ss.errors.LossyExport` warning. A sim imported from another framework (`ss.interop.load(..., format=...)`) also says
@@ -1310,7 +1304,7 @@ class Sim(ss.Base):
         self.loop.run(t.tvec[min(t.ti, t.npts - 2)], verbose) # Up to the next step, which starts at time point ti
         return self
 
-    def run(self, until=None, verbose=None, shrink=False, check_method_calls=True, profile=False, solver=None, n_runs=None):
+    def run(self, until=None, verbose=None, shrink=False, profile=False, solver=None, n_runs=None):
         """
         Run the model -- the main method for running a simulation.
 
@@ -1318,7 +1312,6 @@ class Sim(ss.Base):
             until (date/str/float): run the steps up to and including the one that starts at this time
             verbose (int): how much to print: 0 nothing, 1 the solver, notes, and progress (default), 2 everything (e.g. each step)
             shrink (bool): whether to explicitly shrink the sim after running
-            check_method_calls (bool): whether to check that all required methods were called
             profile (bool): if True, record per-entry CPU timing in the loop (see `sim.loop.to_df()`/`plot_cpu()`)
             solver (str): the solver to use, if different from the sim's (a sim already built for another is built again)
             n_runs (int): if provided, run the sim this many times with different seeds, and return an `ss.MultiSim`; a shortcut for `ss.parallel(sim, n_runs=n_runs)`
@@ -1381,7 +1374,7 @@ class Sim(ss.Base):
             self.elapsed = self.timer.toc(output=True)
             if self.complete:
                 self.finalize()
-                if check_method_calls and not kernels:
+                if not kernels:
                     self.check_method_calls()
                 self._made, self._made_pars = self._settings(), self._module_pars() # So that values set after the run are kept when it is run again (see new())
                 if shrink:
@@ -1687,50 +1680,27 @@ class Sim(ss.Base):
             raise RuntimeError(errormsg)
         return
 
-    def check_method_calls(self, die=None, warn=None, verbose=False):
+    def check_method_calls(self):
         """
-        Check if any required methods were not called.
+        Check if any required methods were not called, and warn if so.
 
-        Typically called automatically by `sim.run()`; default behavior is to warn
-        (see `options.check_method_calls`).
-
-        Args:
-            die (bool): whether to raise an exception if missing methods were found (default False)
-            warn (bool): whether to raise a warning if missing methods were found (default False)
-            verbose (bool): whether to print the number of times each method was called (default False)
+        Typically called automatically by `sim.run()`.
 
         Returns:
             A list of missing method calls by module
         """
-        # Handle arguments, or fall back to options
-        valid = ['die', 'warn', False]
-        if die is not None or warn is not None:
-            check = 'die' if die else 'warn' if warn else False
-        else:
-            check = ss.options.check_method_calls
-        if check not in valid:
-            errormsg = f'Could not understand {check=}, must be one of {valid}'
-            raise ValueError(errormsg)
-
         missing = []
-        if check:
-            if verbose:
-                sc.pp({mod.name:mod._call_required for mod in self.modules})
-
-            for mod in self.modules:
-                modmissing = mod.check_method_calls()
-                if modmissing:
-                    missing.append([type(mod), modmissing])
-            if missing:
-                errormsg = 'The following methods are required, but were not called.\n'
-                errormsg += 'Did you mistype a method name, forget a super() call,\n'
-                errormsg += 'or did part of the sim not run (e.g. zero infections)?\n'
-                for modtype,modmissing in missing:
-                    errormsg += f'{modtype}: {sc.strjoin(modmissing)}\n'
-                if check == 'die':
-                    raise RuntimeError(errormsg)
-                elif check == 'warn':
-                    ss.warn(errormsg)
+        for mod in self.modules:
+            modmissing = mod.check_method_calls()
+            if modmissing:
+                missing.append([type(mod), modmissing])
+        if missing:
+            errormsg = 'The following methods are required, but were not called.\n'
+            errormsg += 'Did you mistype a method name, forget a super() call,\n'
+            errormsg += 'or did part of the sim not run (e.g. zero infections)?\n'
+            for modtype,modmissing in missing:
+                errormsg += f'{modtype}: {sc.strjoin(modmissing)}\n'
+            ss.warn(errormsg)
         return missing
 
     def to_df(self, **kwargs):
@@ -1919,30 +1889,7 @@ class Sim(ss.Base):
             sc.savejson(filename=filename, obj=d, indent=indent)
         return d
 
-    def to_yaml(self, filename=None, sort_keys=False, **kwargs):
-        """
-        Export results and parameters as YAML.
-
-        Args:
-            filename (str): the name of the file to write to (default `{sim.label}.yaml`)
-            kwargs (dict): passed to `sim.to_json()`
-
-        Examples:
-            ```python
-            sim = ss.Sim(diseases='sis', networks='random').run()
-            sim.to_yaml('results.yaml', keys='results')
-            ```
-        """
-        if filename is None:
-            if self.label:
-                filename = f'{self.label}.yaml'
-            else:
-                filename = 'sim.yaml'
-        json = self.to_json(filename=None, **kwargs)
-        return sc.saveyaml(filename=filename, obj=json, sort_keys=sort_keys)
-
-    def plot(self, key=None, fig=None, show_data=True, show_skipped=False, show_module=None,
-             show_label=False, n_ticks=None, annualize=False, **kwargs):
+    def plot(self, key=None, fig=None, show_data=True, show_skipped=False, annualize=False, **kwargs):
         """
         Plot all results in the Sim object
 
@@ -1952,9 +1899,6 @@ class Sim(ss.Base):
             style (str): the plotting style to use
             show_data (bool): plot the data, if available
             show_skipped (bool): show even results that are skipped by default
-            show_module (int): whether to show the module as well as the result name; if an int, show if the label is less than that length (default, 26); if -1, use a newline
-            show_label (str): if 'fig', reset the fignum; if 'title', set the figure suptitle
-            n_ticks (tuple of ints): if provided, specify how many x-axis ticks to use (default: `(2,5)`, i.e. minimum of 2 and maximum of 5)
             annualize (bool): if True, resample results to annual values before plotting (each by its kind; see `ss.Result.resample()`)
             fig_kw (dict): passed to `sc.getrowscols()`, then `plt.subplots()` and `plt.figure()`
             plot_kw (dict): passed to `plt.plot()`
@@ -1978,19 +1922,11 @@ class Sim(ss.Base):
         """
         self.check_results_ready('Please run the sim before plotting')
         data = ss.results.plot_data(self) if show_data else {} # The data, by the result that each column matches; a flow with data at a longer period (e.g. weekly) is shown as its totals over the data's periods, as the fit compares them
-        if fig is None and show_label in ['fig', 'fignum'] and self.label:
-            plotlabel = self.label
-            figlist = sc.autolist()
-            while plt.fignum_exists(plotlabel):
-                figlist += plotlabel
-                plotlabel = sc.uniquename(self.label, figlist, human=True)
-            kwargs['num'] = plotlabel
-        title = self.label if show_label in ['title', 'suptitle'] else None
         if key is None and not show_skipped: # The sim's own results that never change (e.g. the number alive and the deaths of a closed population) are left out
             own = [k for k,res in self.results.items() if isinstance(res, ss.Result)]
             flat = ss.results.match_result_keys(self.results, None)
             key = [k for k,res in flat.items() if not (k in own and np.allclose(res.values, res.values[0]))] or None
-        return self.results.plot(key=key, fig=fig, data=data, label=self.label, title=title, show_skipped=show_skipped, show_module=show_module, n_ticks=n_ticks, annualize=annualize, **kwargs)
+        return self.results.plot(key=key, fig=fig, data=data, label=self.label, show_skipped=show_skipped, annualize=annualize, **kwargs)
 
 
 

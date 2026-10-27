@@ -177,7 +177,7 @@ So a disease at `dt=ss.days(1)` and a demographics module at `dt=ss.years(1)` sh
 - Rates and durations are converted using the `dt` of the module that uses them ([02-types.md](02-types.md)).
 - Results are reported on each module's own timeline, as in Starsim.
 - A declared disease with a timestep of its own is taken a step at a time (it is not run in one call to the kernels).
-- `sim.loop.plot_step_order()` shows the interleaving, which is the quickest way to check a sim with mixed timesteps.
+- `sim.loop.to_df()` shows the interleaving, which is the quickest way to check a sim with mixed timesteps.
 
 Events inside a step use the same mechanism: a network given a sub-daily `dt` appears in the plan at those times. Commuting between places (`ss.geo.Mobility`) is not a module and has no place in the loop: it is a share of time spent in each place, applied within every step ([06-routes.md](06-routes.md)).
 

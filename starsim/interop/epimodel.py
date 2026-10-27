@@ -33,11 +33,11 @@ known = { # The parameters each built-in model reads; any others are listed
 modules = dict(netsim='infection.FUN recovery.FUN departures.FUN arrivals.FUN'.split()) # The modules a built-in network model replaces
 
 
-def dump(filename, rscript=None):
+def dump(filename):
     """ Run `dump_epimodel.R` on an R script or an RDS file, and return the JSON it writes """
-    rscript = rscript or shutil.which('Rscript')
+    rscript = shutil.which('Rscript')
     if rscript is None:
-        errormsg = f'To read "{filename}", give rscript= (an Rscript with EpiModel installed), or run dump_epimodel.R on it and load the JSON'
+        errormsg = f'To read "{filename}", put Rscript (with EpiModel installed) on the path, or run dump_epimodel.R on it and load the JSON'
         raise FileNotFoundError(errormsg)
     with tempfile.TemporaryDirectory() as tmp:
         out = os.path.join(tmp, 'model.json')
@@ -48,13 +48,13 @@ def dump(filename, rscript=None):
         return sc.loadjson(out)
 
 
-def read(source, rscript=None):
+def read(source):
     """ The model as a dict: from a dict, the JSON written by dump_epimodel.R, or an R script or RDS file (which needs R) """
     if isinstance(source, dict):
         return source
     if str(source).lower().endswith('.json'):
         return sc.loadjson(source)
-    return dump(source, rscript=rscript)
+    return dump(source)
 
 
 def mapping(x):
@@ -153,15 +153,15 @@ def network(net, src, name, acts=None):
     return ssl.DegreeNet(**kw, name=name), code
 
 
-def load_epimodel(source, run=0, unit='day', rscript=None, verbose=None, **kwargs):
+def load_epimodel(source, unit='day', verbose=None, **kwargs):
     """
     Read an EpiModel model into a sim
 
+    The first call of `netsim()`, `dcm()`, or `icm()` is read; the others are kept as scenarios (`sim.imported.scenarios`).
+
     Args:
-        source (str/dict): the JSON written by `dump_epimodel.R` (or its contents), or an R script or RDS file, which is dumped with `rscript`
-        run (int/str): which call of `netsim()`, `dcm()`, or `icm()` to read, by number or by scenario (`.scenario.id`); the others are kept as scenarios
+        source (str/dict): the JSON written by `dump_epimodel.R` (or its contents), or an R script or RDS file, which is dumped with the Rscript on the path
         unit (str): what one step of the model is ('day', 'week', 'month', or 'year'); EpiModel's rates are per step, so this only names them
-        rscript (str): the Rscript to dump an R script with (default: the one on the path)
         verbose (bool): whether to print how each flow was read
         kwargs (dict): passed to `ss.Sim()`
 
@@ -174,11 +174,11 @@ def load_epimodel(source, run=0, unit='day', rscript=None, verbose=None, **kwarg
         import starsim.interop
         sim = ss.interop.load('model.json', format='epimodel')
     """
-    d = read(source, rscript=rscript)
+    d = read(source)
     file = source if isinstance(source, str) else d.get('file')
     runs = d['runs']
     ids = [mapping(r['param']).get('.scenario.id', f'run{i}') for i,r in enumerate(runs)]
-    r = runs[ids.index(run) if isinstance(run, str) else run]
+    r = runs[0]
     kind, typ = r['kind'], r['type']
     param, init, control = mapping(r['param']), mapping(r['init']), mapping(r['control'])
     prob, rate = probs[unit], rates[unit]

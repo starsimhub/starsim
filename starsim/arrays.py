@@ -16,7 +16,7 @@ ss_uid     = ss.dtypes.uid
 ss_nbint   = ss.dtypes.nbint
 ss_bool    = ss.dtypes.bool
 int_nan    = ss.dtypes.int_nan
-numba_indexing = ss.options.numba_indexing
+numba_indexing = 2000 # The number of indices above which Numba (rather than NumPy) indexes arrays: it wins for both gather and compaction above ~2k; see https://github.com/starsimhub/starsim/issues/1005
 
 
 def np_indexer(arr, inds):

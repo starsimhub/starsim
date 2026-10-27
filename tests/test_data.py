@@ -46,7 +46,7 @@ def test_contacts():
     sim = ss.Sim(make_sir(), networks=[home, ss.contacts('Kenya', layer='school')], stratify=dict(age=[0, 5, 18, 65]), unit='day', stop=60, **kw)
     spec = sim.to_spec()
     assert spec['networks'][1]['data']['layer'] == 'school'
-    code = ss.to_code(spec)
+    code = ss.spec.to_code(spec)
     assert sim.hash() == rebuild(code).hash()
     assert "ss.contacts('Kenya', layer='school')" in code
     return sims

@@ -139,7 +139,7 @@ class People:
         states.extend(extra_states)
         self.states = ss.ndict(type=ss.Arr)
         for state in states:
-            self.states.append(state, overwrite=False)
+            self.states.append(state)
             setattr(self, state.name, state)
             state.link_people(self)
         self.causes = [] # The causes of death, by name (see request_death()), in the order first seen: people.cause_of_death is the position in this list
@@ -858,10 +858,6 @@ class People:
         else:
             self.remove_dead()
             self.update_post()
-        if sim.solver == 'abm':
-            for strat in sim.groups.strats: # The time since an event, for those who have had it (see ss.dimensions.Strat)
-                if strat.kind == 'clock':
-                    self[strat.attr].raw[self.auids] += strat.clock_dt(sim) # Those with none stay NaN
         return
 
     def to_df(self):

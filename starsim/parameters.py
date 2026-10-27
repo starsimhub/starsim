@@ -846,9 +846,6 @@ class by:
     Arithmetic with a number, or with another `ss.by` over the same levels, gives an `ss.by`; anything else
     (e.g. tables by different bins, a count, or `np.minimum(by, 1)`) is an expression, worked out where it is used.
 
-    In `p=` of a transition with several destinations, a dimension called `to` is the destination: its labels are
-    the names of destination states, and the entry of `p=` it is in is normalized over them (see `ss.Transition`).
-
     Examples:
         ```python
         beta = ss.by(age=[0.08, 0.05, 0.03])
@@ -858,7 +855,6 @@ class by:
         beta = ss.by(age=[ss.timeseries({2020: 0.08, 2021: 0.04}), 0.05, 0.03]) # Children's value changes in 2021
         mu = ss.by(sex=dict(female=0.008, male=0.011)) # From people.female, with or without a dimension by sex
         p = ss.by(dict(age=range(15, 50), value=vals)) # By single year of age (bins with these lower edges)
-        mix = ss.by(dict(age=[15, 15, 25, 25], to=['pill', 'iud', 'pill', 'iud'], value=[0.7, 0.3, 0.4, 0.6])) # A switching row by age, over the destinations
         ```
     """
     def __new__(cls, table=None, dims=None, **kwargs):
@@ -1045,41 +1041,6 @@ class by:
             return pd.DataFrame({self.dim:list(vals.keys()), 'value':list(vals.values())})
         return None
 
-    def to_labels(self):
-        """ The destinations of a value with a `to` axis, if it names them (a table's column, or a dict by name); None if it gives them by position """
-        if self.table is not None:
-            return list(dict.fromkeys(str(v) for v in self.table['to']))
-        vals = self.given.get('to') if self.given else None
-        return [str(k) for k in vals] if isinstance(vals, dict) else None
-
-    def at(self, to, labels):
-        """
-        The value for one destination of a value with a `to` axis: a value, or an `ss.by` over its other dimensions
-
-        Args:
-            to (str): the destination
-            labels (list): the destinations of the entry it is in, in order, for values given by position
-        """
-        others = [dim for dim in self.dims if dim != 'to']
-        def position(n):
-            if n != len(labels):
-                raise ss.errors.ShapeError(f'{self} gives {n} values over "to" by position, but the entry of p= it is in covers {len(labels)} destinations ({sc.strjoin(labels)})')
-            return labels.index(to)
-        if self.array is not None:
-            axis = self.dims.index('to')
-            arr = np.take(self.array, position(self.array.shape[axis]), axis=axis)
-            return by(arr, dims=others) if others else float(arr)
-        if self.table is not None:
-            rows = self.table[[str(v) == to for v in self.table['to']]].drop(columns='to').reset_index(drop=True)
-            if not len(rows): # A destination it does not name has none
-                return 0.0
-            return by(rows) if others else rows['value'].iloc[0]
-        vals = self.given['to']
-        val = {str(k):v for k,v in vals.items()}.get(to, 0.0) if isinstance(vals, dict) else sc.tolist(vals)[position(len(sc.tolist(vals)))]
-        if others: # A product with values by other dimensions
-            return as_expr(by(**{dim:self.given[dim] for dim in others}))*as_expr(val)
-        return val
-
     def keys(self, dim):
         """ How the values along one dimension are given: ('edges', array) for a table's column of numbers (lower bin edges), ('keys', labels) for a table's column of labels or a dict of values by label, or None for values by position """
         return self.cached(('keys', dim), lambda: self._keys(dim))
@@ -1119,8 +1080,6 @@ class by:
     def check(self, sim):
         """ Check the values against the sim's dimensions (`ss.errors.ShapeError`), and that a property of people that is not one is given by value; returns the positions of the sim's dimensions it is by, and those dimensions """
         names = [strat.name for strat in sim.groups.strats]
-        if 'to' in self.dims: # Over the destinations of a transition, which is taken a destination at a time (see at())
-            return [], []
         for dim in self.dims:
             if dim not in names and self.keys(dim) is None: # By position, which needs the dimension's levels
                 if dim == 'sex':

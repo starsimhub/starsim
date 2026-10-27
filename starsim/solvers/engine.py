@@ -278,10 +278,8 @@ class Engine:
         self.partnership_info = dict() # Under the partner-change model, the chance a partnership transmits, by transmission, source state, network, and side of the partner: see Compartmental.partnership_chance()
         self.register = None # The movement register, as arrays for the kernels
         self.year = None # The year in the step that values that vary smoothly in time are taken at, for its stages (None for its start, sim.now)
-        self.immune_states = [] # Protection between strains: the states whose people can be infected again, the protection by level in a state, and the protection by memory (see init_immunity())
+        self.immune_states = [] # Protection between strains: the states whose people can be infected again, and the protection by level in a state (see init_immunity())
         self.protect = {}
-        self.memory = []
-        self.remembering = set()
         self.cross = None # In a compartmental run, the diseases whose states are tracked jointly with this one's, if any: see ss.solvers.Crossing
         self.kernel_rng = None # The random numbers of a run stepped by the kernels: see init_program()
         self.compiled = None # Whether the run is taken by the compiled kernels or as plain Python, once chosen: see Compartmental.kernels()
@@ -344,8 +342,6 @@ class Engine:
                 names = own[strat.name].states if strat.name in own else ([] if strat.states is not None else None)
                 if getattr(strat, 'stages_of', None) is not None: # The stages of a transfer: for its own module's states only
                     names = (strat.states or [s.name for s in graph.people_states]) if strat.stages_of[0] == self.mod.name else []
-                if getattr(strat, 'memory_of', None) is not None: # What people remember of a disease's strains: for its own states only
-                    names = strat.states if strat.memory_of == self.mod.name else []
                 flag = bool(state.people or strat.kind == 'space') if names is None else state.name in names # A place applies to everything; other properties of people, to people
                 if strat.kind == 'disease': # The compartments of another disease, tracked jointly with this one: see ss.solvers.Crossing
                     flag = bool(state.people) and self.mod.name in strat.holders
@@ -379,8 +375,6 @@ class Engine:
             errormsg = f'"{self.mod.name}" has more than one strain dimension ({sc.strjoin(sim.groups.strats[d].name for d in strains)}); a person carries one strain of a disease at a time, so combine them into one'
             raise ValueError(errormsg)
         self.strain = strains[0] if strains else None
-        mems = [d for d,strat in enumerate(sim.groups.strats) if getattr(strat, 'memory_of', None) == self.mod.name]
-        self.memory_dim = mems[0] if mems else None # In a compartmental run: what people remember of the strains (see ss.Strains._memory_strat())
         self.foreign = set() # In a crossing: the dimensions that only another disease's states have, whose level this one's people keep
         if self.cross is not None:
             people = [state.name for state in graph.people_states]
@@ -406,7 +400,7 @@ class Engine:
                     if not self.applies[state.name][d] and not (isinstance(level, tuple) and level[0] == 'matrix'): # A change of strains for each strain carried, for those left with one (see ss.strains.prepare())
                         raise ss.errors.MissingDimension(f'the transition "{tr.name}" of "{self.mod.name}" moves people in "{dim}", but the state they go to ("{state.name}") has no level of it.')
                 strat = self.sim.groups.strats[d]
-                if isinstance(level, tuple) and level[0] in '+=':
+                if isinstance(level, tuple) and level[0] == '+':
                     self.note_counter(strat, f'the transition "{tr.name}" of "{self.mod.name}"')
                 out.append((d, level if isinstance(level, tuple) else strat.move_level(level)))
             self.move_levels[tr.name] = tuple(out)
@@ -433,9 +427,7 @@ class Engine:
             b = self.applies[dst]
             moved = dict(move or ())
             out = None
-            m = getattr(self, 'memory_dim', None)
-            remember = m is not None and src is not None and b[m] and self.remembers(src, dst) # Leaving the states they carry strains in: they remember the strains they carried
-            if strain is not None or moved or remember or not np.array_equal(a, b):
+            if strain is not None or moved or not np.array_equal(a, b):
                 ng = self.sim.groups.n_groups
                 if self.sim.solver != 'abm' and 8*ng**2 > self.max_map_bytes: # A dense matrix of groups by groups (FP84: 25.7 GB for 3,264 × 18 groups)
                     raise ss.CapabilityError(f'"{self.mod.name}" cannot run with solver="{self.sim.solver}": people moving from {src or "outside"} to {dst} change group, and the map between its {ng:,} groups would take {8*ng**2/1e9:.3g} GB (a dense matrix of groups by groups).\n'
@@ -446,7 +438,7 @@ class Engine:
                     factor = np.zeros((n, n))
                     if d in moved and isinstance(moved[d], tuple) and moved[d][0] == 'matrix' and b[d]: # A share of each level to each (see ss.strains.prepare())
                         factor = np.array(moved[d][1])
-                    elif d in moved and isinstance(moved[d], tuple) and moved[d][0] != 'matrix': # A counter (each level to the one k up), a clock set to a time, or a change of strains
+                    elif d in moved and isinstance(moved[d], tuple) and moved[d][0] != 'matrix': # A counter (each level to the one k up), or a change of strains
                         factor[np.arange(n), strat.target(moved[d])] = 1
                     elif d in moved and not isinstance(moved[d], tuple):
                         factor[:, moved[d]] = 1
@@ -455,8 +447,6 @@ class Engine:
                             factor[np.arange(n), strat.adds[:, strain]] = 1
                         else:
                             factor[:, strain] = 1
-                    elif remember and d == m: # Set from the strains carried, below
-                        factor = np.ones((n, n))
                     elif d in self.foreign:
                         factor = np.eye(n)
                     elif not b[d]:
@@ -467,9 +457,6 @@ class Engine:
                         factor[:] = strat.split
                     out = np.kron(out, factor)
                 coords = self.sim.groups.group_coords
-                if remember:
-                    after = self.sim.groups.strats[m].after[coords[:, m], coords[:, self.strain]] # The level each group's people remember, from what they remembered and the strains they carried
-                    out = out*(coords[None, :, m] == after[:, None])
                 for d,strat in enumerate(self.sim.groups.strats): # Entering a dimension whose split depends on the levels of others: by the row for the group people come from
                     if strat.cond is not None and b[d] and not a[d]:
                         ng = len(coords)
@@ -504,13 +491,9 @@ class Engine:
           strain; a multiplier for each level of the strain dimension and strain, in `protect`. A state people
           are not infected in (R) can be infected again, moving on as from the first state (`immune_states`);
           one they are infected in (L) can carry another strain as well (see `ss.strains.add_superinfection()`).
-        - Due to the last strain or every strain had (`memory`): as agents, by each person's own history, for
-          everyone who can be infected (see `ss.solvers.Agents.protection()`).
         """
         self.immune_states = []
         self.protect = {}
-        self.memory = []
-        self.remembering = set() # The states whose people what they remember protects: those not infected
         strat = None if self.strain is None else self.sim.groups.strats[self.strain]
         strains = getattr(strat, 'strains', None)
         if strains is None or not strains.immunity:
@@ -521,42 +504,13 @@ class Engine:
             raise ss.CapabilityError(f'the strains of "{self.mod.name}" need agents: {reason}. Run with solver="abm" (or "auto").')
         sources = {id(src) for tr in graph.transmissions for src in tr.src}
         infected = {id(s) for s in graph.people_states if s.name in (strat.carried or [])} # Carrying strains as an infection (see ss.Strains._carriers())
-        recovered = [s for s in graph.people_states if s.name not in graph.uninfected and id(s) not in infected and id(s) not in sources] # Have been infected, but are not now, and cannot be infected again by a transmission of their own
-        self.remembering = {s.name for s in graph.people_states if id(s) not in infected}
         for imm in strains.immunity:
-            if isinstance(imm.due_to, ss.strains.Memory):
-                if 'rel_sus' in imm.values and not strains.trivial(imm, graph):
-                    self.memory.append(imm)
-                    self.immune_states += [s for s in recovered if s not in self.immune_states]
-                for key in [key for key in imm.values if key != 'rel_sus']: # Protection on the course of an infection, from what people remember of the strains before it (see ss.strains.MemoryProtection)
-                    ss.strains.MemoryProtection.add(self, imm, key)
-                continue
             for name in imm.names:
                 state = graph.states[name]
                 self.protect[name] = self.protect.get(name, 1.0)*(1 - strains.level_protection(imm)) # On every transmission out of the state (e.g. a reinfection R >> I of its own, HP46)
                 if id(state) not in infected and id(state) not in sources and state not in self.immune_states:
                     self.immune_states.append(state)
         return
-
-    def remembers(self, src, dst):
-        """ Whether people moving from one state to another remember the strains they carried: they leave the states they carry strains in for one they don't """
-        carried = self.sim.groups.strats[self.strain].carried or []
-        return src in carried and dst is not None and dst not in carried and self.graph.states[dst].people
-
-    def memory_mult(self, state, strain, key='rel_sus'):
-        """ In a compartmental run: the share of the force of infection of a strain that reaches each group of people in a state, by what they remember of the strains (`ss.immunity(due_to=strains.last)` or `.ever`): with those they carry there too, as agents """
-        m = getattr(self, 'memory_dim', None)
-        if m is None or not self.memory or state.name not in self.remembering:
-            return 1.0
-        mem = self.sim.groups.strats[m]
-        strains = mem.memory
-        levels = self.sim.groups.group_coords[:, m]
-        if self.applies[state.name][self.strain]:
-            levels = mem.after[levels, self.sim.groups.group_coords[:, self.strain]]
-        out = 1.0
-        for imm in self.memory:
-            out = out*(1 - strains.memory_protection(imm, key, mem, levels)[:, strain])
-        return out
 
     def protection(self, state, levels, strain):
         """ The share of the force of infection of a strain that reaches people in a state at some levels of the strain dimension, by the strains they carry there (see `init_immunity()`) """

@@ -28,16 +28,11 @@ class Strat:
         levels (list/dict): bin edges (for a continuous property such as age) or labels; or a dict of the share of the population in each, e.g. `{0: 0.3, 15: 0.6, 65: 0.1}`
         split (list): the share of the population in each level (if not given: from an `ss.geo.geography`'s populations; for age groups, the world's ages; for a boolean dimension, everyone at the first level; otherwise equal)
         adjust (dict): multipliers on named transitions, one per level: on its rate (a duration is divided), or on its probability for a branch chosen with p=
-        kind (str): 'age', 'space', 'clock', or 'plain'; if not given, 'space' for an `ss.geo.geography` or with `mobility=`, 'age' for a dimension called age, and otherwise 'plain'
+        kind (str): 'age', 'space', or 'plain'; if not given, 'space' for an `ss.geo.geography` or with `mobility=`, 'age' for a dimension called age, and otherwise 'plain'
             (a strain dimension, kind 'strain', is made by `ss.Strains`: see `strains`)
         states (list): the names of the states it applies to (default: every state that is people)
         where (dict): the groups it applies to, as a dimension and a level (or list of levels), e.g. `dict(sex='female')`; people in other groups have no level of it (default: every group)
         mobility (gravity/radiation/Mobility/array): for a spatial stratification, the movement between its levels
-
-    A dimension of kind 'clock' holds the time since an event, which advances with time as age does: its levels are
-    the lower edges of bins of time (e.g. `ss.months([0, 1, 2, 3, 6, 12, 24])`), and a last level `none` holds the
-    people who have not had the event (whose value is NaN). An event sets it with `move=` (e.g. `move=dict(since_birth=0)`).
-    Each person's value is the time since it was set, so a clock is kept by agents only.
     """
     strains = None # For a strain dimension: the ss.Strains it is made from
 
@@ -75,17 +70,10 @@ class Strat:
             errormsg = f'mobility= is for a spatial stratification, but "{name}" is of kind "{self.kind}"; pass kind="space" if it is a place'
             raise ValueError(errormsg)
         self.mobility = mobility
-        self.clock_unit = None # For a clock: the unit of time its values are in (None for the sim's), and its levels as given
-        self.declared = None
-        if self.kind == 'clock':
-            self.declared, self.clock_unit = clock_values(name, levels)
-            levels = []
         levels = list(levels)
-        numeric = self.kind != 'clock' and all(sc.isnumber(v) and not isinstance(v, bool) for v in levels)
+        numeric = all(sc.isnumber(v) and not isinstance(v, bool) for v in levels)
         self.edges = None
-        if self.kind == 'clock':
-            self.set_clock(self.declared)
-        elif numeric: # Bin edges; the last bin is open-ended
+        if numeric: # Bin edges; the last bin is open-ended
             self.edges = np.array(levels, dtype=float)
             ends = list(levels[1:]) + [None]
             self.labels = [f'{lo:n}+' if hi is None else f'{lo:n}' if hi - lo <= 1 else f'{lo:n}-{hi-1:n}' for lo,hi in zip(levels, ends)] # e.g. 0, 1-4, 5+
@@ -125,9 +113,6 @@ class Strat:
             if not np.isclose(split.sum(), 1):
                 self.guessed['split'] = f'normalized, since it summed to {split.sum():n}'
                 split = split/split.sum()
-        elif self.kind == 'clock': # Nobody has had the event
-            split = self.at_none()
-            self.guessed['split'] = 'everyone at none, since nobody has had the event yet'
         elif self.kind == 'age' and self.edges is not None: # As the people of a declared model, unless the sim has a named population
             world = ss.data.world
             split = ss.data.age_split(self.edges, world.ages, world.counts)
@@ -141,22 +126,6 @@ class Strat:
         self.split = split
         return
 
-    def set_clock(self, vals):
-        """ A clock's levels: bins with these lower edges (in its own unit), then none """
-        vals = np.asarray(vals, dtype=float)
-        ends = list(vals[1:]) + [None]
-        self.edges = np.append(vals, np.inf) # Nobody's value reaches the last edge, so a value of NaN (none) is in the last level
-        self.labels = [f'{lo:n}+' if hi is None else f'{lo:n}' if hi - lo <= 1 else f'{lo:n}-{hi-1:n}' for lo,hi in zip(vals, ends)] + ['none']
-        self.n = len(self.labels)
-        return
-
-    def clock_dt(self, sim):
-        """ For a clock: the length of a step, in the clock's unit """
-        dt = ss.solvers.convert(sim.pars.dt, sim.unit_base)
-        if self.clock_unit is None:
-            return float(dt)
-        return float(ss.time.get_dur_class(sim.unit_base)(dt).to(self.clock_unit).value)
-
     def worth(self):
         """ The value of the property for each level, as a compartmental run takes it in an expression: the lower edge for whole numbers (a counter), and otherwise the middle of the bin """
         if self.edges is not None and np.allclose(self.edges, np.round(self.edges)):
@@ -168,10 +137,6 @@ class Strat:
         out = np.zeros(self.n)
         out[0] = 1
         return out
-
-    def at_none(self):
-        """ For a clock: a split with everyone at none, the last level """
-        return self.first()[::-1].copy()
 
     def init_carriage(self, strains):
         """
@@ -221,19 +186,18 @@ class Strat:
         return f'{self.name}_group' if (self.name == 'age' and self.edges is None) else self.name
 
     def value(self, index):
-        """ The value people hold for a level, given its position: the level's lower edge for a numeric dimension (people hold values, which are binned into levels), the position itself otherwise; for a clock's none, NaN """
+        """ The value people hold for a level, given its position: the level's lower edge for a numeric dimension (people hold values, which are binned into levels), the position itself otherwise """
         if self.edges is None:
             return index
-        out = self.edges[np.asarray(index, dtype=int)]
-        return np.where(np.isinf(out), np.nan, out) if self.kind == 'clock' else out
+        return self.edges[np.asarray(index, dtype=int)]
 
     def moved(self, vals, level):
-        """ As agents: the values of people moved along this dimension: to a level (its position), up a counter (`('+', k)`), to a time on a clock (`('=', t)`), or from each level to another (`('map', levels)`, a change of strains) """
+        """ As agents: the values of people moved along this dimension: to a level (its position), up a counter (`('+', k)`), or from each level to another (`('map', levels)`, a change of strains) """
         if isinstance(level, tuple):
             op, x = level
             if op == 'map':
                 return self.target(level)[np.asarray(vals, dtype=int)]
-            return self.add(vals, x) if op == '+' else np.full(len(vals), x, dtype=float)
+            return self.add(vals, x)
         return self.value(level)
 
     def target(self, level):
@@ -242,34 +206,23 @@ class Strat:
             op, x = level
             if op == 'map': # Those at a level it does not apply to stay
                 return np.where(np.asarray(x) >= 0, x, np.arange(self.n))
-            return self.shifted(x) if op == '+' else np.full(self.n, self.clock_level(x))
+            return self.shifted(x)
         return np.full(self.n, level)
 
     def move_level(self, level):
-        """ A level that people are moved to, as given in `move=`: its position, or for a clock, the time it is set to (`('=', t)`, in the clock's unit) """
-        if self.kind == 'clock':
-            return ('=', float(clock_values(self.name, [level], self.clock_unit)[0][0]))
+        """ A level that people are moved to, as given in `move=`: its position """
         return self.index(level)
-
-    def clock_level(self, value):
-        """ For a clock: the level of a value (a time in its unit, or a duration) """
-        value = clock_values(self.name, [value], self.clock_unit)[0][0]
-        return int(np.clip(np.digitize(value, self.edges) - 1, 0, self.n - 1))
 
     def people_arr(self):
         """ The property of people that holds each agent's level, when they do not have it already: for a dimension with labels, the level itself, as 16-bit integers (so with one dimension it is also the group: see `Groups.group_raw()`); for a binned one, floats """
         if self.edges is None:
             return ss.Arr(self.attr, dtype=level_dtype(self.n), default=0, nan=-1, label=self.name)
-        return ss.FloatArr(self.attr, default=np.nan if self.kind == 'clock' else 0, label=self.name)
+        return ss.FloatArr(self.attr, default=0, label=self.name)
 
     @property
     def spec(self):
         """ The stratification as it is written in the model spec """
         levels = self.edges.tolist() if self.edges is not None else list(self.labels)
-        unit = None
-        if self.kind == 'clock': # Its levels as given, in their unit; everyone starts at none, so there is no split
-            levels = self.declared.tolist()
-            unit = None if self.clock_unit is None else self.clock_unit.base.removesuffix('s')
         mobility = None
         if self.mobility is not None:
             mob = self.mobility
@@ -279,8 +232,8 @@ class Strat:
                 mobility['matrix'] = mob.matrix(self).tolist()
             else: # A register of movements, by its size and a hash of its contents
                 mobility['register'] = dict(events=len(mob.data), hash=sc.sha(mob.data.astype(str).to_csv()).hexdigest())
-        out = dict(geo=self.geo.ref if self.geo is not None else None, split_from=getattr(self, 'split_from', None) or None, unit=unit, # Where a named geography or split came from
-                   name=self.name, kind=self.kind, levels=levels, split=None if self.kind == 'clock' else self.split.tolist() if self.joint is None else repr(self.joint), adjust={k:v.tolist() for k,v in self.adjust.items()}, states=self.states, where=self.where, mobility=mobility)
+        out = dict(geo=self.geo.ref if self.geo is not None else None, split_from=getattr(self, 'split_from', None) or None, # Where a named geography or split came from
+                   name=self.name, kind=self.kind, levels=levels, split=self.split.tolist() if self.joint is None else repr(self.joint), adjust={k:v.tolist() for k,v in self.adjust.items()}, states=self.states, where=self.where, mobility=mobility)
         if self.strains is not None: # As ss.Strains takes it
             out['strains'] = self.strains.spec
         return out
@@ -322,26 +275,6 @@ class Strat:
         same = self.same_levels(other) and self.kind == other.kind and self.states == other.states and self.where == other.where
         same = same and np.allclose(self.split, other.split) and list(self.adjust.keys()) == list(other.adjust.keys())
         return same and all(np.allclose(self.adjust[key], other.adjust[key]) for key in self.adjust)
-
-
-def clock_values(name, levels, unit=None):
-    """ The times of a clock's levels as numbers, and their unit: from durations (`ss.months([0, 1, 2])`, or a list of them), in the unit given or their own; or numbers, in the sim's unit (None) """
-    if isinstance(levels, ss.dur):
-        unit = unit or type(levels)
-        vals = np.atleast_1d(levels.to(unit).value if unit is not type(levels) else levels.value)
-    elif len(levels) and all(isinstance(v, ss.dur) for v in levels):
-        unit = unit or type(levels[0])
-        vals = [v.to(unit).value for v in levels]
-    elif all(sc.isnumber(v) and not isinstance(v, bool) for v in levels):
-        vals = levels
-    else:
-        errormsg = f'A clock ("{name}") has levels that are times since its event: durations such as ss.months([0, 1, 2, 3, 6, 12]), or numbers in the sim\'s unit; not {levels}'
-        raise TypeError(errormsg)
-    vals = np.asarray(vals, dtype=float)
-    if np.any(np.diff(vals) <= 0):
-        errormsg = f'The levels of the clock "{name}" are the lower edges of bins of time, so they increase, e.g. ss.months([0, 1, 2, 3, 6, 12]); not {vals.tolist()}'
-        raise ValueError(errormsg)
-    return vals, unit
 
 
 class Transfer:
@@ -601,9 +534,6 @@ class Groups:
                         raise ss.errors.MissingDimension(f'the transfer "{mod.name}" moves people along "{dim}", but the model is not stratified by it. Add e.g. sim.stratify({dim}=[...]).')
         if sim.solver not in [None, 'abm']: # In a compartmental run, a transfer whose dur= is a distribution passes people through Erlang stages: a dimension of the people at the levels it moves from (see ss.solvers.Compartmental.init_movers())
             for mod in sim.declared:
-                strat = ss.strains.memory_strat(mod) # And what people remember of a disease's strains, for an ss.immunity due to it
-                if strat is not None:
-                    strats[strat.name] = strat
                 for tf in mod.graph.transfers.values():
                     strat = transfer_stages(sim, mod, tf, strats[tf.dim])
                     if strat is not None:
@@ -621,9 +551,6 @@ class Groups:
                 raise ss.errors.DuplicateStructuralDimension(f'the sim has a dimension called "{strat.name}", which is also the name of a disease whose states are tracked jointly with another\'s; rename one of them.')
             strats[strat.name] = strat
         self.strats = list(strats.values())
-        for strat in self.strats: # A clock starts with everyone at none
-            if strat.kind == 'clock' and 'split' not in strat.guessed:
-                raise ss.errors.BadSplit(f'the clock "{strat.name}" starts with everyone at none (nobody has had its event), so it takes no split=; people who have had it are given by a property of the people')
         named = getattr(sim, 'named_people', None)
         given = getattr(sim, 'given_pyramid', None)
         for strat in self.strats: # Age groups with no split of their own take that of a named population, or of the people given to a compartmental run
@@ -719,7 +646,7 @@ class Groups:
         return
 
     def moved_by(self, strat):
-        """ For describe(): what moves people along a dimension, e.g. '; counter: +1 by delivery; +2 by twins' or '; clock: set to 0 by delivery' """
+        """ For describe(): what moves people along a dimension, e.g. '; counter: +1 by delivery; +2 by twins' """
         sim = self.sim
         events = [] # (what, amount or level)
         for mod in getattr(sim, 'declared', []):
@@ -741,8 +668,8 @@ class Groups:
         amounts = {}
         for name,amount in events:
             amounts.setdefault(amount, []).append(name)
-        verb = lambda amount: amount if amount[0] in '+-' else f'set to {amount}' if strat.kind == 'clock' else f'to {amount}'
-        what = 'clock' if strat.kind == 'clock' else 'counter' if any(amount[0] in '+-' for amount in amounts) else 'moved'
+        verb = lambda amount: amount if amount[0] in '+-' else f'to {amount}'
+        what = 'counter' if any(amount[0] in '+-' for amount in amounts) else 'moved'
         return f'; {what}: ' + '; '.join(f'{verb(amount)} by {sc.strjoin(names)}' for amount,names in amounts.items())
 
     def init_ragged(self):

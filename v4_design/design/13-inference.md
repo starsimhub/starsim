@@ -6,7 +6,6 @@ Justified by [best-practices/calibration.md](../best-practices/calibration.md).
 
 ## The whole interface
 
-<!-- fragment -->
 ```python
 import starsim as ss
 
@@ -35,7 +34,6 @@ The fitting itself is the submodule `ss.fit`, which an ordinary run never import
 
 The same calibration with Starsim 3.7's `ss.Calibration` and `CalibComponent` (condensed from the Starsim calibration tutorial):
 
-<!-- fragment -->
 ```python
 import pandas as pd
 import starsim as ss
@@ -83,7 +81,6 @@ About thirty lines against three (the three `bounds=`, `data=`, and `sim.fit()`)
 
 ### Arguments
 
-<!-- fragment -->
 ```python
 fit = sim.fit(
     pars       = None,   # which parameters to fit; default: all that have bounds
@@ -110,7 +107,6 @@ A stochastic sim is scored at each point by the mean of the scores of `n_runs` r
 
 Data is attached to the sim and matched to results by name, as in Covasim:
 
-<!-- fragment -->
 ```python
 sim = ss.Sim(sir, data='cases.csv')       # a path, a dataframe, or ss.simdata(...)
 ```
@@ -131,7 +127,6 @@ The default is deliberately simple:
 
 A series whose data are all zero (deaths early in an epidemic, a stratum with no cases) has no mean to divide by; it is divided by the mean of the model instead, so it adds 1 when the model has any of it and 0 when the model has none, and cannot swamp the other series in raw counts. To push a fit toward zero more strongly, give that series a likelihood or a weight.
 
-<!-- fragment -->
 ```python
 fit = sim.fit(weights=dict(cases=1, deaths=2, seroprevalence=1))
 ```
@@ -140,7 +135,6 @@ This is the measure Covasim uses. It assumes no noise model, so there is nothing
 
 Other measures are chosen by name or given as a function:
 
-<!-- fragment -->
 ```python
 fit = sim.fit(gof='rmse')    # root-mean-square error, normalized by the mean of the data
 fit = sim.fit(gof=fn)        # fn(sim) returns a number to minimize; then data is not needed
@@ -152,7 +146,6 @@ The default measure is not a likelihood, and it does not need to be: it is enoug
 
 A likelihood can be attached to a result. It says how the observed number is distributed around the model's value, and it enables methods that give a posterior:
 
-<!-- fragment -->
 ```python
 cases = ss.outcome(0.5 * infection, delay=ss.days(5), likelihood=ss.nbinom(n=ss.par(10, bounds=[0.1, 100])))
 ```
@@ -175,7 +168,7 @@ By default a fit is a best fit (a point estimate), by the method that suits the 
 | Stochastic compartmental, run whole by the kernels | Optuna | `'pmcmc'` (particle MCMC), with a likelihood for every series |
 | Agent-based, or a stochastic run stepped from Python | Optuna | `'abc-smc'` |
 
-With a likelihood for every series, the best fit is the maximum likelihood (or, with priors, the most probable values), and the printed reason names the posterior method the sim allows. The other methods are chosen by name: `'abc-smc'` (approximate Bayesian computation by sequential Monte Carlo: a posterior without a likelihood, for any sim, with `generations=`, `quantile=`, `tolerance=`, and `particles=`), `'if2'` (iterated filtering, as pomp's and camdl's: the maximum likelihood of a stochastic compartmental sim, from passes of a particle filter in which each particle's values follow a shrinking random walk, with `particles=`, `iterations=`, `cooling=`, `sd=`, and `chains=`), `'asd'` (adaptive stochastic descent, `sc.asd()`), and any method of `scipy.optimize.minimize`. Settings for a method are keywords of `fit()`: `n_trials=` for Optuna (100 by default), `draws=`, `warmup=`, and `chains=` for NUTS (500, 500, and 4) and particle MCMC (1,000, 1,000, and 4), `particles=` for particle MCMC (chosen by each chain in its warm-up by default). An unknown `method=` is an error that lists the methods. Optuna also takes `n_workers=` (processes that propose and run trials at once, sharing what they have learned through Optuna's storage; each trial is one point, run once for agents) and `storage=` (a file name, kept as an Optuna journal, or a database URL), which keeps the trials so that calling the fit again with the same storage resumes it, the trials already there counting towards `n_trials=`; `fit.study` is Optuna's study (e.g. for its plots). For the SciPy methods, a search starts from each of the best three points (`restarts=3`; one for a single parameter of a deterministic sim, where the scan already finds the valley) of a spread of points over the bounds (`scan=`, 10 per parameter by default, with the initial values) that are at least a tenth of the bounds apart, and the best result is kept; NUTS starts each chain from one of the best of the same points, so that chains caught in different modes disagree and R-hat sees it.
+With a likelihood for every series, the best fit is the maximum likelihood (or, with priors, the most probable values), and the printed reason names the posterior method the sim allows. The other methods are chosen by name: `'abc-smc'` (approximate Bayesian computation by sequential Monte Carlo: a posterior without a likelihood, for any sim, with `generations=`, `quantile=`, `tolerance=`, and `particles=`), `'if2'` (iterated filtering, as pomp's and camdl's: the maximum likelihood of a stochastic compartmental sim, from passes of a particle filter in which each particle's values follow a shrinking random walk, with `particles=`, `iterations=`, `cooling=`, `sd=`, and `chains=`), and any method of `scipy.optimize.minimize`. Settings for a method are keywords of `fit()`: `n_trials=` for Optuna (100 by default), `draws=`, `warmup=`, and `chains=` for NUTS (500, 500, and 4) and particle MCMC (1,000, 1,000, and 4), `particles=` for particle MCMC (chosen by each chain in its warm-up by default). An unknown `method=` is an error that lists the methods. Optuna also takes `n_workers=` (processes that propose and run trials at once, sharing what they have learned through Optuna's storage; each trial is one point, run once for agents) and `storage=` (a file name, kept as an Optuna journal, or a database URL), which keeps the trials so that calling the fit again with the same storage resumes it, the trials already there counting towards `n_trials=`; `fit.study` is Optuna's study (e.g. for its plots). For the SciPy methods, a search starts from each of the best three points (`restarts=3`; one for a single parameter of a deterministic sim, where the scan already finds the valley) of a spread of points over the bounds (`scan=`, 10 per parameter by default, with the initial values) that are at least a tenth of the bounds apart, and the best result is kept; NUTS starts each chain from one of the best of the same points, so that chains caught in different modes disagree and R-hat sees it.
 
 The same model with no network, run as an ODE:
 
@@ -231,7 +224,6 @@ Sometimes one fitting method is not enough. A cheap, robust search is good at fi
 
 `method=` takes a list. **Each entry is a fitting method. They are run in the order given, and each one starts from the best fit the previous one found.**
 
-<!-- fragment -->
 ```python
 fit = sim.fit(method=['optuna', 'nuts'])
 ```
@@ -240,7 +232,6 @@ Read aloud: "search with Optuna; then, starting from the best parameters Optuna 
 
 An entry is either a method's name, which uses that method's default settings, or a dict that also gives its settings:
 
-<!-- fragment -->
 ```python
 fit = sim.fit(method=[
     dict(method='optuna', n_trials=500),  # stage 1: 500 trials to find a good region
@@ -272,7 +263,6 @@ A single method is the one-stage case: `method='optuna'` and `method=['optuna']`
 
 ## The result
 
-<!-- fragment -->
 ```python
 fit.sim          # the calibrated sim: a copy of the original with the best-fit values, already run
 fit.pars         # the best-fit value of each parameter, a dict that can be passed to ss.Sim(pars=...)
@@ -294,7 +284,6 @@ Every fit says whether it converged: `fit.converged` is true or false, and `fit.
 | Method family | Reported |
 |---|---|
 | SciPy optimizers | whether the best two searches from the scan's points ended within 0.1 of each other (of the negative log-likelihood; 0.1% of a goodness of fit), with the value each ended at and the number of evaluations; a single search (`restarts=1`) reports SciPy's own rule, which is wrong in both directions often enough not to be relied on |
-| `asd` | whether the method stopped by its own rule (its message), and the number of evaluations |
 | NUTS | R-hat (rank-normalized) and bulk effective sample size of each parameter, and divergences; converged if R-hat is at most 1.01 with no divergent draws |
 | Particle MCMC | R-hat, effective sample size, and the share of proposals each chain accepted; converged if R-hat is at most 1.01 |
 | ABC-SMC | the final tolerance, the share of the last proposals accepted, and the effective sample size; converged if the tolerance has stopped shrinking (by less than 10% in the last generation) |
@@ -329,7 +318,6 @@ Latin hypercube samples over the bounds (`n=100` by default; wide positive bound
 
 Which of two models is better supported by the data? "Does this model need an exposed compartment?" is this kind of question.
 
-<!-- fragment -->
 ```python
 comp = ss.fit.compare_models([sim_sir, sim_seir], data=df)
 comp.plot()

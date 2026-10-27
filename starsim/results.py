@@ -1097,14 +1097,14 @@ class Result(ss.utils.NoDists, ss.arrays.BaseArr):
 
 class Results(ss.utils.NoDists, ss.ndict):
     """ Container for storing results """
-    def __init__(self, module=None, *args, strict=True, **kwargs):
+    def __init__(self, module=None, *args, **kwargs):
         if module is not None and not isinstance(module, str):
             modlabel = getattr(module, 'label', None)
             modname = getattr(module, 'name', None)
             modcls = module.__class__.__name__
             module = sc.ifelse(modlabel, modname, modcls)
         self.setattribute('_module', module)
-        super().__init__(type=Result, strict=strict, *args, **kwargs)
+        super().__init__(type=Result, *args, **kwargs)
         return
 
     def __repr__(self, indent=4, head_col=None, key_col=None, **kwargs): # kwargs are not used, but are needed for disp() to work
@@ -1233,7 +1233,7 @@ class Results(ss.utils.NoDists, ss.ndict):
 
     def resample(self, new_unit, **kwargs):
         """ Resample all the results to a longer time unit (e.g. 'year'), each by its kind, returning a new Results object; see `ss.Result.resample()` """
-        new = Results(self._module, strict=False)
+        new = Results(self._module)
         timevec = None
         for key, res in self.items():
             if isinstance(res, (Results, Result)):
@@ -1262,7 +1262,7 @@ class Results(ss.utils.NoDists, ss.ndict):
         if not flat:
             return None
         if len({len(res) for res in flat.values()}) > 1: # Different time points: one dataframe for the sim's own results and one for each module
-            own = Results(self._module, strict=False)
+            own = Results(self._module)
             for key,val in self.items():
                 if isinstance(val, Result):
                     own[key] = val
@@ -1283,7 +1283,7 @@ class Results(ss.utils.NoDists, ss.ndict):
             elif isinstance(val, Result):
                 yield None, key, val
 
-    def plot(self, key=None, fig=None, data=None, label=None, title=None, lines=False, legend=True, show_skipped=False, show_module=None, n_ticks=None, annualize=False, **kwargs):
+    def plot(self, key=None, fig=None, data=None, label=None, title=None, lines=False, legend=True, show_skipped=False, annualize=False, **kwargs):
         """
         Plot the results, each in its own axes; see `sim.plot()` and `msim.plot()`
 
@@ -1298,8 +1298,6 @@ class Results(ss.utils.NoDists, ss.ndict):
             lines (bool): for a result across runs, plot every run instead of the median and interval
             legend (bool): whether to label the scenarios, if there is more than one
             show_skipped (bool): show even results that are not plotted by default
-            show_module (int): whether to show the module as well as the result name; if an int, show if the label is shorter than that (default 26); if -1, on a new line
-            n_ticks (tuple): the minimum and maximum number of x-axis ticks (default `(2,5)`)
             annualize (bool): if True, resample the results to annual values first (each by its kind; see `ss.Result.resample()`)
             kwargs (dict): known arguments (e.g. figsize, font) split between the plotting dicts; see `ss.plot_args()`
         """
@@ -1339,7 +1337,7 @@ class Results(ss.utils.NoDists, ss.ndict):
                     group[0]._floor(ax)
                 if len(group) > 1 or group[0].columns is not None: # One line per result, or per column
                     ax.legend(**kw.legend)
-                format_axes(ax, group[0], n_ticks, show_module)
+                format_axes(ax, group[0])
                 if summed:
                     ax.set_title(ax.get_title() + '\n(total over each period of the data)')
                 if len(group) > 1: # Titled by what the results have in common
@@ -1397,41 +1395,10 @@ def match_result_keys(results, key, show_skipped=False, flattened=False):
     return flat
 
 
-def get_result_plot_label(res, show_module=None):
-    """ Helper function for getting the label to plot for a result; not for the user """
-    # Sanitize
-    if show_module is None:
-        show_module = 26 # Default maximum length
-    elif isinstance(show_module, bool):
-        if show_module is True:
-            show_module = 999
-        else:
-            show_module = 0
-    if not isinstance(show_module, int):
-        errormsg = f'"show_module" must be a bool or int, not {show_module}'
-        raise TypeError(errormsg)
-
-    # Decide how/if to show the module
-    if show_module == -1:
-        label = res.full_label.replace(':', '\n')
-    elif len(res.full_label) > show_module:
-        label = sc.ifelse(res.label, res.name)
-    else:
-        label = res.full_label
-
-    return label
-
-
-def format_axes(ax, res, n_ticks=None, show_module=None):
-    """ Standard formatting for axis results; not for the user """
-    if n_ticks is None:
-        n_ticks = (2,5)
-
-    # Set y axis -- commas
+def format_axes(ax, res):
+    """ Standard formatting for axis results: commas on the y axis, and the result as the title, with its module if the label is short; not for the user """
     sc.commaticks(ax)
-
-    # Set the axes title
-    label = get_result_plot_label(res, show_module)
+    label = res.full_label if len(res.full_label) <= 26 else sc.ifelse(res.label, res.name)
     ax.set_title(label)
     return
 

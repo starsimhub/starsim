@@ -1,16 +1,11 @@
 """
-Test ss.jit: functions compiled by Numba or traced by JAX, a module's methods and a whole coded class compiled with the
-same results, what falls back to Python, and the draws compiled code can make (ss.perflib)
+Test ss.jit: functions compiled by Numba or traced by JAX, with the same results, and what falls back to Python
 """
 
 # %% Imports and settings
-import pytest
 import numpy as np
 import sciris as sc
 import starsim as ss
-import starsim.library as ssl
-
-kw = dict(verbose=0)
 
 
 def longest_run(x):
@@ -33,51 +28,6 @@ def draws(n, p, lam, rng):
     return rng.binomial(n, p) + rng.poisson(lam) + rng.binomial(3, 0.5)
 
 
-class Severe(ssl.AgentSIR):
-    """ AgentSIR plus severe disease, written as code, with its methods compiled by ss.jit (or run as written) """
-    def __init__(self, compiled=True, **kwargs):
-        super().__init__(**kwargs)
-        self.define_pars(p_severe=ss.bernoulli(0.3), dur_sev=ss.lognorm_ex(mean=ss.years(0.5)), sev_factor=3.0)
-        self.define_states(ss.BoolState('severe', label='Severe'), ss.FloatArr('ti_severe', label='Time of severe'))
-        self.compiled = compiled
-
-    def method(self, name):
-        meth = getattr(Severe, name)
-        return meth.__get__(self) if self.compiled else meth.py_func.__get__(self)
-
-    def set_progression(self, uids):
-        super().set_progression(uids)
-        self.method('schedule')(uids)
-
-    def step_state(self):
-        self.method('progress')()
-        deaths = self.method('progress_loop')()
-        self.sim.people.request_death(deaths, cause=self)
-
-    @ss.jit
-    def schedule(self, uids):
-        p = self.pars
-        sev = p.p_severe.filter(uids)
-        self.ti_severe[sev] = self.ti_infected[sev] + p.dur_sev.rvs(sev)
-
-    @ss.jit
-    def progress(self):
-        recovered = (self.infected & (self.ti_recovered <= self.ti)).uids
-        self.infected[recovered] = False
-        self.severe[recovered] = False
-        self.recovered[recovered] = True
-        self.rel_trans[:] = 1.0
-        self.rel_trans[self.severe] = self.pars['sev_factor']
-
-    @ss.jit
-    def progress_loop(self):
-        for uid in self.infected.uids:
-            if self.ti_severe[uid] <= self.ti:
-                self.severe[uid] = True
-                self.rel_trans[uid] = self.pars.sev_factor
-        return (self.ti_dead <= self.ti).uids
-
-
 # %% Define the tests
 
 def test_function():
@@ -95,7 +45,7 @@ def test_function():
     def uncompilable(x):
         return sc.findinds(x > 0) # Numba can't call Sciris
     assert np.array_equal(uncompilable(x), sc.findinds(x > 0)) # Runs as Python, with the same result
-    assert uncompilable.failed and uncompilable.said == {None}
+    assert uncompilable.failed and uncompilable.said
     return
 
 

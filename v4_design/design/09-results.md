@@ -53,7 +53,6 @@ Because a result knows whether it is a flow, a stock, or a ratio (`res.infection
 
 After stratifying, a result is still **one result**, now with a dimension for each stratification. The strata are coordinates of that result, not separate results: there is no `I_female_high`. Used as it is, the result is the total; `.select()` picks groups by name, and `.by()` gives one series per group:
 
-<!-- fragment -->
 ```python
 res = sim.results.sir
 res.I                                              # everyone in I
@@ -118,7 +117,6 @@ The rules:
 
 An outcome is a reported quantity: a flow worked out from other flows. It covers reported cases, hospital admissions, deaths, and similar series that are counted from the epidemic without being part of transmission. It moves nobody: no one changes state because they were counted.
 
-<!-- fragment -->
 ```python
 ss.outcome(
     source,               # a transition, another outcome, or a weighted sum of them
@@ -161,7 +159,6 @@ An outcome is a result, and anything can read a result: a [trigger](08-intervent
 
 `sim.plot()` plots each result in axes of its own, leaving out the sim's own results that never change (such as the number alive in a closed population). A module's `plot()` plots its results by what they are:
 
-<!-- fragment -->
 ```python
 sir.plot()            # the number in each state, together in one axes (the default; 'states')
 sir.plot('flows')     # each transition's flow, in axes of its own
@@ -191,7 +188,6 @@ sim.plot()
 
 Real files rarely arrive with matching headers, so `ss.data` renames on the way in:
 
-<!-- fragment -->
 ```python
 ss.simdata(
     source,                 # a file name or a data frame

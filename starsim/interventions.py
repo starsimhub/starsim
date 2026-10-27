@@ -54,83 +54,6 @@ class Intervention(ss.Module):
 
 #%% Events: the people something happened to on a step, and what each person remembers of them
 
-class Event(ss.FloatArr):
-    """
-    An event that a module written as code fires: the people something happened to on a step
-
-    Defined with the module's states, and fired with the UIDs. Like a transition, a delivery, or an
-    outcome of one, it can trigger a delivery (`who=preg.conception`), and it remembers per person
-    whether (`.ever`), how often (`.count`), and how long ago (`.since`) it happened. Its values are
-    the time index of the last time it happened to each person (NaN if never). Agents only, since
-    the module that fires it is.
-
-    An event is news on the step it is fired, and, for a module that steps after the interventions
-    (a disease, or an analyzer), on the next step too, as for a transition. Its memory includes it
-    as soon as it is fired.
-
-    Args:
-        name (str): the name
-        label (str): a human-readable name
-
-    Examples:
-        ```python
-        class Pregnancy(ss.Demographics):
-            def __init__(self, **kwargs):
-                super().__init__(**kwargs)
-                self.define_states(ss.Event('conception'), ss.Event('delivery'))
-
-            def step(self):
-                ...
-                self.conception.fire(uids)
-        ```
-    """
-    def __init__(self, name=None, label=None, **kwargs):
-        super().__init__(name=name, label=label, **kwargs)
-        self.counts = ss.FloatArr(f'n_{name}', default=0, label=f'Number of times: {label or name}') # Defined with it: see ss.Module.define_states()
-        self.fired = None # (time index, UIDs) of the last step it was fired on
-        return
-
-    def fire(self, uids):
-        """ Record that the event happened to these people now """
-        ti = self.mod.ti
-        uids = ss.uids(uids)
-        self[uids] = ti
-        self.counts[uids] = self.counts[uids] + 1
-        if self.fired is not None and self.fired[0] == ti:
-            uids = ss.uids.concatenate([self.fired[1], uids])
-        self.fired = (ti, uids)
-        return
-
-    def current(self):
-        """ The people the event is news for on this step """
-        sim = self.mod.sim
-        late = isinstance(self.mod, ss.Analyzer) or getattr(self.mod, 'graph', None) is not None # It steps after the interventions, so what it fired on the last step is news now
-        if self.fired is None or not (self.fired[0] == sim.ti or (late and self.fired[0] == sim.ti - 1)):
-            return ss.uids()
-        return self.fired[1]
-
-    @property
-    def event(self):
-        return ss.conditions.Cond('event', self.mod, self.name)
-
-    def __or__(self, other): return self.event | other # As an event, not as an array of times
-    def __ror__(self, other): return other | self.event
-    def __and__(self, other): return self.event & other
-    def __rand__(self, other): return other & self.event
-
-    @property
-    def ever(self):
-        return self.event.ever
-
-    @property
-    def since(self):
-        return self.event.since
-
-    @property
-    def count(self):
-        return self.event.count
-
-
 def modules_of(sim, key):
     """ The modules of a kind ('interventions', 'connectors', 'diseases'): the sim's, once it has them, and before then those in its parameters """
     mods = sim.__dict__.get(key)
@@ -186,17 +109,10 @@ def fired(selector, cond):
     """ The people an event happened to on this step (see `ss.conditions.Selector.leaf()`) """
     owner = selector.module(ss.conditions.modname(cond.args[0]))
     outcome = cond.args[1]
-    if isinstance(owner, ss.products.EventSource):
-        return owner.current(outcome, selector)
-    arr = getattr(owner, outcome, None)
-    if not isinstance(arr, Event):
-        errormsg = f'The condition {cond} is an event, but "{outcome}" of "{owner.name}" is not an ss.Event'
+    if not isinstance(owner, ss.products.EventSource):
+        errormsg = f'The condition {cond} is an event, but "{owner.name}" is not a delivery or a product'
         raise TypeError(errormsg)
-    if not selector.abm:
-        raise ss.CapabilityError(f'the event {cond} is fired by "{owner.name}", a module written as code, which cannot run with solver="{selector.sim.solver}". Run with solver="abm".')
-    out = selector.nobody()
-    out[arr.current()] = True
-    return out
+    return owner.current(outcome, selector)
 
 
 def remembered(selector, cond):
@@ -221,11 +137,6 @@ def remembered(selector, cond):
         outcome = event.args[1]
     if owner is None:
         pass
-    elif isinstance(owner, Event) or isinstance(getattr(owner, str(outcome), None), Event):
-        arr = getattr(owner, outcome)
-        if not selector.abm:
-            raise ss.CapabilityError(f'{cond} is the memory of an event of "{owner.name}", a module written as code, which cannot run with solver="{sim.solver}". Run with solver="abm".')
-        last, count = arr.raw, arr.counts.raw
     elif selector.abm:
         mem = owner.__dict__.get('_mem', {}).get(outcome)
         if mem is None:
@@ -403,8 +314,7 @@ class Delivery(ss.products.EventSource, Intervention):
         what (`ss.Product`): what is delivered: an `ss.Vaccine`, `ss.Diagnostic`, or `ss.Treatment`, or a product written as code (an `ss.Product` with an `administer()`), which any of them can give (also the first argument); `ss.vaccinate()`, `ss.screen()`, and `ss.treat()` instead take the product's own keywords and make it, e.g. `ss.vaccinate(efficacy=0.9, ...)`
         who (Cond/event/list): who receives it: a condition (e.g. `ss.ppl.age < 5`), an event (e.g. `sir.infection`, `screening.positive`,
             or a delivery), or a combination with `&` and `|` (an event `|` a condition raises, being neither triggered nor routine);
-            or a list, joined by `operator=`; or a function of the sim
-        operator (str): for a list in who=: 'any' (the default, the same as `|`) or 'all' (the same as `&`)
+            or a function of the sim
         move (Transition/dict/StrainMove): instead of a product, a move between two states for the people reached, written with the states, e.g. `move=S >> V` (a one-off campaign), or from any of several (`move=U + P + W >> P`: a re-dose, which restarts the time in `P` of those already there); or the level of a stratification they move to, e.g. `move=dict(vaccinated=True)`, or from one level to another, `move=dict(risk=('low', 'high'))`; or a change of strains, e.g. `move=DS >> RIF`
         strain (str/Strain): with `move=` into a state where people carry a strain (e.g. `move=S >> E`), the strain they arrive with: the import of a strain on a date, e.g. `ss.Delivery(move=S >> E, strain='alpha', at=['2021-01-01'], capacity=20)`
         increment (str/dict): instead of a product, a counter that goes up for the people reached: its name, which adds 1 (`increment='doses'`), or a dict of the amount for each (`dict(doses=2)`)
@@ -461,10 +371,10 @@ class Delivery(ss.products.EventSource, Intervention):
     kind = None # The kind of product this delivers
 
     def __init__(self, what=None, who=None, move=None, increment=None, start=None, stop=None, at=None, interval=None, where=None, coverage=None,
-                 capacity=None, on=None, operator='any', when=None, deliver=None, trace=None, priority=None, queue=None,
+                 capacity=None, on=None, when=None, deliver=None, trace=None, priority=None, queue=None,
                  delay=None, disease=None, at_age=None, strain=None, name=None, label=None, **kwargs):
         product = what
-        trigger, eligible = ss.conditions.split_who(who, operator=operator, where=where, on=on)
+        trigger, eligible = ss.conditions.split_who(who, where=where, on=on)
         own = {key:kwargs.pop(key) for key in product_keys(self.kind) if key in kwargs} # The product's own keywords, e.g. ss.vaccinate(efficacy=0.9, ...)
         if own:
             if product is not None:
@@ -703,8 +613,6 @@ class Delivery(ss.products.EventSource, Intervention):
         for leaf in leaves(self.on):
             if isinstance(leaf, ss.conditions.Event) and isinstance(leaf.args[1], ss.transitions.Transfer):
                 out.append(f'"{self.name}" is triggered by the transfer "{leaf.args[1].name}", which only agents keep as an event (yet)')
-            elif leaf.op == 'event' and not isinstance(leaf.args[0], (ss.products.EventSource, str)):
-                out.append(f'"{self.name}" is triggered by {leaf}, an event of a module written as code')
         if self.trace is not None:
             out.append(f'"{self.name}" traces contacts, which only a network of agents keeps')
         if self.delay is not None:
@@ -1652,7 +1560,7 @@ class Delivery(ss.products.EventSource, Intervention):
         return f'{self.name}: {what}; delivery {how}{waiting}{added}'
 
     def to_spec(self):
-        """ Its part of the model spec (`sim.to_spec()`), for `sim.hash()`, `ss.diff()`, and `ss.to_code()` """
+        """ Its part of the model spec (`sim.to_spec()`), for `sim.hash()`, `ss.diff()`, and `sim.to_code()` """
         out = super().to_spec()
         out.pop('pars', None)
         move = self.move_arrow if self.move_states is not None else None if self.move is None else {k:ss.presentation.move_json(v) for k,v in self.move.items()}
@@ -1662,9 +1570,9 @@ class Delivery(ss.products.EventSource, Intervention):
             out['strain'] = self.strain
         if self.increment:
             out['increment'] = dict(self.increment)
-        if self.product is not None: # What makes it, so that ss.to_code() can write it
+        if self.product is not None: # What makes it, so that sim.to_code() can write it
             out['product_spec'] = self.product.spec()
-            if getattr(self.product, '_from_keywords', False): # Made from the delivery's keywords, so ss.to_code() writes it in one call
+            if getattr(self.product, '_from_keywords', False): # Made from the delivery's keywords, so sim.to_code() writes it in one call
                 out['product_spec']['made'] = True
         if self.at_age is not None:
             out['at_age'] = spec_value(self.at_age)
