@@ -14,6 +14,7 @@ the common draws are all fast and none is a performance cliff, plus `ss.jit` for
 import starsim as ss
 from . import draws
 from . import passes
+from . import rounds
 from .memory import keep as keep_memory, release as release_memory
 if ss.options.keep_memory:
     keep_memory() # Large arrays freed are kept for reuse, so new ones take no page faults: see memory.py

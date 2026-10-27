@@ -1322,6 +1322,42 @@ def test_state_as_result():
     return
 
 
+@sc.timer()
+def test_compiled_rounds(monkeypatch=None):
+    sc.heading('The rounds of moves as agents, compiled: the same results as in Python')
+    def make():
+        S, E, P, A, Y, X = ss.states('S E P A Y X')
+        female = ss.ppl.female
+        p_symp = ss.par(ss.by(sex=dict(female=0.4, male=0.6)), name='p_symp')
+        dur_clear = ss.par(ss.lognorm_ex(mean=ss.by(sex=dict(female=ss.months(6), male=ss.months(3))), std=ss.months(2)), name='dur_clear')
+        onset = ss.Transition(E, [P, A], p=[p_symp, None], dur=ss.constant(ss.weeks(1))) # A split at the end of a dwell time that rounds to no steps
+        symptoms = P >> Y @ ss.lognorm_ex(ss.weeks(3), ss.weeks(2))
+        seek = ss.Transition(Y, [X, ss.stay], p=[0.3, None], on=symptoms, dur=ss.days(10)) # Triggered, after a delay, and taken by some
+        clear = ss.Transition(Y, S, on=symptoms, dur=dur_clear)
+        persist = ss.Transition(A, S, p=0.1, dur=ss.years(5), where=female) # A branch for women only
+        clear_a = A >> S @ ss.months(4)
+        later = ss.Transition(P + A, [X, ss.stay], p=[0.5, None], on=onset, dur=ss.months(2), where=female) # On another transition's event
+        back = X >> S @ ss.months(1)
+        dis = ss.Disease(infection=S >> E @ ss.peryear(2.0)*(P + A + Y), onset=onset, symptoms=symptoms, seek=seek, clear=clear, persist=persist, clear_a=clear_a,
+                         later=later, back=back, init_prev=0.05, name='seis')
+        return ss.Sim(dis, n_agents=3000, start=2000, stop=2004, dt=ss.months(1), rand_seed=3, verbose=0)
+    sims = []
+    for compiled in [True, False]:
+        ss.solvers.agents.compiled_rounds = compiled
+        try:
+            sims.append(make().run())
+        finally:
+            ss.solvers.agents.compiled_rounds = True
+    nb, py = sims
+    engine = nb.diseases.seis.engine
+    assert engine.lowered, engine.lowered_reason
+    assert not py.diseases.seis.engine.lowered
+    for key,res in nb.results.flatten().items():
+        assert np.array_equal(res, py.results.flatten()[key], equal_nan=True), key
+    assert nb.results.seis.seek.sum() > 10 and nb.results.seis.later.sum() > 10 # The triggers fired
+    return nb
+
+
 if __name__ == '__main__':
     do_plot = True
     sc.options(interactive=do_plot)
@@ -1352,3 +1388,4 @@ if __name__ == '__main__':
     casc  = test_cascade()
     cascb = test_cascade_binomial()
     state = test_state_as_result()
+    comp  = test_compiled_rounds()

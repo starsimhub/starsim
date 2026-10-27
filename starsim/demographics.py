@@ -965,6 +965,7 @@ class Pregnancy(Demographics, ss.Disease):
         """ As agents, once for each event: make the fetuses of new pregnancies, and draw the values recorded at events (see attr()) """
         if not self.abm:
             return
+        self.engine.new_round() # A way in from code, so its draws are its own (see ss.solvers.Agents.new_round())
         new = self.engine.fresh('ptb', 'conception', unique=False) # Before the fetuses are made, since their ages count down to the delivery
         if len(new):
             np.add.at(self.n_pregnancies.raw, new, 1) # Each conception, including a second in a step after an abortion at once
@@ -996,6 +997,8 @@ class Pregnancy(Demographics, ss.Disease):
             preg.preterm_risk(uids, rel=2.0) # Twice the risk of preterm birth, for the pregnancies these women have now
         """
         uids = ss.uids(uids)
+        if self.abm:
+            self.engine.new_round() # It can be called from code (e.g. a callback), so its draws are its own (see ss.solvers.Agents.new_round())
         bins, rr = self.pars.rr_ptb_age
         age_ind = np.searchsorted(np.asarray(bins).astype(int), self.sim.people.age.raw[uids], side='left')
         rel = self.rel_ptb_base.raw[uids]*np.asarray(rr)[np.minimum(age_ind, len(rr) - 1)]*(1.0 if rel is None else np.asarray(rel, dtype=float))

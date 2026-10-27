@@ -93,14 +93,14 @@ uv add starsim[dev]  # With dev dependencies
 - `run.py`: Running multiple simulations (`ss.MultiSim`, `ss.parallel`)
 - `settings.py`: Global options (`ss.options`) and plotting style
 - `sim.py`: The sim (`ss.Sim`)
-- `solvers/`: The engines that run declared models: `engine.py` (what they share), `mixing.py` (who meets whom in a compartmental run), `compartmental.py`, `agents.py`, `crossing.py` (diseases tracked jointly), and `choose.py` (which solver, and why: `ss.solvers.choose_solver()`); every name is also `ss.solvers.X`
+- `solvers/`: The engines that run declared models: `engine.py` (what they share), `mixing.py` (who meets whom in a compartmental run), `compartmental.py`, `agents.py`, `lowered.py` (an agent disease's rounds of moves as tables, for the compiled kernel in `perflib/rounds.py`), `crossing.py` (diseases tracked jointly), and `choose.py` (which solver, and why: `ss.solvers.choose_solver()`); every name is also `ss.solvers.X`
 - `strains.py`: Strains (`ss.Strains`) and immunity between them (`ss.immunity`)
 - `time.py`: Durations and rates (`ss.dur`, `ss.days`, `ss.peryear`, `ss.probperyear`, etc.), and plotting dates and durations with Matplotlib
 - `timeline.py`: Time coordination between modules (`ss.Timeline`)
 - `transitions.py`: States and transitions (`ss.State`, `ss.states()`, `ss.Transition` and its `S >> I @ rate` spelling, ...); the names of the modules above that it builds on are also `ss.transitions.X`
 - `utils.py`: Helper functions
 - `internals/`: How Starsim works under the hood, each also at the top level (`ss.errors`, `ss.spec`, ...): `graph.py` (the graph of a declared module: its states, transitions, and parameters, completed with defaults and checked; `ss.transitions.Graph`), `presentation.py` (how it is shown: `describe()`, `diagram()`, `equations()`), `spec.py` (the model spec, and models written as code: `ss.to_code()`, `ss.diff()`), `expressions.py` (expressions in rates and results, `ss.par`, and how they are evaluated and printed), `gradients.py` (gradients and log-densities in JAX: `sim.gradient()`, `sim.log_density()`), `errors.py` (errors, warnings, and notes, as classes, e.g. `ss.errors.UnknownState`; the base classes and `ss.CapabilityError` are also at the root), `debugtools.py` (profiling, debugging, and mock objects for testing), and `cli.py` (the `starsim` command)
-- `perflib/`: Machinery for speed: `kernels.py` (the Numba kernels that run compartmental models; also `ss.kernels`), `draws.py` (exact draws in Numba), `passes.py` (compiled passes over the agents), `chain.py` (the chain binomial in JAX), `jit.py` (`ss.jit`; `ss.perflib.jit` is the function), `cache.py`, and `memory.py`
+- `perflib/`: Machinery for speed: `kernels.py` (the Numba kernels that run compartmental models; also `ss.kernels`), `draws.py` (exact draws in Numba), `passes.py` (compiled passes over the agents), `rounds.py` (the rounds of moves of an agent disease, compiled), `chain.py` (the chain binomial in JAX), `jit.py` (`ss.jit`; `ss.perflib.jit` is the function), `cache.py`, and `memory.py`
 - `interop/`: Importers and exporters for other modeling frameworks
 
 ### Library (`starsim/library/`)

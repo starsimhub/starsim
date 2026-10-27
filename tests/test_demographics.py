@@ -252,9 +252,8 @@ def test_pregnancy():
         print(f'  Preterm births (<37 weeks): {n_preterm} ({preterm_share:.1%})')
         ptb_results[k] = preterm_share
 
-    # Assertions
-    assert mean_results['<18'] < mean_results['18-35'], '<18 mothers do not have lower gestational age at birth than 18-35 mothers'
-    assert mean_results['>35'] < mean_results['18-35'], '>35 mothers do not have lower gestational age at birth than 18-35 mothers'
+    # Assertions: not on the mean gestational ages themselves, which a relative risk of 1.2 (4.6% to 5.5% preterm) moves by about 0.05 weeks, less than half
+    # their standard error at these numbers of babies (about 0.11 weeks), so their order is as often chance as not; on the risk each mother had instead
     rel = sim.demographics.pregnancy.rel_ptb # Each mother's relative risk of preterm birth at her last conception (the preterm shares themselves are too few here to compare: see test_pregnancy_risks)
     risk = {k:np.mean(rel[ss.uids(np.asarray(mothers)[np.asarray(v)])]) for k,v in key_cohorts.items()}
     assert risk['<18'] > 1.1*risk['18-35'] and risk['>35'] > 1.1*risk['18-35'], f'Mothers <18 and >35 should have a higher relative risk of preterm birth: {risk}'

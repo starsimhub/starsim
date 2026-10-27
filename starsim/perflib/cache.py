@@ -26,6 +26,7 @@ slow = {
     'starsim.perflib.kernels.advance':         ("the particle filter's steps", 10, 30),
     'starsim.perflib.kernels.advance_threads': ("the particle filter's steps in threads", 15, 45),
     'starsim.perflib.passes':         ('the agent solver', 2, 10),
+    'starsim.perflib.rounds':         ("the agent solver's rounds of moves", 5, 20),
     'starsim.perflib.jit':            ('the random draws of ss.jit', 1, 4),
 }
 said = set() # What has been said to be compiling, this session

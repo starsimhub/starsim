@@ -763,8 +763,8 @@ class Engine:
         """ For a branch with where=: 1 for the people it is open to and 0 for the others (agents: for `uids`; compartments: for each group of `state`, if the condition is on states and strata), or None """
         sel = self.selector
         if sel.abm:
-            mask = np.asarray(sel.select(tr.where), dtype=float)
-            return mask[uids] if uids is not None else mask
+            mask = np.asarray(sel.select(tr.where))
+            return (mask[uids] if uids is not None else mask).astype(float) # For the agents asked for only
         if not ss.conditions.is_static(tr.where, self.sim):
             return None
         frac = np.broadcast_to(np.asarray(sel.select(tr.where), dtype=float), (len(sel.states), self.n_groups))
@@ -1195,7 +1195,7 @@ class Engine:
     def dwell_mods(self, name, raw, dw, to_unit):
         """
         The modifiers of a dwell time's parameter when it is a distribution (e.g. `ss.modify('sir.pars.dur_inf', set=ss.constant(ss.years(5)))`), as agents:
-        `dw.mods` are the modifiers, and `dw.sets` the distribution each set= draws from (a duration is the mean of an exponential, as for dur=), with its mean.
+        `dw.mods` are the modifiers, and `dw.sets` the distribution each set= draws from, by the modifier's index (not its id, which would be in the path its seed is made from) (a duration is the mean of an exponential, as for dur=), with its mean.
         People who enter the state while one is active draw from it; those already there have what is left of their dwell rescaled by the change in its mean (see `Agents.rescale_exits()`).
         """
         p = dw.par
@@ -1225,7 +1225,7 @@ class Engine:
             if new is None or ss.transitions.varying_pars(new):
                 raise ss.CapabilityError(f'the modifier "{m.name}" sets {path}, the dwell time of "{name}", to {m.amount}; a dwell time that is a distribution can be set to another distribution with fixed parameters, or to a duration (the mean of an exponential).')
             mean, std = ss.transitions.dwell_stats(new, to_unit)
-            dw.sets[id(m)] = Bunch(key=f'dwell_{name}_{i}', dist=ss.transitions.numeric_dist(new, to_unit), mean=mean)
+            dw.sets[i] = Bunch(key=f'dwell_{name}_{i}', dist=ss.transitions.numeric_dist(new, to_unit), mean=mean)
         return
 
     def transfer_dist(self, tf, per_agent=None):
@@ -1809,7 +1809,9 @@ class Engine:
         res = mod.results
         ti = mod.ti
         scale = ss.results.people_scale(self.sim) # As agents, counts of people are written in people
-        people = [r for r in res.values() if getattr(r, 'in_people', False)]
+        if getattr(self, '_in_people', (None, None))[0] != len(res): # The results counted in people, found once (results are not added during the run)
+            self._in_people = (len(res), [r for r in res.values() if getattr(r, 'in_people', False)])
+        people = self._in_people[1]
         for r in people: # The values by group, as they are kept
             r.write_scale = scale
         if getattr(getattr(self.sim.people, 'scale', None), 'weighted', False): # Agents of different weights (people.scale) make fractions of people

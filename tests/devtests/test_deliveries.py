@@ -1051,7 +1051,7 @@ def test_waning_functions():
     drug = ss.Treatment(efficacy=dict(transmission=0.9), during=sir.I, name='drug')
     for solver in ['abm', 'ode']:
         size = dict(n_agents=5000) if solver == 'abm' else dict(total_pop=5000)
-        sim = ss.Sim(sir, interventions=ss.treat(drug, where=sir.I, coverage=ss.perday(0.2), name='tx'), unit='day', stop=100, solver=solver, verbose=0, **size).run()
+        sim = ss.Sim(sir, interventions=ss.treat(drug, where=sir.I, coverage=ss.perday(0.2), name='tx'), unit='day', stop=50, solver=solver, verbose=0, **size).run() # Treated, it dies out, often by day 100, but not by 50
         if solver == 'abm':
             held = sim.people['has_drug'].raw > 0
             left = held & ~sim.diseases.sir.I.raw[:len(held)]
