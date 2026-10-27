@@ -66,13 +66,14 @@ class Agents(Engine):
         self._drawn_ti = -1 # The step whose competing rates have been drawn: see enter()
         self.batches = [] # Who entered a state, from where, and when, for the events of branches and of entering and leaving states: see event_uids()
         self.n_batches = 0 # The number of each batch, in the order recorded, so what is new since a number is found at the end: see unseen()
+        self.last_batch = dict() # The number of the last batch of each transition, so a trigger on it can tell at once that nothing has happened since it looked: see new_events()
         self._phase = (-1, 0) # Where the engine is in a step: see start_phase()
         self.moved_early = None # Moved by code (ss.move()) before the start, so they have no history to fill in: see fire_placed()
         self.state_index = {state.name:i for i,state in enumerate(graph.people_states)}
         self.triggers = [tr for tr in graph.transitions.values() if tr.trigger is not None and not tr.trigger.outcome] # Moved by ss.on(): see triggered(); those on the outcome of a delivery move as it happens (see ss.interventions.trigger_moves())
         self.trigger_mods = set().union(*[ss.conditions.module_refs(tr.trigger.x) for tr in self.triggers]) # The modules whose changes they react to
         self._seen = dict() # The events each trigger on an event has seen already
-        self._pending = dict() # For each trigger with a delay, who has a time drawn (its ti_after_ is set), so the population is not searched for them: see delayed()
+        self.lifelong = dict() # Values by sex for everyone, by UID, and the parameters of the distributions that use them, kept for the run: see by_people() and agent_pars()
         self._news = False # Whether anyone has moved since the modules that react to this one last looked: see notify()
         self._subscribers = None
         self._started = False
@@ -1087,18 +1088,39 @@ class Agents(Engine):
         """ A parameter of a distribution with a value for each group, as a function the distribution calls for the agents it draws for """
         def values(sim, uids):
             return self.by_agent(by, uids) if len(uids) else np.ones(0) # None, when the distribution is initialized
+        values.by = by # So the engine can tell which values it can work out for everyone at once: see agent_pars()
         return values
 
     def by_people(self, by, uids=None):
-        """ A value read from each person's own properties (see `ss.by.lookup()`), for the agents being evaluated (or for `uids`): looked up for those agents alone, since often few are asked for (e.g. those entering a state) """
+        """ A value read from each person's own properties (see `ss.by.lookup()`), for the agents being evaluated (or for `uids`): looked up for those agents alone, since often few are asked for (e.g. those entering a state), or, for a value by sex, from a table kept for the run """
         if self._by_group and uids is None:
             errormsg = f'{by} is read from each person, so cannot be used where a value is worked out for groups rather than agents (a count that is not people, an inflow, or init_prev)'
             raise ValueError(errormsg)
         if uids is not None and not self.sim.people.initialized: # A distribution's parameter, tried when the distribution is made, before there are people
             return np.ones(np.size(uids))
         uids = self._uids if uids is None else uids
+        if self.is_lifelong(by):
+            vals = self.lifelong_table(id(by), lambda new: (lambda grid, index: grid[index])(*by.lookup_grid(self.sim, self.convert, year=self.year, cache=self.cache, uids=new)))
+            return vals.copy() if uids is None else vals[uids] # Everyone, or these agents
         grid, index = by.lookup_grid(self.sim, self.convert, year=self.year, cache=self.cache, uids=uids)
         return grid[index]
+
+    def is_lifelong(self, by):
+        """ Whether a value by people's properties is the same for each person for the whole run: by sex alone, with values that do not change in time """
+        if by.table is not None or not all(dim in ['sex', 'female'] for dim in by.dims):
+            return False
+        vals = [v for given in by.given.values() for v in (given.values() if isinstance(given, dict) else sc.tolist(given))]
+        return not any(isinstance(v, ss.transitions.TimeValue) or (callable(v) and not isinstance(v, ss.TimePar)) for v in vals)
+
+    def lifelong_table(self, key, values):
+        """ Values for everyone, by UID, kept for the run (see is_lifelong()), from `values(uids)`; those for agents added since are worked out as they are needed """
+        vals = self.lifelong.get(key)
+        n = len(self.sim.people.uid.raw)
+        if vals is None or len(vals) < n:
+            start = 0 if vals is None else len(vals)
+            new = values(ss.uids(np.arange(start, n)))
+            vals = self.lifelong[key] = new if vals is None else np.concatenate([vals, new])
+        return vals
 
     def value(self, p):
         if self._drawing and id(p.raw) in self.attr_dists: # A distribution an attribute is drawn from: see draw_attr()
@@ -1913,12 +1935,7 @@ class Agents(Engine):
         """ For a trigger with a delay: draw the time after the event for those it has just happened to (`uids`), forget it for those who left the source, and return those whose time is up """
         mod = self.mod
         due = mod[f'ti_after_{tr.name}']
-        pending = self._pending.get(tr.name)
-        if pending is None: # Only this sets the times, so they are found once
-            pending = np.flatnonzero(due.raw != due.nan)
-        if not len(pending) and not len(uids):
-            self._pending[tr.name] = pending
-            return pending
+        pending = np.flatnonzero(due.raw != due.nan)
         inside = self.in_states_for(names, pending)
         due.raw[pending[~inside]] = due.nan
         pending = pending[inside]
@@ -1933,7 +1950,6 @@ class Agents(Engine):
         if taken is not None: # Those another trigger moves now keep their time, so it is taken in the next step if they are still in the source
             now = now[~taken[now]]
         due.raw[now] = due.nan
-        self._pending[tr.name] = pending[due.raw[pending] != due.nan]
         return now
 
     def unseen_fired(self, tr, mask):
@@ -1953,6 +1969,9 @@ class Agents(Engine):
         name = ss.conditions.modname(event.module)
         engine = self if name in [None, self.mod.name] else self.sim.get_declared(name).engine
         spec = event.spec()
+        if len(spec) == 1 and 'tr' in spec and engine.last_batch.get(spec['tr'], 0) <= self._seen.get(tr.name, 0): # Nothing of its transition since it looked
+            self._seen[tr.name] = max(self._seen.get(tr.name, 0), engine.batches[-1].n if engine.batches else 0) # As unseen() would mark it
+            return ss.uids()
         fresh = engine.unseen(self._seen, tr.name)
         uids = engine.event_uids(**spec, batches=fresh) if fresh else ss.uids()
         return ss.uids(event.mothers(self.sim, uids)).unique() if isinstance(event, ss.conditions.child) else uids # Each once, in order (event_uids() gives them so)
@@ -2294,12 +2313,22 @@ class Agents(Engine):
         if check_draws:
             self.check_drawn(key, uids)
         plain = type(dist) is ss.random or (type(dist) is ss.expon and dist.unit is None and not dist.round and dist.pars.scale == 1) # Most of them: the uniforms themselves, or the unit exponential of a dwell time (see sample_dwell()), as rvs() would give them without its bookkeeping
-        if plain and self.crn_key(key) is not None:
+        by_agent = None if plain else self.agent_pars(key, dist)
+        if (plain or by_agent is not None) and self.crn_key(key) is not None:
             if not len(uids):
                 return np.array([], dtype=dist.hash_dtype or ss.dtypes.float) # Uniforms, as below
             slots = self.sim.people.slot_raw()
             rvs = ss.distributions.hash_uniforms(dist.seed, self.draw_ind(), uids if slots is None else slots[uids], dtype=dist.hash_dtype)
-            return rvs if type(dist) is ss.random else ss.perflib.draws.many['expon'].from_u(1.0, np.asarray(rvs, dtype=np.float64), np.empty(len(rvs))) # As dist.ppf(), without its checks
+            if type(dist) is ss.random:
+                return rvs
+            elif by_agent is None:
+                return ss.perflib.draws.many['expon'].from_u(1.0, np.asarray(rvs, dtype=np.float64), np.empty(len(rvs))) # As dist.ppf(), without its checks
+            n, pars, kwds = by_agent
+            pick = lambda d: {k:(v[uids] if isinstance(v, np.ndarray) and v.shape == (n,) else v) for k,v in d.items()} # These agents' values
+            dist._pars = type(dist.pars)(pick(pars))
+            if kwds is not None:
+                dist.dist.kwds = pick(kwds)
+            return dist.ppf(rvs)
         ind, ready = dist.ind, dist.ready
         dist.jump(to=self.draw_ind(), force=True)
         try:
@@ -2307,6 +2336,30 @@ class Agents(Engine):
         finally:
             dist.jump(to=ind, force=True)
             dist.ready = ready
+
+    def agent_pars(self, key, dist):
+        """
+        For one of the engine's distributions whose parameters are values by sex (see agent_values() and is_lifelong()), its parameters for
+        everyone (by UID), worked out as rvs() would and kept for the run, so a draw is the uniforms and the inverse; None for any other
+        (whose draws rvs() makes)
+        """
+        if dist._use_ppf is False or dist.unit is not None or dist.round:
+            return None
+        bys = [getattr(v, 'by', None) for v in dist.pars.values() if callable(v) and not isinstance(v, type)]
+        if not bys or not all(by is not None and by.on_people(self.sim) and self.is_lifelong(by) for by in bys):
+            return None
+        def pars(uids):
+            dist.process_size(uids)
+            dist.process_pars()
+            return dict(dist._pars), None if dist.dist is None else dict(dist.dist.kwds)
+        n = len(self.sim.people.uid.raw)
+        held = self.lifelong.get(('pars', key))
+        if held is None or held[0] < n: # Or people have been added since: each value for each agent, appended
+            start = 0 if held is None else held[0]
+            new = pars(ss.uids(np.arange(start, n)))
+            join = lambda old, add: {k:(np.concatenate([old[k], v]) if isinstance(v, np.ndarray) and v.shape == (n - start,) else v) for k,v in add.items()}
+            held = self.lifelong[('pars', key)] = (n, *new) if held is None else (n, join(held[1], new[0]), None if new[1] is None else join(held[2], new[1]))
+        return held
 
     def crn_key(self, key, uids=None):
         """ As `ss.Dist.crn_key()`, for a compiled pass that makes the draws of one of the engine's distributions itself (for `uids`), keyed as `draw()` is; None if it cannot """
@@ -2439,6 +2492,7 @@ class Agents(Engine):
         phase = self._phase[1] if self._phase[0] == ti else -1 # Moved by another module before this one's step: see start_phase()
         self.n_batches += 1
         self.batches.append(Bunch(tr=None if tr is None else tr.name, uids=uids, src=srcs, dst=dst, key=(ti, phase), also=False, n=self.n_batches))
+        self.last_batch[None if tr is None else tr.name] = self.n_batches
         self._news = True
         if tr is not None and tr.name in self.mod.__dict__.get('remembered', ()): # Its memory, e.g. for tb.diagnosis.since
             self.mod[f'last_{tr.name}'][uids] = ti
@@ -2449,6 +2503,7 @@ class Agents(Engine):
             if others is not None and len(others):
                 self.n_batches += 1
                 self.batches.append(Bunch(tr=tr.name, uids=others, src=-1, dst=-1, key=(ti, phase), also=True, n=self.n_batches))
+                self.last_batch[tr.name] = self.n_batches
         return
 
     def event_uids(self, tr=None, to=None, enter=None, exit=None, batches=None, unique=True):
