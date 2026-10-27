@@ -1679,8 +1679,11 @@ class uids(np.ndarray):
         if return_index:
             arr, index = np.unique(self, return_index=True)
             return self._ensure_int(arr), index # index is a position array, not a uids
-        else:
-            return self._ensure_int(np.unique(self))
+        else: # Sorted, without repeats: several times faster than np.unique(), which (from NumPy 2.3) finds integers' unique values with a hash table
+            arr = np.sort(self)
+            keep = np.ones(len(arr), dtype=bool)
+            np.not_equal(arr[1:], arr[:-1], out=keep[1:])
+            return self._ensure_int(arr[keep])
 
     def __array_wrap__(self, out_arr, context=None, return_scalar=False):
         # Guard 1: non-integer dtype → return a plain ndarray.

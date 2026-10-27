@@ -1341,20 +1341,28 @@ def test_compiled_rounds(monkeypatch=None):
         dis = ss.Disease(infection=S >> E @ ss.peryear(2.0)*(P + A + Y), onset=onset, symptoms=symptoms, seek=seek, clear=clear, persist=persist, clear_a=clear_a,
                          later=later, back=back, init_prev=0.05, name='seis')
         return ss.Sim(dis, n_agents=3000, start=2000, stop=2004, dt=ss.months(1), rand_seed=3, verbose=0)
-    sims = []
-    for compiled in [True, False]:
-        ss.solvers.agents.compiled_rounds = compiled
-        try:
-            sims.append(make().run())
-        finally:
-            ss.solvers.agents.compiled_rounds = True
-    nb, py = sims
-    engine = nb.diseases.seis.engine
-    assert engine.lowered, engine.lowered_reason
-    assert not py.diseases.seis.engine.lowered
-    for key,res in nb.results.flatten().items():
-        assert np.array_equal(res, py.results.flatten()[key], equal_nan=True), key
-    assert nb.results.seis.seek.sum() > 10 and nb.results.seis.later.sum() > 10 # The triggers fired
+    def make_groups():
+        S, I, R = ss.states('S I R')
+        sir = ss.Disease(infection=S >> I @ 0.2*I, recovery=I >> R @ ss.by(age=[ss.days(5), ss.days(10), ss.days(20)]), init_prev=0.01, name='seis')
+        sir.stratify(age=[0, 15, 65], split=[0.3, 0.5, 0.2])
+        vaccine = ss.vaccinate(ss.Vaccine(efficacy=0.9), coverage=0.5, at=[10], name='vaccine') # A modifier of rel_sus, which the compiled rounds leave to transmission
+        return ss.Sim(sir, n_agents=3000, unit='day', stop=60, rand_seed=3, verbose=0, interventions=vaccine, networks=ss.contacts(np.array([[4, 2, 1], [2, 3, 1], [1, 1, 2]])))
+    for maker in [make, make_groups]: # And by group, with values by group and a modifier of transmission
+        sims = []
+        for compiled in [True, False]:
+            ss.solvers.agents.compiled_rounds = compiled
+            try:
+                sims.append(maker().run())
+            finally:
+                ss.solvers.agents.compiled_rounds = True
+        nb, py = sims
+        engine = nb.diseases.seis.engine
+        assert engine.lowered, engine.lowered_reason
+        assert not py.diseases.seis.engine.lowered
+        for key,res in nb.results.flatten().items():
+            assert np.array_equal(res, py.results.flatten()[key], equal_nan=True), key
+        if maker is make:
+            assert nb.results.seis.seek.sum() > 10 and nb.results.seis.later.sum() > 10 # The triggers fired
     return nb
 
 

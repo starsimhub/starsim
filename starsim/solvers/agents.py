@@ -2917,7 +2917,8 @@ class Agents(Engine):
                 mod[f'late_{name}'][uids[flagged & due]] = 0.0 # Caught up; the others keep the flag until their exit is due
             for i,tr in enumerate(candidates):
                 self.move(tr, state, uids[due & (which == i)])
-            uids = uids[~due]
+            if competing: # Those still here face them
+                uids = uids[~due]
         elif early is not None and competing: # With only competing rates
             self.draw_competing(state, uids[early], 0.5*dt, key=f'entry_{name}')
             mod[f'late_{name}'][uids[early]] = 0.0

@@ -16,9 +16,10 @@ class Lowered:
 
     Made at the disease's first step, if every scheduled exit, branch, split, and trigger it has is one the kernel takes (see `reason()`):
     dwell times that are constant, exponential, or lognormal; triggers on the disease's own transitions, after a delay; and values that are
-    numbers, values in time, or values by a property of people (`ss.by(sex=...)`), with `where=` by a property of people. A value that
-    differs between people is a table by class of agent (e.g. one row for women and one for men), worked out by the Python engine for one
-    agent of each class, so the kernel uses the numbers the Python engine would. The kernel writes the engine's own arrays (who is in each
+    numbers, values in time, or values by a property of people (`ss.by(sex=...)`) or by the sim's groups, with `where=` by a property of people;
+    in a stratified sim too, and with modifiers of transmission only (of `rel_sus` or `rel_trans`, or of a parameter no table reads). A value
+    that differs between people is a table by class of agent (e.g. one row for women and one for men, or one for each group), worked out by the
+    Python engine for one agent of each class, so the kernel uses the numbers the Python engine would. The kernel writes the engine's own arrays (who is in each
     state, the times of entering, the scheduled exits), and `replay()` records the moves as the Python engine would (events, batches, flows).
     """
     def __init__(self, engine):
@@ -108,20 +109,22 @@ class Lowered:
             return 'without common random numbers'
         if len(graph.people_states) > rounds.MAX_STATES or len(engine.triggers) > rounds.MAX_TRIGGERS:
             return f'with more than {rounds.MAX_STATES} states or {rounds.MAX_TRIGGERS} triggers'
-        if sim.groups.n_groups > 1 or sim.people.scale.weighted:
-            return 'by group, or with agents of different weights'
+        if sim.people.scale.weighted:
+            return 'with agents of different weights'
         if engine.strain is not None or engine.memory or engine.sets or engine.on_event or engine.derived or engine.lifetables or engine.late or engine.entered_dims or engine.also:
             return 'with strains, clocks of sets, attributes set at events, derived attributes, life tables, competing rates on entry, levels taken on entry, or others an event happens to'
         if any(engine.competing.values()):
             return 'with competing rates'
         if engine.subscribers or mod.__dict__.get('remembered'):
             return 'with modules that react to its events, or events it remembers'
-        if any(not cls.where_mod(engine, m) for m in cls.modifiers_of(engine)) or any(adj is not None for adj in engine.adjust.values()) or engine.branch_adjust:
-            return 'with modifiers (other than those of where=), or adjust='
+        if not all(cls.unseen_mod(engine, key, m) for key,m in cls.modifiers_of(engine, keys=True)) or engine.branch_adjust or any(engine.adjust[tr.name] is not None for tr in graph.transitions.values() if not tr.contact):
+            return 'with modifiers of what it moves (other than those of where=), or adjust= of them'
         per = [(ss.conditions.modname(tr.per.module) or m.name) for m in sim.declared for tr in m.graph.inflows if getattr(tr, 'per', None) is not None]
         if mod.name in per or any(tr.inflow and getattr(tr, 'per', None) is not None for tr in graph.transitions.values()):
             return 'with births driven by its flows, or flows that drive births'
         for tr in graph.transitions.values():
+            if engine.moves(tr) or any(engine.enters(tr, src) for src in tr.src): # Including an infection, whose arrivals the kernel sends (see run())
+                return f'"{tr.name}" changes a level (move= or increment=), or takes people into a dimension'
             if tr.contact or tr.inflow:
                 continue
             if tr.outflow or tr.dies or engine.moves(tr) or getattr(tr, 'before', None) is not None or any(not d.people for d in tr.dst):
@@ -169,9 +172,41 @@ class Lowered:
         return [cond] if cond.op == 'people' else [leaf for arg in cond.args for leaf in Lowered.people_leaves(arg)]
 
     @staticmethod
-    def modifiers_of(engine):
-        """ The modifiers of a disease's parameters and transitions """
-        return [m for key,mods in engine.sim.modifiers.items() if key[0] == engine.mod.name for m in mods]
+    def modifiers_of(engine, keys=False):
+        """ The modifiers of a disease's parameters and transitions (with what each modifies, as (module, kind, name), if `keys`) """
+        return [((key, m) if keys else m) for key,mods in engine.sim.modifiers.items() if key[0] == engine.mod.name for m in mods]
+
+    @staticmethod
+    def unseen_mod(engine, key, m):
+        """ Whether a modifier leaves the kernel's moves alone: one that a where= stands for (a table), or one of transmission only (rel_trans, a route, a contact-mediated transition, or a parameter that no table reads; rel_sus too, unless an acquisition is scheduled) """
+        _, kind, name = key
+        graph = engine.graph
+        if Lowered.where_mod(engine, m) or kind in ['rel_trans', 'route']:
+            return True
+        if kind == 'rel_sus':
+            return not any(tr.acquisition and not tr.contact for tr in graph.transitions.values())
+        if kind == 'transition':
+            return name in graph.transitions and graph.transitions[name].contact
+        if kind == 'par':
+            return name not in Lowered.par_names(engine)
+        return False
+
+    @staticmethod
+    def par_names(engine):
+        """ The names of the parameters the tables read (see `table_values()`) """
+        E = ss.expressions
+        out = set()
+        def add(value):
+            for leaf in (value.leaves if isinstance(value, E.Expr) else [value]):
+                if isinstance(leaf, E.par):
+                    out.add(leaf.name)
+                    raws = list(leaf.raw.pars.values()) if isinstance(leaf.raw, ss.Dist) else [leaf.raw]
+                    for raw in raws:
+                        if isinstance(raw, E.Expr):
+                            add(raw)
+        for value in Lowered.table_values(engine):
+            add(value)
+        return out
 
     @staticmethod
     def where_mod(engine, m):
@@ -212,8 +247,8 @@ class Lowered:
                     continue
                 elif isinstance(raw, ss.transitions.TimeValue):
                     dynamic = True
-                elif type(raw) is ss.by and raw.on_people(engine.sim) and engine.derived_strat(raw) is None and 'year' not in raw.dims and raw.table is None:
-                    bys.append(raw)
+                elif type(raw) is ss.by and engine.derived_strat(raw) is None and 'year' not in raw.dims and raw.table is None and (raw.on_people(engine.sim) or set(raw.dims) <= {strat.name for strat in engine.sim.groups.strats}):
+                    bys.append(raw) # By a property of people, or by the sim's groups (a factor of the class: see class_factors())
                 elif isinstance(raw, E.Expr):
                     inner = Lowered.table_parts(engine, raw)
                     if inner is None:
@@ -243,11 +278,14 @@ class Lowered:
         out = {}
         for value in self.table_values(engine):
             for by in self.table_parts(engine, value)[0]:
+                if not by.on_people(engine.sim): # By the sim's groups
+                    out.setdefault(('group',), (engine.sim.groups.n_groups, None, 'group'))
+                    continue
                 for dim in by.dims:
                     n, _ = by.positions(engine.sim, dim)
                     out.setdefault(('by', dim, by.keys_id(dim)), (n + 1, by, dim))
         wheres = [tr.where for tr in self.triggers if tr.where is not None] + [tr.where for name in engine.scheduled for tr in engine.branches_of(name) if getattr(tr, 'where', None) is not None]
-        wheres += [m.where for m in self.modifiers_of(engine)]
+        wheres += [m.where for m in self.modifiers_of(engine) if self.where_mod(engine, m)] # The others leave the moves alone (see unseen_mod())
         for cond in wheres:
             out.setdefault(('where', repr(cond)), (2, cond, None))
         return list(out.values())
@@ -261,7 +299,7 @@ class Lowered:
             return self.cls
         cls = np.zeros(n, dtype=np.int64)
         for levels,obj,dim in self.factors:
-            level = obj.positions(engine.sim, dim)[1] if dim is not None else engine.selector.select(obj) # A position along a dimension of an ss.by, or whether a where= holds
+            level = engine.sim.groups.group_raw() if dim == 'group' else obj.positions(engine.sim, dim)[1] if dim is not None else engine.selector.select(obj) # The group, a position along a dimension of an ss.by, or whether a where= holds
             cls = cls*levels + np.broadcast_to(np.asarray(level, dtype=np.int64), n)
         if self.static_cls:
             self.cls, self.cls_used = cls, used
@@ -287,7 +325,7 @@ class Lowered:
         engine = self.engine
         people = engine.sim.people
         used = people.uid.len_used
-        if not self.dynamic and self.checked == used: # No agents since the last check, and values that do not change in time
+        if not self.dynamic and self.static_cls and self.checked == used: # No agents since the last check, classes that do not change (by sex), and values that do not change in time
             return
         self.checked = used
         alive = people.auids
@@ -369,6 +407,13 @@ class Lowered:
             self.tuples = (key, tuples, sentinels)
         return self.tuples[1], self.tuples[2]
 
+    def work(self, N):
+        """ The kernel's work arrays by UID, kept between calls and made again only when the population grows: who a trigger took, by the index of the round's draws (see `ss.perflib.rounds.run()`); each one's exit as they left; the last round each was put back (-1); and the agents of each delayed trigger """
+        if getattr(self, '_work', None) is None or len(self._work[0]) != N:
+            n_trig = len(self.triggers)
+            self._work = (np.full(N, -1, dtype=np.int64), np.empty(N, dtype=np.int64), np.full(N, -1, dtype=np.int64), np.empty((n_trig, N if self.tg_delay.any() else 0), dtype=np.int64))
+        return self._work
+
     def run(self, phase, ti, members=None):
         """
         The rounds of moves of a phase of a step, compiled (see `ss.perflib.rounds.run()`): phase 1, from the scheduled exits due at the start
@@ -415,7 +460,8 @@ class Lowered:
                                     self.ex_off, self.ex_tr, self.ex_after, self.ex_loop, self.ex_resc, self.n_br, self.br_edges, self.br_off, self.dw_kind, self.dw_pars, self.adj,
                                     self.tr_dst0, self.sp_n, self.sp_dst, self.sp_edges, self.sp_stays, self.tr_trigger,
                                     self.tg_tr, self.tg_event, self.tg_src, self.tg_delay, self.dl_kind, self.dl_pars, self.tg_where, ev0_off, ev0,
-                                    self.seeds, self.br_stream, self.round_stream, self.dw_stream, self.dst_stream, self.after_stream, self.round_after_stream, shift, scale)
+                                    self.seeds, self.br_stream, self.round_stream, self.dw_stream, self.dst_stream, self.after_stream, self.round_after_stream, shift, scale,
+                                    *self.work(len(mod.rel_sus.raw)))
         *summary, rnd, err = out
         engine.round = (loop_ti, int(rnd))
         if err:
@@ -428,10 +474,16 @@ class Lowered:
             engine.notify(ti)
         return
 
-    def replay(self, flow, ev_uid, ev_off, st_uid, st_off, dlive, b_start, b_end, ar_uid, ar_tr, ar_src, ar_dst):
+    def collapsed(self):
+        """ The group each group is counted in while in each state (by state and group: see `Agents.groups()`), made once """
+        if getattr(self, '_collapsed', None) is None:
+            self._collapsed = np.stack([np.asarray(self.engine.collapse[name], dtype=np.int64) for name in self.names])
+        return self._collapsed
+
+    def replay(self, flow, ev_uid, ev_off, st_uid, st_off, dlive, b_start, b_end, ar_uid, ar_tr, ar_src, ar_dst, mv_uid, mv_src):
         """
         Record the moves as the Python engine records them (as `Agents.move()`, `stay()` and `record()`; see `ss.perflib.rounds.summarize()`):
-        the flow and the events of each transition, without those put back; the number in each state; and the batches of arrivals
+        the flow and the events of each transition, without those put back; the number in each state (by group, if there are groups); and the batches of arrivals
         """
         engine = self.engine
         names = self.names
@@ -443,8 +495,15 @@ class Lowered:
             if events is not None and st_off[t+1] > st_off[t]: # Those put back are no longer its event (see Agents.stay())
                 events = events[~np.isin(events, st_uid[st_off[t]:st_off[t+1]])]
             engine.events[tr.name] = uids if events is None else ss.uids.concatenate([events, uids])
+        ng = engine.sim.groups.n_groups
+        groups = engine.sim.groups.group_raw() if ng > 1 else None
         live = engine.live
-        if live is not None:
+        if live is not None and ng > 1: # By group: each arrival (or one put back) in the state they are now in, less each move out (see Agents.wrote())
+            cell = lambda states, uids: np.bincount(states*ng + groups[uids], minlength=len(names)*ng)
+            delta = (cell(np.where(ar_dst == ss.perflib.rounds.STAY, ar_src, ar_dst), ar_uid) - cell(mv_src, mv_uid)).reshape(len(names), ng)
+            for i in np.flatnonzero(delta.any(axis=1)).tolist():
+                live[names[i]] = live[names[i]] + delta[i]
+        elif live is not None:
             for i in np.flatnonzero(dlive).tolist():
                 live[names[i]] = live[names[i]] + int(dlive[i])
         if len(b_start):
@@ -457,5 +516,12 @@ class Lowered:
                 engine.batches.append(Bunch(tr=tr.name, uids=ss.uids(ar_uid[i:j]), src=ar_src[i:j], dst=d, key=key, also=False, n=engine.n_batches))
                 if tr.ends:
                     engine.flowcounts[f'{tr.name}.{names[d]}'] += j - i
+                if ng > 1: # By the group each left, as Agents.move() and destinations() record them (an infection's flow is recorded by move() already)
+                    uids = ar_uid[i:j]
+                    left = self.collapsed()[ar_src[i:j], groups[uids]] # The group each is counted in, in the state they left (see Agents.groups())
+                    if not tr.contact:
+                        engine.add_flow_groups(tr.name, left, uids)
+                    if tr.ends:
+                        engine.add_flow_groups(f'{tr.name}.{names[d]}', left, uids)
             engine._news = True
         return

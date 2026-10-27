@@ -20,6 +20,7 @@ from . import draws, cache as _cache
 _cache.depends(__file__, draws.__file__) # The uniforms and inverses come from the draws
 
 jit = nb.jit(nopython=True, cache=True, error_model='numpy') # As the passes over agents
+inline = nb.jit(nopython=True, cache=True, error_model='numpy', inline='always') # For what is called for each agent, so no call passes arrays (whose reference counts would cost more than the work)
 
 # The kinds of dwell time (and of delay before a triggered move)
 CONSTANT = 0 # pars[0]
@@ -31,25 +32,25 @@ MAX_STATES = 32 # The arrays of each state are passed in tuples of 8, 16, or thi
 MAX_TRIGGERS = 16 # Likewise for the delays of the triggers: 4, 8, or this many
 
 
-@jit
+@inline
 def uniform(seed, ind, slot, shift, scale):
     """ The uniform of an agent's slot from a stream (as `ss.distributions.hash_uniforms()`) """
     return draws.crn_uniform(draws.key(seed, ind), slot, shift, scale)
 
 
-@jit
-def dwell(kind, pars, u):
-    """ A dwell time (or delay) of one of the kinds above from its uniform """
+@inline
+def dwell(kind, pars, i, c, u):
+    """ A dwell time (or delay) of one of the kinds above from its uniform, with the parameters `pars[i, c]` (read in place: a slice for each agent would cost more than the draw) """
     if kind == CONSTANT:
-        return pars[0]
+        return pars[i, c, 0]
     elif kind == LOGNORMAL:
         x = np.float64(np.float32(draws.ndtri(u)))
-        return np.exp(pars[0]*x)*pars[1] + pars[2]
+        return np.exp(pars[i, c, 0]*x)*pars[i, c, 1] + pars[i, c, 2]
     else:
-        return draws.expon(pars[0], u) + pars[1]
+        return draws.expon(pars[i, c, 0], u) + pars[i, c, 1]
 
 
-@jit
+@inline
 def to_step(val, lowest, never, nan):
     """ A step number as stored (see `ss.arrays.StepArr.from_float()`): the next whole step, within the integers, NaN as not set """
     if val != val:
@@ -62,12 +63,12 @@ def to_step(val, lowest, never, nan):
     return v
 
 
-@jit
+@inline
 def grow(arr, n):
-    """ The array, larger if it is full at n """
-    if n < arr.shape[0]:
+    """ The array, with room for n (made twice as large as that if it has not, so it grows rarely; called once for a loop, not for each item, since replacing an array costs reference counts) """
+    if n <= arr.shape[0]:
         return arr
-    out = np.empty(max(2*arr.shape[0], 16), dtype=arr.dtype)
+    out = np.empty(max(2*n, 16), dtype=arr.dtype)
     out[:arr.shape[0]] = arr
     return out
 
@@ -94,7 +95,7 @@ def first_order(keys, n, rank, out):
     return
 
 
-@jit
+@inline
 def whole(dur, dt, seed, ind, slot, shift, scale):
     """ A dwell time as a whole number of steps, rounded up or down at random keeping its mean (as `Agents.whole_steps()`) """
     steps = dur/dt
@@ -106,39 +107,50 @@ def whole(dur, dt, seed, ind, slot, shift, scale):
 
 
 @jit
-def schedule(uid, s, cls, slot, ti, ind, dt, ex_off, ex_tr, ex_after, ex_loop, ex_resc, n_br, br_edges, br_off, dw_kind, dw_pars, adj,
-             seeds, br_stream, round_stream, dw_stream, shift, scale):
+def schedule(uids, states, n, ti_exit, exit_idx, mults, has_mult, cls, slots, use_slots, ti, ind, dt, xnan, xlowest, xnever,
+             ex_off, ex_tr, ex_after, ex_loop, ex_resc, n_br, br_edges, br_off, dw_kind, dw_pars, adj, seeds, br_stream, round_stream, dw_stream, shift, scale):
     """
-    For an agent who has just entered state s: choose their branch, draw its dwell time and the timed exits', and schedule the earliest (as
-    `Agents.schedule()`); returns the step it is due, its index, and how fast it runs (the multiplier on its rate, if it is rescaled when that changes; else 1)
+    For the agents who have just entered a state that schedules exits (`uids[:n]`, each in its state in `states`), all in one call (a call for
+    each would cost more than its work), but not those that code put back with an exit still scheduled, which they keep: choose each one's
+    branch, draw its dwell time and the timed exits', and schedule the earliest (as `Agents.schedule()`), with its index, and how fast it runs
+    (the multiplier on its rate, if it is rescaled when that changes)
     """
-    c = cls[uid]
-    best = np.inf
-    which = -1
-    nb_ = n_br[s]
-    e0 = ex_off[s]
-    if nb_ > 0: # Split on entry
-        u = uniform(seeds[br_stream[s]], ind, slot, shift, scale)
-        base = br_off[s] + c*(nb_ + 1)
-        for i in range(nb_):
-            if u >= br_edges[base + i] and u < br_edges[base + i + 1]:
-                t = ex_tr[e0 + i]
-                if dw_kind[t] >= 0:
-                    best = dwell(dw_kind[t], dw_pars[t, c], uniform(seeds[dw_stream[t]], ind, slot, shift, scale))/adj[t, c] + ex_after[e0 + i]
-                else: # Nobody waits in this branch, beyond a minimum stay
-                    best = ex_after[e0 + i] if ex_after[e0 + i] != 0 else -np.inf
+    for k in range(n):
+        uid = uids[k]
+        s = states[k]
+        if ti_exit[s][uid] != xnan:
+            continue
+        slot = slots[uid] if use_slots else uid
+        c = cls[uid]
+        best = np.inf
+        which = -1
+        nb_ = n_br[s]
+        e0 = ex_off[s]
+        if nb_ > 0: # Split on entry
+            u = uniform(seeds[br_stream[s]], ind, slot, shift, scale)
+            base = br_off[s] + c*(nb_ + 1)
+            for i in range(nb_):
+                if u >= br_edges[base + i] and u < br_edges[base + i + 1]:
+                    t = ex_tr[e0 + i]
+                    if dw_kind[t] >= 0:
+                        best = dwell(dw_kind[t], dw_pars, t, c, uniform(seeds[dw_stream[t]], ind, slot, shift, scale))/adj[t, c] + ex_after[e0 + i]
+                    else: # Nobody waits in this branch, beyond a minimum stay
+                        best = ex_after[e0 + i] if ex_after[e0 + i] != 0 else -np.inf
+                    which = i
+        for i in range(nb_, ex_off[s+1] - e0): # Competing dwell times: the earliest wins
+            t = ex_tr[e0 + i]
+            dur = dwell(dw_kind[t], dw_pars, t, c, uniform(seeds[dw_stream[t]], ind, slot, shift, scale))/adj[t, c] + ex_after[e0 + i]
+            if dur < best or which < 0:
+                best = dur
                 which = i
-    for i in range(nb_, ex_off[s+1] - e0): # Competing dwell times: the earliest wins
-        t = ex_tr[e0 + i]
-        dur = dwell(dw_kind[t], dw_pars[t, c], uniform(seeds[dw_stream[t]], ind, slot, shift, scale))/adj[t, c] + ex_after[e0 + i]
-        if dur < best or which < 0:
-            best = dur
-            which = i
-    steps = whole(best, dt, seeds[round_stream[s]], ind, slot, shift, scale)
-    if which >= 0 and ex_loop[e0 + which] and best > 0: # Back to the state: taken again no sooner than the next step
-        steps = max(steps, 1.0)
-    speed = adj[ex_tr[e0 + which], c] if which >= 0 and ex_resc[e0 + which] else 1.0
-    return ti + steps, which, speed
+        steps = whole(best, dt, seeds[round_stream[s]], ind, slot, shift, scale)
+        if which >= 0 and ex_loop[e0 + which] and best > 0: # Back to the state: taken again no sooner than the next step
+            steps = max(steps, 1.0)
+        ti_exit[s][uid] = to_step(ti + steps, xlowest, xnever, xnan)
+        exit_idx[s][uid] = which
+        if has_mult[s]:
+            mults[s][uid] = adj[ex_tr[e0 + which], c] if which >= 0 and ex_resc[e0 + which] else 1.0
+    return
 
 
 @jit
@@ -150,7 +162,8 @@ def run(phase, ti_entry, ti_start, shift_val, base_ind, round0, max_depth, dt, n
         ex_off, ex_tr, ex_after, ex_loop, ex_resc, n_br, br_edges, br_off, dw_kind, dw_pars, adj,
         tr_dst0, sp_n, sp_dst, sp_edges, sp_stays, tr_trigger,
         tg_tr, tg_event, tg_src, tg_delay, dl_kind, dl_pars, tg_where, ev0_off, ev0,
-        seeds, br_stream, round_stream, dw_stream, dst_stream, after_stream, round_after_stream, shift, scale):
+        seeds, br_stream, round_stream, dw_stream, dst_stream, after_stream, round_after_stream, shift, scale,
+        stamp, kept_exit, last, pend): # Work arrays by UID, kept between calls (see `ss.solvers.Lowered.work()`), since making arrays as large as the population at each call costs more than the work
     """
     The rounds of moves of a phase of a step (phase 1: from the scheduled exits due at its start; phase 2: from the infections at its end)
 
@@ -183,11 +196,8 @@ def run(phase, ti_entry, ti_start, shift_val, base_ind, round0, max_depth, dt, n
     cand = np.empty(size, dtype=np.int64) # A trigger's candidates
     rank_t = np.full(n_trs, -1, dtype=np.int64)
     rank_s = np.full(n_states, -1, dtype=np.int64)
-    kept_exit = np.empty(N, dtype=np.int64) # Each agent's scheduled exit as they left, for those who stay (ss.stay) after a triggered move
-    stamp = np.zeros(N, dtype=np.int64) # Taken by a trigger in the round of this number
     n_trig = tg_tr.shape[0]
     rnd = round0
-    pend = np.empty((n_trig, N if tg_delay.any() else 0), dtype=np.int64) # Each delayed trigger's agents with a time after its event, found once
     n_pend = np.zeros(n_trig, dtype=np.int64)
     for g in range(n_trig):
         if tg_delay[g]:
@@ -208,14 +218,16 @@ def run(phase, ti_entry, ti_start, shift_val, base_ind, round0, max_depth, dt, n
     logged = 0 # The moves of the first round in phase 2 are made already (by transmit()), so are not logged again
     if phase == 1:
         nq = 0
+        qu = grow(qu, len(pro_uids)); qt = grow(qt, len(pro_uids)); qs = grow(qs, len(pro_uids))
         for s in range(n_states):
             if not sched[s] or pro_off[s+1] == pro_off[s]:
                 continue
+            te = ti_exit[s]
+            ei = exit_idx[s]
             for i in range(ex_off[s+1] - ex_off[s]):
                 for j in range(pro_off[s], pro_off[s+1]):
                     uid = pro_uids[j]
-                    if ti_exit[s][uid] <= ti_start and exit_idx[s][uid] == i:
-                        qu = grow(qu, nq); qt = grow(qt, nq); qs = grow(qs, nq)
+                    if te[uid] <= ti_start and ei[uid] == i:
                         qu[nq] = uid; qt[nq] = ex_tr[ex_off[s] + i]; qs[nq] = s
                         nq += 1
         logged = nq
@@ -231,8 +243,9 @@ def run(phase, ti_entry, ti_start, shift_val, base_ind, round0, max_depth, dt, n
     while True:
         rnd += 1
         ind = base_ind + rnd
-        for j in range(logged if phase == 1 and first else (0 if first else nq)):
-            mv_uid = grow(mv_uid, nm); mv_tr = grow(mv_tr, nm); mv_src = grow(mv_src, nm); mv_rnd = grow(mv_rnd, nm)
+        n_log = logged if phase == 1 and first else (0 if first else nq)
+        mv_uid = grow(mv_uid, nm + n_log); mv_tr = grow(mv_tr, nm + n_log); mv_src = grow(mv_src, nm + n_log); mv_rnd = grow(mv_rnd, nm + n_log)
+        for j in range(n_log):
             mv_uid[nm] = qu[j]; mv_tr[nm] = qt[j]; mv_src[nm] = qs[j]; mv_rnd[nm] = rnd
             nm += 1
         if nq > order.shape[0]:
@@ -247,7 +260,8 @@ def run(phase, ti_entry, ti_start, shift_val, base_ind, round0, max_depth, dt, n
         # Send each to their destination, one transition at a time, in the order they first left by it (as send())
         narr = 0
         first_order(qt, nq, rank_t, order)
-        a0 = na # The arrivals of this round start here
+        a0 = na # The arrivals of this round start here: one for each move, at most
+        ar_uid = grow(ar_uid, na + nq); ar_tr = grow(ar_tr, na + nq); ar_src = grow(ar_src, na + nq); ar_dst = grow(ar_dst, na + nq); ar_rnd = grow(ar_rnd, na + nq)
         j = 0
         while j < nq:
             t = qt[order[j]]
@@ -259,7 +273,6 @@ def run(phase, ti_entry, ti_start, shift_val, base_ind, round0, max_depth, dt, n
                 d = tr_dst0[t]
                 for m in range(j, k):
                     q = order[m]
-                    ar_uid = grow(ar_uid, na); ar_tr = grow(ar_tr, na); ar_src = grow(ar_src, na); ar_dst = grow(ar_dst, na); ar_rnd = grow(ar_rnd, na)
                     ar_uid[na] = qu[q]; ar_tr[na] = t; ar_src[na] = qs[q]; ar_dst[na] = d; ar_rnd[na] = rnd
                     na += 1
             else: # Several: one draw each; those who stay are put back first, then each destination in turn (as destinations())
@@ -287,7 +300,6 @@ def run(phase, ti_entry, ti_start, shift_val, base_ind, round0, max_depth, dt, n
                             else:
                                 ti_exit[s][uid] = xnever
                                 exit_idx[s][uid] = -2
-                        ar_uid = grow(ar_uid, na); ar_tr = grow(ar_tr, na); ar_src = grow(ar_src, na); ar_dst = grow(ar_dst, na); ar_rnd = grow(ar_rnd, na)
                         ar_uid[na] = uid; ar_tr[na] = t; ar_src[na] = s; ar_dst[na] = STAY; ar_rnd[na] = rnd
                         na += 1
                 for i in range(n_dst):
@@ -295,7 +307,6 @@ def run(phase, ti_entry, ti_start, shift_val, base_ind, round0, max_depth, dt, n
                     for m in range(j, k):
                         if choice[m] == i:
                             q = order[m]
-                            ar_uid = grow(ar_uid, na); ar_tr = grow(ar_tr, na); ar_src = grow(ar_src, na); ar_dst = grow(ar_dst, na); ar_rnd = grow(ar_rnd, na)
                             ar_uid[na] = qu[q]; ar_tr[na] = t; ar_src[na] = qs[q]; ar_dst[na] = d; ar_rnd[na] = rnd
                             na += 1
             j = k
@@ -310,18 +321,12 @@ def run(phase, ti_entry, ti_start, shift_val, base_ind, round0, max_depth, dt, n
             if kept[d]:
                 ti_in[d][uid] = to_step(ti_entry, lowest, never, nan)
                 shifts[d][uid] = shift_val
-            if sched[d] and ti_exit[d][uid] == xnan: # Unless code put them back with an exit still scheduled, which they keep (as Agents.schedule())
-                slot = slots[uid] if use_slots else uid
-                due, which, speed = schedule(uid, d, cls, slot, ti_entry, ind, dt, ex_off, ex_tr, ex_after, ex_loop, ex_resc, n_br, br_edges, br_off,
-                                             dw_kind, dw_pars, adj, seeds, br_stream, round_stream, dw_stream, shift, scale)
-                ti_exit[d][uid] = to_step(due, xlowest, xnever, xnan)
-                exit_idx[d][uid] = which
-                if has_mult[d]:
-                    mults[d][uid] = speed
             if sched[d]:
                 arr_uid[narr] = uid
                 arr_s[narr] = d
                 narr += 1
+        schedule(arr_uid, arr_s, narr, ti_exit, exit_idx, mults, has_mult, cls, slots, use_slots, ti_entry, ind, dt, xnan, xlowest, xnever,
+                 ex_off, ex_tr, ex_after, ex_loop, ex_resc, n_br, br_edges, br_off, dw_kind, dw_pars, adj, seeds, br_stream, round_stream, dw_stream, shift, scale)
 
         # Who moves on at once: those whose exit is due already, by state in the order they first arrived (as onward())
         nn = 0
@@ -345,14 +350,13 @@ def run(phase, ti_entry, ti_start, shift_val, base_ind, round0, max_depth, dt, n
         for g in range(n_trig):
             e = tg_event[g]
             nc = 0
+            cand = grow(cand, ev0_off[g+1] - ev0_off[g] + na - a0)
             if first:
                 for a in range(ev0_off[g], ev0_off[g+1]):
-                    cand = grow(cand, nc)
                     cand[nc] = ev0[a]
                     nc += 1
             for a in range(a0, na):
                 if ar_tr[a] == e and ar_dst[a] != STAY:
-                    cand = grow(cand, nc)
                     cand[nc] = ar_uid[a]
                     nc += 1
             cand[:nc].sort()
@@ -388,17 +392,17 @@ def run(phase, ti_entry, ti_start, shift_val, base_ind, round0, max_depth, dt, n
                     if due_arr[uid] == anan:
                         slot = slots[uid] if use_slots else uid
                         c = cls[uid]
-                        dur = dwell(dl_kind[g], dl_pars[g, c], uniform(seeds[after_stream[g]], ind, slot, shift, scale))
+                        dur = dwell(dl_kind[g], dl_pars, g, c, uniform(seeds[after_stream[g]], ind, slot, shift, scale))
                         steps = whole(dur, dt, seeds[round_after_stream[g]], ind, slot, shift, scale)
                         due_arr[uid] = to_step(ti_start + steps, alowest, anever, anan)
                         pend[g, m] = uid
                         m += 1
                 n_pend[g] = m
                 nc = 0
+                cand = grow(cand, m)
                 for i in range(m):
                     uid = pend[g, i]
-                    if due_arr[uid] <= ti_start and stamp[uid] != rnd:
-                        cand = grow(cand, nc)
+                    if due_arr[uid] <= ti_start and stamp[uid] != ind:
                         cand[nc] = uid
                         nc += 1
                         due_arr[uid] = anan
@@ -406,30 +410,29 @@ def run(phase, ti_entry, ti_start, shift_val, base_ind, round0, max_depth, dt, n
             n = 0
             for i in range(nc):
                 uid = cand[i]
-                if tg_where[g, cls[uid]] and stamp[uid] != rnd:
+                if tg_where[g, cls[uid]] and stamp[uid] != ind:
                     cand[n] = uid
                     n += 1
             if n:
+                tu = grow(tu, n_tr + n); tt = grow(tt, n_tr + n); ts = grow(ts, n_tr + n) # Each is in one state
                 for s in range(n_states):
                     if tg_src[g, s]:
                         for i in range(n):
                             uid = cand[i]
                             if members[s][uid]:
-                                tu = grow(tu, n_tr); tt = grow(tt, n_tr); ts = grow(ts, n_tr)
                                 tu[n_tr] = uid; tt[n_tr] = tg_tr[g]; ts[n_tr] = s
                                 n_tr += 1
                 for i in range(n):
-                    stamp[cand[i]] = rnd
+                    stamp[cand[i]] = ind
 
         # The next round's moves: the triggered, then the exits due now of those no trigger moves
         nq = 0
+        qu = grow(qu, n_tr + nn); qt = grow(qt, n_tr + nn); qs = grow(qs, n_tr + nn)
         for i in range(n_tr):
-            qu = grow(qu, nq); qt = grow(qt, nq); qs = grow(qs, nq)
             qu[nq] = tu[i]; qt[nq] = tt[i]; qs[nq] = ts[i]
             nq += 1
         for i in range(nn):
-            if stamp[nu[i]] != rnd:
-                qu = grow(qu, nq); qt = grow(qt, nq); qs = grow(qs, nq)
+            if stamp[nu[i]] != ind:
                 qu[nq] = nu[i]; qt[nq] = nt[i]; qs[nq] = ns[i]
                 nq += 1
         first = False
@@ -448,15 +451,18 @@ def run(phase, ti_entry, ti_start, shift_val, base_ind, round0, max_depth, dt, n
                 ti_exit[s][uid] = xnan
             members[s][uid] = False
         depth += 1
-    return summarize(N, n_states, n_trs, mv_uid[:nm], mv_tr[:nm], mv_src[:nm], mv_rnd[:nm], ar_uid[:na], ar_tr[:na], ar_src[:na], ar_dst[:na], ar_rnd[:na]) + (rnd, err)
+    return summarize(last, n_states, n_trs, mv_uid[:nm], mv_tr[:nm], mv_src[:nm], mv_rnd[:nm], ar_uid[:na], ar_tr[:na], ar_src[:na], ar_dst[:na], ar_rnd[:na]) + (rnd, err)
 
 
 @jit
-def summarize(N, n_states, n_trs, mv_uid, mv_tr, mv_src, mv_rnd, ar_uid, ar_tr, ar_src, ar_dst, ar_rnd):
+def summarize(last, n_states, n_trs, mv_uid, mv_tr, mv_src, mv_rnd, ar_uid, ar_tr, ar_src, ar_dst, ar_rnd):
     """
     What the Python engine records of the moves (see `Agents.replay()`): for each transition, its flow (those who left by it, less those put back) and its
     events (those who left by it, in order, less those put back in the same round or a later one), and those put back by it; the change in the number in
-    each state; and the batches of arrivals, one for each transition and destination in each round, as (start, end) in the arrivals, with the arrivals
+    each state; the batches of arrivals, one for each transition and destination in each round, as (start, end) in the arrivals, with the arrivals;
+    and the moves logged (who, from where), for the counts by group
+
+    `last` is the last round each agent was put back by the transition being worked on, -1 for none, and is left so
     """
     nm = mv_uid.shape[0]
     na = ar_uid.shape[0]
@@ -484,7 +490,6 @@ def summarize(N, n_states, n_trs, mv_uid, mv_tr, mv_src, mv_rnd, ar_uid, ar_tr, 
         if ar_dst[i] == STAY:
             st_uid[pos[ar_tr[i]]] = ar_uid[i]
             pos[ar_tr[i]] += 1
-    last = np.full(N, -1, dtype=np.int64) # The last round each agent was put back by the transition being worked on
     ev_uid = np.empty(nm, dtype=np.int64) # The events of each transition, in order
     ev_off = np.zeros(n_trs + 1, dtype=np.int64)
     k = 0
@@ -520,4 +525,4 @@ def summarize(N, n_states, n_trs, mv_uid, mv_tr, mv_src, mv_rnd, ar_uid, ar_tr, 
         while e < na and ar_dst[e] != STAY and ar_tr[e] == ar_tr[b_start[b]] and ar_dst[e] == ar_dst[b_start[b]] and ar_rnd[e] == ar_rnd[b_start[b]]:
             e += 1
         b_end[b] = e
-    return flow, ev_uid[:k], ev_off, st_uid, n_st, dlive, b_start, b_end, ar_uid, ar_tr, ar_src, ar_dst
+    return flow, ev_uid[:k], ev_off, st_uid, n_st, dlive, b_start, b_end, ar_uid, ar_tr, ar_src, ar_dst, mv_uid, mv_src
