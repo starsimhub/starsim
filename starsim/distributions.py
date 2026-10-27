@@ -913,7 +913,9 @@ class Dist:
         - Rates are multiplied by `dt` (so the result will be a number of events, or else the equivalent multiplicate value for the timestep)
         """
         # Check through and see if anything is a timepar
-        timepar_dict = {key:type(timepar_of(val)) for key,val in self._pars.items() if timepar_of(val) is not None}
+        timepar_dict = {key:type(tp) for key,val in self._pars.items() if (tp := timepar_of(val)) is not None}
+        if not timepar_dict and self.unit is None: # Plain numbers (the usual case, e.g. values worked out for agents): nothing to check or convert
+            return
 
         # Check for e.g. ss.normal(ss.years(3), ss.years(2), unit=ss.days)
         if self.unit is not None and len(timepar_dict):
@@ -1044,7 +1046,7 @@ class Dist:
 
     def convert_callable(self, parkey, func, size, uids):
         """ Method to handle how callable parameters are processed; not for the user """
-        size_par = sc.ifelse(uids, size, ss.uids()) # Allow none size
+        size_par = uids if uids is not None else size if size is not None else ss.uids() # Allow none size
         if not getattr(self, '_callable_keys', None):
             module = self.module
             mapping = {
@@ -1528,10 +1530,7 @@ class lognorm_im(Dist):
         if call:
             self.call_pars()
         p = self._pars
-        spars = sc.dictobj()
-        spars.s = p.sigma
-        spars.scale = np.exp(p.mean)
-        spars.loc = 0
+        spars = dict(s=p.sigma, scale=np.exp(p.mean), loc=0)
         self.update_dist_pars(spars)
         return spars
 
@@ -1577,8 +1576,9 @@ class lognorm_ex(Dist):
         parameters of the underlying (implicit) distribution, which are the form expected by NumPy's
         and SciPy's lognorm() distributions.
         """
-        self.call_pars() # Since can't work with functions
         p = self._pars
+        if any(callable(v) and not isinstance(v, type) for v in p.values()): # Since can't work with functions (process_pars() has called them already, when drawing)
+            self.call_pars()
         mean = p.pop('mean')
         std = p.pop('std')
         if np.isscalar(mean) and mean <= 0:

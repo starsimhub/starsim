@@ -72,6 +72,7 @@ class Agents(Engine):
         self.triggers = [tr for tr in graph.transitions.values() if tr.trigger is not None and not tr.trigger.outcome] # Moved by ss.on(): see triggered(); those on the outcome of a delivery move as it happens (see ss.interventions.trigger_moves())
         self.trigger_mods = set().union(*[ss.conditions.module_refs(tr.trigger.x) for tr in self.triggers]) # The modules whose changes they react to
         self._seen = dict() # The events each trigger on an event has seen already
+        self._pending = dict() # For each trigger with a delay, who has a time drawn (its ti_after_ is set), so the population is not searched for them: see delayed()
         self._news = False # Whether anyone has moved since the modules that react to this one last looked: see notify()
         self._subscribers = None
         self._started = False
@@ -1912,7 +1913,12 @@ class Agents(Engine):
         """ For a trigger with a delay: draw the time after the event for those it has just happened to (`uids`), forget it for those who left the source, and return those whose time is up """
         mod = self.mod
         due = mod[f'ti_after_{tr.name}']
-        pending = np.flatnonzero(due.raw != due.nan)
+        pending = self._pending.get(tr.name)
+        if pending is None: # Only this sets the times, so they are found once
+            pending = np.flatnonzero(due.raw != due.nan)
+        if not len(pending) and not len(uids):
+            self._pending[tr.name] = pending
+            return pending
         inside = self.in_states_for(names, pending)
         due.raw[pending[~inside]] = due.nan
         pending = pending[inside]
@@ -1927,6 +1933,7 @@ class Agents(Engine):
         if taken is not None: # Those another trigger moves now keep their time, so it is taken in the next step if they are still in the source
             now = now[~taken[now]]
         due.raw[now] = due.nan
+        self._pending[tr.name] = pending[due.raw[pending] != due.nan]
         return now
 
     def unseen_fired(self, tr, mask):
