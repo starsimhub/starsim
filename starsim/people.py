@@ -120,7 +120,7 @@ class People:
         self.untraited = [] # Ranges of UIDs made by code that sets their properties afterwards (grow() without age=), whose traits are drawn at the next step: see grow()
         self.has_unborn = False # Whether a module makes agents before they are born, with a negative age (e.g. ss.Pregnancy's fetuses), who are not counted among the people: see unborn_uids()
         self.initialized = False
-        self.n_agents_init = n_agents
+        self.n_agents_init = round(n_agents) # The nearest whole number, as ss.SimPars takes it (e.g. a number a fit chose)
         self.named = None # For a named population (ss.people('Kenya')), where it came from: see ss.people()
 
         # The four fundamental arrays (auids, uid, slot, and parent) are made on first use: see make_uids()
