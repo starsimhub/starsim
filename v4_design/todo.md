@@ -13,6 +13,7 @@
 - [ ] Auto-import for EMOD (HIV?)
 - [ ] New TB model ensemble
 - [ ] Atomica applications
+- [ ] malariasimple: https://github.com/mrc-ide/malariasimple
 
 ## Refactoring
 
