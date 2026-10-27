@@ -68,6 +68,15 @@ def inverse(name, rands, *pars, big=None, fallback=None):
     return out
 
 
+def every(x):
+    """ np.all(x), for a parameter's check: a number (or the bool of one) is tested in Python, since np.all() of one costs more than a small draw """
+    return x.all() if isinstance(x, np.ndarray) else bool(x)
+
+def some(x):
+    """ np.any(x), likewise """
+    return x.any() if isinstance(x, np.ndarray) else bool(x)
+
+
 static_types = (int, float, bool, type(None), np.number, type) # Parameter values that cannot change without being replaced
 
 def same_objects(a, b):
@@ -840,10 +849,7 @@ class Dist:
                         slots = uids.view(np.ndarray)
                     else:
                         slots = ss.Arr.__getitem__(self.slots, uids) if isinstance(self.slots, ss.IndexArr) else self.slots[uids] # The slots as stored (32-bit), rather than as UIDs
-                    if len(slots): # Handle case where uids is boolean
-                        size = slots.max() + 1
-                    else:
-                        size = 0
+                    size = len(slots) # One uniform each (a distribution drawn without its inverse draws for every slot up to the largest: see rvs())
             else:
                 slots = np.array([])
                 size = 0
@@ -1132,7 +1138,7 @@ class Dist:
     def ppf(self, rands):
         """ Return default random numbers for array parameters; not for the user """
         scale = self.dist.kwds.get('scale')
-        if scale is not None and np.any(scale == 0): # SciPy gives NaN (and a warning) for scale=0, but NumPy (and the limit) gives loc
+        if scale is not None and some(scale == 0): # SciPy gives NaN (and a warning) for scale=0, but NumPy (and the limit) gives loc
             with np.errstate(invalid='ignore'):
                 rvs = self.dist.ppf(rands)
             return np.where(scale == 0, self.dist.kwds.get('loc', 0), rvs)
@@ -1197,6 +1203,8 @@ class Dist:
                 rands = rands[slots] # Get random values
             rvs = self.ppf(rands) # Convert to actual values via the PPF
         else:
+            if slots is not None: # For every slot up to the largest, so that each agent's draw is their slot's
+                self._size = slots.max() + 1 if len(slots) else 0
             rvs = self.make_rvs() # Or, just get regular values
             if self._slots is not None:
                 rvs = ss.arrays.nb_indexer(rvs, self._slots) if self._slots.size >= ss.arrays.numba_indexing else rvs[self._slots] # Numba indexer is ~1.3x faster for large gathers
@@ -1433,7 +1441,7 @@ class normal(Dist):
     def ppf(self, rands):
         """ The inverse CDF: the same arithmetic as SciPy's, without its checking of the arguments, which is most of the cost of a small draw """
         scale = np.asarray(self.dist.kwds['scale'])
-        if not np.all(scale > 0): # Leave the unusual cases to SciPy
+        if not every(scale > 0): # Leave the unusual cases to SciPy
             return super().ppf(rands)
         return sp_special.ndtri(rands)*scale + np.asarray(self.dist.kwds['loc'])
 
@@ -1530,10 +1538,10 @@ class lognorm_im(Dist):
     def ppf(self, rands):
         s = np.asarray(self.dist.kwds['s'])
         scale = np.asarray(self.dist.kwds['scale'])
-        if np.all(s > 0) and np.all(scale > 0): # The same arithmetic as SciPy's, without its checking of the arguments, which is most of the cost of a small draw
+        if every(s > 0) and every(scale > 0): # The same arithmetic as SciPy's, without its checking of the arguments, which is most of the cost of a small draw
             return np.exp(s*sp_special.ndtri(rands))*scale + np.asarray(self.dist.kwds['loc'])
         rvs = Dist.ppf(self, rands)
-        if np.any(s == 0): # SciPy gives NaN for sigma=0, but NumPy (and the limit) gives exp(mean)
+        if some(s == 0): # SciPy gives NaN for sigma=0, but NumPy (and the limit) gives exp(mean)
             rvs = np.where(s == 0, self.dist.kwds['scale'], rvs)
         return rvs
 
@@ -1609,10 +1617,10 @@ class expon(Dist):
     def ppf(self, rands):
         """ The inverse CDF, compiled (see `ss.perflib.draws`); SciPy's for unusual parameters """
         scale, loc = self.dist.kwds.get('scale', 1.0), self.dist.kwds.get('loc', 0.0)
-        if not np.all(np.asarray(scale) > 0):
+        if not every(np.asarray(scale) > 0):
             return super().ppf(rands)
         rvs = inverse('expon', rands, scale)
-        return rvs + loc if np.any(loc) else rvs
+        return rvs + loc if some(loc) else rvs
 
 
 class poisson(Dist):
@@ -1658,7 +1666,7 @@ class poisson(Dist):
                 self._ppf_cdf = sps.poisson.cdf(np.arange(kmax + 1), lam)
                 self._ppf_lam = lam
             rvs = np.searchsorted(self._ppf_cdf, rands, side='left') # side='left' matches sps.poisson.ppf
-        elif np.all(lam >= 0):
+        elif every(lam >= 0):
             rvs = inverse('poisson', rands, lam, big=lam > ss.perflib.draws.INV_MAX, fallback=lambda u, i: sps.poisson.ppf(u, lam[i]))
         else:
             rvs = self.dist.ppf(rands)
@@ -1741,7 +1749,7 @@ class nbinom(Dist):
     def ppf(self, rands):
         """ The inverse CDF, compiled (see `ss.perflib.draws`); SciPy's above a mean of 30, and for unusual parameters """
         n, p = np.asarray(self.dist.kwds['n']), np.asarray(self.dist.kwds['p'])
-        if not (np.all(n > 0) and np.all(p > 0) and np.all(p <= 1)):
+        if not (every(n > 0) and every(p > 0) and every(p <= 1)):
             return super().ppf(rands)
         big = n*(1 - p)/p > ss.perflib.draws.INV_MAX
         return inverse('nbinom', rands, n, p, big=big, fallback=lambda u, i: sps.nbinom.ppf(u, n if n.ndim == 0 else n[i], p if p.ndim == 0 else p[i]))
@@ -1764,7 +1772,7 @@ class binom(Dist):
     def ppf(self, rands):
         """ The inverse CDF, compiled (see `ss.perflib.draws`); SciPy's above a mean of 30 (on the smaller side of 1/2), and for unusual parameters """
         n, p = np.asarray(self.dist.kwds['n']), np.asarray(self.dist.kwds['p'])
-        if not (np.all(n >= 0) and np.all(n == np.floor(n)) and np.all(p >= 0) and np.all(p <= 1)):
+        if not (every(n >= 0) and every(n == np.floor(n)) and every(p >= 0) and every(p <= 1)):
             return super().ppf(rands)
         big = n*np.minimum(p, 1 - p) > ss.perflib.draws.INV_MAX
         return inverse('binomial', rands, n, p, big=big, fallback=lambda u, i: sps.binom.ppf(u, n if n.ndim == 0 else n[i], p if p.ndim == 0 else p[i]))
@@ -1864,10 +1872,10 @@ class weibull(Dist):
         """ The inverse CDF, compiled (see `ss.perflib.draws`); SciPy's for unusual parameters """
         kw = self.dist.kwds
         c, scale, loc = kw['c'], kw.get('scale', 1.0), kw.get('loc', 0.0)
-        if not (np.all(np.asarray(c) > 0) and np.all(np.asarray(scale) > 0)):
+        if not (every(np.asarray(c) > 0) and every(np.asarray(scale) > 0)):
             return super().ppf(rands)
         rvs = inverse('weibull', rands, c, scale)
-        return rvs + loc if np.any(loc) else rvs
+        return rvs + loc if some(loc) else rvs
 
     def make_rvs(self):
         """ Use SciPy rather than NumPy to include the scale parameter """

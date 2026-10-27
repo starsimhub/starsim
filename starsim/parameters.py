@@ -1389,7 +1389,7 @@ class by:
             return cache[key]
         convert = self.converter(sim, convert, year)
         sizes, index = zip(*[positions(dim) if uids is None else self.positions(sim, dim, uids) for dim in self.dims])
-        missing = [uids is None or bool(np.any(ind == n)) for ind,n in zip(index, sizes)] # Whether the value for people with no value is needed
+        missing = [uids is None or bool((ind == n).any()) for ind,n in zip(index, sizes)] # Whether the value for people with no value is needed
         key = ('grid', id(self), year, tuple(missing)) # The grid does not depend on who is asked for, so it is kept while the values are unchanged
         if cache is not None and key in cache:
             return cache[key], index

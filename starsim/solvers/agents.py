@@ -12,7 +12,6 @@ from .compartmental import Compartmental
 __all__ = ['Agents']
 
 check_counts = sc.parse_env('STARSIM_CHECK_COUNTS', False, bool) # Whether the agent engine checks the counts it keeps against a new count at each step: see ss.solvers.Agents.check_counts()
-compiled_rounds = sc.parse_env('STARSIM_COMPILED_ROUNDS', True, bool) # Whether the rounds of moves run compiled where they can (see ss.solvers.Agents.lower()); 0 runs them all in Python, e.g. to compare the two
 check_draws = sc.parse_env('STARSIM_CHECK_DRAWS', False, bool) # Whether the agent engine checks that no agent is drawn twice from a stream in a round: see ss.solvers.Agents.draw()
 ROUNDS = 2**52 # The index of the engine's draws is ROUNDS + ti*ROUND_MAX + round, apart from each distribution's own (see Agents.draw())
 ROUND_MAX = 2**20
@@ -55,6 +54,7 @@ class Agents(Engine):
         self.events = dict() # The agents who went through each transition this step
         self.also = type(mod).also_happened is not ss.Disease.also_happened # Whether the module says whom else an event happens to: see record()
         self.live = None # The number of agents in each state by group, kept up to date from the census: see census() and wrote()
+        self.unscheduled = None # The states that people have been put in other than by the engine's moves (by code, or at the start) since the last step, so that may have people with no exit scheduled; None for any state
         self.live_total = None # The number alive in each group, likewise
         self.n_counted = 0 # The agents (by UID) that the number alive has been kept for: see alive_counts()
         self.start = None # The number in each state by group at the start of the step
@@ -77,8 +77,6 @@ class Agents(Engine):
         self._started = False
         self._backfill = None # While people are back-dated: see backfill()
         self.round = (None, 0) # The step and the round of moves within it that the engine's draws are keyed by: see new_round()
-        self.lowered = False # The tables of the compiled rounds of moves, None if they cannot run compiled, or False until the first step: see lower()
-        self.lowered_reason = None
         self._drawn = {} # With STARSIM_CHECK_DRAWS, who has been drawn from each stream in this round: see draw()
         self._died = [] # Deaths by its transitions in the step: see uncount_deaths()
         self._fired_seen = {} # For each trigger on a coded module's event, who it has seen it for: see unseen_fired()
@@ -775,6 +773,8 @@ class Agents(Engine):
         if not changed.any():
             return
         entered = uids[changed & new]
+        if len(entered) and self.unscheduled is not None:
+            self.unscheduled.add(name) # Put in it other than by the engine's moves, so perhaps with no exit scheduled: see step_state()
         left = uids[changed & old]
         ng = self.sim.groups.n_groups
         if ng == 1:
@@ -793,6 +793,7 @@ class Agents(Engine):
             if not any(self.mod[state.name].raw[uids].any() for state in self.graph.people_states):
                 return # New agents, who are not in a state yet
         self.live = None
+        self.unscheduled = None # Writes are not watched while nothing is counted
         self.live_total = None
         return
 
@@ -1659,10 +1660,29 @@ class Agents(Engine):
 
     #%% Moving agents
 
+    def put(self, name, uids, value):
+        """ Put agents in a state of people (value True), or take them out, as the engine moves them (each once), keeping its count: as a write from code does (see `wrote()`), more cheaply """
+        arr = self.mod[name].raw
+        if self.live is None:
+            arr[uids] = value
+            return
+        ng = self.sim.groups.n_groups
+        groups = self.sim.groups.group_raw() if ng > 1 else None # Any changes of group (e.g. by age) are counted first, as for a write from code
+        was = arr[uids]
+        arr[uids] = value
+        if ng == 1:
+            n = np.count_nonzero(was)
+            self.live[name] = self.live[name] + (len(uids) - n if value else -n)
+        else:
+            change = np.bincount(groups[uids[~was if value else was]], minlength=ng)
+            self.live[name] = self.live[name] + (change if value else -change)
+        return
+
     def clear_exit(self, name, uids):
         """ Forget the scheduled exit of some agents from a state (which they have left), if it has scheduled exits """
         if name in self.scheduled:
-            self.mod[f'ti_exit_{name}'][uids] = np.nan
+            arr = self.mod[f'ti_exit_{name}']
+            arr.raw[uids] = arr.nan
         return
 
     def move(self, tr, src, uids):
@@ -1678,7 +1698,7 @@ class Agents(Engine):
         if tr.stays and tr.trigger is not None and src.name in self.scheduled: # Those who stay keep the exit they had (see stay())
             kept = mod[f'ti_exit_{src.name}']
             self._kept_exits.setdefault(tr.name, []).append((uids, kept.raw[uids].copy()))
-        mod[src.name][uids] = False
+        self.put(src.name, uids, False)
         self.clear_exit(src.name, uids)
         self.flowcounts[tr.name] += self.n_of(uids)
         self.events[tr.name] = uids if tr.name not in self.events else ss.uids.concatenate([self.events[tr.name], uids])
@@ -1866,7 +1886,7 @@ class Agents(Engine):
             srcs = [s for s in tr.src if s.people]
             names = [s.name for s in srcs]
             if tr.trigger.event:
-                uids = np.unique(self.new_events(tr)) # Seen whether or not anyone is in the source, so an old event does not move people who enter later
+                uids = self.new_events(tr) # Seen whether or not anyone is in the source, so an old event does not move people who enter later
             elif getattr(tr.trigger.x, 'op', None) == 'event': # A delivery's, a product's, or a coded module's event (ss.Event): news for a step (two, from a module that steps late), so moved once
                 uids = np.flatnonzero(self.unseen_fired(tr, np.asarray(self.selector.select(tr.trigger.x), dtype=bool)))
             elif any(mod[name].raw.any() for name in names):
@@ -1928,7 +1948,7 @@ class Agents(Engine):
         spec = event.spec()
         fresh = engine.unseen(self._seen, tr.name)
         uids = engine.event_uids(**spec, batches=fresh) if fresh else ss.uids()
-        return event.mothers(self.sim, uids) if isinstance(event, ss.conditions.child) else uids
+        return ss.uids(event.mothers(self.sim, uids)).unique() if isinstance(event, ss.conditions.child) else uids # Each once, in order (event_uids() gives them so)
 
     def step_per(self, ti):
         """ Births driven by a flow (`ss.birth(per=)`): children for the people who went through the transition since this last looked, made by the module that owns the transition; then whatever moves at once, including the children's own exits due now (e.g. a `dur=0` split) """
@@ -2128,6 +2148,7 @@ class Agents(Engine):
                 b.key = (self.ti - 1, 0)
             self.events = dict()
             self.live = None # Counted again
+            self.unscheduled = None # Writes are not watched while nothing is counted
             self.record_stocks()
         return
 
@@ -2265,11 +2286,13 @@ class Agents(Engine):
             return dist.rvs(uids)
         if check_draws:
             self.check_drawn(key, uids)
-        if type(dist) is ss.random and self.crn_key(key) is not None: # Most of them: the uniforms themselves, as rvs() would give them
+        plain = type(dist) is ss.random or (type(dist) is ss.expon and dist.unit is None and not dist.round and dist.pars.scale == 1) # Most of them: the uniforms themselves, or the unit exponential of a dwell time (see sample_dwell()), as rvs() would give them without its bookkeeping
+        if plain and self.crn_key(key) is not None:
             if not len(uids):
                 return np.array([], dtype=dist.hash_dtype or ss.dtypes.float) # Uniforms, as below
             slots = self.sim.people.slot_raw()
-            return ss.distributions.hash_uniforms(dist.seed, self.draw_ind(), uids if slots is None else slots[uids], dtype=dist.hash_dtype)
+            rvs = ss.distributions.hash_uniforms(dist.seed, self.draw_ind(), uids if slots is None else slots[uids], dtype=dist.hash_dtype)
+            return rvs if type(dist) is ss.random else ss.perflib.draws.many['expon'].from_u(1.0, np.asarray(rvs, dtype=np.float64), np.empty(len(rvs))) # As dist.ppf(), without its checks
         ind, ready = dist.ind, dist.ready
         dist.jump(to=self.draw_ind(), force=True)
         try:
@@ -2383,7 +2406,7 @@ class Agents(Engine):
             self.remember(uids[strained[came]])
         mod = self.mod
         name = state.name
-        mod[name][uids] = True
+        self.put(name, uids, True)
         self.stamp(name, uids, ti)
         for arr,inside in self.sets_of[name]: # Entering a set from outside it starts its clock
             outside = ~np.isin(srcs, inside)
@@ -2393,7 +2416,7 @@ class Agents(Engine):
             mod[f'late_{name}'][uids] = -0.5 if self._infecting and name in self.halved else 0.0 if not late else 0.5 if self._row is not None else 1.0
         self.record(tr, uids, srcs, self.state_index[name])
         if name in self.scheduled:
-            self.schedule(state, uids)
+            self.schedule(state, uids, entered=ti)
         return
 
     def start_phase(self, phase):
@@ -2451,9 +2474,9 @@ class Agents(Engine):
         out = ss.uids.concatenate(out)
         return out.unique() if unique else out
 
-    def schedule(self, state, members):
+    def schedule(self, state, members, entered=None):
         """
-        For the agents in a state who have just entered it: choose their branch, sample its dwell time, and schedule the exit
+        For the agents in a state who have just entered it (at `entered`, if the caller knows it; otherwise as dated): choose their branch, sample its dwell time, and schedule the exit
 
         Returns:
             Which of the members entered the state during the last step's moves (by a progression, dated at its start), after that step's
@@ -2470,17 +2493,18 @@ class Agents(Engine):
         new = members[is_new]
         if not len(new):
             return None
-        entered = mod[f'ti_{name}'].internal(new)
         missed = None
-        if self.competing[name]:
-            late = entered < self.ti # NaN (undated) is not
-            if late.any():
-                missed = np.zeros(len(members), dtype=bool)
-                missed[np.flatnonzero(is_new)[late]] = True
-        undated = np.isnan(entered) # Put in the state directly (e.g. sir.I[uids] = True), with no time of entering: they entered it now
-        if undated.any():
-            entered[undated] = self.ti
-            self.stamp(name, new[undated], self.ti)
+        if entered is None:
+            entered = mod[f'ti_{name}'].internal(new)
+            if self.competing[name]:
+                late = entered < self.ti # NaN (undated) is not
+                if late.any():
+                    missed = np.zeros(len(members), dtype=bool)
+                    missed[np.flatnonzero(is_new)[late]] = True
+            undated = np.isnan(entered) # Put in the state directly (e.g. sir.I[uids] = True), with no time of entering: they entered it now
+            if undated.any():
+                entered[undated] = self.ti
+                self.stamp(name, new[undated], self.ti)
         best = np.full(len(new), np.inf)
         which = np.full(len(new), -1, dtype=np.int8)
 
@@ -2654,14 +2678,6 @@ class Agents(Engine):
         with np.errstate(divide='ignore'): # A rate of 0 (e.g. outside a where=) is a dwell that does not end until it changes: see rescale_exits()
             return np.asarray(rvs, dtype=float)/self.adjusted(tr.name, uids) # An adjustment multiplies the rate, so divides the duration
 
-    #%% Compiled rounds
-
-    def lower(self):
-        """ Whether the rounds of moves of this disease run compiled (see `ss.solvers.Lowered`), worked out at its first step: `self.lowered` has their tables, or is None, and `self.lowered_reason` then says why """
-        self.lowered_reason = ss.solvers.Lowered.reason(self) if compiled_rounds else 'STARSIM_COMPILED_ROUNDS=0'
-        self.lowered = ss.solvers.Lowered(self) if self.lowered_reason is None else None
-        return
-
     def branches_of(self, name):
         """ The branches out of a state, chosen on entry: those with a share, and the one that takes the rest """
         exits = self.graph.exits[name]
@@ -2704,6 +2720,7 @@ class Agents(Engine):
         people.step_die() # Those who died before the start are gone before it is counted
         people.remove_dead()
         self.live = None # Counted again
+        self.unscheduled = None # Writes are not watched while nothing is counted
         return
 
     def alive_in_states(self, uids):
@@ -2812,27 +2829,21 @@ class Agents(Engine):
         self.place_newcomers()
         self.renew_events()
         self.step_lifetables()
-        members = self.start_counts()
+        quick = set() if self.unscheduled is None or self.late or any(self.competing[name] for name in self.listed) else {name for name in self.listed if name not in self.unscheduled and self.exits_of[name] and not self.rescaled_of(name)} # States with only scheduled exits, all scheduled already: who leaves them is found in one pass over the agents, with no need to list who is in them (see leave())
+        members = self.start_counts([name for name in self.listed if name not in quick])
         self.step_counts(dt) # States that are not people, from the people at the start of the step, so that a rate of people that uses a count (a bite rate) takes it once advanced
-        missed = {name:self.schedule(self.graph.states[name], members[name]) for name in self.listed} # Who has a draw of the competing rates to catch up on, by state: see schedule()
-        if self.lowered is False:
-            self.lower()
-        if self.lowered is not None: # Who leaves now, and the same-step cascade, compiled
-            for name in self.lowered.rescale: # What is left of the dwell times that changed in time, as in leave()
-                if len(members[name]):
-                    self.rescale_exits(self.graph.states[name], members[name])
-            self._drawn_ti = ti
-            self._members = None
-            self.lowered.run(1, ti, members)
-        else:
-            for name in self.listed:
-                if len(members[name]):
-                    self.leave(self.graph.states[name], members[name], missed[name])
-            self._drawn_ti = ti
-            self._members = None
-            self._row = np.zeros(len(mod.rel_sus.raw), dtype=bool) # Who has had the competing rates of the state they entered in this row: see finish_moves()
-            self.finish_moves(ti)
-            self._row = None
+        missed = {name:self.schedule(self.graph.states[name], members[name]) if self.unscheduled is None or name in self.unscheduled else None for name in members if name in self.listed} # Who has a draw of the competing rates to catch up on, by state: see schedule()
+        self.unscheduled = set() if self.live is not None else None
+        for name in self.listed:
+            if name in quick:
+                self.leave(self.graph.states[name])
+            elif len(members[name]):
+                self.leave(self.graph.states[name], members[name], missed[name])
+        self._drawn_ti = ti
+        self._members = None
+        self._row = np.zeros(len(mod.rel_sus.raw), dtype=bool) # Who has had the competing rates of the state they entered in this row: see finish_moves()
+        self.finish_moves(ti)
+        self._row = None
         self.step_per(ti)
         self.step_births(dt)
         self.step_transfers(dt)
@@ -2851,8 +2862,8 @@ class Agents(Engine):
         self.forced = {name:uids for name,uids in self.forced.items() if graph.transitions[name].contact}
         return
 
-    def start_counts(self):
-        """ The number in each state at the start of the step, which the rates read whatever order they are taken in; returns who is in each state that is stepped through """
+    def start_counts(self, listed):
+        """ The number in each state at the start of the step, which the rates read whatever order they are taken in; returns who is in each state that is `listed` (some of those stepped through) """
         mod = self.mod
         sim = self.sim
         people_states = self.graph.people_states
@@ -2860,22 +2871,24 @@ class Agents(Engine):
             sim.groups.group_raw() # Groups that change by themselves (age groups) are moved between the counts now: see moved_groups()
         if sim.groups.group_fold is not None: # Counts by place taken from the agents (see local_count()): counted again at each step
             self.live = None
+            self.unscheduled = None # Writes are not watched while nothing is counted
         elif self.live is not None and check_counts:
             self.check_counts()
         if self.live is None:
             listed = self.listed if sim.mixing.space is None or sim.groups.group_fold is None else [state.name for state in people_states]
             members = self.census(listed) # Who is where before anyone moves, in one pass over the agents
-        else: # Counted already: only the states that are stepped through are listed
-            members = {name:ss.uids(ss.perflib.passes.flatnonzero(mod[name].raw)) for name in self.listed}
+        else: # Counted already: only those asked for are listed
+            members = {name:ss.uids(ss.perflib.passes.flatnonzero(mod[name].raw)) for name in listed}
         self.start = {name:vals.copy() for name,vals in self.live.items()}
         self.start_weighted = {state.name:self.weighted_count(state) for state in people_states} if sim.people.scale.weighted else None
         self._members = members
         return members
 
-    def leave(self, state, uids, missed=None):
+    def leave(self, state, uids=None, missed=None):
         """
         At the start of the step: who of the agents in a state leaves it now, by a scheduled exit that is due, or by its competing rates
-        (one draw per agent); `missed` are those who have a draw of the competing rates to catch up on (see `schedule()`)
+        (one draw per agent); `missed` are those who have a draw of the competing rates to catch up on (see `schedule()`). With no `uids`,
+        the state has only scheduled exits, all scheduled already (see `step_state()`), so who is due is found in one pass over the agents
 
         An agent marked `late_<state>` (see `enter()`) entered after the draws of the step it entered in: the share of a step it missed
         is drawn in the step its exit is due, so it faces the competing rates for as long as the dwell time says; one marked as infected
@@ -2885,6 +2898,17 @@ class Agents(Engine):
         name = state.name
         dt = self.dt
         candidates = self.exits_of[name]
+        if uids is None:
+            exits = mod[f'ti_exit_{name}']
+            due = ss.uids(np.flatnonzero(mod[name].raw & (exits.raw <= self.ti))) # Not set is stored as the lowest step, so those put in the state through its NumPy array (which is not watched) are among them
+            unset = exits.raw[due] == exits.nan
+            if unset.any(): # Scheduled now, as at the start of the step (see schedule()), and taken if that is due
+                self.schedule(state, due[unset])
+                due = due[exits.raw[due] <= self.ti]
+            which = mod[f'exit_{name}'].raw[due] if len(candidates) > 1 else None
+            for i,tr in enumerate(candidates):
+                self.move(tr, state, due if which is None else due[which == i])
+            return
         competing = self.competing[name]
         late = missed
         flagged = None
@@ -3335,10 +3359,7 @@ class Agents(Engine):
             self.move(tr, src, uids)
         self._infecting = True # See enter()
         try:
-            if self.lowered: # Compiled (see lower())
-                self.lowered.run(2, mod.ti)
-            else:
-                self.finish_moves(mod.ti) # Infections are dated at the step's index, its end
+            self.finish_moves(mod.ti) # Infections are dated at the step's index, its end
         finally:
             self._infecting = False
         self.step_per(mod.ti)
@@ -3538,9 +3559,11 @@ class Agents(Engine):
             if ref <= 0:
                 continue
             mult = lambda inds, trg: ss.connectors.route_mult(self, tr.name, route, inds, trg) # From the modifiers of its contacts and of the transmission on it
-            weights = mod.rel_trans.raw*0
+            weights = None
             for state,c in coefs.items():
-                weights = weights + mod[state.name].raw*(c/ref)*state.rel_trans
+                share = (c/ref)*state.rel_trans
+                w = mod[state.name].raw if np.ndim(share) == 0 and share == 1 else mod[state.name].raw*share # The usual case, one source state, needs no product
+                weights = w if weights is None else weights + w
             rel_trans = mod.rel_trans.asnew(times(weights*mod.rel_trans.raw, self.mult_raw('rel_trans'), by_strain), copy=False)
             beta = -np.expm1(-ref*dt)
             if isinstance(route, ss.Network):

@@ -6,8 +6,7 @@ The same `ss.transitions.Graph` can be run as compartments (`ode`, `binomial`, `
 the sim's loop like any other module code.
 
 The modules: `engine` (what the engines share), `mixing` (who meets whom in a
-compartmental run), `compartmental` and `agents` (the two engines), `lowered`
-(the rounds of moves of a disease as agents, compiled where they can be), `crossing`
+compartmental run), `compartmental` and `agents` (the two engines), `crossing`
 (diseases tracked jointly), `choose` (which solver runs a model, and why),
 `deliveries` (what a delivery does differently in a compartmental run), and
 `particles` (many runs of a program stepped together, for a particle filter).
@@ -18,7 +17,6 @@ from .mixing import *
 from .compartmental import *
 from .crossing import *
 from .agents import *
-from .lowered import *
 from .choose import *
 from .deliveries import *
 from .particles import *
