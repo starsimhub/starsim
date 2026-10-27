@@ -93,7 +93,7 @@ Everything spatial is in the submodule `ss.geo`.
 | Name | What it is |
 |---|---|
 | `ss.Network` | Base class for networks |
-| `ss.RandomNet` `ss.SexualNet` | Individual-level networks (Starsim's; its other networks are available too, and the library's, e.g. `ssl.StaticNet` for a NetworkX graph). `ss.SexualNet` is partnerships between two groups (`between=`): men and women (`'mf'`, the default), men (`'mm'`), or e.g. sex workers and clients (`('fsw', 'client')`), with acts per unit time in each, as in Starsim 3 (people with no partner are paired), or with a target number of partners at a time (`n_contacts`, `concurrency`, `max_contacts`). Partnerships between anyone (needle sharing), and EpiModel's targets (`match=`), are the library's `ssl.DegreeNet`; more structured sexual networks are STIsim's |
+| `ss.RandomNet` `ss.SexualNet` | Individual-level networks (Starsim's; its other networks are available too, and the library's, e.g. `ssl.StaticNet` for a NetworkX graph). `ss.SexualNet` is partnerships between two groups (`between=`): men and women (`'mf'`, the default), men (`'mm'`), or e.g. sex workers and clients (`('fsw', 'client')`), with acts per unit time in each, as in Starsim 3 (people with no partner are paired), or with a target number of partners at a time (`n_contacts`, `concurrency`, `max_contacts`). Partnerships between anyone (needle sharing), and EpiModel's targets (`match=`), are the library's `ss.DegreeNet`; more structured sexual networks are STIsim's |
 | `ss.MixingPool` `ss.MixingPools` | Group-level mixing; `ss.MixingPool(n_contacts=10)` with no groups is homogeneous |
 | **`ss.contacts`** | A contact matrix as mixing pools: a named one, `ss.contacts('Kenya')`, or one given as a matrix (over several dimensions together with `dims=`) |
 | **`ss.geo.geography`** | A geography: names, populations, centroids, distances; named (`ss.geo.geography('Kenya', level=1)`) or given directly |
@@ -182,7 +182,7 @@ A bare number in any of these slots takes the slot's type and the sim's unit ([0
 
 | Slot | A bare number is | Appears on |
 |---|---|---|
-| `beta=` | a rate per unit time with no network; a probability per contact on a network without acts; a probability per act on a network with acts (`ss.SexualNet`, `ssl.DegreeNet(acts=...)`), as `ss.peract`. A dict gives one value per network; directions are named with `ss.peract(m2f=..., f2m=...)` (a pair is an error) | `ss.SIR`, `ss.SIS`, `ss.SEIR` and the library's diseases |
+| `beta=` | a rate per unit time with no network; a probability per contact on a network without acts; a probability per act on a network with acts (`ss.SexualNet`, `ss.DegreeNet(acts=...)`), as `ss.peract`. A dict gives one value per network; directions are named with `ss.peract(m2f=..., f2m=...)` (a pair is an error) | `ss.SIR`, `ss.SIS`, `ss.SEIR` and the library's diseases |
 | `rate=`, and a bare number after `@` | a rate (hazard) per unit time | `ss.Transition` and every shorthand constructor |
 | `dur=` | a duration; a scalar means an exponential dwell time with that mean | `ss.Transition`, `ss.transfer`, networks |
 | `p=` | a branch probability | `ss.Transition`, `ss.transfer` |

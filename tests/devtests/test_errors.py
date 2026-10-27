@@ -9,7 +9,6 @@ import numpy as np
 import pandas as pd
 import sciris as sc
 import starsim as ss
-import starsim.library as ssl
 import starsim.interop
 
 kw = dict(verbose=0)
@@ -243,7 +242,7 @@ def _(): ss.Sim(n_agents=100, **kw).init().people.age & True
 # %% Warnings
 
 @trigger('against a target of 0.7', RuntimeWarning)
-def _(): ss.Sim(sir(), networks=ssl.DegreeNet(n_contacts=0.7, dur=1000), n_agents=200, stop=10, **kw).run().networks[0].check(n_runs=2)
+def _(): ss.Sim(sir(), networks=ss.DegreeNet(n_contacts=0.7, dur=1000), n_agents=200, stop=10, **kw).run().networks[0].check(n_runs=2)
 
 @trigger('is at one of its bounds', ss.errors.AtBound)
 def _(): fittable(beta=ss.par(0.1, bounds=[0.05, 0.15])).fit()

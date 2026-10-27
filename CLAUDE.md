@@ -86,7 +86,7 @@ uv add starsim[dev]  # With dev dependencies
 - `geo.py`: Places and the movement between them (`ss.geo.geography`, `ss.geo.Mobility`, `ss.geo.gravity`)
 - `loop.py`: Main simulation integration loop
 - `modules.py`: Base module classes and update logic
-- `networks.py`: Networks and mixing pools
+- `networks.py`: Networks and mixing pools, including partnerships with a target number of partners (`ss.DegreeNet`, and its subclass `ss.SexualNet`, which adds debut and participation)
 - `parameters.py`: Parameter containers (`ss.Pars`, `ss.SimPars`) and values that vary by level or in time (`ss.by`, `ss.timeseries`, `ss.seasonal`)
 - `people.py`: The people (`ss.People`, `ss.people()`, `ss.ppl`)
 - `products.py`: Vaccine and treatment deployment
@@ -107,7 +107,7 @@ uv add starsim[dev]  # With dev dependencies
 Example and reference modules that build on core Starsim but are not part of it, available via `import starsim.library as ssl` (e.g. `ssl.Cholera` or `ssl.diseases.Cholera`):
 - `diseases/`: HIV, cholera, Ebola, and measles
 - `mnch/`: Maternal, newborn, and child health (fetal health, maternal infections, neonatal sepsis)
-- `networks/`: Household, spatial, and theoretical (e.g. Erdős–Rényi) networks
+- `networks/`: Household, cluster, spatial, and theoretical (e.g. Erdős–Rényi) networks
 
 Core disease base classes (Disease, Infection, NCD, SIR, SIS, SEIR) live in `starsim/diseases.py`.
 

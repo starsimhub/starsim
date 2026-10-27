@@ -1137,7 +1137,7 @@ def init_capabilities(sim, modules):
                 add(f'strains: {mod.name}', f'the strains of "{mod.name}" protect each other or share a state, which only agents follow (or track them jointly: ss.modify(..., where=) between them)', fatal=True)
             continue
         if graph is None:
-            if isinstance(mod, ss.networks.DegreeTargets): # Lasting partnerships (ss.SexualNet, ssl.DegreeNet): approximate, so 'auto' keeps agents (R4)
+            if isinstance(mod, ss.DegreeNet): # Lasting partnerships (ss.DegreeNet, ss.SexualNet): approximate, so 'auto' keeps agents (R4)
                 add(f'network: {mod.name}', f'"{mod.name}" ({type(mod).__name__}) has lasting partnerships, which agents follow exactly')
             elif isinstance(mod, ss.Network): # One with no approximation is refused by the layout of the mixing (see ss.solvers.Mixing.init())
                 if mod.mean_contacts(sim)[0] is not None:

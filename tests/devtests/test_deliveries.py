@@ -702,7 +702,7 @@ def test_trace():
     def notified(memory):
         S, I, D = ss.states('S I D')
         hiv = ss.Disease(infection=ss.Transition(S, I, rate=ss.prob(0.02)*(I + D)), diagnosis=ss.Transition(I, D, rate=ss.peryear(1.0)), init_prev=0.1, name='hiv')
-        net = ssl.DegreeNet(n_contacts=0.7, dur=ss.weeks(10), acts=ss.freqperweek(2), memory=memory)
+        net = ss.DegreeNet(n_contacts=0.7, dur=ss.weeks(10), acts=ss.freqperweek(2), memory=memory)
         pn = ss.screen(ss.Diagnostic(sensitivity=1.0), who=hiv.diagnosis, trace='degreenet', name='pn')
         sim = ss.Sim(hiv, networks=net, interventions=pn, n_agents=2000, unit='week', stop=ss.years(3), rand_seed=1, verbose=0).run()
         return sim.results.pn.delivered.sum()/sim.results.hiv.diagnosis.sum()

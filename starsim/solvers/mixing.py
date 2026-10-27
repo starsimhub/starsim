@@ -147,7 +147,7 @@ class Mixing(Telling):
                 self.terms.append(self.age_matrix(net, beta))
             elif isinstance(net, ss.MixingPool): # A pool of some people (src= or dst=) is refused by its capability record: see ss.solvers.init_capabilities()
                 self.terms.append(sc.objdict(kind='homogeneous', contacts=self.mean(net.pars.n_contacts, sim.unit_base)*beta, name=net.name))
-            elif isinstance(net, ss.networks.DegreeTargets): # Lasting partnerships (ss.SexualNet, ssl.DegreeNet): the partner-change model
+            elif isinstance(net, ss.DegreeNet): # Lasting partnerships (ss.DegreeNet, ss.SexualNet): the partner-change model
                 terms = self.partnerships(net)
                 what = f'"{net.name}" ({type(net).__name__}) uses the partner-change model: partnerships formed at {terms[0].partnership.formed:.3g} per person per {sim.unit_name}, each with the chance it transmits over its whole length, from people drawn from the population (Anderson and May\'s model: it counts at most one transmission in each partnership, from a partner in the source state when it forms, so it leaves out reinfection within a partnership and concurrency, and runs low when a curable infection passes within a partnership faster than it is cleared, or with concurrency; it runs high for a long infection in long partnerships, where infection stays within pairs)'
                 if approx is False:
@@ -178,7 +178,7 @@ class Mixing(Telling):
 
     def partnerships(self, net):
         """
-        Lasting partnerships (`ss.SexualNet`, `ssl.DegreeNet`) under the partner-change model: a matrix of the
+        Lasting partnerships (`ss.DegreeNet`, `ss.SexualNet`) under the partner-change model: a matrix of the
         partnerships formed per unit time by one person in each cell (a side, by a level of a dimension) with people in each
         other, `φ_i·m_ij`, with `φ_i = n_i/D̄` (partners at a time over how long partnerships last), split by the side of the
         partner, since the chance a partnership transmits differs by direction (see `Compartmental.partnership_chance()`)
@@ -197,10 +197,10 @@ class Mixing(Telling):
         if p.get('where') is not None:
             raise ss.CapabilityError(f'cannot run "{net.name}" with solver="{self.solver}": the partner-change model takes partnerships between everyone, or by sex (ss.SexualNet), not among some people (where=). {fix}')
 
-        # The side of each group: by sex on a sexual network, whose partnerships are a man and a woman (between='mf') or two men ('mm')
-        sexual = isinstance(net, ss.SexualNet)
-        if sexual and net.forms_own:
+        # The side of each group: by sex on a network between men and women (between='mf') or men ('mm')
+        if net.forms_own:
             raise ss.CapabilityError(f'cannot run "{net.name}" with solver="{self.solver}": {type(net).__name__} forms its own partnerships (its own step()), which only agents follow. {fix}')
+        sexual = net.groups is not None
         if sexual and not set(net.groups) <= {'male', 'female'}:
             raise ss.CapabilityError(f'cannot run "{net.name}" with solver="{self.solver}": the partner-change model takes partnerships by sex (between="mf" or "mm"), not between {net.groups[0]} and {net.groups[1]}. {fix}')
         two_sided = sexual and net.sides is not None # Each partnership has one person of each side
@@ -236,9 +236,9 @@ class Mixing(Telling):
         cell_side = np.repeat(np.arange(n_sides), n_lev)
         cell_lev = np.tile(np.arange(n_lev), n_sides)
         mean = lambda v: float(sc.dcp(v).init(force=True).rvs(100_000).mean()) if isinstance(v, ss.Dist) and not any(k in v.pars for k in ['lam', 'v', 'mean', 'loc']) else self.mean(v, unit)
-        if sexual: # Among people who take part, after their debut: one partner each, or the target
-            part = p.participation.pars.get('p', 1.0) if isinstance(p.participation, ss.bernoulli) else 1.0
-            debut = self.mean(p.debut, ss.years) # An age, in years
+        if sexual: # Among people who take part, after their debut (on ss.SexualNet): one partner each, or the target
+            part = p.participation.pars.get('p', 1.0) if isinstance(p.get('participation'), ss.bernoulli) else 1.0
+            debut = self.mean(p.debut, ss.years) if 'debut' in p else 0 # An age, in years
             pyramid = sim.pyramid()
             if pyramid is not None:
                 ages, counts = pyramid
@@ -246,7 +246,7 @@ class Mixing(Telling):
                 older = 1 - np.interp(debut, ends, np.append(0, np.cumsum(counts))/np.sum(counts))
             else: # Agents' ages with no age data: uniform from 0 to 60
                 older = np.clip(1 - debut/60, 0, 1)
-            per = [1.0] if p.get('n_contacts') is None else [mean(v) for v in net.per_group(p.n_contacts)] # One target, or one for each side
+            per = [1.0] if p.get('n_contacts') is None else [mean(p.n_contacts[g]) for g in net.groups] if isinstance(p.n_contacts, dict) else [mean(p.n_contacts)] # One target, or one for each side
             k = float(part)*older*np.array(per)[cell_side if len(per) > 1 else np.zeros(size, dtype=int)]
         elif by is not None:
             k = np.array([mean(v) for v in sc.tolist(by.values)])[cell_lev]
@@ -264,7 +264,7 @@ class Mixing(Telling):
         else:
             mix = np.broadcast_to(stubs[None, :], (size, size)).copy()
         mix = np.divide(mix, mix.sum(axis=1, keepdims=True), out=np.zeros((size, size)), where=mix.sum(axis=1, keepdims=True)>0)
-        if p.get('match'): # A share at the same level, as ssl.DegreeNet pairs them (see its match_pairs())
+        if p.get('match'): # A share at the same level, as ss.DegreeNet pairs them (see its match_pairs())
             share = list(p.match.values())[0]
             same = cell_lev[:, None] == cell_lev[None, :]
             shares = [np.bincount(cell_lev[cell_side == s], weights=stubs[cell_side == s], minlength=n_lev) for s in range(n_sides)]

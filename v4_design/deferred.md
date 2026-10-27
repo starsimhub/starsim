@@ -98,7 +98,7 @@ Set aside while building [oct22/plan.md](oct22/plan.md), each with what it would
 - FP52, implemented rather than refused: `ss.change`/`ss.modify` on a value over `to` in a `p=` table (FPsim's method switching). M.
 - Sugar for a product whose holding is a user-declared state module (`ss.Vaccine(waning=prot)`), about 40–60 lines; wait until a downstream package asks (A3).
 - A module given to a sim and never run raises on `.results`, pointing to `sim.analyzers.<name>` (TB §4.4): small, but touches every module's attribute access.
-- `ss.SexualNet`: `n_contacts=ss.by(risk=...)`, several `match=` properties (as `ssl.DegreeNet` has), and one-off contacts between two groups.
+- `ss.SexualNet`/`ss.DegreeNet`: one-off contacts between two groups.
 - ST49 under the compartmental solvers (one beta per route per source state). S.
 - A family's result with strata (HP50's second half). S.
 - `0.275*ss.peract(...)` (a number times a per-act value directly) is a `TypeError`; it could scale the per-act hazard. S.
@@ -220,7 +220,6 @@ Looked at whether v4 should support modeling paradigms beyond the ODE, chain-bin
 ## From the October 27 plans
 
 - **Owned random streams** (oct27/architecture_simplicity_review.md §2; Cliff skeptical): a distribution reachable under two attribute names takes the name the search finds first, so adding an alias can change its seed. If it matters, name a distribution when it is first set as a module's attribute (later aliases then don't change it), rather than a registry. S.
-- **`ssl.DegreeNet`** (oct27/plan.md): kept, since the EpiModel importer and three user-guide pages use it; Cliff asked to drop it. Move what the importer needs into `ss.SexualNet` (EpiModel's networks have no sexes) or keep it. S.
 - **A compartmental form for an escape** (oct27/plan.md): with `ss.Transition(before=)` removed, `rate*(X.time < d)` runs as agents only. S–M.
 - **A whole JAX ODE run of births with a fixed delay** (oct27 review, `review/solvers.md`): it differs from the kernels (the a7 `births` model: `M0` by up to 38 in about 668, `NP` ends at 1,673 against 1,773), already so at `acef3c7b`. Find which step of the delay or the births the JAX run takes differently. S–M.
 

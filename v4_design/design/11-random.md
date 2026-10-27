@@ -48,7 +48,7 @@ Each built-in module says in its docstring whether it keeps CRN. A module is CRN
 | `ss.PrenatalNet`, `ss.MaternalNet`, `ss.PostnatalNet`, `ss.BreastfeedingNet`, `ssl.RandomSafeNet`, `ssl.ErdosRenyiNet`, `ssl.DiskNet`, `ssl.StaticNet`, `ssl.NullNet`, `ss.Network` with its edges given | Safe |
 | `ssl.ClusterNet`, `ssl.HybridNet` | Safe, unless `dynamic=True` and people are born or die |
 | `ss.RandomNet` | Not safe when people are born or die, unless `dynamic=False`: one death rewires almost every edge (pairing by position in a list of all agents) |
-| `ss.SexualNet`, `ssl.DegreeNet` | Not safe when people are born or die: people are paired in turn, so one fewer shifts the partners of those after them |
+| `ss.SexualNet`, `ss.DegreeNet` | Not safe when people are born or die: people are paired in turn, so one fewer shifts the partners of those after them |
 | `ssl.HouseholdNet` | Not safe unless `dynamic=False`: the partners who move out are drawn together, without replacement |
 
 "Born or die" means differently in the two scenarios: with the same people alive in both, every network is the same in both, except `ssl.HouseholdNet` when pregnancies differ.

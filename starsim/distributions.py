@@ -60,7 +60,7 @@ def inverse(name, rands, *pars, big=None, fallback=None):
         fallback (func): the inverse CDF to use there, as a function of the uniforms and the indices of the draws
     """
     u = np.asarray(rands, dtype=np.float64)
-    pars = [float(p) if np.ndim(p) == 0 else np.asarray(p, dtype=np.float64) for p in pars]
+    pars = [float(p) if isinstance(p, (int, float)) or np.ndim(p) == 0 else np.asarray(p, dtype=np.float64) for p in pars]
     out = ss.perflib.draws.many[name](*pars, u, np.empty(len(u)))
     if big is not None and np.any(big):
         inds = np.flatnonzero(np.broadcast_to(big, u.shape))
@@ -75,6 +75,10 @@ def every(x):
 def some(x):
     """ np.any(x), likewise """
     return x.any() if isinstance(x, np.ndarray) else bool(x)
+
+def positive(x):
+    """ Whether a parameter is above 0 everywhere: a number (the usual case) tested in Python, anything else as an array """
+    return x > 0 if isinstance(x, (int, float)) else every(np.asarray(x) > 0)
 
 
 static_types = (int, float, bool, type(None), np.number, type) # Parameter values that cannot change without being replaced
@@ -763,12 +767,12 @@ class Dist:
 
     def process_size(self, n=1):
         """ Handle an input of either size or UIDs and calculate size, UIDs, and slots; not for the user """
-        if np.isscalar(n) or isinstance(n, tuple):  # If passing a non-scalar size, interpret as dimension rather than UIDs iff a tuple
+        if not isinstance(n, ss.uids) and (np.isscalar(n) or isinstance(n, tuple)):  # If passing a non-scalar size, interpret as dimension rather than UIDs iff a tuple
             uids = None
             slots = None
             size = n
         else:
-            uids = ss.uids(n)
+            uids = n if isinstance(n, ss.uids) else ss.uids(n)
             if len(uids):
                 if not ss.options.crn:
                     # Fast non-CRN path: draw exactly one number per UID directly, with no
@@ -826,6 +830,24 @@ class Dist:
         signature = self.signature() if call else None
         self._static = None if signature is None else (signature, self._pars, spars)
         return spars
+
+    def resolved(self):
+        """
+        Whether a draw for some agents is just `ppf()` of their uniforms: the parameters are plain values (processed once, and again only if
+        one is replaced; see `process_pars()`), and the draw has no unit or rounding to apply after it; not for the user. For a caller that
+        makes the uniforms itself (e.g. the agent engine, keyed by its rounds of moves: see `ss.solvers.Agents.draw()`)
+        """
+        if self._use_ppf is False or self.unit is not None or self.round:
+            return False
+        signature = self.signature()
+        if signature is None:
+            return False
+        static = self._static
+        if static is not None and same_objects(static[0], signature):
+            self._pars = static[1] # As process_pars() would reuse them
+        else:
+            self.process_pars()
+        return True
 
     def signature(self):
         """ Each parameter and what it is scaled by, if the parameters are all plain values (otherwise None); not for the user """
@@ -1117,7 +1139,7 @@ class Dist:
         # Store the pre-call state. Only needed to support CRN reset() or an explicit
         # rvs(reset=True) resample; under crn=False (and no reset) the per-draw PCG64
         # state-dict copy is pure overhead, so skip it.
-        if ss.options.crn or reset:
+        if reset or ss.options.crn:
             self.make_history()
 
         # Check if any keywords are callable -- parameters shouldn't need to be reprocessed otherwise
@@ -1356,10 +1378,11 @@ class normal(Dist):
 
     def ppf(self, rands):
         """ The inverse CDF: the same arithmetic as SciPy's, without its checking of the arguments, which is most of the cost of a small draw """
-        scale = np.asarray(self.dist.kwds['scale'])
-        if not every(scale > 0): # Leave the unusual cases to SciPy
+        kwds = self.dist.kwds
+        scale = kwds['scale']
+        if not positive(scale): # Leave the unusual cases to SciPy
             return super().ppf(rands)
-        return sp_special.ndtri(rands)*scale + np.asarray(self.dist.kwds['loc'])
+        return sp_special.ndtri(rands)*np.asarray(scale) + kwds['loc']
 
 
 class truncnorm(Dist):
@@ -1449,10 +1472,11 @@ class lognorm_im(Dist):
         return spars
 
     def ppf(self, rands):
-        s = np.asarray(self.dist.kwds['s'])
-        scale = np.asarray(self.dist.kwds['scale'])
-        if every(s > 0) and every(scale > 0): # The same arithmetic as SciPy's, without its checking of the arguments, which is most of the cost of a small draw
-            return np.exp(s*sp_special.ndtri(rands))*scale + np.asarray(self.dist.kwds['loc'])
+        kwds = self.dist.kwds
+        s, scale = kwds['s'], kwds['scale']
+        if positive(s) and positive(scale): # The same arithmetic as SciPy's, without its checking of the arguments, which is most of the cost of a small draw
+            return np.exp(np.asarray(s)*sp_special.ndtri(rands))*np.asarray(scale) + kwds['loc']
+        s = np.asarray(s)
         rvs = Dist.ppf(self, rands)
         if some(s == 0): # SciPy gives NaN for sigma=0, but NumPy (and the limit) gives exp(mean)
             rvs = np.where(s == 0, self.dist.kwds['scale'], rvs)
@@ -1531,7 +1555,7 @@ class expon(Dist):
     def ppf(self, rands):
         """ The inverse CDF, compiled (see `ss.perflib.draws`); SciPy's for unusual parameters """
         scale, loc = self.dist.kwds.get('scale', 1.0), self.dist.kwds.get('loc', 0.0)
-        if not every(np.asarray(scale) > 0):
+        if not positive(scale):
             return super().ppf(rands)
         rvs = inverse('expon', rands, scale)
         return rvs + loc if some(loc) else rvs

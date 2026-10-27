@@ -1108,16 +1108,23 @@ def test_value():
     for x in [1., np.array(1.), np.ones(2)]: # After, it is a value, whatever the shape of the other operand
         assert np.all(x - p == 0.7) and not isinstance(x - p, ss.expressions.Expr)
 
-    class Mosquitoes(ss.Module): # Read from code: values that vary as their value now, in the sim's unit; a typed value stays typed
+    class Mosquitoes(ss.Module): # Read from code: values that vary as their value now, numbers as numbers in the sim's unit; a typed value, or one that varies of typed values, typed
         def __init__(self):
             super().__init__()
-            self.define_pars(bites=ss.perday(0.3), f=ss.by(sex=[0.6, 0.8]), em=ss.timeseries({'2000-01-01':ss.peryear(1), '2002-01-01':ss.peryear(2)}))
+            self.define_pars(bites=ss.perday(0.3), f=ss.by(sex=[0.6, 0.8]), em=ss.timeseries({'2000-01-01':1/365, '2002-01-01':2/365}),
+                             death=ss.peryear(2), death_ts=ss.timeseries({'2000-01-01':ss.peryear(1), '2002-01-01':ss.peryear(2)}))
+            self.probs = []
         def step(self):
             sir = self.sim.diseases.sir
-            self.read = [self.pars.bites, 1*self.pars.f, np.exp(self.pars.em) - 1, float(self.pars.em), self.pars.em > 0, 1*sir.pars.beta, float(sir.pars.beta)]
+            self.probs.append([self.pars.death.to_prob(), self.pars.death_ts.to_prob()]) # The same code, whichever form the rate is given in
+            self.read = [self.pars.bites, 1*self.pars.f, np.exp(self.pars.em) - 1, float(self.pars.em), self.pars.em > 0, 2*self.pars.death_ts, 1*sir.pars.beta, float(sir.pars.beta)]
     sim = ss.Sim(ss.SIR(beta=0.3), modules=Mosquitoes(), interventions=ss.change('sir.pars.beta', at='2001-01-01', to=0.1), start='2000-01-01', stop='2003-01-01', unit='day', dt=ss.years(1), n_agents=200, verbose=0).run()
-    bites, f, em, em_float, positive, beta, raw = [m for m in sim.modules if isinstance(m, Mosquitoes)][0].read
+    mosq = [m for m in sim.modules if isinstance(m, Mosquitoes)][0]
+    bites, f, em, em_float, positive, death2, beta, raw = mosq.read
     assert isinstance(bites, ss.perday) and np.allclose(f, [0.6, 0.8]) and np.isclose(em, np.expm1(2/365)) and np.isclose(em_float, 2/365) and positive
+    probs = np.array(mosq.probs)
+    assert np.allclose(probs[:,0], -np.expm1(-2)) and np.allclose(probs[:,1], -np.expm1(-np.array([1, 1, 2]))) and np.isclose(*probs[-1]), 'A typed rate and a time series of them convert alike'
+    assert isinstance(death2, ss.peryear) and death2.value == 4, 'Arithmetic on a time series of typed values is typed arithmetic'
     assert np.isclose(beta, 0.1) and raw == 0.3, 'Arithmetic applies the change (to 0.1 per day); float() is the value the parameter holds'
     assert isinstance(ss.timeseries({2000:1, 2001:2})*2, ss.expressions.Expr), 'Outside a sim, it is an expression'
 

@@ -344,7 +344,7 @@ class Delivery(ss.products.EventSource, Intervention):
         trace (str/Network/list): contact tracing: deliver to the contacts, in this network (or these), of the people that the event in
             who= selects, instead of to them; the condition and `coverage=` then apply to the contacts. Agents only, since only networks
             know who someone's contacts are. A network with `memory=` also gives the partnerships of that long ago that have ended
-            (e.g. `ssl.DegreeNet(..., memory=ss.months(12))`, to notify the partners of the past year)
+            (e.g. `ss.DegreeNet(..., memory=ss.months(12))`, to notify the partners of the past year)
         when (func): deliver only on the steps where this function of the sim returns True
         deliver (func): a function of the sim returning who receives it this step (UIDs, or a number per group in a compartmental
             run); replaces `where`, `coverage`, and the rounds

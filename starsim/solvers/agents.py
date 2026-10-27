@@ -1213,10 +1213,9 @@ class Agents(Engine, Transmission):
             return np.ones(np.size(uids))
         uids = self._uids if uids is None else uids
         if self.is_lifelong(by):
-            vals = self.lifelong_table(id(by), lambda new: (lambda grid, index: grid[index])(*by.lookup_grid(self.sim, self.convert, year=self.year, cache=self.cache, uids=new)))
+            vals = self.lifelong_table(id(by), lambda new: by.lookup(self.sim, self.convert, year=self.year, cache=self.cache, uids=new))
             return vals.copy() if uids is None else vals[uids] # Everyone, or these agents
-        grid, index = by.lookup_grid(self.sim, self.convert, year=self.year, cache=self.cache, uids=uids)
-        return grid[index]
+        return by.lookup(self.sim, self.convert, year=self.year, cache=self.cache, uids=uids)
 
     def is_lifelong(self, by):
         """ Whether a value by people's properties is the same for each person for the whole run: by sex alone, with values that do not change in time """
@@ -2531,10 +2530,9 @@ class Agents(Engine, Transmission):
         if check_draws:
             self.check_drawn(key, uids)
         how = self._draw_how.get(key)
-        if how is None: # Most of them: the uniforms themselves, the unit exponential of a dwell time (see sample_dwell()), or a distribution with values by sex (see agent_pars()), as rvs() would give them without its bookkeeping; worked out once for each
-            how = self._draw_how[key] = 'uniform' if type(dist) is ss.random else 'expon' if (type(dist) is ss.expon and dist.unit is None and not dist.round and dist.pars.scale == 1) else 'agent' if self.agent_pars(key, dist) is not None else 'rvs'
-        by_agent = self.agent_pars(key, dist, checked=True) if how == 'agent' else None
-        if how != 'rvs' and self.crn_key(key) is not None:
+        if how is None: # The uniforms themselves (most of them), the unit exponential of a dwell time (see sample_dwell()), a distribution with values by sex, drawn from a table kept for the run (see agent_pars()), or any other as it is
+            how = self._draw_how[key] = 'uniform' if type(dist) is ss.random else 'expon' if (type(dist) is ss.expon and dist.unit is None and not dist.round and dist.pars.scale == 1) else 'agent' if self.agent_pars(key, dist) is not None else 'own'
+        if self.crn_key(key) is not None and (how != 'own' or dist.resolved()): # The uniforms of this round, and the inverse: as rvs() would give them, without its bookkeeping
             if not len(uids):
                 return np.array([], dtype=dist.hash_dtype or ss.dtypes.float) # Uniforms, as below
             slots = self.sim.people.slot_raw()
@@ -2543,11 +2541,12 @@ class Agents(Engine, Transmission):
                 return rvs
             elif how == 'expon':
                 return ss.perflib.draws.many['expon'](1.0, np.asarray(rvs, dtype=np.float64), np.empty(len(rvs))) # As dist.ppf(), without its checks
-            n, pars, kwds = by_agent
-            pick = lambda d: {k:(v[uids] if isinstance(v, np.ndarray) and v.shape == (n,) else v) for k,v in d.items()} # These agents' values
-            dist._pars = type(dist.pars)(pick(pars))
-            if kwds is not None:
-                dist.dist.kwds = pick(kwds)
+            elif how == 'agent':
+                n, pars, kwds = self.agent_pars(key, dist, checked=True)
+                pick = lambda d: {k:(v[uids] if isinstance(v, np.ndarray) and v.shape == (n,) else v) for k,v in d.items()} # These agents' values
+                dist._pars = type(dist.pars)(pick(pars))
+                if kwds is not None:
+                    dist.dist.kwds = pick(kwds)
             return dist.ppf(rvs)
         ind = dist.ind
         dist.jump(to=self.draw_ind(), force=True)

@@ -99,7 +99,6 @@ summary.loc[['hiv_new_deaths', 'hiv_prevalence']]
 | `ssl.HouseholdNet` | `ss.Network` | Households built from survey data in the format of the Demographic and Health Surveys (DHS), optionally changing over time |
 | `ssl.ClusterNet` | `ss.Network` | Fully connected clusters, such as households |
 | `ssl.HybridNet` | `ss.Network` | Covasim's household, school, work, and community networks |
-| `ssl.DegreeNet` | `ss.DynamicNetwork` | Partnerships with a target number of partners at a time (e.g. needle sharing) |
 | `ssl.StaticNet` | `ss.Network` | A fixed network from a NetworkX graph |
 | `ssl.RandomSafeNet` | `ss.DynamicNetwork` | Random connections that keep each agent's random numbers the same when other agents change, for comparing scenarios |
 | `ssl.DiskNet` | `ss.Network` | Agents move within a unit square, and are connected to others within a given radius |

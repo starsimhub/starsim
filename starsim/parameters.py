@@ -50,7 +50,8 @@ class Pars(sc.objdict):
         """
         Bind the values that vary (`ss.timeseries`, `ss.seasonal`, `ss.by`) to the module, now and when set later, so that once its model is
         built (from `init_post()` on), arithmetic on one (`self.pars.emergence * n`, `np.exp(-self.pars.k)`) is done on its value now (see `now()`), as for a
-        declared parameter (`ss.par`); before then, it builds an expression, as in a rate
+        declared parameter (`ss.par`); before then, it builds an expression, as in a rate. One of typed values is typed now, as a typed value in the
+        parameters is, so `self.pars.rate.to_prob()` works on either
         """
         object.__setattr__(self, '_module', module)
         for key,val in self.items():
@@ -1029,6 +1030,7 @@ class by:
     def __pow__(self, other):      return self._op(other, '**')
     def __rpow__(self, other):     return self._op(other, '**', reflected=True)
     def __neg__(self):             return self._op(-1, '*')
+    def __getattr__(self, attr):   return typed_attr(self, attr) # E.g. .to_prob() of rates by level, on their values now
 
     @property
     def items(self):
@@ -1167,7 +1169,7 @@ class by:
 
     def grid(self, sim, convert=None, year=None):
         """
-        The value for every combination of the levels of its dimensions
+        The value for every combination of the levels of its dimensions: its values (see `tabulate()`) at the position of each group
 
         Returns the positions of the dimensions in the sim, and an array with one axis for each.
         A value that varies in time is taken at the sim's current time, or at `year` if given.
@@ -1180,31 +1182,65 @@ class by:
         if self.array is not None:
             wrap = self.wrap or (lambda v: v)
             return ds, np.vectorize(lambda v: float(convert(wrap(v))))(self.array) if self.array.size else self.array.copy()
-        if self.table is None:
-            out = np.ones([strat.n for strat in strats])
-            for i,(strat,vals) in enumerate(zip(strats, self.given.values())):
-                single, items = self.level_items(strat, vals)
-                vals = np.array([convert(v) for v in items], dtype=float)
-                if single:
-                    vals = np.full(strat.n, vals[0])
-                shape = [1]*len(strats)
-                shape[i] = strat.n
-                out = out*vals.reshape(shape)
-            return ds, out
-        if any(self.keys(strat.name)[0] == 'edges' for strat in strats): # Bins of their own: each group in one of them
-            return ds, self.binned_grid(sim, strats, convert)
-        shape = [strat.n for strat in strats]
-        def index(): # Each row's group
-            out = []
-            for strat in strats:
-                labels = [str(label) for label in strat.labels]
+        sizes, codes = self.cached('groups', lambda: tuple(zip(*[self.group_positions(sim, strat) for strat in strats])), sim) # The groups' positions, once per sim
+        out = self.tabulate(sizes, convert)
+        return ds, out[np.ix_(*codes)] if len(codes) > 1 else out[codes[0]]
+
+    def group_positions(self, sim, strat):
+        """ The number of positions along one of the sim's dimensions, and each group's position along it: its level, the key of its label, or the bin its lower edge is in (a group split by a table's bins raising, since it has no one value) """
+        kind = self.keys(strat.name)
+        if kind is None:
+            return strat.n, np.arange(strat.n)
+        kind, keys = kind
+        if kind == 'keys':
+            labels = [str(label) for label in strat.labels]
+            if self.table is not None:
                 for label in self.table[strat.name]:
                     if str(label) not in labels:
                         raise ValueError(f'the table given to ss.by() has "{label}" for "{strat.name}", which is not one of its levels ({sc.strjoin(labels)}).')
-                out.append([labels.index(str(label)) for label in self.table[strat.name]])
-            return np.ravel_multi_index(np.array(out, dtype=int).reshape(len(strats), -1), shape)
-        flat = self.cached('grid', index, sim)
-        return ds, np.bincount(flat, weights=self.row_values(convert), minlength=int(np.prod(shape))).reshape(shape)
+            return len(keys), np.array([keys.index(label) if label in keys else len(keys) for label in labels])
+        if self.cached('split', lambda: self.split_groups(sim), sim) is not None: # Once per sim, not at every step (it compares every edge)
+            raise ss.CapabilityError(f'{self} is by bins of {strat.name} that split the model\'s groups ({sc.strjoin(strat.labels)}), so a group has no one value.\n'
+                                     f'     Give it by the model\'s groups, or run with solver="abm" (which reads each person\'s own {strat.name}).')
+        if strat.edges is None: # People with no value, who are in no group
+            return len(keys), np.full(strat.n, len(keys))
+        pos = np.searchsorted(keys, strat.edges, side='right') - 1 # The bin each group's lower edge is in (the last is open-ended)
+        return len(keys), np.where(pos >= 0, pos, len(keys))
+
+    def tabulate(self, sizes, convert, weights=None):
+        """
+        The value at every combination of positions along its dimensions (`sizes` of each, as `positions()` or `group_positions()` give them), as
+        numbers, with one more position along each for no value: given by a row for no value, or, with `weights` (for each dimension, the people at
+        each position, or None where no one needs it), the mean over the positions; otherwise 0 (a table) or NaN
+        """
+        if self.table is None:
+            out = np.ones([n + 1 for n in sizes])
+            for i,(dim,n) in enumerate(zip(self.dims, sizes)):
+                vals = self.given[dim]
+                vals = list(vals.values()) if isinstance(vals, dict) else list(vals) if isinstance(vals, (list, tuple)) else [vals]*n if np.ndim(vals) == 0 else list(sc.toarray(vals))
+                w = None if weights is None else weights[i]
+                vals = np.array([convert(v) for v in vals] + [np.nan], dtype=float)
+                if w is not None:
+                    vals[-1] = np.average(vals[:-1], weights=w)
+                if len(sizes) == 1:
+                    return vals
+                shape = [1]*len(sizes)
+                shape[i] = n + 1
+                out = out*vals.reshape(shape)
+            return out
+        shape = tuple(n + 1 for n in sizes)
+        rows = self.row_index()
+        flat, unique = self.cached(('flat', shape), lambda: (lambda f: (f, len(np.unique(f)) == len(f)))(np.ravel_multi_index(rows, shape))) # Each row's place in the values, and whether each place has one row
+        if unique: # The usual case
+            out = np.zeros(shape)
+            out.flat[flat] = self.row_values(convert)
+        else: # Rows for the same place add up
+            out = np.bincount(flat, weights=self.row_values(convert), minlength=int(np.prod(shape))).reshape(shape)
+        for i,n in enumerate(sizes if weights is not None else ()):
+            if weights[i] is not None and not np.any(rows[i] == n): # No row gives the value for people with no value
+                inner = np.take(out, range(n), axis=i)
+                np.put_along_axis(out, np.full([1 if j == i else s + 1 for j,s in enumerate(sizes)], n), np.expand_dims(np.average(inner, axis=i, weights=weights[i]), i), axis=i)
+        return out
 
     @staticmethod
     def level_items(strat, vals):
@@ -1240,37 +1276,6 @@ class by:
             out = out*vals.reshape(shape)
         grid, index = sim.groups.grid_index(ds, out)
         return grid[index].T
-
-    def binned_grid(self, sim, strats, convert):
-        """ For a table with a column of bin edges (e.g. age=[0, 15, 50]), the model's or coarser: the value for each group, that of the bin it is in. Bins that split a group raise, since a group has no one value (see `split_groups()`) """
-        dim = self.cached('split', lambda: self.split_groups(sim), sim) # Once per sim, not at every step (it compares every edge)
-        if dim is not None:
-            raise ss.CapabilityError(f'{self} is by bins of {dim} that split the model\'s groups ({sc.strjoin(strats[[s.name for s in strats].index(dim)].labels)}), so a group has no one value.\n'
-                                     f'     Give it by the model\'s groups, or run with solver="abm" (which reads each person\'s own {dim}).')
-        def index(): # For each row, and each dimension: the groups the row is for
-            rows = []
-            for i in range(len(self.table)):
-                ix = []
-                for strat in strats:
-                    kind, keys = self.keys(strat.name)
-                    val = self.table[strat.name].iloc[i]
-                    if kind == 'keys':
-                        labels = [str(label) for label in strat.labels]
-                        if str(val) not in labels:
-                            raise ValueError(f'the table given to ss.by() has "{val}" for "{strat.name}", which is not one of its levels ({sc.strjoin(labels)}).')
-                        ix.append([labels.index(str(val))])
-                    elif isnull(val) or strat.edges is None: # People with no value, who are in no group
-                        ix.append([])
-                    else: # The groups whose lower edge is in the row's bin (the last is open-ended)
-                        lo = float(val)
-                        hi = keys[keys > lo][0] if np.any(keys > lo) else np.inf
-                        ix.append(np.flatnonzero((strat.edges >= lo) & (strat.edges < hi)))
-                rows.append(np.ix_(*ix))
-            return rows
-        out = np.zeros([strat.n for strat in strats])
-        for ix,val in zip(self.cached('binned', index, sim), self.row_values(convert)):
-            out[ix] = val
-        return out
 
     def on_people(self, sim):
         """ Whether, as agents, it is read from each person's own values rather than by group: over a property that is not a dimension of the sim, or a table whose numbers are bin edges other than the dimension's (e.g. single years of age, against age groups) """
@@ -1344,24 +1349,20 @@ class by:
             return n, out
         return plan
 
-    def lookup(self, sim, convert=None, year=None, cache=None):
+    def lookup(self, sim, convert=None, year=None, cache=None, uids=None):
         """
-        As agents: the value for every agent (indexed by UID), from their own value of each property, or their level of each dimension
+        As agents: the value of each agent (indexed by UID, or for `uids`), from their own value of each property, or their level of each dimension:
+        its values (see `tabulate()`) at each agent's positions
 
         Args:
-            cache (dict): where to keep each agent's position along a dimension, for other values by the same keys (e.g. the same age bins), while people's values are unchanged
-        """
-        grid, index = self.lookup_grid(sim, convert, year, cache)
-        return grid[index]
-
-    def lookup_grid(self, sim, convert=None, year=None, cache=None, uids=None):
-        """
-        As `lookup()`, but as the grid of values and each agent's position along each of its dimensions (indexed by UID), so that the values of only some agents can be taken (`grid[tuple(ind[uids] for ind in index)]`)
-
-        With `uids`, the positions are those of these agents alone (`grid[index]` is their values), which is much faster when they are few
-        (e.g. those entering a state), and the value of people with no value along a dimension is worked out only if one of them has none.
+            cache (dict): where to keep each agent's position along a dimension, for other values by the same keys (e.g. the same age bins), and the
+                table, while people's values are unchanged
+            uids (uids): these agents alone, which is much faster when they are few (e.g. those entering a state); the value of people with no value
+                along a dimension is then worked out only if one of them has none
         """
         def positions(dim):
+            if uids is not None:
+                return self.positions(sim, dim, uids)
             if cache is None:
                 return self.positions(sim, dim)
             key = ('positions', dim, self.cached(('keys_id', dim), lambda: self.keys_id(dim)))
@@ -1369,43 +1370,25 @@ class by:
                 cache[key] = self.positions(sim, dim)
             return cache[key]
         def weights(i, dim):
-            """ People at each level, for the value of those with none """
+            """ People at each position, for the value of those with none """
             key = ('weights', dim, self.cached(('keys_id', dim), lambda: self.keys_id(dim)))
             if cache is None or key not in cache:
-                everyone = index[i] if uids is None else positions(dim)[1]
+                everyone = index[i] if uids is None else self.positions(sim, dim)[1]
                 w = np.bincount(everyone[sim.people.auids], minlength=sizes[i] + 1)[:sizes[i]]
                 w = w if w.sum() > 0 else np.ones(len(w))
                 if cache is None:
                     return w
                 cache[key] = w
             return cache[key]
-        convert = self.converter(sim, convert, year)
-        sizes, index = zip(*[positions(dim) if uids is None else self.positions(sim, dim, uids) for dim in self.dims])
+        sizes, index = zip(*[positions(dim) for dim in self.dims])
         missing = [uids is None or bool((ind == n).any()) for ind,n in zip(index, sizes)] # Whether the value for people with no value is needed
-        key = ('grid', id(self), year, tuple(missing)) # The grid does not depend on who is asked for, so it is kept while the values are unchanged
-        if cache is not None and key in cache:
-            return cache[key], index
-        if self.table is None:
-            out = np.ones([n + 1 for n in sizes])
-            for i,(dim,n) in enumerate(zip(self.dims, sizes)):
-                vals = self.given[dim]
-                vals = list(vals.values()) if isinstance(vals, dict) else [vals]*n if np.ndim(vals) == 0 else list(vals)
-                vals = np.array([convert(v) for v in vals], dtype=float)
-                vals = np.append(vals, np.average(vals, weights=weights(i, dim)) if missing[i] else np.nan)
-                shape = [1]*len(sizes)
-                shape[i] = n + 1
-                out = out*vals.reshape(shape)
-        else:
-            shape = [n + 1 for n in sizes]
-            rows = self.row_index()
-            out = np.bincount(np.ravel_multi_index(rows, shape), weights=self.row_values(convert), minlength=int(np.prod(shape))).reshape(shape)
-            for i,n in enumerate(sizes):
-                if missing[i] and not np.any(rows[i] == n): # No row gives the value for people with no value
-                    inner = np.take(out, range(n), axis=i)
-                    np.put_along_axis(out, np.full([1 if j == i else s + 1 for j,s in enumerate(sizes)], n), np.expand_dims(np.average(inner, axis=i, weights=weights(i, self.dims[i])), i), axis=i)
-        if cache is not None:
-            cache[key] = out
-        return out, index
+        key = ('grid', id(self), year, tuple(missing)) # The table does not depend on who is asked for, so it is kept while the values are unchanged
+        out = None if cache is None else cache.get(key)
+        if out is None:
+            out = self.tabulate(sizes, self.converter(sim, convert, year), weights=[weights(i, dim) if missing[i] else None for i,dim in enumerate(self.dims)])
+            if cache is not None:
+                cache[key] = out
+        return out[index]
 
     def per_group(self, sim, convert=None, year=None):
         """ The value for each group of the sim """
@@ -1443,12 +1426,42 @@ def bind(val, module, key):
 
 
 def now(val):
-    """ The value now of a value that varies, bound to a module (see `Pars.bind()`) whose sim is initialized, as `current_value()` gives it; else None """
+    """
+    The value now of a value that varies, bound to a module (see `Pars.bind()`) whose sim is initialized; else None. If its values are
+    typed (e.g. `ss.timeseries({2000: ss.peryear(0.1), 2010: ss.peryear(0.2)})`), it is typed (an `ss.peryear`), as a typed value in a
+    module's parameters is, so `.to_prob()` and `.to_dt()` work on either (see `typed_now()`); otherwise a number in the sim's unit, as
+    `current_value()` gives it
+    """
     mod = val.__dict__.get('module')
     sim = getattr(mod, 'sim', None)
     if not ss.expressions.has_values(sim):
         return None
-    return current_value(val, sim, cache=mod.__dict__.setdefault('_converted', {}))
+    typed = typed_now(val, sim)
+    return typed if typed is not None else current_value(val, sim, cache=mod.__dict__.setdefault('_converted', {}))
+
+
+def typed_now(val, sim):
+    """ The value now of a value that varies whose values are typed, as a typed value (for an `ss.by` of one dimension, one per level, if all of one kind); else None """
+    year = sim.t.now('year')
+    if isinstance(val, TimeValue):
+        return val.at(year, sim) if any(isinstance(const_value(v), ss.TimePar) for v in val.typed) else None
+    if isinstance(val, by) and val.dim is not None and val.values is not None:
+        items = [val.converter(sim, year=year)(v) for v in val.items]
+        if items and all(type(v) is type(items[0]) and isinstance(v, ss.TimePar) for v in items):
+            return items[0]._new(np.array([v.value for v in items], dtype=float))
+    return None
+
+
+typed_attrs = {'to', 'to_dt', 'to_prob', 'to_events', 'value', 'rate', 'years', 'months', 'weeks', 'days'} # A typed value's own, which a value that varies of typed values passes to its value now
+
+
+def typed_attr(val, attr):
+    """ A typed value's own attribute (e.g. `.to_prob()`) of a value that varies, on its value now (see `now()`); for `__getattr__()` """
+    if attr in typed_attrs:
+        out = now(val)
+        if isinstance(out, ss.TimePar):
+            return getattr(out, attr)
+    raise AttributeError(f"'{type(val).__name__}' object has no attribute '{attr}'")
 
 
 def current_value(val, sim, cache=None):
@@ -1514,6 +1527,7 @@ class TimeValue:
     def __gt__(self, other):       return self._operand() > other
     def __ge__(self, other):       return self._operand() >= other
     def __float__(self):           return float(self._operand())
+    def __getattr__(self, attr):   return typed_attr(self, attr) # E.g. .to_prob() of a time series of rates, on its value now
 
     def __array_ufunc__(self, ufunc, method, *inputs, **kwargs):
         """ A NumPy function of it is an expression, e.g. np.minimum(ss.timeseries(...), 1); or of its value now (see _operand()) """

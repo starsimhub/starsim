@@ -587,7 +587,7 @@ def test_beta_readings():
     with pytest.raises(ValueError, match='m2f and f2m'): # ... and one it does not have raises, listing those it has
         ss.Sim(sis(ss.peract(m2f=0.01, f2m=0.01, m2m=0.02)), networks=ss.SexualNet(), **kw).init()
     with pytest.raises(ValueError, match='no sides'):
-        ss.Sim(sis(ss.peract(m2f=0.01, f2m=0.01)), networks=ssl.DegreeNet(name='needles', dur=ss.years(1), acts=ss.freqpermonth(20)), **kw).init()
+        ss.Sim(sis(ss.peract(m2f=0.01, f2m=0.01)), networks=ss.DegreeNet(name='needles', dur=ss.years(1), acts=ss.freqpermonth(20)), **kw).init()
     with pytest.raises(ValueError, match='A probability per act must be between 0 and 1'):
         ss.peract(1.5)
     with pytest.raises(ValueError, match='step'): # A whole number of acts per step, drawn once, depends on the step

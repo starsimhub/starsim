@@ -49,7 +49,7 @@ A model whose mixing has a compartmental form (no route, a mixing pool, or a con
 | `ss.MixingPools(...)`, `ss.contacts(...)` | exact | exact |
 | `ss.RandomNet(n_contacts=c)` | exact | homogeneous mixing with `c` contacts per unit time |
 | `ssl.StaticNet(graph=...)` | exact | homogeneous mixing with the graph's mean number of contacts |
-| `ss.SexualNet()`, `ssl.DegreeNet()`, and other partnership networks | exact | the partner-change model (partnerships formed at a rate, each with the chance it transmits over its whole length), which needs the model stratified by sex for `ss.SexualNet` |
+| `ss.DegreeNet()`, `ss.SexualNet()`, and other partnership networks | exact | the partner-change model (partnerships formed at a rate, each with the chance it transmits over its whole length), which needs the model stratified by sex for `ss.SexualNet` |
 
 The approximations are rough where the network matters most: homogeneous mixing with the same mean number of contacts loses the variation between people, and the partner-change model counts at most one transmission in each partnership. [Solvers and when they disagree](running_solvers.qmd) has the details. Anything that needs to know who a person's contacts are (contact tracing, partner notification, the transmission tree) needs a network, and so agents.
 
@@ -87,7 +87,7 @@ sim.run()
 sim.networks.sexualnet.check(output=True)
 ```
 
-Partnerships that are not sexual, such as needle sharing among people who inject drugs, are the library's `ssl.DegreeNet`, which takes the same targets among anyone (or the people that `where=` gives).
+`ss.SexualNet` is `ss.DegreeNet` between men and women, with an age of debut and participation. Partnerships that are not sexual, such as needle sharing among people who inject drugs, are `ss.DegreeNet` itself, which takes the same targets among anyone (or the people that `where=` gives, or between two groups with `between=`), with a target of one partner each by default.
 
 ## Transmission that differs by route
 
@@ -196,7 +196,6 @@ The library (`import starsim.library as ssl`) has more:
 |---|---|---|
 | `ssl.ClusterNet` | Fully connected clusters, such as households | `cluster_size`, `dynamic`, `age_range` |
 | `ssl.HybridNet` | Households, schools, workplaces, and community, as in Covasim | `household_size`, `contacts`, `school_ages`, `work_ages` |
-| `ssl.DegreeNet` | Partnerships with targets for the number of partners at a time (as in EpiModel) | `n_contacts`, `dur`, `concurrency`, `max_contacts`, `match`, `where` |
 | `ssl.StaticNet` | A fixed network from a NetworkX graph | `graph`, `p`, `n_contacts` |
 | `ssl.ErdosRenyiNet` | Each pair of people connected with a probability | `p`, `dur` |
 | `ssl.DiskNet` | People who move in a plane, in contact within a radius | `r`, `v` |

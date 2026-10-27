@@ -74,14 +74,14 @@ def test_partners():
     # Partnerships that form at a constant rate: a Poisson number of partners at a time, with the mean given
     S, I = ss.states(2)
     sis = ss.Disease(S >> I @ ss.prob(0.64), I >> S @ ss.prob(0.05), init_n=dict(I=10), name='sis')
-    sim = ss.Sim(sis, networks=ssl.DegreeNet(n_contacts=0.7, dur=50), n_agents=2000, stop=300, verbose=0).run()
+    sim = ss.Sim(sis, networks=ss.DegreeNet(n_contacts=0.7, dur=50), n_agents=2000, stop=300, verbose=0).run()
     e = sim.networks[0].edges
     degree = np.bincount(np.concatenate([e.p1, e.p2]), minlength=2000)
     assert np.isclose(degree.mean(), 0.7, rtol=0.1) and np.isclose(degree.var(), degree.mean(), rtol=0.15)
     assert sim.results.sis.I[-1] > 100 # Infection spreads through the partnerships
 
     # The targets of EpiModel's introductory network, from the library
-    net = ssl.DegreeNet(n_contacts=0.7, concurrency=0.22, max_contacts=3, dur=50)
+    net = ss.DegreeNet(n_contacts=0.7, concurrency=0.22, max_contacts=3, dur=50)
     sim = ss.Sim(sis, networks=net, n_agents=medium, stop=400, verbose=0).run()
     net = sim.networks[0]
     res = net.results
@@ -99,13 +99,13 @@ def test_partners():
     def prev(acts, beta):
         S, I = ss.states(2)
         sis2 = ss.Disease(infection=ss.Transition(S, I, rate=beta * I), recovery=I >> S @ ss.prob(0.05), init_n=dict(I=10), name='sis')
-        return ss.Sim(sis2, networks=ssl.DegreeNet(n_contacts=0.7, dur=50, acts=acts), n_agents=medium, stop=200, rand_seed=1, verbose=0).run().results.sis.I.values
+        return ss.Sim(sis2, networks=ss.DegreeNet(n_contacts=0.7, dur=50, acts=acts), n_agents=medium, stop=200, rand_seed=1, verbose=0).run().results.sis.I.values
     assert np.allclose(prev(ss.freqperday(2), ss.peract(0.4)), prev(None, ss.prob(1 - 0.6**2)))
     with pytest.raises(ValueError, match='per unit time'): # A bare number would be acts in a step, which depends on the step
         prev(2, ss.peract(0.4))
 
     # A number of partners for each level of a property, as EpiModel's nodefactor
-    byrisk = ssl.DegreeNet(n_contacts=ss.by(risk=[0.4, 1.6]), dur=50)
+    byrisk = ss.DegreeNet(n_contacts=ss.by(risk=[0.4, 1.6]), dur=50)
     sim2 = ss.Sim(sis, networks=byrisk, n_agents=medium, stop=200, verbose=0).stratify(risk=['low', 'high'], split=[0.8, 0.2]).run()
     level = np.asarray(sim2.networks[0].levels('risk'))[sim2.people.alive.uids]
     degree = sim2.networks[0].degrees(sim2.people.alive.uids)
@@ -116,14 +116,14 @@ def test_partners():
 
     # Targets that cannot be met together are an error; partnerships are approximate under an ODE (see test_partnership_approx()), and a static network is approximated by the mean degree of its graph
     with pytest.raises(ValueError):
-        ssl.DegreeNet.degree_dist(0.7, concurrency=0.9, max_contacts=3)
+        ss.DegreeNet.degree_dist(0.7, concurrency=0.9, max_contacts=3)
     with pytest.raises(ss.CapabilityError, match='partner-change model'):
-        ss.Sim(sis, networks=ssl.DegreeNet(n_contacts=0.7, dur=50), total_pop=medium, solver='ode', stop=100, approx=False, verbose=0).run()
+        ss.Sim(sis, networks=ss.DegreeNet(n_contacts=0.7, dur=50), total_pop=medium, solver='ode', stop=100, approx=False, verbose=0).run()
     ring = ss.Sim(sis, networks=ssl.StaticNet(graph=nx.cycle_graph(1000)), total_pop=1000, solver='ode', stop=10, verbose=0).init()
     assert ring.mixing.terms[0].contacts == 2 # Not n_contacts=10, whatever the graph
 
     # With births and deaths, partnerships also end when a partner dies, which is allowed for so the mean holds
-    net = ssl.DegreeNet(n_contacts=0.5, dur=50, name='main')
+    net = ss.DegreeNet(n_contacts=0.5, dur=50, name='main')
     S, I, R = ss.states('S I R')
     sir = ss.Disease(infection=ss.Transition(S, I, rate=0.0 * I), recovery=ss.Transition(I, R, dur=10), init_prev=0.01, name='sir')
     demog = [ss.Births(birth_rate=ss.peryear(50)), ss.Deaths(death_rate=ss.peryear(50))]
@@ -146,7 +146,7 @@ def test_partner_targets():
     sir = ss.Disease(infection=ss.Transition(S, I, rate=0.0 * I), name='sir')
     sir.stratify(risk=['low', 'high'], split=[0.8, 0.2])
     for share in [None, 0.9]:
-        net = ssl.DegreeNet(n_contacts=0.7, dur=50, match=None if share is None else dict(risk=share), name='net')
+        net = ss.DegreeNet(n_contacts=0.7, dur=50, match=None if share is None else dict(risk=share), name='net')
         sim = ss.Sim(sir, networks=net, n_agents=5000, stop=300, verbose=0).run()
         net = sim.networks.net
         level = sim.groups.level_raw(sim.groups.dim_index('risk'))
@@ -157,7 +157,7 @@ def test_partner_targets():
 
     # Within the levels of several properties at once, each with its own target (EpiModel's nodematch on each)
     sir.stratify(region=['a', 'b', 'c'], split=[0.5, 0.3, 0.2])
-    net = ssl.DegreeNet(n_contacts=0.7, dur=50, match=dict(risk=0.9, region=0.7), name='net')
+    net = ss.DegreeNet(n_contacts=0.7, dur=50, match=dict(risk=0.9, region=0.7), name='net')
     res = ss.Sim(sir, networks=net, n_agents=5000, stop=300, verbose=0).run().networks.net.results
     assert np.isclose(res.match_risk[150:].mean(), 0.9, atol=0.02) and np.isclose(res.match_region[150:].mean(), 0.7, atol=0.02) # By chance, 0.68 and 0.38
 
@@ -297,7 +297,7 @@ def test_route_modifiers():
 def test_needles():
     sc.heading('Testing a needle-sharing network beside a sexual one (injecting drug use)')
     def run(mf_beta, needles_beta=ss.peract(0.006), nsp=False):
-        needles = ssl.DegreeNet(name='needles', where=ss.ppl.pwid, n_contacts=2, dur=ss.months(6), acts=ss.freqpermonth(20)) # Among people who inject only; no sides, so one value
+        needles = ss.DegreeNet(name='needles', where=ss.ppl.pwid, n_contacts=2, dur=ss.months(6), acts=ss.freqpermonth(20)) # Among people who inject only; no sides, so one value
         S, I = ss.states('S I')
         hiv = ss.Disease(infection=ss.Transition(S, I, rate=dict(sexualnet=mf_beta, needles=needles_beta) * I), init_prev=0.05, name='hiv')
         intv = ss.modify(hiv.infection, multiply=0.2, share=0.5, route='needles', start=2005) if nsp else None # Needle and syringe programs: half of injections with a clean needle, 80% less risk
@@ -327,7 +327,7 @@ def test_partnership_approx():
         return sim.stratify(**(stratify or dict(sex=['female', 'male'])))
 
     # With partnerships that end at a constant rate and no way out of the infectious state, the chance over a partnership is H/(H + 1/D̄)
-    sim = run('ode', sis(ss.peract(0.05)), ssl.DegreeNet(name='pairs', n_contacts=1, dur=ss.years(2), acts=ss.freqperyear(10)), stratify=dict(risk=['low', 'high'])).init()
+    sim = run('ode', sis(ss.peract(0.05)), ss.DegreeNet(name='pairs', n_contacts=1, dur=ss.years(2), acts=ss.freqperyear(10)), stratify=dict(risk=['low', 'high'])).init()
     H = 10*-np.log(0.95)
     assert sim.diseases.d.describe(output=True).count('partner-change model (approx)') == 1
     assert np.isclose(sim.diseases.d.engine.partnership_info[('infection', 'I', 'pairs', 0)][0], H/(H + 1/2)), 'H/(H + 1/D)'
@@ -337,7 +337,7 @@ def test_partnership_approx():
     mf = lambda **kw: ss.SexualNet(participation=ss.bernoulli(p=1.0), debut=ss.constant(0), **kw)
     cases = dict(
         risk = ([0.9, 1.1], [0.9, 1.1], dict(disease=sis(ss.peract(0.002)), stratify=dict(risk=['low', 'medium', 'high'], split=[0.8, 0.15, 0.05]), # 0.999, 0.995
-                 net=ssl.DegreeNet(n_contacts=ss.by(risk=[0.5, 1.5, 4]), match=dict(risk=0.7), dur=ss.months(6), acts=ss.freqperyear(80)))),
+                 net=ss.DegreeNet(n_contacts=ss.by(risk=[0.5, 1.5, 4]), match=dict(risk=0.7), dur=ss.months(6), acts=ss.freqperyear(80)))),
         gono = ([0.08, 0.4], [0.06, 0.4], dict(disease=sis(ss.peract(m2f=0.05, f2m=0.03), ss.months(4)), dt=ss.weeks(1), # 0.19, 0.13: concurrency (Poisson partners), which the approximation leaves out
                  net=ss.SexualNet(participation=ss.bernoulli(p=1.0), debut=ss.constant(0), n_contacts=1, dur=ss.lognorm_ex(mean=ss.weeks(4), std=ss.weeks(2)), acts=ss.freqperweek(2)))),
         hiv  = ([1.0, 1.25], [1.1, 1.4], dict(disease=sis(ss.peract(m2f=0.004, f2m=0.002)), # 1.105, 1.247: infection kept within pairs, which the approximation spreads

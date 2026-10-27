@@ -95,7 +95,7 @@ print(sim.imported.code)
 | [Atomica](../coming_from/atomica.qmd) | A framework and databook (`.xlsx`), and a program book | Programs become parameters of spending, for `ss.fit.optimize()` |
 | [camdl](../coming_from/camdl.qmd) | A `.camdl` file (compiled with `camdlc`), or its JSON form | Parameters keep their bounds and priors; observations become outcomes with their likelihoods |
 | [EMULSION](../coming_from/emulsion.qmd) | A model file (`.yaml`) | Each state machine becomes a disease |
-| [EpiModel](../coming_from/epimodel.qmd) | An R script, run first in R by `dump_epimodel.R` | A fitted network becomes `ssl.DegreeNet` |
+| [EpiModel](../coming_from/epimodel.qmd) | An R script, run first in R by `dump_epimodel.R` | A fitted network becomes `ss.DegreeNet` |
 | [epydemix](../coming_from/epydemix.qmd) | A live model, or the JSON written by `dump_epydemix.py` | Runs as a chain binomial in daily steps, as epydemix does |
 | [flepiMoP](../coming_from/flepimop.qmd) | A configuration file (`.yml`) | Places become a stratification with commuting between them |
 | [MEmilio](../coming_from/memilio.qmd) | The JSON written by `dump_memilio.py` | Contact matrices with their changes over time; a graph of places |

@@ -61,7 +61,7 @@ from .modules import (
 
 from .networks import (
     Network, DynamicNetwork,
-    RandomNet, SexualNet,
+    RandomNet, DegreeNet, SexualNet,
     PrenatalNet, MaternalNet, PostnatalNet, BreastfeedingNet,
     AgeGroup, MixingPools, MixingPool, contacts,
 )
