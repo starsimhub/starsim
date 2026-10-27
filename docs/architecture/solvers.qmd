@@ -54,7 +54,7 @@ The one thing `'auto'` approximates unasked is a dwell time that isn't exponenti
 
 `'auto'` only ever chooses `ode` or `abm`; a stochastic compartmental solver is used only when it is asked for by name. A sim is one run whatever the solver, and many runs are an `ss.MultiSim` (`ss.parallel(sim, n_runs=100)`).
 
-Some of the conditions in the last column are reported as notes (`ss.errors.SmallCounts`, `ExtinctionPossible`, `LargeStep`), and `sim.check_dt()` measures how much a smaller step would change the results.
+Some of the conditions in the last column are reported as notes, and `sim.check_dt()` measures how much a smaller step would change the results.
 
 ## Approximations are announced
 

@@ -5,7 +5,6 @@ Contract tests: properties every model and solver must have, checked on the mode
 
 # %% Imports and settings
 import os
-import runpy
 import pytest
 import numpy as np
 import sciris as sc
@@ -170,21 +169,6 @@ def test_crn_pairing():
     assert np.median(changed[True]) <= 2, f'With CRN, making one agent immune changed the outcomes of {changed[True]} other agents' # 0 to 4
     assert np.median(changed[False]) > 50, f'Without CRN, making one agent immune changed only {changed[False]} other agents' # About 300 of 800 infected
     return changed
-
-
-# %% The code of a model builds it again
-
-@pytest.mark.parametrize('name', corpus.models.keys())
-def test_code_round_trip(name, tmp_path):
-    sc.heading(f'Testing that the code written for the corpus model "{name}" builds the same model, or says what it leaves out')
-    sim = corpus.models[name]()
-    path = tmp_path/'model.py'
-    sim.to_code(path)
-    if 'Not written as code' in path.read_text(): # A network, a function, data, or a module written as code, listed to add by hand
-        return
-    rebuilt = runpy.run_path(str(path))['sim'] # From a file, as a user runs it, so the source of a function in it can be read
-    assert rebuilt.hash() == sim.hash(), f'{name}: the code builds a different model'
-    return
 
 
 # %% The solvers agree
@@ -459,16 +443,16 @@ def test_acquisition():
     return
 
 
-# %% Behavior: a regression, a counter, and a table over the destinations
+# %% Behavior: a regression, a counter, and a switching row by age
 
 def behavior(solver, seed=1, n=2000):
-    """ A choice of method: a regression over two boolean dimensions and a counter, and a switching row by age and destination (a clock since the last birth is agents only: see test_dimensions.py::test_clocks) """
+    """ A choice of method: a regression over two boolean dimensions and a counter, and a switching row by age, one entry per destination """
     from scipy.special import expit
     none, pill, iud, P = ss.states('none pill iud P')
     p_use = expit(-1.0 + 0.5*ss.ppl.urban + 0.3*ss.ppl.edu + 0.4*ss.ppl.parity) # Parity is a counter, so is exact as compartments
-    mix = ss.par(ss.by(dict(age=[0, 0, 30, 30], to=['pill', 'iud', 'pill', 'iud'], value=[0.7, 0.3, 0.4, 0.6]))) # A row of the switching matrix by age, over the destinations
+    mix = ss.par(ss.by(age=[0.7, 0.4])) # The share choosing the pill by age (the rest choose the IUD)
     contra = ss.Disease(none, pill, iud, P,
-        start    = ss.Transition(none, [pill, iud], rate=ss.peryear(0.3)*p_use, p=[mix]),
+        start    = ss.Transition(none, [pill, iud], rate=ss.peryear(0.3)*p_use, p=[mix, None]),
         stop     = ss.Transition(pill, none, rate=ss.peryear(0.2)),
         remove   = ss.Transition(iud, none, rate=ss.peryear(0.1)),
         conceive = ss.Transition(none, P, rate=ss.peryear(0.2)),
@@ -492,7 +476,7 @@ def behavior_shares(sim):
 
 @sc.timer()
 def test_behavior_solvers():
-    sc.heading('Testing that a module of behavior (a regression, a counter, and a table over the destinations) has the same shares by method and age under every solver')
+    sc.heading('Testing that a module of behavior (a regression, a counter, and a switching row by age) has the same shares by method and age under every solver')
     ode = behavior_shares(behavior('ode').run())
     sim = behavior('binomial', n=1_000_000)
     sim.pars.substeps = 10 # Whole steps of the chain binomial would lengthen the 9 months pregnant by half a step (6% more pregnant)

@@ -6,7 +6,6 @@ Justified by [best-practices/calibration.md](../best-practices/calibration.md).
 
 ## The whole interface
 
-<!-- fragment -->
 ```python
 import starsim as ss
 
@@ -27,7 +26,7 @@ fit = sim.fit()
 fit.plot()
 ```
 
-`fit()` fits **every parameter that has `bounds`** to **every result that has data**, and returns an `ss.fit.Fit`. Both were already stated where they belong: the bounds on the parameter, the data on the sim. Nothing is said twice. A parameter of a module written as code, given as an `ss.par` with bounds (`ssl.HIV(beta=ss.par(0.01, bounds=[0.001, 0.1]))`), is fitted too, and so is a setting that such a module keeps as an attribute rather than a parameter (`test_prob(symp_prob=ss.par(0.1, bounds=[0.01, 0.5]))`, as Covasim's interventions do): its code sees the value, and it is fitted and set by name (`pars={'test_prob.symp_prob': 0.2}`) as a parameter is. Bounds given through another `ss.Pars` (a package's full set of defaults for a module, passed to `pars.update()`) are kept. A value in a dict parameter of such a module (`cin_fn=dict(k=ss.par(0.3, bounds=[0.1, 0.5]))`) is fitted as `cin_fn.k`, and the module's code sees its value. A modifier's amount given as `ss.par` (`ss.modify(hiv.rel_sus, multiply=ss.par(2.7, bounds=[1, 4]))`) is one of the modifier's parameters (`multiply`, `add`, `set`, or `efficacy`), whatever it modifies. A parameter of a module written as code that has the same name in several modules is named with its module (`hpv16.rel_beta` and `hpv18.rel_beta`), and so is one that has the name of a declared parameter. A value that is not a parameter of any module (set in code, or worked out from a value) is fitted through a function given as a module, whose keyword arguments with defaults are its parameters, passed to it at each call: `def set_testing(sim, symp_prob=ss.par(0.1, bounds=[0.01, 0.5])): ...`, `interventions=[set_testing, ...]`; it is then a parameter like any other, for `fit()`, `sensitivity()`, `ss.Sim(pars=...)`, and `ss.parallel(pars=...)`. A module added after the sim was made (`sim.pars.analyzers += my_analyzer`) is kept by `sim.new()`, which builds each run of a fit, as the settings and parameters changed after it was made are. A parameter whose value is an array, with bounds for each element (`ss.par(np.array([0.1, 0.4, 0.2]), bounds=[lows, highs])`), is fitted element by element, as `curve[0]`, `curve[1]`, ..., except the elements whose low and high bounds are equal, which stay as they are; `fit.pars` has the array whole. A parameter with a value for each level of a stratification (`ss.par(ss.by(patch=[0.2, 0.3]), bounds=[0.1, 1])`) is fitted level by level, with the same bounds and prior, as `beta[a]`, `beta[b]`, and so on, and a typed value takes typed bounds (`ss.par(ss.days(8), bounds=[ss.days(3), ss.weeks(4)])`).
+`fit()` fits **every parameter that has `bounds`** to **every result that has data**, and returns an `ss.fit.Fit`. Both were already stated where they belong: the bounds on the parameter, the data on the sim. Nothing is said twice. A parameter of a module written as code, given as an `ss.par` with bounds (`ssl.HIV(beta=ss.par(0.01, bounds=[0.001, 0.1]))`), is fitted too, and so is a setting that such a module keeps as an attribute rather than a parameter (`test_prob(symp_prob=ss.par(0.1, bounds=[0.01, 0.5]))`, as Covasim's interventions do): its code sees the value, and it is fitted and set by name (`pars={'test_prob.symp_prob': 0.2}`) as a parameter is. Bounds given through another `ss.Pars` (a package's full set of defaults for a module, passed to `pars.update()`) are kept. A value in a dict parameter of such a module (`cin_fn=dict(k=ss.par(0.3, bounds=[0.1, 0.5]))`) is fitted as `cin_fn.k`, and the module's code sees its value. A modifier's amount given as `ss.par` (`ss.modify(hiv.rel_sus, multiply=ss.par(2.7, bounds=[1, 4]))`) is one of the modifier's parameters (`multiply`, `add`, `set`, or `efficacy`), whatever it modifies. A parameter of a module written as code that has the same name in several modules is named with its module (`hpv16.rel_beta` and `hpv18.rel_beta`), and so is one that has the name of a declared parameter. A value that is not a parameter of any module (set in code, or worked out from a value) is fitted through a function given as a module, whose keyword arguments with defaults are its parameters, passed to it at each call: `def set_testing(sim, symp_prob=ss.par(0.1, bounds=[0.01, 0.5])): ...`, `interventions=[set_testing, ...]`; it is then a parameter like any other, for `fit()`, `sensitivity()`, `ss.Sim(pars=...)`, and `ss.parallel(pars=...)`. A module added after the sim was made (`sim.pars.analyzers += my_analyzer`) is kept by `sim.new()`, which builds each run of a fit from a copy of the sim as it was before it was initialized, as are the settings and parameters changed before then. A parameter whose value is an array, with bounds for each element (`ss.par(np.array([0.1, 0.4, 0.2]), bounds=[lows, highs])`), is fitted element by element, as `curve[0]`, `curve[1]`, ..., except the elements whose low and high bounds are equal, which stay as they are; `fit.pars` has the array whole. A parameter with a value for each level of a stratification (`ss.par(ss.by(patch=[0.2, 0.3]), bounds=[0.1, 1])`) is fitted level by level, with the same bounds and prior, as `beta[a]`, `beta[b]`, and so on, and a typed value takes typed bounds (`ss.par(ss.days(8), bounds=[ss.days(3), ss.weeks(4)])`).
 
 The fitting itself is the submodule `ss.fit`, which an ordinary run never imports: it is imported the first time it is used, by `sim.fit()` or by any of its parts (`ss.fit.loglik()`, `ss.fit.ParticleFilter`, `ss.fit.compare_models()`, and so on).
 
@@ -35,7 +34,6 @@ The fitting itself is the submodule `ss.fit`, which an ordinary run never import
 
 The same calibration with Starsim 3.7's `ss.Calibration` and `CalibComponent` (condensed from the Starsim calibration tutorial):
 
-<!-- fragment -->
 ```python
 import pandas as pd
 import starsim as ss
@@ -83,7 +81,6 @@ About thirty lines against three (the three `bounds=`, `data=`, and `sim.fit()`)
 
 ### Arguments
 
-<!-- fragment -->
 ```python
 fit = sim.fit(
     pars       = None,   # which parameters to fit; default: all that have bounds
@@ -110,17 +107,16 @@ A stochastic sim is scored at each point by the mean of the scores of `n_runs` r
 
 Data is attached to the sim and matched to results by name, as in Covasim:
 
-<!-- fragment -->
 ```python
 sim = ss.Sim(sir, data='cases.csv')       # a path, a dataframe, or ss.simdata(...)
 ```
 
-- The time column is `date`, `year`, `t`, or `time`. Every other column is matched to a result with the same name (`cases`, or `sir.cases` when the short name is ambiguous), which can be any result: an analyzer's (`by_age.cancers_0_15`), one nested deeper in `sim.results` (`hpv.genotype.cancers`), or a column of a result with columns (`sis.new_infections.alpha`). A `gof=` function is needed only for a target worked out from the results (a share, a ratio of two results). A column that matches nothing is an error that lists the closest result names (`UnknownDataColumn`).
+- The time column is `date`, `year`, `t`, or `time`. Every other column is matched to a result with the same name (`cases`, or `sir.cases` when the short name is ambiguous), which can be any result: an analyzer's (`by_age.cancers_0_15`), one nested deeper in `sim.results` (`hpv.genotype.cancers`), or a column of a result with columns (`sis.new_infections.alpha`). A `gof=` function is needed only for a target worked out from the results (a share, a ratio of two results). A column that matches nothing is an error that lists the closest result names (a `KeyError`).
 - Headers that do not match are renamed on the way in, and columns that are not wanted are dropped: `data=ss.simdata(df, aliases=dict(cases='Reported Cases', year='Years'), ignore_extra=True)` ([09-results.md](09-results.md#data)).
 - Results that have data are plotted against it by `sim.plot()` without being asked.
 - **Alignment is automatic.** A result that is a state of the system at a point in time (a count, a prevalence) is compared at the data's dates, interpolating if needed. A result that is a flow (new infections, reported cases, deaths) is summed over the interval ending at each data date. The library knows which is which because results are declared ([09-results.md](09-results.md)).
 - Stratified data uses extra columns named after the stratification (`age`, `sex`), matched to the result's coordinates.
-- Data wholly outside the simulated period is an error (`DataMisaligned`); data partly outside is used where it overlaps.
+- Data wholly outside the simulated period is an error (a `ValueError`); data partly outside is used where it overlaps.
 - Data drawn from a run of the model itself, to check that a fit finds values that are known, is `truth.to_data('cases', resample='week')`: a column for each result named, as Poisson counts with the run's values as their means (`noise=None` for the values themselves), drawn from the run's seed, in the form `ss.Sim(data=...)` takes. Give the true sim another seed than the one fitted (`rand_seed=2`).
 
 ## Goodness of fit
@@ -131,7 +127,6 @@ The default is deliberately simple:
 
 A series whose data are all zero (deaths early in an epidemic, a stratum with no cases) has no mean to divide by; it is divided by the mean of the model instead, so it adds 1 when the model has any of it and 0 when the model has none, and cannot swamp the other series in raw counts. To push a fit toward zero more strongly, give that series a likelihood or a weight.
 
-<!-- fragment -->
 ```python
 fit = sim.fit(weights=dict(cases=1, deaths=2, seroprevalence=1))
 ```
@@ -140,7 +135,6 @@ This is the measure Covasim uses. It assumes no noise model, so there is nothing
 
 Other measures are chosen by name or given as a function:
 
-<!-- fragment -->
 ```python
 fit = sim.fit(gof='rmse')    # root-mean-square error, normalized by the mean of the data
 fit = sim.fit(gof=fn)        # fn(sim) returns a number to minimize; then data is not needed
@@ -152,7 +146,6 @@ The default measure is not a likelihood, and it does not need to be: it is enoug
 
 A likelihood can be attached to a result. It says how the observed number is distributed around the model's value, and it enables methods that give a posterior:
 
-<!-- fragment -->
 ```python
 cases = ss.outcome(0.5 * infection, delay=ss.days(5), likelihood=ss.nbinom(n=ss.par(10, bounds=[0.1, 100])))
 ```
@@ -175,7 +168,7 @@ By default a fit is a best fit (a point estimate), by the method that suits the 
 | Stochastic compartmental, run whole by the kernels | Optuna | `'pmcmc'` (particle MCMC), with a likelihood for every series |
 | Agent-based, or a stochastic run stepped from Python | Optuna | `'abc-smc'` |
 
-With a likelihood for every series, the best fit is the maximum likelihood (or, with priors, the most probable values), and the printed reason names the posterior method the sim allows. The other methods are chosen by name: `'abc-smc'` (approximate Bayesian computation by sequential Monte Carlo: a posterior without a likelihood, for any sim, with `generations=`, `quantile=`, `tolerance=`, and `particles=`), `'if2'` (iterated filtering, as pomp's and camdl's: the maximum likelihood of a stochastic compartmental sim, from passes of a particle filter in which each particle's values follow a shrinking random walk, with `particles=`, `iterations=`, `cooling=`, `sd=`, and `chains=`), `'asd'` (adaptive stochastic descent, `sc.asd()`), and any method of `scipy.optimize.minimize`. Settings for a method are keywords of `fit()`: `n_trials=` for Optuna (100 by default), `draws=`, `warmup=`, and `chains=` for NUTS (500, 500, and 4) and particle MCMC (1,000, 1,000, and 4), `particles=` for particle MCMC (chosen by each chain in its warm-up by default). An unknown `method=` is an error that lists the methods. Optuna also takes `n_workers=` (processes that propose and run trials at once, sharing what they have learned through Optuna's storage; each trial is one point, run once for agents) and `storage=` (a file name, kept as an Optuna journal, or a database URL), which keeps the trials so that calling the fit again with the same storage resumes it, the trials already there counting towards `n_trials=`; `fit.study` is Optuna's study (e.g. for its plots). For the SciPy methods, a search starts from each of the best three points (`restarts=3`; one for a single parameter of a deterministic sim, where the scan already finds the valley) of a spread of points over the bounds (`scan=`, 10 per parameter by default, with the initial values) that are at least a tenth of the bounds apart, and the best result is kept; NUTS starts each chain from one of the best of the same points, so that chains caught in different modes disagree and R-hat sees it.
+With a likelihood for every series, the best fit is the maximum likelihood (or, with priors, the most probable values), and the printed reason names the posterior method the sim allows. The other methods are chosen by name: `'abc-smc'` (approximate Bayesian computation by sequential Monte Carlo: a posterior without a likelihood, for any sim, with `generations=`, `quantile=`, `tolerance=`, and `particles=`), `'if2'` (iterated filtering, as pomp's and camdl's: the maximum likelihood of a stochastic compartmental sim, from passes of a particle filter in which each particle's values follow a shrinking random walk, with `particles=`, `iterations=`, `cooling=`, `sd=`, and `chains=`), and any method of `scipy.optimize.minimize`. Settings for a method are keywords of `fit()`: `n_trials=` for Optuna (100 by default), `draws=`, `warmup=`, and `chains=` for NUTS (500, 500, and 4) and particle MCMC (1,000, 1,000, and 4), `particles=` for particle MCMC (chosen by each chain in its warm-up by default). An unknown `method=` is an error that lists the methods. Optuna also takes `n_workers=` (processes that propose and run trials at once, sharing what they have learned through Optuna's storage; each trial is one point, run once for agents) and `storage=` (a file name, kept as an Optuna journal, or a database URL), which keeps the trials so that calling the fit again with the same storage resumes it, the trials already there counting towards `n_trials=`; `fit.study` is Optuna's study (e.g. for its plots). For the SciPy methods, a search starts from each of the best three points (`restarts=3`; one for a single parameter of a deterministic sim, where the scan already finds the valley) of a spread of points over the bounds (`scan=`, 10 per parameter by default, with the initial values) that are at least a tenth of the bounds apart, and the best result is kept; NUTS starts each chain from one of the best of the same points, so that chains caught in different modes disagree and R-hat sees it.
 
 The same model with no network, run as an ODE:
 
@@ -207,7 +200,7 @@ Scoring each point by the mean of 4 runs, with the same seeds at every point (ov
 Converged: the best value improved by 0.4% over the last quarter of the 100 trials
 ```
 
-Parameters that the data cannot tell apart are noted when the fit ends (`Unidentifiable`; see [Fitting a product of parameters](#fitting-a-product-of-parameters)), and so is a best fit at a bound (`AtBound`).
+Parameters that the data cannot tell apart are noted when the fit ends (a note; see [Fitting a product of parameters](#fitting-a-product-of-parameters)), and so is a best fit at a bound (`AtBound`).
 
 **Optuna gives a best fit, not a posterior.** It is the right tool when each run is expensive and nothing else is affordable, and the output says what it is. The spread of trial values MUST NOT be presented as an interval, but as an indication of the uncertainty the fit gives the range of the best 10% of the trials (`spread_lower` and `spread_upper` in `fit.table`), labeled as such by `fit.summarize()`.
 
@@ -231,7 +224,6 @@ Sometimes one fitting method is not enough. A cheap, robust search is good at fi
 
 `method=` takes a list. **Each entry is a fitting method. They are run in the order given, and each one starts from the best fit the previous one found.**
 
-<!-- fragment -->
 ```python
 fit = sim.fit(method=['optuna', 'nuts'])
 ```
@@ -240,7 +232,6 @@ Read aloud: "search with Optuna; then, starting from the best parameters Optuna 
 
 An entry is either a method's name, which uses that method's default settings, or a dict that also gives its settings:
 
-<!-- fragment -->
 ```python
 fit = sim.fit(method=[
     dict(method='optuna', n_trials=500),  # stage 1: 500 trials to find a good region
@@ -260,19 +251,18 @@ Converged: R-hat at most 1.003 and effective sample size at least 2,146, with 0 
 
 What "starts from the previous best fit" means depends on the stage that follows: an optimizer and NUTS start from it (it is the best point of the scan, and the other searches or chains start from the next best points apart from it), particle MCMC starts its chains from the best of it and a spread of points over the bounds, and ABC-SMC draws its first generation from the prior, so for ABC-SMC an earlier stage changes nothing.
 
-**A stage that fails to converge stops the sequence.** Each method has its own convergence check ([Convergence reporting](#convergence-reporting)). If a stage does not pass it, the stages after it are not run, a warning says which stage stopped and why (`StageStopped`), and the fit returned is the last good one: the result of the last stage that did converge. So a poor starting point is never fed into an expensive sampler. If the first stage is the one that fails, its best attempt is returned, labeled as not converged.
+**A stage that fails to converge stops the sequence.** Each method has its own convergence check ([Convergence reporting](#convergence-reporting)). If a stage does not pass it, the stages after it are not run, a warning says which stage stopped and why (a `RuntimeWarning`), and the fit returned is the last good one: the result of the last stage that did converge. So a poor starting point is never fed into an expensive sampler. If the first stage is the one that fails, its best attempt is returned, labeled as not converged.
 
 ```text
 Stage 1 of 2: optuna
 Not converged: the best value improved by 4.1% over the last quarter of the 500 trials; try more trials (n_trials=)
-StageStopped: stage 1 (optuna) did not converge (the best value improved by 4.1% over the last quarter of the 500 trials; try more trials (n_trials=)), so the stages after it were not run; returning its best attempt
+RuntimeWarning: stage 1 (optuna) did not converge (the best value improved by 4.1% over the last quarter of the 500 trials; try more trials (n_trials=)), so the stages after it were not run; returning its best attempt
 ```
 
 A single method is the one-stage case: `method='optuna'` and `method=['optuna']` are the same.
 
 ## The result
 
-<!-- fragment -->
 ```python
 fit.sim          # the calibrated sim: a copy of the original with the best-fit values, already run
 fit.pars         # the best-fit value of each parameter, a dict that can be passed to ss.Sim(pars=...)
@@ -294,7 +284,6 @@ Every fit says whether it converged: `fit.converged` is true or false, and `fit.
 | Method family | Reported |
 |---|---|
 | SciPy optimizers | whether the best two searches from the scan's points ended within 0.1 of each other (of the negative log-likelihood; 0.1% of a goodness of fit), with the value each ended at and the number of evaluations; a single search (`restarts=1`) reports SciPy's own rule, which is wrong in both directions often enough not to be relied on |
-| `asd` | whether the method stopped by its own rule (its message), and the number of evaluations |
 | NUTS | R-hat (rank-normalized) and bulk effective sample size of each parameter, and divergences; converged if R-hat is at most 1.01 with no divergent draws |
 | Particle MCMC | R-hat, effective sample size, and the share of proposals each chain accepted; converged if R-hat is at most 1.01 |
 | ABC-SMC | the final tolerance, the share of the last proposals accepted, and the effective sample size; converged if the tolerance has stopped shrinking (by less than 10% in the last generation) |
@@ -305,14 +294,14 @@ A best-fit value at or near a bound is flagged when the fit ends (`AtBound`), be
 ## What is model and what is fitting
 
 - A likelihood declared on a result is part of the model: it says how observations relate to the process.
-- The data is not part of the model either, but it is part of the run's identity: `sim.hash()` has a part for it (`data`), apart from the model's ([11-random.md](11-random.md#run-identity)).
-- Everything else here is a fitting setting: the weights, goodness of fit, fitting method, number of trials, and seeds. Changing them does not change the model or the sim's hash.
+- The data is not part of the model either.
+- Everything else here is a fitting setting: the weights, goodness of fit, fitting method, number of trials, and seeds. Changing them does not change the model.
 
 In practice both live in the same script, which is fine and avoids the two drifting apart.
 
 ## Fitting a product of parameters
 
-With a network or mixing pool, `beta` is per contact and the number of contacts belongs to the network, so incidence data determine only their product. The library notes this when it can see it (`Unidentifiable`), with the product (or ratio) the data determine: from the model, when two fitted parameters appear in its rates only multiplied together (or one divided by the other); over a posterior, when two are almost perfectly correlated; and in a fit by gradients, when two change the fitted results in almost the same way at the best fit.
+With a network or mixing pool, `beta` is per contact and the number of contacts belongs to the network, so incidence data determine only their product. The library notes this when it can see it, with the product (or ratio) the data determine: from the model, when two fitted parameters appear in its rates only multiplied together (or one divided by the other); over a posterior, when two are almost perfectly correlated; and in a fit by gradients, when two change the fitted results in almost the same way at the best fit.
 
 The remedy is to fit one of the two and fix the other, which is what the note says. Fitting a product as one free quantity (`pars=[beta * contacts]`) is not built.
 
@@ -329,7 +318,6 @@ Latin hypercube samples over the bounds (`n=100` by default; wide positive bound
 
 Which of two models is better supported by the data? "Does this model need an exposed compartment?" is this kind of question.
 
-<!-- fragment -->
 ```python
 comp = ss.fit.compare_models([sim_sir, sim_seir], data=df)
 comp.plot()

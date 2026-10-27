@@ -3,13 +3,13 @@ title: Bringing a model in
 jupyter: python3
 ---
 
-Many models already exist, written in other frameworks: an ODE model in odin or summer2, a stochastic model in SimInf, a configuration for flepiMoP. Starsim can read a model from eleven such frameworks and turn it into a Starsim model: the same states, transitions, and parameters, which can then be run, checked, stratified, given interventions, and fitted like any other. This tutorial imports a measles model written in odin, checks that it was read correctly, compares it with the model of the earlier tutorials, writes it out as Starsim code, and finishes an import that Starsim couldn't complete by itself.
+Many models already exist, written in other frameworks: an ODE model in odin or summer2, a stochastic model in SimInf, a configuration for flepiMoP. Starsim can read a model from eleven such frameworks and turn it into a Starsim model: the same states, transitions, and parameters, which can then be run, checked, stratified, given interventions, and fitted like any other. This tutorial imports a measles model written in odin, checks that it was read correctly, compares it with the model of the earlier tutorials, keeps it as Starsim code, and finishes an import that Starsim couldn't complete by itself.
 
 By the end of this tutorial, you will be able to:
 
 - import a model from another framework with `ss.interop.load()`, and read how each of its rates was translated;
-- check an imported model with `describe()`, and compare it with another model with `ss.diff()`;
-- write a model as Starsim code with `sim.to_code()`;
+- check an imported model with `describe()`, and compare its results with another model's;
+- keep an imported model as the Starsim code it was written as (`sim.imported.code`);
 - finish an import from the list of what wasn't translated.
 
 ## A model in odin
@@ -76,7 +76,7 @@ R0 is 1.9 × 8 = 15.2, as it should be, and with 10 people infectious at the sta
 
 ## Comparing it with a model written in Starsim
 
-`ss.diff()` compares two models in their own terms: their states, transitions, parameters, and settings. Here is the imported model against the measles model as written in Tutorial 3:
+Two models are the same if they give the same results. Here is the imported model against the measles model as written in Tutorial 3:
 
 ```{python}
 S, E, I, R = ss.states('S E I R')
@@ -85,21 +85,23 @@ progression = E >> I @ ss.days(10)
 recovery    = I >> R @ ss.days(8)
 measles = ss.Disease(infection, progression, recovery, init_n=dict(I=10))
 mine = ss.Sim(measles, total_pop=100_000, stop=ss.days(50))
+mine.run()
 
-ss.diff(sim, mine)
+theirs = sim.results[sim.diseases[0].name]
+print('Largest difference in I:', abs(theirs.I.values - mine.results[mine.diseases[0].name].I.values).max())
 ```
 
-The transitions are matched by the states they join, so `S_to_E` is matched with `infection`, and the infections are the same. The other two differ only in how they are written: the import has a rate of 0.1 a day where Tutorial 3 has an average of 10 days, which is the same exponential distribution. The parameters are the same, and the settings differ only in the solver (an ODE in the import, and chosen by Starsim in the other, which also chooses an ODE). So these are the same model.
+The two differ only in how they are written: the import names its transitions by the states they join (`S_to_E` rather than `infection`), and has a rate of 0.1 a day where Tutorial 3 has an average of 10 days, which is the same exponential distribution. Both run as an ODE, and the numbers agree, so these are the same model. Where two models differ, the `describe()` of each, side by side, shows how.
 
 ## Writing it as Starsim code
 
-`sim.to_code()` writes the model as a Python script that builds it again. For an imported model, it also says where the model came from and how each rate was read:
+An import gives Starsim code: the importer writes the model as a Python script, and the sim is that script run. The code is kept as `sim.imported.code`, and says where the model came from and how each rate was read:
 
 ```{python}
-print(sim.to_code())
+print(sim.imported.code)
 ```
 
-The code is a starting point to edit. A transition can be given a better name (`infection` rather than `S_to_E`), a rate can be written as the duration it stands for, and anything Starsim has that odin doesn't (age groups, interventions, a fit to data) can be added. `sim.to_code('measles_seir.py')` writes it to a file.
+The code is yours, a starting point to edit. A transition can be given a better name (`infection` rather than `S_to_E`), a rate can be written as the duration it stands for, and anything Starsim has that odin doesn't (age groups, interventions, a fit to data) can be added. `sc.savetext('measles_seir.py', sim.imported.code)` writes it to a file.
 
 ## Running it in other ways
 
@@ -150,10 +152,10 @@ sim = ss.interop.load('data/measles_seasonal.R', stop=20*365, dt=7)
 sim.imported.incomplete
 ```
 
-The sim still runs without the parts that are missing, but here that means a model with no transmission, so it has to be finished first. The code that `to_code()` writes lists what wasn't translated at the end, as comments:
+The sim still runs without the parts that are missing, but here that means a model with no transmission, so it has to be finished first. The code of the import lists what wasn't translated at the end, as comments:
 
 ```{python}
-print(sim.to_code())
+print(sim.imported.code)
 ```
 
 To finish it, add what is missing. A seasonal cycle like this one is `ss.seasonal()` ([Parameters over time](g4_time.qmd)): a mean, an amplitude, and the time of year of the peak, here the start of the year (`peak=0`). Here is the code above, with the transmission added and the transitions renamed. Births and deaths into and out of every state are also shorter written as `ss.birth()` and `ss.death()` in `demographics=`, as in [Tutorial 4](t4_ages.qmd), which is the same model:
@@ -195,10 +197,10 @@ For a longer model, with more that isn't translated, `sim.imported.prompt` is a 
 | SimInf | An R script | [Coming from SimInf](../coming_from/siminf.qmd) |
 | summer2 | The model itself, or JSON written by a script in its environment | [Coming from summer2](../coming_from/summer2.qmd) |
 
-Where a framework is not a Python package that can be installed with Starsim, a short script, run where that framework is installed, writes its model as JSON for Starsim to read; the scripts are in `starsim/interop/`. A model can also be written out to odin or SBML, with `ss.interop.export(sim, 'odin', filename='measles.R')`; each export lists anything it couldn't carry. [Importing and exporting models](../user_guide/interop_import.qmd) covers the importers and exporters in more detail, and [The model spec, `to_code()`, and `diff()`](../user_guide/interop_spec.qmd) covers comparing and writing out models.
+Where a framework is not a Python package that can be installed with Starsim, a short script, run where that framework is installed, writes its model as JSON for Starsim to read; the scripts are in `starsim/interop/`. A model can also be written out to odin or SBML, with `ss.interop.export(sim, 'odin', filename='measles.R')`; each export lists anything it couldn't carry. [Importing and exporting models](../user_guide/interop_import.qmd) covers the importers and exporters in more detail.
 
 ## Exercises
 
-1. Import the model with another value of β, with `pars=dict(beta=1.5)` to `ss.interop.load()`, and use `ss.diff()` to compare the result with the model above. What does `ss.diff()` report?
+1. Import the model with another value of β, with `pars=dict(beta=1.5)` to `ss.interop.load()`, and compare its code and its results with the model above. What changed in the code, and how much later is the peak?
 2. Import the model of the first section for a village of 1,000 people with one person infectious at the start (`pars=dict(N0=1000, I0=1)`), and run it as a stochastic compartmental model 100 times (`sim.run(solver='binomial', n_runs=100)`), for 200 days. In how many of the runs is there no outbreak? Compare this with 1/R0, the chance that a single infection's chain of transmission dies out by chance in a branching process.
-3. Write the imported model of the first section as code, and stratify it by age as in [Tutorial 4](t4_ages.qmd), with the contact matrix there. What happens to R0, and why? What value of β gives an R0 of about 15 again?
+3. Take the code of the imported model of the first section, and stratify it by age as in [Tutorial 4](t4_ages.qmd), with the contact matrix there. What happens to R0, and why? What value of β gives an R0 of about 15 again?

@@ -46,7 +46,6 @@ def test_dist(m=m):
     assert 0 < rvs.min() < 1, 'Values should be between 0 and 1'
 
     # Test other options
-    dist.show_state()
     dist.plot_hist()
     return rvs
 
@@ -141,15 +140,11 @@ def test_exceptions(m=m):
     sc.heading('Testing exceptions and strict')
 
     # Create a strict distribution
-    dist = ss.random(strict=True, auto=False)
+    dist = ss.random(strict=True)
     with pytest.raises(ss.errors.DistNotInitializedError):
         dist(m) # Check that we can't call an uninitialized
-
-    # Initialize and check we can't call repeatedly
     dist.init(trace='test', sim=make_sim())
     rvs = dist(m)
-    with pytest.raises(ss.errors.DistNotReadyError):
-        dist(m) # Check that we can't call an already-used distribution
 
     # Check that we can with a non-strict Dist
     dist2 = ss.random(strict=False)
@@ -313,6 +308,47 @@ def test_choice_slots():
     sc.printgreen('✓ ss.choice correct and CRN-safe with large slots')
     return vals
 
+
+def test_choice_rows():
+    """ ss.choice with a row of probabilities per agent: right frequencies, and each agent's choice independent of the others' """
+    sc.heading('Test ss.choice with a row per agent')
+    n, k = 20_000, 4
+    rng = np.random.default_rng(1)
+    P = rng.random((n, k)) # Unnormalized: each row is normalized
+    P2 = P.copy()
+    P2[1::2] = rng.random((n//2, k)) # Change every other agent's row
+    uids = ss.uids(np.arange(n))
+    make = lambda Q: ss.choice(a=k, p=lambda uids: Q[uids], strict=False).init(slots=np.arange(n))
+
+    # Common random numbers: the same choice whoever else is drawn for, and whatever their rows
+    vals = make(P).rvs(uids)
+    assert np.array_equal(make(P).rvs(uids[::3]), vals[::3]), 'Drawing for fewer agents changed their choices'
+    assert np.array_equal(make(P2).rvs(uids)[::2], vals[::2]), "Changing other agents' rows changed these agents' choices"
+
+    # Frequencies match the rows, here two kinds of row
+    Q = np.where((np.arange(n) % 2)[:, None], [0, 1, 1, 2], [3, 0, 0, 1]) # As weights
+    vals = make(Q).rvs(uids)
+    assert np.all(vals[0::2] != 1) and np.all(vals[1::2] != 0), 'A choice with probability 0 was chosen'
+    assert np.isclose((vals[1::2] == 3).mean(), 0.5, atol=0.02) and np.isclose((vals[0::2] == 0).mean(), 0.75, atol=0.02), 'Frequencies do not match the rows'
+
+    # A row per draw for a size works too, and a wrong shape is an error
+    assert len(ss.choice(a=3, p=np.full((5, 3), 1/3), strict=False).init().rvs(5)) == 5
+    with pytest.raises(ValueError):
+        make(P[:, :3]).rvs(uids)
+    sc.printgreen('✓ ss.choice with a row per agent is correct and CRN-safe')
+    return vals
+
+
+def test_callable_default():
+    """ A function as a parameter can fix a value with a default argument (e.g. a loop variable), which is not filled in """
+    sc.heading('Test a callable parameter with a default argument')
+    means = []
+    for v in [0.2, 0.8]:
+        d = ss.bernoulli(p=lambda self, sim, uids, v=v: v)
+        d.init(force=True)
+        means.append(d.rvs(10_000).mean())
+    assert abs(means[0] - 0.2) < 0.02 and abs(means[1] - 0.8) < 0.02, means
+    return means
 
 def make_mock_modules():
     """ Create mock modules for the tests to use """
@@ -620,6 +656,8 @@ if __name__ == '__main__':
     o9 = test_repeat_slot()
     o10 = test_poisson_ppf()
     o11 = test_choice_slots()
+    o11b = test_choice_rows()
+    o11c = test_callable_default()
     o12 = test_timepar_dists()
     o13 = test_timepar_callable()
     o15 = test_dtype_consistency()

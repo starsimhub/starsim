@@ -149,7 +149,6 @@ class ART(ss.Intervention):
         ```
     """
     def __init__(self, year, coverage, pars=None, **kwargs):
-        self.requires = HIV
         self.year = sc.toarray(year)
         self.coverage = sc.toarray(coverage)
         super().__init__()
@@ -211,7 +210,6 @@ class CD4_analyzer(ss.Analyzer):
     """
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.requires = HIV
         self.cd4 = None
         return
 

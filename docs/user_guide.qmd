@@ -74,7 +74,6 @@ To run these user guides locally:
 
 ## Interoperability
 
-- [The model spec, `to_code()`, and `diff()`](user_guide/interop_spec.qmd)
 - [Importing and exporting models](user_guide/interop_import.qmd)
 - [Library modules](user_guide/interop_library.qmd)
 

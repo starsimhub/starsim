@@ -346,25 +346,6 @@ def test_strains_compartmental():
 
 
 @sc.timer()
-def test_strains_spec():
-    sc.heading('Testing a family in the model spec: to_code() round trip, ss.diff(), and the hash')
-    def make(m=0.3, shared='Ca'):
-        return family([make_genotype('hpv16'), make_genotype('hpv18', 2.5)], immunity=ss.immunity(due_to='R', rel_sus=[[0.9, m], [m, 0.9]], combine='sum'), init_prev=0.1, split=[0.6, 0.4], shared=shared)
-    sim = ss.Sim(diseases=make(), stop=2010, verbose=0)
-    spec = sim.to_spec()['modules'][-1]
-    strains = spec['strains']
-    assert spec['type'] == 'Family' and spec['members'] == ['hpv16', 'hpv18'] and strains['split'] == [0.6, 0.4] and strains['immunity'][0]['combine'] == 'sum'
-    ns = {}
-    exec(sim.to_code().replace("if __name__ == '__main__':", 'if False:'), ns) # Each member, then the family
-    assert ns['sim'].hash() == sim.hash()
-    assert 'immunity[0].rel_sus' in ss.diff(sim, ss.Sim(diseases=make(m=0.4), stop=2010, verbose=0), output=True)
-    other = [ss.Sim(diseases=f, stop=2010, verbose=0).hash() for f in [make(m=0.4), make(shared=False)]]
-    assert other[0].model == sim.hash().model and other[0].pars != sim.hash().pars # A value
-    assert other[1].model != sim.hash().model # The structure
-    return spec
-
-
-@sc.timer()
 def test_strains_branch_flows():
     sc.heading('Testing the flow to one destination of a split, in a family and as an outcome, as agents and compartments')
     def make(name, beta):
@@ -382,12 +363,6 @@ def test_strains_branch_flows():
         assert np.allclose(res.hpv.cin.CA + res.hpv.cin.S, res.hpv.cin) and np.allclose(res.hpv.cancers, res.hpv.cin.CA)
         out[solver] = [res.hpv.cin.CA.sum(), res.hpv.cin.CA.sum()/res.hpv.cin.sum()]
     assert np.isclose(out.abm[0], out.ode[0], rtol=0.1) and np.allclose([out.abm[1], out.ode[1]], 0.3, rtol=0.05), out
-
-    # Written to the spec as it was given, and back
-    sim = ss.Sim(diseases=make('a', 1.0), stop=2005, verbose=0)
-    ns = {}
-    exec(sim.to_code().replace("if __name__ == '__main__':", 'if False:'), ns)
-    assert ns['sim'].hash() == sim.hash()
     return out
 
 
@@ -438,7 +413,7 @@ def test_coded_modifiers():
             return
         def step(self):
             uids = (~self.affected).uids
-            p = -np.expm1(-self.pars.p_onset.rate*self.t.dt_year*self.modified('rel_sus', uids))
+            p = -np.expm1(-self.pars.p_onset.rate*self.t.dt_year*self.effective('rel_sus', uids))
             self.affected[uids[self.sim.people.housing[uids] | (np.random.default_rng(self.ti).random(len(uids)) < p)]] = True
             return
 
@@ -449,7 +424,7 @@ def test_coded_modifiers():
     assert (d.affected & ppl.male & ~ppl.housing).sum() > 100
     assert np.isclose(ppl.housing.mean(), 0.5, atol=0.05)
     Condition.reads_modifiers = ()
-    with pytest.raises(ss.errors.Unapplied, match='reads_modifiers'):
+    with pytest.raises(ValueError, match='reads_modifiers'):
         cond = Condition(name='cond')
         ss.Sim(diseases=cond, interventions=ss.modify(cond.rel_sus, multiply=0.0), n_agents=100, start=2000, stop=2001, verbose=0).init()
 
@@ -489,7 +464,6 @@ if __name__ == '__main__':
     immune = test_strains_immunity()
     nabs   = test_strains_immunity_attr()
     compart = test_strains_compartmental()
-    spec    = test_strains_spec()
     branch  = test_strains_branch_flows()
     cond    = test_condition_by_sex()
     seeds   = test_coded_seeds()

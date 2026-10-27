@@ -156,7 +156,7 @@ def test_timeline_syntax():
         g = 'stop and dur',
         h = 'multiple',
     )
-    dd20 = ss.date(2010) - ss.date(1990) # This was ss.datedur(days=7305), but is now just ss.datedur(years=20), since we switched from pd.Timedelta to dateutil.relativedelta
+    dd20 = ss.date(2010) - ss.date(1990) # The time between two dates, in days: ss.days(7305)
 
     # Test start
     kw.a1 = [dict(start=None, stop=None, dur=None, dt=None)           , dict(start=ss.years(2000), stop=ss.years(2050), dur=ss.years(50), dt=ss.years(1))]

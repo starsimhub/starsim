@@ -13,11 +13,11 @@ kw = dict(verbose=0, unit='day')
 
 
 def w209(sim):
-    """ The ss.errors.UndrivenUnused warnings raised when a sim is initialized """
+    """ The warnings raised when a sim is initialized that a transition has nothing to drive it """
     with warnings.catch_warnings(record=True) as w:
         warnings.simplefilter('always')
         sim.init()
-    return [str(x.message) for x in w if issubclass(x.category, ss.errors.UndrivenUnused)]
+    return [str(x.message) for x in w if 'so only custom code can move people along it' in str(x.message)]
 
 
 # %% Define the tests
@@ -95,7 +95,7 @@ def test_sti_failure():
         return ss.Sim(ng, interventions=ss.treat(drug, where=ng.C, interval=ss.days(30), name='clinic'), **kwargs)
     for solver,sim in run_both(make_resist).items():
         res = sim.results
-        assert np.isclose(res.ng.fail.sum(), 0.05*res.clinic.failed.sum(), rtol=0.01 if solver == 'ode' else 0.3), f'{solver}: {res.ng.fail.sum()} of {res.clinic.failed.sum()} failures'
+        assert np.isclose(res.ng.fail.sum(), 0.05*res.clinic.failed.sum(), rtol=0.01 if solver == 'ode' else 0.5), f'{solver}: {res.ng.fail.sum()} of {res.clinic.failed.sum()} failures' # As agents, about 25 of 500 failures: a relative sd of 0.2
 
     # A transfer for those who failed, as a step of its own: resistance acquired
     def make_amr(**kwargs):
@@ -194,7 +194,7 @@ def test_syphilis_stages():
 
     # A person who could match two transitions of one disease is an error
     syph = make_syph()
-    with pytest.raises(ss.errors.OverlappingSources):
+    with pytest.raises(ValueError, match='each person treated can move along only one transition'):
         ss.Sim(syph, interventions=ss.treat(ss.Treatment(moves=[syph.cure_early, syph.late])), **kw).init()
     return sims
 

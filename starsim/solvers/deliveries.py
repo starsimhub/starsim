@@ -29,7 +29,7 @@ def memory_layout(sim, key):
     cache = sim.__dict__.setdefault('_memory_layout', {})
     if key not in cache:
         name, outcome = key
-        cache[key] = None if not ss.interventions.memory_needs(sim).get(key) else ss.transitions.Strat(f'ever_{name if outcome is None else f"{name}_{outcome}"}', [False, True], split=[1.0, 0.0])
+        cache[key] = None if not ss.interventions.memory_needs(sim).get(key) else ss.dimensions.Strat(f'ever_{name if outcome is None else f"{name}_{outcome}"}', [False, True], split=[1.0, 0.0])
     return cache[key]
 
 
@@ -466,7 +466,6 @@ class CompartmentalDelivery:
         untouched[sources] = 0
         cured = np.clip(after - failed - untouched, 0, None)
         eng.y[rows] += after - C
-        eng.changed()
         return after, cured, failed
 
     def test(self, chosen, tails):

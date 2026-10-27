@@ -63,7 +63,7 @@ def test_particle_mcmc():
     assert fit.method == 'pmcmc'
     assert len(fit.samples) == 200 and len(fit.diagnostics.acceptance) == 2
     assert table.lower.beta < 0.5 < table.upper.beta # The posterior covers the value that made the data
-    with pytest.raises(ss.errors.NoPosterior): # A posterior needs a likelihood
+    with pytest.raises(ValueError, match='not every data series has a likelihood'): # A posterior needs a likelihood
         make(data=data).fit(method='pmcmc', gof='nae')
 
     # A best fit scores each point by the mean of several runs, with fresh seeds at each point under Optuna, and reports the score of the best values over the first seeds
@@ -118,7 +118,7 @@ def test_fit_inputs(tmp_path):
         sir = ss.Disease(S >> I @ beta*I, I >> R @ ss.years(2), ss.Transition(R, S, dur=ss.years(3)), init_prev=0.01, name='sir')
         return ss.Sim(sir, start=2000, stop=2020, dt=ss.years(0.05), data=data, verbose=0)
     res = make().run().results.sir
-    flows, stocks = res.S_to_I.resample('year'), res.I.resample('year', kind='ratio') # A flow summed over each year, a stock averaged over it
+    flows, stocks = res.S_to_I.resample('year'), res.I.resample('year', summarize_by='mean') # A flow summed over each year, a stock averaged over it
     df = pd.DataFrame(dict(year=flows.timevec, S_to_I=flows.values, I=stocks.values)).iloc[1:-1]
     fit = make(beta=0.5, data=df).fit(verbose=0)
     assert np.isclose(fit.pars.beta, 0.3, rtol=1e-3) # Before, 0.279, from data compared a year off
@@ -143,7 +143,7 @@ def test_fit_inputs(tmp_path):
     data = pd.DataFrame(dict(year=np.arange(2002, 2010), sis_prevalence=0.1, notes=1))
     sim = ss.Sim(diseases=ss.SIS(dt=ss.years(1)), networks=net, interventions=cure(p=ss.par(0.1, bounds=[0.01, 0.5])), n_agents=300, start=2000, stop=2010, data=data, verbose=0)
     sim.pars.diseases.pars.init_prev = 0.2 # Changed after the sim was built: the fit's runs use it too
-    with pytest.raises(ss.errors.UnknownDataColumn): # Compared with the results, the column must match one
+    with pytest.raises(KeyError, match='the data column "notes" matches no result'): # Compared with the results, the column must match one
         sim.fit()
     loss = lambda sim: abs(sim.results.sis.prevalence[-1] - 0.1)
     path = tmp_path/'fit.log'
@@ -258,6 +258,20 @@ def test_fit_fresh_seeds():
     return fit
 
 
+@sc.timer()
+def test_fit_sim_setting():
+    sc.heading('Testing fitting a sim setting given as ss.par (n_agents), which builds a new sim for each value')
+    S, I = ss.states('S I')
+    make = lambda n_agents, data=None: ss.Sim(ss.Disease(S >> I @ 0.2*I, I >> S @ ss.days(20), init_prev=0.1, name='sis'), networks='random', n_agents=n_agents, start=0, stop=60, unit='day', solver='abm', data=data, verbose=0)
+    data = make(2000).run().to_data('sis.I') # With no total_pop, the counts are of agents, so they tell the number apart
+    fit = make(ss.par(1000, bounds=[500, 4000]), data=data).fit(verbose=0)
+    assert np.isclose(fit.pars.n_agents, 2000, rtol=0.1), fit.pars
+    assert len(fit.sim.new(pars=fit.pars).init().people) == int(fit.pars.n_agents) # pars= takes the setting by name
+    with pytest.raises(sc.KeyNotFoundError, match='setting of the sim'):
+        make(2000).new(pars=dict(n_agents=3000)).init() # Not given as ss.par, so not a value by name
+    return fit
+
+
 #%% Run as a script
 if __name__ == '__main__':
     test_particle_mcmc()
@@ -265,3 +279,4 @@ if __name__ == '__main__':
     test_fit_what_is_not_a_parameter()
     test_fit_arrays()
     test_fit_fresh_seeds()
+    test_fit_sim_setting()

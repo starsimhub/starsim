@@ -53,12 +53,12 @@ recovery  = I >> R @ ss.days(10)
 spellings['Whole flow'] = ss.Disease(infection, recovery, init_prev=0.001, name='sir')
 ```
 
-A sim's hash identifies its model: the same states, transitions, and rates give the same hash, whatever the spelling.
+The same states, transitions, and rates give the same results, whatever the spelling:
 
 ```{python}
 for label, disease in spellings.items():
-    sim = ss.Sim(disease, total_pop=10_000, stop=ss.days(150), verbose=0)
-    print(label, sim.hash().model)
+    sim = ss.Sim(disease, total_pop=10_000, stop=ss.days(150), verbose=0).run()
+    print(f'{label:12s} peak infections: {sim.results.sir.I.max():,.0f}')
 ```
 
 The state-transition diagram, from `diagram()` (the dashed arrow is a transmission):

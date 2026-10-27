@@ -121,7 +121,6 @@ def test_arr_inplace():
     assert np.allclose(c.raw, original_raw + b.raw), 'Non-in-place + must produce correct values'
 
     masked_auids = ss.uids(np.array([0, 1, 2, 4, 5, 6, 7, 8, 9], dtype=int))
-    inactive_uid = 3
 
     def masked(b_auids=masked_auids):
         """ An Arr of 3s and one of 0 to 9, with agent 3 inactive """
@@ -140,8 +139,7 @@ def test_arr_inplace():
     expected[masked_auids] += b.raw[masked_auids]
 
     a += b
-    assert np.allclose(a.raw, expected), 'In-place += must update raw values for active UIDs only'
-    assert a.raw[inactive_uid] == 3.0,   'In-place += must not modify inactive UIDs'
+    assert np.allclose(a.values, expected[masked_auids]), 'In-place += must update the active agents\' values'
     assert id(a) == original_id,         'In-place += must not replace the Arr object'
     assert id(a.raw) == original_id_raw, 'In-place += must not replace the .raw array'
 
@@ -150,19 +148,17 @@ def test_arr_inplace():
     expected = a.raw.copy()
     expected[masked_auids] -= b.raw[masked_auids]
     a -= b
-    assert np.allclose(a.raw, expected), 'In-place -= must update raw values for active UIDs only'
-    assert a.raw[inactive_uid] == 3.0,   'In-place -= must not modify inactive UIDs'
+    assert np.allclose(a.values, expected[masked_auids]), 'In-place -= must update the active agents\' values'
 
     # --- In-place masked Arr +/- scalar ---
     a, _ = masked()
     expected = a.raw.copy()
     expected[masked_auids] += 2
     a += 2
-    assert np.allclose(a.raw, expected), 'In-place += scalar must update active UIDs only'
+    assert np.allclose(a.values, expected[masked_auids]), 'In-place += scalar must update the active agents\' values'
     expected[masked_auids] -= 1
     a -= 1
-    assert np.allclose(a.raw, expected), 'In-place -= scalar must update active UIDs only'
-    assert a.raw[inactive_uid] == 3.0,   'Scalar in-place arithmetic must not modify inactive UIDs'
+    assert np.allclose(a.values, expected[masked_auids]), 'In-place -= scalar must update the active agents\' values'
 
     # --- In-place masked Arr += ndarray aligned to active UIDs ---
     a, _ = masked()
@@ -170,20 +166,19 @@ def test_arr_inplace():
     expected = a.raw.copy()
     expected[masked_auids] += rhs
     a += rhs
-    assert np.allclose(a.raw, expected), 'In-place += ndarray must treat the ndarray as aligned to active UIDs'
+    assert np.allclose(a.values, expected[masked_auids]), 'In-place += ndarray must treat the ndarray as aligned to active UIDs'
 
     # --- In-place masked Arr += ndarray with mismatched length ---
     a, _ = masked()
-    with pytest.raises(ValueError): # In-place += with a mismatched ndarray length must raise an error
-        a += np.arange(len(masked_auids) + 1, dtype=float)
+    with pytest.raises(ValueError): # Neither one value per active agent nor one per raw place
+        a += np.arange(len(a.raw) + 1, dtype=float)
 
     # --- In-place masked Arr += Arr with different active masks ---
     a, b = masked(b_auids=ss.uids(np.array([0, 1, 2, 3, 4, 5, 6, 7, 8], dtype=int)))
     expected = a.raw.copy()
     expected[masked_auids] += b.raw[masked_auids]
     a += b
-    assert np.allclose(a.raw, expected), 'Arr-to-Arr arithmetic must read RHS values from other.raw[self.auids]'
-    assert a.raw[inactive_uid] == 3.0,   'Mismatched RHS masks must not modify inactive UIDs'
+    assert np.allclose(a.values, expected[masked_auids]), 'Arr-to-Arr arithmetic must read RHS values at the same agents'
 
     # --- Non-in-place masked Arr + Arr ---
     a, b = masked()
@@ -194,8 +189,7 @@ def test_arr_inplace():
     assert id(c) != id(a),               'Masked non-in-place + must return a new Arr object'
     assert id(c.raw) != id(a.raw),       'Masked non-in-place + must use a new .raw array'
     assert np.allclose(a.raw, original_raw), 'Masked non-in-place + must not modify the original Arr'
-    assert np.allclose(c.raw, expected), 'Masked non-in-place + must preserve inactive raw values and update active UIDs'
-    assert c.raw[inactive_uid] == original_raw[inactive_uid], 'Masked non-in-place + must preserve inactive raw values'
+    assert np.allclose(c.values, expected[masked_auids]), 'Masked non-in-place + must give the active agents\' values (the inactive agents\' raw values are computed too, and never read as theirs)'
 
     return a, b
 

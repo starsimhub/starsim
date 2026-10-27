@@ -43,17 +43,16 @@ A disease whose strains have courses of their own (`ss.Strains(shared=...)`, [05
 
 ## `ss.Result`
 
-A result carries its name, label, module, values, time vector, unit, and kind: a flow, a stock, or a ratio. This is Starsim's `ss.Result`, with two additions: selection by stratum, and a run dimension when it holds the results of many runs.
+A result carries its name, label, module, values, time vector, unit, and how it is summarized over time (`summarize_by`): `'sum'` for a flow, `'last'` for a stock, `'mean'` for a ratio, or `None` for a result that is not summarized; other summarizers can be added to `ss.Result.summarizers`. This is Starsim's `ss.Result`, with two additions: selection by stratum, and a run dimension when it holds the results of many runs.
 
 During a run, a result is read from inside the sim (by a trigger, a modifier, or custom code) as in Starsim: the storage is preallocated for the whole run, and during a step `sim.ti` is the step's own index, where its results will go, so the results so far (those of the steps before it) are `res.I[:sim.ti]`, and a result written by the step itself is `res.x[sim.ti]`. A shorter spelling for "the steps so far" (`res.I.so_far`, or a slicing helper) would be convenient in triggers; it is listed as open and not specified here ([19-open-questions.md](19-open-questions.md)).
 
-Because a result knows whether it is a flow, a stock, or a ratio (`res.infection.kind` is `'flow'`), converting it to a coarser time step does the right thing without being told: `res.infection.resample('week')` sums, `res.I.resample('week')` takes the value at the end of the week, and a ratio is recomputed from its resampled parts. Weeks (and days, or any duration) are counted from the sim's start; months and years are calendar ones for a sim with dates. As for any period, a time point closes the step that ends there, so the point on 1 January is in the year before, and the sim's start is in the first period: a run from 2000 to 2003 has three years. The same kind decides how the result is compared with data and summarized by `sim.summarize()` (the total of a flow, the final value of a stock, the mean of a ratio). A result has one time vector; other time representations are conversions.
+Because a result knows how it is summarized (`res.infection.summarize_by` is `'sum'`), converting it to a coarser time step does the right thing without being told: `res.infection.resample('week')` sums, `res.I.resample('week')` takes the value at the end of the week, and a ratio is recomputed from its resampled parts. Weeks (and days, or any duration) are counted from the sim's start; months and years are calendar ones for a sim with dates. As for any period, a time point closes the step that ends there, so the point on 1 January is in the year before, and the sim's start is in the first period: a run from 2000 to 2003 has three years. The same `summarize_by` decides how the result is compared with data and summarized by `sim.summarize()` (the total of a flow, the final value of a stock, the mean of a ratio, which for a ratio with a numerator and denominator is each summed and then divided). It is Starsim 3's spelling, kept as the only one, since it says what is done. A result has one time vector; other time representations are conversions.
 
 ### Selecting strata
 
 After stratifying, a result is still **one result**, now with a dimension for each stratification. The strata are coordinates of that result, not separate results: there is no `I_female_high`. Used as it is, the result is the total; `.select()` picks groups by name, and `.by()` gives one series per group:
 
-<!-- fragment -->
 ```python
 res = sim.results.sir
 res.I                                              # everyone in I
@@ -71,6 +70,24 @@ res.prevalence.select(risk='high')
 - A state that is not people has only the dimensions it was stratified by (`patch`, or its own), so `res.W.select(age=0)` is an error and `res.W.select(patch='Nairobi')` is not.
 
 A ratio is never averaged over groups. It keeps its numerator and denominator, each is summed over the selected groups, and then they are divided: prevalence among women is the women in `I` over the women in `N` (see [Ratios and combinations](#ratios-and-combinations)). In an agent-based run, selecting on a continuous property uses the bins it was stratified with ([05-dimensions.md](05-dimensions.md)).
+
+A module written as code keeps a result by group in the same way when it is made with `groups=True`, so it can be selected as a declared module's is, instead of one result per stratum (`prevalence_f_15_20`). As agents, stratifying the sim by a property people already have (`sex`, `age`) changes no draws, so it can be done for the results alone. `sim.groups.count(where)` counts the people alive for whom a condition holds, in each group, in one pass (each agent by its weight, if they differ), and `res.set_groups(ti, vals, denom=None)` writes a count by group, or a ratio from its numerator and denominator by group:
+
+```python
+sim.stratify(sex=['female', 'male'], age=[0, 15, 20, 25, 30, 35, 50, 65])
+
+def init_results(self):                             # in the module written as code
+    super().init_results()
+    self.define_results(ss.Result('infected', groups=True), ss.Result('prevalence', scale=False, groups=True))
+
+def update_results(self):
+    super().update_results()
+    alive, infected = self.sim.groups.count(), self.sim.groups.count(self.infected)
+    self.results.infected.set_groups(self.ti, infected)
+    self.results.prevalence.set_groups(self.ti, infected, alive)
+
+sim.results.ng.prevalence.select(sex='female', age='15-19')   # infected women aged 15-19 over all women aged 15-19
+```
 
 ## Declaring more results
 
@@ -118,7 +135,6 @@ The rules:
 
 An outcome is a reported quantity: a flow worked out from other flows. It covers reported cases, hospital admissions, deaths, and similar series that are counted from the epidemic without being part of transmission. It moves nobody: no one changes state because they were counted.
 
-<!-- fragment -->
 ```python
 ss.outcome(
     source,               # a transition, another outcome, or a weighted sum of them
@@ -129,7 +145,7 @@ ss.outcome(
 ```
 
 - **The source is a weighted sum of flows.** A number times a flow means that fraction of those events: `0.5 * infection` is half of infections. There is no `p=` argument; the weight is the probability. Reporting that depends on severity is a sum, `ss.outcome(0.01 * asymptomatic + 0.3 * symptomatic + 0.8 * severe, delay=ss.days(3))`, where the three names are the transitions into those states. A weight follows the parameter ladder ([04-parameters.md](04-parameters.md)): it can be an `ss.par` with `bounds` and be fitted like any other parameter, or `ss.by(age=[...])`.
-- **Outcomes chain.** The source of `deaths` above is the outcome `hosp`, so infection → hospitalization → death is three lines. A chain that loops back on itself raises `OutcomeCycle`. Where a transition was declared as a keyword and there is no variable to refer to, the source may be its name (`ss.outcome('infection', delay=ss.days(5))`); a name that matches nothing raises `UnknownOutcomeSource`.
+- **Outcomes chain.** The source of `deaths` above is the outcome `hosp`, so infection → hospitalization → death is three lines. A chain that loops back on itself raises a `ValueError`. Where a transition was declared as a keyword and there is no variable to refer to, the source may be its name (`ss.outcome('infection', delay=ss.days(5))`); a name that matches nothing raises a `KeyError`.
 - **`delay=`** is a duration, a distribution (reporting delays are not a single number), or a function of the sim for anything irregular.
 - **`duration=` gives both series.** `hosp` is admissions per step and `n_hosp` is the number currently in hospital.
 - **There is no reporting period.** An outcome is a flow on the sim's time step, like a transition. Weekly data is compared with its total over each week automatically (see [Data](#data)), and `res.cases.resample('week')` gives the weekly series to plot.
@@ -161,7 +177,6 @@ An outcome is a result, and anything can read a result: a [trigger](08-intervent
 
 `sim.plot()` plots each result in axes of its own, leaving out the sim's own results that never change (such as the number alive in a closed population). A module's `plot()` plots its results by what they are:
 
-<!-- fragment -->
 ```python
 sir.plot()            # the number in each state, together in one axes (the default; 'states')
 sir.plot('flows')     # each transition's flow, in axes of its own
@@ -182,16 +197,14 @@ sim.plot()
 ```
 
 - `data=` takes a file name, a data frame, or an `ss.simdata(...)` object (below). It has a time column (`date`, `year`, `t`, or `time`) and one column per data series, **named like the result it corresponds to** (`cases`, `deaths`, `prevalence`, or `cin.X` for the flow to one destination of a transition). With several modules, a column is matched to the one module that has a result of that name, or is written `sir.cases` when the name is ambiguous. This works the same for modules written as code (Starsim 3's diseases among them), so it is a way into fitting for a Starsim 3 model.
-- A column that matches no result is noted when the sim is initialized, with the result names closest to it, since data on a sim can be just for plotting (or read by a fit's own `gof=`); when a fit compares every column with its result, it is an error (`UnknownDataColumn`), so a typo in a header is caught. `ss.simdata(..., ignore_extra=True)` drops such columns. Data entirely outside the simulated period raises `DataMisaligned` when it is compared with the results (by `sim.fit()`, for instance); data partly outside is used where it overlaps.
+- A column that matches no result is noted when the sim is initialized, with the result names closest to it, since data on a sim can be just for plotting (or read by a fit's own `gof=`); when a fit compares every column with its result, it is an error (a `KeyError`), so a typo in a header is caught. `ss.simdata(..., ignore_extra=True)` drops such columns. Data entirely outside the simulated period raises a `ValueError` when it is compared with the results (by `sim.fit()`, for instance); data partly outside is used where it overlaps.
 - Data for particular strata is given in long form: extra columns named after dimensions (`age`, `patch`) say which stratum each row belongs to, by the level's label (or position). Each result and stratum is then one data series, named like `cases[age=0-14]` and compared with `cases.select(age='0-14')`; a likelihood or weight given for `cases` applies to every stratum of it.
 - For a disease whose strains have courses of their own, a strain's own result is its column (`hpv16.cancer`), and in long form a column named after the strains (`strain`, or the name given to `ss.Strains`) gives it: `cancer` in a row for `strain=hpv16` is `hpv16.cancer`. `hpv.cancer[strain=hpv16]` is an error naming `hpv16.cancer`.
 - The data need not be on the model's time step. A flow (weekly reported cases) is compared with the model's flow summed over each data interval; a stock or ratio (a prevalence survey) is compared with the model's value at the data's time. The result already knows which it is. The interval assumed for flow data is the spacing of the data. Data by calendar year, an integer `year` column (as in UNAIDS-style data and `res.resample('year')`), is the year each row names, not 1 January of it: a flow is summed over the year and a stock or ratio averaged over it, with a note; only whole years inside the run are compared. A result of a module with a timestep of its own is compared on that module's timeline.
 - Results that have data are plotted with it automatically: `sim.plot()` (and `msim.plot()`, with the data of its sims) draws the model as a line and the data as points. A flow with data at a longer period than the step (weekly cases from a daily model) is drawn as the fit compares it, its total over each period of the data, so a good fit looks like one; `fit.plot()` and its posterior band do the same.
-- The data's content is hashed as a part of `sim.hash()` of its own (`data`), apart from the model's ([11-random.md](11-random.md#run-identity)).
 
 Real files rarely arrive with matching headers, so `ss.data` renames on the way in:
 
-<!-- fragment -->
 ```python
 ss.simdata(
     source,                 # a file name or a data frame

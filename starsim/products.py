@@ -61,7 +61,7 @@ class EventSource:
         """ The error for a misspelled outcome """
         names = self.outcome_names()
         name = self.__dict__.get('name')
-        return AttributeError(f'"{name}" has no attribute or outcome "{attr}"; its outcomes (events) are {sc.strjoin(names) if names else "none"}{ss.transitions.did_you_mean(attr, names)}')
+        return AttributeError(f'"{name}" has no attribute or outcome "{attr}"; its outcomes (events) are {sc.strjoin(names) if names else "none"}{ss.expressions.did_you_mean(attr, names)}')
 
     def init_events(self, sim):
         """ Before a run: the people of each event on the current step, and the memory the sim needs (as agents, arrays of each person's last time and count) """
@@ -212,14 +212,6 @@ class Product(EventSource, ss.Module):
         super().init_pre(sim)
         return
 
-    spec_keys = [] # The keywords that make the product, for the model spec
-
-    def spec(self):
-        """ The product as plain data, for the model spec of its delivery: its type, its name, and the keywords that make it """
-        out = dict(type=type(self).__name__, name=self.name)
-        out.update({key:ss.interventions.spec_value(getattr(self, key)) for key in self.spec_keys if getattr(self, key) is not None})
-        return out
-
 
 #%% Products for declared models: what is delivered by ss.vaccinate(), ss.screen(), and ss.treat()
 
@@ -245,7 +237,7 @@ class Effect:
     def constant(self):
         """ Whether the effect is the same at every step (so the tables need not be worked out step by step): a number for each group """
         eff = self.efficacy
-        return sc.isnumber(eff) or (isinstance(eff, ss.by) and not any(isinstance(v, ss.transitions.TimeValue) for v in eff.items))
+        return sc.isnumber(eff) or (isinstance(eff, ss.by) and not any(isinstance(v, ss.parameters.TimeValue) for v in eff.items))
 
     def apply(self, value, engine):
         product = self.product
@@ -370,7 +362,7 @@ class Held(Product):
     def __init__(self, efficacy=None, waning=None, doses=None, during=None, cost=None, name=None, label=None, **kwargs):
         super().__init__(name=name, label=label, **kwargs)
         for fn in (waning.values() if isinstance(waning, dict) else [waning]):
-            if isinstance(fn, ss.transitions.TimeValue): # Called with the sim, for the value at the current time
+            if isinstance(fn, ss.parameters.TimeValue): # Called with the sim, for the value at the current time
                 errormsg = f'waning= is a duration or a function of the time since delivery, not {type(fn).__name__}, which varies with the time of the sim; for protection that fades by a table, give e.g. waning=lambda t: np.interp(t.years, [0, 1, 2], [1, 0.5, 0])'
                 raise TypeError(errormsg)
         if isinstance(waning, dict): # One for each effect (MS5): functions of time, or None for none
@@ -440,7 +432,7 @@ class Held(Product):
             return {self.disease:self.effects}
         if not all(keyed):
             others = [k for k,ok in zip(eff, keyed) if not ok]
-            raise ss.errors.UnknownEffect(f'the efficacy of "{self.name}" is keyed by diseases and by {sc.strjoin(others)}, which is not a declared disease; the diseases are {sc.strjoin(names)}. '
+            raise sc.KeyNotFoundError(f'the efficacy of "{self.name}" is keyed by diseases and by {sc.strjoin(others)}, which is not a declared disease; the diseases are {sc.strjoin(names)}. '
                                    f'Give the efficacy against each thing within each disease, e.g. dict(hpv16=dict(acquisition=0.9)).')
         return {ss.conditions.modname(k):(dict(v) if isinstance(v, dict) else {self.default_key:v}) for k,v in eff.items()}
 
@@ -511,8 +503,7 @@ class Held(Product):
                 for key,eff in effects.items():
                     kind = dict(acquisition='rel_sus', transmission='rel_trans').get(key)
                     if kind is None:
-                        raise ss.errors.UnknownEffect(f'the efficacy of "{self.name}" has the key "{key}", but "{disname}" is written as code, so a product acts only on its acquisition (rel_sus) and transmission (rel_trans)')
-                    ss.connectors.AgentModifiers.attach(coded, kind, sim)
+                        raise sc.KeyNotFoundError(f'the efficacy of "{self.name}" has the key "{key}", but "{disname}" is written as code, so a product acts only on its acquisition (rel_sus) and transmission (rel_trans)')
                     sim.modifiers[(disname, kind, None)].append(Effect(self, key, eff))
                 continue
             dis = sim.get_declared(disname)
@@ -533,7 +524,7 @@ class Held(Product):
                     states = (graph.transitions.get(key) or graph.destination(key)).src
                 else:
                     options = ['acquisition', 'transmission'] + ['mortality']*bool(deaths) + list(graph.transitions) + graph.destinations()
-                    raise ss.errors.UnknownEffect(f'the efficacy of "{self.name}" has the key "{key}", which is not something it can act on in "{dis.name}". Valid keys are {sc.strjoin(options)}{ss.transitions.did_you_mean(key, options)}')
+                    raise sc.KeyNotFoundError(f'the efficacy of "{self.name}" has the key "{key}", which is not something it can act on in "{dis.name}". Valid keys are {sc.strjoin(options)}{ss.expressions.did_you_mean(key, options)}')
                 by_strain = self.by_strain(eff, key, dis)
                 if by_strain is not None: # Against acquiring each strain, on each strain's force of infection
                     sim.modifiers[(dis.name, 'strain_sus', None)].append(StrainEffect(self, key, by_strain))
@@ -555,7 +546,7 @@ class Held(Product):
         vals = [vals[name] for name in names] if isinstance(vals, dict) else list(vals)
         if len(vals) != len(names):
             errormsg = f'the acquisition efficacy of "{self.name}" is by the strains of "{dis.name}", against acquiring each strain, so it takes one value per strain ({sc.strjoin(names)}), not {len(vals)}'
-            raise ss.errors.InvalidAdjustment(errormsg)
+            raise ValueError(errormsg)
         return np.array(vals, dtype=float)
 
     def check_dims(self, eff, key, dis, states):
@@ -565,7 +556,7 @@ class Held(Product):
         for strat in dis.graph.strats:
             missing = [s.name for s in states if s.people and s.name not in strat.states] if strat.states is not None and strat.name in eff.dims else []
             if missing:
-                raise ss.errors.InvalidAdjustment(f'the {key} efficacy of "{self.name}" is by "{strat.name}", but people in {sc.strjoin(missing)} of "{dis.name}" have no level of it (as agents, they would be read at the level of their last infection). '
+                raise ValueError(f'the {key} efficacy of "{self.name}" is by "{strat.name}", but people in {sc.strjoin(missing)} of "{dis.name}" have no level of it (as agents, they would be read at the level of their last infection). '
                                            f'For an efficacy against each genotype, make each a disease and key the efficacy by disease: ss.Vaccine(efficacy=dict(hpv16=0.95, hpv18=0.95)).')
         return
 
@@ -599,7 +590,7 @@ class Held(Product):
         uids = (arr == 1).uids
         if len(uids):
             dis = ss.interventions.coded_disease(sim, self.disease) or sim.get_declared(self.disease)
-            eng = dis.engine if dis.graph is not None else ss.connectors.AgentModifiers.engine(dis, sim)
+            eng = dis.engine
             p = -np.expm1(-eng.dt/eng.convert(self.waning))
             lost = uids[self.rng_wane.rvs(uids) < p]
             arr[lost] = 0
@@ -661,14 +652,6 @@ class Vaccine(Held):
         self.leaky = leaky
         self.take = take
         return
-
-    spec_keys = ['efficacy', 'waning', 'doses', 'during', 'cost']
-
-    def spec(self):
-        out = super().spec()
-        if self.take is not None: # All or nothing
-            out.update(efficacy=self.take, leaky=False)
-        return out
 
     def describe(self):
         out = super().describe()
@@ -734,8 +717,6 @@ class Treatment(Held):
         kit = ss.Treatment(moves={ng.cure: 0.95, ct.cure: 0.95}) # Two diseases, one product
         ```
     """
-    spec_keys = ['cure', 'efficacy', 'transition', 'to', 'moves', 'waning', 'during', 'cost']
-
     def __init__(self, cure=None, efficacy=None, transition=None, to=None, moves=None, **kwargs):
         if efficacy is not None and not isinstance(efficacy, dict):
             errormsg = f'The efficacy= of ss.Treatment() is its effects while it is held, as a dict (e.g. efficacy=dict(transmission=0.96)); the probability that it cures is cure= (e.g. ss.Treatment(cure={efficacy}))'
@@ -824,7 +805,7 @@ class Treatment(Held):
             states = coded_states(coded)
             unknown = [name for name in cures if name not in states]
             if unknown:
-                raise ss.errors.UnknownState(f'the treatment "{self.name}" has a cure for {sc.strjoin(unknown)}, which {"is" if len(unknown) == 1 else "are"} not a state of "{disease}" (written as code, so its boolean states). Its states are {sc.strjoin(states)}.')
+                raise sc.KeyNotFoundError(f'the treatment "{self.name}" has a cure for {sc.strjoin(unknown)}, which {"is" if len(unknown) == 1 else "are"} not a state of "{disease}" (written as code, so its boolean states). Its states are {sc.strjoin(states)}.')
             self.cures = f'from {sc.strjoin(cures)} with {disease}.clear_infection()'
             return [sc.objdict(dis=disease, tr=None, dst=None, srcs=[sc.objdict(name=name, people=True)], eff=p) for name,p in cures.items()]
         if self.moves is None:
@@ -838,16 +819,16 @@ class Treatment(Held):
             graph = dis.graph
             trname = spec.rpartition('.')[2] if isinstance(spec, str) else spec.name
             if trname not in graph.transitions:
-                raise ss.errors.UnknownEffect(f'the treatment "{self.name}" moves people along "{trname}", which "{dis.name}" does not have. Its transitions are {sc.strjoin(graph.transitions.keys())}.')
+                raise sc.KeyNotFoundError(f'the treatment "{self.name}" moves people along "{trname}", which "{dis.name}" does not have. Its transitions are {sc.strjoin(graph.transitions.keys())}.')
             tr = graph.transitions[trname]
             if len(tr.dst) != 1 or not tr.people:
-                raise ss.errors.UnknownEffect(f'the treatment "{self.name}" moves people along "{trname}" ({tr.arrow}), which has to go from states of people to one state of people.')
+                raise sc.KeyNotFoundError(f'the treatment "{self.name}" moves people along "{trname}" ({tr.arrow}), which has to go from states of people to one state of people.')
             edges.append(sc.objdict(dis=dis.name, tr=tr, dst=tr.dst[0], srcs=[s for s in tr.src if s.people], eff=eff))
         for i,a in enumerate(edges): # Each person treated moves along at most one transition of each disease
             for b in edges[i+1:]:
                 both = [s.name for s in a.srcs if a.dis == b.dis and s in b.srcs]
                 if both:
-                    raise ss.errors.OverlappingSources(f'the treatment "{self.name}" moves people in {sc.strjoin(both)} along both "{a.tr.name}" and "{b.tr.name}" of "{a.dis}"; '
+                    raise ValueError(f'the treatment "{self.name}" moves people in {sc.strjoin(both)} along both "{a.tr.name}" and "{b.tr.name}" of "{a.dis}"; '
                                                 f'each person treated can move along only one transition of a disease, so give the sources of each once.')
         return edges
 
@@ -874,11 +855,11 @@ class Treatment(Held):
         tr = None
         if self.transition is not None:
             if self.transition not in graph.transitions:
-                raise ss.errors.UnknownEffect(f'the treatment "{self.name}" has transition="{self.transition}", which "{dis.name}" does not have. Its transitions are {sc.strjoin(graph.transitions.keys())}.')
+                raise sc.KeyNotFoundError(f'the treatment "{self.name}" has transition="{self.transition}", which "{dis.name}" does not have. Its transitions are {sc.strjoin(graph.transitions.keys())}.')
             tr = graph.transitions[self.transition]
         if self.to is not None:
             if self.to not in graph.states or not graph.states[self.to].people:
-                raise ss.errors.UnknownState(f'the treatment "{self.name}" has to="{self.to}", which is not a state of people of "{dis.name}". Its states are {sc.strjoin(k for k,v in graph.states.items() if v.people)}.')
+                raise sc.KeyNotFoundError(f'the treatment "{self.name}" has to="{self.to}", which is not a state of people of "{dis.name}". Its states are {sc.strjoin(k for k,v in graph.states.items() if v.people)}.')
             dst = graph.states[self.to]
         elif tr is not None:
             dst = tr.dst[0]
@@ -888,7 +869,7 @@ class Treatment(Held):
                 reached = [d for t in graph.transitions.values() if t.people and any(s in infected for s in t.src or []) for d in t.dst or [] if d.people and d not in infected] # Where infected people go, by any transition
                 ends = [d for d in reached if d is not graph.first and not any(t.people and any(s is d for s in t.src or []) for t in graph.transitions.values())] # Where they stay, e.g. R
                 example = next((d for d in dsts.values() if d is graph.first), None) or next(iter(ends + reached), graph.first)
-                raise ss.errors.UnknownEffect(f'the treatment "{self.name}" cures, so it needs the state that cured people of "{dis.name}" go to, and its recoveries lead to {"none" if not dsts else "several: " + sc.strjoin(s.name for s in dsts.values())} ({sc.strjoin(options.keys()) or "no transition"}).\n'
+                raise sc.KeyNotFoundError(f'the treatment "{self.name}" cures, so it needs the state that cured people of "{dis.name}" go to, and its recoveries lead to {"none" if not dsts else "several: " + sc.strjoin(s.name for s in dsts.values())} ({sc.strjoin(options.keys()) or "no transition"}).\n'
                                        f'     Give it with to= (e.g. to="{example.name}"), or give efficacy as a dict for a treatment that changes rates without curing.')
             dst = list(dsts.values())[0]
         if tr is None: # The flow that counts the cured: the one recovery into that state, if there is one, and if it is for everyone (not, say, only men)
@@ -909,7 +890,7 @@ class Treatment(Held):
             for name in self.cure:
                 state = graph.states.get(name)
                 if state is None or not state.people:
-                    raise ss.errors.UnknownState(f'the treatment "{self.name}" has a cure for "{name}", which is not a state of people of "{dis.name}". Its states are {sc.strjoin(k for k,v in graph.states.items() if v.people)}.')
+                    raise sc.KeyNotFoundError(f'the treatment "{self.name}" has a cure for "{name}", which is not a state of people of "{dis.name}". Its states are {sc.strjoin(k for k,v in graph.states.items() if v.people)}.')
                 if state is not dst:
                     named.append(state)
             srcs = named
@@ -954,10 +935,8 @@ class Diagnostic(Product):
             probability for people in each state (a dict by state, of any disease, as for `sensitivity`; a number is for those with what
             `detects=` says); the last is `None`, everyone the others do not take. A key `None` in a result's dict is for people in
             none of the states keyed in any result (of any disease the test is keyed by), e.g. a false positive: it is counted once,
-            whereas a result for a state (`susceptible=0.1`) is one for each disease, which `combine='worst'` then combines
-        combine (str): for someone in states of several diseases, 'worst' (a result for each disease, and the most severe of them is theirs;
-            for a positive and a negative result, each disease is detected independently), or 'max' (the highest probability of each result
-            or a more severe one, so for a positive and a negative result, the highest sensitivity)
+            whereas a result for a state (`susceptible=0.1`) is one for each disease. For someone in states of several diseases, there is a
+            result for each disease, and the most severe of them is theirs (for a positive and a negative result, each disease is detected independently)
         delay (dur/dict): the time from the test to the result (agents only); a dict gives one for each result
         detects (Cond/func): the condition the test detects (default: being in an infected state of the disease)
         cost (float): the cost of each delivery
@@ -974,13 +953,9 @@ class Diagnostic(Product):
     compartmental = True
     waning = None
     doses = None
-    spec_keys = ['sensitivity', 'specificity', 'delay', 'detects', 'cost']
 
-    def __init__(self, sensitivity=1.0, specificity=1.0, results=None, combine='worst', delay=None, detects=None, cost=None, name=None, label=None, **kwargs):
+    def __init__(self, sensitivity=1.0, specificity=1.0, results=None, delay=None, detects=None, cost=None, name=None, label=None, **kwargs):
         super().__init__(name=name, label=label, **kwargs)
-        if combine not in ['worst', 'max']:
-            errormsg = f'combine= is "worst" or "max", not {combine!r}'
-            raise ValueError(errormsg)
         if results is not None:
             names = list(results)
             if len(names) < 2 or results[names[-1]] is not None or any(v is None for v in list(results.values())[:-1]):
@@ -1000,7 +975,6 @@ class Diagnostic(Product):
         self.sensitivity = sensitivity
         self.specificity = specificity
         self.results_given = results # results is the module's own results
-        self.combine = combine
         self.delay = delay
         self.detects = None if detects is None else ss.conditions.as_cond(detects)
         self.cost = cost
@@ -1095,11 +1069,11 @@ class Diagnostic(Product):
                 name, state = self.key_ref(key)
                 name = name or home
                 if name not in sim.diseases:
-                    raise ss.errors.UnknownDisease(f'the test "{self.name}" has a {"sensitivity" if self.results_given is None else "result"} for "{name}.{state}", but "{name}" is not a disease in the sim; its diseases are {sc.strjoin(sim.diseases.keys())}.')
+                    raise sc.KeyNotFoundError(f'the test "{self.name}" has a {"sensitivity" if self.results_given is None else "result"} for "{name}.{state}", but "{name}" is not a disease in the sim; its diseases are {sc.strjoin(sim.diseases.keys())}.')
                 coded = ss.interventions.coded_disease(sim, name)
                 states = coded_states(coded) if coded is not None else sim.get_declared(name).graph.states # Written as code: its boolean states (HP70)
                 if state not in states:
-                    raise ss.errors.UnknownEffect(f'the test "{self.name}" has a {"sensitivity" if self.results_given is None else "result"} for "{state}", which is not a state of "{name}". Its states are {sc.strjoin(states.keys())}.')
+                    raise sc.KeyNotFoundError(f'the test "{self.name}" has a {"sensitivity" if self.results_given is None else "result"} for "{state}", which is not a state of "{name}". Its states are {sc.strjoin(states.keys())}.')
             vals = [t.get(key, 0.0) for t in tables]
             if all(sc.isnumber(v) for v in vals) and (sum(vals) > 1 + 1e-9 or min(vals) < 0):
                 errormsg = f'The results of the test "{self.name}" for {name if state is None else name + "." + state} have probabilities {vals}, which have to be between 0 and 1 and sum to at most 1'
@@ -1112,7 +1086,7 @@ class Diagnostic(Product):
         """
         The probability that each person's result is each one or a more severe one, for each but the least severe (so for a
         positive and a negative result, the probability of a positive one). For each disease, from the state they are in;
-        combined over diseases as the worst result (P(worst ≥ k) = 1 − ∏(1 − P_d(≥ k))) or the highest
+        combined over diseases as the worst result (P(worst ≥ k) = 1 − ∏(1 − P_d(≥ k)))
 
         Args:
             selector (`ss.conditions.Selector`): the selector of the delivery's disease
@@ -1123,9 +1097,8 @@ class Diagnostic(Product):
         sim = selector.sim
         groups, rest = self.layout(sim, home)
         groups = self.by_family(sim, groups, family)
-        worst = self.combine == 'worst'
         none = 1.0
-        combined = [1.0 if worst else 0.0]*len(rest)
+        combined = [1.0]*len(rest) # The probability of no result this severe or more, from any disease
         for name,rows in groups.items():
             inside = 0.0
             tail = [0.0]*len(rest)
@@ -1149,9 +1122,9 @@ class Diagnostic(Product):
                 for k in range(len(rest)):
                     tail[k] = tail[k] + sel*sum(vals[k:])
             none = none*(1 - inside)
-            combined = [c*(1 - t) if worst else np.maximum(c, t) for c,t in zip(combined, tail)]
+            combined = [c*(1 - t) for c,t in zip(combined, tail)]
         rest = [1 - selector.per_person(self.specificity) if v is self.specificity else selector.per_person(v) for v in rest]
-        return [(1 - c if worst else c) + none*sum(rest[k:]) for k,c in enumerate(combined)]
+        return [1 - c + none*sum(rest[k:]) for k,c in enumerate(combined)]
 
     @staticmethod
     def severity(vals):
@@ -1201,11 +1174,3 @@ class Diagnostic(Product):
             return f'{self.name}: test with results {sc.strjoin(self.outcome_names())}, by {sc.strjoin(label(k) for k in self.state_keys()) or "what it detects"}{delay}'
         detects = sc.strjoin(label(k) for k in self.sensitivity) if isinstance(self.sensitivity, dict) else 'infection' if self.detects is None else self.detects
         return f'{self.name}: test for {detects} (sensitivity {self.sensitivity}, specificity {self.specificity}{delay})'
-
-    def spec(self):
-        out = super().spec()
-        if self.results_given is not None:
-            out['results'] = ss.interventions.spec_value(self.results_given)
-        if self.combine != 'worst':
-            out['combine'] = self.combine
-        return out

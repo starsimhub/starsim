@@ -50,6 +50,35 @@ def test_capabilities_two_modules():
             self.pars.update(h=lambda sim: ss.peryear(0.1))
     sim = ss.Sim(diseases=[A(name='a'), B(name='b')], n_agents=100, start=2000, stop=2001, verbose=0).run()
     assert sim.results.b.go.sum() >= 0
+    assert all(cap.reason for cap in sim.capabilities) # Only what changes the choice is recorded
+
+    # People given to a compartmental solver are where the population size came from, not a guess
+    sim2 = ss.Sim(diseases=A(name='a'), people=ss.People(100), solver='ode', stop=2001, verbose=0).init()
+    assert sim2.pop_from == 'people'
+    return sim
+
+
+def test_one_layout():
+    """ The layout made to choose the solver is the one the run uses, so an SIR is laid out once; and one made for a run as agents says nothing """
+    sc.heading('Testing that the compartments are laid out once')
+    calls = []
+    cls = ss.solvers.Compartmental
+    original = cls.build_layout
+    def tracked(self):
+        calls.append(self.mod.name)
+        return original(self)
+    cls.build_layout = tracked
+    try:
+        sim = ss.Sim(ss.SIR(), stop=2, verbose=0).init()
+        assert sim.solver == 'ode' and calls == ['sir'] # Was ['sir', 'sir']: once to choose the solver, and again for the run
+        calls.clear()
+        dur = ss.gamma(a=2.5, scale=ss.days(3)) # Approximated by Erlang stages in a compartmental run, which is noted
+        sims = [ss.Sim(ss.SIR(dur_inf=dur), solver=solver, unit='day', stop=10, verbose=0).init() for solver in ['auto', 'abm']]
+        assert calls == ['sir', 'sir'] # Once each: for the run, and to say what auto would choose
+    finally:
+        cls.build_layout = original
+    noted = ['Erlang' in note for note in sims[0].notes], ['Erlang' in note for note in sims[1].notes]
+    assert any(noted[0]) and not any(noted[1]) # Said only for the run that uses the layout
     return sim
 
 
@@ -98,7 +127,7 @@ def test_simple(do_plot=do_plot):
     again = agentsim.new(rand_seed=2).run()
     assert again.summary.sis_cum_infections == ss.Sim(n_agents=n_agents, diseases=ssl.AgentSIS(name='sis'), networks='random', start=2000, stop=2010, rand_seed=2, verbose=0).run().summary.sis_cum_infections
 
-    # So can a subclass that adds its modules after Sim.__init__() (as FPsim's does), and settings changed after the sim was made are kept (before, both were lost)
+    # So can a subclass that adds its modules after Sim.__init__() (as FPsim's does), and settings changed after the sim was made are kept
     class MySim(ss.Sim):
         def __init__(self, beta=0.1, **kwargs):
             super().__init__(**kwargs)
@@ -112,6 +141,17 @@ def test_simple(do_plot=do_plot):
     assert type(new) is MySim and new.t.npts == 6 and 'sis' in new.results
     agentsim.pars.stop = 2005
     assert agentsim.new().pars.stop == 2005 # And for ss.Sim itself
+
+    # new() copies the sim as it was before init(), so an edit in place is kept too (before, one that repr() did not show was lost); an edit after init() belongs to that run only
+    class Values(ss.Module):
+        def __init__(self):
+            super().__init__(name='values')
+            self.define_pars(weights=np.ones(2000))
+    valsim = ss.Sim(Values(), stop=2, verbose=0)
+    valsim.values.pars.weights[1000] = 7
+    assert valsim.new().values.pars.weights[1000] == 7
+    valsim.init().values.pars.weights[1000] = 9
+    assert valsim.new().values.pars.weights[1000] == 7
     return sim
 
 
@@ -375,10 +415,33 @@ def test_locked_pars():
         sim.pars['rand_sed'] = 2 # Typo in a sim parameter
     with pytest.raises(sc.KeyNotFoundError):
         sim.diseases.sis.pars.bta = 0.1 # Typo in a module parameter
-    sim.pars.rand_seed = 2 # Existing parameters can be set
+    sim.diseases.sis.pars.beta = 0.1 # Existing parameters of a module can be set
+    with pytest.raises(RuntimeError, match='sim.new'):
+        sim.pars.rand_seed = 2 # But not the sim's settings, which are its run's: sim.new(rand_seed=2)
     sim.pars.update(my_par=3, create=True) # New parameters can be added explicitly
     assert sim.copy().pars.my_par == 3 # Locked parameters can be copied
     return sim
+
+
+@sc.timer()
+def test_new_after_init():
+    """ What a sim takes once it is initialized (values and a seed from restart(), data, jax) is kept by running it again and by sim.new() """
+    sc.heading('Testing sim.new() after init')
+    import pandas as pd
+    def make(beta=0.3):
+        S, I, R = ss.states('S I R')
+        sir = ss.Disease(infection=S >> I @ ss.par(beta, bounds=[0.1, 0.6], name='beta')*I, recovery=I >> R @ 0.1, init_n=dict(I=10), name='sir')
+        return ss.Sim(sir, unit='day', stop=60, total_pop=1000, verbose=0, solver='binomial')
+    ref = make(0.5).new(rand_seed=3).run().results.sir.I[-1]
+    sim = make().init()
+    assert sim.restart(pars=dict(beta=0.5), rand_seed=3).run().results.sir.I[-1] == ref
+    assert sim.run().results.sir.I[-1] == ref and sim.new().run().results.sir.I[-1] == ref, 'Run again, or new, with the values of the restart'
+    df = pd.DataFrame({'time':[10, 20], 'sir.I':[50, 100]})
+    sim.data = df # Not settings of the run, so they can be set after init
+    sim.jax = True
+    new = sim.new()
+    assert new.data is not None and new.jax is True
+    return
 
 
 @sc.timer()
@@ -482,9 +545,8 @@ def test_rescale():
     assert seeded(rescale=True) == 10 # A number of people is a number of agents at the start scale (it was 0.05 agents, so nobody)
     assert seeded() == 1 # Too few to be an agent: one, with a note
 
-    with pytest.warns(RuntimeWarning, match='renaming'):
-        sim = ss.Sim(n_agents=100, diseases=['sis', 'sis'], networks='random').init()
-    assert list(sim.diseases.keys()) == ['sis', 'sis_1'] # Default names are made unique
+    sim = ss.Sim(n_agents=100, diseases=['sis', 'sis'], networks='random').init()
+    assert list(sim.diseases.keys()) == ['sis', 'sis_1'] # Default names are made unique, with no warning
     return rescaled
 
 
@@ -536,6 +598,7 @@ if __name__ == '__main__':
     T = sc.timer()
 
     caps = test_capabilities_two_modules()
+    layout = test_one_layout()
     sim0 = test_demo(do_plot=do_plot)
     sim1 = test_default(do_plot=do_plot)
     sim2 = test_simple(do_plot=do_plot)

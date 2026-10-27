@@ -69,36 +69,11 @@ class Loop:
     results of the start are recorded (people's and every module's but the interventions',
     which have done nothing yet), and the analyzers run (`at_start`).
 
-    A loop also runs ordinary functions with no sim. Each step is called as `step(t, dt)` for
-    each step, where `t` is the time at its start; each record function is called as `record(t)`
-    at each time point, including the first, after the steps that end there. At a time point,
-    the steps run in the order given, then the records, so a change made by one step is seen by
-    the steps after it and by the records. A step given as `(step, times)` has times of its own:
-    it runs only at those, and what it sets holds in between.
-
     Args:
         sim (Sim): the sim to run (usually made by the sim itself)
-        steps (list/dict): with no sim, the functions to call each step, `step(t, dt)`; a dict gives their labels, and a `(step, times)` pair gives a step times of its own
-        times (array/Timeline): with no sim, the time points
-        record (list/dict): with no sim, the functions to call at each time point, `record(t)`
-
-    **Example**:
-
-        y = np.array([0.99, 0.01, 0.0])
-        def step(t, dt):
-            S, I, R = y
-            y[:] = [S - 0.3*S*I*dt, I + (0.3*S*I - 0.1*I)*dt, R + 0.1*I*dt]
-        loop = ss.Loop(steps=[step], times=np.arange(0, 101))
-        loop.run()
     """
-    def __init__(self, sim=None, steps=None, times=None, record=None):
-        if sim is None and steps is None:
-            errormsg = 'A loop needs a sim, or steps= (and times=) to run with no sim'
-            raise ValueError(errormsg)
+    def __init__(self, sim):
         self.sim = sim
-        self.steps = steps
-        self.times = times
-        self.record = record
         self.funcs = None
         self.at_start = None # The functions that also run at the first time point, by function order: those that record the start
         self.shared_timelines = [] # The timelines of the modules on the sim's timeline, which the sim's advance() moves
@@ -115,69 +90,13 @@ class Loop:
         return
 
     def init(self):
-        """ Parse the sim (or the steps) into the integration plan """
-        if self.sim is None:
-            self.collect_steps()
-        else:
-            self.collect_funcs()
-            self.collect_abs_tvecs()
+        """ Parse the sim into the integration plan """
+        self.collect_funcs()
+        self.collect_abs_tvecs()
         self._plan = None
         self.index = 0
         self.initialized = True
         return self
-
-    def collect_steps(self):
-        """ With no sim: the steps and record functions, each with its time points """
-        def as_times(times):
-            if times is None:
-                errormsg = 'A loop with no sim needs times=, e.g. times=np.arange(0, 101)'
-                raise ValueError(errormsg)
-            if isinstance(times, ss.Timeline): # The functions are given its times (dates or durations) and its dt
-                times = times.init() if not times.initialized else times
-                return times, np.asarray(times.yearvec, dtype=float)
-            times = np.asarray(times, dtype=float)
-            return times, times
-
-        def labeled(funcs):
-            if funcs is None:
-                return []
-            if isinstance(funcs, dict):
-                return list(funcs.items())
-            items = []
-            for func in sc.tolist(funcs):
-                f = func[0] if isinstance(func, tuple) else func
-                items.append((getattr(f, '__name__', type(f).__name__.lower()), func))
-            return items
-
-        def caller(func, times, record):
-            j = [-1 if record else 0] # The time point the function was last called at, in its own times: a step is first called for the step ending at the second
-            timeline = isinstance(times, ss.Timeline)
-            tvec = times.tvec if timeline else times
-            def call():
-                j[0] += 1
-                k = j[0]
-                if record:
-                    return func(tvec[k])
-                return func(tvec[k-1], times.dt if timeline else tvec[k] - tvec[k-1])
-            call.__name__ = getattr(func, '__name__', 'step')
-            return call
-
-        self.funcs = []
-        self.abs_tvecs = sc.objdict()
-        self.abs_numvecs = sc.objdict()
-        sim_times, self.abs_numvecs['sim'] = as_times(self.times)
-        self.abs_tvecs['sim'] = sim_times.tvec if isinstance(sim_times, ss.Timeline) else sim_times
-        rows = [(label, func, False) for label,func in labeled(self.steps)] + [(label, func, True) for label,func in labeled(self.record)]
-        labels = [label for label,_,_ in rows]
-        for label,func,record in rows:
-            func, times = func if isinstance(func, tuple) else (func, None)
-            key = label if labels.count(label) == 1 else f'{label}_{len(self.funcs)}'
-            own, numvec = as_times(times) if times is not None else (sim_times, self.abs_numvecs['sim'])
-            self.abs_tvecs[key] = own.tvec if isinstance(own, ss.Timeline) else own
-            self.abs_numvecs[key] = numvec
-            self.funcs.append(dict(func_order=len(self.funcs), module=key, func_name='record' if record else 'step', func_path=key, func=caller(func, own, record)))
-        self.at_start = {row['func_order'] for row in self.funcs if row['func_name'] == 'record'}
-        return self.funcs
 
     @property
     def plan(self):
@@ -713,7 +632,7 @@ class Loop:
         # Compute the main dataframe
         if self.plan is not None:
             df = self.plan_metadata()
-            df['time'] = [float(t.value) if isinstance(t, ss.dur) and not isinstance(t, ss.datedur) else t for t in df['time']] # Plain numbers (on the module's own axis), or dates, rather than durations
+            df['time'] = [float(t.value) if isinstance(t, ss.dur) else t for t in df['time']] # Plain numbers (on the module's own axis), or dates, rather than durations
         else:
             errormsg = f'Simulation "{self.sim}" needs to be initialized before exporting the Loop dataframe'
             raise RuntimeError(errormsg)
@@ -837,78 +756,6 @@ class Loop:
         plt.grid(True)
         sc.figlayout()
         sc.boxoff()
-        return ss.return_fig(fig)
-
-    def plot_step_order(self, which='default', max_len=500, plot_kw=None, scatter_kw=None, fig_kw=None, legend_kw=None):
-        """
-        Plot the order of the module steps across timesteps -- useful for debugging
-        when using different time units.
-
-        Note: generates a lot of data, best to debug with a small number of timesteps first!
-
-        Args:
-            which (dict): columns and values to filter to (default: {'func_name':'step'}; if None, do not filter)
-            max_len (int): maximum number of entries to plot
-            plot_kw (dict): passed to `plt.plot()`
-            scatter_kw (dict): passed to `plt.scatter()`
-            fig_kw (dict): passed to `plt.figure()`
-            legend_kw (dict): passed to `plt.legend()`
-
-        Examples:
-            ```python
-            import starsim.library as ssl
-            sis = ssl.AgentSIS(dt=0.1) # A module written as code can have a timestep of its own
-            net = ss.RandomNet(dt=0.5)
-            births = ss.Births(dt=1)
-            sim = ss.Sim(dt=0.1, dur=5, diseases=sis, networks=net, demographics=births)
-            sim.init()
-            sim.loop.plot_step_order()
-            ```
-        """
-        self._check_initialized()
-        df = self.df
-        if df is None:
-            df = self.to_df()
-        if which == 'default':
-            which = dict(func_name='step')
-        if which:
-            for col,value in which.items():
-                df = df[df[col] == value]
-        if max_len and len(df) > max_len:
-            print(f'Note: truncating from {len(df)} to {max_len} entries')
-            df = df[:max_len]
-
-        # Construct data
-        unique = df.label.unique()
-        n_unique = len(unique)
-        colors = sc.gridcolors(n_unique)
-        colormap = {k:v for k,v in zip(unique, colors)}
-        d = sc.dictobj()
-        for key in ['x', 'y', 'z', 'label']:
-            d[key] = sc.autolist()
-        for ti in df.ti.unique():
-            this = df[df.ti==ti]
-            d.x += list(range(len(this))) # Convert [0,0,0,...] to [0,1,2,...]
-            d.y += list(this.func_order)
-            d.z += list(this.ti)
-            d.label += list(this.label)
-
-        dd = sc.dataframe(d)
-
-        fig = plt.figure(**sc.mergedicts(fig_kw))
-
-        plot_kw = sc.mergedicts(dict(alpha=0.5, lw=2), plot_kw)
-        scatter_kw = sc.mergedicts(dict(s=100, alpha=0.5), scatter_kw)
-        ax = plt.axes(projection='3d')
-        sc.plot3d(dd.x, dd.y, dd.z, ax=ax, **plot_kw)
-        for label in unique:
-            this = dd[dd.label==label]
-            ax.scatter(this.x, this.y, this.z, color=colormap[label], label=label, **scatter_kw)
-        ax.set_xlabel('Position within timestep')
-        ax.set_ylabel('Original function order')
-        ax.set_zlabel('Timestep')
-        legend_kw = sc.mergedicts(dict(loc='upper left', bbox_to_anchor=(1.05, 1)), legend_kw)
-        ax.legend(**legend_kw)
         return ss.return_fig(fig)
 
     def __deepcopy__(self, memo):

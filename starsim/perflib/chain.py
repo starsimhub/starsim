@@ -891,11 +891,11 @@ def runner(program, how, many=False):
 def numbers(engine):
     """ The program of an engine's run (or a crossing's), how to run it, and the numbers in it, as `ChainRun.function()` takes them """
     if isinstance(engine, ss.solvers.Crossing):
-        args, tables, per_step = engine.run_args()
+        args, tables = engine.run_args()
         y, program, dt, npts, solver, n_sub = args
         X = {name:np.array(getattr(program, name), dtype=float) for name in ss.gradients.diff_fields}
         X.update({name:np.asarray(table, dtype=float) for name,table in zip(ss.gradients.table_fields, tables)}, y=np.array(y, dtype=float))
-        how = (dt, npts, solver, n_sub, per_step)
+        how = (dt, npts, solver, n_sub, engine.per_step())
     else:
         program, how, X = ss.gradients.capture(engine)
     sh = engine.shifts
@@ -908,8 +908,7 @@ def numbers(engine):
 
 def seed_of(engine, seed=None):
     """ The seed of a run: from the engine's random numbers (as the kernels are given theirs; for a crossing, its first engine's) """
-    engine = engine.engines[0] if isinstance(engine, ss.solvers.Crossing) else engine
-    return int(engine.make_rng(stream=1, **({} if seed is None else dict(seed=seed))).integers(2**62))
+    return int(engine.engines[0].make_rng(stream=1, **({} if seed is None else dict(seed=seed))).integers(2**62))
 
 
 def run(engine):
@@ -925,7 +924,6 @@ def run(engine):
 def run_crossing(cross):
     """ Take a whole run of the diseases of a crossing together in JAX: returns, for each, what `ss.kernels.run()` does """
     y, stocks, flows, short, tally = run(cross)
-    cross.y = y
     return [cross.split(k, y, stocks, flows) + (short if k == 0 else 0.0,) for k in range(len(cross.engines))]
 
 

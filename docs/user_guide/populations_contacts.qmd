@@ -138,7 +138,7 @@ print('Source:', ref['study'])
 `ss.data.contacts()` and `ss.data.population()` return tuples (a bare matrix, its ages, and a record of the source), though the module calls them tables. Each should return one labeled table, e.g. a DataFrame with the age groups as its index and columns, and the source in its `attrs`, so that `ss.data.contacts('Kenya', layer='school').loc['10-14', '10-14']` reads as it is meant (P11, P13). Today: the tuple, as above.
 :::
 
-Every piece of data records where it came from, which `describe()` shows and the model spec keeps, so a saved model looks up the same data again.
+Every piece of data records where it came from, which `describe()` shows.
 
 ## Contact matrices as agents
 

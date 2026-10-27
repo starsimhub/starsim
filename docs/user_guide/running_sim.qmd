@@ -92,19 +92,19 @@ A sim copies the modules it is given, so the same disease can be given to severa
 
 ## Running again, and variants
 
-`sim.run()` on a sim that has already run runs it again from the start, with any settings changed since:
+`sim.run()` on a sim that has already run runs it again from the start, as it was before it was first run: changes made to a sim once it has been initialized belong to that run only. To run it again with something changed, use `sim.new()`, which makes a new sim as this one was before it was run, with whatever is given changed:
 
 ```{python}
 sim = ss.Sim(measles, total_pop=100_000, stop=ss.days(50), verbose=0)
 sim.run()
-sim.pars.stop = ss.days(20) # A shorter run
-sim.run()
-print('Time points:', len(sim.results.measles.I))
+short = sim.new(stop=ss.days(20)) # A shorter run
+short.run()
+print('Time points:', len(short.results.measles.I))
 ```
 
 `sim.run(solver='abm')` runs the same sim as agents (building it again for the new solver), and `sim.run(n_runs=20)` runs it 20 times with different seeds, returning the runs together (see [Uncertainty, seeds, and many runs](running_uncertainty.qmd)).
 
-To keep the first sim and make a second one that differs, use `sim.new()`, which makes a new sim from the same inputs, with whatever is given changed: settings (`sim.new(total_pop=1_000_000)`), parameters of the model by name (`sim.new(pars=dict(beta=1.5))`), or modules (`sim.new(interventions=campaign)`). This is the usual way to make the scenarios of a comparison (see [Scenarios and sweeps](running_scenarios.qmd)). `sim.copy()` makes an exact copy instead, including the state of a sim part of the way through a run.
+What `sim.new()` changes can be settings (`sim.new(total_pop=1_000_000)`), parameters of the model by name (`sim.new(pars=dict(beta=1.5))`), or modules (`sim.new(interventions=campaign)`). This is the usual way to make the scenarios of a comparison (see [Scenarios and sweeps](running_scenarios.qmd)). `sim.copy()` makes an exact copy instead, including the state of a sim part of the way through a run.
 
 ## Running part of the way
 

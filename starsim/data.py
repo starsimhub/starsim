@@ -12,8 +12,7 @@ These are tables. The model objects that take a place by name read them from her
 and `ss.Births(birth_rate='Kenya')`. The data comes from
 `starsim_data` (https://github.com/starsimhub/starsim_data), which bundles what is
 small and common and fetches the rest on demand. Each lookup returns the data with a
-record of where it came from (`ref`), which is written into the model spec, so the
-sim's hash changes if the data does.
+record of where it came from (`ref`), which `sim.describe()` shows.
 """
 import numpy as np
 import sciris as sc
@@ -87,9 +86,9 @@ def provider():
 
 
 def unknown(place, E, what='place'):
-    """ Raise `ss.errors.UnknownLocation` for a place that the provider cannot resolve, with its suggestions """
+    """ Raise a `KeyError` for a place that the provider cannot resolve, with its suggestions """
     msg = str(E).strip('"\'')
-    raise ss.errors.UnknownLocation(f'the {what} "{place}" was not found in starsim_data: {msg}.')
+    raise sc.KeyNotFoundError(f'the {what} "{place}" was not found in starsim_data: {msg}.')
 
 
 def subnational(ssd, place):
@@ -291,6 +290,6 @@ def contacts(place, source=None, layer='all'):
             unknown(place, E)
         others = [s for s in ['prem2021', 'prem2017', 'mistry2021', 'mistry2021_us'] if s != source and key in ssd.list_locations(s)]
         hint = f'; it is in {sc.strjoin(others)}, e.g. ss.contacts("{place}", source="{others[0]}")' if others else ''
-        raise ss.errors.UnknownLocation(f'"{source}" has no contact matrix for {key}{hint}.')
+        raise sc.KeyNotFoundError(f'"{source}" has no contact matrix for {key}{hint}.')
     ages = [float(a) for a in df.index]
     return df.values.astype(float), ages, ref(ssd, df, place=place, source=source, layer=layer, location=df.attrs.get('location'))

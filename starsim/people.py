@@ -120,7 +120,7 @@ class People:
         self.untraited = [] # Ranges of UIDs made by code that sets their properties afterwards (grow() without age=), whose traits are drawn at the next step: see grow()
         self.has_unborn = False # Whether a module makes agents before they are born, with a negative age (e.g. ss.Pregnancy's fetuses), who are not counted among the people: see unborn_uids()
         self.initialized = False
-        self.n_agents_init = n_agents
+        self.n_agents_init = round(n_agents) # The nearest whole number, as ss.SimPars takes it (e.g. a number a fit chose)
         self.named = None # For a named population (ss.people('Kenya')), where it came from: see ss.people()
 
         # The four fundamental arrays (auids, uid, slot, and parent) are made on first use: see make_uids()
@@ -131,15 +131,15 @@ class People:
             ss.BoolState('alive', default=True),  # Time index for death
             ss.FloatArr('age', default=self.get_age_dist(age_data)),  # NaN until conceived
             ss.BoolState('female', default=ss.bernoulli(name='female', p=p_female)),
-            ss.arrays.StepArr('ti_dead', late=True),  # Time index for death, as 16-bit integers if the run fits
-            ss.arrays.StepArr('ti_removed', late=True),  # Time index for removal (e.g. emigration)
+            ss.TimeArr('ti_dead'),  # Time index for death
+            ss.TimeArr('ti_removed'),  # Time index for removal (e.g. emigration)
             AgentScale('scale', default=1.0, shared=True), # The scale factor for the agents (multiplied for making results); no memory until one is set
             ss.Arr('cause_of_death', dtype=np.int16, default=-1, nan=-1, label='Cause of death', shared=True), # Its position in people.causes (-1 for none); no memory until someone dies
         ]
         states.extend(extra_states)
         self.states = ss.ndict(type=ss.Arr)
         for state in states:
-            self.states.append(state, overwrite=False)
+            self.states.append(state)
             setattr(self, state.name, state)
             state.link_people(self)
         self.causes = [] # The causes of death, by name (see request_death()), in the order first seen: people.cause_of_death is the position in this list
@@ -158,7 +158,7 @@ class People:
         numbers, AUIDs for tracking alive agents, and agents' parents
 
         They are made on first use rather than in `__init__()`, so that a People not yet in
-        a sim (such as the copy `sim.inputs` keeps for `sim.new()`) holds no arrays per agent.
+        a sim (such as the copy a sim keeps of itself before it is initialized, for `sim.new()`) holds no arrays per agent.
         The slots read the UIDs, and the parents are all none, until one is set (see `shared`
         in `ss.Arr`), so they take no memory unless something (e.g. `ss.Pregnancy`, with fetuses as agents) sets them.
         """
@@ -175,6 +175,34 @@ class People:
     def slot_raw(self):
         """ The slot of every agent, by UID, for a kernel; or None while the slots are the UIDs (see `make_uids()`), which have no array of their own """
         return None if isinstance(self.slot.shared, ss.arrays.UIDArr) else self.slot.raw
+
+    def phase(self, uids=None):
+        """
+        Each agent's phase, in [0, 1), by UID: a time between steps, t, is taken at step floor(t + phase), so it is rounded up
+        or down at random in proportion (2.3 steps is 2 for 70% of agents and 3 for the rest), keeping its mean, with no draws:
+        both a time due in a disease written as code (`ss.TimeArr.due()`) and a dwell time of the agent engine. Spread evenly
+        over the slots (so an agent has the same phase in every scenario), and shifted by the sim's seed
+
+        Args:
+            uids (uids): the agents to give the phases of (worked out for them alone); by default, every agent's, kept until agents are made
+        """
+        if getattr(self, '_phase_shift', None) is None:
+            seed = getattr(getattr(self, 'sim', None), 'pars', {}).get('rand_seed', 0)
+            self._phase_shift = np.random.default_rng(seed).random()
+        of = lambda slot: (slot*0.6180339887498949 + self._phase_shift) % 1 # The golden ratio's fractional part spreads consecutive slots evenly
+        slots = self.slot_raw()
+        if uids is not None:
+            return of(uids if slots is None else slots[uids])
+        n, used = self.uid.len_tot, self.uid.len_used
+        phase, done = getattr(self, '_phase', (None, 0))
+        if phase is None or len(phase) != n: # The arrays have grown: keep the phases worked out so far
+            old, phase = phase, np.zeros(n, dtype=np.float32)
+            if old is not None:
+                phase[:done] = old[:done]
+        if used > done: # Slots are set when agents are made, so only the new agents' phases are worked out
+            phase[done:used] = of(np.arange(done, used) if slots is None else slots[done:used])
+        self._phase = (phase, used)
+        return phase
 
     def _link_state(self, state, die=True):
         """
@@ -382,7 +410,7 @@ class People:
             raise RuntimeError(errormsg)
         self.sim = sim # Store the sim
         for arr in [self.ti_dead, self.ti_removed]:
-            arr.fit(sim.t) # 16-bit step numbers if the run fits
+            arr.t = sim.t
         ss.distributions.link_dists(obj=self.states, sim=sim, module=self, skip=[ss.Sim, ss.Module], init=init)
         return
 
@@ -423,7 +451,7 @@ class People:
 
         # Create results for all BoolStates
         for state in self.auto_state_list:
-            results.append(ss.Result(state.name, label=state.label, kind='stock', **kw))
+            results.append(ss.Result(state.name, label=state.label, summarize_by='last', **kw))
 
         # Add standard people-related results
         results.extend([
@@ -459,6 +487,8 @@ class People:
         if len(module.state_list):
             for state in module.state_list:
                 state.link_people(self)
+                if isinstance(state, ss.TimeArr) and state.t is None: # Times as steps of the module's timeline (see due())
+                    state.t = module.t
                 combined_name = module.name + '.' + state.name  # We will have to resolve how this works with multiple instances of the same module (e.g., for strains). The underlying machinery should be fine though, with People._states being flat and keyed by ID
                 self.states[combined_name] = state # Register the state on the user-facing side using the combined name. Within the original module, it can still be referenced by its original name
         return
@@ -545,7 +575,7 @@ class People:
         """
         n = self.n_uids
         raw = np.zeros(self.uid.len_tot, dtype=bool)
-        raw[:n] = ~self.alive.raw[:n] & (self.ti_dead.raw[:n] != self.ti_dead.nan)
+        raw[:n] = ~self.alive.raw[:n] & ~np.isnan(self.ti_dead.raw[:n])
         dead = self.alive.asnew(raw, cls=ss.BoolArr, name='dead', copy=False)
         dead.people = sc.objdict(auids=ss.uids(np.arange(n))) # Cover all agents, not just active ones
         return dead
@@ -858,10 +888,6 @@ class People:
         else:
             self.remove_dead()
             self.update_post()
-        if sim.solver == 'abm':
-            for strat in sim.groups.strats: # The time since an event, for those who have had it (see ss.dimensions.Strat)
-                if strat.kind == 'clock':
-                    self[strat.attr].raw[self.auids] += strat.clock_dt(sim) # Those with none stay NaN
         return
 
     def to_df(self):
@@ -1033,7 +1059,7 @@ def people(place, year=None, n_agents=None, revision=None):
     sim takes its population size (`total_pop`) from them, unless it is given one, and
     the split of an age stratification that is not given one, so a compartmental model
     can use a named population as well as agents can. Where the population came from is
-    written in the model spec, so `sim.to_code()` looks it up again.
+    shown by `sim.describe()`.
 
     Args:
         place (str): a country, by name or code ('Kenya', 'KE', 'KEN'), or a US state ('United States:Massachusetts')

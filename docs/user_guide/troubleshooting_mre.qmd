@@ -37,20 +37,9 @@ print('Infections:', round(sim.results.measles.infection.sum()))
 
 It has the model, the intervention, and the numbers, and nothing else. (The answer, in this case, is that the vaccine is leaky: see [Common pitfalls](troubleshooting_pitfalls.qmd#interventions).)
 
-## Writing a model out as code
+## When the model is spread out
 
-When a model is built by several functions, read from files, or imported from another framework, `sim.to_code()` writes it out as one plain script that builds the same model, which is a quick start on an example:
-
-```{python}
-print(sim.to_code())
-```
-
-::: {.callout-warning}
-## [PROPOSAL]
-`to_code()` should write code as a person would, closer still to the code it came from: large numbers grouped (`total_pop=100_000`, not `100000`), a single time as itself (`at=ss.days(0)`, not `at=[ss.days(0)]`), and no arguments that only repeat a default (`disease='measles'` for the sim's only disease, `name='vaccination'` for a variable of that name) (P8).
-:::
-
-Only the declared parts of a model are written as code (its diseases, contact matrices, modifiers, and deliveries); anything written as code, such as a custom intervention or network, is listed in comments at the end, to be added by hand. See [The model spec, `to_code()`, and `diff()`](interop_spec.qmd).
+When a model is built by several functions or read from files, copy the parts that matter into one script, with the values written in, and check that it still shows the problem. A model imported from another framework is already one script: its code is `sim.imported.code` (see [Importing and exporting models](interop_import.qmd)).
 
 ## What to include
 

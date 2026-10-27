@@ -88,7 +88,7 @@ def test_layers():
     assert np.isclose(run(dict(home=0.03, school=0.02), 'abm'), ode, rtol=0.1)
     assert np.isclose(run(dict(home=0.03, school=0.0), 'ode'), run(0.03, 'ode', layers=['home'])) < 0.9*ode # No transmission at school is home contacts only
     for bad in [dict(home=0.03, school=0.02, wrok=0.1), dict(home=0.03)]: # A key with no route, and a route with no key
-        with pytest.raises(ss.errors.RouteMismatch):
+        with pytest.raises(ValueError, match='is given for each route'):
             run(bad, 'abm')
     return ode
 

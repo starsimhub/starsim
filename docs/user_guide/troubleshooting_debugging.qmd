@@ -26,11 +26,11 @@ When Starsim can't build or run a model, it raises an error that names what is w
 ```{python}
 try:
     ss.Sim(measles, pars=dict(betta=2.0), total_pop=100_000, stop=ss.days(50)).run()
-except ss.errors.UnknownParameter as error:
+except KeyError as error:
     print(error)
 ```
 
-Each kind of error has a name, here `UnknownParameter`, so it can be looked up (`help(ss.errors.UnknownParameter)` says when it is raised) and caught by name, as above. All of them are listed in `ss.errors`. Most mistakes are caught when the sim is built (`sim.init()`, which `sim.run()` calls first), before any time step is taken, so an error usually comes at once rather than after a long run.
+Most errors are Python's own: a `KeyError` for a name that is not found, as here, a `TypeError` for a value of the wrong kind, and a `ValueError` for the rest. The message is what says what went wrong, so search for it, or catch the error by its type as above. The few that code may want to catch by kind are classes of their own, such as `ss.CapabilityError`, raised when the solver asked for can't run part of the model. Most mistakes are caught when the sim is built (`sim.init()`, which `sim.run()` calls first), before any time step is taken, so an error usually comes at once rather than after a long run.
 
 ## Reading what a run prints
 
@@ -72,7 +72,7 @@ sim.describe()
 measles.equations()
 ```
 
-When two sims that should agree don't, `ss.diff()` compares them in their own terms: their states and transitions, their parameters, their settings (such as the time step), and their interventions. Here the second sim has a lower β and a shorter step:
+When two sims that should agree don't, compare what each says about itself: the `describe()` of each, side by side, shows where their states, transitions, parameters, and settings differ (and the code of each can be compared in a text editor). Here the second sim has a lower β and a shorter step:
 
 ```{python}
 S, I, R = ss.states('S I R')
@@ -81,7 +81,7 @@ recovery  = I >> R @ ss.days(8)
 other = ss.Disease(infection, recovery, init_prev=0.001, name='measles')
 other_sim = ss.Sim(other, total_pop=100_000, stop=ss.days(50), dt=ss.days(0.5), verbose=0)
 
-ss.diff(sim, other_sim)
+other_sim.describe()
 ```
 
 ## Checking the numbers

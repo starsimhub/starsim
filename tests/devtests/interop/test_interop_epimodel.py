@@ -5,7 +5,6 @@ import copy
 import numpy as np
 import sciris as sc
 import starsim as ss
-import starsim.library as ssl
 from starsim.interop.epimodel import load_epimodel
 
 # EpiModel's introduction (lingua_franca_design/examples/epimodel/sis-network), as dump_epimodel.R writes it
@@ -46,15 +45,15 @@ def test_epimodel_netsim():
     sim = load_epimodel(sis, verbose=0)
     assert not sim.imported.incomplete, 'the introduction should import completely'
     net = sim.pars.networks
-    assert isinstance(net, ssl.DegreeNet)
+    assert isinstance(net, ss.DegreeNet)
     assert (net.pars.n_contacts, net.pars.concurrency, net.pars.max_contacts, net.pars.dur) == (0.7, 0.22, 3, 50), 'the network should have EpiModel\'s targets'
     sim.run()
     res = sim.results.sis
     assert len(res.I) == 500, 'EpiModel\'s 500 times are 499 steps'
     prev = res.I[-200:].mean() # EpiModel: 227.5, against 234 over 200 runs (its recovery in the step of infection makes it lower)
     assert 180 < prev < 290, f'the equilibrium should be near EpiModel\'s, not {prev}'
-    code = sim.to_code()
-    assert 'ssl.DegreeNet(n_contacts=0.7, concurrency=0.22, max_contacts=3, dur=50, acts=ss.freqperday(2))' in code
+    code = sim.imported.code
+    assert "ss.DegreeNet(n_contacts=0.7, concurrency=0.22, max_contacts=3, dur=50, acts=ss.freqperday(2), name='net')" in code
     return sim
 
 

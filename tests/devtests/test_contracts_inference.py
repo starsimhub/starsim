@@ -328,7 +328,7 @@ def test_log_density():
     odd = ss.Sim(ss.Disease(S >> I @ beta*I, I >> R @ ss.days(10), init=dict(I=0.01), name='sir'), solver='ode', unit='day', stop=30, data=pd.DataFrame(dict(I=[0.02, 0.05]), index=[10, 20]), verbose=0)
     with pytest.raises(ss.CapabilityError, match='weibull'): # A prior that the log-density in JAX does not cover
         odd.log_density(likelihood=dict(I=ss.normal(scale=0.01)))
-    with pytest.raises(ss.errors.NoData): # It was an AttributeError
+    with pytest.raises(ValueError, match='but the sim has no data'): # It was an AttributeError
         odd.new(data=None).log_density()
     return ld
 
@@ -452,7 +452,7 @@ def test_data_files(tmp_path):
     def make(name):
         S, I, R = ss.states(3)
         return ss.Disease(infection=S >> I @ 0.2*I.frac, recovery=I >> R @ ss.days(10), init_n=dict(I=10), name=name)
-    with pytest.raises(ss.errors.UnknownDataColumn, match='flu.infection'):
+    with pytest.raises(KeyError, match='flu.infection'):
         ss.Sim([make('flu'), make('rsv')], unit='day', stop=60, verbose=0, data=ss.simdata(path)).fit()
     return path
 

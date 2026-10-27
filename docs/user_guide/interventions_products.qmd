@@ -220,7 +220,7 @@ sim.run()
 sim.plot('sis')
 ```
 
-An event can also be read on someone's mother: `ss.child(event)` is the event on a mother when one of her children goes through `event`, and `ss.mother(cond, born=True)` holds for a person whose mother meets `cond`. Each event remembers, per person, whether it ever happened (`.ever`), how often (`.count`), and how long ago (`.since`). Here newborns are tested if their mother tested positive at antenatal care within the past year:
+A condition can also be read on someone's mother: `ss.mother(cond, born=True)` holds for a person whose mother meets `cond`. Each event remembers, per person, whether it ever happened (`.ever`), how often (`.count`), and how long ago (`.since`). Here newborns are tested if their mother tested positive at antenatal care within the past year:
 
 ```{python}
 pregnancy = ss.Pregnancy(fertility_rate=ss.freqperyear(100)) # Births a year per 1,000 women

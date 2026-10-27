@@ -18,11 +18,11 @@ def make_sis(cure=None):
 
 
 def w209(sim):
-    """ The ss.errors.UndrivenUnused warnings raised when a sim is initialized """
+    """ The warnings raised when a sim is initialized that a transition has nothing to drive it """
     with warnings.catch_warnings(record=True) as w:
         warnings.simplefilter('always')
         sim.init()
-    return [str(x.message) for x in w if issubclass(x.category, ss.errors.UndrivenUnused)]
+    return [str(x.message) for x in w if 'so only custom code can move people along it' in str(x.message)]
 
 
 # %% Define the tests
@@ -58,7 +58,7 @@ def test_undriven():
         assert np.isclose(res.sis.cure.sum(), 0.9*res.tx.delivered.sum(), rtol=0.05)
         assert res.sis.cure.sum() > 0
 
-    with pytest.raises(ss.errors.UndrivenTransition): # An inflow still needs a rate
+    with pytest.raises(ValueError, match='has no rate. Give it one'): # An inflow still needs a rate
         S, I = ss.states('S I')
         ss.Disease(births=ss.Transition(ss.null, S), infection=ss.Transition(S, I, rate=0.3 * I))
     return sim

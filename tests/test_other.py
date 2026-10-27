@@ -128,24 +128,15 @@ class Counter(ss.Module):
 
     # The code cells of Quarto, Markdown, and notebooks, and nothing else in them
     path = sc.path('notes.qmd') # Only its suffix is read
-    qmd = "Text with ss.Test\n\n```{python}\nx = ss.Test()\n```\n"
+    qmd = "Text with ss.time_prob\n\n```{python}\nx = ss.time_prob(0.1)\n```\n"
     blocks = migrate.code_blocks(path, qmd)
-    assert migrate.replace_blocks(path, qmd, [migrate_text(code)[0] for _,code in blocks]) == qmd.replace('x = ss.Test', 'x = ss.Diagnostic')
+    assert migrate.replace_blocks(path, qmd, [migrate_text(code)[0] for _,code in blocks]) == qmd.replace('x = ss.time_prob', 'x = ss.probperyear')
     assert 'sim.fit()' in migrate_text('calib = ss.Calibration(sim, calib_pars)')[2][0][1] # Removed names are flagged with what to use instead
-    for old in ['ss.demographics.Pregnancy', 'ss.LegacyPregnancy']: # Starsim 3's pregnancy, by its old path or its prerelease name
-        assert migrate_text(f'preg = {old}(fertility_rate=20)')[0] == 'preg = ss.Pregnancy(fertility_rate=20)'
+    assert migrate_text('preg = ss.demographics.Pregnancy(fertility_rate=20)')[0] == 'preg = ss.Pregnancy(fertility_rate=20)' # Starsim 3's pregnancy, by its old path
     todo = migrate_text('class MyPreg(ss.Pregnancy):\n    def make_embryos(self, conceive_uids):\n        return super().make_embryos(conceive_uids)')[2]
     assert any('add_callback' in msg for line,msg in todo) and len(todo) >= 2 # The subclass and the removed method are flagged, not rewritten
     assert not migrate_text('preg = ss.Pregnancy(fertility_rate=20)')[2] # A plain use is left alone
-    assert migrate_text('d = ss.Disease(death=ss.Transition(I, ss.null, rate=r, where=ss.people.age < 1))')[0] == 'd = ss.Disease(death=ss.Transition(I, ss.null, rate=r, where=ss.ppl.age < 1))' # Starsim 4 prerelease names
-    assert migrate_text('tx = ss.treat(ss.Treatment(), eligible=sis.I)')[0] == 'tx = ss.treat(ss.Treatment(), where=sis.I)'
-    assert migrate_text('def care(tb, eligible=None):\n    return care2(eligible=eligible)')[0] == 'def care(tb, eligible=None):\n    return care2(eligible=eligible)' # Only in calls to Starsim's deliveries (TB §2)
-    assert migrate_text("net = ss.SexualNetwork(sides='mm'); sim = ss.Sim(net, copy_inputs=False)")[0] == "net = ss.SexualNet(between='mm'); sim = ss.Sim(net)"
-    assert migrate_text("d = ss.Disease(S, I, init=dict(I=10)); t = ss.transfer(risk='low -> high', rate=r)")[0] == "d = ss.Disease(S, I, init_n=dict(I=10)); t = ss.transfer(risk=('low', 'high'), rate=r)"
-    assert migrate_text("d = ss.Disease(S, I, init=dict(I=0.01))")[0] == "d = ss.Disease(S, I, init=dict(I=0.01))" # A share stays
-    assert migrate_text('ppl = ss.people.People(10)')[0] == 'ppl = ss.people.People(10)' # Starsim 3's module, left alone
-    assert migrate_text('class Pap(ss.Test):\n    pass\nok = isinstance(t, ss.Test)')[0] == 'class Pap(ss.Diagnostic):\n    pass\nok = isinstance(t, ss.Diagnostic)' # ss.Test as a name, e.g. a base class
-    assert migrate_text('ss.Tests(); ss.Testing')[0] == 'ss.Tests(); ss.Testing'
+    assert migrate_text("net = ss.SexualNetwork(); sim = ss.Sim(net, copy_inputs=False)")[0] == "net = ss.SexualNet(); sim = ss.Sim(net)"
     todo = migrate_text('class screening(ss.BaseScreening, ss.RoutineDelivery): pass\ntx = ss.treat_num(product=ss.Tx(df=df), max_capacity=50)')[2] # Starsim 3's delivery classes and products are flagged
     assert [line for line,msg in todo] == [1, 2, 2] and 'queue=True' in todo[1][1] + todo[2][1]
     text, changes, todo = migrate_text("hiv = ssl.HIV(beta={'mf': [0.08, 0.04], 'prenatal': [0.2, 0], 'msm': [0.1, 0.1]})") # A beta pair has direction names
@@ -157,21 +148,11 @@ class Counter(ss.Module):
     own = "class Mosquito(ss.Module):\n    def init_results(self):\n        self.define_results(ss.Result('n_infected'))\n    def step(self):\n        self.results.n_infected[self.ti] = 5\nx = res['n_infected']; y = res.new_infections"
     assert migrate_text(own)[1:] == ([], []) # A result the package makes keeps its name, and new_infections is a declared disease's only next to one
     assert migrate_text('sir = ss.SIR()\nx = res.new_infections')[2][1][0] == 2
-    assert not migrate_text('x = hiv.results.diagnosed')[2] and migrate_text('screening = ss.screen(test)\nx = sim.results.screening.diagnosed')[2][0][0] == 2
     assert 'ss.treat(' in migrate_text('from starsim.interventions import treat_num, Intervention')[2][0][1] # An import of a removed name
 
-    # A test's follow-ups nested in it (Starsim 4's prereleases) become steps of their own, after it in the interventions
-    text, changes, todo = migrate_text("screening = ss.screen(ss.Test(), interval=7, on_positive=ss.treat(ss.Treatment()))\nsim = ss.Sim(interventions=[screening])")
-    assert text.splitlines() == ['screening = ss.screen(ss.Diagnostic(), interval=7)', 'screening_positive = ss.treat(ss.Treatment(), who=screening.positive)', 'sim = ss.Sim(interventions=[screening, screening_positive])']
-    text, changes, todo = migrate_text("tx = ss.treat(ss.Treatment())\nscreening = ss.screen(ss.Diagnostic(), on_positive=tx)\nsim = ss.Sim(interventions=screening)") # A follow-up by name (TB §2)
-    assert text.splitlines() == ['screening = ss.screen(ss.Diagnostic())', 'tx = ss.treat(ss.Treatment(), who=screening.positive)', 'sim = ss.Sim(interventions=[screening, tx])']
-    old = "screening = ss.screen(ss.Diagnostic(), on_positive=tx)" # Not in a list of interventions: left in place, to fail with Starsim 4's own error
-    assert migrate_text(old)[0] == old and any('left in place' in msg for line,msg in migrate_text(old)[2])
-    assert any('assign the test' in msg for line,msg in migrate_text('def care(test, tx):\n    return ss.screen(test, on_positive=tx)')[2]) # Not assigned: flagged
-
-    # More of Starsim 3 (and the prereleases), and the error for a removed name
-    old = "new = ss.uids.cat(a, b); bf = preg.breastfeeding\nS = ss.State('S', infectious=False); net = ss.RandomNet(n_contacts=10, uniform_targets=True)"
-    assert migrate_text(old)[0] == "new = ss.uids.concatenate(a, b); bf = preg.lactating\nS = ss.State('S'); net = ss.RandomNet(n_contacts=10, method='uniform')"
+    # More of Starsim 3, and the error for a removed name
+    old = "new = ss.uids.cat(a, b); bf = preg.breastfeeding\nnet = ss.RandomNet(n_contacts=10, uniform_targets=True)"
+    assert migrate_text(old)[0] == "new = ss.uids.concatenate(a, b); bf = preg.lactating\nnet = ss.RandomNet(n_contacts=10, method='uniform')"
     with pytest.raises(AttributeError, match=r'sim\.fit\(\)') as info:
         ss.Calibration
     assert info.value.obj is None # So that Python suggests no closest name ("emigration")

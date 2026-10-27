@@ -107,7 +107,7 @@ def test_strain_clearance():
     before = d16.current_state()[both].copy(), d16.ti_I.raw[both].copy(), d16.ti_exit_I.raw[both].copy()
     ss.move(d18.I, d18.S, uids=both)
     assert len(both) and not d18.I.raw[both].any()
-    assert all(np.array_equal(a, b) for a,b in zip(before, (d16.current_state()[both], d16.ti_I.raw[both], d16.ti_exit_I.raw[both])))
+    assert all(np.array_equal(a, b, equal_nan=True) for a,b in zip(before, (d16.current_state()[both], d16.ti_I.raw[both], d16.ti_exit_I.raw[both])))
     return sim
 
 
@@ -276,8 +276,10 @@ def test_property_values():
         return sim
     sim = make().run()
     assert np.isclose(sim.people.urban.mean(), 0.9, atol=0.02) and len(np.unique(sim.people.wealth[sim.people.auids])) > 100
-    with pytest.raises(ss.errors.BadSplit):
+    with pytest.raises(ValueError, match='split= would overwrite them'):
         make(split=[0.5, 0.5]).init()
+    with pytest.raises(ValueError, match="'age', 'space', 'plain'"): # An unknown kind, e.g. the removed 'clock'
+        make(kind='clock')
     return sim
 
 
@@ -320,7 +322,7 @@ def test_given_splits():
         m.stratify(urban=[False, True], split=[0.83, 0.17])
         m.stratify(wealth=['w1', 'w2', 'w3', 'w4', 'w5'], split=ss.by(table, dims=['urban', 'wealth']))
         return ss.Sim(m, n_agents=20_000, start=2010, stop=2011, verbose=0)
-    with pytest.raises(ss.errors.InconsistentDimension, match='0.83'):
+    with pytest.raises(ValueError, match='0.83'):
         make(table).init()
     n = make(table*np.array([0.83, 0.17])[:, None]).run().results.life.S # As a joint distribution, it agrees
     assert np.isclose(n.select(urban=1).values[0]/n.values[0], 0.17, atol=0.01)

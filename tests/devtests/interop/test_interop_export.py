@@ -1,5 +1,5 @@
 """
-Test exporting a sim to other formats (ss.interop.export()): Mermaid, SBML, and odin, read back with ss.interop.load(); and runs as a hub submission (ss.interop.to_hub())
+Test exporting a sim to other formats (ss.interop.export()): SBML and odin, read back with ss.interop.load(); and runs as a hub submission (ss.interop.to_hub())
 """
 import tempfile
 import warnings
@@ -35,25 +35,14 @@ def make_seird():
 
 
 @sc.timer()
-def test_mermaid(tmp_path):
-    sc.heading('Testing export to Mermaid')
+def test_save(tmp_path):
+    sc.heading('Testing ss.save() with another format')
     sim = make_sir()
-    text = ss.interop.export(sim, 'mermaid', verbose=False)
-    assert text.startswith('flowchart LR')
-    assert 'S -.->|"infection: 0.3 × I"| I' in text # A transmission is dashed, and labelled with its rate
-    assert 'I -->|"recovery: 7 days"| R' in text # With its value (it was "dur = dur")
-    ss.interop.export(sim, 'mermaid', filename=tmp_path/'sir.md', verbose=False)
-    assert sc.loadtext(tmp_path/'sir.md').startswith('```mermaid\nflowchart LR') # A Markdown file has the diagram in a fenced block
-    ss.save(tmp_path/'sir.xml', sim, format='sbml', verbose=False) # Another format is written by its exporter (it was a TypeError from pickling)
-    assert '<sbml' in sc.loadtext(tmp_path/'sir.xml')
-    with pytest.raises(ValueError, match='the formats are'):
-        ss.save(tmp_path/'sir.x', sim, format='nosuch')
-
-    # Two diseases are a subgraph each; a stratification is in the title
-    sim = ss.Sim([sir('a'), sir('b')], stratify=dict(age=[0, 18]), unit='day', **kw)
-    text = ss.interop.export(sim, 'mermaid', verbose=False)
-    assert 'subgraph a["a (stratified by age: 0-17, 18+)"]' in text and 'b_I -->|"recovery: 7 days"| b_R' in text
-    return text
+    with pytest.raises(ValueError, match='ss.interop.export'): # Another framework's format is written by its exporter (it was a TypeError from pickling)
+        ss.save(tmp_path/'sir.xml', sim, format='sbml')
+    sim.init()
+    assert 'I -->|"recovery: 7 days"| R' in sim.diseases.sir.diagram() # In the sim's unit of time
+    return sim
 
 
 @sc.timer()
@@ -135,7 +124,7 @@ if __name__ == '__main__':
     T = sc.timer()
     with tempfile.TemporaryDirectory() as tmp:
         folder = sc.path(tmp)
-        test_mermaid(folder)
+        test_save(folder)
         test_sbml(folder)
         test_odin(folder)
     test_hub()

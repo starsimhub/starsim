@@ -24,6 +24,15 @@ def tv(x, pmf):
 
 
 @nb.jit(nopython=True)
+def uniforms(k, n):
+    """ The first n uniforms of the stream with key k """
+    out = np.empty(n)
+    for i in range(n):
+        out[i] = D.uniform(k, i)
+    return out
+
+
+@nb.jit(nopython=True)
 def scalar_binomial(n, p, u, out):
     for i in range(n.size):
         out[i] = D.binomial(n[i], p[i], u[i])
@@ -87,14 +96,14 @@ def test_others():
     ]
     for i, (f, pars, law) in enumerate(cases):
         k = D.key(3, i)
-        x = D.many[f].from_key(*pars, k, np.empty(N))
+        x = D.many[f](*pars, uniforms(k, N), np.empty(N))
         ks = sps.kstest(x, law.cdf).statistic*np.sqrt(N)
         print(f'{f}{pars}: KS statistic x sqrt(N) = {ks:.2f}')
         assert ks < 2.0, (f, pars) # A 0.1% chance by noise alone
 
     k = D.key(4, 0)
     for n, p in [(0.05, 0.01), (1.0, 0.3), (5.0, 0.5), (2.0, 0.02), (50.0, 0.4)]:
-        x = D.many.nbinom.from_key(n, p, k, np.empty(N))
+        x = D.many.nbinom(n, p, uniforms(k, N), np.empty(N))
         d, noise = tv(x, lambda j: sps.nbinom.pmf(j, n, p))
         print(f'Negative binomial n={n}, p={p}: TV {d:.4f} (noise ~{noise:.4f})')
         assert d < 3*noise + 1e-3, (n, p)

@@ -27,7 +27,7 @@ def test_strain_data():
     sim = make(data).run()
     assert sim.data.columns.tolist() == ['hpv16.clearance', 'hpv18.clearance']
     assert np.isfinite(ss.fit.mismatch(sim))
-    with pytest.raises(ss.errors.UnknownDataColumn): # One spelling: the strain's own result
+    with pytest.raises(KeyError, match="name each strain's own result"): # One spelling: the strain's own result
         make(pd.DataFrame({'year':[2003], 'hpv.clearance[genotype=hpv16]':[100]})).init()
     return sim
 

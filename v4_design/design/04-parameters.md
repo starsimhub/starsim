@@ -21,7 +21,6 @@ Both values become parameters of the module, named after their slots, `sir.pars.
 
 ## `ss.par`
 
-<!-- fragment -->
 ```python
 ss.par(
     value  = None,        # any form on the ladder below
@@ -30,7 +29,7 @@ ss.par(
     source = None,        # free text: where the number came from
     doc    = None,        # free text: what it means
     name   = None,        # usually taken from the keyword or variable
-    label  = None,        # human-readable
+    label  = None,        # human-readable; shown in its repr, in describe() (`beta (Transmission rate) = ...`), and in the table of a fit
 )
 ```
 
@@ -48,18 +47,18 @@ sir = ss.Disease(
 An `ss.par` behaves like its value in arithmetic, so it can be used anywhere a number can, including after `@` and inside rates.
 
 - **Names.** A named parameter is collected into the module's `pars`, Starsim's parameter container, under its name: `sir.pars.beta`. The name is the keyword if it was passed as one (`ss.Disease(beta=ss.par(0.05), ...)`), else the variable it is bound to, by the same lookup as for transitions ([01-objects.md](01-objects.md#names)). A plain Python number used in a rate is just a number; wrap it in `ss.par` to make it addressable by name.
-- **`bounds`** is what makes a parameter fittable: `sim.fit()` fits every parameter that has bounds to every result that has data, wherever it is used (a rate, an initial value, a seasonal mean, a modifier's amount) ([13-inference.md](13-inference.md)). Bounds that are positive and span a factor of 10 or more are searched on a log scale, and others on a linear one. Bounds given as bare numbers are in the unit of the value, and typed bounds are converted (`ss.par(ss.days(8), bounds=[ss.days(3), ss.weeks(4)])`). A value outside its bounds raises `OutOfBounds` when the sim is initialized.
+- **`bounds`** is what makes a parameter fittable: `sim.fit()` fits every parameter that has bounds to every result that has data, wherever it is used (a rate, an initial value, a seasonal mean, a modifier's amount) ([13-inference.md](13-inference.md)). Bounds that are positive and span a factor of 10 or more are searched on a log scale, and others on a linear one. Bounds given as bare numbers are in the unit of the value, and typed bounds are converted (`ss.par(ss.days(8), bounds=[ss.days(3), ss.weeks(4)])`). A value outside its bounds raises a `ValueError` when the sim is initialized.
 - **A value per level.** `ss.par(ss.by(patch=[...]), bounds=[...])` is fitted level by level, each with the same bounds and prior; the fitted value is an `ss.by`, and one level is set by name, `pars={'beta[a]': 0.3}`.
 - **`prior`** is needed only for posterior methods. Without one, a parameter with bounds is treated as uniform over them. `bounds` and `prior` are separate fields: bounds say which values are valid and where to search, a prior says what is believed. Whether they should be one field is an open question ([19-open-questions.md](19-open-questions.md)); both are kept.
-- **`source`** is one optional line that answers the question every reviewer asks. It is shown by `describe()` and saved in the model spec.
+- **`source`** is one optional line that answers the question every reviewer asks. It is shown by `describe()`.
 - **The type** of a parameter (rate, duration, probability) comes from the slot it is used in ([02-types.md](02-types.md)) or from its typed value. There is no `kind=` argument.
-- **No value.** An `ss.par` with bounds and no value starts at the middle of its bounds (on the search scale), and `describe()` says so. One with neither a value nor bounds, and no value supplied through `ss.Sim(pars=...)`, raises `UnvaluedParameter` when the sim is initialized.
+- **No value.** An `ss.par` with bounds and no value starts at the middle of its bounds (on the search scale), and `describe()` says so. One with neither a value nor bounds, and no value supplied through `ss.Sim(pars=...)`, raises a `ValueError` when the sim is initialized.
 
-Setting a parameter name that the module does not have raises `UnknownParameter`, listing the parameters it has. This is Starsim's existing behavior and it is kept, because a misspelled parameter that is silently ignored is one of the hardest bugs to find. A keyword number on `ss.Disease` sets the parameter of that name:
+Setting a parameter name that the module does not have raises a `KeyError`, listing the parameters it has. This is Starsim's existing behavior and it is kept, because a misspelled parameter that is silently ignored is one of the hardest bugs to find. A keyword number on `ss.Disease` sets the parameter of that name:
 
 ```text
 >>> ss.SIR(dur_inff=3)
-UnknownParameter: "dur_inff=3" was given to "sir", but it has no parameter called "dur_inff"; its parameters are beta, dur_inf, p_death, init_prev.
+KeyError: "dur_inff=3" was given to "sir", but it has no parameter called "dur_inff"; its parameters are beta, dur_inf, p_death, init_prev.
      To add a parameter, use it in a transition, e.g. infection = S >> I @ dur_inff * I with dur_inff = ss.par(3).
 ```
 
@@ -69,11 +68,11 @@ A value given for a parameter (as a keyword, in `pars=`, or by `pars.update()`) 
 
 - **A declared parameter** (an `ss.par`) takes the new value and keeps its name and bounds (`sir.pars.beta = 0.1`), since the module's transitions use that same object. A new `ss.par` gives its bounds, prior and description as well.
 - **A bare number for a typed value** keeps the unit of the default: `ss.SexualNet(dur=5)` on a default in years is `ss.years(5)`, with a warning if the sim runs in another unit.
-- **A single value for a distribution** sets its main parameter and keeps the rest, as in Starsim 3: for `ss.bernoulli` its probability (`init_prev=0.05`), for `ss.lognorm_ex` its mean (`dur=5` is a lognormal of mean 5 with the default's standard deviation), in the default's unit if the value is a bare number (a network of partnerships is the exception: `ss.SexualNet(dur=ss.months(6))` is a mean, with partnerships ending at a constant rate, as for `ssl.DegreeNet`); for `ss.choice` it is that value always (`embryos_per_pregnancy=2` is `ss.constant(2)`). A typed value (`dur=ss.days(200)`) does the same, with a warning that says it set the mean of the default distribution and how to replace the distribution instead (`ss.expon(ss.days(200))`), since in a declared model a duration alone is an exponential (MS8); a bare number does not warn. In a declared model a single value for a parameter whose default is a distribution (other than an exponential) replaces it, with a warning that says how to keep the distribution. A fixed value is `ss.constant(...)`. A dict with a `type` is a distribution (`n_contacts=dict(type='poisson', lam=4)`).
+- **A single value for a distribution** sets its main parameter and keeps the rest, as in Starsim 3: for `ss.bernoulli` its probability (`init_prev=0.05`), for `ss.lognorm_ex` its mean (`dur=5` is a lognormal of mean 5 with the default's standard deviation), in the default's unit if the value is a bare number (a network of partnerships is the exception: `ss.SexualNet(dur=ss.months(6))` is a mean, with partnerships ending at a constant rate, as for `ss.DegreeNet`); for `ss.choice` it is that value always (`embryos_per_pregnancy=2` is `ss.constant(2)`). A typed value (`dur=ss.days(200)`) does the same, with a warning that says it set the mean of the default distribution and how to replace the distribution instead (`ss.expon(ss.days(200))`), since in a declared model a duration alone is an exponential (MS8); a bare number does not warn. In a declared model a single value for a parameter whose default is a distribution (other than an exponential) replaces it, with a warning that says how to keep the distribution. A fixed value is `ss.constant(...)`. A dict with a `type` is a distribution (`n_contacts=dict(type='poisson', lam=4)`).
 
 To change one parameter of a distribution and keep the others, use the distribution's own method, `pars.dur_inf.set(mean=8)`. A list or another dict given for a distribution raises `TypeError` and names that method, since it could mean the distribution's arguments or the values themselves.
 
-The value of a parameter in the current context, with the modifiers that are active on it applied, is `mod.value(name)`: a number in the sim's unit, or one for each group or agent when the modifiers differ between them. `float(sir.pars.beta)` is the same number when it is one number, so a function that reads a parameter sees an `ss.change` to it; when the modifiers give it different values for different people, `float()` raises rather than averaging them. `par.raw` is the value without the modifiers.
+Code reads a parameter as `self.pars.x` (or `disease.pars.x`). Arithmetic and NumPy on a declared parameter (`ss.par`) build an expression while the model is being made and use its current value once the model is built (from `init_post()` on), whatever the other operand (`1 - p` and `np.ones(2) - p` alike), so code beside a model (`acts*(1 - disease.pars.eff_condom)`) reads the current value: a typed value as a number in the sim's unit, a value that varies in time at the current time, a value by level of one dimension as one value for each level, and the modifiers active on it applied (one value for each group or agent when they differ between them). A parameter whose value is a distribution raises there (it has no single value: use `.mean()` or draw from it). In a module written as code, a plain value is itself (a number, or an `ss.par`'s value, which the module keeps while fitting and `sim.new()` find the `ss.par`), a typed value stays typed (its own arithmetic and `.to_prob()`/`.to_dt()` keep its unit), and a value that varies (`ss.timeseries`, `ss.seasonal`, `ss.by`) is its current value in arithmetic, NumPy, comparisons, and `float()`: of numbers, a number in the sim's unit (one for each level), as for a declared parameter; of typed values, the typed value now (an `ss.by` of one dimension: one typed array, one value per level), so `self.pars.rate.to_prob()` is the same code whether `rate` is `ss.peryear(0.1)` or a time series of them, and its arithmetic is typed arithmetic. `float(sir.pars.beta)` and `par.raw` are the value the parameter holds, without the modifiers. The engines read the same values through `ss.parameters.current_value()` and `Engine.value()`; `mod._value()` is internal.
 
 ## The ladder
 
@@ -120,7 +119,7 @@ A compartmental run has no individuals to draw for, so variation between people 
 
 To keep heterogeneity in `beta` or `rel_sus` in a compartmental run, bin it into a dimension (`sir.stratify(rel_sus=[...])`, [05-dimensions.md](05-dimensions.md)). Replacing a distribution by its mean is an approximation, so `approx=False` makes it `CapabilityError` and `approx=True` silences the note ([12-backends.md](12-backends.md)).
 
-The distributions are Starsim's, under Starsim's names: `ss.normal`, `ss.lognorm_ex` (given the mean and standard deviation of the result), `ss.lognorm_im` (given those of the underlying normal), `ss.expon`, `ss.gamma`, `ss.weibull`, `ss.poisson`, `ss.nbinom`, `ss.uniform`, `ss.bernoulli`, `ss.constant`, and `ss.choice`. Starsim's other distributions, and any SciPy distribution through `ss.Dist`, remain available. Two are added: `ss.erlang(k=3, mean=...)`, which is `ss.gamma` with an integer shape (`ss.gamma(a=3, scale=...)`), given by its number of stages and its mean (sub-stages are also `stages=3` on the transition); and `ss.truncnorm`, a normal between `low` and `high`, as flepiMoP draws its parameters.
+The distributions are Starsim's, under Starsim's names: `ss.normal`, `ss.lognorm_ex` (given the mean and standard deviation of the result), `ss.lognorm_im` (given those of the underlying normal), `ss.expon`, `ss.gamma`, `ss.weibull`, `ss.poisson`, `ss.nbinom`, `ss.uniform`, `ss.bernoulli`, `ss.constant`, and `ss.choice`. Starsim's other distributions, and any SciPy distribution through `ss.Dist`, remain available. Two are added: `ss.erlang(k=3, mean=...)`, which is `ss.gamma` with an integer shape (`ss.gamma(a=3, scale=...)`), given by its number of stages and its mean (sub-stages are also `stages=3` on the transition); and `ss.truncnorm`, a normal between `low` and `high`, as flepiMoP draws its parameters. `ss.choice` takes `p` as a row of probabilities per agent (a 2D array, or a function returning one; each row normalized), drawn with one random number per agent through the inverse CDF of that agent's row, so a choice whose probabilities differ by agent is one draw that keeps common random numbers.
 
 The unit of a distribution is given once, either with `unit=` or on one of its parameters; the other parameters of the same dimension take it:
 
@@ -133,7 +132,6 @@ ss.lognorm_ex(mean=ss.days(10), std=3)        # the same
 
 Types say what a number means; shapes say how many there are and along which stratification.
 
-<!-- fragment -->
 ```python
 beta = 0.05                                    # the same everywhere
 beta = ss.by(age=[0.08, 0.05, 0.03])           # one per age group
@@ -143,13 +141,11 @@ pop  = ss.by([[3000, 1000], [5000, 2000]], dims=['age', 'patch'])   # an array w
 mu   = ss.by(sex=dict(female=0.008, male=0.011))  # by label: from people.female, with or without a dimension by sex
 p    = ss.by(dict(age=range(15, 50), value=vals)) # a table over a property: a column of numbers holds lower bin edges
 dur  = ss.by(sex=dict(female=ss.lognorm_ex(6, 2), male=ss.lognorm_ex(12, 4)))  # a distribution for each level
-mix  = ss.by(dict(age=[15, 15, 30, 30], to=['pill', 'iud', 'pill', 'iud'], value=[0.7, 0.3, 0.4, 0.6]))  # in p=, by destination (to)
-act  = ss.by(dict(since_birth=[None, 0, 3, 12], value=[1.0, 0.0, 0.5, 1.0]))  # over a clock: None is its level none
 ```
 
-`ss.by` names the stratification each axis belongs to, so values never depend on the order strata happen to be stored in. A value with fewer axes than the model is used for every level of the missing ones, and `describe()` prints the value with its axes (`beta = by(age=[0.08, 0.05, 0.03])`). Arithmetic works on `ss.by` values (over the same levels, or tables with the same rows; different numbers of levels raise an error), and any of their values can be a time series. Anything else is an expression in which the `ss.by` is one value, worked out where it is used, as for a parameter: tables by different bins (`p_a + p_b`), an `ss.by` with a count or a property of people, and NumPy functions of it (`np.minimum(p, 1)`, `np.log(p)`). Time series and seasonal values are expressions in the same way, and so is an `ss.by` holding them times a number or a typed value (`ss.perday(0.1) * ss.by(age=[school, 1, 1])`, as it is written inside a rate); an `ss.by` cannot hold an expression itself (`ss.by(age=[ss.perday(0.1)*school, ...])` raises a `TypeError` that says to put the factor outside). A value whose length does not match its stratification, such as four values for three age groups, raises `ShapeError` when the sim runs, naming the dimension and both lengths. A function of the sim may give the values of one dimension, `ss.by(patch=fn)` with `fn(sim)` one value per level (or one number), worked out once a step and read as a value by level is, by every solver and whatever other dimensions the sim has (MS2): a value for each place from code beside a declared model, e.g. the biting rate from mosquitoes written as code.
+`ss.by` names the stratification each axis belongs to, so values never depend on the order strata happen to be stored in. A value with fewer axes than the model is used for every level of the missing ones, and `describe()` prints the value with its axes (`beta = by(age=[0.08, 0.05, 0.03])`). Arithmetic works on `ss.by` values (over the same levels, or tables with the same rows; different numbers of levels raise an error), and any of their values can be a time series. Anything else is an expression in which the `ss.by` is one value, worked out where it is used, as for a parameter: tables by different bins (`p_a + p_b`), an `ss.by` with a count or a property of people, and NumPy functions of it (`np.minimum(p, 1)`, `np.log(p)`). Time series and seasonal values are expressions in the same way, and so is an `ss.by` holding them times a number or a typed value (`ss.perday(0.1) * ss.by(age=[school, 1, 1])`, as it is written inside a rate); an `ss.by` cannot hold an expression itself (`ss.by(age=[ss.perday(0.1)*school, ...])` raises a `TypeError` that says to put the factor outside). A value whose length does not match its stratification, such as four values for three age groups, raises a `ValueError` when the sim runs, naming the dimension and both lengths. A function of the sim may give the values of one dimension, `ss.by(patch=fn)` with `fn(sim)` one value per level (or one number), worked out once a step and read as a value by level is, by every solver and whatever other dimensions the sim has (MS2): a value for each place from code beside a declared model, e.g. the biting rate from mosquitoes written as code.
 
-**Values by a property of people.** `ss.by` may be over a property that is not a dimension of the sim, which is then read from each person, as agents: under `'auto'` the model runs as agents, with a note, and an explicit compartmental solver raises `CapabilityError` naming `stratify()` (the rule for a distribution across people, and for `ss.ppl.<name>` in a rate). Its values are given by label (`sex=dict(female=..., male=...)`, read from `people.female`) or as a table; values by position (`ss.by(sex=[a, b])`) need the dimension's order, so without the dimension they raise `MissingDimension`, naming the keyed form or `stratify()`. In a table, a column of numbers holds lower bin edges, the last bin open-ended, so a table by single year of age works whatever the model's age groups: agents read each person's own age, and a compartmental run averages it over each group, weighting each bin by how much of the group it covers, with a note. A row whose key is `None` gives the value for people with no value of the property; without one, they get the mean over the levels, weighted by the people at each. Values by different dimensions multiply as their outer product (`ss.by(age=[...]) * ss.by(sex=dict(...))` is `ss.by(age=[...], sex=dict(...))`, and a table times a table or a value by label is a table of every combination of their rows), and a typed value times an `ss.by` applies to each of its values (`ss.peryear(0.0016) * ss.by(sex=dict(...))`). Over a clock ([05](05-dimensions.md#counters-and-clocks)), a table's numbers are times in the clock's unit, its `None` row is for the people at `none`, and values by position are for the levels as given, also when a compartmental run keeps the clock a step at a time. A dimension called `to` is the destination of a transition with several, in `p=` ([03](03-states-and-transitions.md#branching)). A distribution's parameter may be a property or an expression of properties (`ss.lognorm_ex(mean=0.2*ss.ppl.age + 1, std=0.1)`), read for each person as they draw, as agents. A dwell time may be an `ss.by` of distributions of one kind: as agents, each person draws from their level's; as compartments, each group has its level's mean, with one number of Erlang stages for all, noted.
+**Values by a property of people.** `ss.by` may be over a property that is not a dimension of the sim, which is then read from each person, as agents: under `'auto'` the model runs as agents, with a note, and an explicit compartmental solver raises `CapabilityError` naming `stratify()` (the rule for a distribution across people, and for `ss.ppl.<name>` in a rate). Its values are given by label (`sex=dict(female=..., male=...)`, read from `people.female`) or as a table; values by position (`ss.by(sex=[a, b])`) need the dimension's order, so without the dimension they raise a `KeyError`, naming the keyed form or `stratify()`. In a table, a column of numbers holds lower bin edges, the last bin open-ended, so a table by single year of age works whatever the model's age groups: agents read each person's own age, and a compartmental run averages it over each group, weighting each bin by how much of the group it covers, with a note. A row whose key is `None` gives the value for people with no value of the property; without one, they get the mean over the levels, weighted by the people at each. Values by different dimensions multiply as their outer product (`ss.by(age=[...]) * ss.by(sex=dict(...))` is `ss.by(age=[...], sex=dict(...))`, and a table times a table or a value by label is a table of every combination of their rows), and a typed value times an `ss.by` applies to each of its values (`ss.peryear(0.0016) * ss.by(sex=dict(...))`). A distribution's parameter may be a property or an expression of properties (`ss.lognorm_ex(mean=0.2*ss.ppl.age + 1, std=0.1)`), read for each person as they draw, as agents. A dwell time may be an `ss.by` of distributions of one kind: as agents, each person draws from their level's; as compartments, each group has its level's mean, with one number of Erlang stages for all, noted.
 
 `ss.by` replaces the separate global and local parameter concepts of other frameworks (SimInf's `gdata`/`ldata`, MetaCast's `universal_params`/`subpop_params`) and replaces string-built parameter names such as `'beta_[high,vaccinated]'`, which are not part of the language.
 
@@ -167,16 +163,7 @@ sir  = ss.Disease(
 sim = ss.Sim(sir, pars=sc.loadjson('params/kenya_2024.json'), unit='day')
 ```
 
-`pars=` takes a dict of values by name (`beta`, or `sir.beta` when there is more than one module); values kept in a file are read into one first (`sc.loadjson()`, `pd.read_csv()`), since reading files is not the sim's job. One level of a value per level is named with brackets (`beta[a]`). Names it does not recognize raise `UnknownParameter`.
-
-Either way, `sim.hash()` returns the parts of the run's identity as an `sc.objdict` ([11-random.md](11-random.md)):
-
-```text
->>> sim.hash()
-objdict(model='8f3a21', pars='c47e90', config='1b6d55', scenario='baseline', data='a90f3e', seed=1)
-```
-
-A change of values changes `pars` and nothing else, so the question "did the model change, or did the numbers?" has an answer whether or not the values were in a separate file. The hash is a cheap by-product, useful for telling apart the many runs of a sweep or a calibration made from one commit; the git hash or tag of the code remains the main record of what was run.
+`pars=` takes a dict of values by name (`beta`, or `sir.beta` when there is more than one module); values kept in a file are read into one first (`sc.loadjson()`, `pd.read_csv()`), since reading files is not the sim's job. One level of a value per level is named with brackets (`beta[a]`). Names it does not recognize raise a `KeyError`.
 
 ## Named data
 
@@ -206,15 +193,15 @@ A named population gives the sim its size and the split of an age stratification
 
 The library does not depend on other frameworks' packages (LASER's migration module, `epydemix-data`, `socialmixr`) for generators or data. A data set is adapted once, with its provenance recorded, and then it is ours to keep working.
 
-- Where the data came from is shown by `describe()` and written in the model spec, so it is part of `sim.hash()` and `sim.to_code()` looks it up again.
+- Where the data came from is shown by `describe()`.
 - Providers are pluggable, so a group can add its own sources, and a geography can always come from the user's own table instead ([06-routes.md](06-routes.md#geography)).
-- Place names are forgiving (`'Kenya'`, `'kenya'`, `'KE'`, `'KEN'`), but a name that cannot be resolved is never matched to the nearest guess: it raises `UnknownLocation`, listing near matches.
+- Place names are forgiving (`'Kenya'`, `'kenya'`, `'KE'`, `'KEN'`), but a name that cannot be resolved is never matched to the nearest guess: it raises a `KeyError`, listing near matches.
 
 How data is matched to results is in [09-results.md](09-results.md).
 
 ## Not included
 
-- **Parameters that spring into existence on first use.** A typo then becomes a silent change in behavior; see `UnknownParameter` above.
+- **Parameters that spring into existence on first use.** A typo then becomes a silent change in behavior; see a `KeyError` above.
 - **A required split between model and values.** The split is available; two files for an SIR are not required.
 - **String-built parameter names.** `ss.by` does this job.
 - **Required, enforced data declarations.** Requirements are metadata.

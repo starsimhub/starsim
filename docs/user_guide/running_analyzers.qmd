@@ -7,7 +7,7 @@ An analyzer records something during a run that the results don't keep, without 
 
 ## When an analyzer runs
 
-An analyzer runs at the start (time point 0) and then at the end of each step, after the step's results have been recorded. In the analyzer, `sim.ti` (or `self.ti` in a class) is the time point at the end of the step, where the step's results go. A declared disease dates each infection at the end of the step in which it happened, in its state `ti_I`, so the people infected during this step are those with `ti_I == ti`. An analyzer that acts every few steps (`if self.ti % 7 == 0`, at the end of each week) also acts at time point 0, before anything has happened, unless it skips it (`if self.ti == 0: return`).
+An analyzer runs at the start (time point 0) and then at the end of each step, after the step's results have been recorded. In the analyzer, `sim.ti` (or `self.ti` in a class) is the time point at the end of the step, where the step's results go. A declared disease dates each infection at the end of the step in which it happened, in its state `ti_I`, so the people infected during this step are those with `ti_I.isclose(ti)` (`==` raises for a time, since a time drawn between steps never equals one exactly). An analyzer that acts every few steps (`if self.ti % 7 == 0`, at the end of each week) also acts at time point 0, before anything has happened, unless it skips it (`if self.ti == 0: return`).
 
 ## A function as an analyzer
 
@@ -25,7 +25,7 @@ measles = ss.Disease(infection, recovery, init_prev=0.001)
 
 ages = []
 def age_at_infection(sim):
-    new = sim.diseases.measles.ti_I == sim.ti # People infected during this step
+    new = sim.diseases.measles.ti_I.isclose(sim.ti) # People infected during this step
     ages.append(sim.people.age[new].mean() if new.any() else np.nan)
 
 sim = ss.Sim(measles, n_agents=10_000, stop=ss.days(30), dt=ss.days(0.25), analyzers=age_at_infection, verbose=0)
@@ -52,7 +52,7 @@ class AgeAtInfection(ss.Analyzer):
         )
 
     def step(self):
-        new = self.sim.diseases.measles.ti_I == self.ti
+        new = self.sim.diseases.measles.ti_I.isclose(self.ti)
         if new.any():
             age = self.sim.people.age
             self.results.mean_age[self.ti] = age[new].mean()
@@ -90,6 +90,13 @@ Each row is one infection: the time (`t`), the infected agent (`target`), and th
 
 ```{python}
 sim.analyzers.infection_log.plot()
+```
+
+`animate()` shows the same infections as they happen, one frame per time point: each agent infected is a dot on a grid, colored by when it was infected. It draws each frame in turn, so run it in a Python session rather than a notebook:
+
+```{python}
+#| eval: false
+sim.analyzers.infection_log.animate(framerate=20)
 ```
 
 From the log, the generation interval (the time from a person's infection to the infection of each person they infect) is the time of each infection minus the time its source was infected:

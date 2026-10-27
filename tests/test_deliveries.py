@@ -93,9 +93,9 @@ def test_change():
     sir = make_sir()
     bare = ss.Sim(sir, interventions=ss.change(sir.pars.beta, at=[20, 60], to=[0.09, 0.3]), start='2020-01-01', stop='2020-04-30', total_pop=50_000, verbose=0).run()
     assert np.allclose(bare.results.sir.S, res.S) # In a sim with dates, a number is days since the start (not the year 20, which was taken as the first day)
-    with pytest.raises(ss.errors.TimeOutsideSim): # A time outside the sim, such as the year 2030 written as a number of days
+    with pytest.raises(ValueError, match='is outside the sim'): # A time outside the sim, such as the year 2030 written as a number of days
         ss.Sim(sir, interventions=ss.change(sir.pars.beta, at=[2030], to=[0.09]), start='2020-01-01', stop='2020-04-30', verbose=0).init()
-    with pytest.raises(ss.errors.TimeOutsideSim): # At the stop, where no step starts, so it would never apply
+    with pytest.raises(ValueError, match='so it would never happen'): # At the stop, where no step starts, so it would never apply
         ss.Sim(sir, interventions=ss.change(sir.pars.beta, at=['2020-04-30'], to=[0.09]), start='2020-01-01', stop='2020-04-30', verbose=0).init()
     with pytest.raises(ValueError):
         ss.change(sir.pars.beta, at=[20, 60], by=[0.3])
@@ -125,15 +125,10 @@ def test_change():
 
 def test_applied():
     sc.heading('Testing that every modifier and product is applied, or refused when the sim is made')
-    # Refused: a value over "to" in a p= table, and an efficacy on a transition with several destinations
-    none, pill, iud = ss.states('none pill iud')
-    w = ss.par(ss.by(to=dict(pill=1.0, iud=1.0)))
-    contra = ss.Disease(none, pill, iud, switch=ss.Transition(none, [none, pill, iud], dur=ss.months(6), p=[0.5, 0.5*w]), w=w, first='none', name='contra')
-    with pytest.raises(ss.errors.Unapplied, match='p= table'):
-        ss.Sim(contra, interventions=ss.change('contra.w', at=10, to=ss.by(to=dict(pill=3.0, iud=1.0))), **kw).init()
+    # Refused: an efficacy on a transition with several destinations
     P, C, R = ss.states('P C R')
     hpv = ss.Disease(precin=ss.Transition(P, [C, R], dur=ss.years(2), p=[0.2, 0.8]), init=dict(P=1.0), first='P', name='hpv')
-    with pytest.raises(ss.errors.Unapplied, match="'precin.C'"):
+    with pytest.raises(ValueError, match="'precin.C'"):
         ss.Sim(hpv, interventions=ss.vaccinate(ss.Vaccine(efficacy=dict(precin=0.5)), at=0), **kw).init()
 
     # Applied: modifiers of a disease written as code that overrides transmit(), and a change to an inflow under the ODE
@@ -403,7 +398,7 @@ def test_sensitivity_by_state():
         expected = 0.5*(0.5*before('I', age=0) + 0.9*before('I', age=1) + 0.2*before('E')) # Nobody else tests positive
         print(f'{solver}: {res.screening.positive[ti]:.0f} positive, expected {expected:.0f}')
         assert np.isclose(res.screening.positive[ti], expected, rtol=0.05 if solver == 'ode' else 0.15)
-    with pytest.raises(ss.errors.UnknownEffect):
+    with pytest.raises(KeyError, match='which is not a state of "sis"'):
         ss.Sim(make_sis(), interventions=ss.screen(ss.Diagnostic(sensitivity=dict(X=0.5)), interval=10), stop=20, **kw).run()
     return res
 
@@ -427,11 +422,11 @@ def test_effective():
     sim = ss.Sim(sir, interventions=protect, solver='abm', n_agents=2000, stop=40, **kw).run()
     arr = sim.diseases.sir.rel_sus
     R = sim.diseases.sir.R.uids
-    assert np.allclose(arr.effective[R], 0.4*arr[R]) # The base is untouched by the modifier
+    assert np.allclose(sim.diseases.sir.effective('rel_sus', R), 0.4*arr[R]) # The base is untouched by the modifier
     assert 'protect' in sim.what_modifies(arr, output=True)
     ode = ss.Sim(make_sir(), interventions=ss.vaccinate(ss.Vaccine(efficacy=0.9), at=[5]), solver='ode', stop=40, **kw).run()
     with pytest.raises(ss.CapabilityError): # There are no agents to have values
-        ode.diseases.sir.rel_sus.effective
+        ode.diseases.sir.effective('rel_sus')
     assert 'multiply=0.1 ' in ode.what_modifies('sir.rel_sus', output=True) # Not 0.09999999999999998
     hiv = ssl.HIV() # A disease written as code: its rel_sus is tracked, and its parameters are said not to be (it was a KeyError)
     coded = ss.Sim(hiv, networks=ss.RandomNet(), connectors=ss.modify(hiv.rel_sus, multiply=0.5, name='half'), n_agents=200, verbose=0).init()
@@ -479,7 +474,7 @@ def test_coded_disease():
     vx = ss.vaccinate(ss.Vaccine(efficacy=1.0), coverage=0.5, at=[2000])
     assert make(vx).results.agentsir.infected.max() < 0.9*base.max() # Through rel_sus
 
-    with pytest.raises(ss.errors.UnknownEffect, match='has no "clear_infection"'): # A part the product uses that the disease lacks
+    with pytest.raises(KeyError, match='has no "clear_infection"'): # A part the product uses that the disease lacks
         class NoCure(ssl.AgentSIR):
             clear_infection = property(lambda self: (_ for _ in ()).throw(AttributeError('clear_infection')))
         ss.Sim(n_agents=500, diseases=NoCure(), interventions=ss.treat(ss.Treatment(cure=0.8), coverage=0.1, interval=1), verbose=0).init()

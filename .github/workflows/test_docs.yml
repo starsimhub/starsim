@@ -34,7 +34,7 @@ jobs:
 
     - name: Install Quarto interlinks
       working-directory: ./docs
-      run: quarto add machow/quartodoc --no-prompt
+      run: quarto add sciris/quartopydoc --no-prompt # Fork with a faster interlinks filter
 
     - name: Render docs
       working-directory: ./docs

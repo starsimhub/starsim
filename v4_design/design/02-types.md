@@ -13,15 +13,15 @@ Justified by [best-practices/time-and-units.md](../best-practices/time-and-units
 | `ss.prob` | probability per period | the chance of an event within a period | `ss.probperday`, `ss.probperweek`, `ss.probpermonth`, `ss.probperyear` (the same as `ss.prob(0.1, 'day')` and so on) |
 | `ss.freq` | time⁻¹ | an expected number of events per unit time | `ss.freqperday`, `ss.freqperweek`, `ss.freqpermonth`, `ss.freqperyear` |
 
-One more value type is not a time value: **`ss.peract(p)`**, a probability per act, for a transmission over a network that defines acts (`ss.SexualNet`, `ssl.DegreeNet(acts=...)`). It has no unit and no conversion, so it means the same at any step: a partnership with `a` acts per unit time transmits over a step with probability `1 − (1 − p)^(a·dt)`. It takes one value, or one for each of the network's directions (`ss.peract(m2f=0.3, f2m=0.15)`; see [06-routes.md](06-routes.md#beta-per-route-and-direction)); each value is a number in [0, 1] (else `OutOfBounds`), an `ss.par` or an expression of them, an `ss.timeseries`, or an `ss.by`. A typed rate inside it raises `WrongDimension`.
+One more value type is not a time value: **`ss.peract(p)`**, a probability per act, for a transmission over a network that defines acts (`ss.SexualNet`, `ss.DegreeNet(acts=...)`). It has no unit and no conversion, so it means the same at any step: a partnership with `a` acts per unit time transmits over a step with probability `1 − (1 − p)^(a·dt)`. It takes one value, or one for each of the network's directions (`ss.peract(m2f=0.3, f2m=0.15)`; see [06-routes.md](06-routes.md#beta-per-route-and-direction)); each value is a number in [0, 1] (else a `ValueError`), an `ss.par` or an expression of them, an `ss.timeseries`, or an `ss.by`. A typed rate inside it raises a `TypeError`.
 
 `ss.per`, `ss.prob`, and `ss.freq` share the base class `ss.Rate`; all four types share `ss.TimePar`. `ss.per` is the hazard type and keeps its Starsim name. A typed value needs its unit: `ss.dur(3)` and `ss.per(2)` with no unit raise (they were years in Starsim 3).
 
-`ss.per` and `ss.freq` have the same dimension and are different types. A hazard is the parameter of an exponential clock and converts to a per-step probability by `1 − exp(−r·dt)`; a frequency is an expected count and converts by `f·dt`. Mixing them up is a common quiet error, so adding one to the other raises `IncompatibleTypes`, as Starsim does today.
+`ss.per` and `ss.freq` have the same dimension and are different types. A hazard is the parameter of an exponential clock and converts to a per-step probability by `1 − exp(−r·dt)`; a frequency is an expected count and converts by `f·dt`. Mixing them up is a common quiet error, so adding one to the other raises a `TypeError`, as Starsim does today.
 
 The difference is only in that conversion, which a module written as code asks for (`to_prob()` for a chance this step, `* dt` for a count this step). A declared transition never asks for it: its rate is always a hazard, which the solver turns into a step itself (the ODE integrates it; the stochastic solvers and agents use `1 − exp(−r·dt)`). So in a declared transition `ss.freqperday(0.1)` and `ss.perday(0.1)` give the same result, while `ss.probperday(0.1)` is the hazard that gives a 10% chance a day, `−ln(0.9) = 0.105` a day, and gives a different result (10 days of recovery from 1,000: 368 left at `perday(0.1)` or `freqperday(0.1)`, 349 at `probperday(0.1)`).
 
-`ss.datedur` is kept alongside `ss.months` because calendar durations are not fixed multiples of days.
+`ss.datedur` is kept alongside `ss.months` because calendar durations are not fixed multiples of days. It is a thin wrapper of `pd.DateOffset`: whole numbers of years, months, weeks, and days, added to a date as the calendar does, and approximate as a number (a year of 365 days). The time between two dates (`date - date`) is `ss.days`.
 
 Counts are plain numbers. `I.n` is the number of people in a state (the same number as the result `I`) and `I.frac` its fraction ([03-states-and-transitions.md](03-states-and-transitions.md)). `P.time`, the time each person has spent in a state, is a number in the sim's unit, as a bare number returned by a function is.
 
@@ -38,7 +38,7 @@ Converting to a timestep is the type's job, not the user's. For a step of length
 
 A solver MUST NOT substitute `r·dt` for `1 − exp(−r·dt)`.
 
-**Large steps.** In a run that takes whole steps (`'binomial'`, `'abm'`, or the ODE with Euler steps of a given size), when `rate × dt > 0.1` for a dwell time, the build gives the note `ss.errors.LargeStep`, naming the transition, `rate × dt`, the share of people who leave in a step, and what to do (a smaller `dt`, `substeps=`, or `solver='gillespie'`). Under the other solvers, which follow the rates within a step, it is given only for a mean dwell time shorter than the step, which is usually a rate meant as a duration (`rate=10`). It is a note, not an error; `sim.check_dt()` shows how much the results change with a smaller step ([10-execution.md](10-execution.md)).
+**Large steps.** In a run that takes whole steps (`'binomial'`, `'abm'`, or the ODE with Euler steps of a given size), when `rate × dt > 0.1` for a dwell time, the build gives a note, naming the transition, `rate × dt`, the share of people who leave in a step, and what to do (a smaller `dt`, `substeps=`, or `solver='gillespie'`). Under the other solvers, which follow the rates within a step, it is given only for a mean dwell time shorter than the step, which is usually a rate meant as a duration (`rate=10`). It is a note, not an error; `sim.check_dt()` shows how much the results change with a smaller step ([10-execution.md](10-execution.md)).
 
 Continuous-time solvers (`'ode'`, `'gillespie'`) have no `dt` in this sense and do no conversion at all.
 
@@ -61,19 +61,19 @@ Starsim's rules, summarized:
 | rate | `÷` | rate of the same kind | number | |
 | number | `÷` | `dur` | `per` | `1 / ss.days(10)` is `ss.perday(0.1)` |
 | number | `÷` | `per` or `freq` | `dur` | `2 / ss.perday(0.1)` is `ss.days(20)` |
-| `per` | `+` `−` | `prob` or `freq` | error | `IncompatibleTypes` |
-| rate | `+` `−` | number or `dur` | error | `IncompatibleTypes`; a number minus a rate too |
-| number | `÷` | `prob` | error | `IncompatibleTypes` |
-| rate | `×` | rate | error | `WrongDimension`: per time squared |
-| rate | `÷` | `dur` | error | `WrongDimension` |
-| `dur` | `×` `÷` | `dur` and rate respectively | error | `WrongDimension`: time squared |
+| `per` | `+` `−` | `prob` or `freq` | error | a `TypeError` |
+| rate | `+` `−` | number or `dur` | error | a `TypeError`; a number minus a rate too |
+| number | `÷` | `prob` | error | a `TypeError` |
+| rate | `×` | rate | error | a `TypeError`: per time squared |
+| rate | `÷` | `dur` | error | a `TypeError` |
+| `dur` | `×` `÷` | `dur` and rate respectively | error | a `TypeError`: time squared |
 
 Here "rate" is any of `per`, `prob` (with a time unit), and `freq`. Both errors name the two types.
 
-The slot a result lands in is checked too. A rate multiplied by a duration is a plain number, and putting one in a `rate=` slot or after `@` is a mistake, so `WrongDimension` points at it:
+The slot a result lands in is checked too. A rate multiplied by a duration is a plain number, and putting one in a `rate=` slot or after `@` is a mistake, so a `TypeError` points at it:
 
 ```text
-WrongDimension: the rate of the transition "recovery" is a plain number (a rate times a duration), not a rate:
+TypeError: the rate of the transition "recovery" is a plain number (a rate times a duration), not a rate:
        rate = peryear(0.1) * days(3) = 0.00082158
      A rate times a duration is a probability over that duration, not a rate; give the rate itself, e.g. rate=ss.peryear(0.1).
 ```
@@ -84,7 +84,6 @@ The number remembers the rate and the duration it was made from, which is how th
 
 **A bare Python number is accepted in every slot**, with no warning. The slot gives the dimension and the sim gives the unit.
 
-<!-- fragment -->
 ```python
 S, I, R = ss.states('S I R')
 ss.Transition(S, I, rate=0.05 * I)        # beta, the factor of I, takes the rate's -> 0.05 per unit time
@@ -115,11 +114,11 @@ A typed value (`ss.perday(0.05)`) keeps its own unit and is converted to the sim
 
 The model's unit is a property of the model, so its own typed values come before how the run is written; `dt` then sets only the step. Only `start` and `stop` supply a unit from dates: a date on an intervention or in the data does not. A year-like number for `start` or `stop` (`stop=2020`) is a calendar year, since Starsim 3 sims are written that way, unless `unit=` gives another unit. The unit is never guessed from the size of the numbers: 0.05 is plausible per day and per year.
 
-A function that gives a rate or a duration (`rate=fn`, `dur=fn`) and returns a bare number, in a model whose unit comes from its typed values (rule 2), raises `IncompatibleTypes` when the sim runs, saying to return a typed value or give `unit=`: which unit the function meant cannot be guessed, and reading it in the inferred unit gave silent wrong answers when a typed value elsewhere was in weeks (ST33, decided 2026-10-22). Zero is accepted, and with `unit=` given (or no typed values) a bare number is in the sim's unit, as elsewhere.
+A function that gives a rate or a duration (`rate=fn`, `dur=fn`) and returns a bare number, in a model whose unit comes from its typed values (rule 2), raises a `TypeError` when the sim runs, saying to return a typed value or give `unit=`: which unit the function meant cannot be guessed, and reading it in the inferred unit gave silent wrong answers when a typed value elsewhere was in weeks (ST33, decided 2026-10-22). Zero is accepted, and with `unit=` given (or no typed values) a bare number is in the sim's unit, as elsewhere.
 
 The rule is the same whether a disease is declared or written as code. The other modules' typed values are their own defaults or settings, which say nothing of the unit of the model's bare numbers, so they count only when nothing else gives a unit. A bare number given for a parameter of a module written as code (`ss.RandomNet(dur=5)`) keeps the unit of its default, as in Starsim 3, with a warning when that differs from the sim's.
 
-Whenever the unit comes from rules 2 to 6 it is a guess about what the bare numbers meant, so the sim says where it came from (`UnitInferred`), at `init()` and in `describe()`:
+Whenever the unit comes from rules 2 to 6 it is a guess about what the bare numbers meant, so the sim says where it came from, at `init()` and in `describe()`:
 
 ```text
 >>> ss.Sim(sir, start='2020-03-01', stop='2020-09-01').init()
@@ -149,7 +148,7 @@ This is what a textbook model means. No note is printed, because nothing was gue
 
 - The timestep is one step. With a different `dt`, the bare numbers are per unit of time, a unit with no name: `describe()` then says `time is in units with no name, and a step is 0.1 of them`, `beta = 0.3 per unit`, and `every 0.1 units`, not "per step".
 - The times have no dates: `sim.t.datevec` raises, and so does an `ss.seasonal()`, which is a yearly cycle. (The arithmetic is done in days underneath, so a module written as code with typed values, such as `ss.peryear`, takes a step as a day.)
-- A unitless sim has no calendar, so it cannot be compared with dated data or given a dated intervention: a date on an intervention is outside the sim (`ss.errors.TimeOutsideSim`). Give the sim a unit or dates.
+- A unitless sim has no calendar, so it cannot be compared with dated data or given a dated intervention: a date on an intervention is outside the sim (a `ValueError`). Give the sim a unit or dates.
 - This differs from Starsim 3, which assumes years when nothing is specified, and which sims with no declared states still do.
 
 ## Time in a sim
@@ -218,6 +217,6 @@ Adding a type is a real cost to every user who has to learn it, so the set shoul
 
 ## Open questions
 
-- Whether `ss.prob` keeps its period in the model spec or is normalized to a per-step value at build time. The first is more faithful; the second is smaller.
+- Whether `ss.prob` keeps its period in the built model or is normalized to a per-step value at build time. The first is more faithful; the second is smaller.
 - **The rest of the type lattice.** Adding an `ss.per` to an `ss.freq` or `ss.prob` is an error (above). The rules for every other pair of types need writing down once rather than discovering per operator.
 - **Can the Timeline be simpler?** Three views seem irreducible: the step index, time in the sim's own unit, and the calendar date. The other vectors (`yearvec`, `relvec`, `tvec`) could become conversions on request, `sim.t.to('year')`. Whether that is a real simplification needs trying in Starsim.

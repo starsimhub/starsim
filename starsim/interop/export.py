@@ -2,11 +2,11 @@
 Export a sim to other formats
 
 `ss.interop.export(sim, format, filename=...)` writes a sim's declared diseases in another
-format; see `v4_design/design/16-interop.md`. Only the model spec (`sim.to_spec()`)
-is complete: the other formats carry less, and what is left out or changed is listed
-as `ss.errors.LossyExport`. An export does not fail because something cannot be carried.
+format; see `v4_design/design/16-interop.md`. Each is read from the built model (each
+disease's graph and engine). The formats carry less than a sim, and what is left out or
+changed is listed as `ss.errors.LossyExport`. An export does not fail because something
+cannot be carried.
 
-- `mermaid`: a diagram of each disease's states and transitions, labelled with their rates
 - `sbml`: the compartmental form as species and reactions (https://sbml.org), for any SBML tool
 - `odin`: the compartmental form as `deriv()` equations (https://mrc-ide.github.io/odin)
 
@@ -25,7 +25,7 @@ import pandas as pd
 import sciris as sc
 import starsim as ss
 
-__all__ = ['exporters', 'export', 'flatten', 'to_mermaid', 'to_sbml', 'to_odin', 'to_hub']
+__all__ = ['exporters', 'export', 'flatten', 'to_sbml', 'to_odin', 'to_hub']
 
 math_funcs = dict(exp='exp', log='ln', sqrt='root', abs='abs', absolute='abs', minimum='min', maximum='max', min='min', max='max', sin='sin', cos='cos', floor='floor', ceiling='ceiling')
 
@@ -33,14 +33,10 @@ math_funcs = dict(exp='exp', log='ln', sqrt='root', abs='abs', absolute='abs', m
 #%% The compartmental form
 
 def initialized(sim):
-    """ The sim initialized and not yet run (so its state is the initial one): itself if it is, else a new one from the same inputs """
-    started = sim.initialized and (sim.complete or sim.t.ti > 0)
-    if sim.initialized and not started:
+    """ The sim initialized and not yet run (so its state is the initial one): itself if it is, else a new one (see `sim.new()`) """
+    if sim.initialized and not (sim.complete or sim.t.ti > 0):
         return sim
-    elif started and not hasattr(sim, 'inputs'):
-        errormsg = 'This sim has been run, so its state is not the initial one, and it does not have the inputs to make it again (e.g. it was saved by an earlier version); export it before running it'
-        raise ValueError(errormsg)
-    return sim.new(verbose=0).init() if hasattr(sim, 'inputs') else sc.dcp(sim).init()
+    return sim.new(verbose=0).init()
 
 
 def compartmental(sim):
@@ -100,7 +96,6 @@ def flatten(sim):
     with its compartments and its rate in total; and what was left out or changed.
     """
     sim, how = compartmental(sim)
-    spec = sim.to_spec()
     unit = sim.unit_base
     lost = [how] if how else []
     diseases = [mod for mod in sim.diseases.values() if getattr(mod, 'graph', None) is not None]
@@ -167,58 +162,29 @@ def flatten(sim):
         if used:
             lost.append(f'not exported: {sc.strjoin(sorted(used))}, used in the rate of "{flow.name}" ({flow.rate})')
 
-    # What the spec has that these formats do not
+    # What the sim has that these formats do not
     if not diseases:
         lost.append('not exported: the sim has no declared diseases')
-    for m in spec['modules']:
-        if not any(m['name'] == mod.name for mod in diseases):
-            lost.append(f'not exported: module "{m["name"]}" ({m.get("type")}), which has no declared transitions')
+    for mod in [mod for key in ['custom', 'demographics', 'diseases'] for mod in sim[key]() if not isinstance(mod, ss.demographics.Flows)]: # Births and deaths declared for the population are, by now, transitions of a disease
+        if not any(mod is dis for dis in diseases):
+            lost.append(f'not exported: module "{mod.name}" ({type(mod).__name__}), which has no declared transitions')
             continue
-        mod = sim.diseases[m['name']]
         for text in strata(sim, mod):
-            lost.append(f'changed: "{m["name"]}" is stratified ({text}), written as one group, the sum of its groups, with the base values of its parameters')
-        for r in m.get('results', []):
-            lost.append(f'not exported: {r.get("type", "result")} "{r["name"]}"')
-        for f in m.get('functions', []):
-            lost.append(f'not exported: function "{f["name"]}" (Python code)')
-    for key,what in dict(networks='network', interventions='intervention', modifiers='modifier').items():
-        for item in spec.get(key, []):
-            name = item.get('name') if isinstance(item, dict) else str(item)
-            extra = ' (contacts written as homogeneous mixing)' if key == 'networks' else ''
-            lost.append(f'not exported: {what} "{name}"{extra}')
+            lost.append(f'changed: "{mod.name}" is stratified ({text}), written as one group, the sum of its groups, with the base values of its parameters')
+        results = [(name, 'result') for name in mod.graph.exprs] + [(name, 'outcome') for name in mod.graph.outcomes]
+        for name,kind in sorted(results):
+            lost.append(f'not exported: {kind} "{name}"')
+        for name in sorted(mod.graph.funcs):
+            lost.append(f'not exported: function "{name}" (Python code)')
+    for mods,what in [(list(sim.networks()) + getattr(sim, 'mixed', []), 'network'), (sim.interventions(), 'intervention'), (sim.connectors(), 'modifier')]:
+        for mod in mods:
+            extra = ' (contacts written as homogeneous mixing)' if what == 'network' else ''
+            lost.append(f'not exported: {what} "{mod.name}"{extra}')
     if getattr(sim, 'crossings', None):
         lost.append('not exported: the coupling between diseases (each is written on its own)')
     if sim.solver not in ['ode', 'auto'] and how is None:
         lost.append(f'changed: solver="{sim.solver}" is not carried; the model is written as an ODE')
     return out
-
-
-#%% Mermaid
-
-def to_mermaid(sim):
-    """ A Mermaid flowchart of each disease's states and transitions, labelled with their rates; transmissions are dashed """
-    sim = initialized(sim)
-    diseases = [mod for mod in sim.diseases.values() if getattr(mod, 'graph', None) is not None]
-    many = len(diseases) > 1
-    lines = ['flowchart LR']
-    n_states = n_transitions = 0
-    for mod in diseases:
-        g = mod.graph
-        pre = f'{mod.name}_' if many else ''
-        indent = '    '*(2 if many else 1)
-        strats = strata(sim, mod)
-        title = mod.name + (f' (stratified by {"; ".join(strats)})' if strats else '')
-        if many:
-            lines.append(f'    subgraph {mod.name}["{title}"]')
-        elif strats: # A title above the chart
-            lines = ['---', f'title: {title}', '---'] + lines
-        lines += g.diagram(prefix=pre, indent=indent)
-        if many:
-            lines.append('    end')
-        n_states += len(g.states)
-        n_transitions += len(g.transitions)
-    summary = f'exported to Mermaid: {n_states} states, {n_transitions} transitions'
-    return ss.presentation.Diagram('\n'.join(lines) + '\n'), summary, []
 
 
 #%% SBML
@@ -347,7 +313,6 @@ def to_odin(sim):
 #%% Exporting
 
 exporters = dict(
-    mermaid = to_mermaid,
     sbml    = to_sbml,
     odin    = to_odin,
 )
@@ -362,8 +327,8 @@ def export(sim, format, filename=None, verbose=None):
 
     Args:
         sim (`ss.Sim`): the sim, with declared diseases
-        format (str): one of `ss.interop.exporters`: 'mermaid', 'sbml', or 'odin'
-        filename (str): the file to write, if any (for Mermaid, a `.md` file has the diagram in a fenced block)
+        format (str): one of `ss.interop.exporters`: 'sbml' or 'odin'
+        filename (str): the file to write, if any
         verbose (bool): whether to print what was exported (by default, unless something was lost)
 
     Returns:
@@ -372,7 +337,7 @@ def export(sim, format, filename=None, verbose=None):
     **Examples**:
 
         ss.interop.export(sim, 'sbml', filename='sir.xml')
-        print(ss.interop.export(sim, 'mermaid'))
+        print(ss.interop.export(sim, 'odin'))
     """
     key = str(format).lower()
     if key not in exporters:
@@ -384,8 +349,7 @@ def export(sim, format, filename=None, verbose=None):
     elif verbose is not False:
         print(summary)
     if filename is not None:
-        out = f'```mermaid\n{text}```\n' if key == 'mermaid' and str(filename).endswith('.md') else text
-        sc.savetext(filename, out)
+        sc.savetext(filename, text)
     return text
 
 
@@ -441,13 +405,13 @@ def to_hub(msim, targets, origin_date=None, by=None, every='week', output_type='
         for place,sub in places.items():
             vals = sub.values[:, i0+1:]
             n = vals.shape[1]//steps
-            if sub.kind == 'flow':
+            if sub.summarize_by == 'sum':
                 periods = vals[:, :n*steps].reshape(len(vals), n, steps).sum(axis=2)
             else:
                 periods = vals[:, steps-1:n*steps:steps]
             for target in sc.tolist(names):
                 if target.startswith('cum '):
-                    if sub.kind != 'flow':
+                    if sub.summarize_by != 'sum':
                         errormsg = f'The target "{target}" is a cumulative total, but "{key}" is a count, not a flow'
                         raise ValueError(errormsg)
                     values, horizon = periods.cumsum(axis=1), np.arange(1, n+1)

@@ -187,7 +187,7 @@ def init_results(self):
     super().init_results()
     self.define_results(
         ss.Result('mean_level', scale=False, label='Mean antibody level'),
-        ss.Result('n_protected', kind='stock', label='Number protected'),
+        ss.Result('n_protected', summarize_by='last', label='Number protected'),
     )
 ```
 
@@ -198,7 +198,7 @@ def init_results(self):
 `step()` is called once each step, and is where the module does its job. Inside it:
 
 - `self.sim` is the whole sim: its people (`self.sim.people`), diseases (`self.sim.diseases.cold`), and so on. A plain `ss.Module` given as `modules=` is in `self.sim.custom` (`sim.modules` is every module of the sim, of every kind).
-- `self.pars` are the module's parameters.
+- `self.pars` are the module's parameters. A time parameter stays one (`self.pars.half_life`), as above. A value that varies, in time (`ss.timeseries`, `ss.seasonal`) or by level (`ss.by(node=[...])`), is its value now in arithmetic and NumPy (`self.pars.emergence*n`, `np.exp(-self.pars.k)`, `float(self.pars.k)`): a number in the sim's unit, or one for each level. If its values are typed, its value now is typed too, so `self.pars.rate.to_prob()` works whether `rate` is `ss.peryear(0.1)` or `ss.timeseries({2000: ss.peryear(0.1), 2010: ss.peryear(0.2)})`. So is a parameter of a declared disease, with what modifies it applied (`acts*(1 - hiv.pars.eff_condom)`).
 - `self.t.dt` is the length of a step, `self.now` is the date or time the step starts from, and `self.ti` is the index of the time point at the step's end, where what happens during the step is recorded.
 - A transition of a declared disease says who went through it: `disease.recovery.uids` is the agents who recovered in the last step. `disease.recovery.ever`, `.count`, and `.since` say whether, how often, and how long ago each person did.
 - To move people between the states of a declared disease, use `ss.move()`: `ss.move(sir.I, sir.R, p=0.5)` cures half of those infectious, `ss.move(sir.S, sir.I, n=5)` makes five susceptible people infectious, and `sir.move(uids, sir.R)` moves particular agents from wherever they are (as agents only; the arguments can come in any order, with the source before the destination, so `ss.move(sir, uids, 'R')` is the same). It runs the same under every solver, and since people are moved rather than made or lost, every disease keeps the same people; the number in a state of people (`sir.I.n`) is read, not set. A count that is not people (mosquitoes, `ss.State(people=False)`) can also be set (`W.n = 0`) or moved from and to outside the model (`ss.move(ss.null, mosq.Sv, n=1000)`).
@@ -257,6 +257,6 @@ A function module is called at every step, so it has to check the time itself if
 - **Comparing `self.ti` across modules with their own timelines.** A module given `start=`, `stop=`, or a `dt=` of its own runs only on its own steps, and its `self.ti` counts those steps, not the sim's. To compare times between modules, use dates or durations (`self.now`), not step indices.
 - **Writing into another module's arrays at your own `ti`.** Write into another module's results and time arrays at its index, not yours: `disease.results.treated[disease.ti]`, and `disease.ti_recovered[uids] = disease.ti`. With a yearly sim and a monthly disease, `self.ti` is the wrong row.
 - **Using NumPy's random numbers.** Draw from Starsim's distributions instead, as above, so that runs can be repeated and scenarios compared without noise from the random numbers.
-- **Reading `rel_sus` without its modifiers.** A disease written as code that is not transmitted (not an `ss.Infection` with a `beta`) and reads its own `rel_sus` or `rel_trans` reads them with `self.modified('rel_sus', uids)`, which applies `ss.modify(dis.rel_sus, ...)` and products, and says so in its class, `reads_modifiers = ('rel_sus',)`; otherwise a modifier of them is refused, since nothing would apply it.
+- **Reading `rel_sus` without its modifiers.** A disease written as code that is not transmitted (not an `ss.Infection` with a `beta`) and reads its own `rel_sus` or `rel_trans` reads them with `self.effective('rel_sus', uids)`, which applies `ss.modify(dis.rel_sus, ...)` and products, and says so in its class, `reads_modifiers = ('rel_sus',)`; otherwise a modifier of them is refused, since nothing would apply it.
 - **Several causes of death in one step.** If several modules request the death of the same person in a step (`sim.people.request_death(uids, cause=self)`), one cause is chosen at random; give each claim its hazard (`hazard=`) to choose in proportion to them.
 - **Writing to `.raw`.** Write to states by UID (`self.level[uids] = 1`); see [Array indexing](models_indexing.qmd).

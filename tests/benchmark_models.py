@@ -278,7 +278,7 @@ def make_contra(n_agents=10_000):
     """
     FPsim's contraceptive choice as declared (the 2026-10-22 review's contra_v4b.py, with made-up coefficients): one state
     per method, durations of use by age, and at each exit a choice whose chances are a logistic regression on traits and
-    age times a switching table by age and destination, 2000-2010 monthly (FP82)
+    age times a switching table by age and destination (one p= entry per destination), 2000-2010 monthly (FP82)
     """
     methods = ['pill', 'iud', 'inj', 'cond', 'implant', 'other']
     st = {n: ss.State(n) for n in ['young', 'male', 'never', 'none'] + methods}
@@ -292,13 +292,13 @@ def make_contra(n_agents=10_000):
         rhs = -1.2 + 0.9*ever + 0.3*ppl.urban + 0.1*np.minimum(ppl.parity, 5) + age
         return 1/(1 + np.exp(-rhs))
     rng = np.random.default_rng(0)
-    w = ss.by(to=dict(zip(methods, 0.5 + rng.random(len(methods)))))
-    def mix(src):
-        vals = rng.random(len(age_bins)*len(methods)) + 0.01
-        return ss.by(dict(age=np.repeat(age_bins, len(methods)), to=methods*len(age_bins), value=vals))
+    w = 0.5 + rng.random(len(methods)) # Weights by method
+    def mix(src): # The switching table by age and destination, times the weights, normalized over the destinations: one value by age for each
+        vals = (rng.random(len(age_bins)*len(methods)) + 0.01).reshape(len(age_bins), len(methods))*w
+        return [ss.by(dict(age=age_bins, value=col)) for col in (vals/vals.sum(axis=1, keepdims=True)).T]
     def branch(src, ever):
         pu = p_use(ever)
-        return [1 - pu, pu*mix(src)*w]
+        return [1 - pu] + [pu*share for share in mix(src)]
     def dur(i):
         scale = ss.by(dict(age=age_bins, value=np.exp(2.0 + 0.2*i + 0.1*np.arange(len(age_bins)))))
         return ss.weibull(c=1.5, scale=scale, unit='month') if i % 2 else ss.gamma(a=2.0, scale=scale/2, unit='month')

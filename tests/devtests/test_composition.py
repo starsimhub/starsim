@@ -1,7 +1,7 @@
 """
 Test that code written in plain NumPy composes with Starsim: an ODE of its own beside a declared
 disease, agents of its own beside a standard module, an intervention that changes it, and a fit
-of it. (A loop of NumPy functions with no sim, and with a timeline, is in test_loop.py.)
+of it.
 """
 import numpy as np
 import pandas as pd

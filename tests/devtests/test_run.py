@@ -30,7 +30,7 @@ class BySex(ss.Analyzer):
     """ Record a 2D result of infections by sex """
     def init_results(self):
         super().init_results()
-        self.define_results(ss.Result('infected', columns=['female', 'male'], label='Infected', kind='stock'))
+        self.define_results(ss.Result('infected', columns=['female', 'male'], label='Infected', summarize_by='last'))
 
     def step(self):
         infected = self.sim.diseases.sis.I
@@ -94,7 +94,7 @@ def test_combine_merge():
     m1.label, m2.label = 'first', 'second'
     merged = ss.MultiSim.merge(m1, m2)
     assert [m.label for m in merged.split()] == ['first', 'second'] # Each part keeps its own label (both were the first's)
-    with pytest.raises(ss.errors.ShapeError, match='different times'): # Sims with different steps (their results were silently left out)
+    with pytest.raises(ValueError, match='different times'): # Sims with different steps (their results were silently left out)
         ss.parallel(ss.Sim(diseases='sis', n_agents=200, dt=1, verbose=0), ss.Sim(diseases='sis', n_agents=200, dt=0.5, verbose=0), parallel=False)
     assert len(m1) == 1 and len(m2) == 2 and len(merged) == 3
     assert np.array_equal(merged.results.sis.I.values, msim.results.sis.I.values)

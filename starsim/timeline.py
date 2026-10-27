@@ -210,15 +210,6 @@ class Timeline(ss.utils.NoDists):
         return not any([getattr(self, k) is None for k in self.time_args])
 
     @property
-    def finished(self):
-        """
-        Check if the simulation is finished, i.e. we're at the last time point
-        (note, this does not distinguish whether we are at the beginning or end
-        of the last time point, so use with caution!)
-        """
-        return self.ti == self.npts-1
-
-    @property
     def is_absolute(self):
         """
         Check whether the fundamental simulation unit is absolute
@@ -281,41 +272,22 @@ class Timeline(ss.utils.NoDists):
 
         return now
 
-    def update(self, pars=None, parent=None, reset=True, force=None, **kwargs):
+    def update(self, **kwargs):
         """
-        Reconcile different ways of supplying inputs
+        Update the time parameters, reinitializing the timeline if it was initialized and any changed
 
         Args:
-            pars (dict): dict of time parameters to apply
-            parent (Timeline): parent timeline to inherit values from
-            reset (bool): if True and stale, reinitialize after update
-            force (bool/None): False = only fill missing values; None = prioritize current; True = prioritize parent
-            kwargs: additional time parameters (start, stop, dur, dt)
+            kwargs: the time parameters to change (start, stop, dur, dt); those not given (or None) are kept
         """
-        pars = sc.mergedicts(pars)
         stale = False
-
         for key in self.time_args:
             current_val = getattr(self, key, None)
-            parent_val = getattr(parent, key, None)
-            kw_val = kwargs.get(key)
-            par_val = pars.get(key)
-
-            if force is False: # Only update missing (None) values
-                val = sc.ifelse(current_val, kw_val, par_val, parent_val)
-            elif force is None: # Prioritize current value
-                val = sc.ifelse(kw_val, par_val, current_val, parent_val)
-            elif force is True: # Prioritize parent value
-                val = sc.ifelse(kw_val, par_val, parent_val, current_val)
-            else:
-                errormsg = f'Invalid value {force} for force: must be False, None, or True'
-                raise ValueError(errormsg)
-
+            val = sc.ifelse(kwargs.get(key), current_val)
             if val != current_val:
                 setattr(self, key, val)
                 stale = True
 
-        if stale and reset and self.initialized:
+        if stale and self.initialized:
             self.dur = None # Recalculated from the new start and stop
             self._timevec = self._datevec = self._relvec = None # Clear the lazy vectors
             self.init(force=True)
@@ -444,7 +416,7 @@ class Timeline(ss.utils.NoDists):
                 start = stop - dur # e.g. ss.years(2020) or ss.date(2020)
 
             case (start, stop, None): # e.g. ss.Sim(start=2010, stop=2030)
-                dur = stop - start # e.g. ss.years(20) or ss.datedur(years=20) (actually usually days)
+                dur = stop - start # e.g. ss.years(20), or ss.days(7305) between dates
 
             case (start, stop, dur): # e.g. ss.Sim(start=2010, stop=2030, dur=50)
                 if dur != stop - start: # This is fine unless they don't match

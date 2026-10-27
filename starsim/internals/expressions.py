@@ -20,6 +20,8 @@ def closest(name, options):
 
 def did_you_mean(name, options):
     """ The end of a sentence in an error message: the closest matches to a name, e.g. "; did you mean S, I?", or "." if none is close; a name with no module (beta) is matched to the options' own names (sir.beta) """
+    if not options:
+        return '.'
     short = lambda opt: opt if '.' in name else opt.rpartition('.')[2]
     dists = sc.suggest(name, [short(opt) for opt in options], n=3, fulloutput=True) or {}
     best = min(dists.values(), default=0)
@@ -76,9 +78,14 @@ arith = {'+':operator.add, '-':operator.sub, '*':operator.mul, '/':operator.true
 
 
 def run_value(x):
-    """ The number an expression of parameters is while a sim runs (e.g. 1 - dis.pars.eff_condom); None if it is not one: it reads a state, or a parameter that is not a number """
+    """ The value of an expression of parameters alone (e.g. 1 - dis.pars.eff_condom), with each parameter's current value (see `ss.Module._value()`); None if it reads anything else (a state, a count) """
     if isinstance(x, par):
-        return float(x) if sc.isnumber(x.raw) else None
+        if x.literal or x.module is None:
+            return x.raw
+        elif isinstance(x.raw, ss.Dist): # Its engine reads it as its mean, which code should say if it means it
+            errormsg = f'The parameter "{x.name}" of "{x.module.name}" is a distribution ({value_str(x.raw)}), which has no single value: use {x.name}.mean() for its mean, or draw from it'
+            raise TypeError(errormsg)
+        return x.module._value(x)
     elif isinstance(x, BinOp):
         a, b = run_value(x.a), run_value(x.b)
         return None if a is None or b is None else arith[x.op](a, b)
@@ -87,25 +94,41 @@ def run_value(x):
     return x
 
 
+def has_values(sim):
+    """ Whether a sim's parameters have values for code (see `run_values()`): once the model is built and its modules are being given their values (`init_post()`), and from then on """
+    return sim is not None and (sim.initialized or sim.__dict__.get('_valued', False))
+
+
 def run_values(inputs):
     """
-    For arithmetic between an expression of parameters and an array during a run: the values to do it with, as code means it
-    (a module written as code reading a declared parameter, e.g. `acts*(1 - disease.pars.eff_condom)`); None to build an expression
+    The values to do arithmetic with, once the model is built: before then, arithmetic on a parameter builds an expression (part of
+    the model); after, it is done on the parameters' current values, as code means it (e.g. `acts*(1 - disease.pars.eff_condom)`).
+    None to build an expression: before the model is built (see has_values()), or if an input reads anything but parameters.
     """
-    if not any(isinstance(x, np.ndarray) and x.ndim for x in inputs):
-        return None
-    exprs = [x for x in inputs if isinstance(x, Expr)]
-    named = [leaf for x in exprs for leaf in x.leaves if isinstance(leaf, par) and not leaf.literal]
-    if not named or not all(getattr(getattr(getattr(leaf, 'module', None), 'sim', None), 'initialized', False) for leaf in named): # Only once the sim is initialized: before then, an array in a rate is part of the model
+    named = [leaf for x in inputs if isinstance(x, Expr) for leaf in x.leaves if isinstance(leaf, par) and not leaf.literal]
+    if not named or not all(has_values(getattr(leaf.module, 'sim', None)) for leaf in named):
         return None
     vals = [run_value(x) for x in inputs]
-    return None if any(v is None for v in vals) else vals
+    if any(v is None for v in vals):
+        return None
+    if any(isinstance(x, ss.TimePar) for x in inputs): # With a typed value, a parameter that holds one is typed too (its current value is a number in the sim's unit), so e.g. ss.weeks(40) - preg.pars.loss_threshold is a duration in weeks
+        for i,(x,v) in enumerate(zip(inputs, vals)):
+            if isinstance(x, par) and isinstance(x.raw, ss.TimePar) and sc.isnumber(v):
+                unit = x.module.sim.unit_base # E.g. 'year'
+                vals[i] = (ss.time.get_dur_class(unit) if x.raw.timepar_type == 'dur' else ss.time.get_rate_class(f'per{unit}'))(v) # A rate's current value is per unit (see ss.Module._value())
+    return vals
 
 
 def binop(op, a, b):
-    """ Arithmetic on an expression: another expression, or numbers for code during a run (see run_values()) """
+    """ Arithmetic on an expression: another expression, or a value once the model is built (see run_values()) """
     vals = run_values([a, b])
     return BinOp(op, a, b) if vals is None else arith[op](*vals)
+
+
+def compare(name, a, b):
+    """ A comparison of an expression, which is 1 or 0: another expression, or a value once the model is built (see run_values()) """
+    vals = run_values([a, b])
+    return Func(name, a, b) if vals is None else getattr(np, name)(*vals)
 
 
 class Expr:
@@ -121,7 +144,7 @@ class Expr:
         if method != '__call__' or kwargs:
             return NotImplemented
         vals = run_values(inputs)
-        if vals is not None: # Arithmetic on arrays by code during a run, e.g. a coded network's acts*(1 - disease.pars.eff_condom)
+        if vals is not None: # On the values, once the model is built, e.g. a coded network's np.maximum(acts*(1 - disease.pars.eff_condom), 0)
             return ufunc(*vals)
         elif name in binops:
             return BinOp(binops[name], *inputs)
@@ -148,16 +171,16 @@ class Expr:
     def __rtruediv__(self, other): return binop('/', other, self)
     def __pow__(self, other):      return binop('**', self, other)
     def __rpow__(self, other):     return binop('**', other, self)
-    def __neg__(self):             return BinOp('*', -1, self)
+    def __neg__(self):             return binop('*', -1, self)
     def __and__(self, other):      return ss.conditions.Cond('&', self, other) # As a condition, e.g. hiv.on_art & (hiv.on_art.time >= ss.months(6))
     def __rand__(self, other):     return ss.conditions.Cond('&', other, self)
     def __or__(self, other):       return ss.conditions.Cond('|', self, other)
     def __ror__(self, other):      return ss.conditions.Cond('|', other, self)
     def __invert__(self):          return ss.conditions.Cond('~', self)
-    def __lt__(self, other):       return Func('less', self, other) # Comparisons are 1 or 0, e.g. a capacity: rate * (Q.n < 20)
-    def __le__(self, other):       return Func('less_equal', self, other)
-    def __gt__(self, other):       return Func('greater', self, other)
-    def __ge__(self, other):       return Func('greater_equal', self, other)
+    def __lt__(self, other):       return compare('less', self, other) # Comparisons are 1 or 0, e.g. a capacity: rate * (Q.n < 20)
+    def __le__(self, other):       return compare('less_equal', self, other)
+    def __gt__(self, other):       return compare('greater', self, other)
+    def __ge__(self, other):       return compare('greater_equal', self, other)
 
     def __bool__(self):
         errormsg = f'Cannot use the expression "{self}" where Python needs a single True or False; it has no value until the model runs'
@@ -216,7 +239,7 @@ class par(Nameable, Expr):
         value (any): a number, typed quantity (e.g. `ss.perday(0.1)`), distribution, or function
         bounds (list): the lower and upper bounds; a parameter with bounds can be calibrated
         prior (`ss.Dist`): the prior distribution, for calibration
-        source (str): where the value came from (shown under the parameter by `describe()`, and kept in the model spec)
+        source (str): where the value came from (shown under the parameter by `describe()`)
         doc (str): a description of the parameter (likewise)
         name (str): the name; if not given, taken from the keyword or variable it is assigned to
         label (str): a human-readable name
@@ -231,7 +254,7 @@ class par(Nameable, Expr):
     def __eq__(self, other):
         """ A parameter is only equal to itself; compared with a number it raises, rather than silently being False """
         if isinstance(other, (int, float, np.number)) and not isinstance(other, bool):
-            errormsg = f'Cannot compare the parameter "{self.name or self}" with the number {other}: it is a parameter, not its value. Use mod.value("{self.name}") for its current value'
+            errormsg = f'Cannot compare the parameter "{self.name or self}" with the number {other}: it is a parameter, not its value. Compare the value it holds, par.raw, or its current value, which arithmetic on it gives once the model is built (e.g. 1*par)'
             raise TypeError(errormsg)
         return self is other
 
@@ -269,22 +292,10 @@ class par(Nameable, Expr):
         raise AttributeError(f"'par' object has no attribute '{attr}'")
 
     def __float__(self):
-        """
-        A parameter that holds a number is that number, e.g. float(sir.pars.beta); during a run, with the modifiers on it applied (e.g. ss.change),
-        so a function that reads it sees the change. If the modifiers give it a different value for different people or groups, it is not one number,
-        so this raises: use `mod.value(name)`, the value in the current context (one for each group or agent)
-        """
-        raw = self.raw
-        if sc.isnumber(raw):
-            engine = getattr(self.module, 'engine', None)
-            if engine is not None and self.name and not self.literal and engine.sim.modifiers.get((self.module.name, 'par', self.name)):
-                vals = np.asarray(engine.modified(self, raw), dtype=float)
-                if np.any(vals != vals.flat[0]):
-                    errormsg = f'The parameter {self.name} of "{self.module.name}" has modifiers that give it a value for each group or agent, so it is not one number; use {self.module.name}.value("{self.name}") for its values'
-                    raise ValueError(errormsg)
-                return float(vals.flat[0])
-            return float(raw)
-        errormsg = f'The parameter {self.name or ""} is {value_str(raw)}, which is not a plain number; use its value, e.g. .raw'
+        """ A parameter that holds a number is that number, e.g. float(sir.pars.beta): the value it holds. Arithmetic on it, once the model is built, is its current value (in the sim's unit, with the modifiers on it applied) """
+        if sc.isnumber(self.raw):
+            return float(self.raw)
+        errormsg = f'The parameter {self.name or ""} is {value_str(self.raw)}, which is not a plain number; use its value, e.g. .raw, or arithmetic on it once the model is built for its current value'
         raise TypeError(errormsg)
 
     @property
@@ -303,7 +314,9 @@ class par(Nameable, Expr):
 
     def __repr__(self):
         bounds = f', bounds={self.bounds}' if self.bounds is not None else ''
-        return f'par({value_str(self.raw)}{bounds})'
+        label = f', label={self.label!r}' if self.label else ''
+        doc = f', doc={self.doc!r}' if self.doc and len(self.doc) < 40 else '' # A short description only
+        return f'par({value_str(self.raw)}{bounds}{label}{doc})'
 
 
 def value_str(val):
@@ -422,97 +435,6 @@ class Flow(Expr):
     @property
     def name(self):
         return self.tr.name
-
-
-class Row:
-    """
-    An entry of `p=` with a `to` axis (an `ss.by` with a `to` column or keyword, whose labels are destination states), for the destinations it covers
-
-    Its factors without a `to` axis (`p_use` in `p_use*mix*w`) are kept as they are, and the product of those with one
-    (`mix*w`) is normalized over the destinations, so each destination's probability is `p_use*mix[j]*w[j]/sum(mix*w)`;
-    an entry that is not a product (a sum) is normalized as a whole.
-    See `Share`, one destination's part, which is what the transition's `p=` holds once the graph is built.
-
-    Args:
-        expr (Expr): the entry as given
-        labels (list): the names of the destinations it covers
-    """
-    def __init__(self, expr, labels):
-        self.expr = expr
-        self.labels = list(labels)
-        scalar, row = [], []
-        def split(e): # The factors of a product, each with or without a to axis
-            if isinstance(e, BinOp) and e.op == '*':
-                split(e.a)
-                split(e.b)
-            elif isinstance(e, BinOp) and e.op == '/' and not to_pars(e.b):
-                split(e.a)
-                scalar.append(BinOp('/', 1, e.b))
-            elif to_pars(e):
-                row.append(e)
-            else:
-                scalar.append(e)
-            return
-        split(expr)
-        self.scalar = None
-        for e in scalar:
-            self.scalar = e if self.scalar is None else BinOp('*', self.scalar, e)
-        self.row = row[0]
-        for e in row[1:]:
-            self.row = BinOp('*', self.row, e)
-        self._parts = None
-        return
-
-    def parts(self):
-        """ The row's value for each destination, as an expression with each `ss.by` over `to` taken at it; made again if one of them has a new value """
-        tos = to_pars(self.row)
-        key = tuple(id(p.raw) for p in tos)
-        if self._parts is None or self._parts[0] != key:
-            out = {}
-            for label in self.labels:
-                subs = {id(p):as_expr(p.raw.at(label, self.labels)) for p in tos}
-                out[label] = substitute(self.row, subs)
-            self._parts = (key, out)
-        return self._parts[1]
-
-    def __repr__(self):
-        return f'{format_expr(self.expr)}, normalized over {sc.strjoin(self.labels)}'
-
-
-class Share(Expr):
-    """ One destination's part of an entry of `p=` with a `to` axis (see `Row`): the row's value for it over its sum over the destinations, times the factors without a `to` axis """
-    def __init__(self, row, label):
-        self.row = row
-        self.label = label
-        return
-
-    @property
-    def leaves(self):
-        out = [leaf for part in self.row.parts().values() for leaf in part.leaves]
-        return out + (self.row.scalar.leaves if self.row.scalar is not None else [])
-
-    def evaluate(self, ctx):
-        memo = getattr(ctx, 'memo', None) # A context can keep the row's values for its other destinations, evaluated for the same people (see Agents.branch_probs_for())
-        if memo is not None and id(self.row) in memo:
-            vals, den, scalar = memo[id(self.row)]
-        else:
-            vals = {label:evaluate(part, ctx) for label,part in self.row.parts().items()}
-            den = sum(vals.values())
-            if np.any(np.asarray(den) <= 0):
-                raise ss.errors.BadBranchSplit(f'the row {self.row} sums to 0 for some people or groups, so it has no shares to normalize')
-            scalar = None if self.row.scalar is None else evaluate(self.row.scalar, ctx)
-            if memo is not None:
-                memo[id(self.row)] = (vals, den, scalar)
-        out = vals[self.label]/den
-        return out if scalar is None else scalar*out
-
-
-def to_pars(expr):
-    """ The parameters in an expression whose value is an `ss.by` with a `to` axis (over the destinations of a transition) """
-    if not isinstance(expr, Expr):
-        return []
-    leaves = expr.leaves if not isinstance(expr, Share) else []
-    return [leaf for leaf in leaves if isinstance(leaf, par) and isinstance(leaf.raw, ss.by) and 'to' in leaf.raw.dims]
 
 
 def substitute(expr, subs):
@@ -753,7 +675,7 @@ class attr(Expr):
             errormsg = f'combine= is one of {sc.strjoin(combines)}, or a function of (old, new); not {combine!r}'
             raise ValueError(errormsg)
         self.value = ss.transitions.by_dist(value) # A distribution for each group, e.g. ss.by(urban={False: h0, True: h1}), is one distribution
-        self.by_event = None # For a dict by event: (events, value) for each, set in ss.transitions.Graph.resolve_attrs() (TY1)
+        self.by_event = None # For a dict by event: (events, value) for each, set in ss.graph.Graph.resolve_attrs() (TY1)
         if isinstance(value, dict) and value and all(is_event(key) for key in value):
             if on is not None:
                 errormsg = f'The attribute {name or ""} is a dict by event, whose keys are the events that set it, so it takes no on='
@@ -765,7 +687,7 @@ class attr(Expr):
         self.name = name
         self.label = label
         self.module = None # Set by the graph
-        self.events = [] # The events that set it, as ss.conditions.Event: see ss.transitions.Graph.resolve_attrs()
+        self.events = [] # The events that set it, as ss.conditions.Event: see ss.graph.Graph.resolve_attrs()
         self.cases = None # For a derived attribute: (state names, expression) for each case
         if self.kind == 'derived' and (combine != 'last' or init is not None):
             errormsg = f'A derived attribute ({self.label_name}) is worked out when it is read, so takes no combine= or init=; give it on= to record it at an event'
@@ -909,56 +831,63 @@ def join_binop(e, fmt, op=None):
     return f'{a} {op or e.op} {b}'
 
 
-def linear(expr):
+def linear(expr, die=True):
     """
     Split an expression into a constant part and a coefficient for each bare state
 
     Returns `(const, terms)`, where `const` is an expression with no bare states
-    (or None) and `terms` is a dict of `{state: coefficient}`. Raises `ss.errors.NonlinearExposure` if
-    the expression is not linear in its bare states.
+    (or None) and `terms` is a dict of `{state: coefficient}`. If the expression is not
+    linear in its bare states, raises a `ValueError`, or returns None if `die=False`.
     """
-    def nonlinear():
-        raise ss.errors.NonlinearExposure(f'the expression "{expr}" is not linear in its states. Write the rate per person, where a bare state means contact with people in it (beta*I) and I.n is the number in it (beta*I.n); or the whole flow, with the source of the transition as a factor (beta*S*I/N, frequency-dependent, or beta*S*I, density-dependent).')
-
-    if isinstance(expr, ss.transitions.State):
-        return None, {expr: par(1, literal=True)}
-    elif isinstance(expr, BinOp):
-        ca, ta = linear(expr.a)
-        cb, tb = linear(expr.b)
-        op = expr.op
-        if op in '+-':
-            sign = (lambda x: x) if op == '+' else (lambda x: -x)
-            const = ca if cb is None else (sign(cb) if ca is None else BinOp(op, ca, cb))
-            terms = dict(ta)
-            for state,coef in tb.items():
-                terms[state] = BinOp(op, terms[state], coef) if state in terms else sign(coef)
-            return const, terms
-        elif op == '*':
-            if ta and tb:
-                nonlinear()
-            elif not ta and not tb:
+    def split(expr):
+        """ As linear(), with None for an expression that is not linear """
+        if isinstance(expr, ss.transitions.State):
+            return None, {expr: par(1, literal=True)}
+        elif isinstance(expr, BinOp):
+            a, b = split(expr.a), split(expr.b)
+            if a is None or b is None:
+                return None
+            (ca, ta), (cb, tb) = a, b
+            op = expr.op
+            if op in '+-':
+                sign = (lambda x: x) if op == '+' else (lambda x: -x)
+                const = ca if cb is None else (sign(cb) if ca is None else BinOp(op, ca, cb))
+                terms = dict(ta)
+                for state,coef in tb.items():
+                    terms[state] = BinOp(op, terms[state], coef) if state in terms else sign(coef)
+                return const, terms
+            elif op == '*':
+                if ta and tb:
+                    return None
+                elif not ta and not tb:
+                    return expr, {}
+                const, terms, other = (ca, ta, expr.b) if ta else (cb, tb, expr.a) # "other" is the side with no states
+                terms = {state: (other if is_one(coef) else BinOp('*', other, coef)) for state,coef in terms.items()}
+                const = None if const is None else BinOp('*', const, other)
+                return const, terms
+            elif op == '/':
+                if tb:
+                    return None
+                elif not ta:
+                    return expr, {}
+                terms = {state: BinOp('/', coef, expr.b) for state,coef in ta.items()}
+                const = None if ca is None else BinOp('/', ca, expr.b)
+                return const, terms
+            else:
+                if ta or tb:
+                    return None
                 return expr, {}
-            const, terms, other = (ca, ta, expr.b) if ta else (cb, tb, expr.a) # "other" is the side with no states
-            terms = {state: (other if is_one(coef) else BinOp('*', other, coef)) for state,coef in terms.items()}
-            const = None if const is None else BinOp('*', const, other)
-            return const, terms
-        elif op == '/':
-            if tb:
-                nonlinear()
-            elif not ta:
-                return expr, {}
-            terms = {state: BinOp('/', coef, expr.b) for state,coef in ta.items()}
-            const = None if ca is None else BinOp('/', ca, expr.b)
-            return const, terms
-        else:
-            if ta or tb:
-                nonlinear()
+        elif isinstance(expr, Func):
+            args = [split(arg) for arg in expr.args]
+            if any(arg is None or arg[1] for arg in args):
+                return None
             return expr, {}
-    elif isinstance(expr, Func):
-        if any(linear(arg)[1] for arg in expr.args):
-            nonlinear()
-        return expr, {}
-    return expr, {} # A parameter or a count
+        return expr, {} # A parameter or a count
+
+    out = split(expr)
+    if out is None and die:
+        raise ValueError(f'the expression "{expr}" is not linear in its states. Write the rate per person, where a bare state means contact with people in it (beta*I) and I.n is the number in it (beta*I.n); or the whole flow, with the source of the transition as a factor (beta*S*I/N, frequency-dependent, or beta*S*I, density-dependent).')
+    return out
 
 
 def factors(expr):
@@ -1058,8 +987,6 @@ def evaluate(expr, ctx):
         return ctx.stock(expr.state)
     elif isinstance(expr, Flow):
         return ctx.flow(expr)
-    elif isinstance(expr, Share):
-        return expr.evaluate(ctx)
     elif isinstance(expr, Clock):
         return ctx.clock(expr)
     elif isinstance(expr, Coverage):
@@ -1132,7 +1059,7 @@ def format_expr(expr, values=False, bare=None, mul='*', exact=False, unit=None):
         values (bool): whether to print the values of parameters rather than their names
         bare (func): how to write a bare state (a function of the state, returning a string); by default, its name
         mul (str): the multiplication sign
-        exact (bool): write numbers at full precision (for the model spec, so its hash and code are exact), rather than to six significant figures
+        exact (bool): write numbers at full precision (e.g. for `sim.to_json()`), rather than to six significant figures
         unit (str): with `values='number'`, the unit the numbers are read in (e.g. 'day'): a rate written in another unit keeps its own (`0.02 per year`)
     """
     def fmt(e):
@@ -1167,9 +1094,6 @@ def format_expr(expr, values=False, bare=None, mul='*', exact=False, unit=None):
             names = [s.label_name if s not in weights else f'{fmt(weights[s])}{mul}{s.label_name}' for s in e.states]
             inner = names[0] if len(names) == 1 and not weights else '(' + ' + '.join(names) + ')'
             return f'{inner}.{e.kind}{"_trans" if e.trans else ""}'
-        elif isinstance(e, Share):
-            share = f'share({fmt(e.row.row)}, to={e.label})' # Its row's value at this destination, over the row's sum
-            return share if e.row.scalar is None else f'{fmt(e.row.scalar)} {mul} {share}'
         elif isinstance(e, (Clock, mother, Coverage)):
             return e.to_str()
         return str(e.name) # A flow

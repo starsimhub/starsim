@@ -86,7 +86,7 @@ def test_2d_results():
     class BySex(ss.Analyzer):
         def init_results(self):
             super().init_results()
-            self.define_results(ss.Result('infected', columns=['female', 'male'], label='Infected', kind='stock'))
+            self.define_results(ss.Result('infected', columns=['female', 'male'], label='Infected', summarize_by='last'))
 
         def step(self):
             infected = self.sim.diseases.sis.I
@@ -98,7 +98,7 @@ def test_2d_results():
         def init_results(self):
             super().init_results()
             self.results['nested'] = ss.Results(self)
-            self.results.nested += ss.Result('infected', shape=self.t.npts, timevec=self.t.timevec, kind='stock')
+            self.results.nested += ss.Result('infected', shape=self.t.npts, timevec=self.t.timevec, summarize_by='last')
 
         def step(self):
             self.results.nested.infected[self.ti] = np.count_nonzero(self.sim.diseases.sis.I)
@@ -164,6 +164,37 @@ def test_flow_ratios():
     return sim
 
 
+@sc.timer()
+def test_summarize_by():
+    sc.heading('Testing summarize_by: guessed from the name, given, None, and added')
+    res = ss.Result('new_infections', values=np.arange(5.0))
+    assert res.summarize_by == 'sum' and res.summarize() == 10 and ss.Result('n_infected').summarize_by == 'last' and ss.Result('prevalence').summarize_by == 'mean'
+    assert ss.Result('x', values=np.arange(5.0), summarize_by='last').summarize() == 4
+    none = ss.Result('timer', values=np.arange(5.0), summarize_by=None)
+    with pytest.raises(ValueError):
+        none.summarize()
+    with pytest.raises(ValueError):
+        ss.Result('x', summarize_by='median')
+    ss.Result.summarizers['max'] = lambda arr, starts, ends: np.maximum.reduceat(arr, starts, axis=0)
+    try:
+        assert ss.Result('x', values=np.array([1.0, 5, 2]), summarize_by='max').summarize() == 5
+    finally:
+        del ss.Result.summarizers['max']
+
+    # A result not summarized over time is left out when all the results are resampled, as in summarize()
+    class Timer(ss.Analyzer):
+        def init_results(self):
+            super().init_results()
+            self.define_results(ss.Result('timer', summarize_by=None))
+        def step(self):
+            self.results.timer[self.ti] = self.ti
+    sim = ss.Sim(ss.SIS(), solver='ode', analyzers=Timer(name='a'), start=2000, stop=2002, dt=ss.months(1), verbose=0).run()
+    annual = sim.results.resample('year')
+    assert 'timer' not in annual.a and len(annual.sis.I) == 2
+    assert 'a_timer' not in sim.to_df(resample='year') and 'a_timer' in sim.to_df()
+    return res
+
+
 def test_result_exprs():
     sc.heading('Testing results declared in a class body')
     class SIR(ss.Disease):
@@ -198,6 +229,45 @@ def test_standard_prevalence():
         assert np.allclose(res.I.select(risk='high')/(res.S.select(risk='high') + res.I.select(risk='high')), high)
         assert np.allclose(0.8*low + 0.2*high, res.prevalence, rtol=0.05) # The groups keep their shares of people, about
     return res
+
+
+@sc.timer()
+def test_results_by_group():
+    sc.heading('Testing results by group in a module written as code: counts by sex and age among the living, weighted')
+    edges = [0, 15, 25, 50]
+    class ByGroup(ss.Analyzer):
+        def init_results(self):
+            super().init_results()
+            self.define_results(ss.Result('n_infected', groups=True), ss.Result('prevalence', scale=False, groups=True))
+
+        def step(self):
+            groups, dis = self.sim.groups, self.sim.diseases[0]
+            infected = groups.count(dis.I if dis.states else dis.infected) # Declared, or written as code
+            self.results.n_infected.set_groups(self.ti, infected)
+            self.results.prevalence.set_groups(self.ti, infected, groups.count())
+
+    # Alongside a declared disease, whose results are kept by group already; agents of different weights, and people born and dying
+    kw = dict(networks='random', demographics=[ss.Births(birth_rate=20), ss.Deaths(death_rate=15)], analyzers=ByGroup(name='bygroup'), n_agents=medium, start=2000, stop=2010, verbose=0)
+    sim = ss.Sim(ss.SIS(beta=ss.peryear(0.3), init_prev=0.1), stratify=dict(sex=['female', 'male'], age=edges), **kw).init()
+    sim.people.scale[sim.people.auids[::3]] = 3
+    sim.run()
+    sis, res = sim.results.sis, sim.results.bygroup
+    assert np.array_equal(res.n_infected.strata[1:], sis.I.strata[1:]) # Each group, at each step after the start (whose weights were set after it)
+    assert np.allclose(res.prevalence.select(sex='female', age='15-24')[1:], sis.prevalence.select(sex='female', age='15-24')[1:]) # Summed over the groups, then divided
+    assert np.allclose(res.prevalence.by('age')[1:], sis.prevalence.by('age')[1:])
+    ppl = sim.people
+    age = ppl.age.raw - sim.t.dt_year # As counted, before the people aged at the end of the last step
+    women = ppl.alive.raw & ppl.female.raw & (age >= 15) & (age < 25)
+    assert np.isclose(res.n_infected.select(sex='female', age='15-24')[-1], ppl.scale.raw[women & sim.diseases.sis.I.raw].sum()) # A direct count, by weight
+
+    # With only modules written as code: the stratification is used by the results kept by group
+    sim = ss.Sim(ssl.AgentSIS(beta=ss.peryear(0.3), init_prev=0.1), stratify=dict(sex=['female', 'male']), **kw).run()
+    res = sim.results.bygroup
+    ppl, dis = sim.people, sim.diseases.agentsis
+    assert res.n_infected[-1] == (ppl.alive.raw & dis.infected.raw).sum() and res.n_infected.by('sex').shape == (sim.t.npts, 2)
+    with pytest.raises(ValueError, match='groups=True'):
+        ss.Sim(ssl.AgentSIS(), stratify=dict(sex=['female', 'male']), n_agents=small, verbose=0).init() # Nothing uses it
+    return sim
 
 
 def test_time_points():
@@ -306,8 +376,10 @@ if __name__ == '__main__':
     sim4b = test_flow_ratios()
     sim5 = test_time_points()
     res6 = test_destinations()
+    res6b = test_summarize_by()
     res7 = test_result_exprs()
     res8 = test_standard_prevalence()
+    sim8b = test_results_by_group()
     res9 = test_compare_data()
     sim10 = test_plot()
 

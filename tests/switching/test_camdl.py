@@ -66,7 +66,7 @@ def test_camdl_units():
     )
     for key, slip in slips.items():
         S, I, R = ss.states(3)
-        with pytest.raises(ss.CodedError): # When the transitions or the disease are built, or at init
+        with pytest.raises(TypeError, match='a duration in a rate|not a rate'): # When the transitions or the disease are built, or at init
             infection, recovery = slip(S, I, R)
             sir = ss.Disease(infection=infection, recovery=recovery, init_n=dict(I=10), name='sir')
             ss.Sim(sir, total_pop=10_000, unit='day', stop=84, verbose=0).init()

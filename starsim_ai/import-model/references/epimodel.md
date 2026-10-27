@@ -23,10 +23,10 @@ Then, in Starsim, `sim = ss.interop.load('model.json')`, or `ss.interop.load('in
 | `a.rate`, `ds.rate`, `di.rate`, `dr.rate` | An inflow `a_rate * (S + I + R).n` and an outflow from each state | yes |
 | `i.num`, `r.num`; the network's size | `init_n=dict(S=..., I=..., R=...)` (numbers of people), `n_agents=n`, `solver='abm'` | yes |
 | `nsteps` | `stop=nsteps - 1` (EpiModel's time 1 is the start) | yes |
-| `edges`, `concurrent`, `degrange(from = k)` with target 0 | `ssl.DegreeNet(n_contacts=2*edges/n, concurrency=concurrent/n, max_contacts=k - 1, dur=duration)` | yes (the same targets, not an ERGM fit; marked guessed) |
+| `edges`, `concurrent`, `degrange(from = k)` with target 0 | `ss.DegreeNet(n_contacts=2*edges/n, concurrency=concurrent/n, max_contacts=k - 1, dur=duration)` | yes (the same targets, not an ERGM fit; marked guessed) |
 | `nodematch("attr")` | `match=dict(attr=target/edges)`, and a stratification `attr` split as the attribute is on the network | yes (guessed) |
-| Several networks (`netsim(list(est_main, est_cas), ...)`) | One `ssl.DegreeNet` each, `net1`, `net2`, ... | yes |
-| `dissolution_coefs(d.rate = ...)` | Nothing: `ssl.DegreeNet` allows for partnerships ended by departures | yes |
+| Several networks (`netsim(list(est_main, est_cas), ...)`) | One `ss.DegreeNet` each, `net1`, `net2`, ... | yes |
+| `dissolution_coefs(d.rate = ...)` | Nothing: `ss.DegreeNet` allows for partnerships ended by departures | yes |
 | `dcm()` with `type = "SI"`, `"SIS"`, `"SIR"` | The same states with rates, `inf_prob * act_rate * I` (frequency-dependent), `solver='ode'`, `dt` from `control.dcm(dt=)` | yes |
 | `icm()` with `type = "SI"`, `"SIS"`, `"SIR"` | The same, with `solver='binomial'`: acts between random pairs as a rate of infection (marked guessed) | yes |
 | Scenarios (several calls of `netsim()`, `use_scenario()`) | The chosen one as the sim; the others in `sim.imported.scenarios`, for `sim.new(pars=...)` | yes |
@@ -77,8 +77,8 @@ hiv = ss.Disease(
 )
 hiv.stratify(care=['undx', 'dx', 'art', 'supp', 'off'], states=[A, C, D], split=[1, 0, 0, 0, 0],
              adjust=dict(rel_trans=[1, 1, 0.3, 0.01, 1], aids_death=[1, 1, 1, 0.1, 1]))
-main   = ssl.DegreeNet(n_contacts=0.5, concurrency=0.04, max_contacts=2, dur=200)
-casual = ssl.DegreeNet(n_contacts=0.3, concurrency=0.10, dur=26)
+main   = ss.DegreeNet(n_contacts=0.5, concurrency=0.04, max_contacts=2, dur=200)
+casual = ss.DegreeNet(n_contacts=0.3, concurrency=0.10, dur=26)
 sim = ss.Sim(hiv, networks=dict(main=main, casual=casual), n_agents=1500, stop=1040) # A step is a week
 ```
 

@@ -10,10 +10,6 @@ root = sc.thispath(__file__).parent
 from .version import __version__, __versiondate__, __license__
 from .settings import dtypes, options, style # Also ss.settings.load_fonts
 
-# Optionally print the license
-if options.license:
-    print(__license__)
-
 # Double-check key requirements -- should match pyproject.toml
 sc.require(reqs=['sciris>=3.2.8', 'pandas>=2.0.0'], die=False,
     message = f'\n\nThe following dependencies for Starsim {__version__} were not met:\n  <MISSING>.\nYou can update with: pip install <MISSING> --upgrade\n'
@@ -26,17 +22,16 @@ from .utils import (
     return_fig,
 )
 
-from .internals import errors # Errors, warnings, and notes, as classes (e.g. ss.errors.UnknownState); the base classes and ss.CapabilityError also here
+from .internals import errors # Errors, warnings, and notes (e.g. ss.errors.AtBound); ss.CapabilityError, ss.AlreadyRunError, and ss.note() also here
 from .internals.errors import *
 
 from .internals import debugtools
-from .internals.debugtools import check_requires # Also ss.debugtools.Profile, the mock_* objects for testing, and Diagnostics
 
 from .arrays import (
-    Arr, FloatArr, IntArr, BoolArr, BoolState, IndexArr, uids, # Also ss.arrays.BaseArr and ss.arrays.ModifiableArr
+    Arr, FloatArr, TimeArr, IntArr, BoolArr, BoolState, IndexArr, uids, # Also ss.arrays.BaseArr
 )
 
-from .distributions import ( # Also ss.distributions.Dists, link_dists, make_dist, dist_list, rand_raw
+from .distributions import ( # Also ss.distributions.Dists, link_dists, make_dist, dist_list
     Dist, random, uniform, normal, truncnorm, lognorm_ex, lognorm_im, expon,
     poisson, nbinom, binom, beta_dist, beta_mean, weibull, gamma, erlang, constant,
     randint, bernoulli, choose_n, choice, histogram,
@@ -66,7 +61,7 @@ from .modules import (
 
 from .networks import (
     Network, DynamicNetwork,
-    RandomNet, SexualNet,
+    RandomNet, DegreeNet, SexualNet,
     PrenatalNet, MaternalNet, PostnatalNet, BreastfeedingNet,
     AgeGroup, MixingPools, MixingPool, contacts,
 )
@@ -77,7 +72,7 @@ from .results import Result, Results, simdata
 from .products import Product, Vaccine, Treatment, Diagnostic, box
 
 from .interventions import (
-    Intervention, Event, Delivery, vaccinate, treat, screen,
+    Intervention, Delivery, vaccinate, treat, screen,
 )
 
 from .analyzers import Analyzer, infection_log
@@ -85,7 +80,7 @@ from .analyzers import Analyzer, infection_log
 from .connectors import Connector, modify, change
 
 from . import conditions
-from .conditions import state, child # Conditions on a state by path, and on a mother when her child goes through an event
+from .conditions import state # Conditions on a state by path
 from . import perflib # Hidden machinery for speed (exact draws in Numba), which the kernels use
 from .perflib import kernels
 from .perflib.kernels import compile # Compile the solver kernels ahead of time
@@ -97,7 +92,7 @@ from .transitions import (
     Transition, move, birth, death, lifetable, immigration, emigration, outcome,
 )
 
-from .internals import graph, presentation # The graph of a declared module (ss.transitions.Graph), and how it is shown
+from .internals import graph, presentation # The graph of a declared module (ss.graph.Graph), and how it is shown
 
 from .dimensions import transfer # Also ss.dimensions.Strat, ss.dimensions.Groups
 
@@ -109,9 +104,6 @@ from .strains import immunity, Strains
 from .demographics import Demographics, Births, Deaths, Pregnancy # After the diseases, since a pregnancy is one
 
 from .loop import Loop
-
-from .internals import spec
-from .internals.spec import to_code, diff
 
 from . import data # Data by place, from starsim_data: ss.data.age('Kenya'), ss.data.population(), ss.data.contacts(), ss.data.geography(); starsim_data is imported only when they are used
 

@@ -46,7 +46,7 @@ class geography:
         ```
     """
     def __init__(self, data=None, names=None, pop=None, x=None, y=None, lat=None, lon=None, distances=None, adjacency=None, level=1, year=None, places=None):
-        self.ref = None # Where a named geography came from, for the model spec
+        self.ref = None # Where a named geography came from, for describe()
         self.area = None
         self.codes = None
         named = isinstance(data, str) and not data.endswith(('.csv', '.xlsx') + shapefiles) or (isinstance(data, (list, tuple)) and all(isinstance(d, str) for d in data))
@@ -152,7 +152,7 @@ class gravity:
         """ The movement between each pair of levels of a stratification, from its geography """
         place = strat.geo
         if place is None or place.distances is None or place.pop is None:
-            raise ss.errors.NoGeography(f'ss.geo.gravity() is used on "{strat.name}", which has no geography to give the populations and distances it needs.\n'
+            raise ValueError(f'ss.geo.gravity() is used on "{strat.name}", which has no geography to give the populations and distances it needs.\n'
                                  f'     Give the places with ss.geo.geography(names=[...], pop=[...], x=[...], y=[...]), or give the movement itself with ss.geo.Mobility(matrix=...).')
         pop, dist = place.pop, place.distances
         k, a, b, c = [float(v) for v in [sc.ifelse(self.k, 1.0), self.a, self.b, self.c]] # Any can be a fitted ss.par
@@ -199,7 +199,7 @@ class radiation:
         """ The movement between each pair of levels of a stratification, from its geography """
         place = strat.geo
         if place is None or place.distances is None or place.pop is None:
-            raise ss.errors.NoGeography(f'ss.geo.radiation() is used on "{strat.name}", which has no geography to give the populations and distances it needs.\n'
+            raise ValueError(f'ss.geo.radiation() is used on "{strat.name}", which has no geography to give the populations and distances it needs.\n'
                                  f'     Give the places with ss.geo.geography(names=[...], pop=[...], x=[...], y=[...]), or give the movement itself with ss.geo.Mobility(matrix=...).')
         pop, dist = place.pop, place.distances
         order = np.argsort(dist, axis=1, kind='stable')
@@ -406,7 +406,7 @@ class Mobility:
             raise ValueError(errormsg)
         out = self.model.matrix(strat) if self.model is not None else self.given.copy()
         if out.shape != (strat.n, strat.n):
-            raise ss.errors.ShapeError(f'the mobility matrix for "{strat.name}" has shape {out.shape}, but there are {strat.n} levels ({sc.strjoin(strat.labels)}).')
+            raise ValueError(f'the mobility matrix for "{strat.name}" has shape {out.shape}, but there are {strat.n} levels ({sc.strjoin(strat.labels)}).')
         if spsp.issparse(out):
             out = spsp.csr_array(out - spsp.diags_array(out.diagonal()))
             out.eliminate_zeros()

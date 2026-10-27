@@ -126,7 +126,7 @@ For a stochastic model, also check the fit against many runs, not one: `fit.sim.
 
 ## Can the data tell the parameters apart?
 
-Starsim notes when two parameters can't be told apart (`ss.errors.Unidentifiable`): when they appear in the model only multiplied together, or (for a posterior) when they are almost perfectly correlated. Even without a note, check that the fit can recover known values from data made by the model itself, as this page's examples do. [Parameter identification](calibration_identification.qmd) covers this in detail.
+Starsim notes when two parameters can't be told apart: when they appear in the model only multiplied together, or (for a posterior) when they are almost perfectly correlated. Even without a note, check that the fit can recover known values from data made by the model itself, as this page's examples do. [Parameter identification](calibration_identification.qmd) covers this in detail.
 
 ## Is the posterior reliable?
 
@@ -158,7 +158,7 @@ The SEIR model fits better and predicts better. `folds=` repeats the comparison 
 | The search converged | `fit.converged`, `fit.why` | "Not converged", with the reason |
 | No value is at a bound | The `AtBound` warning | A best value at the edge |
 | The answer is stable | Fit again with another `rand_seed=` (stochastic) or from other starting points (`scan=`) | Different values each time |
-| The parameters are identifiable | The `Unidentifiable` note; recover known values | A ridge, or values that move together |
+| The parameters are identifiable | A note that they can't be told apart; recover known values | A ridge, or values that move together |
 | The posterior is reliable | `rhat`, `ess`, divergences | R-hat above 1.01, few effective draws, any divergences |
 | The model predicts | `ss.fit.compare_models()` | A model that fits well but predicts badly |
 | The fit is plausible | Compare the values with what is known from elsewhere | A reporting share above 1, an infectious period of months |

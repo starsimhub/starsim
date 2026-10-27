@@ -233,7 +233,7 @@ class MultiSim:
                 if not sim.label:
                     sim.label = f'Sim {i}'
         many = n_runs is not None or pars is not None or draws
-        sims = [sim.new(rand_seed=sim.pars.rand_seed, label=sim.label) if hasattr(sim, 'inputs') and (sim.results_ready or (many and sim.initialized)) else sim for sim in sims] # A sim that has been run (e.g. fit.sim), or that would be run more than once after init(), is built again
+        sims = [sim.new(rand_seed=sim.pars.rand_seed, label=sim.label) if sim.results_ready or (many and sim.initialized) else sim for sim in sims] # A sim that has been run (e.g. fit.sim), or that would be run more than once after init(), is built again
         if draws:
             if pars is not None:
                 errormsg = 'ss.parallel() takes pars= or priors=, not both'
@@ -257,9 +257,6 @@ class MultiSim:
         out = []
         rows = []
         for sim in sims:
-            if n_runs is not None and sim.initialized and not hasattr(sim, 'inputs'):
-                errormsg = f'Sim "{sim.label}" is already initialized, so its runs would all be the same; pass an uninitialized sim to run it with n_runs'
-                raise ValueError(errormsg)
             for j,p in enumerate(sets):
                 for i in range(sc.ifelse(n_runs, 1)):
                     seed = run_seed(sim.pars.rand_seed, p, j, i, n_runs, draws)
@@ -269,7 +266,7 @@ class MultiSim:
 
     def make_run(self, sim, values, seed):
         """
-        The sim of one run: a copy of a sim that has not been initialized, otherwise one built again (see `sim.new()`), with a seed and values of model parameters
+        The sim of one run: a new one (see `sim.new()`), with a seed and values of model parameters
 
         A subclass can override this to change the sim of each run, e.g. to add noise to a parameter; the options it adds to
         `run_options` are passed to it as keywords.
@@ -281,13 +278,7 @@ class MultiSim:
         """
         values = dict(values or {})
         seed = values.pop('rand_seed', seed)
-        if sim.initialized:
-            new = sim.new(pars=values or None, rand_seed=seed)
-        else: # A copy, which keeps any changes made to the sim after it was made
-            new = sim.copy()
-            new.pars.rand_seed = seed
-            if values:
-                new.par_values = sc.mergedicts(new.par_values, values)
+        new = sim.new(pars=values or None, rand_seed=seed)
         new.label = sim.label
         return new
 
@@ -428,11 +419,12 @@ class MultiSim:
         n_runs = len(self.sims)
         combined_sim = sc.dcp(self.sims[0])
         combined_sim.metadata = dict(parallelized=True, combined=True, n_runs=n_runs) # Store how this was parallelized
-        pars = combined_sim.pars
+        pars = combined_sim.pars.freeze(False) # Its settings say what it combines (it is not run again)
         pops = np.array([sim.pars.total_pop for sim in self.sims]) # Used to weight the non-count results
         pars.n_agents = sum(sim.pars.n_agents for sim in self.sims)
         pars.total_pop = pops.sum()
         pars.pop_scale = pars.total_pop/pars.n_agents
+        pars.freeze()
 
         # Combine the results
         flats = [sim.results.flatten() for sim in self.sims]
@@ -453,7 +445,7 @@ class MultiSim:
         """
         A table of each result over the whole of each run, across the runs: the median, an interval, the mean, and the standard deviation
 
-        Each result is first summarized over each run by its kind (see `sim.summarize()`): a flow (e.g. infections) by its
+        Each result is first summarized over each run by its `summarize_by` (see `sim.summarize()`): a flow (e.g. infections) by its
         total, a stock (e.g. the number recovered) by its final value, and a ratio (e.g. prevalence) by its mean. Results
         that are 0 throughout are left out.
 
@@ -489,6 +481,8 @@ class MultiSim:
             if not np.any(res.values): # E.g. deaths in a model without them
                 continue
             func = how.get(key, how.get(''))
+            if func is None and res.summarize_by is None: # Not summarized over time
+                continue
             if func is None:
                 arr = np.asarray(res.summarize(), dtype=float) # One value per run
             else:
@@ -547,6 +541,8 @@ class MultiSim:
         resdict = {label:{} for label in labels}
         for key,res in self.results.flatten(sep='_', columns=True).items():
             if t is None:
+                if res.summarize_by is None: # Not summarized over time
+                    continue
                 vals = np.asarray(res.summarize())
             else:
                 ti = t if sc.isnumber(t) else sc.findnearest(res.convert_timevec().years, year) # Nearest timestep to the date, using the result's own timevec since modules can have different dt
@@ -819,7 +815,7 @@ class MultiResults(ss.Results):
             runs (dataframe): one row per run: its scenario, and the values of any parameters swept
             timevec (array): the sim's time points
         """
-        out = cls('MultiSim', strict=False)
+        out = cls('MultiSim')
         for (modname,key),arr in arrays.items():
             like = arr['like']
             values = np.asarray(arr['values'])
@@ -834,7 +830,7 @@ class MultiResults(ss.Results):
                 out[key] = res
             else:
                 if modname not in out:
-                    out[modname] = ss.Results(modname, strict=False)
+                    out[modname] = ss.Results(modname)
                 out[modname][key] = res
         if timevec is not None:
             out['timevec'] = timevec
@@ -853,7 +849,7 @@ class MultiResults(ss.Results):
         times = [sim.t.tvec for sim in sims]
         if any(len(t) != len(times[0]) or np.any(t != times[0]) for t in times[1:]): # Results at different times cannot be stacked as runs of one thing
             steps = sc.strjoin(f'"{sim.label}": {len(t)} steps of {sim.t.dt}' for sim,t in zip(sims, times))
-            raise ss.errors.ShapeError(f'the sims have results at different times ({steps}), so they cannot be put together as runs of one MultiSim. Give them the same start, stop, and dt.')
+            raise ValueError(f'the sims have results at different times ({steps}), so they cannot be put together as runs of one MultiSim. Give them the same start, stop, and dt.')
         entries = {}
         for sim in sims: # Every result of any run, e.g. of an intervention only one scenario has
             entries |= {(None, key):res for key,res in sim.results.items() if isinstance(res, ss.Result) and (None, key) not in entries}
@@ -1036,8 +1032,8 @@ def restart_runs(sims, n_runs, pars=None, draws=False):
     with at least `jax_runs` runs (and JAX installed) takes them all in one call to JAX
     (see `ss.gradients`), which is faster than the kernels for that many.
     """
-    declared = lambda sim: any(getattr(mod, 'graph', None) is not None for val in sim.inputs.values() for mod in sc.tolist(val)) # Only a sim with a declared module can be run whole
-    if not all(hasattr(sim, 'inputs') and declared(sim) for sim in sims): # A sim that has been initialized or run is rebuilt from its inputs too
+    declared = lambda sim: any(getattr(mod, 'graph', None) is not None for mod in ss.sim.given_modules(sim.pars)) # Only a sim with a declared module can be run whole
+    if not all(declared(sim) for sim in sims):
         return None
     sets = par_sets(pars)
     runners = []

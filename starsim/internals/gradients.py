@@ -39,8 +39,8 @@ def jax():
     if 'jax' not in sys.modules and 'xla_force_host_platform_device_count' not in os.environ.get('XLA_FLAGS', ''):
         os.environ['XLA_FLAGS'] = f'{os.environ.get("XLA_FLAGS", "")} --xla_force_host_platform_device_count={os.cpu_count() or 1}'.strip()
     import jax
-    if ss.options.jax_cache and jax.config.jax_compilation_cache_dir is None: # Keep what is compiled for later sessions, unless told otherwise
-        jax.config.update('jax_compilation_cache_dir', ss.options.jax_cache)
+    if jax.config.jax_compilation_cache_dir is None: # Keep what is compiled for later sessions, unless told otherwise (e.g. by JAX_COMPILATION_CACHE_DIR)
+        jax.config.update('jax_compilation_cache_dir', os.path.join(os.path.expanduser('~'), '.cache', 'starsim', 'jax'))
         jax.config.update('jax_persistent_cache_min_compile_time_secs', 0.25)
     return jax
 
@@ -592,8 +592,8 @@ def joint_runner(cross, captured, n_max=None):
     programs = [program for program,how in captured]
     if cross.program is None or cross.built != [id(p) for p in programs]:
         cross.build(programs)
-    per_step, reps = cross.per_step()
-    how = captured[0][1][:4] + (per_step,)
+    reps = cross.reps()
+    how = captured[0][1][:4] + (cross.per_step(),)
     if n_max is not None:
         return CrossRun(cross, Run(cross.program, *how, n_max=n_max), reps)
     key = (Run.key(cross.program, *how), tuple(reps)) + tuple(Run.key(program, *eng_how) for program,eng_how in captured) # The engines' programs fix where each one's numbers go in the crossing's
@@ -898,7 +898,7 @@ def convert_fitted(raw, val, unit_base, xp=np):
 def fixed_rate(flow, dw, ctx):
     """ The rate of a flow before its multipliers, from the values in ctx (as `ss.solvers.Compartmental.flow_base()`): for a dwell time `dw`, its stages (each group's own, if ragged) over its mean; otherwise its expression """
     if flow.expr is not None:
-        return ss.transitions.evaluate(flow.expr, ctx)
+        return ss.expressions.evaluate(flow.expr, ctx)
     val = ctx.value(dw.par)
     kg = dw.kg if flow.kind == 'stage' else None
     return ((flow.stages if kg is None else kg) if flow.kind == 'stage' else 1)/(1/val if dw.is_rate else val)
@@ -919,7 +919,7 @@ def table_years(engine, raw):
 def time_value(raw, ctx, years):
     """ A value that varies in time (`ss.seasonal()` or `ss.timeseries()`), at each of the years, with the parameters inside it from ctx (as its series() works it out) """
     jnp = ctx.xp
-    val = lambda v: ss.transitions.evaluate(v, ctx) if isinstance(v, ss.transitions.Expr) else ctx.engine.convert(v)
+    val = lambda v: ss.expressions.evaluate(v, ctx) if isinstance(v, ss.expressions.Expr) else ctx.engine.convert(v)
     if any(isinstance(ss.parameters.const_value(v), ss.prob) for name in raw.fields for v in sc.tolist(getattr(raw, name))):
         raise Unsupported(f'a fitted parameter inside {raw}, which is a probability')
     if isinstance(raw, ss.seasonal):
@@ -1065,7 +1065,7 @@ class Density:
         self.timed = {} # The values that vary in time with fitted parameters inside them (e.g. the mean and amplitude of ss.seasonal()), which are not linear in them, so are worked out in JAX, by engine and parameter: the year of each row of the tables
         for engine in self.engines:
             for p in engine.time_pars:
-                if isinstance(p.raw, ss.transitions.TimeValue) and any(id(q) in self.index for q in p.raw.pars):
+                if isinstance(p.raw, ss.parameters.TimeValue) and any(id(q) in self.index for q in p.raw.pars):
                     years = self.timed[(id(engine), id(p))] = table_years(engine, p.raw)
                     with jax().enable_x64(True):
                         same = np.allclose(np.asarray(Context(self, engine, self.x0, series=True).value(p)), engine.series[id(p)][1], rtol=1e-12, atol=0)
@@ -1209,8 +1209,8 @@ class Density:
                 if key not in new and key not in out: # The flow to one destination of a transition with several, e.g. cin.CA
                     raise Unsupported(f'the outcome "{name}", from the flow to one destination ({key})')
                 flow = new[key] if key in new else out[key]
-                if isinstance(weight, ss.transitions.Expr):
-                    weight = ss.transitions.evaluate(weight, ctx)
+                if isinstance(weight, ss.expressions.Expr):
+                    weight = ss.expressions.evaluate(weight, ctx)
                 if np.ndim(weight) > 0:
                     raise Unsupported(f'the outcome "{name}", whose weight differs by group')
                 amount = amount + flow*weight
@@ -1248,7 +1248,7 @@ class Density:
                     elif name in outcomes:
                         val = outcomes[name]
                     else:
-                        val = ss.transitions.evaluate(graph.exprs[name], ctx)
+                        val = ss.expressions.evaluate(graph.exprs[name], ctx)
                     out[s.col] = val
         return out
 
@@ -1319,7 +1319,7 @@ class LogDensity:
             errormsg = f'The log-density in JAX needs a sim that runs in JAX, and this one cannot, since {why}'
             raise ss.CapabilityError(errormsg)
         if sim.data is None:
-            raise ss.errors.NoData('The log-density is of the data given the parameters, but the sim has no data; attach it with ss.Sim(..., data=df)')
+            raise ValueError('The log-density is of the data given the parameters, but the sim has no data; attach it with ss.Sim(..., data=df)')
         fitted = find_pars(sim, None if pars is None else sc.tolist(pars))
         self.names = list(fitted.keys())
         self.x0 = np.array([p.raw.value if isinstance(p.raw, ss.TimePar) else p.raw for p in fitted.values()], dtype=float)

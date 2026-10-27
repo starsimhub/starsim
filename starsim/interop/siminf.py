@@ -17,7 +17,7 @@ import numpy as np
 import pandas as pd
 import sciris as sc
 import starsim as ss
-from .core import Source, disease
+from .core import Source, build
 
 __all__ = ['load_siminf']
 
@@ -560,9 +560,13 @@ def load_siminf(source, u0=None, events=None, verbose=None, **kwargs):
             u0[col] = vals
 
     # States: the compartments, and the continuous states
-    for c in compartments: # With several nodes, the initial numbers are given by node once the disease is built
-        total = float(u0[c].sum()) if u0 is not None and c in u0 and n_nodes == 1 else 0
-        src.add_state(c, init=total)
+    src.declared = True # Every compartment is people, including one joined to the others only by events (aging)
+    for c in compartments: # With several nodes, the initial numbers by node (the rest in the first compartment)
+        init = float(u0[c].sum()) if u0 is not None and c in u0 and n_nodes == 1 else 0
+        if n_nodes > 1 and c in u0 and c != u0.columns[0] and u0[c].any():
+            vals = u0[c].values
+            init = ss.by(node=vals.astype(int) if np.all(vals == np.round(vals)) else vals.astype(float))
+        src.add_state(c, init=init)
     for k,val in v0.items():
         src.add_state(k, people=False, init=None)
 
@@ -650,7 +654,8 @@ def load_siminf(source, u0=None, events=None, verbose=None, **kwargs):
     else:
         src.skip('tspan', 'not given: the sim runs for Starsim\'s default time')
     cfg.update(simkw)
-    return build(src, u0, verbose=verbose, **cfg)
+    cfg.setdefault('total_pop', float(u0.values.sum()) if u0 is not None else 0)
+    return build(src, verbose=verbose, **cfg)
 
 
 def event_register(ev, compartments, E, N):
@@ -702,28 +707,3 @@ def event_register(ev, compartments, E, N):
     if to_states.notna().any():
         register['to_states'] = to_states.values
     return register, notes
-
-
-def build(src, u0, verbose=None, **kwargs):
-    """ The sim, as core.build() makes it, with the initial numbers by node """
-    verbose = sc.ifelse(verbose, ss.options.verbose)
-    src.declared = True # Every compartment is people, including one joined to the others only by events (aging)
-    dis, lines = disease(src)
-    if u0 is not None and len(u0) > 1: # Initial numbers by node (the rest in the first compartment)
-        for c in u0.columns[1:]:
-            if u0[c].any():
-                vals = u0[c].values
-                dis.graph.states[c].init = None
-                dis.graph.states[c].init_n = ss.by(node=vals.astype(int) if np.all(vals == np.round(vals)) else vals.astype(float))
-    if verbose:
-        print(f'Imported "{src.name}" from {src.format}: {len(src.states)} states, {len(src.flows)} transitions, {len(src.pars)} parameters')
-        for line in lines:
-            print(line)
-    total = float(u0.values.sum()) if u0 is not None else 0
-    kwargs.setdefault('total_pop', total)
-    sim = ss.Sim(dis, **kwargs)
-    sim.imported = sc.objdict(format=src.format, file=src.file, choices=lines, incomplete=list(src.incomplete))
-    if src.incomplete:
-        items = '\n'.join(f'  {name}: {why}' for name,why in src.incomplete)
-        ss.warn(f'{len(src.incomplete)} part(s) of the model were not translated:\n{items}', ss.errors.ImportIncomplete)
-    return sim

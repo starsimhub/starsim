@@ -62,13 +62,13 @@ def test_clocks():
 
     # Errors: outside the domain, and no scheduled dwell; as compartments, see test_conveyor.py
     S, A, B, C = ss.states('S A B C')
-    with pytest.raises(ss.errors.ClockOutsideDomain):
+    with pytest.raises(ValueError, match='which has a value only for people in B, but moves people from S'):
         ss.Disease(S, A, B, C, ab=A >> B @ ss.days(4), sc_=ss.Transition(S, C, rate=ss.perday(1)*(B.time > 1)))
     d, ab = make()
-    with pytest.raises(ss.errors.ClockOutsideDomain):
+    with pytest.raises(ValueError, match='but applies to everyone'):
         ss.Sim(d, connectors=ss.modify(d.bc, multiply=ab.time/ss.days(1)), n_agents=100, **kw).init()
     S, A, B, C = ss.states('S A B C')
-    with pytest.raises(ss.errors.NoScheduledDwell):
+    with pytest.raises(ValueError, match='so no dwell time is scheduled'):
         ss.Disease(S, A, B, C, ab=A >> B @ ss.perday(0.2), bc=ss.Transition(A, C, rate=ss.perday(1)*A.progress))
     d, ab = make()
     with pytest.raises(ss.CapabilityError):
@@ -109,13 +109,13 @@ def test_bv_recurrence():
 
 @sc.timer()
 def test_stamps():
-    sc.heading('A time of entering reads as the step it happened in: ti_X == sim.ti for a move at the start of the step and an infection at its end')
+    sc.heading('A time of entering reads as the step it happened in: ti_X.isclose(sim.ti) for a move at the start of the step and an infection at its end')
     S, E, I, R = ss.states('S E I R')
     d = ss.Disease(inf=S >> E @ ss.perday(0.4)*I, lat=E >> I @ ss.days(2), rec=I >> R @ ss.days(3), init=dict(E=0.01), name='d')
     def check(sim):
         d, ti = sim.diseases.d, sim.ti
         if ti > 0:
-            assert (d.ti_E == ti).count() == d.results.inf[ti] and (d.ti_I == ti).count() == d.results.lat[ti] # Infected, then moved on, in this step
+            assert d.ti_E.isclose(ti).count() == d.results.inf[ti] and d.ti_I.isclose(ti).count() == d.results.lat[ti] # Infected, then moved on, in this step
     sim = ss.Sim(d, networks=ss.RandomNet(), analyzers=check, n_agents=5000, unit='day', stop=30, **kw).run()
     assert sim.results.d.inf.sum() > 100 and sim.results.d.lat.sum() > 100
     return

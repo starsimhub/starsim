@@ -54,13 +54,13 @@ def test_people():
     sim.people.scale[sim.diseases.sis.I.uids] = 0.01
     assert sim.run().results.sis.infection[-1] < 50 # About 10 (unweighted, about 316)
 
-    # Memory: a People not yet in a sim (as sim.inputs keeps for sim.new()) has no arrays per agent; arrays nothing sets take none (the UIDs are made when read, slot reads them; parent, scale, rel_sus, and rel_trans are their defaults); times of death are 16-bit (the active UIDs are 64-bit, which index arrays faster)
+    # Memory: a People not yet in a sim (as in the copy of the sim before it was initialized, for sim.new()) has no arrays per agent; arrays nothing sets take none (the UIDs are made when read, slot reads them; parent, scale, rel_sus, and rel_trans are their defaults); times of death are 16-bit (the active UIDs are 64-bit, which index arrays faster)
     sim = ss.Sim(ss.SIR(), people=ss.People(small), networks='random', verbose=0)
-    assert 'auids' not in sim.inputs['people'].__dict__
     sim.run()
+    assert 'auids' not in sim._before_init.pars.people.__dict__
     ppl, sir = sim.people, sim.diseases.sir
     assert ppl.slot.shared is ppl.uid and ppl.parent.shared and ppl.scale.shared and sir.rel_sus.shared # No memory of their own
-    assert ppl.auids.dtype == np.int64 and ppl.ti_dead.raw.dtype == np.int16
+    assert ppl.auids.dtype == np.int64 and ppl.ti_dead.raw.dtype == np.float32
     assert '_raw' not in ppl.uid.__dict__ and np.array_equal(ppl.uid.raw[:ppl.n_uids], np.arange(ppl.n_uids)) and ppl.slot.raw[5] == 5 # people.uid is the index, with no array
     assert ppl.age[ppl.auids[0]] == ppl.age.raw[0] and len(ppl.age[ppl.auids.view(np.ndarray)]) == len(ppl) # One UID, or a plain array of them, indexes as before
     assert np.array_equal(sim.new().run().results.sir.I, sim.results.sir.I) # sim.new() rebuilds the same sim

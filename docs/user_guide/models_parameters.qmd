@@ -209,7 +209,7 @@ A module written as code declares its parameters and their defaults with `self.d
 - **A bare number in the wrong unit.** A bare number is in the model's unit of time: in a model whose unit is years, `I >> R @ 0.125` is 0.125 per year. Typed values (`ss.perday(0.125)`, `ss.days(8)`) don't depend on it.
 - **Changing the model instead of the sim.** To try another value, give it to the sim (`pars=dict(beta=1.5)`) rather than changing the disease, which every sim made from it shares.
 - **A distribution as a value or as a prior.** A distribution as a value is variation between people. Uncertainty about a single value is a prior, `ss.par(1.9, prior=...)`, used only in calibration.
-- **A function where a time series would do.** A function can't be printed by `describe()`, saved in the model spec, or written out as equations.
+- **A function where a time series would do.** A function can't be printed by `describe()`, exported to another framework, or written out as equations.
 
 ## See also
 

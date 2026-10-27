@@ -50,6 +50,38 @@ def make_disease(arg, names):
     disease.setattribute('_implicit', True)
     return [obj for obj in flat if not declared(obj)] + [disease]
 
+def copy_given(*inputs):
+    """ The sim's inputs merged and copied together, so the modules given are never run themselves and can be given to other sims, and refer to each other as given """
+    for mod in given_modules(*inputs): # Marked, so that what is added to them later, which this sim would never see, raises (see ss.Module.check_not_given())
+        mod.setattribute('_given', True)
+    out = sc.mergedicts(*inputs, _copy=True)
+    for mod in given_modules(out): # The sim's own copies are its to change
+        mod.setattribute('_given', False)
+    for mod in given_modules(*inputs): # The modules given hold no results (the sim runs its copies), so reading one says where they are
+        if isinstance(getattr(mod, 'results', None), ss.Results) and not len(mod.results):
+            mod.results.setattribute('_given_to', mod.name)
+    return out
+
+
+def outermost(init):
+    """ The outermost call to a sim's init() (Sim's, or a subclass's that calls it) first keeps a copy of the sim as it is, which `sim.new()` copies """
+    @ft.wraps(init)
+    def wrapper(sim, *args, **kwargs):
+        if sim.initialized or sim.__dict__.get('_in_init'):
+            return init(sim, *args, **kwargs)
+        if '_before_init' not in sim.__dict__: # Not again after an init() that failed
+            try:
+                sim._before_init = sc.dcp(sim)
+            except Exception as E: # Something in the sim cannot be copied: it still runs, but new() says why it cannot copy it
+                sim._before_init = f'sim.new() copies the sim as it was before it was initialized, but this {type(sim).__name__} could not be copied ({type(E).__name__}: {E}); make it again instead'
+        sim._in_init = True
+        try:
+            return init(sim, *args, **kwargs)
+        finally:
+            sim.__dict__.pop('_in_init', None)
+    return wrapper
+
+
 def num_str(x):
     """ A time as text: a number (or a duration, by its value) without a needless decimal point (100, not 100.0), or a date """
     x = x.value if isinstance(x, ss.TimePar) else x
@@ -60,7 +92,7 @@ def time_str(x, unit_name, plural=False):
     """ A time point as text, for what a run prints: a date as a date (without a time of day, e.g. 2020-01-08), a duration with its own unit (e.g. year 2000.02, as on a timeline in calendar years), or a number in the sim's unit (e.g. day 27) """
     if isinstance(x, (ss.date, pd.Timestamp)):
         return str(ss.date(x)).partition(' ')[0]
-    if isinstance(x, ss.dur) and not isinstance(x, ss.datedur):
+    if isinstance(x, ss.dur):
         unit_name = type(x).base.removesuffix('s')
     return f'{unit_name}{"s"*plural} {num_str(x)}'
 
@@ -78,7 +110,7 @@ class Sim(ss.Base):
         model (Module/list/dict): the model: a module or a list of modules, which are sorted by type as for `modules`; transitions, alone or in a list (or in `diseases=`), are one disease, named from its states (e.g. `sim.sir`).
             Alternatively, the sim parameters as an `ss.SimPars` object or a nested dictionary, which can include all other arguments
         pars (dict): the values of model parameters by name, e.g. `pars=dict(beta=0.1)` or `pars=fit.pars` (see `ss.par`), and of sim
-            settings by their own names (e.g. `stop`) where no parameter of the model has the name; a name that is neither raises `ss.errors.UnknownParameter`
+            settings by their own names (e.g. `stop`) where no parameter of the model has the name; a name that is neither raises a `KeyError`
         label (str): the human-readable name of the simulation
         people (People): if provided, use this `ss.People` object
         demographics (str/Demographics/list/bool): births, deaths, and migration of everyone: declared (`ss.birth()`, `ss.death()`, for every solver), or modules (e.g. `ss.Births()`, `ss.Pregnancy()`), or a list; True for births and deaths at default rates
@@ -113,38 +145,11 @@ class Sim(ss.Base):
         ```
     """
     def __init_subclass__(cls, **kwargs):
-        """ A subclass that adds modules in its own `__init__()` (as FPsim's does): the modules are noted after it, so they are not taken as added after the sim was made (see `modules_after()`) """
+        """ A subclass whose init() builds modules of its own before Sim.init() (as STIsim's does): the sim is copied before it runs (see `outermost()`) """
         super().__init_subclass__(**kwargs)
-        init = cls.__dict__.get('__init__')
-        if init is not None:
-            def __init__(self, *args, **kw):
-                init(self, *args, **kw)
-                if self.__dict__.get('_made_pars') is not None: # After each level, so the outermost is last
-                    self._made_pars = self._module_pars()
-                return
-            cls.__init__ = ft.wraps(init)(__init__)
-        sim_init = cls.__dict__.get('init')
-        if sim_init is not None: # A subclass whose init() builds modules of its own before Sim.init() (as STIsim's does): those made by init() are not added after the sim was made either
-            def wrapped_init(self, *args, **kw):
-                if self.__dict__.get('_in_init'):
-                    return sim_init(self, *args, **kw)
-                self.modules_after() # Noted before the subclass's init() runs
-                self._in_init = True
-                try:
-                    return sim_init(self, *args, **kw)
-                finally:
-                    self._in_init = False
-            cls.init = ft.wraps(sim_init)(wrapped_init)
+        if 'init' in cls.__dict__:
+            cls.init = outermost(cls.__dict__['init'])
         return
-
-    def __new__(cls, *args, **kwargs):
-        obj = super().__new__(cls)
-        if cls is not Sim: # A subclass (e.g. FPsim's), which may build its modules after Sim.__init__(): the call is kept, so that sim.new() can make it again
-            try:
-                obj._call = (sc.dcp(args), sc.dcp(kwargs))
-            except Exception:
-                obj._call = None
-        return obj
 
     def __init__(self, *models, label=None, people=None, demographics=None, connectors=None,
                  networks=None, diseases=None, interventions=None, analyzers=None, custom=None,
@@ -160,7 +165,7 @@ class Sim(ss.Base):
                 errormsg = f'ss.Sim() takes the model (modules or transitions, or lists of them) or a dict of parameters as positional arguments, not {type(arg).__name__}; give everything else by keyword, e.g. label="..."'
                 raise TypeError(errormsg)
         mods = dict(demographics=demographics, connectors=connectors, networks=networks, diseases=diseases, interventions=interventions, analyzers=analyzers, custom=custom, modules=modules)
-        if any(val is None and key in kwargs for key,val in mods.items()): # Modules given in a dict of parameters (as sim.new() does) are named and ordered as if given by keyword
+        if any(val is None and key in kwargs for key,val in mods.items()): # Modules given in a dict of parameters are named and ordered as if given by keyword
             mods = {key:(kwargs.pop(key) if val is None and key in kwargs else val) for key,val in mods.items()}
             demographics, connectors, networks, diseases, interventions, analyzers, custom, modules = mods.values()
         names = ss.utils.caller_names(1)
@@ -177,7 +182,7 @@ class Sim(ss.Base):
             given = [mod for arg in [modules, demographics, connectors, networks, interventions, diseases, analyzers, custom] for mod in sc.tolist(arg) if isinstance(mod, ss.Module)]
             names = {name for mod in given for name in (mod.pars.keys() if getattr(mod, 'graph', None) is not None else mod.pars.bounded())}
             settings = [key for key in pars if key in self.pars and key not in names]
-            values = {key:val for key,val in pars.items() if key not in settings} # A name that is neither raises ss.errors.UnknownParameter when the sim is initialized
+            values = {key:val for key,val in pars.items() if key not in settings} # A name that is neither raises a KeyError when the sim is initialized
             self.par_values, pars = values or None, {key:pars[key] for key in settings} or None
             if pars and pars.get('interventions') is not None: # Modules given in pars (e.g. by a subclass of ss.Sim): in order too, before they are copied
                 pars['interventions'] = self._order_steps(pars['interventions'])
@@ -185,16 +190,8 @@ class Sim(ss.Base):
                     networks=networks, interventions=interventions, diseases=diseases, 
                     analyzers=analyzers, custom=custom, modules=modules)
         args = {key:val for key,val in args.items() if val is not None} # Remove None inputs
-        for mod in given_modules(pars, args, kwargs): # Marked, so that what is added to them later, which this sim would never see, raises (see ss.Module.check_not_given())
-            mod.setattribute('_given', True)
-        input_pars = sc.mergedicts(pars, args, kwargs, _copy=True) # Copied together, so the modules given are never run themselves and can be given to other sims, and refer to each other as given
-        for mod in given_modules(input_pars): # The sim's own copies are its to change
-            mod.setattribute('_given', False)
-        for mod in given_modules(pars, args, kwargs): # The modules given hold no results (the sim runs its copies), so reading one says where they are
-            if isinstance(getattr(mod, 'results', None), ss.Results) and not len(mod.results):
-                mod.results.setattribute('_given_to', mod.name)
+        input_pars = copy_given(pars, args, kwargs)
         self.pars.update(input_pars)  # Update the parameters
-        self.inputs = sc.dcp(input_pars) # Kept so the sim can be rebuilt (see sim.new()), e.g. with other parameter values for calibration
         self.given = [key for key,val in input_pars.items() if val is not None] # Which parameters were supplied, as opposed to defaults
         self.notes = [] # Notes on what was assumed or approximated when the sim was built
         self.solver = None # Set in init()
@@ -216,60 +213,12 @@ class Sim(ss.Base):
         self.summary = None  # For storing a summary of the results
         self.filename = None # Store the filename, if saved
         self.diagnostics = None # Store diagnostics results
-        self._made = self._settings() # The settings as made, to find the ones set afterwards (see set_after())
-        self._set_after = {}
-        self._made_pars = self._module_pars() # The same for the modules' parameters (see pars_after()), and the modules themselves (see modules_after())
-        self._pars_after = {}
-        self._modules_after = {}
         return
 
     def _settings(self):
         """ The sim settings, not the modules or people (which would be found again by the search for distributions) """
         skip = ss.modules.module_types() + ['custom', 'modules', 'people']
         return {key:val for key,val in self.pars.items() if key not in skip}
-
-    def set_after(self):
-        """ The sim settings set after the sim was made and before it was initialized, or after it ran (e.g. `sim.pars.stop = 30`), which `sim.new()` keeps """
-        made = self.__dict__.get('_made')
-        if made is not None:
-            for key,val in self._settings().items():
-                before = made.get(key)
-                plain = isinstance(val, (int, float, str, bool)) and type(val) is type(before) # Compared by value, since a sim run in another process comes back with copies of them
-                if val is not before and not (plain and val == before):
-                    self._set_after[key] = sc.dcp(val)
-        return self.__dict__.get('_set_after', {})
-
-    def _module_pars(self):
-        """ The parameters of the modules, by name, as they are now """
-        if self.initialized: # The sim's own modules
-            mods = list(self.modules)
-        else:
-            vals = [self.pars.get(key) for key in ss.modules.module_types() + ['custom', 'modules']]
-            mods = [mod for val in vals for mod in (val.values() if isinstance(val, dict) else sc.tolist(val))]
-        return {mod.name:(mod, {k:(v, repr(v)) for k,v in mod.pars.items()}) for mod in mods if isinstance(mod, ss.Module)} # A value set in place (e.g. an ss.par given a new value) keeps its identity, so its repr is kept too
-
-    def pars_after(self):
-        """ The parameters of modules set after the sim was made and before it was initialized, or after it ran (e.g. `sim.pars.diseases.pars.init_prev = 0.5`), which `sim.new()` keeps """
-        made = self.__dict__.get('_made_pars')
-        if made is not None:
-            for key,(mod,before) in made.items():
-                given = mod.pars.with_bounded() if isinstance(mod.pars, ss.Pars) else mod.pars # A value given as ss.par keeps its bounds, so that it can still be fitted
-                changed = {k:given[k] for k,v in mod.pars.items() if k not in before or v is not before[k][0] or repr(v) != before[k][1]}
-                if changed:
-                    self._pars_after[key] = changed
-        return sc.dcp(self.__dict__.get('_pars_after', {})) # Copied together, so that an ss.par shared by several modules (e.g. a beta for every genotype) stays one
-
-    def modules_after(self):
-        """ The modules added after the sim was made and before it was initialized (e.g. `sim.pars.analyzers += my_analyzer`), by kind, which `sim.new()` keeps (copies) """
-        made = self.__dict__.get('_made_pars')
-        if made is not None and not self.initialized and not self.__dict__.get('_in_init'):
-            ids = {id(mod) for mod,_ in made.values()}
-            for key in ss.modules.module_types() + ['custom', 'modules']:
-                val = self.pars.get(key)
-                added = [mod for mod in (val.values() if isinstance(val, dict) else sc.tolist(val)) if isinstance(mod, ss.Module) and id(mod) not in ids]
-                if added:
-                    self._modules_after[key] = sc.dcp(added) # Copied before this sim initializes them
-        return sc.dcp(self.__dict__.get('_modules_after', {}))
 
     @staticmethod
     def _name_modules(names, *args):
@@ -411,34 +360,30 @@ class Sim(ss.Base):
             ):
             yield module
 
-    def init(self, force=False, timer=False, **kwargs):
+    @outermost
+    def init(self, force=False, **kwargs):
         """
         Perform all initializations for the sim
 
         Args:
             force (bool): whether to overwrite sim attributes even if they already exist
-            timer (bool): if True, count the time required for initialization (otherwise just count run time)
             kwargs (dict): passed to ss.People()
         """
         if self.initialized and not force: # E.g. after sim.describe(), which initializes it
             return self
 
-        # Handle the timer
         self.timer = sc.timer() # Store a timer for keeping track of how long the run takes
-        if timer:
-            self.timer.start()
         self._held = [] if self.pars.verbose else None # Notes are said after the line that starts the run
 
         # Validation and initialization -- this is "pre"
-        made = self.__dict__.get('_made') or {}
-        for key,val in self.set_after().items(): # Before the settings are converted
-            if val is not None and key not in self.given and not same_value(val, made.get(key)): # A setting set before init() was given too, e.g. sim.pars.use_aging = True (but not one made a float, e.g. n_agents)
+        defaults = ss.SimPars()
+        for key,val in self._settings().items():
+            if val is not None and key not in self.given and not same_value(val, defaults.get(key)): # A setting set before init() was given too, e.g. sim.pars.use_aging = True (but not one made a float, e.g. n_agents)
                 self.given.append(key)
-        self.pars_after()
-        self.modules_after()
-        self._made = self._made_pars = None # And only then
         np.random.seed(self.pars.rand_seed) # Reset the seed before the population is created -- shouldn't matter if only using Dist objects
         self.pars.lock(False) # Allow parameters to be added during initialization
+        self.pars.freeze(False) # And set (frozen again once it is initialized)
+        self.__dict__.pop('_valued', None) # Arithmetic on a parameter builds the model until it is built (see below)
         self.pars.validate() # Validate parameters
         ss.solvers.choose_solver(self) # Build the declared model, and choose the unit and the solver
         self._init_time() # Initialize time
@@ -449,6 +394,7 @@ class Sim(ss.Base):
         self.init_module_attrs(force=force) # Load specified modules from parameters, initialize them, and move them to the Sim object
         self.init_data(check=False) # Load the data before the modules, which read it (e.g. data by group keeps their results by group at every step)
         self._init_modules_pre()
+        self.groups.check_used() # A stratification that nothing uses
         ss.interventions.check_undriven(self)
         ss.connectors.check_applied(self) # Nothing accepted, then ignored
 
@@ -458,6 +404,7 @@ class Sim(ss.Base):
         self._init_dists() # Initialize distributions
         self._init_people_vals() # Initialize the values in all the states and networks
         ss.solvers.init_group_values(self) # The people's levels of each dimension, or each group's age and sex
+        self._valued = True # From here, arithmetic on a parameter is on its value (see ss.expressions.has_values())
         self._init_modules_post() # Initialize the module values
         ss.solvers.settle_start(self) # The declared modules' people, once every module has its own
         self.init_results() # Initialize the results
@@ -470,13 +417,13 @@ class Sim(ss.Base):
 
         # It's initialized
         self.initialized = True
+        self.__dict__.pop('_valued', None)
+        self.pars.freeze() # Its settings are this run's: a change is made with sim.new()
         held, self._held = self._held, None
         if self.verbose and self.__dict__.pop('_quiet', False): # Initialized by sim.describe(): said when it is run
             self._unsaid = held
         elif self.verbose:
             print('\n'.join(self.start_lines(held)))
-        if timer:
-            self.elapsed = self.timer.toc(label='init', output=True, verbose=self.verbose)
         if self.diagnostics and self.diagnostics.states is not None: # Need not None since dict is empty at this point
             self.diagnostics.store_states(key='init')
         return self
@@ -538,61 +485,52 @@ class Sim(ss.Base):
 
     def new(self, pars=None, inplace=False, **kwargs):
         """
-        A new, uninitialized sim built from the same inputs as this one, optionally with other values
+        A new, uninitialized sim: a copy of this one as it was when it was initialized, optionally with other values
+
+        A sim that has not been initialized is copied as it is, with any changes made to it since it
+        was made. Once a sim is initialized, its settings are those of its run: setting one (e.g. `sim.pars.stop = 30`
+        after `sim.run()`) raises, so give it here instead (`sim.new(stop=30)`). Other changes made to it then (e.g. to a
+        module's parameters) belong to that run only, and are not kept.
 
         A sim that has run is run again this way, so it is seldom needed: `sim.run()` runs a
         finished sim again from the start, and `sim.run(solver='abm')` or `sim.run(n_runs=10)`
         build what they need themselves.
 
         Args:
-            pars (dict): values of model parameters by name, e.g. `dict(beta=0.1)`
+            pars (dict): values of model parameters by name, e.g. `dict(beta=0.1)`, and of sim settings given as `ss.par` (e.g. `ss.Sim(n_agents=ss.par(5000, bounds=[1000, 20000]))`, so they can be fitted)
             inplace (bool): if True, this sim becomes the new one, rather than a new one being returned
-            kwargs (dict): sim arguments to change, e.g. `rand_seed=2` or `solver='abm'`; `None` goes back to the default, e.g. `n_agents=None` for a compartmental run of an agent-based sim; also `data=`. A new `solver=` puts `substeps=` back to that solver's default unless it is given too, since substeps mean a different thing to each (e.g. an importer's `substeps=1`, whole steps for the chain binomial, would be one Runge-Kutta step of the whole timestep for the ODE)
+            kwargs (dict): sim arguments to change, e.g. `rand_seed=2`, `solver='abm'`, or `interventions=...`; `None` goes back to the default, e.g. `n_agents=None` for a compartmental run of an agent-based sim; also `data=`. A new `solver=` puts `substeps=` back to that solver's default unless it is given too, since substeps mean a different thing to each (e.g. an importer's `substeps=1`, whole steps for the chain binomial, would be one Runge-Kutta step of the whole timestep for the ODE). A subclass's own arguments (e.g. FPsim's `location=`) are not taken again: make the subclass again for those.
         """
-        if not hasattr(self, 'inputs'):
-            errormsg = 'sim.new() needs the inputs the sim was built from, which this sim (e.g. one saved by an earlier version) does not have'
+        base = self.__dict__.get('_before_init', None if self.initialized else self)
+        if not isinstance(base, Sim):
+            errormsg = base or 'sim.new() copies the sim as it was before it was initialized, and this one has no such copy (e.g. it was saved by an earlier version); make it again instead'
             raise ValueError(errormsg)
-        if kwargs.get('solver') is not None and kwargs['solver'] != self.pars.solver and 'substeps' not in kwargs:
+        if kwargs.get('solver') is not None and kwargs['solver'] != base.pars.solver and 'substeps' not in kwargs:
             kwargs['substeps'] = None
-        data = sc.dcp(kwargs.pop('data', self.data)) # Data is not a sim parameter, so it is passed on separately
-        call = self.__dict__.get('_call')
-        if type(self) is Sim:
-            inputs = sc.mergedicts(sc.dcp(self.inputs), kwargs)
-            inputs = {key:val for key,val in inputs.items() if not (key in kwargs and val is None)} # As if it had not been given
-            args, kw = [inputs], dict(data=data)
-        else: # A subclass is made again by the call that made it
-            if call is None:
-                errormsg = f'sim.new() cannot make this {type(self).__name__} again, since the arguments it was made with were not kept (its arguments cannot be copied). Make it again by calling {type(self).__name__}(...)'
-                raise ValueError(errormsg)
-            args, kw = sc.dcp(call)
-            kw = sc.mergedicts(kw, kwargs)
-            kw = {key:val for key,val in kw.items() if not (key in kwargs and val is None)}
-        set_after, pars_after, modules_after = self.set_after(), self.pars_after(), self.modules_after()
-        par_values, jax, imported = sc.mergedicts(self.par_values, pars), self.jax, self.__dict__.get('imported')
-        if inplace: # This sim becomes the new one
-            sim = self
-            vars(sim).clear()
-            if call is not None:
-                sim._call = call
-            type(sim).__init__(sim, *args, **kw)
-        else:
-            sim = type(self)(*args, **kw)
-        if type(self) is not Sim:
-            sim.data = data
-        for key,val in set_after.items(): # Settings changed after the sim was made, e.g. sim.pars.stop = 30
-            if key not in kwargs:
-                sim.pars[key] = sc.dcp(val)
-        for key,mods in modules_after.items(): # Modules added after the sim was made (copies), e.g. sim.pars.analyzers += my_analyzer
-            val = sim.pars[key]
-            sim.pars[key] = (list(val.values()) if isinstance(val, dict) else sc.tolist(val)) + mods
-        for name,changed in pars_after.items(): # Parameters of modules changed after the sim was made (copies)
-            target = sim._module_pars().get(name)
-            if target is not None:
-                target[0].pars.update(changed)
-        sim.par_values = par_values
+        data, jax = kwargs.pop('data', self.data), self.jax # Not sim parameters: taken from this sim, as they may be set once it is initialized
+        kinds = ss.modules.module_types() + ['custom', 'modules']
+        if any(key in kinds for key in kwargs): # Modules given here are named and ordered as ss.Sim() does
+            self._name_modules(ss.utils.caller_names(1), *[kwargs.get(key) for key in kinds])
+            if kwargs.get('interventions') is not None:
+                kwargs['interventions'] = self._order_steps(kwargs['interventions'])
+        pars = dict(pars or {})
+        kwargs |= {key:pars.pop(key) for key in list(pars) if key in base.pars.bounded()} # A sim setting given as ss.par (e.g. n_agents=ss.par(5000, bounds=...)) is a value by name too, as when fitting it
+        kwargs = copy_given(kwargs) # And copied
+        sim = self if inplace else object.__new__(type(base))
+        state = sc.dcp(vars(base), memo={id(base):sim}) # What refers to the sim (e.g. its loop) refers to the new one
+        vars(sim).clear()
+        vars(sim).update(state)
+        sim.pars.check_key_mismatch(kwargs)
+        defaults = ss.SimPars()
+        for key,val in kwargs.items():
+            sim.pars[key] = sc.dcp(defaults.get(key)) if val is None else val
+            if val is None and key in sim.given:
+                sim.given.remove(key)
+            elif val is not None and key not in sim.given:
+                sim.given.append(key)
+        sim.data = sc.dcp(data)
         sim.jax = jax
-        if imported is not None: # The same import, with what it did not translate
-            sim.imported = imported
+        sim.par_values = sc.mergedicts(sim.par_values, pars or None)
         return sim
 
     def fit(self, pars=None, data=None, weights=None, likelihood=None, gof=None, penalty=None, method=None, n_runs=None, reseed=None, rand_seed=None, verbose=None, **kwargs):
@@ -621,7 +559,7 @@ class Sim(ss.Base):
             likelihood (dict): the likelihood of a data series, by its name (e.g. `dict(prevalence=ss.normal(scale=0.02))`), for series whose outcome does not declare one. If every series has a likelihood, the fit maximizes their sum (plus the log of the priors of the parameters that have one, for the methods that find a best fit: the most probable values)
             gof (str/func): the goodness of fit: 'nae' (normalized absolute error, the default), 'rmse', or a function of the sim; any other name is an error
             penalty (func): a function of the parameter values (a dict by name, an array whole) returning a number added to what a best fit minimizes, e.g. a smoothness penalty, `lambda pars: 10*np.sum(np.diff(pars['knots'], 2)**2)`
-            method (str/list): by default, a best fit (a point estimate), by the method that suits the sim, which is printed with the reason: 'l-bfgs-b' for a deterministic sim with gradients (from JAX; see `ss.gradients`), 'nelder-mead' for one without them, or with one or two fitted parameters (where it is faster than gradients), and 'optuna' for a stochastic sim, including an agent-based one. A posterior is asked for by name: 'nuts' (the No-U-Turn sampler, for a deterministic sim with gradients whose data series all have a likelihood, with each chain started from one of the best points of a scan over the bounds that are apart), 'pmcmc' (particle MCMC, for a stochastic compartmental sim whose data series all have a likelihood: a random-walk Metropolis sampler on the likelihood estimated by a particle filter; see `ss.fit.ParticleFilter`), or 'abc-smc' (approximate Bayesian computation by sequential Monte Carlo, for any sim, with no likelihood needed); the priors are the parameters' `prior=`, or uniform over their bounds. Also: 'if2' (iterated filtering, for the sims that 'pmcmc' fits: the maximum-likelihood values, from passes of a particle filter in which each particle's values are perturbed by a shrinking random walk; see `ss.fit.Swarm`), 'asd' (adaptive stochastic descent, `sc.asd()`), any other `scipy.optimize.minimize` method, or a list of methods, each started from the best fit of the one before (a stage that does not converge stops the list; see `ss.fit.fit_stages()`)
+            method (str/list): by default, a best fit (a point estimate), by the method that suits the sim, which is printed with the reason: 'l-bfgs-b' for a deterministic sim with gradients (from JAX; see `ss.gradients`), 'nelder-mead' for one without them, or with one or two fitted parameters (where it is faster than gradients), and 'optuna' for a stochastic sim, including an agent-based one. A posterior is asked for by name: 'nuts' (the No-U-Turn sampler, for a deterministic sim with gradients whose data series all have a likelihood, with each chain started from one of the best points of a scan over the bounds that are apart), 'pmcmc' (particle MCMC, for a stochastic compartmental sim whose data series all have a likelihood: a random-walk Metropolis sampler on the likelihood estimated by a particle filter; see `ss.fit.ParticleFilter`), or 'abc-smc' (approximate Bayesian computation by sequential Monte Carlo, for any sim, with no likelihood needed); the priors are the parameters' `prior=`, or uniform over their bounds. Also: 'if2' (iterated filtering, for the sims that 'pmcmc' fits: the maximum-likelihood values, from passes of a particle filter in which each particle's values are perturbed by a shrinking random walk; see `ss.fit.Swarm`), any other `scipy.optimize.minimize` method, or a list of methods, each started from the best fit of the one before (a stage that does not converge stops the list; see `ss.fit.fit_stages()`)
             scan (int): for the SciPy methods, NUTS, and particle MCMC, the number of points spread over the bounds to try first (default: 10 per parameter, at most 100); the search starts from each of the best `restarts=3` of them that are apart (for SciPy; 1 for a single parameter of a deterministic sim), each NUTS chain from one of the best that are apart, and particle MCMC from the best
             n_runs (int): runs per evaluation, for a stochastic sim (default 4 for a stochastic compartmental sim, and 1 for agents and for a deterministic one); every point is scored by the mean over the same seeds (common random numbers), except under Optuna, where each point takes fresh seeds so that its search averages over chance (see `reseed=`); `fit.mismatch` is the score at the best fit over the first seeds
             reseed (bool): whether each point takes fresh seeds (default: True for Optuna, False otherwise); `reseed=False` with Optuna scores every point with the same seeds, e.g. for a rare outcome, where with fresh seeds the search favors values whose runs were lucky
@@ -706,12 +644,11 @@ class Sim(ss.Base):
         if self.initialized:
             errormsg = 'Cannot stratify a sim that has already been initialized; stratify it first'
             raise RuntimeError(errormsg)
+        ss.dimensions.check_kind(kwargs.get('kind'))
         if repr(kwargs) in [repr(call) for call in sc.tolist(self.pars.stratify)]: # The same line run twice
             ss.note(f'the sim is already stratified by {sc.strjoin(kwargs)} in the same way, so this stratify() does nothing', sim=self)
             return self
         self.pars.stratify = sc.mergelists(self.pars.stratify, kwargs)
-        if hasattr(self, 'inputs'): # So that sim.new() is stratified too
-            self.inputs['stratify'] = sc.dcp(self.pars.stratify)
         return self
 
     @property
@@ -764,62 +701,6 @@ class Sim(ss.Base):
             verbose (bool): also show what each rate and dwell time is per step: the probability of leaving in a step, as the solvers that take whole steps use it, and the stages of a dwell time
         """
         return ss.presentation.describe_sim(self, output=output, verbose=verbose)
-
-    def hash(self):
-        """
-        The model's fingerprint: short hashes of its structure, its parameter values, the run settings, the scenario, and the data, plus the seed
-
-        Two sims with the same `model` hash have the same states, transitions, and
-        modifiers (including the source of any function in them); the same `pars` hash,
-        the same values. `config` covers the run settings and the numerical options
-        (e.g. `ss.options.crn`), `scenario` the interventions, and `data` the data
-        attached for fitting. This tells apart the many runs that come from one script
-        (a sweep, a calibration), and tests whether two models written differently are
-        the same model. Each is SHA-256 of the canonical model spec (`sim.to_spec()`), so it is
-        the same in every process and on every machine. A sim that is not initialized
-        is hashed without initializing it. Running and fitting a sim do not need it.
-
-        A function is known by its source text and the plain values it uses (see
-        `ss.presentation.func_json()`), or by where it can be imported from if its source
-        is not available. User code can give its own identity, which is used in place
-        of the source: a `version` attribute on a function (`fn.version = '2'`) or on
-        the class of a module written as code. A module written as code is seen through
-        its class and its parameters, not its code (see `ss.Module.to_spec()`). A function
-        with none of these (e.g. a `functools.partial`) cannot be told apart from another,
-        so the hash raises an error rather than treat two such sims as the same model.
-        """
-        return ss.spec.sim_hash(self)
-
-    def to_spec(self, filename=None, **kwargs):
-        """
-        The model spec: the model (modules, networks, stratifications, interventions, and run settings) as plain, canonical data
-
-        The spec is the normalized form of the model that `sim.hash()` fingerprints and
-        `ss.diff()` compares, and that `sim.to_code()` writes as code for the declared parts.
-        It holds no results and no state of a run, and is not read back into a sim. For
-        the results as JSON, see `sim.to_json()`; to save a sim with its state and results
-        (including partway through a run, to continue it), see `sim.save()`.
-
-        A sim that is not initialized is described without initializing it, as for `sim.hash()`.
-
-        Args:
-            filename (str): if provided, save to this file
-            kwargs (dict): passed to `sc.savejson()`
-        """
-        return ss.spec.sim_spec(self, filename=filename, **kwargs)
-
-    def to_code(self, filename=None):
-        """
-        The sim as a Python file that builds it again, from its model spec (see `ss.to_code()`)
-
-        Only the declared parts are written; what is not (e.g. a module written as code)
-        is listed in the file and in an `ss.errors.LossyExport` warning. A sim imported from another framework (`ss.interop.load(..., format=...)`) also says
-        where it came from, how each rate was read, and what was not translated.
-
-        Args:
-            filename (str): if provided, write the code to this file
-        """
-        return ss.spec.sim_code(self, filename=filename)
 
     def add_module(self, module, key=None):
         """
@@ -976,7 +857,7 @@ class Sim(ss.Base):
         self.t.init(self)
         if self.t.npts > 3001 and 'dt' not in self.given: # The step was not asked for
             why = f"the model's unit, from {self.unit_source}" if self.unit_source else f"unit='{self.pars.unit}'" if self.pars.unit is not None else "the model's unit" # The unit given (source None) is said as given
-            ss.warn(f'the sim has {self.t.npts:n} steps of one {self.unit} ({why}); give dt= for a longer step, e.g. dt=ss.weeks(1)', ss.errors.UnitInferred)
+            ss.warn(f'the sim has {self.t.npts:n} steps of one {self.unit} ({why}); give dt= for a longer step, e.g. dt=ss.weeks(1)')
         self.results.timevec = self.timevec # Store the timevec in the results for plotting
         return
 
@@ -1013,7 +894,7 @@ class Sim(ss.Base):
             self.groups.kept = {strat.name for strat in self.groups.strats if strat.kind != 'age' and strat.female is None and strat.attr in people.states} # People who come with a property keep it: it is binned into the levels, not drawn from the split
             for strat in self.groups.strats:
                 if strat.name in self.groups.kept and strat.split_given:
-                    raise ss.errors.BadSplit(f'"{strat.name}" is a property the people already have, so their own values are kept and binned into its levels; split= would overwrite them. Leave out split=, or set people.{strat.attr} instead.')
+                    raise ValueError(f'"{strat.name}" is a property the people already have, so their own values are kept and binned into its levels; split= would overwrite them. Leave out split=, or set people.{strat.attr} instead.')
                 if strat.name in self.groups.kept:
                     strat.guessed.pop('split', None) # Not "everyone at the first level" (TL3): the people's own values are used
                 if strat.attr not in people.states:
@@ -1134,7 +1015,7 @@ class Sim(ss.Base):
             known = [f'{mod.name}.{key}' for mod in self.modules for key,res in mod.results.items() if isinstance(res, ss.Result)]
             for name in sc.tolist(self.pars.results):
                 if name not in known and not any(key.split('.', 1)[1] == name for key in known):
-                    errormsg = f'results= names "{name}", which is not a result of this sim; the closest are {ss.transitions.closest(name, known)}'
+                    errormsg = f'results= names "{name}", which is not a result of this sim; the closest are {ss.expressions.closest(name, known)}'
                     raise sc.KeyNotFoundError(errormsg)
         return
 
@@ -1310,7 +1191,7 @@ class Sim(ss.Base):
         self.loop.run(t.tvec[min(t.ti, t.npts - 2)], verbose) # Up to the next step, which starts at time point ti
         return self
 
-    def run(self, until=None, verbose=None, shrink=False, check_method_calls=True, profile=False, solver=None, n_runs=None):
+    def run(self, until=None, verbose=None, shrink=False, profile=False, solver=None, n_runs=None):
         """
         Run the model -- the main method for running a simulation.
 
@@ -1318,12 +1199,11 @@ class Sim(ss.Base):
             until (date/str/float): run the steps up to and including the one that starts at this time
             verbose (int): how much to print: 0 nothing, 1 the solver, notes, and progress (default), 2 everything (e.g. each step)
             shrink (bool): whether to explicitly shrink the sim after running
-            check_method_calls (bool): whether to check that all required methods were called
             profile (bool): if True, record per-entry CPU timing in the loop (see `sim.loop.to_df()`/`plot_cpu()`)
             solver (str): the solver to use, if different from the sim's (a sim already built for another is built again)
             n_runs (int): if provided, run the sim this many times with different seeds, and return an `ss.MultiSim`; a shortcut for `ss.parallel(sim, n_runs=n_runs)`
 
-        A sim that has finished is run again from the start, with any values changed since.
+        A sim that has finished is run again from the start, as it was before it was initialized (see `sim.new()`).
         """
         imp = getattr(self, 'imported', None)
         unwarned = imp is not None and imp.get('incomplete') and not imp.get('warned') # Once per import: the runs and copies share it
@@ -1336,9 +1216,9 @@ class Sim(ss.Base):
             return ss.parallel(self.new(solver=solver) if new_solver else self, n_runs=n_runs)
         if new_solver and self.initialized: # Built for another solver, so built again
             self.new(solver=solver, inplace=True)
-        elif solver is not None:
+        elif solver is not None and not self.initialized:
             self.pars.solver = solver
-        if self.complete and until is None: # Run again from the start, with any values changed since
+        if self.complete and until is None: # Run again from the start
             self.new(inplace=True)
 
         # Initialization steps
@@ -1381,9 +1261,8 @@ class Sim(ss.Base):
             self.elapsed = self.timer.toc(output=True)
             if self.complete:
                 self.finalize()
-                if check_method_calls and not kernels:
+                if not kernels:
                     self.check_method_calls()
-                self._made, self._made_pars = self._settings(), self._module_pars() # So that values set after the run are kept when it is run again (see new())
                 if shrink:
                     self.shrink(full=False)
                 if self.progress is not None:
@@ -1488,17 +1367,22 @@ class Sim(ss.Base):
         if not self.initialized:
             self.init()
         self.loop.index = 0
-        rebuild = lambda: self.new(pars=pars, inplace=True, **({} if rand_seed is None else dict(rand_seed=rand_seed)))
-        if not self.kernel_only() or any(isinstance(val, ss.Dist) for val in (pars or {}).values()): # Not run in one call to the kernels, or a distribution the compartments were not laid out for
+        rebuild = lambda: self.new(pars=sc.mergedicts(self.par_values, pars), inplace=True, rand_seed=sc.ifelse(rand_seed, self.pars.rand_seed)) # With the values of earlier restarts
+        if not self.kernel_only() or any(isinstance(val, ss.Dist) or key in self.pars.bounded() for key,val in (pars or {}).items()): # Not run in one call to the kernels, a distribution the compartments were not laid out for, or a sim setting (e.g. n_agents)
             return rebuild()
+        base = self.__dict__.get('_before_init') # The copy that sim.new() and a rerun start from, which takes the same values
         if rand_seed is not None:
-            self.pars.rand_seed = rand_seed
+            dict.__setitem__(self.pars, 'rand_seed', rand_seed) # The seed of this run, which is set while the sim is initialized (see ss.SimPars.freeze())
+            if isinstance(base, Sim):
+                base.pars.rand_seed = rand_seed
         if pars:
             moving = [p for mod in self.declared for strat in mod.graph.strats if strat.mobility is not None for p in strat.mobility.fitted().values()]
             before = [float(p) for p in moving]
             self.par_values = sc.mergedicts(self.par_values, pars)
+            if isinstance(base, Sim):
+                base.par_values = sc.mergedicts(base.par_values, pars)
             ss.solvers.set_par_values(self)
-            varies = lambda raw: isinstance(raw, ss.transitions.TimeValue) or (isinstance(raw, ss.by) and raw.varies)
+            varies = lambda raw: isinstance(raw, ss.parameters.TimeValue) or (isinstance(raw, ss.by) and raw.varies)
             for mod in self.declared: # The kernels' program knows which values vary in time from when it was built
                 built = getattr(mod.engine, 'time_pars', None)
                 if built is not None and any(varies(p.raw) != any(p is q for q in built) for p in mod.graph.pars.values()):
@@ -1574,14 +1458,14 @@ class Sim(ss.Base):
 
     def summarize(self, how=None):
         """
-        Provide a quick summary of the sim: each result over the whole run, by its kind
+        Provide a quick summary of the sim: each result over the whole run, by its `summarize_by`
 
         By default, a flow (e.g. new infections) is totaled, a stock (e.g. the number
         infected) takes its final value, and a ratio (e.g. prevalence) is averaged; see
         `ss.Result.summarize()`.
 
         Args:
-            how (str/dict): 'mean', 'median', 'last', 'sum', or a function, to summarize every result that way; or a dict of these by result key (e.g. `dict(sir_infected='mean')`), with the rest by kind
+            how (str/dict): 'mean', 'median', 'last', 'sum', or a function, to summarize every result that way; or a dict of these by result key (e.g. `dict(sir_infected='mean')`), with the rest by their `summarize_by`
         """
         funcs = dict(mean=np.mean, median=np.median, sum=np.sum, last=lambda res: res[-1])
         if not isinstance(how, dict):
@@ -1590,10 +1474,10 @@ class Sim(ss.Base):
         summary = sc.objdict()
         flat = self.results.flatten(sep='_', only_results=False, columns=True) # Summarize each column of 2D results separately
         for key, res in flat.items():
-            if 'timevec' in key: # Skip module-specific time vectors
+            func = how.get(key, how.get(''))
+            if 'timevec' in key or (func is None and getattr(res, 'summarize_by', '') is None): # Skip module-specific time vectors, and results not summarized over time
                 continue
             try:
-                func = how.get(key, how.get(''))
                 if func is None:
                     entry = res.summarize() if isinstance(res, ss.Result) else np.mean(res)
                 else:
@@ -1687,50 +1571,27 @@ class Sim(ss.Base):
             raise RuntimeError(errormsg)
         return
 
-    def check_method_calls(self, die=None, warn=None, verbose=False):
+    def check_method_calls(self):
         """
-        Check if any required methods were not called.
+        Check if any required methods were not called, and warn if so.
 
-        Typically called automatically by `sim.run()`; default behavior is to warn
-        (see `options.check_method_calls`).
-
-        Args:
-            die (bool): whether to raise an exception if missing methods were found (default False)
-            warn (bool): whether to raise a warning if missing methods were found (default False)
-            verbose (bool): whether to print the number of times each method was called (default False)
+        Typically called automatically by `sim.run()`.
 
         Returns:
             A list of missing method calls by module
         """
-        # Handle arguments, or fall back to options
-        valid = ['die', 'warn', False]
-        if die is not None or warn is not None:
-            check = 'die' if die else 'warn' if warn else False
-        else:
-            check = ss.options.check_method_calls
-        if check not in valid:
-            errormsg = f'Could not understand {check=}, must be one of {valid}'
-            raise ValueError(errormsg)
-
         missing = []
-        if check:
-            if verbose:
-                sc.pp({mod.name:mod._call_required for mod in self.modules})
-
-            for mod in self.modules:
-                modmissing = mod.check_method_calls()
-                if modmissing:
-                    missing.append([type(mod), modmissing])
-            if missing:
-                errormsg = 'The following methods are required, but were not called.\n'
-                errormsg += 'Did you mistype a method name, forget a super() call,\n'
-                errormsg += 'or did part of the sim not run (e.g. zero infections)?\n'
-                for modtype,modmissing in missing:
-                    errormsg += f'{modtype}: {sc.strjoin(modmissing)}\n'
-                if check == 'die':
-                    raise RuntimeError(errormsg)
-                elif check == 'warn':
-                    ss.warn(errormsg)
+        for mod in self.modules:
+            modmissing = mod.check_method_calls()
+            if modmissing:
+                missing.append([type(mod), modmissing])
+        if missing:
+            errormsg = 'The following methods are required, but were not called.\n'
+            errormsg += 'Did you mistype a method name, forget a super() call,\n'
+            errormsg += 'or did part of the sim not run (e.g. zero infections)?\n'
+            for modtype,modmissing in missing:
+                errormsg += f'{modtype}: {sc.strjoin(modmissing)}\n'
+            ss.warn(errormsg)
         return missing
 
     def to_df(self, **kwargs):
@@ -1769,7 +1630,7 @@ class Sim(ss.Base):
             if res is None:
                 errormsg = f'The sim has no result "{name}" (or more than one); results are named as in sim.results, e.g. "cases", or "sir.cases"'
                 raise KeyError(errormsg)
-            if noise is not None and res.kind == 'ratio':
+            if noise is not None and res.summarize_by == 'mean':
                 errormsg = f'"{name}" is a ratio, which has no Poisson noise; give noise=None for its values'
                 raise ValueError(errormsg)
             series = res.to_series(resample=resample)
@@ -1831,9 +1692,8 @@ class Sim(ss.Base):
 
         This is the checkpoint of a sim: saved before it has finished, it keeps its full
         state (it is not shrunk), so the loaded sim can continue the run. A pickle needs the
-        same code (Starsim and any modules written as code) to be read. For the model
-        as plain data, see `sim.to_spec()`; for the results as JSON, `sim.to_json()`; for the
-        model as Python, `sim.to_code()`.
+        same code (Starsim and any modules written as code) to be read. For the results
+        as JSON, see `sim.to_json()`.
 
         Args:
             filename (str or None): the name or path of the file to save to; if None, uses stored
@@ -1867,8 +1727,8 @@ class Sim(ss.Base):
         """
         Export the results and the sim's parameters as JSON
 
-        This is a record of a run's output, for reading elsewhere; it is not the model
-        (see `sim.to_spec()`), and cannot be loaded back into a sim (see `sim.save()`).
+        This is a record of a run's output, for reading elsewhere; it cannot be loaded
+        back into a sim (see `sim.save()`).
 
         Args:
             filename (str): if None, return string; else, write to file
@@ -1919,30 +1779,7 @@ class Sim(ss.Base):
             sc.savejson(filename=filename, obj=d, indent=indent)
         return d
 
-    def to_yaml(self, filename=None, sort_keys=False, **kwargs):
-        """
-        Export results and parameters as YAML.
-
-        Args:
-            filename (str): the name of the file to write to (default `{sim.label}.yaml`)
-            kwargs (dict): passed to `sim.to_json()`
-
-        Examples:
-            ```python
-            sim = ss.Sim(diseases='sis', networks='random').run()
-            sim.to_yaml('results.yaml', keys='results')
-            ```
-        """
-        if filename is None:
-            if self.label:
-                filename = f'{self.label}.yaml'
-            else:
-                filename = 'sim.yaml'
-        json = self.to_json(filename=None, **kwargs)
-        return sc.saveyaml(filename=filename, obj=json, sort_keys=sort_keys)
-
-    def plot(self, key=None, fig=None, show_data=True, show_skipped=False, show_module=None,
-             show_label=False, n_ticks=None, annualize=False, **kwargs):
+    def plot(self, key=None, fig=None, show_data=True, show_skipped=False, annualize=False, **kwargs):
         """
         Plot all results in the Sim object
 
@@ -1952,10 +1789,7 @@ class Sim(ss.Base):
             style (str): the plotting style to use
             show_data (bool): plot the data, if available
             show_skipped (bool): show even results that are skipped by default
-            show_module (int): whether to show the module as well as the result name; if an int, show if the label is less than that length (default, 26); if -1, use a newline
-            show_label (str): if 'fig', reset the fignum; if 'title', set the figure suptitle
-            n_ticks (tuple of ints): if provided, specify how many x-axis ticks to use (default: `(2,5)`, i.e. minimum of 2 and maximum of 5)
-            annualize (bool): if True, resample results to annual values before plotting (each by its kind; see `ss.Result.resample()`)
+            annualize (bool): if True, resample results to annual values before plotting (each by its `summarize_by`; see `ss.Result.resample()`)
             fig_kw (dict): passed to `sc.getrowscols()`, then `plt.subplots()` and `plt.figure()`
             plot_kw (dict): passed to `plt.plot()`
             data_kw (dict): passed to `plt.scatter()`, for plotting the data
@@ -1978,19 +1812,11 @@ class Sim(ss.Base):
         """
         self.check_results_ready('Please run the sim before plotting')
         data = ss.results.plot_data(self) if show_data else {} # The data, by the result that each column matches; a flow with data at a longer period (e.g. weekly) is shown as its totals over the data's periods, as the fit compares them
-        if fig is None and show_label in ['fig', 'fignum'] and self.label:
-            plotlabel = self.label
-            figlist = sc.autolist()
-            while plt.fignum_exists(plotlabel):
-                figlist += plotlabel
-                plotlabel = sc.uniquename(self.label, figlist, human=True)
-            kwargs['num'] = plotlabel
-        title = self.label if show_label in ['title', 'suptitle'] else None
         if key is None and not show_skipped: # The sim's own results that never change (e.g. the number alive and the deaths of a closed population) are left out
             own = [k for k,res in self.results.items() if isinstance(res, ss.Result)]
             flat = ss.results.match_result_keys(self.results, None)
             key = [k for k,res in flat.items() if not (k in own and np.allclose(res.values, res.values[0]))] or None
-        return self.results.plot(key=key, fig=fig, data=data, label=self.label, title=title, show_skipped=show_skipped, show_module=show_module, n_ticks=n_ticks, annualize=annualize, **kwargs)
+        return self.results.plot(key=key, fig=fig, data=data, label=self.label, show_skipped=show_skipped, annualize=annualize, **kwargs)
 
 
 

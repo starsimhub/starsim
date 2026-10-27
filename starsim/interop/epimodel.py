@@ -6,7 +6,7 @@ they are read from the JSON written by `dump_epimodel.R`, which runs the script 
 EpiModel's own environment with the fitting and simulating functions replaced by ones
 that record their arguments. A model of a built-in type (`"SI"`, `"SIS"`, `"SIR"`)
 becomes a disease with its transitions; a network fitted by `netest()` becomes an
-`ssl.DegreeNet` (`import starsim.library as ssl`) with the same targets (an approximation,
+`ss.DegreeNet` with the same targets (an approximation,
 since it is not an ERGM); and
 modules written in R (`infection.FUN = infect`, ...) are listed, with their source in
 `sim.imported.modules`, to be written by hand.
@@ -18,7 +18,7 @@ import tempfile
 import numpy as np
 import sciris as sc
 import starsim as ss
-from .core import Source, build
+from .core import Source, Code, build
 
 __all__ = ['load_epimodel']
 
@@ -33,11 +33,11 @@ known = { # The parameters each built-in model reads; any others are listed
 modules = dict(netsim='infection.FUN recovery.FUN departures.FUN arrivals.FUN'.split()) # The modules a built-in network model replaces
 
 
-def dump(filename, rscript=None):
+def dump(filename):
     """ Run `dump_epimodel.R` on an R script or an RDS file, and return the JSON it writes """
-    rscript = rscript or shutil.which('Rscript')
+    rscript = shutil.which('Rscript')
     if rscript is None:
-        errormsg = f'To read "{filename}", give rscript= (an Rscript with EpiModel installed), or run dump_epimodel.R on it and load the JSON'
+        errormsg = f'To read "{filename}", put Rscript (with EpiModel installed) on the path, or run dump_epimodel.R on it and load the JSON'
         raise FileNotFoundError(errormsg)
     with tempfile.TemporaryDirectory() as tmp:
         out = os.path.join(tmp, 'model.json')
@@ -48,13 +48,13 @@ def dump(filename, rscript=None):
         return sc.loadjson(out)
 
 
-def read(source, rscript=None):
+def read(source):
     """ The model as a dict: from a dict, the JSON written by dump_epimodel.R, or an R script or RDS file (which needs R) """
     if isinstance(source, dict):
         return source
     if str(source).lower().endswith('.json'):
         return sc.loadjson(source)
-    return dump(source, rscript=rscript)
+    return dump(source)
 
 
 def mapping(x):
@@ -77,8 +77,7 @@ def value(par):
 
 
 def network(net, src, name, acts=None):
-    """ An ssl.DegreeNet with the targets of a network fitted by netest(), and its code; acts= is act.rate, the acts in each partnership per step """
-    import starsim.library as ssl # Lazily, since the library builds on the rest of Starsim
+    """ An ss.DegreeNet with the targets of a network fitted by netest(), and its code; acts= is act.rate, the acts in each partnership per step """
     n = net['n']
     targets = sc.tolist(net['target_stats'])
     stats = sc.tolist(net.get('stats') or [])
@@ -133,9 +132,9 @@ def network(net, src, name, acts=None):
             kw.match = {attr: round(val/edges, 10)}
             src.notes.append(f'{name}: nodematch("{attr}") is the share of partnerships within a level of a stratification "{attr}", split as on the network [guessed: matches the share, not an ERGM fit]')
         else:
-            src.skip(f'{name}: {t["text"]}', 'an ERGM term with no counterpart in ssl.DegreeNet (it matches the number of partners, concurrency, a maximum, and mixing within a group)')
+            src.skip(f'{name}: {t["text"]}', 'an ERGM term with no counterpart in ss.DegreeNet (it matches the number of partners, concurrency, a maximum, and mixing within a group)')
     if net['dissolution'].replace(' ', '') != '~offset(edges)':
-        src.skip(f'{name}: dissolution {net["dissolution"]}', 'partnerships that last longer within a group; ssl.DegreeNet has one duration (the first is used)')
+        src.skip(f'{name}: dissolution {net["dissolution"]}', 'partnerships that last longer within a group; ss.DegreeNet has one duration (the first is used)')
     kw.dur = float(sc.tolist(net['duration'])[0])
     if kw.dur.is_integer():
         kw.dur = int(kw.dur)
@@ -148,20 +147,20 @@ def network(net, src, name, acts=None):
     if acts is not None:
         kw.acts = acts
         codes['acts'] = f'ss.{acts!r}'
-    code = 'ssl.DegreeNet(' + ', '.join(f'{k}={v}' for k,v in codes.items()) + ')'
+    code = 'ss.DegreeNet(' + ', '.join(f'{k}={v}' for k,v in codes.items()) + ')'
     src.notes.append(f'{name}: {net["formation"]} with targets {targets} and partnerships lasting {kw.dur} steps => {code} [guessed: the same targets, not an ERGM fit]')
-    return ssl.DegreeNet(**kw, name=name), code
+    return code[:-1] + f', name={name!r})'
 
 
-def load_epimodel(source, run=0, unit='day', rscript=None, verbose=None, **kwargs):
+def load_epimodel(source, unit='day', verbose=None, **kwargs):
     """
     Read an EpiModel model into a sim
 
+    The first call of `netsim()`, `dcm()`, or `icm()` is read; the others are kept as scenarios (`sim.imported.scenarios`).
+
     Args:
-        source (str/dict): the JSON written by `dump_epimodel.R` (or its contents), or an R script or RDS file, which is dumped with `rscript`
-        run (int/str): which call of `netsim()`, `dcm()`, or `icm()` to read, by number or by scenario (`.scenario.id`); the others are kept as scenarios
+        source (str/dict): the JSON written by `dump_epimodel.R` (or its contents), or an R script or RDS file, which is dumped with the Rscript on the path
         unit (str): what one step of the model is ('day', 'week', 'month', or 'year'); EpiModel's rates are per step, so this only names them
-        rscript (str): the Rscript to dump an R script with (default: the one on the path)
         verbose (bool): whether to print how each flow was read
         kwargs (dict): passed to `ss.Sim()`
 
@@ -174,11 +173,11 @@ def load_epimodel(source, run=0, unit='day', rscript=None, verbose=None, **kwarg
         import starsim.interop
         sim = ss.interop.load('model.json', format='epimodel')
     """
-    d = read(source, rscript=rscript)
+    d = read(source)
     file = source if isinstance(source, str) else d.get('file')
     runs = d['runs']
     ids = [mapping(r['param']).get('.scenario.id', f'run{i}') for i,r in enumerate(runs)]
-    r = runs[ids.index(run) if isinstance(run, str) else run]
+    r = runs[0]
     kind, typ = r['kind'], r['type']
     param, init, control = mapping(r['param']), mapping(r['init']), mapping(r['control'])
     prob, rate = probs[unit], rates[unit]
@@ -255,21 +254,17 @@ def load_epimodel(source, run=0, unit='day', rscript=None, verbose=None, **kwarg
     # Networks
     cfg = src.config
     if kind == 'netsim':
-        nets = sc.objdict()
         codes = []
         for i,net in enumerate(r['networks']):
             name = 'net' if len(r['networks']) == 1 else f'net{i+1}'
-            nets[name], code = network(net, src, name, acts=getattr(ss, f'freqper{unit}')(act_rate) if builtin else None)
-            codes.append(f'{name}={code}')
+            codes.append(network(net, src, name, acts=getattr(ss, f'freqper{unit}')(act_rate) if builtin else None))
             if net['d_rate']:
-                src.notes.append(f'{name}: d.rate = {net["d_rate"]} needs nothing: ssl.DegreeNet allows for partnerships ended by departures')
-        if len(nets) == 1:
-            cfg.networks = nets[0]
-            src.code['networks'] = codes[0].split('=', 1)[1]
+                src.notes.append(f'{name}: d.rate = {net["d_rate"]} needs nothing: ss.DegreeNet allows for partnerships ended by departures')
+        if len(codes) == 1:
+            cfg.networks = Code(codes[0])
         else:
-            cfg.networks = list(nets.values())
-            src.code['networks'] = 'dict(' + ', '.join(codes) + ')'
-            src.notes.append(f'{len(nets)} networks: transmission over each, with the same beta [guessed]')
+            cfg.networks = Code('[' + ', '.join(codes) + ']')
+            src.notes.append(f'{len(codes)} networks: transmission over each, with the same beta [guessed]')
         cfg.n_agents = r['networks'][0]['n']
         cfg.solver = 'abm'
     elif kind == 'icm':

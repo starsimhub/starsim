@@ -4,8 +4,6 @@ Numerical utilities and other helper functions
 import os
 import re
 import sys
-import json
-import hashlib
 import warnings
 import numpy as np
 import numba as nb
@@ -48,11 +46,10 @@ class ndict(sc.objdict):
     """
     A dictionary-like class that provides additional functionalities for handling named items.
 
+    Each item is added under its `name` (or the key given), and a key can be added only once.
+
     Args:
-        nameattr (str): The attribute of the item to use as the dict key (i.e., all items should have this attribute defined)
         type (type): The expected type of items.
-        strict (bool): If True, only items with the specified attribute will be accepted.
-        overwrite (bool): whether to allow adding a key when one has already been added
 
     Examples:
         ```python
@@ -61,12 +58,9 @@ class ndict(sc.objdict):
         networks = ss.ndict({'sexual':ss.SexualNet(), 'prenatal':ss.PrenatalNet()})
         ```
     """
-    def __init__(self, *args, nameattr='name', type=None, strict=True, overwrite=False, **kwargs):
+    def __init__(self, *args, type=None, **kwargs):
         super().__init__()
-        self.setattribute('_nameattr', nameattr)  # Since otherwise treated as keys
-        self.setattribute('_type', type)
-        self.setattribute('_strict', strict)
-        self.setattribute('_overwrite', overwrite)
+        self.setattribute('_type', type)  # Since otherwise treated as keys
         self.extend(*args, **kwargs)
         return
 
@@ -74,55 +68,45 @@ class ndict(sc.objdict):
         """ Shortcut for returning values """
         return self.values()
 
-    def append(self, arg, key=None, overwrite=None):
+    def append(self, arg, key=None):
         valid = False
         if arg is None:
             return  # Nothing to do
-        elif hasattr(arg, self._nameattr):
-            key = key or getattr(arg, self._nameattr)
+        elif hasattr(arg, 'name'):
+            key = key or arg.name
             valid = True
         elif isinstance(arg, dict):
-            if self._nameattr in arg:
-                key = key or arg[self._nameattr]
+            if 'name' in arg:
+                key = key or arg['name']
                 valid = True
             else:
                 for k, v in arg.items():
                     self.append(v, key=k)
                 valid = None  # Skip final processing
-        elif not self._strict:
-            key = key or f'item{len(self) + 1}'
-            valid = True
-        else:
-            valid = False
 
         if valid is True:
-            if self._strict:
-                self._check_type(arg)
-                self._check_key(key, overwrite=overwrite)
+            self._check_type(arg)
+            self._check_key(key)
             self[key] = arg # Actually add to the ndict!
         elif valid is None:
             pass  # Nothing to do
         else:
-            if isinstance(arg, ss.Module) and not hasattr(arg, self._nameattr):
+            if isinstance(arg, ss.Module):
                 # A Module missing its name attribute almost always means super().__init__() was not called
-                errormsg = (f'Could not add module of type "{type(arg).__name__}": it is missing the "{self._nameattr}" attribute. '
+                errormsg = (f'Could not add module of type "{type(arg).__name__}": it is missing the "name" attribute. '
                             f'This usually means super().__init__() was not called in the module\'s __init__() method; '
                             f'please ensure your __init__() calls super().__init__(*args, **kwargs).')
             else:
-                errormsg = f'Could not interpret argument {arg}: does not have expected attribute "{self._nameattr}"'
+                errormsg = f'Could not interpret argument {arg}: does not have expected attribute "name"'
             raise TypeError(errormsg)
         return self
 
-    def _check_key(self, key, overwrite=None):
-        """ Validate that a key can be added; raise ValueError or warn if it already exists """
-        if overwrite is None: overwrite = self._overwrite
+    def _check_key(self, key):
+        """ Validate that a key can be added; raise ValueError if it already exists """
         if key in self:
-            if not overwrite:
-                typestr = f' "{self._type}"' if self._type else ''
-                errormsg = f'Cannot add object "{key}" since already present in ndict{typestr} with keys:\n{sc.newlinejoin(self.keys())}'
-                raise ValueError(errormsg)
-            else:
-                ss.warn(f'Overwriting existing ndict entry "{key}"')
+            typestr = f' "{self._type}"' if self._type else ''
+            errormsg = f'Cannot add object "{key}" since already present in ndict{typestr} with keys:\n{sc.newlinejoin(self.keys())}'
+            raise ValueError(errormsg)
         return
 
     def _check_type(self, arg):
@@ -192,7 +176,7 @@ class ndict(sc.objdict):
 
     def copy(self):
         """ Shallow copy """
-        new = self.__class__(nameattr=self._nameattr, type=self._type, strict=self._strict, overwrite=self._overwrite)
+        new = self.__class__(type=self._type)
         new.update(self)
         return new
 
@@ -297,7 +281,7 @@ def caller_names(depth=1):
     """
     The names of the variables in the code that called the caller (`depth` levels above it), as a dict of the name of
     each object by its id: its local variables, else its global ones, and only for an object bound to exactly one of
-    them. A declared disease (`ss.Disease(infection, recovery)`) and a sim (`ss.Sim(diseases=sir)`) look up the names of
+    them. A declared disease (`ss.Disease(infection, recovery)`) and a sim (`ss.Sim(diseases=sir)`, `sim.new(interventions=campaign)`) look up the names of
     what they are given once, here; nothing else does. Empty if the stack is not that deep (e.g. from R via reticulate)
     """
     frame = getframe(depth + 1)
@@ -318,54 +302,6 @@ def n_args(func):
     import inspect
     kinds = [inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD]
     return sum(1 for p in inspect.signature(func).parameters.values() if p.kind in kinds and p.default is inspect.Parameter.empty)
-
-
-def short_hash(obj, n=6):
-    """
-    A short hash of a JSON-compatible object, e.g. for telling model specs apart
-
-    The keys of a dict whose value is None are left out, so that a key a new feature
-    writes as None when it is not used does not change the hash of any other object.
-    The hash is SHA-256 of the canonical JSON (keys sorted), so it is the same in every
-    process and on every machine.
-    """
-    def drop(item):
-        if isinstance(item, dict):
-            return {k:drop(v) for k,v in item.items() if v is not None}
-        elif isinstance(item, (list, tuple)):
-            return [drop(v) for v in item]
-        return item
-    string = json.dumps(drop(sc.jsonify(obj)), sort_keys=True)
-    return hashlib.sha256(string.encode()).hexdigest()[:n]
-
-
-def split_numbers(obj, unit=None, skip=None):
-    """
-    Split a JSON-compatible object into its structure (with every number replaced by a placeholder) and a list of its numbers
-
-    Used to hash a model's structure separately from its parameter values.
-
-    Args:
-        obj (dict): the object to split
-        unit (str): if provided, convert typed quantities to this unit, so e.g. 7 days and 1 week give the same number
-        skip (list): keys to leave out, e.g. labels
-    """
-    numbers = []
-    def walk(item):
-        if isinstance(item, dict):
-            if unit and item.get('type') in ['dur', 'per', 'prob', 'freq'] and item.get('unit'): # A typed quantity
-                factor = ss.time.get_dur_class(item['unit'])(1).to(unit).value
-                numbers.append(float(item['value']*factor if item['type'] == 'dur' else item['value']/factor))
-                return dict(type=item['type'], value='#')
-            return {key:walk(val) for key,val in item.items() if key not in sc.tolist(skip)}
-        elif isinstance(item, (list, tuple)):
-            return [walk(val) for val in item]
-        elif sc.isnumber(item) and not isinstance(item, bool):
-            numbers.append(float(item))
-            return '#'
-        return item
-    structure = walk(obj)
-    return structure, numbers
 
 
 @nb.jit(cache=True)
@@ -576,7 +512,7 @@ def combine_rands(a, b):
     the array. To reinterpret existing bits for free, use `arr.view(np.uint64)`.
 
     Args:
-        a (array): array of random uint64 integers between 0 and np.iinfo(np.uint64).max, as from ss.distributions.rand_raw()
+        a (array): array of random uint64 integers between 0 and np.iinfo(np.uint64).max, as from ss.randint(low=0, high=np.iinfo('uint64').max, dtype=np.uint64)
         b (array): ditto, same size as a
 
     Returns:
@@ -585,7 +521,7 @@ def combine_rands(a, b):
     a_dtype = getattr(a, 'dtype', type(a).__name__)
     b_dtype = getattr(b, 'dtype', type(b).__name__)
     if a_dtype != np.uint64 or b_dtype != np.uint64:
-        errormsg = f'combine_rands() requires uint64 arrays, not a={a_dtype} and b={b_dtype}. Signed integers give output in [-0.5, 0.5] instead of [0, 1]. Use ss.distributions.rand_raw(), or arr.view(np.uint64) to reinterpret the bits without copying.'
+        errormsg = f'combine_rands() requires uint64 arrays, not a={a_dtype} and b={b_dtype}. Signed integers give output in [-0.5, 0.5] instead of [0, 1]. Use ss.randint(low=0, high=np.iinfo(np.uint64).max, dtype=np.uint64), or arr.view(np.uint64) to reinterpret the bits without copying.'
         raise TypeError(errormsg)
     c = np.bitwise_xor(a*b, a-b)
     u = c / np.iinfo(np.uint64).max
@@ -599,8 +535,7 @@ def load(filename, **kwargs):
     Alias to Sciris `sc.loadany()`, for Starsim's own objects
 
     Since Starsim uses Sciris for saving objects, they can be loaded back using
-    this function, e.g. a sim saved with `ss.save('run.sim', sim)`. A model saved as
-    code (`ss.save('model.py', sim)`) is a script: run or import it. Another
+    this function, e.g. a sim saved with `ss.save('run.sim', sim)`. Another
     framework's model is read with `ss.interop.load()`.
 
     Args:
@@ -611,12 +546,6 @@ def load(filename, **kwargs):
 
         sim = ss.load('run.sim') # A sim saved with ss.save()
     """
-    if str(filename).endswith('.json'):
-        spec = sc.loadjson(filename)
-        if isinstance(spec, dict) and str(spec.get('schema', '')).startswith('lingua-franca/'):
-            errormsg = f'{filename} is a model spec, which is the normalized form of a model for sim.hash() and ss.diff(), and is not read back into a sim. Save a model as code with ss.save("model.py", sim), or a sim with its results with ss.save("run.sim", sim)'
-            raise ValueError(errormsg)
-        return spec
     return sc.loadany(filename, **kwargs)
 
 
@@ -625,28 +554,21 @@ def save(filename, obj, **kwargs):
     Alias to Sciris `sc.save()`
 
     While some Starsim objects have their own save methods, this function can be
-    used to save any arbitrary object. It can then be loaded with ss.load(). A sim
-    saved to a `.py` file is written as code that builds it again (`sim.to_code()`).
-    With `format=`, a sim is written in another framework's format by `ss.interop.export()`.
+    used to save any arbitrary object. It can then be loaded with ss.load().
+    Another framework's format is written by `ss.interop.export()`.
 
     Args:
         filename (str/path): the name of the file to save
         obj (any): the object to save
-        format (str): another framework's format, one of `ss.interop.exporters` ('sbml', 'odin', or 'mermaid')
-        kwargs (dict): passed to `sc.save()`, to `sim.to_code()`, or to `ss.interop.export()`
+        kwargs (dict): passed to `sc.save()`
 
     **Examples**:
 
-        ss.save('model.py', sim) # The model, as code
         ss.save('run.sim', sim) # The sim, with its results
-        ss.save('model.xml', sim, format='sbml') # The model, as SBML
     """
-    if 'format' in kwargs: # Another framework's format is written by its exporter (sc.save() would pass format= on to pickling, which fails obscurely)
-        ss.interop.export(obj, kwargs.pop('format'), filename=filename, **kwargs) # An unknown format is an error that lists the formats
-        return sc.path(filename)
-    if str(filename).endswith('.py') and isinstance(obj, ss.Sim):
-        obj.to_code(filename, **kwargs)
-        return sc.path(filename)
+    if 'format' in kwargs: # Otherwise passed on to pickling, which fails obscurely
+        errormsg = f'ss.save() writes Starsim\'s own formats; for another framework\'s, use ss.interop.export(sim, "{kwargs["format"]}", filename="{filename}")'
+        raise ValueError(errormsg)
     return sc.save(filename=filename, obj=obj, **kwargs)
 
 

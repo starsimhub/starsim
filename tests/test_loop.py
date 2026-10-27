@@ -74,7 +74,6 @@ def test_loop_plotting():
     assert len(sim.loop.cpu_time), 'Profiling should record per-entry CPU times'
     sim.loop.plot()
     sim.loop.plot_cpu()
-    sim.loop.plot_step_order()
     return sim.loop
 
 
@@ -187,36 +186,6 @@ def test_loop_plan_views_and_insert():
 
 
 @sc.timer()
-def test_loop_without_sim():
-    sc.heading('Testing a loop of ordinary functions, with no sim')
-
-    # An ODE in plain NumPy, stepped by the loop, with its values recorded at every time point
-    y = np.array([0.99, 0.01, 0.0])
-    def step(t, dt):
-        S, I, R = y
-        y[:] = [S - 0.3*S*I*dt, I + (0.3*S*I - 0.1*I)*dt, R + 0.1*I*dt]
-    seen = []
-    loop = ss.Loop(steps=[step], times=np.arange(0, 101), record=lambda t: seen.append((t, y[1]))).init()
-    loop.run()
-    assert len(seen) == 101 and seen[0] == (0, 0.01) # The start is recorded before any step
-    assert np.isclose(y.sum(), 1) and y[2] > 0.9
-
-    # A step with times of its own runs only at those; at a shared time point, the steps run in the order given
-    calls = []
-    fast = lambda t, dt: calls.append(('fast', t, dt))
-    slow = lambda t, dt: calls.append(('slow', t, dt))
-    ss.Loop(steps=dict(fast=fast, slow=(slow, np.arange(0, 11, 5))), times=np.arange(0, 11)).init().run()
-    assert [c for c in calls if c[0] == 'slow'] == [('slow', 0, 5), ('slow', 5, 5)]
-    assert [c[0] for c in calls[3:6]] == ['fast', 'fast', 'slow'] # The steps ending at 5: fast (4 to 5), then slow (0 to 5)
-
-    # A timeline gives its own times and step, with their units
-    dts = []
-    ss.Loop(steps=[lambda t, dt: dts.append(dt)], times=ss.Timeline(start=ss.days(0), stop=ss.days(10), dt=ss.days(1))).init().run()
-    assert len(dts) == 10 and dts[0] == ss.days(1)
-    return loop
-
-
-@sc.timer()
 def test_coded_alone():
     sc.heading('Testing that a module written as code runs with no agents, and the loop calls only what does something')
     class Decay(ss.Module): # An ODE of its own, with nothing per person
@@ -245,7 +214,6 @@ if __name__ == '__main__':
     l3 = test_memory_cleanup()
     l4 = test_callable_cache_cleanup()
     l5 = test_loop_plan_views_and_insert()
-    l6 = test_loop_without_sim()
-    l7 = test_coded_alone()
+    l6 = test_coded_alone()
 
     T.toc()

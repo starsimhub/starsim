@@ -144,11 +144,11 @@ sim.plot()
 sim = ss.Sim(measles, total_pop=100_000, n_agents=10_000, stop=ss.days(50))
 sim.run()
 
-sim.pars.dt = ss.days(0.25)
+sim = sim.new(dt=ss.days(0.25))
 sim.run()
 ```
 
-Running a sim again runs it from the start, with whatever has been changed since (here, the step). With a step of a quarter of a day, the peak comes on day 6.75, as in the ODE (day 6), rather than on day 9. A good check of any model run as agents is to halve the step and see whether the results change.
+`sim.new()` makes a new sim from the same one, with whatever is given changed (here, the step). With a step of a quarter of a day, the peak comes on day 6.75, as in the ODE (day 6), rather than on day 9. A good check of any model run as agents is to halve the step and see whether the results change.
 
 ## People and agents
 

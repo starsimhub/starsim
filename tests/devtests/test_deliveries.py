@@ -139,7 +139,6 @@ def test_vaccinate():
         assert np.isclose(res.cost.sum(), 2*res.delivered.sum())
         assert sim.results.sir.infection.cum[-1] < 0.5*base.results.sir.infection.cum[-1]
         assert [strat.name for strat in sim.groups.strats] == ['has_vaccine'] # Holding the vaccine is a property of people
-    assert sims.ode.hash().model == base.hash().model # The scenario is not part of the model
     assert 'has_vaccine' in sims.ode.describe(output=True)
 
     # Routine delivery: each person is offered it once, and half accept
@@ -194,14 +193,14 @@ def test_vaccinate():
         ss.Sim(make_sir(), interventions=ss.vaccinate(ss.Vaccine(efficacy=0.9), capacity=100, start=10), **kw).init()
 
     # Errors
-    with pytest.raises(ss.errors.UnknownEffect):
+    with pytest.raises(KeyError, match='which is not something it can act on'):
         ss.Sim(make_sir(), interventions=ss.vaccinate(ss.Vaccine(efficacy=dict(aquisition=0.5))), **kw).init()
     with pytest.raises(TypeError):
         ss.vaccinate(ss.Diagnostic())
     S, I = ss.states('S I')
     a, b = [ss.Disease(infection=ss.Transition(S, I, rate=0.3 * I), init_prev=0.01, name=name) for name in 'ab']
     vx = ss.Vaccine(efficacy=0.9)
-    with pytest.raises(ss.errors.UnknownDisease): # A product acts on one disease, so delivered for a second it would protect against nothing
+    with pytest.raises(KeyError, match='cannot deliver it for "b" alone'): # A product acts on one disease, so delivered for a second it would protect against nothing
         ss.Sim([a, b], interventions=[ss.vaccinate(vx, at=[5], disease='a', name='d1'), ss.vaccinate(vx, at=[5], disease='b', name='d2')], **kw).init()
 
     # Coverage and capacity that vary in time
@@ -270,7 +269,7 @@ def test_treat():
     assert fades.results.sird.death.sum() > 1.2*sims.abm.results.sird.death.sum()
     check_agents(rates, waning=lambda t: np.exp(-t/5), **kw)
 
-    with pytest.raises(ss.errors.UnknownEffect):
+    with pytest.raises(KeyError, match='has transition="cure", which "sird" does not have'):
         ss.Sim(make_sird(), interventions=ss.treat(ss.Treatment(cure=0.5, transition='cure')), **kw).init()
 
     # A cure takes people out of every infected state, not only the sources of the transition named (before, those in Y stayed)
@@ -280,7 +279,7 @@ def test_treat():
         tx = ss.treat(ss.Treatment(transition='clear_a'), at=[5], name='tx')
         res = ss.Sim(sti, interventions=tx, unit='day', stop=10, solver=solver, n_agents=2000, verbose=0).run().results.sti
         assert res.A[-1] == 0 and res.Y[-1] == 0 # Was 995 left in Y
-    with pytest.raises(ss.errors.UnknownEffect): # Its recoveries go to Y and S, so it does not guess which (to= says)
+    with pytest.raises(KeyError, match='its recoveries lead to several'): # Its recoveries go to Y and S, so it does not guess which (to= says)
         S, I, C, R = ss.states('S I C R')
         ss.Sim(ss.Disease(infection=ss.Transition(S, I, rate=0.1 * I), carrier=ss.Transition(I, C, dur=5), recovery=ss.Transition(I, R, dur=10), name='sic'), interventions=ss.treat(ss.Treatment(cure=0.5)), **kw).init()
     with pytest.raises(TypeError): # A value of the sim's time, not of the time since delivery
@@ -405,19 +404,19 @@ def test_screen():
 def test_triggered():
     sc.heading('Testing steps triggered by each other\'s events, in any order')
 
-    # A union of events fires once per person, written as | or as a list; an intersection is those in both (agents only)
+    # A union of events fires once per person; an intersection is those in both (agents only)
     def union(key, who, **kwargs):
         a = ss.screen(ss.Diagnostic(sensitivity=1.0, name='dx_a'), coverage=0.5, at=[20], name='a')
         b = ss.screen(ss.Diagnostic(sensitivity=1.0, name='dx_b'), coverage=0.5, at=[20], name='b')
-        tx = ss.treat(ss.Treatment(cure=1.0), who=who(a, b), operator='all' if key == 'both' else 'any', name='tx')
+        tx = ss.treat(ss.Treatment(cure=1.0), who=who(a, b), name='tx')
         return ss.Sim(make_sir(), interventions=[tx, a, b], stop=30, **kwargs) # In any order: each step after its triggers
     out = {}
-    for key,who in dict(union=lambda a,b: a.positive | b.positive, list=lambda a,b: [a.positive, b.positive], both=lambda a,b: [a.positive, b.positive]).items():
+    for key,who in dict(union=lambda a,b: a.positive | b.positive, both=lambda a,b: a.positive & b.positive).items():
         res = union(key, who, **kw).run().results
         out[key] = res.tx.delivered[21]/res.sir.I[20]
         check_agents(lambda **kwargs: union(key, who, **kwargs), **kw)
     print(out)
-    assert np.isclose(out['union'], 0.75, atol=0.03) and out['list'] == out['union'] # Half of the infected tested by each, independently: 75% by either, once each (not 100%)
+    assert np.isclose(out['union'], 0.75, atol=0.03) # Half of the infected tested by each, independently: 75% by either, once each (not 100%)
     assert np.isclose(out['both'], 0.25, atol=0.03)
 
     # Several steps on the same event, in the step of the test, under agents and the ODE (each finds the people where the others moved them)
@@ -462,7 +461,7 @@ def test_triggered():
         ss.Sim(make_sis(), interventions=ss.treat(ss.Treatment(), who=a.positive), **kw)
     with pytest.raises(TypeError, match='use &'):
         ss.treat(ss.Treatment(), who=a.positive | (ss.ppl.age > 5))
-    with pytest.raises(TypeError, match='use &'):
+    with pytest.raises(TypeError, match='not a list'):
         ss.treat(ss.Treatment(), who=[a.positive, ss.ppl.age > 5])
     with pytest.raises(AttributeError, match='positive, negative'):
         a.postive
@@ -491,7 +490,7 @@ def test_memory():
     first = (sim.interventions.screening.count_positive.raw > 0).sum() # Ever positive
     assert np.isclose(sim.results.retest.delivered.sum(), 0.5*first, rtol=0.1) # Retested once, at the first positive
 
-    # An ss.Event of a module written as code (agents): one visit, both tests on the same attendees, and memory of a test at delivery
+    # A declared transition as an event (agents): one visit, both tests on the same attendees, and memory of a test at delivery
     S, I = ss.states('S I')
     sis = ss.Disease(infection=ss.Transition(S, I, rate=ss.peryear(0.5) * I), recovery=ss.Transition(I, S, dur=ss.years(2)), init_prev=0.1, name='sis')
     preg = ss.Pregnancy(fertility_rate=50)
@@ -703,7 +702,7 @@ def test_trace():
     def notified(memory):
         S, I, D = ss.states('S I D')
         hiv = ss.Disease(infection=ss.Transition(S, I, rate=ss.prob(0.02)*(I + D)), diagnosis=ss.Transition(I, D, rate=ss.peryear(1.0)), init_prev=0.1, name='hiv')
-        net = ssl.DegreeNet(n_contacts=0.7, dur=ss.weeks(10), acts=ss.freqperweek(2), memory=memory)
+        net = ss.DegreeNet(n_contacts=0.7, dur=ss.weeks(10), acts=ss.freqperweek(2), memory=memory)
         pn = ss.screen(ss.Diagnostic(sensitivity=1.0), who=hiv.diagnosis, trace='degreenet', name='pn')
         sim = ss.Sim(hiv, networks=net, interventions=pn, n_agents=2000, unit='week', stop=ss.years(3), rand_seed=1, verbose=0).run()
         return sim.results.pn.delivered.sum()/sim.results.hiv.diagnosis.sum()
@@ -804,7 +803,7 @@ def test_network_contacts():
     assert [net.name for net in ss.contacts('Kenya', layer=['home', 'school'])] == ['home', 'school'] # A layer for each setting
 
     # Only a network's contacts can be targeted
-    with pytest.raises(ss.errors.UnmodifiableTarget):
+    with pytest.raises(KeyError, match='school.pars.dur, was not found'):
         make('ode', ss.modify('school.pars.dur', multiply=0.5))
     return halved
 
@@ -936,7 +935,6 @@ def test_names_memory_at_age():
     sim = ss.Sim(make_sir(), demographics=Arrivals(), interventions=vx, start=2000, stop=2004, dt=0.25, n_agents=2000, verbose=0, use_aging=True)
     ages = []
     sim.init()
-    sim.pars.analyzers = []
     for i in range(sim.t.npts - 1):
         sim.run_one_step()
         uids = sim.interventions.vx.reached()
@@ -978,7 +976,7 @@ def test_coded_states():
     g0 = sim.diseases.g0
     n_cin, n_inf = g0.results.cin[-1]*0 + 0, 0
     assert res.delivered.sum() > 0 and 0 < res.abnormal.sum() < res.delivered.sum()
-    with pytest.raises(ss.errors.UnknownEffect):
+    with pytest.raises(KeyError, match='which is not a state of "g0"'):
         make(ss.screen(ss.Diagnostic(results=dict(abnormal={'g0.precin': 0.9}, normal=None)), at=[2005], disease='g0', name='scr'))
 
     # (b) A cure by state calls the disease's clear_infection()
@@ -1013,7 +1011,6 @@ def test_waning_functions():
     sim = make('ode', box)
     assert sim.solver == 'ode' and len(sim.groups.strats[sim.groups.dim_index('has_vx')].labels) == 12 # False, 10 stages of the box, decaying
     assert np.allclose(box(ss.days(np.array([0, 179, 380]))), [1, 1, np.exp(-1)])
-    assert sim.to_code().count('ss.box(dur=ss.days(180), decay=ss.days(200))') == 1
 
     # A waning function is given the time as a duration (in any sim's unit) and the people who hold it
     seen = {}

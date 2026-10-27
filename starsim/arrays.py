@@ -16,7 +16,7 @@ ss_uid     = ss.dtypes.uid
 ss_nbint   = ss.dtypes.nbint
 ss_bool    = ss.dtypes.bool
 int_nan    = ss.dtypes.int_nan
-numba_indexing = ss.options.numba_indexing
+numba_indexing = 2000 # The number of indices above which Numba (rather than NumPy) indexes arrays: it wins for both gather and compaction above ~2k; see https://github.com/starsimhub/starsim/issues/1005
 
 
 def np_indexer(arr, inds):
@@ -438,7 +438,9 @@ class Arr(BaseArr):
         return self._index(self.raw, key)
 
     def __setitem__(self, key, value):
-        if not isinstance(key, uids):
+        if isinstance(key, slice) and key == slice(None) and np.ndim(value) == 0 and not isinstance(self, BoolArr): # One value for everyone (e.g. rel_sus[:] = 1): every agent's place, since the inactive's values are never read as theirs (a state's are its members, so not for one)
+            pass
+        elif not isinstance(key, uids):
             if isinstance(key, str): # Named column for all active agents, e.g. arr['mutant'] = 0.5
                 key = (slice(None), key)
             key = self._convert_key(key)
@@ -562,12 +564,7 @@ class Arr(BaseArr):
         return self.asnew(result, cls=BoolArr, copy=False)
 
     def _math(self, op, other=None, inplace=False, reverse=False):
-        """
-        Helper function for numeric operations
-
-        The main purpose of this function is to handle in-place operations where the
-        result of the operation needs to be applied to active agents only.
-        """
+        """ Helper function for numeric operations, on the raw arrays (an array of values for the active agents only is spread to their places) """
 
         if not self.initialized and not inplace and op in ss.conditions.ops: # Before the sim exists, this builds a lazy condition instead, as a comparison does (or, with a typed value, an expression for a rate): see ss.conditions.Cond
             arr = ss.conditions.from_arr(self)
@@ -575,15 +572,19 @@ class Arr(BaseArr):
         if isinstance(other, (ss.TimePar, ss.date)):
             return NotImplemented # Not implemented here, at least for now. But allow falling back to the other classes if they have an implementation
 
-        inds = self.auids
-        a = self._index(self.raw, inds)
-
+        if inplace and self.shared is not None:
+            self.own()
+        a = self.raw # On every agent's value, as _boolmath() does: those of the inactive (the dead, and room for births) are never read as theirs
         if isinstance(other, Arr):
-            b = other._index(other.raw, inds)
+            b = other.raw
         elif isinstance(other, BaseArr):
             b = other.values
         else:
             b = other
+        if isinstance(b, np.ndarray) and b.shape[:1] != a.shape[:1]: # Values for the active agents only (e.g. arr.values*2): spread to every agent's place
+            full = np.zeros(a.shape[:1] + b.shape[1:], dtype=b.dtype)
+            full[self.auids] = b
+            b = full
 
         if reverse:
             a, b = b, a
@@ -600,22 +601,14 @@ class Arr(BaseArr):
             raise ValueError(errormsg)
 
         if inplace:
-            out = np.empty(a.shape, dtype=self.raw.dtype) # In-place operations cannot change the dtype
-            ufunc(a, b, out=out) # Calling the ufunc this way ensures in-place operations will raise the same error for Arr as for np.array
-            if self.shared is not None:
-                self.own()
-            self.raw[inds] = out # Write the values back to the existing raw array in-place
+            ufunc(a, b, out=self.raw) # In place, so the dtype cannot change, and an operation that would change it raises as it does for a NumPy array
             return self
-        else:
-            c = ufunc(a, b) # Evaluate the ufunc. Unlike the in-place operation above, the dtype is now allowed to change
-            result_dtype = np.asarray(c).dtype # The resulting dtype will dictate the return class e.g., BoolArr * FloatArr = FloatArr, with np.bool * np.float = np.float
-            result_raw = self.raw.astype(result_dtype, copy=True) # Cast the existing values to the new dtype
-            result_raw[inds] = c # Write the new values into the raw array (with the updated dtype)
-            result_cls, result_nan = self._math_result_type(result_dtype) # Work out which Arr class the new dtype corresponds to
-            result = self.asnew(result_raw, cls=result_cls, copy=False) # Wrap the new result array in an Arr subclass of the appropriate type e.g., a raw `float` array gets wrapped in FloatArr
-            result.nan = result_nan # Since asnew() does not set the .nan or .nan_eq attributes because it does not call __init__, set them now
-            result.nan_eq = (result.nan == result.nan)
-            return result
+        c = ufunc(a, b) # The dtype can change: it dictates the class, e.g. BoolArr*FloatArr is a FloatArr
+        result_cls, result_nan = self._math_result_type(c.dtype)
+        result = self.asnew(c, cls=result_cls, copy=False)
+        result.nan = result_nan # Since asnew() does not call __init__, which sets them
+        result.nan_eq = (result.nan == result.nan)
+        return result
 
     @staticmethod
     def _math_result_type(dtype):
@@ -938,116 +931,38 @@ class FloatArr(Arr):
         return
 
 
-class ModifiableArr(FloatArr):
+class TimeArr(FloatArr):
     """
-    A float array that modifiers act on: a declared disease's `rel_sus` and `rel_trans`, as agents
+    Times, as step numbers of the module's timeline: when something happened or is due for each agent, e.g. a declared disease's `ti_X` (when each entered state X) and `ti_exit_X`, as agents, and `people.ti_dead`
 
-    Reading it gives the base values, which a modifier never changes; `.effective` gives
-    the values with the modifiers that are active now applied, which is what the model
-    uses. `sim.what_modifies()` lists the modifiers.
-    """
-    engine = None # The engine that applies the modifiers; set by it
+    Stored as float32 step numbers, NaN for "never" (not set), so `ti_I > 0` and `(sim.ti - ti_I)*sim.t.dt` give the right
+    answer. `due()` gives whose time has come, with a time between steps rounded up or down at random in proportion (by
+    each agent's phase, as the agent engine rounds a dwell time: see `ss.People.phase()`), so it keeps its mean;
+    `isclose(sim.ti)` gives whose time is taken at this step, and `.years` converts them to years. `==` and `!=` raise,
+    since a time between steps never equals a step: `eq()` is exact equality. For plain arithmetic on the times, compare
+    them: e.g. `ti_x < sim.ti + 0.5` is due at the nearest step, and `ti_x <= sim.ti` at the first step at or after it.
 
-    @property
-    def effective(self):
-        """ The values with the modifiers that are active now applied """
-        mult = 1.0 if self.engine is None else self.engine.mult_raw(self.name)
-        return self.asnew(self.raw*mult, cls=FloatArr, copy=False)
-
-
-class StepArr(Arr):
-    """
-    Step numbers (time indices), stored compactly: a declared disease's `ti_X` and `ti_exit_X`, as agents, and `people.ti_dead` and `people.ti_removed`
-
-    The values are stored as 16-bit integers when the module's run has fewer than
-    32,000 steps (and 32-bit otherwise), which is a quarter of the memory of a
-    float time and half of a float32. Reading them gives float32 step numbers, with
-    NaN for "never" (not set) and `inf` for a time after the end of the run, so
-    `ti_I == sim.ti`, `ti_I > 0`, and `(sim.ti - ti_I)*sim.t.dt` all give the right
-    answer. A time between two steps is stored as the first step at or after it.
-    `.years` converts them to years; `.raw` has the stored integers, where `.nan`
-    means not set and `.never` means after the end of the run.
-
-    A declared state's time of entering (`ti_X`) reads as the index of the step the
-    move happened in, whatever kind of move it was (a progression at the step's start,
-    an infection by contact at its end), so `ti_X == sim.ti` is "entered this step".
-    The engine keeps its own time of the move, which `.raw` and `internal()` give.
-
-    With `late=True` (as for `people.ti_dead`), "not set" is stored as the largest
-    integer, the same as after the end of the run, so `raw <= ti` is whether the time
-    has come, with no special case; both read as NaN. With `wide=True`, they are always
-    32-bit, for times that can lie far beyond the run and still be needed (a scheduled
-    exit that a change of speed can bring back into it).
+    A declared state's time of entering (`ti_X`) reads as the index of the step the move happened in, whatever kind of
+    move it was (a progression at the step's start, an infection by contact at its end), so `ti_X.isclose(sim.ti)` is
+    "entered this step". The engine keeps its own time of the move, which `.raw` gives (see `shift`).
 
     Example:
         ```python
         sim = ss.Sim(ss.SIR(), unit='day', stop=100).run()
         sir = sim.diseases.sir
-        infected_today = (sir.ti_I == sim.ti).uids
+        infected_today = sir.ti_I.isclose(sim.ti).uids
         years = sir.ti_I.years # The year of infection of each agent (NaN if never infected)
+
+        # In a disease written as code
+        self.define_states(ss.BoolState('exposed'), ss.TimeArr('ti_infectious'))
+        self.ti_infectious[uids] = self.ti + dur # In steps
+        mask = self.exposed & self.ti_infectious.due() # Those whose time has come
         ```
     """
-    def __init__(self, name=None, dtype=np.int32, late=False, wide=False, **kwargs):
-        self.late = late
-        self.wide = wide
-        super().__init__(name=name, dtype=dtype, nan=self.sentinels(dtype)[0], **kwargs)
-        self.lowest, self.never = self.sentinels(dtype)[1:]
-        self.nan_eq = False # Read as floats, so NaN is found with np.isnan()
-        self.t = None # The module's timeline, for .years; set by the engine
-        self.shift = None # Steps added when read, from the engine's time to the step's index (see `internal()`): by agent (an Arr) for a declared state's time of entering, 1 for a scheduled exit
-        return
-
-    def sentinels(self, dtype):
-        """ The stored integers for not set, the lowest step, and after the end of the run """
-        info = np.iinfo(dtype)
-        return (info.max if self.late else info.min), info.min + (0 if self.late else 1), info.max
-
-    def fit(self, t):
-        """ Use 16-bit integers if the module's run (on timeline `t`) fits in them """
-        self.t = t
-        dtype = np.int16 if t.npts < 32_000 and not self.wide else np.int32
-        if dtype != self.dtype:
-            nan = self.raw == self.nan
-            self.dtype = dtype
-            self.nan, self.lowest, self.never = self.sentinels(dtype)
-            self.raw = self.raw.astype(dtype)
-            self.raw[nan] = self.nan
-        return
-
-    def to_float(self, vals):
-        """ Convert stored step numbers to float32: NaN where not set, and inf after the end of the run """
-        vals = np.asarray(vals)
-        out = vals.astype(ss_float)
-        out[vals == self.never] = np.inf
-        out[vals == self.nan] = np.nan # After inf, since with late=True they are the same
-        return out if out.ndim else out[()]
-
-    def from_float(self, vals):
-        """ Convert step numbers to the stored integers: NaN to not set, a time between steps to the next step, and inf (or beyond the integers) to after the end of the run """
-        if isinstance(vals, numbers.Integral): # The usual case, e.g. the step now
-            return min(max(int(vals), self.lowest), self.never)
-        elif isinstance(vals, float) and vals != vals: # NaN, e.g. a scheduled exit forgotten
-            return self.nan
-        vals = np.asarray(vals)
-        if vals.dtype.kind in 'iub':
-            return np.clip(vals, self.lowest, self.never)
-        out = np.ceil(vals, out=np.empty(vals.shape)) # An array, even for one value
-        np.clip(out, self.lowest, self.never, out=out) # NaN stays NaN here
-        out[np.isnan(out)] = self.nan
-        return out.astype(self.dtype)
-
-    def internal(self, key):
-        """
-        The stored step numbers as floats, without the shift that reading them adds: the engine's own time (for a
-        declared state's time of entering, the start of the step for a move made then, `ti - 1`, and its end for an
-        infection by contact, `ti`; for a scheduled exit, the start of the step it is taken in), from which its clocks
-        and dwell times are worked out
-        """
-        return self.to_float(super().__getitem__(key))
-
-    def set_internal(self, key, value):
-        """ Set the stored step numbers to the engine's own time (see `internal()`) """
-        super().__setitem__(key, self.from_float(value))
+    def __init__(self, name=None, **kwargs):
+        super().__init__(name=name, **kwargs)
+        self.t = None # The timeline the steps are of (the module's), for due() and .years; set when its states are linked to the people
+        self.shift = None # Steps added when read, from the engine's time of a move to the index of the step it happened in: by agent (an Arr) for a declared state's time of entering, 1 for a scheduled exit
         return
 
     def shifted(self, vals, key=None):
@@ -1058,52 +973,62 @@ class StepArr(Arr):
             return vals + self.shift
         return vals + (self.shift.raw if key is None else self.shift.values if key is Ellipsis else self.shift[key])
 
-    def floats(self):
-        """ The values as a `FloatArr` of step numbers, for arithmetic and comparisons """
-        new = self.asnew(self.shifted(self.to_float(self.raw)), cls=FloatArr)
-        new.dtype, new.nan, new.nan_eq = ss_float, np.nan, False
-        return new
+    def due(self):
+        """ Whose time has come by the current step, as a boolean array (e.g. `mask = self.exposed & self.ti_infectious.due()`): a time between steps is rounded up or down at random in proportion, by each agent's phase (see `ss.People.phase()`) """
+        return self.asnew(self.shifted(self.raw) + self.people.phase() < self.t.ti + 1, cls=BoolArr)
+
+    def isclose(self, other):
+        """ Whose time is taken at step `other` (e.g. `self.ti_infectious.isclose(self.ti)`, those who became infectious this step, as `due()` counts them), as a boolean array """
+        vals = self.shifted(self.raw) + self.people.phase()
+        return self.asnew((vals >= other) & (vals < other + 1), cls=BoolArr)
+
+    def eq(self, other):
+        """ Whose time is exactly `other`, as a boolean array (`==` and `!=` are refused: see `__eq__()`) """
+        return self._boolmath('==', other)
+
+    def __eq__(self, other):
+        errormsg = f'Exact matches to continuous time are fraught; use {self.name}.due() or {self.name}.isclose() instead, or {self.name}.eq() if you want exact equality.'
+        raise TypeError(errormsg)
+
+    def __ne__(self, other):
+        return self.__eq__(other)
 
     @property
     def years(self):
         """ The values as years (e.g. 2020.5), with NaN where not set """
-        steps = self.to_float(self.values).astype(float)
-        return self.t.yearvec[0] + steps*self.t.dt_year
+        return self.t.yearvec[0] + self.values.astype(float)*self.t.dt_year
 
     def __getitem__(self, key):
-        return self.shifted(self.to_float(super().__getitem__(key)), key)
+        vals = super().__getitem__(key)
+        return vals if self.shift is None else self.shifted(vals, key)
 
     def __setitem__(self, key, value): # A step number as read (e.g. sim.ti)
         if isinstance(self.shift, int):
             value = np.asarray(value, dtype=float) - self.shift if not isinstance(value, numbers.Integral) else value - self.shift
-        super().__setitem__(key, self.from_float(value))
+        super().__setitem__(key, value)
         if isinstance(self.shift, Arr):
             self.shift[key] = 0
         return
 
     @property
     def values(self):
-        return self.shifted(self.to_float(super().values), Ellipsis)
-
-    def set(self, uids, new_vals=None):
-        new_vals = self.nan if new_vals is None and self.default is None else self.from_float(new_vals if new_vals is not None else self.default)
-        self.raw[uids] = new_vals
-        return new_vals
+        vals = super().values
+        return vals if self.shift is None else self.shifted(vals, Ellipsis)
 
     def _boolmath(self, op, other=None, inplace=False):
+        if self.shift is None or not self.initialized:
+            return super()._boolmath(op, other, inplace=inplace)
         if inplace:
             errormsg = f'"{self.name}" holds step numbers, which cannot be changed in place by a comparison'
             raise TypeError(errormsg)
-        if not self.initialized:
-            return super()._boolmath(op, other)
-        return self.floats()._boolmath(op, other)
+        return self.asnew(self.shifted(self.raw), cls=FloatArr)._boolmath(op, other)
 
     def _math(self, op, other, reverse=False, inplace=False):
-        if not self.initialized and not inplace:
-            return super()._math(op, other, reverse=reverse)
-        result = self.floats()._math(op, other, reverse=reverse)
+        if self.shift is None or not self.initialized:
+            return super()._math(op, other, reverse=reverse, inplace=inplace)
+        result = self.asnew(self.shifted(self.raw), cls=FloatArr)._math(op, other, reverse=reverse)
         if inplace:
-            self.raw[:] = self.from_float(result.raw)
+            self.raw[:] = result.raw - self.shifted(np.zeros(len(self.raw), dtype=ss_float))
             return self
         return result
 
@@ -1112,7 +1037,7 @@ class Unkept(BaseArr):
     """
     A declared disease's time of entering a state (`ti_X`) that is not kept, since the engine does not need it (see `ss.options.keep_times`)
 
-    Setting it does nothing, and reading it raises `ss.errors.TimeNotKept`, which says how to keep it.
+    Setting it does nothing, and reading it raises an `AttributeError` that says how to keep it.
     It takes no memory, and is not one of the module's states.
     """
     def __init__(self, name, mod):
@@ -1120,18 +1045,22 @@ class Unkept(BaseArr):
         self.mod = mod
         return
 
-    @property
-    def values(self):
+    def unkept(self):
+        """ The error for reading it """
         errormsg = (f'{self.mod.name}.{self.name} is not kept, since the engine does not need it (to save memory).\n'
                     f'     Declare the state with ss.State(keep_time=True) to keep it, or set ss.options.keep_times = True before the sim is initialized to keep the time of entering every state.')
-        raise ss.errors.TimeNotKept(errormsg)
+        return AttributeError(errormsg)
+
+    @property
+    def values(self):
+        raise self.unkept()
 
     raw = values
 
-    def __getattr__(self, attr):
+    def __getattr__(self, attr): # Also reached when values or raw raises, since that is an AttributeError
         if attr.startswith('_'): # E.g. __deepcopy__ or __array__, which are looked for
             raise AttributeError(attr)
-        return self.values
+        raise self.unkept()
 
     def __setitem__(self, key, value):
         return # Not kept
@@ -1363,13 +1292,17 @@ class BoolState(BoolArr):
         if not isinstance(key, uids):
             key = self._convert_key(key)
         inds = np.atleast_1d(np.asarray(key))
-        if len(inds) > 1 and not np.all(inds[1:] > inds[:-1]): # Each agent once, so a change is counted once
-            inds = np.unique(inds)
         if engine.sim.groups.n_groups > 1:
             engine.sim.groups.group_raw() # Any changes of group (e.g. by age) are counted before this one
         old = self.raw[inds]
         self.raw[key] = value
-        engine.wrote(self.name, inds, old, self.raw[inds])
+        if np.ndim(value) == 0 and value: # One value (the usual case): those it changes are those not at it before
+            engine.wrote(self.name, inds[~old], uids())
+        elif np.ndim(value) == 0:
+            engine.wrote(self.name, uids(), inds[old])
+        else:
+            new = self.raw[inds]
+            engine.wrote(self.name, inds[~old & new], inds[old & ~new])
         return
 
     def set(self, uids, new_vals=None):
@@ -1382,7 +1315,8 @@ class BoolState(BoolArr):
             engine.sim.groups.group_raw() # As in __setitem__()
         old = self.raw[inds]
         out = super().set(uids, new_vals=new_vals)
-        engine.wrote(self.name, inds, old, self.raw[inds])
+        new = self.raw[inds]
+        engine.wrote(self.name, inds[~old & new], inds[old & ~new])
         return out
 
     def grow(self, new_uids=None, new_vals=None):
@@ -1398,7 +1332,7 @@ class BoolState(BoolArr):
             self.watch = watch
         if new_vals is not None or self.default: # Otherwise they start out of the state (the usual case)
             inds = np.atleast_1d(np.asarray(new_uids))
-            engine.wrote(self.name, inds, np.zeros(len(inds), dtype=bool), self.raw[inds])
+            engine.wrote(self.name, inds[self.raw[inds]], uids())
         return
 
     def _changed_all(self):
@@ -1646,23 +1580,31 @@ class uids(np.ndarray):
                 raise TypeError(f'UIDs must be integers, but got non-integer values: {arr}')
         return arr.astype(ss_int).view(cls) # Normalize integer width, or cast validated floats
 
+    @staticmethod
+    def _increasing(arr):
+        """ Whether an array is sorted with no repeats, as UIDs from `.uids` and the set operations are, so a set operation need not sort it (a check much faster than the sort) """
+        arr = np.asarray(arr)
+        return arr.ndim == 1 and (arr.size < 2 or bool((arr[1:] > arr[:-1]).all()))
+
     def remove(self, other, **kw):
         """ Remove provided UIDs from current array"""
         if isinstance(other, BoolArr):
             other = other.uids
+        kw.setdefault('assume_unique', self._increasing(self) and self._increasing(other))
         return self._ensure_int(np.setdiff1d(self, other, **kw))
 
     def intersect(self, other, **kw):
         """ Keep only UIDs that are also present in the other array """
         if isinstance(other, BoolArr):
             other = other.uids
+        kw.setdefault('assume_unique', self._increasing(self) and self._increasing(other))
         return self._ensure_int(np.intersect1d(self, other, **kw))
 
-    def union(self, other, **kw):
-        """ Return all UIDs present in both arrays """
+    def union(self, other):
+        """ Return all UIDs present in either array, sorted, without repeats (as np.union1d() gives them, faster: see unique()) """
         if isinstance(other, BoolArr):
             other = other.uids
-        return self._ensure_int(np.union1d(self, other, **kw))
+        return self._ensure_int(np.concatenate([self, np.asarray(other)])).unique()
 
     def xor(self, other, **kw):
         """ Return UIDs present in only one of the arrays """

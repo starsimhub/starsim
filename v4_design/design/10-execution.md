@@ -149,7 +149,7 @@ In a discrete-time run this MUST be implemented as a single multinomial draw per
 Details:
 
 - Separate transitions out of one state that carry `p=` are a split decided on entry to the state, not a competition, and one transition with several destinations splits when it is taken ([03-states-and-transitions.md](03-states-and-transitions.md) §Branching); the split is one draw as well.
-- As agents, exits are scheduled at entry. Moves with no wait (a split with no dwell time, or a dwell time that rounds to no steps) happen in the step that caused them: the moves cascade until nobody moves (a cycle raises `ss.errors.TriggerLoop`, which says when a dwell time shorter than a step is the cause). Compartments pass such moves straight through, so this is what makes agents agree with them.
+- As agents, exits are scheduled at entry. Moves with no wait (a split with no dwell time, or a dwell time that rounds to no steps) happen in the step that caused them: the moves cascade until nobody moves (a cycle raises a `ValueError`, which says when a dwell time shorter than a step is the cause). Compartments pass such moves straight through, so this is what makes agents agree with them.
 - A dwell time competing with a rate: someone who enters a state during a step, after its rates were drawn, has the rates drawn for them in the step their dwell time ends too, so the rate acts for as long as the dwell time says.
 - As agents, people who arrive in a state with rates out of it get half a step of those rates in the step they arrive in, since on average they arrived halfway through it: an arrival in the state-change row has that half step drawn at once, and is in the state for that step's transmission. Someone infected (or moved at once after an infection) is put in their state at the step's end, after its transmission, so if that state is a source of infection they were infectious for half a step that no transmission counts. They have half a step of the state's rates at their first draw, in the next step (and, with a scheduled exit as well, the other half in the step it is due), so each stay counts in transmission for as many steps as it lasts, to first order in γ·dt. With a whole step at that first draw, a model in which infection leads straight to an infectious state ran as if R0 were R0·(1 − γ·dt/2) (an SIS at R0 = 1.2 with γ = 1 a year, at a quarterly step: prevalence 0.068 where the exact value is 0.167; decided 2026-10-25). A state that is not a source (a latent state) has a whole step at the first draw, since there half a step would only make the stay longer. A dwell time needs no such correction: it is rounded to whole steps from the time of entering (the end of the step, for an infection), which keeps its mean. The stock of an infectious state recorded at the step's end then reads high by about half a step of infections (+γ·dt/2: 4% at γ·dt = 1/12), since it is taken just after the step's infections, and the next step's exits balance them; its mean over the step is right to first order.
 - As agents, a state with both spontaneous exits and a contact-mediated exit resolves the spontaneous ones jointly first, and transmission then acts on whoever is still in the state (both in row 9). This is an ordering effect of size O(dt); the compartmental solvers draw them together (the chain-binomial solver draws the number leaving each compartment once, then shares it between the exits).
@@ -177,7 +177,7 @@ So a disease at `dt=ss.days(1)` and a demographics module at `dt=ss.years(1)` sh
 - Rates and durations are converted using the `dt` of the module that uses them ([02-types.md](02-types.md)).
 - Results are reported on each module's own timeline, as in Starsim.
 - A declared disease with a timestep of its own is taken a step at a time (it is not run in one call to the kernels).
-- `sim.loop.plot_step_order()` shows the interleaving, which is the quickest way to check a sim with mixed timesteps.
+- `sim.loop.to_df()` shows the interleaving, which is the quickest way to check a sim with mixed timesteps.
 
 Events inside a step use the same mechanism: a network given a sub-daily `dt` appears in the plan at those times. Commuting between places (`ss.geo.Mobility`) is not a module and has no place in the loop: it is a share of time spent in each place, applied within every step ([06-routes.md](06-routes.md)).
 
@@ -221,20 +221,18 @@ Requirement 2 rules out one random number stream shared across workers, and is o
 1. Resolve the declarations: states (and which of them are people), the kind of each transition, the sim's unit (from `unit=`, else the model's typed values, else dates; none of these means time is in steps; [02-types.md](02-types.md)), and defaults. Every guessed default is recorded for `describe()`.
 2. Expand stratifications into strata and generate the transitions between them.
 3. Load named data: parameters from data sources, and observed data attached to results by name.
-4. Check the dimension of every rate, the shape of every array-valued parameter, and every parameter's value against its bounds (`ss.errors.UnvaluedParameter`, `ss.errors.OutOfBounds`).
+4. Check the dimension of every rate, the shape of every array-valued parameter, and every parameter's value against its bounds (a `ValueError`).
 5. Register modifiers against their targets.
 6. Choose the solver if `solver='auto'`, and work out any approximations the solver needs ([12-backends.md](12-backends.md)).
 7. Collect the loop's functions (the plan itself is made when the loop first runs).
 8. Allocate state, set initial conditions, and initialize the random number streams.
 9. Print the solver with its reason, any approximations, where the sim's unit came from if it was not given as `unit=`, and, for each disease with a transmission, R0 (in a population with no immunity; with the reproduction number at the start too, if immunity at the start changes it by more than 1%) and the number infectious at the start, one line each (`verbose=0` hides them; `approx=True` hides the approximation notes only). The notes are kept in `sim.notes` whatever is printed. `sim.describe()` prints the full resolved model, including the schedule, at any time.
 
-The model spec ([14-model-spec.md](14-model-spec.md)) and `sim.hash()` ([11-random.md](11-random.md#run-identity)) are worked out when asked for, not at `init()`, since a run does not need them.
-
 Problems are reported at the earliest step that can detect them ([15-errors.md](15-errors.md)): a typo in a state name is an error at step 1, not at the first timestep. The exception is user functions, which are not analyzed in advance; a function that asks for something the solver cannot provide is reported when it is first called ([12-backends.md](12-backends.md) §Functions).
 
 ## Finishing
 
-After the last step, `sim.finalize()` calls each module's `finalize()` once, in module order, and then finalizes the results (scaling, summary statistics). This is Starsim's behavior. Calling `run()` again on a completed sim runs it again from the start, built again as `sim.new()` would (with any settings or parameters changed since the run); stepping or finalizing it again raises `AlreadyRunError`.
+After the last step, `sim.finalize()` calls each module's `finalize()` once, in module order, and then finalizes the results (scaling, summary statistics). This is Starsim's behavior. Calling `run()` again on a completed sim runs it again from the start, built again as `sim.new()` would: a copy of the sim as it was before it was initialized, so changes made since belong to that run only (setting `sim.pars` once it is initialized raises, pointing to `sim.new()`); stepping or finalizing it again raises `AlreadyRunError`.
 
 ## Rejected
 

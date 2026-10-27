@@ -109,7 +109,7 @@ class Disease(ss.Module):
     engine = None # Runs the declared part (see ss.solvers.make_engine()); created when the sim is initialized
     infection_log = None # An InfectionLog, if the sim has an ss.infection_log analyzer
     code_pars = () # Parameters of a declared module that its own code reads rather than its graph (e.g. ss.Pregnancy's fertility rates)
-    reads_modifiers = () # For a disease written as code: which of rel_sus and rel_trans its own code reads, with modified(), so ss.modify() of them is applied (an ss.Infection with a beta reads both)
+    reads_modifiers = () # For a disease written as code: which of rel_sus and rel_trans its own code reads, with effective(), so ss.modify() of them is applied (an ss.Infection with a beta reads both)
 
     _infection_methods = ['set_prognoses', 'transmit', 'set_outcomes', 'finalize_infections', 'compute_transmission', 'transmit_route', 'set_congenital'] # Methods of ss.Infection's transmission, which a declared transition never calls
 
@@ -123,7 +123,7 @@ class Disease(ss.Module):
             errormsg = (f'{cls.__name__} declares states or transitions and defines {sc.strjoin(overridden)}, which a declared transition never calls, so it would be silently ignored.\n'
                         f'     A disease whose transmission is written as code subclasses {base} (import starsim.library as ssl); a declared one changes its transitions.')
             raise ss.CapabilityError(errormsg)
-        rebound = [name for name in dict.fromkeys(k for base in cls.__mro__[1:] for k,v in vars(base).items() if isinstance(v, ss.par)) if name in vars(cls) and not isinstance(vars(cls)[name], (ss.par, ss.transitions.Expr))]
+        rebound = [name for name in dict.fromkeys(k for base in cls.__mro__[1:] for k,v in vars(base).items() if isinstance(v, ss.par)) if name in vars(cls) and not isinstance(vars(cls)[name], (ss.par, ss.expressions.Expr))]
         if rebound: # A declared parameter rebound to something else (a method, a number) is dropped from the model, and its transitions keep the base class's parameter, so it would be silently ignored
             name = rebound[0]
             how = (f'give the parameter a function as its value instead, e.g. self.pars.update({name}=self.my_{name}) in __init__(), where my_{name}(sim, uids) returns the value for those agents' if callable(vars(cls)[name]) else
@@ -149,8 +149,8 @@ class Disease(ss.Module):
         if strains is not None and getattr(strains, 'members', None) is not None: # Strains written as diseases of their own
             return ss.strains.attach_members(self, strains, args, pars, kwargs)
         members = ss.transitions.class_members(type(self))
-        declared = (ss.State, ss.Transition, ss.outcome, ss.transitions.Expr, ss.transitions.FlowSum)
-        given = args or members or any((isinstance(v, declared) and not isinstance(v, ss.par)) or key in ss.transitions.Graph.grouped for key,v in kwargs.items()) # Its structure; a parameter's value (e.g. with bounds) is not
+        declared = (ss.State, ss.Transition, ss.outcome, ss.expressions.Expr, ss.transitions.FlowSum)
+        given = args or members or any((isinstance(v, declared) and not isinstance(v, ss.par)) or key in ss.graph.Graph.grouped for key,v in kwargs.items()) # Its structure; a parameter's value (e.g. with bounds) is not
         later = strains is not None or stratify is not None or any(key in kwargs for key in ['init', 'init_n', 'init_prev', 'first']) or any(isinstance(v, ss.par) for v in kwargs.values()) # Only for a declared disease, so its states and transitions follow, from define_states() and define_transitions()
         if given or later:
             names = (_names or ss.utils.caller_names(1)) if given else {} # The names of the variables of the code that made it; or, made by the sim from the transitions it was given, of the code that made the sim
@@ -167,7 +167,7 @@ class Disease(ss.Module):
 
     @property
     def graph(self): # Built when the disease is made (see built_after()); here too, in case something reads it while it is being made
-        """ Its declared states and transitions (`ss.transitions.Graph`), built from what was declared when first needed; None for a disease written as code """
+        """ Its declared states and transitions (`ss.graph.Graph`), built from what was declared when first needed; None for a disease written as code """
         if '_declared' in self.__dict__:
             self.build_graph()
         return self.__dict__.get('_graph')
@@ -208,9 +208,9 @@ class Disease(ss.Module):
         reserved = {key for cls in type(self).__mro__ for key,val in vars(cls).items() if callable(val) or isinstance(val, property)} | set(dir(ss.Module))
         for name,obj in kwargs.items():
             if name in reserved:
-                raise ss.errors.ReservedName(f'"{name}" cannot be used as the name of a state, transition, or result of "{self.name}", since it is an attribute of every module or of {type(self).__name__}. Please choose another name.')
+                raise ValueError(f'"{name}" cannot be used as the name of a state, transition, or result of "{self.name}", since it is an attribute of every module or of {type(self).__name__}. Please choose another name.')
             if not overwrite and (name in d.kwargs or name in d.members):
-                raise ss.errors.DuplicateDeclaration(f'"{name}" is already declared in "{self.name}"; names must be unique within a module (or give overwrite=True to replace it)')
+                raise ValueError(f'"{name}" is already declared in "{self.name}"; names must be unique within a module (or give overwrite=True to replace it)')
             d.kwargs[name] = obj
             self.setattribute(name, obj) # So the declarations that follow can use it, e.g. self.S >> self.I
         d.names.update(names)
@@ -253,7 +253,7 @@ class Disease(ss.Module):
             raise TypeError(errormsg)
         unnamed = [st for st in states if st.name is None]
         if unnamed:
-            raise ss.errors.UnnamedState(f'a state given to define_states() of "{self.name}" has no name: give it one, e.g. ss.State("S"), or give it by keyword, e.g. define_states(S=ss.State())')
+            raise ValueError(f'a state given to define_states() of "{self.name}" has no name: give it one, e.g. ss.State("S"), or give it by keyword, e.g. define_states(S=ss.State())')
         self.declare(states, named, overwrite=overwrite)
         return
 
@@ -294,7 +294,7 @@ class Disease(ss.Module):
         """
         Define results: for a declared disease, sums and ratios of states by name (e.g. `prevalence=I/(S + I + R)`, or `active=(E + I).frac`); otherwise `ss.Result` objects (see `ss.Module.define_results()`)
         """
-        declared = (ss.transitions.Expr, ss.outcome, ss.transitions.FlowSum)
+        declared = (ss.expressions.Expr, ss.outcome, ss.transitions.FlowSum)
         if not kwargs and not any(isinstance(arg, declared) for arg in args):
             return super().define_results(*args)
         if not all(isinstance(arg, declared) for arg in list(args) + list(kwargs.values())):
@@ -304,7 +304,7 @@ class Disease(ss.Module):
         for arg in args:
             if names.get(id(arg)) is None:
                 errormsg = f'a result given to define_results() of "{self.name}" has no name: give it by keyword, e.g. define_results(prevalence=I/N)'
-                raise ss.errors.UnnamedState(errormsg)
+                raise ValueError(errormsg)
         self.declare(args, kwargs, names=names)
         return
 
@@ -357,17 +357,17 @@ class Disease(ss.Module):
                 counted[id(obj)] = obj
             elif isinstance(obj, ss.par):
                 pars[id(obj)] = obj
-            elif isinstance(obj, (ss.State, ss.Transition, ss.transitions.Expr, ss.outcome, ss.transitions.FlowSum)) and depth < 6:
+            elif isinstance(obj, (ss.State, ss.Transition, ss.expressions.Expr, ss.outcome, ss.transitions.FlowSum)) and depth < 6:
                 if getattr(obj, 'module', None) is not None and isinstance(obj, (ss.State, ss.Transition)):
                     owners[id(obj.module)] = obj.module
                 if isinstance(obj, ss.Transition):
                     ends = [st for st in (obj.src or []) + (obj.dst or []) if isinstance(st, ss.State)]
                     endpoints.update(id(st) for st in ends)
                     for st in ends:
-                        ss.transitions.Graph.check_read(st)
+                        ss.graph.Graph.check_read(st)
                 elif isinstance(obj, ss.State) and depth == 0:
                     endpoints.add(id(obj))
-                elif isinstance(obj, ss.transitions.Count):
+                elif isinstance(obj, ss.expressions.Count):
                     counted.update({id(st):st for st in obj.states})
                 for key,val in vars(obj).items():
                     if key != 'module':
@@ -380,7 +380,7 @@ class Disease(ss.Module):
         if not owners:
             return args, members
         members = dict(members)
-        grouped = [obj for key in ss.transitions.Graph.grouped for obj in sc.tolist(members.pop(key, None))]
+        grouped = [obj for key in ss.graph.Graph.grouped for obj in sc.tolist(members.pop(key, None))]
         positional = []
         for obj in list(args) + grouped: # Named first, as keywords, since a copy is not bound to the variable
             name = getattr(obj, 'name', None) or (None if isinstance(obj, ss.State) else (names or {}).get(id(obj)))
@@ -398,17 +398,17 @@ class Disease(ss.Module):
         for key,val in kwargs.items():
             if isinstance(val, ss.par) and val.name_given and val.name == key:
                 exprs = [e for obj in list(args) + list(members.values()) + list(kwargs.values()) if isinstance(obj, ss.Transition) for e in [obj.rate, obj.dur] + sc.tolist(obj.p)]
-                exprs += [obj for obj in list(members.values()) + list(kwargs.values()) if isinstance(obj, ss.transitions.Expr) and obj is not val]
+                exprs += [obj for obj in list(members.values()) + list(kwargs.values()) if isinstance(obj, ss.expressions.Expr) and obj is not val]
                 if any(part is val for part in ss.expressions.nodes(exprs)):
                     errormsg = (f'"{key}" of "{self.name}" is given the parameter "{key}" itself, which its transitions already read, so it is not a result: a result needs a name of its own. '
                                 f'For a result of a parameter, write an expression of it under another name, e.g. {key}_now = 1*{key}')
-                    raise ss.errors.DuplicateDeclaration(errormsg)
+                    raise ValueError(errormsg)
         return
 
     def init_graph(self, args, members, pars, kwargs, names=None):
-        """ Build the graph of declared states and transitions; see `ss.transitions.Graph` """
+        """ Build the graph of declared states and transitions; see `ss.graph.Graph` """
         meta = {key:kwargs.pop(key) for key in ['name', 'label'] if key in kwargs}
-        declared = (ss.State, ss.Transition, ss.outcome, ss.transitions.Expr, ss.transitions.FlowSum, ss.transitions.Transfer)
+        declared = (ss.State, ss.Transition, ss.outcome, ss.expressions.Expr, ss.transitions.FlowSum, ss.dimensions.Transfer)
         timepars = {key:kwargs.pop(key) for key in ss.Timeline.time_args if key in kwargs and not isinstance(kwargs[key], declared)} # A transition can be called "stop"
         pars = sc.mergedicts(pars)
         for key in ['init_prev', 'init', 'init_n']: # The initial conditions can also be given in pars=, as the parameters are
@@ -425,10 +425,10 @@ class Disease(ss.Module):
         def leaves(expr): # Including those inside a parameter that holds an expression, as a dwell time written as an expression is held (e.g. dur=d*ss.days(1), with d = ss.par(ss.lognorm_im(...)))
             for leaf in expr.leaves:
                 yield leaf
-                if isinstance(leaf, ss.par) and isinstance(leaf.raw, ss.transitions.Expr):
+                if isinstance(leaf, ss.par) and isinstance(leaf.raw, ss.expressions.Expr):
                     yield from leaves(leaf.raw)
-        holds_expr = lambda leaf: isinstance(leaf.raw, ss.transitions.Expr) and any(inner is m for inner in leaves(leaf.raw) for m in members.values()) # One holding the class's parameters, copied with them
-        memo = {id(leaf):leaf for val in members.values() if isinstance(val, ss.Transition) for expr in [val.rate, val.dur, getattr(val, 'p_die', None), getattr(val, 'p_stay', None)] + sc.tolist(getattr(val, 'p', None)) if isinstance(expr, ss.transitions.Expr) for leaf in leaves(expr) if isinstance(leaf, ss.par) and not any(leaf is m for m in members.values()) and not holds_members(leaf) and not holds_expr(leaf)}
+        holds_expr = lambda leaf: isinstance(leaf.raw, ss.expressions.Expr) and any(inner is m for inner in leaves(leaf.raw) for m in members.values()) # One holding the class's parameters, copied with them
+        memo = {id(leaf):leaf for val in members.values() if isinstance(val, ss.Transition) for expr in [val.rate, val.dur, getattr(val, 'p_die', None), getattr(val, 'p_stay', None)] + sc.tolist(getattr(val, 'p', None)) if isinstance(expr, ss.expressions.Expr) for leaf in leaves(expr) if isinstance(leaf, ss.par) and not any(leaf is m for m in members.values()) and not holds_members(leaf) and not holds_expr(leaf)}
         members = sc.dcp(members, memo=memo) # Copy class members (together, so they still refer to each other) so instances do not share them; a parameter defined outside the class (rate = ss.par(...) at module level) stays shared, as in the operator form, so it keeps its name
         kwargs = {k:ss.expressions.rebind(v, memo) for k,v in kwargs.items()} # A result given here that reads the class's states reads the copies
         init, init_n = [{k:ss.expressions.rebind(v, memo) for k,v in d.items()} if isinstance(d, dict) else d for d in [init, init_n]] # Likewise a starting value, e.g. init=dict(S=1 - (A - age)/(k*age + A)) with the class's parameters
@@ -437,7 +437,7 @@ class Disease(ss.Module):
         self.check_par_members(args, members, kwargs)
         members = sc.mergedicts(members, kwargs)
         args, members = self.reuse(args, members, names)
-        self.graph = ss.transitions.Graph(self, args, members, init_prev=init_prev, init=init, init_n=init_n, first=first, names=names)
+        self.graph = ss.graph.Graph(self, args, members, init_prev=init_prev, init=init, init_n=init_n, first=first, names=names)
         for name,obj in list(self.graph.states.items()) + list(self.graph.transitions.items()) + list(self.graph.attrs.items()):
             self.setattribute(name, obj) # e.g. sir.S, sir.infection, hiv.cd4
         for tr in list(self.graph.transitions.values()) + list(self.graph.transfers.values()):
@@ -449,33 +449,9 @@ class Disease(ss.Module):
         self.define_pars(**self.graph.pars) # The parameters themselves, so e.g. sir.pars.beta can be the target of ss.modify()
         for key in sc.mergedicts(pars):
             if key not in self.pars:
-                raise ss.errors.UnknownParameter(f'"{self.name}" has no parameter named "{key}". Its parameters are {sc.strjoin(self.pars.keys())}{ss.transitions.did_you_mean(key, self.pars.keys())}')
+                raise sc.KeyNotFoundError(f'"{self.name}" has no parameter named "{key}". Its parameters are {sc.strjoin(self.pars.keys())}{ss.expressions.did_you_mean(key, self.pars.keys())}')
         self.pars.update(pars) # A declared parameter keeps its bounds and name: see ss.Pars
         return
-
-    def value(self, name):
-        """
-        The current value of a parameter, with the modifiers active on it applied
-
-        For a declared parameter (an `ss.par`), a number in the sim's unit once the sim is
-        initialized (before that, the value it holds); for any other parameter, the value itself.
-        Use this from module code (e.g. a network's `net_beta()`) rather than `self.pars[name]`,
-        which for a declared module is the `ss.par`.
-
-        Args:
-            name (str): the name of the parameter
-
-        Examples:
-            ```python
-            eff = disease.value('eff_condom')
-            ```
-        """
-        p = self.pars[name]
-        if not isinstance(p, ss.par):
-            return p
-        if self.engine is None:
-            return p.raw
-        return self.engine.value(p)
 
     def stratify(self, inplace=True, **kwargs):
         """
@@ -484,7 +460,7 @@ class Disease(ss.Module):
         Args:
             split (list): the share of the population in each level, unless the levels are a dict of them (if not given: from a named population or geography; for age groups, the world's ages; for a boolean dimension, or one that people are moved along, everyone at the first level; otherwise equal)
             adjust (dict): multipliers on named transitions, one per level, e.g. `{'recovery': [1.5, 1.0, 0.5]}`: on its rate (a duration is divided), or on its probability for a branch chosen with p=
-            kind (str): 'age', 'space', 'clock' (the time since an event, e.g. `since_birth=ss.months([0, 3, 12]), kind='clock'`), or 'plain'; if not given, from the value: 'space' for an `ss.geo.geography` or with `mobility=`, 'age' for `age=`, and otherwise 'plain' (whatever the name); strains are `strains=ss.Strains(...)` on the disease
+            kind (str): 'age', 'space', or 'plain'; if not given, from the value: 'space' for an `ss.geo.geography` or with `mobility=`, 'age' for `age=`, and otherwise 'plain' (whatever the name); strains are `strains=ss.Strains(...)` on the disease
             states (list): the states the dimension applies to (default: every state that is people)
             where (dict): the groups the dimension applies to, e.g. `dict(sex='female')`; people in other groups have no level of it, so selecting a level of it leaves them out (default: every group)
             mobility (gravity/radiation/Mobility/array): for a place (e.g. `patch=`), the movement between its levels: `ss.geo.gravity()`, `ss.geo.radiation()`, `ss.geo.Mobility()`, or a matrix
@@ -502,7 +478,7 @@ class Disease(ss.Module):
         """
         if self.graph is None:
             errormsg = f'"{self.name}" is written as code ({type(self).__name__}), so it has no states for stratify() to divide; its own code can read a property of people instead, or a sim stratified with sim.stratify() gives people the levels (people.<name>) for a network or a declared module to use'
-            raise ss.errors.Unapplied(errormsg)
+            raise ValueError(errormsg)
         mod = self if inplace else self.copy()
         mod.graph.stratify(**kwargs)
         for strat in mod.graph.strats: # So a dimension can be used in a condition, e.g. where=~sir.vaccinated
@@ -563,6 +539,8 @@ class Disease(ss.Module):
             desc.section(f"{type(self).__name__} '{self.name}'", f'written as code, with {len(self.state_list)} arrays')
             desc.add('arrays', ', '.join(s.name for s in self.state_list))
             desc.add('parameters', ', '.join(self.pars.keys()))
+            if self.strains is not None:
+                desc.add('strains', f'{sc.strjoin(self.strains.names)}, one carried at a time')
         if out is not None:
             return desc
         return str(desc) if output else desc.show()
@@ -584,7 +562,6 @@ class Disease(ss.Module):
         People states are rounded and counts slanted; transmissions are dashed; each
         arrow is labelled with its transition's name and value (`recovery: 10 days`), and
         the share that takes it for a transition with `p=`. `print(sir.diagram())` gives the text.
-        `ss.interop.export(sim, 'mermaid', filename='sir.md')` writes the diagram of every disease in a sim.
 
         **Example**:
 
@@ -636,19 +613,6 @@ class Disease(ss.Module):
             raise ValueError(errormsg)
         return ngm if matrix else float(np.max(np.abs(np.linalg.eigvals(ngm))))
 
-    def to_spec(self, filename=None, **kwargs):
-        """
-        The disease's part of the model spec (`sim.to_spec()`): its states, parameters, and transitions as plain data, for `sim.hash()`, `ss.diff()`, and `ss.to_code()`
-
-        Args:
-            filename (str): if provided, save to this file
-            kwargs (dict): passed to `sc.savejson()`
-        """
-        out = self.graph.to_spec(self.sim) if self.graph is not None else super().to_spec() # Written as code: see ss.Module.to_spec()
-        if filename is not None:
-            return sc.savejson(filename, out, **kwargs)
-        return out
-
     @ss.required()
     def init_pre(self, sim):
         """ Link the disease to the sim, create its engine and objects, initialize results, and start its infection log if there is an `ss.infection_log` analyzer; see Module.init_pre() for details """
@@ -657,7 +621,7 @@ class Disease(ss.Module):
         unknown = [key for key in self.pars if key not in self.graph.pars and key not in self.code_pars] if self.graph is not None else [] # Added after the disease was made, so nothing reads it (TL58: pars.init was ignored)
         if unknown:
             hint = ' The starting values are given when the disease is made, e.g. ss.Disease(..., init=dict(I=0.01)) or init_n=dict(I=100), and cannot be set through pars.' if 'init' in unknown or 'init_n' in unknown else ''
-            raise ss.errors.UnknownParameter(f'"{self.name}" has no parameter named {sc.strjoin(unknown)}, so nothing would read it. Its parameters are {sc.strjoin(self.graph.pars.keys())}{ss.expressions.did_you_mean(unknown[0], self.graph.pars.keys())}{hint}')
+            raise sc.KeyNotFoundError(f'"{self.name}" has no parameter named {sc.strjoin(unknown)}, so nothing would read it. Its parameters are {sc.strjoin(self.graph.pars.keys())}{ss.expressions.did_you_mean(unknown[0], self.graph.pars.keys())}{hint}')
         self.engine = ss.solvers.make_engine(self, sim)
         self.engine.define()
         needs = ss.interventions.memory_needs(sim) if isinstance(sim, ss.Sim) and self.graph is not None and self.graph.transitions else {} # Not a mock sim
@@ -779,31 +743,32 @@ class Disease(ss.Module):
             self.infection_log.add_entries(uids, sources, self.t.tvec[self.ti]) # At the step's time point, as ti_infected is
         return
 
-    def modified(self, key, uids=None, vals=None):
+    def effective(self, key, uids=None):
         """
-        `rel_sus` or `rel_trans` (`key`) times the modifiers active on it (`ss.modify(dis.rel_sus, ...)`, and products), for a disease written as code that reads it
+        `rel_sus` or `rel_trans` (`key`) of each agent with the modifiers and products active on it applied (`ss.modify(dis.rel_sus, ...)`), as agents:
+        what transmission uses, whereas reading `dis.rel_sus` gives the base values, which a modifier never changes
 
-        An `ss.Infection` with a `beta` reads both in its transmission (`transmit_route()`). Any other disease written as
-        code that reads one says so in its class, `reads_modifiers = ('rel_sus',)`, so that modifiers of it are applied
-        rather than refused.
+        A disease written as code that reads one in its own code (other than in an `ss.Infection`'s transmission) says so in its class,
+        `reads_modifiers = ('rel_sus',)`, so that modifiers of it are applied rather than refused.
 
         Args:
             key (str): 'rel_sus' or 'rel_trans'
             uids (uids): the agents to give the values of (default: an array of every agent, by UID)
-            vals (Arr): the values to multiply (default: the disease's own `rel_sus` or `rel_trans`)
 
         **Example**::
+
+            sim.diseases.sir.effective('rel_sus') # With a vaccine's efficacy applied
 
             class Diabetes(ss.Disease):
                 reads_modifiers = ('rel_sus',) # ss.modify(diabetes.rel_sus, ...) scales its onset
                 def step(self):
                     uids = self.at_risk.uids
-                    onset = self.pars.p_onset.rvs(uids)*self.modified('rel_sus', uids) # ...
+                    onset = self.pars.p_onset.rvs(uids)*self.effective('rel_sus', uids) # ...
         """
+        if not isinstance(self.engine, ss.solvers.Transmission):
+            raise ss.CapabilityError(f'{self.name}.effective() is the value of each agent with the modifiers applied, which only a run as agents has; in a compartmental run, sim.what_modifies({self.name}.{key}) lists the modifiers')
         arr = self[key]
-        vals = arr if vals is None else vals
-        if isinstance(arr, ss.arrays.ModifiableArr) and arr.engine is not None:
-            vals = vals.asnew(vals.raw*arr.engine.mult_raw(key), copy=False)
+        vals = arr.asnew(arr.raw*self.engine.mult_raw(key), cls=ss.FloatArr, copy=False)
         return vals if uids is None else vals[uids]
 
     def not_naive(self):
@@ -824,7 +789,7 @@ class Disease(ss.Module):
 
     def infect(self, uids, strain=None):
         """
-        Infect some agents now, from code (e.g. a strain introduced on a date): those in the first state move where its transmission puts them, counted in its flow and dated as its infections are (`ti_I == sim.ti`), with a source of -1 in an `ss.infection_log`
+        Infect some agents now, from code (e.g. a strain introduced on a date): those in the first state move where its transmission puts them, counted in its flow and dated as its infections are (`ti_I.isclose(sim.ti)`), with a source of -1 in an `ss.infection_log`
 
         Args:
             uids (uids): the agents; those not in the first state are left where they are
@@ -865,7 +830,7 @@ class Disease(ss.Module):
         names = [s if isinstance(s, str) else s.name for s in sc.tolist(states)] if states is not None else [s.name for s in graph.people_states]
         unknown = [name for name in names if name not in graph.states]
         if unknown:
-            raise ss.errors.UnknownState(f'"{self.name}" has no state {sc.strjoin(unknown)}; its states are {sc.strjoin(graph.states.keys())}')
+            raise sc.KeyNotFoundError(f'"{self.name}" has no state {sc.strjoin(unknown)}; its states are {sc.strjoin(graph.states.keys())}')
         age = self.sim.people.age # A plain array of the people, to copy
         raw = np.full(len(age.raw), -1, dtype=ss.dtypes.int)
         for i,name in enumerate(names):
@@ -936,19 +901,51 @@ class Infection(Disease):
     and `R0()`. The v4 verbs that act on arrays work on both: `ss.modify(hiv.rel_trans, ...)`,
     conditions such as `hiv.cd4 < 200`, and fitting the values in `pars`.
 
+    With `strains=ss.Strains(...)`, each person carries one strain at a time (`self.strain`, the index of the
+    strain of their current or last infection, -1 if none), which the disease's code reads (e.g. in
+    `set_prognoses()`, and `strain_value()` for a strain's values). The strains are transmitted in one pass, each
+    by those infectious with it at its `rel_trans`; each new case is infected by one of those who reached them in
+    the step, at random, and takes their strain, unless protected against it (`strain_sus()`: protection from
+    `ss.immunity(due_to=<state>, rel_sus=matrix)` by the strain they had, or the disease's own), as a declared
+    disease's strains are passed on, by the same code (`ss.solvers.Transmission`).
+
     Note: CRN safe.
+
+    Args:
+        pars (dict): parameters
+        strains (`ss.Strains`): the strains, carried one at a time, sharing the disease's states
+        kwargs (dict): parameters
 
     Examples:
         ```python
-        class SI(ss.Infection):
+        class SIRS(ss.Infection):
             def __init__(self, **kwargs):
                 super().__init__()
-                self.define_pars(beta=ss.peryear(0.5), init_prev=ss.bernoulli(0.01))
+                self.define_pars(beta=ss.perday(0.05), init_prev=ss.bernoulli(0.01), dur_inf=10)
+                self.define_states(ss.BoolState('recovered'), ss.FloatArr('ti_recovered'))
                 self.update_pars(**kwargs)
+
+            def step_state(self):
+                done = (self.infected & (self.ti_recovered <= self.ti)).uids
+                self.infected[done] = False
+                self.recovered[done] = True
+                self.susceptible[done] = True # Protected only by the immunity of their strain, if any
+
+            def set_prognoses(self, uids, sources=None):
+                super().set_prognoses(uids, sources)
+                self.infected[uids] = True
+                self.recovered[uids] = False
+                self.ti_infected[uids] = self.ti
+                self.ti_recovered[uids] = self.ti + self.pars.dur_inf
+
+        # Two strains, the second more transmissible; recovering from one protects fully against it, and partly against the other
+        strains = ss.Strains(['H1', 'H3'], rel_trans=[1, 1.5], immunity=ss.immunity(due_to='recovered', rel_sus=[[1, 0.5], [0.5, 1]]))
+        sim = ss.Sim(diseases=SIRS(strains=strains, name='flu'), networks='random', n_agents=2000, unit='day', stop=100).run()
+        sim.diseases.flu.strain # The strain of each person's current or last infection
         ```
     """
 
-    def __init__(self, pars=None, **kwargs):
+    def __init__(self, pars=None, strains=None, **kwargs):
         super().__init__()
         self.define_states(
             ss.BoolState('susceptible', default=True, label='Susceptible'),
@@ -962,19 +959,66 @@ class Infection(Disease):
         self.define_pars(
             init_prev = None, # Replace None with a ss.bernoulli to seed infections
         )
-        self.update_pars(pars, **kwargs)
+        self.update_pars(pars, strains=strains, **kwargs)
 
         # Define random number generator for determining transmission
         self.trans_rng = ss.multi_random('source', 'target')
         return
 
+    def define_strains(self, strains):
+        """ Give the disease strains (`ss.Strains`, also as `strains=` to the disease), carried one at a time: the strain of each person (`self.strain`, added when the sim is initialized, set for those infected by transmission, at the start, and by `infect()`; code that infects people itself sets it), and the strain of those infected at the start, by its split """
+        n = len(strains)
+        why = ('its strains are diseases of their own' if strains.members is not None else f'max_strains={strains.max_strains}' if strains.max_strains > 1 else
+               'it has states of its own for each strain (shared=False)' if strains.shared is not True else
+               next((f'ss.immunity lowers {sc.strjoin(imm.values)}, not only rel_sus' for imm in strains.immunity if list(imm.values) != ['rel_sus']), None))
+        if why:
+            raise ss.CapabilityError(f'"{self.name}" is written as code, so its strains are carried one at a time, sharing its states, with protection on rel_sus due to its own states; but {why}. Declare the disease (see ss.Disease) for more.')
+        self.strains = strains # Its arrays are added when the sim is initialized (see init_pre()), so a subclass may define its own states after this, even with reset=True
+        return
+
+    def update_pars(self, pars=None, **kwargs):
+        """ As `ss.Module.update_pars()`, and `strains=` for `define_strains()`, so a subclass that passes its keywords on here takes it too (e.g. `ssl.AgentSIR(strains=...)`) """
+        if isinstance(pars, dict) and 'strains' in pars: # Also in a dict of parameters
+            pars = dict(pars)
+            kwargs['strains'] = pars.pop('strains')
+        strains = kwargs.pop('strains', None)
+        if strains is not None:
+            self.define_strains(strains)
+        return super().update_pars(pars, **kwargs)
+
+    def strain_value(self, key, uids):
+        """ The value of `key` (given to `ss.Strains`, e.g. `rel_trans=[1, 1.5]`) for the strain each of some agents carries (1 if it has none) """
+        vals = self.strains.values[key] if key in self.strains.values else np.ones(len(self.strains))
+        strain = self.strain[uids]
+        return np.where(strain >= 0, vals[np.maximum(strain, 0)], 1.0)
+
+    def strain_sus(self, k):
+        """
+        The share of their susceptibility to strain `k` that each agent (by UID) keeps: `1 − protection` from each `ss.immunity` of the
+        strains, for those in its state (e.g. `due_to='recovered'`) by the strain they had; a disease with protection of its own (e.g.
+        from antibodies) overrides this
+        """
+        out = 1.0
+        strain = self.strain.raw
+        for imm in self.strains.immunity:
+            held = np.logical_or.reduce([self[name].raw for name in imm.names]) & (strain >= 0)
+            out = out*np.where(held, 1 - imm.matrix('rel_sus', len(self.strains))[np.maximum(strain, 0), k], 1.0)
+        return out
+
     @ss.required()
     def init_pre(self, sim):
         """ Link the disease to the sim and initialize results; see `ss.Module.init_pre()` """
+        if self.strains is not None and not isinstance(getattr(self, 'strain', None), ss.IntArr): # The strain of each person, and of those infected at the start, by the split
+            n = len(self.strains)
+            self.define_states(ss.IntArr('strain', default=-1, label='Strain of the current or last infection'))
+            self.strain_dist = ss.choice(a=n, p=self.strains.split if self.strains.split is not None else np.full(n, 1/n))
         super().init_pre(sim)
         if 'beta' in self.pars: # A disease that is not transmitted, such as ssl.NCD, has no beta
             self.validate_beta()
         self.validate_init_prev()
+        unknown = [name for imm in (self.strains.immunity if self.strains is not None else []) for name in imm.names if not isinstance(getattr(self, name, None), ss.BoolArr)]
+        if unknown:
+            raise sc.KeyNotFoundError(f'the strains of "{self.name}" are protected by ss.immunity(due_to={unknown[0]!r}), which is not one of its states (a boolean array, e.g. ss.BoolState("recovered"))')
         return
 
     def validate_init_prev(self):
@@ -1004,6 +1048,8 @@ class Infection(Disease):
         unborn = people.unborn_uids() if isinstance(people, ss.People) else ss.uids() # E.g. the fetuses of pregnancies that ss.Pregnancy starts before the start, who are not seeded
         initial_cases = self.pars.init_prev.filter() if not len(unborn) else self.pars.init_prev.filter(people.auids[people.age.raw[people.auids] >= 0])
         if len(initial_cases):
+            if self.strains is not None:
+                self.strain[initial_cases] = self.strain_dist.rvs(initial_cases)
             ti = self.t.ti
             self.t.ti = min(1, self.t.npts-1) # Dated by the first step, as an infection in it is, so code that schedules from self.ti (e.g. ti_recovered = self.ti + dur) gives them as long as Starsim 3 did, not a step less (CV2)
             try:
@@ -1133,7 +1179,7 @@ class Infection(Disease):
 
         Args:
             uids (uids): the agents; those not susceptible are left as they are
-            strain (str): for a declared disease with strains only
+            strain (str/int): with strains, the strain they are infected with (its name or index; by default, as the split says)
 
         Returns:
             The agents infected
@@ -1146,11 +1192,13 @@ class Infection(Disease):
             return super().infect(uids, strain)
         if not self.sim or not self.sim.initialized:
             raise RuntimeError(f'"{self.name}" infects people once the sim is initialized (sim.init())')
-        if strain is not None:
-            raise ss.CapabilityError(f'"{self.name}" is written as code, so infect() takes no strain=; set the strain in its own states')
+        if strain is not None and self.strains is None:
+            raise ss.CapabilityError(f'"{self.name}" has no strains (define_strains()), so infect() takes no strain=')
         uids = ss.uids(uids)
         uids = uids[self.susceptible[uids]]
         if len(uids):
+            if self.strains is not None:
+                self.strain[uids] = self.strain_dist.rvs(uids) if strain is None else self.strains.names.index(strain) if isinstance(strain, str) else int(strain)
             self.set_outcomes(uids, sources=np.full(len(uids), -1))
         return uids
 
@@ -1176,9 +1224,11 @@ class Infection(Disease):
         Determine who gets infected on this timestep via transmission on the network
 
         Computes the effective transmissibility and susceptibility, calls `transmit_route()`
-        for each network (or other route), and then removes duplicate infections with
-        `finalize_infections()`. A multi-strain disease can override this method to loop
-        over strains, calling `transmit_route()` with per-strain values.
+        for each network (or other route), and keeps the first infection of each agent
+        (`ss.solvers.Transmission.first_infections()`). With strains, every strain is transmitted
+        in one pass, and each new case is infected by one of those who reached them, at random,
+        whose strain they take (`self.strain`), unless protected against it (`strain_sus()`), as
+        for a declared disease (`ss.solvers.Transmission.pick_sources()`).
         """
         if 'beta' not in self.pars: # A disease that is not transmitted, such as ssl.NCD, has no beta
             return self.finalize_infections([], [], [])
@@ -1188,28 +1238,44 @@ class Infection(Disease):
         # (full-length) arrays. This avoids the gather/scatter, full-length astype copy,
         # and extra wrapper allocations of the Arr math operators; edges only ever index
         # living agents, so stale raw values for inactive agents are never used.
-        rel_trans = self.rel_trans.asnew(self.infectious.raw * self.rel_trans.raw, copy=False) # The modifiers are applied by transmit_route()
-        rel_sus   = self.rel_sus.asnew(self.susceptible.raw * self.rel_sus.raw, copy=False)
-
-        new_cases = []
-        sources = []
-        networks = []
+        trans = self.infectious.raw * self.rel_trans.raw # The modifiers are applied by transmit_route()
+        sus   = self.susceptible.raw * self.rel_sus.raw
+        if self.strains is not None: # The infectiousness of the strain each carries (none for someone without one)
+            held = self.strain.raw
+            rel = self.strains.values.rel_trans if 'rel_trans' in self.strains.values else np.ones(len(self.strains))
+            trans = trans*np.where(held >= 0, rel[np.maximum(held, 0)], 0.0)
+        rel_trans, rel_sus = self.rel_trans.asnew(trans, copy=False), self.rel_sus.asnew(sus, copy=False)
+        pairs = []
         for i, (nkey,route) in enumerate(self.sim.networks.items()):
             betas = betamap[ss.utils.standardize_netkey(nkey)]
-            target_uids, source_uids, network_ids = self.transmit_route(i, route, betas, rel_trans, rel_sus)
-            new_cases.append(target_uids)
-            sources.append(source_uids)
-            networks.append(network_ids)
+            if self.strains is None or isinstance(route, ss.Network): # On a network, each case has a source, whose strain they take
+                target_uids, source_uids, network_ids = self.transmit_route(i, route, betas, rel_trans, rel_sus)
+                pairs.append((source_uids, target_uids, network_ids) + ((held[source_uids],) if self.strains is not None else ()))
+            else: # Another route gives no sources, so each strain is transmitted over it by those who carry it
+                for k in range(len(self.strains)):
+                    target_uids, source_uids, network_ids = self.transmit_route(i, route, betas, self.rel_trans.asnew(trans*(held == k), copy=False), rel_sus)
+                    pairs.append((source_uids, target_uids, network_ids, k))
 
-        return self.finalize_infections(new_cases, sources, networks)
+        if self.strains is None or not pairs:
+            return ss.solvers.Transmission.first_infections(pairs)
+        eng = self.engine # Each case is infected by one of those who reached them, at random, and takes their strain unless protected against it, as for a declared disease
+        new_cases, sources, networks, strain = eng.pick_sources(pairs, 'infection')
+        kept = np.ones(len(new_cases))
+        for k in np.unique(strain):
+            kept[strain == k] = np.broadcast_to(self.strain_sus(k), trans.shape)[new_cases[strain == k]]
+        ok = eng.unprotected('infection', new_cases, kept)
+        new_cases, sources, networks, strain = new_cases[ok], sources[ok], networks[ok], strain[ok]
+        self.strain[new_cases] = strain
+        return new_cases, sources, networks
 
     def transmit_route(self, i, route, betas, rel_trans, rel_sus):
         """
         Compute the transmission along a single network (or other route)
 
         On a network, each edge transmits with probability `rel_trans·rel_sus·net_beta()` (see `ss.Network.transmit()`), times the modifiers
-        of the network's contacts and of `rel_sus` on the route (`ss.modify(..., route=)`), as for a declared disease run as agents. The modifiers
-        of `rel_trans` and `rel_sus` (including products) are applied here, so a disease that overrides `transmit()` has them too.
+        of the network's contacts and of `rel_sus` on the route (`ss.modify(..., route=)`), as for a declared disease run as agents, by the same
+        code (`ss.solvers.Transmission`), with beta as the probability in the step. The modifiers of `rel_trans` and `rel_sus` (including
+        products) are applied here, so a disease that overrides `transmit()` has them too.
 
         Args:
             i (int): the index of the route in `sim.networks`, stored as the network ID of each infection
@@ -1221,55 +1287,33 @@ class Infection(Disease):
         Returns:
             A tuple of the target UIDs, the source UIDs, and the network IDs of the new infections (possibly with duplicates)
         """
-        rel_trans = self.modified('rel_trans', vals=rel_trans)
-        rel_sus = self.modified('rel_sus', vals=rel_sus)
-        new_cases = []
-        sources = []
-        mods = self.sim.modifiers
-        if mods.get((route.name, 'par', 'n_contacts')) or mods.get((self.name, 'route', f'rel_sus@{route.name}')): # Modifiers of its contacts, or on this route
-            engine = ss.connectors.AgentModifiers.engine(self, self.sim)
-            mult = lambda inds, trg: ss.connectors.route_mult(engine, 'rel_sus', route, inds, trg)
-        else:
-            mult = lambda inds, trg: 1.0
+        eng = self.engine
+        times = ss.solvers.engine.times
+        rel_trans = times(rel_trans.raw, eng.mult_raw('rel_trans'))
+        rel_sus = times(rel_sus.raw, eng.mult_raw('rel_sus'))
 
         # Main use case: networks
         if isinstance(route, ss.Network):
-            def edge_beta(d, inds, src, trg): # For the edges that might transmit (see ss.Network.transmit())
-                beta = betas[d]
-                if isinstance(beta, np.ndarray): # A probability per act for each direction of the network
-                    beta = beta[route.edge_directions(*(route.ends(d) if route.custom_beta else (src, trg)))] # For every edge, for a net_beta() of its own
-                elif not beta: # Skip directions with no transmission
-                    return None
-                disease_beta = beta.to_prob(self.t.dt) if isinstance(beta, ss.Rate) else beta
-                beta_per_dt = route.edge_net_beta(inds, disease_beta=disease_beta, disease=self) # Compute beta for this network and timestep
-                m = mult(inds, trg)
-                return beta_per_dt*m if np.ndim(m) or m != 1 else beta_per_dt # Bit for bit as before, with no modifiers
-            for source_uids, target_uids in route.transmit(rel_trans.raw, rel_sus.raw, edge_beta, self.trans_rng):
-                new_cases.append(target_uids)
-                sources.append(source_uids)
+            pairs = eng.over_network(i, route, rel_trans, rel_sus, betas, 'rel_sus')
 
         # Handle everything else: mixing pools, environmental transmission, etc.
         elif isinstance(route, ss.networks.Route):
-            # Mixing pools are unidirectional, only use the first beta value
-            disease_beta = betas[0].to_prob(self.t.dt) if isinstance(betas[0], ss.Rate) else betas[0]
-            m = mult(None, slice(None))
-            if np.ndim(m) or m != 1:
-                rel_sus = rel_sus.asnew(rel_sus.raw*m, copy=False)
-            target_uids = route.compute_transmission(rel_sus, rel_trans, disease_beta, disease=self)
-            new_cases.append(target_uids)
-            sources.append(np.full(len(target_uids), dtype=ss_int, fill_value=ss.dtypes.int_nan))
+            beta = betas[0].to_prob(self.t.dt) if isinstance(betas[0], ss.Rate) else betas[0] # Mixing pools are unidirectional, so only the first beta is used
+            rel_sus = times(rel_sus, eng.route_mult('rel_sus', route)(None, slice(None)))
+            target_uids = route.compute_transmission(self.rel_sus.asnew(rel_sus, copy=False), self.rel_trans.asnew(rel_trans, copy=False), beta, disease=self)
+            pairs = [(np.full(len(target_uids), dtype=ss_int, fill_value=ss.dtypes.int_nan), target_uids, i)]
         else:
             errormsg = f'Cannot compute transmission via route {type(route)}; please subclass ss.networks.Route and define a compute_transmission() method'
             raise TypeError(errormsg)
 
-        new_cases = ss.uids.concatenate(new_cases)
-        sources = ss.uids.concatenate(sources)
+        new_cases = ss.uids.concatenate([pair[1] for pair in pairs])
+        sources = ss.uids.concatenate([pair[0] for pair in pairs])
         networks = np.full(len(new_cases), dtype=ss_int, fill_value=i)
         return new_cases, sources, networks
 
     def finalize_infections(self, new_cases, sources, networks):
         """
-        Combine the infections from each route, keeping only the first infection of each agent
+        Combine the infections from each route, keeping only the first infection of each agent (see `ss.solvers.Transmission.first_infections()`)
 
         Args:
             new_cases (list): the target UIDs from each call to `transmit_route()`
@@ -1279,16 +1323,7 @@ class Infection(Disease):
         Returns:
             A tuple of the unique target UIDs, and their source UIDs and network IDs
         """
-        if len(new_cases):
-            new_cases = ss.uids.concatenate(new_cases)
-            new_cases, inds = new_cases.unique(return_index=True)
-            sources = ss.uids.concatenate(sources)[inds]
-            networks = np.concatenate(networks)[inds]
-        else:
-            new_cases = ss.uids()
-            sources = ss.uids()
-            networks = np.empty(0, dtype=ss_int)
-        return new_cases, sources, networks
+        return ss.solvers.Transmission.first_infections(list(zip(sources, new_cases, networks)))
 
     def set_outcomes(self, uids, sources=None):
         """
@@ -1332,7 +1367,7 @@ class Infection(Disease):
         res = self.results
         res.cum_infections[:] = np.cumsum(res.new_infections[:]) # Computed after scaling, since the scale can vary over time (see ss.Sim.rescale())
         ti_infected = getattr(self, 'ti_infected', None) # A subclass can remove it (define_states(reset=...))
-        if ti_infected is not None and not res.new_infections.values.any() and np.any(ti_infected.raw > 0): # People were infected during the run, but none were counted
+        if ti_infected is not None and not res.new_infections.values.any() and np.any(ti_infected.raw > 1): # People were infected during the run, but none were counted (not those seeded, which are dated by the first step: see init_post())
             ss.warn(f'"{self.name}": people were infected during the run, but new_infections is 0 at every time point. Infection.set_prognoses() counts them, '
                     f'so an override of it ({type(self).__name__}.set_prognoses()) should call super().set_prognoses(uids, sources)')
         return
@@ -1475,7 +1510,7 @@ class InfectionLog:
             df['network'] = df['network'].map(lambda v: names.get(v, v))
         if 'network' in df.columns and df['network'].isna().all(): # No route is known (e.g. homogeneous mixing, with no networks): no column of blanks
             df = df.drop(columns='network')
-        df['t'] = [float(t.value) if isinstance(t, ss.dur) and not isinstance(t, ss.datedur) else t for t in df['t']] # Plain numbers (on the disease's own axis), or dates, rather than durations, so times can be subtracted
+        df['t'] = [float(t.value) if isinstance(t, ss.dur) else t for t in df['t']] # Plain numbers (on the disease's own axis), or dates, rather than durations, so times can be subtracted
 
         df = df.sort_values(['t', 'source', 'target'], kind='stable')
         df = df.reset_index(drop=True)

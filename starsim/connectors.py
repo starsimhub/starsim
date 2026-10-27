@@ -32,27 +32,20 @@ class Target:
     def __repr__(self):
         return f'{self.module.name}.{self.name or self.kind}'
 
-    @property
-    def effective(self):
-        errormsg = f'{self}.effective is the value of each agent with the modifiers applied, which only a run as agents has; in a compartmental run, sim.what_modifies({self}) lists the modifiers'
-        raise ss.CapabilityError(errormsg)
-
 
 def parse_target(target):
     """ Work out what a modifier changes: returns the module (or its name), the kind of quantity, and its name """
     if isinstance(target, ss.par):
         if target.module is None:
-            raise ss.errors.UnmodifiableTarget('the target of ss.modify() is a parameter that does not belong to a module yet; build the module first, then use e.g. sir.pars.beta.')
+            raise sc.KeyNotFoundError('the target of ss.modify() is a parameter that does not belong to a module yet; build the module first, then use e.g. sir.pars.beta.')
         return target.module, 'par', target.name
     elif isinstance(target, Target):
         return target.module, target.kind, target.name
     elif isinstance(target, ss.expressions.attr) and target.module is not None: # An attribute, wherever it is read
         return target.module, 'attr', target.name
-    elif isinstance(target, ss.arrays.ModifiableArr) and target.engine is not None: # The array itself, once the sim exists
-        return target.engine.mod, target.name, None
-    elif isinstance(target, ss.Arr) and target.name in ['rel_sus', 'rel_trans'] and target.mod is not None: # Of a disease written as code, e.g. hiv.rel_trans
+    elif isinstance(target, ss.Arr) and target.name in ['rel_sus', 'rel_trans'] and target.mod is not None: # The array itself, once the sim exists (or, for a disease written as code, e.g. hiv.rel_trans, at once)
         return target.mod, target.name, None
-    elif isinstance(target, (ss.Transition, ss.transitions.Transfer)) and getattr(target, 'module', None) is not None: # A transfer's rate is modified as a transition's is
+    elif isinstance(target, (ss.Transition, ss.dimensions.Transfer)) and getattr(target, 'module', None) is not None: # A transfer's rate is modified as a transition's is
         return target.module, 'transition', target.name
     elif isinstance(target, ss.networks.Route) and target.name and 'n_contacts' in target.pars: # A network or a contact layer means its number of contacts, as "school.pars.n_contacts"
         return target.name, 'par', 'n_contacts'
@@ -63,7 +56,7 @@ def parse_target(target):
             return parts[0], 'transition', '.'.join(parts[1:])
         return parts[0], kind, None if kind in ['rel_sus', 'rel_trans'] else parts[-1]
     what = 'a value' if isinstance(target, (ss.TimePar, ss.Dist)) else 'a plain number' if sc.isnumber(target) else 'an object'
-    raise ss.errors.UnmodifiableTarget(f'the target of ss.modify() must be a named quantity, such as sir.pars.beta, sir.rel_sus, sir.recovery, or "sir.pars.beta", not {target} ({type(target).__name__}), which is {what} with no name to refer to.\n'
+    raise sc.KeyNotFoundError(f'the target of ss.modify() must be a named quantity, such as sir.pars.beta, sir.rel_sus, sir.recovery, or "sir.pars.beta", not {target} ({type(target).__name__}), which is {what} with no name to refer to.\n'
                                 f'     (A parameter of a network is named by its path, e.g. ss.modify("randomnet.pars.n_contacts", multiply=0.5), or its contacts by the network itself. A parameter of a disease written as code is a plain value, read by its own code, so it cannot be modified; its rel_sus and rel_trans can be, e.g. ss.modify(hiv.rel_trans, multiply=0.5).)')
 
 
@@ -124,10 +117,10 @@ def to_ti(sim, val, name='time', after=False):
         if sc.isnumber(val) and sim.t.is_absolute:
             hint = f"; a number is a time in the sim's unit ({sim.unit_base}s) since the start, or a year within the sim"
         when = f'{val}, which is {time}' if sc.isnumber(val) and not (sim.t.is_absolute and ss.time.assume_cal_year(val)) else f'{val}'
-        raise ss.errors.TimeOutsideSim(f'{name} ({when}) is outside the sim ({tvec[0]} to {tvec[-1]}){hint}.')
+        raise ValueError(f'{name} ({when}) is outside the sim ({tvec[0]} to {tvec[-1]}){hint}.')
     ti = next((ti for ti,now in enumerate(tvec) if reached(now, time)), len(tvec)) # len(tvec) if after the end
     if ti >= len(tvec) - 1 and not after: # The last time point records the end of the run: no step starts there, so nothing timed then would happen
-        raise ss.errors.TimeOutsideSim(f'{name} ({val}) is after the start of the last step ({tvec[-2]}), so it would never happen: the last time point ({tvec[-1]}) is the end of the run, where no step starts. Give an earlier time, or a later stop.')
+        raise ValueError(f'{name} ({val}) is after the start of the last step ({tvec[-2]}), so it would never happen: the last time point ({tvec[-1]}) is the end of the run, where no step starts. Give an earlier time, or a later stop.')
     return ti + 1 # The step from that time point
 
 
@@ -144,7 +137,7 @@ def combine(mods, value, engine):
     sets = [mod.name for mod in active if mod.op == 'set']
     if len(sets) > 1 and (sets[0], sets[1]) not in engine.sim.overlaps: # Said once
         engine.sim.overlaps.append((sets[0], sets[1]))
-        ss.note(f'the modifiers {sc.strjoin(sets)} both set the same quantity at the same time; the last one wins', ss.errors.OverlappingSet, sim=engine.sim)
+        ss.note(f'the modifiers {sc.strjoin(sets)} both set the same quantity at the same time; the last one wins', sim=engine.sim)
     for op in ['set', 'multiply', 'add']:
         for mod in active:
             if mod.op == op:
@@ -171,7 +164,7 @@ def route_mult(engine, name, route, inds, trg):
     people it applies to (`where=`, of the people who would be infected)
 
     Args:
-        engine (Engine/AgentModifiers): the engine of the disease, as agents
+        engine (`ss.solvers.Transmission`): the engine of the disease, as agents
         name (str): the name the modifiers on the route are under: a declared disease's transmission, or `rel_sus` for a disease written as code
         route (Route): the route
         inds (array): the edges of a network (Ellipsis for all), for a share given per edge; None for a route with no edges
@@ -204,11 +197,11 @@ def route_mult(engine, name, route, inds, trg):
 
 def check_applied(sim):
     """
-    Raise `ss.errors.Unapplied` for any modifier, change, or efficacy of a product that nothing in the sim would apply, naming it and why
+    Raise a `ValueError` for any modifier, change, or efficacy of a product that nothing in the sim would apply, naming it and why
 
     Called once by `sim.init()`, after every module has registered its modifiers in `sim.modifiers` (by module, kind of
     quantity, and name). For each quantity modified, the module it belongs to says whether it reads it: a declared module
-    from its graph (`unapplied()`), and a disease written as code from what its own code reads (`AgentModifiers.unapplied()`).
+    from its graph (`unapplied()`), and a disease written as code from what its own code reads (`ss.solvers.Undeclared.unapplied()`).
     A network's contacts are read by every transmission over it. It costs one pass over the quantities modified.
     """
     modules = {mod.name:mod for mod in sim.modules}
@@ -219,12 +212,12 @@ def check_applied(sim):
         if getattr(mod, 'graph', None) is not None:
             why = unapplied(mod.graph, modname, kind, name, mods)
         elif isinstance(mod, ss.Disease):
-            why = AgentModifiers.unapplied(mod, kind)
+            why = mod.engine.unapplied(kind)
         else: # A network's contacts, read by every transmission over it
             continue
         if why:
             path = f'{modname}.pars.{name}' if kind == 'par' else f'{modname}.{name or kind}'.split('@')[0]
-            raise ss.errors.Unapplied(f'{sc.strjoin(describe_mod(m) for m in mods)} on {path} would not be applied by any solver: {why}')
+            raise ValueError(f'{sc.strjoin(describe_mod(m) for m in mods)} on {path} would not be applied by any solver: {why}')
     return
 
 
@@ -243,10 +236,6 @@ def unapplied(graph, modname, kind, name, mods):
         if name not in graph.pars:
             return (f'"{name}" is a plain parameter of "{modname}", not one of its model\'s parameters (ss.par), so only the module\'s own code reads it, and a modifier cannot change it. '
                     f'Modify a parameter or transition of its model instead (e.g. {modname}.{next(iter(graph.transitions), "transition")}), or give the value when the module is made.')
-        tables = [tr.name for tr in graph.transitions.values() for p in getattr(tr, 'p_given', None) or [] for leaf in ss.expressions.to_pars(p) if leaf.name == name]
-        if tables:
-            dsts = sc.strjoin(f"'{modname}.{tables[0]}.{dst.name}'" for dst in graph.transitions[tables[0]].dst)
-            return f'it is a value over "to" in the p= table of "{tables[0]}", which is built once, when the sim is made (a change to the table is not yet supported). To change the probability of one destination, modify it by name: {dsts}.'
     elif kind in ['rel_sus', 'rel_trans']:
         trans_read = kind == 'rel_trans' and any(isinstance(leaf, ss.expressions.Count) and leaf.trans for tr in graph.transitions.values() if tr.rate is not None for leaf in tr.rate.leaves) # Read by a count weighted by infectiousness (A.n_trans)
         if not (graph.acquisitions if kind == 'rel_sus' else graph.infectious) and not trans_read:
@@ -261,81 +250,6 @@ def unapplied(graph, modname, kind, name, mods):
             dsts = sc.strjoin(f"'{name}.{dst.name}'" for dst in tr.dst)
             return f'"{name}" has several destinations, so an efficacy on it would slow everyone\'s exit from {sc.strjoin(s.name for s in tr.src)}, not lower the chance of one destination. Name the destination it protects against: {dsts}.'
     return None
-
-
-class AgentModifiers:
-    """
-    Applies the modifiers of a disease written as code to its `rel_sus` and `rel_trans`, as agents, as a declared disease's engine does for its own;
-    and is what a delivery for it uses as its engine (see `engine()`): its conditions, and a cure as `clear_infection()`
-
-    The array becomes an `ss.arrays.ModifiableArr`, whose base values the disease's code sets as before, and
-    whose `.effective` values (with the modifiers that are active applied) `ss.Infection.transmit_route()` uses.
-    """
-    cross = None # Never tracked jointly with another disease
-
-    def __init__(self, mod, sim):
-        self.mod = mod
-        self.sim = sim
-        self.selector = ss.conditions.Selector(sim, mod) # Over agents
-        return
-
-    @staticmethod
-    def engine(mod, sim):
-        """ The one for a disease written as code, made once """
-        eng = mod.__dict__.get('_coded_engine')
-        if eng is None or eng.sim is not sim:
-            eng = mod.__dict__['_coded_engine'] = AgentModifiers(mod, sim)
-        return eng
-
-    def convert(self, val):
-        return ss.solvers.convert(val, self.sim.unit_base)
-
-    @property
-    def dt(self):
-        return self.mod.t.dt.to(self.sim.unit_base).value
-
-    def force(self, uids, tr, dst, srcs=None):
-        """ A cure by a delivery (see `ss.Delivery.cure()`): the disease's own `clear_infection()` """
-        if len(uids):
-            self.mod.clear_infection(uids)
-        return len(uids)
-
-    def mult_raw(self, kind, name=None, state=None):
-        """ The multiplier on `rel_sus` or `rel_trans` for each agent from the modifiers that are active (1 if there are none) """
-        mods = self.sim.modifiers.get((self.mod.name, kind, None))
-        if not mods:
-            return 1.0
-        return np.maximum(combine(mods, 1.0, self), 0)
-
-    def contact_mult(self, name):
-        """ The multiplier on the contacts of a network from the modifiers of its `n_contacts` (1 if there are none), as for a declared disease """
-        mods = self.sim.modifiers.get((name, 'par', 'n_contacts'))
-        return contact_mult(self, name, mods) if mods else 1.0
-
-    def reduce(self, value, **kwargs):
-        return value # Per agent, as it is
-
-    def clip(self, value, path):
-        return np.maximum(value, 0) # As mult_raw()
-
-    @staticmethod
-    def unapplied(mod, kind):
-        """ Why a disease written as code would not apply the modifiers on its `rel_sus` or `rel_trans` (`kind`), or None if it would: a transmitted `ss.Infection` reads them in `transmit_route()` (see `check_applied()`) """
-        if (isinstance(mod, ss.Infection) and 'beta' in mod.pars) or kind in getattr(mod, 'reads_modifiers', ()): # Or its own code reads them, with mod.modified()
-            return None
-        why = 'it is not an ss.Infection' if not isinstance(mod, ss.Infection) else 'it has no beta'
-        return (f'"{mod.name}" is written as code and is not transmitted ({why}), so nothing reads its rel_sus or rel_trans; a product or modifier acts on it only through its transmission. '
-                f'If its own code reads {kind} with {mod.name}.modified(\'{kind}\', uids), say so in its class: reads_modifiers = (\'{kind}\',).')
-
-    @staticmethod
-    def attach(mod, kind, sim):
-        """ Make the array of a disease written as code one that modifiers act on """
-        arr = mod[kind]
-        if not isinstance(arr, ss.arrays.ModifiableArr):
-            arr.__class__ = ss.arrays.ModifiableArr # The same array and values, with .effective
-        if arr.engine is None:
-            arr.engine = AgentModifiers.engine(mod, sim)
-        return
 
 
 class modify(Connector):
@@ -454,8 +368,6 @@ class modify(Connector):
             if kind not in ['rel_sus', 'rel_trans']:
                 raise ss.CapabilityError(f'the target of the modifier "{self.name}", {self.target}, is a parameter of "{modname}", which is written as code ({type(coded[modname]).__name__}), so its own code reads the value and a modifier cannot change it.\n'
                                  f'     Modify its rel_sus or rel_trans (e.g. ss.modify({modname}.rel_trans, multiply=0.5)), or declare the disease (see ss.Disease) to modify its parameters and transitions.')
-            if self.route is None: # On a route, it is applied to the transmission over it (see ss.Infection.transmit_route())
-                AgentModifiers.attach(coded[modname], kind, sim)
             found = True
         elif modname in mods:
             graph = mods[modname].graph
@@ -463,9 +375,9 @@ class modify(Connector):
                 kind = 'transition' if (name in graph.transitions or name in graph.transfers) else 'attr' if name in graph.attrs else 'par'
             found = kind in ['rel_sus', 'rel_trans'] or (kind == 'par' and name in mods[modname].pars) or (kind == 'transition' and (name in graph.transitions or name in graph.transfers or graph.destination(name) is not None)) or (kind == 'attr' and name in graph.attrs)
         if not found:
-            raise ss.errors.UnmodifiableTarget(f'the target of the modifier "{self.name}", {self.target}, was not found. Quantities that can be modified: {sc.strjoin(options)}{ss.transitions.did_you_mean(self.target, options)}')
+            raise sc.KeyNotFoundError(f'the target of the modifier "{self.name}", {self.target}, was not found. Quantities that can be modified: {sc.strjoin(options)}{ss.expressions.did_you_mean(self.target, options)}')
         if kind == 'transition' and getattr(graph.transitions.get(name), 'trigger', None) is not None:
-            raise ss.errors.UnmodifiableTarget(f'the modifier "{self.name}" targets {self.target}, which is triggered by {graph.transitions[name].trigger} and has no rate to scale; use where= on the transition, or a p= branch.')
+            raise sc.KeyNotFoundError(f'the modifier "{self.name}" targets {self.target}, which is triggered by {graph.transitions[name].trigger} and has no rate to scale; use where= on the transition, or a p= branch.')
         if kind == 'transition' and name in graph.transitions:
             ss.strains.refuse_by_strain(next((s for s in graph.strats if s.kind == 'strain'), None), graph.transitions[name], self.amount, f'the modifier "{self.name}" of {self.target}')
         if kind == 'transition' and not getattr(self, 'on_rate', False):
@@ -483,7 +395,7 @@ class modify(Connector):
             routes = list(sim.all_networks())
             for route in self.route:
                 if route not in routes:
-                    raise ss.errors.RouteMismatch(f'route= of the modifier "{self.name}" names "{route}", which is not a route of the sim; the routes are {sc.strjoin(routes) or "none"}')
+                    raise ValueError(f'route= of the modifier "{self.name}" names "{route}", which is not a route of the sim; the routes are {sc.strjoin(routes) or "none"}')
             kind = 'route'
         if self.op != 'multiply' and kind != 'par': # A per-person quantity or a rate is a multiplier on each person's own value, which set= or add= would replace
             what = 'each person\'s own value' if kind in ['rel_sus', 'rel_trans'] else 'the rate (or probability) worked out for each person and group'
@@ -516,8 +428,8 @@ class modify(Connector):
     @property
     def fixed_amount(self):
         """ Whether the amount depends at most on time: not a function of the sim, nor an expression that reads states (e.g. `1 - 0.7*b.R.frac`), which is worked out at each step """
-        timed = lambda val: not callable(val) or isinstance(val, ss.transitions.TimeValue)
-        if isinstance(self.amount, ss.transitions.Expr):
+        timed = lambda val: not callable(val) or isinstance(val, ss.parameters.TimeValue)
+        if isinstance(self.amount, ss.expressions.Expr):
             return all(isinstance(leaf, ss.par) and timed(leaf.raw) for leaf in self.amount.leaves)
         return timed(self.amount)
 
@@ -578,7 +490,7 @@ class modify(Connector):
     @property
     def per_edge(self):
         """ Whether its share is a function of the network, one value per edge """
-        return self.route is not None and callable(self.share) and not isinstance(self.share, (ss.transitions.TimeValue, ss.Dist))
+        return self.route is not None and callable(self.share) and not isinstance(self.share, (ss.parameters.TimeValue, ss.Dist))
 
     def apply(self, value, engine):
         """ Apply the modifier to a value, for the people it applies to """
@@ -589,7 +501,7 @@ class modify(Connector):
             if engine.selector.abm: # Only the people alive now: the spare slots in the arrays, for people not yet born, hold NaN
                 check = check[engine.sim.people.auids]
             if np.isnan(check).any():
-                raise ss.errors.ClockOutsideDomain(f'the amount of the modifier "{self.name}" is NaN for some of the people it applies to: {self.nan_sources()}')
+                raise ValueError(f'the amount of the modifier "{self.name}" is NaN for some of the people it applies to: {self.nan_sources()}')
         if mask is not None and self.hold is not None:
             mask = self.held_mask(mask, engine)
         if mask is None:
@@ -637,24 +549,6 @@ class modify(Connector):
 
     def step(self):
         pass
-
-    def to_spec(self):
-        """ Its part of the model spec (`sim.to_spec()`), for `sim.hash()`, `ss.diff()`, and `ss.to_code()` """
-        out = super().to_spec()
-        out.update(type=type(self).__name__, target=self.target, multiply=None, add=None, set=None,
-                   start=None if self.start is None else str(self.start), stop=None if self.stop is None else str(self.stop))
-        spec = lambda val: val if sc.isnumber(val) else ss.presentation.quantity_json(val, None, None) if callable(val) or isinstance(val, (ss.transitions.TimeValue, ss.by)) else str(val) # A function with its source, as in a disease
-        out['efficacy' if self.efficacy is not None else self.op] = spec(self.amount)
-        if self.share is not None:
-            out['share'] = spec(self.share)
-        if self.route is not None:
-            out['route'] = self.route
-        if self.where is not None:
-            out['where'] = spec(self.where)
-        if self.when is not None:
-            out['when'] = spec(self.when)
-        out.pop('pars', None)
-        return out
 
 
 def change(target, at=None, by=None, to=None, name=None, **kwargs):

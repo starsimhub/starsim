@@ -73,7 +73,7 @@ def test_syphilis_latent():
         if form == 'old': # The workaround: relies on ti_EL being kept after people leave EL for LL, and is NaN for seeds in LL
             def latent_decay(sim):
                 s = sim.diseases.syph
-                return np.exp(-np.log(2)/hl*(sim.ti - 1 - s.ti_EL.internal(slice(None)))*sim.t.dt.years) # The engine's own times (NaN if never in EL), from the start of the step, as the clock reads them; ti_EL itself reads as the step of entering, a step later for a move at a step's end
+                return np.exp(-np.log(2)/hl*(sim.ti - 1 - s.ti_EL.raw)*sim.t.dt.years) # The engine's own times (NaN if never in EL), from the start of the step, as the clock reads them; ti_EL itself reads as the step of entering, a step later for a move at a step's end
             amount = latent_decay
         else:
             amount = 0.5**((EL | LL).time/ss.years(hl))
@@ -82,15 +82,15 @@ def test_syphilis_latent():
     old, new = [make(form, ll=False).run().results.syph for form in ['old', 'new']] # With no seeds in LL, the workaround is right, and the same
     assert np.array_equal(old.infection, new.infection) and old.infection.sum() > 100
     sim = make('new').init()
-    assert sim.diseases.syph.rel_trans.effective[sim.diseases.syph.LL.uids].min() == 1 # Seeds in LL start their latent clock at the start
+    assert sim.diseases.syph.effective('rel_trans', sim.diseases.syph.LL.uids).min() == 1 # Seeds in LL start their latent clock at the start
     sim.run()
     s = sim.diseases.syph
-    eff = s.rel_trans.effective[s.LL.uids]
+    eff = s.effective('rel_trans', s.LL.uids)
     assert not np.isnan(eff).any() and eff.min() < 0.3
     late = s.LL.uids[s.ti_EL[s.LL.uids] > 0]
     latent = s.states.EL | s.states.LL
-    assert np.allclose(s.engine.eval_for(latent.time, late), (s.ti - 1 - s.ti_EL.internal(late))/12) # From latent onset to the start of the last step, as the workaround meant
-    with pytest.raises(ss.errors.ClockOutsideDomain): # The workaround with seeds in LL is NaN for them
+    assert np.allclose(s.engine.eval_for(latent.time, late), (s.ti - 1 - s.ti_EL.raw[late])/12) # From latent onset to the start of the last step, as the workaround meant
+    with pytest.raises(ValueError, match='is NaN for some of the people it applies to'): # The workaround with seeds in LL is NaN for them
         make('old').run()
     return sim
 
@@ -129,7 +129,7 @@ def test_keep_time():
     u = c.I.uids
     assert len(u) and np.all(c.ti - c.ti_I[u] >= 0)
     sim = ss.Sim(diseases=make(False), n_agents=200, dur=ss.days(20), dt=ss.days(1), **kw).run()
-    with pytest.raises(ss.errors.TimeNotKept, match='keep_time'):
+    with pytest.raises(AttributeError, match='keep_time'):
         sim.diseases.c.ti_I.values
     return
 

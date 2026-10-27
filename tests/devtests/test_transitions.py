@@ -104,7 +104,7 @@ def test_counts():
         assert np.isclose(sim.results.vector.Sv[-1] + sim.results.vector.Iv[-1], 1000/mult, rtol=0.01) # Emergence over mortality
 
     # A bare count in a rate is an error
-    with pytest.raises(ss.errors.ExposureToCount):
+    with pytest.raises(ValueError, match='there is no contact with a count'):
         S, I = ss.states(2)
         W = ss.State(people=False)
         ss.Disease(infection = S >> I @ 0.5 * W, shedding = ss.null >> W @ 10 * I.n)
@@ -114,7 +114,7 @@ def test_counts():
     d = ss.Disease(S, X, births=ss.Transition(ss.null, [S, X], rate=ss.peryear(100), p=[0.9, 0.1]), name='d')
     assert X.people
     assert np.isclose(ss.Sim(d, n_agents=1000, stop=5, **kw).run().results.d.X[-1], 50, atol=25)
-    with pytest.raises(ss.errors.PeopleAndCounts, match='people=False'): # Unless one is declared not to be
+    with pytest.raises(ValueError, match='people=False'): # Unless one is declared not to be
         S, X = ss.states('S X')
         X.people = False
         ss.Disease(S, X, births=ss.Transition(ss.null, [S, X], rate=ss.peryear(100), p=[0.9, 0.1]))
@@ -138,7 +138,7 @@ def test_counts():
     kernel = sim.results.capped.I.values
     agents = ss.Sim(capped(), unit='day', stop=150, n_agents=10_000, **kw).run().results.capped.I.values
     assert np.allclose(agents[60], kernel[60], rtol=0.1)
-    assert 'minimum(maximum(0.5 * I.frac, 0), 0.02)' in str(sim.to_spec()['modules'][0]['transitions'][0]['rate'])
+    assert 'minimum(maximum(0.5 * I.frac, 0), 0.02)' in ss.expressions.format_expr(sim.diseases.capped.graph.transitions[0].rate, exact=True)
 
     # A transition for some people only
     ppl = ss.People(1)
@@ -241,7 +241,7 @@ def test_births():
     assert ss.Sim(flu(), demographics=demog, **kw).init().solver == 'ode' # Not agents, as birth_rate= gave
     alone = ss.Sim(demographics=True, **kw).run() # With no declared disease, a declared module of everyone alive, chosen for as any declared model (it was ss.Births and ss.Deaths, as agents)
     assert alone.solver == 'ode' and alone.results.population.births.sum() > 0
-    with pytest.raises(ss.errors.DuplicateDeclaration): # Births in two diseases would count people twice
+    with pytest.raises(ValueError, match='people are born and die once'): # Births in two diseases would count people twice
         ss.Sim(ss.SIR(name='a', births=ss.birth(rate=0.02)), ss.SIS(name='b', births=ss.birth(rate=0.02)), **kw).init()
 
     # An inflow given for each level arrives at that level as given, whatever the split
@@ -330,7 +330,7 @@ def test_stratify():
         if key == 'net_ode':
             assert any('approximated' in note for note in sim.notes) # Asking for an ODE of a network model gives the standard approximation, and says so
     assert np.allclose(finals[:], finals[0], rtol=0.03), f'Expected the same attack rate from each, not {finals}'
-    with pytest.raises(ss.errors.WrongDimension): # beta and n_contacts both per unit time
+    with pytest.raises(TypeError, match='both carry a time unit'): # beta and n_contacts both per unit time
         S, I = ss.states('S I')
         ss.Sim(ss.Disease(infection=ss.Transition(S, I, rate=ss.perday(0.03) * I), init_prev=0.01), networks=ss.MixingPool(n_contacts=ss.perday(10)), **kw).init()
     S, I = ss.states('S I')
@@ -352,8 +352,8 @@ def test_stratify():
         return ss.Disease(infection=ss.Transition(S, I, rate=beta * I), recovery=ss.Transition(I, S, dur=dur), init_prev=0.01, name=name)
     pars = dict(unit='day', stop=100, **kw)
     both = ss.Sim([make('flu', 0.4, 5), make('rsv', 0.3, 8)], **pars).stratify(age=[0, 5, 18, 65]).run()
-    same = ss.Sim([make('flu', 0.4, 5), make('rsv', 0.3, 8)], stratify=dict(age=[0, 5, 18, 65]), **pars).init()
-    assert both.hash().model == same.hash().model
+    same = ss.Sim([make('flu', 0.4, 5), make('rsv', 0.3, 8)], stratify=dict(age=[0, 5, 18, 65]), **pars).run()
+    assert ss.debugtools.check_sims_match(both, same)
     for key in ['flu', 'rsv']:
         assert both.results[key].I.by('age').values.shape == (101, 4)
     assert both.new().run().results.flu.I.by('age').values.shape == (101, 4) # A new sim is stratified too
@@ -362,16 +362,16 @@ def test_stratify():
     again = make_sir().stratify(age=[0, 15]).stratify(age=[0, 15]) # The same line run twice does nothing more
     assert len(again.graph.strats) == 1
     assert ss.Sim(make_sir(), **kw).stratify(age=[0, 15]).stratify(age=[0, 15]).init().groups.n_groups == 2 # Likewise for the sim
-    with pytest.raises(ss.errors.DuplicateStructuralDimension): # In another way, it is an error
+    with pytest.raises(ValueError, match='is already stratified by "age", in another way'): # In another way, it is an error
         make_sir().stratify(age=[0, 15]).stratify(age=[0, 20])
-    with pytest.raises(ss.errors.UnknownTransition):
+    with pytest.raises(KeyError, match='adjust= names a transition "recovry"'):
         make_sir().stratify(age=[0, 15], adjust={'recovry': [1, 2]})
-    with pytest.raises(ss.errors.BadSplit):
+    with pytest.raises(ValueError, match='split= has 3 entries'):
         make_sir().stratify(risk=['low', 'high'], split=[0.5, 0.3, 0.2])
-    with pytest.raises(ss.errors.ShapeError): # Caught when the sim is built, not when it runs
+    with pytest.raises(ValueError, match='has 2 values, but "age" has 3 levels'): # Caught when the sim is built, not when it runs
         S, I = ss.states('S I')
         ss.Sim(ss.Disease(infection=ss.Transition(S, I, rate=ss.by(age=[0.3, 0.2]) * I), init_prev=0.01), stratify=dict(age=[0, 15, 65]), **kw).init()
-    with pytest.raises(ss.errors.InconsistentDimension):
+    with pytest.raises(ValueError, match='A property of people has the same groups for every module'):
         a = make_sir().stratify(age=[0, 15])
         I, R = ss.states('I R')
         b = ss.Disease(recovery=ss.Transition(I, R, dur=3), name='other').stratify(age=[0, 20])
@@ -379,7 +379,7 @@ def test_stratify():
 
     # One parser for the sim and the disease: an option is never a dimension, and the sim's adjust= is checked too
     assert [strat.name for strat in ss.Sim(make_sir(), stratify=dict(age=[0, 15], states=['S', 'I']), **kw).init().groups.strats] == ['age'] # Not a dimension called states
-    with pytest.raises(ss.errors.UnknownTransition):
+    with pytest.raises(KeyError, match='that no single module has'):
         ss.Sim(make_sir(), stratify=dict(age=[0, 15], adjust={'recovry': [1, 2]}), **kw).init()
     with pytest.raises(ValueError):
         make_sir().stratify(split=[0.5, 0.5]) # No dimension
@@ -440,24 +440,24 @@ def test_outcomes():
     # Mistakes in the data and the parameters are caught by name
     typo = ss.Sim(make(0.3), data=df.rename(columns=dict(cases='casess')), **pars).init()
     assert any('casess' in note for note in typo.notes) # Data on a sim can be just for plotting, so a column that matches no result is noted, and an error only when fitting
-    with pytest.raises(ss.errors.UnknownDataColumn):
+    with pytest.raises(KeyError, match='the data column "casess" matches no result'):
         typo.fit()
     renamed = ss.simdata(df.rename(columns=dict(cases='Reported')), aliases=dict(cases='Reported'))
     assert 'cases' in ss.Sim(make(0.3), data=renamed, **pars).init().data.columns
     assert 'cases' in ss.Sim(make(0.3), **pars).new(data=renamed).init().data.columns # Or to a new sim
-    with pytest.raises(ss.errors.UnknownParameter):
+    with pytest.raises(KeyError, match='pars= has a value for "betta", which matches no parameter'):
         ss.Sim(make(0.3), pars=dict(betta=0.2), **pars).init()
-    assert ss.transitions.did_you_mean('betta', ['sir.beta', 'sir.dur']) == '; did you mean sir.beta?' # The closest only, matched without the module's name
-    with pytest.raises(ss.errors.OutOfBounds): # A value outside its bounds
+    assert ss.expressions.did_you_mean('betta', ['sir.beta', 'sir.dur']) == '; did you mean sir.beta?' # The closest only, matched without the module's name
+    with pytest.raises(ValueError, match='outside its bounds'): # A value outside its bounds
         ss.Sim(make(0.3), pars=dict(beta=5), **pars).init()
-    with pytest.raises(ss.errors.UnvaluedParameter): # A parameter with no value
+    with pytest.raises(ValueError, match='has no value'): # A parameter with no value
         S, I, R = ss.states('S I R')
         ss.Sim(ss.Disease(infection=ss.Transition(S, I, rate=ss.par() * I), recovery=ss.Transition(I, R, dur=10), init_prev=0.01), **pars).init()
-    with pytest.raises(ss.errors.NoData):
+    with pytest.raises(ValueError, match=r'fit\(\) needs data'):
         ss.Sim(make(0.3), **pars).fit()
     with pytest.raises(ValueError, match='gof'): # Rather than the default in its place
         sim.fit(gof='nea')
-    with pytest.raises(ss.errors.UnknownOutcomeSource):
+    with pytest.raises(KeyError, match='is not a transition or outcome of "ir"'):
         I, R = ss.states('I R')
         ss.Sim(ss.Disease(recovery=ss.Transition(I, R, dur=3), cases=ss.outcome('infection'), first='I'), **kw).init()
 
@@ -605,16 +605,7 @@ def test_modify():
     assert np.allclose(n_R.select(scenario='masks').values[0, :20], n_R.select(scenario='baseline').values[0, :20]) # The same until it starts
     assert 'masks' in msim.sims[1].interventions # Named from its variable
     assert np.isclose(sir.pars.beta.value, 0.3) # The base value is never overwritten
-    assert msim.sims[0].hash().scenario != msim.sims[1].hash().scenario
-    def early(sim): return sim.ti > 3
-    def late(sim): return sim.ti > 50
     timed = lambda when: ss.Sim(sir, interventions=ss.modify(sir.pars.beta, multiply=0.5, when=when), **pars)
-    assert timed(early).hash().scenario != timed(late).hash().scenario # when= is in the spec, with its source
-    assert 'when=early' in timed(early).to_code()
-    ns = {}
-    exec('def unseen(sim): return sim.ti > 3', ns) # A function whose source cannot be read is written by its name, to be defined, not left out (which would apply the modifier from the start)
-    with pytest.warns(ss.errors.LossyExport, match='unseen'):
-        assert 'when=unseen' in timed(ns['unseen']).to_code()
     with pytest.raises(AttributeError, match='typo'): # A mistake in the function is reported as itself, not as the modifier having no "active"
         timed(lambda sim: sim.results.sir.typo).run()
 
@@ -672,13 +663,12 @@ def test_modify():
     fast, slow = timed(), timed()
     assert fast.kernel_only()
     assert np.allclose(fast.run().results.sir.I, slow.run(profile=True).results.sir.I)
-    assert msim.sims[0].hash().model == msim.sims[1].hash().model
 
     # A modifier can also be given as a path, and combines with others by multiplication
     both = [ss.modify('sir.pars.beta', multiply=0.5, start=20, name='a'), ss.modify('sir.pars.beta', multiply=0.5, start=20, name='b')]
     twice = ss.Sim(sir, interventions=both, **pars).run()
     assert twice.results.sir.R[-1] < n_R.select(scenario='masks').values[0, -1]
-    with pytest.raises(ss.errors.UnmodifiableTarget):
+    with pytest.raises(KeyError, match='sir.pars.betta, was not found'):
         ss.Sim(sir, interventions=ss.modify('sir.pars.betta', multiply=0.5), **pars).init()
 
     # A module's array as a modifier's amount (it crashed, saying a state was already added), and a modifier named like a property of people is refused
@@ -823,7 +813,7 @@ def test_functions():
             ss.move(ss.null, sir.W, n=100) # A count can come from outside the model
             with pytest.raises(ss.CapabilityError, match='ss.move'): # Setting the number of people in a state would make or lose people
                 sir.I.n = 0
-            with pytest.raises(ss.errors.PeopleAndCounts):
+            with pytest.raises(ValueError, match='so the number of people stays the same'):
                 ss.move(sir.I, ss.null)
     for solver in ['ode', 'binomial', 'abm']:
         S, I, R, W = ss.State(name='S'), ss.State(name='I'), ss.State(name='R'), ss.State(name='W', people=False)
@@ -854,7 +844,7 @@ def test_functions():
     d2 = ss.Disease(infection=ss.Transition(S, I, rate=0.3 * I), recovery=ss.Transition(I, R, rate=clearance), init_prev=0.01, name='d2')
     sim2 = ss.Sim(d2, stop=100, unit='day', **kw).run()
     assert sim2.solver == 'abm' and 'clearance' in sim2.solver_reason
-    assert 'no as compartments (takes uids)' in sim2.describe(output=True)
+    assert 'takes uids' in sim2.describe(output=True)
 
     # A rate given as a function of the sim with one value per person alive, once people have died (it raised IndexError)
     A, B = ss.states('A B')
@@ -888,7 +878,7 @@ def test_functions():
     assert sim3.unit == 'year'
     n_I = sim3.results.hiv.I
     assert n_I[-1] > 1.5*n_I[0]
-    with pytest.raises(ss.errors.RouteMismatch):
+    with pytest.raises(ValueError, match='no route is called needles'):
         S, I = ss.states('S I')
         other = ss.Disease(infection=ss.Transition(S, I, rate=dict(needles=0.1) * I), init_prev=0.05, name='hiv')
         ss.Sim(other, networks=ss.SexualNet(), start=2000, stop=2005, **kw).run()
@@ -930,7 +920,7 @@ def test_time_values():
     changed = ss.Sim(sis, interventions=ss.change(sis.pars.beta, at=['2020-02-01', '2020-04-01'], to=[0.1, 0.3]), **dates).run()
     assert series.solver == 'ode' # A value that varies in time does not make a model agent-based
     assert np.allclose(series.results.sis.I, changed.results.sis.I)
-    assert series.to_spec()['modules'][0]['pars'][0]['value']['mode'] == 'constant'
+    assert series.diseases.sis.pars.beta.raw.mode == 'constant'
 
     # With no dates, the times are in the sim's unit; and it can be the amount of a modifier
     sis = make(0.3)
@@ -1068,12 +1058,10 @@ def test_stays_and_offspring():
     ode = ss.Sim(growth, unit='day', stop=40, total_pop=5000, verbose=0).run()
     assert ode.solver == 'ode' and ode.results.growth.W[21] == 0 < ode.results.growth.W[22]
     assert np.max(binomial[:, 21]) == 0 and np.isclose(np.mean(binomial[:, 22]), n_W[22], rtol=0.05) # The same as agents, step for step
-    E, D, I = ss.states(3) # An escape during a minimum stay (before=), as EMULSION's
-    x = ss.Disease(onset=ss.Transition(E, I, rate=ss.perday(0.3), after=ss.days(10)), death=ss.Transition(E, D, rate=ss.perday(0.5), before=ss.days(10)), first='E', name='x')
-    for solver in ['abm', 'ode', 'binomial']:
-        size = dict(n_agents=5000) if solver == 'abm' else dict(total_pop=5000)
-        r = ss.Sim(x, unit='day', stop=30, solver=solver, verbose=0, **size).run().results.x
-        assert r.I[10] == 0 and r.I[11] > 0 and r.D[11] == r.D[30] > 0, f'{solver}: nobody should become infectious before day 10, or die after it'
+    E, D, I = ss.states(3) # An escape during a minimum stay, as EMULSION's: a rate only while the time in the state is short (agents)
+    x = ss.Disease(onset=ss.Transition(E, I, rate=ss.perday(0.3), after=ss.days(10)), death=ss.Transition(E, D, rate=ss.perday(0.5)*(E.time < ss.days(10))), first='E', name='x')
+    r = ss.Sim(x, unit='day', stop=30, n_agents=5000, verbose=0).run().results.x
+    assert r.I[10] == 0 and r.I[11] > 0 and r.D[11] == r.D[30] > 0, 'nobody should become infectious before day 10, or die after it'
     S, I, R = ss.states('S I R') # A stay on a transmission is not built yet, and no engine ignores it
     for solver in ['abm', 'ode']:
         infection = ss.Transition(S, I, rate=0.3 * I)
@@ -1154,15 +1142,15 @@ def test_branches():
             res = sim.results.d
             share = res.rec[1:].sum()/(res.rec[1:].sum() + res.rec2[1:].sum())
             assert np.isclose(share, 0.3, atol=0.05), f'{which} ({solver}): {share:.2f} went to P, not 0.3'
-    with pytest.raises(ss.errors.BadBranchSplit): # Only one can take the remainder
+    with pytest.raises(ValueError, match='the branch probabilities out of state "E" sum to 0.3, not 1'): # Only one can take the remainder
         E, P, A, R = ss.states('E P A R')
         ss.Disease(sev=ss.Transition(E, P, p=0.3), a=ss.Transition(E, A, dur=2), b=ss.Transition(E, R, dur=2))
-    with pytest.raises(ss.errors.BadBranchSplit, match='undriven, not the remainder'): # With no p= at all, a transition is undriven
+    with pytest.raises(ValueError, match='undriven, not the remainder'): # With no p= at all, a transition is undriven
         E, P, A = ss.states('E P A')
         ss.Disease(sev=ss.Transition(E, P, p=0.3), mild=ss.Transition(E, A))
     agents = dict(n_agents=1000, start=2000, stop=2003, dt=ss.years(0.25), **kw)
     S, J, A, B = ss.states('S J A B')
-    with pytest.raises(ss.errors.UndrivenTransition, match='give it dur=0'): # An immediate split as one transition says how to write it (it crashed)
+    with pytest.raises(ValueError, match='give it dur=0'): # An immediate split as one transition says how to write it (it crashed)
         ss.Sim(ss.Disease(go=S >> J @ ss.peryear(1), branch=ss.Transition(J, [A, B], p=[0.5, 0.5]), name='d'), **agents).init()
     A, B, C = ss.states('A B C')
     d = ss.Disease(A, B, C, tr=ss.Transition(A, [B, C], dur=ss.years(1), p=lambda sim, uids: np.tile([0.3, 0.7], (len(uids), 1))), first='A', name='d')
@@ -1172,7 +1160,7 @@ def test_branches():
         S, D, R = ss.states('S D R')
         d = ss.Disease(S, D, R, onset=S >> D @ ss.peryear(2), death=ss.Transition(D, ss.null, dur=ss.days(5), p=ss.by(type=[0.1, 1.5])), recovery=ss.Transition(D, R, dur=ss.days(5)), name='d')
         d.stratify(type=['watery', 'bloody'], states=[D])
-        with pytest.raises(ss.errors.BadBranchSplit, match='1.5'):
+        with pytest.raises(ValueError, match='1.5'):
             ss.Sim(d, n_agents=1000, solver=solver, start=2000, stop=2001, **kw).run()
 
     # A branch probability set after building: a new value for one that was given, and a clear error for one that was not (it raised "'by' object has no attribute 'leaves'")
@@ -1193,7 +1181,7 @@ def test_branches():
     res = ss.Sim(d, n_agents=2000, start=2000, stop=2001, dt=ss.months(1), unit='year', **kw).run().results.d
     assert res.A[-1] == 0 and np.isclose(res.C[-1]/2000, 0.1, atol=0.03)
     A, B, C = ss.states('A B C')
-    with pytest.raises(ss.errors.BadBranchSplit, match=r'1.8.*\(b1: .*c1: '): # But still within each
+    with pytest.raises(ValueError, match=r'1.8.*\(b1: .*c1: '): # But still within each
         ss.Disease(A, B, C, b0=ss.Transition(A, B, p=0.9, dur=1, move=dict(k=('0', '1'))), c0=ss.Transition(A, C, p=0.1, dur=1, move=dict(k=('0', '1'))),
                    b1=ss.Transition(A, B, p=0.9, dur=1, move=dict(k=('1', '1'))), c1=ss.Transition(A, C, p=0.9, dur=1, move=dict(k=('1', '1'))))
     return sim
@@ -1461,10 +1449,10 @@ def test_class_helpers():
     assert 'prevalence' in res and not any(k in res for k in ['p_carrier', 'rel'])
     assert 'A' in pars and 'A2' not in pars
     t = ss.Sim(diseases=T(A=30.0, init_prev=0.1), n_agents=100, dur=ss.days(3), dt=ss.days(1), verbose=0).init().diseases.t # A value given to a parameter that has another name in the class (Typhoid's A = unexp2sus_saturation_age)
-    assert t.value('A') == 30 and 'A2' not in t.pars
+    assert 1*t.pars.A == 30 and 'A2' not in t.pars
     eir = ss.par(ss.perday(0.01), name='eir')
     S, I = ss.states('S I')
-    with pytest.raises(ss.errors.DuplicateDeclaration, match='a name of its own'):
+    with pytest.raises(ValueError, match='a name of its own'):
         ss.Disease(S >> I @ eir, I >> S @ ss.perday(0.1), eir=eir, name='m')
     S, I = ss.states('S I')
     m = ss.Disease(S >> I @ eir, I >> S @ ss.perday(0.1), eir_now=1*eir, name='m') # As the docs say: a result of a parameter is an expression
@@ -1564,7 +1552,7 @@ def test_compiled_eval():
     uids = sim.people.auids
     compiled = engine.eval_for(rate, uids)
     with engine.evaluating(uids=uids, for_uids=True):
-        direct = ss.transitions.evaluate(rate, engine)
+        direct = ss.expressions.evaluate(rate, engine)
     assert np.array_equal(np.broadcast_to(compiled, len(uids)), np.broadcast_to(direct, len(uids))), 'The same numbers'
     assert np.ptp(compiled) > 0, 'Different by patch and by the number of infections'
     power = ss.solvers.agents.power

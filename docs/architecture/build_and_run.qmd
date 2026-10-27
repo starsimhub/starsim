@@ -9,10 +9,10 @@ The [previous page](model.qmd) covered the model as data, and the graph that res
 
 Creating a sim only stores what it was given (as copies, so one `sir` can go into several sims). The rest happens at `sim.init()`, which `sim.run()` and `sim.describe()` call if needed. In order (`Sim.init()` in `starsim/sim.py`, and `choose_solver()` and the steps that build a declared model in `starsim/solvers/choose.py`):
 
-1. **Values.** Values given by name (`pars=dict(beta=0.1)`) are set, and each parameter is checked against its bounds (`ss.errors.OutOfBounds`).
+1. **Values.** Values given by name (`pars=dict(beta=0.1)`) are set, and each parameter is checked against its bounds (a `ValueError`).
 2. **Groups.** The stratifications of the sim and its modules are collected into `sim.groups`.
 3. **Unit.** The unit of bare numbers is chosen ([below](#units-and-time)).
-4. **Solver.** Under `solver='auto'`, Starsim tries to lay the model out as compartments (which runs none of its code) and chooses an ODE if every part has a compartmental form, agents otherwise. For a compartmental run, networks become contact rates between groups, and the population becomes one row per group. See [Solvers](solvers.qmd).
+4. **Solver.** Under `solver='auto'`, Starsim lays the model out as compartments (which runs none of its code) and chooses an ODE if every part has a compartmental form, agents otherwise; a compartmental run uses that layout, so it is made once. For a compartmental run, networks become contact rates between groups, and the population becomes one row per group. See [Solvers](solvers.qmd).
 5. **Objects.** The timeline, the people, and for each declared disease an *engine*, the object that runs its transitions under the chosen solver. This is the one place where the solver changes which objects exist.
 6. **Starting values.** Random number streams ([Randomness and fitting](randomness_and_fitting.qmd)), people's attributes, then each state's initial conditions.
 7. **Results and the loop.** Results are allocated, data is attached to them by name, and the loop's functions are collected. Parameters are locked, so setting one that doesn't exist raises an error.
@@ -32,11 +32,11 @@ sim = ss.Sim(sir, start='2020-01-01', stop='2020-07-01')
 sim.init()
 ```
 
-Errors are raised at the earliest point that can detect them: a mistake in the model's structure when the module is built, a value out of bounds at step 1, and a function that asks for something the solver can't give when it is first called. The model spec and `sim.hash()` are built only when asked for, since a run doesn't need them.
+Errors are raised at the earliest point that can detect them: a mistake in the model's structure when the module is built, a value out of bounds at step 1, and a function that asks for something the solver can't give when it is first called.
 
 ## Units and time
 
-Starsim has four time types: durations (`ss.days(10)`), hazard rates (`ss.perday(0.1)`), probabilities per period (`ss.probperday(0.1)`), and frequencies (`ss.freqperday(0.1)`). Converting one to a timestep is the type's job: a hazard `r` becomes the probability `1 − exp(−r·dt)`, and a frequency the expected count `f·dt`. Since mixing them up is a common quiet error, adding a rate to a frequency raises `ss.errors.IncompatibleTypes`.
+Starsim has four time types: durations (`ss.days(10)`), hazard rates (`ss.perday(0.1)`), probabilities per period (`ss.probperday(0.1)`), and frequencies (`ss.freqperday(0.1)`). Converting one to a timestep is the type's job: a hazard `r` becomes the probability `1 − exp(−r·dt)`, and a frequency the expected count `f·dt`. Since mixing them up is a common quiet error, adding a rate to a frequency raises a `TypeError`.
 
 **A bare number is typed by its slot.** Above, `0.3` is a rate and `dur=10` a duration. After `@` a bare number is always a rate: `I >> R @ 10` recovers at 10 a day, while a 10-day dwell time is `@ ss.days(10)`. Its unit is **the sim's unit**, from the first of: `unit=`, the typed values in the model's diseases, dates for `start` and `stop`, a typed `dt` or `stop`, years for `start` and `stop`, and the typed values in other modules. With none, time is in timesteps, as in a textbook model. The unit is never guessed from the size of a number (0.05 is plausible per day and per year), and when it is inferred, the sim says from what:
 

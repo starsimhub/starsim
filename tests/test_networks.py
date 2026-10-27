@@ -571,24 +571,24 @@ def test_beta_readings():
     assert Couples().directions == ['m2f', 'f2m'] and ss.SexualNet(between='mm').directions == [] # A sexual network of its own is between men and women unless it says otherwise; men only: one beta
     sim = ss.Sim(sis(ss.peract(m2f=0.2, f2m=0.1)), networks=Couples(name='couples', acts=2), **kw).run()
     assert sim.results.sis.infection.sum() > 0
-    with pytest.raises(ss.errors.RouteMismatch, match="between='mf'"):
+    with pytest.raises(ValueError, match="between='mf'"):
         ss.Sim(sis(ss.peract(m2f=0.01, f2m=0.01)), networks=ss.SexualNet(between='mm'), **kw).init()
     assert ss.peract({('m', 'f'): 0.3, ('f', 'm'): 0.15}) == ss.peract(m2f=0.3, f2m=0.15) # A direction as a pair of sides, or by name
-    with pytest.raises(ss.errors.WrongDimension, match=r'ss.peract\(0.01\)'): # A rate per unit time times acts per unit time is not a hazard
+    with pytest.raises(TypeError, match=r'ss.peract\(0.01\)'): # A rate per unit time times acts per unit time is not a hazard
         ss.Sim(sis(ss.permonth(0.01)), networks=ss.SexualNet(), **kw).init()
     sim = ss.Sim(diseases='sis', networks=['sexual', 'random'], n_agents=500, verbose=0).init() # But the default of ss.SIS is a probability per act there, as in Starsim 3
     assert sim.diseases.sis.pars.beta.raw['sexualnet'] == ss.peract(0.05) and any('which has acts' in note for note in sim.notes)
-    with pytest.raises(ss.errors.RouteMismatch, match=r'ss.peract\(m2f=0.3, f2m=0.15\)'): # A pair has no direction names
+    with pytest.raises(ValueError, match=r'ss.peract\(m2f=0.3, f2m=0.15\)'): # A pair has no direction names
         ss.Sim(sis(dict(sexualnet=[0.3, 0.15])), networks=ss.SexualNet(), **kw).init()
-    with pytest.raises(ss.errors.RouteMismatch, match='no acts'): # No act to be per
+    with pytest.raises(ValueError, match='no acts'): # No act to be per
         ss.Sim(sis(ss.peract(0.01)), networks='random', **kw).init()
-    with pytest.raises(ss.errors.RouteMismatch, match='f2m'): # Every direction needs a value ...
+    with pytest.raises(ValueError, match='f2m'): # Every direction needs a value ...
         ss.Sim(sis(ss.peract(m2f=0.01)), networks=ss.SexualNet(), **kw).init()
-    with pytest.raises(ss.errors.RouteMismatch, match='m2f and f2m'): # ... and one it does not have raises, listing those it has
+    with pytest.raises(ValueError, match='m2f and f2m'): # ... and one it does not have raises, listing those it has
         ss.Sim(sis(ss.peract(m2f=0.01, f2m=0.01, m2m=0.02)), networks=ss.SexualNet(), **kw).init()
-    with pytest.raises(ss.errors.RouteMismatch, match='no sides'):
-        ss.Sim(sis(ss.peract(m2f=0.01, f2m=0.01)), networks=ssl.DegreeNet(name='needles', dur=ss.years(1), acts=ss.freqpermonth(20)), **kw).init()
-    with pytest.raises(ss.errors.OutOfBounds):
+    with pytest.raises(ValueError, match='no sides'):
+        ss.Sim(sis(ss.peract(m2f=0.01, f2m=0.01)), networks=ss.DegreeNet(name='needles', dur=ss.years(1), acts=ss.freqpermonth(20)), **kw).init()
+    with pytest.raises(ValueError, match='A probability per act must be between 0 and 1'):
         ss.peract(1.5)
     with pytest.raises(ValueError, match='step'): # A whole number of acts per step, drawn once, depends on the step
         ss.Sim(sis(0.01), networks=ss.SexualNet(acts=ss.poisson(lam=ss.freqperyear(80))), **kw).init()
@@ -604,8 +604,8 @@ def test_beta_readings():
 
 
 @sc.timer()
-def test_peract_spec():
-    sc.heading('Testing how a probability per act is described, written in the model spec, and written as code')
+def test_peract_describe():
+    sc.heading('Testing how a probability per act is described')
     def make(beta):
         S, P, EL = ss.states('S P EL')
         syph = ss.Disease(S, P, EL, infection=ss.Transition(S, P, rate=beta * (P + 0.55*EL)),
@@ -616,17 +616,6 @@ def test_peract_spec():
     text = sim.diseases.syph.describe(output=True)
     for line in ['from P + 0.55 EL', 'beta on sexualnet: per act, m2f 0.3, f2m 0.15', "sexualnet's sides m and f", '"condoms"']:
         assert line in text, line
-    for beta, value in [(ss.peract(m2f=0.3, f2m=0.15), dict(type='peract', m2f=0.3, f2m=0.15)), (0.01, dict(type='peract', value=0.01))]:
-        sim = make(beta)
-        spec = sim.to_spec()['modules'][0]
-        assert next(p['value'] for p in spec['pars'] if p['name'] == 'beta') == value
-        assert ('transitions.infection.beta' in spec['guessed']) == sc.isnumber(beta) # A bare number on a network with acts is read as per act, which the spec says
-        with pytest.warns(ss.errors.LossyExport): # The network is not written
-            code = sim.to_code()
-        assert "efficacy=0.5, share=ss.timeseries" in code and "route=['sexualnet']" in code
-        ns = {}
-        exec(code.replace('sim = ss.Sim(', 'sim = None and ss.Sim('), ns) # The disease, without the sim the code builds
-        assert ns['syph'].pars.beta.raw == (beta if isinstance(beta, ss.peract) else ss.peract(beta))
     return
 
 
@@ -646,9 +635,9 @@ def test_beta_default():
     assert 'beta on maternalnet' in sim.diseases.d.describe(output=True)
 
     # Without a default, a name that is not a route, or a route with no value, still raises, since it is likely a typo
-    with pytest.raises(ss.errors.RouteMismatch, match='no route is called msm'):
+    with pytest.raises(ValueError, match='no route is called msm'):
         ss.Sim(make(sexualnet=ss.peract(0.01), maternalnet=0, msm=ss.peract(0.1)), networks=[ss.SexualNet(), ss.MaternalNet()], **kw).init()
-    with pytest.raises(ss.errors.RouteMismatch, match='maternalnet has no value'):
+    with pytest.raises(ValueError, match='maternalnet has no value'):
         ss.Sim(make(sexualnet=ss.peract(0.01)), networks=[ss.SexualNet(), ss.MaternalNet()], **kw).init()
 
     # The default is the same as giving each route its value, as agents and as an ODE, which agree; it can be a typed rate or a parameter
@@ -668,15 +657,8 @@ def test_beta_default():
     # With no networks (homogeneous mixing), the default is the beta, and with none, that is an error
     sim = ss.Sim(make(sexualnet=ss.peract(0.01), default=ss.peryear(2)), **kw).run()
     assert sim.results.d.I[-1] > 0
-    with pytest.raises(ss.errors.RouteMismatch, match='homogeneous mixing'):
+    with pytest.raises(ValueError, match='homogeneous mixing'):
         ss.Sim(make(sexualnet=ss.peract(0.01)), **kw).run()
-
-    # The default is kept in the model spec, and written as code
-    sim = ss.Sim(make(sexualnet=ss.peract(0.01), msm=ss.peract(0.1), default=0), networks=[ss.SexualNet(), ss.MaternalNet()], **kw)
-    beta = next(p['value'] for p in sim.to_spec()['modules'][0]['pars'] if p['name'] == 'beta')
-    assert beta['default'] == 0 and 'msm' in beta # Bare, since it is per act on a route with acts
-    with pytest.warns(ss.errors.LossyExport):
-        assert "'default': 0" in sim.to_code() # Whole numbers as integers
 
     # A disease written as code reads the default too
     sim = ss.Sim(diseases=ssl.AgentSIS(beta=dict(random=0.05, msm=0.1, default=0)), networks=['random', ss.SexualNet()], **kw).run()
@@ -718,7 +700,7 @@ def test_condoms():
     sim = make(share=0.5).init()
     mf, si = sim.networks.mf, sim.diseases.si
     assert np.all(mf.edges.condoms == 0.5)
-    assert si.value('beta') == si.engine.value(si.pars.beta), 'The current value of a declared parameter is a number'
+    assert 1*si.pars.beta == si.engine.value(si.pars.beta), 'The current value of a declared parameter is a number'
     none, half, full = [make(share=s).run().results.si.infection.sum() for s in [0.0, 0.5, 1.0]]
     assert none > half > full, f'Condoms should reduce infections: {none}, {half}, {full}'
     assert make(share=1.0, eff=0.0).run().results.si.infection.sum() == none, 'With no efficacy, condoms do nothing'
@@ -869,7 +851,7 @@ if __name__ == '__main__':
     cond = test_condoms()
     same = test_coded_declared_transmission()
     read = test_beta_readings()
-    spec = test_peract_spec()
+    peract = test_peract_describe()
     default = test_beta_default()
     person = test_beta_by_person()
     sources = test_infection_sources()

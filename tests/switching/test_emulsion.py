@@ -34,7 +34,7 @@ def check_quickstart(msim, age='growth', health='health'):
 
 
 @pytest.mark.skipif(not paths.lfd.exists(), reason=paths.no_lfd)
-@pytest.mark.xfail(reason='The import lists the untranslated parts (cond, when, on_cross, statevars, the calendar; minimum stays are now after=), and warns and hands them to the import-model skill when run (15 animals at the end against 66); a complete import needs after=/before= and offspring by prototype, as test_emulsion_quickstart', strict=False)
+@pytest.mark.xfail(reason='The import lists the untranslated parts (cond, when, on_cross, statevars, the calendar; minimum stays are now after=), and warns and hands them to the import-model skill when run (15 animals at the end against 66); a complete import needs after=, escapes, and offspring by prototype, as test_emulsion_quickstart', strict=False)
 def test_emulsion_import():
     sc.heading('Testing importing EMULSION\'s quickstart and matching its published output')
     sim = ss.interop.load(paths.lfd/'examples/emulsion/quickstart/original/quickstart.yaml', format='emulsion', verbose=False)
@@ -82,8 +82,8 @@ def test_emulsion_quickstart():
         loss        = ss.Transition(M, S, rate=ss.perday(0.04), after=ss.days(adult_age)),
         deaths      = S + R >> ss.null @ ss.perday(0.002),
         sick_deaths = I + Q >> ss.null @ ss.perday(0.004),
-        M_deaths    = ss.Transition(M, ss.null, rate=ss.perday(0.002), before=ss.days(adult_age)), # EMULSION's escape
-        E_deaths    = ss.Transition(E, ss.null, rate=ss.perday(0.004), before=ss.days(10)),
+        M_deaths    = ss.Transition(M, ss.null, rate=ss.perday(0.002)*(M.time < ss.days(adult_age))), # EMULSION's escape
+        E_deaths    = ss.Transition(E, ss.null, rate=ss.perday(0.004)*(E.time < ss.days(10))),
         newborns    = newborns,
         vertical    = ss.Transition(M, [I, M], on=newborns, p=[0.3, 0.7], where=ss.mother(E | I | Q, born=True)), # EMULSION's produce_offspring: (J, NG, I) with chance 0.3 from an infected mother
         init_n      = dict(I=10),

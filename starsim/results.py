@@ -75,10 +75,10 @@ class Result(ss.utils.NoDists, ss.arrays.BaseArr):
         timevec (array): an array of time points
         low (array): values for the lower bound
         high (array): values for the upper bound
-        kind (str): 'flow' (a number of events in each step, e.g. new infections), 'stock' (a quantity at each time point, e.g. the number infected), or 'ratio' (one quantity divided by another, e.g. prevalence); it decides how the result is summarized, resampled, and compared with data. If not given, it is guessed from the name (`new_...` is a flow; `n_...`, `cum_...`, and `cumulative` are stocks; anything else is treated as a ratio)
-        summarize_by (str): Starsim 3's spelling of `kind`: 'sum' for a flow, 'last' for a stock, 'mean' for a ratio
+        summarize_by (str): how the result is summarized over time, which also decides how it is resampled and compared with data: 'sum' for a flow (a number of events in each step, e.g. new infections), 'last' for a stock (a quantity at each time point, e.g. the number infected), 'mean' for a ratio (one quantity divided by another, e.g. prevalence; a ratio that keeps its numerator and denominator sums each over the period, then divides), any other key of `ss.Result.summarizers`, or None for a result that is not summarized over time. By default ('auto') it is guessed from the name (`new_...` is summed; `n_...`, `cum_...`, and `cumulative` take the last value; anything else is averaged)
         columns (list): if provided, make a 2D result of shape `(npts, len(columns))`, with these names for the columns, e.g. `['wild', 'alpha']`
         runs (dataframe): for a result across the runs of a MultiSim: one row per run, with its `scenario` (and the values of any parameters swept); the values then have a run axis first, of shape `(n_runs, npts)`
+        groups (bool): for a module written as code in a stratified sim: keep the values by group too, so they can be selected (`res.select(sex='female')`, `res.by('age')`) as a declared module's are; set them with `set_groups()`
 
     In most cases, [`ss.Result`](`starsim.results.Result`) behaves exactly like `np.array()`, except with
     the additional fields listed above. To see everything contained in a result,
@@ -117,7 +117,7 @@ class Result(ss.utils.NoDists, ss.arrays.BaseArr):
         return super().__getattr__(attr)
 
     def __init__(self, name=None, label=None, dtype=float, shape=None, scale=True, auto_plot=True,
-                 module=None, values=None, timevec=None, low=None, high=None, kind=None, summarize_by=None, columns=None, runs=None, **kwargs):
+                 module=None, values=None, timevec=None, low=None, high=None, summarize_by='auto', columns=None, runs=None, groups=False, **kwargs):
         # Copy inputs
         self.name = name
         self.label = label
@@ -130,9 +130,13 @@ class Result(ss.utils.NoDists, ss.arrays.BaseArr):
         self.dtype = dtype
         self._shape = shape
         self.values = values
-        self.kind = self.get_kind(name, kind, summarize_by)
+        if kwargs:
+            errormsg = f'ss.Result() got unexpected arguments: {sc.strjoin(kwargs.keys())}'
+            raise TypeError(errormsg)
+        self.summarize_by = self.get_summarize_by(name, summarize_by)
         self.columns = columns
         self.runs = runs
+        self.groups = groups
         self.validate_columns()
         self.init_values()
         return
@@ -464,13 +468,13 @@ class Result(ss.utils.NoDists, ss.arrays.BaseArr):
         family = self.__dict__.get('family')
         if family is not None and dim == family[0]: # Each member's own
             name, members, values = family
-            return Result(name=self.name, label=self.label, module=self.module, scale=False, timevec=self.timevec, values=values, shape=values.shape[0], columns=members, kind=self.kind)
+            return Result(name=self.name, label=self.label, module=self.module, scale=False, timevec=self.timevec, values=values, shape=values.shape[0], columns=members, summarize_by=self.summarize_by)
         if dim in self.part_dims:
             i = self.part_dims.index(dim)
             levels = list(dict.fromkeys(k[i] for k in self._parts(dim) if k[i] is not None))
             values = np.column_stack([self._select_parts({dim:level}).values for level in levels])
             return Result(name=self.name, label=self.label, module=self.module, scale=False, timevec=self.timevec,
-                          values=values, shape=values.shape[0], columns=levels, kind=self.kind)
+                          values=values, shape=values.shape[0], columns=levels, summarize_by=self.summarize_by)
         strats = self._check_strata()
         if self.runs is not None:
             self._check_dim(dim)
@@ -497,7 +501,7 @@ class Result(ss.utils.NoDists, ss.arrays.BaseArr):
         if any(col in self.__dict__ or hasattr(type(self), col) or hasattr(np.ndarray, col) for col in columns): # A level named like an attribute of a result (e.g. "low") is qualified by its dimension
             columns = [f'{dim}_{col}' for col in columns]
         out = Result(name=self.name, label=self.label, module=self.module, scale=False, timevec=self.group_timevec,
-                     values=values, shape=values.shape[0], columns=columns, kind=self.kind)
+                     values=values, shape=values.shape[0], columns=columns, summarize_by=self.summarize_by)
         out._by = (self, dim, out.values) # So it can still select groups of the other dimensions (see select()), while its values are these
         return out
 
@@ -534,6 +538,50 @@ class Result(ss.utils.NoDists, ss.arrays.BaseArr):
             strata[rows[ti]] = vals
         return
 
+    def set_groups(self, ti, vals, denom=None):
+        """
+        Set the value at time point ti from values by group (one for each of `sim.groups`, e.g. from `sim.groups.count()`), and keep them, for a result made with `groups=True`
+
+        The value is their total; or, given the denominator of each group, a ratio: the total of the values over the total of the
+        denominators (e.g. the prevalence among everyone), with both kept, so that selecting groups adds up each before dividing.
+
+        Args:
+            ti (int): the time point
+            vals (array): the value of each group (for a ratio, its numerator)
+            denom (array): for a ratio, the denominator of each group
+
+        Examples:
+            ```python
+            # In a module written as code, in a sim stratified by sex and age
+            def init_results(self):
+                super().init_results()
+                self.define_results(ss.Result('n_infected', groups=True), ss.Result('prevalence', scale=False, groups=True))
+
+            def update_results(self):
+                super().update_results()
+                alive, infected = self.sim.groups.count(), self.sim.groups.count(self.infected)
+                self.results.n_infected.set_groups(self.ti, infected)
+                self.results.prevalence.set_groups(self.ti, infected, alive)
+
+            sim.results.sis.prevalence.select(sex='female', age='15-24') # Women aged 15-24 infected, over all women aged 15-24
+            ```
+        """
+        if getattr(self, 'strata', None) is None:
+            errormsg = f'The result "{self.name}" does not keep values by group: make it with ss.Result(..., groups=True), in a module of a sim'
+            raise ValueError(errormsg)
+        vals = np.asarray(vals, dtype=float)
+        self.strata[ti] = vals
+        if denom is None:
+            self[ti] = vals.sum()
+        else:
+            if getattr(self, 'denom', None) is None:
+                self.denom = np.zeros(self.strata.shape)
+            denom = np.asarray(denom, dtype=float)
+            self.denom[ti] = denom
+            total = denom.sum()
+            self[ti] = vals.sum()/total if total else 0.0
+        return
+
     @property
     def group_timevec(self):
         """ The time points of the values by group: every one, or the end of every few steps (see `select()`) """
@@ -566,7 +614,7 @@ class Result(ss.utils.NoDists, ss.arrays.BaseArr):
             errormsg = f'The result "{self.name}" has no part with {pick}; its parts are {sc.strjoin(".".join(k for k in key if k) for key in parts)}'
             raise KeyError(errormsg)
         out = Result(name=self.name, label=f'{self.label} ({", ".join(f"{k}={v}" for k,v in pick.items())})', module=self.module, scale=False, timevec=self.timevec,
-                     values=np.sum([res.values for res in keep], axis=0), shape=len(self.values), kind=self.kind)
+                     values=np.sum([res.values for res in keep], axis=0), shape=len(self.values), summarize_by=self.summarize_by)
         if getattr(self, 'strata', None) is not None and all(getattr(res, 'strata', None) is not None for res in keep):
             out.strata = np.sum([res.strata for res in keep], axis=0)
             for attr in ['strats', 'dims', 'group_ti']:
@@ -617,7 +665,7 @@ class Result(ss.utils.NoDists, ss.arrays.BaseArr):
             denom = denom*(keep if keep_den is None else keep_den)
             values = np.divide(values, denom.sum(axis=-1), out=np.zeros(values.shape), where=denom.sum(axis=-1)!=0)
         out = Result(name=self.name, label=self.label, module=self.module, scale=False, timevec=self.group_timevec,
-                     values=values, kind=self.kind, runs=self.runs)
+                     values=values, summarize_by=self.summarize_by, runs=self.runs)
         out.strata = strata
         out.denom = denom
         out.denom_dims = getattr(self, 'denom_dims', None)
@@ -632,7 +680,7 @@ class Result(ss.utils.NoDists, ss.arrays.BaseArr):
         col = self.columns[i]
         label = sc.ifelse(self.label, self.name)
         res = Result(name=f'{self.name}_{col}', label=f'{label} ({col})', dtype=self.dtype, scale=self.scale,
-                     auto_plot=self.auto_plot, module=self.module, timevec=self.timevec, kind=self.kind)
+                     auto_plot=self.auto_plot, module=self.module, timevec=self.timevec, summarize_by=self.summarize_by)
         res.values = self.values[..., i] # Set after creation, since init_values() would copy
         res.low = self.low[..., i] if self.low is not None else None
         res.high = self.high[..., i] if self.high is not None else None
@@ -688,41 +736,51 @@ class Result(ss.utils.NoDists, ss.arrays.BaseArr):
             full = f'{self.module}: {reslabel}'
         return full
 
-    kinds = dict(flow='sum', stock='last', ratio='mean') # Each kind of result, and how it is summarized over time
+    @staticmethod
+    def periods_sum(arr, starts, ends):
+        """ The total of each period (along the first axis; the periods start at `starts` and end at `ends`, inclusive) """
+        return np.add.reduceat(arr, starts, axis=0)
+
+    @staticmethod
+    def periods_last(arr, starts, ends):
+        """ The last value of each period """
+        return arr[ends]
+
+    @staticmethod
+    def periods_mean(arr, starts, ends):
+        """ The mean of each period """
+        counts = (ends - starts + 1).reshape((-1,) + (1,)*(arr.ndim - 1))
+        return np.add.reduceat(arr, starts, axis=0)/counts
+
+    # How a result is summarized over time (and over each period, when resampled), by its summarize_by: a function of
+    # the values (time first), and the first and last time point of each period, giving one row per period. A ratio
+    # with a numerator and denominator (e.g. prevalence by group) is summarized by 'mean' as each part summed over the
+    # period, then divided, rather than with this function. Others can be added, e.g. `ss.Result.summarizers['max'] = fn`.
+    summarizers = dict(sum=periods_sum, last=periods_last, mean=periods_mean)
 
     @classmethod
-    def get_kind(cls, name, kind=None, summarize_by=None):
-        """ The kind of a result: as given, or from `summarize_by` (Starsim 3's spelling), or else guessed from its name, for results that do not give it (as in Starsim 3) """
-        if kind is None and summarize_by is not None:
-            kind = {v:k for k,v in cls.kinds.items()}.get(summarize_by)
-            if kind is None:
-                errormsg = f'Unrecognized summarize_by="{summarize_by}" for the result "{name}"; use kind="flow", "stock", or "ratio" instead'
-                raise ValueError(errormsg)
-        if kind is None:
+    def get_summarize_by(cls, name, summarize_by='auto'):
+        """ How a result is summarized over time: as given (None for not at all), or else ('auto') guessed from its name, as in Starsim 3 """
+        if summarize_by == 'auto':
             name = str(name)
             if 'new_' in name: # Not using startswith because msim results are prefixed with the module name
-                kind = 'flow'
+                summarize_by = 'sum'
             elif name.startswith('n_') or '_n_' in name or 'cum_' in name or 'cumulative' in name:
-                kind = 'stock'
+                summarize_by = 'last'
             else:
-                kind = 'ratio'
-        if kind not in cls.kinds:
-            errormsg = f'The kind of the result "{name}" must be "flow", "stock", or "ratio", not "{kind}"'
+                summarize_by = 'mean'
+        if summarize_by is not None and summarize_by not in cls.summarizers:
+            errormsg = f'Unrecognized summarize_by="{summarize_by}" for the result "{name}"; use {sc.strjoin([repr(k) for k in cls.summarizers], sep=", ")}, or None'
             raise ValueError(errormsg)
-        return kind
-
-    @property
-    def summarize_by(self):
-        """ Starsim 3's spelling of the kind: how the result is summarized over time ('sum' for a flow, 'last' for a stock, 'mean' for a ratio) """
-        return self.kinds[self.kind]
-
-    @summarize_by.setter
-    def summarize_by(self, value):
-        self.kind = self.get_kind(self.name, summarize_by=value)
-        return
+        return summarize_by
 
     def summarize(self):
-        """ The result over the whole run, by its kind: the total of a flow, the final value of a stock, and the mean of a ratio (over time, of its parts if it has them); one for each run, for a result across runs; and for a result by group (`res.by('age')`), a pandas Series labelled by group """
+        """
+        The result over the whole run, by its `summarize_by`: the total of a flow ('sum'), the final value of a stock ('last'),
+        and the mean of a ratio ('mean'; over time, of its numerator and denominator if it has them, each summed and then
+        divided); one for each run, for a result across runs; and for a result by group (`res.by('age')`), a pandas Series
+        labelled by group
+        """
         out = self._summarize()
         if self.columns is not None and self.runs is None and np.ndim(out) == 1 and len(out) == len(self.columns):
             out = pd.Series(out, index=pd.Index(self.columns, name=getattr(self, 'by_dim', None)), name=self.name)
@@ -730,32 +788,34 @@ class Result(ss.utils.NoDists, ss.arrays.BaseArr):
 
     def _summarize(self):
         """ The summary of `summarize()`, unlabelled """
+        if self.summarize_by is None:
+            errormsg = f'"{self.name}" is not summarized over time (summarize_by=None)'
+            raise ValueError(errormsg)
         t = self.t_axis
-        if self.kind == 'flow':
-            return self.values.sum(axis=t)
-        elif self.kind == 'stock':
-            return np.take(self.values, -1, axis=t)
-        denom = getattr(self, 'denom', None)
-        if denom is not None and self.values.ndim == t + 1:
-            axes = tuple(range(t, denom.ndim)) # Over time and groups
-            num, den = self.strata.sum(axis=axes), denom.sum(axis=axes)
-            return np.divide(num, den, out=np.zeros(np.shape(num)), where=den!=0) if t else (num/den if den else 0.0)
-        parts = getattr(self, 'parts', None) # The results a ratio is made from, if it is not by group, e.g. a delivery's coverage, which is 0 between its rounds
-        if parts is not None and self.values.ndim == 1:
-            num, den = [part.values.sum() for part in parts]
-            return num/den if den else 0.0
-        return self.values.mean(axis=t)
+        if self.summarize_by == 'mean':
+            denom = getattr(self, 'denom', None)
+            if denom is not None and self.values.ndim == t + 1:
+                axes = tuple(range(t, denom.ndim)) # Over time and groups
+                num, den = self.strata.sum(axis=axes), denom.sum(axis=axes)
+                return np.divide(num, den, out=np.zeros(np.shape(num)), where=den!=0) if t else (num/den if den else 0.0)
+            parts = getattr(self, 'parts', None) # The results a ratio is made from, if it is not by group, e.g. a delivery's coverage, which is 0 between its rounds
+            if parts is not None and self.values.ndim == 1:
+                num, den = [part.values.sum() for part in parts]
+                return num/den if den else 0.0
+        values = np.moveaxis(np.asarray(self.values), t, 0) # Time first
+        n = len(values)
+        return self.summarizers[self.summarize_by](values, np.array([0]), np.array([n-1]))[0]
 
     @property
     def cum(self):
-        """ The cumulative total of a flow over time, e.g. `sim.results.sir.infection.cum` (a stock; computed when asked for) """
-        if self.kind != 'flow':
-            errormsg = f'Only a flow has a cumulative total, and "{self.name}" is a {self.kind}'
+        """ The cumulative total of a flow (a result summarized by 'sum') over time, e.g. `sim.results.sir.infection.cum` (a stock; computed when asked for) """
+        if self.summarize_by != 'sum':
+            errormsg = f'Only a flow (summarize_by="sum") has a cumulative total, and "{self.name}" has summarize_by={self.summarize_by!r}'
             raise ValueError(errormsg)
         t = self.t_axis
         values = np.cumsum(self.values, axis=t)
         label = sc.ifelse(self.label, self.name)
-        out = self.asnew(values=values, _shape=values.shape, name=f'cum_{self.name}', label=f'Cumulative {label}', kind='stock', low=None, high=None, auto_plot=False)
+        out = self.asnew(values=values, _shape=values.shape, name=f'cum_{self.name}', label=f'Cumulative {label}', summarize_by='last', low=None, high=None, auto_plot=False)
         if getattr(self, 'strata', None) is not None: # Over the rows of the values by group, which for a flow are totals over each row
             out.strata = np.cumsum(self.strata, axis=t)
         return out
@@ -798,12 +858,12 @@ class Result(ss.utils.NoDists, ss.arrays.BaseArr):
         bins = np.ceil(t/width - eps).astype(int) - 1 # A period includes its end and not its start, as for data: a flow at a time point is over the step that ends there
         return np.maximum(bins, 0) # The start is in the first period
 
-    def resample(self, new_unit=None, kind=None, use_years=False, **kwargs):
+    def resample(self, new_unit=None, summarize_by=None, use_years=False, **kwargs):
         """
-        Resample the result to a longer time unit, by its kind
+        Resample the result to a longer time unit, by its `summarize_by`
 
-        A flow is summed over each period, a stock takes its value at the end of each
-        period, and a ratio sums its numerator and denominator over each period (by group, if
+        A flow ('sum') is summed over each period, a stock ('last') takes its value at the end of each
+        period, and a ratio ('mean') sums its numerator and denominator over each period (by group, if
         it has them) and divides them (one with no parts is averaged over the period). Periods
         start at the sim's start and include their end, as for data; calendar months and years
         are used instead for a sim with dates. Each period is labeled by its last time point.
@@ -811,7 +871,7 @@ class Result(ss.utils.NoDists, ss.arrays.BaseArr):
 
         Args:
             new_unit (str/dur): the new unit: 'day', 'week', 'month', 'year', or a duration, e.g. `ss.weeks(2)`
-            kind (str): resample as this kind instead of the result's own ('flow', 'stock', or 'ratio')
+            summarize_by (str): resample this way instead of by the result's own, e.g. 'mean' to average a stock over each period
             use_years (bool): label the periods by their year (as integers)
 
         Returns:
@@ -829,17 +889,20 @@ class Result(ss.utils.NoDists, ss.arrays.BaseArr):
 
         # For 2D results, resample each column separately
         if self.columns is not None:
-            results = [res.resample(new_unit=new_unit, kind=kind, use_years=use_years) for res in self.by_column().values()]
+            results = [res.resample(new_unit=new_unit, summarize_by=summarize_by, use_years=use_years) for res in self.by_column().values()]
             return self.stack(results)
 
-        kind = self.get_kind(self.name, kind=sc.ifelse(kind, self.kind))
+        how = self.get_summarize_by(self.name, sc.ifelse(summarize_by, self.summarize_by))
+        if how is None:
+            errormsg = f'Cannot resample "{self.name}": it is not summarized over time (summarize_by=None); give summarize_by=, e.g. "mean"'
+            raise ValueError(errormsg)
         t = self.t_axis
         if t: # Across runs: resample with the time points first, then put the runs first again
             tfirst = self.asnew(values=np.moveaxis(self.values, t, 0), runs=None)
             if getattr(self, 'strata', None) is not None:
                 tfirst.strata = np.moveaxis(self.strata, t, 0)
                 tfirst.denom = None if getattr(self, 'denom', None) is None else np.moveaxis(self.denom, t, 0)
-            out = tfirst.resample(new_unit=new_unit, kind=kind, use_years=use_years)
+            out = tfirst.resample(new_unit=new_unit, summarize_by=how, use_years=use_years)
             out.values, out.runs = np.moveaxis(out.values, 0, t), self.runs
             out._shape = out.values.shape
             if getattr(out, 'strata', None) is not None:
@@ -850,17 +913,8 @@ class Result(ss.utils.NoDists, ss.arrays.BaseArr):
         starts = np.flatnonzero(np.diff(bins, prepend=-1)) # The first time point of each period
         ends = np.append(starts[1:], len(bins)) - 1 # And the last
 
-        def agg(arr, how, bins=bins, starts=starts, ends=ends):
-            if arr is None:
-                return None
-            arr = np.asarray(arr)
-            if how == 'last':
-                return arr[ends]
-            total = np.add.reduceat(arr, starts, axis=0)
-            if how == 'mean':
-                counts = np.diff(np.append(starts, len(bins))).reshape((-1,) + (1,)*(arr.ndim - 1))
-                return total/counts
-            return total
+        def agg(arr, how, starts=starts, ends=ends):
+            return None if arr is None else self.summarizers[how](np.asarray(arr), starts, ends)
 
         strata = getattr(self, 'strata', None)
         denom = getattr(self, 'denom', None)
@@ -871,17 +925,16 @@ class Result(ss.utils.NoDists, ss.arrays.BaseArr):
             g_bins = bins[group_ti]
             g_starts = np.flatnonzero(np.diff(g_bins, prepend=-1))
             g_ends = np.append(g_starts[1:], len(g_bins)) - 1
-            agg_g = lambda arr, how: agg(arr, how, g_bins, g_starts, g_ends)
+            agg_g = lambda arr, how: agg(arr, how, g_starts, g_ends)
             if len(g_starts) < len(starts):
                 no_groups = f'it is kept by group every {group_ti[1]} steps, so its groups cannot be resampled to a shorter period'
                 strata = denom = None
-        if kind == 'ratio' and denom is not None: # The parts, each summed over the period, then divided
+        if how == 'mean' and denom is not None: # A ratio: the parts, each summed over the period, then divided
             new_strata, new_denom = agg_g(strata, 'sum'), agg_g(denom, 'sum')
             num, den = new_strata.sum(axis=-1), new_denom.sum(axis=-1)
             values = np.divide(num, den, out=np.zeros(num.shape), where=den!=0)
             low = high = None
         else:
-            how = self.kinds[kind]
             values, low, high = agg(self.values, how), agg(self.low, how), agg(self.high, how)
             new_strata = agg_g(strata, how)
             new_denom = None
@@ -891,7 +944,7 @@ class Result(ss.utils.NoDists, ss.arrays.BaseArr):
             if self.has_dates and len(self.timevec) > 1: # Labeled by the calendar year each period covers, so the one ending on 1 January 2001 is 2000
                 years = years - 0.5*np.min(np.diff(np.asarray(self.timevec.years, dtype=float)))
             timevec = np.floor(years + 1e-9).astype(int)
-        out = self.asnew(values=values, low=low, high=high, timevec=timevec, kind=self.kind, _shape=values.shape)
+        out = self.asnew(values=values, low=low, high=high, timevec=timevec, summarize_by=self.summarize_by, _shape=values.shape)
         out.group_ti = None # Its values by group, if any, are at its own time points
         out.use_years = use_years # Its times are years, which to_df() keeps (see convert_timevec())
         if strata is not None:
@@ -1095,16 +1148,21 @@ class Result(ss.utils.NoDists, ss.arrays.BaseArr):
         return
 
 
+def resamplable(res, kwargs=None):
+    """ Whether a result can be resampled as part of all the results: not if it is not summarized over time and no `summarize_by=` is given """
+    return not (isinstance(res, Result) and res.summarize_by is None and (kwargs or {}).get('summarize_by') is None)
+
+
 class Results(ss.utils.NoDists, ss.ndict):
     """ Container for storing results """
-    def __init__(self, module=None, *args, strict=True, **kwargs):
+    def __init__(self, module=None, *args, **kwargs):
         if module is not None and not isinstance(module, str):
             modlabel = getattr(module, 'label', None)
             modname = getattr(module, 'name', None)
             modcls = module.__class__.__name__
             module = sc.ifelse(modlabel, modname, modcls)
         self.setattribute('_module', module)
-        super().__init__(type=Result, strict=strict, *args, **kwargs)
+        super().__init__(type=Result, *args, **kwargs)
         return
 
     def __repr__(self, indent=4, head_col=None, key_col=None, **kwargs): # kwargs are not used, but are needed for disp() to work
@@ -1159,13 +1217,17 @@ class Results(ss.utils.NoDists, ss.ndict):
         return None
 
     def __getitem__(self, key):
-        if key not in self and self._implicit_has(key):
+        if isinstance(key, str) and dict.__contains__(self, key): # The usual case, as fast as a dict; the rest only for a key that is not here
+            return dict.__getitem__(self, key)
+        if self._implicit_has(key):
             return self[self._implicit][key]
         if msg := self._given_msg(key):
             raise KeyError(msg)
         return super().__getitem__(key)
 
     def __getattr__(self, attr):
+        if dict.__contains__(self, attr): # As in __getitem__()
+            return dict.__getitem__(self, attr)
         if self._implicit_has(attr):
             return self[self._implicit][attr]
         if msg := self._given_msg(attr):
@@ -1222,9 +1284,7 @@ class Results(ss.utils.NoDists, ss.ndict):
             out = split
         if 'resample' in kwargs and kwargs['resample'] is not None:
             resample = kwargs.pop('resample')
-            for k,v in out.items():
-                if isinstance(v, Result):
-                    out[k] = v.resample(new_unit=resample, **kwargs)
+            out = {k:(v.resample(new_unit=resample, **kwargs) if isinstance(v, Result) else v) for k,v in out.items() if resamplable(v, kwargs)}
         if only_results:
             out = sc.objdict({k:v for k,v in out.items() if isinstance(v, Result)})
             if only_auto:
@@ -1232,11 +1292,13 @@ class Results(ss.utils.NoDists, ss.ndict):
         return out
 
     def resample(self, new_unit, **kwargs):
-        """ Resample all the results to a longer time unit (e.g. 'year'), each by its kind, returning a new Results object; see `ss.Result.resample()` """
-        new = Results(self._module, strict=False)
+        """ Resample all the results to a longer time unit (e.g. 'year'), each by its `summarize_by`, returning a new Results object; see `ss.Result.resample()`; results not summarized over time (`summarize_by=None`) are left out, as in `sim.summarize()` """
+        new = Results(self._module)
         timevec = None
         for key, res in self.items():
-            if isinstance(res, (Results, Result)):
+            if not resamplable(res, kwargs):
+                continue
+            elif isinstance(res, (Results, Result)):
                 new[key] = res.resample(new_unit, **kwargs)
                 if isinstance(res, Result) and timevec is None:
                     timevec = new[key].timevec # Store the resampled timevec
@@ -1262,7 +1324,7 @@ class Results(ss.utils.NoDists, ss.ndict):
         if not flat:
             return None
         if len({len(res) for res in flat.values()}) > 1: # Different time points: one dataframe for the sim's own results and one for each module
-            own = Results(self._module, strict=False)
+            own = Results(self._module)
             for key,val in self.items():
                 if isinstance(val, Result):
                     own[key] = val
@@ -1283,7 +1345,7 @@ class Results(ss.utils.NoDists, ss.ndict):
             elif isinstance(val, Result):
                 yield None, key, val
 
-    def plot(self, key=None, fig=None, data=None, label=None, title=None, lines=False, legend=True, show_skipped=False, show_module=None, n_ticks=None, annualize=False, **kwargs):
+    def plot(self, key=None, fig=None, data=None, label=None, title=None, lines=False, legend=True, show_skipped=False, annualize=False, **kwargs):
         """
         Plot the results, each in its own axes; see `sim.plot()` and `msim.plot()`
 
@@ -1298,9 +1360,7 @@ class Results(ss.utils.NoDists, ss.ndict):
             lines (bool): for a result across runs, plot every run instead of the median and interval
             legend (bool): whether to label the scenarios, if there is more than one
             show_skipped (bool): show even results that are not plotted by default
-            show_module (int): whether to show the module as well as the result name; if an int, show if the label is shorter than that (default 26); if -1, on a new line
-            n_ticks (tuple): the minimum and maximum number of x-axis ticks (default `(2,5)`)
-            annualize (bool): if True, resample the results to annual values first (each by its kind; see `ss.Result.resample()`)
+            annualize (bool): if True, resample the results to annual values first (each by its `summarize_by`; see `ss.Result.resample()`)
             kwargs (dict): known arguments (e.g. figsize, font) split between the plotting dicts; see `ss.plot_args()`
         """
         if isinstance(key, (list, tuple)) and any(isinstance(k, (list, tuple)) for k in key): # Several results in some axes
@@ -1308,7 +1368,7 @@ class Results(ss.utils.NoDists, ss.ndict):
         else:
             groups = [[res] for res in match_result_keys(self, key, show_skipped=(show_skipped or key)).values()] # Always show skipped with a custom key
         if annualize:
-            groups = [[res.resample('year') if isinstance(res, Result) else res for res in group] for group in groups]
+            groups = [[res.resample('year') if isinstance(res, Result) and resamplable(res) else res for res in group] for group in groups]
         n_cols,_ = sc.getrowscols(len(groups)) # Number of columns of axes
         figsize = np.array([8, 6])*np.clip((n_cols-3)/6+1, 1, 1.5) # Scale the default figure size with the number of columns
         kw = ss.plot_args(kwargs, figsize=figsize, alpha=0.8, data_alpha=0.3, data_color='k')
@@ -1339,7 +1399,7 @@ class Results(ss.utils.NoDists, ss.ndict):
                     group[0]._floor(ax)
                 if len(group) > 1 or group[0].columns is not None: # One line per result, or per column
                     ax.legend(**kw.legend)
-                format_axes(ax, group[0], n_ticks, show_module)
+                format_axes(ax, group[0])
                 if summed:
                     ax.set_title(ax.get_title() + '\n(total over each period of the data)')
                 if len(group) > 1: # Titled by what the results have in common
@@ -1397,41 +1457,10 @@ def match_result_keys(results, key, show_skipped=False, flattened=False):
     return flat
 
 
-def get_result_plot_label(res, show_module=None):
-    """ Helper function for getting the label to plot for a result; not for the user """
-    # Sanitize
-    if show_module is None:
-        show_module = 26 # Default maximum length
-    elif isinstance(show_module, bool):
-        if show_module is True:
-            show_module = 999
-        else:
-            show_module = 0
-    if not isinstance(show_module, int):
-        errormsg = f'"show_module" must be a bool or int, not {show_module}'
-        raise TypeError(errormsg)
-
-    # Decide how/if to show the module
-    if show_module == -1:
-        label = res.full_label.replace(':', '\n')
-    elif len(res.full_label) > show_module:
-        label = sc.ifelse(res.label, res.name)
-    else:
-        label = res.full_label
-
-    return label
-
-
-def format_axes(ax, res, n_ticks=None, show_module=None):
-    """ Standard formatting for axis results; not for the user """
-    if n_ticks is None:
-        n_ticks = (2,5)
-
-    # Set y axis -- commas
+def format_axes(ax, res):
+    """ Standard formatting for axis results: commas on the y axis, and the result as the title, with its module if the label is short; not for the user """
     sc.commaticks(ax)
-
-    # Set the axes title
-    label = get_result_plot_label(res, show_module)
+    label = res.full_label if len(res.full_label) <= 26 else sc.ifelse(res.label, res.name)
     ax.set_title(label)
     return
 
@@ -1560,11 +1589,11 @@ def member_column(sim, col, levels):
         fams = [mod for mod in sim.modules if isinstance(mod, ss.strains.Family) and mod.dim == dim]
         fam = next((mod for mod in fams if modname in ['', mod.name] and isinstance(mod.results.get(name), ss.Result)), None)
         if fam is None:
-            raise ss.errors.UnknownDataColumn(f'the data for {col} is by {dim}, but {col} is not a result of {sc.strjoin([mod.name for mod in fams])}, whose strains are the levels of "{dim}".')
+            raise sc.KeyNotFoundError(f'the data for {col} is by {dim}, but {col} is not a result of {sc.strjoin([mod.name for mod in fams])}, whose strains are the levels of "{dim}".')
         members = fam.member_names
         member = str(level) if str(level) in members else members[int(level)] if str(level).isdigit() and int(level) < len(members) else None
         if member is None:
-            raise ss.errors.UnknownDataColumn(f'the data for {col} has {dim}={level}, which is not a strain of {fam.name}; its strains are {sc.strjoin(members)}.')
+            raise sc.KeyNotFoundError(f'the data for {col} has {dim}={level}, which is not a strain of {fam.name}; its strains are {sc.strjoin(members)}.')
         col = f'{member}.{name}'
     return col
 
@@ -1646,27 +1675,27 @@ def check_data(sim, df, die=False):
             for dim,level in dims.items():
                 fam = next((mod for mod in sim.modules if isinstance(mod, ss.strains.Family) and mod.dim == dim and dim not in [strat.name for strat in sim.groups.strats]), None)
                 if fam is not None:
-                    raise ss.errors.UnknownDataColumn(f'the data column "{col}" is by {dim}, the strains of {fam.name}, which have courses of their own: name each strain\'s own result, e.g. "{fam.member_names[0]}.{name.rpartition(".")[2]}", or give the data in long form, with a "{dim}" column.')
+                    raise sc.KeyNotFoundError(f'the data column "{col}" is by {dim}, the strains of {fam.name}, which have courses of their own: name each strain\'s own result, e.g. "{fam.member_names[0]}.{name.rpartition(".")[2]}", or give the data in long form, with a "{dim}" column.')
                 strat = sim.groups.strats[sim.groups.dim_index(dim)]
                 if level not in [str(label) for label in strat.labels] and not (level.isdigit() and int(level) < strat.n):
-                    raise ss.errors.UnknownDataColumn(f'the data for {name} has {dim}={level}, which is not a level of "{dim}"; its levels are {sc.strjoin(strat.labels)}.')
+                    raise sc.KeyNotFoundError(f'the data for {name} has {dim}={level}, which is not a level of "{dim}"; its levels are {sc.strjoin(strat.labels)}.')
             if getattr(base, 'strata', None) is None:
-                raise ss.errors.UnknownDataColumn(f'the data for {name} is by {sc.strjoin(dims.keys())}, but the result {name} is not kept by group, so it cannot be split by them.')
+                raise sc.KeyNotFoundError(f'the data for {name} is by {sc.strjoin(dims.keys())}, but the result {name} is not kept by group, so it cannot be split by them.')
             elif getattr(base, 'group_ti', None) is not None:
-                raise ss.errors.UnknownDataColumn(f'the data for {name} is by {sc.strjoin(dims.keys())}, but the result {name} is kept by group only every few steps, to save memory. '
+                raise sc.KeyNotFoundError(f'the data for {name} is by {sc.strjoin(dims.keys())}, but the result {name} is kept by group only every few steps, to save memory. '
                                            f'Give the data to the sim when it is made (ss.Sim(..., data=...)), or name fewer results to keep by group with results=[...].')
         if match_column(sim, col) is None:
             several = [mod.name for mod in sim.modules if name in mod.results and isinstance(mod.results[name], ss.Result)]
             if len(several) > 1: # The name of a result of more than one module
                 msg = f'the data column "{col}" could be the result {name} of any of {sc.strjoin(several)}; name the column after one of them, e.g. "{several[0]}.{name}", or rename it with ss.simdata(..., aliases=dict(...)).'
             else:
-                msg = (f'the data column "{col}" matches no result. The closest results are {ss.transitions.closest(col, [o.split(".")[-1] for o in options])}.\n'
+                msg = (f'the data column "{col}" matches no result. The closest results are {ss.expressions.closest(col, [o.split(".")[-1] for o in options])}.\n'
                        f"     Rename it with ss.simdata(..., aliases=dict(result='{col}')), or drop it with ss.simdata(..., ignore_extra=True).")
             if die:
-                raise ss.errors.UnknownDataColumn(msg)
+                raise sc.KeyNotFoundError(msg)
             ss.note(f'{msg[0].upper()}{msg[1:]} It is not compared with the results.', sim=sim)
     sim_t, data_t = data_times(sim, df)
-    if len(sim_t) > 1 and len(data_t): # Data entirely outside is an error when it is compared (ss.errors.DataMisaligned); partly outside, the rest is left out of the comparison
+    if len(sim_t) > 1 and len(data_t): # Data entirely outside is an error when it is compared; partly outside, the rest is left out of the comparison
         eps = np.median(np.diff(sim_t))/2
         outside = (data_t < sim_t.min() - eps) | (data_t > sim_t.max() + eps)
         if outside.any() and not outside.all():
@@ -1755,7 +1784,7 @@ def compare(sim, df=None):
     df = given_data(sim, df)
     sim_t, data_t = data_times(sim, df)
     if data_t.max() < sim_t.min() or data_t.min() > sim_t.max():
-        raise ss.errors.DataMisaligned(f'the data ({df.index[0]} to {df.index[-1]}) lies entirely outside the simulated period ({sim.t.start} to {sim.t.stop}).')
+        raise ValueError(f'the data ({df.index[0]} to {df.index[-1]}) lies entirely outside the simulated period ({sim.t.start} to {sim.t.stop}).')
     out = sc.objdict()
     for col,(W,expected,rows) in lineup(sim, df).items():
         values = np.asarray(match_column(sim, col).values, dtype=float)
@@ -1773,7 +1802,7 @@ def flow_at_data(sim, col, res=None, weights=False):
     """
     df = given_data(sim)
     res = res if res is not None else match_column(sim, col)
-    if df is None or res is None or res.kind != 'flow' or col not in df.columns:
+    if df is None or res is None or res.summarize_by != 'sum' or col not in df.columns:
         return None
     lined = lineup(sim, df[[col]]).get(col)
     if lined is None or not len(lined[2]) or lined[0].sum(axis=1).max() <= 1: # Each data time is one step
@@ -1820,16 +1849,16 @@ def lineup(sim, df=None):
     """
     df = given_data(sim, df)
     annual = by_year(df)
-    weights = {} # By timeline and kind, since most results share them
+    weights = {} # By timeline and whether summed, since most results share them
     out = sc.objdict()
     for col in df.columns:
         res = match_column(sim, col)
         if res is None:
             continue
         sim_t, data_t = data_times(sim, df, res)
-        key = (len(sim_t), res.kind == 'flow')
+        key = (len(sim_t), res.summarize_by == 'sum')
         if key not in weights:
-            weights[key] = time_weights(sim_t, data_t, res.kind == 'flow', annual)
+            weights[key] = time_weights(sim_t, data_t, res.summarize_by == 'sum', annual)
         W, inside = weights[key]
         expected = np.asarray(df[col], dtype=float)
         ok = inside & np.isfinite(expected)

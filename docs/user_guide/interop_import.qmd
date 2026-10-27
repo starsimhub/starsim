@@ -80,13 +80,13 @@ Here everything was translated. When something isn't, `sim.imported.prompt` is a
 
 ## Keeping an imported model
 
-`sim.to_code()` writes the imported model as Python, which can be kept, read, and changed like a model written by hand. The file starts with how each rate was read:
+An import gives Starsim code: the importer writes the model as Python, and the sim is that code run. The code is kept as `sim.imported.code`, to be kept, read, and changed like a model written by hand. It starts with how each rate was read, and ends with anything that wasn't translated:
 
 ```{python}
-print(sim.to_code())
+print(sim.imported.code)
 ```
 
-`ss.save('measles.py', sim)` writes the same to a file. See [The model spec, `to_code()`, and `diff()`](interop_spec.qmd).
+`sc.savetext('measles.py', sim.imported.code)` writes it to a file. From then on, the file is the model: to compare it with another version, compare their results or their `describe()`, or the two files in a text editor.
 
 ## The formats
 
@@ -95,7 +95,7 @@ print(sim.to_code())
 | [Atomica](../coming_from/atomica.qmd) | A framework and databook (`.xlsx`), and a program book | Programs become parameters of spending, for `ss.fit.optimize()` |
 | [camdl](../coming_from/camdl.qmd) | A `.camdl` file (compiled with `camdlc`), or its JSON form | Parameters keep their bounds and priors; observations become outcomes with their likelihoods |
 | [EMULSION](../coming_from/emulsion.qmd) | A model file (`.yaml`) | Each state machine becomes a disease |
-| [EpiModel](../coming_from/epimodel.qmd) | An R script, run first in R by `dump_epimodel.R` | A fitted network becomes `ssl.DegreeNet` |
+| [EpiModel](../coming_from/epimodel.qmd) | An R script, run first in R by `dump_epimodel.R` | A fitted network becomes `ss.DegreeNet` |
 | [epydemix](../coming_from/epydemix.qmd) | A live model, or the JSON written by `dump_epydemix.py` | Runs as a chain binomial in daily steps, as epydemix does |
 | [flepiMoP](../coming_from/flepimop.qmd) | A configuration file (`.yml`) | Places become a stratification with commuting between them |
 | [MEmilio](../coming_from/memilio.qmd) | The JSON written by `dump_memilio.py` | Contact matrices with their changes over time; a graph of places |
@@ -123,7 +123,7 @@ sir = ss.interop.build(src, stop=100)
 
 ## Exporting a model
 
-`ss.interop.export()` writes a model in another format: SBML (for tools such as COPASI), odin, or a Mermaid diagram. Each is written from the model's compartmental form:
+`ss.interop.export()` writes a model in another format: SBML (for tools such as COPASI) or odin. Each is written from the model's compartmental form:
 
 ```{python}
 print(ss.interop.export(sim, 'odin'))
@@ -152,4 +152,4 @@ hub.head()
 
 A target named "cum ..." is the total since the start, and "peak size ..." the largest value of a period; `by=` gives a location for each level of a stratification (such as each place), and `output_type='sample'` gives the runs instead of quantiles.
 
-How importers and exporters are built is explained in [The model spec, errors, and interop](../architecture/spec_and_interop.qmd).
+How importers and exporters are built is explained in [Errors and interop](../architecture/spec_and_interop.qmd).

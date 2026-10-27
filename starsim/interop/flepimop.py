@@ -20,7 +20,7 @@ import numpy as np
 import pandas as pd
 import sciris as sc
 import starsim as ss
-from .core import Source, build
+from .core import Source, Code, build, code_value
 from .emulsion import number
 
 __all__ = ['load_flepimop']
@@ -301,7 +301,7 @@ def load_flepimop(filename, scenario=None, verbose=None, **kwargs):
     names = sc.tolist((cfg.get('seir_modifiers') or {}).get('scenarios') or [])
     scen_mods = {}
     for scen in names:
-        scen_mods[scen] = modifiers(scen, mods, name, places, methods, src)
+        scen_mods[scen] = [ss.modify(**kw) for kw in modifiers(scen, mods, name, places, methods, src)]
     src.incomplete = list(dict.fromkeys(src.incomplete))
     if scenario is None and names:
         scenario = names[0]
@@ -310,7 +310,7 @@ def load_flepimop(filename, scenario=None, verbose=None, **kwargs):
         errormsg = f'There is no scenario "{scenario}"; the scenarios are {sc.strjoin(names) or "none"}'
         raise ValueError(errormsg)
     if scenario is not None:
-        kwargs.setdefault('interventions', modifiers(scenario, mods, name, places, methods, src, quiet=True))
+        kwargs.setdefault('interventions', Code('[' + ', '.join(f'ss.modify({", ".join(f"{k}={code_value(v)}" for k,v in kw.items())})' for kw in modifiers(scenario, mods, name, places, methods, src, quiet=True)) + ']'))
 
     # Outcomes, which may refer to each other
     for oname,o in ((cfg.get('outcomes') or {}).get('outcomes') or {}).items():
@@ -323,7 +323,7 @@ def load_flepimop(filename, scenario=None, verbose=None, **kwargs):
 
 
 def modifiers(scenario, mods, disease, places, methods, src, quiet=False):
-    """ The modifiers of a scenario (a modifier, or a stack of them), as `ss.modify` interventions """
+    """ The modifiers of a scenario (a modifier, or a stack of them), as the arguments to `ss.modify` """
     out = []
     def add(key, seen=()):
         mod = mods.get(key)
@@ -353,7 +353,7 @@ def modifiers(scenario, mods, disease, places, methods, src, quiet=False):
             src.skip(f'seir_modifiers: {key}', f'applies only in {sc.strjoin(sc.tolist(subpops))}; imported for every place')
         if mod.get('subpop_groups') and not quiet:
             src.skip(f'seir_modifiers: {key}', 'subpop_groups (one value drawn for a group of places) were not translated')
-        out.append(ss.modify(f'{disease}.pars.{par}', start=str(mod['period_start_date']), stop=stop, name=key, **amount))
+        out.append(dict(target=f'{disease}.pars.{par}', start=str(mod['period_start_date']), stop=stop, name=key, **amount))
     add(scenario)
     return out
 

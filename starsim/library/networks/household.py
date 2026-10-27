@@ -118,8 +118,8 @@ class HouseholdNet(ss.Network):
 
     def init_pre(self, sim):
         super().init_pre(sim)
-        if self.dynamic:
-            ss.check_requires(self.sim, ['pregnancy'])
+        if self.dynamic and sim.get_module(ss.Pregnancy, die=False) is None: # By type, so a subclass with its own name is found
+            raise ValueError('A dynamic HouseholdNet requires a Pregnancy module. Add ss.Pregnancy() to demographics.')
         return
 
     def init_post(self, add_pairs=True):
