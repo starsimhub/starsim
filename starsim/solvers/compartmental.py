@@ -117,7 +117,6 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
         if self.laid_out is None:
             self.build()
         self.say()
-        self.init_dwell_mods()
         self.init_syncs()
         self.init_adjust()
         self.init_movers()

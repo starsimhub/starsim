@@ -210,7 +210,6 @@ class Agents(Engine, Transmission):
         self.loops_of = {name:np.array([any(getattr(dst, 'name', None) == name for dst in (tr.dst or [])) for tr in exits], dtype=bool) for name,exits in self.exits_of.items()} # Which exits lead back to the state: a decision taken again, e.g. FPsim's choice of method
         self._rescaled = None # Which exits of each state are rescaled when their speed changes: see rescaled_of()
         self.init_dwells()
-        self.init_dwell_mods()
         modifies = lambda m: isinstance(m, ss.modify) or bool(getattr(getattr(m, 'product', None), 'effects', None)) # A modifier, or a delivery of a product with an efficacy (TL17: these were left out, so a product did nothing against a dwell time)
         rescalable = any(modifies(m) for m in list(self.sim.interventions()) + list(self.sim.connectors())) or any(self.varies(dw) for dw in self.dwells.values()) # Whether a dwell time can change after it is drawn: see rescale_exits()
         rescalable = rescalable or any(isinstance(fam, ss.strains.Family) and any(key.startswith('dur.') for imm in fam.immunity for key in imm.values) for fam in self.sim.diseases()) # Or protection on the time in a state, from a family
@@ -295,11 +294,7 @@ class Agents(Engine, Transmission):
         # Distributions: each is called at most once per step
         self.dists = sc.objdict()
         self.by_groups = dict() # Whether the rate of each transmission is the same for everyone in a group: see same_in_group()
-        def add(key, dist):
-            dist.name = f'rng_{key}'
-            mod.setattribute(f'rng_{key}', dist)
-            self.dists[key] = dist
-            return
+        add = self.add_dist
         def copy(dist):
             """ A copy of a distribution of the model, for the engine to draw from: without the sim and module it may be linked to already (by a module that reads it, e.g. a modifier of an attribute), so it is this disease's, and steps with it """
             sim, module = dist.sim, dist.module
@@ -383,8 +378,6 @@ class Agents(Engine, Transmission):
         mod.setattribute('trans_rng', ss.multi_random('source', 'target'))
         for name,dw in self.dwells.items():
             add(f'dwell_{name}', dw.dist if dw.dist is not None else ss.expon(scale=1.0) if dw.k == 1 else ss.gamma(a=dw.k, scale=1/dw.k)) # A unit-mean exponential (or Erlang), scaled by the mean when used
-            for new in getattr(dw, 'sets', {}).values(): # The distributions a modifier sets it to: see Engine.dwell_mods()
-                add(new.key, new.dist)
         return
 
     def init_pre(self):
@@ -713,8 +706,34 @@ class Agents(Engine, Transmission):
         """ A dwell time whose distribution has parameters with a value for each group (`ss.by`): the parameters are looked up for each agent, and one draw is made (see `Compartmental.varying_dwell()`) """
         dw.family = type(raw).__name__
         dw.staged = True
-        dw.mean = dw.std = None
+        dw.mean = dw.std = None # Each agent's: see agent_dwell_mean()
         dw.dist = ss.transitions.numeric_dist(raw, to_unit, per_agent=self.agent_values)
+        return
+
+    def agent_dwell_mean(self, name, uids):
+        """ The mean of a dwell time whose distribution has parameters by group (see `varying_dwell()`), for each of some agents: worked out once for each set of values, e.g. each age group """
+        trans = ss.transitions
+        raw = self.dwells[name].raw
+        varying = trans.varying_pars(raw)
+        plain = {k:v for k,v in trans.numeric_pars(raw, self.convert, per_agent=lambda val: None).items() if k not in varying}
+        vals = np.column_stack([np.broadcast_to(self.by_agent(by, uids), len(uids)) for by in varying.values()])
+        rows, which = np.unique(vals, axis=0, return_inverse=True)
+        means = [trans.dwell_stats(type(raw)(**plain, **dict(zip(varying.keys(), row))), lambda v: v)[0] for row in rows]
+        return np.asarray(means, dtype=float)[which.ravel()]
+
+    def add_dist(self, key, dist):
+        """ A distribution the engine draws from, registered on its module so the sim initializes it """
+        dist.name = f'rng_{key}'
+        self.mod.setattribute(f'rng_{key}', dist)
+        self.dists[key] = dist
+        return
+
+    def init_dwell_mods(self):
+        """ See `Engine.init_dwell_mods()`; and the distributions each set= draws from, before the sim initializes the distributions """
+        super().init_dwell_mods()
+        for dw in self.dwells.values():
+            for new in getattr(dw, 'sets', {}).values():
+                self.add_dist(new.key, new.dist)
         return
 
     def infect_now(self, uids, strain=None):
@@ -2935,6 +2954,8 @@ class Agents(Engine, Transmission):
         """ The current mean dwell time of a transition, in the sim's unit, including the modifiers of a distribution (see `dist_dwell()`) """
         if getattr(self.dwells[name], 'mods', None):
             key, mean, mult, add = self.dist_dwell(name)
+            if mean is None: # By group: for the agents being evaluated (see speed())
+                mean = self.agent_dwell_mean(name, self._uids)
             return mean*mult + add
         return super().dwell_mean(name)
 
