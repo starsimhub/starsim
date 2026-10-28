@@ -1478,11 +1478,11 @@ def sensitivity(sim, pars=None, results=None, n=100, rand_seed=None, verbose=Non
             continue
         if results is not None and key not in results:
             continue
-        if results is None and not ((modname, key) in counts or res.summarize_by == 'sum'):
+        if results is None and not ((modname, key) in counts or res.kind == 'flow'):
             continue
         vals = np.asarray(res.values)
         summaries[f'{modname}.{key} peak'] = vals.max(axis=1)
-        summaries[f'{modname}.{key} {"total" if res.summarize_by == "sum" else "final"}'] = vals.sum(axis=1) if res.summarize_by == 'sum' else vals[:, -1]
+        summaries[f'{modname}.{key} {"total" if res.kind == "flow" else "final"}'] = vals.sum(axis=1) if res.kind == 'flow' else vals[:, -1]
     ranks = lambda v: sps.rankdata(v)
     RX = np.column_stack([ranks(X[:, j]) for j in range(len(names))])
     table = sc.dataframe(index=names)

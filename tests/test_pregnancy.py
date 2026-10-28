@@ -64,7 +64,7 @@ def test_mmr():
     births, md = r.birth.values, r.maternal_deaths.values
     assert md.sum() > 30
     assert np.allclose(r.mmr.values, sc.safedivide(md, births, default=0)*100e3), 'MMR: maternal deaths per 100,000 births'
-    assert r.mmr.summarize_by == 'mean'
+    assert r.mmr.kind == 'ratio'
     mmr = md.sum()/births.sum()*100e3
     assert 3500 < mmr < 6500, f'An MMR of {mmr:.0f} per 100,000 from a 5% chance of death at delivery'
     imr = r.infant_mortality.sum()/births.sum()

@@ -271,9 +271,9 @@ class Births(Demographics):
     def init_results(self):
         super().init_results()
         self.define_results(
-            ss.Result('new',        dtype=int,   scale=True,  summarize_by='sum',  label='New births'),
-            ss.Result('cumulative', dtype=int,   scale=True,  summarize_by='last', label='Cumulative births'),
-            ss.Result('cbr',        dtype=float, scale=False, summarize_by='mean', label='Crude birth rate'),
+            ss.Result('new',        dtype=int,   scale=True,  kind='flow',  label='New births'),
+            ss.Result('cumulative', dtype=int,   scale=True,  kind='stock', label='Cumulative births'),
+            ss.Result('cbr',        dtype=float, scale=False, kind='ratio', label='Crude birth rate'),
         )
         return
 
@@ -523,9 +523,9 @@ class Deaths(Demographics):
     def init_results(self):
         super().init_results()
         self.define_results(
-            ss.Result('new',        dtype=int,   scale=True,  summarize_by='sum',  label='Deaths', auto_plot=False), # Use sim deaths instead
-            ss.Result('cumulative', dtype=int,   scale=True,  summarize_by='last', label='Cumulative deaths', auto_plot=False),
-            ss.Result('cmr',        dtype=float, scale=False, summarize_by='mean', label='Crude mortality rate'),
+            ss.Result('new',        dtype=int,   scale=True,  kind='flow',  label='Deaths', auto_plot=False), # Use sim deaths instead
+            ss.Result('cumulative', dtype=int,   scale=True,  kind='stock', label='Cumulative deaths', auto_plot=False),
+            ss.Result('cmr',        dtype=float, scale=False, kind='ratio', label='Crude mortality rate'),
         )
         return
 
@@ -1101,15 +1101,15 @@ class Pregnancy(Demographics, ss.Disease):
         super().init_results()
         kw = dict(dtype=float, scale=False)
         self.define_results(
-            ss.Result('maternal_deaths', label='Maternal deaths', summarize_by='sum', auto_plot=False, **kw),
-            ss.Result('n_preterm', label='Preterm births', summarize_by='sum', auto_plot=False, **kw),
-            ss.Result('n_very_preterm', label='Very preterm births', summarize_by='sum', auto_plot=False, **kw),
-            ss.Result('preterm_rate', label='Preterm birth rate', summarize_by='mean', auto_plot=False, **kw),
+            ss.Result('maternal_deaths', label='Maternal deaths', kind='flow', auto_plot=False, **kw),
+            ss.Result('n_preterm', label='Preterm births', kind='flow', auto_plot=False, **kw),
+            ss.Result('n_very_preterm', label='Very preterm births', kind='flow', auto_plot=False, **kw),
+            ss.Result('preterm_rate', label='Preterm birth rate', kind='ratio', auto_plot=False, **kw),
             ss.Result('n_unborn', label='Unborn (fetuses as agents; not counted among the people)', auto_plot=False, **kw),
-            ss.Result('neonatal_deaths', label='Neonatal deaths (within 28 days of birth)', summarize_by='sum', auto_plot=False, **kw),
-            ss.Result('cbr', label='Crude birth rate', summarize_by='mean', **kw),
-            ss.Result('tfr', label='Total fertility rate', summarize_by='mean', **kw), # A rate per year, not a count of events, so averaged rather than summed
-            ss.Result('mmr', label='Maternal mortality ratio (per 100,000 births)', summarize_by='mean', auto_plot=False, **kw),
+            ss.Result('neonatal_deaths', label='Neonatal deaths (within 28 days of birth)', kind='flow', auto_plot=False, **kw),
+            ss.Result('cbr', label='Crude birth rate', kind='ratio', **kw),
+            ss.Result('tfr', label='Total fertility rate', kind='ratio', **kw), # A rate per year, not a count of events, so averaged rather than summed
+            ss.Result('mmr', label='Maternal mortality ratio (per 100,000 births)', kind='ratio', auto_plot=False, **kw),
         )
         self.asfr = np.zeros((len(self.asfr_bins) - 1, self.t.npts))
         return

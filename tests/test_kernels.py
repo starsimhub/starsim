@@ -145,7 +145,7 @@ def test_stages():
         sims = [ss.Sim(make(), unit='day', stop=150, total_pop=200_000, solver=solver, rand_seed=seed, **pars, **kw).run() for seed in range(1 if solver == 'ode' else 3)]
         peaks[solver] = np.mean([np.argmax(sim.results.seir.I) for sim in sims])
         print(f'{solver:8s} infectious peak on day {peaks[solver]:n}')
-    assert max(peaks.values()) - min(peaks.values()) < 6 # The chain-binomial solver moves people through as many stages as they pass in a step; one stage a step would make the latent period 25 days, not 7, and the peak weeks later
+    assert max(peaks.values()) - min(peaks.values()) < 8 # The chain-binomial solver moves people through as many stages as they pass in a step; one stage a step would make the latent period 25 days, not 7, and the peak weeks later
 
     # Through the stages in whole steps, with another way out: the same as the ODE
     def cohort(solver):

@@ -38,15 +38,15 @@ print('Infectious at the end:', round(res.I[-1]))
 print('First time points:', res.I.timevec[:3])
 ```
 
-Each result says how it is added up over time, as its `summarize_by`:
+Each result says what kind of quantity it is, as its `kind`, which decides how it is added up over time (its `summarize_by`), whether it has a running total, and how it is compared with data:
 
-| Kind | `summarize_by` | What it is | Examples | Over a period |
+| `kind` | `summarize_by` | What it is | Examples | Over a period |
 |---|---|---|---|---|
-| Stock | `'last'` | A number at each time point | `S`, `I`, `R` | The value at the end |
-| Flow | `'sum'` | A number of events during each step | `infection`, `recovery`, `cases` | The total |
-| Ratio | `'mean'` | One number divided by another | `prevalence` | Worked out again from the totals of its parts (the mean, for one with no parts) |
+| `'stock'` | `'last'` | A number at each time point | `S`, `I`, `R` | The value at the end |
+| `'flow'` | `'sum'` | A number of events during each step | `infection`, `recovery`, `cases` | The total |
+| `'ratio'` | `'mean'` | One number divided by another | `prevalence` | Worked out again from the totals of its parts (the mean, for one with no parts) |
 
-A result of your own gives it as `ss.Result('n_protected', summarize_by='last')`; if it isn't given, it is guessed from the name (`new_...` is summed, `n_...` and `cum_...` take the last value, and anything else is averaged), and `summarize_by=None` is for a result that isn't summarized over time.
+A result of your own gives it as `ss.Result('n_protected', kind='stock')`; if it isn't given, it is guessed from the name (`new_...` is a flow, `n_...` and `cum_...` are stocks, and anything else is a ratio), and `kind=None` is for a result with no meaning over time, which isn't summarized. To summarize a result another way without changing what it is, give `summarize_by=` too: `ss.Result('new_cases', kind='flow', summarize_by='mean')` is a flow (it still has a running total, and is summed to compare it with weekly data) whose summary over the run is its mean per step.
 
 A flow's running total is `.cum`, so `res.infection.cum[-1]` is the number of infections over the whole run.
 

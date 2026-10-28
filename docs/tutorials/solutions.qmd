@@ -1059,9 +1059,11 @@ sim.run()
 ```{python}
 #| echo: false
 # The tutorial's code, run again here so that its model, likelihood and filter are defined
-import re
+import re, linecache
 fence = '`'*3 # A code block's fence, which can't be written out here
-exec('\n'.join(re.findall(fence + r'\{python\}\n(.*?)' + fence, open('g8_extending.qmd').read(), re.S)))
+code = '\n'.join(re.findall(fence + r'\{python\}\n(.*?)' + fence, open('g8_extending.qmd').read(), re.S))
+linecache.cache['g8_extending'] = (len(code), None, code.splitlines(True), 'g8_extending') # So that ss.jit can read the source of its functions
+exec(compile(code, 'g8_extending', 'exec'))
 ```
 
 **1. Without the noise.** A connector whose value is always 1:

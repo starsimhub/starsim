@@ -1637,7 +1637,7 @@ class Sim(ss.Base):
             if res is None:
                 errormsg = f'The sim has no result "{name}" (or more than one); results are named as in sim.results, e.g. "cases", or "sir.cases"'
                 raise KeyError(errormsg)
-            if noise is not None and res.summarize_by == 'mean':
+            if noise is not None and res.kind == 'ratio':
                 errormsg = f'"{name}" is a ratio, which has no Poisson noise; give noise=None for its values'
                 raise ValueError(errormsg)
             series = res.to_series(resample=resample)

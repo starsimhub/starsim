@@ -187,7 +187,7 @@ def init_results(self):
     super().init_results()
     self.define_results(
         ss.Result('mean_level', scale=False, label='Mean antibody level'),
-        ss.Result('n_protected', summarize_by='last', label='Number protected'),
+        ss.Result('n_protected', kind='stock', label='Number protected'),
     )
 ```
 
