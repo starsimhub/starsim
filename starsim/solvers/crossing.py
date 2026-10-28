@@ -533,6 +533,8 @@ class Crossing:
             mov_comps  = arr(mov_comps),
             mov_pair   = arr(mov_pair).reshape(2, -1),
             mov_rate   = np.zeros(len(mov_pair[0])),
+            mov_base   = np.zeros(len(mov_pair[0])),
+            mov_par    = np.full(len(mov_pair[0]), -1), # Their rates are held for the run (see Compartmental.kernel_reason())
             src_starts = ends(groups),
             src_flows  = flat(groups),
             src_chain  = arr([c[0] for c in chain]),

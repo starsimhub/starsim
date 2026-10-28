@@ -224,6 +224,13 @@ Looked at whether v4 should support modeling paradigms beyond the ODE, chain-bin
 - **A compartmental form for an escape** (oct27/plan.md): with `ss.Transition(before=)` removed, `rate*(X.time < d)` runs as agents only. S–M.
 - **A whole JAX ODE run of births with a fixed delay** (oct27 review, `review/solvers.md`): it differs from the kernels (the a7 `births` model: `M0` by up to 38 in about 668, `NP` ends at 1,673 against 1,773), already so at `acef3c7b`. Find which step of the delay or the births the JAX run takes differently. S–M.
 
+## From the Atomica speed work (October 27)
+
+- **Parts shared between rates in the kernels' program.** A part used more than once within a rate is worked out once (`ss.kernels.LOAD`, `STORE`), which took cat-tb India's 140 rates with counts from 134,652 operations to 13,696 and its run from 1.8 s to 0.5 s. Sharing parts between rates too would take them to 1,206, but every engine that reads the program would then work out the shared parts first, including `sparse_events()`, which works out a few rates at a time. See `oct27/worklogs/atomica_speed.md`.
+- **A transfer whose rate varies in time, in the JAX engines and in diseases tracked jointly.** A whole run in the kernels takes it from the program's values at each step (`ss.kernels.set_movers()`); the JAX ODE and chain binomial, and a crossing, hold a mover's rate for the run, so they refuse it (or, a crossing, step it).
+- **Reading Atomica's workbooks.** cat-tb India takes 10.7 s to read and write as code, against about 6 s for Atomica to read it; done once with `ss.interop.convert()`, so it waits.
+- **The states a transfer moves, written once.** Each of cat-tb's transfers lists the ~110 states it moves, so its `stratify()` is one line of 14,565 characters; a variable for the list would need `ss.interop.Source` to hold code of its own.
+
 ## Won't do
 
 Work that was looked at and decided against, with why, so that it is not proposed again without a new reason.

@@ -66,6 +66,9 @@ def reason(sim):
         name = mod.engine.certain() if hasattr(mod.engine, 'certain') else None
         if name is not None:
             return f'"{mod.name}" has a probability of 1 over a period ({name}), an infinite rate, which the kernels take as everyone moving at once'
+        varying = [name for name,tf in mod.graph.transfers.items() if mod.engine.par_transfer(tf)]
+        if varying:
+            return f'the rate of the transfer "{varying[0]}" of "{mod.name}" changes in time, which only the kernels take at each step'
     return None
 
 
@@ -256,10 +259,15 @@ class Run:
         p = self.p
         kn = ss.kernels
         stack = []
+        regs = {} # Parts used more than once (see ss.kernels.LOAD)
         for k in range(a, b):
             op, arg = p.ops[k], p.args[k]
             if op == kn.CONST:
                 stack.append(consts[arg])
+            elif op == kn.LOAD:
+                stack.append(regs[arg])
+            elif op == kn.STORE:
+                regs[arg] = stack[-1]
             elif op == kn.EXPOSURE:
                 stack.append(exposures[arg])
             elif op == kn.TOTAL: # In the whole population, every place

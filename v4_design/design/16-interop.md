@@ -26,6 +26,7 @@ sim = ss.interop.load('model.yaml', format='emulsion')
 sim = ss.interop.load('config.yml', format='flepimop')
 sim = ss.interop.load('framework.xlsx', format='atomica', databook='databook.xlsx')
 sim = ss.interop.load(summer_model)                 # a Python object from another framework; format taken from its type
+sim = ss.interop.convert('framework.xlsx', format='atomica', databook='databook.xlsx', filename='model.py') # Read it, and save the code (to run from then on)
 ```
 
 The result is an ordinary sim (`ss.interop.formats` lists the importers; the format is told from the file or object where it can be). `sim.describe()` prints it, it can be stratified, run, and fitted like one written by hand, and its code (`sim.imported.code`, which says where the model came from, how each rate was read, and what was not translated) is the user's to save and change, which is the usual next step. `sim.imported` records how it was read: the format and file, the code (`code`), how each rate was read (`choices`), what could not be translated (`incomplete`), and the prompt for finishing it (`prompt`). A rate is checked before it is written (only arithmetic, comparisons, a few functions, and the names the model declares), so a source's expression is never run as it is; a value the writer cannot write as code (e.g. a network) is given by the importer as `ss.interop.Code`, the Python that makes it. A framework with no importer can still fill in an `ss.interop.Source` by hand and call `ss.interop.build()`.
@@ -53,6 +54,8 @@ Most frameworks write a transition as a general rate expression: `beta * S * I /
 
 Rules 2 and 3 are guesses about what the source meant, and the difference matters when the population changes. The importer prints which it chose for each transition, and `describe()` shows the result. If an expression matches neither pattern cleanly, rule 5 applies: the literal form loses nothing, it only means the transition will not pick up a network or contact matrix if one is added later.
 
+**Named expressions are written once.** A source's named expressions (Atomica's parameter functions and characteristics, EMULSION's and summer2's named quantities) are written out in a rate while it is classified, since the rules read the whole rate. The code then defines each once, as a variable of counts (`ch_prev = inf.n / (sus.n + inf.n + rec.n)`), after those it uses, and writes its name wherever its full form is in a rate or a share. One that is only a state, a parameter, or a number, or that names a transition, stays written out. So the code reads as the source does, and the engine works out each part once (see [10-execution.md](10-execution.md)).
+
 ### What each importer reads
 
 | Source | `format=` | What it reads |
@@ -63,7 +66,7 @@ Rules 2 and 3 are guesses about what the source meant, and the difference matter
 | **SimInf** | `'siminf'` (an R script with `mparse()` or a predefined model) | The transitions, run by `gillespie`; several nodes as a stratification of places, with the scheduled events as a movement register (`ss.geo.Mobility(data=...)`); the continuous state `v` as a state that is not people |
 | **flepiMoP** | `'flepimop'` (the config YAML) | Compartment products, `proportional_to` rates, the outcomes chain as `ss.outcome`, `seir_modifiers` (every scenario kept in `sim.imported.scenarios`), and drawn parameters with their distributions as priors |
 | **summer2** | `'summer2'` (a JSON dump, or the model) | Each flow kind as one transition, `stratify_with` as `stratify`, adjustments as `adjust=`, and the mixing matrix; the derived outputs are worked out from the results by `ss.interop.summer2.outputs()` |
-| **Atomica** | `'atomica'` (the framework, databook, and program book workbooks) | Compartments, transitions, characteristics, and the databook's values; the program book's spending as parameters whose coverage moves the parameters they affect |
+| **Atomica** | `'atomica'` (the framework, databook, and program book workbooks) | Compartments, transitions, characteristics, and the databook's values (a series without the points equal to those on either side, which change nothing); the program book's spending as parameters whose coverage moves the parameters they affect; a junction whose shares change (with the counts, or in time) as a transition to each destination with its share as a factor of the rate, which is the same flow, since people pass through a junction at once |
 | **camdl** | `'camdl'` (a `.camdl` file, or camdlc's JSON) | The model, with the parameter values of one of its scenarios (`scenario=`), as an ODE or a chain binomial as camdl's backends run it |
 | **EpiModel** | `'epimodel'` (a JSON dump from `dump_epimodel.R`, or the R script) | `netsim()`, `dcm()`, and `icm()` runs with the built-in models and networks (`ss.DegreeNet` for the network model's targets); custom modules are listed with their R source |
 | **epydemix** | `'epydemix'` (a JSON dump from `dump_epydemix.py`, or the model) | The transitions, the population, and its contact matrices |
