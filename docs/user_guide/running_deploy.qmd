@@ -91,6 +91,32 @@ The same pattern (a function that makes, runs, and shrinks one sim, given a seed
 
 ## Interactive dashboards
 
+### Precompiled compartmental kernels
+
+An application can build Starsim's Numba kernels once and load the resulting native extension before serving runs. This avoids first-use compilation for whole compartmental runs and their expression evaluation, using the same model code and numerical algorithms. Array sizes can differ between models without rebuilding.
+
+Build in the deployment environment (requires a C compiler and `pip install 'starsim[aot]'`):
+
+```bash
+starsim compile --aot /path/to/starsim-aot
+```
+
+The Python equivalent is `ss.aot.build('/path/to/starsim-aot')`. Building runs in a separate process, so it can select a generic CPU target before Numba is imported. Copy the **whole artifact directory** to the application, then load it in each application or worker process:
+
+```python
+import starsim as ss
+entries = ss.aot.load('/path/to/starsim-aot')
+# Construct and run sims normally.
+```
+
+The artifact must match the kernel source, Python, NumPy, Numba, llvmlite, OS, and architecture. The default generic CPU target is portable within that architecture; `--cpu native` targets the build machine's CPU and is checked when loaded. An incompatible artifact raises an error; rebuild it for the destination environment. This command builds an artifact directory, not platform wheels.
+
+Loading preserves `ss.options.compile`, including `'never'`. Unsupported argument types or layouts fall back to JIT. Stepped runs, ensembles, particle filters, agent kernels, and JAX retain their existing behavior; JAX runs do not use these entry points. `ss.aot.unload()` stops using the artifact, and `entries['run'].hits` and `.fallbacks` report which path was used. The original Numba dispatchers remain available internally.
+
+AOT is optional: it uses Numba's [`pycc`, which is pending deprecation](https://numba.readthedocs.io/en/stable/user/pycc.html). Small distribution functions can still compile during a cold Starsim import. To warm all JIT paths instead, use the existing `starsim compile` command.
+
+### Dashboard example
+
 A model can be put behind a web page, so that others can change its inputs and see the results. There are several tools for this, including [Shiny for Python](https://shiny.posit.co/py/), [Voilà](https://voila.readthedocs.io/), and [Panel](https://panel.holoviz.org/); one of the simplest is [Streamlit](https://streamlit.io/). This one has sliders for the share of the town that is immune and the coverage of a vaccination campaign:
 
 ```python

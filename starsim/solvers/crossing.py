@@ -692,9 +692,9 @@ class Crossing:
         J = self.numbers([dict(zip(['fixed', 'mult', 'consts', 'rel_trans'], engine.tables(start, stop))) for engine in self.engines], reps=self.reps())
         return [np.ascontiguousarray(J[key]) for key in ['fixed', 'mult', 'consts', 'rel_trans']]
 
-    def kernels(self, runs=1):
+    def kernels(self, runs=1, entry=None):
         """ The kernels to take the run (or `runs` runs) with, compiled or as plain Python, chosen once for a run: see `ss.solvers.compartmental.choose_kernels()` """
-        return choose_kernels(self, runs, self.plain_seconds)
+        return choose_kernels(self, runs, self.plain_seconds, entry=entry)
 
     def plain_seconds(self):
         """ About how long the run would take as plain Python, from the size of the program and the rates of its diseases at the start, as `ss.solvers.Compartmental.plain_seconds()` works it out for one engine """
@@ -710,7 +710,7 @@ class Crossing:
         else:
             args, tables = self.run_args()
             tally = np.zeros((args[3], 0, 2, self.n_cols))
-            y, stocks, flows, short = self.kernels().run(self.engines[0].make_rng(stream=1), *args, *tables, self.register, self.shifts, tally, self.per_step(), 0)
+            y, stocks, flows, short = self.kernels(entry='run').run(self.engines[0].make_rng(stream=1), *args, *tables, self.register, self.shifts, tally, self.per_step(), 0)
             parts = [self.split(k, y, stocks, flows) + (short if k == 0 else 0.0,) for k in range(len(self.engines))]
         for engine,part in zip(self.engines, parts):
             engine.given = part

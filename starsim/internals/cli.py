@@ -3,6 +3,7 @@ The starsim command, available after installing Starsim:
 
     starsim init                # Both of the below: what most users run once, after pip install starsim
     starsim compile             # Compile Starsim's numerical code (once per install)
+    starsim compile --aot DIR   # Build a portable native extension for compartmental runs
     starsim ai                  # Install the Starsim skill for AI coding agents (Claude Code, Codex, Kimi, ...)
     starsim ai show [skill]     # Show the guide for AI agents, or one of its skills
     starsim ai status           # Where the skill is installed
@@ -34,7 +35,10 @@ targets = sc.objdict(
 
 def compile(args=None):
     """ Compile Starsim's numerical code now, so that no run waits for it: see `ss.compile()` """
-    ss.compile()
+    if getattr(args, 'aot', None):
+        ss.aot.build(args.aot, cpu=args.cpu)
+    else:
+        ss.compile()
     return
 
 
@@ -155,6 +159,8 @@ def main(argv=None):
     p.set_defaults(func=init)
 
     p = commands.add_parser('compile', help='Compile Starsim\'s numerical code (once per install; a few minutes)')
+    p.add_argument('--aot', metavar='DIR', help='Build an optional AOT artifact for whole compartmental runs in DIR')
+    p.add_argument('--cpu', choices=['generic', 'native'], default='generic', help='AOT CPU target (default: generic)')
     p.set_defaults(func=compile)
 
     p = commands.add_parser('ai', help='Install the Starsim skill for AI coding agents, or show its guide')

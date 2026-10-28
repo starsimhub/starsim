@@ -117,6 +117,9 @@ from .run import MultiSim, parallel
 
 # ss.fit (fitting to data) is imported when it is first used, so that import starsim stays fast
 def __getattr__(name):
+    if name == 'aot':
+        import importlib
+        return importlib.import_module('.perflib.aot', __name__)
     if name in ['fit', 'interop']: # Imported when first used
         import importlib
         return importlib.import_module(f'.{name}', __name__)

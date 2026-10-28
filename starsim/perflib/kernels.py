@@ -226,6 +226,7 @@ chosen = False # Whether choose() has chosen to compile the kernels, in this ses
 no_tables = (np.zeros((0, 0, 0)),)*4 # For a step whose program holds for the whole step: see step()
 plain_copy = None # The copy of the kernels that runs as plain Python, once made: see uncompiled()
 on_disk = None # Whether the compiled kernels were found in Numba's cache, once looked for: see is_compiled()
+native = None # Optional AOT entry points, loaded by ss.aot.load(); the Numba dispatchers stay unchanged
 entries = ['run', 'run_many', 'one_step', 'advance', 'advance_threads', 'apply_events', 'apply_shifts', 'settle_places'] # What the engines call
 
 
@@ -333,7 +334,7 @@ def substeps(rates, dt, n_sub, solver):
     return max(int(np.ceil(fastest*dt/0.25)), 1)
 
 
-def choose(seconds=0.0):
+def choose(seconds=0.0, entry=None):
     """
     The kernels to take a run with: these, compiled by Numba, or the same code as plain Python (see `uncompiled()`)
 
@@ -346,6 +347,7 @@ def choose(seconds=0.0):
 
     Args:
         seconds (float): about how long the run (or runs) would take as plain Python: see `plain_seconds()`
+        entry (str): prefer an AOT implementation of this entry point, if loaded
     """
     global plain_total, noted, chosen
     mode = ss.options.compile
@@ -353,6 +355,8 @@ def choose(seconds=0.0):
         raise ValueError(f'ss.options.compile must be "auto", "always", or "never", not {mode!r}')
     if mode == 'never':
         return uncompiled()
+    if entry is not None and native is not None and hasattr(native, entry):
+        return native
     if chosen or is_compiled():
         return sys.modules[__name__]
     if mode == 'always':

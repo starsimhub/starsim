@@ -36,11 +36,13 @@ def synced_event(tr, sim, home):
     return Bunch(mod=name, tr=obj.name, to=getattr(dst, 'name', dst))
 
 
-def choose_kernels(owner, runs, seconds):
+def choose_kernels(owner, runs, seconds, entry=None):
     """
     The kernels for a run of a program (or `runs` runs), compiled or as plain Python, chosen once for a run (see `ss.kernels.choose()`), for an
     engine or a crossing (`owner`, which keeps the choice as `compiled`); `seconds()` is about how long the run would take as plain Python
     """
+    if entry is not None and ss.kernels.native is not None and hasattr(ss.kernels.native, entry):
+        return ss.kernels.choose(entry=entry) # AOT readiness says nothing about the other entry points
     if runs == 1 and owner.compiled is not None:
         return ss.kernels if owner.compiled else ss.kernels.uncompiled()
     if owner.program is None: # Before the program is made (the events of a register at the start), as the kernels are now
@@ -851,7 +853,7 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
                 val = np.asarray(self.value(p), dtype=float)
                 t.prog.const_grouped[row] = val.ndim > 0
                 t.consts[row] = val
-            ss.kernels.choose().evaluate(self.y, t.prog, t.consts, t.out, t.grouped)
+            ss.kernels.choose(entry='evaluate').evaluate(self.y, t.prog, t.consts, t.out, t.grouped)
             self.cache[key] = {i:(t.out[j].copy() if t.grouped[j] else float(t.out[j, 0])) for i,j in t.roots.items()}
         return self.cache[key]
 
@@ -2295,9 +2297,9 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
         self.init_shifts()
         return [self.y, self.program, self.dt, self.mod.t.npts, solver, self.substeps()], self.tables() if tables else None
 
-    def kernels(self, runs=1):
+    def kernels(self, runs=1, entry=None):
         """ The kernels to take the run (or `runs` runs) with, compiled or as plain Python, chosen once for a run: see `ss.kernels.choose()` """
-        return choose_kernels(self, runs, self.plain_seconds)
+        return choose_kernels(self, runs, self.plain_seconds, entry=entry)
 
     def plain_seconds(self):
         """ About how long the run would take as plain Python, from the size of its program and its rates at the start (see `ss.kernels.plain_seconds()`) """
@@ -2358,7 +2360,7 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
         else:
             args, tables = self.run_args()
             tally = np.zeros((self.mod.t.npts, len(self.shifts.to), 2, self.n_groups))
-            out = self.kernels().run(self.make_rng(stream=1), *args, *tables, self.register, self.shifts, tally, self.per_step(), 0)
+            out = self.kernels(entry='run').run(self.make_rng(stream=1), *args, *tables, self.register, self.shifts, tally, self.per_step(), 0)
             for k,mod in enumerate(self.deliveries):
                 mod.compartments.store_shifts(tally[:, self.shift_of[k]])
         y, stocks, flows, short = out

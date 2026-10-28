@@ -45,6 +45,9 @@ dependencies = [
 
 [project.optional-dependencies]
 
+# Building optional ahead-of-time Numba extensions (also needs a C compiler)
+aot = ["setuptools"]
+
 # For running the tests
 test = [
     "pytest>=7.4",
