@@ -110,7 +110,7 @@ class Options(sc.objdict):
         optdesc.show = 'Whether to show the plot immediately (i.e. call plt.show())'
         options.show = sc.parse_env('STARSIM_SHOW', True, bool)
 
-        optdesc.reticulate = 'Set whether to use Reticulate (R) settings'
+        optdesc.reticulate = 'Whether a NumPy integer array indexes a state by UIDs, as for a module written in R (through reticulate), which cannot keep ss.uids'
         options.reticulate = sc.parse_env('STARSIM_RETICULATE', False, bool)
 
         optdesc.precision = 'Set arithmetic precision'

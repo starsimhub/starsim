@@ -627,7 +627,7 @@ def check_dt(sim, factor=2, output=False):
             if not isinstance(res, ss.Result) or key.startswith('cum_') or np.ndim(res.values) != 1:
                 continue
             other = fine.results[mod.name][key].values
-            if res.summarize_by == 'sum': # A flow: total it over each of the larger steps (a flow at a time point is over the step that ends there)
+            if res.kind == 'flow': # A flow: total it over each of the larger steps (a flow at a time point is over the step that ends there)
                 a, b = res.values[1:n+1], other[1:n*factor+1].reshape(n, factor).sum(axis=1)
             else: # A stock: at each of the larger steps' time points
                 b = other[::factor]

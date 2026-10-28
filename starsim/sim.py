@@ -9,7 +9,6 @@ import numpy as np
 import pandas as pd
 import sciris as sc
 import starsim as ss
-import matplotlib.pyplot as plt
 
 
 
@@ -380,11 +379,11 @@ class Sim(ss.Base):
         for key,val in self._settings().items():
             if val is not None and key not in self.given and not same_value(val, defaults.get(key)): # A setting set before init() was given too, e.g. sim.pars.use_aging = True (but not one made a float, e.g. n_agents)
                 self.given.append(key)
-        np.random.seed(self.pars.rand_seed) # Reset the seed before the population is created -- shouldn't matter if only using Dist objects
         self.pars.lock(False) # Allow parameters to be added during initialization
         self.pars.freeze(False) # And set (frozen again once it is initialized)
         self.__dict__.pop('_valued', None) # Arithmetic on a parameter builds the model until it is built (see below)
         self.pars.validate() # Validate parameters
+        np.random.seed(self.pars.rand_seed) # Reset the seed before the population is created -- shouldn't matter if only using Dist objects
         ss.solvers.choose_solver(self) # Build the declared model, and choose the unit and the solver
         self._init_time() # Initialize time
         if 'use_aging' not in self.given and not self.pars.use_aging and any(strat.kind == 'age' and strat.edges is not None for strat in self.groups.strats):
@@ -1637,14 +1636,14 @@ class Sim(ss.Base):
             if res is None:
                 errormsg = f'The sim has no result "{name}" (or more than one); results are named as in sim.results, e.g. "cases", or "sir.cases"'
                 raise KeyError(errormsg)
-            if noise is not None and res.summarize_by == 'mean':
+            if noise is not None and res.kind == 'ratio':
                 errormsg = f'"{name}" is a ratio, which has no Poisson noise; give noise=None for its values'
                 raise ValueError(errormsg)
             series = res.to_series(resample=resample)
             values = series.to_numpy(dtype=float)
             columns[name] = rng.poisson(np.maximum(values, 0)) if noise == 'poisson' else values
         timecol = 'date' if isinstance(series.index[0], (ss.date, pd.Timestamp)) else 'time'
-        return pd.DataFrame({timecol:list(series.index), **columns})
+        return sc.dataframe({timecol:list(series.index), **columns})
 
     def profile(self, follow=None, do_run=True, plot=True, **kwargs):
         """
@@ -1827,7 +1826,7 @@ class Sim(ss.Base):
 
 
 
-def demo(run=True, plot=True, summary=True, show=True, **kwargs):
+def demo(run=True, plot=True, summary=True, show=None, **kwargs):
     """
     Create a simple demo simulation for Starsim
 
@@ -1837,6 +1836,7 @@ def demo(run=True, plot=True, summary=True, show=True, **kwargs):
         run (bool): whether to run the sim
         summary (bool): whether to print a summary of the results
         plot (bool): whether to plot the results
+        show (bool): whether to show the plot (default: `ss.options.show`)
         kwargs (dict): passed to `ss.Sim()`
 
     Examples:
@@ -1854,8 +1854,6 @@ def demo(run=True, plot=True, summary=True, show=True, **kwargs):
             sc.heading('Results:')
             print(sim.summary)
         if plot:
-            sim.plot()
-            if show:
-                plt.show()
+            sim.plot(**({} if show is None else dict(do_show=show)))
     return sim
 

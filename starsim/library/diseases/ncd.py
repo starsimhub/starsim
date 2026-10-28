@@ -81,7 +81,7 @@ class NCD(ss.Disease):
         """
         super().init_results()
         self.define_results(
-            ss.Result('not_at_risk',   dtype=int,   label='Not at risk', summarize_by='last'),
+            ss.Result('not_at_risk',   dtype=int,   label='Not at risk', kind='stock'),
             ss.Result('prevalence',    dtype=float, label='Prevalence'),
             ss.Result('new_deaths',    dtype=int,   label='Deaths'),
         )

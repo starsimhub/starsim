@@ -86,7 +86,7 @@ def test_2d_results():
     class BySex(ss.Analyzer):
         def init_results(self):
             super().init_results()
-            self.define_results(ss.Result('infected', columns=['female', 'male'], label='Infected', summarize_by='last'))
+            self.define_results(ss.Result('infected', columns=['female', 'male'], label='Infected', kind='stock'))
 
         def step(self):
             infected = self.sim.diseases.sis.I
@@ -98,7 +98,7 @@ def test_2d_results():
         def init_results(self):
             super().init_results()
             self.results['nested'] = ss.Results(self)
-            self.results.nested += ss.Result('infected', shape=self.t.npts, timevec=self.t.timevec, summarize_by='last')
+            self.results.nested += ss.Result('infected', shape=self.t.npts, timevec=self.t.timevec, kind='stock')
 
         def step(self):
             self.results.nested.infected[self.ti] = np.count_nonzero(self.sim.diseases.sis.I)
@@ -110,7 +110,7 @@ def test_2d_results():
     assert np.array_equal(res.sum(axis=1), sim.results.sis.I) # Scaled the same as 1D results
     assert np.array_equal(res.male, res[:,1]) and res['male'].label == 'Infected (male)' # Each column is a 1D result
     assert res.resample('year').shape == (len(np.unique(res.timevec.years.astype(int))) - 1, 2) # Resampled along time only: each point after the start closes the year before it
-    assert res.to_df().columns.tolist() == ['timevec', 'female', 'male']
+    assert res.to_df().columns.tolist() == ['time', 'female', 'male']
     assert 'by female, male' in repr(res) # Each column labelled (it was an unlabelled array)
     assert 'bysex_infected_male' in sim.to_df().columns # Dataframe columns for each result column
     assert sim.summary.bysex_infected_male == res['male'][-1] # Summarized by column, a stock by its last value
@@ -166,10 +166,15 @@ def test_flow_ratios():
 
 @sc.timer()
 def test_summarize_by():
-    sc.heading('Testing summarize_by: guessed from the name, given, None, and added')
+    sc.heading('Testing kind and summarize_by: guessed from the name, given, None, and added')
     res = ss.Result('new_infections', values=np.arange(5.0))
-    assert res.summarize_by == 'sum' and res.summarize() == 10 and ss.Result('n_infected').summarize_by == 'last' and ss.Result('prevalence').summarize_by == 'mean'
-    assert ss.Result('x', values=np.arange(5.0), summarize_by='last').summarize() == 4
+    assert res.kind == 'flow' and res.summarize_by == 'sum' and res.summarize() == 10 and ss.Result('n_infected').kind == 'stock' and ss.Result('prevalence').summarize_by == 'mean'
+    assert ss.Result('x', values=np.arange(5.0), kind='stock').summarize() == 4
+    mean = ss.Result('x', values=np.arange(5.0), kind='flow', summarize_by='mean') # A flow summarized another way is still a flow
+    assert mean.summarize() == 2 and mean.cum[-1] == 10
+    assert ss.Result('x', summarize_by='last').kind == 'stock' # The kind follows the summary if only that is given
+    with pytest.raises(ValueError):
+        ss.Result('x', kind='count')
     none = ss.Result('timer', values=np.arange(5.0), summarize_by=None)
     with pytest.raises(ValueError):
         none.summarize()
@@ -185,7 +190,7 @@ def test_summarize_by():
     class Timer(ss.Analyzer):
         def init_results(self):
             super().init_results()
-            self.define_results(ss.Result('timer', summarize_by=None))
+            self.define_results(ss.Result('timer', kind=None))
         def step(self):
             self.results.timer[self.ti] = self.ti
     sim = ss.Sim(ss.SIS(), solver='ode', analyzers=Timer(name='a'), start=2000, stop=2002, dt=ss.months(1), verbose=0).run()

@@ -345,11 +345,7 @@ class Network(Route):
 
     def __repr__(self, **kwargs):
         """ Same as default, except with length """
-        out = self.brief(output=True)
-        len_str = f'n_edges={len(self)}; '
-        pos = out.find('pars=')
-        out = out[:pos] + len_str + out[pos:]
-        return out
+        return self.brief(output=True, extra=f'n_edges={len(self)}')
 
     def __str__(self):
         """ Slightly more detailed, show the dataframe as well """

@@ -456,8 +456,7 @@ class MultiSim:
 
         Returns:
             A dataframe with a row for each result (and scenario, if there are several), and the columns `median`, `low`, `high`, `mean`, and `std`
-            (or `value`, if each scenario was run once), each to four significant figures, or the nearest whole number from 1,000 up (the exact
-            values are e.g. `res.quantiles()`)
+            (or `value`, if each scenario was run once)
 
         Example:
             ```python
@@ -502,10 +501,10 @@ class MultiSim:
                         raise ValueError(errormsg)
                     vals = vals - base
                 stats = dict(median=np.median(vals), low=np.quantile(vals, low), high=np.quantile(vals, high), mean=vals.mean(), std=vals.std()) if len(vals) > 1 else dict(value=vals[0])
-                rows[key if n_scenarios == 1 else (key, scenario)] = {k:readable(v) for k,v in stats.items()}
+                rows[key if n_scenarios == 1 else (key, scenario)] = {k:float(v) for k,v in stats.items()}
         several = any(isinstance(key, tuple) for key in rows)
         index = pd.MultiIndex.from_tuples(list(rows), names=['result', 'scenario']) if several else pd.Index(list(rows), name='result')
-        summary = pd.DataFrame(list(rows.values()), index=index, dtype=object) # So that whole numbers stay whole
+        summary = sc.dataframe(list(rows.values()), index=index)
         self.summary = summary
         return summary
 
@@ -700,14 +699,6 @@ class MultiSim:
         return out
 
 
-def readable(x):
-    """ A number to four significant figures, or the nearest whole number from 1,000 up """
-    if not np.isfinite(x) or x == 0:
-        return 0 if x == 0 else x
-    out = round(float(x), max(0, 3 - int(np.floor(np.log10(abs(x))))))
-    return int(out) if out.is_integer() else out
-
-
 def single_run(sim, ind=0, shrink=True, run_args=None, verbose=None, copy_sim=False, track=False, globaldict=None, show=None):
     """
     Run one sim, as `run_each()` does: labelled by its position if it has no label, and shrunk afterwards if `shrink`
@@ -790,7 +781,7 @@ class MultiResults(ss.Results):
                 df.insert(0, 'module', modname or 'sim')
                 df.insert(1, 'result', key if col is None else f'{key}_{col}')
                 dfs.append(df)
-        return pd.concat(dfs, ignore_index=True)
+        return sc.dataframe(pd.concat(dfs, ignore_index=True))
 
     def diff(self, baseline):
         """ The difference of every result from the baseline scenario: a dict by scenario, then module, then result """

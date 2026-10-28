@@ -832,21 +832,21 @@ class Delivery(ss.products.EventSource, Intervention):
         super().init_results()
         abm = self.sim.solver == 'abm'
         results = [
-            ss.Result('delivered', dtype=float, scale=abm, label='Number delivered', summarize_by='sum'),
-            ss.Result('eligible', dtype=float, scale=abm, label='Number eligible', summarize_by='sum', auto_plot=False), # Those offered it in each step, so over the run the offers made, of which coverage is the share delivered (it was summarized as a mean over every step)
+            ss.Result('delivered', dtype=float, scale=abm, label='Number delivered', kind='flow'),
+            ss.Result('eligible', dtype=float, scale=abm, label='Number eligible', kind='flow', auto_plot=False), # Those offered it in each step, so over the run the offers made, of which coverage is the share delivered (it was summarized as a mean over every step)
             ss.Result('coverage', dtype=float, scale=False, label='Coverage of those eligible', auto_plot=False),
         ]
         if self.cost is not None:
-            results += [ss.Result('cost', dtype=float, scale=abm, label='Cost', summarize_by='sum')]
+            results += [ss.Result('cost', dtype=float, scale=abm, label='Cost', kind='flow')]
         if self.capacity is not None:
-            results += [ss.Result('lost_capacity', dtype=float, scale=abm, label='Number not reached for lack of capacity', summarize_by='sum', auto_plot=False)]
+            results += [ss.Result('lost_capacity', dtype=float, scale=abm, label='Number not reached for lack of capacity', kind='flow', auto_plot=False)]
         labels = dict(positive='Number testing positive', negative='Number testing negative', cured='Number cured', failed='Number treated and not cured', unneeded='Number treated who were not infected', never_ran='Number who left the queue unserved')
-        results += [ss.Result(o, dtype=float, scale=abm, label=labels.get(o, f'Number with result {o}'), summarize_by='sum', auto_plot=o in ['positive', 'cured']) for o in self.outcome_names()]
+        results += [ss.Result(o, dtype=float, scale=abm, label=labels.get(o, f'Number with result {o}'), kind='flow', auto_plot=o in ['positive', 'cured']) for o in self.outcome_names()]
         if self.queue is not None:
             results += [
                 ss.Result('waiting', dtype=float, scale=abm, label='Number waiting'),
                 ss.Result('waited', dtype=float, scale=False, label='Mean time waited, of those served', auto_plot=False),
-                ss.Result('left', dtype=float, scale=abm, label='Number who left the queue when no longer eligible', summarize_by='sum', auto_plot=False),
+                ss.Result('left', dtype=float, scale=abm, label='Number who left the queue when no longer eligible', kind='flow', auto_plot=False),
             ]
         self.by_edge = dict() # For a treatment that moves people along several transitions: the results for each, as {key: {(disease, transition): result}}
         if len(self.edges) > 1:
@@ -854,7 +854,7 @@ class Delivery(ss.products.EventSource, Intervention):
             diseases = list(dict.fromkeys(e.dis for e in self.edges))
             for key in ['cured', 'failed', 'unneeded']:
                 keys = (pairs if len(pairs) > 1 else []) if key != 'unneeded' else [(dis, None) for dis in diseases] if len(diseases) > 1 else []
-                parts = {k:ss.Result(f'{key}_{"_".join(n for n in k if n)}', dtype=float, scale=abm, label=f'{labels[key]} ({".".join(n for n in k if n)})', summarize_by='sum', auto_plot=False) for k in keys}
+                parts = {k:ss.Result(f'{key}_{"_".join(n for n in k if n)}', dtype=float, scale=abm, label=f'{labels[key]} ({".".join(n for n in k if n)})', kind='flow', auto_plot=False) for k in keys}
                 results += list(parts.values())
                 self.by_edge[key] = parts
         self.define_results(*results)

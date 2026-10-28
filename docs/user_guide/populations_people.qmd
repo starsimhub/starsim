@@ -121,7 +121,7 @@ sim = ss.Sim(n_agents=1000, start='2000', stop='2020', dt=ss.years(1), demograph
 sim.init()
 print('Agents at the start:', len(sim.people))
 sim.run()
-print('Births:', sim.results.births.new.sum())
+print('Births:', sim.results.population.births.sum())
 print('Deaths:', sim.results.new_deaths.sum())
 print('Agents at the end:', len(sim.people))
 ```

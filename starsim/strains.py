@@ -1013,8 +1013,8 @@ class Family(ss.Module):
 
     def init_results(self):
         super().init_results()
-        results = [ss.Result(key, dtype=float, scale=True, label=f'{key} (any member)', summarize_by='last') for key in self.stocks]
-        results += [ss.Result(key, dtype=float, scale=True, label=f'{key} (all members)', summarize_by='sum', auto_plot='.' not in key) for key in self.flows] # The flow to each destination is res.<transition>.<state>
+        results = [ss.Result(key, dtype=float, scale=True, label=f'{key} (any member)', kind='stock') for key in self.stocks]
+        results += [ss.Result(key, dtype=float, scale=True, label=f'{key} (all members)', kind='flow', auto_plot='.' not in key) for key in self.flows] # The flow to each destination is res.<transition>.<state>
         self.define_results(*results)
         return
 

@@ -75,7 +75,8 @@ class Result(ss.utils.NoDists, ss.arrays.BaseArr):
         timevec (array): an array of time points
         low (array): values for the lower bound
         high (array): values for the upper bound
-        summarize_by (str): how the result is summarized over time, which also decides how it is resampled and compared with data: 'sum' for a flow (a number of events in each step, e.g. new infections), 'last' for a stock (a quantity at each time point, e.g. the number infected), 'mean' for a ratio (one quantity divided by another, e.g. prevalence; a ratio that keeps its numerator and denominator sums each over the period, then divides), any other key of `ss.Result.summarizers`, or None for a result that is not summarized over time. By default ('auto') it is guessed from the name (`new_...` is summed; `n_...`, `cum_...`, and `cumulative` take the last value; anything else is averaged)
+        kind (str): what the result is, which decides how it behaves: 'flow' (a number of events in each step, e.g. new infections; it has a cumulative total, and is summed over each period of data it is compared with), 'stock' (a quantity at each time point, e.g. the number infected), 'ratio' (one quantity divided by another, e.g. prevalence; one that keeps its numerator and denominator sums each over a period, then divides), or None for a result with no meaning over time. By default ('auto') it is guessed from the name (`new_...` is a flow; `n_...`, `cum_...`, and `cumulative` are stocks; anything else is a ratio), or from `summarize_by` if only that is given
+        summarize_by (str): how the result is summarized over time (and resampled): by default ('auto'), by its kind: 'sum' for a flow, 'last' for a stock, 'mean' for a ratio, and None for none; or another way, e.g. 'mean' to average a flow over time, or any other key of `ss.Result.summarizers`
         columns (list): if provided, make a 2D result of shape `(npts, len(columns))`, with these names for the columns, e.g. `['wild', 'alpha']`
         runs (dataframe): for a result across the runs of a MultiSim: one row per run, with its `scenario` (and the values of any parameters swept); the values then have a run axis first, of shape `(n_runs, npts)`
         groups (bool): for a module written as code in a stratified sim: keep the values by group too, so they can be selected (`res.select(sex='female')`, `res.by('age')`) as a declared module's are; set them with `set_groups()`
@@ -117,7 +118,7 @@ class Result(ss.utils.NoDists, ss.arrays.BaseArr):
         return super().__getattr__(attr)
 
     def __init__(self, name=None, label=None, dtype=float, shape=None, scale=True, auto_plot=True,
-                 module=None, values=None, timevec=None, low=None, high=None, summarize_by='auto', columns=None, runs=None, groups=False, **kwargs):
+                 module=None, values=None, timevec=None, low=None, high=None, kind='auto', summarize_by='auto', columns=None, runs=None, groups=False, **kwargs):
         # Copy inputs
         self.name = name
         self.label = label
@@ -133,7 +134,8 @@ class Result(ss.utils.NoDists, ss.arrays.BaseArr):
         if kwargs:
             errormsg = f'ss.Result() got unexpected arguments: {sc.strjoin(kwargs.keys())}'
             raise TypeError(errormsg)
-        self.summarize_by = self.get_summarize_by(name, summarize_by)
+        self.kind = self.get_kind(name, kind, summarize_by)
+        self.summarize_by = self.get_summarize_by(name, summarize_by, self.kind)
         self.columns = columns
         self.runs = runs
         self.groups = groups
@@ -468,13 +470,13 @@ class Result(ss.utils.NoDists, ss.arrays.BaseArr):
         family = self.__dict__.get('family')
         if family is not None and dim == family[0]: # Each member's own
             name, members, values = family
-            return Result(name=self.name, label=self.label, module=self.module, scale=False, timevec=self.timevec, values=values, shape=values.shape[0], columns=members, summarize_by=self.summarize_by)
+            return Result(name=self.name, label=self.label, module=self.module, scale=False, timevec=self.timevec, values=values, shape=values.shape[0], columns=members, kind=self.kind, summarize_by=self.summarize_by)
         if dim in self.part_dims:
             i = self.part_dims.index(dim)
             levels = list(dict.fromkeys(k[i] for k in self._parts(dim) if k[i] is not None))
             values = np.column_stack([self._select_parts({dim:level}).values for level in levels])
             return Result(name=self.name, label=self.label, module=self.module, scale=False, timevec=self.timevec,
-                          values=values, shape=values.shape[0], columns=levels, summarize_by=self.summarize_by)
+                          values=values, shape=values.shape[0], columns=levels, kind=self.kind, summarize_by=self.summarize_by)
         strats = self._check_strata()
         if self.runs is not None:
             self._check_dim(dim)
@@ -501,7 +503,7 @@ class Result(ss.utils.NoDists, ss.arrays.BaseArr):
         if any(col in self.__dict__ or hasattr(type(self), col) or hasattr(np.ndarray, col) for col in columns): # A level named like an attribute of a result (e.g. "low") is qualified by its dimension
             columns = [f'{dim}_{col}' for col in columns]
         out = Result(name=self.name, label=self.label, module=self.module, scale=False, timevec=self.group_timevec,
-                     values=values, shape=values.shape[0], columns=columns, summarize_by=self.summarize_by)
+                     values=values, shape=values.shape[0], columns=columns, kind=self.kind, summarize_by=self.summarize_by)
         out._by = (self, dim, out.values) # So it can still select groups of the other dimensions (see select()), while its values are these
         return out
 
@@ -614,7 +616,7 @@ class Result(ss.utils.NoDists, ss.arrays.BaseArr):
             errormsg = f'The result "{self.name}" has no part with {pick}; its parts are {sc.strjoin(".".join(k for k in key if k) for key in parts)}'
             raise KeyError(errormsg)
         out = Result(name=self.name, label=f'{self.label} ({", ".join(f"{k}={v}" for k,v in pick.items())})', module=self.module, scale=False, timevec=self.timevec,
-                     values=np.sum([res.values for res in keep], axis=0), shape=len(self.values), summarize_by=self.summarize_by)
+                     values=np.sum([res.values for res in keep], axis=0), shape=len(self.values), kind=self.kind, summarize_by=self.summarize_by)
         if getattr(self, 'strata', None) is not None and all(getattr(res, 'strata', None) is not None for res in keep):
             out.strata = np.sum([res.strata for res in keep], axis=0)
             for attr in ['strats', 'dims', 'group_ti']:
@@ -665,7 +667,7 @@ class Result(ss.utils.NoDists, ss.arrays.BaseArr):
             denom = denom*(keep if keep_den is None else keep_den)
             values = np.divide(values, denom.sum(axis=-1), out=np.zeros(values.shape), where=denom.sum(axis=-1)!=0)
         out = Result(name=self.name, label=self.label, module=self.module, scale=False, timevec=self.group_timevec,
-                     values=values, summarize_by=self.summarize_by, runs=self.runs)
+                     values=values, kind=self.kind, summarize_by=self.summarize_by, runs=self.runs)
         out.strata = strata
         out.denom = denom
         out.denom_dims = getattr(self, 'denom_dims', None)
@@ -680,7 +682,7 @@ class Result(ss.utils.NoDists, ss.arrays.BaseArr):
         col = self.columns[i]
         label = sc.ifelse(self.label, self.name)
         res = Result(name=f'{self.name}_{col}', label=f'{label} ({col})', dtype=self.dtype, scale=self.scale,
-                     auto_plot=self.auto_plot, module=self.module, timevec=self.timevec, summarize_by=self.summarize_by)
+                     auto_plot=self.auto_plot, module=self.module, timevec=self.timevec, kind=self.kind, summarize_by=self.summarize_by)
         res.values = self.values[..., i] # Set after creation, since init_values() would copy
         res.low = self.low[..., i] if self.low is not None else None
         res.high = self.high[..., i] if self.high is not None else None
@@ -757,18 +759,32 @@ class Result(ss.utils.NoDists, ss.arrays.BaseArr):
     # with a numerator and denominator (e.g. prevalence by group) is summarized by 'mean' as each part summed over the
     # period, then divided, rather than with this function. Others can be added, e.g. `ss.Result.summarizers['max'] = fn`.
     summarizers = dict(sum=periods_sum, last=periods_last, mean=periods_mean)
+    kinds = dict(flow='sum', stock='last', ratio='mean') # Each kind of result, and how it is summarized over time unless told otherwise
 
     @classmethod
-    def get_summarize_by(cls, name, summarize_by='auto'):
-        """ How a result is summarized over time: as given (None for not at all), or else ('auto') guessed from its name, as in Starsim 3 """
-        if summarize_by == 'auto':
+    def get_kind(cls, name, kind='auto', summarize_by='auto'):
+        """ The kind of a result: as given (None for one with no meaning over time), or else ('auto') from how it is summarized, if that is given, or its name, as in Starsim 3 """
+        if kind == 'auto':
+            by_summary = {v:k for k,v in cls.kinds.items()}
+            if summarize_by != 'auto' and (summarize_by is None or summarize_by in by_summary):
+                return by_summary.get(summarize_by)
             name = str(name)
             if 'new_' in name: # Not using startswith because msim results are prefixed with the module name
-                summarize_by = 'sum'
+                kind = 'flow'
             elif name.startswith('n_') or '_n_' in name or 'cum_' in name or 'cumulative' in name:
-                summarize_by = 'last'
+                kind = 'stock'
             else:
-                summarize_by = 'mean'
+                kind = 'ratio'
+        if kind is not None and kind not in cls.kinds:
+            errormsg = f'The kind of the result "{name}" must be "flow", "stock", "ratio", or None, not "{kind}"'
+            raise ValueError(errormsg)
+        return kind
+
+    @classmethod
+    def get_summarize_by(cls, name, summarize_by='auto', kind=None):
+        """ How a result is summarized over time: as given (None for not at all), or else ('auto') by its kind """
+        if summarize_by == 'auto':
+            summarize_by = cls.kinds.get(kind)
         if summarize_by is not None and summarize_by not in cls.summarizers:
             errormsg = f'Unrecognized summarize_by="{summarize_by}" for the result "{name}"; use {sc.strjoin([repr(k) for k in cls.summarizers], sep=", ")}, or None'
             raise ValueError(errormsg)
@@ -808,14 +824,14 @@ class Result(ss.utils.NoDists, ss.arrays.BaseArr):
 
     @property
     def cum(self):
-        """ The cumulative total of a flow (a result summarized by 'sum') over time, e.g. `sim.results.sir.infection.cum` (a stock; computed when asked for) """
-        if self.summarize_by != 'sum':
-            errormsg = f'Only a flow (summarize_by="sum") has a cumulative total, and "{self.name}" has summarize_by={self.summarize_by!r}'
+        """ The cumulative total of a flow over time, e.g. `sim.results.sir.infection.cum` (a stock; computed when asked for) """
+        if self.kind != 'flow':
+            errormsg = f'Only a flow has a cumulative total, and "{self.name}" is of kind {self.kind!r}'
             raise ValueError(errormsg)
         t = self.t_axis
         values = np.cumsum(self.values, axis=t)
         label = sc.ifelse(self.label, self.name)
-        out = self.asnew(values=values, _shape=values.shape, name=f'cum_{self.name}', label=f'Cumulative {label}', summarize_by='last', low=None, high=None, auto_plot=False)
+        out = self.asnew(values=values, _shape=values.shape, name=f'cum_{self.name}', label=f'Cumulative {label}', kind='stock', summarize_by='last', low=None, high=None, auto_plot=False)
         if getattr(self, 'strata', None) is not None: # Over the rows of the values by group, which for a flow are totals over each row
             out.strata = np.cumsum(self.strata, axis=t)
         return out
@@ -860,10 +876,10 @@ class Result(ss.utils.NoDists, ss.arrays.BaseArr):
 
     def resample(self, new_unit=None, summarize_by=None, use_years=False, **kwargs):
         """
-        Resample the result to a longer time unit, by its `summarize_by`
+        Resample the result to a longer time unit, by its `summarize_by` (which by default follows its kind)
 
-        A flow ('sum') is summed over each period, a stock ('last') takes its value at the end of each
-        period, and a ratio ('mean') sums its numerator and denominator over each period (by group, if
+        A flow is summed over each period, a stock takes its value at the end of each
+        period, and a ratio sums its numerator and denominator over each period (by group, if
         it has them) and divides them (one with no parts is averaged over the period). Periods
         start at the sim's start and include their end, as for data; calendar months and years
         are used instead for a sim with dates. Each period is labeled by its last time point.
@@ -892,7 +908,7 @@ class Result(ss.utils.NoDists, ss.arrays.BaseArr):
             results = [res.resample(new_unit=new_unit, summarize_by=summarize_by, use_years=use_years) for res in self.by_column().values()]
             return self.stack(results)
 
-        how = self.get_summarize_by(self.name, sc.ifelse(summarize_by, self.summarize_by))
+        how = self.get_summarize_by(self.name, sc.ifelse(summarize_by, self.summarize_by), self.kind)
         if how is None:
             errormsg = f'Cannot resample "{self.name}": it is not summarized over time (summarize_by=None); give summarize_by=, e.g. "mean"'
             raise ValueError(errormsg)
@@ -992,7 +1008,7 @@ class Result(ss.utils.NoDists, ss.arrays.BaseArr):
 
     def to_df(self, sep='_', col_names='vlh', bounds=True, resample=None, set_date_index=False, quantiles=None, **kwargs):
         """
-        Convert to a dataframe with timevec, value, low, and high columns
+        Convert to a dataframe with time, value, low, and high columns
 
         For a result across runs, a long dataframe instead: one row per run and time point (columns `run`,
         `scenario`, any parameters swept, `time`, and `value`), or with `quantiles=`, one row per scenario,
@@ -1001,7 +1017,7 @@ class Result(ss.utils.NoDists, ss.arrays.BaseArr):
         Args:
             sep (str): separator for the column names
             col_names (str or None): if None, uses the name of the result. Default is 'vlh' which uses value, low, high
-            set_date_index (bool): if True, use the timevec as the index
+            set_date_index (bool): if True, use the times as the index
             bounds (bool): include high and low bounds as well (if and only if they exist, e.g. from a MultiSim)
             resample (str): if provided, resample the data to this frequency
             quantiles (list): for a result across runs, the quantiles over the runs of each scenario
@@ -1022,7 +1038,7 @@ class Result(ss.utils.NoDists, ss.arrays.BaseArr):
                 q = row.pop('quantile', None)
                 head = row if q is not None else dict(run=i, **row)
                 rows.append(pd.DataFrame(dict(**head, time=res.timevec, **({} if q is None else dict(quantile=q)), value=vals)))
-            return pd.concat(rows, ignore_index=True)
+            return sc.dataframe(pd.concat(rows, ignore_index=True))
 
         # For 2D results, make one set of dataframe columns per result column
         if self.columns is not None:
@@ -1031,8 +1047,8 @@ class Result(ss.utils.NoDists, ss.arrays.BaseArr):
                 gcol = col if col_names == 'vlh' else f'{sc.ifelse(col_names, self.name)}{sep}{col}'
                 dfs.append(res.to_df(sep=sep, col_names=gcol, bounds=bounds, resample=resample, set_date_index=set_date_index, **kwargs))
             df = pd.concat(dfs, axis=1)
-            df = df.loc[:, ~df.columns.duplicated()] # Remove duplicate timevec columns
-            return df
+            df = df.loc[:, ~df.columns.duplicated()] # Remove duplicate time columns
+            return sc.dataframe(df)
 
         # Return a resampled version if requested
         if resample is not None:
@@ -1046,7 +1062,7 @@ class Result(ss.utils.NoDists, ss.arrays.BaseArr):
         # Deal with timevec
         timevec = self.convert_timevec()
         if not set_date_index:
-            data['timevec'] = timevec
+            data['time'] = timevec
 
         # Determine how to label columns
         if col_names is None:
@@ -1317,7 +1333,7 @@ class Results(ss.utils.NoDists, ss.ndict):
 
         Args:
             sep (str): separator for the column names
-            set_date_index (bool): if True, use the times as the index rather than as the column `timevec`
+            set_date_index (bool): if True, use the times as the index rather than as the column `time`
             kwargs (dict): passed to `ss.Result.resample()`, e.g. `resample='year'`
         """
         flat = self.flatten(sep=sep, columns=True, **kwargs)
@@ -1333,7 +1349,7 @@ class Results(ss.utils.NoDists, ss.ndict):
             return sc.objdict({key:df for key,df in parts.items() if df is not None})
         timevec = flat[0].convert_timevec()
         data = {key:res.values for key,res in flat.items()}
-        return sc.dataframe(data, index=timevec) if set_date_index else sc.dataframe(dict(timevec=timevec) | data)
+        return sc.dataframe(data, index=timevec) if set_date_index else sc.dataframe(dict(time=timevec) | data)
 
     def walk(self):
         """ Each result, as (module name, key, result), with the module None for the sim's own results """
@@ -1805,7 +1821,7 @@ def flow_at_data(sim, col, res=None, weights=False):
     """
     df = given_data(sim)
     res = res if res is not None else match_column(sim, col)
-    if df is None or res is None or res.summarize_by != 'sum' or col not in df.columns:
+    if df is None or res is None or res.kind != 'flow' or col not in df.columns:
         return None
     lined = lineup(sim, df[[col]]).get(col)
     if lined is None or not len(lined[2]) or lined[0].sum(axis=1).max() <= 1: # Each data time is one step
@@ -1859,9 +1875,9 @@ def lineup(sim, df=None):
         if res is None:
             continue
         sim_t, data_t = data_times(sim, df, res)
-        key = (len(sim_t), res.summarize_by == 'sum')
+        key = (len(sim_t), res.kind == 'flow')
         if key not in weights:
-            weights[key] = time_weights(sim_t, data_t, res.summarize_by == 'sum', annual)
+            weights[key] = time_weights(sim_t, data_t, res.kind == 'flow', annual)
         W, inside = weights[key]
         expected = np.asarray(df[col], dtype=float)
         ok = inside & np.isfinite(expected)

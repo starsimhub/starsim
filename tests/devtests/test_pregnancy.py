@@ -132,7 +132,7 @@ def test_burnin():
     # The TFR and ASFR, as in Starsim 3: about the fertility rate over the ages women can conceive at (against compartments once P.time can run as them: Phase B1)
     tfr = abm.results.pregnancy.tfr[13:25].mean() # Per year at each step, whatever the step (with monthly steps, it was the TFR of the month)
     assert 2.5 < tfr < 3.5, f'TFR {tfr}'
-    assert abm.results.pregnancy.tfr.summarize_by == 'mean' # So it is averaged over time, not summed
+    assert abm.results.pregnancy.tfr.kind == 'ratio' # So it is averaged over time, not summed
     asfr = abm.demographics.pregnancy.asfr
     assert asfr.shape == (11, len(abm.timevec)) and asfr[:3, 24].sum() == 0 and asfr[4, 24] > 50 # None under 15; per 1000 women, over a year
 

@@ -41,7 +41,7 @@ jobs:
       matrix:
         include:
           - {model: STIsim,     repo: starsimhub/stisim,          ref: v4, dir: stisim,     install: pip install -e . -r tests/requirements.txt}
-          - {model: HPVsim,     repo: starsimhub/hpvsim,          ref: v4, dir: hpvsim,     install: 'pip install -e ".[hiv]" -r tests/requirements.txt && hpvsim-download-data'} # [hiv] pulls in stisim, which the HIV tests need
+          - {model: HPVsim,     repo: starsimhub/hpvsim,          ref: v4, dir: hpvsim,     install: 'pip install -e ".[hiv]" -r tests/requirements.txt git+https://github.com/starsimhub/stisim@v4 && hpvsim-download-data'} # [hiv] pulls in stisim, which the HIV tests need, from its v4 branch rather than the release
           - {model: TBsim,      repo: starsimhub/tbsim,           ref: v4, dir: tbsim,      install: pip install -e . -r tests/requirements.txt}
           - {model: FPsim,      repo: starsimhub/fpsim,           ref: v4, dir: fpsim,      install: pip install -e . -r tests/requirements.txt}
           - {model: malariasim, repo: starsimhub/starsim-malaria, ref: v4, dir: malariasim, install: 'pip install -e ".[dev]" pytest-xdist'}

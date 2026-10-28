@@ -405,13 +405,13 @@ def to_hub(msim, targets, origin_date=None, by=None, every='week', output_type='
         for place,sub in places.items():
             vals = sub.values[:, i0+1:]
             n = vals.shape[1]//steps
-            if sub.summarize_by == 'sum':
+            if sub.kind == 'flow':
                 periods = vals[:, :n*steps].reshape(len(vals), n, steps).sum(axis=2)
             else:
                 periods = vals[:, steps-1:n*steps:steps]
             for target in sc.tolist(names):
                 if target.startswith('cum '):
-                    if sub.summarize_by != 'sum':
+                    if sub.kind != 'flow':
                         errormsg = f'The target "{target}" is a cumulative total, but "{key}" is a count, not a flow'
                         raise ValueError(errormsg)
                     values, horizon = periods.cumsum(axis=1), np.arange(1, n+1)

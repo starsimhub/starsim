@@ -136,7 +136,7 @@ def people_results(sim):
                 gone['emigrants' if getattr(tr, 'migration', False) else 'deaths'] += np.asarray(mod.results[tr.deaths].values, dtype=float)
     deaths, emigrants = [np.broadcast_to(gone[key], alive.shape).copy() for key in ['deaths', 'emigrants']]
     sim.results += [
-        ss.Result('alive', label='Number alive', values=alive, summarize_by='last', **kw),
+        ss.Result('alive', label='Number alive', values=alive, kind='stock', **kw),
         ss.Result('new_deaths', label='Deaths', values=deaths, **kw),
         ss.Result('new_emigrants', label='Emigrants', values=emigrants, **kw),
         ss.Result('cum_deaths', label='Cumulative deaths', values=np.cumsum(deaths), **kw),
@@ -1538,24 +1538,24 @@ class Engine(Telling, Effects):
         for state in graph.states.values():
             key = state.name
             if key not in mod.results:
-                results += ss.Result(key, dtype=float, scale=abm and state.people, label=state.label or state.name, summarize_by='last')
+                results += ss.Result(key, dtype=float, scale=abm and state.people, label=state.label or state.name, kind='stock')
         for name,tr in graph.transitions.items():
             scale = abm and tr.people
-            results += ss.Result(name, dtype=float, scale=scale, label=tr.label or name, summarize_by='sum')
+            results += ss.Result(name, dtype=float, scale=scale, label=tr.label or name, kind='flow')
             for end in tr.ends: # A flow for each destination, e.g. res.cin.X, whose sum is the total
                 dst = graph.states.get(end)
-                results += ss.Result(f'{name}.{end}', dtype=float, scale=scale, label=f'{tr.label or name} to {"death" if dst is None else dst.label or dst.name}', summarize_by='sum', auto_plot=False)
+                results += ss.Result(f'{name}.{end}', dtype=float, scale=scale, label=f'{tr.label or name} to {"death" if dst is None else dst.label or dst.name}', kind='flow', auto_plot=False)
         for name,expr in graph.exprs.items(): # A ratio, a sum of flows, or otherwise a stock
             if len(ratio_parts(expr)) == 2: # Including one scaled by a number, e.g. I/N*1e5
-                how = 'mean'
+                kind = 'ratio'
             elif any(isinstance(leaf, ss.expressions.Flow) for leaf in expr.leaves) and all(isinstance(leaf, (ss.expressions.Flow, ss.par)) for leaf in expr.leaves):
-                how = 'sum'
+                kind = 'flow'
             else:
-                how = 'last'
-            results += ss.Result(name, dtype=float, scale=False, label=name, summarize_by=how)
+                kind = 'stock'
+            results += ss.Result(name, dtype=float, scale=False, label=name, kind=kind)
         self.init_outcomes(results)
         for name,tf in graph.transfers.items():
-            results += ss.Result(name, dtype=float, scale=abm, label=tf.label or name, summarize_by='sum')
+            results += ss.Result(name, dtype=float, scale=abm, label=tf.label or name, kind='flow')
             self.flowcounts[name] = 0.0
             stages = next((strat for strat in self.sim.groups.strats if getattr(strat, 'stages_of', None) == (mod.name, name)), None)
             if stages is not None and not stages.dwell.exact: # Erlang stages: see ss.dimensions.transfer_stages()
@@ -1700,9 +1700,9 @@ class Engine(Telling, Effects):
                 elif oc.duration is not None: # An exponential stay
                     info.p_leave = -np.expm1(-dt/self.convert(oc.duration))
                 self.outcomes[name] = info
-                results += ss.Result(name, dtype=float, scale=abm, label=oc.label or name, summarize_by='sum')
+                results += ss.Result(name, dtype=float, scale=abm, label=oc.label or name, kind='flow')
                 if oc.duration is not None:
-                    results += ss.Result(f'n_{name}', dtype=float, scale=abm, label=f'Number in {oc.label or name}', summarize_by='last')
+                    results += ss.Result(f'n_{name}', dtype=float, scale=abm, label=f'Number in {oc.label or name}', kind='stock')
                 del todo[name]
                 progress = True
             if not progress:

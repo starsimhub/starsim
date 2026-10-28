@@ -451,7 +451,7 @@ class People:
 
         # Create results for all BoolStates
         for state in self.auto_state_list:
-            results.append(ss.Result(state.name, label=state.label, summarize_by='last', **kw))
+            results.append(ss.Result(state.name, label=state.label, kind='stock', **kw))
 
         # Add standard people-related results
         results.extend([
