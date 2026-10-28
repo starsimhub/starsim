@@ -2974,8 +2974,11 @@ class Agents(Engine, Transmission):
             with self.evaluating(uids=uids, for_uids=True): # So each part of an expression is for these agents
                 mean = self.dwell_mean(tr.name)
             rvs = rvs*(mean if np.ndim(mean) == 0 or len(mean) == len(uids) else np.asarray(mean)[uids])
+        adjust = self.adjusted(tr.name, uids)
+        if np.ndim(adjust) == 0 and adjust == 1.0: # The usual case
+            return np.asarray(rvs, dtype=float)
         with np.errstate(divide='ignore'): # A rate of 0 (e.g. outside a where=) is a dwell that does not end until it changes: see rescale_exits()
-            return np.asarray(rvs, dtype=float)/self.adjusted(tr.name, uids) # An adjustment multiplies the rate, so divides the duration
+            return np.asarray(rvs, dtype=float)/adjust # An adjustment multiplies the rate, so divides the duration
 
     def branches_of(self, name):
         """ The branches out of a state, chosen on entry: those with a share, and the one that takes the rest """
@@ -3823,6 +3826,8 @@ class Agents(Engine, Transmission):
         strains = self.strain_levels()
         if not routes and strains == [None] and self.same_in_group(tr): # The usual case, in one pass over the agents
             return self.transmit_groups(tr, src)
+        if routes and strains == [None] and not any(np.any(np.asarray(self.route_beta(coef, nkey, route), dtype=float) > 0) for nkey,route in routes for coef in tr.terms.values()): # No route carries it (e.g. a mother-to-child transmission with a beta of 0): nobody is infected, and nothing is drawn
+            return ss.uids()
         sus = self.members(src)
         if not len(sus):
             return ss.uids()
@@ -4172,11 +4177,11 @@ class Agents(Engine, Transmission):
                 act += w[src]*hs
             return act
 
+        source = functools.reduce(operator.add, [w for h,w in shared]) # Whether each agent is infectious, with the rel_trans of their state
         if route.custom_beta: # Starsim 3's contract, whose net_beta() is for every edge
             edge_beta = lambda d, inds, src, trg: route.edge_net_beta(inds, disease_beta=-np.expm1(-act_hazard(*route.ends(d))), disease=mod)*mult(inds, trg)
-            out = route.transmit(trans, rel_sus.raw, edge_beta, mod.trans_rng)
+            out = route.transmit(np.where(source > 0, trans, 0), rel_sus.raw, edge_beta, mod.trans_rng) # Only the edges from someone infectious: from anyone else the hazard per act is 0
         else:
-            source = functools.reduce(operator.add, [w for h,w in shared]) # Whether each agent is infectious, with the rel_trans of their state
             weight = lambda inds: route.edges.beta[inds]*route.edges.acts[inds]
             prob = lambda d, inds, src, trg: -np.expm1(-weight(inds)*act_hazard(src, trg)*trans[src]*rel_sus.raw[trg]*mult(inds, trg))
             out = route.transmit(trans*source, rel_sus.raw, lambda d, inds, src, trg: weight(inds), mod.trans_rng, prob=prob)
