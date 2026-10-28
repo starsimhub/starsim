@@ -32,7 +32,7 @@ classifiers = [
 dependencies = [
     "numpy>=2.0.0",
     "pandas>=3.0",
-    "sciris>=3.2.8",
+    "sciris>=3.5.0", # Results and other ndicts rely on its attribute lookup (older versions call __getitem__(exception=))
     "numba>=0.59.0",
     "scipy",
     "networkx",
@@ -115,7 +115,7 @@ lock = [
     "python-dateutil==2.9.0.post0",
     "pyyaml==6.0.3",
     "scipy==1.18.1",
-    "sciris==3.4.0",
+    "sciris==3.6.1",
     "setuptools==84.1.0",
     "six==1.17.0",
     "smmap==5.0.3",

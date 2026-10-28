@@ -471,6 +471,37 @@ def test_current_state():
 
 
 @sc.timer()
+def test_move_along():
+    sc.heading('Testing ss.move() along a transition: from code, counted in its flow, in its shares')
+    def make():
+        care, svl, usvl = ss.states('care svl usvl')
+        return ss.Disease(name='cas', initiate=ss.Transition(care, [svl, usvl], p=[0.9, None], rate=0), first='care') # Only code moves people along it
+
+    # As agents: those given, of those in its source, each to a destination in its shares
+    sim = ss.Sim(diseases=make(), n_agents=2000, stop=2001, verbose=0).init()
+    cas = sim.diseases.cas
+    cas.move(ss.uids([0, 1]), cas.svl) # Not in the source any more
+    n = cas.move(cas.initiate, uids=ss.uids(np.arange(1000)))
+    assert n == 998 and cas.engine.flowcounts['initiate'] == 998
+    assert 850 < cas.svl.count() - 2 < 945 and cas.svl.count() + cas.usvl.count() == 1000
+    assert ss.move(cas.initiate, n=100) == 100 and cas.care.count() == 900
+    sim.run()
+    assert sim.results.cas.initiate.values.sum() == 1098 # In the results' flow too
+
+    # Under a compartmental solver: a share, or a number, in the transition's shares
+    sim = ss.Sim(diseases=make(), total_pop=1000, stop=2001, solver='ode', verbose=0).init()
+    cas = sim.diseases.cas
+    assert np.isclose(cas.move(cas.initiate, n=100), 100)
+    counts = cas.engine.state_counts().sum(axis=1)
+    assert np.allclose(counts[1:], [90, 10])
+    with pytest.raises(ss.CapabilityError): # Particular agents need agents
+        cas.move(cas.initiate, uids=ss.uids([0]))
+    with pytest.raises(ValueError): # The transition alone, not with states
+        ss.move(cas.initiate, cas.svl)
+    return sim
+
+
+@sc.timer()
 def test_infect():
     sc.heading('Testing disease.infect(): infections from code are dated and logged as infections')
     class Import(ss.Intervention):
@@ -779,6 +810,7 @@ if __name__ == '__main__':
     multi = test_multidisease()
     mtct  = test_mtct()
     current = test_current_state()
+    along = test_move_along()
     infect  = test_infect()
     same  = test_same_transmission()
     same_strains = test_same_strains()

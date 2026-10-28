@@ -976,6 +976,16 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
         frac = np.full(self.selector.shape, float(p)) if np.ndim(p) == 0 else np.broadcast_to(p, self.selector.shape)
         return float(self.move_states(frac, srcs, dst, given=given).sum())
 
+    def move_along(self, tr, p=None, n=None):
+        """ A move from code along a transition (`ss.move(tr, ...)`): a share `p` of the people in its source states (or `n` of them), each to a destination in the transition's shares, counted in its flow; returns the number moved """
+        srcs = [s for s in tr.src if s.people]
+        if n is not None:
+            total = sum(self.y[self.state_comps[s.name]].sum() for s in srcs)
+            p = min(n/total, 1.0) if total > 0 else 0.0
+        before = self.flowcounts[tr.name]
+        self.move_share(tr, np.full(self.selector.shape, float(p)), srcs)
+        return float(self.flowcounts[tr.name] - before)
+
     def move_share(self, tr, frac, srcs):
         """ Move a share of each state and group (within the sources `srcs`) along a triggered transition: with p=, that share of them; with several destinations, split between them """
         ps = self.branch_probs(tr) if tr.split else [self.selector.per_person(tr.p[0]) if tr.p else 1.0]

@@ -551,6 +551,33 @@ class Agents(Engine, Transmission):
         moved = self.move_states(chosen, srcs, dst)
         return len(moved)*self.scale
 
+    def move_along(self, tr, p=None, n=None, uids=None):
+        """ A move from code along a transition (`ss.move(tr, ...)`): a share `p` of the agents in its source states (or `n` people, or of `uids`, those given), chosen at random, each to a destination in the transition's shares, counted in its flow; returns the number of people moved """
+        mod = self.mod
+        srcs = [s for s in tr.src if s.people]
+        self.new_round()
+        cands = ss.uids.concatenate([mod[s.name].uids for s in srcs])
+        if uids is not None:
+            cands = cands.intersect(uids)
+        if n is not None or not (np.ndim(p) == 0 and p == 1):
+            draws = self.draw('move', cands)
+            if n is None:
+                cands = cands[draws < p]
+            else:
+                k = min(int(round(n/self.scale)), len(cands))
+                cands = cands[np.sort(np.argsort(draws, kind='stable')[:k])]
+        if not tr.split:
+            return self.force(cands, tr, tr.dst[0])*self.scale
+        frm = np.full(len(cands), -1)
+        for s in srcs:
+            frm[mod[s.name].raw[cands]] = self.state_index[s.name]
+        edges = self.dest_edges(tr, cands, frm)
+        rvs = self.draw(f'dst_{tr.name}', cands)
+        moved = 0
+        for i,dst in enumerate(tr.dst): # Those beyond the last edge take ss.stay, and do not move
+            moved += self.force(cands[(rvs >= edges[i]) & (rvs < edges[i+1])], tr, dst)
+        return moved*self.scale
+
     @property
     def scale(self):
         """ The number of people each agent stands for """

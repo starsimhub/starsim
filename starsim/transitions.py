@@ -775,17 +775,22 @@ def move(*args, p=None, n=None, uids=None):
     """
     Move people between states of a declared disease from code, the same way under every solver
 
-    A one-off move along no transition (as `ss.Delivery(move=I >> R)` is for a declared intervention), so people
-    are moved and never made or lost: the number of people stays the same in every disease. A count that is not
-    people (`ss.State(people=False)`, e.g. mosquitoes) moves the same way, and also from and to outside the model
+    Between states, a one-off move along no transition (as `ss.Delivery(move=I >> R)` is for a declared intervention),
+    so people are moved and never made or lost: the number of people stays the same in every disease. A count that is
+    not people (`ss.State(people=False)`, e.g. mosquitoes) moves the same way, and also from and to outside the model
     (`ss.null`), which for people is a birth or a death, and is declared. Also `disease.move(...)`, the same with
     the disease given.
+
+    Along a transition instead (`ss.move(cascade.initiate, n=100)`), people move from its source states as if they
+    had taken it: to its destination, or with several, to each in its shares (`p=` of the transition); counted in its
+    flow, and its event from the next step. A transition that only code moves people along has a rate of 0
+    (`ss.Transition(care, [svl, usvl], p=[0.9, None], rate=0)`).
 
     Args:
         args: in any order, told apart by what they are: the state (or a list of states) to move people from and the
             state to move them to, as the code sees them at run time (`sir.I`) or by name (`'I'`), the source first;
-            the disease, which is enough to say where they come from (any of its states of people); and the agents to
-            move (`ss.uids`), as `uids=`
+            or instead a transition to move them along (`sir.recovery`); the disease, which is enough to say where they
+            come from (any of its states of people); and the agents to move (`ss.uids`), as `uids=`
         p (float): the share of the people in the source to move, in each group (by default, everyone)
         n (float): instead, the number of people to move, shared among the groups and states in proportion to who is in them
         uids (uids): only these agents (those of them in the source), which needs agents; with `p=` or `n=`, a share or number of them
@@ -800,14 +805,17 @@ def move(*args, p=None, n=None, uids=None):
         sir.move(uids, sir.R) # These agents, from wherever they are (also ss.move(sir, uids, sir.R), or sir.move(uids, 'R'))
         self.move(self.I, self.R, uids=uids) # In a disease's own code: these agents, if they are infectious
         ss.move(mosq.Sv, ss.null, p=0.1) # A tenth of the mosquitoes die
+        ss.move(cascade.initiate, uids=uids) # These agents (those of them in its source) along a transition, counted in its flow
     """
     if p is not None and n is not None:
         raise ValueError('ss.move() moves a share of the people (p=) or a number of them (n=), not both')
 
     # Tell the arguments apart
-    diseases, ends = [], []
+    diseases, ends, trs = [], [], []
     for arg in args:
-        if isinstance(getattr(arg, 'graph', None), ss.graph.Graph):
+        if isinstance(arg, Transition):
+            trs.append(arg)
+        elif isinstance(getattr(arg, 'graph', None), ss.graph.Graph):
             diseases.append(arg)
         elif isinstance(arg, ss.Module): # Written as code, with no states and transitions of its own to move people between
             raise TypeError(f'ss.move() moves people between the states of a declared disease, and "{arg.name}" is written as code: set its states in code instead, e.g. {arg.name}.<state>[uids] = True')
@@ -819,6 +827,8 @@ def move(*args, p=None, n=None, uids=None):
             ends.append(arg)
     if len(diseases) > 1:
         raise ValueError(f'ss.move() moves people between the states of one disease, not {len(diseases)}')
+    if trs:
+        return move_along(trs, ends, diseases, p=p, n=n, uids=uids)
     if not 1 <= len(ends) <= 2:
         raise ValueError(f'ss.move() takes the state people move to, and the state (or states) they move from unless the disease is given; not {len(ends)} of them')
     home = diseases[0] if diseases else None
@@ -864,6 +874,30 @@ def move(*args, p=None, n=None, uids=None):
         p = 1.0
     kw = dict(uids=uids.uids if hasattr(uids, 'uids') else ss.uids(uids)) if uids is not None else dict()
     return mod.engine.move_some([state for _,state in srcs], None if to is None else to[1], p=p, n=n, **kw)
+
+
+def move_along(trs, ends, diseases, p=None, n=None, uids=None):
+    """ `ss.move()` along a transition: its checks, then the move, by the engine of the transition's disease """
+    if len(trs) > 1 or ends:
+        raise ValueError('ss.move() along a transition takes the transition alone, with the agents, p= or n= (not states, nor several transitions): the people move from its source states')
+    tr = trs[0]
+    mod = tr.module
+    if mod is None or mod.graph is None or mod.graph.transitions.get(tr.name) is not tr:
+        raise ValueError(f'ss.move() was given the transition "{tr.name}" before its disease was built, or as declared rather than as the sim\'s copy: use the one in the sim, e.g. sim.diseases.<disease>.{tr.name}')
+    if diseases and diseases[0] is not mod:
+        raise ValueError(f'ss.move() was given the transition "{tr.name}" of "{mod.name}" with the disease "{diseases[0].name}"')
+    if mod.engine is None:
+        raise RuntimeError(f'"{mod.name}" moves people once the sim is initialized (sim.init())')
+    if not hasattr(mod.engine, 'move_along'):
+        raise ss.CapabilityError(f'ss.move() along a transition is not yet supported for "{mod.name}" as it is run ({type(mod.engine).__name__}); move people between its states instead')
+    if not tr.people or tr.inflow or tr.outflow or getattr(tr, 'dies', False):
+        raise ValueError(f'ss.move() moves people along a transition between states of people; "{tr.name}" ({tr.arrow}) adds or removes people, which births, deaths, and migration do')
+    if uids is not None and mod.sim.solver != 'abm':
+        raise ss.CapabilityError(f'ss.move() of particular agents (uids) needs agents, but "{mod.name}" is run with solver="{mod.sim.solver}", which has none.\n     Move a share (p=) or a number (n=) of the people in its source instead, or run with solver="abm"')
+    if n is None and p is None:
+        p = 1.0
+    kw = dict(uids=uids.uids if hasattr(uids, 'uids') else ss.uids(uids)) if uids is not None else dict()
+    return mod.engine.move_along(tr, p=p, n=n, **kw)
 
 
 def is_uids(x):
