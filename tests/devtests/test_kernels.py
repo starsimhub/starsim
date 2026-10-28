@@ -245,6 +245,25 @@ def test_compile():
     return
 
 
+def test_numpy_ode():
+    sc.heading('Testing the ODE in NumPy (ss.perflib.ode, for runs before the kernels are compiled) against the kernels')
+    from starsim.perflib import ode
+    mode = ode.mode
+    try:
+        for key in models:
+            for integrator,hows in dict(rk4=['all', 'step'], euler=['all']).items():
+                for how in hows:
+                    sims = []
+                    for ode.mode in ['always', 'never']:
+                        with ss.options.context(compile='always'):
+                            sims.append(run(key, how, solver='ode', integrator=integrator))
+                    diff = largest_diff(*sims)
+                    assert diff < 1e-10, f'{key} ({integrator}, {how}): the ODE in NumPy differs from the kernels by {diff:.3g}'
+    finally:
+        ode.mode = mode
+    return
+
+
 if __name__ == '__main__':
     do_plot = True
     sc.options(interactive=do_plot)
@@ -254,5 +273,6 @@ if __name__ == '__main__':
     stoch = test_stochastic()
     msim = test_restart()
     test_compile()
+    test_numpy_ode()
 
     T.toc()

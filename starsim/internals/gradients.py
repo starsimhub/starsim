@@ -249,17 +249,18 @@ class Run:
             exposures.append(expo)
 
         rows = [fixed[f] for f in range(self.nf)]
+        regs = {} # The parts used more than once (see ss.kernels.LOAD), those several rates share first
+        self.evaluate(ys, 0, p.starts[0], consts, exposures, local_n, regs)
         for f in self.dynamic: # The operations on a stack, as in the kernels
-            rows[f] = jnp.broadcast_to(self.evaluate(ys, p.starts[f], p.starts[f+1], consts, exposures, local_n), (self.ng,))*mult[f]
+            rows[f] = jnp.broadcast_to(self.evaluate(ys, p.starts[f], p.starts[f+1], consts, exposures, local_n, regs), (self.ng,))*mult[f]
         return jnp.stack(rows)
 
-    def evaluate(self, ys, a, b, consts, exposures, local_n):
+    def evaluate(self, ys, a, b, consts, exposures, local_n, regs):
         """ The value of the operations a to b-1 of the program, by group, with the compartments at ys (as `ss.kernels.step()` works out a rate) """
         jnp = jax().numpy
         p = self.p
         kn = ss.kernels
         stack = []
-        regs = {} # Parts used more than once (see ss.kernels.LOAD)
         for k in range(a, b):
             op, arg = p.ops[k], p.args[k]
             if op == kn.CONST:
@@ -267,7 +268,7 @@ class Run:
             elif op == kn.LOAD:
                 stack.append(regs[arg])
             elif op == kn.STORE:
-                regs[arg] = stack[-1]
+                regs[arg] = stack.pop()
             elif op == kn.EXPOSURE:
                 stack.append(exposures[arg])
             elif op == kn.TOTAL: # In the whole population, every place
@@ -297,7 +298,7 @@ class Run:
                 elif op == kn.GE:  stack.append(jnp.where(x >= y, 1.0, 0.0))
                 else:
                     raise ValueError(f'Unknown operation {op} on two values in the program of a rate')
-        return stack[0]
+        return stack[0] if stack else None # None for the shared parts, which leave nothing on the stack
 
     def share(self, v, block, X, by_columns):
         """ The time share between places times values by place and level (as `ss.kernels.share()`) """

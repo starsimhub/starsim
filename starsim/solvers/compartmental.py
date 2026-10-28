@@ -8,6 +8,7 @@ import scipy.sparse as sps
 import sciris as sc
 import starsim as ss
 from .engine import Bunch, CountState, Engine, StockCtx, add_rows, at_ends, by_level, no_tables
+from ..perflib import ode
 
 __all__ = ['Compartmental', 'synced_event']
 
@@ -41,6 +42,8 @@ def choose_kernels(owner, runs, seconds):
     The kernels for a run of a program (or `runs` runs), compiled or as plain Python, chosen once for a run (see `ss.kernels.choose()`), for an
     engine or a crossing (`owner`, which keeps the choice as `compiled`); `seconds()` is about how long the run would take as plain Python
     """
+    if runs == 1 and owner.program is not None and ode.wanted(owner.sim.solver, owner.program, owner.y): # The ODE in NumPy, which needs no compiling
+        return ode
     if runs == 1 and owner.compiled is not None:
         return ss.kernels if owner.compiled else ss.kernels.uncompiled()
     if owner.program is None: # Before the program is made (the events of a register at the start), as the kernels are now
@@ -1629,32 +1632,59 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
                 held.append(e)
             return k
 
-        def count_uses(e, uses):
-            """ How many times each operation is used in a rate, once each part used more than once is worked out once """
+        def count_uses(e, uses, reps=None):
+            """ How many times each operation is used in a rate, once each part used more than once is worked out once (and a part of each operation, in reps) """
             if isinstance(e, (ss.expressions.BinOp, ss.expressions.Func)):
                 k = part_key(e)
                 uses[k] = uses.get(k, 0) + 1
+                if reps is not None:
+                    reps.setdefault(k, e)
                 if uses[k] == 1:
                     for child in ([e.a, e.b] if isinstance(e, ss.expressions.BinOp) else e.args):
-                        count_uses(child, uses)
+                        count_uses(child, uses, reps)
             return
 
-        shared = sc.objdict(uses={}, stored={}) # For the rate being flattened: the uses of each operation, and the register of each part kept
+        plains = dict() # Whether each part is plain, by its number
 
-        def flatten(expr, strain, routes=None, rtr=None):
-            """ Add the operations for an expression, and return the size of stack they need (`rtr`: the transmission and its source state, if modifiers act on it on some routes); a part used more than once in the rate is worked out once, and kept """
+        def plain(e):
+            """ Whether a part means the same in every rate: no exposure (which is for a strain and routes) and nothing for the state a flow leaves """
+            k = part_key(e)
+            if k not in plains:
+                if isinstance(e, ss.expressions.BinOp):
+                    plains[k] = plain(e.a) and plain(e.b)
+                elif isinstance(e, ss.expressions.Func):
+                    plains[k] = all(plain(arg) for arg in e.args)
+                else:
+                    plains[k] = not isinstance(e, (ss.State, ss.expressions.Prop)) and not (isinstance(e, ss.par) and id(e) in self.func_exprs)
+            return plains[k]
+
+        shared = sc.objdict(common={}, local={}, done={}, uses={}) # The register of each part several rates share, and of each one rate uses twice; those worked out so far; and the uses in the rate being flattened
+
+        def flatten(expr, strain, routes=None, rtr=None, keep=True):
+            """
+            Add the operations for an expression, and return the size of stack they need (`rtr`: the transmission and its source state, if modifiers act on it on some routes);
+            a part that several rates share, or that this rate uses twice, is worked out once, and stored (and kept on the stack, unless keep=False)
+            """
             if not isinstance(expr, (ss.expressions.BinOp, ss.expressions.Func)):
                 return flatten_part(expr, strain, routes, rtr)
             k = part_key(expr)
-            if k in shared.stored:
+            if k in shared.done:
                 ops.append(kn.LOAD)
-                args.append(shared.stored[k])
+                args.append(shared.done[k])
                 return 1
             depth = flatten_part(expr, strain, routes, rtr)
-            if shared.uses.get(k, 0) > 1:
-                shared.stored[k] = len(shared.stored)
-                ops.append(kn.STORE)
-                args.append(shared.stored[k])
+            if k in shared.common:
+                reg = shared.common[k]
+            elif shared.uses.get(k, 0) > 1:
+                reg = shared.local[k] = len(shared.common) + len(shared.local)
+            else:
+                return depth
+            shared.done[k] = reg
+            ops.append(kn.STORE)
+            args.append(reg)
+            if keep:
+                ops.append(kn.LOAD)
+                args.append(reg)
             return depth
 
         def flatten_part(expr, strain, routes=None, rtr=None):
@@ -1720,16 +1750,31 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
                     if id(leaf) in self.func_exprs: # Worked out within the step, as the expression is
                         flow.dynamic = True
         depth = 1
-        n_regs = 0 # The most parts any rate keeps (see ss.kernels.LOAD)
-        for flow in self.flows:
+        n_local = 0 # The most parts any rate keeps of its own (see ss.kernels.LOAD)
+        flow_uses = [{} for flow in self.flows]
+        reps = dict() # A part of each kind, for working out those several rates share
+        for flow,uses in zip(self.flows, flow_uses):
+            if flow.dynamic:
+                count_uses(flow.expr, uses, reps)
+        if self.solver != 'gillespie' and self.cross is None: # The parts several rates share, worked out first; not for the exact solver (whose places work out a few rates at a time) or for diseases tracked jointly (whose program is joined rate by rate)
+            n_flows = {}
+            for uses in flow_uses:
+                for k in uses:
+                    n_flows[k] = n_flows.get(k, 0) + 1
+            shared.common = {k:i for i,k in enumerate(k for k,n in n_flows.items() if n > 1 and plain(reps[k]))}
+            for k in shared.common:
+                if k not in shared.done:
+                    depth = max(depth, flatten(reps[k], None, keep=False))
+        starts[0] = len(ops)
+        for flow,uses in zip(self.flows, flow_uses):
             if flow.dynamic:
                 routes = (flow.routes if flow.routes is not False else self.route_betas(flow)) if flow.kind == 'contact' else None
                 rtr = (flow.tr, flow.state) if flow.kind == 'contact' and self.route_mods(flow.tr) else None
-                shared.uses, shared.stored = {}, {}
-                count_uses(flow.expr, shared.uses)
+                shared.uses, shared.local = uses, {}
+                shared.done = {k:shared.common[k] for k in shared.common}
                 with self.evaluating(src=flow.state):
                     depth = max(depth, flatten(flow.expr, flow.strain, routes, rtr))
-                n_regs = max(n_regs, len(shared.stored))
+                n_local = max(n_local, len(shared.local))
             else:
                 for leaf in ([] if flow.expr is None else flow.expr.leaves) + sc.tolist(self.dwells.get(flow.tr.name, Bunch(par=None)).par):
                     check(leaf)
@@ -1798,7 +1843,7 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
             inflow     = np.array([self.inflow_split(flow.tr) if flow.src is None else np.zeros(ng) for flow in self.flows], dtype=float).reshape(nf, ng), # For the flow out of a conveyor, set by the ODE each step (see ss.kernels.convey())
             fixed      = np.zeros((nf, ng)),
             mult       = np.ones((nf, ng)),
-            depth      = depth + n_regs,
+            depth      = depth + len(shared.common) + n_local,
             starts     = np.array(starts, dtype=int),
             ops        = kn.check_ops(ops),
             args       = np.array(args, dtype=int),
@@ -2217,12 +2262,8 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
                     whens = []
                     for ti in range(npts): # The values for the step from ti, which is step ti+1 (see ss.Loop)
                         sim.t.ti = mod.t.ti = min(ti + 1, npts - 1)
-                        if isinstance(raw, ss.by): # Not by_group(), which holds a value for the step
-                            whens.append(sim.t.now('year'))
-                        else:
-                            vals.append(self.convert(raw(sim)))
-                    if isinstance(raw, ss.by):
-                        vals = raw.series(whens, sim, self.convert)
+                        whens.append(sim.t.now('year'))
+                    vals = raw.series(whens, sim, self.convert) # Every year at once (its values converted, then interpolated as numbers, as held_value() takes them)
                 kept = self.series[id(par)] = (raw, np.array(vals, dtype=float).reshape(len(vals), -1), per_step, inner)
             self.cache[id(par)] = kept[1] # Steps by groups, where a value is otherwise one number or a number for each group
             self.cache['series'] = True # So the tape, which is for one step, is not used (see tape_values())
