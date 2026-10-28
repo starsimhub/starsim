@@ -399,9 +399,9 @@ def choose_engine(sim):
     kernels more than `jax_after` seconds (see `kernel_seconds()`). Once started, JAX takes 0.27 to 0.45 times as long
     as the kernels for the chain binomial, and 0.1 to 0.3 times for the ODE over many groups, but starting it takes
     about half a second in a session (0.3 s to import it, and 0.1 to 0.25 s to trace a model; compiled code is kept
-    on disk), which a short run would notice. The chain binomial in JAX draws with Numba, so it is not used under
-    `ss.options.compile = 'never'`; its draws compile once per install, in about 20 s (or ahead of time, with
-    `ss.compile()`). The choice depends on the model only (`kernel_seconds()` is worked out from its size, never
+    on disk), which a short run would notice. The chain binomial in JAX draws with compiled code (Rust's, or Numba's), so it is not
+    used under `ss.options.kernels = 'python'`; Numba's draws compile once per install, in about 20 s (or ahead of
+    time, with `ss.compile()`). The choice depends on the model only (`kernel_seconds()` is worked out from its size, never
     timed), not on what has run before, whether the kernels are compiled, or the load on the machine, so a sim with a
     seed gives the same results whenever it is run (an ODE run in JAX agrees with the kernels to about
     1e-14). A model JAX does not cover (see `ss.gradients.reason()` and `ss.perflib.chain.reason()`) is taken by the

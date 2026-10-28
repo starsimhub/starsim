@@ -49,6 +49,15 @@ def test_uniforms():
     u = rng.random(300)
     assert np.array_equal(P.binomials(n, p, u, np.empty(300), np.empty((9, 300))), D.binomials(n, p, u, np.empty(300), np.empty((9, 300))))
     assert np.array_equal([P.poisson(l, v) for l, v in zip(p*50, u)], [D.poisson(l, v) for l, v in zip(p*50, u)])
+
+    # A mean (of the side drawn) of 2^53 or more (from a bug upstream: it used to hang or overflow), or NaN, gives NaN, in a row as on its own
+    n = np.array([np.inf, 1e20, np.nan, 50, 50])
+    p = np.array([0.3, 0.7, 0.3, np.nan, 0.3])
+    assert np.array_equal(D.binomials(n, p, u[:5], np.empty(5), np.empty((9, 5))), [D.binomial(*a) for a in zip(n, p, u[:5])], equal_nan=True)
+    assert np.isnan(D.binomial(np.inf, 0.3, 0.5)) and D.binomial(50, 0.3, 0.5) >= 0
+    lam = np.array([np.inf, 1e19, np.nan, 50])
+    assert np.array_equal(D.poissons(lam, u[:4], np.empty(4), np.empty((6, 4))), [D.poisson(*a) for a in zip(lam, u[:4])], equal_nan=True)
+    assert np.isnan(D.poisson(1e19, 0.5)) and D.poisson(50, 0.5) >= 0
     return
 
 

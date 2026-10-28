@@ -132,6 +132,9 @@ def __getattr__(name):
             raise AttributeError(errormsg, name=name, obj=None) # No object, so Python suggests no closest name (e.g. "emigration" for "Calibration")
     raise AttributeError(f'module "starsim" has no attribute "{name}"{hint}')
 
+# The kernels: Rust if it has been built (or asked for by STARSIM_KERNELS), else Numba (see ss.options.kernels)
+options.set(kernels=options.kernels)
+
 # Say if Starsim has not been compiled yet
 kernels.note_uncompiled()
 

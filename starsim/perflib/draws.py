@@ -326,7 +326,8 @@ def binomial_bound(n, q):
 def binomial(n, p, u):
     """
     Binomial(n, p) from the uniform u (n is rounded down to a whole number): by inversion for a mean up to INV_MAX
-    (so monotone in u), with u <= 1 - mean a 0 at once; else by BTPE, from a stream seeded by u
+    (so monotone in u), with u <= 1 - mean a 0 at once; else by BTPE, from a stream seeded by u. NaN for a mean (of the side drawn,
+    n*min(p, 1 - p)) of 2^53 or more (which no model has: it comes from a bug upstream, and BTPE's integers would overflow) or NaN
     """
     n = np.floor(n)
     if n <= 0.0 or p <= 0.0:
@@ -336,7 +337,9 @@ def binomial(n, p, u):
     flip = p > 0.5 # Draw on the side of 1/2 with the smaller mean
     q = 1.0 - p if flip else p
     m = n*q
-    if m > INV_MAX:
+    if not m <= INV_MAX:
+        if not m < TWO53: # Including NaN
+            return np.nan
         y = binomial_btpe(n, q, stream(u))
         return n - y if flip else y
     if flip:
@@ -356,11 +359,11 @@ def binomial(n, p, u):
 
 @jit()
 def poisson(lam, u):
-    """ Poisson(lam) from the uniform u: by inversion for a mean up to INV_MAX (monotone in u), with u <= 1 - lam a 0 at once; else by PTRS, from a stream seeded by u """
+    """ Poisson(lam) from the uniform u: by inversion for a mean up to INV_MAX (monotone in u), with u <= 1 - lam a 0 at once; else by PTRS, from a stream seeded by u; NaN for a mean of 2^53 or more, or NaN (as binomial()) """
     if lam <= 0.0:
         return 0.0
-    if lam > INV_MAX:
-        return poisson_ptrs(lam, stream(u))
+    if not lam <= INV_MAX:
+        return poisson_ptrs(lam, stream(u)) if lam < TWO53 else np.nan
     if u <= 1.0 - lam:
         return 0.0
     px = exp(-lam)
@@ -380,8 +383,8 @@ def poisson(lam, u):
 def _prep_binomial(n, p, u, uu, qq, flip, nn):
     """
     For every lane, branch-free: n rounded down, the side of 1/2 to draw on, and its uniform and chance. Lanes the walk
-    shouldn't take (settled at once, or means above INV_MAX) get a uniform of 0, so they stay at 0. Returns the number
-    of lanes left to walk, and of those with a mean above INV_MAX.
+    shouldn't take (settled at once, or means above INV_MAX or NaN) get a uniform of 0, so they stay at 0. Returns the
+    number of lanes left to walk, and of those with a mean above INV_MAX or NaN.
     """
     big = 0
     need = 0
@@ -391,25 +394,26 @@ def _prep_binomial(n, p, u, uu, qq, flip, nn):
         qi = 1.0 - p[i] if f else p[i]
         ui = 1.0 - u[i] if f else u[i]
         m = ni*qi
-        large = m > INV_MAX
+        large = not m <= INV_MAX # Including NaN
         walk = (ni > 0.0) & (qi > 0.0) & (not large) & (ui > 1.0 - m)
         nn[i] = ni
         qq[i] = qi if walk else 0.0
         uu[i] = ui if walk else 0.0
         flip[i] = f
-        big += large & (ni > 0.0) & (qi > 0.0)
+        big += large & (not ni <= 0.0) & (not qi <= 0.0)
         need += walk
     return need, big
 
 @jit()
 def _prep_walk(nn, qq, rr, bb, px):
-    """ For the lanes that walk: the ratio q/(1-q), the bound of the walk, and the chance of 0, (1-q)^n, as binomial() has them """
+    """ For the lanes that walk: the ratio q/(1-q), the bound of the walk, and the chance of 0, (1-q)^n, as binomial() has them (the others, with q = 0, as if n were 0, so a NaN n there is never exp()'s, which plain Python can't take) """
     for i in range(nn.size):
         q = qq[i]
-        m = nn[i]*q
+        n = nn[i] if q > 0.0 else 0.0
+        m = n*q
         rr[i] = q/(1.0 - q)
-        bb[i] = min(nn[i], m + 10.0*math.sqrt(m*(1.0 - q) + 1.0))
-        px[i] = exp(nn[i]*log1p(-q))
+        bb[i] = min(n, m + 10.0*math.sqrt(m*(1.0 - q) + 1.0))
+        px[i] = exp(n*log1p(-q))
 
 @jit()
 def _exp_row(x, out):
@@ -472,9 +476,9 @@ def binomials(n, p, u, out, w):
             out[i] = 0.0
         elif p[i] >= 1.0:
             out[i] = nn[i]
-    if big > 0: # Means above INV_MAX: BTPE
+    if big > 0: # Means above INV_MAX (BTPE), or NaN
         for i in range(N):
-            if nn[i] > 0.0 and nn[i]*min(p[i], 1.0 - p[i]) > INV_MAX:
+            if not (nn[i] <= 0.0 or p[i] <= 0.0 or p[i] >= 1.0 or nn[i]*min(p[i], 1.0 - p[i]) <= INV_MAX):
                 out[i] = binomial(n[i], p[i], u[i])
     return out
 
@@ -487,7 +491,7 @@ def poissons(lam, u, out, w):
     need = 0
     for i in range(N):
         L = lam[i]
-        large = L > INV_MAX
+        large = not L <= INV_MAX # Including NaN
         walk = (L > 0.0) & (not large) & (u[i] > 1.0 - L)
         ll[i] = L if walk else 0.0
         uu[i] = u[i] if walk else 0.0
@@ -506,9 +510,9 @@ def poissons(lam, u, out, w):
         X[:] = 0.0
     for i in range(N):
         out[i] = X[i]
-    if big > 0:
+    if big > 0: # Means above INV_MAX (PTRS), or NaN
         for i in range(N):
-            if lam[i] > INV_MAX:
+            if not lam[i] <= INV_MAX:
                 out[i] = poisson(lam[i], u[i])
     return out
 

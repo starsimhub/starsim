@@ -3,6 +3,7 @@ Test ss.jit: functions compiled by Numba or traced by JAX, with the same results
 """
 
 # %% Imports and settings
+import pytest
 import numpy as np
 import sciris as sc
 import starsim as ss
@@ -41,11 +42,13 @@ def test_function():
     out = ss.jit(draws)(n, p, lam, np.random.default_rng(2))
     assert np.array_equal(out, draws(n, p, lam, np.random.default_rng(2)))
 
-    @ss.jit
     def uncompilable(x):
         return sc.findinds(x > 0) # Numba can't call Sciris
-    assert np.array_equal(uncompilable(x), sc.findinds(x > 0)) # Runs as Python, with the same result
-    assert uncompilable.failed and uncompilable.said
+    with pytest.raises(TypeError, match='nopython=False'):
+        ss.jit(uncompilable)(x) # An error, saying why, by default
+    fallback = ss.jit(nopython=False)(uncompilable)
+    assert np.array_equal(fallback(x), sc.findinds(x > 0)) # Runs as Python if allowed, with the same result
+    assert fallback.failed and fallback.said
     return
 
 

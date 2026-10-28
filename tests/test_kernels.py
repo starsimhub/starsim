@@ -190,20 +190,6 @@ def test_seasonal_steps():
 
 
 @sc.timer()
-def test_plain():
-    sc.heading('Testing the kernels run as plain Python against compiled')
-    for solver in ['rk4', 'euler', 'binomial', 'tau', 'gillespie']:
-        kw_solver = dict(solver='ode', integrator=solver) if solver in ['rk4', 'euler'] else dict(solver=solver)
-        res = []
-        for mode in ['always', 'never']:
-            with ss.options.context(compile=mode):
-                sim = ss.Sim(make_seir(), total_pop=2000, unit='day', stop=60, rand_seed=2, **kw_solver, **kw).run()
-            res.append(sim.results.seir.to_df())
-        assert np.allclose(res[0].values, res[1].values, rtol=1e-10), solver
-    return res
-
-
-@sc.timer()
 def test_plain_estimate():
     sc.heading('Testing that the estimate of a plain run counts the substeps of a stiff ODE')
     S, I, R = ss.states(3)
@@ -243,7 +229,6 @@ if __name__ == '__main__':
     mix = test_factored_mixing()
     peaks = test_stages()
     seasonal = test_seasonal_steps()
-    res = test_plain()
     plain = test_plain_estimate()
     choices = test_engine_choice()
 

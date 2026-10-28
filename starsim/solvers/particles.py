@@ -5,6 +5,7 @@ import numpy as np
 import numba as nb
 import starsim as ss
 from .crossing import Crossing
+from .compartmental import kernel_list
 
 __all__ = ['Particles']
 
@@ -53,10 +54,10 @@ class Particles:
         for c,state in enumerate(state_of):
             self.stocks[:, 0, state] += y0[c] if by_group else y0[c].sum()
         self.ys = np.ascontiguousarray(np.repeat(y0[None], n, axis=0))
-        self.rngs = nb.typed.List([np.random.Generator(bits) for bits in rng.bit_generator.spawn(n)]) # The random numbers of each run (of each place among the runs, which a run drawn again takes over)
+        self.rngs = kernel_list([np.random.Generator(bits) for bits in rng.bit_generator.spawn(n)]) # The random numbers of each run (of each place among the runs, which a run drawn again takes over)
         self.n_threads = min(ss.options.threads or nb.get_num_threads(), n)
         if self.n_threads > 1: # A copy of the program for each thread, since a step changes the parts of it that vary in time, and the threads would contend for the counts of references to shared arrays
-            self.progs = nb.typed.List([ss.kernels.Program(*[part.copy() if isinstance(part, np.ndarray) else part for part in p]) for i in range(self.n_threads)])
+            self.progs = kernel_list([ss.kernels.Program(*[part.copy() if isinstance(part, np.ndarray) else part for part in p]) for i in range(self.n_threads)])
         self.done = 0
         return
 
@@ -77,6 +78,10 @@ class Particles:
         rest = (self.solver, self.n_sub, *tables, shares, self.register, self.shifts, self.state_of, self.stocks, self.flows, self.per_step, row0)
         n_sub = ss.kernels.substeps(np.append(self.program.fixed[self.program.src >= 0], self.program.mov_rate), self.dt, self.n_sub, self.solver) # The rates of the step last refreshed
         kn = ss.kernels.choose(len(self.ys)*ss.kernels.plain_seconds(self.program, self.ys[0], end - self.done + 1, self.solver, n_sub))
+        if not ss.perflib.rust.on and isinstance(self.rngs, list): # Made for the Rust kernels, now run by Numba's
+            self.rngs = nb.typed.List(self.rngs)
+            if self.n_threads > 1:
+                self.progs = nb.typed.List(self.progs)
         if self.n_threads > 1:
             kn.advance_threads(self.rngs, self.progs, self.ys, self.dt, self.done, end, *rest)
         else:

@@ -335,10 +335,11 @@ def substeps(rates, dt, n_sub, solver):
 
 def choose(seconds=0.0):
     """
-    The kernels to take a run with: these, compiled by Numba, or the same code as plain Python (see `uncompiled()`)
+    The kernels to take a run with: the Rust ones (see `ss.perflib.rust`) if they are in use, else these, compiled by
+    Numba, or the same code as plain Python (see `uncompiled()`), as `ss.options.kernels` says
 
     Compiling them takes about a minute, once per install (or ahead of time, with `ss.compile()`). By default
-    (`ss.options.compile = 'auto'`) they are compiled first if the runs taken as plain Python in this session, with
+    (`ss.options.kernels = 'auto'`, without Rust) they are compiled first if the runs taken as plain Python in this session, with
     this one, would take longer than that (as a long run, or a calibration's many small runs, would), with a note
     saying so; and otherwise the run is taken as plain Python, with a note (once a session, for a run of more than
     `note_after` seconds) of how long it would take each way. A note is printed whatever the sim's `verbose`, since
@@ -348,14 +349,14 @@ def choose(seconds=0.0):
         seconds (float): about how long the run (or runs) would take as plain Python: see `plain_seconds()`
     """
     global plain_total, noted, chosen
-    mode = ss.options.compile
-    if mode not in ['auto', 'always', 'never']:
-        raise ValueError(f'ss.options.compile must be "auto", "always", or "never", not {mode!r}')
-    if mode == 'never':
+    if ss.perflib.rust.on: # Compiled ahead of time
+        return ss.perflib.rust.compartmental()
+    mode = ss.options.kernels
+    if mode == 'python':
         return uncompiled()
     if chosen or is_compiled():
         return sys.modules[__name__]
-    if mode == 'always':
+    if mode == 'numba':
         chosen = True # Each part says so as it is compiled: see ss.perflib.compiling()
         return sys.modules[__name__]
     total = plain_total + seconds
@@ -377,12 +378,17 @@ def compile(verbose=True):
 
     Compiling takes about five minutes, once per install (and after an upgrade); the result is kept in Numba's cache,
     beside the package (or, if that cannot be written to, in the user's cache folder, or in `NUMBA_CACHE_DIR` if it
-    is set). Until the kernels are compiled, small runs are taken as plain Python: see `ss.options.compile`.
+    is set). Until the kernels are compiled, small runs are taken as plain Python: see `ss.options.kernels`. With the
+    Rust kernels in use, there is nothing to compile: they are compiled already.
 
     **Example**:
 
         ss.compile()
     """
+    if ss.perflib.rust.on:
+        if verbose:
+            print('Nothing to compile: the Rust kernels are in use, and are compiled already (for Numba\'s, set ss.options.kernels="numba" first)')
+        return
     T = sc.timer()
     if verbose and not is_compiled():
         ss.perflib.compiling('the solver kernels', 'Numba', 60, 180) # Then each part, as it is compiled
@@ -390,7 +396,7 @@ def compile(verbose=True):
         S, I, R = ss.states(3)
         sir = ss.Disease(S >> I @ 0.3*I, I >> R @ ss.days(10), init=dict(I=0.1), name='sir')
         return ss.Sim(sir, total_pop=100, unit='day', stop=3, solver=solver, verbose=0)
-    with ss.options.context(compile='always', verbose=ss.options.verbose if verbose else 0):
+    with ss.options.context(kernels='numba', verbose=ss.options.verbose if verbose else 0):
         make().run() # A whole run, in one call: run(), which has every solver's code
         make().run(until=1) # A run taken a step at a time: one_step()
         sim = make().init()
@@ -420,7 +426,7 @@ def note_uncompiled():
     False (`STARSIM_UNCOMPILED_WARNING=0`); not in the workers of `ss.parallel()`, nor for the `starsim` command
     """
     command = os.path.basename(getattr(sys, 'argv', [''])[0]) in ['-m', 'starsim', 'starsim.exe', 'starsim-script.py'] # The command (or python -m starsim), which says what it does itself
-    if ss.options.uncompiled_warning and mp.parent_process() is None and not command and not is_compiled():
+    if not ss.perflib.rust.on and ss.options.uncompiled_warning and mp.parent_process() is None and not command and not is_compiled():
         print(uncompiled_note)
     return
 
@@ -2626,15 +2632,19 @@ def one_step(rng, y, p, dt, solver, n_sub, tables, row):
 
 #%% Threads, for the workers of ss.parallel() and of a calibration
 
-def one_thread(func, *args, main_modules=None, **kwargs):
+def one_thread(func, *args, main_modules=None, kernels=None, **kwargs):
     """
     Run a function with one thread for the kernels (the passes over the agents, see `ss.options.threads`, and the places of a Gillespie run): for the workers of `ss.parallel()` and of a calibration, which share the cores already
+
+    With `kernels`, the main process's `ss.options.kernels`, which a worker started afresh would not otherwise have
 
     With `main_modules` (see `worker()`), the modules imported in the main process's `__main__` are imported in this one's
     first, for a worker started afresh (by forkserver, see `start_method()`)
     """
     ss.options.threads = 1
     nb.set_num_threads(1)
+    if kernels is not None and kernels != ss.options.kernels:
+        ss.options.kernels = kernels
     if main_modules: # A function defined in a notebook or script looks up its names (e.g. cv of import covasim as cv) in __main__, which in a worker started afresh lacks them
         main = sys.modules['__main__']
         for alias,name in main_modules.items():
@@ -2647,10 +2657,10 @@ def one_thread(func, *args, main_modules=None, **kwargs):
 
 
 def worker(func):
-    """ A function to run in each worker of `ss.parallel()` or of a calibration: with one thread for the kernels, and the modules imported in `__main__` (see `one_thread()`) """
+    """ A function to run in each worker of `ss.parallel()` or of a calibration: with one thread for the kernels, the main process's kernels, and the modules imported in `__main__` (see `one_thread()`) """
     main = sys.modules.get('__main__')
     modules = {alias:val.__name__ for alias,val in vars(main).items() if type(val) is type(sys) and not alias.startswith('_')} if main is not None else {}
-    return ft.partial(one_thread, func, main_modules=modules)
+    return ft.partial(one_thread, func, main_modules=modules, kernels=ss.options.kernels)
 
 
 blas_threads = [('openblas_set_num_threads', 'openblas_get_num_threads'), ('openblas_set_num_threads64_', 'openblas_get_num_threads64_'), ('scipy_openblas_set_num_threads', 'scipy_openblas_get_num_threads'),
