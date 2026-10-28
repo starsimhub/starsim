@@ -7,7 +7,7 @@ import numba as nb
 import sciris as sc
 import starsim as ss
 from .engine import by_level, no_tables
-from .compartmental import Compartmental, choose_kernels, run_many_parts
+from .compartmental import Compartmental, choose_kernels, kernel_list, run_many_parts
 
 __all__ = ['Crossing', 'Joint']
 
@@ -757,7 +757,7 @@ class Crossing:
         args, _ = self.run_args(tables=False)
         per_step = self.per_step()
         y0, npts = args[0], args[3]
-        rngs = nb.typed.List([engines[0].make_rng(stream=1, seed=seed) for seed in seeds]) # The random numbers that each run would have
+        rngs = kernel_list([engines[0].make_rng(stream=1, seed=seed) for seed in seeds]) # The random numbers that each run would have
         R, nc, nflows, n_runs = self.n_cols, self.n_rows, self.n_trans + self.n_movers, len(seeds)
         grouped = self.sim.groups.n_groups > 1 and any(s or f for s,f in [engine.group_needs() for engine in engines])
         rows = group_ti = None

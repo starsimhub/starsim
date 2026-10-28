@@ -31,7 +31,7 @@ def wanted(solver, p=None, y=None):
         return False
     if mode == 'always':
         return True
-    return ss.options.compile != 'always' and not K.chosen and not K.is_compiled() and (p is None or K.work(p, y) > 50)
+    return ss.options.kernels != 'numba' and not K.chosen and not K.is_compiled() and (p is None or K.work(p, y) > 50)
 
 
 def matrix(rows, cols, shape):

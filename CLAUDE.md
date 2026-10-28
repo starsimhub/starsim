@@ -100,8 +100,11 @@ uv add starsim[dev]  # With dev dependencies
 - `transitions.py`: States and transitions (`ss.State`, `ss.states()`, `ss.Transition` and its `S >> I @ rate` spelling, ...); the names it builds on are spelled by their own modules (`ss.expressions.Expr`, `ss.graph.Graph`, `ss.dimensions.Strat`, ...)
 - `utils.py`: Helper functions
 - `internals/`: How Starsim works under the hood, each also at the top level (`ss.errors`, `ss.graph`, ...): `graph.py` (the graph of a declared module: its states, transitions, and parameters, completed with defaults and checked; `ss.graph.Graph`), `presentation.py` (how it is shown: `describe()`, `diagram()`, `equations()`), `expressions.py` (expressions in rates and results, `ss.par`, and how they are evaluated and printed), `gradients.py` (gradients and log-densities in JAX: `sim.gradient()`, `sim.log_density()`), `errors.py` (the few errors and warnings that are classes, e.g. `ss.CapabilityError` and `ss.errors.AtBound`, and `ss.note()`), `debugtools.py` (profiling, debugging, and mock objects for testing), and `cli.py` (the `starsim` command)
-- `perflib/`: Machinery for speed: `kernels.py` (the Numba kernels that run compartmental models; also `ss.kernels`), `draws.py` (exact draws in Numba), `passes.py` (compiled passes over the agents), `chain.py` (the chain binomial in JAX), `jit.py` (`ss.jit`; `ss.perflib.jit` is the function), `cache.py`, and `memory.py`
+- `perflib/`: Machinery for speed: `kernels.py` (the Numba kernels that run compartmental models; also `ss.kernels`), `draws.py` (exact draws in Numba), `passes.py` (compiled passes over the agents), `chain.py` (the chain binomial in JAX), `rust.py` (swaps in the Rust copies of all these, built from `rust/`: see `ss.options.kernels`), `jit.py` (`ss.jit`; `ss.perflib.jit` is the function), `cache.py`, and `memory.py`
 - `interop/`: Importers (each reads its format into `ss.interop.Source`, which `ss.interop.write()` writes as Starsim code, run to make the sim) and exporters for other modeling frameworks
+
+### Rust kernels (`rust/`)
+A second copy of every Numba kernel above, in Rust, giving the same numbers bit for bit; `ss.options.kernels='auto'` uses it once built (`cd rust && ./build`). Numba's code is the reference: change it first, then the Rust copy to match, and run `tests/test_kernel_sets.py` (see `rust/README.md`).
 
 ### Library (`starsim/library/`)
 Example and reference modules that build on core Starsim but are not part of it, available via `import starsim.library as ssl` (e.g. `ssl.Cholera` or `ssl.diseases.Cholera`):

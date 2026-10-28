@@ -17,7 +17,7 @@ seeds or parameter sets) give the same draws as runs taken one at a time.
 `reason()` says what a model has that this does not cover (then the kernels run it).
 Everything here is CPU only, and is imported only when used (it imports JAX; Numba caches the
 handler, so it compiles once per install, in about 20 s, with a note, or ahead of time with
-`ss.compile()`; under `ss.options.compile = 'never'`, the kernels take the run instead).
+`ss.compile()`, or not at all with the Rust kernels; under `ss.options.kernels = 'python'`, the kernels take the run instead).
 """
 import os
 import re
@@ -56,8 +56,8 @@ def reason(sim):
         return sim.kernel_reason()
     elif any(isinstance(mod, ss.Delivery) and mod.move_states is not None for mod in sim.interventions()):
         return f'"{next(mod.name for mod in sim.interventions() if isinstance(mod, ss.Delivery) and mod.move_states is not None)}" moves people between states, which only the kernels draw'
-    elif ss.options.compile == 'never':
-        return 'its draws are compiled by Numba, and ss.options.compile is "never"'
+    elif ss.options.kernels == 'python':
+        return 'its draws are compiled, and ss.options.kernels is "python"'
     for mod in sim.declared:
         name = mod.engine.certain() if hasattr(mod.engine, 'certain') else None
         if name is not None:
@@ -681,31 +681,40 @@ def make_handler(major, minor):
 
 
 def is_compiled():
-    """ Whether the handler for the installed JAX is compiled already: in this session, or in Numba's cache from an earlier one (as `ss.kernels.is_compiled()`) """
+    """ Whether the handler for the installed JAX is compiled already: in this session, or in Numba's cache from an earlier one (as `ss.kernels.is_compiled()`); the Rust one always is """
     v = api_version()
-    if v in handlers:
+    if ss.perflib.rust.on or (ss.perflib.rust.on, v) in handlers:
         return True
     cache = FunctionCache(handler_func(*v))
     return cache._index_key(types.int64(types.int64), CFunc._targetdescr.target_context.codegen()) in cache._cache_file._load_index()
 
 
-handlers = {} # The handler registered with XLA, and its name there, by the API version it reports
+handlers = {} # The handler registered with XLA (the Numba cfunc, or the Rust function's address), and its name there, by whether the Rust kernels are in use and the API version it reports
 registered = {} # Every handler registered with XLA this session, by its name there
 
 
 def register():
-    """ Register the handler with XLA, once a session (or again, under another name, for another FFI API version): returns its name """
+    """ Register the handler with XLA, once a session for each kernel set, Numba's (`make_handler()`) or Rust's (or again, under another name, for another FFI API version): returns its name """
     v = api_version()
-    if v not in handlers:
+    rust = ss.perflib.rust.on
+    if (rust, v) not in handlers:
         jx = ss.gradients.jax()
         if not is_compiled():
             ss.perflib.compiling("the chain binomial's draws for JAX", 'Numba', 10, 30) # 14-23 s measured, with nothing in Numba's cache
-        name = f'starsim_chain_step_{v[0]}_{v[1]}'
+        name = f'starsim_chain_step_{"rs_" if rust else ""}{v[0]}_{v[1]}'
         if name not in registered: # XLA refuses a second handler under a name, so one dropped by check() is reused
-            registered[name] = make_handler(*v)
-            jx.ffi.register_ffi_target(name, jx.ffi.pycapsule(registered[name].address), platform='cpu')
-        handlers[v] = (registered[name], name)
-    return handlers[v][1]
+            if rust:
+                registered[name] = ss.perflib.rust.load().chain_handler(*v)
+            else:
+                registered[name] = make_handler(*v)
+            jx.ffi.register_ffi_target(name, jx.ffi.pycapsule(address(registered[name])), platform='cpu')
+        handlers[rust, v] = (registered[name], name)
+    return handlers[rust, v][1]
+
+
+def address(handler):
+    """ Where the handler is: the Numba cfunc's address, or the Rust function's """
+    return getattr(handler, 'address', handler)
 
 
 def reported_version(handler):
@@ -713,7 +722,7 @@ def reported_version(handler):
     meta = (ctypes.c_int64*5)() # XLA_FFI_Metadata: struct_size, api_version (struct_size, extension_start, major and minor as int32s), traits
     ext = (ctypes.c_int64*4)(32, 1, 0, ctypes.addressof(meta)) # XLA_FFI_Metadata_Extension: struct_size, type (1: metadata), next, metadata
     frame = (ctypes.c_int64*14)(112, ctypes.addressof(ext)) # XLA_FFI_CallFrame: struct_size, extension_start, and the rest (unread)
-    ctypes.CFUNCTYPE(ctypes.c_int64, ctypes.c_int64)(handler.address)(ctypes.addressof(frame))
+    ctypes.CFUNCTYPE(ctypes.c_int64, ctypes.c_int64)(address(handler))(ctypes.addressof(frame))
     ints = (ctypes.c_int32*2).from_buffer(meta, 24)
     return (ints[0], ints[1])
 
@@ -722,9 +731,10 @@ def check():
     """ Check that the registered handler reports the XLA FFI API version of the installed JAX; if not, unregister it (so it is made and registered again next time) and raise an error, so the run falls back to the kernels """
     v = api_version()
     register()
-    reported = reported_version(handlers[v][0])
+    key = (ss.perflib.rust.on, v)
+    reported = reported_version(handlers[key][0])
     if reported != v:
-        handlers.pop(v)
+        handlers.pop(key)
         errormsg = f'its handler reports XLA FFI API version {reported[0]}.{reported[1]}, but the installed JAX ({ss.gradients.jax().__version__}) has {v[0]}.{v[1]}'
         raise RuntimeError(errormsg)
     return v
@@ -882,7 +892,7 @@ def on_cpu():
 
 def runner(program, how, many=False):
     """ The `ChainRun` of a program, and its compiled run: for one, or for a batch over seeds (all with the same numbers), reduced (see `ChainRun.function()`) """
-    key = (many,) + ss.gradients.Run.key(program, *how)
+    key = (many, ss.perflib.rust.on) + ss.gradients.Run.key(program, *how) # The kernels too, since the run calls the handler of the kernels it was compiled with
     if key not in compiled:
         dt, npts, solver, n_sub, per_step = how
         run = ChainRun(program, dt, npts, solver, n_sub, per_step)

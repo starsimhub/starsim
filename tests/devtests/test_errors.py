@@ -314,7 +314,7 @@ def _():
 
 @trigger('runs as Python', 'note')
 def _():
-    @ss.jit
+    @ss.jit(nopython=False)
     def uncompilable(x):
         return sc.findinds(x > 0) # Numba can't call Sciris
     with ss.options.context(verbose=1), sc.capture() as said: # With no sim, the note is printed, not kept

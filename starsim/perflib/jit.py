@@ -7,7 +7,8 @@ Nothing here needs reading to use `ss.jit`; see its docstring. How it works:
   traced by JAX if it is called with JAX arrays (e.g. under `jax.grad()`), with `np` in it standing for
   `jax.numpy`. A NumPy Generator passed in can draw arrays (`rng.binomial(n, p)` with arrays n and p),
   as NumPy's do and with the same numbers, which Numba alone can't.
-- What can't be compiled runs as written, as Python, with one line saying why (once a function).
+- What Numba can't compile is an error, saying why; with `nopython=False`, it runs as written, as Python, with one line
+  saying why (once a function).
 """
 import re
 import ast
@@ -29,12 +30,13 @@ __all__ = ['jit']
 gen_methods = ['binomial', 'poisson'] # NumPy Generator methods given arrays as Numba doesn't: see rng_binomial()
 
 
-def jit(func):
+def jit(func=None, *, nopython=True):
     """
     Make a function fast, by compiling it with Numba or JAX, with no change in what it does
 
-    The first call compiles it (once; it is kept on disk for later sessions, when it can be). If it can't be
-    compiled, it runs as written, as Python, and says why in one line (once). Called with JAX arrays (or inside
+    The first call compiles it (once; it is kept on disk for later sessions, when it can be). If Numba can't
+    compile it, that is an error, saying why; with `nopython=False`, it runs as written, as Python, and says why in
+    one line (once). Called with JAX arrays (or inside
     `jax.grad()`, `jax.jit()`, or `jax.vmap()`), it is traced by JAX, with `np` standing for `jax.numpy`, so it
     can be differentiated; otherwise it is compiled by Numba, which suits loops. The function as written is
     `.py_func`.
@@ -43,6 +45,7 @@ def jit(func):
 
     Args:
         func (function): the function
+        nopython (bool): if False, run it as Python when Numba can't compile it, rather than raise an error
 
     **Examples**:
 
@@ -52,8 +55,14 @@ def jit(func):
             for v in x:
                 out += v**2
             return out
+
+        @ss.jit(nopython=False) # Compiled if it can be, else run as Python
+        def positive(x):
+            return sc.findinds(x > 0)
     """
-    return Function(func)
+    if func is None: # Called with options, as @ss.jit(nopython=False)
+        return lambda func: Function(func, nopython=nopython)
+    return Function(func, nopython=nopython)
 
 
 class Unsupported(Exception):
@@ -85,8 +94,9 @@ def reason(err):
 class Function:
     """ A function compiled by Numba, or traced by JAX when called with JAX arrays """
 
-    def __init__(self, func):
+    def __init__(self, func, nopython=True):
         self.py_func = func
+        self.nopython = nopython # Whether Numba not compiling it is an error, rather than running it as Python
         self.numba = None # The Numba dispatcher, once made
         self.jax_func = None # The function traced by JAX, once made
         self.failed = False # Whether Numba can't compile it
@@ -125,6 +135,9 @@ class Function:
             try:
                 return self.dispatcher(args)(*[plain(a) for a in args], **{k:plain(v) for k,v in kwargs.items()})
             except (NumbaError, Unsupported) as e:
+                if self.nopython:
+                    errormsg = f'ss.jit: Numba can\'t compile {self.py_func.__qualname__}(): {reason(e)}. Write it with what Numba supports, or use @ss.jit(nopython=False) to run it as Python when it can\'t be compiled'
+                    raise TypeError(errormsg) from e
                 self.failed = True
                 self.say(f'Numba can\'t compile it: {reason(e)}')
         return self.py_func(*args, **kwargs)

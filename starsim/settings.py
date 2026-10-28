@@ -68,7 +68,7 @@ class Options(sc.objdict):
     def __init__(self):
         super().__init__()
         optdesc, options = self.get_orig_options()  # Get the options
-        self.update(options)  # Update this object with them
+        super().update(options)  # Update this object with them
         self.setattribute('optdesc', optdesc)  # Set the description as an attribute, not a dict entry
         self.setattribute('orig_options', sc.dcp(options))  # Copy the default options
         self.setattribute('on_entry', [])  # Stack of settings to restore, to allow nested context() blocks
@@ -119,8 +119,8 @@ class Options(sc.objdict):
         optdesc.threads = 'The number of threads that the passes over the agents of a large sim, and the particles of a particle filter, take: 0 (default) for as many as Numba has (by default, one per core), 1 for none. Each worker of ss.parallel() and of a calibration takes one, since the workers share the cores already'
         options.threads = sc.parse_env('STARSIM_THREADS', 0, int)
 
-        optdesc.compile = 'Whether the compartmental solvers run compiled (by Numba) or as plain Python, which gives the same results: "auto" (default) for compiled if they are compiled already (see ss.compile()), or if the runs in a session would take longer uncompiled than compiling takes (about two minutes, once per install), with a note either way; "always" to always compile them first; "never" for plain Python (and the kernels, not JAX, for the chain binomial, whose draws in JAX are compiled by Numba; so a long seeded chain-binomial run gives other numbers than with "auto")'
-        options.compile = sc.parse_env('STARSIM_COMPILE', 'auto', str)
+        optdesc.kernels = 'Which kernels run the solvers (all give the same results, except as said for "python"): "auto" (default) for Rust if it has been built (see rust/README.md), and otherwise Numba, with compartmental runs taken as plain Python until Numba has compiled (if a run, or the runs of a session, would take longer as plain Python than compiling takes, about two minutes once per install, Numba compiles first; a note says which); "rust" for Rust, compiled ahead of time, so a first run takes no compiling; "numba" to always compile with Numba first (see ss.compile()); "python" for the compartmental kernels as plain Python (and the kernels, not JAX, for the chain binomial, whose draws in JAX are compiled, so a long seeded chain-binomial run gives other numbers than with the others; the passes over agents are Numba). JAX is chosen by the run (see sim.jax), and ss.jit is always Numba'
+        options.kernels = sc.parse_env('STARSIM_KERNELS', 'auto', str)
 
         optdesc.uncompiled_warning = 'If True (default), say on import when Starsim has not been compiled yet (see ss.compile()) -- NOTE, only has effect via the environment variable since executed on load'
         options.uncompiled_warning = sc.parse_env('STARSIM_UNCOMPILED_WARNING', True, bool)
@@ -142,6 +142,10 @@ class Options(sc.objdict):
     def __call__(self, *args, **kwargs):
         """Allow `ss.options(verbose=0)` instead of `ss.options.set(verbose=0)` """
         return self.set(*args, **kwargs)
+
+    def update(self, *args, **kwargs):
+        """ Set several options, as `set()` does (so e.g. the kernels are swapped) """
+        return self.set(**dict(*args, **kwargs))
 
     def __setitem__(self, key, value):
         """ Do not allow accidental modifications """
@@ -298,9 +302,12 @@ class Options(sc.objdict):
             else:
                 if value in [None, 'default']:
                     value = self.orig_options[key]
-                if key == 'compile' and value not in ['auto', 'always', 'never']: # Checked here rather than at the first run (CB-9)
-                    errormsg = f'ss.options.compile must be "auto", "always", or "never", not {value!r}'
-                    raise ValueError(errormsg)
+                if key == 'kernels': # Checked here rather than at the first run (CB-9), and swapped before the option is set, so it is not set if the Rust kernels have not been built
+                    if value not in ['auto', 'rust', 'numba', 'python']:
+                        errormsg = f'ss.options.kernels must be "auto", "rust", "numba", or "python", not {value!r}'
+                        raise ValueError(errormsg)
+                    import starsim.perflib.rust as rust # Imported only now, since it imports the modules whose kernels it swaps
+                    rust.auto() if value == 'auto' else rust.use(value == 'rust')
                 super().__setitem__(key, value) # Needed since we overwrite __setitem__ to call this
 
                 # Handle special cases

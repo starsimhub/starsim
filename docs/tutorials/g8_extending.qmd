@@ -233,7 +233,7 @@ for label,euler in [('NumPy', euler_step), ('Compiled', euler_loop)]:
     T.toc(f'One run, {label}')
 ```
 
-The first call compiles it, which takes a few seconds once; after that it is loaded from Numba's cache. Compiling pays off most for loops that NumPy can't write as whole arrays. For this model, most of the time of a large run is the random draws themselves.
+The first call compiles it, which takes a few seconds once; after that it is loaded from Numba's cache. Compiling pays off most for loops that NumPy can't write as whole arrays. For this model, most of the time of a large run is the random draws themselves. A function that Numba can't compile (e.g. one that calls Sciris) is an error, which says why; `@ss.jit(nopython=False)` runs it as Python instead, with a note.
 
 ## 5. A particle filter
 

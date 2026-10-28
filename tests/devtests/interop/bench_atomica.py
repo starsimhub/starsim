@@ -21,7 +21,7 @@ import starsim.interop
 sys.path.insert(0, str(sc.thispath().parent.parent))
 import paths
 
-ss.options.compile = 'always' # Timed compiled, as a long run would be
+ss.options.kernels = 'numba' # Timed compiled, as a long run would be
 framework = paths.cattb/'framework'/'tb_framework_2025.xlsx'
 databook = paths.cattb/'databooks'/'IND.xlsx'
 calibration = paths.cattb/'databooks'/'IND_calibration.xlsx'

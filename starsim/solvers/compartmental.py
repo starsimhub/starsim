@@ -42,6 +42,8 @@ def choose_kernels(owner, runs, seconds):
     The kernels for a run of a program (or `runs` runs), compiled or as plain Python, chosen once for a run (see `ss.kernels.choose()`), for an
     engine or a crossing (`owner`, which keeps the choice as `compiled`); `seconds()` is about how long the run would take as plain Python
     """
+    if ss.perflib.rust.on: # Compiled ahead of time, so nothing to choose
+        return ss.kernels.choose()
     if runs == 1 and owner.program is not None and ode.wanted(owner.sim.solver, owner.program, owner.y): # The ODE in NumPy, which needs no compiling
         return ode
     if runs == 1 and owner.compiled is not None:
@@ -52,6 +54,11 @@ def choose_kernels(owner, runs, seconds):
     if runs == 1:
         owner.compiled = kn is ss.kernels
     return kn
+
+
+def kernel_list(items):
+    """ A list for the kernels to take: a typed list for Numba's; a plain one for Rust's, which take any (making a typed list compiles it, about 1.5 s a session) """
+    return list(items) if ss.perflib.rust.on else nb.typed.List(items)
 
 
 def run_many_parts(owner, rngs, ys, args, per_step, n_cols, outputs, state_of, rows, grp_state, grp_flow):
@@ -2573,7 +2580,7 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
         self.restart()
         args, _ = self.run_args(tables=False)
         y0, npts = args[0], args[3]
-        rngs = nb.typed.List([self.make_rng(stream=1, seed=seed) for seed in seeds]) # The random numbers that each run would have
+        rngs = kernel_list([self.make_rng(stream=1, seed=seed) for seed in seeds]) # The random numbers that each run would have
         ng = self.n_groups
         states = list(graph.states)
         state_of = np.array([states.index(comp.state.name) for comp in self.comps])
