@@ -360,6 +360,7 @@ class Run:
         lax = jx.lax
         dt, per_step, n_max = self.dt, self.per_step, self.n_max
         rk4 = self.solver == 0
+        rows = {}
 
         def at(table, ti, th):
             """ A table's value at a fraction th of the way through step ti (see ss.kernels.interp()) """
@@ -374,9 +375,11 @@ class Run:
             return table[row]
 
         def vals(ti, th):
-            return [at(X[name], ti, th) for name in table_fields] + [X]
+            return [at(rows[name], 0, th) if name in rows else at(X[name], ti, th) for name in table_fields] + [X]
 
-        def step(y, ti):
+        def step(y, ti, step_rows=None):
+            nonlocal rows
+            rows = step_rows or {} # The rows of the tables that vary in time for this step, if given (see function())
             due = y[self.cv_last] # The people due to leave each conveyor, at a constant rate over the step (see ss.kernels.convey())
 
             if len(self.cv_flow): # The people due to leave each conveyor leave at a constant rate over the step, as the inflow of its flow (whose last target is its last slot, with a share of -1), lowered so that the slot is empty at its end with its other exits (see ss.kernels.release_rates())
@@ -405,9 +408,11 @@ class Run:
                     tot, grow = y[comps].sum(axis=0), dy0[comps].sum(axis=0)
                     rising = (grow > 0) & (tot > least)
                     growing = jnp.maximum(growing, jnp.max(jnp.where(rising, grow/jnp.where(rising, tot, 1.0), 0.0)))
-                n = jnp.maximum(jnp.ceil(lax.stop_gradient(jnp.maximum(fastest, growing))*dt/0.25), 1)
+                n = need = jnp.maximum(jnp.ceil(lax.stop_gradient(jnp.maximum(fastest, growing))*dt/0.25), 1)
                 if clamp:
                     n = jnp.minimum(n, n_max)
+            if self.n_sub:
+                need = n
             h = dt/n
 
             def derivs(ys, th):
@@ -435,7 +440,7 @@ class Run:
                 for s in range(self.n_sub):
                     carry = sub(s, carry)
                 y_end, flows = carry
-            elif clamp and self.fixed: # A loop with a fixed count, which reverse mode needs
+            elif clamp and self.fixed: # A loop with a fixed count, which reverse mode needs; the substeps past those the step needs are skipped (except under vmap, where both branches are taken)
                 y_end, flows = lax.fori_loop(0, n_max, sub, (y, flows))
             else: # As many substeps as the step needs (a loop with a fixed count would take n_max every time)
                 def body(carry):
@@ -445,7 +450,7 @@ class Run:
                 _, y_end, flows = lax.while_loop(lambda carry: carry[0] < n, body, (0, y, flows))
             if len(self.cv_flow): # Everyone in a conveyor moves along one slot
                 y_end = y_end.at[self.cv_next].set(y_end[self.cv_prev]).at[self.cv_first].set(0.0)
-            return jnp.maximum(y_end, 0.0), flows, n # The compartments after the step, as the kernels record them
+            return jnp.maximum(y_end, 0.0), flows, need # The compartments after the step, as the kernels record them, and the substeps it needed (more than it took, if clamped)
 
         return step
 
@@ -485,22 +490,60 @@ class Run:
         def run(X):
             X = self.prepare(X)
             step = self.stepper(X, clamp)
-            def body(y, ti):
+            steps = self.npts - 1
+            per_step = self.per_step
+            rows = {name:X[name][:steps*per_step].reshape((steps, per_step) + X[name].shape[1:]) for name in table_fields if X[name].shape[0] > 1} # Each step's rows of the tables that vary in time, given to it by the scan, rather than read from the whole table at each step (which reverse mode turns into adding into a table as large at every step)
+            def body(y, xs):
+                ti, step_rows = xs
                 y = self.deliver(y, X, ti)
-                y_end, flows, n = step(y, ti)
+                y_end, flows, n = step(y, ti, step_rows)
                 return y_end, (y_end, flows, n)
-            y_end, (stocks, flows, n) = jx.lax.scan(body, X['y'], jnp.arange(self.npts - 1)) # Step ti+1 goes from time point ti to ti+1, with the values at the start of it
+            y_end, (stocks, flows, n) = checkpointed(body, X['y'], (jnp.arange(steps), rows), steps, self.fixed and self.checkpoint(X)) # Step ti+1 goes from time point ti to ti+1, with the values at the start of it
             stocks = jnp.concatenate([X['y'][None], stocks]) # The start, then the end of each step, as the kernels record them
             flows = jnp.concatenate([jnp.zeros((1,) + flows.shape[1:]), flows])
             return y_end, stocks, flows, jnp.max(n)
 
         return run
 
+    def checkpoint(self, X):
+        """ Whether a run differentiated in reverse mode keeps the state at only about √T of its T steps (see `checkpointed()`): if what reverse mode would otherwise keep (the compartments at each substep and stage) is large """
+        kept = (self.npts - 1)*self.n_max*4*np.size(X['y'])*8
+        return kept > checkpoint_bytes
+
     def get(self, kind='run'):
         """ The compiled run: 'run' for one, 'many' for a batch, 'jvp' for its derivative along a batch of directions """
         if kind not in self.compiled:
             self.compiled[kind] = compile_run(self.function(), kind)
         return self.compiled[kind]
+
+
+checkpoint_bytes = 200e6 # What reverse mode may keep of a run before it is checkpointed (see Run.checkpoint())
+
+
+def checkpointed(body, init, xs, steps, checkpoint):
+    """
+    `jax.lax.scan(body, init, xs)` over `steps` steps; with `checkpoint`, as about √T outer steps of √T inner steps each, with only the
+    state at the start of each outer step kept for reverse mode (the inner steps are taken again), so that its memory grows as the
+    square root of the run's length, at the cost of a second forward pass (as Jaxley's `nested_checkpoint_scan()` does). The steps
+    past the end that make the inner steps whole (given a time `ti >= steps`) change nothing.
+    """
+    jx = jax()
+    jnp = jx.numpy
+    if not checkpoint:
+        return jx.lax.scan(body, init, xs)
+    inner = int(np.ceil(np.sqrt(steps)))
+    outer = int(np.ceil(steps/inner))
+    pad = outer*inner - steps
+    def split(v, first=False):
+        v = jnp.concatenate([v, steps + jnp.arange(pad)]) if first else jnp.concatenate([v, jnp.repeat(v[-1:], pad, axis=0)]) # The time past the end, and the last rows again
+        return v.reshape((outer, inner) + v.shape[1:])
+    def masked(y, xs):
+        y_end, out = body(y, xs)
+        return jnp.where(xs[0] < steps, y_end, y), out
+    ti, rows = xs
+    xs = (split(ti, first=True), jx.tree_util.tree_map(split, rows))
+    y_end, outs = jx.lax.scan(jx.checkpoint(lambda y, xs: jx.lax.scan(masked, y, xs)), init, xs)
+    return y_end, jx.tree_util.tree_map(lambda v: v.reshape((outer*inner,) + v.shape[2:])[:steps], outs)
 
 
 def compile_run(run, kind):
@@ -813,16 +856,22 @@ def difference(a, b, h):
     return (np.asarray(a, dtype=float) - np.asarray(b, dtype=float))/(2*h)
 
 
-def find_pars(sim, names=None):
-    """ The parameters named (by name, or 'module.name' where needed), or every one that has bounds: an `sc.objdict` of them by name """
+def find_pars(sim, names=None, several=False):
+    """
+    The parameters named (by name, or 'module.name' where needed), or every one that has bounds: an `sc.objdict` of them by name
+
+    Args:
+        several (bool): whether a parameter may have several values (a value for each level, an array, or a time series), and a name may be of one of them ("beta[a]"); see `entries()`
+    """
     out = sc.objdict()
+    wanted = None if names is None else [base_name(name) if several else name for name in names]
     for mod in sim.declared:
         for name,p in mod.graph.pars.items():
-            if (names is None and p.bounds is not None) or (names is not None and (name in names or f'{mod.name}.{name}' in names)):
+            if (wanted is None and p.bounds is not None) or (wanted is not None and (name in wanted or f'{mod.name}.{name}' in wanted)):
                 if not any(p is q for q in out.values()): # A parameter shared by several modules is counted once
                     same = [m.graph.pars[name] for m in sim.declared if name in m.graph.pars]
                     out[name if all(q is same[0] for q in same) else f'{mod.name}.{name}'] = p
-    missing = [name for name in sc.tolist(names) if not any(name == key or key.endswith(f'.{name}') or name.endswith(f'.{key}') for key in out)] if names is not None else [] # By name, or 'module.name'
+    missing = [name for name in sc.tolist(wanted) if not any(name == key or key.endswith(f'.{name}') or name.endswith(f'.{key}') for key in out)] if wanted is not None else [] # By name, or 'module.name'
     if missing or not out:
         options = [f'{mod.name}.{k}' for mod in sim.declared for k in mod.graph.pars]
         what = f'no parameter named {sc.strjoin(missing)}' if missing else 'no parameter with bounds'
@@ -830,25 +879,50 @@ def find_pars(sim, names=None):
         raise ValueError(errormsg)
     for key,p in out.items():
         val = p.raw.value if isinstance(p.raw, ss.TimePar) else p.raw
-        if not sc.isnumber(val):
-            errormsg = f'Only a parameter that is a single number can be differentiated with respect to, not "{key}" ({p.raw})'
+        if not (sc.isnumber(val) or (several and isinstance(val, (ss.by, np.ndarray, ss.timeseries)))):
+            what = 'a number, a value for each level (ss.by), an array, or a time series' if several else 'a single number'
+            errormsg = f'Only a parameter that is {what} can be differentiated with respect to, not "{key}" ({p.raw})'
             raise ValueError(errormsg)
     return out
 
 
+def base_name(name):
+    """ The name of the parameter that an entry of one with several values is of ("beta" for "beta[a]") """
+    return name.rpartition('[')[0] if name.endswith(']') else name
+
+
+def entries(sim, names=None):
+    """
+    The parameters named, or every one that has bounds (see `find_pars()`), with each that has several values as an entry for
+    each value, named as a fit names them (see `ss.fit.expand()`)
+
+    Returns the entries by name; the setter of `gradient()` (a function of an array of values that restarts the sim with them);
+    the values now; and the lowest and highest value of each (the value now, for one without bounds)
+    """
+    import starsim.fit # For the entries of a parameter with several values
+    found, levels, elements = ss.fit.expand(sim, find_pars(sim, names, several=True))
+    if names is not None: # Only the values named, of a parameter with several ("beta[a]")
+        named = lambda key: any(n in [key, base_name(key)] or key.endswith(f'.{n}') or base_name(key).endswith(f'.{n}') for n in names)
+        found = sc.objdict({key:p for key,p in found.items() if named(key)})
+    raws = [ss.fit.entry(name, p, levels, elements) for name,p in found.items()]
+    x0, types = ss.fit.start_values(raws)
+    bounds = np.array([elements[name][2:4] if name in elements else [ss.fit.bound_value(b, raw) for b in p.bounds] if p.bounds is not None else [x, x] for name,p,raw,x in zip(found.keys(), found.values(), raws, x0)], dtype=float).T
+    keys = list(found.keys())
+    pars = sim.par_values
+
+    def set_pars(x):
+        sim.restart(pars=sc.mergedicts(pars, ss.fit.to_pars(keys, found, x, types, elements)))
+
+    return found, set_pars, x0, bounds
+
+
 def of_results(sim, results=None, pars=None):
-    """ The derivative of results with respect to parameters: see `ss.Sim.gradient()` """
+    """ The derivative of results, or of a function of the run sim, with respect to parameters: see `ss.Sim.gradient()` """
     why = reason(sim)
     if why:
         errormsg = f'Gradients need a sim that runs in JAX, and this one cannot, since {why}'
         raise ss.CapabilityError(errormsg)
-    found = find_pars(sim, None if pars is None else sc.tolist(pars))
-    types = [type(p.raw) if isinstance(p.raw, ss.TimePar) else None for p in found.values()]
-    x0 = np.array([p.raw.value if cls is not None else p.raw for p,cls in zip(found.values(), types)], dtype=float)
-    base = sim.par_values
-
-    def set_pars(x):
-        sim.restart(pars=sc.mergedicts(base, {key:(cls(val) if cls is not None else float(val)) for key,val,cls in zip(found.keys(), x, types)}))
+    found, set_pars, x0, bounds = entries(sim, None if pars is None else sc.tolist(pars))
 
     def read(sim):
         out = sc.objdict()
@@ -858,8 +932,8 @@ def of_results(sim, results=None, pars=None):
                     out.setdefault(mod.name, sc.objdict())[key] = np.array(res.values, dtype=float)
         return out
 
-    value, derivs = gradient(sim, set_pars, x0, read)
-    if not value:
+    value, derivs = gradient(sim, set_pars, x0, results if callable(results) else read)
+    if not callable(results) and not value:
         errormsg = f'Found no result named {sc.strjoin(sc.tolist(results))}'
         raise ValueError(errormsg)
     return sc.objdict(zip(found.keys(), derivs))
@@ -872,24 +946,34 @@ class Unsupported(Exception):
     pass
 
 
+def several(p):
+    """ Whether a parameter has several values, each fitted on its own (see `ss.fit.expand()`) """
+    return isinstance(p.raw, (ss.by, np.ndarray, ss.timeseries))
+
+
 def fitted_index(names, fitted, mods, sim, external=None):
     """
     The position among the fitted parameters of each parameter object that stands for one (by id: the fitted parameter, and
     the parameter of a module's graph that its name gives), and the names of those that a modifier changes, which neither the
     log-density (`Density`) nor IF2 (`ss.fit.Swarm`) covers. A parameter that belongs to a likelihood (`external`) stands for itself only.
+    One with several values (a value for each level, an array, or a time series) stands for none: each of its values is one of the
+    numbers that change linearly in the run (see `Density.init_program()`).
     """
     index, modified = {}, []
     for i,(name,p) in enumerate(zip(names, fitted)):
-        index[id(p)] = i
-        if external is None or not external[i]:
-            modname, _, key = name.rpartition('.')
+        own = external is None or not external[i]
+        values = own and several(p)
+        if not values:
+            index[id(p)] = i
+        if own:
+            modname, _, key = (name.rpartition('[')[0] if values else name).rpartition('.')
             for mod in mods:
                 if modname and mod.name != modname:
                     continue
                 graph_par = mod.graph.pars.get(key)
-                if graph_par is not None:
+                if graph_par is not None and not values:
                     index[id(graph_par)] = i
-                if sim.modifiers.get((mod.name, 'par', key)):
+                if sim.modifiers.get((mod.name, 'par', key)) and name not in modified:
                     modified.append(name)
     return index, modified
 
@@ -925,8 +1009,8 @@ def table_years(engine, raw):
     return years[np.minimum(np.arange(npts) + 1, npts - 1)] # The values for the step from ti, which is step ti+1
 
 
-def time_value(raw, ctx, years):
-    """ A value that varies in time (`ss.seasonal()` or `ss.timeseries()`), at each of the years, with the parameters inside it from ctx (as its series() works it out) """
+def time_value(raw, ctx, years, values=None):
+    """ A value that varies in time (`ss.seasonal()` or `ss.timeseries()`), at each of the years, with the parameters inside it from ctx (as its series() works it out), or with the `values` of a time series fitted value by value """
     jnp = ctx.xp
     val = lambda v: ss.expressions.evaluate(v, ctx) if isinstance(v, ss.expressions.Expr) else ctx.engine.convert(v)
     if any(isinstance(ss.parameters.const_value(v), ss.prob) for name in raw.fields for v in sc.tolist(getattr(raw, name))):
@@ -935,7 +1019,7 @@ def time_value(raw, ctx, years):
         return val(raw.mean)*jnp.maximum(0.0, 1 + val(raw.amplitude)*jnp.cos(2*np.pi*(years - raw.peak_frac)/raw.period_years))
     elif isinstance(raw, ss.timeseries):
         _, i, j, w = raw.weights(years, ctx.engine.sim)
-        vals = jnp.stack([jnp.asarray(val(v), dtype=float) for v in raw.values])
+        vals = jnp.stack([jnp.asarray(val(v), dtype=float) for v in raw.values] if values is None else values)
         return vals[i]*(1 - w) + vals[j]*w
     raise Unsupported(f'a fitted parameter inside {raw}')
 
@@ -952,12 +1036,22 @@ class Context:
         return
 
     def value(self, p):
-        i = self.density.index.get(id(p))
+        density = self.density
+        i = density.index.get(id(p))
         if i is not None:
-            return self.density.convert(i, self.x[i])
-        years = self.density.timed.get((id(self.engine), id(p)))
-        if years is not None: # A value that varies in time with fitted parameters inside it: at every row of the tables, or at every step for a result
-            val = time_value(p.raw, self, years)
+            return density.convert(i, self.x[i])
+        levels = density.levels.get(id(p))
+        if levels is not None: # A value for each level: each group's, from the value of its level
+            if self.n is not None: # In a result, whose counts are summed over the groups
+                raise Unsupported(f'a result that uses a parameter with a value for each level ({p.raw})')
+            positions, M = levels
+            return self.xp.stack(density.values(positions, self.x, self.engine)) @ M
+        if self.n is not None and id(p) in density.arrays: # In a result, where its values are not among the numbers in the run
+            raise Unsupported(f'a result that uses a parameter whose value is an array ({p.raw})')
+        years = density.timed.get((id(self.engine), id(p)))
+        if years is not None: # A value that varies in time with fitted parameters inside it, or fitted value by value: at every row of the tables, or at every step for a result
+            positions = density.series_of.get(id(p))
+            val = time_value(p.raw, self, years, values=None if positions is None else density.values(positions, self.x, self.engine))
             return val[:, None] if self.series else val[::self.engine.per_step()]
         kept = self.engine.series.get(id(p)) if self.series else None
         if kept is not None: # Rows by groups, as in the engine's tables
@@ -1024,10 +1118,12 @@ class Density:
         self.weights = weights or {}
         self.external = external or [False]*len(x0)
         self.bounds = bounds
+        self.priors = True # Whether the priors are included, or only the likelihood (as a best fit takes them, through its own penalty)
         self.mods = list(sim.declared)
         self.engines = [mod.engine for mod in self.mods]
         self.units = units(sim)
         self.index, modified = fitted_index(self.names, self.fitted, self.mods, sim, self.external)
+        self.init_several()
         if modified:
             raise Unsupported(f'a modifier of the fitted parameter "{modified[0]}"')
         self.init_program()
@@ -1036,9 +1132,46 @@ class Density:
             ss.fit.logprior(p, val, xp=jax().numpy)
         return
 
+    def init_several(self):
+        """
+        For each parameter with several values (see `ss.fit.expand()`), how its value is worked out from the fitted ones: a value
+        for each level as each group's (`levels`, the matrix from the levels to the groups), and a time series by interpolating
+        them (`series_of`), both exactly, as a parameter with one value is; an array (`arrays`) as the numbers in the run that change
+        linearly with it. Also the value of each entry as the parameter holds it (`raws`), for `convert()`.
+        """
+        self.raws = [p.raw for p in self.fitted]
+        self.levels, self.series_of, self.arrays = {}, {}, set()
+        for p,ext in zip(self.fitted, self.external):
+            if ext or not several(p) or id(p) in self.levels or id(p) in self.series_of or id(p) in self.arrays:
+                continue
+            key = next(name for name,q in zip(self.names, self.fitted) if q is p).rpartition('[')[0]
+            raw = p.raw
+            if isinstance(raw, ss.by):
+                labels, values = ss.fit.vector_labels(self.sim, raw, key), sc.tolist(raw.values)
+            elif isinstance(raw, ss.timeseries):
+                labels, values = [str(t) for t in raw.times], raw.values
+            else:
+                self.arrays.add(id(p))
+                continue
+            positions = [(self.names.index(f'{key}[{label}]') if f'{key}[{label}]' in self.names else None, v) for label,v in zip(labels, values)] # Each value's position among the fitted ones (None if it is not fitted), and its value as given
+            for i,v in positions:
+                if i is not None:
+                    self.raws[i] = v
+            if isinstance(raw, ss.by):
+                n = len(positions)
+                M = np.array([ss.by(**{raw.dim:list(np.eye(n)[k])}).per_group(self.sim) for k in range(n)], dtype=float) # The levels by the groups: each group's value is the value of its level (or a mean of them)
+                self.levels[id(p)] = (positions, M)
+            else:
+                self.series_of[id(p)] = positions
+        return
+
+    def values(self, positions, x, engine):
+        """ The values of a parameter with several values, in the sim's unit: those fitted from x, the others as given """
+        return [self.convert(i, x[i]) if i is not None else engine.convert(raw) for i,raw in positions]
+
     def convert(self, i, val):
         """ A fitted value as the engine uses it: in the sim's unit (see `convert_fitted()`) """
-        raw = self.fitted[i].raw
+        raw = self.raws[i]
         if not (isinstance(raw, ss.TimePar) or self.external[i] or sc.isnumber(raw)):
             raise Unsupported(f'the fitted parameter "{self.names[i]}" is a {type(raw).__name__}')
         return convert_fitted(raw, val, self.sim.unit_base, jax().numpy)
@@ -1074,7 +1207,7 @@ class Density:
         self.timed = {} # The values that vary in time with fitted parameters inside them (e.g. the mean and amplitude of ss.seasonal()), which are not linear in them, so are worked out in JAX, by engine and parameter: the year of each row of the tables
         for engine in self.engines:
             for p in engine.time_pars:
-                if isinstance(p.raw, ss.parameters.TimeValue) and any(id(q) in self.index for q in p.raw.pars):
+                if isinstance(p.raw, ss.parameters.TimeValue) and (id(p) in self.series_of or any(id(q) in self.index for q in p.raw.pars)):
                     years = self.timed[(id(engine), id(p))] = table_years(engine, p.raw)
                     with jax().enable_x64(True):
                         same = np.allclose(np.asarray(Context(self, engine, self.x0, series=True).value(p)), engine.series[id(p)][1], rtol=1e-12, atol=0)
@@ -1117,8 +1250,8 @@ class Density:
         self.consts = []
         self.fixed = []
         for engine in self.engines:
-            self.consts.append({k:p for k,p in enumerate(engine.prog_pars) if id(p) in self.index or (id(engine), id(p)) in self.timed})
-            fitted = lambda leaf: id(leaf) in self.index or (id(engine), id(leaf)) in self.timed
+            self.consts.append({k:p for k,p in enumerate(engine.prog_pars) if id(p) in self.index or id(p) in self.levels or (id(engine), id(p)) in self.timed})
+            fitted = lambda leaf: id(leaf) in self.index or id(leaf) in self.levels or (id(engine), id(leaf)) in self.timed
             fixed = []
             for f,flow in enumerate(engine.flows):
                 if flow.dynamic or flow.kind == 'conveyor': # The flow out of a conveyor has no rate of its own (see ss.kernels.convey())
@@ -1205,7 +1338,8 @@ class Density:
             if (name in graph.outcomes and name not in engine.outcomes) or (staying and engine.outcomes[name[2:]].stay is None and engine.outcomes[name[2:]].p_leave is None):
                 raise Unsupported(f'the outcome "{name}"')
             W, expected, rows = lined[col]
-            self.series.append(sc.objdict(col=col, j=j, name=name, keep=keep, W=W, expected=expected, lik=liks[col], weight=ss.fit.series_weight(self.weights, col)))
+            rows, cols = np.nonzero(W) # Each data point is a step's value, or the total over the steps since the last: kept as the entries that are not zero, since the whole matrix is the data points times the steps
+            self.series.append(sc.objdict(col=col, j=j, name=name, keep=keep, W=(rows, cols, W[rows, cols], W.shape[0]), expected=expected, lik=liks[col], weight=ss.fit.series_weight(self.weights, col)))
         return
 
     def outcomes(self, engine, ctx, new, npts):
@@ -1293,9 +1427,14 @@ class Density:
 
     def __call__(self, x):
         """ The log of the posterior density at some parameter values (a JAX array), up to a constant """
+        return self.evaluate(x)[0]
+
+    def evaluate(self, x):
+        """ The log of the posterior density at some parameter values, and the most substeps a step of any run needed (more than it took, if clamped by `n_max`) """
         Xs = self.numbers(x)
         stocks = [None]*len(self.engines)
         flows = [None]*len(self.engines)
+        need = 0
         for unit,run in zip(self.units, self.runs):
             if len(unit) == 1:
                 y_end, stocks[unit[0]], flows[unit[0]], n = run.function(clamp=True)(Xs[unit[0]])
@@ -1303,14 +1442,17 @@ class Density:
                 y_end, unit_stocks, unit_flows, n = run.function(clamp=True)(tuple(Xs[j] for j in unit))
                 for k,j in enumerate(unit):
                     stocks[j], flows[j] = unit_stocks[k], unit_flows[k]
+            need = jax().numpy.maximum(need, n)
         results = self.results(x, stocks, flows)
         total = 0.0
         for s in self.series:
-            model = jax().numpy.asarray(s.W) @ results[s.col]
+            rows, cols, w, n_rows = s.W
+            model = jax().ops.segment_sum(w*results[s.col][cols], rows, num_segments=n_rows) # The matrix times the result
             total = total + s.weight*self.loglik(s.lik, s.expected, model, x).sum()
-        for i in range(len(self.fitted)):
-            total = total + ss.fit.logprior(self.fitted[i], x[i], xp=jax().numpy)
-        return total
+        if self.priors:
+            for i in range(len(self.fitted)):
+                total = total + ss.fit.logprior(self.fitted[i], x[i], xp=jax().numpy)
+        return total, need
 
 
 class LogDensity:
@@ -1329,14 +1471,10 @@ class LogDensity:
             raise ss.CapabilityError(errormsg)
         if sim.data is None:
             raise ValueError('The log-density is of the data given the parameters, but the sim has no data; attach it with ss.Sim(..., data=df)')
-        fitted = find_pars(sim, None if pars is None else sc.tolist(pars))
+        fitted, set_pars, self.x0, bounds = entries(sim, None if pars is None else sc.tolist(pars))
         self.names = list(fitted.keys())
-        self.x0 = np.array([p.raw.value if isinstance(p.raw, ss.TimePar) else p.raw for p in fitted.values()], dtype=float)
-        types = [type(p.raw) if isinstance(p.raw, ss.TimePar) else None for p in fitted.values()]
-        def set_pars(x):
-            sim.restart(pars={key:(cls(val) if cls is not None else float(val)) for key,val,cls in zip(self.names, x, types)})
         try:
-            self.density = Density(sim, fitted, self.x0, set_pars, likelihood=likelihood).reverse()
+            self.density = Density(sim, fitted, self.x0, set_pars, likelihood=likelihood, bounds=bounds).reverse()
         except Unsupported as E:
             errormsg = f'The log-density in JAX does not cover {E} yet'
             raise ss.CapabilityError(errormsg) from E

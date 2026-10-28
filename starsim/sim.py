@@ -533,7 +533,7 @@ class Sim(ss.Base):
         sim.par_values = sc.mergedicts(sim.par_values, pars or None)
         return sim
 
-    def fit(self, pars=None, data=None, weights=None, likelihood=None, gof=None, penalty=None, method=None, n_runs=None, reseed=None, rand_seed=None, verbose=None, **kwargs):
+    def fit(self, pars=None, data=None, weights=None, likelihood=None, gof=None, penalty=None, method=None, n_runs=None, reseed=None, rand_seed=None, nopython=True, verbose=None, **kwargs):
         """
         Fit every parameter that has bounds to every result that has data
 
@@ -564,6 +564,7 @@ class Sim(ss.Base):
             n_runs (int): runs per evaluation, for a stochastic sim (default 4 for a stochastic compartmental sim, and 1 for agents and for a deterministic one); every point is scored by the mean over the same seeds (common random numbers), except under Optuna, where each point takes fresh seeds so that its search averages over chance (see `reseed=`); `fit.mismatch` is the score at the best fit over the first seeds
             reseed (bool): whether each point takes fresh seeds (default: True for Optuna, False otherwise); `reseed=False` with Optuna scores every point with the same seeds, e.g. for a rare outcome, where with fresh seeds the search favors values whose runs were lucky
             rand_seed (int): the random seed for the fitting method (default: the sim's, so a fit gives the same answer each time)
+            nopython (bool): for a deterministic sim with gradients and a likelihood for every series, whether the gradients (and a NUTS posterior) have to be taken with the log-likelihood as one function in JAX; if the model has something JAX does not cover yet, the fit is then an error that says what, and with `nopython=False` it takes them with Python in the loop instead, which is much slower
             verbose (bool): whether to print progress
             kwargs (dict): passed to the fitting method, e.g. `n_trials=200` for Optuna (and `n_workers=4` to run trials in 4 processes at once, and `storage='fit.log'` to keep the trials in a file, so that calling it again resumes the fit; see `ss.fit.fit_optuna()`), `maxiter=500` for SciPy, `draws=500`, `warmup=500`, and `chains=4` for NUTS (the defaults; 1,000 draws and 1,000 warm-up draws for particle MCMC, whose draws are more correlated), `particles=` for particle MCMC (default: chosen by each chain in its warm-up; see `ss.fit.pmmh()`), or `parallel=False` to run its chains one after another; for IF2, `particles=1000`, `iterations=50` (passes of the filter), `cooling=0.5` (the share of the first size of the random walk's steps that is left after 50 passes, as pomp's `cooling.fraction.50`), `sd=0.05` (that first size, on the scale searched on: the logit of each value's place between its bounds, of its log for wide bounds), and `chains=4` (each from its own start: the best of the initial values and a spread of points over the bounds, by the filter)
 
@@ -583,13 +584,13 @@ class Sim(ss.Base):
         """
         from . import fit
         if isinstance(method, (list, tuple)): # Staged fitting: each method starts from the best fit of the one before
-            return fit.fit_stages(self, method, pars=pars, data=data, weights=weights, likelihood=likelihood, gof=gof, penalty=penalty, n_runs=n_runs, reseed=reseed, rand_seed=rand_seed, verbose=verbose, **kwargs)
+            return fit.fit_stages(self, method, pars=pars, data=data, weights=weights, likelihood=likelihood, gof=gof, penalty=penalty, n_runs=n_runs, reseed=reseed, rand_seed=rand_seed, nopython=nopython, verbose=verbose, **kwargs)
         if method is not None:
             method = method.lower()
             if method not in fit.methods:
                 errormsg = f'Unknown fitting method method="{method}"; the choices are {sc.strjoin(fit.methods.keys())}'
                 raise ValueError(errormsg)
-        problem = fit.Problem(self, pars=pars, data=data, weights=weights, likelihood=likelihood, gof=gof, penalty=penalty, n_runs=n_runs, reseed=reseed, rand_seed=rand_seed, verbose=verbose)
+        problem = fit.Problem(self, pars=pars, data=data, weights=weights, likelihood=likelihood, gof=gof, penalty=penalty, n_runs=n_runs, reseed=reseed, rand_seed=rand_seed, nopython=nopython, verbose=verbose)
         method = problem.choose(method)
         if method != 'optuna' and ('n_workers' in kwargs or 'storage' in kwargs):
             errormsg = f'n_workers= and storage= are for method="optuna", not method="{method}"'
@@ -1302,18 +1303,20 @@ class Sim(ss.Base):
 
     def gradient(self, results=None, pars=None):
         """
-        The derivative of results with respect to parameters, at their current values
+        The derivative of results, or of a function of the run sim, with respect to parameters, at their current values
 
         The ODE run is differentiated by JAX (see `ss.gradients`), so this needs JAX, a sim
         with `solver='ode'`, and one that the kernels run from start to finish (see
-        `sim.kernel_only()`). The sim itself is not changed.
+        `sim.kernel_only()`). The sim itself is not changed. A parameter with several values
+        (a value for each level, `ss.by(patch=[...])`; an array; or a time series) has a
+        derivative for each, named as `sim.fit()` names them (`beta[a]`, `beta[b]`, ...).
 
         Args:
-            results (str/list): the results, by name (`'I'`, or `'sir.I'` where needed); default: every result of the declared modules
-            pars (str/list): the parameters, by name; default: every parameter that has bounds
+            results (str/list/func): the results, by name (`'I'`, or `'sir.I'` where needed); or a function of the run sim that returns a number or an array (e.g. a cost); default: every result of the declared modules
+            pars (str/list): the parameters, by name (or one value of one, `'beta[a]'`); default: every parameter that has bounds
 
         Returns:
-            An `sc.objdict` by parameter, then module, then result, of the derivative at each step
+            An `sc.objdict` by parameter, then module, then result, of the derivative at each step; for a function, by parameter, of the derivative of what it returns
 
         Example:
             ```python
@@ -1323,6 +1326,7 @@ class Sim(ss.Base):
             sim = ss.Sim(sir, unit='day', stop=100)
             grad = sim.gradient('I')
             grad.beta.sir.I # How the number infectious at each step changes with beta
+            sim.gradient(lambda sim: sim.results.sir.infection.sum()).beta # How the total infections change with it
             ```
         """
         sim = self.new(verbose=0).init()
@@ -1335,7 +1339,7 @@ class Sim(ss.Base):
         Needs JAX, a sim with `solver='ode'` that the kernels run whole, data, and a likelihood for every data series.
 
         Args:
-            pars (str/list): the parameters, by name (default: every one with bounds)
+            pars (str/list): the parameters, by name (default: every one with bounds); one with several values has a value for each, named as `sim.fit()` names them
             likelihood (dict): the likelihood of each data series, if not declared on its outcome
 
         Example:
