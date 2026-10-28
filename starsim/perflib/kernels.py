@@ -30,7 +30,7 @@ __all__ = ['Program', 'Register', 'Shifts', 'opcodes']
 # The operations a rate can be made of
 CONST, COUNT, FRAC, EXPOSURE, ADD, SUB, MUL, DIV, POW, MIN, MAX, LT, LE, GT, GE, EXP, LOG, SQRT, ABS, SIN, COS, TOTAL = range(22) # TOTAL is a count in the whole population, every place (I.total)
 CONVEY = 22 # Not in a rate: a conveyor (its flow, then its slots; see convey()); kept out of the program's fields, since every field adds to the cost of each call that is passed it
-LOAD, STORE = 23, 24 # A part used more than once in a rate: STORE copies the top of the stack into register arg, which LOAD puts back on top; the registers are the last rows of the stack (row depth-1-arg), and each rate fills its own before using them, so a rate can be worked out on its own
+LOAD, STORE = 23, 24 # A part used more than once: STORE takes the top of the stack into register arg, and LOAD puts a copy back on top; the registers are the last rows of the stack (row depth-1-arg). The parts used by several rates are worked out first, in the operations before the first rate's (starts[0] > 0); a part used twice in one rate, in the rate
 opcodes = {'+':ADD, '-':SUB, '*':MUL, '/':DIV, '**':POW, 'minimum':MIN, 'maximum':MAX, 'exp':EXP, 'log':LOG, 'sqrt':SQRT, 'absolute':ABS, 'sin':SIN, 'cos':COS,
            'less':LT, 'less_equal':LE, 'greater':GT, 'greater_equal':GE}
 
@@ -991,6 +991,7 @@ def place_rates(ys, p, a, b, rates, stack, expo):
                     stack[top, 0] = stack[len(stack)-1-arg, 0]
                 elif op == STORE:
                     stack[len(stack)-1-arg, 0] = stack[top, 0]
+                    top -= 1
                 elif op >= EXP:
                     stack[top, 0] = unary(op, stack[top, 0])
                 else:
@@ -1310,6 +1311,7 @@ def sparse_events(y, p, w, active, first, last, dt, flows, seed, maps):
                             stack[top, 0] = stack[len(stack)-1-arg, 0]
                         elif op == STORE:
                             stack[len(stack)-1-arg, 0] = stack[top, 0]
+                            top -= 1
                         elif op >= EXP:
                             stack[top, 0] = unary(op, stack[top, 0])
                         else:
@@ -1990,9 +1992,9 @@ def step(rng, y, p, w, dt, n_sub, solver, flows, tables, row):
                             for g in range(ng):
                                 exposures[e, g] += c*prev[p.levels[t, g]]
 
-                for f in range(nf): # The rates that are worked out from these, as operations on a stack
+                for f in range(-1, nf): # The rates that are worked out from these, as operations on a stack, after the parts several share (f = -1)
                     top = -1
-                    for k in range(p.starts[f], p.starts[f+1]):
+                    for k in range(0 if f < 0 else p.starts[f], p.starts[f+1]):
                         op = p.ops[k]
                         arg = p.args[k]
                         if op == CONST:
@@ -2029,6 +2031,7 @@ def step(rng, y, p, w, dt, n_sub, solver, flows, tables, row):
                         elif op == STORE:
                             for g in range(ng):
                                 stack[len(stack)-1-arg, g] = stack[top, g]
+                            top -= 1
                         elif op >= EXP: # A function of one value
                             for g in range(ng):
                                 stack[top, g] = unary(op, stack[top, g])
@@ -2036,7 +2039,7 @@ def step(rng, y, p, w, dt, n_sub, solver, flows, tables, row):
                             top -= 1
                             for g in range(ng):
                                 stack[top, g] = binary(op, stack[top, g], stack[top+1, g])
-                    if top >= 0:
+                    if top >= 0 and f >= 0:
                         for g in range(ng):
                             rates[f, g] = stack[0, g]*p.mult[f, g]
 
