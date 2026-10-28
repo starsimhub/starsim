@@ -8,6 +8,7 @@ import scipy.sparse as sps
 import sciris as sc
 import starsim as ss
 from .engine import Bunch, CountState, Engine, StockCtx, add_rows, at_ends, by_level, no_tables
+from ..perflib import ode
 
 __all__ = ['Compartmental', 'synced_event']
 
@@ -41,6 +42,8 @@ def choose_kernels(owner, runs, seconds):
     The kernels for a run of a program (or `runs` runs), compiled or as plain Python, chosen once for a run (see `ss.kernels.choose()`), for an
     engine or a crossing (`owner`, which keeps the choice as `compiled`); `seconds()` is about how long the run would take as plain Python
     """
+    if runs == 1 and owner.program is not None and ode.wanted(owner.sim.solver, owner.program, owner.y): # The ODE in NumPy, which needs no compiling
+        return ode
     if runs == 1 and owner.compiled is not None:
         return ss.kernels if owner.compiled else ss.kernels.uncompiled()
     if owner.program is None: # Before the program is made (the events of a register at the start), as the kernels are now

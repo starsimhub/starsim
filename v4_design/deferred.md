@@ -235,6 +235,7 @@ Looked at whether v4 should support modeling paradigms beyond the ODE, chain-bin
 
 Work that was looked at and decided against, with why, so that it is not proposed again without a new reason.
 
+- **Compiling the kernels per solver** (October 28): a first ODE run compiled in 37 s instead of 136 s, but `ss.compile()` doubled to about 680 s, Gillespie gained nothing, and it needed a Numba compiler pass on Numba's internals; the ODE in NumPy needs no compiling at all. See `oct27/worklogs/atomica_speed_optB.md`.
 - **camdl's `overdispersed`, `deterministic`, and `balance` as features, and more built-in likelihoods** (beta, beta-binomial, zero-inflated negative binomial, a normal whose spread depends on the model). Each is a keyword that one or two benchmark models need, and each is a few lines of code with what v4 already has: a connector that sets a value each step, a function of the sim, a module written as code, and a likelihood given as a function `fn(observed, model)`. Cliff (2026-10-25): no more complexity or built-in features, but a sensible, easy path for unanticipated extensions; that path is [tutorial G8](../docs/tutorials/g8_extending.qmd) and the tutorial `docs/tutorials/g8_extending.qmd`.
 
 - **NumPy versions of the agent passes, to avoid their first-use compile.** An agent-based run compiles about 5 s of Numba passes (`census`, `count_alive`, `due_alive` and others) once per install; Cliff (2026-10-21): "5 s as a one-off compile is acceptable". So no second implementation of them (about 150–250 lines) for small populations.
