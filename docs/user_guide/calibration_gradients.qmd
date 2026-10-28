@@ -56,6 +56,33 @@ A higher β brings the epidemic forward: more cases before the peak, and fewer a
 
 The result is indexed by parameter, then module, then result: `grad.beta.measles.cases` is an array with one value per time step.
 
+`sim.gradient()` also takes a function of the run sim, which can be anything that returns a number or an array, e.g. a total cost. Its gradient is worked out from the same run in JAX, so it needs no JAX of your own:
+
+```{python}
+total = lambda sim: sim.results.measles.cases.sum()
+truth.gradient(total)
+```
+
+## Many values
+
+A parameter with a value for each level of a stratification (`ss.par(ss.by(patch=[...]), bounds=...)`), an array, or a time series has a gradient for each value, named as a fit names them. A time series fitted value by value is a way to estimate a transmission rate that changes in time, with no shape assumed for it:
+
+```{python}
+S, E, I, R = ss.states('S E I R')
+days = list(range(0, 365, 28)) # A value every four weeks, in between which it changes linearly
+beta = ss.par(ss.timeseries(days, [1.5]*len(days), 'linear'), bounds=[0.5, 4])
+onset = E >> I @ ss.days(10)
+cases = ss.outcome(0.5*onset, likelihood=ss.poisson()) # The share reported, taken as known here
+measles_t = ss.Disease(S >> E @ beta*I, onset, I >> R @ ss.days(8), cases, init=dict(I=0.0001, R=0.9))
+smooth = lambda pars: 100*np.sum(np.diff(pars['beta'].values)**2) # Large changes from one value to the next are unlikely
+fit_t = ss.Sim(measles_t, data=data, **pars).fit(penalty=smooth, verbose=False)
+fit_t.table[['par', 'best']]
+```
+
+The data were made with a `beta` of 1.9 throughout, which the fit finds. Without `penalty=`, the values early in the year, when there are few cases, would wander, since the data say little about them; the penalty keeps each close to its neighbors.
+
+With many values, what the fit minimizes is differentiated in reverse mode, which takes one pass whatever the number of values, and a long run is checkpointed so that the memory it takes grows only as the square root of its length. Neither is a setting.
+
 ## The log-density
 
 `sim.log_density()` gives the log of the posterior density of the fitted parameters (the log-likelihood of the data, plus the log of the priors), as a function of their values, together with its gradient. It is what a sampler or optimizer of your own would use:

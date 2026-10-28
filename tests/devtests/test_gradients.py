@@ -333,6 +333,92 @@ def test_parallel_pars():
     return msim
 
 
+@sc.timer()
+def test_several_values():
+    sc.heading('Testing gradients with respect to a value for each level and a time series, in forward and reverse mode')
+    def by_place(b, data=None):
+        beta = ss.par(ss.by(patch=list(b)), bounds=[0.1, 0.8], name='beta')
+        S, I, R = ss.states('S I R')
+        sir = ss.Disease(infection=S >> I @ beta*I, recovery=I >> R @ 0.1, init_n=dict(I=ss.by(patch=[10, 10, 10])), name='sir')
+        sir.stratify(patch=['a', 'b', 'c'])
+        return ss.Sim(sir, unit='day', start=0, stop=60, data=data, **kw)
+
+    # A gradient for each level, of the results and of a function of the sim, as finite differences give them
+    b = np.array([0.3, 0.4, 0.5])
+    grad = by_place(b).gradient('I', pars='beta')
+    cost = lambda sim: float(np.sum(sim.results.sir.infection))
+    slopes = by_place(b).gradient(cost)
+    assert list(grad.keys()) == list(slopes.keys()) == ['beta[a]', 'beta[b]', 'beta[c]']
+    h = 1e-6
+    for k,label in enumerate(['a', 'b', 'c']):
+        sims = [by_place(b + sign*h*np.eye(3)[k]).run() for sign in [1, -1]]
+        fd = (sims[0].results.sir.I.values - sims[1].results.sir.I.values)/(2*h)
+        assert np.abs(grad[f'beta[{label}]'].sir.I - fd).max() < 1e-5*np.abs(fd).max()
+        assert np.isclose(slopes[f'beta[{label}]'], (cost(sims[0]) - cost(sims[1]))/(2*h), rtol=1e-5)
+
+    # The log-density and a fit by gradients, whose gradient is the same in either mode, checkpointed or not
+    truth = by_place([0.25, 0.4, 0.35]).run().results.sir.infection
+    df = pd.DataFrame([dict(time=t, patch=lab, infection=np.asarray(truth.select(patch=lab))[t-4:t+1].sum()) for lab in ['a', 'b', 'c'] for t in range(5, 61, 5)]).set_index('time')
+    sim = by_place([0.3]*3, data=ss.simdata(df))
+    ld = sim.log_density(likelihood=dict(infection=ss.poisson()))
+    assert ld.names == ['beta[a]', 'beta[b]', 'beta[c]']
+    fd = [(ld(ld.x0 + 1e-6*e) - ld(ld.x0 - 1e-6*e))/2e-6 for e in np.eye(3)]
+    assert np.allclose(ld.grad(ld.x0), fd, rtol=1e-5)
+    x = ld.x0*1.1
+    out = {}
+    for name,rmin,ckpt in [('forward', np.inf, np.inf), ('reverse', 0, np.inf), ('checkpointed', 0, 0)]:
+        reverse_min, checkpoint_bytes = ss.fit.reverse_min, ss.gradients.checkpoint_bytes
+        ss.fit.reverse_min, ss.gradients.checkpoint_bytes = rmin, ckpt
+        try:
+            problem = ss.fit.Problem(sim, likelihood=dict(infection=ss.poisson()), verbose=0)
+            out[name] = problem.with_gradient(x)
+            if name == 'reverse': # With more substeps than at the start: taken again with more
+                out['more'] = problem.with_gradient(x*2)
+        finally:
+            ss.fit.reverse_min, ss.gradients.checkpoint_bytes = reverse_min, checkpoint_bytes
+    for name in ['reverse', 'checkpointed']:
+        assert np.isclose(out[name][0], out['forward'][0], rtol=1e-10) and np.allclose(out[name][1], out['forward'][1], rtol=1e-8), name
+    assert np.isclose(out['more'][0], problem.objective(x*2), rtol=1e-8)
+    fit = sim.fit(likelihood=dict(infection=ss.poisson()), method='l-bfgs-b', verbose=0)
+    assert np.allclose(fit.pars.beta.values, [0.25, 0.4, 0.35], rtol=1e-3) # Fitted by gradients, which a value for each level used not to have
+
+    # A duration for each level, whose rate (one over it) is not linear in it, is worked out exactly, as a single value is
+    S, I, R = ss.states('S I R')
+    dur = ss.par(ss.by(patch=[ss.days(8), ss.days(10), ss.days(12)]), bounds=[ss.days(4), ss.days(20)], name='dur')
+    sir = ss.Disease(infection=S >> I @ 0.3*I, recovery=I >> R @ dur, init_n=dict(I=ss.by(patch=[10, 10, 10])), name='sir')
+    sir.stratify(patch=['a', 'b', 'c'])
+    ld = ss.Sim(sir, unit='day', start=0, stop=60, data=ss.simdata(df), **kw).log_density(likelihood=dict(infection=ss.poisson()))
+    x = ld.x0*1.3 # Away from where the numbers in the run were worked out
+    fd = [(ld(x + 1e-6*e) - ld(x - 1e-6*e))/2e-6 for e in np.eye(3)]
+    assert ld.names == ['dur[a]', 'dur[b]', 'dur[c]'] and np.allclose(ld.grad(x), fd, rtol=1e-5)
+    run = ss.Sim(sir, unit='day', start=0, stop=60, data=ss.simdata(df), pars={'dur': ss.by(patch=[ss.days(v) for v in x])}, **kw).run()
+    assert np.isclose(ld(x), ss.fit.loglik(run, likelihood=dict(infection=ss.poisson())) + sum(ss.fit.logprior(dur, v) for v in x), rtol=1e-9) # As a run of the sim gives it
+
+    # A time series, fitted value by value
+    days = [0, 20, 40, 60]
+    def in_time(vals, data=None):
+        beta = ss.par(ss.timeseries(days, list(vals), 'linear'), bounds=[0.05, 1], name='beta')
+        S, I, R = ss.states('S I R')
+        sir = ss.Disease(infection=S >> I @ beta*I, recovery=I >> R @ 0.1, init_n=dict(I=10), name='sir')
+        return ss.Sim(sir, unit='day', start=0, stop=80, data=data, **kw)
+    true = [0.4, 0.2, 0.3, 0.15]
+    truth = in_time(true).run().results.sir.infection
+    df = pd.DataFrame(dict(infection=[np.asarray(truth)[t-4:t+1].sum() for t in range(5, 81, 5)]), index=range(5, 81, 5))
+    fit = in_time([0.3]*4, data=ss.simdata(df)).fit(likelihood=dict(infection=ss.poisson()), verbose=0)
+    assert fit.method == 'l-bfgs-b' and list(fit.table.par) == ['beta[0]', 'beta[20]', 'beta[40]', 'beta[60]']
+    assert isinstance(fit.pars.beta, ss.timeseries) and np.allclose(fit.pars.beta.values, true, rtol=1e-3)
+
+    # A likelihood that is a function, which the log-likelihood in JAX does not cover: an error, unless Python in the loop is asked for
+    poisson = lambda observed, model: observed*np.log(model) - model
+    sim = in_time([0.3]*4, data=ss.simdata(df))
+    with pytest.raises(ss.CapabilityError, match='nopython=False'):
+        sim.fit(likelihood=dict(infection=poisson), method='l-bfgs-b', verbose=0)
+    problem = ss.fit.Problem(sim, likelihood=dict(infection=poisson), nopython=False, verbose=0)
+    value, grad = problem.with_gradient(problem.x0)
+    assert np.isfinite(value) and np.all(np.isfinite(grad))
+    return fit
+
+
 if __name__ == '__main__':
     do_plot = True
     T = sc.timer()
@@ -347,5 +433,6 @@ if __name__ == '__main__':
     cross = test_crossing()
     post_data = test_posterior_data()
     msim = test_parallel_pars()
+    several = test_several_values()
 
     T.toc()

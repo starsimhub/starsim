@@ -709,7 +709,7 @@ def pmmh(logpost, z0, draws=1000, warmup=1000, chains=4, particles=None, seed=No
     return out, logdens, accepted, n
 
 
-def nuts(logdensity, z0, draws=500, warmup=500, chains=4, traced=False, seed=None, verbose=True):
+def nuts(logdensity, z0, draws=500, warmup=500, chains=4, traced=False, forward=True, seed=None, verbose=True):
     """
     Sample from a posterior with the No-U-Turn sampler (NUTS, from BlackJAX), with Stan's warm-up of the step size and the mass matrix
 
@@ -719,7 +719,8 @@ def nuts(logdensity, z0, draws=500, warmup=500, chains=4, traced=False, seed=Non
     another. With `traced=True`, as a JAX function (see `ss.gradients.Density`), so that the whole
     of the sampling is compiled, with the chains run together (each on cores of its own); its
     gradient is taken in forward mode (one direction per parameter), which for a few parameters
-    is much cheaper than reverse mode through the steps of an ODE.
+    is much cheaper than reverse mode through the steps of an ODE, or with `forward=False` in
+    reverse mode (one pass whatever their number, for many parameters).
 
     Args:
         logdensity (func): called with a point (an array, on an unbounded scale); returns the log of the posterior density there and its gradient (or, with `traced=True`, the log-density alone, as a JAX function)
@@ -728,6 +729,7 @@ def nuts(logdensity, z0, draws=500, warmup=500, chains=4, traced=False, seed=Non
         warmup (int): the draws for the warm-up of each chain, which are not kept
         chains (int): the number of chains
         traced (bool): whether `logdensity` is a JAX function
+        forward (bool): for a JAX function, whether its gradient is taken in forward mode (else reverse mode, for which it has to be differentiable)
         seed (int): the random seed
         verbose (bool): whether to say what is being done
 
@@ -744,7 +746,7 @@ def nuts(logdensity, z0, draws=500, warmup=500, chains=4, traced=False, seed=Non
     try:
         key = jax.random.key(seed if seed is not None else 0)
         if traced:
-            return nuts_traced(jax, blackjax, logdensity, starts, key, draws, warmup, verbose)
+            return nuts_traced(jax, blackjax, logdensity, starts, key, draws, warmup, verbose, forward=forward)
         shape = (jax.ShapeDtypeStruct((), jnp.float64), jax.ShapeDtypeStruct((d,), jnp.float64))
 
         def host(z):
@@ -787,24 +789,27 @@ def nuts(logdensity, z0, draws=500, warmup=500, chains=4, traced=False, seed=Non
         jax.config.update('jax_enable_x64', x64)
 
 
-def nuts_traced(jax, blackjax, logdensity, starts, key, draws, warmup, verbose):
+def nuts_traced(jax, blackjax, logdensity, starts, key, draws, warmup, verbose, forward=True):
     """ `nuts()` with `traced=True`: the whole of the sampling compiled, with the chains run together """
     jnp = jax.numpy
     chains, d = starts.shape
     logdensity = jax.jit(logdensity) # Traced once, rather than wherever the sampler uses it
 
-    @jax.custom_vjp
-    def logp(z):
-        return logdensity(z)
+    if forward:
+        @jax.custom_vjp
+        def logp(z):
+            return logdensity(z)
 
-    def forward(z): # The value and every partial derivative, in forward mode
-        values, slopes = jax.vmap(lambda e: jax.jvp(logdensity, (z,), (e,)))(jnp.eye(d))
-        return values[0], slopes
+        def slopes(z): # The value and every partial derivative, in forward mode
+            values, slopes = jax.vmap(lambda e: jax.jvp(logdensity, (z,), (e,)))(jnp.eye(d))
+            return values[0], slopes
 
-    def backward(slopes, cotangent):
-        return (cotangent*slopes,)
+        def backward(slopes, cotangent):
+            return (cotangent*slopes,)
 
-    logp.defvjp(forward, backward)
+        logp.defvjp(slopes, backward)
+    else: # In reverse mode, as JAX takes it
+        logp = logdensity
 
     def one_chain(key, start):
         warm_key, run_key = jax.random.split(key)
@@ -1351,6 +1356,88 @@ def bounded_pars(probe, pars=None, unused=()):
     return fitted, contacts
 
 
+def expand(probe, fitted):
+    """
+    Each parameter that has several values as one entry for each, as a fit fits them and a gradient is taken with respect to them
+
+    A value for each level of one stratification (`ss.par(ss.by(patch=[...]), bounds=)`) is "beta[a]", "beta[b]", ...,
+    with the same bounds and prior; an array with bounds for each element (`ss.par(np.array([...]), bounds=[lows, highs])`)
+    is "knots[0]", "knots[1]", ..., except the elements whose bounds are equal (fixed); and a time series
+    (`ss.par(ss.timeseries(...), bounds=)`) is "R[0]", "R[7]", ..., by its times. A parameter without bounds has every element.
+
+    Returns the parameters by name, with those as their entries; the position of each level, by name; and the parameter's name,
+    the position, and the bounds of each element (of an array or a time series), by name
+    """
+    out, levels, elements = sc.objdict(), {}, {}
+    for key,p in fitted.items():
+        raw = p.raw
+        if isinstance(raw, ss.by):
+            for i,label in enumerate(vector_labels(probe, raw, key)):
+                out[f'{key}[{label}]'] = p
+                levels[f'{key}[{label}]'] = i
+        elif isinstance(raw, (np.ndarray, ss.timeseries)):
+            n = len(raw.values) if isinstance(raw, ss.timeseries) else raw.size
+            bounds = p.bounds if p.bounds is not None else [-np.inf, np.inf]
+            lows, highs = [np.broadcast_to(np.asarray([bound_value(v, element(raw, 0)) for v in np.ravel(b)] if isinstance(b, (list, np.ndarray)) else bound_value(b, element(raw, 0)), dtype=float), n) for b in bounds]
+            labels = [str(t) for t in raw.times] if isinstance(raw, ss.timeseries) else range(n)
+            for i,label in zip(np.flatnonzero(lows < highs), np.asarray(labels, dtype=object)[lows < highs]):
+                out[f'{key}[{label}]'] = p
+                elements[f'{key}[{label}]'] = (key, i, lows[i], highs[i])
+        else:
+            out[key] = p
+    return out, levels, elements
+
+
+def element(raw, i):
+    """ Element i of an array, or value i of a time series """
+    return raw.values[i] if isinstance(raw, ss.timeseries) else raw.flat[i]
+
+
+def with_element(raw, i, val, whole=None):
+    """ An array or a time series with element i set to val: in `whole` if given (a copy made by an earlier call), else in a copy of raw """
+    if whole is None:
+        if isinstance(raw, ss.timeseries):
+            whole = ss.timeseries(list(raw.times), list(raw.values), mode=raw.mode, period=raw.period)
+        else:
+            whole = np.array(raw, dtype=float)
+    if isinstance(whole, ss.timeseries):
+        whole.values[i] = val
+    else:
+        whole.flat[i] = val
+    return whole
+
+
+def to_pars(names, fitted, x, types, elements=None, external=None):
+    """ The values of the model's parameters, for `sim.new(pars=...)`: a level by its name ("beta[a]"), an array or a time series whole (with the elements not fitted as they were); the values of a likelihood's own parameters are set on them """
+    out = {}
+    for k,(name,p,val) in enumerate(zip(names, fitted.values(), x)):
+        cls = types[k]
+        val = cls(val) if cls is not None else float(val)
+        if external is not None and external[k]:
+            p.value = val
+        elif elements and name in elements:
+            key, i = elements[name][:2]
+            out[key] = with_element(p.raw, i, val, out.get(key))
+        else:
+            out[name] = val
+    return out
+
+
+def entry(name, p, levels=None, elements=None):
+    """ The value of an entry of `expand()`, as the parameter holds it (e.g. typed) """
+    if levels and name in levels:
+        return sc.tolist(p.raw.values)[levels[name]]
+    elif elements and name in elements:
+        return element(p.raw, elements[name][1])
+    return p.raw
+
+
+def start_values(raws):
+    """ The values of entries of `expand()` as numbers, and the type of each typed one (to keep its unit), or None """
+    x0 = np.array([raw.value if isinstance(raw, ss.TimePar) else raw for raw in raws], dtype=float)
+    return x0, [type(raw) if isinstance(raw, ss.TimePar) else None for raw in raws]
+
+
 def sensitivity(sim, pars=None, results=None, n=100, rand_seed=None, verbose=None):
     """
     Which parameters matter: Latin hypercube samples over the bounds of the parameters, with the partial rank correlation of each with a summary of each result
@@ -1448,7 +1535,7 @@ def profile(sim, par, values=None, level=0.95, **kwargs):
         ```
     """
     kwargs.setdefault('verbose', 0)
-    problem = Problem(sim, **{k:kwargs[k] for k in ['pars', 'data', 'weights', 'likelihood', 'gof', 'penalty', 'n_runs', 'reseed', 'rand_seed'] if k in kwargs}, verbose=0)
+    problem = Problem(sim, **{k:kwargs[k] for k in ['pars', 'data', 'weights', 'likelihood', 'gof', 'penalty', 'n_runs', 'reseed', 'rand_seed', 'nopython'] if k in kwargs}, verbose=0)
     name_of = lambda key: key.rpartition('[')[0] if key in problem.levels else key
     if par not in problem.names[:problem.n_model] and values is None:
         errormsg = f'profile() takes a parameter of the model that is fitted (one with bounds), or its values=; "{par}" is not one of {sc.strjoin(dict.fromkeys(map(name_of, problem.names)))}'
@@ -1618,8 +1705,9 @@ class Problem:
 
     Args: as for `sim.fit()`
     """
-    def __init__(self, sim, pars=None, data=None, weights=None, likelihood=None, gof=None, penalty=None, n_runs=None, reseed=None, rand_seed=None, verbose=None):
+    def __init__(self, sim, pars=None, data=None, weights=None, likelihood=None, gof=None, penalty=None, n_runs=None, reseed=None, rand_seed=None, nopython=True, verbose=None):
         base = sim.new(verbose=0)
+        self.nopython = nopython
         self.rand_seed = sc.ifelse(rand_seed, base.pars.rand_seed) # A fit is reproducible, as a sim is
         if data is not None:
             base.data = data
@@ -1642,22 +1730,8 @@ class Problem:
         unused = [id(val) for mod in probe.declared for oc in mod.graph.outcomes.values() if oc.likelihood is not None for val in lik_pars(oc.likelihood).values() if id(val) not in used]
         fitted, contacts = bounded_pars(probe, pars, unused)
         settings = [key for key in fitted if key in probe.pars.bounded()] # Sim settings, for which the sim is built again
-        self.levels = levels = {} # For a parameter with a value per level (ss.par(ss.by(patch=[...]), bounds=)): each level is fitted, with the same bounds and prior, as "beta[a]", "beta[b]", ...
-        for key,p in list(fitted.items()):
-            if isinstance(p.raw, ss.by):
-                labels = vector_labels(probe, p.raw, key)
-                del fitted[key]
-                for i,label in enumerate(labels):
-                    fitted[f'{key}[{label}]'] = p
-                    levels[f'{key}[{label}]'] = i
-        self.elements = elements = {} # For a parameter whose value is an array, with bounds for each element (ss.par(np.array([...]), bounds=[lows, highs])): each element is fitted, as "knots[0]", "knots[1]", ..., except those whose bounds are equal (fixed)
-        for key,p in list(fitted.items()):
-            if isinstance(p.raw, np.ndarray):
-                del fitted[key]
-                lows, highs = [np.broadcast_to(b, p.raw.shape) for b in p.bounds]
-                for i in np.flatnonzero(lows < highs):
-                    fitted[f'{key}[{i}]'] = p
-                    elements[f'{key}[{i}]'] = (key, i, lows.flat[i], highs.flat[i])
+        fitted, self.levels, self.elements = expand(probe, fitted) # A value for each level, an array, or a time series: each value fitted on its own
+        levels, elements = self.levels, self.elements
         self.n_model = len(fitted)
         if use_lik:
             for col,lik in liks.items(): # A parameter of a likelihood given at calibration time, with bounds, is fitted too
@@ -1675,10 +1749,9 @@ class Problem:
         self.names = names = list(fitted.keys())
         self.products = product_pairs(probe, names[:self.n_model]) # Parameters that the data cannot tell apart, from the model
         self.penalty_fn = penalty
-        raws = [sc.tolist(p.raw.values)[levels[name]] if name in levels else p.raw.flat[elements[name][1]] if name in elements else p.raw for name,p in fitted.items()]
+        raws = [entry(name, p, levels, elements) for name,p in fitted.items()]
         self.lows, self.highs = [np.array([elements[name][2+k] if name in elements else bound_value(p.bounds[k], raw) for name,p,raw in zip(names, fitted.values(), raws)], dtype=float) for k in [0, 1]]
-        self.x0 = np.array([raw.value if isinstance(raw, ss.TimePar) else raw for raw in raws], dtype=float)
-        self.types = [type(raw) if isinstance(raw, ss.TimePar) else None for raw in raws] # Keep the unit of typed values
+        self.x0, self.types = start_values(raws) # Keep the unit of typed values
         self.logs = logs = (self.lows > 0) & (self.highs/np.maximum(self.lows, 1e-300) >= 10) # Wide positive bounds are searched on a log scale
         if verbose and logs.any():
             print(f'Searching on a log scale: {sc.strjoin(np.array(names)[logs])}')
@@ -1697,8 +1770,9 @@ class Problem:
         self.runner = runner = base.new() # If the sim is nothing but compartments, it is built once and restarted for each evaluation
         runner.data = base.data
         self.can_restart = runner.init().kernel_only() and not contacts and not settings # The mixing is worked out when the sim is built, as are its settings, so a new value needs a new sim
-        self.no_grad = ss.gradients.reason(runner) or ('a parameter has a value for each level' if levels else 'a parameter is an array' if elements else None) or (f'{contacts[0]} sets the mixing when the sim is built' if contacts else None) or (f'{settings[0]} is a setting of the sim' if settings else None) # Why there are no gradients, if there are not
+        self.no_grad = ss.gradients.reason(runner) or (f'{contacts[0]} sets the mixing when the sim is built' if contacts else None) or (f'{settings[0]} is a setting of the sim' if settings else None) # Why there are no gradients, if there are not
         self.trials = [] # Every evaluation
+        self._density = None # The log-likelihood in JAX, once built: see jax_density()
         return
 
     def choose(self, method=None):
@@ -1731,17 +1805,8 @@ class Problem:
         return method
 
     def to_pars(self, x):
-        """ The values of the model's parameters, for `sim.new(pars=...)` (an array whole, with the elements not fitted as they were); the values of a likelihood's own parameters are set on them """
-        out = {}
-        for name,p,val,cls,ext in zip(self.names, self.fitted.values(), x, self.types, self.external):
-            if ext:
-                p.value = float(val)
-            elif name in self.elements:
-                key, i = self.elements[name][:2]
-                out.setdefault(key, np.array(p.raw, dtype=float)).flat[i] = val
-            else:
-                out[name] = cls(val) if cls is not None else float(val)
-        return out
+        """ The values of the model's parameters, for `sim.new(pars=...)`: see `to_pars()` """
+        return to_pars(self.names, self.fitted, x, self.types, self.elements, self.external)
 
     def restart(self, x):
         """ The runner, restarted with these values """
@@ -1779,11 +1844,72 @@ class Problem:
         self.trials.append(dict(zip(self.names, x), objective=value))
         return value
 
+    def jax_density(self):
+        """
+        Minus the log-likelihood and its gradient as one compiled function in JAX (see `ss.gradients.Density`), or None if the
+        model is not covered (or not every series has a likelihood); built the first time it is asked for. With many values it is
+        differentiated in reverse mode, in one pass, rather than in one direction per value
+        """
+        if self._density is None:
+            self._density = False
+            if self.use_lik:
+                try:
+                    density = ss.gradients.Density(self.runner, self.fitted, self.x0, self.restart, likelihood=self.likelihood, weights=self.weights, external=self.external, bounds=(self.lows, self.highs))
+                except ss.gradients.Unsupported as E:
+                    self.python_in_loop(f'the log-likelihood in JAX does not cover {E} yet', 'the gradients')
+                    return None
+                density.priors = False
+                jax = ss.gradients.jax()
+                d = len(self.x0)
+                reverse = d*sum(X['y'].size for X in density.X0) >= reverse_min # Forward mode takes about as long as the values times the compartments; reverse mode, about the same whatever the number of values
+                adaptive = [run for run in density.runs if not run.n_sub] # The runs whose substeps are worked out as the run goes
+                compiled = []
+                if reverse: # Each step takes a fixed number of substeps, as reverse mode needs: as many as the run at the start needs (an optimizer, unlike a sampler, needs no one function over the bounds), and more if a step needs them (see call())
+                    with jax.enable_x64(True):
+                        need = float(jax.jit(lambda x: density.evaluate(x)[1])(jax.numpy.asarray(self.x0, dtype=float)))
+                    density.reverse()
+                    for run in adaptive:
+                        run.n_max = int(2**np.ceil(np.log2(max(need, 1))))
+                    def fn(x):
+                        (value, need), grad = jax.value_and_grad(lambda x: density.evaluate(x), has_aux=True)(x)
+                        return -value, -grad, need
+                else:
+                    def fn(x): # Every partial derivative, in forward mode
+                        (values, needs), (slopes, _) = jax.vmap(lambda e: jax.jvp(density.evaluate, (x,), (e,)))(jax.numpy.eye(d))
+                        return -values[0], -slopes, 0
+                def call(x):
+                    with jax.enable_x64(True):
+                        while True:
+                            if not compiled:
+                                ss.perflib.compiling('the gradient of the log-likelihood', 'JAX', 0.5, 5)
+                                compiled.append(jax.jit(fn))
+                            value, grad, need = compiled[0](jax.numpy.asarray(x, dtype=float))
+                            if not reverse or not adaptive or need <= min(run.n_max for run in adaptive):
+                                return float(value), np.array(grad, dtype=float) # A copy, since JAX's is read-only
+                            for run in adaptive: # Taken again with more substeps, rounded up so that it is compiled again only a few times
+                                run.n_max = max(run.n_max, int(2**np.ceil(np.log2(float(need)))))
+                            compiled.clear()
+                self._density = call
+        return self._density or None
+
+    def python_in_loop(self, why, what):
+        """ Take something (e.g. the gradients) with Python in the loop, which is much slower, only if `nopython=False`; otherwise say why it can't be taken in JAX """
+        if self.nopython:
+            errormsg = f'The fit would take {what} with Python in the loop, which is much slower, since {why}; to fit this way anyway, use sim.fit(..., nopython=False)'
+            raise ss.CapabilityError(errormsg)
+        if self.verbose:
+            print(f'Note: taking {what} with Python in the loop, which is slower, since {why}')
+        return
+
     def with_gradient(self, x):
-        """ The objective and its gradient, through the run in JAX """
-        value, derivs = ss.gradients.gradient(self.runner, self.restart, x, self.measure)
-        derivs = np.array(derivs, dtype=float)
-        if self.use_map: # The slope of the priors, numerically
+        """ The objective and its gradient, through the run in JAX: the log-likelihood as one function in JAX if the model allows (see `jax_density()`), else the run differentiated with Python either side (see `ss.gradients.gradient()`) """
+        density = self.jax_density()
+        if density is not None:
+            value, derivs = density(x)
+        else:
+            value, derivs = ss.gradients.gradient(self.runner, self.restart, x, self.measure)
+            derivs = np.array(derivs, dtype=float)
+        if self.use_map or self.penalty_fn is not None: # The slope of the priors and the penalty, numerically
             hs = 1e-6*np.maximum(np.abs(x), 1e-6)
             derivs += np.array([(self.penalty(x + h*e) - self.penalty(x - h*e))/(2*h) for h,e in zip(hs, np.eye(len(x)))])
         value = float(value) + self.penalty(x)
@@ -1963,9 +2089,9 @@ class Problem:
                 key = name.rpartition('[')[0]
                 vals = best_pars[key].values if key in best_pars else []
                 best_pars[key] = ss.by(**{p.raw.dim:list(vals) + [val]})
-            elif name in self.elements: # An array, whole
+            elif name in self.elements: # An array or a time series, whole
                 key, i = self.elements[name][:2]
-                best_pars.setdefault(key, np.array(p.raw, dtype=float)).flat[i] = val
+                best_pars[key] = with_element(p.raw, i, val, best_pars.get(key))
             else:
                 best_pars[name] = val
         diagnostics = sc.objdict(divergences=out.get('divergences'), acceptance=out.get('acceptance'), band=out.get('band'))
@@ -2238,21 +2364,23 @@ def fit_nuts(problem, draws=500, warmup=500, chains=4, scan=None, **kwargs):
         density = ss.gradients.Density(p.runner, p.fitted, p.x0, p.restart, likelihood=p.likelihood, weights=p.weights, external=p.external, bounds=(p.lows, p.highs))
     except ss.gradients.Unsupported as E:
         density = None
-        if p.verbose:
-            print(f'Note: sampling with Python in the loop, which is slower, since the log-density in JAX does not cover {E} yet')
+        p.python_in_loop(f'the log-density in JAX does not cover {E} yet', 'the posterior')
     if density is not None:
         jnp = ss.gradients.jax().numpy
+        forward = len(p.names)*sum(X['y'].size for X in density.X0) < reverse_min # As for a best fit (see Problem.jax_density())
+        if not forward:
+            density.reverse()
         def logpost_jax(z):
             share = jnp.clip(1/(1 + jnp.exp(-z)), 1e-12, 1 - 1e-12)
             pos = base_lows + span*share
             x = jnp.where(logs, jnp.exp(pos), pos)
             return density(x) + jnp.log(span*share*(1 - share)*jnp.where(logs, x, 1.0)).sum()
-        zs, logdens, divergent = nuts(logpost_jax, z0, traced=True, seed=p.rand_seed, verbose=p.verbose, **sampling)
+        zs, logdens, divergent = nuts(logpost_jax, z0, traced=True, forward=forward, seed=p.rand_seed, verbose=p.verbose, **sampling)
         flat_z, flat_lp = zs.reshape(-1, len(p.names)), logdens.reshape(-1)
         for i in np.linspace(0, len(flat_lp) - 1, 3).astype(int): # The JAX log-density is the one the sim gives, at a few of the draws
             expected = exact(flat_z[i])
             if not np.isclose(flat_lp[i], expected, rtol=1e-6, atol=1e-6):
-                ss.warn(f'The log-density in JAX ({flat_lp[i]:.10g}) differs from the one from the sim ({expected:.10g}) at {dict(zip(p.names, p.to_x(flat_z[i])[0]))}, so the posterior is sampled again with Python in the loop')
+                p.python_in_loop(f'the log-density in JAX ({flat_lp[i]:.10g}) differs from the one from the sim ({expected:.10g}) at {dict(zip(p.names, p.to_x(flat_z[i])[0]))}', 'the posterior again')
                 density = None
                 break
     if density is None:
@@ -2260,6 +2388,7 @@ def fit_nuts(problem, draws=500, warmup=500, chains=4, scan=None, **kwargs):
     return sc.objdict(zs=zs, logdens=logdens, divergent=divergent)
 
 
+reverse_min = 5000 # The values times the compartments at which a gradient of one number is taken in reverse mode (one pass) rather than forward mode (one direction per value): forward is faster for 40 values of an SIR (3.1 ms against 14 ms), and for 20 places (5 against 20 ms); reverse for 100 places (26 against 117 ms)
 grad_methods = ['l-bfgs-b', 'bfgs', 'cg', 'tnc', 'slsqp', 'trust-constr'] # The SciPy methods that use gradients, when the sim has them
 sampling_methods = ['nuts', 'pmcmc', 'abc-smc'] # The methods that give a posterior
 methods = {'nuts':fit_nuts, 'pmcmc':fit_pmcmc, 'abc-smc':fit_abc_smc, 'if2':fit_if2, 'optuna':fit_optuna} | {name:functools.partial(fit_scipy, method=name) for name in scipy_methods} # The methods that sim.fit() knows, by name
