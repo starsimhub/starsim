@@ -4,13 +4,13 @@ Test using Starsim from R, through reticulate (skipped if R or reticulate is not
 import os
 import sys
 import shutil
+import tempfile
 import subprocess
 import pytest
 import sciris as sc
 import paths
 
 rscript = shutil.which('Rscript')
-stale = pytest.mark.xfail(reason='stale: rstarsim is not yet updated for v4', strict=False) # Fix rstarsim later, then remove
 has_reticulate = rscript is not None and subprocess.run([rscript, '-e', 'quit(status=!requireNamespace("reticulate", quietly=TRUE))'], capture_output=True).returncode == 0
 
 
@@ -25,18 +25,18 @@ def test_r():
     return out
 
 
-@pytest.mark.skipif(not has_reticulate or not paths.rstarsim.exists(), reason='needs R with reticulate, and the rstarsim repo (set STARSIM_RSTARSIM)')
-@stale
-def test_r_declare():
-    sc.heading('Testing a model declared in R, with formulas for rates')
-    script = sc.thispath() / 'r' / 'declare.R'
-    env = dict(os.environ, RETICULATE_PYTHON=sys.executable, STARSIM_RSTARSIM=str(paths.rstarsim))
-    out = subprocess.run([rscript, str(script)], capture_output=True, text=True, env=env)
+@pytest.mark.skipif(not has_reticulate or not paths.rstarsim.exists(), reason='needs R with reticulate and pkgload, and the rstarsim repo (set STARSIM_RSTARSIM)')
+def test_rstarsim():
+    sc.heading('Testing the example of R-Starsim, the R package')
+    example = paths.rstarsim / 'examples' / 'example.R'
+    code = f'pkgload::load_all("{paths.rstarsim}", quiet=TRUE); source("{example}")'
+    env = dict(os.environ, RETICULATE_PYTHON=sys.executable)
+    out = subprocess.run([rscript, '-e', code], capture_output=True, text=True, env=env, cwd=sc.path(tempfile.mkdtemp())) # Its plots are saved to Rplots.pdf
     assert out.returncode == 0, out.stderr
-    assert 'Peak infected' in out.stdout
+    assert 'MultiSim: 20 runs' in out.stdout
     return out
 
 
 if __name__ == '__main__':
     out = test_r()
-    out = test_r_declare()
+    out = test_rstarsim()

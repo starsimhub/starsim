@@ -17,6 +17,15 @@ def level_dtype(n):
     return np.int16 if n < 2**15 else np.int32
 
 
+def is_number(string):
+    """ Whether a string is a number, e.g. '15' or '0.5' """
+    try:
+        float(string)
+        return True
+    except ValueError:
+        return False
+
+
 #%% Stratifications
 
 class Strat:
@@ -58,6 +67,8 @@ class Strat:
                 errormsg = f'"{name}" was given the share in each level twice, as a dict and as split=; give one'
                 raise ValueError(errormsg)
             levels, split = list(levels.keys()), list(levels.values())
+            if all(isinstance(v, str) and is_number(v) for v in levels): # Keys that are numbers as strings, as from R, JSON, or YAML, e.g. {'0': 0.3, '15': 0.6, '65': 0.1}
+                levels = [float(v) for v in levels]
         if isinstance(mobility, (list, tuple)) and any(isinstance(m, (Mobility, gravity, radiation)) for m in mobility):
             errormsg = f'mobility= takes one movement for "{name}", not {len(mobility)}; movements of one kind can be combined by adding their matrices (ss.geo.Mobility(matrix=M1 + M2)), but several kinds at once (e.g. a register and commuting) are not supported'
             raise TypeError(errormsg)

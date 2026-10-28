@@ -656,7 +656,7 @@ plotting_kw.data = {'data_alpha':'alpha', 'data_color':'color', 'data_size':'mar
 plotting_kw.fill = {'fill_alpha':'alpha', 'fill_color':'color', 'fill_hatch':'hatch', 'fill_lw':'lw'}
 plotting_kw.legend = ['loc', 'bbox_to_anchor', 'ncols', 'reverse', 'frameon']
 plotting_kw.style = ['style', 'font', 'fontsize', 'interactive'] # For sc.options.with_style()
-plotting_kw.return_fig = ['do_show', 'is_jupyter', 'is_reticulate']
+plotting_kw.return_fig = ['do_show', 'is_jupyter']
 
 def plot_args(kwargs=None, _debug=False, **defaults):
     """
@@ -688,7 +688,7 @@ def plot_args(kwargs=None, _debug=False, **defaults):
         - data: 'data_alpha', 'data_color', 'data_size'
         - fill: 'fill_alpha', 'fill_color', 'fill_hatch', 'fill_lw'
         - style: 'font', 'fontsize', 'interactive'
-        - return_fig: 'do_show', 'is_jupyter', 'is_reticulate'
+        - return_fig: 'do_show', 'is_jupyter'
 
     Examples:
         ```python
@@ -745,10 +745,7 @@ def return_fig(fig, **kwargs):
     """ Do postprocessing on the figure: by default, don't return if in Jupyter, but show instead; not for the user """
     do_show = kwargs.pop('do_show', ss.options.show) # TODO: make this more consistent with other implementations, e.g. plot_args()
     is_jupyter = kwargs.pop('is_jupyter', ss.options.is_jupyter)
-    is_reticulate = kwargs.pop('is_reticulate', ss.options.reticulate)
-    if is_jupyter or is_reticulate:
-        if is_reticulate: # Under R (rstarsim), printing the figure is what makes it appear; in Jupyter, it would only print "Figure(640x480)"
-            print(fig)
+    if is_jupyter:
         if do_show != False:
             plt.show()
         return None

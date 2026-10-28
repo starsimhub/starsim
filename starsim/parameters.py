@@ -516,6 +516,7 @@ class SimPars(Pars):
     def validate_sim_pars(self):
         """ Validate each of the parameter values """
         self.validate_verbose()
+        self.validate_whole()
         self.validate_agents()
         self.validate_total_pop()
         return
@@ -523,6 +524,14 @@ class SimPars(Pars):
     def validate_verbose(self):
         """ Validate verbosity """
         self.verbose = check_verbose(self.verbose)
+        return
+
+    def validate_whole(self):
+        """ Take a whole number given as a float as an integer where one is needed, e.g. rand_seed=2.0 from R """
+        for key in ['rand_seed', 'substeps']:
+            val = self[key]
+            if sc.isnumber(val) and not isinstance(val, (bool, np.bool_)) and val == int(val):
+                dict.__setitem__(self, key, int(val))
         return
 
     def validate_agents(self):

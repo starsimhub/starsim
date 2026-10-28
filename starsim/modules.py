@@ -354,16 +354,21 @@ class Module(Base):
             raise RuntimeError(errormsg)
         return
 
-    def brief(self, output=False):
-        """ Show a brief representation of the module; used by __repr__ """
+    def brief(self, output=False, extra=''):
+        """ Show a brief representation of the module, with any extra text after its name (e.g. a network's number of edges); used by __repr__ """
         name = self.name # e.g. 'sir'
         label = self.label # e.g. 'My SIR'
         class_name = self.__class__.__name__ # e.g. 'SIR'
-        class_str = f':{class_name}' if name != class_name.lower() else '' # e.g. 'SIR'
-        label_str = f'"{label}"; ' if (label.lower() != name and label != class_name) else ''
-        pars_str = '[' + sc.strjoin(self.pars.keys()) + ']' if len(self.pars) else 'None'
-        states_str = '[' + sc.strjoin(self.state_dict.keys()) + ']' if len(self.state_dict) else 'None'
-        out = f'{name}{class_str}({label_str}pars={pars_str}; states={states_str})'
+        graph = getattr(self, 'graph', None)
+        states = graph.states if isinstance(graph, ss.graph.Graph) else self.state_dict # Its declared states (S, I, R), or the arrays of one written as code
+        parts = [
+            name if name != class_name.lower() else '',
+            f'"{label}"' if (label.lower() != name and label != class_name) else '',
+            extra,
+            f'pars={sc.strjoin(self.pars.keys())}' if len(self.pars) else '',
+            f'states={sc.strjoin(states.keys())}' if len(states) else '',
+        ]
+        out = f'{class_name}({"; ".join(part for part in parts if part)})'
         return out if output else print(out)
 
     def __repr__(self):

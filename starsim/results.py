@@ -1008,7 +1008,7 @@ class Result(ss.utils.NoDists, ss.arrays.BaseArr):
 
     def to_df(self, sep='_', col_names='vlh', bounds=True, resample=None, set_date_index=False, quantiles=None, **kwargs):
         """
-        Convert to a dataframe with timevec, value, low, and high columns
+        Convert to a dataframe with time, value, low, and high columns
 
         For a result across runs, a long dataframe instead: one row per run and time point (columns `run`,
         `scenario`, any parameters swept, `time`, and `value`), or with `quantiles=`, one row per scenario,
@@ -1017,7 +1017,7 @@ class Result(ss.utils.NoDists, ss.arrays.BaseArr):
         Args:
             sep (str): separator for the column names
             col_names (str or None): if None, uses the name of the result. Default is 'vlh' which uses value, low, high
-            set_date_index (bool): if True, use the timevec as the index
+            set_date_index (bool): if True, use the times as the index
             bounds (bool): include high and low bounds as well (if and only if they exist, e.g. from a MultiSim)
             resample (str): if provided, resample the data to this frequency
             quantiles (list): for a result across runs, the quantiles over the runs of each scenario
@@ -1038,7 +1038,7 @@ class Result(ss.utils.NoDists, ss.arrays.BaseArr):
                 q = row.pop('quantile', None)
                 head = row if q is not None else dict(run=i, **row)
                 rows.append(pd.DataFrame(dict(**head, time=res.timevec, **({} if q is None else dict(quantile=q)), value=vals)))
-            return pd.concat(rows, ignore_index=True)
+            return sc.dataframe(pd.concat(rows, ignore_index=True))
 
         # For 2D results, make one set of dataframe columns per result column
         if self.columns is not None:
@@ -1047,8 +1047,8 @@ class Result(ss.utils.NoDists, ss.arrays.BaseArr):
                 gcol = col if col_names == 'vlh' else f'{sc.ifelse(col_names, self.name)}{sep}{col}'
                 dfs.append(res.to_df(sep=sep, col_names=gcol, bounds=bounds, resample=resample, set_date_index=set_date_index, **kwargs))
             df = pd.concat(dfs, axis=1)
-            df = df.loc[:, ~df.columns.duplicated()] # Remove duplicate timevec columns
-            return df
+            df = df.loc[:, ~df.columns.duplicated()] # Remove duplicate time columns
+            return sc.dataframe(df)
 
         # Return a resampled version if requested
         if resample is not None:
@@ -1062,7 +1062,7 @@ class Result(ss.utils.NoDists, ss.arrays.BaseArr):
         # Deal with timevec
         timevec = self.convert_timevec()
         if not set_date_index:
-            data['timevec'] = timevec
+            data['time'] = timevec
 
         # Determine how to label columns
         if col_names is None:
@@ -1333,7 +1333,7 @@ class Results(ss.utils.NoDists, ss.ndict):
 
         Args:
             sep (str): separator for the column names
-            set_date_index (bool): if True, use the times as the index rather than as the column `timevec`
+            set_date_index (bool): if True, use the times as the index rather than as the column `time`
             kwargs (dict): passed to `ss.Result.resample()`, e.g. `resample='year'`
         """
         flat = self.flatten(sep=sep, columns=True, **kwargs)
@@ -1349,7 +1349,7 @@ class Results(ss.utils.NoDists, ss.ndict):
             return sc.objdict({key:df for key,df in parts.items() if df is not None})
         timevec = flat[0].convert_timevec()
         data = {key:res.values for key,res in flat.items()}
-        return sc.dataframe(data, index=timevec) if set_date_index else sc.dataframe(dict(timevec=timevec) | data)
+        return sc.dataframe(data, index=timevec) if set_date_index else sc.dataframe(dict(time=timevec) | data)
 
     def walk(self):
         """ Each result, as (module name, key, result), with the module None for the sim's own results """

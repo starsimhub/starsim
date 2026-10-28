@@ -751,8 +751,8 @@ for peak in ['January', 'July']:
     sim = ss.Sim(measles, **pars)
     sim.run()
     df = sim.results.measles.I.to_df()
-    df = df[df.timevec >= '2020-01-01']
-    peaks = df.loc[df.groupby(df.timevec.dt.year).value.idxmax()]
+    df = df[df.time >= '2020-01-01']
+    peaks = df.loc[df.groupby(df.time.dt.year).value.idxmax()]
     print('Transmission highest in', peak)
     print(peaks)
 ```

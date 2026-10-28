@@ -404,7 +404,7 @@ def test_time():
     c = ss.Disease(recovery=ss.Transition(I, R, rate=ss.prob(0.05)), first='I')
     assert np.isclose(ss.Sim(c, stop=10, **kw).run().diseases[0].results.I[10], 10_000*0.95**10) # After ten steps
     df = ss.Sim(make_sir(), stop=10, **kw).run().results.sir.to_df()
-    assert df.timevec.iloc[1] == 1 # Not a date in year 1
+    assert df.time.iloc[1] == 1 # Not a date in year 1
 
     # A number times a probability scales its rate: 0.275 of people a year, not 0.16; a probability of 1 is an infinite rate (so still 1 when scaled), which moves everyone in the step, under every solver (FP1)
     S, I = ss.states('S I')

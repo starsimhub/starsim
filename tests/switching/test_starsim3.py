@@ -53,7 +53,7 @@ def test_starsim3_verbs():
 def test_starsim3_fit():
     sc.heading('Starsim 3: fit ss.SIS (now declared), with bounds given as Starsim 3 gave the value')
     truth = ss.Sim(diseases=ss.SIS(beta=ss.peryear(0.2)), rand_seed=1, **kw()).run()
-    data = truth.to_df()[['timevec', 'sis_prevalence']].iloc[1:].rename(columns=dict(timevec='t', sis_prevalence='sis.prevalence'))
+    data = truth.to_df()[['time', 'sis_prevalence']].iloc[1:].rename(columns=dict(time='t', sis_prevalence='sis.prevalence'))
     sis = ss.SIS(beta=ss.par(ss.peryear(0.1), bounds=[0.05, 1]))
     fit = ss.Sim(diseases=sis, data=data, **kw()).fit(n_trials=10, rand_seed=1)
     beta = fit.pars.beta.value
