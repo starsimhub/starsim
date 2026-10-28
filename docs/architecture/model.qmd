@@ -107,7 +107,7 @@ sir.equations()
 sir.transitions
 ```
 
-`sir.diagram()` gives the same graph as a Mermaid flowchart, and `ss.interop.export()` as odin or SBML (see [Errors and interop](spec_and_interop.qmd)).
+`sir.diagram()` gives the same graph as a Mermaid flowchart, and `ss.export_to()` as odin or SBML (see [Errors, importing, and exporting](errors_and_io.qmd)).
 
 ## Limits
 

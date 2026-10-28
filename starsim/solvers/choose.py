@@ -393,7 +393,7 @@ def kernel_seconds(sim):
 def choose_engine(sim):
     """
     Whether JAX takes the sim's whole compartmental run (the ODE as `ss.gradients` runs it, the chain binomial and
-    tau-leaping as `ss.perflib.chain` does), rather than the kernels, and why
+    tau-leaping as `ss.solvers.backends.chain` does), rather than the kernels, and why
 
     By `sim.jax`: True for JAX, False for the kernels, or None (the default) to choose: JAX if the run would take the
     kernels more than `jax_after` seconds (see `kernel_seconds()`). Once started, JAX takes 0.27 to 0.45 times as long
@@ -404,7 +404,7 @@ def choose_engine(sim):
     time, with `ss.compile()`). The choice depends on the model only (`kernel_seconds()` is worked out from its size, never
     timed), not on what has run before, whether the kernels are compiled, or the load on the machine, so a sim with a
     seed gives the same results whenever it is run (an ODE run in JAX agrees with the kernels to about
-    1e-14). A model JAX does not cover (see `ss.gradients.reason()` and `ss.perflib.chain.reason()`) is taken by the
+    1e-14). A model JAX does not cover (see `ss.gradients.reason()` and `ss.solvers.backends.chain.reason()`) is taken by the
     kernels, with a note if JAX was asked for.
 
     Returns whether to use JAX, and the reason, also kept as `sim.engine_reason`.
@@ -423,7 +423,7 @@ def choose_engine(sim):
         if seconds is not None and seconds < jax_after:
             why = f'kernels: a short run (about {seconds:.2g} s), shorter than JAX takes to start (about {jax_after} s a session)'
         else:
-            no = ss.gradients.reason(sim) if sim.solver not in ['binomial', 'tau'] else importlib.import_module('starsim.perflib.chain').reason(sim) # Imported only when used
+            no = ss.gradients.reason(sim) if sim.solver not in ['binomial', 'tau'] else importlib.import_module('starsim.solvers.backends.chain').reason(sim) # Imported only when used
             if no is not None:
                 why = f'kernels: JAX cannot run this sim, since {no}'
                 if sim.jax:

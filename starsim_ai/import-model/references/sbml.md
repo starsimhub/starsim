@@ -39,7 +39,7 @@ infection = S >> I @ beta * I     # exposure: the law over N, with S taken out
 recovery  = I >> R @ gamma
 ```
 
-which equals a hand-written model to 1e-6 (`tests/test_interop_odin_sbml.py`).
+which equals a hand-written model to 1e-6 (`tests/test_io_odin_sbml.py`).
 
 ## Running the original
 

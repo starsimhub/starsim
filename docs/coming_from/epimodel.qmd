@@ -38,7 +38,6 @@ In Starsim, `ss.DegreeNet` takes the same targets: a mean of 0.7 partners each (
 
 ```{python}
 import starsim as ss
-import starsim.interop
 ss.options(jupyter=True)
 
 S, I = ss.states('S I')
@@ -118,4 +117,4 @@ for risk, epimodel in [('low', 20.7), ('high', 77.4)]:
 
 ## Bringing your model in
 
-`ss.interop.load('model.R', format='epimodel')` reads an EpiModel model. Since EpiModel models are R scripts, the script is first run in EpiModel's own environment by `dump_epimodel.R` (in `starsim/interop/`), with EpiModel's fitting and simulating functions replaced by ones that record their arguments, and that writes a JSON file for `ss.interop.load()`. A model of a built-in type (`"SI"`, `"SIS"`, `"SIR"`) becomes a disease with its transitions, and a network fitted by `netest()` becomes an `ss.DegreeNet` with the same targets (degree by group from `nodefactor`, and `act.rate` as `acts=`). Modules written in R (`infection.FUN = ...`) are listed as not translated, with their source in `sim.imported.modules`, to be written by hand; `sim.imported.prompt` is a prompt for an AI assistant with Starsim's import-model skill to finish the job. `sim.describe()` shows how each part was read.
+`ss.import_from('model.R', format='epimodel')` reads an EpiModel model. Since EpiModel models are R scripts, the script is first run in EpiModel's own environment by `dump_epimodel.R` (in `starsim/io/`), with EpiModel's fitting and simulating functions replaced by ones that record their arguments, and that writes a JSON file for `ss.import_from()`. A model of a built-in type (`"SI"`, `"SIS"`, `"SIR"`) becomes a disease with its transitions, and a network fitted by `netest()` becomes an `ss.DegreeNet` with the same targets (degree by group from `nodefactor`, and `act.rate` as `acts=`). Modules written in R (`infection.FUN = ...`) are listed as not translated, with their source in `sim.imported.modules`, to be written by hand; `sim.imported.prompt` is a prompt for an AI assistant with Starsim's import-model skill to finish the job. `sim.describe()` shows how each part was read.

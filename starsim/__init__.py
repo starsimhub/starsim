@@ -81,9 +81,8 @@ from .connectors import Connector, modify, change
 
 from . import conditions
 from .conditions import state # Conditions on a state by path
-from . import perflib # Hidden machinery for speed (exact draws in Numba), which the kernels use
-from .perflib import kernels
-from .perflib.kernels import compile # Compile the solver kernels ahead of time
+from .solvers.backends import kernels # The machinery for speed is in ss.solvers.backends (the kernels, passes, and exact draws)
+from .solvers.backends.kernels import compile # Compile the solver kernels ahead of time
 
 from .internals import expressions
 from .internals.expressions import par, mother, attr
@@ -109,26 +108,29 @@ from . import data # Data by place, from starsim_data: ss.data.age('Kenya'), ss.
 
 from .internals import gradients # Used as ss.gradients; JAX is imported only when it is used
 
-from .perflib import jit # Compile users' own code; the machinery for speed is hidden in ss.perflib
+from .solvers.backends import jit # Compile users' own code; the machinery for speed is in ss.solvers.backends
 
 from .sim import Sim, demo
 
 from .run import MultiSim, parallel
 
+from . import io # Importing from and exporting to other frameworks: ss.io.importers, ss.io.exporters, ss.io.convert()
+from .io import import_from, export_to
+
 # ss.fit (fitting to data) is imported when it is first used, so that import starsim stays fast
 def __getattr__(name):
-    if name in ['fit', 'interop']: # Imported when first used
+    if name == 'fit': # Imported when first used
         import importlib
         return importlib.import_module(f'.{name}', __name__)
     hint = '; import it first: import starsim.library as ssl' if name == 'library' else ''
     if not hint and not name.startswith('_'):
         try:
-            from .interop.migrate import removed # A name of Starsim 3's: its replacement, from the migration script's tables (loaded only now)
+            from .io.migrate import removed # A name of Starsim 3's: its replacement, from the migration script's tables (loaded only now)
             note = removed(name)
         except Exception: # E.g. asked for while starsim is still being imported
             note = None
         if note:
-            errormsg = f'module "starsim" has no attribute "{name}" (removed in Starsim 4): {note}. The migration script rewrites Starsim 3 code: python -m starsim.interop.migrate mypackage/'
+            errormsg = f'module "starsim" has no attribute "{name}" (removed in Starsim 4): {note}. The migration script rewrites Starsim 3 code: python -m starsim.io.migrate mypackage/'
             raise AttributeError(errormsg, name=name, obj=None) # No object, so Python suggests no closest name (e.g. "emigration" for "Calibration")
     raise AttributeError(f'module "starsim" has no attribute "{name}"{hint}')
 

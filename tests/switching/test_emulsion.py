@@ -11,7 +11,6 @@ import numpy as np
 import pytest
 import sciris as sc
 import starsim as ss
-import starsim.interop
 sys.path.insert(0, str(sc.thispath().parent)) # For tests/paths.py when run as a script (conftest.py does this under pytest)
 import paths
 
@@ -37,7 +36,7 @@ def check_quickstart(msim, age='growth', health='health'):
 @pytest.mark.xfail(reason='The import lists the untranslated parts (cond, when, on_cross, statevars, the calendar; minimum stays are now after=), and warns and hands them to the import-model skill when run (15 animals at the end against 66); a complete import needs after=, escapes, and offspring by prototype, as test_emulsion_quickstart', strict=False)
 def test_emulsion_import():
     sc.heading('Testing importing EMULSION\'s quickstart and matching its published output')
-    sim = ss.interop.load(paths.lfd/'examples/emulsion/quickstart/original/quickstart.yaml', format='emulsion', verbose=False)
+    sim = ss.import_from(paths.lfd/'examples/emulsion/quickstart/original/quickstart.yaml', format='emulsion', verbose=False)
     assert not sim.imported.incomplete, f'{len(sim.imported.incomplete)} parts of the model were not translated'
     check_quickstart(sim.new(verbose=0).run(n_runs=n_runs), age='age_group', health='health_state')
 
@@ -56,7 +55,7 @@ prototypes: {population: [{infected: {health_state: I}}]}
 initial_conditions: {population: [{prototype: infected, amount: 1000}]}
 '''
     sc.savetext(tmp_path/'proba.yaml', yaml)
-    sim = ss.interop.load(tmp_path/'proba.yaml', format='emulsion', verbose=False).new(solver='ode', verbose=0).run()
+    sim = ss.import_from(tmp_path/'proba.yaml', format='emulsion', verbose=False).new(solver='ode', verbose=0).run()
     left = sim.results[sim.diseases[0].name].I.values[1]/1000
     assert np.isclose(left, ref_proba_left, rtol=1e-3), f'{left:.1%} still infectious after one step, against {ref_proba_left:.1%} in EMULSION'
 

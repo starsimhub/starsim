@@ -93,18 +93,17 @@ uv add starsim[dev]  # With dev dependencies
 - `run.py`: Running multiple simulations (`ss.MultiSim`, `ss.parallel`)
 - `settings.py`: Global options (`ss.options`) and plotting style
 - `sim.py`: The sim (`ss.Sim`)
-- `solvers/`: The engines that run declared models: `engine.py` (what they share), `mixing.py` (who meets whom in a compartmental run), `compartmental.py`, `agents.py`, `crossing.py` (diseases tracked jointly), and `choose.py` (which solver, and why: `ss.solvers.choose_solver()`); every name is also `ss.solvers.X`
+- `solvers/`: The engines that run declared models, and their kernels (below): `engine.py` (what they share), `mixing.py` (who meets whom in a compartmental run), `compartmental.py`, `agents.py`, `crossing.py` (diseases tracked jointly), and `choose.py` (which solver, and why: `ss.solvers.choose_solver()`); every name is also `ss.solvers.X`
 - `strains.py`: Strains (`ss.Strains`) and immunity between them (`ss.immunity`)
 - `time.py`: Durations and rates (`ss.dur`, `ss.days`, `ss.peryear`, `ss.probperyear`, etc.), and plotting dates and durations with Matplotlib
 - `timeline.py`: Time coordination between modules (`ss.Timeline`)
 - `transitions.py`: States and transitions (`ss.State`, `ss.states()`, `ss.Transition` and its `S >> I @ rate` spelling, ...); the names it builds on are spelled by their own modules (`ss.expressions.Expr`, `ss.graph.Graph`, `ss.dimensions.Strat`, ...)
 - `utils.py`: Helper functions
 - `internals/`: How Starsim works under the hood, each also at the top level (`ss.errors`, `ss.graph`, ...): `graph.py` (the graph of a declared module: its states, transitions, and parameters, completed with defaults and checked; `ss.graph.Graph`), `presentation.py` (how it is shown: `describe()`, `diagram()`, `equations()`), `expressions.py` (expressions in rates and results, `ss.par`, and how they are evaluated and printed), `gradients.py` (gradients and log-densities in JAX: `sim.gradient()`, `sim.log_density()`), `errors.py` (the few errors and warnings that are classes, e.g. `ss.CapabilityError` and `ss.errors.AtBound`, and `ss.note()`), `debugtools.py` (profiling, debugging, and mock objects for testing), and `cli.py` (the `starsim` command)
-- `perflib/`: Machinery for speed: `kernels.py` (the Numba kernels that run compartmental models; also `ss.kernels`), `draws.py` (exact draws in Numba), `passes.py` (compiled passes over the agents), `chain.py` (the chain binomial in JAX), `rust.py` (swaps in the Rust copies of all these, built from `rust/`: see `ss.options.kernels`), `jit.py` (`ss.jit`; `ss.perflib.jit` is the function), `cache.py`, and `memory.py`
-- `interop/`: Importers (each reads its format into `ss.interop.Source`, which `ss.interop.write()` writes as Starsim code, run to make the sim) and exporters for other modeling frameworks
-
-### Rust kernels (`rust/`)
-A second copy of every Numba kernel above, in Rust, giving the same numbers bit for bit; `ss.options.kernels='auto'` uses it once built (`cd rust && ./build`). Numba's code is the reference: change it first, then the Rust copy to match, and run `tests/test_kernel_sets.py` (see `rust/README.md`).
+- `solvers/backends/`: Machinery for speed: `kernels.py` (the Numba kernels that run compartmental models; also `ss.kernels`), `draws.py` (exact draws in Numba), `passes.py` (compiled passes over the agents), `chain.py` (the chain binomial in JAX), `ode.py`, `rust.py` (swaps in the Rust copies of all these, built from `solvers/rust/`: see `ss.options.kernels`), `jit.py` (`ss.jit`; `ss.solvers.backends.jit` is the function), `cache.py`, and `memory.py`
+- `solvers/rust/`: A second copy of every Numba kernel above, in Rust, giving the same numbers bit for bit; `ss.options.kernels='auto'` uses it once built (`cd starsim/solvers/rust && ./build`). It is not part of the installed package. Numba's code is the reference: change it first, then the Rust copy to match, and run `tests/test_kernel_sets.py` (see `starsim/solvers/rust/README.md`)
+- `internals/assets/`: The fonts for plots
+- `io/`: Importing and exporting: `ss.import_from()` (each importer reads its format into `ss.io.Source`, which `ss.io.write()` writes as Starsim code, run to make the sim), `ss.export_to()`, and `migrate.py` (rewrites Starsim 3 code: `python -m starsim.io.migrate`). The importers for epydemix, MEmilio, and summer2, run as scripts in those frameworks' own environments, write their models as JSON (EpiModel's is `dump_epimodel.R`)
 
 ### Library (`starsim/library/`)
 Example and reference modules that build on core Starsim but are not part of it, available via `import starsim.library as ssl` (e.g. `ssl.Cholera` or `ssl.diseases.Cholera`):
@@ -116,7 +115,7 @@ Core disease base classes (Disease, Infection, NCD, SIR, SIS, SEIR) live in `sta
 
 ### Testing (`tests/`)
 - `test_*.py`: Core test files (about 300 tests, under a minute in parallel); keep new tests here few and quick
-- `devtests/`: Developer tests (contracts, inference, errors, interop, and slower feature tests), in files named like the core ones
+- `devtests/`: Developer tests (contracts, inference, errors, importers and exporters, and slower feature tests), in files named like the core ones
 - `run_tests`: Main test runner script
 - `pytest.ini`: Pytest configuration
 

@@ -2,9 +2,9 @@
 Test that every set of kernels gives the same numbers: Numba's, Rust's and plain Python's bit for bit, and JAX's ODE to rounding
 
 Numba's kernels are the reference: a change is made there first (plain Python is the same code, run uncompiled), then copied
-to Rust's in rust/src/ and, where it applies, to JAX's in ss.gradients and ss.perflib.chain (see rust/README.md). These are
+to Rust's in starsim/solvers/rust/src/ and, where it applies, to JAX's in ss.gradients and ss.solvers.backends.chain (see starsim/solvers/rust/README.md). These are
 quick checks of the main paths; tests/devtests/rust_twin.py compares every call to the compartmental kernels in any test.
-Rust's are skipped if they have not been built (cd rust && ./build), unless STARSIM_RUST_REQUIRED=1 (as in CI).
+Rust's are skipped if they have not been built (cd starsim/solvers/rust && ./build), unless STARSIM_RUST_REQUIRED=1 (as in CI).
 """
 
 # %% Imports and settings
@@ -16,9 +16,9 @@ import starsim as ss
 from test_kernels import models, make_seir
 
 kw = dict(verbose=0)
-D = ss.perflib.draws
-rust = ss.perflib.rust.built() or sc.parse_env('STARSIM_RUST_REQUIRED', False, bool) # Whether to compare Rust's
-needs_rust = pytest.mark.skipif(not rust, reason='the Rust kernels have not been built (cd rust && ./build)')
+D = ss.solvers.backends.draws
+rust = ss.solvers.backends.rust.built() or sc.parse_env('STARSIM_RUST_REQUIRED', False, bool) # Whether to compare Rust's
+needs_rust = pytest.mark.skipif(not rust, reason='the Rust kernels have not been built (cd starsim/solvers/rust && ./build)')
 compiled = ['numba', 'rust'] if rust else ['numba']
 
 
@@ -45,7 +45,7 @@ def how(solver):
 
 def same(make, kernels, seeds=(0, 1)):
     """ Run each sim with each set of kernels; check they all give the same numbers, with no call going from Rust's to Numba's """
-    ss.perflib.rust.fell.clear()
+    ss.solvers.backends.rust.fell.clear()
     for seed in seeds:
         res = {}
         for k in kernels:
@@ -56,7 +56,7 @@ def same(make, kernels, seeds=(0, 1)):
             assert res[k].keys() == ref.keys()
             differ = [key for key in ref if not np.array_equal(ref[key], res[k][key], equal_nan=True)]
             assert not differ, f'{k} differs from {kernels[0]} (seed {seed}): {differ[:5]}'
-    assert not ss.perflib.rust.fell, f'Calls that went from Rust to Numba: {dict(ss.perflib.rust.fell)}'
+    assert not ss.solvers.backends.rust.fell, f'Calls that went from Rust to Numba: {dict(ss.solvers.backends.rust.fell)}'
     return
 
 
@@ -139,7 +139,7 @@ def test_draws():
         )
     sets = dict(python=plain)
     if rust:
-        rs = ss.perflib.rust.load()
+        rs = ss.solvers.backends.rust.load()
         def into(f, *args, size=400):
             out = np.empty(size)
             f(*args, out)

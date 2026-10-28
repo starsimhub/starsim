@@ -3,7 +3,7 @@ Run every call to the compartmental kernels through both Numba's and Rust's, and
 
 A pytest plugin: Numba's kernels take the real arguments (so each sim goes on as with Numba), and Rust's take deep copies,
 then the results, every array the call changed, and the random generators' states are compared. Use it after changing
-ss.kernels (and the Rust copy to match: see rust/README.md), over any tests, e.g.:
+ss.kernels (and the Rust copy to match: see starsim/solvers/rust/README.md), over any tests, e.g.:
 
     cd tests && python -m pytest -p devtests.rust_twin test_kernels.py test_dimensions.py devtests/test_gradients.py -n 2
 
@@ -67,7 +67,7 @@ def twin(name, rust):
 class Twin:
     """ The compartmental kernels, each call taken by both Numba's and Rust's """
     def __init__(self):
-        rust = ss.perflib.rust.compartmental()
+        rust = ss.solvers.backends.rust.compartmental()
         for name in names:
             setattr(self, name, twin(name, rust))
 

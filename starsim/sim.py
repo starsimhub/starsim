@@ -177,7 +177,7 @@ class Sim(ss.Base):
         self._name_modules(names, demographics, connectors, networks, interventions, diseases, analyzers, custom, modules)
         interventions = self._order_steps(interventions)
         self.par_values = None # Values of model parameters by name, e.g. pars=dict(beta=0.1) or pars=fit.pars
-        self.jax = None # Whether a whole run is taken in JAX: of the ODE (as ss.parallel() does for many runs with different values; see ss.gradients), or of the chain binomial and tau-leaping (see ss.perflib.chain); None to choose (see ss.solvers.choose_engine())
+        self.jax = None # Whether a whole run is taken in JAX: of the ODE (as ss.parallel() does for many runs with different values; see ss.gradients), or of the chain binomial and tau-leaping (see ss.solvers.backends.chain); None to choose (see ss.solvers.choose_engine())
         if isinstance(pars, dict) and len(pars): # Values of the model's parameters by name; a sim setting only by its own name, if no parameter that could be fitted has it (so pars=fit.pars works with a parameter called dur, and pars=dict(dur=10) with a network that has one)
             given = [mod for arg in [modules, demographics, connectors, networks, interventions, diseases, analyzers, custom] for mod in sc.tolist(arg) if isinstance(mod, ss.Module)]
             names = {name for mod in given for name in (mod.pars.keys() if getattr(mod, 'graph', None) is not None else mod.pars.bounded())}

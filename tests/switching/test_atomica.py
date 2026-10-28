@@ -12,7 +12,6 @@ import pytest
 import sciris as sc
 import starsim as ss
 import starsim.fit
-import starsim.interop
 sys.path.insert(0, str(sc.thispath().parent)) # For tests/paths.py when run as a script (conftest.py does this under pytest)
 import paths
 
@@ -40,7 +39,7 @@ def load(demo, progbook=False, **kwargs):
     """ Load one of Atomica's library demos, as an Atomica modeler would """
     dt, start, stop = ref_demos[demo][:3]
     books = dict(databook=lib/f'{demo}_databook.xlsx', progbook=lib/f'{demo}_progbook.xlsx' if progbook else None)
-    return ss.interop.load(lib/f'{demo}_framework.xlsx', format='atomica', dt=dt, start=start, stop=stop, verbose=False, **books, **kwargs)
+    return ss.import_from(lib/f'{demo}_framework.xlsx', format='atomica', dt=dt, start=start, stop=stop, verbose=False, **books, **kwargs)
 
 
 def at_year(sim, key, year):

@@ -52,7 +52,7 @@ Starsim also comes with a library of example modules, written as code, which are
 - **Networks** (`ssl.networks`): households from survey data, people who move in space and connect to those nearby (`DiskNet`), and theoretical networks such as Erdős–Rényi.
 - **Maternal, newborn, and child health** (`ssl.mnch`): fetal health, neonatal sepsis, and congenital disease.
 
-[Library modules](user_guide/interop_library.qmd) in the user guide describes them, and how to use them.
+[Library modules](user_guide/io_library.qmd) in the user guide describes them, and how to use them.
 
 ## Scripts in the repository
 

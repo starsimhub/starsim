@@ -138,6 +138,10 @@ starsim = "starsim.internals.cli:main"
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["starsim*"]
+exclude = ["starsim.solvers.rust*"] # The Rust kernels' source, built in place (see its README), not shipped
+
+[tool.setuptools.exclude-package-data]
+"starsim.solvers" = ["rust/*"]
 
 [tool.setuptools.package-data]
 starsim = ["*.ipynb", "*.rst", "*.csv"]

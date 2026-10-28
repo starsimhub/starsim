@@ -706,7 +706,7 @@ class Crossing:
     def run(self, use_jax=False):
         """ A whole run of the diseases together, in one call to the kernels (or to JAX): gives each engine its part of the output (as `ss.gradients` does; see `ss.solvers.Compartmental.run_all()`) """
         if use_jax:
-            parts = ss.gradients.run_crossing(self) if self.sim.solver not in ['binomial', 'tau'] else importlib.import_module('starsim.perflib.chain').run_crossing(self)
+            parts = ss.gradients.run_crossing(self) if self.sim.solver not in ['binomial', 'tau'] else importlib.import_module('starsim.solvers.backends.chain').run_crossing(self)
         else:
             args, tables = self.run_args()
             tally = np.zeros((args[3], 0, 2, self.n_cols))
@@ -772,7 +772,7 @@ class Crossing:
         ys = np.repeat(y0[None], n_runs, axis=0)
         if self.sim.solver in ['binomial', 'tau'] and ss.solvers.choose_engine(self.sim)[0]: # In JAX, as a single run would be (see ss.solvers.choose_engine())
             kept = (range(nc), range(nflows)) if grouped else ([], [])
-            stocks, flows, stocks_g, flows_g = importlib.import_module('starsim.perflib.chain').run_many(self, seeds, np.arange(nc), *kept, rows)[:4]
+            stocks, flows, stocks_g, flows_g = importlib.import_module('starsim.solvers.backends.chain').run_many(self, seeds, np.arange(nc), *kept, rows)[:4]
         else:
             run_many_parts(self, rngs, ys, args, per_step, R, (stocks, flows, stocks_g, flows_g, tally, tally_g), np.arange(nc), rows, grp_state, grp_flow)
         outs = []

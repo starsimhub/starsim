@@ -536,7 +536,7 @@ def load(filename, **kwargs):
 
     Since Starsim uses Sciris for saving objects, they can be loaded back using
     this function, e.g. a sim saved with `ss.save('run.sim', sim)`. Another
-    framework's model is read with `ss.interop.load()`.
+    framework's model is read with `ss.import_from()`.
 
     Args:
         filename (str/path): the name of the file to load
@@ -555,7 +555,7 @@ def save(filename, obj, **kwargs):
 
     While some Starsim objects have their own save methods, this function can be
     used to save any arbitrary object. It can then be loaded with ss.load().
-    Another framework's format is written by `ss.interop.export()`.
+    Another framework's format is written by `ss.export_to()`.
 
     Args:
         filename (str/path): the name of the file to save
@@ -567,7 +567,7 @@ def save(filename, obj, **kwargs):
         ss.save('run.sim', sim) # The sim, with its results
     """
     if 'format' in kwargs: # Otherwise passed on to pickling, which fails obscurely
-        errormsg = f'ss.save() writes Starsim\'s own formats; for another framework\'s, use ss.interop.export(sim, "{kwargs["format"]}", filename="{filename}")'
+        errormsg = f'ss.save() writes Starsim\'s own formats; for another framework\'s, use ss.export_to(sim, "{kwargs["format"]}", filename="{filename}")'
         raise ValueError(errormsg)
     return sc.save(filename=filename, obj=obj, **kwargs)
 

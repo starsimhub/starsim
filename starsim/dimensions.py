@@ -850,7 +850,7 @@ class Groups:
                     return self.group_raw()
                 if len(uids):
                     before = old_level[uids]
-                    after = np.clip(np.digitize(raw[uids], strat.edges) - 1, 0, strat.n - 1) if strat.edges is not None else ss.perflib.passes.levels(raw[uids])
+                    after = np.clip(np.digitize(raw[uids], strat.edges) - 1, 0, strat.n - 1) if strat.edges is not None else ss.solvers.backends.passes.levels(raw[uids])
                     old_level[uids] = after
                     old_raw[uids] = raw[uids]
                     if not shared:
@@ -866,7 +866,7 @@ class Groups:
         levels = []
         changed = False
         def level_of(strat, raw): # As 16-bit integers if they fit, to save memory
-            return (np.clip(np.digitize(raw, strat.edges) - 1, 0, strat.n - 1) if strat.edges is not None else ss.perflib.passes.levels(raw)).astype(level_dtype(strat.n), copy=False)
+            return (np.clip(np.digitize(raw, strat.edges) - 1, 0, strat.n - 1) if strat.edges is not None else ss.solvers.backends.passes.levels(raw)).astype(level_dtype(strat.n), copy=False)
         dtype = level_dtype(self.n_groups)
         mults = np.cumprod((self.group_shape + (1,))[::-1])[::-1][1:]
         n = people.uid.len_tot
@@ -885,7 +885,7 @@ class Groups:
                 if strat.edges is not None: # A binned property (e.g. age) changes for nearly everyone at each step, but only those who crossed an edge (or have no value) change level
                     inner = strat.edges[1:strat.n]
                     lo, hi = np.append(-np.inf, inner), np.append(inner, np.inf) # The bounds of each level, as digitize() bins them
-                    idx = ss.perflib.passes.crossed(raw, old[1], lo, hi)
+                    idx = ss.solvers.backends.passes.crossed(raw, old[1], lo, hi)
                 else:
                     idx = np.flatnonzero(old[0] != raw) # Usually few: those born, or who moved, since it was last worked out
                 if len(idx):

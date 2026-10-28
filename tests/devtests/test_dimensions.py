@@ -485,8 +485,8 @@ def test_space():
         assert res.infection.cum.by('patch').values[-1, 0] > 40_000
 
     # The passes over the agents are split between threads for a large population (here, for a small one): the results are those of one thread
-    defaults = ss.perflib.passes.min_threaded, ss.perflib.passes.chunk_size
-    ss.perflib.passes.min_threaded, ss.perflib.passes.chunk_size = 0, 1000
+    defaults = ss.solvers.backends.passes.min_threaded, ss.solvers.backends.passes.chunk_size
+    ss.solvers.backends.passes.min_threaded, ss.solvers.backends.passes.chunk_size = 0, 1000
     try:
         sims = []
         for threads in [1, 0]: # One thread, then as many as Numba has
@@ -495,7 +495,7 @@ def test_space():
                 sim.loop.insert(seed_north, label='sim.start_step')
                 sims.append(sim.run())
     finally:
-        ss.perflib.passes.min_threaded, ss.perflib.passes.chunk_size = defaults
+        ss.solvers.backends.passes.min_threaded, ss.solvers.backends.passes.chunk_size = defaults
     infections = [sim.results.sir.infection.values for sim in sims]
     assert infections[0].sum() > 0 and np.array_equal(*infections) # The same people infected, with threads or without
 

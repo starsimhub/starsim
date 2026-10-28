@@ -433,7 +433,7 @@ class Agents(Engine, Transmission):
         (`.uids`), which is several times faster for a large population: anyone who
         has died has already left every state (see `die()`).
         """
-        return ss.uids(ss.perflib.passes.flatnonzero(self.mod[state.name].raw))
+        return ss.uids(ss.solvers.backends.passes.flatnonzero(self.mod[state.name].raw))
 
     def adjusted_rel(self, kind, state=None):
         """ The multiplier on rel_trans or rel_sus for each agent (by UID), for those in a state that has the dimension """
@@ -892,7 +892,7 @@ class Agents(Engine, Transmission):
         order = {name:k for k,name in enumerate(want)}
         listed = np.array([order.get(name, -1) for name in names], dtype=np.int64)
         members = tuple(self.mod[name].raw for name in names)
-        counts, found, offsets = ss.perflib.passes.census(members, sim.people.alive.raw, groups, ng, listed)
+        counts, found, offsets = ss.solvers.backends.passes.census(members, sim.people.alive.raw, groups, ng, listed)
         self.live = dict(zip(names, counts[:-1]))
         self.live_total = counts[-1] # Everyone alive
         self.n_counted = sim.people.uid.len_used
@@ -2551,7 +2551,7 @@ class Agents(Engine, Transmission):
             if how == 'uniform':
                 return rvs
             elif how == 'expon':
-                return ss.perflib.draws.many['expon'](1.0, np.asarray(rvs, dtype=np.float64), np.empty(len(rvs))) # As dist.ppf(), without its checks
+                return ss.solvers.backends.draws.many['expon'](1.0, np.asarray(rvs, dtype=np.float64), np.empty(len(rvs))) # As dist.ppf(), without its checks
             elif how == 'agent':
                 n, pars, kwds = self.agent_pars(key, dist, checked=True)
                 pick = lambda d: {k:(v[uids] if isinstance(v, np.ndarray) and v.shape == (n,) else v) for k,v in d.items()} # These agents' values
@@ -3177,7 +3177,7 @@ class Agents(Engine, Transmission):
             listed = self.listed if sim.mixing.space is None or sim.groups.group_fold is None else [state.name for state in people_states]
             members = self.census(listed) # Who is where before anyone moves, in one pass over the agents
         else: # Counted already: only those asked for are listed
-            members = {name:ss.uids(ss.perflib.passes.flatnonzero(mod[name].raw)) for name in listed}
+            members = {name:ss.uids(ss.solvers.backends.passes.flatnonzero(mod[name].raw)) for name in listed}
         self.start = {name:vals.copy() for name,vals in self.live.items()}
         self.start_weighted = {state.name:self.weighted_count(state) for state in people_states} if sim.people.scale.weighted else None
         self._members = members
@@ -3285,9 +3285,9 @@ class Agents(Engine, Transmission):
         crn = self.crn_key(f'exit_{state.name}', uids) if key is None and len(uids) else None
         if crn is not None: # The usual case: each agent's draw is made in one compiled pass, as rvs() would make it, so only those who leave are listed
             if same:
-                pos, which = ss.perflib.passes.competing_exits(uids, self.sim.people.slot_raw(), *crn, p_exit, edges)
+                pos, which = ss.solvers.backends.passes.competing_exits(uids, self.sim.people.slot_raw(), *crn, p_exit, edges)
             else: # With the edges of each agent's exits worked out in it, as np.cumsum() of the hazards times p_exit/total
-                pos, which = ss.perflib.passes.competing_agent_exits(uids, self.sim.people.slot_raw(), *crn, p_exit, share, np.array(hazards, dtype=float).reshape(len(hazards), n))
+                pos, which = ss.solvers.backends.passes.competing_agent_exits(uids, self.sim.people.slot_raw(), *crn, p_exit, share, np.array(hazards, dtype=float).reshape(len(hazards), n))
             leaving = np.zeros(len(uids), dtype=bool)
             leaving[pos] = True
             for i,tr in enumerate(competing):
@@ -4040,10 +4040,10 @@ class Agents(Engine, Transmission):
         adjust = (1.0 if self.adjust[tr.name] is None else self.adjust[tr.name])*self.mult_raw('transition', tr.name)
         key = self.crn_key(f'mix_{tr.name}', mod[src.name].uids if check_draws else None)
         if key is not None: # The usual case: the draws are made in the same pass, so only the agents infected are listed
-            uids = ss.perflib.passes.infect(mod[src.name].raw, sim.groups.group_raw(), np.ascontiguousarray(rate), mod.rel_sus.raw, float(src.rel_sus), np.ascontiguousarray(np.broadcast_to(adjust, ng), dtype=float),
+            uids = ss.solvers.backends.passes.infect(mod[src.name].raw, sim.groups.group_raw(), np.ascontiguousarray(rate), mod.rel_sus.raw, float(src.rel_sus), np.ascontiguousarray(np.broadcast_to(adjust, ng), dtype=float),
                                      float(self.mult_raw('rel_sus')), self.dt, sim.people.slot_raw(), *key)
             return ss.uids(uids)
-        uids, probs = ss.perflib.passes.infection_probs(mod[src.name].raw, sim.people.auids.view(np.ndarray), sim.groups.group_raw(), np.ascontiguousarray(rate), mod.rel_sus.raw,
+        uids, probs = ss.solvers.backends.passes.infection_probs(mod[src.name].raw, sim.people.auids.view(np.ndarray), sim.groups.group_raw(), np.ascontiguousarray(rate), mod.rel_sus.raw,
                                                  float(src.rel_sus), np.ascontiguousarray(np.broadcast_to(adjust, ng), dtype=float), float(self.mult_raw('rel_sus')), self.dt)
         uids = ss.uids(uids)
         return uids[self.draw(f'mix_{tr.name}', uids) < probs]

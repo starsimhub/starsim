@@ -6,13 +6,13 @@ EpiModel is an R package. A model is an R script with three kinds: `dcm()` (a de
 
 ## Getting the model out
 
-The script is run in EpiModel's environment by `starsim/interop/dump_epimodel.R` (it needs only EpiModel and jsonlite), with `netest()`, `netdx()`, `netsim()`, `dcm()`, and `icm()` replaced by functions that record their arguments, so nothing is fitted or simulated and it takes about a second. Each call of `netsim()`, `dcm()`, or `icm()` is a run; statements that fail afterwards (plots of the results) are skipped. A saved `netsim()` result or `netest()` (`.rds`) works too.
+The script is run in EpiModel's environment by `starsim/io/dump_epimodel.R` (it needs only EpiModel and jsonlite), with `netest()`, `netdx()`, `netsim()`, `dcm()`, and `icm()` replaced by functions that record their arguments, so nothing is fitted or simulated and it takes about a second. Each call of `netsim()`, `dcm()`, or `icm()` is a run; statements that fail afterwards (plots of the results) are skipped. A saved `netsim()` result or `netest()` (`.rds`) works too.
 
 ```bash
 Rscript dump_epimodel.R intro_sis.R model.json
 ```
 
-Then, in Starsim, `sim = ss.interop.load('model.json')`, or `ss.interop.load('intro_sis.R', rscript='.../bin/Rscript')` to dump and load in one step. Choose a run with `run=` (a number, or a scenario's `.scenario.id`); the others are in `sim.imported.scenarios` as the parameters that differ. The script runs as `Rscript` would run it, so `interactive()` is false: the Gallery's HIV model dumps its small test size (300 people, 100 steps), not the 1,500 and 1,040 of an interactive run.
+Then, in Starsim, `sim = ss.import_from('model.json')`, or `ss.import_from('intro_sis.R', rscript='.../bin/Rscript')` to dump and load in one step. Choose a run with `run=` (a number, or a scenario's `.scenario.id`); the others are in `sim.imported.scenarios` as the parameters that differ. The script runs as `Rscript` would run it, so `interactive()` is false: the Gallery's HIV model dumps its small test size (300 people, 100 steps), not the 1,500 and 1,040 of an interactive run.
 
 ## Mapping
 
@@ -53,7 +53,7 @@ Then, in Starsim, `sim = ss.interop.load('model.json')`, or `ss.interop.load('in
 
 ## Worked example
 
-`lingua_franca_design/vignettes/epimodel/sis-network/model.py` (the introduction), which `ss.interop.load()` imports completely (against 100 EpiModel runs: new infections agree statistically, prevalence is 3% higher for the reason above, and the network has 174 partnerships against 177 and 110 people with two or more against 111; a `dcm()` SIR with arrivals and departures agrees with EpiModel's LSODA run to 3e-7 of the largest value), and `lingua_franca_design/vignettes/epimodel/hiv/model.py` (the Gallery HIV model, with the cascade and PrEP), of which only the two networks and the parameters import mechanically: its six modules are R (`infect`, `progress`, `cascade`, `prep`, `dfunc`, `afunc`), listed with their source. The hand translation of those modules:
+`lingua_franca_design/vignettes/epimodel/sis-network/model.py` (the introduction), which `ss.import_from()` imports completely (against 100 EpiModel runs: new infections agree statistically, prevalence is 3% higher for the reason above, and the network has 174 partnerships against 177 and 110 people with two or more against 111; a `dcm()` SIR with arrivals and departures agrees with EpiModel's LSODA run to 3e-7 of the largest value), and `lingua_franca_design/vignettes/epimodel/hiv/model.py` (the Gallery HIV model, with the cascade and PrEP), of which only the two networks and the parameters import mechanically: its six modules are R (`infect`, `progress`, `cascade`, `prep`, `dfunc`, `afunc`), listed with their source. The hand translation of those modules:
 
 ```python
 week = ss.prob # EpiModel uses each rate as the probability of an event in a week (a step)

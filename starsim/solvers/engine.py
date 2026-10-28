@@ -12,7 +12,7 @@ from types import SimpleNamespace as Bunch # A plain object with attributes; muc
 __all__ = ['Effects', 'Engine', 'CountState', 'StockCtx', 'convert', 'add_rows', 'at_ends', 'by_level', 'no_tables', 'kept_by_group', 'group_rows', 'people_results']
 
 
-no_tables = ss.kernels.no_tables # For a step whose program holds for the whole step: see ss.kernels.step()
+from .backends.kernels import no_tables # For a step whose program holds for the whole step: see ss.kernels.step()
 
 
 def convert(val, unit, cache=None):

@@ -11,7 +11,6 @@ import pytest
 import sciris as sc
 import starsim as ss
 import starsim.fit
-import starsim.interop
 
 ref_n_I = {1990: 3150.376, 2010: 1527.021, 2025: 1477.900} # switching/summer2.md, "The second week" §1: summer2's active TB (all ages) from tb_summer2.py
 ref_notifications = {1990: 2341.466, 2010: 2263.245, 2024: 2194.623} # Same section: summer2's notifications (v4: 2,341, 2,260, 2,195)
@@ -78,7 +77,7 @@ def test_summer2_tb():
     return res
 
 
-@pytest.mark.xfail(reason='summer2 1.3.6 needs JAX 0.4 (it imports jax.core.call), so it cannot be installed with Starsim and a live model cannot be imported in the same process; the same model written by dump_summer2.py in summer2\'s environment imports with nothing missing and matches make_tb(ages=False) to 1e-13 (and tests/test_interop_summer2_atomica.py checks it by age against summer2)', strict=False)
+@pytest.mark.xfail(reason='summer2 1.3.6 needs JAX 0.4 (it imports jax.core.call), so it cannot be installed with Starsim and a live model cannot be imported in the same process; the same model written by starsim/io/summer2.py in summer2\'s environment imports with nothing missing and matches make_tb(ages=False) to 1e-13 (and tests/devtests/io/test_io_summer2_atomica.py checks it by age against summer2)', strict=False)
 def test_summer2_import_live():
     sc.heading('summer2: the live model, with its parameters and its sigmoid, imported')
     summer2 = pytest.importorskip('summer2')
@@ -96,7 +95,7 @@ def test_summer2_import_live():
     m.add_death_flow('tb_death', 0.2, 'I')
     m.add_universal_death_flows('universal_death', death_rate=1/70)
     m.add_crude_birth_flow('birth', 0.02, 'S')
-    sim = ss.interop.load(m, pars=dict(contact_rate=10.0, rr_reinf=0.21, detect_max=1.5), verbose=0)
+    sim = ss.import_from(m, pars=dict(contact_rate=10.0, rr_reinf=0.21, detect_max=1.5), verbose=0)
     assert not sim.imported.incomplete, f'Not translated: {sim.imported.incomplete}'
     ours = np.asarray(make_tb(ages=False).run().results.tb.detection.values)
     theirs = np.asarray(sim.run().results.summer2.detection.values) # The flow in each year, as make_tb's (summer2's own output is the mean of the rates at either end of the year)

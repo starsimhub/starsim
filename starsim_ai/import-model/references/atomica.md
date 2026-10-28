@@ -31,12 +31,12 @@ An Atomica model is a framework workbook (compartments, characteristics, paramet
 ## What needs care
 
 - Atomica moves `value × dt` (or `dt / duration`, or `number × dt`) each step, capped at everyone: the Euler step. The import uses `integrator='euler', substeps=1` so that it agrees to rounding error; a finer Starsim run is closer to the continuous model but not to Atomica.
-- Run with the same `dt` as the reference (`ss.interop.load(..., dt=1)` for the LFD examples): at a different step the numbers differ by order `dt`.
+- Run with the same `dt` as the reference (`ss.import_from(..., dt=1)` for the LFD examples): at a different step the numbers differ by order `dt`.
 - Atomica runs from the first year of data to five years after the last (or to 2035 if the model has births); the import does the same unless `start=` and `stop=` are given.
 
 ## Worked example
 
-`lingua_franca_design/vignettes/atomica/hiv_dyn/model.py`: the HIV care cascade by sex, with programs and three budget scenarios. `ss.interop.load('hiv_dyn_framework.xlsx', databook='hiv_dyn_databook.xlsx', dt=1)` gives the baseline, which agrees with Atomica to 3e-14 in all 78 compartments, flows, and characteristics (the SIR demo to 1e-15); the programs are by hand, as in the vignette:
+`lingua_franca_design/vignettes/atomica/hiv_dyn/model.py`: the HIV care cascade by sex, with programs and three budget scenarios. `ss.import_from('hiv_dyn_framework.xlsx', databook='hiv_dyn_databook.xlsx', dt=1)` gives the baseline, which agrees with Atomica to 3e-14 in all 78 compartments, flows, and characteristics (the SIR demo to 1e-15); the programs are by hand, as in the vignette:
 
 ```python
 coverage = ss.par(lambda sim: np.minimum(budget * spend / cost / eligible.n, 1))

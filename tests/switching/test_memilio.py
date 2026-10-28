@@ -2,7 +2,7 @@
 Switching demo for the MEmilio seat: 400 counties × 6 ages with commuting and per-county NPIs, projected from priors.
 
 Passes when: within 3x of 1.5 s; agreement as today.
-Blocked today by: N18, the per-place hold, `priors=True` (the graph importer is done: test_interop_memilio.py).
+Blocked today by: N18, the per-place hold, `priors=True` (the graph importer is done: test_io_memilio.py).
 Scaled down to 50 and 100 synthetic counties (the report's own synthetic Germany, regenerated here); the 400-county time is checked by the north-star script (phase 6).
 """
 import numpy as np
@@ -124,7 +124,7 @@ def test_memilio_projection():
     d = make_germany(50)
     scale = ss.par(1.0, prior=ss.uniform(0.75, 1.25), name='scale') # MEmilio's ParameterDistributionUniform, ±25% around the midpoints
     sim = make_sim(d, make_secir(d, beta=scale*ss.by(age=P['beta'])), on_sim=True) # sim.stratify(), the spelling in best-practices/metapopulation.md
-    # The graph importer (ss.load of a MobilityGraph or GraphParameterStudy script) needs MEmilio itself, so is tested in test_interop_memilio.py
+    # The graph importer (ss.import_from() of a MobilityGraph or GraphParameterStudy script) needs MEmilio itself, so is tested in test_io_memilio.py
     msim = ss.parallel(sim, n_runs=10, priors=True)
     isy = msim.results.secir.ISy
     q = isy.select(patch='c005').quantiles([0.05, 0.25, 0.5, 0.75, 0.95])

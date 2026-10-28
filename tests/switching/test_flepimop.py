@@ -12,7 +12,6 @@ import pytest
 import sciris as sc
 import starsim as ss
 import starsim.fit
-import starsim.interop
 
 ref_n_quantiles = 23 # switching/flepimop.md, "Who this user is": a hub submission is 23 quantiles by scenario, location, target, and week
 places = ['10001', '10003', '10005'] # The three counties below
@@ -53,7 +52,7 @@ def load_config(folder):
     sc.savetext(folder/'config.yml', config)
     for key,text in files.items():
         sc.savetext(folder/f'{key}.csv', text)
-    return ss.interop.load(folder/'config.yml', format='flepimop', verbose=0) # The drawn Ro is imported with its distribution as its prior
+    return ss.import_from(folder/'config.yml', format='flepimop', verbose=0) # The drawn Ro is imported with its distribution as its prior
 
 
 def weekly_totals(sim):
@@ -97,7 +96,7 @@ def test_flepimop_hub(tmp_path):
     msim = ss.parallel(sim, n_runs=10, priors=True) # Each run draws Ro from the config's truncated normal
     peaks = list(msim.results.values())[0].incidHosp.values.max(axis=1) # Each run's peak
     assert len(set(np.round(peaks, 6))) > 1, 'Expected runs with different draws of Ro to differ'
-    hub = ss.interop.to_hub(msim, targets=dict(incidHosp='inc hosp'), by='subpop', every='week')
+    hub = ss.io.to_hub(msim, targets=dict(incidHosp='inc hosp'), by='subpop', every='week')
     assert {'origin_date', 'scenario_id', 'location', 'target', 'horizon', 'output_type', 'output_type_id', 'value'} == set(hub.columns)
     assert hub['output_type_id'].nunique() == ref_n_quantiles
     assert hub['location'].nunique() == len(places)

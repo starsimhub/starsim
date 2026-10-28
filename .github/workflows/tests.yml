@@ -29,7 +29,7 @@ jobs:
       - name: Install Starsim
         run: pip install -e .[dev]
       - name: Build the Rust kernels
-        working-directory: ./rust
+        working-directory: ./starsim/solvers/rust
         run: ./build # Rust is installed on GitHub's runners
       - name: Run API tests
         working-directory: ./tests
