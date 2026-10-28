@@ -1608,8 +1608,58 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
             if varies and not any(p is par for par in self.time_pars):
                 self.time_pars.append(p)
 
+        interned = dict() # A number for what each part of a rate is made of
+        keyed = dict() # Each part's number, by id (the parts are held in held, so no id is reused)
+        held = []
+
+        def part_key(e):
+            """ What an operation in a rate is made of, as a number, the same for equal parts (as on the tape: see init_tape()) """
+            k = keyed.get(id(e))
+            if k is None:
+                if isinstance(e, ss.expressions.BinOp):
+                    parts = (e.op, part_key(e.a), part_key(e.b))
+                elif isinstance(e, ss.expressions.Func):
+                    parts = (e.name,) + tuple(part_key(arg) for arg in e.args)
+                elif isinstance(e, ss.par) and e.literal and sc.isnumber(e.raw):
+                    parts = ('number', repr(float(e.raw)))
+                elif isinstance(e, ss.expressions.Count) and not e.weighted:
+                    parts = ('count', e.kind, e.trans, tuple(state.name for state in e.states))
+                else:
+                    parts = ('part', id(e))
+                k = keyed[id(e)] = interned.setdefault(parts, len(interned))
+                held.append(e)
+            return k
+
+        def count_uses(e, uses):
+            """ How many times each operation is used in a rate, once each part used more than once is worked out once """
+            if isinstance(e, (ss.expressions.BinOp, ss.expressions.Func)):
+                k = part_key(e)
+                uses[k] = uses.get(k, 0) + 1
+                if uses[k] == 1:
+                    for child in ([e.a, e.b] if isinstance(e, ss.expressions.BinOp) else e.args):
+                        count_uses(child, uses)
+            return
+
+        shared = sc.objdict(uses={}, stored={}) # For the rate being flattened: the uses of each operation, and the register of each part kept
+
         def flatten(expr, strain, routes=None, rtr=None):
-            """ Add the operations for an expression, and return the size of stack they need (`rtr`: the transmission and its source state, if modifiers act on it on some routes) """
+            """ Add the operations for an expression, and return the size of stack they need (`rtr`: the transmission and its source state, if modifiers act on it on some routes); a part used more than once in the rate is worked out once, and kept """
+            if not isinstance(expr, (ss.expressions.BinOp, ss.expressions.Func)):
+                return flatten_part(expr, strain, routes, rtr)
+            k = part_key(expr)
+            if k in shared.stored:
+                ops.append(kn.LOAD)
+                args.append(shared.stored[k])
+                return 1
+            depth = flatten_part(expr, strain, routes, rtr)
+            if shared.uses.get(k, 0) > 1:
+                shared.stored[k] = len(shared.stored)
+                ops.append(kn.STORE)
+                args.append(shared.stored[k])
+            return depth
+
+        def flatten_part(expr, strain, routes=None, rtr=None):
+            """ The operations for one part of an expression (see flatten()) """
             if isinstance(expr, ss.expressions.BinOp):
                 a = flatten(expr.a, strain, routes, rtr)
                 b = flatten(expr.b, strain, routes, rtr)
@@ -1671,12 +1721,16 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
                     if id(leaf) in self.func_exprs: # Worked out within the step, as the expression is
                         flow.dynamic = True
         depth = 1
+        n_regs = 0 # The most parts any rate keeps (see ss.kernels.LOAD)
         for flow in self.flows:
             if flow.dynamic:
                 routes = (flow.routes if flow.routes is not False else self.route_betas(flow)) if flow.kind == 'contact' else None
                 rtr = (flow.tr, flow.state) if flow.kind == 'contact' and self.route_mods(flow.tr) else None
+                shared.uses, shared.stored = {}, {}
+                count_uses(flow.expr, shared.uses)
                 with self.evaluating(src=flow.state):
                     depth = max(depth, flatten(flow.expr, flow.strain, routes, rtr))
+                n_regs = max(n_regs, len(shared.stored))
             else:
                 for leaf in ([] if flow.expr is None else flow.expr.leaves) + sc.tolist(self.dwells.get(flow.tr.name, Bunch(par=None)).par):
                     check(leaf)
@@ -1745,7 +1799,7 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
             inflow     = np.array([self.inflow_split(flow.tr) if flow.src is None else np.zeros(ng) for flow in self.flows], dtype=float).reshape(nf, ng), # For the flow out of a conveyor, set by the ODE each step (see ss.kernels.convey())
             fixed      = np.zeros((nf, ng)),
             mult       = np.ones((nf, ng)),
-            depth      = depth,
+            depth      = depth + n_regs,
             starts     = np.array(starts, dtype=int),
             ops        = kn.check_ops(ops),
             args       = np.array(args, dtype=int),

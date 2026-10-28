@@ -30,6 +30,7 @@ __all__ = ['Program', 'Register', 'Shifts', 'opcodes']
 # The operations a rate can be made of
 CONST, COUNT, FRAC, EXPOSURE, ADD, SUB, MUL, DIV, POW, MIN, MAX, LT, LE, GT, GE, EXP, LOG, SQRT, ABS, SIN, COS, TOTAL = range(22) # TOTAL is a count in the whole population, every place (I.total)
 CONVEY = 22 # Not in a rate: a conveyor (its flow, then its slots; see convey()); kept out of the program's fields, since every field adds to the cost of each call that is passed it
+LOAD, STORE = 23, 24 # A part used more than once in a rate: STORE copies the top of the stack into register arg, which LOAD puts back on top; the registers are the last rows of the stack (row depth-1-arg), and each rate fills its own before using them, so a rate can be worked out on its own
 opcodes = {'+':ADD, '-':SUB, '*':MUL, '/':DIV, '**':POW, 'minimum':MIN, 'maximum':MAX, 'exp':EXP, 'log':LOG, 'sqrt':SQRT, 'absolute':ABS, 'sin':SIN, 'cos':COS,
            'less':LT, 'less_equal':LE, 'greater':GT, 'greater_equal':GE}
 
@@ -44,7 +45,7 @@ fields = [
     'fixed',      # The rate of each flow that does not change within a step, by group
     'mult',       # The multiplier on each flow whose rate does, by group
     # The rates that change within a step
-    'depth',      # The largest stack any of them needs
+    'depth',      # The largest stack any of them needs, and after it their registers (see LOAD)
     'starts',     # Where each flow's operations start and end (the same, if it has none); and after the flows', those of each conveyor (see convey())
     'ops',        # The operations
     'args',       # What each one acts on
@@ -834,9 +835,9 @@ def sum_exposures(expo, e, s):
 def check_ops(ops):
     """ Check that a program has only operations the kernels know, which they then need not check (see `unary()`) """
     ops = np.asarray(ops, dtype=int)
-    unknown = sorted(set(ops[(ops < CONST) | (ops > CONVEY)].tolist()))
+    unknown = sorted(set(ops[(ops < CONST) | (ops > STORE)].tolist()))
     if unknown:
-        errormsg = f'The program of a rate has unknown operations {unknown}; the kernels know {CONST} to {CONVEY}'
+        errormsg = f'The program of a rate has unknown operations {unknown}; the kernels know {CONST} to {STORE}'
         raise ValueError(errormsg)
     return ops
 
@@ -985,6 +986,11 @@ def place_rates(ys, p, a, b, rates, stack, expo):
                         for i in range(p.set_starts[arg], p.set_starts[arg+1]):
                             v += ys[p.set_comps[i], p.pl_groups[jj]]
                     stack[top, 0] = leaf_share(op, v, n)
+                elif op == LOAD:
+                    top += 1
+                    stack[top, 0] = stack[len(stack)-1-arg, 0]
+                elif op == STORE:
+                    stack[len(stack)-1-arg, 0] = stack[top, 0]
                 elif op >= EXP:
                     stack[top, 0] = unary(op, stack[top, 0])
                 else:
@@ -1299,6 +1305,11 @@ def sparse_events(y, p, w, active, first, last, dt, flows, seed, maps):
                             top += 1
                             v = counts[arg]
                             stack[top, 0] = leaf_share(op, v, n)
+                        elif op == LOAD:
+                            top += 1
+                            stack[top, 0] = stack[len(stack)-1-arg, 0]
+                        elif op == STORE:
+                            stack[len(stack)-1-arg, 0] = stack[top, 0]
                         elif op >= EXP:
                             stack[top, 0] = unary(op, stack[top, 0])
                         else:
@@ -2011,6 +2022,13 @@ def step(rng, y, p, w, dt, n_sub, solver, flows, tables, row):
                                 num[p.places[g]] += vals[g]
                             for g in range(ng):
                                 stack[top, g] = leaf_share(op, num[p.places[g]], local_n[g])
+                        elif op == LOAD: # A part worked out already
+                            top += 1
+                            for g in range(ng):
+                                stack[top, g] = stack[len(stack)-1-arg, g]
+                        elif op == STORE:
+                            for g in range(ng):
+                                stack[len(stack)-1-arg, g] = stack[top, g]
                         elif op >= EXP: # A function of one value
                             for g in range(ng):
                                 stack[top, g] = unary(op, stack[top, g])

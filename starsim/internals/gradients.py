@@ -259,10 +259,15 @@ class Run:
         p = self.p
         kn = ss.kernels
         stack = []
+        regs = {} # Parts used more than once (see ss.kernels.LOAD)
         for k in range(a, b):
             op, arg = p.ops[k], p.args[k]
             if op == kn.CONST:
                 stack.append(consts[arg])
+            elif op == kn.LOAD:
+                stack.append(regs[arg])
+            elif op == kn.STORE:
+                regs[arg] = stack[-1]
             elif op == kn.EXPOSURE:
                 stack.append(exposures[arg])
             elif op == kn.TOTAL: # In the whole population, every place
