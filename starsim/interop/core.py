@@ -455,6 +455,70 @@ def linked_states(source):
     return linked | (set(source.states) - touched)
 
 
+class Named:
+    """
+    The named expressions of a source (e.g. an Atomica model's parameter functions and characteristics) that its rates use,
+    each written once, with states as their counts (I.n), so a rate or share that contains one is written with its name
+
+    `Rates.parse()` writes them out, as the rules for reading a rate need; `fold()` puts their names back in what it gives.
+    A named expression that is only a state, a parameter, or a number is left written out, as is one that names a transition.
+    """
+    def __init__(self, source, rates, exclude):
+        self.ids = dict() # A number for what each node is made of, so equal nodes have the same number
+        self.forms = sc.objdict() # The full form of each, by its name
+        self.by_id = dict() # The name of each, by its form's number
+        self.used = [] # Those used so far
+        self.found = [] # Those found by the last fold
+        for name in source.exprs:
+            if name in exclude:
+                continue
+            try:
+                node = rates.counts_of(rates.parse(name))
+                expr_code(ast.unparse(node), set(source.states) | set(source.pars)) # Written out, it must be code (else the rate that uses it is listed as not translated, as before)
+            except (ValueError, SyntaxError):
+                continue
+            if not isinstance(node, (ast.Name, ast.Attribute, ast.Constant)):
+                self.forms[name] = node
+                self.by_id.setdefault(self.fold_node(node)[0], name)
+        return
+
+    def fold_node(self, node, skip=None):
+        """ The number of what a node is made of, and the node with each part that is a named expression (other than skip) as its name """
+        if isinstance(node, list):
+            parts = [self.fold_node(v, skip) for v in node]
+            return self.ids.setdefault(('list',) + tuple(i for i,v in parts), len(self.ids)), [v for i,v in parts]
+        elif not isinstance(node, ast.AST):
+            return self.ids.setdefault(('value', type(node).__name__, node), len(self.ids)), node
+        fields = [(field,self.fold_node(val, skip)) for field,val in ast.iter_fields(node) if field != 'ctx']
+        ident = self.ids.setdefault((type(node).__name__,) + tuple((field, i) for field,(i,v) in fields), len(self.ids))
+        name = self.by_id.get(ident)
+        if name is not None and name != skip:
+            self.found.append(name)
+            if name not in self.used:
+                self.used.append(name)
+            return ident, ast.Name(name)
+        new = type(node)(**{field:v for field,(i,v) in fields})
+        return ident, ast.copy_location(new, node) if hasattr(node, 'lineno') else new
+
+    def fold(self, text):
+        """ An expression (as text) with each named expression in it written as its name """
+        return ast.unparse(self.fold_node(ast.parse(str(text).strip(), mode='eval').body)[1])
+
+    def definitions(self):
+        """ Each named expression used, and those they use, as (name, its expression as text), each after those it uses """
+        out = sc.objdict()
+        def define(name):
+            if name not in out:
+                self.found = []
+                text = ast.unparse(self.fold_node(self.forms[name], skip=name)[1])
+                for other in list(self.found):
+                    define(other)
+                out[name] = text
+        for name in list(self.used):
+            define(name)
+        return out
+
+
 def disease_code(source, var, total=None):
     """
     The Python for the disease of one source, as the variable var: its parameters, states, transitions, outcomes, and
@@ -471,6 +535,9 @@ def disease_code(source, var, total=None):
     add = lines.append
     choices = []
     guessed = sc.objdict()
+    naming = {flow.rate for flow in source.flows if flow.name is None and flow.rate in source.exprs} # Named expressions that name transitions
+    named = Named(source, rates, taken | naming)
+    code_names = names | set(named.forms) # What a rate can use, written with its named expressions
 
     # Parameters, including the shares of outcomes that are not parameters of the source
     shares = sc.objdict()
@@ -530,7 +597,9 @@ def disease_code(source, var, total=None):
         else:
             text, how, rule = rates.classify(flow)
             try:
-                kw.rate = expr_code(text, names)
+                expr_code(text, names) # Written out, it must be code
+                text = named.fold(text)
+                kw.rate = expr_code(text, code_names)
             except (ValueError, SyntaxError) as E: # Something only the source's own language can say: listed, and the rest is written
                 source.skip(arrow, f'the rate "{flow.rate}" could not be translated ({E})')
                 continue
@@ -538,7 +607,7 @@ def disease_code(source, var, total=None):
                 guessed.setdefault(name, {})['import'] = how[-1]
             choices.append(f'  {arrow:16s} {flow.rate} : {"; ".join(how)} => {text}')
         if flow.get('p') is not None:
-            kw.p = '[' + ', '.join('None' if v is None else expr_code(ast.unparse(rates.counts_of(rates.parse(v))), names) for v in flow.p) + ']' # With the named expressions written out, and states as their counts (a share that changes with them)
+            kw.p = '[' + ', '.join('None' if v is None else expr_code(named.fold(ast.unparse(rates.counts_of(rates.parse(v)))), code_names) for v in flow.p) + ']' # States as their counts (a share that changes with them)
         if flow.get('after') is not None:
             kw.after = code_value(flow.after)
         if flow.label is not None:
@@ -571,6 +640,12 @@ def disease_code(source, var, total=None):
         taken.add(name)
         choices.append(f'  {name:16s} an outcome: {"" if whole else f"{share} × "}{" + ".join(parts)}' + ''.join(f', {k} {o[k]}' for k in ['delay', 'duration'] if o[k] is not None))
     choices += [f'  {note}' for note in source.notes]
+    defs = named.definitions()
+    if defs:
+        add('# Named expressions, with states as their counts')
+        for name,text in defs.items():
+            add(f'{name} = {expr_code(text, code_names)}')
+        add('')
     if members:
         add('# Transitions and outcomes')
         for name,code in members:

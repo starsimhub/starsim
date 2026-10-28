@@ -878,7 +878,10 @@ class Engine(Telling, Effects):
         """ Expand a value for each level of one or more dimensions to a value for each group, once a step """
         key = ('by', id(by))
         if key not in self.cache:
-            self.cache[key] = by.per_group(self.sim, self.convert, year=None if ss.solvers.Compartmental.held(by) else self.year) # A step function at the start of the step, as in call()
+            if by.varies and (self.year is None or ss.solvers.Compartmental.held(by)): # At the start of the step: worked out for every step at once, as in call()
+                self.cache[key] = np.array(self.held_value(by))
+            else:
+                self.cache[key] = by.per_group(self.sim, self.convert, year=None if ss.solvers.Compartmental.held(by) else self.year) # A step function at the start of the step, as in call()
         return self.cache[key]
 
     def check_counted_strains(self):
@@ -1052,12 +1055,12 @@ class Engine(Telling, Effects):
         return self.cache[key]
 
     def held_value(self, func):
-        """ A value that varies in time, at the start of the current step: worked out for every step at once, the first time it is needed (as in `Compartmental.tables()`), rather than at each call """
+        """ A value that varies in time (or an `ss.by` of them, for each group), at the start of the current step: worked out for every step at once, the first time it is needed (as in `Compartmental.tables()`), rather than at each call """
         key = ('held', id(func))
         if key in self.cache: # Already looked up this step
             return self.cache[key]
         t = self.sim.t
-        inner = tuple(p.raw for p in func.pars) # The values of any parameters inside it, which can change between runs
+        inner = tuple(p.raw for p in getattr(func, 'pars', [])) # The values of any parameters inside it, which can change between runs
         kept = self.held_series.get(id(func))
         if kept is None or kept[0] is not func or kept[1] != inner:
             kept = self.held_series[id(func)] = (func, inner, func.series(t.yearvec, self.sim, self.convert))

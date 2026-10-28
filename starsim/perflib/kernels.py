@@ -85,6 +85,8 @@ fields = [
     'mov_comps',
     'mov_pair',   # The group of each entry that people move from, and to
     'mov_rate',   # Its rate
+    'mov_base',   # For an entry whose rate is a parameter that can vary in time (see mov_par), its rate without it
+    'mov_par',    # The row of consts whose value, in the group people move from, times mov_base is its rate (set by set_movers()), or -1
     # For the stochastic solvers: the flows in the order they are drawn, grouped by the compartment they leave
     'src_starts', # (In the program of a crossing, the flows of each disease are drawn in turn: an empty set of flows ends each disease's; see draw())
     'src_flows',
@@ -137,6 +139,24 @@ shift_fields = [
 ]
 
 Shifts = collections.namedtuple('Shifts', shift_fields)
+
+# The values worked out once a step, as the kernels work them out (see evaluate())
+tape_fields = [
+    'ops',           # The operation of each entry, in an order where each comes after those it uses
+    'a',             # What it acts on: the row of consts (CONST), the set of compartments (a count), or the first entry it uses
+    'b',             # The second entry it uses, or -1
+    'const_grouped', # Whether each row of consts differs by group
+    'set_starts',    # Where each set of states counted together starts and ends (in the states below)
+    'state_starts',  # Where each state's compartments start and end
+    'state_comps',   # Their compartments
+    'places',        # The place of each group (all 0, with no places)
+    'n_places',
+    'local',         # Whether there are places, so a count differs by group
+    'people',        # The compartments of people, for a share (FRAC)
+    'has_frac',      # Whether there is one
+]
+
+Tape = collections.namedtuple('Tape', tape_fields)
 
 plain = __name__ == 'starsim.perflib.plain_kernels' # Whether this is the copy of the kernels that runs as plain Python: see uncompiled()
 if plain:
@@ -856,6 +876,55 @@ def binary(op, a, b):
     elif op == GT:  return 1.0 if a > b else 0.0
     elif op == GE:  return 1.0 if a >= b else 0.0
     return np.nan # Never reached: see unary()
+
+
+@jit
+def evaluate(y, t, consts, out, grouped):
+    """
+    Every value of a tape (see `ss.solvers.Tape`) at the compartments y, by group, into out (values by groups); grouped is set to whether each differs by group
+
+    Each entry is a parameter's value (CONST, a row of consts, which differs by group if its row of t.const_grouped says so),
+    a count (COUNT, TOTAL, FRAC: in the same place, the whole population, and as a share of the people in the same place),
+    or an operation on earlier entries (a, and b for one of two), so an expression used in many places is worked out once.
+    """
+    ng = y.shape[1]
+    num = np.zeros(t.n_places)
+    people = np.zeros(t.n_places)
+    if t.has_frac:
+        for g in range(ng):
+            for c in t.people:
+                people[t.places[g]] += y[c, g]
+    for i in range(len(t.ops)):
+        op = t.ops[i]
+        arg = t.a[i]
+        if op == CONST:
+            grouped[i] = t.const_grouped[arg]
+            for g in range(ng):
+                out[i, g] = consts[arg, g]
+        elif op == COUNT or op == FRAC or op == TOTAL:
+            num[:] = 0.0
+            for g in range(ng):
+                v = 0.0
+                for s in range(t.set_starts[arg], t.set_starts[arg+1]): # State by state, added as NumPy adds them
+                    vs = 0.0
+                    for k in range(t.state_starts[s], t.state_starts[s+1]):
+                        vs += y[t.state_comps[k], g]
+                    v += vs
+                num[0 if op == TOTAL else t.places[g]] += v
+            grouped[i] = t.local and op != TOTAL
+            for g in range(ng):
+                pl = 0 if op == TOTAL else t.places[g]
+                out[i, g] = leaf_share(op, num[pl], people[pl])
+        elif op >= EXP:
+            grouped[i] = grouped[arg]
+            for g in range(ng):
+                out[i, g] = unary(op, out[arg, g])
+        else:
+            b = t.b[i]
+            grouped[i] = grouped[arg] or grouped[b]
+            for g in range(ng):
+                out[i, g] = binary(op, out[arg, g], out[b, g])
+    return
 
 
 @jit
@@ -1843,6 +1912,7 @@ def step(rng, y, p, w, dt, n_sub, solver, flows, tables, row):
                 for k in range(4):
                     if len(tables[k]) > 1:
                         interp((p.fixed, p.mult, p.consts, p.rel_trans)[k], tables[k], row, th)
+                set_movers(p)
 
             # The rate of every flow, by group: per member of its source compartment, or in total for an inflow
             for f in range(nf):
@@ -2304,6 +2374,15 @@ def set_step(parts, ti, tables):
 
 
 @kernel(inline='always')
+def set_movers(p):
+    """ The rates of the movers whose rate is a parameter (see `Program`), from its value at a step or stage, once consts is set """
+    for e in range(len(p.mov_par)):
+        if p.mov_par[e] >= 0:
+            p.mov_rate[e] = p.mov_base[e]*p.consts[p.mov_par[e], p.mov_pair[0, e]]
+    return
+
+
+@kernel(inline='always')
 def time_point(rng, y, p, w, ti, row, per_step, dt, n_sub, solver, flows, tables, reg, sh, tally):
     """
     Step ti of a run, from time point ti-1 to ti, as `run()`, `run_many()` and `advance()` take it, in this order: the
@@ -2318,6 +2397,7 @@ def time_point(rng, y, p, w, ti, row, per_step, dt, n_sub, solver, flows, tables
         if sh.due[:, ti-1].any():
             wake(w)
     set_step((p.fixed, p.mult, p.consts, p.rel_trans), row, tables)
+    set_movers(p)
     step(rng, y, p, w, dt, n_sub, solver, flows, tables, row if per_step == 3 else -1)
     short = 0.0
     if len(reg.src): # The events dated at its end (not called if there are none, since passing the register costs as much as a small step)
@@ -2477,6 +2557,7 @@ def advance(rngs, p, ys, first, last, dt, start, end, solver, n_sub, fixed, mult
                 if sh.due[:, ti-1].any():
                     wake(w)
             set_step(parts, (ti-1)*per_step - row0, tables)
+            set_movers(p)
             step(rng, y, p, w, dt, n_sub, solver, now, tables, (ti-1)*per_step - row0 if per_step == 3 else -1) # Compiled into advance(): see into_many()
             if len(reg.src):
                 apply_events(rng, y, reg, ti, solver >= 2)

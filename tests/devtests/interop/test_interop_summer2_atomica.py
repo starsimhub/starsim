@@ -181,8 +181,8 @@ def test_summer2():
     return sim
 
 
-def atomica_files(folder):
-    """ A small Atomica framework and databook: an SIR with a probability, a duration, a rate, a number, and a function """
+def atomica_files(folder, junction=False):
+    """ A small Atomica framework and databook: an SIR with a probability, a duration, a rate, a number, and a function; with junction=True, those infected pass through a junction, to inf for a share that rises with prevalence and to rec for the rest """
     fw = os.path.join(folder, 'framework.xlsx')
     db = os.path.join(folder, 'databook.xlsx')
     sheets = dict(
@@ -200,6 +200,11 @@ def atomica_files(folder):
                       ['vacc', 'Number vaccinated', 'Number', 'parameters', None, None]],
         Transitions = [[None, 'sus', 'inf', 'rec', 'dead'], ['sus', None, 'foi', 'vacc', None], ['inf', None, None, 'dur', 'mort'], ['rec', None, None, None, None], ['dead', None, None, None, None]],
     )
+    if junction:
+        sheets['Compartments'].append(['jn', 'Junction', 'n', 'n', 'y', None])
+        sheets['Parameters'].append(['p_sym', 'Share symptomatic', 'Proportion', None, None, 'min(10 * ch_prev, 1)'])
+        sheets['Transitions'] = [[None, 'sus', 'inf', 'rec', 'dead', 'jn'], ['sus', None, None, 'vacc', None, 'foi'], ['inf', None, None, 'dur', 'mort', None],
+                                 ['rec', None, None, None, None, None], ['dead', None, None, None, None, None], ['jn', None, 'p_sym', '>', None, None]]
     with pd.ExcelWriter(fw) as w:
         for name,rows in sheets.items():
             pd.DataFrame(rows).to_excel(w, sheet_name=name, header=False, index=False)
@@ -257,8 +262,37 @@ def test_atomica():
     return sim
 
 
+def test_atomica_junction():
+    sc.heading('Testing an Atomica model whose junction splits by a share that changes with the counts')
+    with tempfile.TemporaryDirectory() as tmp:
+        fw, db = atomica_files(tmp, junction=True)
+        sim = ss.interop.convert(fw, format='atomica', databook=db, dt=1, **kw) # Read, and the code saved beside the framework
+        code = sim.imported.code
+        assert sim.imported.filename.read_text() == code
+    assert '\nch_prev = ' in code and code.count('ch_prev') > code.count('\nch_prev = ') + 1, 'The characteristic should be written once and used by name'
+    assert 'sus_to_jn_inf' in code and 'sus_to_jn_rec' in code, 'A junction whose shares change should be a transition to each destination, with its share in the rate'
+    sim.init()
+    assert sim.kernel_reason() is None, 'The whole run should be taken in one call to the kernels'
+    sim.run()
+    res = sim.results.tiny
+
+    # Atomica's step by hand, with those infected split at the junction
+    x = np.array([900.0, 50, 50, 0])
+    vacc = np.interp(np.arange(2000, 2010), [2000, 2001, 2002, 2003, 2004], [10, 10, 20, 20, 20])
+    for i,t in enumerate(range(2000, 2009)):
+        s, inf, r, d = x
+        prev = inf/(s + inf + r)
+        new = 0.6*prev*s
+        sym = min(10*prev, 1)
+        flows = dict(si=new*sym, sj=new*(1 - sym), sr=min(vacc[i], s), ir=inf/5, id=0.02*inf)
+        x = np.array([s - new - flows['sr'], inf + flows['si'] - flows['ir'] - flows['id'], r + flows['sj'] + flows['sr'] + flows['ir'], d + flows['id']])
+    assert np.allclose([res.sus[-1], res.inf[-1], res.rec[-1], res.dead[-1]], x), 'Should match Atomica\'s Euler step through the junction'
+    return sim
+
+
 if __name__ == '__main__':
     T = sc.timer()
     sim1 = test_summer2()
     sim2 = test_atomica()
+    sim3 = test_atomica_junction()
     T.toc()

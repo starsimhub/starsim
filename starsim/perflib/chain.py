@@ -62,6 +62,9 @@ def reason(sim):
         name = mod.engine.certain() if hasattr(mod.engine, 'certain') else None
         if name is not None:
             return f'"{mod.name}" has a probability of 1 over a period ({name}), an infinite rate, which the kernels take as everyone moving at once'
+        varying = [name for name,tf in mod.graph.transfers.items() if mod.engine.par_transfer(tf)]
+        if varying:
+            return f'the rate of the transfer "{varying[0]}" of "{mod.name}" changes in time, which only the kernels take at each step'
     try:
         check()
     except RuntimeError as e:

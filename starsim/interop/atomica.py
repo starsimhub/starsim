@@ -222,7 +222,11 @@ def as_value(constant, series, factor=1.0, lo=None, hi=None):
         return fix(constant)
     if len(series) == 1:
         return fix(list(series.values())[0])
-    return ss.timeseries({float(y):fix(v) for y,v in sorted(series.items())}, mode='linear')
+    points = [(float(y), fix(v)) for y,v in sorted(series.items())]
+    kept = [pt for i,pt in enumerate(points) if i in (0, len(points) - 1) or not points[i-1][1] == pt[1] == points[i+1][1]] # Not a point equal to those on either side, which changes nothing (e.g. a databook given month by month)
+    if len(kept) == 2 and kept[0][1] == kept[1][1]:
+        return kept[0][1]
+    return ss.timeseries(dict(kept), mode='linear')
 
 
 def same(a, b):
@@ -614,6 +618,11 @@ def load_atomica(framework, databook=None, progbook=None, calibration=None, star
         return {leaf:shares[0] if len(shares) == 1 else ' + '.join(f'({s})' for s in shares) for leaf,shares in found.items()}
 
     # Transitions
+    def fixed(text):
+        """ Whether an expression (with its named expressions written out) has the same value throughout: no states, and no parameters that vary in time """
+        names = {n.id for n in ast.walk(expand(text)) if isinstance(n, ast.Name)} - {'max', 'min', 'exp', 'log', 'sqrt', 'abs', 'floor', 'sdiv'}
+        varies = lambda v: isinstance(v, ss.parameters.TimeValue) or (isinstance(v, ss.by) and v.varies)
+        return all(name in used and not any(varies(v) for v in used[name]) for name in names)
     for frm,to,p in links:
         if frm in junctions: # A branch of the transitions into it
             continue
@@ -640,6 +649,10 @@ def load_atomica(framework, databook=None, progbook=None, calibration=None, star
         froms = [a for a,b,q in links if q == p]
         if f == 'number' and frm not in sources and len(froms) > 1: # A number shared over every compartment it moves people out of (counted once for each of its transitions), as Atomica shares it
             rate, per = f'{p} / ({" + ".join(froms)})', 'person'
+        if shares is not None and not all(fixed(share) for share in ends.values()): # Shares that change (with the numbers in states, or in time) are factors of the rates of a transition to each destination, which is the same flow, since people pass through a junction at once
+            for leaf,share in ends.items():
+                src.add_flow(None if frm in sources else frm, leaf, f'({rate}) * ({share})', per=per, name=f'{tname}_{leaf}', label=get(pars, p, 'Display Name'))
+            continue
         src.add_flow(None if frm in sources else frm, dst, rate, per=per, name=tname, label=get(pars, p, 'Display Name'), p=shares)
 
     # The parameters that are used, by population

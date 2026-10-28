@@ -224,6 +224,13 @@ Looked at whether v4 should support modeling paradigms beyond the ODE, chain-bin
 - **A compartmental form for an escape** (oct27/plan.md): with `ss.Transition(before=)` removed, `rate*(X.time < d)` runs as agents only. S–M.
 - **A whole JAX ODE run of births with a fixed delay** (oct27 review, `review/solvers.md`): it differs from the kernels (the a7 `births` model: `M0` by up to 38 in about 668, `NP` ends at 1,673 against 1,773), already so at `acef3c7b`. Find which step of the delay or the births the JAX run takes differently. S–M.
 
+## From the Atomica speed work (October 27)
+
+- **Shared parts in the kernels' program of rates.** The rates that change within a step (those with counts) are flattened into a stack program with no part shared: cat-tb India's 140 such flows are 134,652 operations, worked out at each step (1.3 s of its 1.8 s run, and most of `init_program()`'s 0.6 s), where the tape (`Compartmental.init_tape()`) has every expression worked out once a step in 1,300 entries. Sharing parts across flows would change every engine that reads the program: the kernels' `step()`, `place_rates()` and `sparse_events()` (which works out a few flows at a time, so a part shared with another flow needs working out first), the crossing's merge, and the JAX engines. See `oct27/worklogs/atomica_speed.md`.
+- **A transfer whose rate varies in time, in the JAX engines and in diseases tracked jointly.** A whole run in the kernels takes it from the program's values at each step (`ss.kernels.set_movers()`); the JAX ODE and chain binomial, and a crossing, hold a mover's rate for the run, so they refuse it (or, a crossing, step it).
+- **Reading Atomica's workbooks.** cat-tb India takes 10.7 s to read and write as code, against about 6 s for Atomica to read it; done once with `ss.interop.convert()`, so it waits.
+- **The states a transfer moves, written once.** Each of cat-tb's transfers lists the ~110 states it moves, so its `stratify()` is one line of 14,565 characters; a variable for the list would need `ss.interop.Source` to hold code of its own.
+
 ## Won't do
 
 Work that was looked at and decided against, with why, so that it is not proposed again without a new reason.

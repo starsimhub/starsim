@@ -8,6 +8,7 @@ same rules for every format (`ss.interop.write()`) and runs the code to make the
 the code is kept in `sim.imported.code`, how each rate was read is printed, and what
 could not be translated is listed as `ss.errors.ImportIncomplete` and kept in `sim.imported`.
 """
+import os
 import re
 import sciris as sc
 from .core import Source, Code, write, build
@@ -24,7 +25,7 @@ from .siminf import load_siminf
 from .summer2 import load_summer2
 from .export import exporters, export, to_hub
 
-__all__ = ['Source', 'Code', 'write', 'build', 'formats', 'sniff', 'load', 'exporters', 'export', 'to_hub']
+__all__ = ['Source', 'Code', 'write', 'build', 'formats', 'sniff', 'load', 'convert', 'exporters', 'export', 'to_hub']
 
 formats = dict(
     atomica  = load_atomica,
@@ -109,3 +110,33 @@ def load(source, format=None, **kwargs):
         errormsg = f'Cannot import format "{format}"; the formats are {sc.strjoin(formats)}'
         raise ValueError(errormsg)
     return formats[key](source, **kwargs)
+
+
+def convert(source, filename=None, format=None, **kwargs):
+    """
+    Read another framework's model, as `load()` does, and save the Starsim code for it: read the model once, then run the code (which takes a fraction of the time)
+
+    Args:
+        source (str/any): the file (or, for some formats, the model object)
+        filename (str): where to save the code (default: beside the source, with its name and .py)
+        format (str): the framework (see `load()`)
+        kwargs (dict): passed to the importer
+
+    Returns:
+        The `ss.Sim`, as `load()` gives it, with `sim.imported.filename` the file the code was saved to
+
+    **Example**:
+
+        import starsim.interop
+        sim = ss.interop.convert('tb_framework.xlsx', format='atomica', databook='IND.xlsx', filename='tb_india.py')
+        sim.run() # Or later: python tb_india.py, or runpy.run_path('tb_india.py')['sim']
+    """
+    if filename is None:
+        if not isinstance(source, (str, os.PathLike)):
+            errormsg = f'Give filename= for the code, since the model ({type(source).__name__}) is not a file'
+            raise ValueError(errormsg)
+        filename = sc.path(source).with_suffix('.py')
+    sim = load(source, format=format, **kwargs)
+    sc.savetext(filename, sim.imported.code)
+    sim.imported.filename = sc.path(filename)
+    return sim
