@@ -21,13 +21,13 @@ The import reads the R script without running R: literal numbers, strings, `c()`
 | `enter`, `exit`, `intTrans`, `extTrans` events, with `E` and `N` | `ss.geo.Mobility(data=register)` (`to_states` for `intTrans`; entering animals go to the first compartment selected) | yes |
 | `SISe`, `SISe3` (`phi` in the environment, by quarter) | `phi` as `ss.State(people=False)`, with a seasonal decay `phi >> ss.null` and shedding `ss.null >> phi` from `I` | yes |
 | `tspan` | `solver='gillespie'`, in days, from `tspan[0] - 1` to `tspan[-1]` | yes |
-| `u0`, `events` computed in R (`u0_SIR()`, `events_SIR()`, `read.csv()`, loops) | Listed as "computed in R"; pass them in: `ss.interop.load('model.R', u0='u0.csv', events='events.csv.gz')` | no |
+| `u0`, `events` computed in R (`u0_SIR()`, `events_SIR()`, `read.csv()`, loops) | Listed as "computed in R"; pass them in: `ss.import_from('model.R', u0='u0.csv', events='events.csv.gz')` | no |
 | `pts_fun` (C code updating `v`) | Transitions of a state that is not people (below) | no |
 | Events with `proportion` and `n = 0` | Numbers, or an intervention | no |
 
 ## What needs care
 
-- **Data computed in R.** Have R write it after sourcing the script: `write.csv(cbind(node = seq_len(ncol(model@u0)), as.data.frame(t(model@u0))), "u0.csv", row.names = FALSE)` and `write.csv(as.data.frame(events(model)), gzfile("events.csv.gz"), row.names = FALSE)`. The script's own assignments to `u0` are applied to what is passed. Everything can also be given as a dict: `ss.interop.siminf.load_siminf(dict(transitions=[...], compartments=[...], u0=df, gdata=dict(...), tspan=..., events=df, E=..., N=...))`.
+- **Data computed in R.** Have R write it after sourcing the script: `write.csv(cbind(node = seq_len(ncol(model@u0)), as.data.frame(t(model@u0))), "u0.csv", row.names = FALSE)` and `write.csv(as.data.frame(events(model)), gzfile("events.csv.gz"), row.names = FALSE)`. The script's own assignments to `u0` are applied to what is passed. Everything can also be given as a dict: `ss.io.siminf.load_siminf(dict(transitions=[...], compartments=[...], u0=df, gdata=dict(...), tspan=..., events=df, E=..., N=...))`.
 - **A daily update in `pts_fun`**, `v' = v*(1 - b) + g`, is a decay at rate `-log(1 - b)` plus an inflow at `g*(-log(1 - b))/b`, which give the same `v` at the end of each day:
 
 ```python
@@ -45,7 +45,7 @@ infection = S >> I @ upsilon * phi.n # phi.n, not phi: phi is a count, not peopl
 `lingua_franca_design/examples/siminf/sir_herds` (SIR in 1,600 herds with births, deaths, and movements) and `examples/siminf/sise3` (SISe3, three age categories with the environment). With `u0` and the events written by R, both import with nothing listed. Over 96 runs of the SIR, the mean of every compartment and of the number of infected herds is within about 1.4 standard errors of SimInf's at days 100, 365, 700, 1,000, and 1,450 (`I` on day 700: 47,303 ± 1,888 against 49,853); over 24 runs of SISe3, `I` in each age category is within about 1 standard error (all `I` on day 1,450: 3,273 ± 537 against 3,692).
 
 ```python
-sim = ss.interop.load('events_SIR.R', u0='reference/u0.csv', events='reference/events.csv.gz')
+sim = ss.import_from('events_SIR.R', u0='reference/u0.csv', events='reference/events.csv.gz')
 ```
 
 ## Running the original

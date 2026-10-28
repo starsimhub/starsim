@@ -775,7 +775,7 @@ def nuts(logdensity, z0, draws=500, warmup=500, chains=4, traced=False, forward=
             start = jnp.asarray(starts[c]) + 0.01*jax.random.normal(start_key, (d,)) # Each a little apart, even from the same point
             if verbose:
                 print(f'NUTS chain {c+1} of {chains}: {warmup} warm-up draws, then {draws} draws')
-            ss.perflib.compiling('the NUTS sampler', 'JAX', 1, 10)
+            ss.solvers.backends.compiling('the NUTS sampler', 'JAX', 1, 10)
             adapt = blackjax.window_adaptation(blackjax.nuts, logp)
             (state, params), _ = adapt.run(warm_key, start, num_steps=warmup)
             step = jax.jit(blackjax.nuts(logp, **params).step)
@@ -829,7 +829,7 @@ def nuts_traced(jax, blackjax, logdensity, starts, key, draws, warmup, verbose, 
     n_dev = max(k for k in range(1, min(len(devices), chains) + 1) if chains % k == 0) # Each device takes the same number of chains
     shape = lambda arr: arr.reshape((n_dev, chains//n_dev) + arr.shape[1:])
     T = sc.timer()
-    ss.perflib.compiling('the NUTS sampler', 'JAX', 1, 10)
+    ss.solvers.backends.compiling('the NUTS sampler', 'JAX', 1, 10)
     if n_dev > 1: # Each on cores of its own
         compiled = jax.pmap(jax.vmap(one_chain), devices=devices[:n_dev]).lower(shape(keys), shape(starts)).compile()
         args = (shape(keys), shape(starts))
@@ -1176,8 +1176,7 @@ def optimize(sim, total=None, maximize=None, minimize=None, at=None, start=None,
 
     Examples:
         ```python
-        import starsim.interop
-        sim = ss.interop.load('hiv_framework.xlsx', format='atomica', databook='hiv_databook.xlsx', progbook='hiv_progbook.xlsx', programs_start=2020)
+        sim = ss.import_from('hiv_framework.xlsx', format='atomica', databook='hiv_databook.xlsx', progbook='hiv_progbook.xlsx', programs_start=2020)
         best = ss.fit.optimize(sim, start=2020, maximize='all_vs', at=2030)
         best.summarize()
         least = ss.fit.optimize(sim, start=2020, maximize='all_vs', at=2030, target=1.1*best.value) # The least money that reaches it
@@ -1881,7 +1880,7 @@ class Problem:
                     with jax.enable_x64(True):
                         while True:
                             if not compiled:
-                                ss.perflib.compiling('the gradient of the log-likelihood', 'JAX', 0.5, 5)
+                                ss.solvers.backends.compiling('the gradient of the log-likelihood', 'JAX', 0.5, 5)
                                 compiled.append(jax.jit(fn))
                             value, grad, need = compiled[0](jax.numpy.asarray(x, dtype=float))
                             if not reverse or not adaptive or need <= min(run.n_max for run in adaptive):

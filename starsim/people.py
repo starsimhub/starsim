@@ -773,9 +773,9 @@ class People:
     def step_die(self):
         """ Carry out any deaths or removals that took place this timestep """
         ti = self.sim.ti
-        deaths, n_alive = ss.perflib.passes.due_alive(self.alive.raw[:self.uid.len_used], self.ti_dead.raw, self.ti_removed.raw, ti) # As ((self.ti_dead <= ti) | (self.ti_removed <= ti)).uids, in one pass by UID, since the active agents are those alive...
+        deaths, n_alive = ss.solvers.backends.passes.due_alive(self.alive.raw[:self.uid.len_used], self.ti_dead.raw, self.ti_removed.raw, ti) # As ((self.ti_dead <= ti) | (self.ti_removed <= ti)).uids, in one pass by UID, since the active agents are those alive...
         if n_alive != len(self.auids): # ...unless something else has changed who is alive: then from the active agents themselves
-            deaths = ss.perflib.passes.due(self.auids.view(np.ndarray), self.ti_dead.raw, self.ti_removed.raw, ti)
+            deaths = ss.solvers.backends.passes.due(self.auids.view(np.ndarray), self.ti_dead.raw, self.ti_removed.raw, ti)
         death_uids = ss.uids(deaths)
         self.resolve_causes(death_uids[self.ti_dead.raw[death_uids] <= ti])
         self.alive[death_uids] = False  # Whilst not dead, removed agents should not be included in alive totals
@@ -807,12 +807,12 @@ class People:
             room = self._auids_room
         else:
             room = np.empty(expected + max(1000, expected//10), dtype=ss.dtypes.uid) # With room for births: see add_active()
-        n_kept = ss.perflib.passes.keep_raw(self.alive.raw[:self.uid.len_used], age, dt, aging, room, expected) # By UID, if the active agents are those alive and those who died in this step...
+        n_kept = ss.solvers.backends.passes.keep_raw(self.alive.raw[:self.uid.len_used], age, dt, aging, room, expected) # By UID, if the active agents are those alive and those who died in this step...
         if n_kept >= 0:
             gone = dying.view(np.ndarray)
         else: # ...or else from the active agents themselves
             room = np.empty(len(auids) + max(1000, len(auids)//10), dtype=ss.dtypes.uid)
-            n_kept, gone = ss.perflib.passes.keep_alive(auids.view(np.ndarray), self.alive.raw, age, dt, aging, room)
+            n_kept, gone = ss.solvers.backends.passes.keep_alive(auids.view(np.ndarray), self.alive.raw, age, dt, aging, room)
         if len(gone): # Agents who are still active but no longer alive
 
             # Remove the UIDs from the networks too
@@ -845,11 +845,11 @@ class People:
             gone = dying[self.ti_dead.raw[dying] <= ti], dying[self.ti_removed.raw[dying] <= ti]
             counts = [float(w[state.raw[auids]].sum()) for state in states] + [float(self.scale.raw[uids].sum()) for uids in gone]
         elif all(state.raw.ndim == 1 for state in states):
-            counts = ss.perflib.passes.count_alive(tuple(state.raw for state in states), self.alive.raw[:self.uid.len_used]) # In one pass by UID, if the active agents are those alive and those who died in this step
+            counts = ss.solvers.backends.passes.count_alive(tuple(state.raw for state in states), self.alive.raw[:self.uid.len_used]) # In one pass by UID, if the active agents are those alive and those who died in this step
             if counts[-1] + len(dying) == len(self.auids):
                 counts = [count + np.count_nonzero(state.raw[dying]) for state,count in zip(states, counts)] + [np.count_nonzero(self.ti_dead.raw[dying] <= ti), np.count_nonzero(self.ti_removed.raw[dying] <= ti)]
             else: # From the active agents themselves
-                counts = ss.perflib.passes.count_people(self.auids.view(np.ndarray), tuple(state.raw for state in states), self.alive.raw, self.ti_dead.raw, self.ti_removed.raw, ti)
+                counts = ss.solvers.backends.passes.count_people(self.auids.view(np.ndarray), tuple(state.raw for state in states), self.alive.raw, self.ti_dead.raw, self.ti_removed.raw, ti)
         if self.scale.weighted: # Agents of different weights make fractions of people
             for key in [state.name for state in states] + ['new_deaths', 'new_emigrants', 'cum_deaths']:
                 if res[key].values.dtype.kind in 'iu':

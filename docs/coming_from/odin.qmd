@@ -58,7 +58,6 @@ In Starsim, the age groups are a stratification and the contact matrix is `ss.co
 ```{python}
 import numpy as np
 import starsim as ss
-import starsim.interop
 ss.options(jupyter=True)
 
 m = [[12, 4, 2, 1], [4, 8, 3, 1], [2, 3, 6, 2], [1, 1, 2, 3]] # Contacts a day
@@ -82,12 +81,12 @@ The final number recovered, over the 20 runs (odin's mean over 1,000 runs is 532
 msim.summarize().loc[['seir_R']]
 ```
 
-The same file can also be imported. `ss.interop.load()` reads odin's language directly, without R or odin, and turns the arrays coupled by the contact matrix into an age stratification with `ss.contacts()`:
+The same file can also be imported. `ss.import_from()` reads odin's language directly, without R or odin, and turns the arrays coupled by the contact matrix into an age stratification with `ss.contacts()`:
 
 ```{python}
 #| eval: false
 #| label: starsim-import
-sim = ss.interop.load('age_seir.R', format='odin', pars=dict(S0=pop - [10, 0, 0, 0], I0=[10, 0, 0, 0], m=m), stop=365)
+sim = ss.import_from('age_seir.R', format='odin', pars=dict(S0=pop - [10, 0, 0, 0], I0=[10, 0, 0, 0], m=m), stop=365)
 msim = sim.run(n_runs=20)
 ```
 
@@ -133,4 +132,4 @@ These are from Starsim's switching demo for odin users (`tests/switching/test_od
 
 ## Bringing your model in
 
-`ss.interop.load('model.R', format='odin')` reads a model in odin's language, in odin 1's syntax (`user()`, `rbinom()`) or odin2's (`parameter()`, `Binomial()`, `data()` with `~`). The file is parsed in Python, so neither R nor odin is needed. Each equation is split into its terms, and a term that leaves one state and enters another becomes a flow between them. Arrays of independent copies (replicates) become one model run many times; arrays with flows from each level to the next (aging) become an age stratification; arrays coupled through a matrix become a stratification with `ss.contacts()`; and `delay()` of a flow into a state becomes a fixed dwell time. Values given with `user()` or `parameter()` can be passed as `pars=`, the `initial()` equations give the initial states, and a comparison with data (`cases ~ Poisson(incidence)`) becomes an outcome with its likelihood. What is not translated is listed (`sim.imported.incomplete`), and `sim.imported.prompt` is a prompt for an AI assistant with Starsim's import-model skill to finish the job.
+`ss.import_from('model.R', format='odin')` reads a model in odin's language, in odin 1's syntax (`user()`, `rbinom()`) or odin2's (`parameter()`, `Binomial()`, `data()` with `~`). The file is parsed in Python, so neither R nor odin is needed. Each equation is split into its terms, and a term that leaves one state and enters another becomes a flow between them. Arrays of independent copies (replicates) become one model run many times; arrays with flows from each level to the next (aging) become an age stratification; arrays coupled through a matrix become a stratification with `ss.contacts()`; and `delay()` of a flow into a state becomes a fixed dwell time. Values given with `user()` or `parameter()` can be passed as `pars=`, the `initial()` equations give the initial states, and a comparison with data (`cases ~ Poisson(incidence)`) becomes an outcome with its likelihood. What is not translated is listed (`sim.imported.incomplete`), and `sim.imported.prompt` is a prompt for an AI assistant with Starsim's import-model skill to finish the job.

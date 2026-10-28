@@ -43,9 +43,9 @@ Tested by `test_transitions.py::test_forms` on the SIR (the spellings, a class, 
 
 ### 2. The code and the saved form
 
-- The code an import writes builds the same sim, run on its own, with the same results (`test_interop.py::test_code`, on an EMULSION import and on a source with every kind of value an importer gives); an import and its hand translation give the same results (`test_interop.py::test_hand`).
-- A sim saved with `ss.save('run.sim', sim)`, before a run or after one, loads with the same results, under every solver (`test_transitions.py::test_load`), and so does every corpus model (`test_interop.py::test_save_load`).
-- Each export lists what it changed and left out (`ss.errors.LossyExport`): `test_interop_export.py` checks the list for Erlang stages, a network, an agent-based sim, and a stratification, and that SBML and odin exports read back with the same results. That the list matches everything missing from the file is not checked.
+- The code an import writes builds the same sim, run on its own, with the same results (`test_io.py::test_code`, on an EMULSION import and on a source with every kind of value an importer gives); an import and its hand translation give the same results (`test_io.py::test_hand`).
+- A sim saved with `ss.save('run.sim', sim)`, before a run or after one, loads with the same results, under every solver (`test_transitions.py::test_load`), and so does every corpus model (`test_io.py::test_save_load`).
+- Each export lists what it changed and left out (`ss.errors.LossyExport`): `test_io_export.py` checks the list for Erlang stages, a network, an agent-based sim, and a stratification, and that SBML and odin exports read back with the same results. That the list matches everything missing from the file is not checked.
 
 ### 3. Agreement between solvers, on simple models
 

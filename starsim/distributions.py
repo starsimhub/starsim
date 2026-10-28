@@ -9,7 +9,7 @@ import scipy.stats as sps
 import scipy.special as sp_special
 import starsim as ss
 import matplotlib.pyplot as plt
-from .perflib import draws, cache as _cache
+from .solvers.backends import draws, cache as _cache
 ss_int = ss.dtypes.int
 
 
@@ -36,7 +36,7 @@ def _hash_uniforms_fill(seed, ind, slots, out, shift, scale):
     """
     Fill `out` with one uniform in (0, 1) per slot via a counter-based (splitmix64) hash keyed
     by (seed, ind); not for the user. See hash_uniforms() for the algorithm and rationale, and
-    `ss.perflib.draws` for the hash (`key()` and `crn_uniform()`), which the kernels share.
+    `ss.solvers.backends.draws` for the hash (`key()` and `crn_uniform()`), which the kernels share.
 
     `out` carries the target float dtype (Numba specializes on it), and (shift, scale) select the
     mantissa width: (40, 2^-24) for float32, (11, 2^-53) for float64. Matching the mantissa to the
@@ -50,18 +50,18 @@ def _hash_uniforms_fill(seed, ind, slots, out, shift, scale):
 
 def inverse(name, rands, *pars, big=None, fallback=None):
     """
-    The inverse CDF of a distribution at the uniforms rands, compiled (by `ss.perflib.draws`, exact); not for the user
+    The inverse CDF of a distribution at the uniforms rands, compiled (by `ss.solvers.backends.draws`, exact); not for the user
 
     Args:
-        name (str): the distribution in `ss.perflib.draws.many`
+        name (str): the distribution in `ss.solvers.backends.draws.many`
         rands (array): the uniforms
         pars (list): its parameters, each a number or an array (one value per uniform)
-        big (array): where the draws are not by inversion in `ss.perflib.draws` (means above its `INV_MAX`), so are taken from fallback instead, to stay monotone in the uniform
+        big (array): where the draws are not by inversion in `ss.solvers.backends.draws` (means above its `INV_MAX`), so are taken from fallback instead, to stay monotone in the uniform
         fallback (func): the inverse CDF to use there, as a function of the uniforms and the indices of the draws
     """
     u = np.asarray(rands, dtype=np.float64)
     pars = [float(p) if isinstance(p, (int, float)) or np.ndim(p) == 0 else np.asarray(p, dtype=np.float64) for p in pars]
-    out = ss.perflib.draws.many[name](*pars, u, np.empty(len(u)))
+    out = ss.solvers.backends.draws.many[name](*pars, u, np.empty(len(u)))
     if big is not None and np.any(big):
         inds = np.flatnonzero(np.broadcast_to(big, u.shape))
         out[inds] = fallback(u[inds], inds)
@@ -1203,7 +1203,7 @@ class Dist:
 
     def crn_key(self):
         """
-        For a compiled loop that draws the uniforms itself (e.g. `ss.perflib.passes.infect()`), in place of `rvs(uids)`: the seed and
+        For a compiled loop that draws the uniforms itself (e.g. `ss.solvers.backends.passes.infect()`), in place of `rvs(uids)`: the seed and
         index of this call's draws, which are `hash_uniforms(seed, ind, slots)` at `dtype`, with the bookkeeping of one call to
         `rvs()`; not for the user. None if they cannot be drawn that way (without common random numbers, or while the draws
         are being recorded), in which case `rvs()` is called instead.
@@ -1553,7 +1553,7 @@ class expon(Dist):
         return
 
     def ppf(self, rands):
-        """ The inverse CDF, compiled (see `ss.perflib.draws`); SciPy's for unusual parameters """
+        """ The inverse CDF, compiled (see `ss.solvers.backends.draws`); SciPy's for unusual parameters """
         scale, loc = self.dist.kwds.get('scale', 1.0), self.dist.kwds.get('loc', 0.0)
         if not positive(scale):
             return super().ppf(rands)
@@ -1593,7 +1593,7 @@ class poisson(Dist):
         and for CRN draws it is called every time an ``ss.poisson`` is sampled by
         UID. For a scalar ``lam`` we instead precompute the CDF once and map each
         uniform via ``np.searchsorted``, which is 30-60x faster and produces
-        bitwise-identical results. Array-valued ``lam`` is inverted by `ss.perflib.draws`
+        bitwise-identical results. Array-valued ``lam`` is inverted by `ss.solvers.backends.draws`
         (SciPy's above a mean of 30, and for unusual values).
         """
         lam = self._pars.lam
@@ -1605,7 +1605,7 @@ class poisson(Dist):
                 self._ppf_lam = lam
             rvs = np.searchsorted(self._ppf_cdf, rands, side='left') # side='left' matches sps.poisson.ppf
         elif every(lam >= 0):
-            rvs = inverse('poisson', rands, lam, big=lam > ss.perflib.draws.INV_MAX, fallback=lambda u, i: sps.poisson.ppf(u, lam[i]))
+            rvs = inverse('poisson', rands, lam, big=lam > ss.solvers.backends.draws.INV_MAX, fallback=lambda u, i: sps.poisson.ppf(u, lam[i]))
         else:
             rvs = self.dist.ppf(rands)
         return rvs.astype(ss.dtypes.int) # Poisson yields integer counts, matching the native rvs path (SciPy's ppf returns float)
@@ -1685,11 +1685,11 @@ class nbinom(Dist):
         return
 
     def ppf(self, rands):
-        """ The inverse CDF, compiled (see `ss.perflib.draws`); SciPy's above a mean of 30, and for unusual parameters """
+        """ The inverse CDF, compiled (see `ss.solvers.backends.draws`); SciPy's above a mean of 30, and for unusual parameters """
         n, p = np.asarray(self.dist.kwds['n']), np.asarray(self.dist.kwds['p'])
         if not (every(n > 0) and every(p > 0) and every(p <= 1)):
             return super().ppf(rands)
-        big = n*(1 - p)/p > ss.perflib.draws.INV_MAX
+        big = n*(1 - p)/p > ss.solvers.backends.draws.INV_MAX
         return inverse('nbinom', rands, n, p, big=big, fallback=lambda u, i: sps.nbinom.ppf(u, n if n.ndim == 0 else n[i], p if p.ndim == 0 else p[i]))
 
 
@@ -1708,11 +1708,11 @@ class binom(Dist):
         return
 
     def ppf(self, rands):
-        """ The inverse CDF, compiled (see `ss.perflib.draws`); SciPy's above a mean of 30 (on the smaller side of 1/2), and for unusual parameters """
+        """ The inverse CDF, compiled (see `ss.solvers.backends.draws`); SciPy's above a mean of 30 (on the smaller side of 1/2), and for unusual parameters """
         n, p = np.asarray(self.dist.kwds['n']), np.asarray(self.dist.kwds['p'])
         if not (every(n >= 0) and every(n == np.floor(n)) and every(p >= 0) and every(p <= 1)):
             return super().ppf(rands)
-        big = n*np.minimum(p, 1 - p) > ss.perflib.draws.INV_MAX
+        big = n*np.minimum(p, 1 - p) > ss.solvers.backends.draws.INV_MAX
         return inverse('binomial', rands, n, p, big=big, fallback=lambda u, i: sps.binom.ppf(u, n if n.ndim == 0 else n[i], p if p.ndim == 0 else p[i]))
 
 
@@ -1791,7 +1791,7 @@ class weibull(Dist):
         return
 
     def ppf(self, rands):
-        """ The inverse CDF, compiled (see `ss.perflib.draws`); SciPy's for unusual parameters """
+        """ The inverse CDF, compiled (see `ss.solvers.backends.draws`); SciPy's for unusual parameters """
         kw = self.dist.kwds
         c, scale, loc = kw['c'], kw.get('scale', 1.0), kw.get('loc', 0.0)
         if not (every(np.asarray(c) > 0) and every(np.asarray(scale) > 0)):

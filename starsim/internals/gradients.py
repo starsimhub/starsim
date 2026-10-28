@@ -549,7 +549,7 @@ def checkpointed(body, init, xs, steps, checkpoint):
 def compile_run(run, kind):
     """ A run compiled for one use: 'run' for one, 'many' for a batch, 'jvp' for its derivative along a batch of directions """
     jx = jax()
-    ss.perflib.compiling(dict(run='the run', many='the runs', jvp='the gradient')[kind], 'JAX', 0.2, 5)
+    ss.solvers.backends.compiling(dict(run='the run', many='the runs', jvp='the gradient')[kind], 'JAX', 0.2, 5)
     if kind == 'run':
         return jx.jit(run)
     elif kind == 'many':
@@ -1488,7 +1488,7 @@ class LogDensity:
 
     def apply(self, func, x):
         """ One of the compiled functions, at some values (compiled the first time) """
-        ss.perflib.compiling('the log-density', 'JAX', 0.5, 5)
+        ss.solvers.backends.compiling('the log-density', 'JAX', 0.5, 5)
         with jax().enable_x64(True):
             return func(jax().numpy.asarray(x, dtype=float))
 

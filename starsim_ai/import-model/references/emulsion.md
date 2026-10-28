@@ -38,7 +38,7 @@ An EMULSION model is one YAML file: `time_info` (unit, `delta_t`, `total_duratio
 
 ## Worked example
 
-`lingua_franca_design/vignettes/emulsion/quickstart/model.py`: three state machines (age group, gestation, health), with the minimum stays, conditions on another machine, the quarantine calendar and capacity, and births on farrowing. The import (`ss.interop.load('quickstart.yaml')`) gives the health machine's 13 transitions directly, and lists the 16 pieces that the vignette writes by hand:
+`lingua_franca_design/vignettes/emulsion/quickstart/model.py`: three state machines (age group, gestation, health), with the minimum stays, conditions on another machine, the quarantine calendar and capacity, and births on farrowing. The import (`ss.import_from('quickstart.yaml')`) gives the health machine's 13 transitions directly, and lists the 16 pieces that the vignette writes by hand:
 
 ```python
 dates = {'2021-01-01': 0, '2021-04-01': 1, '2021-09-02': 0, '2022-04-01': 1, '2022-09-02': 0}

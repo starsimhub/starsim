@@ -46,7 +46,7 @@ for kw in [dict(networks=ss.RandomNet(n_contacts=4), n_agents=2000), dict(solver
     print(f'{alone.solver}: SIR results unchanged by adding flu:', same)
 ```
 
-Every draw goes through one small library (`ss.perflib`, compiled with Numba). Uniforms are counter-based (a SplitMix64 hash of a key and an index), and most distributions are drawn by inverting their CDF at one uniform, so each draw is a monotone function of its uniform. That property is what makes common random numbers work well.
+Every draw goes through one small library (`ss.solvers.backends`, compiled with Numba). Uniforms are counter-based (a SplitMix64 hash of a key and an index), and most distributions are drawn by inverting their CDF at one uniform, so each draw is a monotone function of its uniform. That property is what makes common random numbers work well.
 
 ## Common random numbers
 

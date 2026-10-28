@@ -63,7 +63,6 @@ with three CSV files: the populations (9,000 and 1,000), the commuters (100 from
 ```{python}
 import numpy as np
 import starsim as ss
-import starsim.interop
 ss.options(jupyter=True)
 
 pop     = dict(large_province=9000, small_province=1000)
@@ -89,7 +88,7 @@ Or the configuration can be imported as it is, with the CSV files next to it:
 ```{python}
 #| eval: false
 #| label: starsim-import
-sim = ss.interop.load('config_sample_2pop.yml', format='flepimop')
+sim = ss.import_from('config_sample_2pop.yml', format='flepimop')
 sim.run()
 ```
 
@@ -99,7 +98,7 @@ sim.run()
 |---|---|
 | The two-population tutorial (above) | Agree: every compartment in both provinces within 0.05 people |
 | The vaccine scenarios tutorial (vaccination, three scenarios of stacked modifiers, `Ro` and the share of cases detected drawn for each run, outcomes chained with delays) | Agree exactly, by province: run with the values flepiMoP drew, the mean, 5%, and 95% of all 28 series in each province agree within 1e-9 of their largest value in all three scenarios. With Starsim's own draws, they agree in distribution |
-| A configuration with 3,000 places and 29,958 commuting links, imported with `ss.interop.load()` | Agree: incident cases, hospitalizations, deaths, and current hospitalizations within 0.007% of each place's peak on every day |
+| A configuration with 3,000 places and 29,958 commuting links, imported with `ss.import_from()` | Agree: incident cases, hospitalizations, deaths, and current hospitalizations within 0.007% of each place's peak on every day |
 
 ## Timings
 
@@ -123,7 +122,7 @@ These are from Starsim's switching demo for flepiMoP users (`tests/switching/tes
 | Fit one value per place: `Ro` by county, fitted to weekly hospitalizations by county with a Poisson likelihood | **Works**: `sim.new(pars=dict(Ro=ss.par(ss.by(subpop=[2.2, 2.2, 2.2]), bounds=[1, 4])))` and `fit()`; the fitted values are within 5% of the true ones. Data by place are a long table with a `subpop` column |
 | A Poisson likelihood on data that are not whole numbers (an ODE's output) | **Works**: the likelihood is finite |
 | Runs that each draw their parameters from their priors | **Works**: `ss.parallel(sim, n_runs=, priors=True)` |
-| A hub submission (hubverse columns): 23 quantiles or the runs themselves, by scenario, location, target, and week; incident, cumulative, and peak targets | **Works**: `ss.interop.to_hub(msim, targets=..., origin_date=..., by='subpop', every='week')`, below; `output_type='sample'` gives the runs |
+| A hub submission (hubverse columns): 23 quantiles or the runs themselves, by scenario, location, target, and week; incident, cumulative, and peak targets | **Works**: `ss.io.to_hub(msim, targets=..., origin_date=..., by='subpop', every='week')`, below; `output_type='sample'` gives the runs |
 | Scenarios from the configuration | **Works**: `sim.imported.scenarios` gives each scenario's modifiers, as `ss.modify` interventions |
 | Fits by NUTS with gradients through the run | **Works**: on flepiMoP's California and New York benchmark (four parameters, a value for each state in two periods, fitted to six weekly series), NUTS took 70 s on 4 cores against 283 s for flepiMoP's emcee run on 10 cores, with estimates within 1.5% of the truth (measured on 17 October 2026, with each state's values written into the rate) |
 | Batch jobs on a cluster, R post-processing | **Not planned**: Starsim runs in one process on many cores |
@@ -143,10 +142,10 @@ seir.stratify(patch=list(pop.keys()), split=list(pop.values()), mobility=ss.geo.
 sim = ss.Sim(seir, total_pop=sum(pop.values()), start='2020-02-01', stop='2020-08-31', verbose=0)
 
 msim = ss.parallel(sim, n_runs=20, priors=True) # Each run draws its own Ro
-hub = ss.interop.to_hub(msim, targets=dict(infection='inc inf'), by='patch', every='week')
+hub = ss.io.to_hub(msim, targets=dict(infection='inc inf'), by='patch', every='week')
 hub.head()
 ```
 
 ## Bringing your model in
 
-`ss.interop.load('config.yml', format='flepimop')` reads a flepiMoP configuration. The compartments become states (with several dimensions, one state for each combination, named as flepiMoP names them, e.g. `S_unvaccinated`); the places become a stratification `subpop` with commuting (`ss.geo.Mobility(kind='visit')`); each transition becomes a flow; the modifiers of a scenario become `ss.modify` interventions; and the outcomes become `ss.outcome`s. A configuration with age, vaccination, and variant as dimensions comes in as a flat product of states, which runs the same as flepiMoP but is not how it would be written in Starsim, where each dimension is a stratification. What is not translated is listed (`sim.imported.incomplete`), and `sim.imported.prompt` is a prompt for an AI assistant with Starsim's import-model skill to finish the job.
+`ss.import_from('config.yml', format='flepimop')` reads a flepiMoP configuration. The compartments become states (with several dimensions, one state for each combination, named as flepiMoP names them, e.g. `S_unvaccinated`); the places become a stratification `subpop` with commuting (`ss.geo.Mobility(kind='visit')`); each transition becomes a flow; the modifiers of a scenario become `ss.modify` interventions; and the outcomes become `ss.outcome`s. A configuration with age, vaccination, and variant as dimensions comes in as a flat product of states, which runs the same as flepiMoP but is not how it would be written in Starsim, where each dimension is a stratification. What is not translated is listed (`sim.imported.incomplete`), and `sim.imported.prompt` is a prompt for an AI assistant with Starsim's import-model skill to finish the job.

@@ -119,7 +119,7 @@ class Options(sc.objdict):
         optdesc.threads = 'The number of threads that the passes over the agents of a large sim, and the particles of a particle filter, take: 0 (default) for as many as Numba has (by default, one per core), 1 for none. Each worker of ss.parallel() and of a calibration takes one, since the workers share the cores already'
         options.threads = sc.parse_env('STARSIM_THREADS', 0, int)
 
-        optdesc.kernels = 'Which kernels run the solvers (all give the same results, except as said for "python"): "auto" (default) for Rust if it has been built (see rust/README.md), and otherwise Numba, with compartmental runs taken as plain Python until Numba has compiled (if a run, or the runs of a session, would take longer as plain Python than compiling takes, about two minutes once per install, Numba compiles first; a note says which); "rust" for Rust, compiled ahead of time, so a first run takes no compiling; "numba" to always compile with Numba first (see ss.compile()); "python" for the compartmental kernels as plain Python (and the kernels, not JAX, for the chain binomial, whose draws in JAX are compiled, so a long seeded chain-binomial run gives other numbers than with the others; the passes over agents are Numba). JAX is chosen by the run (see sim.jax), and ss.jit is always Numba'
+        optdesc.kernels = 'Which kernels run the solvers (all give the same results, except as said for "python"): "auto" (default) for Rust if it has been built (see starsim/solvers/rust/README.md), and otherwise Numba, with compartmental runs taken as plain Python until Numba has compiled (if a run, or the runs of a session, would take longer as plain Python than compiling takes, about two minutes once per install, Numba compiles first; a note says which); "rust" for Rust, compiled ahead of time, so a first run takes no compiling; "numba" to always compile with Numba first (see ss.compile()); "python" for the compartmental kernels as plain Python (and the kernels, not JAX, for the chain binomial, whose draws in JAX are compiled, so a long seeded chain-binomial run gives other numbers than with the others; the passes over agents are Numba). JAX is chosen by the run (see sim.jax), and ss.jit is always Numba'
         options.kernels = sc.parse_env('STARSIM_KERNELS', 'auto', str)
 
         optdesc.uncompiled_warning = 'If True (default), say on import when Starsim has not been compiled yet (see ss.compile()) -- NOTE, only has effect via the environment variable since executed on load'
@@ -134,7 +134,7 @@ class Options(sc.objdict):
         optdesc.max_joint = 'The most compartments that the diseases tracked jointly in a compartmental run may take (their joint states times the groups of the other dimensions; see ss.solvers.Crossing): above it, solver="auto" runs agents, and a compartmental solver that was asked for stops before anything is made. 0 for no limit'
         options.max_joint = sc.parse_env('STARSIM_MAX_JOINT', 10_000, int) # 6,912 compartments (three diseases with Erlang stages, by four age groups) take about 2 GB over 400 steps
 
-        optdesc.keep_memory = 'If True (default), large arrays that a sim frees are kept by the process for reuse, rather than given back to the system, which makes sims with networks 15-30% faster, but the process keeps its peak memory until it ends (Linux only). Set False (before importing Starsim, via the environment variable) to give memory back as it is freed; ss.perflib.release_memory() gives back what is free now'
+        optdesc.keep_memory = 'If True (default), large arrays that a sim frees are kept by the process for reuse, rather than given back to the system, which makes sims with networks 15-30% faster, but the process keeps its peak memory until it ends (Linux only). Set False (before importing Starsim, via the environment variable) to give memory back as it is freed; ss.solvers.backends.release_memory() gives back what is free now'
         options.keep_memory = sc.parse_env('STARSIM_KEEP_MEMORY', True, bool)
 
         return optdesc, options
@@ -306,7 +306,7 @@ class Options(sc.objdict):
                     if value not in ['auto', 'rust', 'numba', 'python']:
                         errormsg = f'ss.options.kernels must be "auto", "rust", "numba", or "python", not {value!r}'
                         raise ValueError(errormsg)
-                    import starsim.perflib.rust as rust # Imported only now, since it imports the modules whose kernels it swaps
+                    import starsim.solvers.backends.rust as rust # Imported only now, since it imports the modules whose kernels it swaps
                     rust.auto() if value == 'auto' else rust.use(value == 'rust')
                 super().__setitem__(key, value) # Needed since we overwrite __setitem__ to call this
 
@@ -427,7 +427,7 @@ def load_fonts(folder=None, name='Mulish', rebuild=False, verbose=False, **kwarg
         verbose (bool): whether to print out progress/errors
     """
     if folder is None:
-        folder = str(sc.thispath(__file__) / 'assets')
+        folder = str(sc.thispath(__file__) / 'internals' / 'assets')
     sc.fonts(add=folder, rebuild=rebuild, verbose=verbose, **kwargs)
 
     # Try to find the font, and if it succeeds, update the styles
@@ -444,9 +444,9 @@ def load_fonts(folder=None, name='Mulish', rebuild=False, verbose=False, **kwarg
 options = Options()
 options.set_precision(refresh=False) # Other modules are not loaded yet, so nothing to refresh
 
-# Load the fonts, rebuilding Matplotlib's font cache the first time (marked by a file in assets/; if it can't be written, the cache isn't rebuilt)
+# Load the fonts, rebuilding Matplotlib's font cache the first time (marked by a file in internals/assets/; if it can't be written, the cache isn't rebuilt)
 if options.install_fonts:
-    marker = sc.thispath(__file__) / 'assets' / 'fonts_installed_successfully'
+    marker = sc.thispath(__file__) / 'internals' / 'assets' / 'fonts_installed_successfully'
     first = not marker.exists()
     try:
         if first:

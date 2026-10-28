@@ -9,7 +9,6 @@ import numpy as np
 import pandas as pd
 import sciris as sc
 import starsim as ss
-import starsim.interop
 
 kw = dict(verbose=0)
 triggers = {} # The trigger of each message, by a distinctive part of it
@@ -259,15 +258,15 @@ def _():
     ode(ss.Disease(infection=ss.Transition(S, I, rate=0.3 * I), cure=ss.Transition(I, S), init_prev=0.01, name='sis')).init()
 
 @trigger('not exported: network', ss.errors.LossyExport)
-def _(): ss.interop.export(ss.Sim(sir(), networks='random', n_agents=100, **kw), 'odin')
+def _(): ss.export_to(ss.Sim(sir(), networks='random', n_agents=100, **kw), 'odin')
 
 @trigger('season: a time function', ss.errors.ImportIncomplete)
 def _():
-    src = ss.interop.Source('si', format='test')
+    src = ss.io.Source('si', format='test')
     src.add_state('S', init=99); src.add_state('I', init=1); src.add_par('beta', 0.3)
     src.add_flow('S', 'I', rate='beta * I / (S + I)')
     src.skip('season', 'a time function')
-    ss.interop.build(src, verbose=0)
+    ss.io.build(src, verbose=0)
 
 
 # %% Notes

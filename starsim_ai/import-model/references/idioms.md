@@ -1,6 +1,6 @@
 # Starsim forms for the pieces importers leave out
 
-What to write for the pieces that `ss.interop.load()` lists as not translated (`ImportIncomplete`), and for the same constructs when translating by hand. Prefer the first form that says what the source says; use a function or custom code only when no declared form does, and mark it with a `Workaround:` comment.
+What to write for the pieces that `ss.import_from()` lists as not translated (`ImportIncomplete`), and for the same constructs when translating by hand. Prefer the first form that says what the source says; use a function or custom code only when no declared form does, and mark it with a `Workaround:` comment.
 
 ## Rates and times
 

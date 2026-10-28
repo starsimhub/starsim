@@ -7,7 +7,7 @@ Many models already exist, written in other frameworks: an ODE model in odin or 
 
 By the end of this tutorial, you will be able to:
 
-- import a model from another framework with `ss.interop.load()`, and read how each of its rates was translated;
+- import a model from another framework with `ss.import_from()`, and read how each of its rates was translated;
 - check an imported model with `describe()`, and compare its results with another model's;
 - keep an imported model as the Starsim code it was written as (`sim.imported.code`);
 - finish an import from the list of what wasn't translated.
@@ -40,14 +40,13 @@ Each `deriv()` is the rate of change of a compartment, written as the total flow
 
 ## Importing it
 
-`ss.interop.load()` reads the file. The importers are in a part of Starsim that `import starsim` doesn't load by itself, so it is imported first. odin has no unit of time, so its numbers are taken to be per day (`unit=` says otherwise), and odin is told how long to run when it is run, so `stop=` gives it here, in days:
+`ss.import_from()` reads the file. The importers are in a part of Starsim that `import starsim` doesn't load by itself, so it is imported first. odin has no unit of time, so its numbers are taken to be per day (`unit=` says otherwise), and odin is told how long to run when it is run, so `stop=` gives it here, in days:
 
 ```{python}
 import starsim as ss
-import starsim.interop # The importers
 ss.options(jupyter=True) # Plots and tables suited to a notebook
 
-sim = ss.interop.load('data/measles_seir.R', stop=50)
+sim = ss.import_from('data/measles_seir.R', stop=50)
 ```
 
 The import says how it read each flow, which is the first thing to check:
@@ -143,7 +142,7 @@ mu <- user(0.00008)  # Birth and death rate, per day (about 3% a year)
 Over 20 years, a step of a week is plenty, so `dt=7` (days) is given as well:
 
 ```{python}
-sim = ss.interop.load('data/measles_seasonal.R', stop=20*365, dt=7)
+sim = ss.import_from('data/measles_seasonal.R', stop=20*365, dt=7)
 ```
 
 β now depends on the time, `t`, in a formula the importer doesn't translate. So the transmission, which uses β, isn't translated either, and the warning (`ImportIncomplete`) lists both. The births, deaths, latent period, and recovery are translated. The list is also kept with the sim:
@@ -181,7 +180,7 @@ For a longer model, with more that isn't translated, `sim.imported.prompt` is a 
 
 ## Other frameworks
 
-`ss.interop.load()` reads models from these frameworks, and tells which one a file is from by its contents (or give `format=`):
+`ss.import_from()` reads models from these frameworks, and tells which one a file is from by its contents (or give `format=`):
 
 | Framework | What is read | Translated example |
 |---|---|---|
@@ -197,10 +196,10 @@ For a longer model, with more that isn't translated, `sim.imported.prompt` is a 
 | SimInf | An R script | [Coming from SimInf](../coming_from/siminf.qmd) |
 | summer2 | The model itself, or JSON written by a script in its environment | [Coming from summer2](../coming_from/summer2.qmd) |
 
-Where a framework is not a Python package that can be installed with Starsim, a short script, run where that framework is installed, writes its model as JSON for Starsim to read; the scripts are in `starsim/interop/`. A model can also be written out to odin or SBML, with `ss.interop.export(sim, 'odin', filename='measles.R')`; each export lists anything it couldn't carry. [Importing and exporting models](../user_guide/interop_import.qmd) covers the importers and exporters in more detail.
+Where a framework is not a Python package that can be installed with Starsim, a short script, run where that framework is installed, writes its model as JSON for Starsim to read; the scripts are in `starsim/io/`. A model can also be written out to odin or SBML, with `ss.export_to(sim, 'odin', filename='measles.R')`; each export lists anything it couldn't carry. [Importing and exporting models](../user_guide/io_import.qmd) covers the importers and exporters in more detail.
 
 ## Exercises
 
-1. Import the model with another value of β, with `pars=dict(beta=1.5)` to `ss.interop.load()`, and compare its code and its results with the model above. What changed in the code, and how much later is the peak?
+1. Import the model with another value of β, with `pars=dict(beta=1.5)` to `ss.import_from()`, and compare its code and its results with the model above. What changed in the code, and how much later is the peak?
 2. Import the model of the first section for a village of 1,000 people with one person infectious at the start (`pars=dict(N0=1000, I0=1)`), and run it as a stochastic compartmental model 100 times (`sim.run(solver='binomial', n_runs=100)`), for 200 days. In how many of the runs is there no outbreak? Compare this with 1/R0, the chance that a single infection's chain of transmission dies out by chance in a branching process.
 3. Take the code of the imported model of the first section, and stratify it by age as in [Tutorial 4](t4_ages.qmd), with the contact matrix there. What happens to R0, and why? What value of β gives an R0 of about 15 again?

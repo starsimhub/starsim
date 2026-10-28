@@ -59,7 +59,6 @@ In Starsim, parameters carry their bounds and priors, a bare state in a rate is 
 
 ```{python}
 import starsim as ss
-import starsim.interop
 ss.options(jupyter=True)
 
 beta  = ss.par(ss.perday(0.4),  bounds=[0.05, 1.0], prior=ss.lognorm_im(mean=-1.0, sigma=0.5), doc='transmission rate')
@@ -157,4 +156,4 @@ print('Infections with SIAs:', round(sia.infection.sum()), '(camdl: 863920)')
 
 ## Bringing your model in
 
-`ss.interop.load('model.camdl', format='camdl')` reads a camdl model: a `.camdl` file is compiled with `camdlc` (from the `PATH`, or `CAMDLC`) into camdl's JSON intermediate representation, which is what is read; the IR itself and a pycamdl model (through `dump_pycamdl.py`) can be read too. Each transition becomes a transition, its rate classified by Starsim's import rules (`beta * S * I / N` is exposure to `I`), parameters keep their bounds and priors, and each observation of a flow becomes an outcome with its likelihood. `scenario=` chooses a scenario's parameter values. What is not translated (scheduled events and interventions, ODE compartments, forcing functions of time) is listed (`sim.imported.incomplete`), and `sim.imported.prompt` is a prompt for an AI assistant with Starsim's import-model skill to finish the job.
+`ss.import_from('model.camdl', format='camdl')` reads a camdl model: a `.camdl` file is compiled with `camdlc` (from the `PATH`, or `CAMDLC`) into camdl's JSON intermediate representation, which is what is read; the IR itself and a pycamdl model (through `dump_pycamdl.py`) can be read too. Each transition becomes a transition, its rate classified by Starsim's import rules (`beta * S * I / N` is exposure to `I`), parameters keep their bounds and priors, and each observation of a flow becomes an outcome with its likelihood. `scenario=` chooses a scenario's parameter values. What is not translated (scheduled events and interventions, ODE compartments, forcing functions of time) is listed (`sim.imported.incomplete`), and `sim.imported.prompt` is a prompt for an AI assistant with Starsim's import-model skill to finish the job.

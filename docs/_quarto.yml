@@ -175,8 +175,8 @@ website:
             - user_guide/calibration_diagnosing.qmd
           - section: "Interoperability"
             contents:
-            - user_guide/interop_import.qmd
-            - user_guide/interop_library.qmd
+            - user_guide/io_import.qmd
+            - user_guide/io_library.qmd
           - section: "Troubleshooting"
             contents:
             - user_guide/troubleshooting_debugging.qmd
@@ -190,7 +190,7 @@ website:
             - architecture/solvers.qmd
             - architecture/interactions.qmd
             - architecture/randomness_and_fitting.qmd
-            - architecture/spec_and_interop.qmd
+            - architecture/errors_and_io.qmd
             - architecture/testing.qmd
         - href: gallery.qmd
           text: "**Gallery**"
@@ -235,7 +235,7 @@ website:
             - api/internals.gradients.qmd
             - api/geo.qmd
             - api/data.qmd
-            - api/interop.qmd
+            - api/io.qmd
         - section: "**Library**"
           contents:
             - api/library.diseases.qmd
@@ -302,18 +302,18 @@ quartodoc:
         - transitions
         - utils
         - kind: page
-          path: interop
+          path: io
           package: starsim
           contents:
             - kind: auto
-              name: interop
+              name: io
               include_imports: true
               children: embedded
     - title: Library
       desc: |
         Example and reference modules that build on core Starsim but are not part of it.
         Import as `import starsim.library as ssl`. These modules are illustrative rather
-        than validated; see the [user guide](../user_guide/interop_library.qmd) for details.
+        than validated; see the [user guide](../user_guide/io_library.qmd) for details.
       contents:
         # One page per library subpackage; contents are picked up automatically from each
         # subpackage's __init__.py, so adding a class to the library does not need any

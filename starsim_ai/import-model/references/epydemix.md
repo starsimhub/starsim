@@ -6,14 +6,14 @@ epydemix is a Python package for age-structured compartmental models, run as a s
 
 ## Getting the model out
 
-The model is built in epydemix's own environment and written to JSON by `starsim/interop/dump_epydemix.py`, which needs only epydemix:
+The model is built in epydemix's own environment and written to JSON by `starsim/io/epydemix.py`, which needs only epydemix:
 
 ```bash
-python dump_epydemix.py my_model.py model.json               # a script that makes a variable called model
-python dump_epydemix.py my_model.py:build model.json         # a function that returns the model, or dict(model=..., start_date=..., **run arguments)
+python epydemix.py my_model.py model.json               # a script that makes a variable called model
+python epydemix.py my_model.py:build model.json         # a function that returns the model, or dict(model=..., start_date=..., **run arguments)
 ```
 
-Then, in Starsim, `sim = ss.interop.load('model.json')`. The dump records the last `simulate()` or `run_simulations()` call made with the model, which gives the dates, the step, the initial numbers by age group (worked out from `percentage_in_agents` as epydemix does), and any parameters passed to the run rather than set on the model. That matters: scripts often pass `beta` (or an `R0`-derived array) only to the run, as the COVID tutorial's `simulate_wrapper` does. If the script runs a calibration (ABC-SMC can take an hour), write a short script that builds the model and returns it with the run's arguments at fixed values, and dump that.
+Then, in Starsim, `sim = ss.import_from('model.json')`. The dump records the last `simulate()` or `run_simulations()` call made with the model, which gives the dates, the step, the initial numbers by age group (worked out from `percentage_in_agents` as epydemix does), and any parameters passed to the run rather than set on the model. That matters: scripts often pass `beta` (or an `R0`-derived array) only to the run, as the COVID tutorial's `simulate_wrapper` does. If the script runs a calibration (ABC-SMC can take an hour), write a short script that builds the model and returns it with the run's arguments at fixed values, and dump that.
 
 ## Mapping
 

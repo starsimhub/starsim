@@ -1000,14 +1000,13 @@ Even finding every case and isolating it after 2 days prevents only about 170 of
 ```{python}
 import numpy as np
 import starsim as ss
-import starsim.interop
 ```
 
 **1. Comparing models with another value of β.**
 
 ```{python}
-sim = ss.interop.load('data/measles_seir.R', stop=50, verbose=False)
-sim15 = ss.interop.load('data/measles_seir.R', stop=50, pars=dict(beta=1.5), verbose=False)
+sim = ss.import_from('data/measles_seir.R', stop=50, verbose=False)
+sim15 = ss.import_from('data/measles_seir.R', stop=50, pars=dict(beta=1.5), verbose=False)
 changed = [line for line in sim15.imported.code.splitlines() if line not in sim.imported.code.splitlines()]
 print('\n'.join(changed))
 for s in [sim, sim15]:
@@ -1020,7 +1019,7 @@ The code is the same but for β, from 1.9 to 1.5 a day, and with less transmissi
 **2. Outbreaks that don't happen.**
 
 ```{python}
-village = ss.interop.load('data/measles_seir.R', stop=200, pars=dict(N0=1000, I0=1), verbose=False)
+village = ss.import_from('data/measles_seir.R', stop=200, pars=dict(N0=1000, I0=1), verbose=False)
 msim = village.run(solver='binomial', n_runs=100)
 final_R = msim.results.measles_seir.R.values[:, -1]
 print('Runs with no outbreak:', (final_R < 50).sum(), 'of 100')

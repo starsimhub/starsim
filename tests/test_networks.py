@@ -797,7 +797,7 @@ def test_transmit_candidates():
     rel_sus[:5] = np.nan # A candidate, ruled out later by the chance itself
     for n_edges in [50, 5000]: # Under an eighth of the agents, read directly
         p1, p2 = rng.integers(n, size=(2, n_edges))
-        found = ss.perflib.passes.candidates(p1, p2, rel_trans, rel_sus)
+        found = ss.solvers.backends.passes.candidates(p1, p2, rel_trans, rel_sus)
         for (src, trg), inds in zip([(p1, p2), (p2, p1)], found):
             assert np.array_equal(inds, np.flatnonzero((rel_trans[src] != 0) & (rel_sus[trg] != 0))), f'Wrong candidates with {n_edges} edges'
     return

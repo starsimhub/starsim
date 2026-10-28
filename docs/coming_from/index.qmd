@@ -2,7 +2,7 @@
 title: Coming from another framework
 ---
 
-These pages are for people who already model with another framework and want to know what Starsim would mean for their work. Each one shows a model from that framework next to the same model in Starsim, how their results agree, how long each takes, and what works and what does not yet. The rows that fail are kept: where Starsim is slower, or cannot yet do something, the page says so. How to import a model from another framework in general is in the tutorial [Bringing a model in](../tutorials/g7_import.qmd) and the user guide's [Importing and exporting models](../user_guide/interop_import.qmd).
+These pages are for people who already model with another framework and want to know what Starsim would mean for their work. Each one shows a model from that framework next to the same model in Starsim, how their results agree, how long each takes, and what works and what does not yet. The rows that fail are kept: where Starsim is slower, or cannot yet do something, the page says so. How to import a model from another framework in general is in the tutorial [Bringing a model in](../tutorials/g7_import.qmd) and the user guide's [Importing and exporting models](../user_guide/io_import.qmd).
 
 | Framework | Lines of model code | Time for one run | The switching demo's checks | Where Starsim is furthest behind today |
 |---|---|---|---|---|

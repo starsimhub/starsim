@@ -74,8 +74,8 @@ To run these user guides locally:
 
 ## Interoperability
 
-- [Importing and exporting models](user_guide/interop_import.qmd)
-- [Library modules](user_guide/interop_library.qmd)
+- [Importing and exporting models](user_guide/io_import.qmd)
+- [Library modules](user_guide/io_library.qmd)
 
 ## Troubleshooting
 

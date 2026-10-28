@@ -39,7 +39,7 @@ It has the model, the intervention, and the numbers, and nothing else. (The answ
 
 ## When the model is spread out
 
-When a model is built by several functions or read from files, copy the parts that matter into one script, with the values written in, and check that it still shows the problem. A model imported from another framework is already one script: its code is `sim.imported.code` (see [Importing and exporting models](interop_import.qmd)).
+When a model is built by several functions or read from files, copy the parts that matter into one script, with the values written in, and check that it still shows the problem. A model imported from another framework is already one script: its code is `sim.imported.code` (see [Importing and exporting models](io_import.qmd)).
 
 ## What to include
 

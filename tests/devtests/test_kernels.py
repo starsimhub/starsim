@@ -246,8 +246,8 @@ def test_compile():
 
 
 def test_numpy_ode():
-    sc.heading('Testing the ODE in NumPy (ss.perflib.ode, for runs before the kernels are compiled) against the kernels')
-    from starsim.perflib import ode
+    sc.heading('Testing the ODE in NumPy (ss.solvers.backends.ode, for runs before the kernels are compiled) against the kernels')
+    from starsim.solvers.backends import ode
     mode = ode.mode
     try:
         for key in models:

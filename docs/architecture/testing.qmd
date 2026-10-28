@@ -22,7 +22,7 @@ The tests are in `tests/`, in two sets. The core tests (`tests/test_*.py`, about
 | `test_fast_draws.py`, `test_jit.py` | The exact random draws match their distributions, and the same uniforms give the same draws compiled or not; `ss.jit` gives the same results as the code run as Python. |
 | `test_baselines.py` | A standard agent-based sim (two diseases, three networks, births and deaths) gives exactly its recorded results (`baseline.yaml`); and `test_performance_guard` fails if any of a set of timed cases is more than 1.5 times slower than its record (`perf_guard.yaml`). |
 | Feature tests | One file per area (`test_transitions.py`, `test_deliveries.py`, `test_dimensions.py`, ...), and `test_composition.py` for plain NumPy modules beside declared ones. |
-| `devtests/interop/` | Each importer and exporter against the framework it reads or writes. Tests that need R, or the repository of translated examples, are skipped when it isn't available. |
+| `devtests/io/` | Each importer and exporter against the framework it reads or writes. Tests that need R, or the repository of translated examples, are skipped when it isn't available. |
 | `switching/` | Thirteen acceptance demos, each in the terms of a framework Starsim is compared with: bring the model in, describe it, fit it, ask a policy question, and run it another way. Each asserts the original's reference numbers; one that doesn't pass yet is marked `xfail`, with the reason. |
 | `north_star.py` | The north star: a model should never be easier to write without Starsim than with it. For each translated example (kept in a separate repository), a table of lines of model code and run time, original against Starsim, published on the [Coming from](../coming_from/index.qmd) pages. |
 
@@ -50,14 +50,14 @@ The performance guard is timing-sensitive, so run it on its own on a quiet machi
 | Parameters, time or units (`parameters.py`, `time.py`, `dates.py`) | Every engine, fitting (which reads bounds and priors), and the spec | `test_time.py`, `test_transitions.py`, `test_contracts_inference.py` |
 | Stratification or strains (`dimensions.py`, `strains.py`) | The compartment layout, mixing, agents' properties, and results by group | `test_dimensions.py`, `test_contracts.py` |
 | The compartmental engine or the kernels (`solvers/compartmental.py`, `kernels.py`) | All four compartmental solvers, the JAX runs that follow the kernels step for step, and the particle filter | `test_kernels.py`, `test_gradients.py`, `test_contracts.py` |
-| The agent engine or the passes (`solvers/agents.py`, `perflib/passes.py`) | Declared models as agents, networks, and births | `test_contracts.py`, `test_baselines.py`, `test_networks.py` |
-| Random draws (`distributions.py`, `perflib/draws.py`) | Every stochastic solver, common random numbers, and every recorded result | `test_fast_draws.py`, `test_randomness.py`, `test_contracts.py::test_streams`, `test_baselines.py` |
+| The agent engine or the passes (`solvers/agents.py`, `solvers/backends/passes.py`) | Declared models as agents, networks, and births | `test_contracts.py`, `test_baselines.py`, `test_networks.py` |
+| Random draws (`distributions.py`, `solvers/backends/draws.py`) | Every stochastic solver, common random numbers, and every recorded result | `test_fast_draws.py`, `test_randomness.py`, `test_contracts.py::test_streams`, `test_baselines.py` |
 | Solver choice (`solvers/choose.py`) | What `'auto'` picks, the notes, and `describe()` | `test_transitions.py::test_auto`, `test_contracts.py`, `test_sim.py` |
 | Interventions and modifiers (`interventions.py`, `products.py`, `connectors.py`, `solvers/deliveries.py`) | Both engines, the loop order, and whether a whole compartmental run is possible | `test_deliveries.py`, `test_interventions.py`, `test_products.py` |
 | The loop or module lifecycle (`loop.py`, `modules.py`, `sim.py`) | Every sim, including modules written as code | `test_loop.py`, `test_sim.py`, `test_baselines.py` |
 | Fitting (`fit.py`, `gradients.py`) | `sim.fit()` and every fitting method | `test_contracts_inference.py`, `test_calibration.py`, `test_gradients.py` |
-| The importers' code writer or the exporters (`interop/core.py`, `interop/export.py`) | Every import, and every export | `devtests/interop/`, `switching/` |
-| An importer or exporter (`interop/`) | That framework's users, and its switching demo | its file in `devtests/interop/`, and its demo in `switching/` |
+| The importers' code writer or the exporters (`io/core.py`, `io/export.py`) | Every import, and every export | `devtests/io/`, `switching/` |
+| An importer or exporter (`io/`) | That framework's users, and its switching demo | its file in `devtests/io/`, and its demo in `switching/` |
 | An error, warning or note | Its message | `test_errors.py` |
 | Anything on a hot path | Run time | `test_baselines.py::test_performance_guard` |
 

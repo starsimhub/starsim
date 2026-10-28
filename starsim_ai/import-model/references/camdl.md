@@ -6,14 +6,14 @@ camdl is a compartmental modeling language (a compiler, `camdlc`, in OCaml; a ru
 
 ## Getting the model out
 
-`ss.interop.load('model.camdl', pars=dict(...))` compiles the file with `camdlc` (from the PATH, `CAMDLC`, or `camdlc=`) and reads the IR; `ss.interop.load('model.json')` reads an IR written by `camdlc model.camdl --no-state-grad > model.json`. Give parameter values that the model leaves to the command line (`--param beta=0.4`) as `pars=`; a model's scenarios fill in values too (`scenario=`, default the first). A pycamdl model is written in the same form by `starsim/interop/dump_pycamdl.py`, which needs only pycamdl:
+`ss.import_from('model.camdl', pars=dict(...))` compiles the file with `camdlc` (from the PATH, `CAMDLC`, or `camdlc=`) and reads the IR; `ss.import_from('model.json')` reads an IR written by `camdlc model.camdl --no-state-grad > model.json`. Give parameter values that the model leaves to the command line (`--param beta=0.4`) as `pars=`; a model's scenarios fill in values too (`scenario=`, default the first). A pycamdl model is written in the same form by `starsim/io/dump_pycamdl.py`, which needs only pycamdl:
 
 ```bash
 python dump_pycamdl.py stratified.py model.json        # a module that makes a model called m or model
 python dump_pycamdl.py my_model.py:build model.json    # a function that returns one
 ```
 
-or `ss.interop.load(m)` on a live pycamdl model, if pycamdl can be imported where Starsim is.
+or `ss.import_from(m)` on a live pycamdl model, if pycamdl can be imported where Starsim is.
 
 ## Mapping
 
@@ -49,7 +49,7 @@ or `ss.interop.load(m)` on a live pycamdl model, if pycamdl can be imported wher
 
 ## Worked example
 
-`lingua_franca_design/vignettes/camdl/sir/sir.py` (an SIR with weekly cases and a negative-binomial likelihood) and `lingua_franca_design/vignettes/camdl/stratified/model.py` (SEIR by age and patch). `ss.interop.load('sir.camdl', pars=dict(beta=0.4, gamma=0.15, rho=0.6, k=10))` gives the vignette's model, with its priors, and agrees with camdl's ODE to camdl's rounding (its compartments are written as whole numbers: within 0.5 people) and to 1e-7 in the daily infections and weekly cases. The pycamdl SEIR by age and patch (24 states, 58 transitions, with aging and movement), written with `dump_pycamdl.py`, agrees with pycamdl's ODE to 3e-16 in every compartment; its vaccination is an intervention, off unless enabled, and listed. The declared form of the stratified model, by hand:
+`lingua_franca_design/vignettes/camdl/sir/sir.py` (an SIR with weekly cases and a negative-binomial likelihood) and `lingua_franca_design/vignettes/camdl/stratified/model.py` (SEIR by age and patch). `ss.import_from('sir.camdl', pars=dict(beta=0.4, gamma=0.15, rho=0.6, k=10))` gives the vignette's model, with its priors, and agrees with camdl's ODE to camdl's rounding (its compartments are written as whole numbers: within 0.5 people) and to 1e-7 in the daily infections and weekly cases. The pycamdl SEIR by age and patch (24 states, 58 transitions, with aging and movement), written with `dump_pycamdl.py`, agrees with pycamdl's ODE to 3e-16 in every compartment; its vaccination is an intervention, off unless enabled, and listed. The declared form of the stratified model, by hand:
 
 ```python
 contacts = [[12, 4, 1], [4, 8, 2], [1, 2, 3]]

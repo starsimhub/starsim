@@ -12,7 +12,6 @@ import pandas as pd
 import sciris as sc
 import starsim as ss
 import starsim.fit
-import starsim.interop
 import timing
 
 ref_final_R = 532_176 # Mean final R over 1,000 odin 1.2.7 runs: switching/odin.md, "The second week" §2
@@ -59,7 +58,7 @@ def test_odin_import(tmp_path):
     sc.heading('Importing the odin model the user already has')
     path = tmp_path/'age_seir.R'
     path.write_text(odin_model)
-    sim = ss.interop.load(path, format='odin', pars=dict(S0=pop - [10, 0, 0, 0], I0=[10, 0, 0, 0], m=m), stop=365)
+    sim = ss.import_from(path, format='odin', pars=dict(S0=pop - [10, 0, 0, 0], I0=[10, 0, 0, 0], m=m), stop=365)
     final_R = np.asarray(sim.run(n_runs=20).results.age_seir.R.values)[:, -1].mean()
     assert np.isclose(final_R, ref_final_R, rtol=0.03), f'Imported model: mean final R {final_R:,.0f}, odin {ref_final_R:,}'
     return sim

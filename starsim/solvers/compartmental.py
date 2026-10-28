@@ -8,7 +8,7 @@ import scipy.sparse as sps
 import sciris as sc
 import starsim as ss
 from .engine import Bunch, CountState, Engine, StockCtx, add_rows, at_ends, by_level, no_tables
-from ..perflib import ode
+from .backends import ode
 
 __all__ = ['Compartmental', 'synced_event']
 
@@ -42,7 +42,7 @@ def choose_kernels(owner, runs, seconds):
     The kernels for a run of a program (or `runs` runs), compiled or as plain Python, chosen once for a run (see `ss.kernels.choose()`), for an
     engine or a crossing (`owner`, which keeps the choice as `compiled`); `seconds()` is about how long the run would take as plain Python
     """
-    if ss.perflib.rust.on: # Compiled ahead of time, so nothing to choose
+    if ss.solvers.backends.rust.on: # Compiled ahead of time, so nothing to choose
         return ss.kernels.choose()
     if runs == 1 and owner.program is not None and ode.wanted(owner.sim.solver, owner.program, owner.y): # The ODE in NumPy, which needs no compiling
         return ode
@@ -58,7 +58,7 @@ def choose_kernels(owner, runs, seconds):
 
 def kernel_list(items):
     """ A list for the kernels to take: a typed list for Numba's; a plain one for Rust's, which take any (making a typed list compiles it, about 1.5 s a session) """
-    return list(items) if ss.perflib.rust.on else nb.typed.List(items)
+    return list(items) if ss.solvers.backends.rust.on else nb.typed.List(items)
 
 
 def run_many_parts(owner, rngs, ys, args, per_step, n_cols, outputs, state_of, rows, grp_state, grp_flow):
@@ -2393,8 +2393,8 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
             self.cross.run(use_jax=use_jax)
         if self.given is not None: # The run has been taken already, by ss.gradients or the crossing
             out, self.given = self.given, None
-        elif use_jax and self.solver in ['binomial', 'tau']: # The chain binomial or tau-leaping in JAX: see ss.perflib.chain
-            *out, tally = importlib.import_module('starsim.perflib.chain').run(self)
+        elif use_jax and self.solver in ['binomial', 'tau']: # The chain binomial or tau-leaping in JAX: see ss.solvers.backends.chain
+            *out, tally = importlib.import_module('starsim.solvers.backends.chain').run(self)
             for k,mod in enumerate(self.deliveries):
                 mod.compartments.store_shifts(tally[:, self.shift_of[k]])
         elif use_jax:
@@ -2602,7 +2602,7 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
         tally, tally_g = np.zeros((n_runs, npts, nd, 2, 1)), np.zeros((n_runs, n_rows, nd, 2, ng))
         ys = np.repeat(y0[None], n_runs, axis=0) # The compartments of each run
         if self.solver in ['binomial', 'tau'] and ss.solvers.choose_engine(self.sim)[0]: # In JAX, as a single run would be (see ss.solvers.choose_engine())
-            stocks, flows, stocks_g, flows_g, tally, tally_g = importlib.import_module('starsim.perflib.chain').run_many(self, seeds, state_of, kept_s, kept_f, rows)
+            stocks, flows, stocks_g, flows_g, tally, tally_g = importlib.import_module('starsim.solvers.backends.chain').run_many(self, seeds, state_of, kept_s, kept_f, rows)
         else:
             run_many_parts(self, rngs, ys, args, self.per_step(), ng, (stocks, flows, stocks_g, flows_g, tally, tally_g), state_of, rows, grp_state, grp_flow)
         out = self.collect(stocks, flows, grouped=None if rows is None else (stocks_g, flows_g, kept_s, kept_f, group_ti), seeds=seeds)

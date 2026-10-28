@@ -78,7 +78,7 @@ class Particles:
         rest = (self.solver, self.n_sub, *tables, shares, self.register, self.shifts, self.state_of, self.stocks, self.flows, self.per_step, row0)
         n_sub = ss.kernels.substeps(np.append(self.program.fixed[self.program.src >= 0], self.program.mov_rate), self.dt, self.n_sub, self.solver) # The rates of the step last refreshed
         kn = ss.kernels.choose(len(self.ys)*ss.kernels.plain_seconds(self.program, self.ys[0], end - self.done + 1, self.solver, n_sub))
-        if not ss.perflib.rust.on and isinstance(self.rngs, list): # Made for the Rust kernels, now run by Numba's
+        if not ss.solvers.backends.rust.on and isinstance(self.rngs, list): # Made for the Rust kernels, now run by Numba's
             self.rngs = nb.typed.List(self.rngs)
             if self.n_threads > 1:
                 self.progs = nb.typed.List(self.progs)

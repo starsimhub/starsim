@@ -788,7 +788,7 @@ def check_verbose(verbose):
         return verbose
     errormsg = f'verbose must be 0 (print nothing), a fraction (progress every that share of the run), 1 (the solver, notes, and progress), or 2 or more (everything), not {verbose!r}'
     if verbose in ['brief', -1]:
-        errormsg += '. verbose="brief" (or -1) in Starsim 3 is now verbose=0, which the migration script rewrites (python -m starsim.interop.migrate mypackage/)'
+        errormsg += '. verbose="brief" (or -1) in Starsim 3 is now verbose=0, which the migration script rewrites (python -m starsim.io.migrate mypackage/)'
     raise ValueError(errormsg)
 
 
