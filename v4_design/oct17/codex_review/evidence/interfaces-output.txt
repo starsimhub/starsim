@@ -1,7 +1,0 @@
-SCREEN abm delivered [100.0, 100.0, 100.0, 100.0, 100.0, 100.0, 100.0, 100.0, 100.0, 100.0, 0.0] diagnosed [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-SCREEN ode delivered [100.0, 100.0, 100.0, 100.0, 100.00000000000001, 100.0, 100.0, 100.0, 100.0, 100.0, 0.0] diagnosed [0.0, 0.0, 0.0, 9.999995000001667e-05, 9.999985000011667e-05, 9.999975000031667e-05, 9.999965000061665e-05, 9.999955000101666e-05, 9.999945000151666e-05, 9.999935000211667e-05, 0.0]
-RESAMPLE values (3,) strata (14, 2) denom (14, 2)
-SPEC data None RESTORED data None
-SCHEMA accepted 99.0
-FIT dict_keys(['samples', 'divergences', 'acceptance', 'band', 'measure', 'sim', 'before', 'pars', 'table', 'trials', 'method', 'mismatch', 'mismatch_before']) trials 3
-INIT FIT #0. 'init_prev': 0.10000000000000002
