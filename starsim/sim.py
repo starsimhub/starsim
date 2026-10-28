@@ -964,6 +964,9 @@ class Sim(ss.Base):
         """ Initialize all the modules with the sim """
         for mod in self.modules:
             mod.init_pre(self)
+        for mod in self.modules: # Once every modifier is known: one in a module made later (e.g. an intervention) modifies a module made before it (e.g. a connector)
+            if isinstance(getattr(mod, 'engine', None), ss.solvers.Engine):
+                mod.engine.init_dwell_mods()
         return
 
     def _init_dists(self):

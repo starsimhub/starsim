@@ -1192,7 +1192,7 @@ class Engine(Telling, Effects):
         return
 
     def init_dwell_mods(self):
-        """ The modifiers of each dwell time (see `dwell_mods()`), once the modifiers are known: after the layout, which may be made before them, to choose the solver """
+        """ The modifiers of each dwell time (see `dwell_mods()`), once every module has registered its modifiers (see `Sim._init_modules_pre()`): after the layout, which may be made before them, to choose the solver """
         for name,dw in self.dwells.items():
             self.dwell_mods(name, dw)
         return
@@ -1219,8 +1219,9 @@ class Engine(Telling, Effects):
         if self.solver != 'abm':
             raise ss.CapabilityError(f'the modifier "{mods[0].name}" changes {path}, the dwell time of "{name}", which is a distribution ({raw}); with solver="{self.solver}" it is laid out in compartments once, at the start, so it cannot change during the run.\n'
                                      f'     Run with solver="abm", or modify the transition instead (e.g. ss.modify("{self.mod.name}.{name}", multiply=0.5)), which scales its rate.')
-        if getattr(dw, 'varying', False) or np.isnan(dw.mean):
-            raise ss.CapabilityError(f'the modifier "{mods[0].name}" changes {path}, the dwell time of "{name}", whose distribution ({raw}) differs between people, which a modifier cannot change yet; modify the transition instead (e.g. ss.modify("{self.mod.name}.{name}", multiply=0.5)).')
+        funcs = [key for key,val in ss.transitions.varying_pars(raw).items() if not isinstance(val, ss.by)] if isinstance(raw, ss.Dist) else []
+        if funcs or (dw.mean is not None and np.isnan(dw.mean)): # By group is fine, since each agent's mean is known (see Agents.agent_dwell_mean()); a function of the agents is not
+            raise ss.CapabilityError(f'the modifier "{mods[0].name}" changes {path}, the dwell time of "{name}", whose distribution ({raw}) is a function of the agents, which a modifier cannot change yet; modify the transition instead (e.g. ss.modify("{self.mod.name}.{name}", multiply=0.5)).')
         dw.mods = mods
         dw.sets = {}
         for i,m in enumerate(mods):

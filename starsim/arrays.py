@@ -259,13 +259,13 @@ class Arr(BaseArr):
 
     Args:
         name (str): The name for the state (also used as the dictionary key, so should not have spaces etc.)
-        dtype (class): The dtype to use for this instance (if None, infer from value)
+        dtype (class): The dtype to use for this instance (if None, infer from `raw` or `default`; `str` is stored as `object`)
         default (any): Specify default value for new agents. This can be:
 
             * A scalar with the same dtype (or castable to the same dtype) as the Arr;
             * A callable, with a single argument for the number of values to produce;
             * A [`ss.Dist`](`starsim.distributions.Dist`) instance.
-        nan (any): the value to use to represent NaN (not a number); also used as the default value if not supplied
+        nan (any): the value to use to represent NaN (not a number); also used as the default value if not supplied (if None, inferred from the dtype, e.g. `int_nan` for integers)
         label (str): The human-readable name for the state
         raw (array): If provided, initialize the array with these raw values
         skip_init (bool): Whether to skip initialization with the People object (used for uid and slot states)
@@ -312,9 +312,11 @@ class Arr(BaseArr):
         self.shared = None if shared is False else shared # True or an Arr until a value is set: see own()
         self.label = label or name
         self.default = default
-        if nan is not None: self.nan = nan
-        if dtype is None: dtype = np.asarray(default).dtype if np.isscalar(default) else ss_float # Infer from the default value
+        if dtype is None: dtype = np.asarray(raw).dtype if raw is not None else np.asarray(default).dtype if np.isscalar(default) else ss_float # Infer from the values
+        if dtype is str: dtype = object # NumPy's str holds 1 character
+        if nan is None: nan = {'b':False, 'i':int_nan, 'f':np.nan, 'U':''}.get(np.dtype(dtype).kind) # E.g. None for objects
         self.dtype = dtype
+        self.nan = nan
         self.nan_eq = (nan == nan) # Distinguish between NaN placeholder values (e.g. int), and ones where equality is impossible (e.g. float)
         self.people = people # Used solely for accessing people.auids
 

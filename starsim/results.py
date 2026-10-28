@@ -1367,6 +1367,9 @@ class Results(ss.utils.NoDists, ss.ndict):
             groups = [list(match_result_keys(self, sc.tolist(k), show_skipped=True).values()) for k in key]
         else:
             groups = [[res] for res in match_result_keys(self, key, show_skipped=(show_skipped or key)).values()] # Always show skipped with a custom key
+        if not groups:
+            errormsg = 'There are no results to plot'
+            raise ValueError(errormsg)
         if annualize:
             groups = [[res.resample('year') if isinstance(res, Result) and resamplable(res) else res for res in group] for group in groups]
         n_cols,_ = sc.getrowscols(len(groups)) # Number of columns of axes
