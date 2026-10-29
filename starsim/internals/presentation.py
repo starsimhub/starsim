@@ -543,7 +543,7 @@ class Presentation:
         """
         mod = self.module
         if engine is None or not hasattr(engine, 'flows'): # Not in a compartmental sim, so lay the model out with a stand-in
-            mock = sc.objdict(unit_base='day', solver='ode', groups=sc.objdict(n_groups=1), pars=sc.objdict(rand_seed=0, total_pop=1, approx=True), unit=None, unit_name='day', crossings=[])
+            mock = sc.objdict(unit_base='day', solver='ode', groups=sc.objdict(n_groups=1), pars=sc.objdict(rand_seed=0, total_pop=1, approx=True, solver='ode', branching=False), unit=None, unit_name='day', crossings=[])
             engine = ss.solvers.Compartmental(mod, mock)
             engine.init_dwells()
             engine.build_layout()

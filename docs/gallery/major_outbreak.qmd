@@ -1,6 +1,10 @@
 ---
 title: The chance of a major outbreak
 jupyter: python3
+authorship:
+  human: 0
+  ai: 100
+  note: Written by AI
 ---
 
 An epidemic with R0 above 1 doesn't always take off. Early on, when there are only a few cases, each one infects a random number of others, and by chance all of them can recover before passing the infection on. For an SIR model with an exponential infectious period, started by one infectious person, the chance that this happens (that the outbreak is minor) is 1 / R0, so the chance of a major outbreak is 1 − 1 / R0 (Whittle, 1955). A deterministic model can't show this, since in an ODE an epidemic with R0 above 1 always takes off; this page checks it with many stochastic runs.
@@ -54,6 +58,6 @@ The theory is for continuous time. A chain binomial model (`solver='binomial'`) 
 
 ## Going further
 
-- [Repeated runs and uncertainty](../tutorials/t6_uncertainty.qmd) covers stochastic runs, and why one run isn't enough.
-- [Uncertainty, seeds, and many runs](../user_guide/running_uncertainty.qmd) covers the options.
+- [Repeated runs and uncertainty](../tutorials/t5_interventions.qmd) covers stochastic runs, and why one run isn't enough.
+- [Uncertainty, seeds, and many runs](../user_guide/running_scenarios.qmd) covers the options.
 - Whittle P (1955). The outcome of a stochastic epidemic: a note on Bailey's paper. *Biometrika* 42:116–122.

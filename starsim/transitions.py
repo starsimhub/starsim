@@ -1296,6 +1296,39 @@ def scaled_dist(expr):
     return out if out is not None and out[1] is not None else None
 
 
+def dwell_cdf(dist, convert):
+    """
+    The cumulative distribution function of a distribution of durations, in the sim's unit, as a function of an array of times;
+    None for a distribution it is not known for (whose dwell time the `'ide'` solver then takes as Erlang stages)
+
+    Args:
+        dist (`ss.Dist`): the distribution
+        convert (func): converts a parameter of the distribution to a number in the sim's unit
+    """
+    import scipy.stats as sps
+    pars = numeric_pars(dist, convert)
+    name = type(dist).__name__
+    if any(callable(val) for val in pars.values()):
+        return None
+    elif name == 'expon':
+        return sps.expon(scale=pars['scale']).cdf
+    elif name == 'gamma':
+        return sps.gamma(a=pars['a'], scale=pars['scale']).cdf
+    elif name == 'weibull':
+        return sps.weibull_min(c=pars['c'], scale=pars['scale']).cdf
+    elif name == 'lognorm_ex':
+        mean, std = pars['mean'], pars['std']
+        s2 = np.log(1 + std**2/mean**2)
+        return sps.lognorm(s=np.sqrt(s2), scale=mean*np.exp(-s2/2)).cdf
+    elif name == 'normal':
+        return sps.norm(loc=pars['loc'], scale=pars['scale']).cdf
+    elif name == 'constant':
+        return lambda x: (np.asarray(x) >= pars['v']).astype(float)
+    elif name == 'uniform':
+        return sps.uniform(loc=pars['low'], scale=pars['high'] - pars['low']).cdf
+    return None
+
+
 def dwell_stats(dist, convert):
     """
     The mean and standard deviation of a distribution of durations, in the sim's unit

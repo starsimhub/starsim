@@ -68,6 +68,13 @@ pub fn place_rates(ys: A2<f64>, p: &Program, a: usize, b: usize, rates: A2<f64>,
                         }
                     }
                     stack.set(top as usize, 0, leaf_share(op, v, n));
+                } else if op == GROUP {
+                    top += 1;
+                    let mut v = 0.0;
+                    for i in p.set_starts.u(arg)..p.set_starts.u(arg + 1) {
+                        v += ys.at(p.set_comps.u(i), g);
+                    }
+                    stack.set(top as usize, 0, v);
                 } else {
                     top = stack_op(stack, top, op, arg, top_reg);
                 }
@@ -476,6 +483,13 @@ pub fn sparse_events(y: A2<f64>, p: &Program, w: &Work, active: &[usize], dt: f6
                         } else if op == COUNT || op == FRAC {
                             top += 1;
                             stack.set(top as usize, 0, leaf_share(op, counts[arg], n));
+                        } else if op == GROUP {
+                            top += 1;
+                            let mut v = 0.0;
+                            for ii in p.set_starts.u(arg)..p.set_starts.u(arg + 1) {
+                                v += y.at(p.set_comps.u(ii), g);
+                            }
+                            stack.set(top as usize, 0, v);
                         } else {
                             top = stack_op(stack, top, op, arg, top_reg);
                         }

@@ -1,6 +1,10 @@
 ---
 title: An STI on a sexual network
 jupyter: python3
+authorship:
+  human: 0
+  ai: 100
+  note: Written by AI
 ---
 
 A sexually transmitted infection spreads only within partnerships, which form and dissolve over time, and how fast it spreads depends on who partners with whom and for how long, not just on the average number of partners. This needs a model of individual people and their partnerships: a network, and so agents. This page models a curable bacterial STI (an SIS model: people become susceptible again when cured) on Starsim's sexual network of men and women, with a different chance of transmission per sex act from men to women and from women to men.
@@ -51,6 +55,6 @@ msim.summarize().loc[['sti_I', 'sti_infection']]
 
 ## Going further
 
-- [Networks](../tutorials/g1_networks.qmd) covers random, sexual, and maternal networks, and when a model needs one.
-- [Several diseases](../tutorials/g5_diseases.qmd) adds HIV to a model like this one, with each infection changing the other.
-- [Coming from EpiModel](../coming_from/epimodel.qmd) shows EpiModel's SIS on a network in Starsim.
+- [Networks](../tutorials/a2_networks.qmd) covers random, sexual, and maternal networks, and when a model needs one.
+- [Several diseases](../tutorials/t8_strata.qmd) adds HIV to a model like this one, with each infection changing the other.
+- [Coming from EpiModel](../user_guide/conversion/epimodel.qmd) shows EpiModel's SIS on a network in Starsim.

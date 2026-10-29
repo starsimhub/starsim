@@ -1,5 +1,9 @@
 ---
 title: Gallery
+authorship:
+  human: 0
+  ai: 100
+  note: Written by AI
 ---
 
 Complete models, each on a page of its own with the same parts: what the model is and why a modeler would build it this way, its state-transition diagram, its parameters, the code, a result with a plot, and where to go next. Each page runs as it is, in a few seconds. They cover a range of diseases and structures, rather than building one model up step by step as the [tutorials](tutorials.qmd) do.
@@ -17,6 +21,8 @@ Complete models, each on a page of its own with the same parts: what the model i
 | [Cases, hospitalizations, and deaths, fitted to data](gallery/outcomes_fit.qmd) | Outcomes with delays; data made from the model; fitting β with `sim.fit()` |
 | [Severity by age, as a function](gallery/custom_code.qmd) | A Python function in a model, which still runs as compartments, and as agents |
 | [An STI on a sexual network](gallery/sexual_network.qmd) | Transmission per sex act over partnerships; many runs as agents |
+| [Measles in London, four ways](gallery/measles_london.qmd) | He et al. (2010)'s stochastic measles model with school terms and cohort entry: declared with a little code, with a likelihood of its own, as code, compiled, and with a particle filter |
+| [Closing schools](gallery/school_closures.qmd) | An SEIR in the United Kingdom's population, with contacts by setting, and a school closure that removes one setting |
 
 ## Checks against theory
 
@@ -27,22 +33,22 @@ Complete models, each on a page of its own with the same parts: what the model i
 
 ## Models from other frameworks
 
-Each of the "coming from" pages starts with a showcase model from another framework, written in that framework and in Starsim, with how their results agree and how long each takes:
+Each of the [conversion](user_guide/conversion/index.qmd) pages starts with a showcase model from another framework, written in that framework and in Starsim, with how their results agree and how long each takes:
 
 | Framework | Model |
 |---|---|
-| [Atomica](coming_from/atomica.qmd#the-same-model-in-both) | Atomica's SIR demo, from its framework workbook and databook |
-| [camdl](coming_from/camdl.qmd#the-same-model-in-both) | A closed SIR, observed through weekly reported cases |
-| [EMULSION](coming_from/emulsion.qmd#the-same-model-in-both) | EMULSION's compartmental SIR |
-| [EpiModel](coming_from/epimodel.qmd#the-same-model-in-both) | An SIS over partnerships that form and dissolve |
-| [epydemix](coming_from/epydemix.qmd#the-same-model-in-both) | An SIR in Kenya's population, with contact matrices between five age groups |
-| [flepiMoP](coming_from/flepimop.qmd#the-same-model-in-both) | An SEIR in two provinces whose residents commute between them |
-| [LASER](coming_from/laser.qmd#the-same-model-in-both) | An SEIR in a city and fifteen smaller places, coupled by gravity |
-| [MEmilio](coming_from/memilio.qmd#the-same-model-in-both) | An age-resolved SECIR with seasonality and a cut in contacts |
-| [NumPy](coming_from/numpy.qmd#the-same-model-in-both) | A stochastic SEIR in daily steps for a million people |
-| [odin](coming_from/odin.qmd#the-same-model-in-both) | A discrete-time stochastic SEIR in four age groups, with seasonal forcing |
-| [SimInf](coming_from/siminf.qmd#the-same-model-in-both) | An SIR in each of 1,600 cattle herds, linked by movements |
-| [summer2](coming_from/summer2.qmd#the-same-model-in-both) | An SIR with deaths, stratified by age and by location, with a mixing matrix for each |
+| [Atomica](user_guide/conversion/atomica.qmd#the-same-model-in-both) | Atomica's SIR demo, from its framework workbook and databook |
+| [camdl](user_guide/conversion/camdl.qmd#the-same-model-in-both) | A closed SIR, observed through weekly reported cases |
+| [EMULSION](user_guide/conversion/emulsion.qmd#the-same-model-in-both) | EMULSION's compartmental SIR |
+| [EpiModel](user_guide/conversion/epimodel.qmd#the-same-model-in-both) | An SIS over partnerships that form and dissolve |
+| [epydemix](user_guide/conversion/epydemix.qmd#the-same-model-in-both) | An SIR in Kenya's population, with contact matrices between five age groups |
+| [flepiMoP](user_guide/conversion/flepimop.qmd#the-same-model-in-both) | An SEIR in two provinces whose residents commute between them |
+| [LASER](user_guide/conversion/laser.qmd#the-same-model-in-both) | An SEIR in a city and fifteen smaller places, coupled by gravity |
+| [MEmilio](user_guide/conversion/memilio.qmd#the-same-model-in-both) | An age-resolved SECIR with seasonality and a cut in contacts |
+| [NumPy](user_guide/conversion/numpy.qmd#the-same-model-in-both) | A stochastic SEIR in daily steps for a million people |
+| [odin](user_guide/conversion/odin.qmd#the-same-model-in-both) | A discrete-time stochastic SEIR in four age groups, with seasonal forcing |
+| [SimInf](user_guide/conversion/siminf.qmd#the-same-model-in-both) | An SIR in each of 1,600 cattle herds, linked by movements |
+| [summer2](user_guide/conversion/summer2.qmd#the-same-model-in-both) | An SIR with deaths, stratified by age and by location, with a mixing matrix for each |
 
 ## Library modules
 
@@ -52,7 +58,7 @@ Starsim also comes with a library of example modules, written as code, which are
 - **Networks** (`ssl.networks`): households from survey data, people who move in space and connect to those nearby (`DiskNet`), and theoretical networks such as Erdős–Rényi.
 - **Maternal, newborn, and child health** (`ssl.mnch`): fetal health, neonatal sepsis, and congenital disease.
 
-[Library modules](user_guide/io_library.qmd) in the user guide describes them, and how to use them.
+[Library modules](user_guide/library_diseases.qmd) in the user guide describes them, and how to use them.
 
 ## Scripts in the repository
 

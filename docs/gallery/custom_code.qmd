@@ -1,6 +1,10 @@
 ---
 title: Severity by age, as a function
 jupyter: python3
+authorship:
+  human: 0
+  ai: 100
+  note: Written by AI
 ---
 
 Some parts of a model are easiest to write as a function. Here the chance that an infection is severe enough for hospital depends on age: 10% under 50, and 40% from 50 up. Rather than stratify the disease by age and give a value for each group, the chance is a Python function of the sim, which reads people's ages. Starsim tries the function on the model's age groups, and since it works on them, the model still runs as compartments; run as agents, the same function is evaluated for each person.
@@ -61,5 +65,5 @@ A function that needs each person (one that takes `uids`, the people it applies 
 
 ## Going further
 
-- [Modules written as code](../tutorials/g6_code.qmd) goes further, with modules that have a `step()` of their own.
-- [Modules written as code](../user_guide/models_code.qmd), in the user guide, covers functions in rates and probabilities, and when a model can still run as compartments.
+- [Modules written as code](../tutorials/t9_modules.qmd) goes further, with modules that have a `step()` of their own.
+- [Modules written as code](../user_guide/building_modules.qmd), in the user guide, covers functions in rates and probabilities, and when a model can still run as compartments.

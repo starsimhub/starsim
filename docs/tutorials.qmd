@@ -1,134 +1,117 @@
 ---
 pagetitle: "Tutorials"
+authorship:
+  human: 20
+  ai: 80
+  note: Adapted by AI from the Starsim 3 tutorials page
 ---
 
 # Tutorials
 
-The core tutorials build one model a step at a time: a measles outbreak in a town, which gains a latent period, age groups, vaccination, repeated runs, data to fit it to, and other towns. Each takes about ten minutes, starts with the model so far (so you can start at any one), and ends with exercises.
+The tutorials teach Starsim through one example: a simplified measles outbreak in a town, which gains a latent period, age groups, vaccination, other towns, data to fit it to, and more. Each takes 10 to 20 minutes, starts with the model so far (so you can start at any one), and ends with exercises. The [user guide](user_guide.qmd) covers each topic in full.
 
 ## Core tutorials
 
+The core tutorials build models of compartments: groups of people, by state and by age or place. Starsim runs them as equations, as stochastic models, or as agents.
+
 ::: {.grid}
 ::: {.g-col-6}
-[**T1: Getting started**](tutorials/t1_intro.qmd)
+[**T1 – Getting started**](tutorials/t1_intro.qmd)
 
 A measles outbreak as an SIR model: run it, plot it, and check what Starsim built.
 :::
 
 ::: {.g-col-6}
-[**T2: Building your model**](tutorials/t2_model.qmd)
+[**T2 – Building a model**](tutorials/t2_model.qmd)
 
-The first model again, in more depth: what each part means, results, time, and parameters.
+The first model in more depth: states, transitions, parameters, time, and results.
 :::
 
 ::: {.g-col-6}
-[**T3: Disease structure**](tutorials/t3_structure.qmd)
+[**T3 – Building a disease**](tutorials/t3_disease.qmd)
 
-A latent period, durations, and branching, and how to see a model's diagram and equations.
+A latent period, how long people stay in each state, waning immunity, and deaths, with the diagram and equations.
 :::
 
 ::: {.g-col-6}
-[**T4: Age groups and contacts**](tutorials/t4_ages.qmd)
+[**T4 – Age groups and contacts**](tutorials/t4_ages.qmd)
 
 Who mixes with whom: age groups, contact matrices, and real populations.
 :::
 
 ::: {.g-col-6}
-[**T5: Vaccination and scenarios**](tutorials/t5_vaccination.qmd)
+[**T5 – Interventions and scenarios**](tutorials/t5_interventions.qmd)
 
-Vaccines and other interventions, and comparing scenarios side by side.
+Vaccination, school terms, and comparing scenarios across many runs.
 :::
 
 ::: {.g-col-6}
-[**T6: Repeated runs and uncertainty**](tutorials/t6_uncertainty.qmd)
-
-How much an outbreak varies by chance, and how to show it.
-:::
-
-::: {.g-col-6}
-[**T7: Calibration**](tutorials/t7_calibration.qmd)
-
-Fitting the model's parameters to reported cases, and projecting from the fit.
-:::
-
-::: {.g-col-6}
-[**T8: Places and movement**](tutorials/t8_places.qmd)
+[**T6 – Geography and mixing**](tutorials/t6_places.qmd)
 
 Several towns, and how an outbreak travels between them.
 :::
+
+::: {.g-col-6}
+[**T7 – Data and calibration**](tutorials/t7_calibration.qmd)
+
+Fitting the model to reported cases, and projecting from the fit.
 :::
 
-## Going further
+::: {.g-col-6}
+[**T8 – Stratification and co-transmission**](tutorials/t8_strata.qmd)
 
-These tutorials go deeper into topics that some models need and others don't. They can be read in any order after the core tutorials. Two suggested routes:
+Splitting a model by more than age, and two diseases that affect each other.
+:::
 
-- **Modeling individuals, networks, or behavior:** G1, G2, G5, and G6.
-- **Coming from compartmental (ODE) models:** G3, G4, G7, and G5.
+::: {.g-col-6}
+[**T9 – Custom modules**](tutorials/t9_modules.qmd)
+
+Writing your own behavior as code, while keeping the model compartmental.
+:::
+
+:::
+
+## Agent-based modeling
+
+These tutorials are for models that need individual people: contact networks, individual histories, births and deaths, and interventions that target individuals.
 
 ::: {.grid}
 ::: {.g-col-6}
-[**G1: Networks**](tutorials/g1_networks.qmd)
+[**A1 – Diseases**](tutorials/a1_diseases.qmd)
 
-Contact networks between people, and when a model needs one.
+A disease as agents: individual states, histories, and differences between people.
 :::
 
 ::: {.g-col-6}
-[**G2: Demographics**](tutorials/g2_demographics.qmd)
+[**A2 – Networks**](tutorials/a2_networks.qmd)
 
-Births, deaths, and pregnancy, from a country's data.
+Who meets whom, one contact at a time: random, sexual, and other networks.
 :::
 
 ::: {.g-col-6}
-[**G3: Stratification in depth**](tutorials/g3_strata.qmd)
+[**A3 – Demographics**](tutorials/a3_demographics.qmd)
 
-Several dimensions at once, and people moving between groups.
+Births, deaths, and pregnancy for individual people.
 :::
 
 ::: {.g-col-6}
-[**G4: Parameters over time**](tutorials/g4_time.qmd)
+[**A4 – Interventions**](tutorials/a4_interventions.qmd)
 
-Values that change over time: time series, seasons, and school terms.
+Interventions that target individuals: eligibility, testing, and treatment.
 :::
 
 ::: {.g-col-6}
-[**G5: Several diseases**](tutorials/g5_diseases.qmd)
+[**A5 – Custom modules**](tutorials/a5_modules.qmd)
 
-Diseases that interact, and how to link them.
+Writing agent-level logic of your own, from a small change to a new module.
 :::
 
-::: {.g-col-6}
-[**G6: Modules written as code**](tutorials/g6_code.qmd)
-
-Writing your own behavior in Python, next to a declared model.
-:::
-
-::: {.g-col-6}
-[**G7: Bringing a model in**](tutorials/g7_import.qmd)
-
-Importing a model from another framework, and comparing models.
-:::
-
-::: {.g-col-6}
-[**G8: When the model doesn't fit**](tutorials/g8_extending.qmd)
-
-A classic model with features Starsim has no words for, in four steps from declared to compiled code.
-:::
 :::
 
 The answers to the exercises are in the [solutions](tutorials/solutions.qmd).
 
-:::{.callout-note}
-You can download these tutorials as Jupyter notebooks to run them locally. Look for the download button at the top of each tutorial.
-:::
-
 ::: {.callout-tip}
 ## Running tutorials locally
 
-To run these tutorials locally:
-
-1. Clone the Starsim repository
-2. Install Starsim and its dependencies
-3. Navigate to the `docs/tutorials` directory
-4. Convert to Jupyter: `./convert_notebooks` (or just open them directly if `jupytext` is installed)
-5. Launch Jupyter: `jupyter lab`
+Each tutorial can be downloaded as a Jupyter notebook: look for the download button at the top of the page. Or, to run them all locally: clone the Starsim repository, install Starsim (`pip install -e .`), go to `docs/tutorials`, and open them in Jupyter (`jupyter lab`, with `jupytext` installed to open `.qmd` files directly, or run `./convert_notebooks` first).
 :::

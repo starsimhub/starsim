@@ -1,6 +1,10 @@
 ---
 title: Vaccination as a stratification
 jupyter: python3
+authorship:
+  human: 0
+  ai: 100
+  note: Written by AI
 ---
 
 In many compartmental models, vaccination is not part of the disease at all: the population is split into the vaccinated and the unvaccinated, vaccination moves people from one group to the other, and the vaccinated are infected at a lower rate. This is how summer2, Atomica, and many published models write it, and it keeps the disease model the same whatever the vaccination program. This page writes an SIR this way, with a campaign that vaccinates half of the population on day 10, and compares it with no vaccination.
@@ -57,6 +61,6 @@ msim.summarize().loc['sir_infection']
 
 ## Going further
 
-- [Vaccination and scenarios](../tutorials/t5_vaccination.qmd) vaccinates with a vaccine product instead, which is simpler when the vaccine is the topic.
-- [Stratification in depth](../tutorials/g3_strata.qmd) covers transfers between strata, of which vaccination is one.
-- [Coming from summer2](../coming_from/summer2.qmd) and [Coming from Atomica](../coming_from/atomica.qmd) show models from those frameworks, which use this pattern.
+- [Vaccination and scenarios](../tutorials/t5_interventions.qmd) vaccinates with a vaccine product instead, which is simpler when the vaccine is the topic.
+- [Stratification in depth](../tutorials/t8_strata.qmd) covers transfers between strata, of which vaccination is one.
+- [Coming from summer2](../user_guide/conversion/summer2.qmd) and [Coming from Atomica](../user_guide/conversion/atomica.qmd) show models from those frameworks, which use this pattern.

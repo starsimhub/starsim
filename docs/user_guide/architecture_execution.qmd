@@ -1,0 +1,144 @@
+---
+title: Model execution
+jupyter: python3
+authorship:
+  human: 0
+  ai: 100
+  note: Written by AI from the Claude drafts of "From model to run" and "Errors, importing, and exporting", checked against the current code
+---
+
+[Model declaration](architecture_declaration.qmd) covered the model as data, and the graph that resolves and checks it when a module is built. This page follows the model into a sim: what `sim.init()` does, how time works, the loop that runs each step, the objects that hold a run's state, and how Starsim reports what went wrong or what it assumed. [Modules](architecture_modules.qmd) looks at the same loop from the side of one module.
+
+## What `sim.init()` does
+
+Creating a sim only stores what it was given (as copies, so one `sir` can go into several sims). The rest happens at `sim.init()`, which `sim.run()` and `sim.describe()` call if needed. In order (`Sim.init()` in `starsim/sim.py`, and `choose_solver()` and the steps that build a declared model in `starsim/solvers/choose.py`):
+
+1. **Values.** Values given by name (`pars=dict(beta=0.1)`) are set, and each parameter is checked against its bounds (a `ValueError`).
+2. **Groups.** The stratifications of the sim and its modules are collected into `sim.groups`.
+3. **Unit.** The unit of bare numbers is chosen ([below](#units-and-time)).
+4. **Solver.** Under `solver='auto'`, Starsim records each ingredient that matters to the choice, lays the model out as compartments (which runs none of its code), and chooses an ODE if every part has a compartmental form, agents otherwise; a compartmental run uses that layout, so it is made once. For a compartmental run, networks become contact rates between groups, and the population becomes one row per group. See [Solvers and backends](architecture_solvers.qmd).
+5. **Objects.** The timeline, the people, and for each declared disease an *engine*, the object that runs its transitions under the chosen solver. This is the one place where the solver changes which objects exist.
+6. **Starting values.** Random number streams ([Randomness](architecture_randomness.qmd)), people's attributes, then each state's initial conditions.
+7. **Results and the loop.** Results are allocated, data is attached to them by name, and the loop's functions are collected. Parameters are locked, so setting one that doesn't exist raises an error.
+8. **Report.** One line saying what will run and how (the modules, the population, the solver, and the span of time), a note for each inference or approximation (kept in `sim.notes`), and for a compartmental model with transmission, R0 and the number infectious at the start, as a check that the model and its seed are what you meant. When `sim.describe()` initializes the sim, the line is said when the sim is run instead. The reason for the solver is in `sim.solver_reason`, and in `describe()`.
+
+```{python}
+import starsim as ss
+ss.options(jupyter=True)
+
+S, I, R = ss.states('S I R')
+sir = ss.Disease(
+    infection = S >> I @ 0.3 * I,
+    recovery  = ss.Transition(I, R, dur=10),
+    init_prev = 0.01,
+)
+sim = ss.Sim(sir, start='2020-01-01', stop='2020-07-01')
+sim.init()
+```
+
+Errors are raised at the earliest point that can detect them: a mistake in the model's structure when the module is built, a value out of bounds at step 1, and a function that asks for something the solver can't give when it is first called. After `sim.init()` the sim's settings are frozen: a changed copy is made with `sim.new()`.
+
+## Units and time
+
+Starsim has four time types: durations (`ss.days(10)`), hazard rates (`ss.perday(0.1)`), probabilities per period (`ss.probperday(0.1)`), and frequencies (`ss.freqperday(0.1)`). Converting one to a timestep is the type's job: a hazard `r` becomes the probability `1 − exp(−r·dt)`, and a frequency the expected count `f·dt`. Since mixing them up is a common quiet error, adding a rate to a frequency raises a `TypeError`. The types are in `starsim/time.py`, and dates in `starsim/dates.py`.
+
+**A bare number is typed by its slot.** Above, `0.3` is a rate and `dur=10` a duration. After `@` a bare number is always a rate: `I >> R @ 10` recovers at 10 a day, while a 10-day dwell time is `@ ss.days(10)`. Its unit is **the sim's unit**, from the first of: `unit=`, the typed values in the model's diseases, dates for `start` and `stop`, a typed `dt` or `stop`, years for `start` and `stop`, and the typed values in other modules. With none, time is in timesteps, as in a textbook model. The unit is never guessed from the size of a number (0.05 is plausible per day and per year), and when it is inferred, a note says from what:
+
+| Sim | Unit | Note |
+|---|---|---|
+| `ss.Sim(sir, stop=100)`, with only bare numbers | none: 100 steps | none, since nothing was guessed |
+| `ss.Sim(sir, stop=100, unit='day')` | day | none |
+| `ss.Sim(sir, start='2020-01-01', stop='2020-06-01')` | day | `unit='day' (from start and stop dates)`, kept but not printed, since the dates make it plain |
+| `ss.Sim(sir, start=2020, stop=2030)` | year | `unit='year' (from start and stop years)` |
+| `ss.Sim(sir, stop=100, dt=ss.weeks(1))` | week | `unit='week' (from dt)` |
+
+**One time index per step.** Step `k` goes from time point `k − 1` to `k`. Throughout it, in every module, `sim.ti` is `k`, where its results go, and `sim.now` is its start, when values that vary in time are read. At `ti == 0` there is no step: the loop records the starting values, and the analyzers run once to see them. See [Time](building_time.qmd).
+
+## The loop
+
+Each step, the loop calls the modules in Starsim's long-standing order (`starsim/loop.py`):
+
+| Order | Who | What happens |
+|---|---|---|
+| 1 | sim, then every module | `advance()` and `start_step()`: move time and the random number streams on |
+| 2 | custom modules, then demographics | `step()`: custom modules; births add agents, and deaths are requested |
+| 3 | diseases | `step_state()`: state updates of a disease written as code |
+| 4 | connectors, networks, interventions | `step()`: cross-module code, then edges, then deliveries |
+| 5 | diseases | `step()`: transmission, and every transition of a declared disease |
+| 6 | people | `step_die()`: requested deaths take effect |
+| 7 | people, then every module | `update_results()` |
+| 8 | analyzers | `step()`, reading the finished step |
+| 9 | every module, people, sim | `finish_step()`: dead agents are removed |
+
+New agents exist before diseases see them, networks update before interventions so an intervention sees the final network, and interventions run before transmission so someone vaccinated today is protected today. Within a type, modules run in the order given; there are no priorities, phases, or dependency graph. Three rules make this easy to reason about:
+
+- **Each module sees what the modules before it did.** Infection, testing, and treatment can happen in one step. HIV and syphilis can each change the other's transmission: the order decides who goes first, and its effect shrinks with the timestep (`sim.check_dt()` measures it).
+- **Order inside one module doesn't matter.** Transitions out of one state compete in one draw: the total hazard decides who leaves, and each one's share decides where they go, so declaring recovery before death favors neither.
+- **Nobody is removed mid-step.** A death is a request that takes effect at `step_die()`, so arrays never change length partway through a step.
+
+**The loop is data.** After `sim.init()`, `sim.loop.to_df()` lists every call at every time, and `sim.loop.insert(fn, label='sir.step')` adds a function at any point, or moves a module there. The order can always be printed, and it is the only thing that decides what runs when. [Modules](architecture_modules.qmd#reading-the-loop) shows how to read it.
+
+In a compartmental run, a disease's own flows have no order: the ODE evaluates them together. If nothing needs a step of its own, the whole run is one call to the *kernels* (small compiled functions that step the compartments; see [Solvers and backends](architecture_solvers.qmd#the-engines)), with no Python loop. `sim.kernel_reason()` says why a run is stepped instead (for example "it runs as agents", or the name of an analyzer with a step of its own), and is `None` for a run taken in one call.
+
+## Per-module timesteps
+
+A module can have its own `dt`. The loop's plan is every (time, function) pair of every module on its own timeline, sorted by time and then by the order above, so a daily disease and yearly demographics share one sim, and on the days the demographics are due they run at their usual place. Rates and durations are converted with the `dt` of the module that uses them. `describe()` shows the schedule; for a daily disease with `ss.Births(dt=ss.years(1))` and `ss.Deaths(dt=ss.years(1))`:
+
+```text
+schedule     every day: sir
+             every 365 days: births, deaths
+```
+
+## The runtime objects
+
+These are the objects that hold a run's state, and that a module written as code reads and writes.
+
+- **Modules.** Diseases, networks, demographics, interventions, connectors, and analyzers are all `ss.Module` (`starsim/modules.py`), with one lifecycle: `init_pre()` and `init_post()`, then the step functions above, then `finalize()`. They differ in what they contain, not in how they are scheduled. See [Modules](architecture_modules.qmd).
+- **Engines.** A declared disease's `step()` hands its transitions to its engine (`ss.solvers.make_engine()`): `Agents` or `Compartmental`, or one that runs nothing for a disease written as code. This is the seam between model and solver: no method of `ss.Disease` asks which solver it has. A subclass that overrides `step()` calls `super().step()`, then does anything else.
+- **People.** As agents, `sim.people` (`starsim/people.py`) has one entry per agent: age, sex, whether alive, and every module's states. In a compartmental run it has one row per group, so `people.age` in a model not stratified by age raises an `ss.CapabilityError` saying to stratify or run as agents.
+- **Arrays.** As agents, a declared state is an `ss.BoolState` over agents (`starsim/arrays.py`), beside the `ss.FloatArr` and others that code adds. `arr[uids]` reads and writes some agents (`ss.uids`), and `arr.values` those alive. Arrays grow as agents are born; the dead leave at the end of the step. Writes by code to a declared state (`sir.I[uids] = True`) are tracked, so counts see them; writes through `.raw`, the NumPy array underneath, are not. See [Array indexing](mechanics_indexing.qmd).
+
+## Errors, warnings, and notes
+
+The policy is: **prefer guessing a default and printing it to raising an error.** An error is for when there is no sensible guess: a name that doesn't exist, lengths that don't match, a request the solver can't meet. Every message is meant to be read once, by an epidemiologist or by an AI writing a model for one, so it uses the user's own names, says what exists instead, and says what to do:
+
+```{python}
+S, I, R = ss.states('S I R')
+sir = ss.Disease(infection=S >> I @ 0.05 * I, recovery=I >> R @ ss.days(7), init_prev=0.01, name='sir')
+sim = ss.Sim(sir, pars=dict(betta=0.2), verbose=0)
+try:
+    sim.init()
+except KeyError as e:
+    print(f'{type(e).__name__}: {e}')
+```
+
+There are three levels:
+
+| Level | Type | What happens |
+|---|---|---|
+| Error | a built-in exception: a `KeyError` for a name that is not found, a `TypeError` for a value of the wrong kind, a `ValueError` for the rest | raises; caught by type, e.g. `except KeyError` |
+| Warning | a `RuntimeWarning` | issued through Python's warnings, so filters (and `ss.options.warnings='error'`) apply; the run continues |
+| Note | `ss.note()` | a line about something assumed or approximated; kept in `sim.notes` whatever the verbosity, and printed as one line when `verbose` is 1 or more |
+
+A note is said once: the same note isn't kept twice, and notes made while a sim is being initialized are held and printed after the line that starts the run, so they read as part of it. Since the notes are kept, they survive into a saved sim, and a test can check for them.
+
+Five errors and four warnings are classes of their own, in `starsim/internals/errors.py`, since code catches or filters them by kind: `ss.CapabilityError` (the solver asked for can't run part of the model, which `solver='auto'` catches to run as agents; it is a `ValueError`), `ss.AlreadyRunError` (a sim or module run twice), the distribution errors `ss.errors.DistNotInitializedError` and `DistSeedRepeatError`, and `BooleanOperationError`; and the warnings `ss.errors.AtBound` (a best fit at a bound), `NotConverged`, `LossyExport`, and `ImportIncomplete`. The tests check each error, warning, and note by its message (`tests/devtests/test_errors.py`), so a change to a message is a deliberate one.
+
+## Limits
+
+- **Order between modules is a modeling choice** that Starsim won't make for you. By convention, the module whose accuracy matters most runs last, since it sees the most up-to-date state.
+- **Direct writes by code aren't recorded.** `sim.what_modifies(x)` lists the declared modifiers on a quantity, not what a `step()` does to it.
+
+## In the design record
+
+- [Overview](https://github.com/starsimhub/starsim/blob/v4/v4_design/design/00-overview.md): what happens at build time
+- [Objects and construction](https://github.com/starsimhub/starsim/blob/v4/v4_design/design/01-objects.md): `ss.Sim`, the lifecycle, and the module contract
+- [Types](https://github.com/starsimhub/starsim/blob/v4/v4_design/design/02-types.md): the time types, the sim's unit, and the timing contract
+- [Execution](https://github.com/starsimhub/starsim/blob/v4/v4_design/design/10-execution.md): the loop, competing hazards, deferred removals, and per-module timesteps
+- [Errors, warnings, and notes](https://github.com/starsimhub/starsim/blob/v4/v4_design/design/15-errors.md): the policy, the message shape, and the errors and warnings that are classes
+
+## Further reading
+
+- [EMOD: Simulation core components](https://emod.idmod.org/EMOD-Generic/md_dev/dev-architecture-core/): how IDM's agent-based model steps nodes and individuals each timestep
+- [Vivarium: The simulation lifecycle](https://vivarium.readthedocs.io/en/latest/concepts/lifecycle.html): the phases of a microsimulation run (setup, initialization, main loop, cleanup), for comparison with Starsim's `init()` and loop
+- [Vivarium: The event framework](https://vivarium.readthedocs.io/en/latest/concepts/event.html): how components are ordered within a timestep by events and priorities, where Starsim uses one fixed order

@@ -1,0 +1,157 @@
+---
+title: "T6 – Geography and mixing"
+jupyter: python3
+authorship:
+  human: 0
+  ai: 100
+  note: Merged from the Codex and Claude drafts of this tutorial, both written by AI
+---
+
+**Can an outbreak in one town seed another?** Measles brought into one town doesn't stay there. People travel to the next town to work, to shop, or to visit family, and some of them carry it with them. Each town then has its own outbreak, with its own timing, and the towns' outbreaks are linked by the people who move between them. This is a **metapopulation** model: several populations, each mixing mostly within itself, coupled by movement.
+
+This tutorial takes the measles model from one town to four. By the end, you will be able to:
+
+- give a model several places, with their populations and positions;
+- say how much people move between them, with a gravity model or a matrix;
+- read the results for each place, and see how an outbreak spreads from one to the next;
+- see how much the answer depends on the amount of movement, and on chance.
+
+## The model so far
+
+This is the model from [T5 – Interventions and scenarios](t5_interventions.qmd): measles in a town of 100,000 people in three age groups, who mix according to a contact matrix, most of them already immune. Since this tutorial makes the disease several times, with different places and movement, the parts that stay the same are made once, and `make_measles()` puts them together, with the number of people infectious at the start given:
+
+```{python}
+import starsim as ss
+ss.options(jupyter=True) # Plots and tables suited to a notebook
+
+S, E, I, R = ss.states('S E I R')
+beta = ss.par(0.14, bounds=[0.05, 0.5]) # The rate of infection per contact with an infectious person, per day
+infection   = S >> E @ beta*I
+progression = E >> I @ ss.days(10) # Latent for 10 days on average
+recovery    = I >> R @ ss.days(8)  # Infectious for 8 days on average
+contacts = ss.contacts(ages=[0, 15, 65], matrix=[[10, 6, 1], [3, 8, 1], [3, 6, 3]]) # Contacts a day, between age groups
+
+def make_measles(init_n=10):
+    """ The measles model, by age, with the number infectious at the start given """
+    measles = ss.Disease(infection, progression, recovery,
+        init   = dict(R=ss.by(age=[0.8, 0.92, 0.98])), # The share immune in each age group
+        init_n = dict(I=init_n),
+        name   = 'measles',
+    )
+    measles.stratify(age={0: 0.3, 15: 0.6, 65: 0.1}) # Ages 0-14, 15-64, and 65+
+    return measles
+
+sim = ss.Sim(make_measles(), networks=contacts, total_pop=100_000, start='2025-01-01', stop='2026-01-01')
+sim.run()
+sim.plot('measles.I')
+```
+
+## Several towns
+
+The town, Riverton, has three smaller neighbors. A **geography** ([`ss.geo.geography()`](../api/geo.qmd)) gives the places: their names, their populations, and where they are (here, positions on a map in kilometers, from which Starsim works out the distance between each pair):
+
+```{python}
+towns = ss.geo.geography(
+    names = ['Riverton', 'Hillside', 'Lakeview', 'Fairfield'],
+    pop   = [100_000, 40_000, 20_000, 10_000],
+    x     = [0, 20, 35, 60], # Kilometers east of Riverton
+    y     = [0, 10, -15, 5], # Kilometers north of Riverton
+)
+towns.distances.round()
+```
+
+Places are a stratification, as age groups are: `stratify(patch=towns)` splits each state by town (a "patch" is a place in a metapopulation model), so that each town has its own susceptible, exposed, infectious, and recovered people, and the contact matrix applies within each town. The populations of the towns give the population of the model, so `total_pop` isn't needed. The outbreak starts in Riverton only: `ss.by(patch=[10, 0, 0, 0])` gives the number infectious at the start in each town.
+
+Without movement, each town is a separate model:
+
+```{python}
+alone = make_measles(init_n=ss.by(patch=[10, 0, 0, 0])) # 10 people infectious in Riverton, none elsewhere
+alone.stratify(patch=towns)
+
+settings = dict(networks=contacts, start='2025-01-01', stop='2026-01-01')
+sim = ss.Sim(alone, **settings)
+sim.run()
+sim.results.measles.infection.by('patch').summarize().round()
+```
+
+Riverton has its outbreak, the same as before, and measles never leaves it.
+
+## Movement between towns
+
+How much people move between places, and where they go, is often not known in detail. A **gravity model** is the usual first guess: the movement from one place to another grows with the population of the place people go to (a larger town draws more visitors) and falls with the square of the distance between them. The amount of movement is given separately, as the share of their time that people spend in other towns, `away`, here 1% (about a quarter of an hour a day, or a day out of every three months):
+
+```{python}
+away = ss.par(0.01, bounds=[0.001, 0.1]) # People spend 1% of their time in other towns
+measles = make_measles(init_n=ss.by(patch=[10, 0, 0, 0]))
+measles.stratify(patch=towns, mobility=ss.geo.gravity(away=away))
+
+sim = ss.Sim(measles, **settings)
+sim.run()
+sim.results.measles.I.by('patch').plot()
+```
+
+The movement here is commuting: the people of each town keep their home town, but spend a share of their time in the others, where they can be infected by the people there, and infect them. Commuting changes who is exposed where without changing anyone's home. (Migration, in which people move home, is `kind='migrate'`, with rates of moving rather than shares of time.)
+
+With movement, the outbreak peaks first in Riverton, at the end of April, and then in each other town in turn: in Hillside, the nearest, in late May, then in Lakeview, and last in Fairfield, the smallest and farthest, in mid-June, six weeks after Riverton. Since the towns have the same immunity, each outbreak infects about the same share of its town, about 9%. `select()` picks one place's result, as it does an age group's:
+
+```{python}
+round(sim.results.measles.infection.select(patch='Fairfield').sum())
+```
+
+When the movement between places is known, from a survey or from mobile phone data, it can be given as a matrix instead, with `ss.geo.Mobility(matrix=..., kind='commute')`: row *i*, column *j* is the share of their time that the people of place *i* spend in place *j*. [Geography](../user_guide/populations_geography.qmd) covers this, the radiation model, and coupling places through the force of infection rather than through movement.
+
+## How much movement matters
+
+The share of time away is the least certain number in this model. To see how much it matters, run the model with several values of it. `ss.parallel()` with `pars=` runs a sim once for each value given (a parameter sweep), labeling each run with its value:
+
+```{python}
+msim = ss.parallel(sim, pars=dict(away=[0.001, 0.01, 0.05]))
+msim.results.measles.I.select(patch='Fairfield').plot()
+```
+
+With 5 times as much movement, Fairfield's outbreak comes about three weeks earlier; with 10 times less, about five weeks later. The size of the outbreak doesn't change: in this model, measles always reaches Fairfield in the end.
+
+That last part isn't realistic. In an ODE, a small fraction of an infectious person can travel to Fairfield on the first day and start an outbreak there; in reality, measles reaches Fairfield only if a whole infectious person does, and then only if the chains of infection they start don't die out by chance. To see this, run the model as a stochastic model (as in [T5](t5_interventions.qmd#many-runs)), with little movement, many times:
+
+```{python}
+sim = ss.Sim(measles, pars=dict(away=0.001), solver='binomial', **settings)
+msim = sim.run(n_runs=30)
+msim.results.measles.I.select(patch='Fairfield').plot(lines=True)
+```
+
+```{python}
+fairfield = msim.results.measles.infection.select(patch='Fairfield').summarize() # The infections in Fairfield in each run
+print('Runs with an outbreak in Fairfield:', sum(fairfield > 100), 'of', len(fairfield))
+```
+
+In about one run in ten, measles never takes off in Fairfield: either no infectious person goes there while the other towns' outbreaks last, or the few infections they cause die out. In the others, the outbreak comes at very different times, from May to the end of the year, when some are still going. For a small place that is weakly linked to others, whether an outbreak arrives at all is a matter of chance, and a model that ignores this overstates how surely it spreads.
+
+## As agents
+
+The same model runs as agents, each with a home town, with `n_agents=`. Here there is one agent for each of the 170,000 people:
+
+```{python}
+sim = ss.Sim(measles, n_agents=170_000, **settings)
+sim.run()
+sim.results.measles.I.by('patch').plot()
+```
+
+Each agent has a home town, and is exposed in the other towns for the share of their time spent there, as in the compartmental model. The outbreaks spread from town to town as in the compartmental model, a little later (the run notes that agents taking whole days can lag the ODE), and with the variation of a stochastic model: in this run, Fairfield's outbreak happens to come before Lakeview's. With fewer agents than people, each agent stands for several people, and the 10 people infectious at the start can be as few as one agent, so the outbreak can die out at the start by chance alone.
+
+## Real places
+
+Places can also be a country's regions, by name: `ss.geo.geography('Kenya', level=1)` gives Kenya's 47 counties, with their populations, positions, and which share a border. Movement can come from a gravity model, from the radiation model (`ss.geo.radiation()`, which needs no parameters), from a matrix of movement you supply, or from a register of moves on given dates (e.g. of livestock between farms), and it can be commuting, as here, or migration. See [Geography](../user_guide/populations_geography.qmd) and [Population data](../user_guide/populations_data.qmd).
+
+## Exercises
+
+1. Lakeview's children are less often vaccinated: only 65% of them are immune. Give the share immune by age and town (`ss.by()` with both, multiplied together: e.g. `ss.by(age=[0.8, 0.92, 0.98], patch=[1, 1, 0.8125, 1])`), and run the model. How does Lakeview's outbreak compare with the others'?
+2. A campaign that vaccinates 80% of children under 15 in Riverton only, on 1 March (`where=(measles.age < 15) & (measles.patch == 'Riverton')`): how many infections does it prevent in Riverton, and how many in the other towns? Why so few in the other towns, in this model?
+3. Replace the gravity model with the radiation model (`ss.geo.radiation(away=away)`). Which towns' outbreaks come earlier or later, and why?
+
+[Solutions](solutions.qmd#t6-geography-and-mixing) · Next: [T7 – Data and calibration](t7_calibration.qmd)
+
+## Further reading
+
+- [epydemix: Populations](https://epydemix.readthedocs.io/en/latest/guide/populations.html): the populations and contact data of real places, in another Python framework
+- [Xia, Bjørnstad and Grenfell (2004): Measles metapopulation dynamics: a gravity model for epidemiological coupling and dynamics](https://pubmed.ncbi.nlm.nih.gov/15278849/): the gravity model fitted to measles in England and Wales
+- [Simini et al. (2012): A universal model for mobility and migration patterns](https://www.nature.com/articles/nature10856): the radiation model

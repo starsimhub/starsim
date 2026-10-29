@@ -322,6 +322,11 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
         self.tr_index = {name:i for i,name in enumerate(list(graph.transitions) + graph.destinations())} # After the transitions, the flow to each destination of a transition with several ('cin.X')
         self._target_key = None # So that update_targets() works out where the new flows go
         self.tape = None # Likewise, the tape (see init_tape())
+        self.uninfected = set(graph.uninfected) if self.sim.pars.branching else None # As a branching process: the states infection takes no one from (see held below)
+        if self.uninfected is not None:
+            back = [tr.name for tr in graph.transitions.values() if tr.src and any(src.name not in self.uninfected for src in tr.src) and any(dst.name in self.uninfected for dst in tr.dst or [])]
+            if back:
+                ss.note(f'"{self.mod.name}" runs as a branching process, so people who go back to the uninfected ({sc.strjoin(back)}) leave it: they are not counted there, nor infected again', sim=self.sim)
 
         def add_comp(state, track, stage):
             self.comps.append(Bunch(state=state, track=track, stage=stage))
@@ -417,8 +422,9 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
                     track.first = add_raced(state, j, track, exits, competing, stays)
                     continue
                 dwell = self.dwells.get(tr.name) if tr is not None else None # None for a branch whose rate changes with time: a hazard out of its own compartment
-                fixed = dwell is not None and dwell.fixed # A fixed delay: a conveyor, out of which people leave by it
-                n_slots = self.delay_steps(tr) if fixed else max(stays.values(), default=0) # Or a minimum stay: a conveyor, then the rest of the state
+                slot_rates = self.slot_rates(tr, dwell) if self.sim.pars.solver == 'ide' and dwell is not None and not dwell.fixed and dwell.staged and not stays and not getattr(track, 'apart', False) else None # The dwell time as it is (solver='ide')
+                fixed = dwell is not None and (dwell.fixed or slot_rates is not None) # A fixed delay, or a dwell time as it is: a conveyor, out of which people leave by it
+                n_slots = len(slot_rates) if slot_rates is not None else self.delay_steps(tr) if fixed else max(stays.values(), default=0) # Or a minimum stay: a conveyor, then the rest of the state
                 slots = [add_comp(state, j, None) for i in range(n_slots + 1)] if n_slots else []
                 k = 0 if fixed else dwell.k if dwell is not None else 1
                 inds = [add_comp(state, j, i) for i in range(k)]
@@ -428,6 +434,9 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
                 acting = slots if (fixed and self.solver == 'ode') else slots[:-1] # The last slot is left by the people due to leave in the next step: in the ODE, over the step, with the other exits acting on them until they do (see ss.kernels.release_rates()); the stochastic solvers release them at a point in the step (see ss.kernels.convey()), which already keeps the delay's exits exact
                 for i,ind in enumerate(acting):
                     add_exits(ind, state, exits, competing, stays, slot=i)
+                    if slot_rates is not None and i < len(slot_rates) and slot_rates[i] > 0: # Leaving after this many steps, at the dwell time's own chance
+                        add_flow(tr, ind, 'slot')
+                        self.flows[-1].slot_rate = slot_rates[i]
                 if slots:
                     add_flow(tr if fixed else self.graph.transitions[next(iter(stays))], slots[-1], 'conveyor', named=fixed, to=None if fixed else inds[0])
                     self.conveyors.append(Bunch(slots=slots, flow=self.flows[-1]))
@@ -448,10 +457,15 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
 
         for flow in self.flows: # The expression each flow's rate is worked out from, if it is not a dwell time, and whether that can change within a step
             tr = flow.tr
-            flow.expr = None if (flow.kind in ['stage', 'conveyor'] or (flow.kind != 'contact' and tr.dur is not None)) else tr.rate
+            flow.expr = None if (flow.kind in ['stage', 'conveyor', 'slot'] or (flow.kind != 'contact' and tr.dur is not None)) else tr.rate
             if flow.strain and tr.const is not None: # A part of the rate with no source of infection has no strain, so is counted once, with the first
                 flow.expr = flow.expr - tr.const
             flow.dynamic = flow.expr is not None and any(isinstance(leaf, (ss.State, ss.expressions.Count, ss.expressions.Coverage)) for leaf in flow.expr.leaves)
+            flow.held = self.uninfected is not None and tr.acquisition and flow.src is not None and flow.state.name in self.uninfected # An infection in a branching process: an inflow at its rate per member of its source, which it takes no one from (see init_program())
+            if flow.held:
+                if flow.expr is None:
+                    raise ss.CapabilityError(f'"{self.mod.name}.{tr.name}" is an infection with a dwell time rather than a rate, which a branching process cannot run as compartments; give it a rate, or run with solver="abm"')
+                flow.dynamic = True
 
         self.n_comps = len(self.comps)
         self.n_trans = len(self.tr_index)
@@ -461,7 +475,7 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
         self.by_src = sc.ddict(list) # The flows out of each compartment, for the stochastic solvers (which release the last slot of a conveyor by itself)
         for flow in self.flows:
             if flow.kind != 'conveyor':
-                self.by_src[flow.src].append(flow)
+                self.by_src[None if flow.held else flow.src].append(flow) # A held flow is drawn as an inflow
         stage_flows = {flow.src:flow for flow in self.flows if flow.kind == 'stage' and flow.strain is None and not getattr(flow, 'raced', False)}
         self.chains = dict() # For the chain-binomial solver: for each compartment of a dwell time in stages, the number of stages left, its flow to the next, and the flow out of the last (see ss.kernels.draw_chain())
         for c,flow in stage_flows.items():
@@ -1354,6 +1368,8 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
                 src = None if flow.src is None else flow.state.name
                 ps = dest_probs(flow.tr)
                 for dst,p in zip(flow.tr.dst, ps):
+                    if self.gives_back(src, dst.name): # In a branching process, they leave the model instead
+                        continue
                     comps, credits = self.entry[dst.name]
                     syn = self.syncs_of(flow.tr, dst.name)
                     for ind,w in comps:
@@ -1386,6 +1402,38 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
             if getattr(self, '_landed', False) or len(weights) != len(self._weights) or not all(np.array_equal(a, b) for a,b in zip(weights, self._weights)):
                 self.pack_targets()
         return
+
+    def slot_rates(self, tr, dwell, most=5000):
+        """
+        For solver='ide': a dwell time as it is, as a conveyor of whole steps, with the rate of leaving each slot that gives the
+        distribution's own chance of leaving after that many steps (rounded to the nearest), out to the step by which all but
+        1e-6 have left, whose slot is the last: everyone left there leaves in the next step, as from a fixed delay
+
+        Returns the rates of the slots before the last, or None for a distribution whose CDF is not known (which is left as Erlang stages, with a note)
+        """
+        if dwell.dist is None or getattr(dwell, 'scale', None) is not None or getattr(dwell, 'varying', False):
+            cdf = None
+        else:
+            cdf = ss.transitions.dwell_cdf(dwell.raw, self.convert)
+        if cdf is None:
+            self.tell(ss.note, f'solver="ide" takes the dwell time of "{self.mod.name}.{tr.name}" ({dwell.family}) as {dwell.k} Erlang stages, since it has no distribution function it can use as it is', sim=self.sim)
+            return None
+        dt = self.dt
+        G = cdf((np.arange(most + 1) + 0.5)*dt) # The share who leave within each number of steps, to the nearest step
+        rates = []
+        before = 0.0
+        for j in range(most + 1):
+            left = 1 - before
+            if 1 - G[j] <= 1e-6 or left <= 1e-12: # The last slot
+                return np.array(rates)
+            q = (G[j] - before)/left
+            rates.append(-np.log1p(-min(q, 1 - 1e-15))/dt)
+            before = G[j]
+        raise ss.CapabilityError(f'the dwell time of "{self.mod.name}.{tr.name}" lasts more than {most} steps, too many slots for solver="ide"; take a longer step, or run with solver="ode" (Erlang stages)')
+
+    def gives_back(self, src, dst):
+        """ In a branching process, whether a move from one state to another is from the infected side back into the uninfected side, which it takes people out of the model by instead """
+        return self.uninfected is not None and src is not None and src not in self.uninfected and dst in self.uninfected
 
     def apart_shares(self, name, tracks):
         """ For several non-exponential dwell times out of a state, each for other people (where=): the share of each group that enters each one's track, 1 for the one it has (the first, if none) """
@@ -1459,6 +1507,8 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
             return 0.0
         elif flow.kind == 'conveyor': # The last slot of a conveyor has no rate: its people leave in the step after they reach it, as its inflow in the program (see ss.kernels.convey())
             return 1.0
+        elif flow.kind == 'slot': # A slot of a dwell time as it is (solver='ide'): see slot_rates()
+            return flow.slot_rate
         elif flow.expr is None:
             kg = self.dwells[flow.tr.name].kg if flow.kind == 'stage' else None # Ragged stages: each group's own number
             return ((flow.stages if kg is None else kg) if flow.kind == 'stage' else 1)/self.dwell_mean(flow.tr.name)
@@ -1781,6 +1831,10 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
                 shared.done = {k:shared.common[k] for k in shared.common}
                 with self.evaluating(src=flow.state):
                     depth = max(depth, flatten(flow.expr, flow.strain, routes, rtr))
+                if flow.held: # Times the people in its source, in its own group
+                    ops += [kn.GROUP, kn.MUL]
+                    args += [add(sets, (flow.src,)), 0]
+                    depth = max(depth, 2)
                 n_local = max(n_local, len(shared.local))
             else:
                 for leaf in ([] if flow.expr is None else flow.expr.leaves) + sc.tolist(self.dwells.get(flow.tr.name, Bunch(par=None)).par):
@@ -1843,11 +1897,11 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
 
         self.program = kn.Program(
             n_trans    = self.n_trans,
-            src        = np.array([-1 if flow.src is None or flow.kind == 'conveyor' else flow.src for flow in self.flows], dtype=int), # The types are given for a disease with no flows
+            src        = np.array([-1 if flow.src is None or flow.kind == 'conveyor' or flow.held else flow.src for flow in self.flows], dtype=int), # The types are given for a disease with no flows
             named      = np.array([flow.named for flow in self.flows], dtype=bool),
             index      = np.array([flow.index for flow in self.flows], dtype=int),
             record     = np.full(nf, -1),
-            inflow     = np.array([self.inflow_split(flow.tr) if flow.src is None else np.zeros(ng) for flow in self.flows], dtype=float).reshape(nf, ng), # For the flow out of a conveyor, set by the ODE each step (see ss.kernels.convey())
+            inflow     = np.array([self.inflow_split(flow.tr) if flow.src is None else np.ones(ng) if flow.held else np.zeros(ng) for flow in self.flows], dtype=float).reshape(nf, ng), # For the flow out of a conveyor, set by the ODE each step (see ss.kernels.convey())
             fixed      = np.zeros((nf, ng)),
             mult       = np.ones((nf, ng)),
             depth      = depth + len(shared.common) + n_local,
@@ -1857,7 +1911,7 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
             consts     = np.zeros((len(pars), ng)),
             set_starts = ends(setlist),
             set_comps  = flat(setlist),
-            people     = np.array(self.people_comps, dtype=int),
+            people     = np.array([c for c in self.people_comps if self.uninfected is None or self.comps[c].state.name in self.uninfected], dtype=int), # The population a rate divides by: in a branching process, the uninfected
             has_det    = any(self.det_flow(flow) for flow in self.flows),
             det        = np.array([self.det_flow(flow) for flow in self.flows], dtype=bool),
             places     = np.array(mixing.places) if mixing.space is not None else np.zeros(ng, dtype=int),

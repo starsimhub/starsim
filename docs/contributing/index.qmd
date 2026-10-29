@@ -1,0 +1,76 @@
+---
+title: How to contribute
+jupyter: python3
+authorship:
+  human: 40
+  ai: 60
+  note: The guidelines are from the human-written contributing guide; the section on reporting problems was written by AI
+---
+
+Welcome! We are thrilled you are interested in contributing to Starsim. There are many ways to help: asking a question, reporting a bug, suggesting a feature, improving the docs, or contributing code or models.
+
+- We are serious about inclusion and believe the open-source software community still has a long way to go. The Starsim community follows a [code of conduct](conduct.qmd). By participating in this project, you agree to abide by its terms.
+- Feel free to [open an issue](https://github.com/starsimhub/starsim/issues/new/choose) on more or less anything! This project is small enough that we don't need a formal triage system.
+- Questions can also go to <info@starsim.org>, or to the [Starsim Slack](https://starsimhub.slack.com).
+- To contribute code, see the [developer guide](developer.qmd): how to set up, how the code is organized, which tests to run, and how to write a changelog entry.
+
+## Reporting a problem
+
+A *minimal reproducible example* is the shortest complete script that shows a problem: anyone can copy it, run it as it is, and see the same thing. It is the most useful thing to include when asking for help or reporting a bug, and making one often finds the cause on the way, since each part removed either matters or doesn't.
+
+### How to make one
+
+1. **Start from what fails, in a fresh session.** Restart the notebook's kernel (or run the script from the command line) and check that the problem is still there. A notebook can hold values from cells that were changed or deleted since, and a disease that was stratified twice.
+2. **Remove what doesn't matter, one thing at a time.** Take out interventions, analyzers, extra diseases, networks, and data, and after each removal check that the problem is still there. Put back the last thing removed if it goes away: that is part of the cause.
+3. **Make it small and quick.** Use fewer agents (or none: if the problem shows in an ODE, use that), a shorter run, and plain numbers in place of values read from files.
+4. **Replace private data with made-up data.** A few rows typed in, or data drawn from a run of the model with `sim.to_data()`, show the same problem without sharing anything.
+5. **Fix the random seed** (`rand_seed=` in `ss.Sim`), so that a stochastic run gives the same numbers every time.
+6. **Say what you expected, and what you got.** Print the numbers, or include the plot, and give the reason you expected something else (a known result, another model, a calculation by hand).
+
+### An example
+
+A report that a vaccine works less well than expected might come down to this script, which runs in a second:
+
+```{python}
+import starsim as ss
+ss.options(jupyter=True)
+
+S, I, R = ss.states('S I R')
+infection = S >> I @ 1.9*I
+recovery  = I >> R @ ss.days(8)
+measles = ss.Disease(infection, recovery, init_prev=0.001)
+
+vaccination = ss.vaccinate(efficacy=0.9, coverage=0.9, at=ss.days(0))
+sim = ss.Sim(measles, interventions=vaccination, total_pop=100_000, stop=ss.days(100), rand_seed=1)
+sim.run()
+
+# Expected: at most 19,000 infections (the 10% not vaccinated, plus the 10% of the vaccinated whom the vaccine doesn't protect)
+print('Infections:', round(sim.results.measles.infection.sum()))
+```
+
+It has the model, the intervention, and the numbers, and nothing else. (The answer, in this case, is that the vaccine is leaky: see [Profiling and debugging](../user_guide/running_debugging.qmd).)
+
+### When the model is spread out
+
+When a model is built by several functions or read from files, copy the parts that matter into one script, with the values written in, and check that it still shows the problem. A model imported from another framework is already one script: its code is `sim.imported.code` (see [Import/export](../user_guide/conversion/index.qmd)).
+
+### What to include
+
+When reporting a problem, for example as an issue at [github.com/starsimhub/starsim/issues](https://github.com/starsimhub/starsim/issues), include:
+
+- the script;
+- what it printed, including any notes, and the whole error message if there is one;
+- what you expected, and why;
+- the versions of Starsim, Python, and the main libraries, which this prints:
+
+```{python}
+ss.debugtools.metadata().versions
+```
+
+## Contributing code
+
+Pull requests should be made against `main`. Please follow the house [style guide](https://github.com/starsimhub/styleguide) (Starsim more or less follows Google's Python style guide, but with some exceptions), make sure the tests pass, and add an entry to the changelog. The [developer guide](developer.qmd) has the details.
+
+Models and modules are welcome too: a disease, network, or intervention that others could use may belong in the [model library](../user_guide/library_diseases.qmd), and a complete model may belong in the [gallery](../gallery.qmd). Open an issue first to discuss it.
+
+If you have any other questions, please reach out to us: <info@starsim.org>. Thank you!

@@ -1,9 +1,13 @@
 ---
-title: Networks and mixing pools
+title: Contact networks
 jupyter: python3
+authorship:
+  human: 15
+  ai: 85
+  note: Based on the AI-written v4 draft, with the sections on how mixing pools transmit, hybrid networks, and editing edges adapted from the Starsim 3 user guide page on networks
 ---
 
-A disease model says how infectious people are; the mixing says who meets whom, and how often. This page covers the ways of giving the mixing in Starsim: homogeneous mixing, mixing pools, and networks of individual contacts (random, sexual, mother-to-child, and household networks). Contact matrices between groups, such as age groups, have a page of their own, [Contact matrices and data by place](populations_contacts.qmd), and so do several places with movement between them, [Places and movement](populations_places.qmd). The [Networks tutorial](../tutorials/g1_networks.qmd) builds up the same material as a single worked path.
+A disease model says how infectious people are; the mixing says who meets whom, and how often. This page covers the ways of giving the mixing in Starsim: homogeneous mixing, mixing pools, and networks of individual contacts (random, sexual, mother-to-child, and household networks). Contact matrices between groups, such as age groups, are in [Population data](populations_data.qmd), and several places with movement between them in [Geography](populations_geography.qmd). The tutorial [A2 – Networks](../tutorials/a2_networks.qmd) builds up the same material as a single worked path, and [T4 – Age groups and contacts](../tutorials/t4_ages.qmd) uses a contact matrix in a compartmental model.
 
 ## Choosing how people mix
 
@@ -11,7 +15,7 @@ The disease and the mixing are separate: changing from homogeneous mixing to a n
 
 - **No route given**: homogeneous mixing, the assumption of the standard ODE models. Everyone is equally likely to meet everyone else, and the transmission rate β (`beta`) is a rate per unit time: in `S >> I @ beta*I`, each susceptible person is infected at a rate of β times the share of people who are infectious.
 - **A mixing pool**, `ss.MixingPool(n_contacts=10)`: homogeneous mixing with 10 contacts per unit time. β is then the probability that a contact with an infectious person infects, so β × the number of contacts is the transmission rate.
-- **A contact matrix**, `ss.contacts(...)`: mixing between groups, such as age groups, with a number of contacts for each pair of groups (see [Contact matrices and data by place](populations_contacts.qmd)).
+- **A contact matrix**, `ss.contacts(...)`: mixing between groups, such as age groups, with a number of contacts for each pair of groups (see [Population data](populations_data.qmd)).
 - **A network**, such as `ss.RandomNet(n_contacts=10)` or `ss.SexualNet()`: contacts between particular people, with β per contact (or per sex act, on a network with acts).
 
 Here is the same disease under three kinds of mixing. With no route, β = 0.05 per day and an infectious period of 10 days give R0 = β × the infectious period = 0.5, so there is no epidemic. With 10 contacts a day, R0 = 0.05 × 10 × 10 = 5, and the mixing pool and the random network give nearly the same epidemic:
@@ -36,7 +40,7 @@ msim = ss.parallel(scenarios)
 msim.plot('sir.I')
 ```
 
-Transmission along every route is frequency-dependent: a person's number of contacts is fixed, and what matters is the share of them who are infectious. This is the usual assumption for infections passed directly between people. A density-dependent rate, which grows with the number of people infected rather than their share, is written with the count itself, `S >> I @ ss.perday(3e-5)*I.n` (see [Diseases](models_diseases.qmd)).
+Transmission along every route is frequency-dependent: a person's number of contacts is fixed, and what matters is the share of them who are infectious. This is the usual assumption for infections passed directly between people. A density-dependent rate, which grows with the number of people infected rather than their share, is written with the count itself, `S >> I @ ss.perday(3e-5)*I.n` (see [Diseases](building_diseases.qmd)).
 
 ### Which solver runs it
 
@@ -51,7 +55,7 @@ A model whose mixing has a compartmental form (no route, a mixing pool, or a con
 | `ssl.StaticNet(graph=...)` | exact | homogeneous mixing with the graph's mean number of contacts |
 | `ss.DegreeNet()`, `ss.SexualNet()`, and other partnership networks | exact | the partner-change model (partnerships formed at a rate, each with the chance it transmits over its whole length), which needs the model stratified by sex for `ss.SexualNet` |
 
-The approximations are rough where the network matters most: homogeneous mixing with the same mean number of contacts loses the variation between people, and the partner-change model counts at most one transmission in each partnership. [Solvers and when they disagree](running_solvers.qmd) has the details. Anything that needs to know who a person's contacts are (contact tracing, partner notification, the transmission tree) needs a network, and so agents.
+The approximations are rough where the network matters most: homogeneous mixing with the same mean number of contacts loses the variation between people, and the partner-change model counts at most one transmission in each partnership. [Solvers and backends](running_solvers.qmd) has the details. Anything that needs to know who a person's contacts are (contact tracing, partner notification, the transmission tree) needs a network, and so agents.
 
 ## Random networks
 
@@ -66,13 +70,24 @@ infection = S >> I @ 0.02*I       # Per contact, per day
 recovery  = I >> S @ ss.days(10)  # No lasting immunity
 sis = ss.Disease(infection, recovery, init_prev=0.01)
 
-sim = ss.Sim(sis, networks=[households, work], n_agents=2000, stop=ss.days(200), verbose=0)
-sim.run()
-print('Number of households:', sim.networks.households.n_clusters)
-sim.plot('sis')
+def make_sim(networks):
+    return ss.Sim(sis, networks=networks, n_agents=2000, stop=ss.days(200), verbose=0)
+
+msim = ss.parallel({'Work only': make_sim(work), 'Households and work': make_sim([households, work])})
+msim.plot('sis.I')
+print('Number of households:', msim.sims[1].networks.households.n_clusters)
 ```
 
-`ssl.HybridNet` gives the four layers of [Covasim](https://covasim.org/) in one: households (`h`), schools (`s`), workplaces (`w`), and the community (`c`), each reached on its own as `sim.networks.s` and so on.
+Adding households raises the number infected at the endemic level: they reach children and older people, who have no contacts at work, and give each person a few more contacts. Each network's transmission is counted separately, so the same β applies on every layer unless it is given by route (see below).
+
+`ssl.HybridNet` gives the four layers of [Covasim](https://covasim.org/) in one: households (`h`, a `ssl.ClusterNet`), schools (`s`), workplaces (`w`), and the community (`c`), each a random network limited by age where it should be. Once in a sim, it becomes four networks, each reached (and changed) on its own, e.g. `sim.networks.s`; a `dt`, `start`, or `stop` given to it is passed to all four:
+
+```{python}
+hybrid = ss.Sim(sis, networks=ssl.HybridNet(household_size=3), n_agents=2000, stop=ss.days(100), verbose=0)
+hybrid.run()
+for net in hybrid.networks():
+    print(net.label, 'edges:', len(net))
+```
 
 ## Sexual networks
 
@@ -146,7 +161,9 @@ sim.run()
 sim.plot('sir')
 ```
 
-Of the 5,000 people, 250 start infected, and the epidemic goes no further than the adults whom children infect: it dies out once the infected children recover, since nobody infects children in this pool and adults infect nobody. `ss.MixingPools` (plural) is a set of pools between groups, with `src` and `dst` as dicts of groups and `n_contacts` as a matrix, sources by row and destinations by column. For mixing by age, the usual case, `ss.contacts()` makes the `ss.MixingPools` from a contact matrix and a stratified model gives results by group: see [Contact matrices and data by place](populations_contacts.qmd).
+Each person in a pool has an effective number of contacts, drawn once from `n_contacts`. On each step, the force of infection in the pool is the mean infectiousness of the sources (the share of them infectious, weighted by each one's `rel_trans`), and each susceptible destination is infected with probability β × that mean × their number of contacts × their `rel_sus`. This is the term β × S × I/N of the ODE, applied to each person.
+
+Of the 5,000 people, 250 start infected, and the epidemic goes no further than the adults whom children infect: it dies out once the infected children recover, since nobody infects children in this pool and adults infect nobody. `ss.MixingPools` (plural) is a set of pools between groups, with `src` and `dst` as dicts of groups and `n_contacts` as a matrix, sources by row and destinations by column. For mixing by age, the usual case, `ss.contacts()` makes the `ss.MixingPools` from a contact matrix and a stratified model gives results by group: see [Population data](populations_data.qmd).
 
 In a declared disease, β belongs to the transmission, not to the pool: a pool's own `beta` must be left at its default of 1, and any other value raises an error that says to give it to the transmission instead (e.g. `dict(mixingpool=...)`).
 
@@ -165,7 +182,20 @@ custom = ss.Network(name='custom').from_df(dict(p1=[0, 1, 2], p2=[1, 2, 3]))
 custom.to_df()
 ```
 
-A network of partnerships forgets a partnership when it ends. With `memory=`, it keeps those that ended within that time, so that `net.find_contacts()`, and so contact tracing (the `trace=` of a delivery: see [Products and deliveries](interventions_products.qmd)), also reaches recent past partners, as for partner notification of the past year's partners:
+Edges can be removed by a condition on them or by position, and `net.eligible()` gives the people who can form edges (alive, and within an age range if given), here on the community layer of the hybrid network above:
+
+```{python}
+net = hybrid.networks.c
+print('Community edges:', len(net))
+net.remove_edges(net['p1'] < 100) # Remove the edges whose first person has a UID below 100
+net.remove_edges([0, 1, 2])       # Remove the first three edges
+print('After removing some:', len(net))
+print('People of school age:', net.eligible(age_range=[6, 22]).sum())
+```
+
+Changing the edges of a network in the middle of a run is the job of an intervention (see [Interventions](interventions_interventions.qmd)), such as closing schools; the edges of a network that is redrawn each step come back on the next step.
+
+A network of partnerships forgets a partnership when it ends. With `memory=`, it keeps those that ended within that time, so that `net.find_contacts()`, and so contact tracing (the `trace=` of a delivery: see [Interventions](interventions_interventions.qmd)), also reaches recent past partners, as for partner notification of the past year's partners:
 
 ```{python}
 net = ss.SexualNet(dur=ss.lognorm_ex(mean=ss.years(1), std=ss.years(1)), memory=ss.years(1))
@@ -188,7 +218,7 @@ print('Including those of the past year:', len(net.find_contacts(uids)))
 | `ss.PostnatalNet` | Mother and child after birth | `dur` |
 | `ss.MixingPool` | Homogeneous mixing within a group, or from one group to another | `src`, `dst`, `n_contacts` |
 | `ss.MixingPools` | Mixing between several groups | `src`, `dst`, `n_contacts` (a matrix) |
-| `ss.contacts()` | A contact matrix (returns `ss.MixingPools`) | see [Contact matrices](populations_contacts.qmd) |
+| `ss.contacts()` | A contact matrix (returns `ss.MixingPools`) | see [Population data](populations_data.qmd) |
 
 The library (`import starsim.library as ssl`) has more:
 
@@ -214,12 +244,21 @@ A network written as code is a subclass of one of these (usually `ss.DynamicNetw
 | `init_post()` | Sets the network up once the people exist |
 | `find_contacts()` | Gives the contacts of some people |
 
-[Modules written as code](models_code.qmd) has the general pattern, including parameters, states, and results of a module's own.
+[Custom modules](building_modules.qmd) has the general pattern, including parameters, states, and results of a module's own, and the tutorial [A5 – Custom modules](../tutorials/a5_modules.qmd) writes a network step by step.
 
 ## Pitfalls
 
 - **β changes meaning when a route is added.** With no route, β is a rate per unit time; with a mixing pool, contact matrix, or network, it is a probability per contact (per act, on a network with acts). Adding `networks=ss.RandomNet(n_contacts=10)` to a model fitted with homogeneous mixing multiplies its R0 by 10, as in the first example on this page.
-- **A network makes the model agent-based.** Asking for `solver='ode'` with a network approximates it; check the note it prints, and [Solvers and when they disagree](running_solvers.qmd) for how far the approximation goes.
+- **A network makes the model agent-based.** Asking for `solver='ode'` with a network approximates it; check the note it prints, and [Solvers and backends](running_solvers.qmd) for how far the approximation goes.
 - **A probability per act needs acts.** `ss.peract()` on a route without acts (a random network, a mixing pool, a mother-to-child network) raises an error; give a bare probability per contact instead.
 - **A β by route names every route.** A dict that leaves out a route, or names one that isn't in the sim, raises an error that lists the routes there are.
 - **A static network leaves out newcomers.** With `dynamic=False`, edges are made once, and people born or added later have no contacts on that network.
+
+The API reference for this page: [Networks](../api/networks.qmd).
+
+## Further reading
+
+- [EpiModel: Network models](https://epimodel.github.io/EpiModel/articles/Intro.html): stochastic network models of HIV and other STIs, estimated with exponential random graph models
+- [Covasim: Population structures](https://docs.covasim.org/tutorials/tut_people.html): the households, schools, workplaces, and community that `ssl.HybridNet` copies
+- [NetworkX: Graph generators](https://networkx.org/documentation/stable/reference/generators.html): ready-made graphs that `ssl.StaticNet` can use
+- [Mesa: Discrete space](https://mesa.readthedocs.io/latest/apis/discrete_space.html): agents placed on the cells of a grid or the nodes of a network

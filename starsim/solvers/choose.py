@@ -15,7 +15,7 @@ from .engine import convert
 __all__ = ['solver_names', 'integrators', 'Undeclared', 'make_engine', 'choose_solver', 'choose_engine', 'kernel_seconds', 'init_crossings', 'init_capabilities', 'auto_reasons', 'set_par_values', 'flows_of', 'init_group_values', 'settle_start', 'group_people']
 
 
-solver_names = ['auto', 'ode', 'binomial', 'gillespie', 'tau', 'abm'] # The solvers that can be asked for
+solver_names = ['auto', 'ode', 'ide', 'binomial', 'gillespie', 'tau', 'abm'] # The solvers that can be asked for ('ide' runs as the ODE, with each dwell time as it is: see Compartmental.slot_rates())
 integrators = ['rk4', 'euler'] # The schemes of the ODE
 
 
@@ -153,6 +153,8 @@ def choose_solver(sim):
                     ss.note(f'running as agents: {cap.reason}', sim=sim)
         else:
             solver, reason = 'ode', 'every part of the model has a compartmental form' if sim.declared else 'nothing in the model needs agents'
+    elif solver == 'ide': # The ODE, with each dwell time as it is rather than as Erlang stages
+        solver, reason = 'ode', 'requested (as an integro-differential model)'
     else:
         reason = 'requested'
     sim.solver = solver
@@ -272,7 +274,13 @@ def lay_out(sim, mod, solver):
 def init_agents(sim, reason):
     """ Once the model runs as agents: their number and scale, if only the population was given, and the mixing pools """
     pars = sim.pars
-    if 'n_agents' not in sim.given and ('people' not in sim.given or sim.named_unsized) and 'total_pop' in sim.given:
+    if pars.branching: # Agents only for the infected, each one person, made by the declared module (see ss.solvers.Agents.init_branching()); the population is the uninfected's counts
+        if 'n_agents' in sim.given and 'total_pop' in sim.given:
+            ss.note(f'n_agents={pars.n_agents:n} is not used by a branching process of agents, which makes agents only for the infected, out of total_pop={pars.total_pop:n}', sim=sim)
+        pars.total_pop = pars.total_pop if pars.total_pop is not None else pars.n_agents
+        pars.n_agents = 0
+        pars.pop_scale = 1.0
+    elif 'n_agents' not in sim.given and ('people' not in sim.given or sim.named_unsized) and 'total_pop' in sim.given:
         pars.n_agents = int(min(pars.total_pop, pars.n_agents))
         pars.pop_scale = pars.total_pop/pars.n_agents
         if pars.pop_scale > 1000 and 'solver' not in sim.given: # Chosen for the user, at a scale they did not choose either

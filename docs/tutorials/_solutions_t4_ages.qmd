@@ -1,0 +1,65 @@
+## T4 – Age groups and contacts
+
+Each solution starts from the model of the tutorial: measles in a town of 100,000 people in three age groups, with immunity by age and a contact matrix.
+
+```{python}
+import starsim as ss
+ss.options(jupyter=True)
+
+def make_measles(immune=ss.by(age=[0.8, 0.92, 0.98])):
+    """ The measles model of T4, with the share immune in each age group given """
+    S, E, I, R = ss.states('S E I R')
+    beta = ss.par(0.14, bounds=[0.05, 0.5])
+    infection   = S >> E @ beta*I
+    progression = E >> I @ ss.days(10)
+    recovery    = I >> R @ ss.days(8)
+    measles = ss.Disease(infection, progression, recovery, init=dict(R=immune), init_n=dict(I=10), name='measles')
+    measles.stratify(age={0: 0.3, 15: 0.6, 65: 0.1})
+    return measles
+
+matrix = [[10, 6, 1], [3, 8, 1], [3, 6, 3]]
+settings = dict(total_pop=100_000, start='2025-01-01', stop='2026-01-01', verbose=0)
+```
+
+**1. Fewer contacts between children.**
+
+```{python}
+measles = make_measles()
+open_schools   = ss.contacts(ages=[0, 15, 65], matrix=matrix)
+closed_schools = ss.contacts(ages=[0, 15, 65], matrix=[[5, 6, 1], [3, 8, 1], [3, 6, 3]])
+for label, contacts in {'Schools open': open_schools, 'Schools closed': closed_schools}.items():
+    sim = ss.Sim(measles, networks=contacts, label=label, **(settings | dict(verbose=1))) # verbose=1 to print R at the start
+    sim.run()
+    print(sim.results.measles.infection.by('age').summarize().round())
+```
+
+The reproduction number at the start (`R`, in the line each run prints as it starts) falls from about 2.5 to about 1.6, and the outbreak is about a quarter smaller (6,700 infections rather than 8,800), and peaks three months later, at the end of July. Most of the infections prevented are in children, but adults and older adults have fewer infections too, though their own contacts have not changed: they are infected by children, and with fewer children infected, there are fewer infectious children for them to meet. (The matrix with fewer contacts between children is still reciprocal, since only the contacts of children with each other changed.)
+
+**2. The same immunity in every age group.**
+
+```{python}
+contacts = ss.contacts(ages=[0, 15, 65], matrix=matrix)
+msim = ss.parallel({
+    'Immunity by age': ss.Sim(make_measles(), networks=contacts, **settings),
+    '90% immune at every age': ss.Sim(make_measles(immune=0.9), networks=contacts, **settings),
+})
+msim.plot('measles.infection')
+for sim in msim.sims:
+    print(sim.label, '- infections:', round(sim.results.measles.infection.sum()))
+```
+
+In the town of the tutorial, 0.3 × 80% + 0.6 × 92% + 0.1 × 98% ≈ 89% of people are immune, about the same as 90% at every age. Yet with the same immunity at every age, the reproduction number at the start is about 1.6 rather than 2.5, and the outbreak is a third smaller (5,900 infections rather than 8,800), though the number of people susceptible is almost the same. Where the susceptible people are matters, not only how many there are: a gap in immunity among children, who have the most contacts, gives measles far more chances to spread than the same gap spread evenly over the town. This is why measles programs track coverage by age and birth cohort, not only overall.
+
+**3. A higher birth rate.**
+
+```{python}
+demographics = lambda rate: [ss.birth(rate=ss.peryear(rate)), ss.death(rate=ss.peryear(0.02))]
+long = dict(networks=contacts, total_pop=100_000, unit='day', dt=ss.weeks(1), start='2025-01-01', stop='2045-01-01', verbose=0)
+msim = ss.parallel({
+    '30 births a year per 1,000': ss.Sim(make_measles(), demographics=demographics(0.03), **long),
+    '45 births a year per 1,000': ss.Sim(make_measles(), demographics=demographics(0.045), **long),
+})
+msim.plot('measles.I')
+```
+
+With more births, the outbreaks after the first come sooner and closer together, and settle sooner to a higher level of infection. Susceptible children are born faster, so the number needed for the next outbreak builds up sooner. (The population also grows faster, by 2.5% a year rather than 1%, which is why the level of infection keeps rising.)

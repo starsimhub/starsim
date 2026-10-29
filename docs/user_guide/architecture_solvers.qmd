@@ -1,0 +1,153 @@
+---
+title: Solvers and backends
+jupyter: python3
+authorship:
+  human: 0
+  ai: 100
+  note: Written by AI from the Claude draft of the architecture page on solvers, checked against the current code
+---
+
+The same declared model can be run five ways: as a deterministic ODE (`'ode'`), as three kinds of stochastic compartmental model (`'binomial'`, `'gillespie'`, `'tau'`), or as agents (`'abm'`). This page explains how Starsim chooses between them, the engines that do the work, the backends and kernel sets that make them fast, how approximations are announced, and which tests keep each path honest. For how to choose a solver as a modeler, and how the solvers' results differ, see [Solvers and backends](running_solvers.qmd) in Running models.
+
+## How `solver='auto'` chooses
+
+The default, `solver='auto'`, picks the simplest, fastest representation that runs the model without changing what it means: an ODE if every part of the model has a compartmental form, and agents otherwise. The line the sim prints when it is initialized says which it chose, and `sim.solver_reason` (and `describe()`) says why:
+
+```{python}
+import starsim as ss
+ss.options(jupyter=True)
+
+def make_sir(dur=ss.days(10)):
+    S, I, R = ss.states('S I R')
+    return ss.Disease(
+        infection = S >> I @ ss.perday(0.3) * I,
+        recovery  = ss.Transition(I, R, dur=dur),
+        init_prev = 0.01,
+    )
+
+kw = dict(unit='day', stop=100)
+sim = ss.Sim(make_sir(), **kw).init()                                       # Homogeneous mixing
+print()
+sim = ss.Sim(make_sir(), networks=ss.RandomNet(n_contacts=10), **kw).init() # A network of individuals
+print()
+sim = ss.Sim(make_sir(ss.lognorm_ex(mean=ss.days(10), std=ss.days(4))), **kw).init() # A lognormal dwell time
+```
+
+The rule behind this is that `'auto'` never approximates the mixing and never drops anything individual-level. A model runs as agents if it has any of these:
+
+- an individual-level network (`ss.RandomNet`, `ss.SexualNet`), or `n_agents=`;
+- a function that takes `uids`, or a per-agent attribute that isn't a stratification (viral load);
+- a module written as code that keeps a value for each person (`define_states()`), or that says `compartmental = False`; being written as code isn't a reason by itself, so a module that keeps nothing per person (an ODE of its own, an analyzer) runs beside the compartments, and a sim of such modules has no agents at all;
+- anything that needs individual histories: contact tracing, the infection log, time in a state, or each person's mother or children.
+
+Everything else, including contact matrices, stratifications, fixed delays, and interventions that target strata, has a compartmental form.
+
+The one thing `'auto'` approximates unasked is a dwell time that isn't exponential, Erlang or fixed, as in the third example. Sending a simple model to agents over one lognormal would be the bigger surprise, so it uses Erlang stages that keep the mean exactly, and prints the standard deviation they give. A dwell time too variable for stages (a coefficient of variation above 3) makes `'auto'` choose agents.
+
+`sim.describe()` lists each ingredient that matters for the choice and whether it runs as compartments: `yes`, `approx` (and how), or `no` (and why). Code is never analyzed in advance: a function is called with what the solver has (one value per agent, or one per group), and if it asks for something only agents have, the run stops with an `ss.CapabilityError` that names it.
+
+## The solvers
+
+| Solver | Time | State | Good for | Loses accuracy when |
+|---|---|---|---|---|
+| `ode` | continuous | real numbers | large populations, fast fitting, gradients | counts are small or extinction matters |
+| `ide` | continuous, dwell times by whole steps | real numbers | dwell times far from exponential, renewal-equation models | the step is long against a dwell time |
+| `binomial` | discrete | whole people | simple stochastic models on a fixed step | `rate × dt` is large |
+| `gillespie` | continuous | whole people | exact stochastic dynamics | values vary quickly within a step |
+| `tau` | continuous | whole people | large stochastic runs, close to exact | rates change quickly within a leap |
+| `abm` | discrete | individuals | networks, heterogeneity, histories | `rate × dt` is large; cost grows with `n_agents` |
+
+`'auto'` only ever chooses `ode` or `abm`; a stochastic compartmental solver, or `ide`, is used only when it is asked for by name. `ide` runs as the ODE, with each dwell time that is not exponential as a conveyor of whole steps, leaving each slot at the distribution's own chance rather than through Erlang stages. Any solver can also run the model as a branching process (`branching=True`): infection takes no one from the uninfected and gives no one back, and as agents, agents are made only for the infected (see [Branching and rescaling](running_branching.qmd)). A sim is one run whatever the solver, and many runs are an `ss.MultiSim` (`ss.parallel(sim, n_runs=100)`).
+
+Some of the conditions in the last column are reported as notes, and `sim.check_dt()` measures how much a smaller step would change the results.
+
+## Approximations are announced
+
+When a solver is asked for that the model doesn't natively fit, Starsim uses the standard approximation where one exists, and says so in one line. It stops only when there is no sensible approximation. For example, a random network run as an ODE becomes homogeneous mixing at the network's mean number of contacts:
+
+```text
+>>> ss.Sim(sir, networks=ss.RandomNet(n_contacts=10), solver='ode', unit='day', stop=100).init()
+Sim: sir, 10,000 people, as an ODE, days 0 to 100
+  sir: R0 = 30, with 100 infectious at the start
+  Note: RandomNet approximated by homogeneous mixing with 10 contacts per day (its mean number of contacts)
+```
+
+A network model run as an ODE is a coarser model, not an invalid one, and someone who typed `solver='ode'` asked for it. Each ingredient has one standard approximation (lasting partnerships use a partner-change model; a distribution on `beta` uses its mean). Things with no compartmental form, such as contact tracing, stop with an `ss.CapabilityError` before the run, saying what to do instead.
+
+By default each approximation prints a note; `approx=True` keeps the notes without printing them, and `approx=False` makes any approximation an error (under `'auto'`, that sends a lognormal dwell time to agents). Either way the notes are kept in `sim.notes`, so they survive into saved output.
+
+## The engines
+
+Each declared module gets one engine when the sim is initialized. A module written as code, with no declared states or transitions, gets an empty engine and runs its own `step()`. Beside the engines, `solvers/deliveries.py` is what an intervention does differently as compartments (it reaches a share of each group, not a list of agents), and `solvers/particles.py` steps many runs of one program together for the particle filter.
+
+| Engine | Files | What it does |
+|---|---|---|
+| Compartmental | `solvers/compartmental.py`, `solvers/mixing.py`, `solvers/backends/kernels.py` | Expands states into compartments (one per group, branch and Erlang stage) and transitions into a flat list of flows, the *program*. The kernels (small functions in `solvers/backends/kernels.py`, compiled with Numba, or their Rust copies) step that program for all four compartmental solvers. `mixing.py` turns networks and mixing pools into contact rates between groups. |
+| Agents | `solvers/agents.py`, `solvers/backends/passes.py` | Each state is a boolean array over agents. A dwell time is drawn on entry and the exit scheduled; competing rates out of a state are resolved in one draw; transmission is drawn over each network's edges. The moves of a step are taken in rounds (below), each a few NumPy passes over the agents who move. The heavy passes over agents and edges are compiled. |
+| Crossing | `solvers/crossing.py` | Diseases tracked jointly, when a condition in one refers to a state of another (`ss.modify(hiv.rel_trans, multiply=3, where=syph.I)`). Their compartments are crossed and run as one program, up to a budget (`ss.options.max_joint`); above it, `'auto'` uses agents. |
+
+Three details of the compartmental engine explain most of its behavior:
+
+- **A whole run in one call.** If nothing needs Python between steps (no intervention or analyzer with a step of its own), the kernels run the whole simulation in one call; otherwise they are called once per step. Values that vary in time (`ss.timeseries`, `ss.seasonal`, and `ss.by` of them, by place or age) are tabulated for every step before the run, and so are deliveries on a schedule to people chosen by state and group (`ss.Delivery.tabulated`), including a move between states such as a seed (`ss.Delivery(move=S >> I, at=...)`), so none of these makes a run stepped. The results are the same, and `sim.kernel_reason()` says why a run is stepped.
+- **Rust, Numba, or plain.** The kernels run in Rust, compiled by Numba, or as plain Python, with the same results (see [the kernels](#the-kernels), below).
+- **JAX for long runs and gradients.** `internals/gradients.py` (`ss.gradients`) runs the same program with the same RK4 steps in JAX, so results can be differentiated (`sim.gradient()`) and many parameter sets run at once; `solvers/backends/chain.py` does the same for the chain binomial and tau-leaping. `ss.solvers.choose_engine()` uses JAX when the kernels would take more than about half a second (about what JAX takes to start), as estimated from the size of the model alone, so the same model always gets the same engine (and the same results with a seed); `sim.engine_reason` says which ran, once the sim has been run.
+
+The agent engine takes a step as one sweep over the disease's transitions, in an order worked out once from the graph (`Agents.sweep()`): each transition after those that bring people into its source, a trigger (`on=`) after the event it waits for, and the triggers out of a state ahead of its scheduled exits; a loop of states is broken at the transition declared first. At each transition in turn, those it moves now leave (by its trigger, or because their exit by it is due, including people who arrived in its source earlier in the sweep with a wait that rounds to no steps), and everyone who left by it is sent to their destinations (a transition with several destinations takes one draw for each, and `ss.stay` puts people back); each arrival is dated, and has its branch, dwell time and exit drawn if its state schedules them. Someone who reaches a transition the sweep has already passed is taken by another sweep, until nobody moves, so the moves with no wait happen in the step that caused them, as in the ODE, and in the order a modeler writing the code by hand would take them (`Agents.finish_moves()`). The step's infections are dated at its end, and start a cascade of their own. Every way in from code (an intervention's move, `ss.move()`, `disease.infect()`) is a round of its own.
+
+Each of the engine's draws is keyed by its stream, the step, and the *round* (`Agents.draw()`, `Agents.new_round()`): each transition of the sweep is a round, as is each way in from code. A draw is not keyed by how many times the stream has been called, so it does not depend on how the work of a round is batched; an agent moves at most once in a round, so each agent's draws from a stream are its own (`STARSIM_CHECK_DRAWS=1` checks it).
+
+The random draws are shared too: `solvers/backends/draws.py` has exact draws from counter-based uniforms, so a stream doesn't depend on how work is split across threads. Users' own code can be compiled with `@ss.jit` (`solvers/backends/jit.py`), with the same results as when run as Python.
+
+## The kernels
+
+The same kernels exist as several sets, which give the same numbers (but see plain Python's in the table, for the chain binomial): Rust's (`solvers/rust/`, swapped in by `solvers/backends/rust.py`), Numba's (`solvers/backends/kernels.py`, `passes.py`, `draws.py`, `chain.py`), and plain Python's (the compartmental kernels in Numba's code, run without compiling it; for the ODE, the same steps vectorized in NumPy, `solvers/backends/ode.py`). `ss.options.kernels` chooses between them; by default (`'auto'`) it is chosen at run time, as the table says. JAX is not one of these: it is an engine for a whole run, chosen by the run (`sim.jax`), and it uses the compiled draws for the chain binomial.
+
+| Kernels | Used by `'auto'` | First run | Speed | Works with | Doesn't work with |
+|---|---|---|---|---|---|
+| Rust (`'rust'`) | Always, once built (`cd starsim/solvers/rust && ./build`) | No compiling | As fast as Numba or faster: compartmental runs 1.05–7×, agents 1.0–1.1× (on one thread; 0.97–0.99× on four), the chain binomial's draws in JAX 1.1–5× | Everything in Starsim | `ss.jit` (users' own code, which Numba compiles); not yet in `pip install starsim` (it has to be built) |
+| Numba (`'numba'`) | Without Rust: the agents always, and compartmental runs once compiled (or long enough to be worth compiling) | Compiles once per install, and keeps it on disk: about 2 minutes for the compartmental kernels, 20 s for agents, 20 s for the chain binomial's draws in JAX; `ss.compile()` does it ahead of time | The reference | Everything, including `ss.jit` | |
+| Plain Python (`'python'`) | Without Rust, for compartmental runs too short to be worth compiling first (estimated from the size of the model, with a note) | Nothing to compile | 15–300× slower than compiled | The compartmental kernels | The passes over agents (always compiled); the chain binomial in JAX (whose draws are compiled), so those runs are taken by the kernels, and a long seeded run gives other numbers than with the other sets |
+| JAX (by `sim.jax`, not `ss.options.kernels`) | For a run the kernels would take more than about half a second over, an ensemble (`n_runs=`), or a gradient | About 0.5 s to start in a session | 2–10× faster than Numba's kernels for long runs and many groups (less against Rust's) | The ODE (equal to the kernels up to rounding), the chain binomial and tau-leaping (the same distribution, but not the same draws, as the kernels), gradients (`sim.gradient()`) | Gillespie, agents, modules written as code, and deliveries that move people between states (see `ss.gradients.reason()` and `ss.solvers.backends.chain.reason()`) |
+
+Numba's kernels are the reference: a change is made there first, then in Rust's (`solvers/rust/README.md` says how), and `test_kernel_sets.py` checks that every set still gives the same numbers.
+
+## Execution paths and the tests that pin them
+
+Each path below is checked against a reference where one exists: the ODE against SciPy and known answers, and the other paths against the ODE or against a path already checked. Files in `tests/` are the core tests, run on every change; those marked `devtests/` are the slower developer tests in `tests/devtests/`.
+
+| Path | When it is used | Pinned by |
+|---|---|---|
+| ODE in the kernels | `ode`, or `'auto'` choosing it | `test_transitions.py::test_solvers` (within 1e-4 of SciPy, and the analytic final size); `test_kernels.py::test_ode` (whole run equals stepped run to 1e-9) |
+| Kernels as plain Python, and in Rust | before Numba's are compiled; Rust's when built | `test_kernel_sets.py` (equal to Numba's, bit for bit, every solver); `devtests/test_kernels.py::test_numpy_ode` (the ODE in NumPy) |
+| ODE in JAX | long runs, gradients, many parameter sets | `devtests/test_gradients.py::test_jax_run` (equals the kernels to 1e-9); `test_gradient` (against finite differences) |
+| `binomial`, `gillespie` in the kernels | asked for by name | `devtests/test_contracts.py::test_solvers_agree` (means within 5% of the ODE), `test_exit_order`, `test_conservation`; `devtests/test_kernels.py::test_stochastic` (whole and stepped runs identical) |
+| `tau` in the kernels | asked for by name | `devtests/test_contracts.py::test_exit_order`; `test_kernels.py::test_stages`; `devtests/test_contracts_inference.py::test_particle_filter` (against the ODE at a large population) |
+| `binomial`, `tau` in JAX | long stochastic runs | `devtests/test_gradients.py::test_jax_binomial` (same distribution as the kernels), `test_jax_engine` |
+| Diseases tracked jointly | one refers to another's states | `devtests/test_contracts.py::test_crossing_conservation`, `test_joint_population`; `devtests/test_gradients.py::test_crossing` |
+| A declared model as agents | `abm`, or `'auto'` choosing it | `devtests/test_contracts.py::test_solvers_agree`, `test_agents_match_ode` (within 3% of the ODE), `test_dwell_forms` |
+| Built-in modules as agents | `ss.SIR`, `ss.RandomNet`, births and deaths | `test_baselines.py::test_baseline` (results identical to the recorded baseline) |
+| Modules written as code | their own `step()`, alone or beside a declared model | `test_composition.py`; `devtests/test_contracts.py::test_coded_beside` (code beside a declared model leaves its results unchanged) |
+| Particle filter | `ss.fit.ParticleFilter` | `devtests/test_contracts_inference.py::test_particle_filter` (against direct runs) |
+| `@ss.jit` | users' compiled code | `test_jit.py` (same results compiled as run as Python) |
+
+The [developer guide](../contributing/developer.qmd#testing) explains the suites these come from, and which to run after a change.
+
+## Limits
+
+- Solvers that take whole steps differ from the ODE by an amount of order `dt`, which is why the agreement tests use a quarter-day step. With whole weekly steps (`substeps=1`) on an SIR with daily rates, the chain binomial's peak is about a third higher than the ODE's; by default it takes enough substeps to stay within a few percent. A compartment holds about x/2 too many people, for x its total rate out times the substep, so `Compartmental.binomial_substeps()` keeps x to 5%, and near the epidemic threshold (where a small bias in R moves prevalence a lot) to a tenth of |R0 − 1|.
+- Agreement is tested on simple models. For complex ones (a sexual network as an ODE), solvers are expected to differ; the guarantee is that Starsim says what it approximated.
+- Gillespie is exact but takes events one at a time; for millions of events in groups that mix, `'tau'` is the practical choice.
+- Gradients exist only for `solver='ode'` and for rates written as expressions. One model can't yet mix solvers (an ODE with rare importations as discrete events).
+
+## In the design record
+
+- [12-backends.md](https://github.com/starsimhub/starsim/blob/v4/v4_design/design/12-backends.md): the solvers, the approximations, and how a model is built for each
+- [10-execution.md](https://github.com/starsimhub/starsim/blob/v4/v4_design/design/10-execution.md): the loop the engines are called from
+- [18-conformance.md](https://github.com/starsimhub/starsim/blob/v4/v4_design/design/18-conformance.md): the agreement contracts between solvers
+
+## Further reading
+
+- [dust2: Introduction](https://mrc-ide.github.io/dust2/): the engine behind odin2, which runs one compiled model deterministically or as many stochastic particles, as Starsim's compartmental engine does
+- [GillesPy2](https://stochss.github.io/GillesPy2/): exact (Gillespie) and tau-leaping solvers for stochastic compartmental models, with several compiled backends
+- [Numba: A 5-minute guide](https://numba.readthedocs.io/en/stable/user/5minguide.html): the compiler behind Starsim's reference kernels and `ss.jit`
+- [JAX: Quickstart](https://docs.jax.dev/en/latest/quickstart.html): the library Starsim uses to differentiate a run and to run many at once

@@ -1,6 +1,10 @@
 ---
 title: Parameter identification
 jupyter: python3
+authorship:
+  human: 0
+  ai: 100
+  note: Based on the Claude draft
 ---
 
 A parameter is *identifiable* if the data determine its value. A fit always returns some value for each parameter, but that value is only meaningful if the data could not equally well be explained by quite different values. There are two ways this can fail:
@@ -8,7 +12,7 @@ A parameter is *identifiable* if the data determine its value. A fit always retu
 - **Structurally**: the model itself can't tell two parameters apart, whatever the data. If transmission depends only on the product of the number of contacts and the chance of infection per contact, any pair with the same product fits equally well.
 - **Practically**: the model could in principle tell them apart, but these data can't, because there is too little of it, it is too noisy, or it doesn't cover the part of the epidemic that would show the difference.
 
-The way to check is to fit data for which the right answer is known: data made from the model itself, with known values. If the fit doesn't recover those values, it won't recover the truth from real data either. This page shows that check, and what the fit tells you when identification fails. It assumes the basics of [Calibration](calibration_fitting.qmd).
+The way to check is to fit data for which the right answer is known: data made from the model itself, with known values. If the fit doesn't recover those values, it won't recover the truth from real data either. This page shows that check, and what the fit tells you when identification fails. It assumes the basics of [Fitting a model](calibration_fitting.qmd).
 
 ## Recovering known values
 
@@ -138,7 +142,7 @@ for seed in range(1, 7):
 pd.DataFrame(rows).round(3)
 ```
 
-Each epidemic is a little different (the total number of reported cases ranges from about 2,800 to 3,200), and so is each estimate: β from about 1.8 to 2.0, against a true 1.9, and the share reported from about 0.48 to 0.53, against 0.5. This spread is how precisely one outbreak of this size can determine the parameters. A small outbreak, or one that dies out early by chance, leaves much less to go on. A posterior gives this uncertainty from a single data set; see [Gradients and likelihoods](calibration_gradients.qmd).
+Each epidemic is a little different (the total number of reported cases ranges from about 2,800 to 3,200), and so is each estimate: β from about 1.8 to 2.0, against a true 1.9, and the share reported from about 0.48 to 0.53, against 0.5. This spread is how precisely one outbreak of this size can determine the parameters. A small outbreak, or one that dies out early by chance, leaves much less to go on. A posterior gives this uncertainty from a single data set; see [Gradients](calibration_gradients.qmd).
 
 ## Summary
 
@@ -150,4 +154,9 @@ Each epidemic is a little different (the total number of reported cases ranges f
 | A best value at a bound | The data don't constrain it, or the bounds are too narrow | Check the trials; widen the bounds only if larger values are plausible |
 | Estimates from known data far from the truth | Too little data, or the wrong data | Recover known values before fitting real data |
 
-Starsim notes the first two cases itself. To draw values from the priors of the parameters (or uniformly over their bounds) and run the model for each, for a Bayesian workflow of your own, use `ss.parallel(sim, priors=True, n_runs=200)`. [Diagnosing a fit](calibration_diagnosing.qmd) covers the other checks to make after a fit.
+Starsim notes the first two cases itself. To draw values from the priors of the parameters (or uniformly over their bounds) and run the model for each, for a Bayesian workflow of your own, use `ss.parallel(sim, priors=True, n_runs=200)`. [Fit diagnostics](calibration_diagnostics.qmd) covers the other checks to make after a fit, and [Gradients](calibration_gradients.qmd#profile-likelihoods) the profile likelihood, which shows how well the data determine one parameter at a time.
+
+## Further reading
+
+- [pomp: Getting started](https://kingaa.github.io/pomp/vignettes/getting_started.html): likelihood-based inference for epidemic models, including profiles
+- [Stan: Problematic posteriors](https://mc-stan.org/docs/stan-users-guide/problematic-posteriors.html): ridges and non-identified parameters in a posterior, and what to do about them

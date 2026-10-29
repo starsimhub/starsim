@@ -1,0 +1,176 @@
+---
+title: Plotting
+jupyter: python3
+authorship:
+  human: 0
+  ai: 100
+  note: Written by AI, from the plotting functions in the Starsim code
+---
+
+Starsim's results know what they are (their labels, their time points, whether they are counts or shares, and any data they are compared with), so most plots take one line. This page covers plotting a sim, a module, and a single result; comparing scenarios and many runs; choosing what to plot; styles and fonts; saving figures; and falling back to Matplotlib for anything else. For what the results themselves are, see [Results](building_results.qmd).
+
+The example is the measles model of the other pages, in a town of 100,000 people in which most people are already immune, so that the outbreak is slow enough to see its shape:
+
+```{python}
+import starsim as ss
+ss.options(jupyter=True)
+
+def make_measles(immune=0.9):
+    S, I, R = ss.states('S I R')
+    infection = S >> I @ 1.9*I        # β = 1.9 per day
+    recovery  = I >> R @ ss.days(8)   # Infectious for 8 days on average
+    prevalence = I/(S + I + R)        # The share of people infectious
+    return ss.Disease(infection, recovery, prevalence, init=dict(R=immune), init_n=dict(I=10), name='measles')
+
+sim = ss.Sim(make_measles(), total_pop=100_000, start='2025-01-01', stop='2025-07-01', verbose=0)
+sim.run()
+sim.plot()
+```
+
+## Plotting a sim
+
+`sim.plot()` plots every result that is plotted by default, each in axes of its own, labeled and dated from the results. The sim's own results that never change (such as the number alive, in a model with no births or deaths) are left out; `show_skipped=True` includes them, and any result whose `auto_plot` is False.
+
+What to plot is given by name, as the first argument:
+
+| Argument | Plots |
+|---|---|
+| None (the default) | Every result plotted by default, each in its own axes |
+| `'measles'` | The results of one module |
+| `'measles.I'` (or `'measles_I'`) | One result |
+| `['measles.I', 'measles.infection']` | Exactly these results, each in its own axes |
+| `[['measles.S', 'measles.I', 'measles.R'], 'measles.infection']` | The results in an inner list together in one axes, with a legend |
+
+A name that matches no result is an error that lists the names there are. Put together only results that are the same kind of quantity on a similar scale. Here the two flows, infections and recoveries (people per day), share one axes, and the number infectious (a stock: people) has its own:
+
+```{python}
+sim.plot([['measles.infection', 'measles.recovery'], 'measles.I'], figsize=(8, 6))
+```
+
+New infections rise above recoveries while the outbreak grows, and fall below them once it is past its peak, which is when the number infectious is highest.
+
+A module plots its own results with `plot()`, which by default puts its states together in one axes: `'states'` (the default), `'flows'` (each transition's flow, in axes of its own), `'all'`, or the names of results, each argument in its own axes and a list of names together:
+
+```{python}
+sim.diseases.measles.plot('I', 'prevalence') # Two axes: the number and the share infectious
+```
+
+A model run over years can be plotted as yearly values with `annualize=True`, which adds up each result by its kind: the total of a flow over each year, the value of a stock at its end, and a ratio worked out again from its parts. If the sim has data (see [Outcomes](building_outcomes.qmd#data-attached-by-name)), `sim.plot()` shows it as points with the result of the same name, with a flow summed over each period of the data, as a fit compares them; `show_data=False` leaves it out.
+
+## Plotting results
+
+A single result plots itself, with its label as the title:
+
+```{python}
+res = sim.results.measles
+res.infection.resample('week').plot() # New infections in each week
+```
+
+The same goes for anything made from a result: a result resampled to weeks or months (`resample()`), one group of a stratified result (`select(age='0-14')`), and one series per group (`by('age')`), which plots every group in one axes with a legend. A result with several columns plots one line per column. See [Results](building_results.qmd) for these.
+
+Each plotting function takes the common Matplotlib settings by name, and passes them on to the right place: `color`, `lw` (line width), `ls` (line style), `alpha`, and `marker` for the lines; `figsize` and `dpi` for the figure; `font` and `fontsize` for the text; and `data_color`, `data_size`, and `data_alpha` for the data points. Anything else can be given as a dict: `plot_kw=` is passed to `plt.plot()`, `fig_kw=` to `plt.figure()`, `data_kw=` to `plt.scatter()`, and `legend` settings such as `loc`. A setting that isn't recognized is an error listing the valid ones.
+
+```{python}
+res.I.plot(color='k', lw=3, figsize=(6, 3))
+```
+
+## Comparing scenarios and runs
+
+Sims run together, with `ss.parallel()` or `ss.MultiSim`, plot together: each result is one axes, with a line for each scenario, labeled by the sims' labels. Here is the outbreak with 90% of people immune, against 85%:
+
+```{python}
+scenarios = {
+    '85% immune': ss.Sim(make_measles(0.85), total_pop=100_000, start='2025-01-01', stop='2025-07-01', verbose=0),
+    '90% immune': ss.Sim(make_measles(0.90), total_pop=100_000, start='2025-01-01', stop='2025-07-01', verbose=0),
+}
+msim = ss.parallel(scenarios)
+msim.plot('measles.I')
+```
+
+With more people susceptible (R = 2.3 at the start, instead of 1.5), the outbreak is much faster and larger. The many runs of a stochastic model are plotted as their median at each time point, with a band holding 95% of the runs; `lines=True` plots every run instead:
+
+```{python}
+runs = sim.run(solver='binomial', n_runs=10)
+runs.plot('measles.I')                # The median and the range of 95% of the runs
+runs.plot('measles.I', lines=True)    # Every run
+```
+
+The band says how much chance alone changes the course of the outbreak: the date of the peak varies by several weeks between runs. See [Scenarios](running_scenarios.qmd) for running scenarios and many runs, and [Results](building_results.qmd#results-of-many-runs) for their summaries.
+
+## Styles and fonts
+
+Starsim's plots use its own style by default (`'starsim'`), with the Mulish font that comes with Starsim. A plot can use another with `style=`: `'simple'`, `'fancy'`, or any of Matplotlib's styles, such as `'seaborn-v0_8-whitegrid'` or `'ggplot'`. Fonts are given with `font=`: Starsim also comes with Raleway and Rosario, and `font='sans-serif'` uses Matplotlib's default font. Here is the same plot in the default style and in Matplotlib's `'ggplot'` style:
+
+```{python}
+sim.plot('measles.I', figsize=(6, 3))
+sim.plot('measles.I', figsize=(6, 3), style='ggplot', font='sans-serif')
+```
+
+To change the style of every plot, set it once: `ss.options(style='simple')`. To use Starsim's style for plots of your own, use `ss.style()` in a `with` block (below).
+
+## Saving figures
+
+Outside Jupyter (in a script), a plotting function returns the figure, which is saved with Matplotlib's `savefig()`. Give `do_show=False` so that the figure isn't shown first:
+
+```python
+fig = sim.plot(do_show=False)
+fig.savefig('measles.png', dpi=150)
+```
+
+In Jupyter, a plotting function shows the figure and returns nothing, so that the figure isn't displayed twice. To save a figure there, keep it from being shown with `do_show=False`, and get it from Matplotlib with `plt.gcf()` (the current figure):
+
+```{python}
+import matplotlib.pyplot as plt
+
+sim.plot('measles.I', do_show=False)
+fig = plt.gcf()
+fig.savefig('my-measles.png', dpi=150)
+plt.close(fig)
+```
+
+`ss.options(jupyter=False)` makes the plotting functions return the figure in Jupyter too (and `ss.options(show=False)` stops them from showing it).
+
+::: {.callout-warning}
+## [PROPOSAL]
+Saving a figure from Jupyter should not need `plt.gcf()`. Plotting functions should take a filename (`sim.plot(filename='measles.png')`, as Covasim's `do_save` and `fig_path` did), and could return the figure when asked (`return_fig=True`) without showing it twice.
+:::
+
+## Falling back to Matplotlib
+
+Anything Starsim doesn't plot can be plotted with Matplotlib from the results, since a result is an array with its time points (`res.I.timevec`, `res.I.values`). Starsim's plotting functions also take `fig=` (to plot into an existing figure) and `ax=` (for a single result, into existing axes), so that a figure of your own can mix the two. `ss.style()` applies Starsim's style (or another) to plots of your own, and `sc.commaticks()` from [Sciris](https://docs.sciris.org/) puts commas in large numbers on an axis. Here the share of people who have been infected (the attack rate) is compared with the share still susceptible, in the two scenarios:
+
+```{python}
+with ss.style():
+    fig, ax = plt.subplots(figsize=(7, 4))
+    for label, scenario in scenarios.items():
+        res = scenario.results.measles
+        attack = res.infection.cum / 100_000 # Infected since the start, as a share of everyone
+        ax.plot(res.infection.timevec, attack, label=label)
+    ax.set_title('Share of people infected since the start')
+    ax.set_ylabel('Share of the population')
+    ax.set_ylim(bottom=0)
+    ax.legend()
+    plt.show()
+```
+
+The results are also tables: `res.to_df()` gives a dataframe, which can be plotted with pandas or seaborn, and `msim.to_df()` gives the quantiles of every result across runs, in long form, for a plotting library that works with tables.
+
+## Other plots
+
+Besides results over time, Starsim plots these:
+
+| Plot | What it shows |
+|---|---|
+| `disease.diagram()` | A declared disease's states and transitions, as a Mermaid flowchart ([Writing models](building_writing.qmd#equations-diagram-and-transitions)) |
+| `sim.people.plot()`, `sim.people.plot_ages()` | Agents' attributes, as histograms; the age pyramid ([People and agents](populations_people.qmd)) |
+| `network.plot()` | The contacts of a network of agents ([Contact networks](populations_networks.qmd)) |
+| `dist.plot_hist()` | Draws from a distribution, as a histogram ([Distributions](mechanics_distributions.qmd)) |
+| `sim.loop.plot()` | The order in which modules are called in each step ([Model execution](architecture_execution.qmd)) |
+| `fit.plot()` | A fit: the data against the fitted model, and how the fit went ([Fitting a model](calibration_fitting.qmd)) |
+
+## Further reading
+
+- [Matplotlib: style sheets reference](https://matplotlib.org/stable/gallery/style_sheets/style_sheets_reference.html): the styles that `style=` accepts
+- [Matplotlib: customizing Matplotlib with style sheets and rcParams](https://matplotlib.org/stable/users/explain/customizing.html): setting fonts, sizes, and colors for every plot
+- [Seaborn](https://seaborn.pydata.org/): statistical plots from tables, such as those `to_df()` gives
+- [Ten simple rules for better figures](https://doi.org/10.1371/journal.pcbi.1003833): advice on making figures that communicate

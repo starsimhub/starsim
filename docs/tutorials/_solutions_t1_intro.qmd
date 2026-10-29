@@ -1,0 +1,55 @@
+## T1 – Getting started
+
+```{python}
+import starsim as ss
+ss.options(jupyter=True)
+```
+
+### Exercise 1
+
+**Suppose people with measles were infectious for only 5 days, with the same β. What would R0 be? Change the model, run it, and check the R0 the run prints. How does the epidemic change?**
+
+R0 = β × the infectious period = 1.9 × 5 = 9.5, which the second run prints. With a shorter infectious period, people recover sooner, so fewer are infectious at once, and the peak is lower; but since R0 is still well above 5, almost everyone is still infected.
+
+```{python}
+S, I, R = ss.states('S I R')
+infection = S >> I @ 1.9*I
+recovery8 = I >> R @ ss.days(8) # Infectious for 8 days, as in the tutorial
+recovery5 = I >> R @ ss.days(5) # Infectious for 5 days instead
+measles8 = ss.Disease(infection, recovery8, init_prev=0.001, name='measles')
+measles5 = ss.Disease(infection, recovery5, init_prev=0.001, name='measles')
+
+sim8 = ss.Sim(measles8, total_pop=100_000, stop=ss.days(50))
+sim5 = ss.Sim(measles5, total_pop=100_000, stop=ss.days(50))
+msim = ss.parallel({'Infectious for 8 days': sim8, 'Infectious for 5 days': sim5})
+msim.plot('measles.I')
+```
+
+### Exercise 2
+
+**Run the agent version of the model with 1,000 agents instead of 10,000 (each standing for 100 people). What changes in the plot, and why?**
+
+Surprisingly little: in an epidemic this large, which infects almost everyone, even 1,000 agents follow the same course, and the two curves differ by little more than chance. What changes is the detail. Each agent now stands for 100 people, so the results move in steps of 100, and chance plays a larger part with fewer agents (try another `rand_seed=` to see how much the curve moves). This matters most when following small numbers, such as the first or last few cases of an outbreak.
+
+```{python}
+S, I, R = ss.states('S I R')
+infection = S >> I @ 1.9*I
+recovery  = I >> R @ ss.days(8)
+measles = ss.Disease(infection, recovery, init_prev=0.001)
+
+many = ss.Sim(measles, total_pop=100_000, n_agents=10_000, stop=ss.days(50))
+few  = ss.Sim(measles, total_pop=100_000, n_agents=1_000, stop=ss.days(50))
+msim = ss.parallel({'10,000 agents': many, '1,000 agents': few})
+msim.plot('measles.I')
+```
+
+### Exercise 3
+
+**Using the output of `describe()`, find out how Starsim assumes that people mix, and how long people stay infectious (the distribution as well as the average).**
+
+Under "Mixing and interventions", `describe()` says that mixing is homogeneous (everyone mixes with everyone else equally), marked as guessed, since no contacts were given. Under `recovery`, it says that the time in `I` is exponentially distributed, with a mean of 8 days (`time in I ~ exponential(mean = 8 days)`), also marked as guessed.
+
+```{python}
+sim = ss.Sim(measles, total_pop=100_000, stop=ss.days(50))
+sim.describe()
+```

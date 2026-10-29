@@ -1,84 +1,93 @@
 ---
 pagetitle: "User guide"
+authorship:
+  human: 10
+  ai: 90
+  note: Written by AI, with some text from the Starsim 3 user guide page
 ---
 
 # User guide
 
-The user guide is organized by task: each page covers one topic, to look up when you need it, with the smallest example, the options, and the pitfalls. The [tutorials](tutorials.qmd) are the place to start; they link to these pages where a topic goes further.
-
-:::{.callout-note}
-You can download these user guides as Jupyter notebooks to run them locally. Look for the download button at the top of each page.
-:::
-
-::: {.callout-tip}
-## Running user guides locally
-
-To run these user guides locally:
-
-1. Clone the Starsim repository
-2. Install Starsim and its dependencies
-3. Navigate to the `docs/user_guide` folder
-4. Launch Jupyter: `jupyter lab`
-:::
+The user guide is organized by topic: each page covers one in full, to read through or to look up when you need it. The [tutorials](tutorials.qmd) are the place to start; the user guide pages go further.
 
 ## Introduction
 
-- [What is Starsim?](user_guide/intro_starsim.qmd)
-- [Models built with Starsim](user_guide/intro_models.qmd)
+- [What is Starsim?](user_guide/intro_starsim.qmd): what Starsim is for, and what it does
+- [Starsim models](user_guide/intro_models.qmd): models and frameworks built with Starsim
+- [Conceptual overview](user_guide/intro_concepts.qmd): sims, modules, states, transitions, and solvers in one page
 
-## Writing models
+## Building models
 
-- [Building and checking a model](user_guide/models_building.qmd)
-- [Diseases: states, transitions, and rates](user_guide/models_diseases.qmd)
-- [Parameters](user_guide/models_parameters.qmd)
-- [Stratification](user_guide/models_stratification.qmd)
-- [Outcomes and observation](user_guide/models_outcomes.qmd)
-- [Distributions](user_guide/models_distributions.qmd)
-- [Modules written as code](user_guide/models_code.qmd)
-- [Array indexing](user_guide/models_indexing.qmd)
-- [Random numbers](user_guide/models_random.qmd)
-- [Nonstandard models](user_guide/models_nonstandard.qmd)
+- [Writing models](user_guide/building_writing.qmd): states, transitions, and rates, and checking what was built
+- [Diseases](user_guide/building_diseases.qmd): the built-in diseases and writing your own
+- [Parameters](user_guide/building_parameters.qmd): values, bounds, priors, and parameters that vary by group
+- [Time](user_guide/building_time.qmd): dates, durations, rates, time steps, and values that change over time
+- [Stratification](user_guide/building_stratification.qmd): splitting states by age, sex, risk, and more
+- [Outcomes](user_guide/building_outcomes.qmd): reported cases, deaths, and other quantities derived from a model
+- [Results](user_guide/building_results.qmd): reading, summarizing, and exporting results
+- [Plotting](user_guide/building_plotting.qmd): plotting sims, results, and many runs
+- [Custom modules](user_guide/building_modules.qmd): writing modules as code
 
-## Populations and contact
+## Populations and data
 
-- [People](user_guide/populations_people.qmd)
-- [Demographics](user_guide/populations_demographics.qmd)
-- [Networks and mixing pools](user_guide/populations_networks.qmd)
-- [Contact matrices and data by place](user_guide/populations_contacts.qmd)
-- [Places and movement](user_guide/populations_places.qmd)
+- [People and agents](user_guide/populations_people.qmd): the population, as compartments or as agents
+- [Demographics](user_guide/populations_demographics.qmd): births, deaths, migration, and pregnancy
+- [Contact networks](user_guide/populations_networks.qmd): who meets whom, from mixing pools to sexual networks
+- [Population data](user_guide/populations_data.qmd): contact matrices and built-in data by country
+- [Geography](user_guide/populations_geography.qmd): places, and movement between them
 
-## Running
+## Interventions and analyzers
 
-- [The Sim](user_guide/running_sim.qmd)
-- [Time](user_guide/running_time.qmd)
-- [Results](user_guide/running_results.qmd)
-- [Analyzers](user_guide/running_analyzers.qmd)
-- [Solvers and when they disagree](user_guide/running_solvers.qmd)
-- [Uncertainty, seeds, and many runs](user_guide/running_uncertainty.qmd)
-- [Scenarios and sweeps](user_guide/running_scenarios.qmd)
-- [Population rescaling](user_guide/running_rescaling.qmd)
-- [Deployment](user_guide/running_deploy.qmd)
+- [Products](user_guide/interventions_products.qmd): vaccines, treatments, and diagnostics
+- [Interventions](user_guide/interventions_interventions.qmd): delivering products, and changing parameters during a run
+- [Analyzers](user_guide/interventions_analyzers.qmd): collecting results of your own
+- [Connectors](user_guide/interventions_connectors.qmd): linking modules, e.g. diseases that interact
+- [Costs](user_guide/interventions_costs.qmd): the costs of interventions, and cost per outcome averted
 
-## Interventions
+## Running models
 
-- [Products and deliveries](user_guide/interventions_products.qmd)
-- [Changing parameters](user_guide/interventions_changes.qmd)
-- [Connectors](user_guide/interventions_connectors.qmd)
+- [Running sims](user_guide/running_sim.qmd): making and running a sim, and its settings
+- [Scenarios](user_guide/running_scenarios.qmd): comparing scenarios, repeated runs, and uncertainty
+- [Solvers and backends](user_guide/running_solvers.qmd): ODEs, stochastic compartments, and agents, and how one is chosen
+- [Branching and rescaling](user_guide/running_branching.qmd): large populations and small outbreaks
+- [Profiling and debugging](user_guide/running_debugging.qmd): finding what is slow or wrong, and common pitfalls
+- [Deployment](user_guide/running_deploy.qmd): running Starsim on clusters and in the cloud
 
 ## Calibration
 
-- [Calibration](user_guide/calibration_fitting.qmd)
-- [Parameter identification](user_guide/calibration_identification.qmd)
-- [Gradients and likelihoods](user_guide/calibration_gradients.qmd)
-- [Diagnosing a fit](user_guide/calibration_diagnosing.qmd)
+- [Fitting a model](user_guide/calibration_fitting.qmd): fitting parameters to data
+- [Fit diagnostics](user_guide/calibration_diagnostics.qmd): checking a fit
+- [Parameter identification](user_guide/calibration_identification.qmd): which parameters the data can pin down
+- [Gradients](user_guide/calibration_gradients.qmd): derivatives of results with respect to parameters
+- [Optimization](user_guide/calibration_optimization.qmd): allocating a budget to get the best outcome
 
-## Interoperability
+## Model library
 
-- [Importing and exporting models](user_guide/io_import.qmd)
-- [Library modules](user_guide/io_library.qmd)
+- [Modeling landscape](user_guide/library_landscape.qmd): disease-modeling tools, and where Starsim fits
+- [Library: diseases](user_guide/library_diseases.qmd): HIV, cholera, Ebola, measles, and more, ready to use
+- [Library: networks](user_guide/library_networks.qmd): household, spatial, and theoretical networks
+- [Library: maternal-child health](user_guide/library_mnch.qmd): fetal health, maternal infections, and neonatal outcomes
+- [Conversion: import/export](user_guide/conversion/index.qmd): bringing models in from other frameworks, and writing them out
 
-## Troubleshooting
+## Mechanics
 
-- [Debugging and profiling](user_guide/troubleshooting_debugging.qmd)
-- [Common pitfalls](user_guide/troubleshooting_pitfalls.qmd)
-- [A minimal reproducible example](user_guide/troubleshooting_mre.qmd)
+- [Array indexing](user_guide/mechanics_indexing.qmd): agents, UIDs, and arrays
+- [Distributions](user_guide/mechanics_distributions.qmd): random draws for agents
+- [Random numbers](user_guide/mechanics_random.qmd): common random numbers, and comparing runs exactly
+- [Nonstandard usage](user_guide/mechanics_nonstandard.qmd): agent-based models that are not about disease
+
+## Architecture
+
+- [Overview](user_guide/architecture_index.qmd): how Starsim works inside
+- [Model declaration](user_guide/architecture_declaration.qmd): how a model is held as data
+- [Model execution](user_guide/architecture_execution.qmd): how a model becomes a run
+- [Solvers and backends](user_guide/architecture_solvers.qmd): the engines, and the kernels behind them
+- [Transmission](user_guide/architecture_transmission.qmd): routes, effects, and results
+- [Randomness](user_guide/architecture_randomness.qmd): random numbers, and fitting
+- [Modules](user_guide/architecture_modules.qmd): what a module is, and how modules work together
+
+::: {.callout-tip}
+## Running the user guide locally
+
+Each page can be downloaded as a Jupyter notebook: look for the download button at the top of the page. Or clone the Starsim repository, install Starsim (`pip install -e .`), go to `docs/user_guide`, and open the pages in Jupyter (`jupyter lab`).
+:::

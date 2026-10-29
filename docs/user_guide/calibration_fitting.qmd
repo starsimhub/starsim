@@ -1,9 +1,15 @@
 ---
-title: Calibration
+title: Fitting a model
 jupyter: python3
+authorship:
+  human: 10
+  ai: 90
+  note: Based on the Claude draft, with the introduction to calibration and to optimization-based fitting adapted from the Starsim 3 user guide page on calibration
 ---
 
-Calibration is fitting a model's parameters to data: finding the values for which the model's results match what was observed, so that the model can then be used to ask "what if" questions about that setting. A model of a measles outbreak, for example, may know how long people are infectious from the literature, but not how fast measles spreads in this particular town, or what share of cases were reported. Those are the parameters to estimate from the data.
+Disease models usually need to be fitted to a particular setting before they can answer "what if" questions about it. Calibration is fitting a model's parameters to data: finding the values for which the model's results match what was observed. A model of a measles outbreak, for example, may know how long people are infectious from the literature, but not how fast measles spreads in this particular town, or what share of cases were reported. Those are the parameters to estimate from the data.
+
+There are many approaches to calibration, from tuning parameters by hand to fully Bayesian methods. For many applications an optimization-based approach, which looks for the single set of values that fits best, is enough for a first exploration: it avoids the tedium of tuning by hand, and costs much less than a Bayesian method. The optimizer chooses values, the model is run with them, its results are compared with the data, and a measure of the mismatch tells the optimizer where to look next, until it settles on the values that fit best. When the question needs the uncertainty in the values too, a posterior (the distribution of values consistent with the data) can be fitted instead.
 
 In Starsim, calibration needs two things, each stated where it belongs:
 
@@ -12,7 +18,7 @@ In Starsim, calibration needs two things, each stated where it belongs:
 
 `sim.fit()` then fits every parameter that has bounds to every result that has data. There is no function to write that puts each value into the model, and none that pulls out the results to compare: the model already knows where each parameter is used and what each result is.
 
-This page covers the options. The [calibration tutorial](../tutorials/t7_calibration.qmd) goes through one fit step by step; [Parameter identification](calibration_identification.qmd) is about whether the data can determine the parameters at all; [Gradients and likelihoods](calibration_gradients.qmd) covers posteriors and profile likelihoods; and [Diagnosing a fit](calibration_diagnosing.qmd) covers what to check afterwards.
+This page covers the options. The [calibration tutorial](../tutorials/t7_calibration.qmd) goes through one fit step by step; [Parameter identification](calibration_identification.qmd) is about whether the data can determine the parameters at all; [Gradients](calibration_gradients.qmd) covers posteriors and profile likelihoods; [Fit diagnostics](calibration_diagnostics.qmd) covers what to check afterwards; and [Optimization](calibration_optimization.qmd) uses the same machinery to allocate a budget.
 
 ## The smallest example
 
@@ -156,7 +162,7 @@ The likelihoods are:
 | `ss.nbinom(n=...)` | Counts that vary more than a Poisson, with `n` the dispersion (a smaller `n` is more variable); `n` can itself be an `ss.par` with bounds, and is then fitted too |
 | `ss.normal(scale=...)` | Continuous values, with the standard deviation `scale` |
 | `ss.lognorm_ex(std=...)` | Positive continuous values, with the standard deviation `std` |
-| `ss.binom(n=...)` | The number who test positive out of `n` people surveyed, with the model's value as the probability; see [Parameter identification](calibration_identification.qmd) |
+| `ss.binom(n=...)` | The number who test positive out of `n` people surveyed (the data column holds the number positive), with the model's value, a share such as a prevalence, as the probability |
 | `ss.bernoulli()` | Yes or no outcomes |
 
 When every data series has a likelihood, the fit maximizes the sum of their logs (the maximum likelihood estimate), and the methods that give a posterior can be used.
@@ -178,7 +184,7 @@ By default a fit is a best fit (a single set of values), by a method that suits 
 
 Any other method of `scipy.optimize.minimize` can be given, as can `'if2'` (iterated filtering, for a stochastic compartmental model). A list, such as `method=['optuna', 'nelder-mead']`, runs each method in turn, each starting from the best values the one before found, and stops at a method that doesn't converge.
 
-The gradient-based methods and their posteriors are covered in [Gradients and likelihoods](calibration_gradients.qmd).
+The gradient-based methods and their posteriors are covered in [Gradients](calibration_gradients.qmd).
 
 ## A stochastic model
 
@@ -190,7 +196,7 @@ fit = sim.fit(n_trials=100, rand_seed=5)
 fit.summarize()
 ```
 
-The estimates are less precise than those of the ODE: each score is noisy, so the search can settle anywhere in a region of similar scores, and a fit with another `rand_seed` gives somewhat different values (in particular of `report`). [Diagnosing a fit](calibration_diagnosing.qmd) shows how to check how much this matters.
+The estimates are less precise than those of the ODE: each score is noisy, so the search can settle anywhere in a region of similar scores, and a fit with another `rand_seed` gives somewhat different values (in particular of `report`). [Fit diagnostics](calibration_diagnostics.qmd) shows how to check how much this matters.
 
 The options that matter for a stochastic fit:
 
@@ -232,7 +238,7 @@ msim.plot('measles.cases')
 msim.summarize().loc['measles_cases']
 ```
 
-These runs use the best values only, so their spread is chance alone, not the uncertainty in the fitted values. For projections that carry that uncertainty too, fit a posterior and use `fit.project()`; see [Gradients and likelihoods](calibration_gradients.qmd#projecting-from-a-posterior).
+These runs use the best values only, so their spread is chance alone, not the uncertainty in the fitted values. For projections that carry that uncertainty too, fit a posterior and use `fit.project()`; see [Gradients](calibration_gradients.qmd#projecting-from-a-posterior).
 
 ## Which parameters matter
 
@@ -245,24 +251,7 @@ sens[['measles.I peak', 'measles.cases total']]
 
 ## Allocating a budget
 
-`ss.fit.optimize()` uses the same machinery for a different question: given the spending on each program as parameters of the model, how should a fixed total be divided between them to make a result as small (or as large) as possible? Here, testing cuts transmission twice as much as bed nets for the same money, until everyone is covered:
-
-```{python}
-import numpy as np
-
-S, I, R = ss.states('S I R')
-tests = ss.par(50e3, name='tests') # Spending on testing
-nets  = ss.par(50e3, name='nets')  # Spending on bed nets
-coverage = lambda spend, cost: np.minimum(spend/cost/(S + I + R).total, 1) # The share of people covered, at a cost per person
-beta = ss.perday(0.3)*(1 - 0.5*coverage(tests, 10) - 0.25*coverage(nets, 10))
-sir = ss.Disease(S >> I @ beta*I.frac, I >> R @ ss.days(10), init_prev=0.001, name='sir')
-budget_sim = ss.Sim(sir, total_pop=10_000, start='2025-01-01', stop='2025-06-01', verbose=0)
-
-best = ss.fit.optimize(budget_sim, spend=['tests', 'nets'], minimize='sir.R', verbose=False)
-best.summarize()
-```
-
-`bounds=` limits what each program can have, by name (e.g. `bounds=dict(tests=(None, 60e3))`, with `None` for no limit), and `target=` asks instead for the least total spending that reaches a given value of the result. With a program book imported from Atomica, the programs are found from it, so `spend=` is not needed (see [Coming from Atomica](../coming_from/atomica.qmd)).
+The same machinery answers a different question: given the spending on each program as parameters of the model, how should a fixed total be divided between them to make a result as small (or as large) as possible? `ss.fit.optimize()` does this; see [Optimization](calibration_optimization.qmd).
 
 ## Pitfalls
 
@@ -272,4 +261,11 @@ best.summarize()
 - **A column that matches nothing.** Data columns are matched to results by name; a column that matches no result is an error when fitting, with the closest names suggested.
 - **Too few runs to judge.** One run of a stochastic model, with the best values, says little about whether the model fits; compare the data with many runs, as [above](#a-stochastic-model).
 
-More checks are in [Diagnosing a fit](calibration_diagnosing.qmd). How the fitting works, and how the method is chosen, is explained in [Randomness and fitting](../architecture/randomness_and_fitting.qmd).
+More checks are in [Fit diagnostics](calibration_diagnostics.qmd). How the fitting works, and how the method is chosen, is explained in [Randomness](architecture_randomness.qmd).
+
+## Further reading
+
+- [Covasim: Calibration](https://docs.covasim.org/tutorials/tut_calibration.html): fitting with Optuna in Starsim's predecessor
+- [Optuna: Key features](https://optuna.readthedocs.io/en/stable/tutorial/10_key_features/index.html): the library that fits stochastic models here, and its plots of a search
+- [pomp: Getting started](https://kingaa.github.io/pomp/vignettes/getting_started.html): likelihood-based fitting of stochastic models, including iterated filtering, in R
+- [Stan: User's guide](https://mc-stan.org/docs/stan-users-guide/index.html): Bayesian fitting with NUTS, the sampler used here for ODE posteriors
