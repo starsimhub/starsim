@@ -1087,8 +1087,9 @@ class Sim(ss.Base):
             if ratio > pars.rescale_threshold: # Check if we've reached the point to rescale
                 max_ratio = pars.pop_scale/scale[ti] # Don't exceed the total population size
                 scaling_ratio = min(max(ratio/pars.rescale_threshold, pars.rescale_factor), max_ratio)
-                self.results.unrepresented[ti:] -= scale[ti]*(scaling_ratio - 1)*self.people.n_alive # The agents alive now stand for that many more people
-                scale[ti:] *= scaling_ratio # Update the scale factor from here on
+                new_scale = pars.pop_scale if scaling_ratio == max_ratio else scale[ti]*scaling_ratio # Exactly the full scale at the end, so no rounding is left over
+                self.results.unrepresented[ti:] -= (new_scale - scale[ti])*self.people.n_alive # The agents alive now stand for that many more people
+                scale[ti:] = new_scale # Update the scale factor from here on
                 n = int(round(len(not_naive)*(1.0 - 1.0/scaling_ratio))) # For example, rescaling by 2 makes half of the non-naive agents naive
                 self.rng_rescale.set(n=n)
                 new_naive = self.rng_rescale.filter(not_naive)
@@ -1587,10 +1588,12 @@ class Sim(ss.Base):
             func = how.get(k, how.get(''))
             if 'timevec' in k or (func is None and getattr(res, 'summarize_by', '') is None): # Skip module-specific time vectors, and results not summarized over time
                 continue
-            if func is None:
-                values[k] = float(res.summarize() if isinstance(res, ss.Result) else np.mean(res))
-            else:
-                values[k] = float(func(np.asarray(res)))
+            if not isinstance(res, ss.Result) and not (isinstance(res, np.ndarray) and np.issubdtype(res.dtype, np.number)): # Other data a module keeps in its results, e.g. a table of partnerships
+                continue
+            value = res.summarize() if func is None and isinstance(res, ss.Result) else (func or np.mean)(np.asarray(res))
+            if np.ndim(value) and not one: # A 2D result with no columns= has no one number (ask for it by key)
+                continue
+            values[k] = float(value) if not np.ndim(value) else value
         summary = sc.dataframe(dict(value=list(values.values())), index=pd.Index(list(values), name='result'))
         if one:
             if not values:

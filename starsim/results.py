@@ -797,7 +797,7 @@ class Result(ss.utils.NoDists, ss.arrays.BaseArr):
         """
         The kind of a result: as given (None for one with no meaning over time), or else ('auto') from how it is summarized, if that is given,
         or else its name, as in Starsim 3 (`new_...` is a flow; `n_...`, `cum_...`, and `cumulative` are stocks), or else its dtype: an integer
-        is a count, so a flow (a count over each step, e.g. doses), and anything else a ratio
+        is a count, so a flow (a count over each step, e.g. doses), a dtype that is not numbers (e.g. `list`) has none, and anything else is a ratio
         """
         if kind == 'auto':
             by_summary = {v:k for k,v in cls.kinds.items()}
@@ -810,6 +810,8 @@ class Result(ss.utils.NoDists, ss.arrays.BaseArr):
                 kind = 'stock'
             elif dtype is not None and np.issubdtype(dtype, np.integer): # A count with no name to go on is likelier a count of events than of people (which is written kind='stock')
                 kind = 'flow'
+            elif dtype is not None and not np.issubdtype(dtype, np.number) and not np.issubdtype(dtype, np.bool_): # Not numbers (e.g. dtype=list or object), so nothing to summarize
+                kind = None
             else:
                 kind = 'ratio'
         if kind is not None and kind not in cls.kinds:

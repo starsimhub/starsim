@@ -143,7 +143,7 @@ def main(argv=None):
     """ Run the starsim command; see this module's docstring """
     parser = argparse.ArgumentParser(prog='starsim', description='Set up and use Starsim from the command line')
     parser.add_argument('--version', action='version', version=f'Starsim {ss.__version__} ({ss.__versiondate__})')
-    commands = parser.add_subparsers(dest='command', required=True)
+    commands = parser.add_subparsers(dest='command')
 
     def add_target_args(p):
         p.add_argument('--to', help=f'Where to install the skill, as a comma-separated list of: {sc.strjoin(targets.keys())} (default: each whose agent is installed)')
@@ -170,5 +170,8 @@ def main(argv=None):
     a.set_defaults(func=show)
 
     args = parser.parse_args(argv)
+    if args.command is None: # Bare "starsim": show the help rather than an error
+        parser.print_help()
+        return
     args.func(args)
     return

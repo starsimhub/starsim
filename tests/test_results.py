@@ -212,6 +212,17 @@ def test_summarize_by():
     annual = sim.results.resample('year')
     assert 'timer' not in annual.a and len(annual.sis.I) == 2
     assert 'a_timer' not in sim.to_df(resample='year') and 'a_timer' in sim.to_df()
+
+    # What has no one number is left out of the summary, rather than failing the run: a 2D result with no columns=, a list, and other data
+    assert ss.Result('times', dtype=list).kind is None
+    class Odd(ss.Analyzer):
+        def init_results(self):
+            super().init_results()
+            self.define_results(ss.Result('by_age', dtype=int, shape=(self.t.npts, 3)), ss.Result('times', dtype=list, scale=False))
+            self.results['log'] = dict(net=[[0, None]])
+    sim = ss.Sim(ss.SIS(), analyzers=Odd(name='odd'), n_agents=small, stop=5, verbose=0).run()
+    assert 'sis_I' in sim.summary.index and not any(k.startswith('odd') for k in sim.summary.index)
+    assert len(sim.summarize('odd.by_age')) == 3 # Asked for by key, it is one number per column
     return res
 
 
