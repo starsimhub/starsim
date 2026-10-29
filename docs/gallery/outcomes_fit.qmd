@@ -1,6 +1,10 @@
 ---
 title: Cases, hospitalizations, and deaths, fitted to data
 jupyter: python3
+authorship:
+  human: 0
+  ai: 100
+  note: Written by AI
 ---
 
 Data on an epidemic is rarely the number infected: it is reported cases, hospital admissions, or deaths, each a share of infections, some time after infection. In Starsim these are outcomes: results computed from the model's flows, with a share, a delay, and (for a stay in hospital) a duration, that don't change the epidemic itself. This page adds three outcomes to an SIR, makes weekly data from the model with a known β, and fits β to it.
@@ -69,5 +73,5 @@ fit.pars
 ## Going further
 
 - [Calibration](../tutorials/t7_calibration.qmd) fits the measles model to weekly case data, and projects from the fit.
-- [Outcomes and observation](../user_guide/models_outcomes.qmd) covers outcomes, and [Calibration](../user_guide/calibration_fitting.qmd) the options of `sim.fit()`.
-- [Coming from camdl](../coming_from/camdl.qmd) and [Coming from flepiMoP](../coming_from/flepimop.qmd) show models that are fitted to outcomes in those frameworks.
+- [Outcomes and observation](../user_guide/building_outcomes.qmd) covers outcomes, and [Calibration](../user_guide/calibration_fitting.qmd) the options of `sim.fit()`.
+- [Coming from camdl](../user_guide/conversion/camdl.qmd) and [Coming from flepiMoP](../user_guide/conversion/flepimop.qmd) show models that are fitted to outcomes in those frameworks.

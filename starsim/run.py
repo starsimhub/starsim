@@ -214,6 +214,17 @@ class MultiSim:
         return
 
     @property
+    def branching(self):
+        """ For the runs of a branching process (`ss.Sim(branching=True)`): what came of them together, as an `ss.run.Branching`; None if the runs are not branching processes (see `sim.branching` for one run) """
+        sims = list(self.sims or [])
+        runs = [sim.branching for sim in sims]
+        if not runs or any(b is None for b in runs):
+            return None
+        if 'size' not in runs[0]: # Several declared modules: by module
+            return sc.objdict({name:Branching([b[name] for b in runs]) for name in runs[0].keys()})
+        return Branching(runs)
+
+    @property
     def run_pars(self):
         """ The values of the parameters swept (or drawn) in each run, as a dataframe (or None if there are none) """
         if self.runs is None or not len(self.runs.columns.difference(['scenario', 'rand_seed'])):
@@ -697,6 +708,83 @@ class MultiSim:
                 del msim.chunks
             out.append(msim)
         return out
+
+
+class Branching(sc.prettyobj):
+    """
+    What came of the runs of a branching process together (`msim.branching`): see `sim.branching` for one run
+
+    Attributes:
+        sizes (array): the people infected in each run, the seeds included
+        outcomes (array): each run's outcome: `'extinct'`, `'stopped'` (by `until=`), or `'ongoing'`
+        p_extinct (float): the share of the runs that went extinct, and `p_extinct_ci` its 95% interval (Wilson's)
+        lengths (array): as agents, the most generations of each run's chain
+        offspring (array): as agents, the number each person infected, of everyone infected long enough before the end that their offspring are all counted (see `sim.branching`); only if no run was stopped by `until=`, since where a run stops depends on its offspring
+        R, k (float): as agents, the mean of the offspring and their dispersion, as a negative binomial fitted by maximum likelihood (k is infinite for offspring no more variable than a Poisson's); None if a run was stopped by `until=`, so to estimate them, run for a fixed `dur` instead
+
+    Example:
+        ```python
+        sir = ss.SIR(beta=ss.perday(0.3), dur_inf=ss.days(10), init_n=dict(I=1))
+        sim = ss.Sim(diseases=sir, total_pop=1e6, branching=True, solver='gillespie', unit='day', dur=365)
+        msim = sim.run(n_runs=200, until=sir.I.n + sir.R.n >= 200)
+        msim.branching.p_extinct # About 1/R0 = 1/3
+        msim.branching.plot()
+        ```
+    """
+    def __init__(self, runs):
+        self.sizes = np.array([b.size for b in runs], dtype=float)
+        self.outcomes = np.array([b.outcome for b in runs], dtype=object)
+        n = len(runs)
+        x = int(np.sum(self.outcomes == 'extinct'))
+        self.p_extinct = x/n if n else np.nan
+        z = 1.96
+        mid = (x + z**2/2)/(n + z**2) if n else np.nan
+        half = z*np.sqrt(x*(n - x)/n + z**2/4)/(n + z**2) if n else np.nan
+        self.p_extinct_ci = (max(mid - half, 0.0), min(mid + half, 1.0))
+        agents = all('offspring' in b for b in runs)
+        self.lengths = np.array([b.length for b in runs]) if agents else None
+        fixed = not any(b.outcome == 'stopped' for b in runs) # A run stopped by until= stops when its chain is large, so the people infected before then had more offspring than most: R and k would be biased
+        self.offspring = np.concatenate([b.offspring[b.complete] for b in runs]) if agents and fixed else None
+        self.R, self.k = self.fit_offspring(self.offspring) if self.offspring is not None and len(self.offspring) else (None, None)
+        return
+
+    @staticmethod
+    def fit_offspring(counts):
+        """ The mean of some offspring counts, and the dispersion k of a negative binomial with that mean fitted to them by maximum likelihood (infinite if they are no more variable than a Poisson's) """
+        import scipy.optimize as spo
+        import scipy.special as sps
+        counts = np.asarray(counts, dtype=float)
+        R = counts.mean()
+        if R == 0 or counts.var() <= R:
+            return float(R), np.inf
+        def nll(logk):
+            k = np.exp(logk)
+            return -np.sum(sps.gammaln(counts + k) - sps.gammaln(k) - sps.gammaln(counts + 1) + k*np.log(k/(k + R)) + counts*np.log(R/(k + R)))
+        res = spo.minimize_scalar(nll, bounds=(-10, 10), method='bounded')
+        return float(R), float(np.exp(res.x))
+
+    def plot(self, **kwargs):
+        """ The distribution of the chains' sizes (and, as agents, of their lengths in generations) """
+        agents = self.lengths is not None
+        kw = ss.plot_args(kwargs)
+        with ss.style(**kw.style):
+            fig,axs = sc.getrowscols(2 if agents else 1, make=True, **kw.fig)
+            axs = sc.toarray(axs).flatten()
+            ax = axs[0]
+            sizes = self.sizes[self.sizes > 0]
+            bins = np.unique(np.round(np.logspace(0, np.log10(max(sizes.max(), 2)), 30))) if len(sizes) else 10
+            ax.hist(sizes, bins=bins)
+            ax.set_xscale('log')
+            ax.set_xlabel('People infected')
+            ax.set_ylabel('Runs')
+            ax.set_title(f'Chain sizes (extinct in {self.p_extinct:.0%} of {len(self.sizes)} runs)')
+            if agents:
+                ax = axs[1]
+                ax.hist(self.lengths, bins=np.arange(self.lengths.max() + 2) - 0.5)
+                ax.set_xlabel('Generations')
+                ax.set_ylabel('Runs')
+                ax.set_title(f'Chain lengths (R = {self.R:.2f}, k = {self.k:.2g})' if self.R is not None else 'Chain lengths')
+        return ss.return_fig(fig, **kw.return_fig)
 
 
 def single_run(sim, ind=0, shrink=True, run_args=None, verbose=None, copy_sim=False, track=False, globaldict=None, show=None):

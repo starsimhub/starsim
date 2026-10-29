@@ -1,0 +1,127 @@
+---
+title: Modeling landscape
+authorship:
+  human: 0
+  ai: 100
+  note: Written by AI, around the comparison table from the earlier "Coming from another framework" page
+---
+
+There are many tools for modeling infectious diseases, and most modelers already use one. This page sets out the kinds of model and of tool, where Starsim fits among them, and when another tool is the better choice. It ends with a comparison of Starsim with the frameworks that have a [conversion page](conversion/index.qmd): a model from each, written both ways, with how their results agree, how long each takes, and what works and what does not yet.
+
+## Kinds of model
+
+Mechanistic models of transmission (models of how infection passes between people, as opposed to statistical models that forecast cases from past cases) come in a few kinds, which differ in how they represent the population:
+
+- **Deterministic compartmental models** divide the population into compartments (susceptible, infectious, recovered, and so on, often stratified by age, sex, or place) and follow the number in each as an ordinary differential equation (ODE) or difference equation. They are fast, smooth, and easy to fit, and they give the expected course of a large epidemic; they have no chance, so they say nothing about fade-out or the spread of outcomes in small populations.
+- **Stochastic compartmental models** have the same compartments, but move whole numbers of people between them at random: a chain binomial in discrete time, or the Gillespie algorithm in continuous time. They capture chance (outbreaks that die out, variation between runs) at little more cost than an ODE, and are the usual basis of particle filters.
+- **Metapopulation models** are compartmental models in each of many places (towns, districts, farms) linked by movement or commuting. They capture the geography of spread without following individuals.
+- **Network models** follow individuals and their contacts: partnerships for sexually transmitted infections, households, or contact graphs. They are needed when who meets whom matters (concurrency, clustering, contact tracing), and often estimate the network from survey data.
+- **Agent-based models** follow every individual, each with their own states (age, infection, immunity, treatment, history), contacts, and events. They are the most flexible (any rule that can be written about a person can be modeled) and the most costly, both to run and, often, to write and check.
+
+The same disease can usually be written in more than one of these, and the choice is about the question: an ODE for the expected size of an epidemic in a large population, a stochastic or agent-based model where chance, heterogeneity, or individual histories matter.
+
+## Kinds of tool
+
+The tools differ as much in how a model is written as in what it can represent:
+
+- **Written by hand**, in a general-purpose language: a loop in [NumPy](conversion/numpy.qmd), or an ODE solver such as R's deSolve or Julia's DifferentialEquations. Complete freedom, and nothing done for you: stratification, interventions, calibration, and checking are all yours to write.
+- **Model languages** compiled to fast code: [odin](conversion/odin.qmd) (R, compiled to C++), and [camdl](conversion/camdl.qmd). A model is a short list of equations; the tool runs it fast, and often fits it (odin's companions for particle filters and MCMC).
+- **Configuration files**: [flepiMoP](conversion/flepimop.qmd) and [EMULSION](conversion/emulsion.qmd) in YAML, [Atomica](conversion/atomica.qmd) in spreadsheets. A model is data rather than code, which suits teams and non-programmers, and pipelines that run many models the same way.
+- **Libraries of compartmental models**, used from Python: [summer2](conversion/summer2.qmd) (stratifications and JAX), [epydemix](conversion/epydemix.qmd) (populations and contact matrices by country, and fitting by approximate Bayesian computation), [MEmilio](conversion/memilio.qmd) (a C++ core, with ODE, integro-differential, metapopulation, and agent-based models), and [SimInf](conversion/siminf.qmd) in R (stochastic models in thousands of linked herds).
+- **Network and agent-based frameworks**: [EpiModel](conversion/epimodel.qmd) (R, with networks estimated by exponential random graph models), [LASER](conversion/laser.qmd) (fast agent-based models at national scale), [Starsim v3](conversion/starsim3.qmd) and Covasim, EMOD, and general-purpose agent-based tools such as Mesa and NetLogo.
+- **Statistical tools** that fit mechanistic models to data: pomp (partially observed Markov processes), Stan and PyMC (Bayesian inference), and the packages of the R Epidemics Consortium and the Epiverse for outbreak analytics.
+
+## Where Starsim fits
+
+Starsim's distinctive feature is that one model runs in more than one of these ways. A disease declared as states and transitions (`S >> I @ beta*I`; see [Writing models](building_writing.qmd)) is data that Starsim can read, so the same declaration runs as an ODE, as a stochastic compartmental model, or as agents, chosen by a single argument (see [Solvers and backends](running_solvers.qmd)). A model can start as an ODE, be fitted fast, and then run as agents to add a network, a household structure, or an intervention that targets individuals, without being written twice. Where the declaration can't express something, a module written as code in Python (see [Custom modules](building_modules.qmd)) adds it, at the cost of running only as agents.
+
+Around that core are the parts most models need: stratification by age, sex, place, or anything else ([Stratification](building_stratification.qmd)); populations and contact matrices by country ([Population data](populations_data.qmd)); networks ([Contact networks](populations_networks.qmd)); demographics and pregnancy ([Demographics](populations_demographics.qmd)); vaccines, treatments, and other interventions ([Interventions](interventions_interventions.qmd)); costs ([Costs](interventions_costs.qmd)); and calibration, including gradients through the model ([Fitting a model](calibration_fitting.qmd)). Models from many of the tools above can be read in, and Starsim models written out ([Import/export](conversion/index.qmd)).
+
+Starsim is a Python library. It suits modelers who write code (or are willing to), who want one tool from a quick compartmental model to a detailed agent-based one, and who want to compare the two.
+
+## When another tool is the better choice
+
+Starsim is not the best tool for every job, and the comparisons below say where it falls short. Another tool is likely to serve better:
+
+- **For networks estimated from survey data** with exponential random graph models (terms such as `nodemix`, `absdiff`, or `gwesp`): EpiModel, which builds on statnet. Starsim's networks target degrees and matching, not general ERGM terms.
+- **For the fastest agent-based runs at national scale** (tens of millions of agents): LASER, which is built for speed per agent above all; Starsim is close on one thread, but slower on many.
+- **For many small stochastic runs, and fits by particle MCMC with filtered trajectories**: odin with its companion packages, whose compiled models start faster.
+- **For models of livestock in thousands of herds driven by a register of movements**: SimInf, which is faster for small models of this kind.
+- **For models built and used in spreadsheets, with budget optimization**: Atomica, whose users need no code at all.
+- **For a full pipeline of scenario projections for a hub, on a cluster**: flepiMoP, which has the batch jobs and post-processing that Starsim lacks.
+- **For teaching with a graphical interface**: NetLogo, where students can watch and change a model without writing Python.
+- **For estimating the reproduction number or forecasting cases from surveillance data**: statistical tools such as EpiNow2 and the Epiverse packages, rather than a mechanistic model of transmission.
+- **For statistical models that are not about transmission**: Stan or PyMC directly.
+
+If the team already has a working model in another tool, that is often reason enough to keep it; the conversion pages show what moving would gain and lose.
+
+## Comparison with other frameworks
+
+Each framework with a conversion page, compared on a model from its own documentation (described in [How these numbers were made](#how-these-numbers-were-made)). Bold marks where Starsim does worse than the original.
+
+| Framework | Lines of model code | Time for one run | The switching demo's checks | Where Starsim is furthest behind today |
+|---|---|---|---|---|
+| [EpiModel](conversion/epimodel.qmd) | Fewer in both models | Faster in both | 3 of 3 pass | No ERGM terms beyond degree by group and `match=` properties (no `nodemix`, `absdiff`, or `gwesp`) |
+| [SimInf](conversion/siminf.qmd) | **More** in both models | **Slower** in both | 4 of 5 pass | The time to build and run a small model (SISe3: 5.2 s against 1.6 to 1.9 s) |
+| [odin](conversion/odin.qmd) | Fewer in both | Faster in one, slower in the other, under the limit | 4 of 5 pass | Many small stochastic runs (1,000 runs in 11.2 s against 1.98 s); no filtered trajectories from particle MCMC |
+| [epydemix](conversion/epydemix.qmd) | **More** in one of two | The same in one, slower in the other, under the limit | 4 of 5 pass | The US states' data are read, but not yet published for download |
+| [MEmilio](conversion/memilio.qmd) | Fewer in both | Faster | 4 of 4 pass | No German county data; no `osecirvvs` importer |
+| [flepiMoP](conversion/flepimop.qmd) | Fewer in both | Faster | 3 of 3 pass | No cluster batch jobs or R post-processing |
+| [summer2](conversion/summer2.qmd) | Fewer in both | Slower per run once summer2 has compiled, faster the first time; under the limit | 2 of 2 pass (1 not run) | No sigmoidal scale-up; a live model cannot be imported in the same process |
+| [Atomica](conversion/atomica.qmd) | Fewer in both | Slower per run, but under the limit | 6 of 7 pass | The `tb` library workbook fails to import; no spreadsheet interface |
+| [camdl](conversion/camdl.qmd) | Fewer in both | Faster in one, slower in the other, under the limit | 3 of 3 pass | The interventions (SIAs) of an imported model are not translated |
+| [EMULSION](conversion/emulsion.qmd) | Fewer in both | Faster | 2 of 5 pass | Importing the quickstart; newborns by prototype give too few animals; births between strata as compartments |
+| [LASER](conversion/laser.qmd) | Fewer in both | **Slower** (the other model passes only with a tenth of the agents) | 2 of 3 pass | Speed per agent at national scale |
+| [NumPy](conversion/numpy.qmd) | Fewer | **Slower**, under the limit | No demo | Speed for a small model run once |
+| [Starsim v3](conversion/starsim3.qmd) | | | 4 of 4 pass | Declared diseases as agents are slower than code |
+
+## How these numbers were made
+
+**The models.** Each framework's examples were taken from its own documentation or repository, run in that framework's own environment, and translated into Starsim by hand. The original, the translation, and a script that compares them are kept in the lingua franca design repository (`examples/` and `vignettes/`), with the original's reference results. These are the models on each page.
+
+**Lines and times.** Starsim's north-star script, `tests/north_star.py`, reads every translation and writes a table of lines of model code and run time, the original against Starsim, with the rows that fail. Starsim's lines are counted from the translation: not counting blank lines, comments, docstrings, imports, or the `if __name__ == '__main__'` block, and counting a line over 100 characters twice. The original's lines are those of its model file (rows of spreadsheets for Atomica, lines of YAML for flepiMoP and EMULSION). Starsim fails on lines if it has more than the original. Time is two numbers: the first run in a new process, and the best of 5 repeated runs, each building and running the sim. A time fails if Starsim is more than 2 times slower and more than 1 s slower. The originals were timed in their own environments (what each time includes, such as starting R or compiling, is said on each page). The script was run twice on 18 October 2026, on a 20-core x86-64 Linux machine shared with other work: once with the originals' recorded times, and once with the originals run again where that could be done.
+
+**What works and what does not yet.** Starsim's switching demos (`tests/switching/`) take each task that a user of that framework does every week, written in that field's terms and scaled down to run in seconds, and check it against the original framework's numbers. Of their 50 checks, 41 pass today, 8 fail, and one needs a framework that cannot be installed alongside Starsim. Each failing check names what blocks it. The demos were built from a review in which an experienced user of each framework tried their routine work in Starsim at their real scale (on 17 October 2026). Numbers on the pages that are not from the demos or the north star are from the translations' own comparisons (13 and 14 October 2026) or from that review; a time from the review is given with its date. The NumPy page has no translation or demo: its numbers are from its own code, which is run when the docs are built. Starsim's numbers are for the development version of Starsim.
+
+## The north-star table
+
+The second run of the north-star script, with the originals timed again where that could be done; (r) marks an original's time recorded earlier on the same machine.
+
+| Model | Lines: original | Lines: Starsim | First run (s): original | First run (s): Starsim | Repeated run (s): original | Repeated run (s): Starsim | Lines | First run | Repeated run |
+|---|---|---|---|---|---|---|---|---|---|
+| atomica/hiv_dyn | 217 | 67 | 0.005 | 0.16 | 0.0047 | 0.1 | pass | pass | pass |
+| atomica/sir | 62 | 16 | 0.0033 | 0.068 | 0.0025 | 0.014 | pass | pass | pass |
+| camdl/sir | 30 | 13 | 0.012 | 0.059 | 0.0068 | 0.018 | pass | pass | pass |
+| camdl/stratified | 35 | 15 | – | 0.057 | 0.1 (r) | 0.015 | pass | | pass |
+| emulsion/quickstart | 280 | 75 | 1.3 | 0.24 | 1.3 | 0.23 | pass | pass | pass |
+| emulsion/sir | 81 | 7 | 0.98 | 0.057 | 1 | 0.012 | pass | pass | pass |
+| epimodel/hiv | 405 | 59 | – | 4.6 | 54 (r) | 2.9 | pass | | pass |
+| epimodel/sis-network | 13 | 9 | – | 0.48 | 3.9 (r) | 0.44 | pass | | pass |
+| epydemix/covid19 | 161 | 33 | 0.034 | 0.12 | 0.034 | 0.036 | pass | pass | pass |
+| epydemix/sir_kenya | 7 | 13 | 0.0071 | 0.052 | 0.0065 | 0.013 | **fail** | pass | pass |
+| flepimop/seir_2pop | 42 | 14 | 8.6 | 0.06 | 8.1 | 0.016 | pass | pass | pass |
+| flepimop/vaccine_scenarios | 141 | 36 | 96 (r) | 2.1 | 96 (r) | 1.4 | pass | pass | pass |
+| laser/england_wales | 126 | 62 | 4.7 (r) | 53 | 3 (r) | 47 (best of 3) | pass | **fail** | **fail** |
+| laser/hub_spoke_seir | 50 | 15 | 2.8 (r) | 1.6 | 0.78 (r) | 1.3 | pass | pass | pass |
+| memilio/secir | 44 | 14 | 0.62 | 0.065 | 0.61 | 0.019 | pass | pass | pass |
+| memilio/secir_ageres | 45 | 21 | 0.49 | 0.061 | 0.43 | 0.022 | pass | pass | pass |
+| odin/seir_array | 53 | 17 | 1.1 | 1.5 | 1.1 | 1.5 | pass | pass | pass |
+| odin/stochastic_sir_arrays | 27 | 6 | 0.91 | 0.061 | 0.92 | 0.01 | pass | pass | pass |
+| siminf/sir_herds | 12 | 21 | 1.9 | 5.5 | 1.8 | 4.9 | **fail** | **fail** | **fail** |
+| siminf/sise3 | 27 | 40 | 1.9 | 8.7 | 1.9 | 8.9 | **fail** | **fail** | **fail** |
+| summer2/seir-age-clinical | 134 | 15 | 0.0012 | 0.13 | 0.00099 | 0.041 | pass | pass | pass |
+| summer2/sir-age-location | 35 | 11 | 0.00099 | 0.12 | 0.00038 | 0.02 | pass | pass | pass |
+
+Lines: 19 of 22 pass. First run: 16 of 19 pass (three originals have no first-run time). Repeated run: 19 of 22 pass. The hub-and-spoke row passes with a tenth of LASER's agents (each Starsim agent stands for ten people); at equal size, Starsim was about 10 times slower than LASER on its threads. After the work on speed of 22 October 2026, which is after these runs, Starsim on one thread took 5.9 s against LASER's 5.4 s on one thread.
+
+## Further reading
+
+- [CRAN Task View: Epidemiology](https://cran.r-project.org/web/views/Epidemiology.html): a curated list of R packages for epidemiology, including transmission models
+- [The Epiverse: tools](https://epiverse-trace.github.io/): open-source tools for outbreak analytics
+- [The R Epidemics Consortium (RECON)](https://www.reconverse.org/): R packages for outbreak response
+- [Epicookbook](https://epirecip.es/epicookbook/): the same models written in many languages and tools
+- [SIR models in Julia](https://github.com/epirecipes/sir-julia): one SIR model written in every kind of model (ODE, stochastic, network, agent-based)
+- [pomp: statistical inference for partially observed Markov processes](https://kingaa.github.io/pomp/): fitting mechanistic models to data in R
+- [NetLogo](https://ccl.northwestern.edu/netlogo/): agent-based modeling with a graphical interface
+- [Mesa](https://mesa.readthedocs.io/): general-purpose agent-based modeling in Python
+- [IDM documentation](https://docs.idmod.org/): EMOD and other models from the Institute for Disease Modeling

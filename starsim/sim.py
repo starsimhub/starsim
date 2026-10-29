@@ -121,8 +121,12 @@ class Sim(ss.Base):
         custom (Module/list): as above, for any custom user-created modules not matching one of the above types
         modules (Module/list): alternatively, supply all modules together and divide among demographics, diseases, etc. based on type
         solver (str): how to run modules with declared states and transitions (see `ss.Disease`): 'auto' (the default: an ODE if
-            every part of the model has a compartmental form, otherwise agents), 'ode', 'binomial' (chain-binomial), 'gillespie' (exact,
-            one event at a time), 'tau' (tau-leaping: close to exact, and much faster for a run of many events), or 'abm'
+            every part of the model has a compartmental form, otherwise agents), 'ode', 'ide' (deterministic, with each dwell time as it is
+            rather than as stages), 'binomial' (chain-binomial), 'gillespie' (exact, one event at a time), 'tau' (tau-leaping: close to
+            exact, and much faster for a run of many events), or 'abm'
+        branching (bool): run the declared model as a branching process, under any solver: infection takes no one from the states of
+            the uninfected and gives no one back, so the susceptible side stays as it would be with no infection (agents are made
+            only for the infected); see `sim.branching` for the size and outcome of each run, and `sim.run(until=)` to stop one
         integrator (str): the scheme of the ODE: 'rk4' (the default) or 'euler'
         unit (str): the unit of bare numbers in declared transitions, e.g. 'day'; if nothing in the model has a unit, time is in timesteps
         approx (bool): by default, each approximation a solver makes is noted in one line (kept in `sim.notes`, and printed unless `verbose=0`); True does not print them, and False makes them errors
@@ -439,10 +443,12 @@ class Sim(ss.Base):
         if self.solver == 'abm':
             rounded = float(f'{self.pars.pop_scale:.3g}') # To 3 significant figures, without an exponent (e.g. 25,300)
             scale = '' if rounded == 1 else f', each {rounded:,.0f} people' if rounded >= 10 else f', each {rounded:g} people'
-            how = f'as {len(self.people):,} agents{scale}'
+            how = f'as {len(self.people):,} agents{scale}' if not self.pars.branching else f'{self.pars.total_pop:,.0f} people, as a branching process of agents (starting with {len(self.people):,})'
         else:
-            kind = dict(ode='an ODE', binomial='a stochastic compartmental model (chain binomial)', gillespie='a stochastic compartmental model (Gillespie)', tau='a stochastic compartmental model (tau-leaping)')
-            how = f'{self.pars.total_pop:,.0f} people, as {kind.get(self.solver, self.solver)}'
+            kind = dict(ode='an ODE', ide='an integro-differential model', binomial='a stochastic compartmental model (chain binomial)', gillespie='a stochastic compartmental model (Gillespie)', tau='a stochastic compartmental model (tau-leaping)')
+            short = dict(ode='ODE', ide='integro-differential', binomial='chain binomial', gillespie='Gillespie', tau='tau-leaping')
+            solver = 'ide' if self.pars.solver == 'ide' else self.solver # Run as the ODE, with its dwell times as they are
+            how = f'{self.pars.total_pop:,.0f} people, as ' + (f'a branching process ({short.get(solver, solver)})' if self.pars.branching else kind.get(solver, solver))
         label = f' "{self.label}"' if self.label else ''
         what = f'{sc.strjoin(mods)}, ' if mods else ''
         lines = [ss.presentation.style(f'Sim{label}: {what}{how}, {when}', 'bold', color=ss.presentation.in_color())]
@@ -1199,7 +1205,7 @@ class Sim(ss.Base):
         Run the model -- the main method for running a simulation.
 
         Args:
-            until (date/str/float): run the steps up to and including the one that starts at this time
+            until (date/str/float/Expr/func): run the steps up to and including the one that starts at this time; or a condition, checked at the end of each step, that stops and finalizes the run once it holds: an expression of the model (`sir.I.n + sir.R.n >= 1000`) or a function of the sim; the results after the stop are NaN, and `sim.stopped` is the time point it stopped at
             verbose (int): how much to print: 0 nothing, 1 the solver, notes, and progress (default), 2 everything (e.g. each step)
             shrink (bool): whether to explicitly shrink the sim after running
             profile (bool): if True, record per-entry CPU timing in the loop (see `sim.loop.to_df()`/`plot_cpu()`)
@@ -1216,7 +1222,7 @@ class Sim(ss.Base):
                     f'its results leave them out. {imp.prompt}', ss.errors.ImportIncomplete)
         new_solver = solver is not None and solver != (self.solver if self.initialized else self.pars.solver)
         if n_runs is not None:
-            return ss.parallel(self.new(solver=solver) if new_solver else self, n_runs=n_runs)
+            return ss.parallel(self.new(solver=solver) if new_solver else self, n_runs=n_runs, run_args=None if until is None else dict(until=until))
         if new_solver and self.initialized: # Built for another solver, so built again
             self.new(solver=solver, inplace=True)
         elif solver is not None and not self.initialized:
@@ -1241,6 +1247,7 @@ class Sim(ss.Base):
             errormsg = 'Simulation is already complete'
             raise ss.AlreadyRunError(errormsg)
 
+        self.stopped = None # The time point a condition given as until= stopped the run at
         if self.verbose: # Otherwise none, or how far it has got for a MultiSim's progress (see ss.run.single_run())
             self.progress = ss.presentation.Progress(self)
         try:
@@ -1258,12 +1265,17 @@ class Sim(ss.Base):
                 self.complete = True # Without making the loop's plan, which is not needed
             else:
                 self.loop.run(until, profile=profile)
-                self.complete = self.loop.index == len(self.loop.plan)
+                self.stopped = self.loop.stopped
+                self.complete = self.loop.index == len(self.loop.plan) or self.stopped is not None
 
             # If simulation reached the end, finalize the results
             self.elapsed = self.timer.toc(output=True)
             if self.complete:
                 self.finalize()
+                if getattr(self, 'stopped', None) is not None:
+                    self.blank_after(self.stopped)
+                if self.pars.branching:
+                    self.summarize_branching()
                 if not kernels:
                     self.check_method_calls()
                 if shrink:
@@ -1275,6 +1287,75 @@ class Sim(ss.Base):
             self.progress = None
         
         return self # Allows e.g. ss.Sim().run().plot()
+
+    def holds(self, cond):
+        """ Whether a condition given as `sim.run(until=)` holds now: an expression of the declared modules' states (`sir.I.n == 0`), or a function of the sim """
+        if isinstance(cond, ss.expressions.Expr):
+            names = {state.module.name for leaf in cond.leaves if isinstance(leaf, ss.expressions.Count) for state in leaf.states if state.module is not None}
+            if len(names) != 1:
+                errormsg = f'until={cond!r} needs the states of one declared module, not {len(names)}; for more, give a function of the sim, e.g. until=lambda sim: ...'
+                raise ValueError(errormsg)
+            return bool(np.all(self.get_declared(names.pop()).engine.eval(cond)))
+        return bool(cond(self))
+
+    @property
+    def branching(self):
+        """
+        For a run as a branching process (`ss.Sim(branching=True)`): what came of it, as an `sc.objdict` (by module, if several
+        are declared), or None for any other run
+
+        - `size`: the people infected, the seeds included
+        - `outcome`: `'extinct'` if no one is infected at the end, `'stopped'` if `until=` stopped the run, or else `'ongoing'`
+        - and as agents: `length`, the most generations of the chain; for each agent made, by UID, `infector` (-1 for a seed,
+          or an infection from no one), `generation`, `ti` (the time point of infection), `offspring` (the number they
+          infected), and `complete`, whether they were infected long enough before the end that all their offspring are counted
+
+        See `msim.branching` for the runs of a MultiSim together.
+        """
+        return self.__dict__.get('_branching')
+
+    def summarize_branching(self):
+        """ Work out `sim.branching` once the run is finished (see there) """
+        out = sc.objdict()
+        last = self.stopped if self.stopped is not None else self.t.npts - 1
+        for mod in self.declared:
+            graph = mod.graph
+            if not graph.acquisitions:
+                continue
+            uninfected = set(graph.uninfected)
+            infected = [s.name for s in graph.people_states if s.name not in uninfected]
+            active = {s.name for s in graph.infectious} or set(infected) # The states that transmit, and those that lead to one: someone there can still infect others
+            grew = True
+            while grew:
+                before = len(active)
+                active |= {src.name for tr in graph.transitions.values() for src in tr.src or [] if src.name in infected and any(dst.name in active for dst in tr.dst or [])}
+                grew = len(active) > before
+            res = mod.results
+            start = sum(float(res[name][0]) for name in infected)
+            new = sum(float(np.nansum(res[tr.name].values)) for tr in graph.acquisitions)
+            now = sum(float(res[name][last]) for name in active)
+            b = sc.objdict(size=start + new, outcome='stopped' if self.stopped is not None else 'extinct' if now < 0.5 else 'ongoing')
+            engine = mod.engine
+            if self.solver == 'abm':
+                n = self.people.uid.len_used
+                infector = engine.infector[:n].copy()
+                b.length = int(engine.generation[:n].max()) if n else 0
+                b.infector = infector
+                b.generation = engine.generation[:n].copy()
+                b.ti = engine.infected_ti[:n].copy()
+                b.offspring = np.bincount(infector[infector >= 0], minlength=n)
+                b.complete = b.ti <= last - engine.infectious_window()/engine.dt # The same cut in every run, whatever came of it, so the people kept are not chosen by their offspring
+            out[mod.name] = b
+        self._branching = out[0] if len(out) == 1 else out
+        return
+
+    def blank_after(self, ti):
+        """ Set every result after time point ti to NaN, for a run stopped there by `until=` """
+        for res in self.results.flatten().values():
+            if isinstance(res, ss.Result) and len(res) == self.t.npts:
+                res.values = res.values.astype(float) if res.values.dtype.kind in 'iub' else res.values
+                res.values[ti+1:] = np.nan
+        return
 
     def kernel_reason(self):
         """ Why the sim is not run in one call to the kernels, in a few words, or None if it is (see `sim.kernel_only()`) """

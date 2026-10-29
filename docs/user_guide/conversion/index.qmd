@@ -1,0 +1,275 @@
+---
+title: Import/export
+jupyter: python3
+authorship:
+  human: 0
+  ai: 100
+  note: Written by AI, merging the earlier user guide page on importing, the tutorial "Bringing a model in", and the user-facing parts of the architecture page on importing and exporting
+---
+
+A model written for another framework can be read into Starsim, and a Starsim model can be written out in formats other tools read. Importing is useful for checking a model against its original, for running it in ways the original can't (as agents, say, or fitted with gradients), or for building on it in Starsim: adding age groups, interventions, or a fit to data. This page covers how importing works, how to check an import and finish one that is incomplete, the formats, and the exports. The pages for each framework ([Starsim v3](starsim3.qmd), [odin](odin.qmd), [EpiModel](epimodel.qmd), and the others in this section) show a model from that framework written both ways, and how closely the results agree; [Modeling landscape](../library_landscape.qmd) compares the frameworks.
+
+## Importing a model
+
+`ss.import_from()` reads a model file into a sim. Here is a measles model written in [odin](https://mrc-ide.github.io/odin/), a language for compartmental models in R: the measles model of the tutorials, with a latent period of 10 days (a rate `sigma` of 0.1 per day) and an infectious period of 8 days (`gamma` = 0.125 per day), in a town of 100,000, 90% of whom are immune. The file is written to a temporary folder first:
+
+```{python}
+import os
+import tempfile
+import numpy as np
+import sciris as sc
+import starsim as ss
+ss.options(jupyter=True)
+
+odin_code = '''
+deriv(S) <- -beta * S * I / N
+deriv(E) <- beta * S * I / N - sigma * E
+deriv(I) <- sigma * E - gamma * I
+deriv(R) <- gamma * I
+
+initial(S) <- N - I_init - R_init
+initial(E) <- 0
+initial(I) <- I_init
+initial(R) <- R_init
+
+N <- user(100000)    # Population size
+I_init <- user(10)   # Number infectious at the start
+R_init <- user(90000) # Number immune at the start
+beta <- user(1.9)    # Transmission rate, per day
+sigma <- user(0.1)   # 1 / latent period (10 days)
+gamma <- user(0.125) # 1 / infectious period (8 days)
+'''
+folder = tempfile.mkdtemp()
+filename = os.path.join(folder, 'measles.R')
+sc.savetext(filename, odin_code)
+
+sim = ss.import_from(filename, start='2025-01-01', stop=365)
+```
+
+Each `deriv()` is the rate of change of a compartment, written as the total flows in and out: β S I / N people a day are infected, σ E become infectious, and γ I recover. This is the form of most textbooks and frameworks. The format is told from the file (or given with `format='odin'`). odin has no time unit, so its numbers are taken to be per day (`unit=` says otherwise), and odin is told when to stop when it is run, so the sim needs `stop=`, here 365 days; `start=` gives it dates, which a forecast hub needs ([below](#forecast-hubs)). Other arguments change the model as it is read: `pars=dict(beta=1.5)` gives a parameter another value, and `dt=` a step.
+
+The importer prints how it read each rate, which is the first thing to check. A Starsim transition is a rate per person (each susceptible person is infected at a rate of β times the share infectious), so each importer turns each total flow into a rate for each person who leaves the state, by dividing by that state, and then classifies what is left:
+
+| A flow written as | Is read as |
+|---|---|
+| `gamma * I` | A rate `gamma` per person in `I`, whatever anyone else is doing |
+| `beta * S * I / N` | Frequency-dependent transmission: `beta * I`, exposure to the share infectious |
+| `beta * S * I` | Density-dependent transmission: `beta * I.n`, exposure to the number infectious |
+| Anything else | The expression itself, as a rate of counts, which is exact under every solver |
+
+## Checking an import
+
+The imported model is an ordinary Starsim sim, and runs like any other:
+
+```{python}
+sim.run()
+sim.plot()
+```
+
+`sim.describe()` shows the model as Starsim built it, with each guess marked, as for a model written by hand:
+
+```{python}
+sim.describe()
+```
+
+Here the importer guessed the names of the transitions (from their states, such as `S_to_E`, since odin doesn't name flows), and the total population `N` (from the people at the start). The solver is the one odin uses for this model, an ODE, so that the results can be checked against odin's.
+
+Two models are the same if they give the same results. Here is the import against the same model written in Starsim, as in the tutorials (see [T3 – Building a disease](../../tutorials/t3_disease.qmd)), where the rates are written as the durations they stand for:
+
+```{python}
+S, E, I, R = ss.states('S E I R')
+infection   = S >> E @ 1.9*I
+progression = E >> I @ ss.days(10)
+recovery    = I >> R @ ss.days(8)
+measles = ss.Disease(infection, progression, recovery, init_n=dict(I=10, R=90_000), name='measles')
+mine = ss.Sim(measles, total_pop=100_000, start='2025-01-01', stop=ss.days(365))
+mine.run()
+
+theirs = sim.results[sim.diseases[0].name]
+print('Largest difference in I:', abs(theirs.I.values - mine.results.measles.I.values).max())
+```
+
+The two differ only in how they are written: the import names its transitions by the states they join, and has a rate of 0.1 a day where the other has an average of 10 days, which is the same exponential distribution. Both run as an ODE, and the numbers agree, so these are the same model. Where two models differ, the `describe()` of each, side by side, shows how. For an import from a framework that is installed alongside Starsim, the best check is against the original framework's own results; each conversion page does this for one or two models.
+
+Since the import is an ordinary model, it can then be run in any of the ways Starsim can run a model. `sim.new()` makes a new sim from the same inputs, with whatever is given changed. Here it is run as agents, which odin can't do (the solver is given as well as the number of agents, since the import asked for an ODE, to match odin):
+
+```{python}
+agents = sim.new(solver='abm', n_agents=100_000) # One agent per person
+agents.run()
+
+import matplotlib.pyplot as plt
+fig = plt.figure()
+plt.plot(sim.t.datevec, theirs.I, label='ODE (as in odin)')
+plt.plot(agents.t.datevec, agents.results[agents.diseases[0].name].I, label='Agents')
+plt.ylabel('Number infectious')
+plt.legend()
+plt.show()
+```
+
+The agents follow the ODE, as they should in a town of this size, with some noise from chance: with only 10 people infectious at the start, and only 10% of the town susceptible, chance moves the timing of the peak a little from run to run, and whole steps of a day make the peak a little higher (as the note printed by the run says). See [Solvers and backends](../running_solvers.qmd) for the solvers.
+
+## Keeping an imported model
+
+An import gives Starsim code: the importer writes the model as Python, and the sim is that code run. The code is kept as `sim.imported.code`, to be kept, read, and changed like a model written by hand. It says where the model came from and how each rate was read, and ends with anything that wasn't translated:
+
+```{python}
+print(sim.imported.code)
+```
+
+The code is yours, a starting point to edit: a transition can be given a better name (`infection` rather than `S_to_E`), a rate can be written as the duration it stands for, and anything Starsim has that the original doesn't (age groups, interventions, a fit to data) can be added. `sc.savetext('measles.py', sim.imported.code)` writes it to a file, and `ss.io.convert(filename)` imports a model and saves its code in one step (beside the original, with the extension `.py`, unless `filename=` is given). Reading some formats takes a while (a large workbook, or a script that has to be run in R first), and the saved code then runs in a fraction of the time. From then on, the file is the model: to compare it with another version, compare their results or their `describe()`, or the two files in a text editor.
+
+## Finishing an incomplete import
+
+Each framework has features that have no direct counterpart in Starsim, such as code written in the original language, or a formula the importer can't read. An importer translates what it can, and lists the rest by name rather than guessing: the sim runs without the parts it couldn't translate, and lists them in a warning (`ss.errors.ImportIncomplete`) and in `sim.imported.incomplete`. The import above was complete:
+
+```{python}
+print('Format:', sim.imported.format)
+print('Not translated:', sim.imported.incomplete)
+```
+
+Here is the measles model over 20 years instead, with births, deaths, and seasonal transmission:
+
+```{python}
+seasonal_code = '''
+deriv(S) <- mu * N - beta * S * I / N - mu * S
+deriv(E) <- beta * S * I / N - sigma * E - mu * E
+deriv(I) <- sigma * E - gamma * I - mu * I
+deriv(R) <- gamma * I - mu * R
+
+N <- S + E + I + R
+beta <- beta0 * (1 + amp * cos(2 * 3.141593 * t / 365)) # Highest at the start of each year
+
+initial(S) <- 7000
+initial(E) <- 30
+initial(I) <- 30
+initial(R) <- 92940
+
+beta0 <- user(1.9)   # Mean transmission rate, per day
+amp <- user(0.2)     # Size of the seasonal cycle, relative to the mean
+sigma <- user(0.1)   # 1 / latent period (10 days)
+gamma <- user(0.125) # 1 / infectious period (8 days)
+mu <- user(0.00008)  # Birth and death rate, per day (about 3% a year)
+'''
+seasonal_file = os.path.join(folder, 'measles_seasonal.R')
+sc.savetext(seasonal_file, seasonal_code)
+
+seasonal = ss.import_from(seasonal_file, stop=20*365, dt=7) # A step of a week is plenty over 20 years
+seasonal.imported.incomplete
+```
+
+β now depends on the time, `t`, in a formula the importer doesn't translate. So the transmission, which uses β, isn't translated either, and both are listed. The births, deaths, latent period, and recovery are translated. Without the transmission, this sim would run, but with no epidemic, so it has to be finished first. The code of the import lists what wasn't translated at the end, as comments, and the missing parts can be added to it by hand. A seasonal cycle like this one is `ss.seasonal()` (see [Parameters](../building_parameters.qmd)): a mean, an amplitude, and the time of year of the peak, here the start of the year (`peak=0`). Births and deaths into and out of every state are shorter written as `ss.birth()` and `ss.death()` in `demographics=` (see [Demographics](../populations_demographics.qmd)), which is the same model:
+
+```{python}
+beta = ss.seasonal(mean=ss.perday(1.9), amplitude=0.2, peak=0) # Added: β, highest at the start of the year
+
+S, E, I, R = ss.states('S E I R')
+infection   = S >> E @ beta*I # Added: the transmission
+progression = E >> I @ ss.perday(0.1)
+recovery    = I >> R @ ss.perday(0.125)
+measles = ss.Disease(infection, progression, recovery, init_n=dict(S=7000, E=30, I=30, R=92940), name='measles')
+
+demographics = [ss.birth(rate=ss.perday(8e-05)), ss.death(rate=ss.perday(8e-05))]
+finished = ss.Sim(measles, demographics=demographics, total_pop=100_000, stop=ss.days(20*365), dt=ss.days(7))
+finished.run()
+finished.plot('measles.I')
+```
+
+This gives the two-year cycle of measles epidemics, as births replenish the susceptible people. Checking it against the original model, run in odin, would be the last step.
+
+For a longer model, with more that isn't translated, `sim.imported.prompt` is a prompt for an AI assistant with Starsim's `import-model` skill (installed with `starsim ai install`), which can finish the job in the same way: write the code, translate what is listed, and check the result against the original.
+
+## The formats
+
+`ss.import_from()` reads these formats, and tells which one a file is from by its contents (or give `format=`); `ss.io.importers` lists them:
+
+| Framework | Reads | Notes |
+|---|---|---|
+| [Atomica](atomica.qmd) | A framework and databook (`.xlsx`), and a program book | Programs become parameters of spending, for `ss.fit.optimize()` |
+| [camdl](camdl.qmd) | A `.camdl` file (compiled with `camdlc`), or its JSON form | Parameters keep their bounds and priors; observations become outcomes with their likelihoods |
+| [EMULSION](emulsion.qmd) | A model file (`.yaml`) | Each state machine becomes a disease |
+| [EpiModel](epimodel.qmd) | An R script, run first in R by `dump_epimodel.R` | A fitted network becomes `ss.DegreeNet` |
+| [epydemix](epydemix.qmd) | A live model, or the JSON written by `epydemix.py` | Runs as a chain binomial in daily steps, as epydemix does |
+| [flepiMoP](flepimop.qmd) | A configuration file (`.yml`), with the files it names | Places become a stratification with commuting between them |
+| [MEmilio](memilio.qmd) | The JSON written by `memilio.py` | Contact matrices with their changes over time; a graph of places |
+| [odin](odin.qmd) | An R file in odin's language (read without R) | odin 1 and odin2 syntax; arrays become stratifications |
+| SBML | An SBML file (`.xml`) | Species become states, reactions transitions |
+| [SimInf](siminf.qmd) | An R file (read without R), with its initial state and events | Nodes become places; events a movement register |
+| [summer2](summer2.qmd) | A live model, or the JSON written by `summer2.py` | Each stratification, with its mixing matrix |
+
+For epydemix, MEmilio, and summer2, Starsim's importer for that framework (e.g. `starsim/io/memilio.py`) also runs as a script in the framework's own environment, needing neither Starsim nor Sciris there, and writes what it built as JSON for Starsim to read; for EpiModel, `starsim/io/dump_epimodel.R` does the same in R. The others are read directly. Each importer is tested against its framework's own examples. A Starsim 3 script is not imported, but rewritten: see [Starsim v3](starsim3.qmd).
+
+## How an import is built
+
+Every importer reads its format into the same intermediate object, `ss.io.Source`: its states, parameters, flows as rate expressions, stratifications, outcomes, and what it couldn't translate. One function, `ss.io.write()`, writes a `Source` as Starsim code (a declared `ss.Disease`, with its parameters, states, and transitions as variables, ending with `sim = ss.Sim(...)`), by the same rules for every format, and `ss.io.build()` runs that code to make the sim. So there is one path, from another framework's model to code to a sim; each framework needs only a reader. A value that can't be written as a simple value, such as a network, is given by the importer as `ss.io.Code('...')`, the Python that makes it.
+
+```{mermaid}
+%%| echo: false
+flowchart LR
+  F["odin, SBML, EMULSION, SimInf,<br>flepiMoP, summer2, Atomica, camdl,<br>EpiModel, epydemix, MEmilio"] --> R[reader] --> S["ss.io.Source"] --> W["ss.io.write()"] --> C["Starsim code"] --> Sim[sim]
+  Sim --> E["SBML, odin"]
+```
+
+A `Source` can also be filled in by hand, to bring in a model from a framework that has no importer (here, an SIR from a spreadsheet or a paper):
+
+```{python}
+src = ss.io.Source('sir', format='by hand')
+for name, n in dict(S=990, I=10, R=0).items():
+    src.add_state(name, init=n)
+src.add_par('beta', 0.3)
+src.add_par('gamma', 0.1)
+src.add_flow('S', 'I', rate='beta * S * I / (S + I + R)', per='total', name='infection')
+src.add_flow('I', 'R', rate='gamma * I', per='total', name='recovery')
+sir = ss.io.build(src, stop=100)
+print(sir.imported.code)
+```
+
+`ss.io.write(src)` gives the code without running it. How the importers and exporters are built is described in [Architecture](../architecture_index.qmd).
+
+## Exporting a model
+
+A Starsim model is written as Python, and that code is the model: it is what is kept, shared, and compared. There are other ways to write a model, or its results, out:
+
+| What | How | Holds | Read back? |
+|---|---|---|---|
+| The code | the script itself; for an import, `sim.imported.code` | the model, as Python | yes, by running it |
+| Results as JSON | `sim.to_json()` | parameters, summary, and results, for use elsewhere | no |
+| A saved sim | `ss.save('run.sim', sim)` | the sim itself (a pickle), including partway through a run | yes, with `ss.load()` |
+| Another framework's format | `ss.export_to(sim, 'odin')` | the compartmental form of the declared diseases | yes, with `ss.import_from()` |
+
+`ss.export_to()` writes a model in SBML (for tools such as COPASI) or odin. Each is written from the model's compartmental form:
+
+```{python}
+print(ss.export_to(sim, 'odin'))
+```
+
+`filename=` writes it to a file too. A format that can't carry part of the model (such as a network, a module written as code, or a function) leaves it out, and the export lists what it left out or changed in a warning (`ss.errors.LossyExport`), one line for each. An exported model can be read back in:
+
+```{python}
+sbml_file = os.path.join(folder, 'measles.xml')
+ss.export_to(sim, 'sbml', filename=sbml_file)
+again = ss.import_from(sbml_file, start='2025-01-01', stop=365, verbose=False)
+again.run()
+print('Infections, imported from odin:', round(sim.results.measles.S_to_E.values.sum()))
+print('Infections, after a round trip through SBML:', round(again.results.measles.S_to_E.values.sum()))
+```
+
+A sim made in Starsim is not written back out as Starsim code: its code is the script that made it. Only an import is written as code.
+
+## Forecast hubs
+
+`ss.io.to_hub()` writes the runs of a MultiSim as a submission to a forecast hub (in the [hubverse](https://hubverse.io/) format used by the US forecast and scenario modeling hubs): each target, by scenario, location, and period, as quantiles over the runs or as the runs themselves. Here, weekly infections from 20 stochastic runs of the imported model:
+
+```{python}
+msim = sim.run(solver='binomial', n_runs=20)
+hub = ss.io.to_hub(msim, targets=dict(S_to_E='inc inf'), every='week', location='town')
+hub.head()
+```
+
+A target named "cum ..." is the total since the start, and "peak size ..." the largest value of a period; `by=` gives a location for each level of a stratification (such as each place), and `output_type='sample'` gives the runs instead of quantiles. See [Scenarios](../running_scenarios.qmd) for running scenarios to submit.
+
+## Further reading
+
+- [odin: documentation](https://mrc-ide.github.io/odin/): the language of the model imported on this page
+- [SBML: the Systems Biology Markup Language](https://sbml.org/): the exchange format for models of reactions, read and written by many tools
+- [COPASI](https://copasi.org/): a tool that simulates and analyzes SBML models
+- [The hubverse: documentation](https://hubverse.io/): the format of forecast and scenario hub submissions

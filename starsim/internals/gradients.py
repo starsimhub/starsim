@@ -273,6 +273,8 @@ class Run:
                 stack.append(exposures[arg])
             elif op == kn.TOTAL: # In the whole population, every place
                 stack.append(jnp.broadcast_to(ys[self.sets[arg]].sum(), (self.ng,)))
+            elif op == kn.GROUP: # In the same group
+                stack.append(ys[self.sets[arg]].sum(axis=0))
             elif op in [kn.COUNT, kn.FRAC]:
                 local = ys[self.sets[arg]].sum(axis=0)
                 if not self.simple:

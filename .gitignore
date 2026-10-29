@@ -16,6 +16,9 @@ docs/_inv/
 docs/api/
 objects.json
 objects.txt
+*.html
+*_files/
+docs/site_libs/
 
 # Other files
 .idea

@@ -115,7 +115,7 @@ class Layout:
             stack, regs = [], dict(shared)
             for k in range(0 if f < 0 else p.starts[f], p.starts[f+1]):
                 op, arg = int(p.ops[k]), int(p.args[k])
-                if op in (K.CONST, K.EXPOSURE, K.COUNT, K.FRAC, K.TOTAL):
+                if op in (K.CONST, K.EXPOSURE, K.COUNT, K.FRAC, K.TOTAL, K.GROUP):
                     stack.append(node((op, arg), 0))
                 elif op == K.LOAD:
                     stack.append(regs[arg])
@@ -141,7 +141,7 @@ class Layout:
         for (lev,op),items in sorted(groups.items()):
             cols = np.array(items, dtype=int).T # The node, then what it acts on
             self.steps.append((op, *cols))
-        self.counts = any(op in (K.COUNT, K.FRAC, K.TOTAL) for op,*_ in self.steps)
+        self.counts = any(op in (K.COUNT, K.FRAC, K.TOTAL, K.GROUP) for op,*_ in self.steps)
         return
 
 
@@ -215,6 +215,8 @@ def rates_of(ys, p, L):
             V[out] = total[x[0]]
         elif op == K.COUNT:
             V[out] = local[x[0]]
+        elif op == K.GROUP:
+            V[out] = setsum[x[0]]
         elif op == K.FRAC:
             V[out] = np.divide(local[x[0]], local_n, out=np.zeros((len(out), ng)), where=local_n > 0)
         elif op >= K.EXP:

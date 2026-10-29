@@ -1,6 +1,10 @@
 ---
 title: Final size
 jupyter: python3
+authorship:
+  human: 0
+  ai: 100
+  note: Written by AI
 ---
 
 In a closed SIR epidemic that starts with almost everyone susceptible, the share of people who are ever infected, *z*, depends only on R0. Kermack and McKendrick (1927) showed that it solves the final-size equation

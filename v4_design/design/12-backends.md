@@ -92,6 +92,7 @@ For simple models the solver is a free choice made when the sim is built. For co
 ```python
 ss.Sim(sir, solver='auto')        # the default
 ss.Sim(sir, solver='ode')         # deterministic compartmental
+ss.Sim(sir, solver='ide')         # deterministic compartmental, with each dwell time as it is (integro-differential)
 ss.Sim(sir, solver='binomial')    # chain-binomial, discrete time
 ss.Sim(sir, solver='gillespie')   # exact stochastic, continuous time
 ss.Sim(sir, solver='tau')         # tau-leaping: stochastic, close to exact, for a run of many events
@@ -100,11 +101,12 @@ ss.Sim(sir, solver='abm')         # agent-based
 
 The diffusion approximation of earlier drafts (`'sde'`) is gone: it resolved competing exits in declaration order at coarse steps, agreed worst with the ODE, and had no user. An unknown solver raises an error that lists the solvers.
 
-The model object is the same in every case, and whatever the solver, a sim is one trajectory; many runs are `ss.parallel(sim, n_runs=100)` ([09-results.md](09-results.md#one-run-many-runs)). The exact solver is called `'gillespie'` because that is the name the field uses for it. An integro-differential solver (`'ide'`, for arbitrary dwell times without stages) is deferred.
+The model object is the same in every case, and whatever the solver, a sim is one trajectory; many runs are `ss.parallel(sim, n_runs=100)` ([09-results.md](09-results.md#one-run-many-runs)). The exact solver is called `'gillespie'` because that is the name the field uses for it.
 
 | Solver | Time | State | Good for | Loses accuracy when |
 |---|---|---|---|---|
 | `ode` | continuous | real-valued | large populations, fast fitting | counts are small or extinction matters |
+| `ide` | continuous, dwell times by whole steps | real-valued | dwell times far from exponential (a heavy tail, data), renewal-equation models | the step is long against a dwell time |
 | `gillespie` | continuous | integer | exact stochastic dynamics (for rates that are constant within each quarter of a step) | values vary quickly within a step |
 | `tau` | continuous | integer | large stochastic runs, close to exact | rates change quickly within a leap |
 | `binomial` | discrete | integer | simple stochastic models on a fixed step | `rate * dt` is large |
@@ -167,6 +169,22 @@ A network model run as an ODE is a different, coarser model, not an invalid one,
 How network rates are obtained: a random network gives its mean number of contacts (`n_contacts`, or the mean of its distribution), and a static network the mean degree of its graph, as a homogeneous contact rate, so that the per-contact `beta` keeps its meaning. This discards concurrency, clustering, and partnership persistence, and the one-line note is the reminder.
 
 How stages are chosen: `k = round(mean^2 / std^2)`, at least 1, with each stage exponential with mean `mean / k`. The mean is kept exactly, and the note prints the standard deviation that results next to the one asked for. A distribution more variable than an exponential gets one stage and a note that its extra variance is not represented; one with a coefficient of variation above 3 (e.g. a Weibull with shape below about 0.4, whose one stage keeps a mean dominated by a tail few people reach) makes `'auto'` run the model as agents, naming the transition, and a compartmental solver that is asked for warns; to keep it, write it as a mixture of exponential branches decided on entry (`ss.Transition(I, R, p=0.1, dur=ss.days(820))` and `ss.Transition(I, R, p=0.9, dur=ss.days(20))`: a mean of 100 days and a CV of 2), which every solver runs exactly. `ss.gamma` with an integer shape is already Erlang and is exact. The same expansion is used by every compartmental solver, stochastic ones included.
+
+### Dwell times as they are: `'ide'`
+
+`solver='ide'` runs as the ODE, except that a dwell time that is not exponential is taken as it is, not as Erlang stages (decided 2026-10-28). It is a conveyor of whole steps, as a fixed delay is (below), out to the step by which all but 1e-6 of the distribution has elapsed; people leave slot `j` at the rate that gives the distribution's own chance of leaving after `j` steps, rounded to the nearest step: `q_j = (G(j) - G(j - 1))/(1 - G(j - 1))`, with `G(j) = F((j + 1/2) dt)`. Everyone left in the last slot leaves in the next step, so a fixed delay is exactly the conveyor it already is. An exponential dwell time stays a rate. The distribution function comes from SciPy for the common families (`ss.transitions.dwell_cdf()`); a distribution without one (a histogram, a user's own) stays Erlang stages, with a note. The cost is a compartment per slot per group (a gamma of mean 10 days and SD 5, at a day, is about 45), and the kernels, the ODE in NumPy and the ODE in JAX take conveyors already. Against the exact Erlang form of a gamma with shape 4, the run is within 0.15% at a step of a day and 0.01% at a quarter day. `'auto'` never chooses it. Under a branching process ([Branching processes](#branching-processes)), it is the renewal equation.
+
+### Branching processes
+
+`ss.Sim(branching=True)` runs the declared model with depletion turned off, under any solver (decided 2026-10-28; the spec is [oct28/branching.md](../oct28/branching.md)). The *uninfected side* is the states people can be in without having been infected (`graph.uninfected`). An acquisition takes no one from its source: it adds people to its destination at its rate per member of the source, as an inflow. A flow from the infected side back into the uninfected side takes people out of the model instead, with a note. The uninfected side's own flows act as usual (vaccination, waning of vaccine protection, births and deaths), and `N` in a rate is the uninfected side, so the offspring of one case average the disease-free R0 however many are seeded. `'auto'` chooses the solver as it would without branching.
+
+| Solver | Run as |
+|---|---|
+| `ode`, `ide` | the linearized model: exponential growth at the rate R0 gives, by the generation interval the dwell times imply |
+| `binomial`, `gillespie`, `tau` | a multitype branching process of counts; under `gillespie`, exact for exponential and Erlang dwell times |
+| `abm` | a branching process of agents: the uninfected are counts by group (advanced over each step by their own flows, as expected values), and agents are made only for the infected. The number infected in each group in a step is a Poisson draw of the expected number, each with an infector drawn from the infectious agents in proportion to what each adds to the hazard there (the same in distribution as each agent's offspring as a Poisson count); the new agent is put in its group's levels, with an age from the population's within its age group. Each records its infector, generation, and time of infection. Networks, strains, and several declared modules are not taken yet (`CapabilityError`) |
+
+In the compartmental kernels, an acquisition is an inflow whose rate is multiplied by `GROUP`, the count of its source compartments in the flow's own group (not its place, as `COUNT` is), in Numba, Rust, the ODE in NumPy and JAX, and so the chain binomial in JAX. `sim.branching` gives a run's size and outcome (`'extinct'`, `'stopped'` by `until=`, or `'ongoing'`), and as agents its chain; `msim.branching` (`ss.run.Branching`) gives the chance of extinction with its interval, and as agents the offspring's R and dispersion k, fitted only from runs of a fixed length, since where `until=` stops a run depends on its offspring.
 
 ### A fixed delay and a minimum stay
 

@@ -463,7 +463,7 @@ class Loop:
         `NaN`. The plan metadata (via `to_df()`) is always available on demand regardless.
 
         Args:
-            until (str/date): if supplied, stop after the step that starts at this time (used by sim.run_one_step)
+            until (str/date/Expr/func): if a time, stop after the step that starts at it (used by sim.run_one_step); if a condition (see `sim.run()`), stop once it holds at the end of a step
             verbose (bool): if True, print each function call as it runs
             profile (bool): if True, record per-entry CPU timing (default: keep the current setting)
         """
@@ -472,14 +472,21 @@ class Loop:
             self.profile = profile
 
         # Convert e.g. '2020-01-01' to an actual date
+        cond = None
         if isinstance(until, str):
             until = ss.date(until)
+        elif isinstance(until, ss.expressions.Expr) or callable(until): # A condition, e.g. sir.I.n == 0
+            cond, until = until, None
+        self.stopped = None
 
         # Loop over every function in the integration loop, e.g. disease.step()
         plan = self.plan
         while self.index < len(plan):
             entry = plan[self.index]
             if until is not None and entry.label == 'sim.advance' and self.sim.t.tvec[entry.ti - 1] > until: # Stop before a step that starts after the time asked for
+                break
+            if cond is not None and entry.label == 'sim.advance' and self.sim.holds(cond): # It holds at the end of the step just taken
+                self.stopped = self.sim.t.ti
                 break
             if verbose:
                 now = entry.time if isinstance(entry.time, ss.date) else f'{entry.time:n}' # Dates don't support number formatting

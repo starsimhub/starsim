@@ -1,9 +1,15 @@
 ---
-title: Products and deliveries
+title: Products
 jupyter: python3
+authorship:
+  human: 10
+  ai: 90
+  note: Based on the AI-written v4 draft, with the framing of products and deliveries and the custom product adapted from the Starsim 3 user guide page on products
 ---
 
-Vaccination, screening, and treatment programs have two parts: **what** is given (a vaccine, a test, or a drug: a **product**), and the **delivery**, which says who gets it, when, and how many. Starsim keeps the two apart, because programs do: the same vaccine can be given routinely to infants in one scenario and in a campaign in another. This page covers both parts. Changes to a model's parameters, such as distancing or school closures, need no product, and are on [Changing parameters](interventions_changes.qmd); the [Vaccination and scenarios tutorial](../tutorials/t5_vaccination.qmd) uses deliveries for measles.
+Vaccination, screening, and treatment programs have two parts: **what** is given (a vaccine, a test, or a drug: a **product**), and the **delivery**, which says who gets it, when, and how many. Starsim keeps the two apart, because programs do: an intervention decides who gets something and when, while the product says what happens to a person when they get it. The same vaccine can then be given routinely to infants in one scenario and in a campaign in another, without defining the vaccine again.
+
+This page covers products: vaccines, tests, and treatments, how their protection wanes, and products of your own. Deliveries (routine and campaign delivery, coverage, capacity, eligibility, and delivery triggered by events) and changes to a model's parameters, such as distancing or school closures, which need no product, are on [Interventions](interventions_interventions.qmd). The cost of products is on [Costs](interventions_costs.qmd). The tutorial [T5 – Interventions and scenarios](../tutorials/t5_interventions.qmd) uses a vaccine for measles, and [A4 – Interventions](../tutorials/a4_interventions.qmd) uses tests and treatment with agents.
 
 ## A vaccination campaign
 
@@ -30,7 +36,7 @@ msim = ss.parallel(scenarios)
 msim.plot('measles.I')
 ```
 
-Interventions are given to the sim with `interventions=`, singly or as a list. A delivery takes its name from the variable it is assigned to (`vaccination` here), and has results of its own: the number `delivered` on each step, the number `eligible`, and the `coverage` reached (and `cost`, if the product has one). Name a delivery after the activity (`vaccination`, `screening`, `treatment`), since the product takes the name of the thing (`vaccine`, `test`, `drug`).
+A vaccine protects only those not yet infected, so the sooner the campaign, the more it prevents; coverage (the share reached) and efficacy (the protection of those reached) are separate numbers, and both matter. Interventions are given to the sim with `interventions=`, singly or as a list. A delivery takes its name from the variable it is assigned to (`vaccination` here), and has results of its own: the number `delivered` on each step, the number `eligible`, and the `coverage` reached (and `cost`, if the product has one). Name a delivery after the activity (`vaccination`, `screening`, `treatment`), since the product takes the name of the thing (`vaccine`, `test`, `drug`).
 
 ## Products
 
@@ -126,135 +132,26 @@ print('Low grade:', sim.results.screening.low.sum())
 
 A treatment's `cure` is the chance that it clears the infection, once, when it is given: the person leaves the infected states by the disease's recovery (`transition=` names it, when there are several). Its `efficacy` is what it does for as long as it is held, as for a vaccine: antiretroviral therapy for HIV is `efficacy=dict(transmission=0.96, mortality=0.9)`. A treatment is given to the people who are infected, unless the delivery says otherwise. `cure=dict(cin=0.9)` cures by state, of a declared disease or one written as code (which is cured by its `clear_infection()`).
 
-### Costs
-
-Every product takes `cost=`, the cost of each delivery, which is then a result of the delivery, next to the number delivered: enough for a simple comparison of costs and effects.
+Here are the two kinds of treatment, each given to infected people at a rate of 50% a year: a cure, and a treatment that cuts how infectious people are by 90% while they are infected (and are treated), without shortening their infection:
 
 ```{python}
-vaccination = ss.vaccinate(efficacy=0.8, cost=12.50, coverage=0.5, at=['2010'])
-sim = ss.Sim(sis, interventions=vaccination, **kw)
-sim.run()
-print('Doses:', sim.results.vaccination.delivered.sum())
-print('Total cost:', sim.results.vaccination.cost.sum())
-```
-
-## Deliveries
-
-A delivery says who can receive the product, when, and how many. Its keywords are the same for every product:
-
-| Keyword | Meaning |
-|---|---|
-| `start=`, `stop=` | When delivery starts and stops: dates, or times in the sim's unit |
-| `at=` | Deliver in rounds at these times (a campaign) |
-| `interval=` | Deliver in rounds this far apart, between `start` and `stop` |
-| `at_age=` | Routine delivery to people as they reach an age, e.g. `at_age=ss.months(9)` |
-| `where=` | Who can receive it: a condition, or a function of the sim |
-| `who=` | Who receives it: an event (such as `screening.positive` or `sis.infection`), a condition, or both, joined with `&` |
-| `on=` | The event part of `who=`, e.g. `on=sis.infection` |
-| `coverage=` | The share of eligible people reached |
-| `capacity=` | The number that can be delivered (per round, per step, or as a rate) |
-| `priority=` | Who is served first when capacity runs short |
-| `queue=` | Whether those not served wait their turn (agents only) |
-| `delay=` | The time from a trigger to delivery (agents only) |
-| `trace=` | Deliver to the contacts of those selected, on a network (agents only) |
-| `when=` | Deliver only on steps where a function of the sim returns `True` |
-| `deliver=` | A function of the sim that returns who receives it, instead of `where=`, `coverage=`, and the rounds |
-| `disease=` | The disease the product acts on, if there is more than one |
-
-### Rounds and routine delivery
-
-With `at=` or `interval=`, delivery is in **rounds**: in each round, every eligible person is offered the product once. With neither, delivery is **routine**: each person is offered it once, at the first step on which they are eligible. `at_age=` is routine delivery as people reach an age: `at_age=ss.months(9)` vaccinates children as they turn 9 months old, and not everyone older on the first day.
-
-```{python}
-routine  = ss.vaccinate(efficacy=0.8, coverage=0.8, start='2005')                         # Once per person, when first eligible
-yearly   = ss.vaccinate(efficacy=0.8, coverage=0.2, interval=ss.years(1), start='2005')   # A round every year
-campaign = ss.vaccinate(efficacy=0.8, coverage=0.6, at=['2005', '2010'])                  # Two rounds
+cure = ss.treat(cure=0.9, coverage=ss.peryear(0.5))
+suppress = ss.treat(efficacy=dict(transmission=0.9), during=sis.I, coverage=ss.peryear(0.5))
 
 scenarios = {
-    'No vaccination':       ss.Sim(sis, **kw),
-    'Routine, 80%':         ss.Sim(sis, interventions=routine, **kw),
-    'Yearly rounds, 20%':   ss.Sim(sis, interventions=yearly, **kw),
-    'Two campaigns, 60%':   ss.Sim(sis, interventions=campaign, **kw),
+    'No treatment':                ss.Sim(sis, **kw),
+    'Cure':                        ss.Sim(sis, interventions=cure, **kw),
+    'Less infectious while held':  ss.Sim(sis, interventions=suppress, **kw),
 }
 msim = ss.parallel(scenarios)
 msim.plot('sis.I')
 ```
 
-### Coverage and capacity
+Both lower prevalence by about half. A cure does it by shortening infections, and reaches each person afresh each time they are infected; the other keeps people infected, but stops most of them from passing it on.
 
-`coverage=0.7` is a share of the eligible people. A typed rate or probability, such as `coverage=ss.perday(0.1)`, is the chance of being reached over the step (or over the round, with `interval=`), and routine delivery then offers it at every step to those eligible: a rate of seeking care, for example. `capacity=` is a number available: a bare number is per round for campaigns (or per step, for delivery on events or by a function), and a rate, such as `ss.peryear(500)`, is per unit time, which routine delivery needs. When fewer are available than people who would receive one, those who do are chosen at random, unless `priority=` says who comes first (e.g. `priority=ss.ppl.age`, the oldest first). Given together, coverage is applied first, and capacity caps the result:
+### Costs
 
-```{python}
-limited = ss.vaccinate(efficacy=0.8, coverage=0.6, at=['2005', '2010'], capacity=500) # At most 500 doses a round
-sim = ss.Sim(sis, interventions=limited, **kw)
-sim.run()
-print('Doses delivered:', sim.results.limited.delivered.sum())
-```
-
-With `queue=True`, those not served for lack of capacity wait, longest first, until they are served or are no longer eligible; a duration, such as `queue=ss.months(6)`, limits the wait.
-
-### Who is eligible
-
-`where=` says who can receive the product. It is a condition on people or on the states of a module, written before the sim exists, such as `ss.ppl.age < 15` (people under 15), `sis.I` (people infected), or a combination with `&`, `|`, and `~` (and, or, not). A condition is not worked out when it is written, but each time it is needed, in the sim it runs in, so the same condition works in every copy of a sim. Anything else is a function of the sim, returning a boolean array or the UIDs of people:
-
-```{python}
-children = ss.vaccinate(efficacy=0.8, coverage=0.9, at=['2005'], where=ss.ppl.age < 15)
-adults = ss.vaccinate(efficacy=0.8, coverage=0.9, at=['2005'], where=lambda sim: sim.people.age >= 15)
-
-sim = ss.Sim(sis, interventions=[children, adults], **kw)
-sim.run()
-print('Children vaccinated:', sim.results.children.delivered.sum())
-print('Adults vaccinated:', sim.results.adults.delivered.sum())
-```
-
-Each of these deliveries makes its own vaccine. The first is named `vaccine`; since that name is taken, the second is named after its delivery, `adults_product`.
-
-### Delivery when something happens
-
-`on=` delivers to the people something has just happened to, instead of on a schedule: a transition (the people who went through it on this step), the outcome of another delivery, or a function of the sim returning UIDs. For the people in a state, use `where=` instead (`where=sis.I`). Here half of people are treated when they are infected, up to 30 treatments a month:
-
-```{python}
-on_infection = ss.treat(cure=0.9, on=sis.infection, coverage=0.5, capacity=30)
-sim = ss.Sim(sis, interventions=on_infection, **kw)
-sim.run()
-sim.plot('sis')
-```
-
-A condition can also be read on someone's mother: `ss.mother(cond, born=True)` holds for a person whose mother meets `cond`. Each event remembers, per person, whether it ever happened (`.ever`), how often (`.count`), and how long ago (`.since`). Here newborns are tested if their mother tested positive at antenatal care within the past year:
-
-```{python}
-pregnancy = ss.Pregnancy(fertility_rate=ss.freqperyear(100)) # Births a year per 1,000 women
-anc = ss.screen(sensitivity=0.9, specificity=0.98, where=pregnancy.P, coverage=0.5)
-newborn = ss.screen(sensitivity=0.9, specificity=0.98, who=pregnancy.birth & ss.mother(anc.positive.since <= ss.years(1), born=True))
-sim = ss.Sim(sis, demographics=pregnancy, interventions=[anc, newborn], **kw)
-sim.run()
-print('Newborns tested:', sim.results.newborn.delivered.sum())
-```
-
-As agents, every delivery keeps the memory of its events (who it reached, and each outcome), so it can be read after a run: `sim.interventions.screening.ever.uids` is everyone ever screened, and `(sim.interventions.screening.positive.since <= ss.years(1)).uids` everyone positive within the past year.
-
-`trace=` is contact tracing: it delivers to the contacts, on a network, of the people that the event in `who=` selects. A network with `memory=` reaches recent past partners too (see [Networks and mixing pools](populations_networks.qmd#working-with-edges)).
-
-### Delivery by a function
-
-When who, when, and how many depend on each other ("treat the 200 oldest people who are infected"), one function says it. It is called every step (within `start` and `stop`, if given), and returns the UIDs of the people who receive the product on that step; `capacity=` may still cap it:
-
-```{python}
-import numpy as np
-
-def oldest_infected(sim):
-    """ The 200 oldest people who are infected """
-    infected = sim.diseases.sis.I.uids
-    order = np.argsort(sim.people.age[infected])
-    return infected[order[-200:]]
-
-targeted = ss.treat(cure=0.9, deliver=oldest_infected, start='2005')
-sim = ss.Sim(sis, interventions=targeted, **kw)
-sim.run()
-sim.plot('sis')
-```
-
-`when=` takes a function of the sim that returns `True` or `False`, and delivers only on steps where it is `True`, e.g. once prevalence passes a threshold (see [Changing parameters](interventions_changes.qmd#changes-triggered-by-the-epidemic)).
+Every product takes `cost=`, the cost of each delivery, which is then a result of the delivery (`cost`), next to the number delivered. See [Costs](interventions_costs.qmd) for costing a program and comparing costs and effects between scenarios.
 
 ## One product, several deliveries
 
@@ -277,16 +174,47 @@ Each delivery has a name of its own, from its variable or from `name=`; steps ma
 
 ## Under compartments and agents
 
-Products and deliveries work under every solver: as agents, the sim records who holds each product and since when, and in a compartmental run, holding a product becomes a stratification of the model. What follows each person's own history needs agents: waning given as a function of the time since delivery (an `ss.box()` runs under every solver, its box as several levels of holding the product), a test's `delay=`, `queue=` and `delay=` on a delivery, `.since` and `.count` (`.ever` works under every solver), the conditions on mothers, contact tracing, and functions that pick particular people. A model that uses any of these runs as agents unless told otherwise. For any other waning shape under every solver (e.g. two rates in turn), write the protection as states of the disease, and move people into them with the delivery's `move=` (e.g. `ss.Delivery(move=S >> V, ...)`; see [Diseases](models_diseases.qmd)). A weighted count (`(ss.by(biting=w)*I).n`, `A.n_trans`) and a product's coverage in a rate are worked out once a step in a compartmental run.
+Products and deliveries work under every solver: as agents, the sim records who holds each product and since when, and in a compartmental run, holding a product becomes a stratification of the model. What follows each person's own history needs agents: waning given as a function of the time since delivery (an `ss.box()` runs under every solver, its box as several levels of holding the product), a test's `delay=`, `queue=` and `delay=` on a delivery, `.since` and `.count` (`.ever` works under every solver), the conditions on mothers, contact tracing, and functions that pick particular people. A model that uses any of these runs as agents unless told otherwise. For any other waning shape under every solver (e.g. two rates in turn), write the protection as states of the disease, and move people into them with the delivery's `move=` (e.g. `ss.Delivery(move=S >> V, ...)`; see [Diseases](building_diseases.qmd)). A weighted count (`(ss.by(biting=w)*I).n`, `A.n_trans`) and a product's coverage in a rate are worked out once a step in a compartmental run.
 
-## Writing an intervention as code
+## Writing a product as code
 
-Deliveries cover the common cases. Anything else is a module written as code: a subclass of `ss.Intervention` with a `step()` method, which runs on every step and can read and change anything in the sim; [Modules written as code](models_code.qmd) shows how. A product whose effect needs code of its own is a subclass of `ss.Product` with an `administer(uids)` method.
+A product whose effect needs code of its own is a subclass of `ss.Product` (or of `ss.Vaccine`, `ss.Diagnostic`, or `ss.Treatment`) with an `administer(uids)` method, which is called with the people a delivery gave it to on each step. Like any module, it can have parameters of its own (with `define_pars()`), states, and results. Here is a vaccine that protects younger people more: 90% at birth, falling to none at 80:
+
+```{python}
+class AgeVaccine(ss.Product):
+    """ A vaccine whose protection falls with the age at which it is given """
+    def __init__(self, efficacy=0.9, **kwargs):
+        super().__init__()
+        self.define_pars(efficacy=efficacy)
+        self.update_pars(**kwargs)
+        return
+
+    def administer(self, uids):
+        age = self.sim.people.age[uids]
+        protection = self.pars.efficacy * np.clip(1 - age/80, 0, 1)
+        self.sim.diseases.sis.rel_sus[uids] *= 1 - protection
+        return
+
+scenarios = {
+    'No vaccine':                    ss.Sim(sis, **kw),
+    'Vaccine, 90% at every age':     ss.Sim(sis, interventions=ss.vaccinate(efficacy=0.9, coverage=0.5, at=['2010']), **kw),
+    'Vaccine, falling with age':     ss.Sim(sis, interventions=ss.vaccinate(AgeVaccine(), coverage=0.5, at=['2010']), **kw),
+}
+msim = ss.parallel(scenarios)
+msim.plot('sis.I')
+```
+
+A product written as code acts on agents, so a model with one runs as agents. Here `administer()` changes each person's susceptibility directly, which lasts for the rest of the run; a protection that should wane, or combine with other products and modifiers without overwriting them, is better given as a vaccine's `efficacy=` with `waning=`, or as an `ss.modify()` (see [Interventions](interventions_interventions.qmd)). `administer()` can also return outcomes, as a test does (`dict(positive=uids)`), which are then results and events of the delivery. An intervention whose logic is not a product at all is a subclass of `ss.Intervention`: see [Interventions](interventions_interventions.qmd#writing-an-intervention-as-code).
 
 ## Pitfalls
 
 - **One product, one protection.** Two deliveries of the same vaccine object share it: someone vaccinated by both is protected once. Two deliveries that make their own vaccines (`ss.vaccinate(efficacy=0.8, ...)` twice) give two vaccines, whose protections multiply for someone who gets both.
-- **Routine is once per person.** Routine delivery offers each person the product once, when they are first eligible; a share of people reached every year is delivery in yearly rounds (`interval=ss.years(1)`), or routine delivery with a typed coverage (`coverage=ss.probperyear(0.5)`), a chance at every step for as long as people are eligible.
-- **Coverage is of the eligible.** `coverage=0.8` with `where=ss.ppl.age < 5` reaches 80% of children under 5, not 80% of everyone.
-- **Routine delivery needs a rate of capacity.** A bare number as `capacity=` is per round or per step; routine delivery has neither, so it needs a rate, e.g. `ss.peryear(500)`.
-- **`and`, `or`, and `not` don't combine conditions.** Use `&`, `|`, and `~`, with brackets: `(ss.ppl.age > 15) & ~sis.I`.
+- **Coverage is not efficacy.** Coverage is the share of eligible people who receive a product; efficacy is what it does for those who do. Halving either halves the protection of a leaky vaccine, but they are different questions for a program.
+
+The API reference for this page: [Products](../api/products.qmd).
+
+## Further reading
+
+- [Covasim: Interventions](https://docs.covasim.org/tutorials/tut_interventions.html): vaccines, testing, tracing, and treatment in an agent-based model of COVID-19
+- [epydemix: Vaccinations](https://epydemix.readthedocs.io/en/latest/tutorials/09_Vaccinations.html): vaccination in a compartmental model
+- [EpiModel: Vaccination](https://epimodel.github.io/sismid/4_basic_epimodel/mod4-Vax.html): an all-or-nothing vaccine in a network model

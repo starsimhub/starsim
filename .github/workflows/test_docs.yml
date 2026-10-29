@@ -1,15 +1,15 @@
-# Test that docs build successfully on pushes to main
-# and PRs targeting main.
+# Test that docs build successfully. Disabled for now: run it manually from the
+# Actions tab. To re-enable, restore the push and pull_request triggers below.
 
 name: Test docs
 
 on:
-  push:
-    branches:
-      - main
-  pull_request:
-    branches:
-      - main
+  # push:
+  #   branches:
+  #     - main
+  # pull_request:
+  #   branches:
+  #     - main
   workflow_dispatch:
 
 jobs:

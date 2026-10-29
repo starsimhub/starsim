@@ -1,6 +1,10 @@
 ---
 title: Hospitalization and death
 jupyter: python3
+authorship:
+  human: 0
+  ai: 100
+  note: Written by AI
 ---
 
 Two different mechanisms decide what happens to people after a state, and a model needs the right one. In a **split on entry**, the outcome is decided when people enter the state: here, 10% of infectious people will go to hospital and the rest will recover, each after their infectious period. With **competing hazards**, two transitions out of a state run at the same time and whichever happens first wins: here, people in hospital are discharged after 10 days on average, but die at a rate of 0.02 per day while they are there, so the share who die depends on both rates. This page puts both in one model, a respiratory infection with hospitalization, and checks the share who die.
@@ -66,5 +70,5 @@ print('Admitted:', round(admitted), 'Died:', round(deaths), 'Share:', round(deat
 
 ## Going further
 
-- [Disease structure](../tutorials/t3_structure.qmd) adds branching to the measles model.
-- [Diseases: states, transitions, and rates](../user_guide/models_diseases.qmd) covers splits, competing hazards, and their durations.
+- [Disease structure](../tutorials/t3_disease.qmd) adds branching to the measles model.
+- [Diseases: states, transitions, and rates](../user_guide/building_diseases.qmd) covers splits, competing hazards, and their durations.

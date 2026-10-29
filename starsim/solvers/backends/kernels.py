@@ -31,6 +31,7 @@ __all__ = ['Program', 'Register', 'Shifts', 'opcodes']
 CONST, COUNT, FRAC, EXPOSURE, ADD, SUB, MUL, DIV, POW, MIN, MAX, LT, LE, GT, GE, EXP, LOG, SQRT, ABS, SIN, COS, TOTAL = range(22) # TOTAL is a count in the whole population, every place (I.total)
 CONVEY = 22 # Not in a rate: a conveyor (its flow, then its slots; see convey()); kept out of the program's fields, since every field adds to the cost of each call that is passed it
 LOAD, STORE = 23, 24 # A part used more than once: STORE takes the top of the stack into register arg, and LOAD puts a copy back on top; the registers are the last rows of the stack (row depth-1-arg). The parts used by several rates are worked out first, in the operations before the first rate's (starts[0] > 0); a part used twice in one rate, in the rate
+GROUP = 25 # A count in the group each rate is for, not its place: a branching process's infection, which adds people at its rate per member of its source without taking them from it (see ss.solvers.Compartmental.init_program())
 opcodes = {'+':ADD, '-':SUB, '*':MUL, '/':DIV, '**':POW, 'minimum':MIN, 'maximum':MAX, 'exp':EXP, 'log':LOG, 'sqrt':SQRT, 'absolute':ABS, 'sin':SIN, 'cos':COS,
            'less':LT, 'less_equal':LE, 'greater':GT, 'greater_equal':GE}
 
@@ -841,9 +842,9 @@ def sum_exposures(expo, e, s):
 def check_ops(ops):
     """ Check that a program has only operations the kernels know, which they then need not check (see `unary()`) """
     ops = np.asarray(ops, dtype=int)
-    unknown = sorted(set(ops[(ops < CONST) | (ops > STORE)].tolist()))
+    unknown = sorted(set(ops[(ops < CONST) | (ops > GROUP)].tolist()))
     if unknown:
-        errormsg = f'The program of a rate has unknown operations {unknown}; the kernels know {CONST} to {STORE}'
+        errormsg = f'The program of a rate has unknown operations {unknown}; the kernels know {CONST} to {GROUP}'
         raise ValueError(errormsg)
     return ops
 
@@ -992,6 +993,12 @@ def place_rates(ys, p, a, b, rates, stack, expo):
                         for i in range(p.set_starts[arg], p.set_starts[arg+1]):
                             v += ys[p.set_comps[i], p.pl_groups[jj]]
                     stack[top, 0] = leaf_share(op, v, n)
+                elif op == GROUP:
+                    top += 1
+                    v = 0.0
+                    for i in range(p.set_starts[arg], p.set_starts[arg+1]):
+                        v += ys[p.set_comps[i], g]
+                    stack[top, 0] = v
                 elif op == LOAD:
                     top += 1
                     stack[top, 0] = stack[len(stack)-1-arg, 0]
@@ -1312,6 +1319,12 @@ def sparse_events(y, p, w, active, first, last, dt, flows, seed, maps):
                             top += 1
                             v = counts[arg]
                             stack[top, 0] = leaf_share(op, v, n)
+                        elif op == GROUP:
+                            top += 1
+                            v = 0.0
+                            for ii in range(p.set_starts[arg], p.set_starts[arg+1]):
+                                v += y[p.set_comps[ii], g]
+                            stack[top, 0] = v
                         elif op == LOAD:
                             top += 1
                             stack[top, 0] = stack[len(stack)-1-arg, 0]
@@ -2030,6 +2043,12 @@ def step(rng, y, p, w, dt, n_sub, solver, flows, tables, row):
                                 num[p.places[g]] += vals[g]
                             for g in range(ng):
                                 stack[top, g] = leaf_share(op, num[p.places[g]], local_n[g])
+                        elif op == GROUP: # The number in some compartments, in the same group
+                            top += 1
+                            for g in range(ng):
+                                stack[top, g] = 0.0
+                                for i in range(p.set_starts[arg], p.set_starts[arg+1]):
+                                    stack[top, g] += ys[p.set_comps[i], g]
                         elif op == LOAD: # A part worked out already
                             top += 1
                             for g in range(ng):

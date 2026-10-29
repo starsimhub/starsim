@@ -1,6 +1,10 @@
 ---
 title: Age groups and a contact matrix
 jupyter: python3
+authorship:
+  human: 0
+  ai: 100
+  note: Written by AI
 ---
 
 People of different ages mix differently: children have the most contacts, and most of them with other children. An age-structured model splits each state by age group, and a contact matrix says how many contacts a day a person in each group has with people in each other group. With contacts, β is the chance of infection per contact, and the force of infection on group *i* is β times the sum over groups *j* of the contacts of *i* with *j* times the share of *j* who are infectious. This page builds an age-structured SIR, as in the age-structured models of Keeling and Rohani (2008, chapter 3).
@@ -62,5 +66,5 @@ Of 30,000 children, 50,000 adults under 65, and 20,000 people aged 65 and over, 
 ## Going further
 
 - [Age groups and contacts](../tutorials/t4_ages.qmd) adds age groups and a contact matrix to the measles model, with data for real countries.
-- [Stratification](../user_guide/models_stratification.qmd) and [Contact matrices and data by place](../user_guide/populations_contacts.qmd) cover the options.
+- [Stratification](../user_guide/building_stratification.qmd) and [Contact matrices and data by place](../user_guide/populations_data.qmd) cover the options.
 - Keeling MJ, Rohani P (2008). *Modeling Infectious Diseases in Humans and Animals*. Princeton University Press.

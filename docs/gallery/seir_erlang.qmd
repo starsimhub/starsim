@@ -1,6 +1,10 @@
 ---
 title: SEIR with a realistic infectious period
 jupyter: python3
+authorship:
+  human: 0
+  ai: 100
+  note: Written by AI
 ---
 
 In an SEIR model, people infected first pass through a latent period (E, exposed) before they become infectious. In the simplest SEIR, the time spent in each state is exponentially distributed: many people leave a state almost at once and a few stay a long time, which is rarely realistic. A gamma-distributed (Erlang) period with a few stages is closer to most real infections: each person passes through *k* stages, each exponential, and the total has the same mean but much less spread. This page compares the two, for the same mean infectious period.
@@ -60,5 +64,5 @@ Both have the same R0, so the same share of people is infected in the end. But w
 
 ## Going further
 
-- [Disease structure](../tutorials/t3_structure.qmd) adds a latent period to the measles model, with durations and their distributions.
-- [Distributions](../user_guide/models_distributions.qmd) lists the distributions a duration can have; any of them can be used as agents, and as compartments they are represented by stages.
+- [Disease structure](../tutorials/t3_disease.qmd) adds a latent period to the measles model, with durations and their distributions.
+- [Distributions](../user_guide/mechanics_distributions.qmd) lists the distributions a duration can have; any of them can be used as agents, and as compartments they are represented by stages.

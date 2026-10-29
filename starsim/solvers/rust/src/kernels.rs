@@ -44,6 +44,7 @@ pub const TOTAL: i64 = 21;
 pub const CONVEY: i64 = 22;
 pub const LOAD: i64 = 23;
 pub const STORE: i64 = 24;
+pub const GROUP: i64 = 25; // A count in the group each rate is for (kernels.py's GROUP)
 
 pub const PIECES: usize = 4; // The stochastic solvers that take steps of their own length hold values that vary in time for a quarter of a step at a time
 pub const GOLDEN: u64 = 0x9e3779b97f4a7c15;
@@ -573,6 +574,15 @@ pub fn step(rng: Rng, y: A2<f64>, p: &Program, w: &Work, dt: f64, mut n_sub: i64
                             }
                             for g in 0..ng {
                                 stack.set(top as usize, g, leaf_share(op, num.at(p.places.u(g)), local_n.at(g)));
+                            }
+                        } else if op == GROUP { // The number in some compartments, in the same group
+                            top += 1;
+                            for g in 0..ng {
+                                let mut v = 0.0;
+                                for i in p.set_starts.u(arg)..p.set_starts.u(arg + 1) {
+                                    v += ys.at(p.set_comps.u(i), g);
+                                }
+                                stack.set(top as usize, g, v);
                             }
                         } else if op == LOAD {
                             top += 1;

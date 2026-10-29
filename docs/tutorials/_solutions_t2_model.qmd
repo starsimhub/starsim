@@ -1,0 +1,61 @@
+## T2 – Building a model
+
+```{python}
+import starsim as ss
+ss.options(jupyter=True)
+```
+
+
+### Exercise 1
+
+**A town of 2,000 people has had no measles for many years, and 70% of its people are immune. Five people arrive with measles. Using `init` and `init_n`, model the outbreak over a year. How many people are infected? Is the reproduction number at the start above or below 1?**
+
+With 30% of people susceptible, the reproduction number at the start is 15.2 × 0.3 ≈ 4.6 (which the run prints after R0, as `R = 4.56 at the start`), well above 1. Almost all of the 600 susceptible people are infected. The run also notes that with only 5 people infected at the start, whether an outbreak takes off is partly a matter of chance, which the ODE doesn't show; as the note says, running the model many times with a stochastic solver (`solver='gillespie'`, with `ss.parallel(n_runs=...)`) does.
+
+```{python}
+S, I, R = ss.states('S I R')
+infection = S >> I @ 1.9*I
+recovery  = I >> R @ ss.days(8)
+measles = ss.Disease(infection, recovery, init=dict(R=0.7), init_n=dict(I=5))
+
+sim = ss.Sim(measles, total_pop=2_000, stop=ss.days(365))
+sim.run()
+print('Infections:', round(sim.results.measles.infection.sum()))
+```
+
+### Exercise 2
+
+**Using the final size relation, a model with R0 = 1.5 should infect about 58% of people. Choose β to give R0 = 1.5 with an infectious period of 8 days, run the model for long enough for the outbreak to end, and check.**
+
+β = R0 / the infectious period = 1.5 / 8 ≈ 0.19 per day. The outbreak is much slower than with R0 = 15, so it needs about two years to end.
+
+```{python}
+S, I, R = ss.states('S I R')
+infection = S >> I @ (1.5/8)*I
+recovery  = I >> R @ ss.days(8)
+measles = ss.Disease(infection, recovery, init_prev=0.001)
+
+sim = ss.Sim(measles, total_pop=100_000, stop=ss.days(730))
+sim.run()
+print('Share infected:', round(sim.results.measles.R[-1] / 100_000, 2))
+```
+
+### Exercise 3
+
+**Change the model to density-dependent transmission (`I.n`), choosing β so that R0 is still 15 in a town of 100,000. Then run it in a town of 10,000 and of 1,000,000. How does the outbreak change with the size of the town, and how does this differ from the frequency-dependent model?**
+
+With density-dependent transmission, R0 = β N × the infectious period, so for R0 = 15.2 in a town of 100,000, β = 15.2 / (100,000 × 8) = 1.9 × 10⁻⁵ per infectious person per day. In a town of 10,000, R0 is then only 1.5, so the outbreak is slow and infects about 60% of people; in a town of 1,000,000, R0 is 152, and almost everyone is infected within days. With frequency-dependent transmission, R0 and the shares infected would be the same in towns of every size. Each run prints its R0 as it starts, with `verbose=1`, and `sim.diseases.measles.R0()` gives it.
+
+```{python}
+beta = 1.9e-5 # Per infectious person per day
+for pop in [10_000, 100_000, 1_000_000]:
+    S, I, R = ss.states('S I R')
+    infection = S >> I @ beta*I.n
+    recovery  = I >> R @ ss.days(8)
+    measles = ss.Disease(infection, recovery, init_n=dict(I=10))
+    sim = ss.Sim(measles, total_pop=pop, stop=ss.days(365), verbose=0)
+    sim.run()
+    res = sim.results.measles
+    print('Town of', pop, ' share infected:', round(res.R[-1] / pop, 2), ' peak infectious:', round(res.I.max()))
+```
+

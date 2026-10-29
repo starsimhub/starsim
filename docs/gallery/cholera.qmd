@@ -1,6 +1,10 @@
 ---
 title: Cholera with a water reservoir
 jupyter: python3
+authorship:
+  human: 0
+  ai: 100
+  note: Written by AI
 ---
 
 Cholera spreads mostly through water rather than from person to person: infected people shed bacteria into the water, the bacteria decay over weeks, and susceptible people are infected by drinking it. A model of it needs a state that is not people at all: the amount of bacteria in the water, W. This page models W as a state of the disease that holds a count rather than people, following the model of Codeço (2001).
@@ -56,6 +60,6 @@ Bacteria build up in the water while people are infectious, and outlast them: th
 
 ## Going further
 
-- [Diseases: states, transitions, and rates](../user_guide/models_diseases.qmd) covers states that are counts, and flows from and to `ss.null`.
-- The library's cholera model, `ssl.diseases.Cholera`, is a fuller version written as code (see [Library modules](../user_guide/io_library.qmd)).
+- [Diseases: states, transitions, and rates](../user_guide/building_diseases.qmd) covers states that are counts, and flows from and to `ss.null`.
+- The library's cholera model, `ssl.diseases.Cholera`, is a fuller version written as code (see [Library modules](../user_guide/library_diseases.qmd)).
 - Codeço CT (2001). Endemic and epidemic dynamics of cholera: the role of the aquatic reservoir. *BMC Infectious Diseases* 1:1.

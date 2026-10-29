@@ -1,0 +1,104 @@
+## A2 – Networks
+
+### Exercise 1
+
+**Q: Repeat the comparison of contacts for a less infectious disease, with a chance of infection of 0.083 per contact per day. How much does it matter now that people meet the same contacts every day, and why?**
+
+A: With a chance of infection of 0.083 per contact per day and 3 contacts a day, R0 is about 0.083 × 3 × 8 ≈ 2 with random mixing:
+
+```{python}
+import starsim as ss
+import starsim.library as ssl
+ss.options(jupyter=True)
+
+S, I, R = ss.states('S I R')
+infection = S >> I @ 0.083*I
+recovery  = I >> R @ ss.days(8)
+disease = ss.Disease(infection, recovery, init_prev=0.001, name='disease')
+
+pars = dict(n_agents=10_000, stop=ss.days(200))
+sims = {
+    'Well mixed':              ss.Sim(disease, networks=ss.MixingPool(n_contacts=3), **pars),
+    'New contacts each day':   ss.Sim(disease, networks=ss.RandomNet(n_contacts=3), **pars),
+    'Same contacts every day': ss.Sim(disease, networks=ss.RandomNet(n_contacts=3, dynamic=False), **pars),
+}
+msim = ss.parallel(sims)
+msim.plot('disease.I')
+msim.summarize().loc['disease_infection']
+```
+
+Now it matters a great deal: with random mixing, most people are infected, but with the same 3 contacts every day, far fewer (how many varies a lot from one run to the next, since the outbreak can stall early or find its way through). Over a contact that lasts for the whole infectious period, the chance of passing the infection on is only about 1 − e^(−0.083 × 8) ≈ 50%, and one of each person's 3 contacts is usually the person who infected them, so each case infects on average not much more than one new person. Measles passes along nearly every link, so for measles the network changed the timing but not the size of the outbreak.
+
+### Exercise 2
+
+**Q: Give the network with partnerships of a year `n_contacts=1` and `concurrency=0.2`. Does the infection persist?**
+
+```{python}
+S, I = ss.states('S I')
+infection = S >> I @ ss.peract(m2f=0.1, f2m=0.05)*I
+recovery  = I >> S @ ss.months(6)
+sti = ss.Disease(infection, recovery, init_prev=0.05)
+
+pars = dict(n_agents=5000, start=2000, stop=2030, dt=ss.months(1))
+sims = {
+    'One partner at a time': ss.Sim(sti, networks=ss.SexualNet(dur=ss.years(1)), **pars),
+    '20% with more than one': ss.Sim(sti, networks=ss.SexualNet(dur=ss.years(1), n_contacts=1, concurrency=0.2), **pars),
+}
+msim = ss.parallel(sims)
+msim.plot('sti.I')
+```
+
+A: Yes: with 20% of people having more than one partner at a time, the infection persists. Someone with two partners can pass the infection from one partnership to the other without waiting for either to end, which is why concurrency matters so much for sexually transmitted infections.
+
+### Exercise 3
+
+**Q: Add transmission between men, with a second network `ss.SexualNet(name='msm', between='mm', dur=ss.months(3))` and a β for each network. How much does it add?**
+
+A: β is given as a dict, with a value for each network by name. Between men, the chance per act is the same in both directions, so it is a single number:
+
+```{python}
+S, I = ss.states('S I')
+beta = dict(
+    sexualnet = ss.peract(m2f=0.1, f2m=0.05), # Between men and women
+    msm       = ss.peract(0.1),               # Between men
+)
+infection = S >> I @ beta*I
+recovery  = I >> S @ ss.months(6)
+sti = ss.Disease(infection, recovery, init_prev=0.05)
+
+pars = dict(n_agents=5000, start=2000, stop=2030, dt=ss.months(1))
+mf  = ss.SexualNet(dur=ss.months(3))
+msm = ss.SexualNet(name='msm', between='mm', dur=ss.months(3))
+sti_mf = ss.Disease(S >> I @ ss.peract(m2f=0.1, f2m=0.05)*I, recovery, init_prev=0.05, name='sti')
+sims = {
+    'Between men and women only': ss.Sim(sti_mf, networks=mf, **pars),
+    'Also between men':           ss.Sim(sti, networks=[mf, msm], **pars),
+}
+msim = ss.parallel(sims)
+msim.plot('sti.I')
+```
+
+The network between men adds its own chains of transmission, and the infection settles at a much higher level, more than twice as many infected. Who is in it, and how many partners they have, matters as much as the chance per act: in a model of a real setting, the share of men who take part (`participation=`) would be much smaller than the default.
+
+### Exercise 4
+
+**Q: Add households to the measles model, with a community mixing pool with 2 contacts a day. How much do households add?**
+
+```{python}
+S, I, R = ss.states('S I R')
+infection = S >> I @ 0.19*I
+recovery  = I >> R @ ss.days(8)
+measles = ss.Disease(infection, recovery, init_prev=0.001)
+
+households = ssl.ClusterNet(cluster_size=ss.poisson(4))
+pars = dict(n_agents=10_000, stop=ss.days(100))
+sims = {
+    'Community only': ss.Sim(measles, networks=ss.MixingPool(n_contacts=2), **pars),
+    'Households and community': ss.Sim(measles, networks=[households, ss.MixingPool(n_contacts=2)], **pars),
+}
+msim = ss.parallel(sims)
+msim.plot('measles.I')
+msim.summarize().loc['measles_infection']
+```
+
+A: The community alone gives an R0 of 0.19 × 2 × 8 ≈ 3, and infects most people. Households make the epidemic faster and infect nearly everyone, but they add less than their number of contacts suggests: once one person in a household is infected, the others are soon infected too, so most household contacts after that are wasted.

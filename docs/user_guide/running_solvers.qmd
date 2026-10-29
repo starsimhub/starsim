@@ -1,21 +1,26 @@
 ---
-title: Solvers and when they disagree
+title: Solvers and backends
 jupyter: python3
+authorship:
+  human: 0
+  ai: 100
+  note: Based on the Claude draft on solvers, with a new section on the backends that run them (kernels, Rust, JAX, compiling) and points from the Codex draft
 ---
 
-A model in Starsim says what the compartments are, how people move between them, and at what rates. A *solver* is the method that turns this into numbers over time. The same model can be solved in five ways, and for most models and questions they give the same answer, so Starsim chooses one for you. This page is about the cases where the choice matters: small numbers of people, outbreaks that die out by chance, steps that are too long for the rates, and contacts between particular people.
+A model in Starsim says what the compartments are, how people move between them, and at what rates. A *solver* is the method that turns this into numbers over time. The same model can be solved in six ways, and for most models and questions they give the same answer, so Starsim chooses one for you. This page is about the cases where the choice matters: small numbers of people, outbreaks that die out by chance, steps that are too long for the rates, and contacts between particular people. It ends with speed, and the compiled code (the backends) that runs each solver. How the solvers work inside, and how they are tested against each other, is in [Solvers and backends](architecture_solvers.qmd) in the architecture section.
 
 ## The solvers
 
 | Solver | What it computes | Use it for |
 |---|---|---|
 | `'ode'` | The expected course of the epidemic, as a set of ordinary differential equations: compartments hold fractions of people, and the result is the same on every run | Large populations, comparing scenarios on average, fitting to data, gradients |
+| `'ide'` | As `'ode'`, with each dwell time as it is rather than as Erlang stages (an integro-differential model) | Dwell times far from exponential, and renewal-equation models (see [Branching and rescaling](running_branching.qmd#the-renewal-equation)) |
 | `'binomial'` | Whole people moving between compartments at random, a step at a time (a chain-binomial model) | Simple stochastic runs, and models that are defined in discrete time |
 | `'gillespie'` | Whole people moving one at a time, at random times (Gillespie's exact stochastic simulation algorithm) | Small populations, chance of extinction, exact stochastic dynamics |
 | `'tau'` | As Gillespie, but taking many events at once (tau-leaping), which is close to exact and much faster when there are many events | Large stochastic runs |
 | `'abm'` | Individual agents, each with their own state, age, and contacts | Networks, differences between individuals, histories (who infected whom, time since infection) |
 
-The first four are *compartmental*: they only know how many people are in each compartment (or group, if the model is [stratified](models_stratification.qmd)). Agents know who each person is.
+The first five are *compartmental*: they only know how many people are in each compartment (or group, if the model is [stratified](building_stratification.qmd)). Agents know who each person is. Any of them can also run the model as a branching process, with depletion turned off (`branching=True`; see [Branching and rescaling](running_branching.qmd)).
 
 ## How Starsim chooses
 
@@ -51,10 +56,13 @@ For a large population and a model with nothing individual in it, the solvers ag
 sims = {}
 for solver in ['ode', 'binomial', 'gillespie', 'tau', 'abm']:
     sims[solver] = ss.Sim(measles, total_pop=100_000, stop=ss.days(150), solver=solver)
+sims['abm'] = sims['abm'].new(n_agents=100_000) # One agent per person: see below
 
 msim = ss.parallel(sims)
-msim.plot()
+msim.plot('measles.I')
 ```
+
+The agents are given `n_agents=100_000`, one per person. By default a sim has 10,000 agents, so here each would stand for 10 people, and the 10 infectious people at the start would be a single agent: an outbreak started by one case, which dies out two times in three (below). When a model's start is a few people, keep agents at one per person, at least at the start; see [Branching and rescaling](running_branching.qmd).
 
 The table gives each result over the whole run: the total of each flow (`measles_infection` is the number of infections) and the final value of each state:
 
@@ -62,7 +70,7 @@ The table gives each result over the whole run: the total of each flow (`measles
 msim.summarize()
 ```
 
-The classic final-size equation for an SIR model says that a share *z* of the susceptible people are infected in the end, where *z* = 1 − exp(−1.5 *z*): *z* = 0.58, or about 5,800 of the 10,000 who are susceptible. The ODE is close to that (it is not quite over by day 150), and each stochastic run is within a few hundred of it. Each stochastic run is one draw from many possible outbreaks, so a single run of one is not a better or worse answer than the ODE: to compare them properly, run the stochastic solvers many times (see [Uncertainty, seeds, and many runs](running_uncertainty.qmd)).
+The classic final-size equation for an SIR model says that a share *z* of the susceptible people are infected in the end, where *z* = 1 − exp(−1.5 *z*): *z* = 0.58, or about 5,800 of the 10,000 who are susceptible. The ODE is close to that (it is not quite over by day 150), and so are the stochastic runs: the chain binomial, tau-leaping, and agents within a few hundred, and the Gillespie run lower, since its outbreak happened by chance to take off later and is further from over by day 150. Each stochastic run is one draw from many possible outbreaks, so a single run of one is not a better or worse answer than the ODE: to compare them properly, run the stochastic solvers many times (see [Scenarios](running_scenarios.qmd)).
 
 ## When they disagree
 
@@ -80,7 +88,7 @@ The note suggests running it many times with a stochastic solver. Here it is run
 
 ```{python}
 msim = sim.run(solver='gillespie', n_runs=200)
-msim.plot('measles', lines=True)
+msim.plot('measles.I', lines=True)
 ```
 
 Most runs show nothing: the outbreak died out. Counting the runs with fewer than 100 infections:
@@ -116,14 +124,14 @@ The ODE has a first epidemic, a trough in which the number infectious falls belo
 
 ```{python}
 msim = town.run(solver='tau', n_runs=8)
-msim.plot('measles', lines=True)
+msim.plot('measles.I', lines=True)
 ```
 
 ```{python}
 msim.summarize().loc['measles_infection']
 ```
 
-In every stochastic run, measles dies out after the first epidemic, with about 6,700 infections in all: a sixth of the ODE's. Neither is wrong as a model, but only the stochastic one represents a town in which measles can disappear, and the difference is the whole answer to a question about long-term burden. Where fade-out matters, use a stochastic solver, or add introductions from outside (see [Places and movement](populations_places.qmd)).
+In every stochastic run, measles dies out after the first epidemic, with about 6,700 infections in all: a sixth of the ODE's. Neither is wrong as a model, but only the stochastic one represents a town in which measles can disappear, and the difference is the whole answer to a question about long-term burden. Where fade-out matters, use a stochastic solver, or add introductions from outside (see [Geography](populations_geography.qmd)).
 
 ### The length of a step
 
@@ -164,7 +172,7 @@ The ODE peaks on day 6, and agents with steps of a quarter of a day within a day
 daily.check_dt()
 ```
 
-A result that changes by more than a few percent when the step is halved depends on the step, and the step should be smaller. The shorter the generation time of an infection compared with the step, the more this matters: measles is extreme, and for an infection with rates of a few percent per step (as for most models with daily steps and durations of weeks), the step makes little difference. See [Time](running_time.qmd) for how to set the step.
+A result that changes by more than a few percent when the step is halved depends on the step, and the step should be smaller. The shorter the generation time of an infection compared with the step, the more this matters: measles is extreme, and for an infection with rates of a few percent per step (as for most models with daily steps and durations of weeks), the step makes little difference. See [Time](building_time.qmd) for how to set the step.
 
 A threshold on a clock acts at the step boundaries, since the clock is read once a step. A rate that applies until 13 weeks of pregnancy (`where=preg.P.time < ss.weeks(13)`), on monthly steps, applies while the clock reads 0, 1, and 2 months, and someone who arrives during a step spends on average half of it at 0: so it applies for about 2.5 of the 3 months it should, and the event it governs happens less often than the inputs imply (11.9% of pregnancies miscarry against 14.1%, in FPsim's case). `sim.check_dt()` shows it, and a shorter step reduces it.
 
@@ -194,7 +202,19 @@ for solver in ['binomial', 'tau', 'gillespie']:
     ss.Sim(measles, total_pop=1_000_000, stop=ss.days(50), solver=solver).run()
 ```
 
-Each says how long it took. Gillespie handled about two million events here in well under a second; with tens of millions of events, use tau-leaping. Agents take time in proportion to the number of agents and the number of steps; a population larger than the number of agents is represented by having each agent stand for several people (see [Population rescaling](running_rescaling.qmd)).
+Each says how long it took. Gillespie handled about two million events here in well under a second; with tens of millions of events, use tau-leaping. Agents take time in proportion to the number of agents and the number of steps; a population larger than the number of agents is represented by having each agent stand for several people (see [Branching and rescaling](running_branching.qmd)).
+
+## Backends
+
+Whichever solver is chosen, the numbers are worked out by compiled code rather than by Python, which is why a compartmental run of a million people takes milliseconds. Starsim has three engines, and chooses among them itself; none changes the results, so most users never need this section, except to know why the first run after installing Starsim can be slow.
+
+- **The kernels** are compiled loops: they run compartmental models step by step, the passes over the agents (who is infected, who recovers), and the random draws. There are two copies that give the same numbers bit for bit: one in Numba, which is compiled on first use after installing Starsim (a few minutes, once; it is then kept on disk), and one in Rust, compiled ahead of time if it has been built (`cd starsim/solvers/rust && ./build`, from the source). `ss.options.kernels` chooses: `'auto'` (the default) uses Rust if it has been built and Numba otherwise, running short compartmental runs as plain Python while Numba has not yet compiled; `'rust'` and `'numba'` ask for one; `'python'` runs the compartmental kernels as plain Python, which is slow but easy to step through in a debugger.
+- **JAX** takes a whole run of the ODE, the chain binomial, or tau-leaping when the run is long enough to repay starting JAX (about half a second, once a session): many groups, many steps, or many runs. The choice is made from the size of the model, never from timing, so a run with a seed gives the same results whenever it is run. Setting `sim.jax = True` or `False` before the run forces it either way. JAX is also what computes [gradients](calibration_gradients.qmd).
+- **Plain Python and NumPy** run the rest: the step loop of agent-based runs, and modules written as code. Your own loops in a module can be compiled with `@ss.jit` (see [Custom modules](building_modules.qmd)).
+
+To compile everything at once rather than on first use, run `ss.compile()` (or `starsim compile` from the command line): once after installing, when building a Docker image, in continuous integration, or before a long batch of runs on a cluster, so that no run waits for it (see [Deployment](running_deploy.qmd)). With `verbose=2`, a run says which engine took it and why (e.g. "engine: kernels: a short run, shorter than JAX takes to start"), and why a compartmental run was taken step by step rather than in one call (an intervention that needs its own step, for example).
+
+Two settings of the sim change the numerical method itself rather than the engine. `integrator=` is the ODE's scheme: `'rk4'` (fourth-order Runge–Kutta, the default) or `'euler'`. `substeps=` is the number of substeps in each time step, for the ODE and the chain binomial; by default there are enough that no compartment turns over by more than a small share in one, and `substeps=1` takes each step whole, as discrete-time chain-binomial models in the literature do.
 
 ## Which to use
 
@@ -203,6 +223,7 @@ Each says how long it took. Gillespie handled about two million events here in w
 | The expected course of an epidemic in a large population | `'ode'` (the default for a compartmental model) |
 | Fitting a model to data, or gradients | `'ode'` (see [Calibration](calibration_fitting.qmd)) |
 | The chance that an outbreak takes off or dies out, or the spread of possible outbreaks | `'gillespie'` (or `'tau'` for large populations), with many runs |
+| The same for one introduction into a large population, or chains of who infected whom | `branching=True`, with `'gillespie'`, or `'abm'` for chains, and `until=` to stop the runs that take off ([Branching and rescaling](running_branching.qmd)) |
 | A model written in discrete time, such as a chain-binomial model from the literature | `'binomial'` with `substeps=1` |
 | Networks, contact tracing, individual histories, or differences between people that groups can't hold | `'abm'` (chosen for you when the model has them) |
 
@@ -213,8 +234,9 @@ Each says how long it took. Gillespie handled about two million events here in w
 - **An ODE with fewer than one person infected.** The ODE notes when the number infected falls below one and then rises again; a stochastic model would usually die out there.
 - **Approximations under `'ode'`.** A network, or anything else that needs agents, is replaced by its standard compartmental form when you ask for `'ode'`, with a note; read the notes (they are also kept in `sim.notes`).
 
-## See also
+## Further reading
 
-- [Repeated runs and uncertainty](../tutorials/t6_uncertainty.qmd), the tutorial that runs the measles model many times
-- [Uncertainty, seeds, and many runs](running_uncertainty.qmd), for `n_runs`, intervals, and seeds
-- [Solvers](../architecture/solvers.qmd), for how Starsim chooses, the approximations, and the tests that check the solvers against each other
+- [Keeling & Ross: On methods for studying stochastic disease dynamics](https://pmc.ncbi.nlm.nih.gov/articles/PMC2705976/): ODEs, chain binomials, Gillespie, and tau-leaping compared
+- [GillesPy2 documentation](https://gillespy2.readthedocs.io/en/latest/): a library of Gillespie and tau-leaping solvers for the same kind of model
+- [Epiverse epidemics](https://epiverse-trace.github.io/epidemics/articles/epidemics.html): deterministic and stochastic compartmental models in R
+- [odin.dust](https://mrc-ide.github.io/odin.dust/): one model compiled as an ODE or as a stochastic discrete-time model

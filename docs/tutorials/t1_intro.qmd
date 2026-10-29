@@ -1,13 +1,17 @@
 ---
-title: Getting started
+title: "T1 – Getting started"
 jupyter: python3
+authorship:
+  human: 10
+  ai: 90
+  note: Written by AI and lightly edited by a human; merged with a second AI draft
 ---
 
 Starsim is a framework for modeling the spread of disease, and the health of populations more generally. A model in Starsim is written the way an epidemiologist would describe it: the states people can be in, the transitions between them, and the rates of those transitions. Starsim then runs it, either as a compartmental model (a set of equations for the number of people in each state) or as agents (one simulated person at a time).
 
-These tutorials follow one example throughout: a deliberately simplified outbreak of measles in a town of 100,000 people. This first tutorial writes the simplest version of it, runs it, and shows how to check what was built. Later tutorials add a latent period, age groups, vaccination, data, and several towns.
+These tutorials follow one example throughout: a deliberately simplified outbreak of measles in a town of 100,000 people. The numbers are typical of measles, but the model is for teaching, not a calibrated model of any real outbreak. This first tutorial asks the simplest question about it: **how does an outbreak grow, and why does it stop?** It writes the simplest model that can answer this, runs it, and shows how to check what was built. [Tutorial 2](t2_model.qmd) goes through the same model in more depth, [Tutorial 3](t3_disease.qmd) gives the disease a more realistic course, and later tutorials add age groups, vaccination, several towns, and data.
 
-By the end of this tutorial, you will be able to:
+You need only basic Python: variables, numbers, and function calls. By the end of this tutorial, you will be able to:
 
 - write an SIR model and run it;
 - plot its results and read what the run prints;
@@ -41,7 +45,7 @@ recovery  = I >> R @ ss.days(8)   # From I to R, after 8 days on average
 measles = ss.Disease(infection, recovery, init_prev=0.001)
 ```
 
-A state in a rate, like `I` in `1.9*I`, is the share of people in that state. A duration, like `ss.days(8)`, is the average time spent in a state before leaving it. The rate 1.9 has no unit of its own, so it takes the unit of the duration: 1.9 per day. `init_prev=0.001` starts the outbreak with 0.1% of people infectious (100 people in a town of 100,000), and everyone else susceptible.
+Read `S >> I @ 1.9*I` as "from S to I, at a rate of 1.9 × I". A state in a rate, like `I` in `1.9*I`, is the share of people in that state. A duration, like `ss.days(8)`, is the average time spent in a state before leaving it. The rate 1.9 has no unit of its own, so it takes the unit of the duration: 1.9 per day. [`ss.Disease`](../api/diseases.qmd) puts the transitions together into a disease, and `init_prev=0.001` starts the outbreak with 0.1% of people infectious (100 people in a town of 100,000), and everyone else susceptible.
 
 The disease is named `measles`, after its variable. These are the standard equations of an SIR model, which `equations()` prints:
 
@@ -53,7 +57,7 @@ Here `dur` is the infectious period (8 days), so `I / dur` is the rate of recove
 
 ## Running the model
 
-To run the model, give it to a sim (`ss.Sim`), with the size of the population and how long to run for, here 50 days:
+To run the model, give it to a sim ([`ss.Sim`](../api/sim.qmd)), with the size of the population and how long to run for, here 50 days:
 
 ```{python}
 sim = ss.Sim(measles, total_pop=100_000, stop=ss.days(50))
@@ -65,7 +69,9 @@ The run prints three lines: what it ran (the disease, 100,000 people, as an ODE,
 
 Starsim chose to run this model as an ODE (a deterministic compartmental model, solved as a set of differential equations), since nothing in it needs individual people. The plot shows each state (`S`, `I`, and `R`), and each transition as the number of people who made it each day (`infection` and `recovery`).
 
-With an R0 of 15 and nobody immune, almost everyone in the town is infected, and the outbreak peaks within a week. This is far faster than real measles outbreaks, because the model has no latent period: people are infectious from the moment they are infected, whereas with measles they are infected for about 10 days before they can infect anyone else. [Tutorial 3](t3_structure.qmd) adds this.
+The curves answer the question we started with. At first, almost everyone is susceptible, so each infectious person infects about 15 others, and the number infectious grows several times over in a few days. But each infection uses up a susceptible person. Once most of the town has been infected, an infectious person meets mostly people who are already immune, and infects fewer than one other person before recovering: then the number infectious falls, even though β has not changed. The outbreak stops because it runs out of susceptible people, not because the disease becomes less contagious.
+
+With an R0 of 15 and nobody immune, almost everyone in the town is infected, and the outbreak peaks within a week. This is far faster than real measles outbreaks, because the model has no latent period: people are infectious from the moment they are infected, whereas with measles they are infected for about 10 days before they can infect anyone else. [Tutorial 3](t3_disease.qmd) adds this.
 
 ## Checking the model
 
@@ -79,20 +85,29 @@ It is worth reading `describe()` for every new model, to check that it is the mo
 
 ## The same model as agents
 
-Starsim can also run the same model as agents: one simulated person at a time, each with their own state, who are infected and recover by chance. Giving `n_agents=` says how many agents to simulate. Here, 10,000 agents stand for the 100,000 people of the town, so each agent stands for 10 people:
+Starsim can also run the same model as agents: one simulated person at a time, each with their own state, who are infected and recover by chance. Giving `n_agents=` says how many agents to simulate. Here, 10,000 agents stand for the 100,000 people of the town, so each agent stands for 10 people. To compare the two, [`ss.parallel()`](../api/run.qmd) runs several sims, each with a label, and plots any of their results together, here the number infectious:
 
 ```{python}
-sim = ss.Sim(measles, total_pop=100_000, n_agents=10_000, stop=ss.days(50))
-sim.run()
-sim.plot()
+agents = ss.Sim(measles, total_pop=100_000, n_agents=10_000, stop=ss.days(50))
+msim = ss.parallel({'ODE': sim, 'Agents': agents})
+msim.plot('measles.I')
 ```
 
-The epidemic is much the same: almost everyone is infected, and the peak is about as high. It comes a few days later than in the ODE, though, and the run prints a note saying why. Agents move one step of time at a time (by default, a day), and this outbreak is so fast that a day is a long step: the number of infectious people grows several times over in a day. With a shorter step, such as `dt=ss.days(0.25)`, agents follow the ODE closely; [Tutorial 2](t2_model.qmd) shows how.
+The epidemic is much the same: almost everyone is infected, and the peak is about as high. It comes a few days later as agents, though, and the run prints a note saying why. Agents move one step of time at a time (by default, a day), and this outbreak is so fast that a day is a long step: the number of infectious people grows several times over in a day. With a shorter step, such as `dt=ss.days(0.25)`, agents follow the ODE closely; [Tutorial 2](t2_model.qmd) shows how.
 
-Agents are what a model needs when people differ in ways that compartments can't hold, such as each person's own contacts in a network. For a model like this one, where everyone mixes with everyone else, both give the same answer when the step is short enough. The model is written the same way either way; the [tutorials](../tutorials.qmd) that follow mostly use the ODE, since it is fast and gives the expected epidemic, and say where agents would give something different.
+Agents are what a model needs when people differ in ways that compartments can't hold, such as each person's own contacts in a network. For a model like this one, where everyone mixes with everyone else, both give the same answer when the step is short enough. The model is written the same way either way. The core tutorials (T1 to T9) mostly use the ODE, since it is fast and gives the expected epidemic, and say where agents would give something different; the [agent-based tutorials](a1_diseases.qmd) (A1 to A5) go further with agents.
 
 ## Exercises
 
 1. Suppose people with measles were infectious for only 5 days, with the same β. What would R0 be? Change the model, run it, and check the R0 the run prints. How does the epidemic change?
 2. Run the agent version of the model with 1,000 agents instead of 10,000 (each standing for 100 people). What changes in the plot, and why?
 3. Using the output of `describe()`, find out how Starsim assumes that people mix, and how long people stay infectious (the distribution as well as the average).
+
+[Solutions](solutions.qmd) · Next: [T2 – Building a model](t2_model.qmd)
+
+## Further reading
+
+- [Wikipedia: Compartmental models in epidemiology](https://en.wikipedia.org/wiki/Compartmental_models_in_epidemiology): the SIR model and its relatives, with their equations
+- [EpiModel: Mathematical modeling of infectious disease dynamics](https://epimodel.github.io/EpiModel/articles/Intro.html): the same SIR model in R, as a compartmental model and as individuals
+- [odin2: Getting started](https://mrc-ide.github.io/odin2/articles/odin2.html): an SIR model written as equations in R
+- [Epiverse epidemics: Getting started](https://epiverse-trace.github.io/epidemics/articles/epidemics.html): ready-made compartmental epidemic models in R

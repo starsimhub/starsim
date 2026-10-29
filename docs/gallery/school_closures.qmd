@@ -1,0 +1,78 @@
+---
+title: Closing schools
+jupyter: python3
+authorship:
+  human: 0
+  ai: 100
+  note: Written by AI, adapting the school closure example of the Epidemics R package
+---
+
+Closing schools is one of the first measures considered against a new respiratory infection. It removes the contacts children make at school, but not those at home or elsewhere, so whether it helps depends on how much of the spread happens at school, and on when the schools close and reopen. This page models a closure as the loss of one setting's contacts, adapting the school closure example of the [Epidemics](https://epiverse-trace.github.io/epidemics/) R package: an SEIR model of an influenza-like infection in the population of the United Kingdom, in three age groups, with the contact matrices of Prem et al. (2021) for each setting.
+
+## The model
+
+| Parameter | Value | Meaning |
+|---|---|---|
+| β | 0.016 per contact | Chance of infection per contact with an infectious person |
+| Latent period | 3 days | Mean time in E (exponential) |
+| Infectious period | 7 days | Mean time in I (exponential) |
+| Age groups | 0–19, 20–39, 40+ | With the shares of the United Kingdom's population |
+| Contacts | Prem et al. (2021) | One matrix each for home, school, work, and the rest of the community |
+| Infectious at the start | One in a million | |
+| Closure | Days 200 to 260 | School contacts removed; the others go on |
+
+```{python}
+import starsim as ss
+ss.options(jupyter=True)
+
+S, E, I, R = ss.states('S E I R')
+flu = ss.Disease(
+    infection = S >> E @ 0.016*I,
+    onset     = E >> I @ ss.days(3),
+    recovery  = I >> R @ ss.days(7),
+    init      = dict(I=1e-6),
+    name      = 'flu',
+)
+flu.stratify(age=[0, 20, 40])
+
+home, school, work, community = [ss.contacts('United Kingdom', layer=layer) for layer in ['home', 'school', 'work', 'community']]
+```
+
+R0 is about 1.5. The closure is a modifier of the school contacts: from day 200 to day 260 they are multiplied by zero, and when it ends, they are back as they were, since a modifier never changes the contacts themselves.
+
+```{python}
+closure = ss.modify(school, multiply=0, start=ss.days(200), stop=ss.days(260))
+```
+
+## Result
+
+```{python}
+pars = dict(people=ss.people('United Kingdom'), networks=[home, school, work, community], stop=ss.days(600))
+sims = {
+    'Schools open': ss.Sim(flu, **pars),
+    'Schools closed for 60 days': ss.Sim(flu, interventions=closure, **pars),
+}
+msim = ss.parallel(sims)
+msim.plot('flu_I')
+```
+
+The closure doesn't prevent the epidemic. It delays the peak by about six weeks and lowers it by about a fifth, which could matter for hospitals, but most of those it spares are infected after schools reopen, since the epidemic resumes among people who are still susceptible: the number infected in all is only about 3% lower.
+
+```{python}
+msim.summarize().loc['flu_infection']
+```
+
+By age, the number infectious falls in every group while schools are closed, and most among children, who make most of the contacts at school:
+
+```{python}
+sims['Schools closed for 60 days'].results.flu.I.by('age').plot()
+```
+
+The Epidemics package says a closure another way: as a share by which the contacts of each age group fall (e.g. by half for those under 20). That works in Starsim too, as a modifier of each group's susceptibility and transmissibility, e.g. `ss.modify(flu.rel_sus, multiply=0.5, where=flu.age < 20, start=..., stop=...)`. Removing the school contacts says more directly what a closure does, when the contacts by setting are known.
+
+## Going further
+
+- [Interventions and scenarios](../tutorials/t5_interventions.qmd) compares scenarios in the measles model, including school terms.
+- [Interventions](../user_guide/interventions_interventions.qmd) covers `ss.modify()` and `ss.change()`; [Population data](../user_guide/populations_data.qmd) covers the contact matrices by country and setting.
+- [Epidemics: modeling non-pharmaceutical interventions](https://epiverse-trace.github.io/epidemics/articles/modelling_interventions.html), the original of this example.
+- Prem K, et al. (2021). Projecting contact matrices in 177 geographical regions. *PLoS Computational Biology* 17(7): e1009098.

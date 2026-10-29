@@ -1,0 +1,116 @@
+---
+title: Maternal-child health
+jupyter: python3
+authorship:
+  human: 45
+  ai: 55
+  note: Adapted from the Starsim 3 user guide page on library modules; ported to v4, with the comparisons with and without each module written by AI
+---
+
+Transmission from mother to child, and the outcomes of a pregnancy (stillbirth, preterm birth, low birth weight, neonatal death), are harder to model than a standard disease: they depend on the timing of pregnancy, on which module acts first in a step, and on how deaths around birth are counted. The `ssl.mnch` submodule of the Starsim library (`import starsim.library as ssl`; see [Library: diseases](library_diseases.qmd) for what the library is) has worked examples of these patterns. All of them build on pregnancy (`ss.Pregnancy`, which gives each pregnancy as states and transitions, with conception, delivery, and the unborn child as an agent) and on `ss.PrenatalNet`, the network between a pregnant woman and her unborn child; both are described on [Demographics](populations_demographics.qmd).
+
+| Class | Based on | Description |
+| --- | --- | --- |
+| `ssl.mnch.CongenitalDisease` | `ssl.AgentSIR` | Congenital outcomes (stillbirth, congenital infection, or none) for children infected before birth |
+| `ssl.mnch.NeonatalSepsis` | `ssl.AgentSIR` | Infects newborns at birth, and kills some within days |
+| `ssl.mnch.FetalHealth` | `ss.Module` | Tracks fetal growth and birth weight (low, very low, and small for gestational age) |
+| `ssl.mnch.fetal_infection` | `ss.Connector` | Links a disease to fetal health: infection in pregnancy brings delivery forward and restricts growth |
+| `ssl.mnch.treat_pregnant` | `ss.Intervention` | Treats infected pregnant women, partly reversing the damage to the fetus |
+
+Like the rest of the library, these are illustrative: the probabilities and effect sizes are placeholders, chosen to make the effects easy to see. The examples below use a step of a week, since pregnancy outcomes are timed in weeks, and a high fertility rate, so that a small population gives enough births:
+
+```{python}
+import starsim as ss
+import starsim.library as ssl
+ss.options(jupyter=True)
+
+mnch_pars = dict(start='2000', stop='2005', n_agents=2000, dt=ss.weeks(1))
+demographics = lambda: [ss.Pregnancy(fertility_rate=ss.freqperyear(100), burnin=True), ss.Deaths()]
+networks = lambda: [ss.PrenatalNet(), ss.RandomNet()]
+```
+
+## Congenital outcomes
+
+`CongenitalDisease` is an SIR that is passed from an infected mother to her unborn child through `ss.PrenatalNet`. For each child infected before birth, it draws an outcome from `birth_outcomes` (by default stillbirth, congenital infection, or a normal birth, with probabilities 0.3, 0.4, and 0.3), and schedules it for around the time of delivery. An outcome that kills (a stillbirth or miscarriage) is scheduled one step before delivery, so that it happens before birth; otherwise `ss.Pregnancy`, which runs earlier in each step, would already have delivered the baby, and the loss would be counted as a live birth followed by a neonatal death. Compared with the same population without transmission (`beta=0`), the extra stillbirths are those the disease causes (and are no longer counted as births):
+
+```{python}
+def congenital(beta):
+    disease = ssl.mnch.CongenitalDisease(beta=beta, init_prev=0.2)
+    return ss.Sim(diseases=disease, demographics=demographics(), networks=networks(), **mnch_pars)
+
+for label, beta in {'No transmission': 0, 'Transmission': ss.peryear(20)}.items():
+    sim = congenital(beta).run()
+    preg = sim.results.pregnancy
+    print(label)
+    print('  Births:', int(preg.birth.sum()))
+    print('  Stillbirths:', int(preg.stillbirth.sum()))
+    print('  Congenital infections:', sim.diseases.congenitaldisease.congenital.sum())
+```
+
+Among the children infected before birth, the numbers of stillbirths and congenital infections follow the probabilities in `birth_outcomes`.
+
+To use this in a disease of your own, build on `ssl.mnch.CongenitalDisease` (or copy its `set_congenital()` and `step_congenital()`; `ss.Infection` calls `set_congenital()` for each person infected before birth): define `birth_outcome_keys` and `birth_outcomes` in its parameters, add a `ti_<key>` state for each outcome (and a true/false state for each outcome that doesn't kill), and call `self.step_congenital()` from `step_state()`. Outcomes named `'stillborn'`, `'miscarriage'`, or `'neonatal_deaths'` are deaths; the first two happen before delivery and the third after it. `ssl.HIV` (see [Library: diseases](library_diseases.qmd)) also uses `set_congenital()`, to infect children of infected mothers at birth.
+
+## Neonatal deaths
+
+`NeonatalSepsis` infects a share of newborns at birth (`init_prev`, by default 30%), and kills half of them (`p_death`) within about a week. It shows that neonatal deaths need no special handling: `ss.Pregnancy` counts any death of a baby aged 0 to 28 days, from any cause, as a neonatal death. The results are therefore in the pregnancy module, not the disease, and comparing with a sim without sepsis gives the deaths it causes:
+
+```{python}
+scenarios = {
+    'No sepsis': ss.Sim(demographics=demographics(), networks=networks(), **mnch_pars),
+    'Sepsis':    ss.Sim(diseases=ssl.mnch.NeonatalSepsis(), demographics=demographics(), networks=networks(), **mnch_pars),
+}
+for label, sim in scenarios.items():
+    sim.run()
+    print(label)
+    print('  Births:', int(sim.results.pregnancy.birth.sum()))
+    print('  Neonatal deaths:', int(sim.results.pregnancy.neonatal_deaths.sum()))
+```
+
+## Fetal health
+
+`FetalHealth` doesn't depend on any particular disease: it tracks a baseline fetal weight percentile for each pregnancy, and has two levers that other modules can pull: bringing delivery forward (the risk of a preterm birth) and adding growth restriction (the risk of a low birth weight). At delivery, it works out the birth weight from the gestational age, the percentile, and the growth restriction, and classifies newborns as of low birth weight (under 2,500 g), very low birth weight (under 1,500 g), small for gestational age, or small vulnerable newborns (any of these, or preterm).
+
+The `fetal_infection` connector pulls those levers when a pregnant woman is infected: each infection brings delivery forward by about 3 weeks (`timing_shift`) and restricts growth by 15% (`growth_penalty`). The `treat_pregnant` intervention treats infected pregnant women (90% of them, `p_treat`), and reverses 70% of the damage. Both are written as code for an SIR written as code, so the disease here is `ssl.AgentSIR`, named `'sir'`. `FetalHealth` is given as `custom`, since it is not a disease, network, demographic module, or intervention. Three scenarios show the baseline, the effect of infection, and how much treatment from 2001 recovers:
+
+```{python}
+def fetal(beta, treat=False):
+    treatment = ssl.mnch.treat_pregnant(disease='sir', start_year=2001) if treat else None
+    return ss.Sim(
+        diseases      = ssl.AgentSIR(beta=beta, name='sir'),
+        demographics  = demographics(),
+        connectors    = ssl.mnch.fetal_infection(),
+        interventions = treatment,
+        custom        = ssl.mnch.FetalHealth(),
+        networks      = networks(),
+        **mnch_pars,
+    )
+
+scenarios = {
+    'No infection': fetal(beta=0),
+    'Infection, untreated': fetal(beta=ss.peryear(20)),
+    'Infection, treated from 2001': fetal(beta=ss.peryear(20), treat=True),
+}
+msim = ss.parallel(scenarios, parallel=False)
+
+import matplotlib.pyplot as plt
+fig = plt.figure()
+for label, sim in zip(scenarios, msim.sims):
+    res = sim.results.fetal_health
+    births = int(res.n_births.sum())
+    print(label)
+    print('  Births:', births)
+    print('  Low birth weight (%):', round(100*res.n_lbw.sum()/births))
+    print('  Small vulnerable newborns (%):', round(100*res.n_svn.sum()/births))
+    plt.plot(res.timevec, res.n_lbw.cumsum(), label=label)
+plt.ylabel('Babies born with a low birth weight (cumulative)')
+plt.legend()
+plt.show()
+```
+
+Infection in pregnancy raises the share of babies born with a low birth weight several times over, and treatment brings most of it back down. To adapt this to another disease, build on `fetal_infection` and replace `_apply_damage()` with the disease's own effects: for example, a larger growth penalty for severe infections than for mild ones.
+
+## Further reading
+
+- [WHO: Born too soon](https://www.who.int/publications/i/item/9789240073890): the decade of action on preterm birth, and the definitions of preterm and low birth weight used here
+- [LiST: the Lives Saved Tool](https://www.livessavedtool.org/): a widely used model of the effect of maternal and child health interventions on mortality

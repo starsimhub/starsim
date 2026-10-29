@@ -78,6 +78,7 @@ def test_compartmental():
     solvers = ['rk4', 'euler', 'binomial', 'tau', 'gillespie']
     for solver in solvers: # Small enough for plain Python
         same(lambda s: ss.Sim(make_seir(), total_pop=2000, unit='day', stop=60, rand_seed=s, **how(solver), **kw), compiled + ['python'], seeds=[2])
+        same(lambda s: ss.Sim(make_seir(), total_pop=2000, unit='day', stop=40, rand_seed=s, branching=True, **how(solver), **kw), compiled + ['python'], seeds=[2]) # A branching process: the count in a flow's own group (ss.kernels.GROUP)
     if rust:
         for key in ['sir', 'commute', 'delay']:
             make, pars = models[key]
@@ -85,6 +86,9 @@ def test_compartmental():
                 if solver == 'gillespie' and key == 'commute':
                     continue # Too slow for a quick test
                 same(lambda s: ss.Sim(make(), **sc.mergedicts(pars, kw), **how(solver), rand_seed=s), compiled, seeds=[0])
+        make, pars = models['towns'] # A branching process by place, which the exact solver steps place by place
+        for solver in ['binomial', 'gillespie']:
+            same(lambda s: ss.Sim(make(), **sc.mergedicts(pars, kw, dict(stop=30)), **how(solver), branching=True, rand_seed=s), compiled, seeds=[0])
         make, pars = models['seir']
         def stepped(seed):
             sim = ss.Sim(make(), **sc.mergedicts(pars, kw), solver='binomial', rand_seed=seed)
@@ -104,6 +108,11 @@ def test_jax():
     ref = ss.Sim(make(), **sc.mergedicts(pars, kw), solver='ode')
     ref.jax = False
     assert np.allclose(ode.run().results.sir.I.values, ref.run().results.sir.I.values, rtol=1e-9, atol=0) # To rounding: XLA orders the arithmetic its own way
+    ode = ss.Sim(make(), **sc.mergedicts(pars, kw), solver='ode', branching=True) # A branching process, by place
+    ode.jax = True
+    ref = ss.Sim(make(), **sc.mergedicts(pars, kw), solver='ode', branching=True)
+    ref.jax = False
+    assert np.allclose(ode.run().results.sir.I.values, ref.run().results.sir.I.values, rtol=1e-9, atol=0)
     if rust:
         make, pars = models['seir']
         with mock.patch.object(ss.solvers.choose, 'jax_after', 0): # Every run in JAX

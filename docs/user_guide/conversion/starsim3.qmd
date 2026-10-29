@@ -1,0 +1,113 @@
+---
+title: Starsim v3
+authorship:
+  human: 0
+  ai: 100
+  note: Written by AI
+jupyter: python3
+---
+
+This page is for people with a Starsim 3 model: custom `ss.Infection` subclasses with their own states and step methods, `ss.MFNet` and `ss.RandomNet`, `ss.Births` and `ss.Deaths`, custom interventions and connectors, and `ss.Calibration`. For you Starsim 4 is an upgrade rather than a switch. This page says what you get, what still runs, and what does not yet; the [migration guide](../../migration/v3_v4.md) maps Starsim 3 code to Starsim 4 job by job, and lists what changes meaning.
+
+## The same model in both
+
+An SIS on a random network, as Starsim 3 wrote it, with the library disease written as code and a `beta` for each network:
+
+```{python}
+#| eval: false
+import starsim as ss # Starsim 3
+
+sis = ss.SIS(beta=dict(randomnet=0.05), dur_inf=ss.years(1), init_prev=0.01)
+sim = ss.Sim(diseases=sis, networks=ss.RandomNet(n_contacts=4), n_agents=5000, start=2000, stop=2010, dt=1/12)
+sim.run()
+```
+
+In Starsim 4, the same disease is declared as states and transitions. Two things change meaning on the way. A bare number in a Starsim 3 `beta` dict was a probability per step, so here it is written `ss.prob(0.05, 'month')`; copied as a bare number, it would be a rate per year, 12 times too low at monthly steps (Starsim 4 warns when this happens). And a duration in a declared transition is exponential with that mean, unless a distribution is given, while Starsim 3's `ss.SIS` drew a lognormal `dur_inf`; `dur=ss.lognorm_ex(mean=ss.years(1))` keeps the old shape. Here the textbook exponential is used:
+
+```{python}
+import starsim as ss
+ss.options(jupyter=True)
+
+S, I = ss.states('S I')
+sis = ss.Disease(
+    infection = ss.Transition(S, I, rate=dict(randomnet=ss.prob(0.05, 'month')) * I),
+    recovery  = ss.Transition(I, S, dur=ss.years(1)),
+    init_prev = 0.01,
+)
+sim = ss.Sim(sis, networks=ss.RandomNet(n_contacts=4), n_agents=5000, start=2000, stop=2010, dt=ss.years(1/12), verbose=0)
+sim.run()
+print('Infections:', round(sim.results.sis.infection.sum()))
+sim.plot()
+```
+
+A declared disease can then be described (`sim.describe()`), run as an ODE or a stochastic compartmental model when nothing in the sim needs agents, swept and compared with `ss.parallel()` and `msim.diff()`, and fitted with `sim.fit()`.
+
+## What still runs
+
+Modules written as code are still part of Starsim 4: `ss.Module`, `ss.Disease` and `ss.Infection` subclasses with `define_states()`, `set_prognoses()`, and `step_state()`, custom networks, interventions, analyzers, and connectors. They run as agents, unchanged, and can sit in the same sim as declared diseases. The library `ss.SIR`, `ss.SIS`, and `ss.SEIR` are now declared diseases with the same keywords, and are the textbook models (an exponential `dur_inf`, and no deaths unless `p_death` is given); the Starsim 3 code versions, with Starsim 3's lognormal `dur_inf` and `p_death=0.01`, are in the library as `ssl.AgentSIR` and the like (`import starsim.library as ssl`). The Starsim 3 delivery classes (`ss.routine_vx`, `ss.campaign_vx`, `ss.treat_num`), products (`ss.Vx`, `ss.Dx`, `ss.Tx`), `ss.seasonality`, and `ss.Calibration` are replaced; the migration guide gives each replacement.
+
+Results now follow the convention of other frameworks: `<state>[0]` (e.g. `I[0]`) is the number at the start, and a sim with `stop=T` takes one step fewer than in Starsim 3. The same script gives the same answer statistically (over several seeds), not number for number. To reproduce published Starsim 3 numbers exactly, use `pip install starsim==3.7.2`.
+
+## Upgrading the code
+
+Most of the changes are mechanical, and a tool makes them: `python -m starsim.io.migrate` rewrites Starsim 3 code for Starsim 4, in `.py` files and in the code cells of notebooks, Quarto, and Markdown files. It renames what was renamed (`ss.MFNet` is `ss.SexualNet`, `ss.time_prob()` is `ss.probperyear()`, the library's modules are `ssl.X`), turns subclasses of Starsim 3's `ss.SIR`, `ss.SIS`, and `ss.SEIR` written as code into subclasses of `ssl.AgentSIR` and the like, rewrites a `beta` pair on a sexual network as a probability per act in each direction, and renames the results that count people in a state. Everything else it lists by file and line, as something for a person to check. Give `--check` to see what it would change without changing anything. For this Starsim 3 script, `mymodel.py`:
+
+```python
+import starsim as ss
+
+class MySIS(ss.SIS):
+    def step_state(self):
+        super().step_state()
+
+sis = MySIS(beta=dict(mf=[0.08, 0.04]), dur_inf=ss.years(1), init_prev=0.01)
+net = ss.MFNet()
+sim = ss.Sim(diseases=sis, networks=net, n_agents=5000, start=2000, stop=2010, dt=1/12, verbose=-1)
+sim.run()
+print(sim.results.mysis.n_infected[-1])
+```
+
+it says:
+
+```bash
+python -m starsim.io.migrate mymodel.py --check
+```
+```
+mymodel.py: would change 6 line(s)
+  0: added import starsim.library as ssl
+  3: Starsim 3's ss.SIS, written as code, is ssl.AgentSIS (ss.SIS is now declared)
+  7: a beta pair on ss.MFNet (now ss.SexualNet; [p1 to p2, p2 to p1], with men in p1) is ss.peract(m2f=..., f2m=...), a probability per act in each direction
+  8: ss.MFNet is ss.SexualNet (between='mf' is its default)
+  9: verbose=-1 ("brief") is verbose=0
+  11: the count of a state is the result named after the state (e.g. results.alive, res.infected, results["sir.infected"])
+
+6 change(s) in 1 file(s); 0 item(s) to do by hand
+```
+
+Without `--check`, it makes the changes in place (so run it on code that is under version control, and read the diff afterwards); give it folders to upgrade a whole package. What it can't do mechanically, such as a `beta` given as a bare number that was a probability per step (see above), is in the [migration guide](../../migration/v3_v4.md), and an AI assistant with Starsim's `migrate-starsim3` skill can work through the list it leaves.
+
+## What works and what does not yet
+
+These are from Starsim's switching demo for Starsim 3 users (`tests/switching/test_starsim3.py`), and from the review it was built from. All four of the demo's checks pass today.
+
+| Task | Today |
+|---|---|
+| Run a Starsim 3 model with the disease as code | **Works**: the SIS above as `ssl.AgentSIS` (one changed name) gives the Starsim 3 answer within seed noise (22,555 infections against 21,557, where two seeds differ by about 6%) |
+| Use Starsim 4 verbs on a disease written as code: `ss.modify(hiv.rel_trans, multiply=0.5, start=2005)`, conditions on its arrays (`where=hiv.cd4 < 200`), scenarios with `ss.parallel()` and `msim.diff('baseline')` | **Works**, on the library HIV written as code alongside a declared SIS |
+| Fit with `sim.fit()`, with bounds given on a parameter (`ss.SIS(beta=ss.par(ss.peryear(0.1), bounds=[0.05, 1]))`) | **Works**, for the declared `ss.SIS` and for `ssl.AgentSIS` |
+| Port a disease with its `beta` dict copied verbatim | **Warns**: the result is about 12 times too low at monthly steps, and Starsim 4 says why |
+| Port one disease at a time | **Works**: a sim can mix diseases written as code and declared ones, and `ss.parallel()` sweeps and `diff()` work on the whole sim |
+| Speed of a model written as code | **Faster**: an unchanged Starsim 3 model with HIV, an SIS, an SIRS, two networks, demographics, and interventions ran about twice as fast under Starsim 4 (2.2 s against 4.9 s at 3,000 agents) |
+| Speed of a declared disease run as agents | **Slower**: 1.4 to 1.6 times slower than the same model written as code, at 3,000 to 30,000 agents; making them equal is planned |
+| Per-agent quantities that change continuously (a CD4 count, a level of immunity, time since an event) | **No declared form**: keep them as code, which is a supported choice |
+
+## Next steps
+
+- The [migration guide](../../migration/v3_v4.md): what changes the numbers, and a table of jobs and their Starsim 4 spellings.
+- [Starsim in ten minutes](../../tour.qmd): a declared model built step by step, with age groups, interventions, calibration, and uncertainty.
+- [Getting started](../../tutorials/t1_intro.qmd): the tutorials, which build up one model a step at a time.
+- [Library: diseases](../library_diseases.qmd): the Starsim 3 models written as code, `ssl.AgentSIR`, `ssl.AgentSIS`, and `ssl.AgentSEIR`, and the library's other diseases.
+
+## Further reading
+
+- [Starsim: releases](https://github.com/starsimhub/starsim/releases): the changes in each version, including the last of Starsim 3 (3.7.2)
+- [Starsim 3 on PyPI](https://pypi.org/project/starsim/3.7.2/): the version to install to reproduce Starsim 3 results exactly
