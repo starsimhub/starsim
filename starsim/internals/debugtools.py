@@ -266,7 +266,7 @@ def diff_sims(sim1, sim2, skip_key_diffs=False, skip=None, full=False, output=Fa
     values which differ.
 
     Args:
-        sim1 (Sim/MultiSim/dict): either a simulation/MultiSim object or the sim.summary dictionary
+        sim1 (Sim/MultiSim/dict): either a simulation/MultiSim object or a dict of its summary (e.g. sim.summary.value.to_dict())
         sim2 (im/dict): ditto
         skip_key_diffs (bool): whether to skip keys that don't match between sims
         skip (list): a list of values to skip
@@ -283,7 +283,7 @@ def diff_sims(sim1, sim2, skip_key_diffs=False, skip=None, full=False, output=Fa
     '''
 
     # Convert to dict
-    as_dict = lambda sim: sim.summarize() if isinstance(sim, ss.Sim) else sc.objdict(sim.summarize().to_dict('index')) # A MultiSim's: each result's mean, std, ...
+    as_dict = lambda sim: sc.objdict(sim.summarize().value.to_dict()) if isinstance(sim, ss.Sim) else sc.objdict(sim.summarize().to_dict('index')) # A MultiSim's: each result's mean, std, ...
     if isinstance(sim1, (ss.Sim, ss.MultiSim)):
         sim1 = as_dict(sim1)
     if isinstance(sim2, (ss.Sim, ss.MultiSim)):

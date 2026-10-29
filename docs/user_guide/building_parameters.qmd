@@ -25,7 +25,7 @@ measles = ss.Disease(infection, recovery, init_prev=0.001)
 measles.pars
 ```
 
-The number that multiplies a source of infection is `beta`, and a duration is `dur`; where two would have the same name, the transition's name is added (`dur_onset`, `dur_recovery`). What a number means is given by where it is: after `@` and multiplying `I`, a rate; as `init_prev=`, a share of the population.
+The number that multiplies a source of infection is `beta` (named by its transition, `beta_infection`, only where two would have the same name). A duration is named by the state it is the time in (`dur_E`, `dur_I`), or by its transition if people can leave that state after more than one duration (`dur_recovery`, `dur_death`), and a rate by its transition (`rate_death`). What a number means is given by where it is: after `@` and multiplying `I`, a rate; as `init_prev=`, a share of the population.
 
 ## Units of time
 

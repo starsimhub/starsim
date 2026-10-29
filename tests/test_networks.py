@@ -531,7 +531,9 @@ def test_bare_units():
     with warnings.catch_warnings():
         warnings.simplefilter('error')
         sim(ss.SexualNet(dur=ss.days(5))).init() # A unit says which is meant
-        ss.Sim(n_agents=200, diseases=ss.SIS(beta=ss.peract(0.01)), networks=ss.SexualNet(dur=5), verbose=0).init() # The same unit as the sim
+    with pytest.warns(RuntimeWarning, match='set only the mean') as record: # The same unit as the sim: only that the std of the default was kept (see Pars._update_dist())
+        ss.Sim(n_agents=200, diseases=ss.SIS(beta=ss.peract(0.01)), networks=ss.SexualNet(dur=5), verbose=0).init()
+    assert not any('read in' in str(w.message) for w in record)
     return
 
 

@@ -150,18 +150,13 @@ Data is matched to results by name: a column called `cases` in a table given as 
 
 ## Summaries and export
 
-`sim.summarize()` gives each result over the whole run, by its `summarize_by`: the total of a flow (`'sum'`), the final value of a stock (`'last'`), and the mean of a ratio (`'mean'`).
+`sim.summarize()` gives each result over the whole run, by its `summarize_by`: the total of a flow (`'sum'`), the final value of a stock (`'last'`), and the mean of a ratio (`'mean'`). It is a table with a row for each result and one column, `value`, as `msim.summarize()` gives for many runs (see below), so one run and many read the same way; results that are 0 throughout are kept, so the tables of different runs line up row for row. `sim.summarize('measles_infection')` gives one result's summary as a number, and `how=` summarizes another way, e.g. `sim.summarize('measles_I', how='max')` for the peak (`how=` takes `'mean'`, `'median'`, `'sum'`, `'last'`, `'max'`, `'min'`, or a function).
 
 ```{python}
 sim = ss.Sim(measles, total_pop=100_000, start='2025-01-01', stop='2025-07-01', verbose=0) # The measles model with prevalence and reported cases, not stratified
 sim.run()
 sim.summarize()
 ```
-
-::: {.callout-warning}
-## [PROPOSAL]
-`sim.summarize()` should return the same kind of table as `msim.summarize()` (a dataframe with one `value` column, rounded for reading, leaving out results that are 0 throughout), so that one run and many runs read the same way (P15). Today it returns a dict of unrounded numbers, including results such as deaths that are 0 in a model without them.
-:::
 
 `to_df()` gives results as a table (a pandas dataframe), for one module or for the whole sim, with one column per result; it can then be saved with `df.to_csv()` or `df.to_excel()`:
 

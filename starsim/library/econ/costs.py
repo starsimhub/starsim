@@ -21,6 +21,11 @@ def years(res):
     return np.asarray(tv.years if hasattr(tv, 'years') else tv, dtype=float)
 
 
+def in_years(time):
+    """ A time on a sim's timeline (a date or a duration, as `ss.connectors.to_time()` gives), in years """
+    return time.years if isinstance(time, ss.date) else time.to('year').value
+
+
 class Costs(ss.Analyzer):
     """
     The costs of a sim, from its results, with their total
@@ -33,7 +38,7 @@ class Costs(ss.Analyzer):
     Args:
         unit_costs (dict): the cost of each event of a result, by the result's path, e.g. `{'measles.infection': 50}` for $50 of care for each infection, or `{'routine.delivered': 5}` for $5 a dose of a delivery made without its own `cost=`
         fixed (float): a cost per year that does not depend on any result, such as running a program (staff, cold chain, training)
-        start (float/str): when the fixed cost starts (default: the start of the sim)
+        start (float/str): when the fixed cost starts, read as any time is (see `ss.connectors.to_time()`: a number from 1900 on is a year; default: the start of the sim)
         deliveries (bool): whether to include the `cost` result of every module that has one
 
     Examples:
@@ -62,7 +67,7 @@ class Costs(ss.Analyzer):
         names = [mod.name for mod in self.sim.modules if self.deliveries and mod is not self and 'cost' in mod.results]
         names += [path.replace('.', '_') for path in self.unit_costs]
         names += ['fixed'] if self.fixed else []
-        self.define_results(*[ss.Result(name, scale=False) for name in names + ['total']]) # Each is made from results that are already scaled
+        self.define_results(*[ss.Result(name, kind='flow') for name in names + ['total']]) # Costs in each step; scaling them does nothing, since they are filled in after the sim's results are scaled
         return
 
     def step(self):
@@ -79,7 +84,7 @@ class Costs(ss.Analyzer):
             res[path.replace('.', '_')][:] = unit_cost * get_result(self.sim.results, path)
         if self.fixed:
             t = self.t.yearvec
-            start = t[0] if self.start is None else ss.date(self.start).years
+            start = t[0] if self.start is None else in_years(ss.connectors.to_time(self.sim, self.start))
             width = np.diff(t, append=t[-1]) # The years from each time point to the next
             res.fixed[:] = self.fixed * width * (t >= start)
         res.total[:] = sum(r.values for k, r in res.items() if isinstance(r, ss.Result) and k != 'total')

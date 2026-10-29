@@ -24,7 +24,7 @@ Starsim has data for each country, from the package `starsim_data`: populations 
 
 A named population gives the sim its size (`total_pop`) and the share of people in each age group, so a model stratified by age needs no shares of its own; as agents, it gives the agents their ages and sex (see [People and agents](populations_people.qmd)). Birth and death rates are on [Demographics](populations_demographics.qmd), and administrative units on [Geography](populations_geography.qmd).
 
-`ss.people()` and `ss.contacts()` take a year and a source: `ss.people('Kenya', year=2030)` (from 1950 to 2100, with the years between the UN's decadal values interpolated), and `ss.contacts('Kenya', source='mistry2021')` for the matrices of Mistry et al. (2021), by single year of age, for 36 countries. A US state is named with its country, `ss.people('United States:Massachusetts')` and `ss.contacts('United States:Massachusetts')`, from the US Census and Mistry et al. The data is given as tables and arrays:
+`ss.people()` and `ss.contacts()` take a year and a source: `ss.people('Kenya', year=2030)` (from 1950 to 2100, with the years between the UN's decadal values interpolated), and `ss.contacts('Kenya', source='mistry2021')` for the matrices of Mistry et al. (2021), by single year of age, for 36 countries. A US state is named with its country, `ss.people('United States:Massachusetts')` and `ss.contacts('United States:Massachusetts')`, from the US Census and Mistry et al. The data is given as tables (dataframes), with the age groups labeled as a stratification by age labels them (`'0-4'`, `'5-9'`, ..., `'100+'`) and where the data came from in `.attrs['ref']`:
 
 ```{python}
 import starsim as ss
@@ -33,9 +33,10 @@ ss.options(jupyter=True)
 births = ss.data.rates('Kenya', 'births') # Crude birth rates per 1,000 people, by year
 print(births.head())
 
-ages, female, male, ref = ss.data.population('Kenya', year=2024)
-print('Population of Kenya in 2024:', round(female.sum() + male.sum()))
-print('Source:', ref['study'])
+pop = ss.data.population('Kenya', year=2024) # Women and men by 5-year age group
+print(pop.head())
+print('Population of Kenya in 2024:', round(pop.values.sum()))
+print('Source:', pop.attrs['ref']['study'])
 ```
 
 Every piece of data records where it came from, which `describe()` shows. Record the source and year with an analysis: the data don't all have the same reference year.
@@ -69,11 +70,6 @@ infections = sim.results.flu.infection.by('age').summarize() # The total in each
 people = [30_000, 60_000, 10_000]
 print('Share infected in each age group:', (infections/people).round(2))
 ```
-
-::: {.callout-warning}
-## [PROPOSAL]
-Results should offer the share of each group, e.g. `sim.results.flu.infection.by('age').share()` for the share of each age group ever infected, so that the sizes of the groups needn't be divided by by hand (P10, P15). Today: `summarize()` gives the total in each group, labeled by group, and the shares are worked out as above.
-:::
 
 The R0 that the sim prints comes from the matrix: with a contact matrix, R0 is β × the infectious period × the largest eigenvalue of the matrix, which is about 12.2 here, so R0 = 0.03 × 5 × 12.2 ≈ 1.8.
 
@@ -160,19 +156,14 @@ msim = ss.parallel(scenarios)
 msim.plot('flu.I')
 ```
 
-See [Interventions](interventions_interventions.qmd) for `ss.modify()`. Each layer's matrix is also in `ss.data`:
+See [Interventions](interventions_interventions.qmd) for `ss.modify()`. Each layer's matrix is also in `ss.data`, as a table by age group, which `ss.contacts()` also takes (e.g. after changing it):
 
 ```{python}
-matrix, ages, ref = ss.data.contacts('Kenya', layer='school')
-print('Age groups:', ages)
-print('Contacts a day of a child aged 10-14 at school with children aged 10-14:', round(matrix[2, 2], 1))
-print('Source:', ref['study'])
+school = ss.data.contacts('Kenya', layer='school')
+print('Age groups:', list(school.index))
+print('Contacts a day of a child aged 10-14 at school with children aged 10-14:', round(school.loc['10-14', '10-14'], 1))
+print('Source:', school.attrs['ref']['study'])
 ```
-
-::: {.callout-warning}
-## [PROPOSAL]
-`ss.data.contacts()` and `ss.data.population()` return tuples (a bare matrix, its ages, and a record of the source), though the module calls them tables. Each should return one labeled table, e.g. a DataFrame with the age groups as its index and columns, and the source in its `attrs`, so that `ss.data.contacts('Kenya', layer='school').loc['10-14', '10-14']` reads as it is meant (P11, P13). Today: the tuple, as above.
-:::
 
 ## Contact matrices as agents
 
@@ -194,7 +185,7 @@ Data of your own takes the same forms as the data by place. Ages are a table of 
 ppl = ss.People(10_000, age_data=ss.data.age('Kenya', year=2000))
 ```
 
-Birth and death rates are tables by year (and by sex and age for deaths), for `ss.Births()` and `ss.Deaths()` (see [Demographics](populations_demographics.qmd#data-of-your-own)); a contact matrix is an array, with the lower edges of its age groups, for `ss.contacts(matrix, ages=...)`, as above; and places are a table of names, populations, and positions, for `ss.geo.geography()` (see [Geography](populations_geography.qmd)).
+Birth and death rates are tables by year (and by sex and age for deaths), for `ss.Births()` and `ss.Deaths()` (see [Demographics](populations_demographics.qmd#data-of-your-own)); a contact matrix is an array, with the lower edges of its age groups, for `ss.contacts(matrix, ages=...)`, as above, or a table labeled by age group (`'0-14'`, `'15-64'`, `'65+'`), as `ss.data.contacts()` gives, for `ss.contacts(table)`; and places are a table of names, populations, and positions, for `ss.geo.geography()` (see [Geography](populations_geography.qmd)).
 
 Data on the disease itself (cases, deaths, prevalence) is a different input: it is given to the sim with `data=`, to plot with the results and fit the model to (see [Fitting a model](calibration_fitting.qmd)). Before using any data, check its units, its denominators, and the period it covers: a contact survey gives contacts a day, a crude birth rate is per 1,000 people a year, and a blank cell means not observed, while a zero is a count of none.
 

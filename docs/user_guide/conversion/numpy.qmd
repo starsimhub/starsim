@@ -50,14 +50,9 @@ msim.plot()
 `msim.summarize()` summarizes each result over each run (a state by its final value, unless told otherwise; here `I` by its peak), then over the runs, with the median, a 95% interval, the mean, and the standard deviation:
 
 ```{python}
-summary = msim.summarize(how={'seir_I': np.max}) # The peak of I in each run
+summary = msim.summarize(how={'seir_I': 'max'}) # The peak of I in each run
 summary.loc[['seir_I', 'seir_R']]
 ```
-
-::: {.callout-warning}
-## [PROPOSAL]
-`summarize(how=)` takes `'mean'`, `'median'`, `'sum'`, and `'last'` by name, but not `'max'`, so the peak, the most common summary of an epidemic after its size, needs `np.max` (P11). Accept `'max'` (and `'min'`) by name, so this is `msim.summarize(how={'seir_I': 'max'})`.
-:::
 
 The same model runs as an ODE with `sim.run(solver='ode')`, and as agents with `sim.new(solver='abm', n_agents=100_000).run()` (`sim.new()` makes a new sim from the same inputs, with whatever is given changed), with no change to the model.
 

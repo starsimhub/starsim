@@ -58,7 +58,7 @@ def test_lognorm_im_unit():
 def test_dist_default_warnings():
     """ MS8: a typed duration for a distribution default sets its mean, and says so; in a declared model, a single value replaces the distribution, and says so """
     defaults = dict(dur=ss.lognorm_ex(mean=ss.days(200), std=ss.days(200)))
-    with pytest.warns(RuntimeWarning, match='set the mean'):
+    with pytest.warns(RuntimeWarning, match='set only the mean'):
         p = ss.pars(defaults, dur=ss.days(100))
     assert isinstance(p.dur.raw, ss.lognorm_ex) and p.dur.raw.pars.mean == 100
     class M(ss.Disease):

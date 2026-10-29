@@ -2754,18 +2754,19 @@ def unguarded_main():
 
 
 @contextlib.contextmanager
-def starting_workers():
+def starting_workers(method=None):
     """
     While the workers of `ss.parallel()` or of a calibration are started: one thread for NumPy's BLAS (see `one_blas_thread()`), and if
-    this is called from the main script outside `if __name__ == '__main__':` (see `unguarded_main()`), the script hidden from them
+    they are started afresh (by `method`, as `start_method()` gives) from the main script outside `if __name__ == '__main__':` (see
+    `unguarded_main()`), the script hidden from them
 
-    A worker started afresh (by forkserver, once threads that are not safe to fork have started; see `start_method()`) would otherwise
+    A forked worker is a copy of this process, so it keeps the script as it is. A worker started afresh (by forkserver, once threads that are not safe to fork have started; see `start_method()`) would otherwise
     run the script again, redoing everything before this call, and stop at this call with a RuntimeError ("An attempt has been made
     to start a new process before the current process has finished its bootstrapping phase"). Hidden, the workers start as from a
     notebook: what they run is pickled by value, and the modules the script imports are imported in them (see `one_thread()`).
     """
     main = sys.modules.get('__main__')
-    hide = unguarded_main()
+    hide = not forked(method) and unguarded_main()
     hidden = dict(__file__=main.__file__, __spec__=getattr(main, '__spec__', None)) if hide else {}
     try:
         if hide:
@@ -2805,6 +2806,11 @@ def start_method():
     return 'forkserver' if fork_unsafe() else None
 
 
+def forked(method):
+    """ Whether workers started by `method` (as `start_method()` gives; None for the platform's default) are forked """
+    return (method or mp.get_start_method()) == 'fork'
+
+
 def workers_failed(E, method):
     """
     Raise a clear error for a pool whose workers could not start because they ran the main script again: a worker started
@@ -2812,8 +2818,9 @@ def workers_failed(E, method):
     the parent sees only an EOFError ("unexpected EOF"), and the worker prints multiprocessing's "bootstrapping" RuntimeError
     """
     bootstrap = isinstance(E, EOFError) or (isinstance(E, RuntimeError) and 'bootstrapping' in str(E))
-    if method in [None, 'fork'] or not bootstrap:
+    if forked(method) or not bootstrap:
         return
+    method = method or mp.get_start_method()
     why = fork_unsafe() if method == 'forkserver' else None
     why = f', since {why}' if why else ''
     errormsg = (f'The workers could not start: they were started by {method} rather than by fork{why}, and a worker started this way runs the main script again, '

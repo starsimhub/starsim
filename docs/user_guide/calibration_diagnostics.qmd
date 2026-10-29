@@ -12,7 +12,6 @@ authorship:
 The examples use a measles outbreak in a town of 100,000, 90% of whom are immune. The data are a year of weekly reported cases, made from the model with a latent period of 10 days (an SEIR model), `beta = 1.9`, and half of all cases reported:
 
 ```{python}
-import matplotlib.pyplot as plt
 import starsim as ss
 ss.options(jupyter=True)
 
@@ -48,30 +47,17 @@ def make_sir():
 sir_fit = ss.Sim(make_sir(), data=data, **pars).fit()
 ```
 
-The search converged, but the share reported ended at its upper bound of 1 (with an `AtBound` warning). Comparing the model's weekly cases with the data, and the difference between them (the residuals), shows why:
+The search converged, but the share reported ended at its upper bound of 1 (with an `AtBound` warning). `fit.plot(residuals=True)` shows why: the model's weekly cases before and after fitting against the data, and below them the difference between the data and the fitted model (the residuals), on the data's own weeks, as the fit compares them:
 
 ```{python}
-def weekly_check(fit, data):
-    """ The model's weekly cases against the data, and the residuals """
-    model = fit.sim.results.measles.cases.resample('week')
-    fig, (ax1, ax2) = plt.subplots(2, 1, sharex=True, figsize=(7, 6))
-    ax1.plot(data.date, model.values, label='Model')
-    ax1.scatter(data.date, data.cases, color='k', s=15, label='Data')
-    ax1.set_ylabel('Weekly cases')
-    ax1.legend(frameon=False)
-    ax2.bar(data.date, data.cases - model.values, width=5)
-    ax2.axhline(0, color='k', lw=0.5)
-    ax2.set_ylabel('Data minus model')
-    return fig
-
-weekly_check(sir_fit, data);
+sir_fit.plot(residuals=True)
 ```
 
 Without a latent period, an epidemic with the same R0 grows much faster, so the SIR model can't be both as late and as large as the data: it peaks too early and too low, even with every case reported. The residuals have a pattern: too many cases in the model early on, then too few through the peak. Residuals that wander above and below zero at random, as for the right model below, are what a good fit looks like:
 
 ```{python}
 seir_fit = ss.Sim(make_seir(), data=data, **pars).fit(verbose=False)
-weekly_check(seir_fit, data);
+seir_fit.plot(residuals=True)
 ```
 
 A pattern in the residuals points to the structure of the model, or to how the data were defined, not to the fitting: no search will fix it. Some common patterns, and what to look at first:
@@ -85,11 +71,6 @@ A pattern in the residuals points to the structure of the model, or to how the d
 | A good fit but an unstable projection | Parameters the data can't tell apart; a change in the epidemic the model doesn't have |
 
 Before blaming the model, check that like is compared with like: incidence with case counts over the same interval, prevalence with a survey at a time, hospital admissions with admissions rather than beds occupied, and dates aligned (a week ending on a Sunday, not starting on one). The fit's measure (`fit.mismatch`) helps compare fits to the same data, here 0.38 for the SIR model against 0.10 for the SEIR model, but the plot shows *where* a model fails.
-
-::: {.callout-warning}
-## [PROPOSAL]
-This check should be built in: `fit.plot(residuals=True)` should add the residuals below the model and the data. Today `fit.plot()` shows the model's weekly totals against the data, but the residuals have to be worked out by hand, as above. (P11, P15)
-:::
 
 ## Did the search converge?
 
@@ -185,7 +166,7 @@ The SEIR model fits better and predicts better. `folds=` repeats the comparison 
 
 | Check | How | A problem looks like |
 |---|---|---|
-| The model matches the data | Plot the model against the data, on the data's own periods, and the residuals | A pattern in the residuals; a parameter pushed to a bound |
+| The model matches the data | Plot the model against the data, on the data's own periods, and the residuals (`fit.plot(residuals=True)`) | A pattern in the residuals; a parameter pushed to a bound |
 | The search converged | `fit.converged`, `fit.why` | "Not converged", with the reason |
 | No value is at a bound | The `AtBound` warning | A best value at the edge |
 | The answer is stable | Fit again with another `rand_seed=` (stochastic) or from other starting points (`scan=`) | Different values each time |

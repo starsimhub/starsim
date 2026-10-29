@@ -93,8 +93,8 @@ declared = ss.Disease(
 )
 
 pars = dict(networks=ss.MixingPool(n_contacts=1), n_agents=10_000, stop=ss.days(2*365), verbose=0)
-sim_coded = ss.Sim(coded, dt=ss.days(0.25), **pars) # A step of a quarter of a day; see below
-sim_declared = ss.Sim(declared, dt=ss.days(0.25), **pars)
+sim_coded = ss.Sim(coded, **pars)
+sim_declared = ss.Sim(declared, **pars)
 sim_coded.run()
 sim_declared.run()
 
@@ -105,7 +105,7 @@ plt.ylabel('Number infectious')
 plt.legend();
 ```
 
-The two are the same model, and give much the same epidemic, up to chance: a large first wave, and then smaller waves as immunity wanes. They are run here with a step of a quarter of a day, since with daily steps they differ: on a mixing pool, the coded disease, as in Starsim 3, turns the rate of infection into a chance per day before multiplying it by the share of people who are infectious, which with a β of 0.4 per day makes the force of infection about a fifth lower, and the first wave of the coded one about a fifth smaller. (Both round each duration to whole steps the same way, so on a network, with the same parameters, they give the same epidemic at any step.) A shorter step brings both close to the ODE. What differs is what Starsim knows about them. The declared disease can be shown (`describe()`, `diagram()`, `equations()`), run as an ODE or a stochastic compartmental model as well as agents, and fitted with `sim.fit()`; its results are named after its states and transitions. The coded one is a set of methods: it runs only as agents, and Starsim can't show what it does. So for a model that can be declared, declare it. Write a disease as code when its course is easier to say in code than in transitions, or to keep a Starsim 3 model as it was (a Starsim 3 subclass of `ss.SIR` can subclass `ssl.AgentSIR` unchanged).
+The two are the same model, and give the same epidemic, up to chance: a large first wave, and then smaller waves as immunity wanes. They work out the chance of infection in a step the same way (the rate times the share of people who are infectious, turned into a chance), and round each duration to whole steps the same way, so they agree at any step: over four seeds at daily steps, the first wave peaks at 3032 people infectious when coded, and 3015 when declared. What differs is what Starsim knows about them. The declared disease can be shown (`describe()`, `diagram()`, `equations()`), run as an ODE or a stochastic compartmental model as well as agents, and fitted with `sim.fit()`; its results are named after its states and transitions. The coded one is a set of methods: it runs only as agents, and Starsim can't show what it does. So for a model that can be declared, declare it. Write a disease as code when its course is easier to say in code than in transitions, or to keep a Starsim 3 model as it was (a Starsim 3 subclass of `ss.SIR` can subclass `ssl.AgentSIR` unchanged).
 
 ## The parts of a module
 

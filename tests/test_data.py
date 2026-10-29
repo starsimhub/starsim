@@ -3,6 +3,7 @@ Test data by place (ss.data): ages, populations, contact matrices, and administr
 """
 import pytest
 import numpy as np
+import pandas as pd
 import sciris as sc
 import starsim as ss
 
@@ -28,6 +29,16 @@ def test_contacts():
     sims[1] = ss.Sim(make_sir(), networks=given, people=ss.people('Kenya'), stratify=dict(age=[0, 5, 18, 65]), total_pop=10_000, unit='day', stop=60, **kw).run()
     assert np.allclose(sims[0].results.sir.I, sims[1].results.sir.I) # The same as the matrix given by hand, with Kenya's people
     assert sims[0].pars.total_pop == 10_000 and sims[0].groups.strats[0].split[:2].sum() > 0.4 # The ages of Kenya, but not its size
+
+    # The data itself is a table labeled by age group, which ss.contacts() takes as it is
+    school = ss.data.contacts('Kenya', layer='school')
+    assert school.loc['10-14', '10-14'] == school.values[2, 2] and school.index[-1] == '75+' and school.attrs['ref']['layer'] == 'school'
+    table = ss.contacts(school)
+    assert np.array_equal(table.edges, ss.contacts('Kenya', layer='school').edges) and table.ref == school.attrs['ref'] and table.unit == 'day'
+    m = [[10, 3], [3, 5]] # A table not labeled by age group is a matrix over the model's own groups, as a list is
+    for df in [pd.DataFrame(m), pd.DataFrame(m, index=['young', 'old'], columns=['young', 'old'])]:
+        assert ss.contacts(df).edges is None and np.array_equal(ss.contacts(df).dims['age'], ss.contacts(m).dims['age'])
+    assert np.array_equal(ss.contacts(pd.DataFrame(m, index=['0-17', '18+'])).edges, [0, 18])
 
     # A place a source does not have says which do
     with pytest.raises(KeyError, match='mistry2021'):
@@ -88,10 +99,11 @@ def test_geo():
 def test_people():
     sc.heading('Testing populations by name')
     ppl = ss.people('Kenya', year=2025)
-    ages, female, male, _ = ss.data.population('Kenya', year=2020)
+    pop = ss.data.population('Kenya', year=2020) # A table of women and men by age group
     later = ss.data.population('Kenya', year=2030)
-    assert np.isclose(ppl.named.total, 0.5*(female + male).sum() + 0.5*(later[1] + later[2]).sum()) # Between the decadal values, interpolated
-    assert np.array_equal(ss.data.age('Kenya', year=2020)[:-1], np.column_stack([ages, female + male])) # The age_data of ss.People, ending with 0 people at 105
+    assert np.isclose(ppl.named.total, 0.5*pop.values.sum() + 0.5*later.values.sum()) # Between the decadal values, interpolated
+    assert np.array_equal(ss.data.age('Kenya', year=2020)[:-1], np.column_stack([np.arange(0, 101, 5), pop.female + pop.male])) # The age_data of ss.People, ending with 0 people at 105
+    assert list(pop.columns) == ['female', 'male'] and pop.index[1] == '5-9' and pop.attrs['ref']['year'] == 2020
 
     # The size and the age split of a compartmental model, with no agents
     stratify = dict(age=[0, 5, 18, 65])
@@ -100,8 +112,9 @@ def test_people():
     assert ode.solver == 'ode' and ode.pars.total_pop == total
     n = ode.results.sir
     initial = n.S.strata[:, 0] + n.I.strata[:, 0] + n.R.strata[:, 0]
-    _, female, male, _ = ss.data.population('Kenya', year=2024)
-    assert np.isclose(initial[0], (female + male)[0]) # The 0-4 group, which is one WPP age group
+    pop = ss.data.population('Kenya', year=2024)
+    assert np.isclose(initial[0], pop.loc['0-4'].sum()) # The 0-4 group, which is one WPP age group
+    female, male = pop.female.values, pop.male.values
 
     # As agents, the same ages and the share who are female
     abm = ss.Sim(make_sir(), people=ss.people('Kenya', year=2024, n_agents=20_000), stratify=stratify, unit='day', stop=60, **kw).run()
@@ -167,9 +180,23 @@ def test_us_states(us_states):
     return sim
 
 
+@sc.timer()
+def test_fertility():
+    sc.heading('Testing age-specific fertility rates by name')
+    if 'fertility' not in ssd.list_datasets():
+        pytest.skip(f'starsim_data {ssd.__version__} has no age-specific fertility rates (added in 2.1.0)')
+    sim = ss.Sim(people=ss.people('Nigeria', n_agents=2000), demographics=ss.Pregnancy(fertility_rate='Nigeria', burnin=False), start=2000, stop=2003, dt=ss.months(1), **kw).run()
+    preg = sim.demographics.pregnancy
+    asfr = ssd.load('Nigeria', which='fertility')
+    assert np.isclose(preg.fertility_rate_data.loc[2000, 25], asfr.set_index(['Time', 'AgeGrpStart']).ASFR[2000, 25]) # The UN's, by 5-year age group, per 1,000 women
+    assert 4 < sim.results.pregnancy.tfr[-12:].mean() < 7 # Nigeria's TFR was about 6
+    return sim
+
+
 if __name__ == '__main__':
     T = sc.timer()
     test_contacts()
     test_geo()
     test_people()
+    test_fertility()
     T.toc()

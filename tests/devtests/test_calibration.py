@@ -118,8 +118,8 @@ def test_fit_inputs(tmp_path):
         sir = ss.Disease(S >> I @ beta*I, I >> R @ ss.years(2), ss.Transition(R, S, dur=ss.years(3)), init_prev=0.01, name='sir')
         return ss.Sim(sir, start=2000, stop=2020, dt=ss.years(0.05), data=data, verbose=0)
     res = make().run().results.sir
-    flows, stocks = res.S_to_I.resample('year'), res.I.resample('year', summarize_by='mean') # A flow summed over each year, a stock averaged over it
-    df = pd.DataFrame(dict(year=flows.timevec, S_to_I=flows.values, I=stocks.values)).iloc[1:-1]
+    flows, stocks = res.infection.resample('year'), res.I.resample('year', summarize_by='mean') # A flow summed over each year, a stock averaged over it
+    df = pd.DataFrame(dict(year=flows.timevec, infection=flows.values, I=stocks.values)).iloc[1:-1]
     fit = make(beta=0.5, data=df).fit(verbose=0)
     assert np.isclose(fit.pars.beta, 0.3, rtol=1e-3) # Before, 0.279, from data compared a year off
     assert len(fit.trials) < 60 # Before, 3 searches (131 evaluations)

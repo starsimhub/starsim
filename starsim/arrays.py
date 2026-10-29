@@ -1283,24 +1283,18 @@ class BoolState(BoolArr):
         Those still in the state are left out (`.time` gives how long they have been there so far), so a run that ends
         while many are in it understates the mean; so are those who died in it, or left it other than by the
         disease's transitions. Those placed in it at the start (e.g. seeded cases in I) count from the start of the run.
-        The time each left is when they entered the state they left for, so the times of entering those states must
-        be kept (see `ss.options.keep_times`).
+        The engine keeps when each person last left every state whose time of entering is kept, so this works whenever
+        that time is, e.g. for any state with a dwell time (otherwise, see `ss.options.keep_times`).
         """
         engine = getattr(self.watch, 'engine', None)
         if engine is None:
             raise TypeError(f'"{self.name}" is not a state of a declared disease run as agents, so has no stays (.stays)') # Not an AttributeError, which __getattr__ would hide
-        def times(name):
-            arr = engine.mod[f'ti_{name}']
-            if isinstance(arr, Unkept): # Not an AttributeError, as above
-                raise ValueError(f'{self.name}.stays needs the time of entering {name}: {arr.unkept()}')
-            return arr.raw.astype(float)
-        entered = times(self.name)
-        dsts = {d.name for tr in engine.graph.transitions.values() if any(getattr(s, 'name', None) == self.name for s in (tr.src or []))
-                for d in (tr.dst or []) if getattr(d, 'people', False) and d.name != self.name}
-        left = np.full(len(entered), np.inf)
-        for name in dsts: # The first state each entered after it: where they went
-            arr = times(name)
-            left = np.where(arr >= entered, np.minimum(left, arr), left) # NaN (never entered) compares False
+        arr = engine.mod[f'ti_{self.name}']
+        if isinstance(arr, Unkept): # Not an AttributeError, as above
+            raise ValueError(f'{self.name}.stays needs the time of entering {self.name}: {arr.unkept()}')
+        entered = arr.raw.astype(float)
+        left = engine.mod[f'ti_left_{self.name}'].raw.astype(float) if f'ti_left_{self.name}' in engine.mod.__dict__ else np.full(len(entered), np.nan) # When each last left it (see Agents.enter()); not kept for a state that leads to no other
+        left[left < entered] = np.nan # Left an earlier stay: still in it, or died in it
         done = ~self.raw & np.isfinite(entered) & np.isfinite(left)
         return ss.time.get_dur_class(engine.sim.unit)((left[done] - entered[done])*engine.dt)
 

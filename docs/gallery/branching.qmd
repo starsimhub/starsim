@@ -45,12 +45,7 @@ And the equations, in which the split appears as the shares (1 - 0.1) and 0.1 of
 covid.equations()
 ```
 
-The rate of death appears as a parameter called `rate`.
-
-::: {.callout-warning}
-## [PROPOSAL]
-A rate given as a number in a transition should be named after its transition, as a duration is (`dur_discharge`): here `rate_death`, not `rate`, so that the equations, the diagram, and `covid.pars` say which rate it is (P6, P12). Today it is called `rate`.
-:::
+A rate given as a number is named by its transition, so the rate of death appears as a parameter called `rate_death`, and a duration by the state it is the time in (`dur_I` and `dur_H`). To give it a name of your own, write it as `ss.par(ss.perday(0.02), name='mu')` (see [Parameters](../user_guide/building_parameters.qmd)).
 
 ## Result
 

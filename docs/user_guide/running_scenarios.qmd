@@ -46,7 +46,7 @@ The result is an `ss.MultiSim`: the runs of every scenario, with each result hol
 msim.summarize()
 ```
 
-A campaign in February averts about 490 of the 1,190 infections; by March, most of the outbreak has happened, and it averts about 140. A scenario contains exactly the interventions given to it, so the baseline is a scenario like any other. The sims themselves are kept in `msim.sims`, by position (`msim.sims[0]`), or by label (`msim.sims['Campaign in March']`, which gives the list of that scenario's runs).
+A campaign in February averts about 490 of the 1,190 infections; by March, most of the outbreak has happened, and it averts about 140. A scenario contains exactly the interventions given to it, so the baseline is a scenario like any other. Where each sim has one disease, a result can also be named without it, as for a single sim: `msim.plot('I')` and `msim.results.I` find `I` in each sim's disease, even if the diseases are named differently (say, `sir` in one scenario and `seir` in another); a sim with several diseases needs the disease named (`'measles.I'`). The sims themselves are kept in `msim.sims`, by position (`msim.sims[0]`), or by label (`msim.sims['Campaign in March']`, which gives the list of that scenario's runs).
 
 `msim.compare()` puts the scenarios side by side as columns, one row per result: by default each result over the whole run, as above, or with `t=` its value on a date (or at a time index):
 
@@ -94,7 +94,7 @@ The median outbreak has about 1,150 infections, while the interval runs from alm
 The band in the plot is different: it is the spread of the runs at each time point, taken separately. The median curve is not a typical epidemic, since the runs peak at different times, and at each time point the median mixes runs that are rising, peaking, and over. Its peak is lower than the peak of most runs:
 
 ```{python}
-peaks = msim.summarize(how={'measles_I': max}).loc['measles_I'] # The peak of each run, summarized
+peaks = msim.summarize(how={'measles_I': 'max'}).loc['measles_I'] # The peak of each run, summarized
 print('Median of the peaks:', peaks['median'])
 print('Peak of the median curve:', msim.results.measles.I.median().max())
 ```

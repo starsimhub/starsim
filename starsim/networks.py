@@ -2139,7 +2139,7 @@ class MixingPool(Route):
         Args:
             rel_sus (float): Relative susceptibility
             rel_trans (float): Relative infectiousness
-            disease_beta (float): The beta value for the disease
+            disease_beta (float): The beta value for the disease, as the probability in the step
         Returns:
             UIDs of agents who acquired the disease at this step
         """
@@ -2157,10 +2157,10 @@ class MixingPool(Route):
         if len(self.src_uids) == 0 or len(self.dst_uids) == 0:
             return []
 
-        # Calculate transmission
+        # Calculate transmission: the hazard of the step, from beta, is multiplied by the infectious share and the contacts before being turned back into a probability, as for a declared disease (see ss.solvers.Transmission)
         trans = np.mean(rel_trans[self.src_uids])
         acq = self.eff_contacts[self.dst_uids] * rel_sus[self.dst_uids]
-        p = beta*disease_beta*trans*acq
+        p = 1 - (1 - disease_beta)**(beta*trans*acq) # I.e. 1 - exp(-hazard*dt), with the hazard -log(1 - disease_beta)/dt
         self.p_acquire.set(p=p)
         return self.p_acquire.filter(self.dst_uids)
 
@@ -2197,7 +2197,7 @@ def contacts(matrix=None, ages=None, dims=None, name=None, source=None, layer='a
     two groups are the product of the entries for each. The matrix by age can have its own age groups here too (`ss.contacts(dict(age=..., area=...), ages=[0, 15, 65])`).
 
     Args:
-        matrix (array/str/dict): `matrix[i,j]`, the number of contacts per unit time that one person in group `i` has with people in group `j`; or a country, by name or code ('Kenya', 'KE'), or a US state ('United States:Massachusetts'); or a matrix for each of the model's stratifications, by name
+        matrix (array/str/df/dict): `matrix[i,j]`, the number of contacts per unit time that one person in group `i` has with people in group `j`; or a country, by name or code ('Kenya', 'KE'), or a US state ('United States:Massachusetts'); or a table by age group, as `ss.data.contacts()` gives (with labels such as '0-4' and '75+', or an index named "age"; a table labeled otherwise is a matrix as it is); or a matrix for each of the model's stratifications, by name
         ages (list/array): the lower edge of each age group of the matrix (or of its matrix by age), e.g. `[0, 15, 65]` for 0–14, 15–64, and 65+
         dims (str/list): the model's stratifications the matrix is over (default: age); for several, `matrix[i, k, j, l]` is the number of contacts per unit time
             that one person at levels `(i, k)` has with people at levels `(j, l)`, or the same as a square matrix over the combinations of levels, the first stratification slowest
@@ -2235,6 +2235,13 @@ def contacts(matrix=None, ages=None, dims=None, name=None, source=None, layer='a
     if dims is not None and (isinstance(matrix, (str, dict)) or ages is not None):
         errormsg = f'ss.contacts(matrix, dims={dims!r}) is a matrix over the model\'s own stratifications, so it takes no ages= (a matrix with its own age groups is ss.contacts(matrix, ages=[...])), and a matrix, not a name or a dict'
         raise ValueError(errormsg)
+    ref = None
+    if isinstance(matrix, str): # A country's matrix, from starsim_data, as a table by age group
+        matrix = ss.data.contacts(matrix, source=source, layer=layer)
+    if isinstance(matrix, pd.DataFrame): # A table by age group (e.g. ss.data.contacts('Kenya')), with the lower edge of each from its labels; any other table is a matrix over the model's own groups
+        if ages is None and dims is None and ss.data.is_age_index(matrix.index):
+            ages, ref = ss.data.age_edges(matrix.index), matrix.attrs.get('ref')
+        matrix = matrix.values
     if dims is not None and len(sc.tolist(dims)) > 1: # One matrix over several of the model's stratifications together
         over = sc.tolist(dims)
         matrix = np.array(matrix, dtype=float)
@@ -2291,10 +2298,7 @@ def contacts(matrix=None, ages=None, dims=None, name=None, source=None, layer='a
         out.age_edges = age_edges # The lower edges of the age matrix's own groups, if given with ages= (see ss.solvers.Mixing.dim_matrices())
         out.unit = unit
         return out
-    ref = None
-    if isinstance(matrix, str): # A country's matrix, from starsim_data
-        matrix, ages, ref = ss.data.contacts(matrix, source=source, layer=layer)
-    elif matrix is None:
+    if matrix is None:
         errormsg = 'ss.contacts() needs a matrix: a country (ss.contacts("Kenya")), a matrix with its own age groups (ss.contacts(matrix, ages=[...])), or one over the model\'s stratifications (ss.contacts(matrix), ss.contacts(matrix, dims=\'risk\'))'
         raise ValueError(errormsg)
     matrix = np.array(matrix, dtype=float)

@@ -698,8 +698,9 @@ def pmmh(logpost, z0, draws=1000, warmup=1000, chains=4, particles=None, seed=No
         if verbose:
             print('Particle MCMC: running the chains one after another, since JAX has been started in this process')
     if parallel and chains > 1:
-        with ss.kernels.starting_workers():
-            results = sc.parallelize(ss.kernels.worker(one_chain), iterarg=list(seeds), start_method=ss.kernels.start_method())
+        method = ss.kernels.start_method()
+        with ss.kernels.starting_workers(method):
+            results = sc.parallelize(ss.kernels.worker(one_chain), iterarg=list(seeds), start_method=method)
     else:
         results = [one_chain(chain_seed) for chain_seed in seeds]
     out, logdens, accepted, n = [np.array(v) for v in zip(*results)]
@@ -1016,19 +1017,39 @@ class Fit(sc.prettyobj):
         """ Every evaluation: the parameter values tried, and the objective at each """
         return self.trials
 
-    def plot(self, **kwargs):
+    def plot(self, residuals=False, **kwargs):
         """
         Plot the results that have data against it, before and after fitting; a flow with data at a longer period than the step (e.g. weekly cases) is shown as its totals over the data's periods, as the fit compares them
 
         Args:
+            residuals (bool): whether to add the residuals of the fitted model (the data minus the model, as the fit compares them) in axes below each result
             kwargs (dict): see `ss.plot_args()`, e.g. `figsize=(8, 4)`
+
+        Example:
+            ```python
+            fit = sim.fit()
+            fit.plot(residuals=True) # A pattern in the residuals points to the structure of the model
+            ```
         """
         cols = list(self.sim.data.columns)
         times = plot_times(self.sim.data)
         kw = ss.plot_args(kwargs, alpha=0.8, data_color='k')
+        k = 2 if residuals else 1 # Rows of axes for each row of results
+        nrows, ncols = sc.getrowscols(len(cols))
         with ss.style(**kw.style):
-            fig, axs = sc.getrowscols(len(cols), make=True, squeeze=False, **kw.fig)
-            for ax,col in zip(axs.flatten(), cols):
+            fig, axs = sc.getrowscols(k*nrows*ncols, nrows=k*nrows, make=True, squeeze=False, remove_extra=False, **(dict(height_ratios=[2, 1]*nrows) if residuals else {}), **kw.fig)
+            main, below = axs[::k].flatten(), axs[1::2].flatten() if residuals else [] # The axes of the results, and of their residuals
+            for ax in [*main[len(cols):], *below[len(cols):]]:
+                fig.delaxes(ax)
+            if residuals:
+                lined, compared = lineup(self.sim), compare(self.sim)
+                for ax,col in zip(below, cols):
+                    expected, model = compared[col]
+                    ax.scatter(times[lined[col][2]], expected - model, s=15, **kw.data)
+                    ax.axhline(0, color='k', lw=0.5)
+                    ax.sharex(main[cols.index(col)])
+                    ax.set_title(f'{col}: data minus model')
+            for ax,col in zip(main, cols):
                 for sim,label in [(self.before, 'Before'), (self.sim, 'After')]:
                     res = match_column(sim, col)
                     summed = flow_at_data(sim, col, res)
@@ -2231,8 +2252,9 @@ def fit_optuna(problem, n_trials=100, scan=None, n_workers=None, storage=None, *
     remaining = n_trials - len(study.trials)
     if remaining > 0 and n_workers > 1:
         shares = [len(part) for part in np.array_split(np.arange(remaining), n_workers)]
-        with ss.kernels.starting_workers(): # The workers share the cores, so each takes one thread, as in ss.parallel()
-            sc.parallelize(ss.kernels.worker(optuna_worker), iterarg=list(enumerate(shares)), kwargs=dict(problem=p, storage=storage, kwargs=kwargs), ncpus=n_workers, start_method=ss.kernels.start_method())
+        method = ss.kernels.start_method()
+        with ss.kernels.starting_workers(method): # The workers share the cores, so each takes one thread, as in ss.parallel()
+            sc.parallelize(ss.kernels.worker(optuna_worker), iterarg=list(enumerate(shares)), kwargs=dict(problem=p, storage=storage, kwargs=kwargs), ncpus=n_workers, start_method=method)
         study = optuna_study(p, storage)
     elif remaining > 0:
         study.optimize(functools.partial(optuna_trial, p), n_trials=remaining, **kwargs)

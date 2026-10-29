@@ -60,7 +60,7 @@ def test_export():
 
     # Export results of a whole module to a dataframe
     dfs = rs1.to_df()
-    assert res_df.value.sum() == dfs.cum_infections.values[-1] == sim.summary.sis1_cum_infections
+    assert res_df.value.sum() == dfs.cum_infections.values[-1] == sim.summary.value.sis1_cum_infections
 
     # Export resampled summary of results to dataframe
     dfy1 = rs1.to_df(resample='year')
@@ -126,7 +126,7 @@ def test_2d_results():
     assert res.to_df().columns.tolist() == ['time', 'female', 'male']
     assert 'by female, male' in repr(res) # Each column labelled (it was an unlabelled array)
     assert 'bysex_infected_male' in sim.to_df().columns # Dataframe columns for each result column
-    assert sim.summary.bysex_infected_male == res['male'][-1] # Summarized by column, a stock by its last value
+    assert sim.summary.value.bysex_infected_male == res['male'][-1] # Summarized by column, a stock by its last value
     res.plot()
     sim.plot()
     with pytest.raises(ValueError):
@@ -346,6 +346,10 @@ def test_destinations():
     data = pd.DataFrame({'course.C': truth.values[1:]}, index=truth.timevec[1:]) # Daily, as the flow is
     fit = cohort('ode', p=ss.par(0.5, bounds=[0.05, 0.95], name='p'), data=data).fit(gof='rmse')
     assert np.isclose(fit.table.best.iloc[0], 0.3, rtol=1e-2)
+    fig = fit.plot(residuals=True) # The residuals below the model and the data, lined up as the fit compares them
+    expected, model = ss.results.compare(fit.sim)['course.C']
+    assert len(fig.axes) == 2 and np.allclose(fig.axes[1].collections[0].get_offsets()[:, 1], expected - model)
+    plt.close('all')
     return res
 
 
@@ -363,6 +367,13 @@ def test_compare_data():
     assert np.allclose(compared['sis.infection'][1][1:], [res.infection.values[(sim.t.yearvec > y-1) & (sim.t.yearvec <= y)].sum() for y in years[1:]]) # A flow, summed over the year to each
     for col,(W,expected,rows) in lined.items(): # The same matrix as calibration uses
         assert np.allclose(W @ ss.results.match_column(sim, col).values, compared[col][1])
+    typo = ss.Sim(diseases='sis', networks='random', n_agents=small, start=2000, stop=2010, data=df.rename(columns={'sis.infection': 'infectoin'}), verbose=0).init()
+    assert any("aliases=dict(infection='infectoin')" in note for note in typo.notes) # The code to rename it, with the closest result filled in, to paste as it is
+    two = ss.Sim(diseases=['sir', 'sis'], networks='random', n_agents=small, start=2000, stop=2010, verbose=0).init()
+    with pytest.raises(KeyError, match=r"aliases=\{'sir.infection': 'infectoin'\}"): # A result named by module is not a keyword, so the code is a dict literal
+        ss.results.check_data(two, df.rename(columns={'sis.infection': 'infectoin'}), die=True)
+    with pytest.raises(KeyError, match=r"(?s)No result is close; the results are .*aliases=dict\(result='zzzzqqq'\)"): # Nothing close is not a guess
+        ss.results.check_data(two, df.rename(columns={'sis.infection': 'zzzzqqq'}), die=True)
     return compared
 
 

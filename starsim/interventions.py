@@ -572,7 +572,7 @@ class Delivery(ss.products.EventSource, Intervention):
             return (f'at_age= of "{self.name}" needs people\'s ages, which a compartmental run has as age groups: stratify by age with an edge at {age:n} '
                     f'(e.g. sim.stratify(age=[0, {age:n}, ...])), or run as agents (solver="abm")')
         edges = [int(e) if e == int(e) else float(e) for e in strat.edges]
-        if age not in strat.edges and age > strat.edges[0]: # As ss.conditions.group_reasons() finds it
+        if ss.conditions.on_edge(strat, age) is None and age > strat.edges[0]: # As ss.conditions.group_reasons() finds it
             return (f'at_age={age:n} of "{self.name}" falls inside an age group (the edges are {edges}), so a compartmental run cannot tell who reaches it: '
                     f'add {age:n} as an edge of the age groups, or run as agents (solver="abm")')
         return None

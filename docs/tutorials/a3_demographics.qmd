@@ -59,16 +59,8 @@ ode = ss.Sim(make_measles(), total_pop=20_000, **pars)
 ode.run()
 
 res = ode.results.measles
-plt.figure()
-plt.semilogy(res.timevec, res.I) # On a log scale, since the first epidemic is so much larger than the rest
-plt.ylim(bottom=0.01)
-plt.ylabel('Number infectious');
+res.I.plot(log=True); # On a log scale, since the first epidemic is so much larger than the rest
 ```
-
-::: {.callout-warning}
-## [PROPOSAL]
-A result's plot can't be put on a log scale by itself: `res.I.plot()` has no option for it (it can draw into axes given with `ax=`, whose scale can then be changed). Plots of results (`res.I.plot()`, `sim.plot()`, `msim.plot()`) should take `log=True`, so that this needs no Matplotlib.
-:::
 
 After the first epidemic, there is a "honeymoon" of a few years with very little measles, while births slowly rebuild the number of susceptible people. Once there are enough of them for each case to cause more than one more, measles returns, in a series of smaller epidemics that settle toward a steady endemic level. These match the classic theory of an SIR model with births:
 
@@ -135,13 +127,10 @@ If you want to use realistic demographics for a setting that isn't in the UN dat
 
 `ss.Births()` adds babies to the population as a whole. `ss.Pregnancy()` instead gives women of reproductive age pregnancies, at age-specific fertility rates, which last about nine months and end in a birth (or a miscarriage, a stillbirth, or a maternal death, at rates that can be set). This is what a model needs when something depends on pregnancy itself: infection passed from mother to child (see [A2](a2_networks.qmd#mothers-and-children)), testing in antenatal care, or the effects of a disease on pregnancy. Pregnancy is itself declared as states (`NP`, not pregnant, and `P`, pregnant) and transitions (`conception`, `delivery`, and so on), so other modules can use them, e.g. `where=pregnancy.P`, and each transition is a result. As per standard definitions, `fertility_rate` is defined per *woman*, whereas a birth rate is defined per *person*.
 
-Here Nigeria's age-specific fertility rates (births per 1,000 women of each age, by year, from the UN) are read from a file. Pregnancy takes months, so the sim steps by a month:
+As with births and deaths, `ss.Pregnancy(fertility_rate='Nigeria')` reads Nigeria's age-specific fertility rates from the UN: births per 1,000 women in each 5-year age group, by year. Pregnancy takes months, so the sim steps by a month:
 
 ```{python}
-import pandas as pd
-
-fertility = pd.read_csv('test_data/nigeria_asfr.csv') # Columns Time (year), AgeGrp (age), and ASFR (births per 1,000 women)
-pregnancy = ss.Pregnancy(fertility_rate=fertility)
+pregnancy = ss.Pregnancy(fertility_rate='Nigeria')
 deaths = ss.Deaths(death_rate='Nigeria')
 
 sim = ss.Sim(people=ss.people('Nigeria', n_agents=5000), demographics=[pregnancy, deaths], start=2000, stop=2030, dt=ss.months(1), data=data)
@@ -151,10 +140,7 @@ sim.plot('alive')
 
 The population grows much as it did with crude birth rates, but now each birth comes from a pregnancy of a particular woman, so it can be linked to her: her age, her infections, and the care she receives. The pregnancy model supplies the births, so don't also add `ss.Births()` (or `ss.birth()`) unless it stands for a separate source of people: the same births would be counted twice.
 
-::: {.callout-warning}
-## [PROPOSAL]
-`ss.Births(birth_rate='Nigeria')` and `ss.Deaths(death_rate='Nigeria')` read UN data by name, but `ss.Pregnancy()` doesn't: its age-specific fertility rates have to be found and read from a file. `ss.Pregnancy(fertility_rate='Nigeria')` should read the UN's age-specific fertility rates in the same way (they are in the World Population Prospects, but not yet in `starsim_data`).
-:::
+Rates of your own work too: `fertility_rate` takes a table with a column for the year, one for the age, and one for the rate, e.g. `pd.read_csv('test_data/nigeria_asfr.csv')` (columns `Time`, `AgeGrp`, and `ASFR`), or one rate, e.g. `ss.freqperyear(100)`.
 
 ## Agents standing for many people
 

@@ -938,7 +938,7 @@ def birth(state=None, rate=None, per=None, n=1, sex=None, name=None, label=None)
 
     Args:
         state (State): the state people are born into (default: the disease's first state; in `demographics=`, each disease's)
-        rate (any): the birth rate per person per unit time, e.g. `ss.peryear(0.03)`; for the births of everyone (no `state`), a bare number (or a time series of them) is read as `ss.Births` reads it, per year and, if above 1, per 1,000 people (`30` is `ss.peryear(0.03)`); into a state, it is in the model's unit, as any bare number in a disease
+        rate (any): the birth rate per person per unit time, e.g. `ss.peryear(0.03)`; for the births of everyone (no `state`), a bare number (or a time series of them) is read as `ss.Births` reads a number, per year and, if above 1, per 1,000 people (`30` is `ss.peryear(0.03)`); into a state, it is in the model's unit, as any bare number in a disease
         per (Transition): instead of a rate, the transition whose flow drives the births
         n (int/Dist): the number of children each time: a number, or a distribution (drawn for each parent)
         sex (float/Dist): the chance a child is female (default: as for anyone added)
@@ -1048,7 +1048,7 @@ def death(state=None, rate=None, dur=None, lifetable=None, name=None, label=None
 
     Args:
         state (State/list): the state people die from, or several (`[E, I]`); if not given, every state that is people
-        rate (any): the death rate per person per unit time; with no state (the deaths of everyone), a bare number (or a time series of them) is read as `ss.Deaths` reads it, per year and, if above 1, per 1,000 people (`10` is `ss.peryear(0.01)`)
+        rate (any): the death rate per person per unit time; with no state (the deaths of everyone), a bare number (or a time series of them) is read as `ss.Deaths` reads a number, per year and, if above 1, per 1,000 people (`10` is `ss.peryear(0.01)`)
         dur (any): the mean time to death (instead of `rate`)
         lifetable (`ss.lifetable`): instead of a rate, a life table: as agents, each person's age at death is drawn from it once (at the start, or at birth), given their age; in a compartmental run, which needs a stratification by age, it is a death rate for each age group
         name (str): the name of the transition

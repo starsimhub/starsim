@@ -296,11 +296,6 @@ ss.Sim(make_measles(), data=data, total_pop=100_000, stop=ss.days(50)).init()
 
 Rename the column to match the result (`data.rename(columns={'reported': 'cases'})`), or say which result it is: `data=ss.simdata(data, aliases=dict(cases='reported'))`.
 
-::: {.callout-warning}
-## [PROPOSAL]
-The message suggests `aliases=dict(result='reported')`, with `result` standing for the name of the result. It should give the code with the closest result filled in, `aliases=dict(cases='reported')`, so it can be pasted as it is (P11).
-:::
-
 **Counts over a period are compared with totals over the same period.** A result that counts events, such as infections or reported cases, is compared with the data as its total since the previous data point, so weekly data is compared with weekly totals, whatever the model's time step. A result that counts people at a time, such as the number infectious, is compared at the time of each data point. Data on prevalence (people infectious at a time) given as a count of events, or the other way round, fits the wrong thing; check which kind each column is. [Fitting a model](calibration_fitting.qmd) has more on data.
 
 ## Looking inside a run

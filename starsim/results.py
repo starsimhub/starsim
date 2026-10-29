@@ -36,10 +36,21 @@ def get_ax(fig, ax, kw):
     return fig.gca() if fig is not None else plt.figure(**kw.fig).add_subplot(111)
 
 
+def log_scale(ax, decades=6):
+    """ A log scale for the y axis, down to at most `decades` powers of 10 below its top, since a model's values can fall to 1e-20 (e.g. the number infectious in an ODE between epidemics) """
+    top = max([np.nanmax(np.asarray(line.get_ydata(), dtype=float), initial=0) for line in ax.get_lines()], default=0) # The data's, since Matplotlib's margin grows with the decades shown
+    if top <= 0: # Nothing to show on a log scale (e.g. deaths in a model without them)
+        return
+    ax.set_yscale('log')
+    if ax.get_ylim()[0] < top/10**decades:
+        ax.set_ylim(top/10**decades, top*1.5)
+    return
+
+
 def set_scale(ax, res, log=False):
-    """ A log scale for the y axis, if asked for; otherwise, keep the axis from going negative if the result doesn't (see `ss.Result._floor()`) """
+    """ A log scale for the y axis, if asked for (see `log_scale()`); otherwise, keep the axis from going negative if the result doesn't (see `ss.Result._floor()`) """
     if log:
-        ax.set_yscale('log')
+        log_scale(ax)
     else:
         res._floor(ax)
     return
@@ -1281,10 +1292,15 @@ class Results(ss.utils.NoDists, ss.ndict):
         print(super().__str__(*args, **kwargs))
         return
 
-    def _implicit_has(self, key):
-        """ Whether a key is a result of the sim's one disease made or named by the sim (see `ss.Sim.init_results()`), which is also found here, e.g. `sim.results.I` for `sim.results.sir.I` """
+    def _implicit_get(self, key):
+        """
+        A result of the sim's one disease (the one it made or named, else its only one; see `ss.Sim.init_results()`), which is also found here, e.g. `sim.results.I` for `sim.results.sir.I`; else None
+
+        Across the runs of a MultiSim, it is a result of each sim's one disease, even if their names differ (see `ss.run.MultiResults.from_sims()`).
+        """
         implicit = self.__dict__.get('_implicit')
-        return implicit is not None and isinstance(key, str) and key in dict.get(self, implicit, {})
+        res = dict.get(self, implicit) if isinstance(implicit, str) else implicit # A module's name here, or results of their own
+        return res[key] if isinstance(key, str) and isinstance(res, dict) and key in res else None
 
     def _given_msg(self, key):
         """ For the results of a module that was given to a sim, which ran its own copy: where the results are """
@@ -1304,8 +1320,8 @@ class Results(ss.utils.NoDists, ss.ndict):
     def __getitem__(self, key):
         if isinstance(key, str) and dict.__contains__(self, key): # The usual case, as fast as a dict; the rest only for a key that is not here
             return dict.__getitem__(self, key)
-        if self._implicit_has(key):
-            return self[self._implicit][key]
+        if (res := self._implicit_get(key)) is not None:
+            return res
         if msg := self._given_msg(key) or self._unknown_msg(key):
             raise sc.KeyNotFoundError(msg)
         return super().__getitem__(key)
@@ -1313,8 +1329,8 @@ class Results(ss.utils.NoDists, ss.ndict):
     def __getattr__(self, attr):
         if dict.__contains__(self, attr): # As in __getitem__()
             return dict.__getitem__(self, attr)
-        if self._implicit_has(attr):
-            return self[self._implicit][attr]
+        if (res := self._implicit_get(attr)) is not None:
+            return res
         if msg := self._given_msg(attr) or self._unknown_msg(attr):
             raise AttributeError(msg)
         return super().__getattr__(attr)
@@ -1494,7 +1510,7 @@ class Results(ss.utils.NoDists, ss.ndict):
                     several = res._draw(ax, kw, label=sc.ifelse(res.label, res.name) if len(group) > 1 else label, lines=lines, floor=False, colors=colors)
                     many = many or (several and res.columns is None) # Several scenarios, labelled once
                 if log:
-                    ax.set_yscale('log')
+                    log_scale(ax)
                 elif all(res.values.min() >= 0 for res in group):
                     group[0]._floor(ax)
                 if len(group) > 1 or group[0].columns is not None: # One line per result, or per column
@@ -1522,12 +1538,44 @@ class Results(ss.utils.NoDists, ss.ndict):
         return {scenario:cycle[i % len(cycle)] for i,scenario in enumerate(scenarios)}
 
 
+def summary_funcs(how, results):
+    """
+    The functions of `how=` in `sim.summarize()` and `msim.summarize()`, by the key of each result in `results.flatten(sep='_', columns=True)`
+    ('' for every result): each is given by name ('mean', 'median', 'sum', 'last', 'max', or 'min') or as a function of a run's values. A result
+    is named as for `key=` (e.g. 'sir_I' or 'sir.I'), and a 2D result's functions are those of each of its columns; a name that matches no result raises.
+    """
+    funcs = dict(mean=np.mean, median=np.median, sum=np.sum, last=lambda vals: vals[-1], max=np.max, min=np.min)
+    how = {} if how is None else how if isinstance(how, dict) else {'':how} # '' matches every key
+    out = {}
+    flat = None
+    for key,func in how.items():
+        if not callable(func) and func not in funcs:
+            errormsg = f'Unknown how={func!r}{f" for {key}" if key else ""}; use {sc.strjoin([repr(k) for k in funcs])}, or a function'
+            raise ValueError(errormsg)
+        func = func if callable(func) else funcs[func]
+        if key == '':
+            out[key] = func
+            continue
+        flat = flat if flat is not None else results.flatten(sep='_', only_results=False) # 2D results whole, as a key names them
+        try:
+            (name, res), = match_result_keys(flat, key, show_skipped=True, flattened=True).items()
+        except KeyError:
+            names = [k for k,v in flat.items() if isinstance(v, Result) and 'timevec' not in k]
+            errormsg = f'how= names "{key}", which is not the name of one result{ss.expressions.did_you_mean(key.replace(".", "_"), names)} The results are {sc.strjoin(names)}.'
+            raise sc.KeyNotFoundError(errormsg) from None
+        cols = getattr(res, 'columns', None)
+        out.update({k:func for k in ([name] if cols is None else [f'{name}_{col}' for col in res.by_column()])})
+    return out
+
+
 def match_result_keys(results, key, show_skipped=False, flattened=False):
     """ Ensure that the user-provided keys match available ones, and raise an exception if not """
 
     def normkey(key):
         """ Normalize the key: e.g. 'SIS.prevalence' becomes 'sis_prevalence' """
         return key.replace('.','_').lower()
+
+    implicit = lambda key: results._implicit_get(key) if isinstance(results, Results) else None # A result of the sim's one disease (see Results._implicit_get())
 
     # Handle accessing subdicts
     if isinstance(key, str) and key in results and isinstance(results[key], dict): # Key matches a subdict, use that directly, e.g. sim.plot('sis')
@@ -1549,6 +1597,8 @@ def match_result_keys(results, key, show_skipped=False, flattened=False):
         if isinstance(key, str):
             if normkey(key) in lower: # Use an exact match if there is one, e.g. 'new_deaths' rather than 'cholera_new_deaths'
                 flat = {lower[normkey(key)]:flat[lower[normkey(key)]]}
+            elif implicit(key) is not None: # A result of the sim's one disease, e.g. 'I' for 'sir.I', or of each sim's across the runs of a MultiSim
+                flat = {key:implicit(key)}
             else:
                 flat = {k:v for k,v in flat.items() if (normkey(key) in k.lower())} # Will match e.g. 'SIS.prevalence' and 'sis_prevalence'
                 named = {k:v for k,v in flat.items() if k.lower().endswith('_' + normkey(key))} # A result's own name, e.g. 'cpr' for 'contraception_cpr' rather than 'contraception_acpr'
@@ -1559,7 +1609,7 @@ def match_result_keys(results, key, show_skipped=False, flattened=False):
                 raise sc.KeyNotFoundError(errormsg)
         else:
             try:
-                flat = {k.lower():flat[lower[normkey(k)]] for k in key}
+                flat = {k.lower():flat[lower[normkey(k)]] if normkey(k) in lower or implicit(k) is None else implicit(k) for k in key}
             except KeyError as e:
                 errormsg = f'Not all keys could be matched.\nAvailable keys:\n{sc.newlinejoin(flat_orig.keys())}\n\nYour keys:\n{sc.newlinejoin(key)}'
                 raise sc.KeyNotFoundError(errormsg) from e
@@ -1799,8 +1849,14 @@ def check_data(sim, df, die=False):
             if len(several) > 1: # The name of a result of more than one module
                 msg = f'the data column "{col}" could be the result {name} of any of {sc.strjoin(several)}; name the column after one of them, e.g. "{several[0]}.{name}", or rename it with ss.simdata(..., aliases=dict(...)).'
             else:
-                msg = (f'the data column "{col}" matches no result. The closest results are {ss.expressions.closest(col, [o.split(".")[-1] for o in options])}.\n'
-                       f"     Rename it with ss.simdata(..., aliases=dict(result='{col}')), or drop it with ss.simdata(..., ignore_extra=True).")
+                short = [o.split('.')[-1] for o in options]
+                names = [s if short.count(s) == 1 else o for o,s in zip(options, short)] # A result of one module by its name, as a column can be named; of several, by module and name
+                matches = sc.suggest(col, names, n=3) or []
+                found = f'The closest results are {sc.strjoin(matches)}' if matches else f'No result is close; the results are {sc.strjoin(names)}'
+                key = matches[0] if matches else 'result'
+                alias = f"dict({key}='{col}')" if key.isidentifier() else f"{{'{key}': '{col}'}}" # A result named by module and name (sir.infection) is not a keyword
+                msg = (f'the data column "{col}" matches no result. {found}.\n'
+                       f"     Rename it with ss.simdata(..., aliases={alias}), or drop it with ss.simdata(..., ignore_extra=True).")
             if die:
                 raise sc.KeyNotFoundError(msg)
             ss.note(f'{msg[0].upper()}{msg[1:]} It is not compared with the results.', sim=sim)
@@ -1834,7 +1890,10 @@ def data_times(sim, df, res=None):
     if res is not None and res.timevec is not None and len(res.timevec) != len(sim_t): # A module with a timestep of its own
         own = res.timevec
         sim_t = np.asarray(own.years if hasattr(own, 'years') else own, dtype=float)
-    data_t = date_years(tuple(index)).copy() if years else np.asarray(index, dtype=float)
+    if years and not dated and sim.t.is_absolute: # Numbers in a sim with dates, read as any time is: a year from 1900 on, else a time after the start (see ss.connectors.to_time())
+        data_t = np.array([ss.connectors.to_time(sim, float(v)).years for v in index], dtype=float)
+    else:
+        data_t = date_years(tuple(index)).copy() if years else np.asarray(index, dtype=float)
     return sim_t, data_t
 
 

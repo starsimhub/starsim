@@ -160,7 +160,7 @@ class Pars(sc.objdict):
         Update internal dict with new pars.
 
         A new value replaces the old one, except that a declared parameter (`ss.par`) takes the value and keeps its name and bounds,
-        a bare number for a typed value keeps its unit, and a single value for a distribution is the fixed value of that kind
+        a bare number for a typed value keeps its unit, and a single value for a distribution sets its main parameter
         (see `_update_dist()`). To change one parameter of a distribution, use its own method, e.g. `pars.dur_inf.set(mean=8)`.
 
         Args:
@@ -301,8 +301,9 @@ class Pars(sc.objdict):
         A distribution (or a dict with a `type`) replaces it. A single value (a number, duration, rate, or function) sets
         its main parameter and keeps the rest: for `ss.bernoulli`, its probability (`init_prev=0.05`);
         for `ss.lognorm_ex`, its mean (`dur=5` is a lognormal of mean 5, with the same standard deviation); for
-        `ss.constant`, its value; for `ss.choice`, it becomes that value always (`ss.constant`). A bare number keeps the unit of the distribution (see `note_bare()`). To change other
-        parameters, use its own method, e.g. `pars.dur_inf.set(mean=8, std=2)`; for a fixed value, give `ss.constant(...)`.
+        `ss.constant`, its value; for `ss.choice`, it becomes that value always (`ss.constant`). A bare number keeps the unit of the distribution (see `note_bare()`).
+        If that leaves other parameters that shape it (e.g. the std of a lognormal, but not the shift of 0 of a gamma), it warns, since a single
+        value may have been meant: for that, give `ss.constant(...)`. To change other parameters, use its own method, e.g. `pars.dur_inf.set(mean=8, std=2)`.
         """
         if isinstance(new, dict) and 'type' in new: # A distribution given by its type and parameters, e.g. dict(type='poisson', lam=4)
             new = ss.distributions.make_dist(new)
@@ -323,13 +324,15 @@ class Pars(sc.objdict):
             old.set(new)
             if isinstance(new, Number):
                 self.note_bare(key, old, new)
-            elif isinstance(new, (ss.dur, ss.Rate)) and not isinstance(old, ss.constant): # MS8: in a declared model, a duration alone is an exponential, so say that it was not
-                first = next(iter(old.pars), 'mean')
-                val = f'ss.{new!r}'
-                bare = [k for k in (old.unit_pars or []) if k != first and sc.isnumber(old.pars.get(k))] # E.g. the std of ss.lognorm_ex(mean=ss.years(6)): a number, in the unit of the mean, which is now that of the value given
-                kept = f' as numbers, so {sc.strjoin(f"{k}={old.pars[k]}" for k in bare)} {"is" if len(bare) == 1 else "are"} now in {new.base}' if bare and isinstance(new, ss.dur) else ''
-                ss.warn(f'{key}={val} set the {first} of its default distribution, which is now {old}, keeping its other parameters{kept}. '
-                        f'To replace the distribution, give one, e.g. {key}=ss.expon({val}) for an exponential, or ss.constant({val}) for a fixed value')
+            first = next(iter(old.pars), None)
+            num = lambda v: v.value if isinstance(v, ss.TimePar) else v
+            kept = [k for k,v in old.pars.items() if k != first and (sc.isfunc(v) or sc.isnumber(num(v)) and np.isfinite(num(v)) and not (k == 'loc' and num(v) == 0))] # The parameters that still shape it, e.g. the std of a lognormal; not a dtype, an infinite bound, or a zero shift
+            if kept: # 14b: only some of the distribution was set, which may not be what was meant (in a declared model, a duration alone is an exponential instead), so say so
+                val = f'ss.{new!r}' if isinstance(new, (ss.dur, ss.Rate)) else new.__name__ if sc.isfunc(new) else new
+                bare = [k for k in kept if k in (old.unit_pars or []) and sc.isnumber(old.pars[k])] if isinstance(new, ss.dur) else [] # E.g. the std of ss.lognorm_ex(mean=ss.years(6)): a number, in the unit of the mean, which is now that of the value given
+                units = f' in {new.base}' if bare else ''
+                ss.warn(f'{key}={val} set only the {first} of its default distribution, keeping the rest: it is now {old}{units}. '
+                        f'For a single value, give {key}=ss.constant({val}); for another distribution, give it, e.g. {key}=ss.{type(old).__name__}(...)')
 
         # Give up
         else:
@@ -909,6 +912,7 @@ class by:
             raise ValueError(errormsg)
         self.array = None
         self.wrap = None # The type of a typed array given as the table, e.g. ss.permonth(np.ones((2, 2)))
+        self.rest = None # The value of a level left out of a dict by label, which only a starting value has (see starting()); otherwise every level is needed
         series = lambda vals: isinstance(vals, pd.Series) and not isinstance(vals.index, pd.RangeIndex) # Keyed by the levels' names
         kwargs = {dim:(dict(vals) if series(vals) else vals.tolist() if isinstance(vals, (np.ndarray, pd.Series)) and np.ndim(vals) == 1 else vals) for dim,vals in kwargs.items()} # An array is a list, a value per level, e.g. ss.perday(ss.by(herd=np.array(b))); a Series with labels, a dict
         numeric = [dim for dim,vals in kwargs.items() if isinstance(vals, dict) and any(sc.isnumber(k) and not isinstance(k, (bool, np.bool_)) for k in vals)]
@@ -946,7 +950,7 @@ class by:
         return
 
     def __setattr__(self, name, value):
-        if name in ['table', 'array', 'given', 'dims']: # The values changed, so what was worked out from them is worked out again
+        if name in ['table', 'array', 'given', 'dims', 'rest']: # The values changed, so what was worked out from them is worked out again
             self.__dict__['_cache'] = {}
         object.__setattr__(self, name, value)
 
@@ -1147,7 +1151,10 @@ class by:
                 labels = strat.labels
                 if isinstance(vals, dict):
                     missing = [str(label) for label in labels if str(label) not in [str(k) for k in vals]]
-                    if missing:
+                    unknown = [str(k) for k in vals if str(k) not in [str(label) for label in labels]]
+                    if unknown: # e.g. a misspelled place, which would otherwise leave a starting value's level at 0 unnoticed
+                        raise ValueError(f'ss.by({strat.name}=dict(...)) has a value for {sc.strjoin(unknown)}, which {"is not a level" if len(unknown) == 1 else "are not levels"} of "{strat.name}" ({sc.strjoin(labels)}).')
+                    if missing and self.rest is None:
                         raise ValueError(f'ss.by({strat.name}=dict(...)) has no value for {sc.strjoin(missing)} (the levels of "{strat.name}" are {sc.strjoin(labels)}).')
                     continue
                 n = len(vals) if isinstance(vals, (list, tuple)) else len(sc.toarray(vals)) if np.ndim(vals) else len(labels) # One value is for every level, e.g. ss.by(subpop=2.2)
@@ -1231,7 +1238,9 @@ class by:
                 vals = list(vals.values()) if isinstance(vals, dict) else list(vals) if isinstance(vals, (list, tuple)) else [vals]*n if np.ndim(vals) == 0 else list(sc.toarray(vals))
                 w = None if weights is None else weights[i]
                 vals = np.array([convert(v) for v in vals] + [np.nan], dtype=float)
-                if w is not None:
+                if self.rest is not None: # A level left out of a starting value, and people with no value
+                    vals[-1] = self.rest
+                elif w is not None:
                     vals[-1] = np.average(vals[:-1], weights=w)
                 if len(sizes) == 1:
                     return vals
@@ -1254,11 +1263,11 @@ class by:
         return out
 
     @staticmethod
-    def level_items(strat, vals):
-        """ The values given for a dimension, in the order of its levels: whether it is one value for every level, and the values """
+    def level_items(strat, vals, rest=None):
+        """ The values given for a dimension, in the order of its levels (`rest` for a level left out): whether it is one value for every level, and the values """
         if isinstance(vals, dict): # By label, in the order of the levels
             vals = {str(k):v for k,v in vals.items()}
-            vals = [vals[str(label)] for label in strat.labels]
+            vals = [vals.get(str(label), rest) for label in strat.labels]
         if isinstance(vals, (list, tuple)): # The usual case, which NumPy need not inspect (slowly, for typed values)
             return False, vals
         return np.ndim(vals) == 0, sc.toarray(vals) # One value for every level, e.g. ss.by(subpop=2.2)
@@ -1278,7 +1287,7 @@ class by:
             return v.series(years, sim, convert) if isinstance(v, TimeValue) else np.full(len(years), float(one(v)))
         out = np.ones([strat.n for strat in strats] + [len(years)])
         for i,(strat,vals) in enumerate(zip(strats, self.given.values())):
-            single, items = self.level_items(strat, vals)
+            single, items = self.level_items(strat, vals, self.rest)
             vals = np.array([series(v) for v in items], dtype=float).reshape(len(items), len(years))
             if single:
                 vals = np.repeat(vals[:1], strat.n, axis=0)
@@ -1412,6 +1421,23 @@ class by:
         if self.array is not None:
             return bool(np.all(self.array == np.round(self.array)))
         return np.asarray(self.items).dtype.kind in 'iu'
+
+
+def starting(val):
+    """
+    A starting value (`init=`, `init_n=`, or `init_prev=`, or a parameter holding one), where an `ss.by` given by label may leave levels out,
+    which start at 0, e.g. `init_n=dict(I=ss.by(patch={'Nairobi': 10}))`; a rate or other parameter by label needs every level, since a missing
+    one there is more likely a mistake. Returns the value to use (a copy, so the same `ss.by` used elsewhere still needs every level).
+    """
+    raw = val.raw if isinstance(val, par) else val
+    if not isinstance(raw, by) or raw.rest is not None or not any(isinstance(v, dict) for v in raw.given.values()):
+        return val
+    raw = sc.cp(raw)
+    raw.rest = 0.0
+    if isinstance(val, par):
+        val.value = raw
+        return val
+    return raw
 
 
 class Static:

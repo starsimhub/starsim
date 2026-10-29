@@ -243,9 +243,7 @@ class Cond:
         if op in comparisons: # A level of a stratification can be given by its label, and an age must fall on a bin edge
             op, a, b = ctx.bands(op, a, b)
             a_val, b_val = ctx.level(b, a), ctx.level(a, b)
-            ctx.check_edge(a, b_val)
-            ctx.check_edge(b, a_val)
-            a, b = a_val, b_val
+            a, b = ctx.check_edge(b, a_val), ctx.check_edge(a, b_val)
         a, b = evaluate(a, ctx), evaluate(b, ctx)
         if op in ['&', '|']:
             if not getattr(ctx, 'abm', True) and (has_event(args[0]) or has_event(args[1])): # In a compartmental run, the people an event happened to are a share of each state and group, and the other side is a condition, which holds for all of a group or none (two events together are agents only: see group_reasons())
@@ -253,6 +251,15 @@ class Cond:
                 return np.clip(a*b if op == '&' else a + b - a*b, 0, 1)
             a, b = as_bool(a), as_bool(b)
         return ops[op](a, b)
+
+
+def on_edge(strat, value):
+    """
+    The edge of a binned dimension that a number falls on, or None: to within rounding, so that an age in weeks or days
+    (`ss.weeks(6)`, 0.11506849... years) is on the edge written as printed (0.115068)
+    """
+    match = np.flatnonzero(np.isclose(strat.edges, value, rtol=0, atol=1e-6))
+    return strat.edges[match[0]] if len(match) else None
 
 
 def find_module(cond):
@@ -627,7 +634,7 @@ def group_reasons(cond, sim):
         for x,v in [cond.args, cond.args[::-1]]:
             if isinstance(x, Cond) and x.op == 'people' and sc.isnumber(v) and not isinstance(v, (bool, np.bool_)):
                 strat = next((strat for strat in sim.groups.strats if strat.name == x.args[0]), None)
-                if strat is not None and strat.edges is not None and v not in strat.edges and strat.edges[0] < v:
+                if strat is not None and strat.edges is not None and on_edge(strat, v) is None and strat.edges[0] < v:
                     out.append(f'a condition uses people.{x.args[0]} and {v:n}, which falls inside a bin of {x.args[0]}')
     for arg in cond.args:
         out += group_reasons(arg, sim)
@@ -1005,27 +1012,31 @@ class Selector:
         if op in ['==', '!=']:
             errormsg = f'The condition {a} {op} {b:n} compares the bins of "{strat.name}" ({sc.strjoin(strat.labels)}) with a number; give a bin by its label, e.g. {strat.name} == "{strat.labels[0]}", or a range by its edges, e.g. {strat.name} < {edges[-1]}'
             raise ValueError(errormsg)
-        if b not in strat.edges:
+        edge = on_edge(strat, b)
+        if edge is None:
             errormsg = f'The condition {a} {op} {b:n} needs {b:n} to be an edge of the bins of "{strat.name}" ({edges}), since people are counted by bin; add it as an edge, or use one of those'
             raise ValueError(errormsg)
-        index = int(np.flatnonzero(strat.edges == b)[0])
+        index = int(np.flatnonzero(strat.edges == edge)[0])
         return ('<' if op in ['<', '<='] else '>='), a, index # Ages are continuous, so below an edge (or at most it) is the bins below it
 
     def check_edge(self, cond, value):
-        """ In a compartmental run, an age threshold has to be the edge of an age group """
+        """ In a compartmental run, an age threshold has to be the edge of an age group: the value, as that edge (see `on_edge()`) """
         sim = self.sim
         if self.abm or not (isinstance(cond, Cond) and cond.op == 'people' and sc.isnumber(value)):
-            return
+            return value
         name = cond.args[0]
         dims = [strat.name for strat in sim.groups.strats]
         if name in dims and self.is_binned(name):
             strat = sim.groups.strats[dims.index(name)]
-            if value not in strat.edges and strat.edges[0] < value:
+            edge = on_edge(strat, value)
+            if edge is not None:
+                return edge
+            if strat.edges[0] < value:
                 edges = sorted(set(strat.edges.tolist() + [value]))
                 edges = [int(e) if e == int(e) else e for e in edges]
                 raise ss.CapabilityError(f'a condition uses people.{name} and {value:n}, but the model\'s {name} bins are {[int(e) if e == int(e) else e for e in strat.edges]} and {value:n} falls inside a bin.\n'
                                          f'     Fix: add {value:n} as a bin edge, stratify({name}={edges}), or run with solver="abm".')
-        return
+        return value
 
     #%% Selections
 

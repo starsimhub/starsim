@@ -1005,17 +1005,18 @@ class Sim(ss.Base):
         # Let People handle its own result initialization
         self.people.init_results()
 
-        # With dynamic rescaling, store the scale factor for each timestep
+        # With dynamic rescaling, store the scale factor for each timestep, and the people no agent stands for yet (see rescale())
         if self.pars.rescale:
             self.results += ss.Result('pop_scale', label='Population scale factor', scale=False, auto_plot=False, timevec=self.timevec, values=np.ones(self.t.npts))
+            self.results += ss.Result('unrepresented', label='People no agent stands for yet', scale=False, auto_plot=False, timevec=self.timevec, values=np.full(self.t.npts, (self.pars.pop_scale - 1)*self.people.n_alive, dtype=float))
 
         # A product with no results of its own (most are only given by a delivery, which keeps the results) is left out
         for prod in self.products():
             if not [key for key,res in prod.results.items() if isinstance(res, ss.Result) and key != 'timevec']:
                 self.results.pop(prod.name, None)
 
-        # The results of one disease made or named by the sim are also at the top, e.g. sim.results.I
-        implicit = [mod.name for mod in self.diseases() if mod._implicit]
+        # The results of the sim's one disease (the one it made or named, else its only one) are also at the top, e.g. sim.results.I
+        implicit = [mod.name for mod in self.diseases() if mod._implicit] or [mod.name for mod in self.diseases()]
         if len(implicit) == 1:
             self.results.setattribute('_implicit', implicit[0])
 
@@ -1024,7 +1025,7 @@ class Sim(ss.Base):
             known = [f'{mod.name}.{key}' for mod in self.modules for key,res in mod.results.items() if isinstance(res, ss.Result)]
             for name in sc.tolist(self.pars.results):
                 if name not in known and not any(key.split('.', 1)[1] == name for key in known):
-                    errormsg = f'results= names "{name}", which is not a result of this sim; the closest are {ss.expressions.closest(name, known)}'
+                    errormsg = f'results= names "{name}", which is not a result of this sim; the closest are {sc.strjoin(ss.expressions.closest(name, known))}'
                     raise sc.KeyNotFoundError(errormsg)
         return
 
@@ -1070,6 +1071,11 @@ class Sim(ss.Base):
         is increased by at least `pars.rescale_factor` (up to `pars.pop_scale`), and the same
         fraction of non-naive agents are made naive again (via `disease.make_naive()`), so that
         each agent now represents more people. Based on Covasim's dynamic rescaling.
+
+        The people no agent stands for yet are counted as one number, `results.unrepresented`:
+        `pop_scale - 1` for each agent at the start, less the people the agents alive take on
+        at each rescaling (from scale `s` to `s'`, `s' - s` for each); the deaths and births of
+        agents do not change it. So `alive` is `scale` people for each agent alive, plus these.
         """
         pars = self.pars
         ti = self.ti
@@ -1081,6 +1087,7 @@ class Sim(ss.Base):
             if ratio > pars.rescale_threshold: # Check if we've reached the point to rescale
                 max_ratio = pars.pop_scale/scale[ti] # Don't exceed the total population size
                 scaling_ratio = min(max(ratio/pars.rescale_threshold, pars.rescale_factor), max_ratio)
+                self.results.unrepresented[ti:] -= scale[ti]*(scaling_ratio - 1)*self.people.n_alive # The agents alive now stand for that many more people
                 scale[ti:] *= scaling_ratio # Update the scale factor from here on
                 n = int(round(len(not_naive)*(1.0 - 1.0/scaling_ratio))) # For example, rescaling by 2 makes half of the non-naive agents naive
                 self.rng_rescale.set(n=n)
@@ -1532,11 +1539,14 @@ class Sim(ss.Base):
             # otherwise the scale factor will be applied multiple times
             raise ss.AlreadyRunError('Simulation has already been finalized')
 
-        scale = self.result_scale()
+        scale = stock_scale = self.result_scale()
+        if self.pars.rescale and 'alive' in self.results: # With dynamic rescaling, a count of people (e.g. alive) includes those no agent stands for yet, who are like the agents, shared out as the agents alive are
+            n = np.asarray(self.results.alive.values, dtype=float)
+            stock_scale = scale + np.divide(self.results.unrepresented.values, n, out=np.zeros(len(n)), where=n>0)
         for reskey, res in self.results.items():
             if isinstance(res, ss.Result):
                 if res.scale: # Scale results; NB: disease-specific results are scaled in module.finalize() below
-                    res.apply_scale(scale)
+                    res.apply_scale(stock_scale if res.kind == 'stock' else scale)
                 if np.all(res == res[0]): # Results were not modified during the sim
                     self.results[reskey].auto_plot = False
         if self.pars.rescale and self.pars.people_results: # With a scale that varies over time, cumulative results must be summed after scaling
@@ -1546,42 +1556,47 @@ class Sim(ss.Base):
 
     def summarize(self, key=None, how=None):
         """
-        Provide a quick summary of the sim: each result over the whole run, by its `summarize_by`
+        A table of each result over the whole run, by its `summarize_by`, as `msim.summarize()` gives for a scenario run once
 
         By default, a flow (e.g. new infections) is totaled, a stock (e.g. the number
         infected) takes its final value, and a ratio (e.g. prevalence) is averaged; see
-        `ss.Result.summarize()`.
+        `ss.Result.summarize()`. Results that are 0 throughout are kept, so the tables of
+        different runs line up row for row.
 
         Args:
-            key (str): if given, only this result (e.g. `'sir_infection'` or `'sir.infection'`): its summary, rather than a dict of all of them (which is kept as `sim.summary`)
-            how (str/dict): 'mean', 'median', 'last', 'sum', or a function, to summarize every result that way; or a dict of these by result key (e.g. `dict(sir_infected='mean')`), with the rest by their `summarize_by`
-        """
-        funcs = dict(mean=np.mean, median=np.median, sum=np.sum, last=lambda res: res[-1])
-        if not isinstance(how, dict):
-            how = {} if how is None else {'':how} # '' matches every key
+            key (str): if given, only this result (e.g. `'sir_infection'` or `'sir.infection'`): its summary, as a number (or the rows of its columns, for a 2D result)
+            how (str/dict): 'mean', 'median', 'sum', 'last', 'max', 'min', or a function, to summarize every result that way; or a dict of these by result, named as for `key` (e.g. `dict(sir_I='max')` or `{'sir.I': 'max'}`), with the rest by their `summarize_by`
 
-        summary = sc.objdict()
+        Returns:
+            A dataframe with a row for each result and one column, `value` (kept as `sim.summary`); with `key`, that result's summary
+
+        Example:
+            ```python
+            sim.summarize()                  # Every result
+            sim.summarize('sir_infection')   # The total infections
+            sim.summarize('sir_I', how='max') # The peak number infectious
+            ```
+        """
+        how = ss.results.summary_funcs(how, self.results)
         flat = self.results.flatten(sep='_', only_results=False, columns=True) # Summarize each column of 2D results separately
         one = key is not None
         if one: # Only the result asked for
             flat = ss.results.match_result_keys(flat, key, show_skipped=True, flattened=True)
-        for key, res in flat.items():
-            func = how.get(key, how.get(''))
-            if 'timevec' in key or (func is None and getattr(res, 'summarize_by', '') is None): # Skip module-specific time vectors, and results not summarized over time
+        values = {}
+        for k, res in flat.items():
+            func = how.get(k, how.get(''))
+            if 'timevec' in k or (func is None and getattr(res, 'summarize_by', '') is None): # Skip module-specific time vectors, and results not summarized over time
                 continue
-            try:
-                if func is None:
-                    entry = res.summarize() if isinstance(res, ss.Result) else np.mean(res)
-                else:
-                    entry = func(res) if callable(func) else funcs[func](res)
-            except Exception as E:
-                entry = f'N/A {E}'
-            summary[key] = entry
+            if func is None:
+                values[k] = float(res.summarize() if isinstance(res, ss.Result) else np.mean(res))
+            else:
+                values[k] = float(func(np.asarray(res)))
+        summary = sc.dataframe(dict(value=list(values.values())), index=pd.Index(list(values), name='result'))
         if one:
-            if key not in summary:
+            if not values:
                 errormsg = f'"{key}" has no summary: it is not summarized over time (give how=)'
                 raise ValueError(errormsg)
-            return summary[key]
+            return summary.value.iloc[0] if len(summary) == 1 else summary # A 2D result has a row for each column
         self.summary = summary
         return summary
 
@@ -1857,7 +1872,7 @@ class Sim(ss.Base):
                 d.pars = pardict
             elif key == 'summary':
                 if self.results_ready:
-                    d.summary = dict(sc.dcp(self.summary))
+                    d.summary = self.summary.value.to_dict()
                 else:
                     d.summary = 'Summary not available (Sim has not yet been run)'
             elif key == 'results':

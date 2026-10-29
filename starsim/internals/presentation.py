@@ -706,7 +706,11 @@ def describe_sim(sim, output=False, verbose=False):
             add('', f'{cap.ingredient}: {cap.reason}')
         if not guessed: # What auto would have done
             reasons = ss.solvers.auto_reasons(sim)
-            add('', f'auto would choose: ' + (f'abm ({reasons[0]})' if reasons else 'ode (every part of the model has a compartmental form)'))
+            stops = [cap.reason for cap in sim.capabilities if not cap.get('switch', True)] # E.g. at_age= with no age group starting at that age, which auto does not run as agents
+            if stops:
+                add('', f'auto would stop: {stops[0]}')
+            else:
+                add('', f'auto would choose: ' + (f'abm ({reasons[0]})' if reasons else 'ode (every part of the model has a compartmental form)'))
         if sim.solver == 'abm':
             scale = f', each standing for {pars.pop_scale:n} people' if pars.pop_scale != 1 else ''
             add('', f'{pars.n_agents:,} agents{scale}', None if 'n_agents' in sim.given else 'guessed')

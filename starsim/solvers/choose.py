@@ -205,6 +205,8 @@ def init_model(sim):
         if any(key in mod.pars for mod in sim.declared):
             sim.par_values = sc.mergedicts(sim.par_values, {key:pars.pop(key)})
     set_par_values(sim)
+    for mod in sim.declared: # A level left out of a starting value by label starts at 0
+        mod.graph.resolve_starting()
     check_par_values(sim) # Not on a restart, so a fit can probe values at its bounds
     init_named_people(sim)
     sim.groups.init()

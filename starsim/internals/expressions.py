@@ -13,9 +13,8 @@ __all__ = ['Expr', 'par', 'mother', 'attr']
 #%% Helpers
 
 def closest(name, options):
-    """ String listing the closest matches to a name, for error messages """
-    matches = sc.suggest(name, list(options), n=3) or list(options)
-    return sc.strjoin(matches)
+    """ The closest matches to a name (up to three, closest first), or all the options if none is close, for error messages """
+    return sc.suggest(name, list(options), n=3) or list(options)
 
 
 def did_you_mean(name, options):

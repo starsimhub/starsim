@@ -231,12 +231,16 @@ class Agents(Engine, Transmission):
         self.halved = infected & {s.name for s in graph.infectious if graph.exits[s.name].hazards}
         self.late = set() # The states with a late_ array: see enter()
         unkept = [state.name for state in graph.people_states if read is not None and not state.keep_time and state.name not in read and state.name not in self.scheduled and state.name not in clocked and not any(getattr(tr, 'after', None) is not None for tr in graph.exits[state.name].hazards)]
+        exited = {s.name for tr in graph.transitions.values() if any(getattr(d, 'people', False) for d in (tr.dst or [])) for s in (tr.src or []) if getattr(s, 'people', False)}
+        self.lefts = {self.state_index[name]:f'ti_left_{name}' for name in self.state_index if name in exited and name not in unkept} # The engine's time each agent last left a state that leads to another and whose time of entering is kept, for its stays: see enter() and ss.BoolState.stays
         for state in graph.people_states:
             name = state.name
             arrs += [ss.BoolState(name, label=state.label or name)]
             if name not in unkept: # Only if something reads it, to save memory
                 arrs.append(ss.TimeArr(f'ti_{name}', label=f'Time of entering {name}'))
                 arrs.append(ss.Arr(f'shift_{name}', dtype=np.int8, nan=0, default=0, label=f'Steps from the engine\'s time of entering {name} to the step\'s index')) # See stamp()
+                if self.state_index[name] in self.lefts:
+                    arrs.append(ss.FloatArr(f'ti_left_{name}', label=f'The engine\'s time of last leaving {name}')) # See enter()
             if name in self.scheduled: # Only for a state with scheduled exits, to save memory
                 arrs += [ss.TimeArr(f'ti_exit_{name}', label=f'Scheduled time of leaving {name}'),
                          ss.Arr(f'exit_{name}', dtype=np.int8, nan=-1, label=f'Scheduled exit from {name}')] # Which of the exits, as 8-bit integers
@@ -2704,6 +2708,11 @@ class Agents(Engine, Transmission):
         name = state.name
         self.put(name, uids, True)
         self.stamp(name, uids, ti)
+        if self.lefts and not np.isscalar(srcs): # Dated as leaving the states they came from, for their stays (see ss.BoolState.stays)
+            for i,arr in self.lefts.items():
+                came = srcs == i
+                if came.any():
+                    mod[arr].raw[uids[came]] = ti
         for arr,inside in self.sets_of[name]: # Entering a set from outside it starts its clock
             outside = ~np.isin(srcs, inside)
             mod[arr][uids[np.broadcast_to(outside, len(uids))]] = ti

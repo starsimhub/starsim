@@ -1076,10 +1076,11 @@ def people(place, year=None, n_agents=None, revision=None):
         sim = ss.Sim(sir, people=ss.people('Kenya', year=2024), networks=ss.contacts('Kenya'))
         ss.people('NG').named.total # The population of Nigeria in 2024
     """
-    ages, female, male, ref = ss.data.population(place, year=year, revision=revision)
-    total = female + male
-    ppl = People(n_agents=sc.ifelse(n_agents, ss.SimPars().n_agents), age_data=ss.data.to_age_data(ages, total), p_female=female.sum()/total.sum())
-    ppl.named = sc.objdict(place=place, year=year, n_agents=n_agents, revision=revision, total=float(total.sum()), ages=ages, counts=total, ref=ref)
+    pop = ss.data.population(place, year=year, revision=revision)
+    ages = np.array(ss.data.age_edges(pop.index))
+    total = (pop.female + pop.male).values
+    ppl = People(n_agents=sc.ifelse(n_agents, ss.SimPars().n_agents), age_data=ss.data.to_age_data(ages, total), p_female=pop.female.sum()/total.sum())
+    ppl.named = sc.objdict(place=place, year=year, n_agents=n_agents, revision=revision, total=float(total.sum()), ages=ages, counts=total, ref=pop.attrs['ref'])
     return ppl
 
 

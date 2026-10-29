@@ -3,6 +3,7 @@ Test Sim API
 """
 
 import pytest
+import warnings
 import numpy as np
 import starsim as ss
 import starsim.library as ssl
@@ -126,7 +127,7 @@ def test_simple(do_plot=do_plot):
     # A sim of modules written as code can be built again with other values, as a declared one can
     agentsim = ss.Sim(n_agents=n_agents, diseases=ssl.AgentSIS(name='sis'), networks='random', start=2000, stop=2010, verbose=0)
     again = agentsim.new(rand_seed=2).run()
-    assert again.summary.sis_cum_infections == ss.Sim(n_agents=n_agents, diseases=ssl.AgentSIS(name='sis'), networks='random', start=2000, stop=2010, rand_seed=2, verbose=0).run().summary.sis_cum_infections
+    assert again.summary.value.sis_cum_infections == ss.Sim(n_agents=n_agents, diseases=ssl.AgentSIS(name='sis'), networks='random', start=2000, stop=2010, rand_seed=2, verbose=0).run().summary.value.sis_cum_infections
 
     # So can a subclass that adds its modules after Sim.__init__() (as FPsim's does), and settings changed after the sim was made are kept
     class MySim(ss.Sim):
@@ -288,8 +289,8 @@ def test_shared_product(do_plot=do_plot):
         plt.xlabel('Year')
         plt.ylabel('Cumulative infections')
 
-    assert s2.summary.sir_infection < s1.summary.sir_infection, 'Vaccine should avert infections'
-    assert s3.summary.sir_infection < s2.summary.sir_infection, 'Vaccine should avert infections'
+    assert s2.summary.value.sir_infection < s1.summary.value.sir_infection, 'Vaccine should avert infections'
+    assert s3.summary.value.sir_infection < s2.summary.value.sir_infection, 'Vaccine should avert infections'
     return s3
 
 
@@ -449,7 +450,11 @@ def test_new_after_init():
 def test_update_pars():
     """ A single value given for a distribution sets its main parameter, as in Starsim 3; a distribution replaces it """
     sc.heading('Testing parameter updates...')
-    sir = ssl.AgentSIR(init_prev=0.05, dur_inf=6, p_death=0)
+    with pytest.warns(RuntimeWarning, match=r'set only the mean .*=ss\.constant\(6\)'): # Keeps the std, but says so (only for dur_inf: a probability is the whole of a Bernoulli)
+        sir = ssl.AgentSIR(init_prev=0.05, dur_inf=6, p_death=0)
+    with warnings.catch_warnings():
+        warnings.simplefilter('error')
+        ssl.AgentSIR(init_prev=0.05, dur_inf=ss.constant(6))
     assert isinstance(sir.pars.init_prev, ss.bernoulli) and sir.pars.init_prev.pars.p == 0.05 # A probability
     assert isinstance(sir.pars.dur_inf, ss.lognorm_ex) and sir.pars.dur_inf.pars.mean == ss.years(6) # Its mean, in the unit of the default
     assert isinstance(ss.SexualNet(dur=ss.days(15)).pars.dur, ss.expon) and isinstance(ss.SexualNet(dur=ss.constant(ss.days(15))).pars.dur, ss.constant) # A single duration on a network of partnerships is a mean, ending at a constant rate; a fixed value is a constant
@@ -490,7 +495,7 @@ def test_save():
     json2 = sc.loadjson(f.json)
 
     # Run tests
-    assert sim.summary == s2.summary, 'Sims do not match'
+    assert sim.summary.equals(s2.summary), 'Sims do not match'
     assert sim.pars.n_agents == json2['pars']['n_agents'], 'Parameters do not match'
     assert json == json2, 'Outputs do not match'
 
@@ -545,6 +550,17 @@ def test_rescale():
     seeded = lambda **kw: ss.Sim(flu, total_pop=1e6, n_agents=5000, stop=ss.days(2), verbose=0, **kw).init().diseases[0].I.count()
     assert seeded(rescale=True) == 10 # A number of people is a number of agents at the start scale (it was 0.05 agents, so nobody)
     assert seeded() == 1 # Too few to be an agent: one, with a note
+
+    # A declared disease counts the people no agent stands for yet in its first state, and so do alive and the ratios
+    flu = ss.Disease(S >> I @ 0.3*I, I >> R @ ss.days(10), init_prev=ss.choose_n(10), prevalence=I/(S+I+R), name='flu')
+    res = ss.Sim(flu, total_pop=1e6, n_agents=2000, stop=ss.days(60), rescale=True, verbose=0).run().results
+    assert np.allclose(res.flu.S + res.flu.I + res.flu.R, 1e6) and np.allclose(res.alive, 1e6)
+    assert res.flu.I[0] == 10 and np.isclose(res.flu.prevalence[0], 1e-5)
+    deadly = ss.SIR(beta=ss.perday(0.3), dur_inf=ss.days(10), p_death=0.5, init_prev=0.002) # An agent's death is scale people, not those no agent stands for yet
+    res = ss.Sim(diseases=deadly, networks='random', n_agents=2000, total_pop=2e6, rescale=True, stop=40, unit='day', verbose=0).run().results
+    assert res.cum_deaths[-1] > 0 and np.allclose(res.alive, 2e6 - res.cum_deaths) and np.allclose(res.sir.S + res.sir.I + res.sir.R, res.alive)
+    preg = lambda rescale: ss.Sim(demographics=ss.Pregnancy(), n_agents=2000, total_pop=1e6, rescale=rescale, stop=5, unit='day', verbose=0).run().results.pregnancy
+    assert np.allclose(preg(True).P, preg(False).P) # In a module that is not a disease, those no agent stands for are in each state as the agents are (rather than all not pregnant)
 
     sim = ss.Sim(n_agents=100, diseases=['sis', 'sis'], networks='random').init()
     assert list(sim.diseases.keys()) == ['sis', 'sis_1'] # Default names are made unique, with no warning

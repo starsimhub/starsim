@@ -3,22 +3,24 @@ Data by place: ages, populations, birth and death rates, contact matrices, and a
 
     ss.data.age('Kenya')                    # The age_data of ss.People: counts by 5-year age group ('world' needs no download)
     ss.data.population('Kenya', year=2020)  # By age and sex (also for a US state, e.g. 'United States:Massachusetts')
-    ss.data.rates('Kenya', 'deaths')        # Birth or death rates, by year
+    ss.data.rates('Kenya', 'deaths')        # Birth, death, or fertility rates, by year
     ss.data.contacts('Kenya', layer='home') # A contact matrix by age
     ss.data.geography('Kenya', level=1)     # Administrative units, with populations and positions
 
 These are tables. The model objects that take a place by name read them from here:
 `ss.people('Kenya')`, `ss.geo.geography('Kenya', level=1)`, `ss.contacts('Kenya')`,
-and `ss.Births(birth_rate='Kenya')`. The data comes from
+`ss.Births(birth_rate='Kenya')`, `ss.Deaths(death_rate='Kenya')`, and `ss.Pregnancy(fertility_rate='Kenya')`. The data comes from
 `starsim_data` (https://github.com/starsimhub/starsim_data), which bundles what is
 small and common and fetches the rest on demand. Each lookup returns the data with a
-record of where it came from (`ref`), which `sim.describe()` shows.
+record of where it came from (`ref`; for a table, in `.attrs['ref']`), which `sim.describe()` shows.
 """
+import re
 import numpy as np
+import pandas as pd
 import sciris as sc
 import starsim as ss
 
-__all__ = ['age', 'population', 'rates', 'contacts', 'geography', 'world', 'age_split', 'provider']
+__all__ = ['age', 'population', 'rates', 'contacts', 'geography', 'world', 'age_split', 'age_labels', 'age_edges', 'provider']
 
 layers = ['all', 'home', 'school', 'work', 'community'] # The settings of the contact matrices
 
@@ -31,6 +33,24 @@ world = sc.objdict(
                        410.7, 353.9, 296.2, 219.8, 154.3, 98.6, 49.7, 19.8, 4.7, 0.6]),
     guess  = "ages as the world's population in 2024",
 )
+
+
+def age_labels(edges):
+    """ The label of each age group from its lower edge, as a stratification by age labels them, e.g. '0-4', '5-9', and '75+' (a single year is '3') """
+    ends = list(edges[1:]) + [None]
+    return [f'{lo:n}+' if hi is None else f'{lo:n}' if hi - lo <= 1 else f'{lo:n}-{hi-1:n}' for lo,hi in zip(edges, ends)]
+
+
+def age_edges(labels):
+    """ The lower edge of each age group from its label ('0-4', '75+', or '3'), as floats: the inverse of `age_labels()` """
+    return [float(str(label).split('-')[0].rstrip('+')) for label in labels]
+
+
+def is_age_index(index):
+    """ Whether a table's index is by age group: named "age", or labeled as `age_labels()` labels them ('0-4', '75+', or '3'), and not just the positions of the rows (a RangeIndex) """
+    if index.name == 'age':
+        return True
+    return not isinstance(index, pd.RangeIndex) and len(index) > 0 and all(re.fullmatch(r'\d+(\.\d+)?(-\d+(\.\d+)?|\+)?', str(label).strip()) for label in index)
 
 
 def to_age_data(ages, counts):
@@ -56,8 +76,8 @@ def age(place='world', year=None):
             errormsg = f"year={year} is not available for the world's ages, which are those of 2024; give a country for another year"
             raise ValueError(errormsg)
         return to_age_data(world.ages, world.counts)
-    ages, female, male, _ = population(place, year=year)
-    return to_age_data(ages, female + male)
+    df = population(place, year=year)
+    return to_age_data(np.array(age_edges(df.index)), (df.female + df.male).values)
 
 
 def age_split(edges, ages, counts):
@@ -192,14 +212,17 @@ def geography(place, level=1, year=None, places=None):
 
 def rates(place, which, revision=None):
     """
-    The UN World Population Prospects birth or death rates of a named place, for `ss.Births(birth_rate='Kenya')` and `ss.Deaths(death_rate='Kenya')`
+    The UN World Population Prospects birth, death, or fertility rates of a named place, for `ss.Births(birth_rate='Kenya')`, `ss.Deaths(death_rate='Kenya')`, and `ss.Pregnancy(fertility_rate='Kenya')`
 
     Args:
         place (str): a country, by name or code
-        which (str): 'births' (crude birth rates per 1,000, by year) or 'deaths' (death rates per person, by year, sex, and age)
+        which (str): 'births' (crude birth rates per 1,000, by year), 'deaths' (death rates per person, by year, sex, and age), or 'fertility' (age-specific fertility rates per 1,000 women, by year and 5-year age group)
         revision (str): the WPP revision (default: the latest bundled)
     """
     ssd = provider()
+    if which not in ssd.list_datasets(): # A series added in a later version, e.g. fertility (2.1.0)
+        errormsg = f'The data "{which}" are not in starsim_data {ssd.__version__}; a newer version has them: pip install -U starsim_data'
+        raise ImportError(errormsg)
     try:
         return ssd.load(place, which=which, revision=revision)
     except KeyError as E:
@@ -221,7 +244,15 @@ def population(place, year=None, revision=None):
         revision (str): the WPP revision (default: the latest bundled); not for a US state
 
     Returns:
-        The lower edge of each 5-year age group (the last is 100+, or 80+ for a US state), the number of women and of men in each, and `ref`
+        A dataframe of the number of women and of men (columns `female` and `male`) in each 5-year age group (the index, labeled
+        '0-4', '5-9', ..., '100+', or '80+' for a US state), with where it came from in `.attrs['ref']`
+
+    Examples:
+        ```python
+        pop = ss.data.population('Kenya', year=2024)
+        pop.loc['0-4'].sum() # Children under 5
+        pop.attrs['ref']['study'] # The source
+        ```
     """
     ssd = provider()
     if subnational(ssd, place):
@@ -239,7 +270,7 @@ def population(place, year=None, revision=None):
         ages = np.arange(0, len(single), 5, dtype=float)
         both = np.add.reduceat(single, ages.astype(int)) # By 5-year age group
         info = ref(ssd, df, place=place, year=data_year, location=df.attrs.get('location'))
-        return ages, both/2, both/2, info
+        return by_age(ages, dict(female=both/2, male=both/2), info)
     try:
         df = ssd.load(place, which='population', revision=revision)
     except KeyError as E:
@@ -256,7 +287,14 @@ def population(place, year=None, revision=None):
         table = df[df.Sex == sex].pivot(index='Time', columns='AgeGrp', values='Value').loc[years, ages.astype(int)].values
         counts[sex] = np.array([np.interp(year, years, table[:,i]) for i in range(len(ages))])
     info = ref(ssd, df, place=place, year=int(year), location=df.attrs.get('location'), revision=rev)
-    return ages, counts['Female'], counts['Male'], info
+    return by_age(ages, dict(female=counts['Female'], male=counts['Male']), info)
+
+
+def by_age(edges, cols, info):
+    """ A table by age group, labeled from the lower edges, with where it came from in `.attrs['ref']`; not for the user """
+    df = pd.DataFrame(cols, index=pd.Index(age_labels(edges), name='age'))
+    df.attrs['ref'] = info
+    return df
 
 
 def contacts(place, source=None, layer='all'):
@@ -269,7 +307,15 @@ def contacts(place, source=None, layer='all'):
         layer (str): the setting: 'all', 'home', 'school', 'work', or 'community'
 
     Returns:
-        The matrix (contacts a day that a person in each age group has with people in each), the lower edge of each age group, and `ref`
+        A dataframe of the contacts a day that a person in each age group (a row) has with people in each (a column), with the groups labeled
+        '0-4', '5-9', ..., '75+' (or by single year of age), and where it came from in `.attrs['ref']`; `ss.contacts()` takes it
+
+    Examples:
+        ```python
+        school = ss.data.contacts('Kenya', layer='school')
+        school.loc['10-14', '10-14'] # Contacts a day of a child aged 10-14 at school with children aged 10-14
+        mixing = ss.contacts(school) # The same as ss.contacts('Kenya', layer='school')
+        ```
     """
     ssd = provider()
     source = sc.ifelse(source, 'mistry2021_us' if subnational(ssd, place) else 'prem2021')
@@ -291,5 +337,7 @@ def contacts(place, source=None, layer='all'):
         others = [s for s in ['prem2021', 'prem2017', 'mistry2021', 'mistry2021_us'] if s != source and key in ssd.list_locations(s)]
         hint = f'; it is in {sc.strjoin(others)}, e.g. ss.contacts("{place}", source="{others[0]}")' if others else ''
         raise sc.KeyNotFoundError(f'"{source}" has no contact matrix for {key}{hint}.')
-    ages = [float(a) for a in df.index]
-    return df.values.astype(float), ages, ref(ssd, df, place=place, source=source, layer=layer, location=df.attrs.get('location'))
+    labels = age_labels([float(a) for a in df.index])
+    out = pd.DataFrame(df.values.astype(float), index=pd.Index(labels, name='age'), columns=pd.Index(labels, name='contact age'))
+    out.attrs['ref'] = ref(ssd, df, place=place, source=source, layer=layer, location=df.attrs.get('location'))
+    return out

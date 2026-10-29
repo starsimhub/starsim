@@ -40,7 +40,7 @@ dependencies = [
     "optuna",
     "jax>=0.8",
     "blackjax",
-    "starsim_data>=2.0.0",
+    "starsim_data>=2.1.0",
 ]
 
 [project.optional-dependencies]

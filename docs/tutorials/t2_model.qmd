@@ -71,7 +71,7 @@ With only 10% of people susceptible, each infectious person infects 15 × 0.1 �
 
 ## Changing parameters
 
-Starsim takes the parameters of a disease from its transitions: β from the rate of `infection` (named `beta`, since it multiplies a state in a transmission), and the infectious period from the duration of `recovery` (named `dur`, as in the equations of Tutorial 1). They are listed in the disease's `pars`:
+Starsim takes the parameters of a disease from its transitions: β from the rate of `infection` (named `beta`, since it multiplies a state in a transmission), and the infectious period from the duration of `recovery` (named `dur_I`, the mean time in I, as in the equations of Tutorial 1). They are listed in the disease's `pars`:
 
 ```{python}
 measles.pars

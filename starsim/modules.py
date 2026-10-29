@@ -275,7 +275,7 @@ class Module(Base):
         # Handle parameters
         self.pars = ss.Pars() # Usually populated via self.define_pars()
         self._default_name = True # Whether the name is the class default, in which case the sim can rename it to make it unique
-        self._implicit = False # Whether it was made or named by the sim (from the transitions it was given, or its states), so its results are also at the top of the sim's, e.g. sim.results.I
+        self._implicit = False # Whether it was made or named by the sim (from the transitions it was given, or its states), so its results are at the top of the sim's (e.g. sim.results.I) even beside other diseases
         named = type(self) is ss.Disease or isinstance(self, (ss.modify, ss.Delivery, ss.Product)) # The modules that take the name of their variable (see ss.Sim._name_modules())
         self._assigned = ss.utils.assigned_name(self) if named else None # The variable it was first assigned to, e.g. campaign = ss.vaccinate(...)
         self.set_metadata(name, label) # Usually reset as part of self.update_pars()

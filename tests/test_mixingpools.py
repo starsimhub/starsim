@@ -76,6 +76,18 @@ def test_multi(do_plot=do_plot):
 
 
 @sc.timer()
+def test_coded_declared():
+    sc.heading('Testing that a disease written as code gives the same epidemic on a mixing pool as a declared one')
+    S, I, R = ss.states('S I R')
+    pars = dict(networks=ss.MixingPool(n_contacts=1), n_agents=5000, stop=ss.days(150), verbose=0)
+    coded = ss.Sim(ssl.AgentSIR(beta=ss.perday(0.4), dur_inf=ss.expon(scale=ss.days(7)), p_death=0, init_prev=0.01, name='sir'), **pars).run()
+    declared = ss.Sim(ss.Disease(S >> I @ 0.4*I, I >> R @ ss.days(7), init_prev=0.01, name='sir'), **pars).run()
+    sizes = coded.results.sir.recovered[-1], declared.results.sir.R[-1]
+    assert np.isclose(*sizes, rtol=0.03), sizes # The hazard is multiplied by the share infectious before it is a probability (when it was not, the coded epidemic was about 5% smaller, and its peak a fifth lower)
+    return sizes
+
+
+@sc.timer()
 def test_layers():
     sc.heading('Testing contact layers with a beta for each, under both engines')
     def run(beta, solver, layers=('home', 'school')):

@@ -48,7 +48,7 @@ def test_deepcopy():
     s1.run()
     s2.run()
     ss.debugtools.diff_sims(s1, s2, full=True)
-    assert np.allclose(s1.summary[:], s2.summary[:], rtol=0, atol=0, equal_nan=True)
+    assert np.allclose(s1.summary.value, s2.summary.value, rtol=0, atol=0, equal_nan=True)
 
     return s1, s2
 
@@ -63,7 +63,7 @@ def test_deepcopy_until():
     s1.run()
     s2.run()
     s1.plot() # Plotting a sim that was copied part way through
-    assert np.allclose(s1.summary[:], s2.summary[:], rtol=0, atol=0, equal_nan=True)
+    assert np.allclose(s1.summary.value, s2.summary.value, rtol=0, atol=0, equal_nan=True)
 
     return s1, s2
 

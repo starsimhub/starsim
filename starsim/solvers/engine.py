@@ -1291,7 +1291,8 @@ class Engine(Telling, Effects):
                 per = 'per infectious contact' if len(sim.networks) else 'with everyone infectious'
                 fast.append((rate*dt, tr.name, f'{tr.name} transmits at up to {rate:.2g} per {unit} ({per}), {-np.expm1(-rate*dt):.0%} in a {step}'))
         for name,dw in self.dwells.items():
-            if name in inflows:
+            tr = self.graph.transitions[name]
+            if name in inflows or self.never_taken(tr):
                 continue
             if dw.dist is None and (callable(dw.par.raw) or isinstance(dw.par.raw, (ss.by, ss.expressions.Expr))): # Not known until the sim runs, or not one number
                 continue
@@ -1302,8 +1303,13 @@ class Engine(Telling, Effects):
                 x = dt/mean
                 share = min(x, 1) if euler else -np.expm1(-x)
                 leave = 'almost everyone leaves' if share > 0.99 else f'{share:.0%} leave'
-                fast.append((x, name, f'people leave {name} after {plural(mean)} on average, so {leave} in a {step}'))
+                src = sc.strjoin([state.name for state in tr.src or []], sep=' or ') or name # Named by the state left, which its exits (e.g. recovery and death) share
+                fast.append((x, src, f'people leave {src} after {plural(mean)} on average, so {leave} in a {step}'))
         fast = sorted([f for f in fast if f[0] > 0.1], key=lambda f: -f[0]) # The fastest first, since it is what the step is too long for
+        fastest = {}
+        for f in fast: # Each state once, at its fastest
+            fastest.setdefault(f[1], f)
+        fast = list(fastest.values())
         if fast:
             x, _, what = fast[0]
             others = f' (and {sc.strjoin(f[1] for f in fast[1:])} {"is" if len(fast) == 2 else "are"} fast too)' if len(fast) > 1 else ''
@@ -1316,6 +1322,15 @@ class Engine(Telling, Effects):
                 msg += f'. Taking whole steps, {who} may differ from the ODE by an amount of that order'
             ss.note(f'{msg}; sim.check_dt() shows how much it matters', sim=sim)
         return
+
+    def never_taken(self, tr):
+        """ Whether a transition to one destination has a branch probability of 0 everywhere (e.g. death in `ss.SIR` with `p_death=0`) """
+        if tr.p is None or len(tr.p) != 1 or tr.p[0] is None:
+            return False
+        try:
+            return not np.any(np.asarray(self.eval(tr.p[0]), dtype=float))
+        except Exception: # Not known until the run
+            return False
 
     def plausible_density(self, tr):
         """
@@ -1415,9 +1430,9 @@ class Engine(Telling, Effects):
         family = getattr(graph, 'seeded_by', None)
         if family is not None and self.solver != 'abm': # A strain with its own course, seeded by the disease (ss.Strains(shared=...)): the disease's share, times this member's split (independently of the other members, so unlike agents some are seeded with two)
             family = self.sim.diseases[family]
-            init_prev, share = family.init_prev, family.split[family.member_names.index(self.mod.name)]
-        if isinstance(init_prev, ss.expressions.par): # A parameter (e.g. sir.pars.init_prev), whose value can be a distribution
-            init_prev = init_prev.raw if isinstance(init_prev.raw, ss.Dist) else self.value(init_prev)
+            init_prev, share = ss.parameters.starting(family.init_prev), family.split[family.member_names.index(self.mod.name)]
+        if isinstance(init_prev, ss.expressions.par): # A parameter (e.g. sir.pars.init_prev), whose value can be a distribution, or a value for each level (worked out for each group below, not for each agent)
+            init_prev = init_prev.raw if isinstance(init_prev.raw, (ss.Dist, ss.by)) else self.value(init_prev)
         if init_prev is not None and self.seed_dist() is not None: # Drawn for each agent instead: see Agents.init_post()
             init_prev = None
         if isinstance(init_prev, ss.by): # A share for each level of some dimensions (a property of each person that is not one raises here, unless run as agents: see seed_dist())
@@ -1828,6 +1843,38 @@ class Engine(Telling, Effects):
             self.stocks[state.name] = self.stock(state)
         return
 
+    def with_unrepresented(self):
+        """
+        The number in each state (and by group), as the results count them: with dynamic rescaling (rescale=True), including the people no agent stands for yet
+
+        Each agent stands for `scale` people; the people no agent stands for (`sim.results.unrepresented`, see `ss.Sim.rescale()`) are
+        like the agents, and are shared out as the agents alive are, in agents (as the other counts are, before they are scaled). For a
+        disease, which rescaling makes naive again, they have never been infected, so their share is in its first state; for another
+        module (e.g. `ss.Pregnancy`), each state has its share. The engine's own stocks (used in the dynamics) are untouched.
+        """
+        sim = self.sim
+        if not sim.pars.rescale or sim.solver != 'abm' or 'unrepresented' not in sim.results:
+            return self.stocks, self.stock_groups
+        n_alive = sim.people.n_alive
+        extra = sim.results.unrepresented[sim.ti]/self.scale/n_alive if n_alive else 0.0 # For each agent alive, in agents
+        if not extra:
+            return self.stocks, self.stock_groups
+        people = [state.name for state in self.graph.people_states]
+        stocks = sc.objdict(self.stocks)
+        stock_groups = sc.objdict(self.stock_groups)
+        first = self.graph.first
+        if any(self.mod is mod for mod in sim.diseases()): # In its first state
+            if first.people:
+                stocks[first.name] = stocks[first.name] + extra*sum(stocks.get(name, 0.0) for name in people)
+                if first.name in stock_groups:
+                    stock_groups[first.name] = stock_groups[first.name] + extra*sum(stock_groups[name] for name in people if name in stock_groups)
+        else: # In each state, as the agents are
+            for counts in [stocks, stock_groups]:
+                for name in people:
+                    if name in counts:
+                        counts[name] = counts[name]*(1 + extra)
+        return stocks, stock_groups
+
     def update_results(self):
         mod = self.mod
         graph = self.graph
@@ -1843,14 +1890,15 @@ class Engine(Telling, Effects):
             for key in list(self.stocks) + list(self.flowcounts):
                 if res[key].values.dtype.kind in 'iu':
                     res[key].init_values(dtype=float, force=True)
-        for name,val in self.stocks.items():
+        stocks, stock_groups = self.with_unrepresented()
+        for name,val in stocks.items():
             res[name][ti] = val
         for name,val in self.flowcounts.items():
             res[name][ti] = val
         self.written_ti = ti # See Agents.infect_now()
         self.step_outcomes()
         derived = getattr(self, 'derived_res', {})
-        for name,val in self.stock_groups.items():
+        for name,val in stock_groups.items():
             if name not in derived:
                 res[name].store_group(ti, val, self.rows)
         for name,val in self.flow_groups.items():
@@ -1864,11 +1912,11 @@ class Engine(Telling, Effects):
             for name,val in self.flow_groups.items():
                 self.row_flows[name] = self.row_flows.get(name, 0) + val
         if graph.exprs:
-            ctx = StockCtx(self)
+            ctx = StockCtx(self, stocks)
             for name,expr in graph.exprs.items():
                 res[name][ti] = ss.expressions.evaluate(expr, ctx)
                 if getattr(res[name], 'strata', None) is not None: # By group: in a row of several steps, from the states at its end and the flows over it
-                    ctx_g = StockCtx(self, self.stock_groups, self.flow_groups if self.rows is None else self.row_flows)
+                    ctx_g = StockCtx(self, stock_groups, self.flow_groups if self.rows is None else self.row_flows)
                     if name in self.ratios:
                         num, den = [ss.expressions.evaluate(part, ctx_g) for part in self.ratios[name]]
                         row = ti if self.rows is None else self.rows[ti]

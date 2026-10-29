@@ -10,7 +10,7 @@ Welcome! We are thrilled you are interested in contributing to Starsim. This doc
 If you have any other questions, please reach out to us: <info@starsim.org>. Thank you!
 
 ## Changelog entries
-Every PR should add an entry to `CHANGELOG.md`. Changes that alter model output, or that are needed to run an old parameter set with the current version, must be flagged with **Migration** or **Regression**.
+Every PR should add an entry to `CHANGELOG.md`. Changes that alter model output, or that are needed to run an old parameter set with the current version, must be flagged with **Migration** or **Regression**. Until Starsim 4 is released, its detailed entries go in `docs/migration/v4_changelog.md`, and the 4.0.0 entry in `CHANGELOG.md` stays a short summary.
 
 For any backwards-incompatible change, write the entry so that a human (or an LLM) could perform the migration from the changelog alone. Include the concrete before/after call. For example, instead of:
 
