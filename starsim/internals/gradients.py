@@ -28,21 +28,67 @@ diff_fields = ['inflow', 'contacts', 'mat', 'sh_val', 'tgt_w', 'crd_w', 'maps', 
 table_fields = ['fixed', 'mult', 'consts', 'rel_trans'] # As tables over the steps: see ss.solvers.Compartmental.tables()
 
 
+platform_advice = 'run JAX on the CPU: ss.options.jax = "cpu" (or the environment variable STARSIM_JAX=cpu, or JAX_PLATFORMS=cpu), before JAX is first used' # What to do when JAX fails to start on a GPU
+
+
 def jax():
     """
     Import JAX (imported only when first used, since it takes a few tenths of a second)
 
     If JAX has not been imported yet, it is given a device for each core of the CPU (as
     `numpyro.set_host_device_count()` does), so that the chains of a posterior run on
-    cores of their own; everything else runs on the first, as before.
+    cores of their own; everything else runs on the first, as before. The platform it runs
+    on is `ss.options.jax` (e.g. "cpu"), if not "auto". The first time, its devices are
+    started here, so that a GPU that fails to start (e.g. with a CUDA plugin of another
+    version than jaxlib) says what to do.
     """
-    if 'jax' not in sys.modules and 'xla_force_host_platform_device_count' not in os.environ.get('XLA_FLAGS', ''):
-        os.environ['XLA_FLAGS'] = f'{os.environ.get("XLA_FLAGS", "")} --xla_force_host_platform_device_count={os.cpu_count() or 1}'.strip()
+    if 'jax' not in sys.modules:
+        if 'xla_force_host_platform_device_count' not in os.environ.get('XLA_FLAGS', ''):
+            os.environ['XLA_FLAGS'] = f'{os.environ.get("XLA_FLAGS", "")} --xla_force_host_platform_device_count={os.cpu_count() or 1}'.strip()
+        if ss.options.jax != 'auto':
+            os.environ['JAX_PLATFORMS'] = ss.options.jax
     import jax
+    from jax._src import xla_bridge
+    if not xla_bridge.backends_are_initialized(): # The first use, by Starsim or anything else
+        if ss.options.jax != 'auto':
+            jax.config.update('jax_platforms', ss.options.jax) # If JAX was imported before Starsim used it
+        else:
+            check_plugins()
+        try:
+            jax.devices()
+        except Exception as E:
+            errormsg = f'JAX could not start its devices ({type(E).__name__}: {E}).\nIf this is a GPU that JAX cannot use, {platform_advice}'
+            raise RuntimeError(errormsg) from E
+    elif ss.options.jax != 'auto' and ss.options.jax.split(',')[0] != jax.default_backend():
+        ss.warn(f'ss.options.jax = "{ss.options.jax}", but JAX was started already, on "{jax.default_backend()}", before Starsim used it; set it (or STARSIM_JAX, or JAX_PLATFORMS) before JAX is first used')
     if jax.config.jax_compilation_cache_dir is None: # Keep what is compiled for later sessions, unless told otherwise (e.g. by JAX_COMPILATION_CACHE_DIR)
         jax.config.update('jax_compilation_cache_dir', os.path.join(os.path.expanduser('~'), '.cache', 'starsim', 'jax'))
         jax.config.update('jax_persistent_cache_min_compile_time_secs', 0.25)
     return jax
+
+
+def check_plugins():
+    """
+    Warn, before JAX starts its devices, of a GPU plugin of another version than jaxlib (e.g. jax-cuda12-plugin 0.9.2 with
+    jaxlib 0.12), which can crash XLA itself, so that no Python error can say what to do; nothing if JAX_PLATFORMS is set
+    """
+    if os.environ.get('JAX_PLATFORMS'):
+        return
+    import importlib.metadata as md
+    try:
+        jaxlib = md.version('jaxlib')
+    except md.PackageNotFoundError:
+        return
+    plugins = {}
+    for dist in md.distributions():
+        name = (dist.metadata['Name'] or '').lower().replace('_', '-')
+        if name.startswith(('jax-cuda', 'jax-rocm')):
+            plugins[name] = dist.version
+    wrong = {name:v for name,v in plugins.items() if v != jaxlib}
+    if wrong:
+        ss.warn(f'JAX has GPU plugins of another version than jaxlib {jaxlib} ({sc.strjoin(f"{k} {v}" for k,v in wrong.items())}), which can crash XLA when it starts. '
+                f'If it does, {platform_advice}; or install the plugin of the same version as jaxlib')
+    return
 
 
 def reason(sim):

@@ -4,7 +4,6 @@ Define core Sim classes
 import os
 import inspect
 import itertools
-import functools as ft
 import numpy as np
 import pandas as pd
 import sciris as sc
@@ -54,20 +53,21 @@ def copy_given(*inputs):
     for mod in given_modules(*inputs): # Marked, so that what is added to them later, which this sim would never see, raises (see ss.Module.check_not_given())
         mod.setattribute('_given', True)
     out = sc.mergedicts(*inputs, _copy=True)
-    for mod in given_modules(out): # The sim's own copies are its to change
+    for mod in given_modules(out): # The sim's own copies are its to change, and hold their own results (also if the module given was given to a sim before)
         mod.setattribute('_given', False)
+        if isinstance(getattr(mod, 'results', None), ss.Results):
+            mod.results.__dict__.pop('_given_to', None)
     for mod in given_modules(*inputs): # The modules given hold no results (the sim runs its copies), so reading one says where they are
         if isinstance(getattr(mod, 'results', None), ss.Results) and not len(mod.results):
             mod.results.setattribute('_given_to', mod.name)
     return out
 
 
-def outermost(init):
+class outermost(ss.utils.method_wrapper):
     """ The outermost call to a sim's init() (Sim's, or a subclass's that calls it) first keeps a copy of the sim as it is, which `sim.new()` copies """
-    @ft.wraps(init)
-    def wrapper(sim, *args, **kwargs):
+    def __call__(self, sim, *args, **kwargs):
         if sim.initialized or sim.__dict__.get('_in_init'):
-            return init(sim, *args, **kwargs)
+            return self.func(sim, *args, **kwargs)
         if '_before_init' not in sim.__dict__: # Not again after an init() that failed
             try:
                 sim._before_init = sc.dcp(sim)
@@ -75,10 +75,9 @@ def outermost(init):
                 sim._before_init = f'sim.new() copies the sim as it was before it was initialized, but this {type(sim).__name__} could not be copied ({type(E).__name__}: {E}); make it again instead'
         sim._in_init = True
         try:
-            return init(sim, *args, **kwargs)
+            return self.func(sim, *args, **kwargs)
         finally:
             sim.__dict__.pop('_in_init', None)
-    return wrapper
 
 
 def num_str(x):
@@ -87,12 +86,12 @@ def num_str(x):
     return f'{x:n}' if sc.isnumber(x) else str(x)
 
 
-def time_str(x, unit_name, plural=False):
-    """ A time point as text, for what a run prints: a date as a date (without a time of day, e.g. 2020-01-08), a duration with its own unit (e.g. year 2000.02, as on a timeline in calendar years), or a number in the sim's unit (e.g. day 27) """
+def time_str(x, sim=None, plural=False):
+    """ A time point as text, for what a run prints: a date as a date (without a time of day, e.g. 2020-01-08), a duration with its own unit (e.g. year 2000.02, as on a timeline in calendar years), or a number in the sim's unit (e.g. day 27, or step 27 in a sim with no unit, whose times are days underneath) """
     if isinstance(x, (ss.date, pd.Timestamp)):
         return str(ss.date(x)).partition(' ')[0]
-    if isinstance(x, ss.dur):
-        unit_name = type(x).base.removesuffix('s')
+    unitless = sim is not None and sim.t.unitless
+    unit_name = type(x).base.removesuffix('s') if isinstance(x, ss.dur) and not unitless else sim.unit_name
     return f'{unit_name}{"s"*plural} {num_str(x)}'
 
 
@@ -435,7 +434,7 @@ class Sim(ss.Base):
         """ What a run says as it starts: what is run and how, R0 (as a check that the model and its seed are what was meant), and the notes """
         t = self.t
         mods = list(self.diseases.keys()) or [mod.name for mod in self.modules]
-        when = f'{time_str(t.tvec[0], None)} to {time_str(t.tvec[-1], None)}' if t.is_absolute else f'{time_str(t.tvec[0], self.unit_name, plural=True)} to {num_str(t.tvec[-1])}' # On the timeline's own axis, though stop may be given in another unit (e.g. ss.weeks(8))
+        when = f'{time_str(t.tvec[0], None)} to {time_str(t.tvec[-1], None)}' if t.is_absolute else f'{time_str(t.tvec[0], self, plural=True)} to {num_str(t.tvec[-1])}' # On the timeline's own axis, though stop may be given in another unit (e.g. ss.weeks(8))
         stop = t.stop.to_year() if isinstance(t.stop, ss.date) else t.stop.years if isinstance(t.stop, ss.dur) else None
         if stop is not None and stop - t.yearvec[-1] > 1e-6: # The stop is not a whole number of steps from the start, so the run ends at the last step before it
             given = time_str(t.stop, None) if t.is_absolute else num_str(type(t.tvec[-1])(t.stop) if isinstance(t.tvec[-1], ss.dur) else t.stop)
@@ -448,7 +447,8 @@ class Sim(ss.Base):
             kind = dict(ode='an ODE', ide='an integro-differential model', binomial='a stochastic compartmental model (chain binomial)', gillespie='a stochastic compartmental model (Gillespie)', tau='a stochastic compartmental model (tau-leaping)')
             short = dict(ode='ODE', ide='integro-differential', binomial='chain binomial', gillespie='Gillespie', tau='tau-leaping')
             solver = 'ide' if self.pars.solver == 'ide' else self.solver # Run as the ODE, with its dwell times as they are
-            how = f'{self.pars.total_pop:,.0f} people, as ' + (f'a branching process ({short.get(solver, solver)})' if self.pars.branching else kind.get(solver, solver))
+            people = self.declared or 'total_pop' in self.given or self.pop_from # Modules written as code with nothing per person (e.g. an ODE of their own) have no population, unless one was given
+            how = (f'{self.pars.total_pop:,.0f} people, ' if people else '') + 'as ' + (f'a branching process ({short.get(solver, solver)})' if self.pars.branching else kind.get(solver, solver))
         label = f' "{self.label}"' if self.label else ''
         what = f'{sc.strjoin(mods)}, ' if mods else ''
         lines = [ss.presentation.style(f'Sim{label}: {what}{how}, {when}', 'bold', color=ss.presentation.in_color())]
@@ -483,7 +483,7 @@ class Sim(ss.Base):
                 if np.ndim(infectious):
                     peak = int(np.argmax(infectious))
                     tvec = dis.t.tvec if len(dis.t.tvec) == len(infectious) else self.t.tvec # On the disease's own timeline, if it has one
-                    when = time_str(tvec[peak], self.unit_name) # A date, or e.g. day 27, as in the first line
+                    when = time_str(tvec[peak], self) # A date, or e.g. day 27, as in the first line
                     parts.append(f'{dis.name}: {total:,.0f} infections; at most {infectious[peak]:,.0f} infectious, on {when}')
         took = f'{self.elapsed:.2g}' if self.elapsed < 1 else f'{self.elapsed:.1f}'
         return f'  Done in {took} s' + (f'; {"; ".join(parts)}' if parts else '')
@@ -1368,9 +1368,10 @@ class Sim(ss.Base):
         elif self.verbose >= 2:
             return 'it prints each step (verbose=2)'
         names = {func['module'] for func in self.loop.funcs} - {'sim', 'people'} - {mod.name for mod in self.modules if getattr(mod, 'tabulated', False)} # A modifier that depends only on time and on states is tabulated by the engines: see ss.solvers.Compartmental.tables()
-        others = [mod.name for mod in self.modules if mod.name in names and not isinstance(getattr(mod, 'engine', None), ss.solvers.Compartmental)]
-        if others:
-            return f'{sc.strjoin(others)} {"has" if len(others) == 1 else "have"} a step of {"its" if len(others) == 1 else "their"} own (a modifier with where=, when=, or a function as its amount, an intervention, or an analyzer)'
+        others = [mod for mod in self.modules if mod.name in names and not isinstance(getattr(mod, 'engine', None), ss.solvers.Compartmental)]
+        if others: # Any module written as code (an intervention, analyzer, connector, network, ...), or a modifier the engines cannot tabulate
+            kinds = list(dict.fromkeys('a modifier with where=, when=, or a function as its amount' if isinstance(mod, ss.modify) else 'a module written as code' for mod in others))
+            return f'{sc.strjoin(mod.name for mod in others)} {"has" if len(others) == 1 else "have"} a step of {"its" if len(others) == 1 else "their"} own ({" or ".join(kinds)})'
         for mod in self.declared:
             reason = mod.engine.kernel_reason()
             if reason is not None:
@@ -1543,7 +1544,7 @@ class Sim(ss.Base):
         self.results_ready = True # Results are ready to use
         return
 
-    def summarize(self, how=None):
+    def summarize(self, key=None, how=None):
         """
         Provide a quick summary of the sim: each result over the whole run, by its `summarize_by`
 
@@ -1552,6 +1553,7 @@ class Sim(ss.Base):
         `ss.Result.summarize()`.
 
         Args:
+            key (str): if given, only this result (e.g. `'sir_infection'` or `'sir.infection'`): its summary, rather than a dict of all of them (which is kept as `sim.summary`)
             how (str/dict): 'mean', 'median', 'last', 'sum', or a function, to summarize every result that way; or a dict of these by result key (e.g. `dict(sir_infected='mean')`), with the rest by their `summarize_by`
         """
         funcs = dict(mean=np.mean, median=np.median, sum=np.sum, last=lambda res: res[-1])
@@ -1560,6 +1562,9 @@ class Sim(ss.Base):
 
         summary = sc.objdict()
         flat = self.results.flatten(sep='_', only_results=False, columns=True) # Summarize each column of 2D results separately
+        one = key is not None
+        if one: # Only the result asked for
+            flat = ss.results.match_result_keys(flat, key, show_skipped=True, flattened=True)
         for key, res in flat.items():
             func = how.get(key, how.get(''))
             if 'timevec' in key or (func is None and getattr(res, 'summarize_by', '') is None): # Skip module-specific time vectors, and results not summarized over time
@@ -1572,6 +1577,11 @@ class Sim(ss.Base):
             except Exception as E:
                 entry = f'N/A {E}'
             summary[key] = entry
+        if one:
+            if key not in summary:
+                errormsg = f'"{key}" has no summary: it is not summarized over time (give how=)'
+                raise ValueError(errormsg)
+            return summary[key]
         self.summary = summary
         return summary
 

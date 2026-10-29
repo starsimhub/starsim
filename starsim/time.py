@@ -1480,6 +1480,11 @@ class FloatYearLocator(matplotlib.ticker.Locator):
         return self.tick_values(vmin, vmax)
 
 
+    def nonsingular(self, vmin, vmax):
+        if self._convert_dates and vmin == vmax: # A single time point (e.g. one year of a resampled result): a year either side, not 5% of the year (two centuries)
+            return vmin - 1, vmax + 1
+        return super().nonsingular(vmin, vmax)
+
     def tick_values(self, *args, **kwargs):
         if self._convert_dates:
             with warnings.catch_warnings(): # On a narrow axis (e.g. one of many in sim.plot()), no interval may give few enough ticks, and Matplotlib warns and takes its longest, which is what is wanted

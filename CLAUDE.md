@@ -72,7 +72,7 @@ uv add starsim[dev]  # With dev dependencies
 ## Project structure
 
 ### Core modules (`starsim/`)
-- `analyzers.py`: Analyzers for custom results (e.g. `ss.infection_log`, `ss.dynamics_by_age`)
+- `analyzers.py`: Analyzers for custom results (`ss.Analyzer`, the base class, and `ss.infection_log`)
 - `arrays.py`: State management arrays for people/networks
 - `conditions.py`: Conditions on states and people, for `where=` (`ss.conditions.Cond`)
 - `connectors.py`: Connectors between modules (e.g. `ss.modify`)

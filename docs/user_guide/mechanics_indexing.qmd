@@ -118,7 +118,7 @@ class AgeOfInfectious(ss.Analyzer):
     """ Record the mean age of the people infectious with measles at each step """
     def init_results(self):
         super().init_results()
-        self.define_results(ss.Result('mean_age', scale=False, label='Mean age of the infectious'))
+        self.define_results(ss.Result('mean_age', label='Mean age of the infectious'))
         return
 
     def step(self):

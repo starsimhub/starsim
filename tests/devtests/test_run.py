@@ -94,8 +94,9 @@ def test_combine_merge():
     m1.label, m2.label = 'first', 'second'
     merged = ss.MultiSim.merge(m1, m2)
     assert [m.label for m in merged.split()] == ['first', 'second'] # Each part keeps its own label (both were the first's)
-    with pytest.raises(ValueError, match='different times'): # Sims with different steps (their results were silently left out)
-        ss.parallel(ss.Sim(diseases='sis', n_agents=200, dt=1, verbose=0), ss.Sim(diseases='sis', n_agents=200, dt=0.5, verbose=0), parallel=False)
+    steps = ss.parallel(ss.Sim(diseases='sis', n_agents=200, dt=1, verbose=0), ss.Sim(diseases='sis', n_agents=200, dt=0.5, verbose=0), parallel=False) # Sims with different steps are run, but not put together as runs
+    with pytest.raises(ValueError, match='different time vectors'):
+        steps.summarize()
     assert len(m1) == 1 and len(m2) == 2 and len(merged) == 3
     assert np.array_equal(merged.results.sis.I.values, msim.results.sis.I.values)
     assert [len(m) for m in merged.split()] == [1, 2] # Uses the chunks from the merge

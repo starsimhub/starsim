@@ -9,7 +9,7 @@ authorship:
 
 A program has to be paid for, and the question that decides between programs is often not only how much each prevents, but at what cost. Every product in Starsim takes a `cost=`, the cost of each delivery, and each delivery then records what it spent as a result, next to the number it delivered. With the results of a scenario without the program, that gives the cost of a program and the cost per outcome averted.
 
-This page covers costing a program, comparing the costs and effects of several, costs with uncertainty, and costs that are not per delivery, such as discounting and fixed costs. What each product does is on [Products](interventions_products.qmd), and how they are delivered on [Interventions](interventions_interventions.qmd). To find the best way to spend a fixed budget across programs, see [Optimization](calibration_optimization.qmd).
+This page covers costing a program, comparing the costs and effects of several, costs with uncertainty, and costs that are not per delivery, such as discounting and fixed costs. Most sims have no costs, so core Starsim stops at the `cost` result of each delivery; the tools for adding costs up, discounting them, and comparing scenarios are in the Starsim library (`import starsim.library as ssl`), in `ssl.econ`: the analyzer `ssl.Costs`, and the functions `ssl.discount()` and `ssl.icer()`. They are short, so they can be copied and changed for an evaluation that needs something else. What each product does is on [Products](interventions_products.qmd), and how they are delivered on [Interventions](interventions_interventions.qmd). To find the best way to spend a fixed budget across programs, see [Optimization](calibration_optimization.qmd).
 
 ## Costing a vaccination program
 
@@ -17,8 +17,8 @@ Here is measles in a population of a million people over 30 years, with births a
 
 ```{python}
 import numpy as np
-import pandas as pd
 import starsim as ss
+import starsim.library as ssl
 ss.options(jupyter=True)
 
 S, I, R = ss.states('S I R')
@@ -75,29 +75,17 @@ When there are several programs, the question is usually what each one adds over
 ```{python}
 campaign = ss.vaccinate(efficacy=0.95, leaky=False, coverage=0.9, where=ss.ppl.age < 5, interval=ss.years(4), start='2010', cost=8.0)
 
+costed = base.new(analyzers=ssl.Costs()) # Adds up the cost of every delivery, as the result costs.total
 msim = ss.parallel({
-    'No vaccination':         base,
-    'Routine':                base.new(interventions=routine),
-    'Routine and campaigns':  base.new(interventions=[routine, campaign]),
+    'No vaccination':         costed,
+    'Routine':                costed.new(interventions=routine),
+    'Routine and campaigns':  costed.new(interventions=[routine, campaign]),
 })
 
-rows = []
-for sim in msim.sims:
-    cost = sum(sim.results[intv.name].cost.sum() for intv in sim.interventions()) # The total over every delivery
-    rows.append(dict(scenario=sim.label, cost=cost, infections=sim.results.measles.infection.sum()))
-df = pd.DataFrame(rows).set_index('scenario')
-df['averted'] = df.infections.iloc[0] - df.infections
-df['incremental cost'] = df.cost.diff()
-df['incremental averted'] = df.averted.diff()
-df['ICER'] = df['incremental cost'] / df['incremental averted']
-df.round()
+ssl.icer(msim, outcome='measles.infection').round()
 ```
 
-The campaigns cost more than routine vaccination, and avert more infections, but each extra infection they avert costs more than with the routine program alone: the campaigns mostly reach children whom routine vaccination has already protected, or who would not have been infected anyway. Whether that is worth paying for is a judgment the model informs but does not make; it depends on what else the money could buy. The table works the same for any number of programs, ordered from the cheapest; a program that costs more and averts less than another (dominated) is left out before the ratios are worked out.
-
-::: {.callout-note}
-[PROPOSAL] Costs and effects are compared by hand here, with a loop over the deliveries and a table. A sim could give its total cost as a result (`sim.results.cost`, the sum over every delivery), and a MultiSim a table of costs, effects, and incremental ratios against a baseline (e.g. `msim.costs('No vaccination', outcome='measles.infection')`).
-:::
+The campaigns cost more than routine vaccination, and avert more infections, but each extra infection they avert costs more than with the routine program alone: the campaigns mostly reach children whom routine vaccination has already protected, or who would not have been infected anyway. Whether that is worth paying for is a judgment the model informs but does not make; it depends on what else the money could buy. `ssl.Costs` gives each sim a result for the cost of each delivery, and their total, `costs.total`. `ssl.icer()` totals the cost and the outcome named (any result: infections, deaths, or a model's DALYs) for each scenario, takes the outcome averted from that of the baseline (the first scenario, unless `baseline=` names another), and orders the scenarios by cost. Each is compared with the next cheaper one, except that a program that costs more and averts no more than a cheaper one is dominated, and has no ratio. It works the same for any number of programs, for a dict or list of sims as well as a MultiSim, and with several runs of each scenario compares their means. A table that needs more than this, such as extended dominance or a different measure of effect, can be built the same way from the results.
 
 ## Costs with uncertainty
 
@@ -129,7 +117,7 @@ The costs of each run are scaled to the population, as all results are: with 5,0
 
 ## Discounting and other costs
 
-Economic evaluations usually discount costs and outcomes in later years, at 3% a year for example, since a cost paid later, or an infection averted later, counts for less than one now. A result is an array over time, so discounting is a weight for each time point; `sim.t.yearvec` gives each point's time in years. Here the routine measles program from the first example, discounted at 3% a year from 2010:
+Economic evaluations usually discount costs and outcomes in later years, at 3% a year for example, since a cost paid later, or an infection averted later, counts for less than one now. A result is an array over time, so discounting is a weight for each time point, `(1 + rate)**-(t - start)` for a time `t` in years after `start`. `ssl.discount()` applies it to a result, and gives back a result. Here the routine measles program from the first example, discounted at 3% a year from 2010:
 
 ```{python}
 sim = ss.Sim(measles, interventions=routine, **pars)
@@ -137,29 +125,28 @@ sim.run()
 no_vx = ss.Sim(measles, **pars)
 no_vx.run()
 
-discount = 1.03**-np.maximum(sim.t.yearvec - 2010, 0) # The weight of each time point: 1 until 2010, then falling 3% a year
-cost = (sim.results.routine.cost.values * discount).sum()
-averted = ((no_vx.results.measles.infection.values - sim.results.measles.infection.values) * discount).sum()
+cost = ssl.discount(sim.results.routine.cost, 0.03, start=2010).sum()
+averted = ssl.discount(no_vx.results.measles.infection - sim.results.measles.infection, 0.03, start=2010).sum()
 print('Discounted cost ($):', round(cost))
 print('Discounted infections averted:', round(averted))
 print('Discounted cost per infection averted ($):', round(cost/averted, 2))
 ```
 
-Other costs work the same way, with the results that drive them. A cost that does not depend on deliveries, such as running a program (staff, cold chain, training), is added as an amount per year over the years the program runs. The cost of the disease itself, such as care for each case, is a cost per infection (or per case, if the model declares one), times the infections; the infections averted then save that cost, and the net cost of a program is its cost less the savings:
+Other costs work the same way, with the results that drive them. A cost that does not depend on deliveries, such as running a program (staff, cold chain, training), is an amount per year over the years the program runs. The cost of the disease itself, such as care for each case, is a cost per infection (or per case, if the model declares one), times the infections; the infections averted then save that cost, and the net cost of a program is its cost less the savings. `ssl.Costs` takes both: `fixed=`, a cost per year from `start=`, and `unit_costs=`, the cost of each event of any result, by its path. Here the program costs $20,000 a year to run from 2010, and each infection $50 of care, in both scenarios, so that the difference between them is the net cost:
 
 ```{python}
-years = sim.t.yearvec
-fixed = 20_000 * (years[-1] - 2010) # $20,000 a year to run the program from 2010
-care = 50 * averted                 # $50 of care saved for each infection averted (discounted)
-net = cost + fixed - care
-print('Net cost per infection averted ($):', round(net/averted, 2))
+care = {'measles.infection': 50} # $50 of care for each infection
+msim = ss.parallel({
+    'No vaccination': ss.Sim(measles, analyzers=ssl.Costs(unit_costs=care), **pars),
+    'Routine':        ss.Sim(measles, interventions=routine, analyzers=ssl.Costs(unit_costs=care, fixed=20_000, start=2010), **pars),
+})
+df = ssl.icer(msim, outcome='measles.infection', rate=0.03, start=2010) # Discounted, as above
+print(df[['cost', 'averted']].round())
+net = df.cost['Routine'] - df.cost['No vaccination']
+print('Net cost per infection averted ($):', round(net/df.averted['Routine'], 2))
 ```
 
-A net cost below zero means a program saves more than it costs.
-
-::: {.callout-note}
-[PROPOSAL] Discounting is done by hand here. Results could take a discount rate, e.g. `res.cost.discount(0.03, start='2010').sum()`, and a delivery a fixed cost per year (`ss.vaccinate(..., cost=5, fixed_cost=ss.peryear(20_000))`), which its `cost` result would include.
-:::
+A net cost below zero means a program saves more than it costs; `ssl.icer()` then marks the scenario without it as dominated.
 
 ## Optimizing spending
 

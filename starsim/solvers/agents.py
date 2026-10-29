@@ -522,8 +522,8 @@ class Agents(Engine, Transmission):
             self.record_stocks()
         return moved
 
-    def move_some(self, srcs, dst, p=None, n=None, uids=None):
-        """ A one-off move from code (`ss.move()`): a share `p` of the agents in some states (or `n` people, as the nearest whole number of agents; or of `uids`, those given), chosen at random, to a state; or of a count, to and from outside the model too (`dst` or `srcs` empty); returns the number of people moved """
+    def move_some(self, srcs, dst, p=None, n=None, uids=None, where=None):
+        """ A one-off move from code (`ss.move()`): a share `p` of the agents in some states (or `n` people, as the nearest whole number of agents; or of `uids`, those given; or of those for whom `where` holds), chosen at random, to a state; or of a count, to and from outside the model too (`dst` or `srcs` empty); returns the number of people moved """
         if not (srcs[0] if srcs else dst).people: # A count: an exact share, as its flows are
             have = sum(self.counts[state.name].sum() for state in srcs)
             if n is not None:
@@ -541,6 +541,8 @@ class Agents(Engine, Transmission):
         cands = ss.uids.concatenate([mod[state.name].uids for state in srcs])
         if uids is not None:
             cands = cands.intersect(uids)
+        if where is not None:
+            cands = cands[np.asarray(self.selector.select(where), dtype=bool)[cands]]
         if n is None and np.ndim(p) == 0 and p == 1: # Everyone: no random numbers to draw
             return len(self.move_states(cands, srcs, dst))*self.scale
         draws = self.draw('move', cands)
@@ -3438,6 +3440,12 @@ class Agents(Engine, Transmission):
             new = self.add_people(enter, self.ti, f'born_{tr.name}', newborn=not tr.migration)
             self.fire_entered(new, tr)
             self.flowcounts[tr.name] += self.n_of(new)
+            if len(new): # An event, e.g. on=measles.births, as for births driven by a flow (see step_per())
+                for dst in tr.dst:
+                    inds = new[self.mod[dst.name].raw[new]]
+                    if len(inds):
+                        self.record(tr, inds, -1, self.state_index[dst.name])
+                self.events[tr.name] = new if tr.name not in self.events else ss.uids.concatenate([self.events[tr.name], new])
             if sim.groups.n_groups > 1:
                 self.flow_groups[tr.name] = np.bincount(self.groups(new), weights=self.weights(new), minlength=sim.groups.n_groups)
         return

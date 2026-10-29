@@ -302,7 +302,9 @@ def init_compartments(sim, joints=None, mixing=None):
     pars = sim.pars
     solver = sim.solver
     for cap in sim.capabilities:
-        if cap.fatal:
+        if cap.fatal and not cap.get('switch', True): # Says what to do itself, whatever the solver asked for (e.g. at_age=)
+            raise ss.CapabilityError(cap.reason)
+        elif cap.fatal:
             raise ss.CapabilityError(f'cannot run with solver="{solver}": {cap.reason}.\n'
                                      f'     Run with solver="abm", or leave the solver as "auto".')
     for mod in sim.declared: # Variation between people is lost without agents
@@ -692,7 +694,8 @@ def init_unit(sim):
             bare = [name for mod in setters for name in bare_in(mod)]
             if bare: # Which unit they are in cannot be guessed
                 raise TypeError(f'the typed values in the model have different units ({sc.strjoin(disagree)}), so the unit of the bare numbers {sc.strjoin(bare)} is not known. Set it with unit=, e.g. ss.Sim(..., unit=\'{unit}\').')
-            if pars.dt is None: # The finest, as the most likely, but the step is then that small
+            run = {base(v) for v in durs} | ({'day'} if dates else set()) # The units the run is written in (stop=ss.days(100), or dates, which step by a day)
+            if pars.dt is None and unit not in run: # The finest, as the most likely, but the step is then that small, which is worth saying unless the run is written in it
                 ss.warn(f'the typed values in the model have different units ({sc.strjoin(disagree)}), so its unit is the finest, {unit}s, and it steps by one {unit}; give dt= (e.g. dt=ss.{disagree[-1]}s(1)) or unit= to say otherwise')
     elif dates:
         unit, source = 'day', 'start and stop dates'
@@ -1096,17 +1099,20 @@ def init_capabilities(sim, modules):
     """
     One record for each ingredient that changes which solvers can run the model, read by `solver='auto'`, `sim.describe()`, and the `CapabilityError` of a compartmental solver that was asked for
 
-    Each record has the ingredient; the reason it makes `auto` run the model as agents (`reason`); and whether it stops a
-    compartmental solver that was asked for (`fatal`). Ingredients that every solver runs are not recorded. Code is never run to find out: setting `compartmental = True` or `False` on a module (or its class)
-    says whether it works on groups. Without it, an analyzer, a plain `ss.Module`, a function given as a module, and the code
-    and functions of a declared module run beside the compartments (and raise a `CapabilityError` if they ask for agents);
-    other modules written as code (diseases, networks, demographics, interventions, connectors) need agents. What the layout of
+    Each record has the ingredient; the reason it makes `auto` run the model as agents (`reason`); whether it stops a
+    compartmental solver that was asked for (`fatal`); and whether `auto` runs as agents for it (`switch`): not for `at_age=`
+    with no age group starting at the age (see `ss.Delivery.age_reason()`), which raises instead, unless something else needs agents. Ingredients that every solver runs are not recorded. Code is never run to find out: setting `compartmental = True` or `False` on a module (or its class)
+    says whether it works on groups. Without it, a module written as code needs agents if it keeps a value for each person
+    (`define_states()`) or adds and removes agents (`ss.Births`, `ss.Deaths`); a network of individuals, or one with lasting
+    partnerships, makes `auto` run as agents, and is approximated by a compartmental solver that was asked for where it can.
+    Any other module written as code, whatever its kind, and the code and functions of a declared module, run beside the
+    compartments (and raise a `CapabilityError` if they ask for agents). What the layout of
     the compartments refuses (a minimum stay it has no form for, a race with a fixed delay, a network's partnerships, a network with no approximation) is not
     predicted here: `init_layouts()` makes the layout, which runs none of the model's code, and adds its refusal as a record.
     """
     caps = []
-    def add(ingredient, reason, fatal=False):
-        caps.append(sc.objdict(ingredient=ingredient, reason=reason, fatal=fatal))
+    def add(ingredient, reason, fatal=False, switch=True):
+        caps.append(sc.objdict(ingredient=ingredient, reason=reason, fatal=fatal, switch=switch))
         return
 
     approx = sim.pars.approx
@@ -1131,7 +1137,10 @@ def init_capabilities(sim, modules):
         reasons = mod.agent_reasons() if hasattr(mod, 'agent_reasons') else [] # What needs agents, which needs no layout to find (see ss.Delivery.agent_reasons())
         for reason in reasons: # A priority per agent is ignored by a compartmental solver that was asked for, with a note (see ss.Delivery.key())
             add(f'module: {mod.name}', reason, fatal=not (reason.startswith('priority=') and approx is not False))
-        for cond in [getattr(mod, key, None) for key in ['on', 'eligible', 'where'] if not (key == 'where' and graph is not None)]: # The conditions of a delivery or a modifier
+        aged = isinstance(mod, ss.Delivery) and mod.at_age is not None
+        if aged and mod.age_reason(sim): # Raised, not run as agents: see ss.Delivery.age_reason()
+            add(f'at_age: {mod.name}', mod.age_reason(sim), fatal=True, switch=False)
+        for cond in [mod.where_given if aged and key == 'eligible' else getattr(mod, key, None) for key in ['on', 'eligible', 'where'] if not (key == 'where' and graph is not None)]: # The conditions of a delivery or a modifier (with at_age=, apart from the age)
             for reason in ss.conditions.group_reasons(cond, sim)[:1]:
                 add(f'condition: {mod.name}', reason, fatal=True)
         if graph is not None and graph.attrs: # Agents only (see ss.attr), apart from traits, which a compartmental run takes at their mean
@@ -1283,4 +1292,4 @@ def init_capabilities(sim, modules):
 
 def auto_reasons(sim):
     """ The reasons, from the capability record, that `solver='auto'` runs the model as agents (none if it runs it as compartments) """
-    return [cap.reason for cap in getattr(sim, 'capabilities', [])]
+    return [cap.reason for cap in getattr(sim, 'capabilities', []) if cap.get('switch', True)]

@@ -95,7 +95,7 @@ class Cholera(AgentSEIR):
             ss.BoolState('symptomatic', label='Symptomatic'),
 
             # Timepoint states
-            ss.FloatArr('ti_symptomatic', label='Time of symptoms'),
+            ss.TimeArr('ti_symptomatic', label='Time of symptoms'),
 
             # Aliases
             asymptomatic = lambda self: self.infectious & ~self.symptomatic, # Infectious, but shedding much less
@@ -119,10 +119,9 @@ class Cholera(AgentSEIR):
         Original version by Dom Delport
         """
         super().step_state()
-        ti = self.ti
 
         # Progress infectious -> symptomatic
-        symptomatic = (self.infectious & (self.ti_symptomatic <= ti)).uids
+        symptomatic = (self.infectious & self.ti_symptomatic.due()).uids
         self.symptomatic[symptomatic] = True
 
         # Recovery ends symptoms too
@@ -201,6 +200,6 @@ class Cholera(AgentSEIR):
         super().update_results()
         res = self.results
         ti = self.ti
-        res.new_deaths[ti] = np.count_nonzero((self.ti_dead > ti - 1) & (self.ti_dead <= ti)) # Deaths requested in this step, since ti_dead is fractional
+        res.new_deaths[ti] = np.count_nonzero(self.ti_dead.isclose(ti)) # Deaths requested in this step, as due() rounds ti_dead
         res.cum_deaths[ti] = np.sum(res.new_deaths[:ti+1])
         return

@@ -281,6 +281,12 @@ def test_odin_ode():
     sim2 = load_odin(write(odin_sir, '.R'), stop=100, pars=dict(beta=0.5), **kw).run()
     assert sim2.results[sim2.diseases[0].name].R.values[-1] > res.R.values[-1]
 
+    # A rate that uses the time is not translated, and is listed once
+    with pytest.warns(ss.errors.ImportIncomplete):
+        sim3 = load_odin(write(odin_sir.replace('beta <- user(0.3)', 'beta <- 0.3 * (1 + 0.2 * cos(t))'), '.R'), stop=100, **kw)
+    listed = [name for name,why in sim3.imported.incomplete]
+    assert 'S -> I' in listed and len(listed) == len(set(listed)), listed
+
     # An SEIRS with births and deaths: terms multiplied out and paired into flows, the rest into or out of the model
     sim = load_odin(write(odin_seirs, '.R'), stop=365, **kw)
     arrows = sorted(tr.arrow for tr in sim.pars.diseases[0].transitions.values())

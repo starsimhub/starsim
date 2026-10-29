@@ -1295,9 +1295,10 @@ class Dist:
         return
 
     def plot_hist(self, n=1000, bins=None, fig_kw=None, hist_kw=None):
-        """ Plot the current state of the RNG as a histogram """
+        """ Plot the current state of the RNG as a histogram (from a copy initialized on its own, if this one has no sim yet) """
         plt.figure(**sc.mergedicts(fig_kw))
-        rvs = self.rvs(n, reset=True) # As if nothing ever happened
+        dist = self if self.initialized else sc.dcp(self).init(force=True) # Leave this one to be initialized by its sim
+        rvs = dist.rvs(n, reset=True) # As if nothing ever happened
         plt.hist(rvs, bins=bins, **sc.mergedicts(hist_kw))
         plt.title(str(self))
         plt.xlabel('Value')

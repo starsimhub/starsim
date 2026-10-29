@@ -26,7 +26,7 @@ def test_exports():
     """ Check that every library class is importable from both the top level and its submodule """
     sc.heading('Testing library exports...')
 
-    for submod in [ssl.diseases, ssl.networks, ssl.mnch]:
+    for submod in [ssl.diseases, ssl.networks, ssl.mnch, ssl.econ]:
         for name,obj in vars(submod).items():
             if name.startswith('_') or inspect.ismodule(obj): # Skip dunders and submodules
                 continue
@@ -124,7 +124,43 @@ def test_hiv():
     return s1, s2
 
 
+@sc.timer()
+def test_econ():
+    """ Check that ssl.Costs adds up every cost, that ssl.discount() weights by time, and that ssl.icer() compares scenarios with the baseline """
+    sc.heading('Testing health economics...')
+
+    S, I = ss.states('S I')
+    infection = S >> I @ ss.peryear(2)*I
+    recovery  = I >> S @ ss.years(1)
+    sis = ss.Disease(infection, recovery, init_prev=0.1)
+    vaccine = ss.vaccinate(efficacy=0.5, coverage=0.5, interval=ss.years(1), start=2005, cost=5.0)
+    costs = ssl.Costs(unit_costs={'sis.infection': 0.1}, fixed=1000, start=2005)
+    base = ss.Sim(sis, analyzers=costs, total_pop=10_000, start=2000, stop=2020, verbose=0)
+    msim = ss.parallel({'None': base, 'Vaccine': base.new(interventions=vaccine)}, parallel=False)
+
+    # The total is the sum of the delivery, care, and fixed costs
+    sim = msim.sims['Vaccine']
+    res = sim.results
+    expected = res.vaccine.cost.sum() + 0.1*res.sis.infection.sum() + 1000*15
+    assert np.isclose(res.costs.total.sum(), expected), f'Expected a total cost of {expected}, not {res.costs.total.sum()}'
+
+    # Discounting leaves values before the start, and lowers those after it
+    disc = ssl.discount(res.costs.total, 0.03, start=2005)
+    assert np.allclose(disc.values[:5], res.costs.total.values[:5]), 'Values before the start should not be discounted'
+    assert disc.sum() < res.costs.total.sum(), 'Discounting should lower the total'
+
+    # The ICER is the incremental cost over the incremental outcome averted
+    df = ssl.icer(msim, outcome='sis.infection', baseline='None')
+    print(df)
+    assert df.averted['None'] == 0 and df.averted['Vaccine'] > 0, 'Expected vaccination to avert infections'
+    row = df.loc['Vaccine']
+    assert np.isclose(row.ICER, (row.cost - df.cost['None'])/row.averted), 'Expected the ICER to be the incremental cost per infection averted'
+
+    return df
+
+
 if __name__ == '__main__':
     exports  = test_exports()
     diseases = test_diseases()
     hiv      = test_hiv()
+    econ     = test_econ()

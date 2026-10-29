@@ -156,24 +156,16 @@ sim.plot()
 **Steps, people, and agents.** A run moves forward in steps of time, `dt`, which is one of the unit by default: here one day. For the ODE, the step is only how often results are recorded, since the equations are solved more finely in between. For agents, the step matters more, since each agent moves at most once per step. [Tutorial 1](t1_intro.qmd) showed that this outbreak is too fast for a step of a day as agents. Here are agents with a step of a day and of a quarter of a day, with the ODE:
 
 ```{python}
-import matplotlib.pyplot as plt
-
 ode = ss.Sim(measles, total_pop=100_000, stop=ss.days(50), verbose=0)
 day = ss.Sim(measles, total_pop=100_000, n_agents=10_000, stop=ss.days(50), verbose=0)
 quarter = day.new(dt=ss.days(0.25))
-sims = {'ODE': ode, 'Agents, step of 1 day': day, 'Agents, step of 1/4 day': quarter}
-for label, s in sims.items():
-    s.run()
-    res = s.results.measles
-    plt.plot(res.I.timevec, res.I.values, label=label)
-plt.xlabel('Day')
-plt.ylabel('Number infectious')
-plt.legend();
+msim = ss.parallel({'ODE': ode, 'Agents, step of 1 day': day, 'Agents, step of 1/4 day': quarter})
+msim.plot('measles.I')
 ```
 
 `sim.new()` makes a new sim from an existing one, with whatever is given changed (here, the step); `verbose=0` turns off the lines a run prints. With a step of a quarter of a day, the peak comes on day 6.75, close to the ODE (day 6), rather than on day 9. A good check of any model run as agents is to halve the step and see whether the results change; `sim.check_dt()` does this and reports the difference.
 
-> **[PROPOSAL]** `ss.parallel()` can't put together sims with different steps (it stops with "the sims have results at different times"), so this comparison falls back on Matplotlib. It would be simpler if `ss.parallel(sims).plot('measles.I')` worked here too, plotting each run on its own time axis. (Overlaying with `Result.plot(ax=ax, label=...)` doesn't work in a notebook either: with `ss.options(jupyter=True)`, each call shows and closes the figure and returns `None`.)
+The sims run together with `ss.parallel()`, as above. Since they have different steps, `msim.plot()` plots each against its own time points; what needs their results put together as runs of one thing, such as the median across runs, raises an error saying so.
 
 `total_pop` is the number of people in the population. When the model runs as agents, `n_agents` is the number of agents simulated, and each stands for `total_pop / n_agents` people (here 10). Results are always in people, not agents. More agents give results that vary less by chance, but take longer to run; 10,000 is often enough to see the shape of an epidemic, and more are needed to follow small numbers, such as the last few cases of an outbreak. [Time](../user_guide/building_time.qmd) in the user guide has more on units, dates, and steps.
 

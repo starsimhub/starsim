@@ -54,6 +54,8 @@ def bare_rate(rate, name):
     Returns the rate, and a note saying how a bare number was read (None for anything else), which is said with `say_bare()`
     once the module is in a sim: a bare number is the usual way to give these rates, so it is not a warning
 
+    A time series of bare numbers is read the same way, its values together (so 40 falling to 0.5 is per 1,000 throughout).
+
     Args:
         rate (any): the rate as given
         name (str): what it is, for the note (e.g. "rate")
@@ -61,12 +63,18 @@ def bare_rate(rate, name):
     Examples:
         ```python
         rate, note = ss.demographics.bare_rate(30, 'rate') # ss.peryear(0.03): 30 per 1,000 people per year
+        rate, note = ss.demographics.bare_rate(ss.timeseries({2000: 40, 2030: 20}), 'rate') # ss.peryear(0.04) falling to ss.peryear(0.02)
         ```
     """
-    if not sc.isnumber(rate):
+    series = isinstance(rate, ss.timeseries) and len(rate.values) and all(sc.isnumber(v) for v in rate.values)
+    if not (sc.isnumber(rate) or series):
         return rate, None
-    units = infer_rate_units(None, rate, name, hint=f'Give a typed rate to say which, e.g. ss.peryear({rate:n}) per person or ss.peryear({rate/1000:n}) for {rate:n} per 1,000.')
+    first = rate.values[0] if series else rate
+    units = infer_rate_units(None, rate.values if series else rate, name, hint=f'Give a typed rate to say which, e.g. ss.peryear({first:n}) per person or ss.peryear({first/1000:n}) for {first:n} per 1,000.')
     what = ' per 1,000 people' if units == 1e-3 else ' per person'
+    if series:
+        out = ss.timeseries(rate.times, [ss.peryear(v*units) for v in rate.values], mode=rate.mode, period=rate.period)
+        return out, f'the values of {name}= are bare numbers, so they are taken as{what} per year'
     return ss.peryear(rate*units), f'{name}={rate:n} is a bare number, so it is taken as {rate:n}{what} per year'
 
 

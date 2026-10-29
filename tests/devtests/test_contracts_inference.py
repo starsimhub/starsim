@@ -415,6 +415,11 @@ def test_optimize():
     assert capped.alloc['a'] <= 60 + 1e-6 and np.isclose(sum(capped.alloc.values()), 100) and capped.value < best.value_before
     least = ss.fit.optimize(make(), spend=dict(a='spend_a', b='spend_b'), minimize='sir.R', target=best.value_before) # The least money that does as well as the current allocation
     assert least.total < 90 and least.value <= best.value_before and np.isclose(sum(least.alloc.values()), least.total)
+    smaller = ss.fit.optimize(make(), spend=dict(a='spend_a', b='spend_b'), minimize='sir.R', total=50) # Less than the current total
+    assert np.isclose(smaller.total, 50) and np.isclose(sum(smaller.alloc.values()), 50) and smaller.alloc['a'] > 45
+    dated = make().new(start='2025-01-01', stop='2025-04-11')
+    late = ss.fit.optimize(dated, spend=dict(a='spend_a', b='spend_b'), minimize='sir.R', start='2025-02-01') # In a sim with dates (a bare-number key of 2025.08 was read as days)
+    assert late.alloc['a'] > 95 and best.value < late.value < best.value_before
     return best
 
 

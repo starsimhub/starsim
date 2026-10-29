@@ -223,7 +223,7 @@ class Cond:
         try:
             out = self.eval(selector)
         except (KeyError, AttributeError) as e: # E.g. the memory of a declared transition that nothing in the model reads (tb.diagnosis.since), which is not kept
-            raise ss.CapabilityError(f'{self!r} cannot be read: "{mod.name}" keeps it only when something in the model reads it (a condition, rate, or result), and nothing does ({e})') from e
+            raise ss.CapabilityError(f'{self!r} cannot be read: "{mod.name}" keeps it only when something in the model reads it (a condition, rate, or result), and nothing does ({e}); set ss.options.keep_times = True before the sim is initialized to keep it') from e
         out = np.asarray(out)
         if out.ndim == 0:
             out = np.full(sim.people.uid.len_tot, out[()])
@@ -471,12 +471,15 @@ def leaf_states(cond):
 
 
 def state_refs(obj):
-    """ The states of named modules that the conditions of a module (e.g. an `ss.modify()` or a delivery, and its product) refer to, as (module name, state name) """
+    """ The states of named modules that the conditions of a module (e.g. an `ss.modify()` or a delivery, and its product) refer to, as (module name, state name), and the dimensions of a disease's own (e.g. `measles.age`), as (module name, dimension name) """
     out = []
     def walk(cond):
         if cond.op == 'state':
             if modname(cond.args[0]) is not None:
                 out.append((modname(cond.args[0]), cond.args[1]))
+        elif cond.op == 'dim':
+            if getattr(cond, 'owner', None) is not None: # See ss.Disease.stratify()
+                out.append((modname(cond.owner), cond.args[0]))
         elif isinstance(cond, Event): # The transition, or the states entered or left
             kind, obj, dst = cond.args
             name = modname(cond.module)
@@ -680,8 +683,8 @@ def check_path_events(sim, cond, owner):
         modname, name = path.args
         mod = next((m for m in sim.declared if m.name == modname), None)
         if mod is None or name not in mod.graph.transitions:
-            what = f'"{modname}" is not a declared module in the sim' if mod is None else f'"{name}" is not a transition of "{modname}"{"; for entering the state, use ss.state(" + repr(modname + "." + name) + ").enter" if name in mod.graph.states else ""}'
-            errormsg = f'on=ss.state("{modname}.{name}") of "{owner}" is the event of going through a transition, but {what}'
+            what = f'"{modname}" is not a declared module in the sim' if mod is None else f'"{name}" is not a transition of "{modname}"{"; for entering the state, use ss.state(" + repr(modname + "." + name) + ").enter" if name in mod.graph.states else "; its transitions are " + sc.strjoin(mod.graph.transitions.keys())}'
+            errormsg = f'on="{modname}.{name}" of "{owner}" is the event of going through a transition, but {what}'
             raise ValueError(errormsg)
     return
 
@@ -692,8 +695,14 @@ def split_who(who, where=None, on=None):
 
     who= takes a condition, an event, or a combination with & and |.
     With an event in it, delivery is triggered: it reaches the people the event happened to on this step who meet the condition parts.
-    `on=` and `where=` are the same thing, joined to it by &. Returns (trigger, condition), either of which may be None.
+    `on=` and `where=` are the same thing, joined to it by &; `on=` also takes a transition by its path (`on='measles.births'`),
+    found when the sim is initialized. Returns (trigger, condition), either of which may be None.
     """
+    if isinstance(on, str): # A transition by its path, as ss.state() gives it (see path_events())
+        if len(on.split('.')) != 2 or not all(on.split('.')):
+            errormsg = f'on= as a string is a transition by its path, "module.transition", e.g. on="measles.births"; not {on!r}'
+            raise ValueError(errormsg)
+        on = state(on)
     parts = []
     for val in [who, on, where]:
         if isinstance(val, (list, tuple)):
@@ -702,7 +711,7 @@ def split_who(who, where=None, on=None):
         elif val is not None:
             val = as_cond(val)
         if val is not None and not isinstance(val, Cond) and not callable(val):
-            errormsg = f'who=, on=, and where= of a delivery take conditions and events (e.g. who=sir.infection, who=ss.ppl.age < 5), or a function of the sim; not {val!r}'
+            errormsg = f'who=, on=, and where= of a delivery take conditions and events (e.g. who=sir.infection, who=ss.ppl.age < 5), or a function of the sim; on= also takes a transition by its path (e.g. on="sir.infection"); not {val!r}'
             raise TypeError(errormsg)
         parts.append(val)
     who, on, where = parts

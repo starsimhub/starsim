@@ -55,6 +55,7 @@ def test_capabilities_two_modules():
     # People given to a compartmental solver are where the population size came from, not a guess
     sim2 = ss.Sim(diseases=A(name='a'), people=ss.People(100), solver='ode', stop=2001, verbose=0).init()
     assert sim2.pop_from == 'people'
+    assert '1 group;' in str(sim2.people) # Printing the people of an unstratified compartmental run (which has no ages) works
     return sim
 
 

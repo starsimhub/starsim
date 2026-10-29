@@ -7,6 +7,7 @@ import functools as ft
 import numpy as np
 import pandas as pd
 import sciris as sc
+import matplotlib.pyplot as plt
 import starsim as ss
 
 
@@ -127,6 +128,7 @@ class MultiSim:
         verbosities = {sim.pars.verbose for sim in sc.tolist(sims) or [base_sim] if isinstance(sim, ss.Sim)}
         self.verbose = verbosities.pop() if len(verbosities) == 1 else None # The sims' verbose, if they share one (e.g. ss.Sim(verbose=0).run(n_runs=10) prints nothing)
         self.results = None # Every result, with a run axis first
+        self._same_times = True # Whether the sims have the same time points, so their results can be put together as runs (see collect())
         self.runs = None # One row per run: its scenario, the values of any parameters swept, and its seed
         self.summary = None
         self.ready = False # Whether the sim of each run has been made, by init_sims()
@@ -135,7 +137,7 @@ class MultiSim:
         # Sims that have already run: their results across runs, without running them again
         if sims is not None and all(sim.results_ready for sim in sims):
             self.sims, self.runs = self.expand(sims)
-            self.results = MultiResults.from_sims(self.sims, self.runs)
+            self.collect(self.sims)
 
         # Optionally initialize
         if initialize:
@@ -201,7 +203,7 @@ class MultiSim:
 
     @property
     def sims(self):
-        """ The sim of each run, by position (`msim.sims[0]`) or by scenario (`msim.sims['Vaccine']`: its sim, or a list of them if it has several runs) """
+        """ The sim of each run, by position (`msim.sims[0]`) or by scenario (`msim.sims['Vaccine']`: its sim, or a list of them if it has several runs; and `msim.sims.items()`), each labelled by its scenario """
         sims = self.__dict__.get('_sims', self.__dict__.get('sims'))
         runs = self.__dict__.get('runs')
         if isinstance(sims, (Sims, RestartedSims)):
@@ -263,7 +265,7 @@ class MultiSim:
         return sims, n_runs, pars, draws
 
     def expand(self, sims, n_runs=None, pars=None, draws=False, **opts):
-        """ The sim of each run, each with its own seed (see `run_seed()`) and set of values (see `make_run()`), and a dataframe of the runs; a set of values swept is a scenario of its own, and a draw (`draws=True`) or a seed swept is a run of its sim's scenario """
+        """ The sim of each run, each with its own seed (see `run_seed()`) and set of values (see `make_run()`), labelled by its scenario, and a dataframe of the runs; a set of values swept is a scenario of its own, and a draw (`draws=True`) or a seed swept is a run of its sim's scenario """
         sets = par_sets(pars)
         out = []
         rows = []
@@ -271,8 +273,12 @@ class MultiSim:
             for j,p in enumerate(sets):
                 for i in range(sc.ifelse(n_runs, 1)):
                     seed = run_seed(sim.pars.rand_seed, p, j, i, n_runs, draws)
-                    out.append(sim if n_runs is None and p is None else self.make_run(sim, p, seed, **opts)) # A sim run once as it is is run itself
-                    rows.append(run_row(sim, p, seed, draws))
+                    row = run_row(sim, p, seed, draws)
+                    run = sim if n_runs is None and p is None else self.make_run(sim, p, seed, **opts) # A sim run once as it is is run itself
+                    if row['scenario'] and run.label != row['scenario']: # Labelled by its scenario, e.g. with the values swept
+                        run.label = row['scenario']
+                    out.append(run)
+                    rows.append(row)
         return out, pd.DataFrame(rows)
 
     def make_run(self, sim, values, seed):
@@ -356,7 +362,7 @@ class MultiSim:
                 if old is not new:
                     old.__dict__.update(new.__dict__) # Update the same object with the new results
         self.sims = run_sims
-        self.results = MultiResults.from_sims(run_sims, self.runs)
+        self.collect(run_sims)
         self.ready = False
         self.timer.stop()
         self.say(verbose, progress)
@@ -376,7 +382,20 @@ class MultiSim:
                 print(text)
         return
 
+    def collect(self, sims):
+        """
+        Put the results of the sims together as runs (`msim.results`), if they have the same time points (`msim._same_times`)
+
+        Sims with different time points (e.g. different steps) are kept as they are: each can be plotted on its own time
+        axis (`msim.plot()`), but their results can't be put together, so what combines the runs raises an error.
+        """
+        self._same_times = same_times(sims)
+        self.results = MultiResults.from_sims(sims, self.runs) if self._same_times else DifferentTimes(sims)
+        return
+
     def check_run(self, what):
+        if not self._same_times:
+            self.results.error(f'msim.{what}()')
         if self.results is None:
             errormsg = f'msim.{what}() needs the results of the runs; run the MultiSim first (or use ss.parallel())'
             raise ValueError(errormsg)
@@ -452,7 +471,7 @@ class MultiSim:
         combined_sim.summarize()
         return combined_sim
 
-    def summarize(self, interval=0.95, how=None, baseline=None):
+    def summarize(self, key=None, interval=0.95, how=None, baseline=None):
         """
         A table of each result over the whole of each run, across the runs: the median, an interval, the mean, and the standard deviation
 
@@ -461,19 +480,20 @@ class MultiSim:
         that are 0 throughout are left out.
 
         Args:
+            key (str): if given, only this result (e.g. `'sir_infection'` or `'sir.infection'`), as `msim.summarize().loc[key]`: its row (or a row per scenario, if there are several)
             interval (float): the share of runs the interval holds (default 0.95: from the 2.5th to the 97.5th percentile), as `msim.plot()` shows
             how (str/dict): how to summarize each result over each run, as for `sim.summarize()`
             baseline (str): the label of a scenario to compare with: each other scenario's difference from it, run by run (the runs are paired by position, as in `msim.diff()`), so the interval is of the paired differences
 
         Returns:
             A dataframe with a row for each result (and scenario, if there are several), and the columns `median`, `low`, `high`, `mean`, and `std`
-            (or `value`, if each scenario was run once)
+            (or `value`, if each scenario was run once); with `key`, the rows of that result
 
         Example:
             ```python
             msim = sim.run(n_runs=20)
             msim.summarize()                     # Every result
-            msim.summarize().loc['sir_infection'] # The total infections
+            msim.summarize('sir_infection')      # The total infections
             msim.summarize(baseline='No intervention') # Each scenario's difference from the baseline, e.g. the infections averted (negative)
             ```
         """
@@ -487,14 +507,18 @@ class MultiSim:
         if baseline is not None and (self.runs is None or baseline not in set(self.runs['scenario'])):
             errormsg = f'No runs are labelled "{baseline}"; the labels are {list(dict.fromkeys(self.runs["scenario"])) if self.runs is not None else []}'
             raise KeyError(errormsg)
-        for key,res in self.results.flatten(sep='_', columns=True).items():
-            if not np.any(res.values): # E.g. deaths in a model without them
+        flat = self.results.flatten(sep='_', columns=True)
+        one = key is not None
+        if one: # Only the result asked for
+            flat = ss.results.match_result_keys(flat, key, show_skipped=True, flattened=True)
+        for key,res in flat.items():
+            if not np.any(res.values) and not one: # E.g. deaths in a model without them
                 continue
             func = how.get(key, how.get(''))
             if func is None and res.summarize_by is None: # Not summarized over time
                 continue
             if func is None:
-                arr = np.asarray(res.summarize(), dtype=float) # One value per run
+                arr = np.asarray(res._summarize(), dtype=float) # One value per run
             else:
                 func = func if callable(func) else funcs[func]
                 arr = np.array([func(vals) for vals in np.asarray(res.values)], dtype=float)
@@ -516,6 +540,11 @@ class MultiSim:
         several = any(isinstance(key, tuple) for key in rows)
         index = pd.MultiIndex.from_tuples(list(rows), names=['result', 'scenario']) if several else pd.Index(list(rows), name='result')
         summary = sc.dataframe(list(rows.values()), index=index)
+        if one:
+            if key not in summary.index.get_level_values(0):
+                errormsg = f'"{key}" has no summary: it is not summarized over time (give how=), or the baseline does not have it'
+                raise ValueError(errormsg)
+            return summary.loc[key]
         self.summary = summary
         return summary
 
@@ -526,7 +555,7 @@ class MultiSim:
         Args:
             t (int/str/date): if None, compare each result over the whole run (see `sim.summarize()`); else, the timestep index or date to compare the results at
             sim_inds (list): the positions of the runs to include (default: all)
-            output (bool): whether to return the dataframe (otherwise, print it)
+            output (bool): whether to only return the dataframe (otherwise, also print it in a script; in a notebook, it shows what is returned; see `ss.utils.return_table()`)
             do_plot (bool): whether to also plot the comparison as a bar chart, with one panel per result
             kwargs (dict): for the plot: see `ss.plot_args()`
 
@@ -553,7 +582,7 @@ class MultiSim:
             if t is None:
                 if res.summarize_by is None: # Not summarized over time
                     continue
-                vals = np.asarray(res.summarize())
+                vals = np.asarray(res._summarize()) # One value per run
             else:
                 ti = t if sc.isnumber(t) else sc.findnearest(res.convert_timevec().years, year) # Nearest timestep to the date, using the result's own timevec since modules can have different dt
                 vals = np.asarray(res.values)[:, ti]
@@ -579,11 +608,9 @@ class MultiSim:
             ss.return_fig(fig, **kw.return_fig)
         if output:
             return df
-        else:
-            timestr = 'Summary' if t is None else f'Results for t={t}'
-            print(f'{timestr} for each run:')
-            print(df)
-            return
+        timestr = 'Summary' if t is None else f'Results for t={t}'
+        print(f'{timestr} for each run:')
+        return ss.utils.return_table(df) # Printed in a script; in a notebook, shown once, as what is returned
 
     def diff(self, baseline):
         """
@@ -621,11 +648,58 @@ class MultiSim:
             show_data (bool): plot the data of the first sim that has any, as `sim.plot()` does (a flow with data at a longer period than the step is shown as its totals over the data's periods)
             **kwargs (dict): known arguments (e.g. figsize, font) split between the plotting dicts; see `ss.plot_args()` for all valid options
         """
+        if not self._same_times and (lines or self.runs['scenario'].is_unique): # Each run on its own time axis, which needs no combining of the runs
+            return self.plot_each(key=key, fig=fig, legend=legend, show_data=show_data, **kwargs)
         self.check_run('plot')
         sims = list(getattr(self.sims, 'runners', self.sims) or []) # Of sims restarted for their runs, the sim of each scenario, which was run
         withdata = next((sim for sim in sims if getattr(sim, 'data', None) is not None and sim.results_ready), None) if show_data else None
         data = ss.results.plot_data(withdata) if withdata is not None else None
         return self.results.plot(key=key, fig=fig, legend=legend, lines=lines, data=data, **kwargs)
+
+    def plot_each(self, key=None, fig=None, legend=True, show_data=True, log=False, **kwargs):
+        """ Plot each run on its own time axis, for sims with different time points (see `plot()`): each scenario in a color of its own """
+        sims = list(self.sims)
+        scenarios = list(self.runs['scenario'])
+        keys = ss.results.match_result_keys(sims[0].results, key, show_skipped=bool(key)).values()
+        def get(sim, res): # The same result of another sim
+            mod = sim.results.get(res.module)
+            return mod[res.name] if isinstance(mod, ss.Results) and res.name in mod else sim.results.get(res.name)
+        n_cols,_ = sc.getrowscols(len(keys))
+        kw = ss.plot_args(kwargs, figsize=np.array([8, 6])*np.clip((n_cols-3)/6+1, 1, 1.5), alpha=0.8, data_alpha=0.3, data_color='k')
+        given = fig is not None
+        withdata = next((sim for sim in sims if getattr(sim, 'data', None) is not None), None) if show_data else None
+        data = ss.results.plot_data(withdata) if withdata is not None else {}
+        several = not self.runs['scenario'].is_unique # Several runs of a scenario, drawn faintly, as with lines=True
+        with ss.style(**kw.style):
+            if fig is None:
+                fig, axs = sc.getrowscols(len(keys), make=True, **kw.fig)
+                axs = axs.flatten() if isinstance(axs, np.ndarray) else axs
+            else:
+                axs = fig.axes
+            axs = axs if sc.isiterable(axs) else [axs]
+            cycle = plt.rcParams['axes.prop_cycle'].by_key().get('color', ['k'])
+            colors = {scenario:cycle[i % len(cycle)] for i,scenario in enumerate(dict.fromkeys(scenarios))}
+            for ax,first in zip(axs, keys):
+                entry = data.get((first.module, first.name))
+                if entry is not None:
+                    ax.scatter(entry[0], entry[1], **kw.data)
+                labelled = set()
+                for sim,scenario in zip(sims, scenarios):
+                    res = get(sim, first)
+                    if res is None: # E.g. of an intervention only some scenarios have
+                        continue
+                    plot_kw = sc.mergedicts(dict(color=colors[scenario]), kw.plot, dict(alpha=0.3, lw=1) if several else {}, dict(label=None if scenario in labelled else scenario))
+                    labelled.add(scenario)
+                    ax.plot(res.timevec, res.values, **plot_kw)
+                if log:
+                    ax.set_yscale('log')
+                else:
+                    first._floor(ax)
+                ss.results.format_axes(ax, first)
+            if legend and len(colors) > 1:
+                axs[0].legend(**kw.legend)
+        sc.figlayout(fig=fig)
+        return ss.return_fig(fig, given=given, **kw.return_fig)
 
     @classmethod
     def merge(cls, *args):
@@ -834,7 +908,7 @@ def run_each(sims, parallel=True, n_cpus=None, par_args=None, shrink=None, verbo
     kwargs = dict(verbose=verbose, shrink=shrink, run_args=run_args, track=progress is not None)
     if parallel:
         par_args = sc.mergedicts({'ncpus': n_cpus, 'start_method': ss.kernels.start_method(), 'parallelizer': 'multiprocess-async', 'globaldict': {}}, par_args)
-        with ss.kernels.one_blas_thread():
+        with ss.kernels.starting_workers():
             P = sc.Parallel(ss.kernels.worker(single_run), iterkwargs=dict(sim=sims, ind=np.arange(len(sims))), kwargs=kwargs, **par_args) # The runs share the cores, so each takes one thread
             try:
                 P.run_async()
@@ -844,13 +918,41 @@ def run_each(sims, parallel=True, n_cpus=None, par_args=None, shrink=None, verbo
                         progress.update()
                         time.sleep(0.05)
                 P.finalize()
-            except BaseException:
+            except BaseException as E:
                 P.close() # Without leaving the workers running, as sc.parallelize() does
+                ss.kernels.workers_failed(E, par_args['start_method']) # A clear error if they ran the main script again
                 raise
         return P.results
     show = None if progress is None else progress.update
     store = {} if progress is None else progress.store
     return [single_run(sim, ind=i, copy_sim=True, globaldict=store, show=show, **kwargs) for i,sim in enumerate(sims)] # A fresh sim, as pickling gives when running in parallel
+
+
+def same_times(sims):
+    """ Whether the sims have the same time points, so that their results can be put together as runs """
+    times = [sim.t.tvec for sim in sims]
+    return all(len(t) == len(times[0]) and np.all(t == times[0]) for t in times[1:])
+
+
+class DifferentTimes:
+    """ In place of `msim.results`, for sims with different time points (e.g. different steps): any use of it raises an error saying why, and what to do instead """
+    def __init__(self, sims):
+        self.steps = sc.strjoin(dict.fromkeys(f'"{sim.label}": {len(sim.t.tvec)} steps of {sim.t.dt}' for sim in sims)) # Once for each scenario
+
+    def error(self, what='msim.results'):
+        errormsg = f'{what} needs the results of the runs put together, but the sims have different time vectors ({self.steps}). Plot each on its own time axis with msim.plot(lines=True), or use each sim\'s results (msim.sims[0].results); or give the sims the same start, stop, and dt.'
+        raise ValueError(errormsg)
+
+    def __getattr__(self, attr):
+        if attr.startswith('__'):
+            raise AttributeError(attr)
+        self.error()
+
+    def __getitem__(self, key):
+        self.error()
+
+    def __repr__(self):
+        return f'<No results across runs: the sims have different time vectors ({self.steps})>'
 
 
 class MultiResults(ss.Results):
@@ -885,7 +987,7 @@ class MultiResults(ss.Results):
         return out
 
     @classmethod
-    def build(cls, arrays, runs, timevec=None):
+    def build(cls, arrays, runs, timevec=None, order=None):
         """
         The results of many runs, each with a run axis first: the one constructor that every way of running many sims ends in
 
@@ -893,8 +995,12 @@ class MultiResults(ss.Results):
             arrays (dict): for each result, by (module, key), with the module None for the sim's own results: the result of one run it is like (`like`, for its name, kind, label, time points, and dimensions), its `values` (runs by time points), and if it is kept by group, `strata` and `denom` (runs by rows by groups) and `group_ti` (see `ss.solvers.group_rows()`)
             runs (dataframe): one row per run: its scenario, and the values of any parameters swept
             timevec (array): the sim's time points
+            order (Results): the results of a sim, whose order the results keep (e.g. the modules' results before the sim's own, as in `sim.summarize()`); results it doesn't have go last
         """
         out = cls('MultiSim')
+        if order is not None:
+            rank = {(modname, key):i for i,(modname,key,_) in enumerate(order.walk())}
+            arrays = dict(sorted(arrays.items(), key=lambda item: rank.get(item[0], len(rank)))) # Stable, so the others keep their order
         for (modname,key),arr in arrays.items():
             like = arr['like']
             values = np.asarray(arr['values'])
@@ -913,6 +1019,12 @@ class MultiResults(ss.Results):
                 out[modname][key] = res
         if timevec is not None:
             out['timevec'] = timevec
+        if order is not None: # The modules and the sim's own results in the sim's order
+            keys = [k for k in order.keys() if k in out] + [k for k in out.keys() if k not in order]
+            ordered = cls('MultiSim')
+            for k in keys:
+                ordered[k] = out[k]
+            out = ordered
         return out
 
     @classmethod
@@ -953,7 +1065,7 @@ class MultiResults(ss.Results):
                 denom = [getattr(r, 'denom', None) for r in found]
                 arr['denom'] = np.stack(denom) if all(x is not None for x in denom) else None # A ratio's denominator by group, so that selecting groups adds up each part before dividing
             arrays[modname, key] = arr
-        return cls.build(arrays, runs, timevec=first.results.get('timevec'))
+        return cls.build(arrays, runs, timevec=first.results.get('timevec'), order=first.results)
 
     def take(self, inds):
         """ The results of some of the runs, by position """
@@ -1034,8 +1146,19 @@ def by_scenario(sims, key):
     return out[0] if len(out) == 1 else out
 
 
-class Sims(list):
-    """ The sims of the runs of a MultiSim: a list, which can also be indexed by scenario (see `MultiSim.sims`) """
+class ByScenario:
+    """ For the sims of a MultiSim: `keys()` and `items()` by scenario, as a dict of them would have (each scenario's sim, or a list of them if it has several runs) """
+    def keys(self):
+        """ The scenarios, in order """
+        return list(dict.fromkeys(getattr(self, 'scenarios', None) or []))
+
+    def items(self):
+        """ Each scenario, and its sim (or a list of them, if it has several runs) """
+        return [(key, by_scenario(self, key)) for key in self.keys()]
+
+
+class Sims(ByScenario, list):
+    """ The sims of the runs of a MultiSim: a list, which can also be indexed by scenario (`msim.sims['Vaccine']`, `msim.sims.items()`; see `MultiSim.sims`) """
     scenarios = None # The scenario of each run, set by the MultiSim
 
     def __getitem__(self, ind):
@@ -1044,7 +1167,7 @@ class Sims(list):
         return super().__getitem__(ind)
 
 
-class RestartedSims(cabc.Sequence):
+class RestartedSims(ByScenario, cabc.Sequence):
     """
     The sim of each run of sims that were restarted for their runs (see `restart_runs()`), made when it is first asked for
 
@@ -1074,6 +1197,8 @@ class RestartedSims(cabc.Sequence):
             runner = self.runners[r]
             p = self.sets[r][(ind // self.n_runs) % len(self.sets[r])]
             sim = sc.dcp(runner)
+            if getattr(self, 'scenarios', None): # Labelled by its scenario, e.g. with the values swept
+                sim.label = self.scenarios[ind] or sim.label
             self.made[ind] = sim.restart(pars=p, rand_seed=self.seeds[ind]).run()
         return self.made[ind]
 
@@ -1119,7 +1244,7 @@ def restart_runs(sims, n_runs, pars=None, draws=False):
     for sim in sims:
         runner = sim.new(rand_seed=sim.pars.rand_seed, verbose=0).init() # The seed as it is now, which may have been set since the sim was made; the MultiSim says what it runs
         runner.label = sim.label
-        if not runner.kernel_only():
+        if not runner.kernel_only() or not same_times([runners[0] if runners else runner, runner]): # Runs at different times can't be put together as results across runs
             return None
         keys = {key for p in sets if p is not None for key in p}
         for net in getattr(runner, 'mixed', []): # A network's parameter sets the contact rates when the sim is built, so each run with a value for one is built
@@ -1174,7 +1299,7 @@ def restart_runs(sims, n_runs, pars=None, draws=False):
             strata, denom = [join(d[modname, key]) if (modname, key) in d else None for d in [groups, denoms]]
             strata = strata if strata is not None and len(strata) == len(runs) else None
             arrays[modname, key] = dict(like=res, values=vals, strata=strata, denom=denom if strata is not None else None, group_ti=group_ti.get(modname))
-    return RestartedSims(runners, sets, n_runs, seeds), MultiResults.build(arrays, runs), runs
+    return RestartedSims(runners, sets, n_runs, seeds), MultiResults.build(arrays, runs, order=runners[0].results), runs
 
 
 def parallel(*args, n_runs=None, pars=None, priors=False, **kwargs):

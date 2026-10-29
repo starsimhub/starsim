@@ -104,6 +104,13 @@ def test_randomfast():
     assert np.isclose(deg4.mean(), 20, rtol=0.05), f'Mean degree should be ~20, not {deg4.mean()}'
     assert np.isclose(deg4.var(), 15, rtol=0.1), f'Degree variance with uniform targets should be ~15, not {deg4.var()}'
 
+    # Self-loops are made by default, and dropped with remove_self_loops=True
+    loops = []
+    for remove in [False, True]:
+        e = ss.Sim(n_agents=50, networks=ss.RandomNet(method='exact', remove_self_loops=remove), rand_seed=1).init().networks[0].edges
+        loops.append((e.p1 == e.p2).sum())
+    assert loops[0] > 0 and loops[1] == 0, f'remove_self_loops=True should drop the edges joining an agent to itself, not leave {loops[1]} of {loops[0]}'
+
     o = sc.objdict(nw1=nw1, nw2=nw2, nw4=nw4)
     return o
 

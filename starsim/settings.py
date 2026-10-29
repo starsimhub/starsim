@@ -122,13 +122,16 @@ class Options(sc.objdict):
         optdesc.kernels = 'Which kernels run the solvers (all give the same results, except as said for "python"): "auto" (default) for Rust if it has been built (see starsim/solvers/rust/README.md), and otherwise Numba, with compartmental runs taken as plain Python until Numba has compiled (if a run, or the runs of a session, would take longer as plain Python than compiling takes, about two minutes once per install, Numba compiles first; a note says which); "rust" for Rust, compiled ahead of time, so a first run takes no compiling; "numba" to always compile with Numba first (see ss.compile()); "python" for the compartmental kernels as plain Python (and the kernels, not JAX, for the chain binomial, whose draws in JAX are compiled, so a long seeded chain-binomial run gives other numbers than with the others; the passes over agents are Numba). JAX is chosen by the run (see sim.jax), and ss.jit is always Numba'
         options.kernels = sc.parse_env('STARSIM_KERNELS', 'auto', str)
 
+        optdesc.jax = 'The platform that JAX runs on where Starsim uses it (sim.gradient(), posteriors, and long compartmental runs; see sim.jax): "auto" (default) for JAX\'s own choice (a GPU if it finds one), or a platform, e.g. "cpu" (for a GPU that JAX cannot use) or "cuda". It sets JAX_PLATFORMS, so it applies to everything in the session that uses JAX, and must be set before JAX is first used'
+        options.jax = sc.parse_env('STARSIM_JAX', 'auto', str)
+
         optdesc.uncompiled_warning = 'If True (default), say on import when Starsim has not been compiled yet (see ss.compile()) -- NOTE, only has effect via the environment variable since executed on load'
         options.uncompiled_warning = sc.parse_env('STARSIM_UNCOMPILED_WARNING', True, bool)
 
         optdesc.crn = 'If True (default), use common random numbers (CRN) for reproducibility across scenarios. Set False for faster draws (one plain uniform per agent/edge, skipping the slot machinery); statistically valid but not CRN-safe across scenarios.'
         options.crn = sc.parse_env('STARSIM_CRN', True, bool)
 
-        optdesc.keep_times = 'If True, a declared disease run as agents keeps the time each agent entered every state (e.g. ti_S); by default (False), only those the engine needs, to save memory (reading another raises an AttributeError)'
+        optdesc.keep_times = 'If True, a declared disease run as agents keeps the time each agent entered every state (e.g. ti_S) and the history of every transition (e.g. sir.infection.count, .since, and .ever); by default (False), only those the engine or the model needs, to save memory (reading another raises an error)'
         options.keep_times = sc.parse_env('STARSIM_KEEP_TIMES', False, bool)
 
         optdesc.max_joint = 'The most compartments that the diseases tracked jointly in a compartmental run may take (their joint states times the groups of the other dimensions; see ss.solvers.Crossing): above it, solver="auto" runs agents, and a compartmental solver that was asked for stops before anything is made. 0 for no limit'
@@ -308,6 +311,9 @@ class Options(sc.objdict):
                         raise ValueError(errormsg)
                     import starsim.solvers.backends.rust as rust # Imported only now, since it imports the modules whose kernels it swaps
                     rust.auto() if value == 'auto' else rust.use(value == 'rust')
+                elif key == 'jax' and not (isinstance(value, str) and value):
+                    errormsg = f'ss.options.jax must be "auto" or the name of a JAX platform, e.g. "cpu", not {value!r}'
+                    raise ValueError(errormsg)
                 super().__setitem__(key, value) # Needed since we overwrite __setitem__ to call this
 
                 # Handle special cases
@@ -413,6 +419,12 @@ class Options(sc.objdict):
 
 
 
+def with_fallback(font):
+    """ A named font, followed by Matplotlib's sans-serif fonts (DejaVu Sans by default) for the glyphs it lacks, e.g. the Greek letters that Mulish, Raleway, and Rosario don't have; a generic family or a list is kept as it is """
+    generic = ['serif', 'sans-serif', 'monospace', 'cursive', 'fantasy']
+    return [font, 'sans-serif'] if isinstance(font, str) and font not in generic else font
+
+
 def load_fonts(folder=None, name='Mulish', rebuild=False, verbose=False, **kwargs):
     """
     Helper function to load custom fonts for plotting -- (usually) not for the user.
@@ -433,7 +445,7 @@ def load_fonts(folder=None, name='Mulish', rebuild=False, verbose=False, **kwarg
     # Try to find the font, and if it succeeds, update the styles
     try:
         fm.findfont(name, fallback_to_default=False) # Raise an exception if the font isn't found
-        rc_starsim['font.family']  = name # Need to set both
+        rc_starsim['font.family'] = with_fallback(name)
         if verbose: print(f'Default Starsim font reset to "{name}"')
     except Exception as E:
         if verbose: print(f'Could not find font {name}: {str(E)}')
@@ -497,6 +509,8 @@ def style(style=None, **kwargs):
     for key,val in mapping.items():
         if key in kwargs:
             kwargs[val] = kwargs.pop(key)
+    if 'font.family' in kwargs:
+        kwargs['font.family'] = with_fallback(kwargs['font.family'])
 
     # Reset
     out = sc.options.with_style(style, **kwargs)

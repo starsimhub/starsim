@@ -171,7 +171,7 @@ ss.Sim(make_measles(), total_pop=100_000, stop=2).run()
 
 Give times with their units (`stop=ss.years(2)`), or as dates (`start='2025-01-01', stop='2027-01-01'`). If nothing in a model has a unit, time is counted in steps, and the run says "steps" where it would say "days".
 
-**A number as a time is a time since the start.** In a sim with dates, a number is a time in the sim's unit after the start, so `at=30` means 30 days after the start of a sim in days. The one exception is a whole year within the sim (`at=2025` in a sim that runs through 2025), which is read as the start of that year, since it is the only reading that falls in the sim. Starsim stops with an error when a time falls outside the sim:
+**A number as a time is a year, or a time since the start.** A number from 1900 on is a calendar year, as in `start=2025`: `at=2026` is the start of 2026, and `at=2026.5` the middle of it. Any other number is a time in the sim's unit after the start, so `at=30` means 30 days after the start of a sim in days (for 2,000 days, write `ss.days(2000)`). Starsim stops with an error when a time falls outside the sim:
 
 ```{python}
 vaccination = ss.vaccinate(efficacy=0.9, coverage=0.5, at=2026)
@@ -239,7 +239,7 @@ When the question is whether there is an outbreak at all, count the runs with on
 
 **`n_agents=` runs the model as agents.** Giving a number of agents asks for agents, so a model that would run as an ODE is run as agents instead, with the chance and time steps that come with them. To set the size of the population in a compartmental model, use `total_pop=`. With both, each agent stands for several people (`total_pop=100_000, n_agents=10_000` makes each agent ten people), and the results are scaled to the whole population. `describe()` says which solver was chosen and why.
 
-**A time step can be too long for a fast disease.** Agents and stochastic compartmental models take whole steps, and someone infected during a step can only infect others from the next one. For a disease that spreads as fast as measles, steps of a day slow the epidemic down by a few days. Starsim notes when people are likely to leave a state within one step, and `sim.check_dt()` shows how much a smaller step changes the results; see [Checking the time step](#checking-the-time-step) above.
+**A time step can be too long for a fast disease.** Agents and stochastic compartmental models take whole steps, and someone infected during a step can only infect others from the next one. For a disease that spreads as fast as measles, steps of a day slow the epidemic down by a few days. Starsim suggests a shorter step when transmission or leaving a state is fast compared with the step (and says which is fastest), and `sim.check_dt()` shows how much a smaller step changes the results; see [Checking the time step](#checking-the-time-step) above.
 
 ### Mixing and stratification
 

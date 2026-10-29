@@ -324,7 +324,8 @@ class People:
     def brief(self, output=False):
         n = self.n_agents_init
         if self.grouped and self.initialized: # A compartmental run: the rows are groups of people
-            out = f'People({n:n} groups; {float(np.sum(self.n)):n} people; age={self.age.mean():0.1f}±{self.age.std():0.1f} over the groups)'
+            age = '' if 'age' in self.__dict__.get('_no_groups', []) else f'; age={self.age.mean():0.1f}±{self.age.std():0.1f} over the groups' # Not when unstratified by age
+            out = f'People({n:n} group{"s"*(n != 1)}; {float(np.sum(self.n)):n} people{age})'
             return out if output else print(out)
         if not self.initialized: # Age and other states hold uninitialized memory until init_vals() runs
             out = f'People({n=:n}; uninitialized)'

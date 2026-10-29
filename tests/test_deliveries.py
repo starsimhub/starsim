@@ -250,6 +250,12 @@ def test_deliver():
         given = np.flatnonzero(res.response.delivered)
         assert len(given) and np.all(res.sir.I[given - 1] > 2000)
 
+    # Rounds a year apart on weekly steps fall a year apart, each on the first step of the year (they were 52 weeks apart, so 2005 had two)
+    yearly = ss.vaccinate(ss.Vaccine(efficacy=0.9), coverage=0.2, interval=ss.years(1), name='yearly')
+    sim = ss.Sim(make_sir(), interventions=yearly, start='2000-01-01', stop='2010-01-01', dt=ss.weeks(1), solver='ode', verbose=0).init()
+    starts = [sim.t.tvec[ti - 1] for ti in sorted(sim.interventions.yearly.round_tis)]
+    assert [d.year for d in starts] == list(range(2000, 2010)) and all(d.month == 1 and d.day <= 7 for d in starts)
+
     # Scenarios are sims, and can be compared run by run
     def scenario(vaccinate=True, **kwargs):
         sir = make_sir()
@@ -558,6 +564,40 @@ def test_agents_only():
     return sim
 
 
+def test_age_and_birth():
+    sc.heading('Testing delivery as people reach an age and at birth, as compartments and agents; and the disease of where=')
+    def make(solver, strata=[0, 0.75, 5], **kwargs):
+        S, I, R = ss.states('S I R')
+        sir = ss.Disease(S, I, R, infection=S >> I @ ss.peryear(0.5)*I, recovery=I >> R @ ss.days(8), births=ss.birth(S, rate=ss.peryear(0.03)), init=dict(I=0.001), name='sir')
+        if strata is not None:
+            sir.stratify(age=strata)
+        mcv1 = ss.vaccinate(efficacy=0.85, coverage=0.8, at_age=ss.months(9), name='mcv1') # On aging into the group that starts at 9 months
+        bcg = ss.vaccinate(efficacy=0.5, coverage=0.6, on='sir.births', name='bcg') # A transition by its path
+        return ss.Sim(sir, interventions=[mcv1, bcg], start=2000, stop=2004, dt=ss.weeks(1), solver=solver, total_pop=20_000, verbose=0, rand_seed=2, **kwargs)
+    sims = {solver:make(solver, **(dict(n_agents=20_000) if solver == 'abm' else {})).run() for solver in ['ode', 'abm']}
+    for key in ['mcv1', 'bcg']:
+        ode, abm = [sim.results[key].delivered.sum() for sim in sims.values()]
+        assert np.isclose(ode, abm, rtol=0.1), f'{key}: {ode:n} as compartments, {abm:n} as agents'
+    for sim in sims.values(): # At birth: the share of the newborns (as agents, it was none)
+        assert np.isclose(sim.results.bcg.delivered.sum(), 0.6*sim.results.sir.births.sum(), rtol=0.1)
+
+    # at_age= never switches to agents: it needs an age group that starts at the age
+    with pytest.raises(ss.CapabilityError, match='needs people.s ages'):
+        make('auto', strata=None).init()
+    with pytest.raises(ss.CapabilityError, match='falls inside an age group'):
+        make('auto', strata=[0, 1, 5]).init()
+    assert make('abm', strata=None, n_agents=1000).init().solver == 'abm'
+
+    # With two diseases, a condition on one's own age groups says which disease a delivery is for
+    def sir(name):
+        S, I, R = ss.states('S I R')
+        return ss.Disease(S >> I @ 0.3*I, I >> R @ ss.days(10), init_prev=0.01, name=name).stratify(age=[0, 15, 100])
+    measles, flu = sir('measles'), sir('flu')
+    sim = ss.Sim(diseases=[measles, flu], interventions=ss.vaccinate(efficacy=0.9, where=measles.age < 15, at=[5], name='vx'), stop=10, **kw).init()
+    assert sim.interventions.vx.disease == 'measles'
+    return sims
+
+
 if __name__ == '__main__':
     sc.options(interactive=False)
     change = test_change()
@@ -577,3 +617,4 @@ if __name__ == '__main__':
     agents = test_agents_only()
     saved  = test_save_load()
     copied = test_copied_steps()
+    aged   = test_age_and_birth()

@@ -505,6 +505,16 @@ def test_bare_units():
     assert np.allclose(rains.factor(np.array([3.5, 9.5])/12), 1.5) and np.allclose(rains.factor(np.array([0.5, 6.5])/12), 0.5)
     sis = ss.Disease(S >> I @ rains*I, I >> S @ ss.days(10), init_prev=0.1, name='sis')
     ss.Sim(sis, start='2000', stop='2002', verbose=0).run()
+
+    # A bare number from 1900 on is a year in a sim with dates, as with numeric years; a smaller one is in the sim's unit after the start (2000 was read as 2000 days)
+    for start in [2020, '2020-01-01']:
+        sim = ss.Sim(sir, start=start, stop=2021, n_agents=100, verbose=0).init()
+        assert np.allclose(ss.timeseries({2000: 1, 2030.5: 2, '2040-01-01': 3}).years(sim), [2000, 2030.5, 2040])
+    assert ss.connectors.to_time(sim, 30) == ss.date('2020-01-31') # Days, the sim's unit
+
+    # A time series of bare numbers as a crude birth rate is per year, as a bare number is (it was per day, and the population exploded)
+    alive = [ss.Sim(demographics=ss.birth(rate=rate), total_pop=1000, start='2000-01-01', stop='2001-01-01', verbose=0).run().results.alive[-1] for rate in [0.04, ss.timeseries({2000: 0.04, 2030: 0.02})]]
+    assert np.isclose(alive[0], alive[1]) and alive[0] < 1100
     return
 
 
@@ -523,6 +533,16 @@ def test_time_text():
     assert '2000-01-01 to 2002-01-01' in sim.start_lines()[0] and sim.end_line().endswith('on 2000-01-08')
     sim = ss.Sim(make(), total_pop=1e5, stop=ss.days(7300), dt=7, verbose=0).init() # A stop that is not a whole number of steps is said (it ended at day 7294 silently)
     assert 'days 0 to 7294 (the last whole step before 7300)' in sim.start_lines()[0]
+
+    # With no unit, times are steps (they were "days 0 to 50"), and a module of its own with nothing per person has no population (it was "10,000 people, as an ODE")
+    S, I, R = ss.states('S I R')
+    sim = ss.Sim(ss.Disease(S >> I @ 0.3*I, I >> R @ 0.1, name='sir'), stop=50, verbose=0).run()
+    assert '10,000 people, as an ODE, steps 0 to 50' in sim.start_lines()[0] and 'on step ' in sim.end_line()
+    class Own(ss.Module):
+        def step(self):
+            pass
+    assert 'own, as an ODE, steps 0 to 50' in ss.Sim(Own(), stop=50, verbose=0).init().start_lines()[0]
+    assert '500 people, as an ODE' in ss.Sim(Own(), total_pop=500, stop=50, verbose=0).init().start_lines()[0]
 
     # A date given to a delivery in a sim in calendar years, without warnings (they were "Dates with years < 1 are not valid")
     with warnings.catch_warnings():

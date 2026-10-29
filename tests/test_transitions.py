@@ -393,6 +393,7 @@ def test_time():
     with ss.options.context(keep_times=True):
         sim = ss.Sim(make_sir(), stop=100, unit='day', n_agents=1000, analyzers=Recovered(), **kw).run()
     assert np.array_equal(sim.diseases.sir.results.I, sir.results.I) and sim.analyzers[0].n == sim.results.sir.recovery[-1] # The same run, and the recoveries of the last step
+    assert sim.diseases.sir.recovery.count.values.sum() == sim.results.sir.recovery.sum() # And the history of every transition, to read after the run
     S, I, R = ss.states('S I R')
     seeded = ss.Sim(ss.Disease(S >> I @ 0*I, I >> R @ ss.days(5), name='seeded'), stop=30, unit='day', n_agents=100, **kw).init()
     seeded.diseases.seeded.S[ss.uids(np.arange(10))] = False
@@ -491,6 +492,8 @@ def test_auto():
     assert any('distribution across people' in note for note in ode.notes)
     with pytest.raises(ss.CapabilityError):
         ss.Sim(spread, stop=100, approx=False, solver='ode', **kw).init()
+    with pytest.raises(ss.CapabilityError, match='approx=False: RandomNet approximated'): # A network has no exact compartmental form, so the ODE approximates it
+        ss.Sim(make_sir(), networks='random', stop=10, approx=False, solver='ode', **kw).init()
 
     # A mixing pool of some people needs agents
     pool = ss.MixingPool(src=lambda sim: sim.people.age < 15, dst=lambda sim: sim.people.age >= 15)
@@ -1004,6 +1007,22 @@ def test_infection_step():
 
 
 @sc.timer()
+def test_stays():
+    sc.heading('Testing the time people spent in a state (E.stays): the declared mean, where the difference of the times of entering is a step long')
+    S, E, I, R = ss.states('S E I R')
+    seir = ss.Disease(S >> E @ 1.9*I, E >> I @ ss.days(10), I >> R @ ss.days(8), init_n=dict(I=10), name='seir')
+    sim = ss.Sim(seir, n_agents=5000, stop=ss.days(200), rand_seed=1, verbose=0).run()
+    m = sim.diseases.seir
+    stays = m.E.stays
+    assert isinstance(stays, ss.days) and len(stays) > 4000 and np.isclose(np.mean(stays).value, 10, atol=0.5), np.mean(stays) # The seeds, who never entered E, are not counted
+    done = (m.R | m.I).uids[np.isfinite(m.ti_E[(m.R | m.I).uids])]
+    assert np.isclose(np.mean(m.ti_I[done] - m.ti_E[done]), np.mean(stays).value + 1, atol=0.1) # As read, a step long (see ss.TimeArr)
+    with pytest.raises(ValueError, match='ti_R is not kept'):
+        m.I.stays
+    return stays
+
+
+@sc.timer()
 def test_cascade():
     """ Moves with no wait happen in the step that caused them, under every solver """
     sc.heading('Testing the same-step cascade')
@@ -1301,6 +1320,7 @@ if __name__ == '__main__':
     sched = test_schedule()
     split = test_split_timing()
     infst = test_infection_step()
+    stays = test_stays()
     casc  = test_cascade()
     cascb = test_cascade_binomial()
     state = test_state_as_result()

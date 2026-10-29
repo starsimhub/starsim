@@ -326,7 +326,9 @@ class Pars(sc.objdict):
             elif isinstance(new, (ss.dur, ss.Rate)) and not isinstance(old, ss.constant): # MS8: in a declared model, a duration alone is an exponential, so say that it was not
                 first = next(iter(old.pars), 'mean')
                 val = f'ss.{new!r}'
-                ss.warn(f'{key}={val} set the {first} of its default distribution, which is now {old}, keeping its other parameters. '
+                bare = [k for k in (old.unit_pars or []) if k != first and sc.isnumber(old.pars.get(k))] # E.g. the std of ss.lognorm_ex(mean=ss.years(6)): a number, in the unit of the mean, which is now that of the value given
+                kept = f' as numbers, so {sc.strjoin(f"{k}={old.pars[k]}" for k in bare)} {"is" if len(bare) == 1 else "are"} now in {new.base}' if bare and isinstance(new, ss.dur) else ''
+                ss.warn(f'{key}={val} set the {first} of its default distribution, which is now {old}, keeping its other parameters{kept}. '
                         f'To replace the distribution, give one, e.g. {key}=ss.expon({val}) for an exponential, or ss.constant({val}) for a fixed value')
 
         # Give up
@@ -605,10 +607,11 @@ class SimPars(Pars):
                 # Modules from specific containers stay where the user put them
                 modkey = source
             self.validate_name(mod, modkey, names)
-            if getattr(mod, 'has_product', False) and not any(mod.product is p for p in products): # Products share the same namespaces; the same product can be used by more than one intervention
-                self.validate_name(mod.product, 'products', names, delivery=mod)
-                products.append(mod.product)
+            if getattr(mod, 'has_product', False) and not any(mod.product is p for p,d in products): # Products share the same namespaces; the same product can be used by more than one intervention
+                products.append((mod.product, mod))
             self[modkey].append(mod)
+        for product, delivery in products: # Named after all the other modules, so that a product named for its kind ("treatment") never takes a name the user gave a module
+            self.validate_name(product, 'products', names, delivery=delivery)
 
         # Do special validation on networks (must be after modules are created)
         self.validate_networks()
@@ -1556,8 +1559,8 @@ class timeseries(TimeValue):
     Args:
         data (dict/str/dataframe/list): the value at each time, as a dict, a dataframe (the first column is
             the time, the second the value), or the name of a file holding one; or the times, with the values
-            as the second argument (`ss.timeseries(times, values)`). A time is a date, or a number, which is
-            a time in the sim's unit (in a sim with dates, that long after the start)
+            as the second argument (`ss.timeseries(times, values)`). A time is a date, or a number: a calendar
+            year from 1900 on (e.g. `2030`), and otherwise a time in the sim's unit (in a sim with dates, that long after the start)
         values (list): the values, if `data` is the times
         mode (str): how to interpolate: 'constant' (each value holds until the next), 'linear', or 'cosine' (a smooth S-shaped change between each value and the next, as MEmilio's dampings)
         period (dur): if given, the series repeats with this period, measured from its first time (e.g. `ss.years(1)` for a yearly pattern given over one year)
@@ -1610,11 +1613,11 @@ class timeseries(TimeValue):
             if np.any(np.diff(out) <= 0):
                 errormsg = f'The times of ss.timeseries() must be in order, not {self.times}'
                 if np.all(np.diff(self.times) > 0) if all(sc.isnumber(t) for t in self.times) else False: # In order as given, but not as read: bare numbers are in the sim's unit, and a date has whole days
-                    errormsg += f', which are read as {sc.strjoin([f"{y:.6g}" for y in out])} years (bare times are in the sim\'s unit, {sim.unit_base}s, after the start); for times in another unit, give typed times, e.g. ss.years(...)'
+                    errormsg += f', which are read as {sc.strjoin([f"{y:.6g}" for y in out])} years (a bare time from {ss.time.cal_year_threshold} on is a calendar year, and any other is in the sim\'s unit, {sim.unit_base}s, after the start); for times in another unit, give typed times, e.g. ss.days(...)'
                 raise ValueError(errormsg)
             start, stop = sim.t.yearvec[0], sim.t.yearvec[-1]
             if len(out) > 1 and (out[-1] < start or out[0] > stop) and any(sc.isnumber(time) for time in self.times): # e.g. days of the year (0 to 365) beside calendar years: the value is flat over the run
-                ss.note(f'every time of an ss.timeseries ({self.times[0]} to {self.times[-1]}) is outside the run, so its value is the same throughout; bare times are in the sim\'s unit ({sim.unit_base}s, or calendar years beside a year-like start); for another unit, give typed times, e.g. ss.days([...])', sim=sim)
+                ss.note(f'every time of an ss.timeseries ({self.times[0]} to {self.times[-1]}) is outside the run, so its value is the same throughout; a bare time from {ss.time.cal_year_threshold} on is a calendar year, and any other is in the sim\'s unit ({sim.unit_base}s) after the start; for another unit, give typed times, e.g. ss.days([...])', sim=sim)
             self._years = (sim, np.array(out, dtype=float))
         return self._years[1]
 

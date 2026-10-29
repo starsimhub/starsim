@@ -771,7 +771,7 @@ class Transition(Nameable):
         return f'Transition({name}{self.arrow}{driver})'
 
 
-def move(*args, p=None, n=None, uids=None):
+def move(*args, p=None, n=None, uids=None, where=None):
     """
     Move people between states of a declared disease from code, the same way under every solver
 
@@ -789,6 +789,7 @@ def move(*args, p=None, n=None, uids=None):
         p (float): the share of the people in the source to move, in each group (by default, everyone)
         n (float): instead, the number of people to move, shared among the groups and states in proportion to who is in them
         uids (uids): only these agents (those of them in the source), which needs agents; with `p=` or `n=`, a share or number of them
+        where (Cond/State): only the people for whom a condition holds (e.g. `ss.ppl.age < 15`, or a group), under every solver; with `p=` or `n=`, a share or number of them
 
     Returns:
         The number of people moved
@@ -797,6 +798,7 @@ def move(*args, p=None, n=None, uids=None):
 
         ss.move(sir.I, sir.R, p=0.5) # Cure half of those infectious
         ss.move(sir.S, sir.I, n=5) # Five susceptible people become infectious
+        ss.move(sir.S, sir.R, p=0.8, where=ss.ppl.age < 5) # Protect 80% of the susceptible children under 5
         sir.move(uids, sir.R) # These agents, from wherever they are (also ss.move(sir, uids, sir.R), or sir.move(uids, 'R'))
         self.move(self.I, self.R, uids=uids) # In a disease's own code: these agents, if they are infectious
         ss.move(mosq.Sv, ss.null, p=0.1) # A tenth of the mosquitoes die
@@ -858,11 +860,15 @@ def move(*args, p=None, n=None, uids=None):
         raise ValueError(f'ss.move() moves people between states, so the number of people stays the same; people come into the model and leave it by births, deaths, and migration, which are declared (e.g. ss.birth(), ss.death(), ss.immigration())')
     if not srcs and n is None:
         raise ValueError(f'ss.move() from outside the model adds a number: give n=')
+    if where is not None and not people:
+        raise ValueError(f'ss.move() with where= picks people, but it moves a count of "{mod.name}" (declared with people=False), which has none to pick')
     if uids is not None and (mod.sim.solver != 'abm' or not people):
         raise ss.CapabilityError(f'ss.move() of particular agents (uids) needs agents, but ' + (f'"{mod.name}" is run with solver="{mod.sim.solver}", which has none.\n     Move a share (p=) or a number (n=) of the people in a state instead, or run with solver="abm"' if people else 'a count has none'))
     if n is None and p is None:
         p = 1.0
     kw = dict(uids=uids.uids if hasattr(uids, 'uids') else ss.uids(uids)) if uids is not None else dict()
+    if where is not None:
+        kw['where'] = where
     return mod.engine.move_some([state for _,state in srcs], None if to is None else to[1], p=p, n=n, **kw)
 
 
@@ -932,7 +938,7 @@ def birth(state=None, rate=None, per=None, n=1, sex=None, name=None, label=None)
 
     Args:
         state (State): the state people are born into (default: the disease's first state; in `demographics=`, each disease's)
-        rate (any): the birth rate per person per unit time, e.g. `ss.peryear(0.03)`; for the births of everyone (no `state`), a bare number is read as `ss.Births` reads it, per year and, if above 1, per 1,000 people (`30` is `ss.peryear(0.03)`); into a state, it is in the model's unit, as any bare number in a disease
+        rate (any): the birth rate per person per unit time, e.g. `ss.peryear(0.03)`; for the births of everyone (no `state`), a bare number (or a time series of them) is read as `ss.Births` reads it, per year and, if above 1, per 1,000 people (`30` is `ss.peryear(0.03)`); into a state, it is in the model's unit, as any bare number in a disease
         per (Transition): instead of a rate, the transition whose flow drives the births
         n (int/Dist): the number of children each time: a number, or a distribution (drawn for each parent)
         sex (float/Dist): the chance a child is female (default: as for anyone added)
@@ -967,7 +973,7 @@ def crude_rate(rate, kind):
     and per 1,000 people if above 1 (see `ss.demographics.bare_rate()`). A typed rate is per person, and warns above 1 per person per year: most likely
     a rate per 1,000 people, which would grow or empty the population at once. Returns the rate, and the note for a bare number (see `bare_rate()`)
     """
-    if sc.isnumber(rate):
+    if sc.isnumber(rate) or isinstance(rate, ss.timeseries):
         return ss.demographics.bare_rate(rate, 'rate')
     raw = getattr(rate, 'raw', rate)
     if isinstance(raw, ss.Rate) and raw.unit is not None and np.ndim(raw.value) == 0:
@@ -1042,7 +1048,7 @@ def death(state=None, rate=None, dur=None, lifetable=None, name=None, label=None
 
     Args:
         state (State/list): the state people die from, or several (`[E, I]`); if not given, every state that is people
-        rate (any): the death rate per person per unit time; with no state (the deaths of everyone), a bare number is read as `ss.Deaths` reads it, per year and, if above 1, per 1,000 people (`10` is `ss.peryear(0.01)`)
+        rate (any): the death rate per person per unit time; with no state (the deaths of everyone), a bare number (or a time series of them) is read as `ss.Deaths` reads it, per year and, if above 1, per 1,000 people (`10` is `ss.peryear(0.01)`)
         dur (any): the mean time to death (instead of `rate`)
         lifetable (`ss.lifetable`): instead of a rate, a life table: as agents, each person's age at death is drawn from it once (at the start, or at birth), given their age; in a compartmental run, which needs a stratification by age, it is a death rate for each age group
         name (str): the name of the transition

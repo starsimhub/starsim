@@ -151,20 +151,10 @@ quarter = ss.Sim(measles, total_pop=100_000, stop=ss.days(30), solver='abm', dt=
 ```
 
 ```{python}
-import matplotlib.pyplot as plt
-
-for sim in [ode, daily, quarter]:
-    res = sim.results.measles.I
-    plt.plot(res.timevec, res.values, label=sim.label)
-plt.xlabel('Day')
-plt.ylabel('Number infectious')
-plt.legend();
+ss.parallel(ode, daily, quarter).plot('measles.I')
 ```
 
-::: {.callout-warning}
-## [PROPOSAL]
-Comparing sims with different time steps should take one call, as for any other comparison: `ss.parallel({'ODE': ode, 'Agents, steps of a day': daily, ...}).plot('measles')`, with the results resampled to common time points. Today `ss.parallel()` raises an error that the sims have results at different times, and asks for the same start, stop, and `dt`. The Matplotlib above is the workaround (P11).
-:::
+The sims have different steps, so each is plotted against its own time points; what needs their results put together as runs of one thing, such as the median across runs, raises an error saying so.
 
 The ODE peaks on day 6, and agents with steps of a quarter of a day within a day of it; agents with daily steps peak three days later, and higher. The agents' run notes the size of the step, and `sim.check_dt()` runs the sim again with half the step and shows how much each result changes:
 

@@ -161,7 +161,7 @@ class Mixing(Telling):
                     raise ss.CapabilityError(f'cannot run with solver="{self.solver}": {kind} has no compartmental approximation yet{source}. Run with solver="abm".')
                 what = f'{kind} approximated by homogeneous mixing with {contacts:n} contacts per {sim.unit_name} ({source})'
                 if approx is False:
-                    raise ss.CapabilityError(f'cannot run with solver="{self.solver}" and approx=False: {what[0].lower() + what[1:]}. Run with solver="abm".')
+                    raise ss.CapabilityError(f'cannot run with solver="{self.solver}" and approx=False: {what}. Run with solver="abm".')
                 else:
                     self.tell(ss.note, what, sim=sim, verbose=0 if approx else None)
                 self.terms.append(sc.objdict(kind='homogeneous', contacts=contacts, name=net.name))

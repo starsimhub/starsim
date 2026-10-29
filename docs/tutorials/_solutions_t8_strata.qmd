@@ -83,7 +83,7 @@ pneumococcus = ss.Disease(acquisition, clearance, init=dict(C=ss.by(age=[0.25, 0
 pneumococcus.stratify(age=ages)
 
 amnesia = ss.modify(pneumococcus.rel_sus, multiply=2, where=measles.I | measles.A)
-campaign = ss.vaccinate(efficacy=0.93, where=measles.age < 15, coverage=0.8, at='2025-02-01', disease='measles')
+campaign = ss.vaccinate(efficacy=0.93, where=measles.age < 15, coverage=0.8, at='2025-02-01')
 
 sims = {}
 for label, connectors in [('Independent', None), ('Interacting', amnesia)]:

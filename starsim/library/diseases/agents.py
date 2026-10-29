@@ -6,6 +6,13 @@ per-agent states and methods. They are examples of writing a disease as code, an
 base classes for the library diseases that add per-agent behavior. The core `ss.SIR`,
 `ss.SIS`, and `ss.SEIR` are declared from states and transitions instead. Written as
 code, these run only as agents, hence their names (`ssl.AgentSIR` and the others).
+
+They schedule each move in whole steps as the agent engine does a declared disease's (see `ss.Infection`): an
+infection in a step happens at its end, so a course of `dur` steps after it is due at `self.ti + 1 + dur`, and is
+taken when `ss.TimeArr.due()`, at the start of a step, before transmission, rounding a time between steps up or
+down at random in proportion. So each case, seeds included, is infectious for `dur` steps on average, and with the
+same parameters these agree with `ss.SIR` and `ss.SEIR` run as agents at any step (Starsim 3's gave each case half
+a step less, and the seeds half a step more).
 """
 import numpy as np
 import sciris as sc
@@ -31,7 +38,9 @@ class AgentSIR(ss.Infection):
 
     Its defaults are Starsim 3's: a lognormal `dur_inf` (a mean of 6 years, std 1 year)
     and `p_death=0.01`, where the declared `ss.SIR` is the textbook SIR, with an
-    exponential `dur_inf` and no deaths. Use it to keep a Starsim 3 model as it was.
+    exponential `dur_inf` and no deaths. Use it to keep a Starsim 3 model's parameters;
+    its timing is the agent engine's (see above), so each case is infectious for half a
+    step longer on average than in Starsim 3.
 
     Note: CRN safe.
 
@@ -59,8 +68,8 @@ class AgentSIR(ss.Infection):
             ss.BoolState('infected', label='Infected'),
             ss.BoolState('recovered', label='Recovered'),
             ss.FloatArr('ti_infected', label='Time of infection'),
-            ss.FloatArr('ti_recovered', label='Time of recovery'),
-            ss.FloatArr('ti_dead', label='Time of death'),
+            ss.TimeArr('ti_recovered', label='Time of recovery'),
+            ss.TimeArr('ti_dead', label='Time of death'),
             ss.FloatArr('rel_sus', default=1.0, label='Relative susceptibility'),
             ss.FloatArr('rel_trans', default=1.0, label='Relative transmission'),
             reset = True, # Remove any existing states and aliases (from super().define_states())
@@ -71,12 +80,13 @@ class AgentSIR(ss.Infection):
     def step_state(self):
         # Progress infectious -> recovered
         sim = self.sim
-        recovered = (self.infected & (self.ti_recovered <= self.ti)).uids
+        recovered = (self.infected & self.ti_recovered.due()).uids
         self.clear_infection(recovered)
         self.recovered[recovered] = True
 
-        # Trigger deaths
-        deaths = (self.ti_dead <= self.ti).uids
+        # Trigger deaths: at the start of the step, as recovery is, so they do not transmit in it
+        deaths = self.ti_dead.due().uids
+        self.clear_infection(deaths)
         if len(deaths):
             sim.people.request_death(deaths, cause=self)
         return
@@ -108,13 +118,14 @@ class AgentSIR(ss.Infection):
         dur_inf = p.dur_inf.rvs(uids)
 
         # Determine who dies and who recovers and when. In AgentSIR agents are infectious as
-        # soon as they are infected, so the infectious period runs from ti_infected;
-        # AgentSEIR overrides this to run it from ti_infectious instead.
+        # soon as they are infected, at the end of the step, so the infectious period runs
+        # from the next step (ti_infected + 1); AgentSEIR overrides this to run it from
+        # ti_infectious instead. due() rounds the time to a step (see ss.TimeArr).
         will_die = p.p_death.rvs(uids)
         dead_uids = uids[will_die]
         rec_uids = uids[~will_die]
-        self.ti_dead[dead_uids] = self.ti_infected[dead_uids] + dur_inf[will_die] # Consider rand round, but not CRN safe
-        self.ti_recovered[rec_uids] = self.ti_infected[rec_uids] + dur_inf[~will_die]
+        self.ti_dead[dead_uids] = self.ti_infected[dead_uids] + 1 + dur_inf[will_die]
+        self.ti_recovered[rec_uids] = self.ti_infected[rec_uids] + 1 + dur_inf[~will_die]
         return
 
     def step_die(self, uids):
@@ -178,7 +189,7 @@ class AgentSEIR(AgentSIR):
             ss.BoolState('exposed', label='Exposed'),
             ss.BoolState('infectious', label='Infectious'),
             ss.FloatArr('ti_exposed', label='Time of exposure'),
-            ss.FloatArr('ti_infectious', label='Time of becoming infectious'),
+            ss.TimeArr('ti_infectious', label='Time of becoming infectious'),
             reset = ['infected', 'infectious', 'ti_infected'],
             infected = lambda self: self.exposed | self.infectious, # Derived: E and I are both infected
         )
@@ -188,7 +199,7 @@ class AgentSEIR(AgentSIR):
         """ Agents are exposed first, and become infectious after the latent period """
         self.exposed[uids] = True
         self.ti_exposed[uids] = self.ti
-        self.ti_infectious[uids] = self.ti_exposed[uids] + self.pars.dur_exp.rvs(uids)
+        self.ti_infectious[uids] = self.ti_exposed[uids] + 1 + self.pars.dur_exp.rvs(uids) # Exposed at the end of this step, so the latent period runs from the next
         return
 
     def set_progression(self, uids):
@@ -213,7 +224,7 @@ class AgentSEIR(AgentSIR):
 
     def step_state(self):
         """ Progress exposed -> infectious, then the usual SIR transitions """
-        infectious = (self.exposed & (self.ti_infectious <= self.ti)).uids
+        infectious = (self.exposed & self.ti_infectious.due()).uids
         self.exposed[infectious] = False
         self.infectious[infectious] = True
         super().step_state()
@@ -251,14 +262,14 @@ class AgentSIS(ss.Infection):
         self.update_pars(pars, **kwargs)
 
         self.define_states(
-            ss.FloatArr('ti_recovered'),
+            ss.TimeArr('ti_recovered'),
             ss.FloatArr('immunity', default=0.0),
         )
         return
 
     def step_state(self):
         """ Progress infectious -> recovered """
-        recovered = (self.infected & (self.ti_recovered <= self.ti)).uids
+        recovered = (self.infected & self.ti_recovered.due()).uids
         self.clear_infection(recovered)
         self.update_immunity()
         return
@@ -293,8 +304,8 @@ class AgentSIS(ss.Infection):
         # Sample duration of infection
         dur_inf = self.pars.dur_inf.rvs(uids)
 
-        # Determine when people recover
-        self.ti_recovered[uids] = self.ti_infected[uids] + dur_inf
+        # Determine when people recover: infected at the end of this step, so infectious from the next
+        self.ti_recovered[uids] = self.ti_infected[uids] + 1 + dur_inf
 
         return
 
@@ -302,7 +313,7 @@ class AgentSIS(ss.Infection):
         """ Initialize results """
         super().init_results()
         self.define_results(
-            ss.Result('rel_sus', dtype=float, scale=False, label='Relative susceptibility')
+            ss.Result('rel_sus', dtype=float, label='Relative susceptibility')
         )
         return
 

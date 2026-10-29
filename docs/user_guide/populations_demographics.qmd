@@ -31,18 +31,12 @@ demographics = [
 pars = dict(total_pop=100_000, start='2000', stop='2030', dt=ss.days(1), verbose=0)
 sim = ss.Sim(measles, demographics=demographics, **pars)
 msim = ss.parallel({'No births or deaths': ss.Sim(measles, **pars), 'Births and deaths': sim})
-import matplotlib.pyplot as plt
-for sim in msim.sims:
-    plt.plot(sim.timevec, sim.results.measles.I, label=sim.label)
-plt.yscale('log') # A log scale shows the later epidemics, which are far smaller than the first
-plt.ylim(0.1, 200_000)
-plt.title('Number infectious')
-plt.legend();
+fig = msim.plot('measles.I', log=True, do_show=False) # A log scale shows the later epidemics, which are far smaller than the first
+fig.axes[0].set_ylim(0.1, 200_000)
+fig
 ```
 
-::: {.callout-note}
-[PROPOSAL] In a notebook, `msim.plot()` shows the figure and returns `None` (and ignores `fig=` and `do_show=False`), so a plot that needs a change such as a log scale has to be drawn with Matplotlib. Plots could take `log=True`, or return the figure in a notebook too.
-:::
+`log=True` plots on a log scale; `do_show=False` returns the figure without showing it, so it can be changed (here, the range of the axis) before it is shown.
 
 Without births, the first epidemic leaves almost everyone immune, and measles is gone for good. With them, births add susceptible children until there are enough for measles to spread again, and the epidemics recur, smaller each time, until they settle at an endemic level.
 
@@ -82,7 +76,7 @@ msim = ss.parallel({
 msim.plot(['alive', 'measles.I'])
 ```
 
-The population grows more slowly with the falling birth rate, and with fewer susceptible children born each year, the endemic level of measles is lower. Give the times of a series in a sim with dates as dates; a bare number such as `2030` is read as a time in the sim's unit after the start, not as a year. See [Parameters](building_parameters.qmd) for `ss.timeseries()` and other parameters that vary over time.
+The population grows more slowly with the falling birth rate, and with fewer susceptible children born each year, the endemic level of measles is lower. The times of a series can also be years (`{2000: ..., 2030: ...}`): a bare number from 1900 on is a calendar year, and a smaller one a time in the sim's unit after the start. See [Parameters](building_parameters.qmd) for `ss.timeseries()` and other parameters that vary over time.
 
 ## Rates from data
 

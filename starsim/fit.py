@@ -698,7 +698,7 @@ def pmmh(logpost, z0, draws=1000, warmup=1000, chains=4, particles=None, seed=No
         if verbose:
             print('Particle MCMC: running the chains one after another, since JAX has been started in this process')
     if parallel and chains > 1:
-        with ss.kernels.one_blas_thread():
+        with ss.kernels.starting_workers():
             results = sc.parallelize(ss.kernels.worker(one_chain), iterarg=list(seeds), start_method=ss.kernels.start_method())
     else:
         results = [one_chain(chain_seed) for chain_seed in seeds]
@@ -989,13 +989,12 @@ class Fit(sc.prettyobj):
         return ss.parallel(*sims, priors=draws) # Draws, not a sweep: runs of each scenario
 
     def summarize(self):
-        """ Print the goodness of fit before and after, and return the estimates (a dataframe); outside a notebook, which shows what is returned, the estimates are printed too """
+        """ Print the goodness of fit before and after, and return the estimates (a dataframe), which are printed too in a script (see `ss.utils.return_table()`) """
         if self.samples is None:
             print(f'Fitted {len(self.pars)} parameter(s) by {self.method}, with {len(self.trials)} evaluations')
         else: # The evaluations in JAX are not recorded
             print(f'Fitted {len(self.pars)} parameter(s) by {self.method}')
-        if not sc.isjupyter(): # In a notebook, the table returned shows itself, so printing it too would show it twice
-            print(self.table.to_string(index=False))
+        ss.utils.return_table(self.table, index=False) # Printed in a script; in a notebook, shown once, as what is returned
         print(f'{self.measure.capitalize()}: {self.mismatch_before:.4g} before, {self.mismatch:.4g} after' + (f' (the mean of {len(self.scores)} runs)' if self.scores is not None and len(self.scores) > 1 else ''))
         if self.converged is not None:
             print(f'{"Converged" if self.converged else "Not converged"}: {self.why}')
@@ -1018,23 +1017,36 @@ class Fit(sc.prettyobj):
         return self.trials
 
     def plot(self, **kwargs):
-        """ Plot the results that have data against it, before and after fitting; a flow with data at a longer period than the step (e.g. weekly cases) is shown as its totals over the data's periods, as the fit compares them """
-        import matplotlib.pyplot as plt
+        """
+        Plot the results that have data against it, before and after fitting; a flow with data at a longer period than the step (e.g. weekly cases) is shown as its totals over the data's periods, as the fit compares them
+
+        Args:
+            kwargs (dict): see `ss.plot_args()`, e.g. `figsize=(8, 4)`
+        """
         cols = list(self.sim.data.columns)
-        fig, axs = sc.getrowscols(len(cols), make=True, squeeze=False, **kwargs)
-        for ax,col in zip(axs.flatten(), cols):
-            for sim,label in [(self.before, 'Before'), (self.sim, 'After')]:
-                res = match_column(sim, col)
-                summed = flow_at_data(sim, col, res)
-                x, y = (self.sim.data.index[summed[0]], summed[1]) if summed is not None else (res.timevec, res.values)
-                ax.plot(x, y, label=label, alpha=0.8)
-            if self.diagnostics.band is not None:
-                ax.fill_between(x, *self.diagnostics.band[col], alpha=0.3, label='95% of the posterior')
-            ax.scatter(self.sim.data.index, self.sim.data[col], c='k', s=15, label='Data', zorder=10)
-            ax.set_title(col + (' (total over each period of the data)' if summed is not None else ''))
-            ax.legend(frameon=False)
-        sc.figlayout(fig=fig)
-        return ss.return_fig(fig)
+        times = plot_times(self.sim.data)
+        kw = ss.plot_args(kwargs, alpha=0.8, data_color='k')
+        with ss.style(**kw.style):
+            fig, axs = sc.getrowscols(len(cols), make=True, squeeze=False, **kw.fig)
+            for ax,col in zip(axs.flatten(), cols):
+                for sim,label in [(self.before, 'Before'), (self.sim, 'After')]:
+                    res = match_column(sim, col)
+                    summed = flow_at_data(sim, col, res)
+                    x, y = (times[summed[0]], summed[1]) if summed is not None else (res.timevec, res.values)
+                    ax.plot(x, y, label=label, **kw.plot)
+                if self.diagnostics.band is not None:
+                    ax.fill_between(x, *self.diagnostics.band[col], alpha=0.3, label='95% of the posterior')
+                ax.scatter(times, self.sim.data[col], s=15, label='Data', zorder=10, **kw.data)
+                ax.set_title(col + (' (total over each period of the data)' if summed is not None else ''))
+                ax.legend(frameon=False)
+            sc.figlayout(fig=fig)
+        return ss.return_fig(fig, **kw.return_fig)
+
+
+def plot_times(df):
+    """ The times of data, as a sim's results have them (dates as an `ss.DateArray`), so they share an axis, with Starsim's date ticks """
+    x = df.index
+    return ss.DateArray([ss.date(t) for t in x]) if len(x) and isinstance(x[0], pd.Timestamp) else np.asarray(x)
 
 
 def vector_labels(sim, by, key):
@@ -1140,13 +1152,13 @@ class Optimization(sc.prettyobj):
         return
 
     def summarize(self):
-        """ Print the allocation before and after, and the result """
+        """ Print the result before and after, and return the allocation before and after (a dataframe), which is printed too in a script (see `ss.utils.return_table()`) """
         df = pd.DataFrame(dict(before=self.alloc_before, after=self.alloc))
-        print(df.to_string(float_format=lambda v: f'{v:,.0f}'))
+        ss.utils.return_table(df, float_format=lambda v: f'{v:,.0f}')
         print(f'{self.what}: {self.value_before:,.6g} before, {self.value:,.6g} after ({self.n_runs} runs)')
         if self.target is not None:
             print(f'The least total that reaches {self.target:,.6g}: {self.total:,.0f} (from {sum(self.alloc_before.values()):,.0f})')
-        return
+        return df
 
 
 def optimize(sim, total=None, maximize=None, minimize=None, at=None, start=None, spend=None, bounds=None, target=None, maxiter=50, verbose=None):
@@ -1164,8 +1176,8 @@ def optimize(sim, total=None, maximize=None, minimize=None, at=None, start=None,
         total (float): the total to allocate (default: the current total); with `target=`, the total the search starts from
         maximize (str/func): what to make as large as possible: a result of the disease (e.g. `'all_vs'`, or `'hiv.n_vs'`), or a function of the run sim
         minimize (str/func): or what to make as small as possible
-        at (float/date): the time of the result (default: the end); without it, a function of the sim decides
-        start (float/date): when the new allocation takes effect (default: the start of the sim)
+        at (float/date): the time of the result (default: the end), read as any time is (see `ss.connectors.to_time()`: a number from 1900 on is a year); without it, a function of the sim decides
+        start (float/date): when the new allocation takes effect (default: the start of the sim), read as `at` is
         spend (dict/list): the spending parameters: names, or {program: name} (default: the imported programs)
         bounds (tuple/dict): the least and most a program can have, as amounts (default: 0 and the total); a dict gives them by program, e.g. `dict(testing=(1e5, None))` (None for no limit), and a program not in it has the default
         target (float): the value of the result to reach (at most this with `minimize=`, at least with `maximize=`) with the least total
@@ -1201,13 +1213,14 @@ def optimize(sim, total=None, maximize=None, minimize=None, at=None, start=None,
         if not found:
             raise sc.KeyNotFoundError(f'ss.fit.optimize() has spend="{name}", which is not a parameter of the model')
         current[name] = found[0].raw if isinstance(found[0], ss.par) else found[0]
-    t0 = float(probe.t.yearvec[0])
-    begin = None if start is None else (ss.date(start).years if isinstance(start, (str, ss.date)) else float(start))
+    to_time = lambda time: ss.connectors.to_time(probe, time) # On the sim's timeline: a date, or a duration on its own axis
+    as_year = lambda time: time.years if isinstance(time, ss.date) else time.to('year').value
+    t0 = probe.t.tvec[0]
+    begin = None if start is None else to_time(start)
     def level(raw):
         """ A spending parameter's value at the start of the new allocation """
         if isinstance(raw, ss.timeseries):
-            keys = sorted(raw.values) if isinstance(raw.values, dict) else None
-            return float(np.interp(begin if begin is not None else t0, [float(k) for k in keys], [raw.values[k] for k in keys])) if keys else float(np.mean(raw.values))
+            return float(raw.at(as_year(sc.ifelse(begin, t0)), probe))
         return float(raw.value if isinstance(raw, ss.TimePar) else raw)
     before = np.array([level(current[name]) for name in names])
     total = float(sc.ifelse(total, before.sum()))
@@ -1229,9 +1242,9 @@ def optimize(sim, total=None, maximize=None, minimize=None, at=None, start=None,
             raw = current[name]
             if begin is None or begin <= t0:
                 out[name] = float(val)
-            else:
-                old = dict(raw.values) if isinstance(raw, ss.timeseries) and isinstance(raw.values, dict) else {t0:level(raw)}
-                old = {k:v for k,v in old.items() if float(k) < begin}
+            else: # Keyed by times on the sim's timeline, so a sim with dates reads them as it should
+                old = {k:v for k,v in zip(raw.times, raw.values) if to_time(k) < begin} if isinstance(raw, ss.timeseries) else {}
+                old = old or {t0:float(raw.at(as_year(t0), probe)) if isinstance(raw, ss.timeseries) else level(raw)} # The value before the new allocation
                 out[name] = ss.timeseries({**old, begin:float(val)})
         return out
 
@@ -1243,7 +1256,7 @@ def optimize(sim, total=None, maximize=None, minimize=None, at=None, start=None,
         modname, _, key = str(what).rpartition('.')
         mod = run.diseases[modname] if modname else run.declared[0]
         vals = np.asarray(mod.results[key].values)
-        i = len(vals) - 1 if at is None else int(np.argmin(abs(np.asarray(run.t.yearvec) - (ss.date(at).years if isinstance(at, (str, ss.date)) else float(at)))))
+        i = len(vals) - 1 if at is None else int(np.argmin(abs(np.asarray(run.t.yearvec) - as_year(to_time(at)))))
         return float(vals[i])
 
     runner = sim.new(pars=values(before), verbose=0).init() # Built with the spending as it will be given, so a restart can change it
@@ -1272,13 +1285,17 @@ def optimize(sim, total=None, maximize=None, minimize=None, at=None, start=None,
         return x*total, read(best), best, res
 
     T = sc.timer()
+    shares = before/before.sum() if before.sum() > 0 else np.full(len(names), 1/len(names)) # The current shares, which the search starts from
     if target is None:
-        alloc, value, best, res = allocate(total, before/total)
-        if sign*value > sign*value_before: # The search can end worse than it started
-            alloc, value, best = before, value_before, run(before)
+        alloc, value, best, res = allocate(total, shares)
+        scaled = shares*total # The current allocation, scaled to the total
+        lo, hi = limits(total)
+        if total > 0 and np.all((lo <= scaled) & (scaled <= hi)): # The search can end worse than it started
+            start_value = value_before if np.allclose(scaled, before) else read(run(scaled))
+            if sign*value > sign*start_value:
+                alloc, value, best = scaled, start_value, run(scaled)
     else:
         reached = lambda value: sign*value <= sign*target
-        shares = before/before.sum() if before.sum() > 0 else np.full(len(names), 1/len(names))
         most = limits(np.inf)[1].sum() # The most that can be spent, if every program has an upper bound
         least = limits(0)[0].sum() # And the least
         tried = lambda tot, value: print(f'  Total {tot:,.6g}: {what} {value:,.6g} at best ({"reaches" if reached(value) else "does not reach"} {target:,.6g})') if verbose else None
@@ -2214,7 +2231,7 @@ def fit_optuna(problem, n_trials=100, scan=None, n_workers=None, storage=None, *
     remaining = n_trials - len(study.trials)
     if remaining > 0 and n_workers > 1:
         shares = [len(part) for part in np.array_split(np.arange(remaining), n_workers)]
-        with ss.kernels.one_blas_thread(): # The workers share the cores, so each takes one thread, as in ss.parallel()
+        with ss.kernels.starting_workers(): # The workers share the cores, so each takes one thread, as in ss.parallel()
             sc.parallelize(ss.kernels.worker(optuna_worker), iterarg=list(enumerate(shares)), kwargs=dict(problem=p, storage=storage, kwargs=kwargs), ncpus=n_workers, start_method=ss.kernels.start_method())
         study = optuna_study(p, storage)
     elif remaining > 0:
@@ -2452,9 +2469,9 @@ class ModelComparison(sc.prettyobj):
         return
 
     def summarize(self):
-        """ Print the table """
+        """ Print what was held out, and return the table, which is printed too in a script (see `ss.utils.return_table()`) """
         print(f'held out: {self.holdout}')
-        print(self.table.to_string())
+        ss.utils.return_table(self.table)
         print(f'fit error and prediction error are {self.measure}, on the data fitted to and on the held-out data (lower is better)')
         if not self.clear:
             print('the spread of the prediction error across folds is larger than the difference between the best two models, so there is no clear difference between them')
@@ -2465,21 +2482,23 @@ class ModelComparison(sc.prettyobj):
         return self.table
 
     def plot(self, **kwargs):
-        """ Plot each model's fit and prediction against the data, with the held-out data hollow """
+        """ Plot each model's fit and prediction against the data, with the held-out data hollow; kwargs are as for `ss.plot_args()` """
         train, test = self.splits[-1]
         cols = list(train.columns)
-        fig, axs = sc.getrowscols(len(cols), make=True, squeeze=False, **kwargs)
-        for ax,col in zip(axs.flatten(), cols):
-            for label,fits in self.fits.items():
-                fit = sc.tolist(fits)[-1]
-                res = match_column(fit.sim, col)
-                ax.plot(res.timevec, res.values, label=label, alpha=0.8)
-            ax.scatter(train.index, train[col], c='k', s=15, label='Fitted to', zorder=10)
-            ax.scatter(test.index, test[col], facecolors='none', edgecolors='k', s=15, label='Held out', zorder=10)
-            ax.set_title(col)
-            ax.legend(frameon=False)
-        sc.figlayout(fig=fig)
-        return ss.return_fig(fig)
+        kw = ss.plot_args(kwargs, alpha=0.8)
+        with ss.style(**kw.style):
+            fig, axs = sc.getrowscols(len(cols), make=True, squeeze=False, **kw.fig)
+            for ax,col in zip(axs.flatten(), cols):
+                for label,fits in self.fits.items():
+                    fit = sc.tolist(fits)[-1]
+                    res = match_column(fit.sim, col)
+                    ax.plot(res.timevec, res.values, label=label, **kw.plot)
+                ax.scatter(plot_times(train), train[col], c='k', s=15, label='Fitted to', zorder=10)
+                ax.scatter(plot_times(test), test[col], facecolors='none', edgecolors='k', s=15, label='Held out', zorder=10)
+                ax.set_title(col)
+                ax.legend(frameon=False)
+            sc.figlayout(fig=fig)
+        return ss.return_fig(fig, **kw.return_fig)
 
 
 def compare_models(sims, data=None, holdout=0.25, folds=None, **kwargs):

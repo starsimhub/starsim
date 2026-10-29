@@ -96,7 +96,7 @@ There is no switching demo for NumPy users, since a NumPy model is whatever its 
 
 ## Bringing your model in
 
-There is no importer for NumPy code, since a loop can do anything. An AI assistant with Starsim's import-model skill (`skills/import-model/` in the Starsim repository) can translate one, following the mapping above: each binomial draw is a flow (`S >> E @ rate`), its probability's rate is the flow's rate, and each array axis is a stratification.
+There is no importer for NumPy code, since a loop can do anything. An AI assistant with Starsim's import-model skill (`starsim_ai/import-model/` in the Starsim repository, or `starsim ai show import-model`) can translate one, following the mapping above: each binomial draw is a flow (`S >> E @ rate`), its probability's rate is the flow's rate, and each array axis is a stratification.
 
 See [Import/export](index.qmd) for importing in general: checking an import, keeping it as code, and finishing one that is incomplete.
 

@@ -40,7 +40,7 @@ def test_fetal_health(do_plot=do_plot):
 
     def mean_bw(sim):
         bw = sim.results.fetal_health.mean_birth_weight
-        return bw[bw > 0].mean()
+        return np.nanmean(bw) # NaN on steps with no births
 
     # -- 1. Baseline (no disease) --
     sim_baseline = ss.Sim(
@@ -62,9 +62,12 @@ def test_fetal_health(do_plot=do_plot):
     assert 2500 < bw_baseline < 4000, f'Mean birth weight {bw_baseline:.0f}g outside expected range'
 
     ga = res_fh.mean_ga_at_birth
-    mean_ga = ga[ga > 0].mean()
+    mean_ga = np.nanmean(ga)
     print(f'Mean GA at birth: {mean_ga:.1f} weeks')
     assert 36 < mean_ga < 44, f'Mean GA {mean_ga:.1f} weeks outside expected range'
+    none = res_fh.n_births.values == 0
+    assert np.isnan(res_fh.mean_birth_weight.values[none]).all() and not np.isnan(res_fh.mean_birth_weight.values[~none]).any() # Undefined on a step with no births
+    assert not np.isnan(res_fh.mean_birth_weight.resample('year').values).any() # And left out of a mean over time
 
     # -- 2. Disease only (no treatment) --
     sim_disease = ss.Sim(
@@ -386,12 +389,13 @@ def test_condition_by_sex():
 
 @sc.timer()
 def test_coded_seeds():
-    sc.heading('Testing that the initial infections of a disease written as code are dated by the first step (CV2)')
-    sim = ss.Sim(diseases=ssl.AgentSIR(dur_inf=ss.constant(ss.years(2))), networks='random', n_agents=1000, start=2000, stop=2005, verbose=0).init()
+    sc.heading('Testing that the initial infections of a disease written as code are dated at the start, as a declared disease\'s are, so they are infectious for as long as later cases')
+    sim = ss.Sim(diseases=ssl.AgentSIR(dur_inf=ss.constant(ss.years(2)), p_death=0), networks='random', n_agents=1000, start=2000, stop=2005, verbose=0).init()
     sir = sim.diseases.agentsir
     seeds = sir.infected.uids
-    assert len(seeds) and np.all(sir.ti_infected[seeds] == 1) and np.all(sir.ti_recovered[seeds] == 3) # As an infection in the first step is, so they are infectious for as long
-    assert sim.t.ti == 0 and sir.ti == 0 # The time is restored
+    assert len(seeds) and np.all(sir.ti_infected[seeds] == 0) and np.all(sir.ti_recovered[seeds] == 3) # Infectious in steps 1 and 2, as a case infected in step 1 is in steps 2 and 3
+    sim.run()
+    assert np.all(sir.recovered[seeds]) and np.all(sim.results.agentsir.infected[1:3] >= len(seeds))
     return sim
 
 

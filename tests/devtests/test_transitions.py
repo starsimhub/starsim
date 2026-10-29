@@ -1008,7 +1008,7 @@ def test_time_values():
     fast = ss.Disease(infection=ss.Transition(S, I, rate=0.6 * I), recovery=ss.Transition(I, R, dur=4), init_prev=0.01, name='fast')
     stepped = ss.Sim(fast, solver='binomial', substeps=1, unit='day', stop=60, total_pop=1e6, **kw) # Whole steps (by default, the chain binomial takes enough substeps)
     df = stepped.check_dt(output=True)
-    assert any('22% leave in a step' in note for note in stepped.new().init().notes) # 1 - exp(-1/4)
+    assert any('consider a shorter step' in note and 'infection transmits at up to 0.6' in note and 'recovery is fast too' in note for note in stepped.new().init().notes) # The transmission is the fastest (0.6 a day), then the recovery (1/4)
     assert 0.05 < df.change[df.result == 'I'].iloc[0] < 0.2
     with sc.capture() as txt: # With its default substeps, the chain binomial takes substeps of the same size whatever the step, so says so (it printed a table of zeros)
         S, E, I, R = ss.states('S E I R')

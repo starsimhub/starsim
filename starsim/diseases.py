@@ -1,7 +1,6 @@
 """
 Base classes for diseases
 """
-import functools
 import inspect
 import numpy as np
 import pandas as pd
@@ -14,22 +13,20 @@ _ = None # For function signatures
 
 
 
-def built_after(init):
+class built_after(ss.utils.method_wrapper):
     """ Wrap the __init__() of a subclass of ss.Disease, so that what it declares (`define_states()`, `define_transitions()`) is built once the outermost __init__() has finished """
-    @functools.wraps(init)
-    def __init__(self, *args, **kwargs):
-        depth = self.__dict__.get('_init_depth', 0) # How many __init__()s deep: a subclass's calls its parent's
-        self.__dict__['_init_depth'] = depth + 1
+    def __call__(self, dis, *args, **kwargs):
+        depth = dis.__dict__.get('_init_depth', 0) # How many __init__()s deep: a subclass's calls its parent's
+        dis.__dict__['_init_depth'] = depth + 1
         try:
-            init(self, *args, **kwargs)
+            self.func(dis, *args, **kwargs)
         finally:
-            self.__dict__['_init_depth'] = depth
+            dis.__dict__['_init_depth'] = depth
         if depth == 0:
-            del self.__dict__['_init_depth']
-            if '_declared' in self.__dict__:
-                self.build_graph()
+            del dis.__dict__['_init_depth']
+            if '_declared' in dis.__dict__:
+                dis.build_graph()
         return
-    return __init__
 
 
 class Disease(ss.Module):
@@ -192,7 +189,8 @@ class Disease(ss.Module):
     def declare(self, args=(), kwargs=None, names=None, overwrite=False):
         """ Add declared members (states, transitions, results), to be built with the rest; see `define_transitions()` """
         if self.__dict__.get('_graph') is not None:
-            errormsg = f'"{self.name}" has already been built, so nothing more can be declared in it: declare its states, transitions, and results while it is being made, in __init__()'
+            errormsg = (f'"{self.name}" was built when it was made, so nothing more can be declared in it now: its states, transitions, and results must be declared before that, '
+                        f'in its __init__() or class body (or given to ss.Disease() with the rest). A plain ss.Result can still be added, as to any module')
             raise ss.CapabilityError(errormsg)
         d = self.__dict__.get('_declared')
         if d is None: # The first declaration of a disease that called super().__init__() with none
@@ -297,6 +295,8 @@ class Disease(ss.Module):
         declared = (ss.expressions.Expr, ss.outcome, ss.transitions.FlowSum)
         if not kwargs and not any(isinstance(arg, declared) for arg in args):
             return super().define_results(*args)
+        if self.__dict__.get('_graph') is not None: # Too late to declare (its states are no longer expressions, so the check below would blame the wrong thing)
+            return self.declare(args, kwargs)
         if not all(isinstance(arg, declared) for arg in list(args) + list(kwargs.values())):
             errormsg = f'define_results() of "{self.name}" takes expressions of states (e.g. prevalence=I/(S + I + R)) or ss.Result objects, not both in one call'
             raise TypeError(errormsg)
@@ -483,7 +483,9 @@ class Disease(ss.Module):
         mod.graph.stratify(**kwargs)
         for strat in mod.graph.strats: # So a dimension can be used in a condition, e.g. where=~sir.vaccinated
             if not hasattr(mod, strat.name):
-                mod.setattribute(strat.name, ss.conditions.Cond('dim', strat.name))
+                cond = ss.conditions.Cond('dim', strat.name)
+                cond.owner = mod # So a delivery whose condition reads it is for this disease (see ss.conditions.state_refs())
+                mod.setattribute(strat.name, cond)
         return mod
 
     @property
@@ -626,6 +628,8 @@ class Disease(ss.Module):
         self.engine.define()
         needs = ss.interventions.memory_needs(sim) if isinstance(sim, ss.Sim) and self.graph is not None and self.graph.transitions else {} # Not a mock sim
         self.remembered = [name for mod,name in needs if mod == self.name and name in self.graph.transitions] # Transitions whose memory something reads, e.g. tb.diagnosis.since
+        if ss.options.keep_times and isinstance(self.engine, ss.solvers.Agents): # Or every transition's, to read after the run
+            self.remembered += [name for name in self.graph.transitions if name not in self.remembered]
         for name in self.remembered:
             self.define_states(ss.FloatArr(f'last_{name}', label=f'Time index of the last {name}'), ss.FloatArr(f'count_{name}', default=0, label=f'Number of times: {name}'))
         super().init_pre(sim)
@@ -896,6 +900,11 @@ class Infection(Disease):
     agents. A disease with no `beta` (such as `ssl.NCD`) is not transmitted; one that has no
     use for these states at all is a plain `ss.Disease`.
 
+    An infection in a step happens at its end, so a course scheduled from it starts at the next step: schedule a move
+    `dur` steps after an infection at `self.ti + 1 + dur`, in an `ss.TimeArr`, and take it when `due()` (as in the
+    example below). Each case is then infectious for `dur` steps on average, as a declared disease's is; the seeds are
+    dated at the start (`self.ti` is 0), the end of the step before the first, so they are too.
+
     A disease that can be written as states and transitions is declared instead, with
     `ss.Disease` (see `ss.SIR`), which gives it every solver and `describe()`, `equations()`,
     and `R0()`. The v4 verbs that act on arrays work on both: `ss.modify(hiv.rel_trans, ...)`,
@@ -922,11 +931,11 @@ class Infection(Disease):
             def __init__(self, **kwargs):
                 super().__init__()
                 self.define_pars(beta=ss.perday(0.05), init_prev=ss.bernoulli(0.01), dur_inf=10)
-                self.define_states(ss.BoolState('recovered'), ss.FloatArr('ti_recovered'))
+                self.define_states(ss.BoolState('recovered'), ss.TimeArr('ti_recovered'))
                 self.update_pars(**kwargs)
 
             def step_state(self):
-                done = (self.infected & (self.ti_recovered <= self.ti)).uids
+                done = (self.infected & self.ti_recovered.due()).uids
                 self.infected[done] = False
                 self.recovered[done] = True
                 self.susceptible[done] = True # Protected only by the immunity of their strain, if any
@@ -936,7 +945,7 @@ class Infection(Disease):
                 self.infected[uids] = True
                 self.recovered[uids] = False
                 self.ti_infected[uids] = self.ti
-                self.ti_recovered[uids] = self.ti + self.pars.dur_inf
+                self.ti_recovered[uids] = self.ti + 1 + self.pars.dur_inf # Infected at the end of this step, so infectious from the next
 
         # Two strains, the second more transmissible; recovering from one protects fully against it, and partly against the other
         strains = ss.Strains(['H1', 'H3'], rel_trans=[1, 1.5], immunity=ss.immunity(due_to='recovered', rel_sus=[[1, 0.5], [0.5, 1]]))
@@ -1015,11 +1024,26 @@ class Infection(Disease):
         super().init_pre(sim)
         if 'beta' in self.pars: # A disease that is not transmitted, such as ssl.NCD, has no beta
             self.validate_beta()
+            self.check_routes()
         self.validate_init_prev()
         unknown = [name for imm in (self.strains.immunity if self.strains is not None else []) for name in imm.names if not isinstance(getattr(self, name, None), ss.BoolArr)]
         if unknown:
             raise sc.KeyNotFoundError(f'the strains of "{self.name}" are protected by ss.immunity(due_to={unknown[0]!r}), which is not one of its states (a boolean array, e.g. ss.BoolState("recovered"))')
         return
+
+    def check_routes(self):
+        """ Raise an error if the disease has a beta but nothing to transmit it over: no network or mixing pool, and no `transmit()` of its own (e.g. cholera's, from the environment) """
+        if len(self.sim.networks) or type(self).transmit is not Infection.transmit or not isinstance(self.sim, ss.Sim): # A mock sim (init_mock()) has no networks
+            return
+        β = self.pars.beta
+        values = β.values() if isinstance(β, dict) else [β]
+        value = lambda v: v.values if isinstance(v, ss.peract) else v.value if isinstance(v, ss.Rate) else v
+        if not any(np.any(value(v)) for v in values): # Not transmitted by design (beta=0)
+            return
+        errormsg = (f'"{self.name}" is transmitted over networks and mixing pools, but the sim has none, so it would infect no one: '
+                     'add one (e.g. networks="random"), give it beta=0 if it is not transmitted, or override transmit() for a route of its own. '
+                     '(A declared disease, such as ss.SIR, mixes homogeneously with no networks.)')
+        raise ValueError(errormsg)
 
     def validate_init_prev(self):
         """ Check that init_prev is a probability, not a count (which should use `ss.choose_n()`) """
@@ -1036,9 +1060,10 @@ class Infection(Disease):
         """
         Set initial values for states: by default, infect `init_prev` of the people (`set_prognoses()`)
 
-        The initial infections are dated by the first step: in `set_prognoses()`, `self.ti` is 1 (not 0, the
-        start of the run), as it is for those infected in the first step, so a disease that schedules from
-        `self.ti` (e.g. `self.ti_recovered[uids] = self.ti + dur`) gives them the same course, as Starsim 3 did.
+        The initial infections are dated at the start of the run (`self.ti` is 0), the end of the step before
+        the first, as a declared disease dates its seeds and an infection in a step is dated at its end: so a
+        disease that schedules a move from `self.ti + 1` (e.g. `self.ti_recovered[uids] = self.ti + 1 + dur`,
+        read with `ss.TimeArr.due()`) gives the seeds the same course as later cases.
         """
         super().init_post()
         if self.pars.init_prev is None:
@@ -1050,12 +1075,7 @@ class Infection(Disease):
         if len(initial_cases):
             if self.strains is not None:
                 self.strain[initial_cases] = self.strain_dist.rvs(initial_cases)
-            ti = self.t.ti
-            self.t.ti = min(1, self.t.npts-1) # Dated by the first step, as an infection in it is, so code that schedules from self.ti (e.g. ti_recovered = self.ti + dur) gives them as long as Starsim 3 did, not a step less (CV2)
-            try:
-                self.set_prognoses(initial_cases, sources=-1)  # -1 = externally seeded infection with no source agent
-            finally:
-                self.t.ti = ti
+            self.set_prognoses(initial_cases, sources=-1)  # -1 = externally seeded infection with no source agent
         return initial_cases
 
     def init_results(self):

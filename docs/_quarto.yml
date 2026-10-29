@@ -253,6 +253,7 @@ website:
         - section: "**Library**"
           contents:
             - api/library.diseases.qmd
+            - api/library.econ.qmd
             - api/library.mnch.qmd
             - api/library.networks.qmd
         - section: "**Utilities**"
@@ -340,6 +341,14 @@ quartodoc:
           contents:
             - kind: auto
               name: library.diseases
+              include_imports: true
+              children: embedded
+        - kind: page
+          path: library.econ
+          package: starsim
+          contents:
+            - kind: auto
+              name: library.econ
               include_imports: true
               children: embedded
         - kind: page

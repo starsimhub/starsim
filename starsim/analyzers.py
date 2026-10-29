@@ -31,6 +31,14 @@ class infection_log(Analyzer):
     different than other analyzers, but is required since the information required
     to create an infection log isn't kept outside of the disease's `transmit()` step.
 
+    Each entry has the time (`t`), the person infected (`target`), who infected them
+    (`source`), and the route (`network`). The source is known only for transmission
+    over a network, where each infection is drawn along an edge: seeds have a source
+    of -1, and infections by a mixing pool (`ss.MixingPool`), a contact matrix, or
+    mixing with everyone (no network) have a source and network of NaN, since they
+    come from the share infectious in a group rather than from a particular person.
+    As agents only.
+
     Note: CRN safe.
 
     Examples:

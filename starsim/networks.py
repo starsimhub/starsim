@@ -810,6 +810,7 @@ class RandomNet(DynamicNetwork):
         dynamic (bool): if True (default), edges are replaced once their duration ends; if False, edges are created once and never change
             (so agents who join later, e.g. newborns, are not added)
         method (str): how the other end of each contact is drawn: 'fast' (the default), 'exact', or 'uniform' (see above)
+        remove_self_loops (bool): if True, drop the few edges that join an agent to itself (as any of the methods can make; e.g. about 1 in 25 edges with 50 agents, and far fewer in larger populations), so agents have slightly fewer contacts; off by default since such edges transmit nothing anyway. The same pair of agents can still be joined by more than one edge.
 
     Note: n_contacts = 10 will create *5* edges per agent. Since disease transmission
     usually occurs bidirectionally, this means that the effective number of contacts
@@ -824,7 +825,7 @@ class RandomNet(DynamicNetwork):
     """
     methods = ['fast', 'exact', 'uniform']
 
-    def __init__(self, pars=None, n_contacts=_, dur=_, beta=_, age_range=_, dynamic=_, method=_, **kwargs):
+    def __init__(self, pars=None, n_contacts=_, dur=_, beta=_, age_range=_, dynamic=_, method=_, remove_self_loops=_, **kwargs):
         """ Initialize """
         super().__init__()
         self.define_pars(
@@ -834,6 +835,7 @@ class RandomNet(DynamicNetwork):
             age_range = None,
             dynamic = True,
             method = 'fast',
+            remove_self_loops = False,
         )
         self.update_pars(pars, **kwargs)
         if self.pars.method not in self.methods:
@@ -987,6 +989,9 @@ class RandomNet(DynamicNetwork):
 
         # Get the new edges -- the key step
         p1, p2 = self.pair(uids, n_conn)
+        if p.remove_self_loops:
+            keep = p1 != p2 # One pass over the new edges; finding duplicates would need a sort of all of them
+            p1, p2 = p1[keep], p2[keep]
         n = len(p1)
         beta = np.full(n, self.pars.beta, dtype=ss_float)
 

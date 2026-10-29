@@ -1276,6 +1276,20 @@ class Engine(Telling, Effects):
         if sim.solver == 'binomial' and sim.pars.substeps is None: # It takes enough substeps (see ss.solvers.Compartmental.substeps())
             return
         dt = self.dt/(sim.pars.substeps if euler or sim.solver == 'binomial' else 1)
+        step = 'step' if dt == self.dt else 'substep'
+        plural = lambda n: f'{n:.2g} {unit}{"s" if n != 1 else ""}'
+        fast = [] # What is fast compared with the step, as (rate × step, its name, what it is)
+        for tr in self.graph.transitions.values(): # Transmission: someone infected in a step infects others only from the next, so a fast one is slowed down (as measles is at daily steps)
+            if tr.contact and tr.people and not tr.inflow: # Its β for each infectious state, per contact (with a network) or per share infectious
+                E = ss.expressions
+                if any(isinstance(leaf, (ss.transitions.State, E.Count, E.Clock, E.Flow, E.Stock)) for coef in tr.terms.values() for leaf in getattr(coef, 'leaves', [])):
+                    continue # It reads states (e.g. another disease's prevalence), which have no values yet
+                try:
+                    rate = max(float(np.max(np.asarray(self.eval(coef), dtype=float))) for coef in tr.terms.values())
+                except Exception: # A value not known until the run (e.g. a function of time)
+                    continue
+                per = 'per infectious contact' if len(sim.networks) else 'with everyone infectious'
+                fast.append((rate*dt, tr.name, f'{tr.name} transmits at up to {rate:.2g} per {unit} ({per}), {-np.expm1(-rate*dt):.0%} in a {step}'))
         for name,dw in self.dwells.items():
             if name in inflows:
                 continue
@@ -1284,20 +1298,23 @@ class Engine(Telling, Effects):
             mean = dw.mean if dw.dist is not None else self.dwell_mean(name)
             if sim.solver == 'abm' and dw.dist is not None and dw.family != 'exponential' and mean is not None and getattr(dw, 'std', None) is not None and np.all(np.asarray(mean, dtype=float) - 2*np.asarray(dw.std, dtype=float) >= dt): # As agents, a dwell drawn from a distribution that seldom reaches below a step (e.g. a pregnancy of 32 to 42 weeks, at a monthly step) loses nobody to whole steps (FP7)
                 continue
-            if mean is not None and np.ndim(mean) == 0 and mean > 0 and dt/mean > 0.1: # The chain-binomial solver moves people through the stages exactly (see ss.kernels.draw_chain()), and agents draw the whole dwell time, so it is the mean that matters
+            if mean is not None and np.ndim(mean) == 0 and mean > 0: # The chain-binomial solver moves people through the stages exactly (see ss.kernels.draw_chain()), and agents draw the whole dwell time, so it is the mean that matters
                 x = dt/mean
                 share = min(x, 1) if euler else -np.expm1(-x)
-                step = 'step' if dt == self.dt else 'substep'
-                plural = lambda n: f'{n:.2g} {unit}{"s" if n != 1 else ""}'
                 leave = 'almost everyone leaves' if share > 0.99 else f'{share:.0%} leave'
-                msg = f'{name}: people leave after {plural(mean)} on average, and each {step} is {plural(dt)}, so {leave} in a {step}'
-                if euler:
-                    msg += ' (Euler scales outflows that would take more than everyone down together)' if x > 1 else ''
-                else: # Whole steps are off the ODE by an amount of order rate × dt, which can be large: about 15% in the prevalence of a seasonal SIRS at 0.12
-                    fixes = 'a shorter step (dt=) or substeps=' if sim.solver == 'binomial' else f'a shorter step (e.g. dt=ss.{unit}s({dt/4:.2g}))'
-                    who = 'agents' if sim.solver == 'abm' else 'the chain binomial'
-                    msg += f'. Taking whole steps, {who} can differ from the ODE by that much or more; {fixes} follows it more closely'
-                ss.note(f'{msg}, and sim.check_dt() shows how much it matters', sim=sim)
+                fast.append((x, name, f'people leave {name} after {plural(mean)} on average, so {leave} in a {step}'))
+        fast = sorted([f for f in fast if f[0] > 0.1], key=lambda f: -f[0]) # The fastest first, since it is what the step is too long for
+        if fast:
+            x, _, what = fast[0]
+            others = f' (and {sc.strjoin(f[1] for f in fast[1:])} {"is" if len(fast) == 2 else "are"} fast too)' if len(fast) > 1 else ''
+            fixes = 'a shorter step (dt=) or more substeps=' if euler or sim.solver == 'binomial' else f'a shorter step (e.g. dt=ss.{unit}s({dt/4:.2g}))'
+            msg = f'consider {fixes}: each {step} is {plural(dt)}, and {what}{others}'
+            if euler:
+                msg += ' (Euler scales outflows that would take more than everyone down together)' if x > 1 else ''
+            else: # Whole steps are off the ODE by an amount of order rate × dt, which can be large: about 15% in the prevalence of a seasonal SIRS at 0.12
+                who = 'agents' if sim.solver == 'abm' else 'the chain binomial'
+                msg += f'. Taking whole steps, {who} may differ from the ODE by an amount of that order'
+            ss.note(f'{msg}; sim.check_dt() shows how much it matters', sim=sim)
         return
 
     def plausible_density(self, tr):

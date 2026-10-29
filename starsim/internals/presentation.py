@@ -57,7 +57,7 @@ class Progress:
     def line(self):
         t = self.sim.t
         share = t.ti/max(1, t.npts - 1)
-        now = ss.sim.time_str(t.tvec[t.ti], self.sim.unit_name) # The end of the step being run, so that the last says the end of the run: a date, or e.g. day 27
+        now = ss.sim.time_str(t.tvec[t.ti], self.sim) # The end of the step being run, so that the last says the end of the run: a date, or e.g. day 27
         return f'  {self.bar(share)} {share:4.0%}  {now}  {self.sim.elapsed:.1f} s'
 
     def update(self):

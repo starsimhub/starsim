@@ -41,7 +41,7 @@ Each result is an `ss.Result`. It behaves like a NumPy array, one number per tim
 | `timevec` | The time point of each value |
 | `label` | A human-readable label, used in plots |
 | `kind` | What kind of quantity it is: a stock, a flow, or a ratio (below) |
-| `scale` | Whether the result is a count that scales with the population (as agents, each agent stands for some number of people) |
+| `scale` | Whether the result is a count that scales with the population (as agents, each agent stands for some number of people); by default, a flow or stock does and a ratio doesn't |
 | `low`, `high` | Bounds, for a result that has them |
 
 ```{python}
@@ -59,7 +59,7 @@ Each result says what kind of quantity it is, as its `kind`, which decides how i
 | `'flow'` | `'sum'` | A number of events during each step | `infection`, `recovery`, `cases` | The total |
 | `'ratio'` | `'mean'` | One number divided by another | `prevalence` | Worked out again from the totals of its parts (the mean, for one with no parts) |
 
-A result of your own gives it as `ss.Result('n_protected', kind='stock')`; if it isn't given, it is guessed from the name (`new_...` is a flow, `n_...` and `cum_...` are stocks, and anything else is a ratio), and `kind=None` is for a result with no meaning over time, which isn't summarized. To summarize a result another way without changing what it is, give `summarize_by=` too: `ss.Result('new_cases', kind='flow', summarize_by='mean')` is a flow (it still has a running total, and is summed to compare it with weekly data) whose summary over the run is its mean per step.
+A result of your own gives it as `ss.Result('n_protected', kind='stock')`; if it isn't given, it is guessed from the name (`new_...` is a flow, `n_...` and `cum_...` are stocks), or else from the type: an integer result (`dtype=int`) is a count, guessed to be a flow (e.g. doses given each step), and anything else is a ratio. The kind also says whether the result is scaled by the number of people each agent stands for: a flow or stock is, and a ratio isn't (`scale=` overrides this). `kind=None` is for a result with no meaning over time, which isn't summarized. To summarize a result another way without changing what it is, give `summarize_by=` too: `ss.Result('new_cases', kind='flow', summarize_by='mean')` is a flow (it still has a running total, and is summed to compare it with weekly data) whose summary over the run is its mean per step.
 
 A flow's running total is `.cum`, so `res.infection.cum[-1]` is the number of infections over the whole run. Two cautions: summing a stock over time does not count people (`res.I.sum()` counts each person once for every step they are infectious), and the people infectious at the start are not new infections during the run, so `infection.sum()` leaves them out; add them if your definition of outbreak size includes everyone ever infected.
 
@@ -129,7 +129,7 @@ A module written as code can keep its results by group too, rather than one resu
 class ByGroup(ss.Analyzer):
     def init_results(self):
         super().init_results()
-        self.define_results(ss.Result('prevalence', scale=False, groups=True))
+        self.define_results(ss.Result('prevalence', groups=True))
 
     def step(self):
         groups = self.sim.groups
@@ -170,12 +170,7 @@ df = sim.to_df()
 df.head()
 ```
 
-A single module's results, or a single result, give a table the same way: `sim.results.measles.to_df()`, or `res.I.to_df()`. `sim.results.flatten()` gives the same results as a flat dict, keyed like the columns (`measles_I`).
-
-::: {.callout-warning}
-## [PROPOSAL]
-A result should have a `df` property as a shortcut for `to_df()` (`res.I.df`, `sim.results.measles.df`), as a dataframe is the most common thing to make from a result. Today `res.I.df` is an error.
-:::
+A single module's results, or a single result, give a table the same way: `sim.results.measles.to_df()`, or `res.I.to_df()`; `.df` is a shortcut for `to_df()` (`res.I.df`, `sim.results.measles.df`). `sim.results.flatten()` gives the same results as a flat dict, keyed like the columns (`measles_I`).
 
 ## Results of many runs
 

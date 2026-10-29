@@ -47,6 +47,8 @@ def test_dist(m=m):
 
     # Test other options
     dist.plot_hist()
+    normal = ss.normal(3, 1) # Not initialized: plotted from a copy, leaving it for a sim to initialize
+    assert np.isclose(normal.plot_hist().mean(), 3, atol=0.2) and not normal.initialized
     return rvs
 
 
