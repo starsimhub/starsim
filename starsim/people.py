@@ -324,7 +324,8 @@ class People:
     def brief(self, output=False):
         n = self.n_agents_init
         if self.grouped and self.initialized: # A compartmental run: the rows are groups of people
-            out = f'People({n:n} groups; {float(np.sum(self.n)):n} people; age={self.age.mean():0.1f}±{self.age.std():0.1f} over the groups)'
+            age = '' if 'age' in self.__dict__.get('_no_groups', []) else f'; age={self.age.mean():0.1f}±{self.age.std():0.1f} over the groups' # Not when unstratified by age
+            out = f'People({n:n} group{"s"*(n != 1)}; {float(np.sum(self.n)):n} people{age})'
             return out if output else print(out)
         if not self.initialized: # Age and other states hold uninitialized memory until init_vals() runs
             out = f'People({n=:n}; uninitialized)'
@@ -1075,10 +1076,11 @@ def people(place, year=None, n_agents=None, revision=None):
         sim = ss.Sim(sir, people=ss.people('Kenya', year=2024), networks=ss.contacts('Kenya'))
         ss.people('NG').named.total # The population of Nigeria in 2024
     """
-    ages, female, male, ref = ss.data.population(place, year=year, revision=revision)
-    total = female + male
-    ppl = People(n_agents=sc.ifelse(n_agents, ss.SimPars().n_agents), age_data=ss.data.to_age_data(ages, total), p_female=female.sum()/total.sum())
-    ppl.named = sc.objdict(place=place, year=year, n_agents=n_agents, revision=revision, total=float(total.sum()), ages=ages, counts=total, ref=ref)
+    pop = ss.data.population(place, year=year, revision=revision)
+    ages = np.array(ss.data.age_edges(pop.index))
+    total = (pop.female + pop.male).values
+    ppl = People(n_agents=sc.ifelse(n_agents, ss.SimPars().n_agents), age_data=ss.data.to_age_data(ages, total), p_female=pop.female.sum()/total.sum())
+    ppl.named = sc.objdict(place=place, year=year, n_agents=n_agents, revision=revision, total=float(total.sum()), ages=ages, counts=total, ref=pop.attrs['ref'])
     return ppl
 
 

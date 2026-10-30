@@ -54,6 +54,16 @@ Maternal, newborn, and child health examples, demonstrating patterns that are mo
 | `fetal_infection` | `ss.Connector` | Links a disease to fetal health outcomes: preterm risk via delivery timing shifts, low birth weight via growth restriction |
 | `treat_pregnant` | `ss.Intervention` | Treats infected pregnant women and partially reverses accumulated fetal damage |
 
+### Economics (`econ/`)
+
+Health economics, which most sims don't need, so it is here rather than in core Starsim. See the user guide page on [Costs](https://docs.starsim.org/user_guide/interventions_costs.html).
+
+| Name | Base | Description |
+| --- | --- | --- |
+| `Costs` | `ss.Analyzer` | Adds up the costs of a sim as results: the `cost` of each delivery, a cost for each event of any other result (e.g. care for each infection), and a fixed cost per year, with their `total` |
+| `discount()` | | Discounts a result (or any values over time) at a yearly rate from a start year |
+| `icer()` | | A table of the costs and effects of scenarios (from a MultiSim, or a dict or list of sims) compared with a baseline, with incremental cost-effectiveness ratios |
+
 ## Documentation
 
 - User guide: [Library modules](https://docs.starsim.org/user_guide/io_library.html)

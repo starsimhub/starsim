@@ -188,28 +188,16 @@ plt.legend();
 
 The static sim starts with 2,000 people infectious, so its epidemic peaks weeks earlier. The dynamic sim starts with 10, like the ODE here; it may take off later or earlier than the ODE by chance, since the ODE always takes off at once, while a few agents can take a while to start a chain of transmission (see [Scenarios](running_scenarios.qmd), and branching processes above).
 
-#### Results count only the people that agents stand for
+#### Results count the people no agent stands for yet
 
-While each agent stands for fewer people than `pop_scale`, part of the population is not represented by any agent. These people are all naive, but they are not in the results: at the start, the dynamic sim has 5,000 people alive, not a million, so any share of the population (such as prevalence) worked out from its results is 200 times too high:
+While each agent stands for fewer people than `pop_scale`, part of the population is not represented by any agent. The sim counts these people as one number, `sim.results.unrepresented`: at the start, `pop_scale − 1` for each agent; at each rescaling, from `s` to `s′` people per agent, it falls by `s′ − s` for each agent alive then, who now stands for that many more. An agent who dies is the `scale` people it stands for, and one who is born adds that many, so neither changes it. The number alive is `scale` people for each agent alive, plus these. They are like the agents, and have never been infected, so a declared disease counts its share of them in its first state; another declared module, such as `ss.Pregnancy`, shares them out over its states as the agents are. The results are of the whole population from the start, and so is any share of it, such as prevalence:
 
 ```{python}
 res = dynamic.results
 print('Alive at the start:', res.alive[0])
+print('Susceptible at the start:', res.flu.S[0])
 print('Infectious at the start:', res.flu.I[0])
 ```
-
-The people who are missing are `n_agents × (pop_scale − scale)`, where `scale` is the number of people per agent at each step, and they are all in the first state. Adding them back:
-
-```{python}
-missing = dynamic.pars.n_agents * (dynamic.pars.pop_scale - res.pop_scale.values) # People no agent stands for yet
-susceptible = res.flu.S.values + missing
-print('Susceptible at the start, with the missing people:', round(susceptible[0]))
-```
-
-::: {.callout-warning}
-## [PROPOSAL]
-For a declared disease, the people that no agent stands for yet are known to be in its first state, so its results should include them by themselves when `rescale=True` (`S`, `alive`, and every ratio), rather than each user correcting each result by hand (P11). Today, only a disease written as code can do it, in its `finalize_results()`, or the user afterwards, as above.
-:::
 
 #### Diseases written as code
 
@@ -230,7 +218,8 @@ A count that is added up during the run would mix steps with different numbers o
 - **Results during a run are in agents.** Counts are scaled when the run ends; an analyzer that reads a count during the run sees agents.
 - **Rare events.** An event that happens to fewer people than an agent stands for (a rare complication) happens to whole agents or not at all; such a model needs more agents.
 - **Too few agents for a few seeds.** A model started by a few people, run with each agent standing for several, starts from fewer agents than people, or from none: give `n_agents` equal to `total_pop` at least until the outbreak is large, or use `rescale=True`.
-- **Dynamic rescaling changes what results mean** until the scale reaches `pop_scale`: counts of people outside the agents are missing.
+- **Dynamic rescaling and diseases written as code.** The people no agent stands for yet are in the results of a declared module (for a disease, in its first state) and in `alive`, but not in those of a module written as code, whose counts and shares are of the people the agents stand for.
+- **Dynamic rescaling with births and deaths.** An agent who dies early, while it stands for few people, is few deaths, and the people no agent stands for are not born and do not die, so with many deaths or births before the scale reaches `pop_scale`, the population is not that of a run with each agent standing for `pop_scale` from the start. With more agents born than die before then, the count of people no agent stands for can fall below 0, as the agents come to stand for more people than there are.
 - **Treating a depleting run as a branching process.** Chains and offspring counted from a run in which a sizable share of people have been infected are biased down; count them only while the outbreak is small compared with the population.
 - **A stochastic branching process with no `until=`.** A chain that takes off grows without limit, and each step gets slower; give `until=`, or a short `stop=`.
 - **R and k from runs stopped by `until=`.** They are not fitted, since such runs are not a fair sample of cases; run for a fixed `stop=` instead.

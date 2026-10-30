@@ -1,6 +1,7 @@
 """
 Test the Timeline object
 """
+import warnings
 import numpy as np
 import pytest
 import sciris as sc
@@ -324,6 +325,15 @@ def test_coded_unit():
     assert sim.t.dt == ss.weeks(1) and len(sim.t) == 11
     sim = ss.Sim(connectors=Step(), verbose=0).init() # Nothing has a unit: time is in timesteps
     assert sim.unit is None and sim.t.start == 0 and len(sim.t) == 51
+
+    # Typed values in days and years: a step of a day is said, unless the run is written in days
+    sis = lambda: ss.SIS(beta=ss.perday(0.002)) # Its dur_inf is in years
+    with pytest.warns(RuntimeWarning, match='different units'):
+        ss.Sim(diseases=sis(), n_agents=small, stop=100, verbose=0).init()
+    with warnings.catch_warnings():
+        warnings.simplefilter('error')
+        sim = ss.Sim(diseases=sis(), n_agents=small, start='2000', dur=ss.days(100), verbose=0).init()
+    assert sim.t.dt == ss.days(1)
     return sim
 
 

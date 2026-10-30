@@ -8,23 +8,52 @@ import numpy as np
 import pandas as pd
 import sciris as sc
 import starsim as ss
+import matplotlib as mpl
 import matplotlib.pyplot as plt
 
 
 
 class Levels(sc.objdict):
     """ A result across runs split by a dimension: a result across runs for each level, which can be plotted together """
-    def plot(self, fig=None, ax=None, lines=False, **kwargs):
-        """ Plot each level's median and interval (or every run, if `lines=True`) on the same axes; kwargs: see `ss.plot_args()` """
+    def plot(self, fig=None, ax=None, lines=False, log=False, **kwargs):
+        """ Plot each level's median and interval (or every run, if `lines=True`) on the same axes; the other arguments are as for `ss.Result.plot()` """
         kw = ss.plot_args(kwargs, alpha=0.8)
+        given = fig is not None or ax is not None
         with ss.style(**kw.style):
-            ax = ax if ax is not None else (fig or plt.figure(**kw.fig)).add_subplot(111)
+            ax = get_ax(fig, ax, kw)
             for label,res in self.items():
                 res._draw(ax, kw, label=label, lines=lines, floor=False)
-            res._floor(ax)
+            set_scale(ax, res, log)
             ax.legend(**kw.legend)
             ax.set_title(res.full_label)
-        return ss.return_fig(ax.figure, **kw.return_fig)
+        return ss.return_fig(ax.figure, given=given, **kw.return_fig)
+
+
+def get_ax(fig, ax, kw):
+    """ The axes to plot a result into: those given, else the figure's current axes (made if it has none), else those of a new figure """
+    if ax is not None:
+        return ax
+    return fig.gca() if fig is not None else plt.figure(**kw.fig).add_subplot(111)
+
+
+def log_scale(ax, decades=6):
+    """ A log scale for the y axis, down to at most `decades` powers of 10 below its top, since a model's values can fall to 1e-20 (e.g. the number infectious in an ODE between epidemics) """
+    top = max([np.nanmax(np.asarray(line.get_ydata(), dtype=float), initial=0) for line in ax.get_lines()], default=0) # The data's, since Matplotlib's margin grows with the decades shown
+    if top <= 0: # Nothing to show on a log scale (e.g. deaths in a model without them)
+        return
+    ax.set_yscale('log')
+    if ax.get_ylim()[0] < top/10**decades:
+        ax.set_ylim(top/10**decades, top*1.5)
+    return
+
+
+def set_scale(ax, res, log=False):
+    """ A log scale for the y axis, if asked for (see `log_scale()`); otherwise, keep the axis from going negative if the result doesn't (see `ss.Result._floor()`) """
+    if log:
+        log_scale(ax)
+    else:
+        res._floor(ax)
+    return
 
 
 def people_scale(sim):
@@ -68,14 +97,14 @@ class Result(ss.utils.NoDists, ss.arrays.BaseArr):
         module (str): the name or label of the parent module, e.g. 'SIR'
         name (str): the name of this result, e.g. 'new_infections'
         shape (int/tuple): the shape of the result array (usually `module.npts`)
-        scale (bool): whether or not the result scales by population size (e.g. a count does, a prevalence does not)
+        scale (bool): whether the result scales with the population (by `pop_scale`, the people each agent stands for): by default ('auto'), by its kind, so a flow or stock (a count, e.g. infections) does, and a ratio (e.g. prevalence) does not
         auto_plot (bool): whether to include automatically in `sim.plot()` results
         label (str): a human-readable label for the result
         values (array): prepopulate the Result with these values
         timevec (array): an array of time points
         low (array): values for the lower bound
         high (array): values for the upper bound
-        kind (str): what the result is, which decides how it behaves: 'flow' (a number of events in each step, e.g. new infections; it has a cumulative total, and is summed over each period of data it is compared with), 'stock' (a quantity at each time point, e.g. the number infected), 'ratio' (one quantity divided by another, e.g. prevalence; one that keeps its numerator and denominator sums each over a period, then divides), or None for a result with no meaning over time. By default ('auto') it is guessed from the name (`new_...` is a flow; `n_...`, `cum_...`, and `cumulative` are stocks; anything else is a ratio), or from `summarize_by` if only that is given
+        kind (str): what the result is, which decides how it behaves: 'flow' (a number of events in each step, e.g. new infections; it has a cumulative total, and is summed over each period of data it is compared with), 'stock' (a quantity at each time point, e.g. the number infected), 'ratio' (one quantity divided by another, e.g. prevalence; one that keeps its numerator and denominator sums each over a period, then divides), or None for a result with no meaning over time. The kind also sets the default `scale`. By default ('auto') it is guessed from `summarize_by` if only that is given, or else from the name (`new_...` is a flow; `n_...`, `cum_...`, and `cumulative` are stocks), or else from the dtype: an integer is a count, guessed to be a flow (a count over each step, e.g. doses given), and anything else is a ratio. Give `kind='stock'` for a count of people at each time point with no such name (e.g. `ss.Result('vaccinated', dtype=int, kind='stock')`), and `kind=` for anything else the guess gets wrong
         summarize_by (str): how the result is summarized over time (and resampled): by default ('auto'), by its kind: 'sum' for a flow, 'last' for a stock, 'mean' for a ratio, and None for none; or another way, e.g. 'mean' to average a flow over time, or any other key of `ss.Result.summarizers`
         columns (list): if provided, make a 2D result of shape `(npts, len(columns))`, with these names for the columns, e.g. `['wild', 'alpha']`
         runs (dataframe): for a result across the runs of a MultiSim: one row per run, with its `scenario` (and the values of any parameters swept); the values then have a run axis first, of shape `(n_runs, npts)`
@@ -117,13 +146,12 @@ class Result(ss.utils.NoDists, ss.arrays.BaseArr):
             return dests[attr]
         return super().__getattr__(attr)
 
-    def __init__(self, name=None, label=None, dtype=float, shape=None, scale=True, auto_plot=True,
+    def __init__(self, name=None, label=None, dtype=float, shape=None, scale='auto', auto_plot=True,
                  module=None, values=None, timevec=None, low=None, high=None, kind='auto', summarize_by='auto', columns=None, runs=None, groups=False, **kwargs):
         # Copy inputs
         self.name = name
         self.label = label
         self.module = module
-        self.scale = scale # TODO: should default to True for ints, False for floats
         self.auto_plot = auto_plot
         self.timevec = timevec
         self.low = low
@@ -134,8 +162,9 @@ class Result(ss.utils.NoDists, ss.arrays.BaseArr):
         if kwargs:
             errormsg = f'ss.Result() got unexpected arguments: {sc.strjoin(kwargs.keys())}'
             raise TypeError(errormsg)
-        self.kind = self.get_kind(name, kind, summarize_by)
+        self.kind = self.get_kind(name, kind, summarize_by, dtype)
         self.summarize_by = self.get_summarize_by(name, summarize_by, self.kind)
+        self.scale = self.kind in ['flow', 'stock'] if scale == 'auto' else scale # A count scales with the population, a ratio does not
         self.columns = columns
         self.runs = runs
         self.groups = groups
@@ -750,9 +779,11 @@ class Result(ss.utils.NoDists, ss.arrays.BaseArr):
 
     @staticmethod
     def periods_mean(arr, starts, ends):
-        """ The mean of each period """
-        counts = (ends - starts + 1).reshape((-1,) + (1,)*(arr.ndim - 1))
-        return np.add.reduceat(arr, starts, axis=0)/counts
+        """ The mean of each period, of the time points that have a value (a NaN is a time point with none, e.g. a mean birth weight on a step with no births); NaN if none do """
+        arr = np.asarray(arr, dtype=float)
+        has = ~np.isnan(arr)
+        sums, counts = np.add.reduceat(np.where(has, arr, 0), starts, axis=0), np.add.reduceat(has, starts, axis=0)
+        return np.divide(sums, counts, out=np.full(sums.shape, np.nan), where=counts>0)
 
     # How a result is summarized over time (and over each period, when resampled), by its summarize_by: a function of
     # the values (time first), and the first and last time point of each period, giving one row per period. A ratio
@@ -762,8 +793,12 @@ class Result(ss.utils.NoDists, ss.arrays.BaseArr):
     kinds = dict(flow='sum', stock='last', ratio='mean') # Each kind of result, and how it is summarized over time unless told otherwise
 
     @classmethod
-    def get_kind(cls, name, kind='auto', summarize_by='auto'):
-        """ The kind of a result: as given (None for one with no meaning over time), or else ('auto') from how it is summarized, if that is given, or its name, as in Starsim 3 """
+    def get_kind(cls, name, kind='auto', summarize_by='auto', dtype=None):
+        """
+        The kind of a result: as given (None for one with no meaning over time), or else ('auto') from how it is summarized, if that is given,
+        or else its name, as in Starsim 3 (`new_...` is a flow; `n_...`, `cum_...`, and `cumulative` are stocks), or else its dtype: an integer
+        is a count, so a flow (a count over each step, e.g. doses), a dtype that is not numbers (e.g. `list`) has none, and anything else is a ratio
+        """
         if kind == 'auto':
             by_summary = {v:k for k,v in cls.kinds.items()}
             if summarize_by != 'auto' and (summarize_by is None or summarize_by in by_summary):
@@ -773,6 +808,10 @@ class Result(ss.utils.NoDists, ss.arrays.BaseArr):
                 kind = 'flow'
             elif name.startswith('n_') or '_n_' in name or 'cum_' in name or 'cumulative' in name:
                 kind = 'stock'
+            elif dtype is not None and np.issubdtype(dtype, np.integer): # A count with no name to go on is likelier a count of events than of people (which is written kind='stock')
+                kind = 'flow'
+            elif dtype is not None and not np.issubdtype(dtype, np.number) and not np.issubdtype(dtype, np.bool_): # Not numbers (e.g. dtype=list or object), so nothing to summarize
+                kind = None
             else:
                 kind = 'ratio'
         if kind is not None and kind not in cls.kinds:
@@ -794,12 +833,14 @@ class Result(ss.utils.NoDists, ss.arrays.BaseArr):
         """
         The result over the whole run, by its `summarize_by`: the total of a flow ('sum'), the final value of a stock ('last'),
         and the mean of a ratio ('mean'; over time, of its numerator and denominator if it has them, each summed and then
-        divided); one for each run, for a result across runs; and for a result by group (`res.by('age')`), a pandas Series
-        labelled by group
+        divided); one for each run, for a result across runs (and with several scenarios, a dict of these by scenario, as `diff()`
+        gives); and for a result by group (`res.by('age')`), a pandas Series labelled by group
         """
         out = self._summarize()
         if self.columns is not None and self.runs is None and np.ndim(out) == 1 and len(out) == len(self.columns):
             out = pd.Series(out, index=pd.Index(self.columns, name=getattr(self, 'by_dim', None)), name=self.name)
+        elif self.runs is not None and self.runs['scenario'].nunique() > 1:
+            out = sc.objdict({scenario:out[inds] for scenario,inds in self.scenarios().items()})
         return out
 
     def _summarize(self):
@@ -840,7 +881,8 @@ class Result(ss.utils.NoDists, ss.arrays.BaseArr):
         """
         Which period of a longer time unit each time point is in; see `resample()`
 
-        Returns the period of each time point (a non-decreasing array of integers from 0).
+        Returns the period of each time point (a non-decreasing array of integers from 0), and for calendar
+        months and years, the date each period ends (the first day of the next month or year; else None).
         """
         tv = self.timevec
         if tv is None:
@@ -850,9 +892,12 @@ class Result(ss.utils.NoDists, ss.arrays.BaseArr):
             idx = pd.DatetimeIndex(tv)
             if len(idx) > 1: # A time point is in the period of the step that ends there, so 1 January is in the year before, as for data; the start is in the first period
                 idx = idx - (idx[1:] - idx[:-1]).min()/2
-            key = np.asarray(idx.year*12 + idx.month if new_unit == 'month' else idx.year)
+            key = np.asarray(idx.year*12 + idx.month - 1 if new_unit == 'month' else idx.year)
             key[0] = key[1:2].max(initial=key[0])
-            return np.unique(key, return_inverse=True)[1]
+            keys, bins = np.unique(key, return_inverse=True)
+            nxt = keys + 1 # The period after each
+            ends = pd.to_datetime(dict(year=nxt//12, month=nxt%12 + 1, day=1) if new_unit == 'month' else dict(year=nxt, month=1, day=1))
+            return bins, ends
         if isinstance(new_unit, str):
             if new_unit not in ['day', 'week', 'month', 'year']:
                 errormsg = f'Cannot resample to "{new_unit}"; use "day", "week", "month", "year", or a duration, e.g. ss.weeks(2)'
@@ -872,7 +917,7 @@ class Result(ss.utils.NoDists, ss.arrays.BaseArr):
         step = np.median(np.diff(t)) if len(t) > 1 else width
         eps = 0.5*min(step, width)/width # Times that are the same up to rounding (e.g. 83.9999999 days from 12 weeks) are the same time point
         bins = np.ceil(t/width - eps).astype(int) - 1 # A period includes its end and not its start, as for data: a flow at a time point is over the step that ends there
-        return np.maximum(bins, 0) # The start is in the first period
+        return np.maximum(bins, 0), None # The start is in the first period
 
     def resample(self, new_unit=None, summarize_by=None, use_years=False, **kwargs):
         """
@@ -882,7 +927,9 @@ class Result(ss.utils.NoDists, ss.arrays.BaseArr):
         period, and a ratio sums its numerator and denominator over each period (by group, if
         it has them) and divides them (one with no parts is averaged over the period). Periods
         start at the sim's start and include their end, as for data; calendar months and years
-        are used instead for a sim with dates. Each period is labeled by its last time point.
+        are used instead for a sim with dates. Each period is labeled by its end: for calendar months and years,
+        the first day of the next (so a year of weekly steps is labeled 1 January of the next year, not the week
+        ending after it), or the end of the run if sooner; otherwise its last time point.
         The values by group (`select()` and `by()`) are resampled too.
 
         Args:
@@ -925,7 +972,7 @@ class Result(ss.utils.NoDists, ss.arrays.BaseArr):
                 out.strata = np.moveaxis(out.strata, 0, t)
                 out.denom = None if getattr(out, 'denom', None) is None else np.moveaxis(out.denom, 0, t)
             return out
-        bins = self.periods(new_unit)
+        bins, period_ends = self.periods(new_unit)
         starts = np.flatnonzero(np.diff(bins, prepend=-1)) # The first time point of each period
         ends = np.append(starts[1:], len(bins)) - 1 # And the last
 
@@ -955,6 +1002,9 @@ class Result(ss.utils.NoDists, ss.arrays.BaseArr):
             new_strata = agg_g(strata, how)
             new_denom = None
         timevec = self.timevec[ends]
+        if period_ends is not None: # The calendar end of each period, or the end of the run
+            stop = pd.Timestamp(self.timevec[-1])
+            timevec = ss.DateArray([ss.date(min(end, stop)) for end in period_ends])
         if use_years:
             years = np.asarray(timevec.years if hasattr(timevec, 'years') else timevec, dtype=float)
             if self.has_dates and len(self.timevec) > 1: # Labeled by the calendar year each period covers, so the one ending on 1 January 2001 is 2000
@@ -1092,7 +1142,12 @@ class Result(ss.utils.NoDists, ss.arrays.BaseArr):
 
         return df
 
-    def plot(self, fig=None, ax=None, label=None, lines=False, **kwargs):
+    @property
+    def df(self):
+        """ The result as a dataframe: a shortcut for `to_df()` """
+        return self.to_df()
+
+    def plot(self, fig=None, ax=None, label=None, lines=False, log=False, **kwargs):
         """
         Plot the result, with one line per column for a 2D result
 
@@ -1100,29 +1155,44 @@ class Result(ss.utils.NoDists, ss.arrays.BaseArr):
         for quantiles, the middle one and the interval between the outer ones.
 
         Args:
-            fig (Figure): if provided, plot into new axes in this figure
+            fig (Figure): if provided, plot into this figure's current axes (made if it has none)
             ax (Axes): if provided, plot into these axes
-            label (str): the label of the line
+            label (str): the label of the line (shown in a legend, if given)
             lines (bool): for a result across runs, plot every run instead of the median and interval
-            kwargs (dict): known arguments (e.g. figsize, color, lw, font, or plot_kw) split between the plotting dicts; see `ss.plot_args()`
+            log (bool): if True, use a log scale for the y axis
+            kwargs (dict): known arguments (e.g. figsize, color, lw, font, plot_kw, do_show, or filename) split between the plotting dicts; see `ss.plot_args()`
+
+        Returns the figure, unless it is shown in Jupyter (see `ss.return_fig()`). A figure or axes given are the caller's,
+        so the figure is not shown (unless `do_show=True`), and other results can be plotted into it.
 
         Examples:
             ```python
             sim = ss.Sim(diseases='sis', networks='random').run()
             sim.results.sis.prevalence.plot(color='k')
+
+            # Two results on the same axes, saved to a file
+            fig = sim.results.sis.I.plot(label='Infectious', do_show=False)
+            sim.results.sis.S.plot(fig=fig, label='Susceptible', log=True, filename='sis.png')
             ```
         """
         kw = ss.plot_args(kwargs, alpha=0.8)
+        given = fig is not None or ax is not None
         with ss.style(**kw.style):
-            ax = ax if ax is not None else (fig or plt.figure(**kw.fig)).add_subplot(111)
-            if self._draw(ax, kw, label=label, lines=lines):
+            ax = get_ax(fig, ax, kw)
+            if self._draw(ax, kw, label=label, lines=lines, floor=False) or label:
                 ax.legend(**kw.legend)
+            set_scale(ax, self, log)
             ax.set_title(self.full_label)
             ax.set_xlabel('Time')
-        return ss.return_fig(ax.figure, **kw.return_fig)
+        return ss.return_fig(ax.figure, given=given, **kw.return_fig)
 
-    def _draw(self, ax, kw, label=None, lines=False, floor=True):
-        """ Draw the result into axes, for `plot()` and `ss.Results.plot()`, with the arguments from `ss.plot_args()`; returns whether it drew several lines that need a legend """
+    def _draw(self, ax, kw, label=None, lines=False, floor=True, colors=None):
+        """
+        Draw the result into axes, for `plot()` and `ss.Results.plot()`, with the arguments from `ss.plot_args()`; returns whether it drew several lines that need a legend
+
+        For a result across runs, `colors` gives the color of each scenario, so that each has the same color in every axes, even those of a
+        result that only some of them have (see `ss.Results.plot()`); otherwise each scenario takes the next color of the axes.
+        """
         if self.timevec is None:
             errormsg = f'Cannot figure out how to plot {self}: no time data associated with it'
             raise ValueError(errormsg)
@@ -1140,22 +1210,26 @@ class Result(ss.utils.NoDists, ss.arrays.BaseArr):
         else: # Across runs
             res = self if lines or 'quantile' in self.runs else self.quantiles()
             groups = res.scenarios()
+        named = len(groups) > 1 or len(colors or {}) > 1 # Scenarios among several are labelled by their names
         for scenario,inds in groups.items():
-            plot_kw = sc.mergedicts(kw.plot, dict(label=scenario if len(groups) > 1 else label))
+            plot_kw = sc.mergedicts(kw.plot, dict(label=scenario if named else label))
+            if colors and scenario in colors and not {'color', 'c'} & set(plot_kw):
+                plot_kw['color'] = colors[scenario]
             if 'quantile' in res.runs: # The middle quantile, and the interval between the outer ones
                 q = res.runs['quantile'].to_numpy()[inds]
                 vals = res.values[inds]
                 line, = ax.plot(res.timevec, vals[np.argmin(np.abs(q - 0.5))], **plot_kw)
                 if len(inds) > 1:
                     ax.fill_between(res.timevec, vals[np.argmin(q)], vals[np.argmax(q)], **sc.mergedicts(dict(alpha=0.3), kw.fill, dict(color=line.get_color())))
-            else: # Every run, in one color for each scenario
-                drawn = ax.plot(res.timevec, res.values[inds].T, **sc.mergedicts(plot_kw, dict(alpha=0.3, lw=1, label=None)))
-                drawn[0].set_label(plot_kw['label'])
-                for line in drawn[1:]:
-                    line.set_color(drawn[0].get_color())
+            else: # Every run, in one color for each scenario: the first run's, which takes one color of the axes, however many runs there are
+                vals = res.values[inds]
+                first, = ax.plot(res.timevec, vals[0], **sc.mergedicts(plot_kw, dict(alpha=0.3, lw=1)))
+                if len(vals) > 1:
+                    rest = {k:v for k,v in plot_kw.items() if k != 'c'}
+                    ax.plot(res.timevec, vals[1:].T, **sc.mergedicts(rest, dict(alpha=0.3, lw=1, label=None, color=first.get_color())))
         if floor:
             self._floor(ax)
-        return len(groups) > 1
+        return named
 
     def _floor(self, ax):
         """ Don't let the axis go negative if the results don't; only once all lines are drawn, since setting a limit stops the axis growing to fit later lines """
@@ -1220,10 +1294,15 @@ class Results(ss.utils.NoDists, ss.ndict):
         print(super().__str__(*args, **kwargs))
         return
 
-    def _implicit_has(self, key):
-        """ Whether a key is a result of the sim's one disease made or named by the sim (see `ss.Sim.init_results()`), which is also found here, e.g. `sim.results.I` for `sim.results.sir.I` """
+    def _implicit_get(self, key):
+        """
+        A result of the sim's one disease (the one it made or named, else its only one; see `ss.Sim.init_results()`), which is also found here, e.g. `sim.results.I` for `sim.results.sir.I`; else None
+
+        Across the runs of a MultiSim, it is a result of each sim's one disease, even if their names differ (see `ss.run.MultiResults.from_sims()`).
+        """
         implicit = self.__dict__.get('_implicit')
-        return implicit is not None and isinstance(key, str) and key in dict.get(self, implicit, {})
+        res = dict.get(self, implicit) if isinstance(implicit, str) else implicit # A module's name here, or results of their own
+        return res[key] if isinstance(key, str) and isinstance(res, dict) and key in res else None
 
     def _given_msg(self, key):
         """ For the results of a module that was given to a sim, which ran its own copy: where the results are """
@@ -1232,21 +1311,29 @@ class Results(ss.utils.NoDists, ss.ndict):
             return f'"{key}" is not here: this module was given to a sim, which runs its own copy, so its results are in the sim, e.g. sim.results.{name}.{key}'
         return None
 
+    def _unknown_msg(self, key):
+        """ For a name that is not a result here: the closest names that are, and all of them """
+        if isinstance(key, str) and not key.startswith('_') and len(self) and key not in self:
+            keys = [k for k in self.keys() if isinstance(k, str)]
+            owner = f'"{self._module}"' if self._module else 'the sim'
+            return f'"{key}" is not a result of {owner}{ss.expressions.did_you_mean(key, keys)} The results are {sc.strjoin(keys)}'
+        return None
+
     def __getitem__(self, key):
         if isinstance(key, str) and dict.__contains__(self, key): # The usual case, as fast as a dict; the rest only for a key that is not here
             return dict.__getitem__(self, key)
-        if self._implicit_has(key):
-            return self[self._implicit][key]
-        if msg := self._given_msg(key):
-            raise KeyError(msg)
+        if (res := self._implicit_get(key)) is not None:
+            return res
+        if msg := self._given_msg(key) or self._unknown_msg(key):
+            raise sc.KeyNotFoundError(msg)
         return super().__getitem__(key)
 
     def __getattr__(self, attr):
         if dict.__contains__(self, attr): # As in __getitem__()
             return dict.__getitem__(self, attr)
-        if self._implicit_has(attr):
-            return self[self._implicit][attr]
-        if msg := self._given_msg(attr):
+        if (res := self._implicit_get(attr)) is not None:
+            return res
+        if msg := self._given_msg(attr) or self._unknown_msg(attr):
             raise AttributeError(msg)
         return super().__getattr__(attr)
 
@@ -1351,6 +1438,11 @@ class Results(ss.utils.NoDists, ss.ndict):
         data = {key:res.values for key,res in flat.items()}
         return sc.dataframe(data, index=timevec) if set_date_index else sc.dataframe(dict(time=timevec) | data)
 
+    @property
+    def df(self):
+        """ The results as a dataframe: a shortcut for `to_df()` """
+        return self.to_df()
+
     def walk(self):
         """ Each result, as (module name, key, result), with the module None for the sim's own results """
         for key,val in self.items():
@@ -1361,7 +1453,7 @@ class Results(ss.utils.NoDists, ss.ndict):
             elif isinstance(val, Result):
                 yield None, key, val
 
-    def plot(self, key=None, fig=None, data=None, label=None, title=None, lines=False, legend=True, show_skipped=False, annualize=False, **kwargs):
+    def plot(self, key=None, fig=None, data=None, label=None, title=None, lines=False, legend=True, show_skipped=False, annualize=False, log=False, **kwargs):
         """
         Plot the results, each in its own axes; see `sim.plot()` and `msim.plot()`
 
@@ -1377,7 +1469,10 @@ class Results(ss.utils.NoDists, ss.ndict):
             legend (bool): whether to label the scenarios, if there is more than one
             show_skipped (bool): show even results that are not plotted by default
             annualize (bool): if True, resample the results to annual values first (each by its `summarize_by`; see `ss.Result.resample()`)
-            kwargs (dict): known arguments (e.g. figsize, font) split between the plotting dicts; see `ss.plot_args()`
+            log (bool): if True, use a log scale for the y axes
+            kwargs (dict): known arguments (e.g. figsize, font, do_show, or filename) split between the plotting dicts; see `ss.plot_args()`
+
+        Returns the figure, unless it is shown in Jupyter (see `ss.return_fig()`); a figure given is not shown, unless `do_show=True`.
         """
         if isinstance(key, (list, tuple)) and any(isinstance(k, (list, tuple)) for k in key): # Several results in some axes
             groups = [list(match_result_keys(self, sc.tolist(k), show_skipped=True).values()) for k in key]
@@ -1392,7 +1487,9 @@ class Results(ss.utils.NoDists, ss.ndict):
         figsize = np.array([8, 6])*np.clip((n_cols-3)/6+1, 1, 1.5) # Scale the default figure size with the number of columns
         kw = ss.plot_args(kwargs, figsize=figsize, alpha=0.8, data_alpha=0.3, data_color='k')
         data = data or {}
+        given = fig is not None
         with ss.style(**kw.style):
+            colors = self.scenario_colors()
             if fig is None:
                 fig, axs = sc.getrowscols(len(groups), make=True, **kw.fig)
                 if isinstance(axs, np.ndarray):
@@ -1408,13 +1505,15 @@ class Results(ss.utils.NoDists, ss.ndict):
                     entry = data.get((res.module, res.name))
                     if entry is not None: # Plot the data
                         ax.scatter(entry[0], entry[1], **kw.data)
-                        if len(entry) == 4 and res.columns is None and entry[3].shape[1] == len(res.timevec): # A flow with data at a longer period: its totals over the data's periods, as the fit compares them (see plot_data())
+                        if len(entry) == 4 and res.columns is None and entry[3].shape[1] == len(res.timevec): # A flow with data at a longer period: its totals over each period of the run, as the fit compares them with the data (see plot_data())
                             vals = sum_steps(entry[3], res.values)
                             res = group[i] = res.asnew(values=vals, _shape=vals.shape, timevec=entry[2], low=None, high=None, strata=None)
                             summed = True
-                    several = res._draw(ax, kw, label=sc.ifelse(res.label, res.name) if len(group) > 1 else label, lines=lines, floor=False)
+                    several = res._draw(ax, kw, label=sc.ifelse(res.label, res.name) if len(group) > 1 else label, lines=lines, floor=False, colors=colors)
                     many = many or (several and res.columns is None) # Several scenarios, labelled once
-                if all(res.values.min() >= 0 for res in group):
+                if log:
+                    log_scale(ax)
+                elif all(res.values.min() >= 0 for res in group):
                     group[0]._floor(ax)
                 if len(group) > 1 or group[0].columns is not None: # One line per result, or per column
                     ax.legend(**kw.legend)
@@ -1423,12 +1522,52 @@ class Results(ss.utils.NoDists, ss.ndict):
                     ax.set_title(ax.get_title() + '\n(total over each period of the data)')
                 if len(group) > 1: # Titled by what the results have in common
                     ax.set_title(group[0].module if len({res.module for res in group}) == 1 else '')
-            if legend and many:
-                axs[0].legend(**kw.legend)
+            if legend and many: # Every scenario, even if the first axes have only some of them
+                handles = [mpl.lines.Line2D([], [], color=color, label=scenario) for scenario,color in colors.items()] if colors and not {'color', 'c'} & set(kw.plot) else None
+                axs[0].legend(handles=handles, **kw.legend)
         if title:
             fig.suptitle(title, weight='bold')
         sc.figlayout(fig=fig)
-        return ss.return_fig(fig, **kw.return_fig)
+        return ss.return_fig(fig, given=given, **kw.return_fig)
+
+    def scenario_colors(self):
+        """ For results across the runs of several scenarios, the color of each scenario, from the colors of the current style, so that each has the same color in every axes; else None """
+        scenarios = [list(dict.fromkeys(res.runs['scenario'])) for _,_,res in self.walk() if res.runs is not None]
+        scenarios = max(scenarios, key=len, default=[])
+        if len(scenarios) < 2:
+            return None
+        cycle = plt.rcParams['axes.prop_cycle'].by_key().get('color', ['k'])
+        return {scenario:cycle[i % len(cycle)] for i,scenario in enumerate(scenarios)}
+
+
+def summary_funcs(how, results):
+    """
+    The functions of `how=` in `sim.summarize()` and `msim.summarize()`, by the key of each result in `results.flatten(sep='_', columns=True)`
+    ('' for every result): each is given by name ('mean', 'median', 'sum', 'last', 'max', or 'min') or as a function of a run's values. A result
+    is named as for `key=` (e.g. 'sir_I' or 'sir.I'), and a 2D result's functions are those of each of its columns; a name that matches no result raises.
+    """
+    funcs = dict(mean=np.mean, median=np.median, sum=np.sum, last=lambda vals: vals[-1], max=np.max, min=np.min)
+    how = {} if how is None else how if isinstance(how, dict) else {'':how} # '' matches every key
+    out = {}
+    flat = None
+    for key,func in how.items():
+        if not callable(func) and func not in funcs:
+            errormsg = f'Unknown how={func!r}{f" for {key}" if key else ""}; use {sc.strjoin([repr(k) for k in funcs])}, or a function'
+            raise ValueError(errormsg)
+        func = func if callable(func) else funcs[func]
+        if key == '':
+            out[key] = func
+            continue
+        flat = flat if flat is not None else results.flatten(sep='_', only_results=False) # 2D results whole, as a key names them
+        try:
+            (name, res), = match_result_keys(flat, key, show_skipped=True, flattened=True).items()
+        except KeyError:
+            names = [k for k,v in flat.items() if isinstance(v, Result) and 'timevec' not in k]
+            errormsg = f'how= names "{key}", which is not the name of one result{ss.expressions.did_you_mean(key.replace(".", "_"), names)} The results are {sc.strjoin(names)}.'
+            raise sc.KeyNotFoundError(errormsg) from None
+        cols = getattr(res, 'columns', None)
+        out.update({k:func for k in ([name] if cols is None else [f'{name}_{col}' for col in res.by_column()])})
+    return out
 
 
 def match_result_keys(results, key, show_skipped=False, flattened=False):
@@ -1437,6 +1576,8 @@ def match_result_keys(results, key, show_skipped=False, flattened=False):
     def normkey(key):
         """ Normalize the key: e.g. 'SIS.prevalence' becomes 'sis_prevalence' """
         return key.replace('.','_').lower()
+
+    implicit = lambda key: results._implicit_get(key) if isinstance(results, Results) else None # A result of the sim's one disease (see Results._implicit_get())
 
     # Handle accessing subdicts
     if isinstance(key, str) and key in results and isinstance(results[key], dict): # Key matches a subdict, use that directly, e.g. sim.plot('sis')
@@ -1458,6 +1599,8 @@ def match_result_keys(results, key, show_skipped=False, flattened=False):
         if isinstance(key, str):
             if normkey(key) in lower: # Use an exact match if there is one, e.g. 'new_deaths' rather than 'cholera_new_deaths'
                 flat = {lower[normkey(key)]:flat[lower[normkey(key)]]}
+            elif implicit(key) is not None: # A result of the sim's one disease, e.g. 'I' for 'sir.I', or of each sim's across the runs of a MultiSim
+                flat = {key:implicit(key)}
             else:
                 flat = {k:v for k,v in flat.items() if (normkey(key) in k.lower())} # Will match e.g. 'SIS.prevalence' and 'sis_prevalence'
                 named = {k:v for k,v in flat.items() if k.lower().endswith('_' + normkey(key))} # A result's own name, e.g. 'cpr' for 'contraception_cpr' rather than 'contraception_acpr'
@@ -1468,7 +1611,7 @@ def match_result_keys(results, key, show_skipped=False, flattened=False):
                 raise sc.KeyNotFoundError(errormsg)
         else:
             try:
-                flat = {k.lower():flat[lower[normkey(k)]] for k in key}
+                flat = {k.lower():flat[lower[normkey(k)]] if normkey(k) in lower or implicit(k) is None else implicit(k) for k in key}
             except KeyError as e:
                 errormsg = f'Not all keys could be matched.\nAvailable keys:\n{sc.newlinejoin(flat_orig.keys())}\n\nYour keys:\n{sc.newlinejoin(key)}'
                 raise sc.KeyNotFoundError(errormsg) from e
@@ -1708,8 +1851,14 @@ def check_data(sim, df, die=False):
             if len(several) > 1: # The name of a result of more than one module
                 msg = f'the data column "{col}" could be the result {name} of any of {sc.strjoin(several)}; name the column after one of them, e.g. "{several[0]}.{name}", or rename it with ss.simdata(..., aliases=dict(...)).'
             else:
-                msg = (f'the data column "{col}" matches no result. The closest results are {ss.expressions.closest(col, [o.split(".")[-1] for o in options])}.\n'
-                       f"     Rename it with ss.simdata(..., aliases=dict(result='{col}')), or drop it with ss.simdata(..., ignore_extra=True).")
+                short = [o.split('.')[-1] for o in options]
+                names = [s if short.count(s) == 1 else o for o,s in zip(options, short)] # A result of one module by its name, as a column can be named; of several, by module and name
+                matches = sc.suggest(col, names, n=3) or []
+                found = f'The closest results are {sc.strjoin(matches)}' if matches else f'No result is close; the results are {sc.strjoin(names)}'
+                key = matches[0] if matches else 'result'
+                alias = f"dict({key}='{col}')" if key.isidentifier() else f"{{'{key}': '{col}'}}" # A result named by module and name (sir.infection) is not a keyword
+                msg = (f'the data column "{col}" matches no result. {found}.\n'
+                       f"     Rename it with ss.simdata(..., aliases={alias}), or drop it with ss.simdata(..., ignore_extra=True).")
             if die:
                 raise sc.KeyNotFoundError(msg)
             ss.note(f'{msg[0].upper()}{msg[1:]} It is not compared with the results.', sim=sim)
@@ -1743,7 +1892,10 @@ def data_times(sim, df, res=None):
     if res is not None and res.timevec is not None and len(res.timevec) != len(sim_t): # A module with a timestep of its own
         own = res.timevec
         sim_t = np.asarray(own.years if hasattr(own, 'years') else own, dtype=float)
-    data_t = date_years(tuple(index)).copy() if years else np.asarray(index, dtype=float)
+    if years and not dated and sim.t.is_absolute: # Numbers in a sim with dates, read as any time is: a year from 1900 on, else a time after the start (see ss.connectors.to_time())
+        data_t = np.array([ss.connectors.to_time(sim, float(v)).years for v in index], dtype=float)
+    else:
+        data_t = date_years(tuple(index)).copy() if years else np.asarray(index, dtype=float)
     return sim_t, data_t
 
 
@@ -1836,10 +1988,40 @@ def sum_steps(W, values):
     return np.where(W != 0, W*values[..., None, :], 0).sum(axis=-1)
 
 
+def flow_periods(sim, col, res, x):
+    """
+    For plotting a flow with data at a longer period than the step (see `flow_at_data()`): the times of each period of the run at the
+    data's period (those of the data inside the run, and as many whole periods before and after them as the run has, e.g. a projection),
+    and the matrix that sums the steps of each (see `sum_steps()`). `x` is the data's times as they are plotted. None for any other result.
+    """
+    summed = flow_at_data(sim, col, res, weights=True)
+    if summed is None:
+        return None
+    df = given_data(sim)
+    annual = by_year(df)
+    sim_t, data_t = data_times(sim, df, res)
+    if len(data_t) < 2: # No period to repeat
+        return x[summed[0]], summed[1]
+    step = 1.0 if annual else np.median(np.diff(data_t))
+    eps = np.median(np.diff(sim_t))/2 if len(sim_t) > 1 else 1e-9
+    first, last = (data_t[0], data_t[-1] + 1) if annual else (data_t[0] - step, data_t[-1]) # Where the data's periods start and end
+    n_before = max(0, int(np.floor((first - sim_t.min() + eps)/step)))
+    n_after = max(0, int(np.floor((sim_t.max() + eps - last)/step)))
+    before = data_t[0] - step*np.arange(n_before, 0, -1)
+    after = data_t[-1] + step*np.arange(1, n_after + 1)
+    times = np.concatenate([before, data_t, after])
+    W, inside = time_weights(sim_t, times, flow=True, annual=annual)
+    as_x = (lambda t: int(round(t))) if annual else (lambda t: t) if not len(x) or sc.isnumber(x[0]) else ss.date # The new times, as the data's are plotted
+    times = [as_x(t) for t in before] + list(x) + [as_x(t) for t in after]
+    times = ss.DateArray(times) if times and isinstance(times[0], ss.date) else np.array(times)
+    return times[inside], W[inside]
+
+
 def plot_data(sim):
     """
     The data of a sim, by the result each column matches, for `ss.Results.plot()`: its times and values, and for a flow with
-    data at a longer period than the step, the rows and weights that sum the model over the data's periods (see `flow_at_data()`)
+    data at a longer period than the step, the times of each period of the run and the weights that sum the model over them
+    (see `flow_periods()`), so the model is shown as the fit compares it with the data, over the whole run
     """
     data = {}
     if getattr(sim, 'data', None) is None or not getattr(sim, 'results_ready', True):
@@ -1849,8 +2031,8 @@ def plot_data(sim):
     for col in sim.data.columns:
         res = match_name(sim, col)
         if res is not None:
-            summed = flow_at_data(sim, col, res, weights=True)
-            data[(res.module, res.name)] = (x, sim.data[col].values) + ((x[summed[0]], summed[1]) if summed is not None else ())
+            summed = flow_periods(sim, col, res, x)
+            data[(res.module, res.name)] = (x, sim.data[col].values) + (summed or ())
     return data
 
 

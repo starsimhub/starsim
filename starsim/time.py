@@ -2,6 +2,8 @@
 Functions and classes for handling time
 
 Hierarchy of TimePars:
+
+```
 TimePar  # All time parameters
 ├── dur  # All durations, units of *time*
 │   ├── days  # Duration with units of days
@@ -25,6 +27,7 @@ TimePar  # All time parameters
         ├── freqperweek
         ├── freqpermonth
         └── freqperyear
+```
 """
 import types
 import warnings
@@ -1479,6 +1482,11 @@ class FloatYearLocator(matplotlib.ticker.Locator):
 
         return self.tick_values(vmin, vmax)
 
+
+    def nonsingular(self, vmin, vmax):
+        if self._convert_dates and vmin == vmax: # A single time point (e.g. one year of a resampled result): a year either side, not 5% of the year (two centuries)
+            return vmin - 1, vmax + 1
+        return super().nonsingular(vmin, vmax)
 
     def tick_values(self, *args, **kwargs):
         if self._convert_dates:

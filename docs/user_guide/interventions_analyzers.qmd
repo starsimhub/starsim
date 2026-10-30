@@ -51,7 +51,7 @@ class AgeAtInfection(ss.Analyzer):
     def init_results(self):
         super().init_results()
         self.define_results(
-            ss.Result('mean_age', label='Mean age at infection', scale=False), # An average, so not scaled by the people each agent stands for
+            ss.Result('mean_age', label='Mean age at infection'), # An average (a ratio), so not scaled by the people each agent stands for
             ss.Result('new_infections', columns=['children', 'adults'], label='New infections'),
         )
 
@@ -94,11 +94,11 @@ msim.plot('ageatinfection.mean_age')
 
 With homogeneous mixing, the mean age at infection stays near the mean age of the population throughout. With the contact matrix, children are infected first, and the mean age rises as the epidemic goes on, until the last people infected are mostly older adults, who have the fewest contacts. Nearly everyone is infected by measles in the end either way, so a result such as the total number infected would not show this.
 
-A result declared with `scale=True` (the default) is a count, which is multiplied by the number of people each agent stands for when the run ends; an average or a share takes `scale=False`.
+A result that is a count (a flow or a stock) is multiplied by the number of people each agent stands for when the run ends; an average or a share (a ratio, which `mean_age` is guessed to be from its name) is not. `scale=` overrides this.
 
 ## The infection log
 
-The infection log records each infection: when it happened, who was infected, and, where there is a network, by whom. It needs agents and a contact network, since otherwise nobody is the source of a particular infection. Give `analyzers='infection_log'`:
+The infection log records each infection: when it happened, who was infected, and, where there is a network, by whom. It needs agents and a contact network, since otherwise nobody is the source of a particular infection: an infection by a mixing pool (`ss.MixingPool`), a contact matrix, or mixing with everyone comes from the share infectious in a group, not from a particular person, so its `source` and `network` are NaN (seeds have a source of -1). Give `analyzers='infection_log'`:
 
 ```{python}
 S, I, R = ss.states('S I R')
@@ -144,7 +144,7 @@ An analyzer can be given to a model that runs as compartments, as any module wri
 
 - **An analyzer must not change the model.** To change something during a run, use an [intervention](interventions_interventions.qmd).
 - **Results kept outside the sim are lost** when the sim runs in another process (`ss.parallel()`); declare results in a class.
-- **Counts of agents are scaled; averages are not.** Declare an average or a share with `scale=False`.
+- **Counts of agents are scaled; averages are not.** A result's `kind` decides this: a flow or stock is scaled, a ratio is not. Give `kind=` (or `scale=`) when the guess from the name is wrong.
 - **Check whether a result already exists.** Stratifying the model gives results by age or any other group, under every solver, with no analyzer.
 
 ## See also

@@ -946,7 +946,11 @@ class TimeArr(FloatArr):
 
     A declared state's time of entering (`ti_X`) reads as the index of the step the move happened in, whatever kind of
     move it was (a progression at the step's start, an infection by contact at its end), so `ti_X.isclose(sim.ti)` is
-    "entered this step". The engine keeps its own time of the move, which `.raw` gives (see `shift`).
+    "entered this step". The engine keeps its own time of the move, which `.raw` gives (see `shift`). So the difference
+    of two of them is not always a duration: an infection by contact happens at the end of its step and a scheduled
+    move at the start of its step, so `ti_I - ti_E` of an SEIR reads one step longer than the latent period was. For
+    the time people spent in a state, use the state's `stays` (e.g. `np.mean(seir.E.stays)`, the mean latent period),
+    which is built from the engine's times.
 
     Example:
         ```python
@@ -1265,6 +1269,34 @@ class BoolState(BoolArr):
             inside[leaving[0][np.broadcast_to(leaving[1], len(leaving[0])) == engine.state_index[self.name]]] = True
         steps[~inside] = np.nan
         return ss.time.get_dur_class(engine.sim.unit)(steps*engine.dt)
+
+    @property
+    def stays(self):
+        """
+        For a state of a declared disease run as agents: how long each person who has been through it stayed there, e.g.
+        `np.mean(measles.E.stays)`, the mean latent period. A duration in the sim's unit, one value for each person who
+        has entered the state and left it (their last stay, if more than one; dead or alive), from the engine's own
+        times, so the mean is the declared one at any step. This is the way to get a time spent in a state: the
+        difference of two times of entering (`ti_I - ti_E`) is not, since each reads as the step its move happened in,
+        which can make it a step long (see `ss.TimeArr`).
+
+        Those still in the state are left out (`.time` gives how long they have been there so far), so a run that ends
+        while many are in it understates the mean; so are those who died in it, or left it other than by the
+        disease's transitions. Those placed in it at the start (e.g. seeded cases in I) count from the start of the run.
+        The engine keeps when each person last left every state whose time of entering is kept, so this works whenever
+        that time is, e.g. for any state with a dwell time (otherwise, see `ss.options.keep_times`).
+        """
+        engine = getattr(self.watch, 'engine', None)
+        if engine is None:
+            raise TypeError(f'"{self.name}" is not a state of a declared disease run as agents, so has no stays (.stays)') # Not an AttributeError, which __getattr__ would hide
+        arr = engine.mod[f'ti_{self.name}']
+        if isinstance(arr, Unkept): # Not an AttributeError, as above
+            raise ValueError(f'{self.name}.stays needs the time of entering {self.name}: {arr.unkept()}')
+        entered = arr.raw.astype(float)
+        left = engine.mod[f'ti_left_{self.name}'].raw.astype(float) if f'ti_left_{self.name}' in engine.mod.__dict__ else np.full(len(entered), np.nan) # When each last left it (see Agents.enter()); not kept for a state that leads to no other
+        left[left < entered] = np.nan # Left an earlier stay: still in it, or died in it
+        done = ~self.raw & np.isfinite(entered) & np.isfinite(left)
+        return ss.time.get_dur_class(engine.sim.unit)((left[done] - entered[done])*engine.dt)
 
     def __init__(self, name=None, **kwargs):
         if kwargs.get('columns') is not None: # Automatic results are 1D, so don't allow 2D states

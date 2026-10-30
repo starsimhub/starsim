@@ -270,21 +270,8 @@ class Graph(Presentation):
 
     def resolve_transitions(self):
         """ Give every transition a name, a source, and a rate or a dwell time """
-        # Fallback names
-        for tr in self._unnamed:
-            src = '_'.join([s.name for s in tr.src or []]) or 'in'
-            dst = '_'.join([s.name for s in tr.dst or []]) or 'out'
-            base = f'{src}_to_{dst}' if tr.dst is not None else 'immigration' if tr.migration else 'births' # A birth with no state given is into the first state, found later
-            name = base
-            count = 1
-            while name in self.transitions:
-                count += 1
-                name = f'{base}_{count}'
-            tr.name = name
-            tr.guessed.setdefault('name', 'built from its endpoints')
-            self.add(self.transitions, name, tr)
-
-        for name,tr in self.transitions.items():
+        for tr in list(self.transitions.values()) + self._unnamed:
+            name = tr.name or tr.arrow # Not named yet: see below
             if tr.dst is None and not (tr.inflow and not tr.state_given): # A birth with no state is into the first state (see resolve_people())
                 errormsg = f'The transition "{name}" has no destination'
                 raise ValueError(errormsg)
@@ -305,6 +292,25 @@ class Graph(Presentation):
             tr.contact = bool(tr.terms)
             for state in tr.terms:
                 state.infectious = True
+
+        # Fallback names: the only transmission is the infection (as in ss.SIR), the rest are named after their endpoints
+        contacts = [tr for tr in list(self.transitions.values()) + self._unnamed if tr.contact]
+        for tr in self._unnamed:
+            src = '_'.join([s.name for s in tr.src or []]) or 'in'
+            dst = '_'.join([s.name for s in tr.dst or []]) or 'out'
+            if contacts == [tr] and not any('infection' in other for other in [self.states, self.transitions, self.pars, self.outcomes, self.exprs, self.funcs, self.transfers, self.attrs]):
+                base, why = 'infection', 'given to the only transmission'
+            else:
+                base = f'{src}_to_{dst}' if tr.dst is not None else 'immigration' if tr.migration else 'births' # A birth with no state given is into the first state, found later
+                why = 'built from its endpoints'
+            name = base
+            count = 1
+            while name in self.transitions:
+                count += 1
+                name = f'{base}_{count}'
+            tr.name = name
+            tr.guessed.setdefault('name', why)
+            self.add(self.transitions, name, tr)
         return
 
     def resolve_init_prev(self):
@@ -316,6 +322,13 @@ class Graph(Presentation):
             self.init_prev = par(0.01)
             self._add_par(self.init_prev, name='init_prev')
             self.guessed['init_prev'] = 'the default, 1%'
+        return
+
+    def resolve_starting(self):
+        """ Let the starting values (init_prev, and each state's init= and init_n=) leave levels out of an `ss.by` by label, which start at 0 (see `ss.parameters.starting()`); done when the sim is built, after values by name are set and before anything checks or reads them """
+        for state in self.states.values():
+            state.init, state.init_n = [ss.parameters.starting(v) for v in [state.init, state.init_n]]
+        self.init_prev = ss.parameters.starting(self.init_prev)
         return
 
     def unset_default_init_prev(self):
@@ -518,7 +531,7 @@ class Graph(Presentation):
         """ Turn inline values in the standard slots into named parameters (beta, dur, rate, p) """
         slots = [(tr, slot, p) for tr in self.transitions.values() for slot,p in self.set_slots(tr)] # (transition, slot name, parameter)
 
-        # Name the anonymous ones after their slot, qualified by the transition where two would clash
+        # Name the anonymous ones after their slot: a duration by its state and a rate by its transition, and any other qualified by the transition where two would clash
         anon = [(tr, slot, p) for tr,slot,p in slots if p.literal or getattr(p, 'slot_named', False) or (p.name is None and self.names.get(id(p)) is None)] # Including an ss.par written in the slot itself, e.g. beta=ss.par(0.3, bounds=[0.1, 1]), and one named after its slot before (in a class this one subclasses), which is named again
         anon = [(tr, slot, p) for i,(tr,slot,p) in enumerate(anon) if not any(q is p for _,_,q in anon[:i])] # One used in several transitions (e.g. beta = ss.seasonal(...)) is one parameter, named after the first
         counts = sc.objdict()
@@ -528,8 +541,12 @@ class Graph(Presentation):
         inner |= {q.name or self.names.get(id(q)) for tr,slot,p in slots if isinstance(p.value, Expr) for q in p.value.leaves if isinstance(q, par) and q is not p} # And inside an expression in a slot, e.g. dur=dur_rec*k
         inner |= {p.name or self.names.get(id(p)) for tr,slot,p in slots if not any(p is q for _,_,q in anon)} # And the explicit ones in the slots, registered below, e.g. dur = ss.par(ss.days(6)) in one transition and a bare ss.days(100) in another
         taken = lambda name: name in self.pars or name in self.states or name in self.transitions or name in inner
+        timed = lambda state: sum(tr.dur is not None and any(s is state for s in tr.src or []) for tr in self.transitions.values()) # The number of timed exits from a state
         for tr,slot,p in anon:
-            name = f'{slot}_{tr.name}' if counts[slot] > 1 or taken(slot) else slot
+            qual = tr.src[0].name if slot == 'dur' and len(tr.src or []) == 1 and timed(tr.src[0]) == 1 else tr.name # A dwell time is the mean time in its state (dur_E), unless the state has several timed exits
+            name = f'{slot}_{qual}' if slot in ['dur', 'rate'] or counts[slot] > 1 or taken(slot) else slot
+            if qual != tr.name and taken(name):
+                name = f'{slot}_{tr.name}'
             if taken(name): # e.g. a parameter of the user's called dur_rec, inside the dwell time of a transition called rec
                 name = f'{slot}_of_{tr.name}'
             self._add_par(p, name=name)

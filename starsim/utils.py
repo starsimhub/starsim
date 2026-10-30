@@ -3,6 +3,8 @@ Numerical utilities and other helper functions
 """
 import os
 import re
+import types
+import functools
 import sys
 import warnings
 import numpy as np
@@ -18,6 +20,27 @@ import starsim as ss
 class NoDists:
     """ A base for objects that never hold a distribution (or a time parameter), so are not searched for them (see `ss.distributions.no_dists()`) """
     pass
+
+
+class method_wrapper:
+    """
+    A method that Starsim wraps in a subclass (e.g. the `__init__()` of a disease, see `ss.diseases.built_after`); a subclass defines `__call__(self, obj, *args, **kwargs)`, which calls `self.func`
+
+    It is a class rather than a closure so that a class defined in a script, which dill pickles by value (e.g. to
+    send a sim to `ss.parallel()`'s workers), pickles with its own method and not with the globals of the module that
+    wrapped it: dill copies those, and with them, by value, any module not installed in site-packages (e.g. Sciris
+    or Starsim installed as editable), which may not pickle at all ("cannot pickle '_thread._local' object").
+    """
+    def __init__(self, func):
+        self.func = func
+        functools.update_wrapper(self, func) # Its name, docstring, and signature, as the method's
+        return
+
+    def __get__(self, obj, cls=None):
+        return self if obj is None else types.MethodType(self, obj)
+
+    def __call__(self, obj, *args, **kwargs):
+        raise NotImplementedError
 
 
 class skipkey(str):
@@ -656,7 +679,7 @@ plotting_kw.data = {'data_alpha':'alpha', 'data_color':'color', 'data_size':'mar
 plotting_kw.fill = {'fill_alpha':'alpha', 'fill_color':'color', 'fill_hatch':'hatch', 'fill_lw':'lw'}
 plotting_kw.legend = ['loc', 'bbox_to_anchor', 'ncols', 'reverse', 'frameon']
 plotting_kw.style = ['style', 'font', 'fontsize', 'interactive'] # For sc.options.with_style()
-plotting_kw.return_fig = ['do_show', 'is_jupyter']
+plotting_kw.return_fig = ['do_show', 'is_jupyter', 'filename']
 
 def plot_args(kwargs=None, _debug=False, **defaults):
     """
@@ -688,7 +711,7 @@ def plot_args(kwargs=None, _debug=False, **defaults):
         - data: 'data_alpha', 'data_color', 'data_size'
         - fill: 'fill_alpha', 'fill_color', 'fill_hatch', 'fill_lw'
         - style: 'font', 'fontsize', 'interactive'
-        - return_fig: 'do_show', 'is_jupyter'
+        - return_fig: 'do_show', 'is_jupyter', 'filename' (see `ss.return_fig()`)
 
     Examples:
         ```python
@@ -741,18 +764,41 @@ def show(**kwargs):
     return plt.show(**kwargs)
 
 
-def return_fig(fig, **kwargs):
-    """ Do postprocessing on the figure: by default, don't return if in Jupyter, but show instead; not for the user """
-    do_show = kwargs.pop('do_show', ss.options.show) # TODO: make this more consistent with other implementations, e.g. plot_args()
+def return_fig(fig, given=False, **kwargs):
+    """
+    Do postprocessing on the figure: save it, show it, and return it; not for the user, but its arguments can be given to any plot of results
+
+    Args:
+        fig (Figure): the figure
+        given (bool): whether the figure (or axes) was given by the caller, who then shows it, so it is not shown unless `do_show=True`
+        do_show (bool): whether to show the figure (by default, `ss.options.show`, and in Jupyter, always)
+        is_jupyter (bool): whether in Jupyter (by default, `ss.options.is_jupyter`), where a figure that is shown is not also returned, so it is not displayed twice
+        filename (str): if given, save the figure to this file (with `sc.savefig()`)
+
+    Returns the figure, unless it is shown in Jupyter; so in Jupyter, `fig = sim.plot(do_show=False)` gives the figure, without showing it.
+    """
+    do_show = kwargs.pop('do_show', False if given else None)
     is_jupyter = kwargs.pop('is_jupyter', ss.options.is_jupyter)
+    filename = kwargs.pop('filename', None)
+    if filename is not None:
+        sc.savefig(filename, fig=fig, die=False, verbose=False) # With metadata where the format allows it (e.g. not a JPG)
     if is_jupyter:
         if do_show != False:
             plt.show()
-        return None
-    else:
-        if do_show:
-            plt.show()
-        return fig
+            return None
+    elif sc.ifelse(do_show, ss.options.show):
+        plt.show()
+    return fig
+
+
+def return_table(df, **kwargs):
+    """
+    Return a table to show it: in a notebook or at an interactive prompt, which show what is returned, it is only returned, so it
+    isn't shown twice; in a script, it is printed too (with `df.to_string(**kwargs)`). For summaries that print and return a table.
+    """
+    if not (ss.options.is_jupyter or hasattr(sys, 'ps1')): # sys.ps1 is the prompt of an interactive session (Python or IPython)
+        print(df.to_string(**kwargs))
+    return df
 
 
 def __getattr__(name):

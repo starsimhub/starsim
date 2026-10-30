@@ -82,16 +82,15 @@ sim_erlang.run()
 
 plt.figure()
 for label, s in {'Exponential': sim, 'Erlang (k = 10)': sim_erlang}.items():
-    m = s.diseases.measles
-    infected = m.R.uids                             # Everyone who has been through the infection
-    latent = m.ti_I[infected] - m.ti_E[infected]    # Each person's latent period, in days
+    latent = s.diseases.measles.E.stays # How long each person who has been through E stayed there: their latent period, in days
+    print(f'{label}: mean latent period {np.mean(latent):.1f} days')
     plt.hist(latent, bins=np.arange(0, 40), alpha=0.5, label=label)
 plt.xlabel('Latent period (days)')
 plt.ylabel('Number of people')
 plt.legend();
 ```
 
-With an exponential latent period, short latent periods are the most common, and many people take three weeks or more (the longest are off the chart); with an Erlang distribution, most people become infectious between about 6 and 17 days after infection. The times are whole days, since agents move between states in whole steps. [Array indexing](../user_guide/mechanics_indexing.qmd) shows the other ways to pick out people, and [People and agents](../user_guide/populations_people.qmd) what each person has.
+With an exponential latent period, short latent periods are the most common, and many people take three weeks or more (the longest are off the chart); with an Erlang distribution, most people become infectious between about 6 and 17 days after infection. Both average about 10 days, as declared. The times are whole days, since agents move between states in whole steps. `E.stays` covers everyone who has entered E and left it (the seeded cases, who started in I, never did), and leaves out those still in it. Subtracting the times of entering (`m.ti_I - m.ti_E`) would give a day more, since an infection happens at the end of its step and becoming infectious at the start of one; see [People and agents](../user_guide/populations_people.qmd). [Array indexing](../user_guide/mechanics_indexing.qmd) shows the other ways to pick out people, and [People and agents](../user_guide/populations_people.qmd) what each person has.
 
 ## Step 3: Chance, and the first case
 

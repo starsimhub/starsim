@@ -103,27 +103,19 @@ The **solver** is the method that turns the model into numbers over time. There 
 By default (`solver='auto'`), a model runs as an ODE if every part of it can be written as compartments, and as agents if anything needs individuals: a network of individual contacts, `n_agents=`, or a module written as code. The sim says which it chose and why, and `solver=` overrides it. Here is the same measles model run as an ODE and as agents, with two lengths of step:
 
 ```{python}
-import matplotlib.pyplot as plt
-
 pars = dict(total_pop=100_000, stop=ss.days(50), verbose=0)
 sims = [
     ss.Sim(measles, label='ODE', **pars),
     ss.Sim(measles, n_agents=20_000, label='Agents, daily steps', **pars),
     ss.Sim(measles, n_agents=20_000, dt=ss.days(0.25), label='Agents, quarter-day steps', **pars),
 ]
-fig, ax = plt.subplots()
+msim = ss.parallel(sims)
 for sim in sims:
-    sim.run()
-    sim.results.measles.I.plot(ax=ax, label=sim.label, do_show=False)
     print(sim.label, '-', sim.solver_reason)
-ax.legend()
-plt.show()
+msim.plot('measles.I')
 ```
 
-::: {.callout-warning}
-## [PROPOSAL]
-Sims with different steps can't be run together with `ss.parallel()` or plotted together with `msim.plot()`: putting their results together raises "the sims have results at different times". Comparing steps is a common check, so a MultiSim should accept them, plotting each against its own time points (and refusing only operations that need shared time points, such as the median across runs). Then this example would be `ss.parallel(sims).plot('measles.I')`.
-:::
+The sims have different steps, so `msim.plot()` plots each against its own time points. Their results can't be put together as runs of one thing, so what needs that, such as the median across runs (`msim.summarize()`, or a band in the plot), raises an error saying so.
 
 With quarter-day steps, the agents follow the ODE closely, with a little noise from chance: in a large, well-mixed population, the two are the same model. With daily steps, the agents' epidemic comes about three days late. Agents take each step whole, and measles spreads so fast (early on, the number infectious grows almost sixfold a day) that a day is a long step for it; the ODE has no steps to take. Starsim prints a note when a step may be too long for the rates in a model, and `sim.check_dt()` measures how much it matters. Otherwise, the solvers differ where chance or individuals matter: in small populations, at the start of an outbreak (which may die out by chance), and with networks of particular contacts. [Solvers and backends](running_solvers.qmd) shows where, and which to use.
 

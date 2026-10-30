@@ -64,10 +64,11 @@ def to_time(sim, val):
     """
     Convert a time (a date, a duration since the start, or a number) to the same kind of time as the sim's timeline
 
-    A number is a time in the sim's unit: in a sim with dates, that long after the start, unless that
-    is outside the sim and the number is a whole year within it (`at=2005` in a sim from 1975 to 2030
-    is the start of 2005); otherwise, a time on the sim's own axis (which, for a sim whose start and
-    stop are years, e.g. `start=2000`, is the year).
+    A number from 1900 on (see `ss.time.assume_cal_year()`) is a calendar year, as `start=2000` is: in a
+    sim with dates, `2005` is the start of 2005, and `2005.5` the middle of it. Any other number is a time
+    in the sim's unit: in a sim with dates, that long after the start; otherwise, a time on the sim's own
+    axis (which, for a sim whose start and stop are years, is the year). So a number means the same in a
+    sim with dates as in one whose start and stop are years; for, e.g., 2000 days after the start, give `ss.days(2000)`.
     """
     t = sim.t
     if val is None:
@@ -79,11 +80,9 @@ def to_time(sim, val):
         return date
     elif t.is_absolute:
         if sc.isnumber(val):
-            time = t.tvec[0] + ss.time.get_dur_class(sim.unit_base)(val)
-            first, last = t.tvec[0].year, t.tvec[-1].year
-            if not t.tvec[0] <= time <= t.tvec[-1] and float(val).is_integer() and first <= val <= last: # A year, which is the only reading that falls within the sim
-                return ss.date(int(val))
-            return time
+            if ss.time.assume_cal_year(val): # A calendar year
+                return ss.date(val)
+            return t.tvec[0] + ss.time.get_dur_class(sim.unit_base)(val)
         return t.tvec[0] + val
     elif sc.isnumber(val):
         return type(t.tvec[0])(val)
@@ -115,7 +114,7 @@ def to_ti(sim, val, name='time', after=False):
     if time < tvec[0] or (time > tvec[-1] and not after):
         hint = ''
         if sc.isnumber(val) and sim.t.is_absolute:
-            hint = f"; a number is a time in the sim's unit ({sim.unit_base}s) since the start, or a year within the sim"
+            hint = f"; a number from {ss.time.cal_year_threshold} on is a calendar year, and any other number a time in the sim's unit ({sim.unit_base}s) since the start"
         when = f'{val}, which is {time}' if sc.isnumber(val) and not (sim.t.is_absolute and ss.time.assume_cal_year(val)) else f'{val}'
         raise ValueError(f'{name} ({when}) is outside the sim ({tvec[0]} to {tvec[-1]}){hint}.')
     ti = next((ti for ti,now in enumerate(tvec) if reached(now, time)), len(tvec)) # len(tvec) if after the end
@@ -277,7 +276,7 @@ class modify(Connector):
             the network returning one value per edge (e.g. `lambda net: net.edges.condoms`)
         route (str/list): for a modifier of a transmission, the network or networks (by name) it applies on; by default, every route. A disease written as code has no transmission to name, so on a route the target is its `rel_sus` (of the people who would be infected over it)
         where (Cond/func): who it applies to: a condition (e.g. `sir.vaccinated`), or a function of the sim (default: everyone); with `route=`, the people who would be infected
-        start (date/float): when the modifier starts to apply, within the sim (default: the start of the sim); a number is a time in the sim's unit
+        start (date/float): when the modifier starts to apply, within the sim (default: the start of the sim); a number is a calendar year from 1900 on, and otherwise a time in the sim's unit
         stop (date/float): when it stops applying (default: never); a stop after the end of the sim never stops it
         when (func): a function of the sim returning True on the steps it applies
         hold (dur): once `where=` (or `when=`) selects someone, the modifier stays on for them for at least this long, as a rule that is lifted only after a while; a bare number is in the sim's unit

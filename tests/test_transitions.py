@@ -92,7 +92,7 @@ def test_forms():
     for key,sir in forms.items():
         sims[key] = ss.Sim(sir, stop=50, **kw)
         assert list(sir.states.keys()) == ['S', 'I', 'R']
-        assert {key:p.value for key,p in sir.pars.items()} == dict(beta=0.05, dur=10, init_prev=0.01) # init_prev by default
+        assert {key:p.value for key,p in sir.pars.items()} == dict(beta=0.05, dur_I=10, init_prev=0.01) # init_prev by default
     assert same(*sims.values()), 'Expected every form to give the results of the operator form'
 
     # Several sources as a sum of states, in the explicit form
@@ -127,11 +127,20 @@ def test_names():
     recovery = I >> R @ ss.days(10)
     sir = ss.Disease(infection, recovery, I >> S @ ss.days(100))
     assert list(sir.graph.transitions.keys()) == ['infection', 'recovery', 'I_to_S'] # The last has no variable, so gets a fallback name
-    assert sorted(sir.pars.keys()) == ['beta', 'dur_I_to_S', 'dur_recovery', 'init_prev'] # Two durations, so each is qualified by its transition; init_prev by default
+    assert sorted(sir.pars.keys()) == ['beta', 'dur_I_to_S', 'dur_recovery', 'init_prev'] # Two durations out of I, so each is qualified by its transition; init_prev by default
     assert sir.infection is infection
     A, B = ss.states(2)
     first = second = A >> B @ 0.3 * B
-    assert list(ss.Disease(first).graph.transitions.keys()) == ['A_to_B'] # Which name is meant is not known, so it is built from its endpoints
+    assert list(ss.Disease(first).graph.transitions.keys()) == ['infection'] # Which name is meant is not known, so the only transmission is the infection
+    S, E, I, R = ss.states('S E I R')
+    seir = ss.Disease(S >> E @ 0.3 * I, E >> I @ ss.days(5), I >> R @ ss.days(10), I >> S @ 0.01)
+    assert list(seir.graph.transitions.keys()) == ['infection', 'E_to_I', 'I_to_R', 'I_to_S'] # The rest are built from their endpoints
+    assert sorted(seir.pars.keys()) == ['beta', 'dur_E', 'dur_I', 'init_prev', 'rate_I_to_S'] # A dwell time is named by its state, and a rate by its transition
+    S, I, H, R, D = ss.states('S I H R D')
+    death = H >> D @ ss.perday(0.02)
+    discharge = H >> R @ ss.perday(0.1)
+    covid = ss.Disease(S >> I @ 0.3*I, I >> H @ ss.days(8), discharge, death)
+    assert sorted(covid.pars.keys()) == ['beta', 'dur_I', 'init_prev', 'rate_death', 'rate_discharge'] # Each rate named by its transition, and the duration by its state
 
     sim = ss.Sim(sir, stop=10, **kw).init()
     assert 'sir' in sim.diseases # The module is named from its variable
@@ -295,7 +304,7 @@ def test_names():
     S, I, R = ss.states('S I R')
     dur = ss.par(ss.days(6), bounds=[ss.days(3), ss.days(10)])
     named = ss.Disease(S >> I @ 0.3*I, I >> R @ dur, R >> S @ ss.days(100), name='named') # A parameter named like a slot, beside a bare value in that slot (it was DuplicateDeclaration)
-    assert named.pars.dur is dur and 'dur_R_to_S' in named.pars
+    assert named.pars.dur is dur and 'dur_R' in named.pars
 
     # A model can be built with no Python frame above it, as when called from R
     S, I, R = ss.states('S I R')
@@ -393,6 +402,7 @@ def test_time():
     with ss.options.context(keep_times=True):
         sim = ss.Sim(make_sir(), stop=100, unit='day', n_agents=1000, analyzers=Recovered(), **kw).run()
     assert np.array_equal(sim.diseases.sir.results.I, sir.results.I) and sim.analyzers[0].n == sim.results.sir.recovery[-1] # The same run, and the recoveries of the last step
+    assert sim.diseases.sir.recovery.count.values.sum() == sim.results.sir.recovery.sum() # And the history of every transition, to read after the run
     S, I, R = ss.states('S I R')
     seeded = ss.Sim(ss.Disease(S >> I @ 0*I, I >> R @ ss.days(5), name='seeded'), stop=30, unit='day', n_agents=100, **kw).init()
     seeded.diseases.seeded.S[ss.uids(np.arange(10))] = False
@@ -491,6 +501,8 @@ def test_auto():
     assert any('distribution across people' in note for note in ode.notes)
     with pytest.raises(ss.CapabilityError):
         ss.Sim(spread, stop=100, approx=False, solver='ode', **kw).init()
+    with pytest.raises(ss.CapabilityError, match='approx=False: RandomNet approximated'): # A network has no exact compartmental form, so the ODE approximates it
+        ss.Sim(make_sir(), networks='random', stop=10, approx=False, solver='ode', **kw).init()
 
     # A mixing pool of some people needs agents
     pool = ss.MixingPool(src=lambda sim: sim.people.age < 15, dst=lambda sim: sim.people.age >= 15)
@@ -550,7 +562,7 @@ def test_describe():
 
     eqs = sir.equations(output=True)
     print(eqs)
-    assert eqs.splitlines() == ['dS/dt = -beta * S * I / N', 'dI/dt =  beta * S * I / N - I / dur', 'dR/dt =  I / dur']
+    assert eqs.splitlines() == ['dS/dt = -beta * S * I / N', 'dI/dt =  beta * S * I / N - I / dur_I', 'dR/dt =  I / dur_I']
     S, I, R = ss.states('S I R')
     fatal = ss.Disease(S >> I @ 0.4*I, ss.Transition(I, [R, ss.null], dur=ss.days(8), p=[None, 0.002]), name='fatal')
     assert 'dR/dt =  (1 - 0.002) * I / dur' in fatal.equations(output=True) # A branch to ss.null, given in a list, takes its share (it was "I / dur")
@@ -1004,6 +1016,29 @@ def test_infection_step():
 
 
 @sc.timer()
+def test_stays():
+    sc.heading('Testing the time people spent in a state (E.stays): the declared mean, where the difference of the times of entering is a step long')
+    S, E, I, R = ss.states('S E I R')
+    seir = ss.Disease(S >> E @ 1.9*I, E >> I @ ss.days(10), I >> R @ ss.days(8), init_n=dict(I=10), name='seir')
+    sim = ss.Sim(seir, n_agents=5000, stop=ss.days(200), rand_seed=1, verbose=0).run()
+    m = sim.diseases.seir
+    stays = m.E.stays
+    assert isinstance(stays, ss.days) and len(stays) > 4000 and np.isclose(np.mean(stays).value, 10, atol=0.5), np.mean(stays) # The seeds, who never entered E, are not counted
+    done = (m.R | m.I).uids[np.isfinite(m.ti_E[(m.R | m.I).uids])]
+    assert np.isclose(np.mean(m.ti_I[done] - m.ti_E[done]), np.mean(stays).value + 1, atol=0.1) # As read, a step long (see ss.TimeArr)
+    assert np.isclose(np.mean(m.I.stays).value, 8, atol=0.5), np.mean(m.I.stays) # Without keep_times: the time of leaving is kept for every state whose time of entering is
+    with pytest.raises(AttributeError, match='ti_R is not kept'): # But not the time of entering where it leads
+        m.ti_R.values
+
+    # Going back to a state it led to (a relapse) does not change when people left
+    E, I, R = ss.states('E I R')
+    tb = ss.Disease(E >> I @ ss.days(5), I >> R @ ss.days(5), R >> I @ ss.days(5), init_n=dict(E=1000), name='tb')
+    m = ss.Sim(tb, n_agents=1000, stop=ss.days(60), verbose=0).run().diseases.tb
+    assert len(m.E.stays) == 1000 and np.isclose(np.mean(m.E.stays).value, 5, atol=0.5), np.mean(m.E.stays) # Not from the last time they entered I
+    return stays
+
+
+@sc.timer()
 def test_cascade():
     """ Moves with no wait happen in the step that caused them, under every solver """
     sc.heading('Testing the same-step cascade')
@@ -1132,7 +1167,7 @@ def test_value():
     S, I, R = ss.states(3)
     sim = ss.Sim(ss.Disease(S >> I @ 0.3*I, ss.Transition(I, R, dur=ss.lognorm_ex(8, 2)), init=dict(I=0.01), name='d'), unit='day', stop=10, verbose=0).init()
     with pytest.raises(TypeError, match='no single value'):
-        1/sim.diseases.d.pars.dur
+        1/sim.diseases.d.pars.dur_I
     with pytest.raises(RuntimeError, match=r'sim.new\(stop='):
         sim.pars.stop = 30
     sim.label = 'renamed' # Not a setting of the run
@@ -1301,6 +1336,7 @@ if __name__ == '__main__':
     sched = test_schedule()
     split = test_split_timing()
     infst = test_infection_step()
+    stays = test_stays()
     casc  = test_cascade()
     cascb = test_cascade_binomial()
     state = test_state_as_result()

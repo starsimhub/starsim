@@ -321,7 +321,8 @@ class Dist:
 
     Note: by default, `ss.Dist` is initialized with an `ss.Sim` object to ensure
     random number reproducibility. You can override this with either `ss.Dist(strict=False)`
-    on creation, or `dist.init(force=True)` after creation.
+    on creation, or `dist.init(force=True)` after creation. A distribution with a unit (e.g.
+    `ss.erlang(k=4, mean=ss.days(10))`) draws in that unit outside a sim, with neither.
 
     Although it's possible in theory to define a custom distribution (i.e., not
     one from NumPy or SciPy), in practice this is difficult. The distribution needs
@@ -408,6 +409,7 @@ class Dist:
         self.slots = None # Created on initialization with a sim
         self.strict = strict
         self.scaling = sc.tolist(self.scaling) # Convert e.g. 'predraw' to ['predraw'] so can use "if x in y" later
+        self.given = None # What the distribution was made from, if not its parameters (e.g. ('erlang', dict(k=4, mean=ss.days(10)))), for its repr
 
         # Auto-generated
         self.rvs_func = None # The default function to call in make_rvs() to generate the random numbers
@@ -453,10 +455,11 @@ class Dist:
         return
 
     def __repr__(self):
-        """ Custom display to show state of object """
+        """ Custom display to show state of object: as it was made, e.g. `ss.erlang(k=4, mean=ss.days(10))` """
         j = sc.dictobj(self.to_json())
-        parstr = [f'{k}={v}' for k,v in j.pars.items()]
-        string = f'ss.{j.classname}({j.diststr}{sc.strjoin(parstr)})'
+        classname, pars = self.given if self.given is not None else (j.classname, j.pars)
+        parstr = [f'{k}=ss.{v!r}' if isinstance(v, ss.TimePar) else f'{k}={v}' for k,v in pars.items()]
+        string = f'ss.{classname}({j.diststr}{sc.strjoin(parstr)})'
         return string
 
     def disp(self):
@@ -492,6 +495,7 @@ class Dist:
                     raise ValueError(errormsg)
             self.preserve_timepars(kwargs) # Ensure e.g. dist.set(mean=6) gives years(6), not 6, if mean was years(5)
             self.pars.update(kwargs)
+            self.given = None # Shown by its parameters from now on
             if self.initialized:
                 # If initialized, re-process the pars to update self._pars
                 # If not initialized, the module may not be available to do this conversion - but in any case,
@@ -859,6 +863,24 @@ class Dist:
             out += [val, inner]
         return out
 
+    def own_unit(self):
+        """ The distribution's own time unit, as the class of its time parameters (e.g. `ss.days` for `ss.erlang(k=4, mean=ss.days(10))`, or `ss.peryear`), or None if it has none """
+        tp = self.unit or next((tp for val in self.pars.values() if (tp := timepar_of(val)) is not None), None)
+        return tp if tp is None or isinstance(tp, type) else type(tp)
+
+    def own_dt(self):
+        """ One of the distribution's own time unit (e.g. `ss.days(1)`), or None if it has none: what it draws in outside a sim (durations divided by it, rates multiplied by it), rather than in steps of its module """
+        unit = self.own_unit()
+        return None if unit is None else ss.time.get_dur_class(unit.base)(1)
+
+    def step_dt(self):
+        """ The time step that durations and rates are converted to: its module's, else its sim's, else (outside a sim) one of its own unit; not for the user """
+        if self.module is not None:
+            return self.module.dt
+        elif self.sim is not None:
+            return self.sim.dt
+        return self.own_dt()
+
     def convert_timepars(self):
         """
         Convert time parameters (durations and rates) to scalars
@@ -910,14 +932,7 @@ class Dist:
                         warnmsg = f'Operating on an array of timepars is very slow; timepars should wrap arrays, not vice versa. Values:\n{v}'
                         ss.warn(warnmsg)
 
-                if self.module is not None:
-                    dt = self.module.dt
-                elif self.sim is not None:
-                    dt = self.sim.dt
-                else:
-                    errormsg = f'Cannot do predraw scaling of timepar {v} when both module and sim are None. Consider e.g. ss.normal(3, 2, unit="year") instead of ss.normal(ss.years(3), ss.years(2))'
-                    raise RuntimeError(errormsg)
-
+                dt = self.step_dt() # Outside a sim, in the distribution's own unit
                 if issubclass(timepar_type, ss.dur):
                     self._pars[key] = v/dt
                 elif issubclass(timepar_type, ss.Rate):
@@ -1118,7 +1133,10 @@ class Dist:
         """
         # Check for readiness
         if not self.initialized:
-            raise ss.errors.DistNotInitializedError(self)
+            if self.sim is None and self.module is None and self.own_dt() is not None: # Outside a sim, a distribution with a unit draws in it with no setup (one in a sim is initialized by it)
+                self.init(force=True)
+            else:
+                raise ss.errors.DistNotInitializedError(self)
 
         # Figure out size, UIDs, and slots
         size, slots = self.process_size(n)
@@ -1169,9 +1187,9 @@ class Dist:
             if 'postdraw' in self.scaling: # It can be scaled post-draw, proceed
                 rvs = self.unit(rvs)
                 if isinstance(rvs, ss.dur):
-                    rvs = rvs/self.module.dt
+                    rvs = rvs/self.step_dt()
                 elif isinstance(rvs, ss.Rate):
-                    rvs = rvs*self.module.dt
+                    rvs = rvs*self.step_dt()
                 else:
                     errormsg = f'Unexpected timepar type {type(rvs)}: expecting subclass of ss.dur or ss.Rate'
                     raise NotImplementedError(errormsg)
@@ -1295,12 +1313,17 @@ class Dist:
         return
 
     def plot_hist(self, n=1000, bins=None, fig_kw=None, hist_kw=None):
-        """ Plot the current state of the RNG as a histogram """
+        """ Plot the current state of the RNG as a histogram (from a copy initialized on its own, if this one has no sim yet); outside a sim, a distribution with a unit is drawn and labelled in it (e.g. days) """
         plt.figure(**sc.mergedicts(fig_kw))
-        rvs = self.rvs(n, reset=True) # As if nothing ever happened
+        dist = self if self.initialized else sc.dcp(self).init(force=True) # Leave this one to be initialized by its sim
+        rvs = dist.rvs(n, reset=True) # As if nothing ever happened
         plt.hist(rvs, bins=bins, **sc.mergedicts(hist_kw))
         plt.title(str(self))
-        plt.xlabel('Value')
+        unit = dist.own_unit() if dist.module is None and dist.sim is None else None # Outside a sim, drawn in it
+        if unit is None:
+            plt.xlabel('Value')
+        else:
+            plt.xlabel(f'Per {unit.base.removesuffix("s")}' if issubclass(unit, ss.Rate) else unit.base.capitalize()) # e.g. "Days", or "Per year"
         plt.ylabel(f'Count ({n} total)')
         return rvs
 
@@ -1833,11 +1856,14 @@ class gamma(Dist):
             if mean is None or std is None or a is not None or scale is not None:
                 errormsg = f'ss.gamma() is given by a and scale, or by mean and std, not by {sc.strjoin([k for k,v in dict(a=a, scale=scale, mean=mean, std=std).items() if v is not None])}'
                 raise ValueError(errormsg)
+            given = dict(mean=mean, std=std) | (dict(loc=loc) if loc else {})
             a = float((mean/std)**2) # A mean of a×scale and a variance of a×scale²
             scale = mean/a
         a = sc.ifelse(a, 1.0)
         scale = sc.ifelse(scale, 1.0)
         super().__init__(distname='gamma', dist=sps.gamma, a=a, scale=scale, loc=loc, **kwargs)
+        if mean is not None:
+            self.given = ('gamma', given)
         return
 
     def make_rvs(self):
@@ -1866,7 +1892,9 @@ def erlang(k=1, mean=1.0, **kwargs):
     if k != int(k) or k < 1:
         errormsg = f'The number of stages of an Erlang distribution must be a positive whole number, not {k}; for other shapes, use ss.gamma()'
         raise ValueError(errormsg)
-    return gamma(a=int(k), scale=mean/k, **kwargs)
+    dist = gamma(a=int(k), scale=mean/k, **kwargs)
+    dist.given = ('erlang', dict(k=int(k), mean=mean) | ({'loc':kwargs['loc']} if kwargs.get('loc') else {}))
+    return dist
 
 
 class constant(Dist):

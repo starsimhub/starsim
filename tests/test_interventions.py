@@ -97,6 +97,9 @@ def test_two_products():
         warnings.simplefilter('error')
         two = ss.Sim(make_pars(), interventions=[vaccine, campaign]).init()
     assert [p.name for p in two.products()] == ['vaccine_product', 'campaign_product'] # "vaccine" is taken by the first delivery, so each is named for its delivery (it was vaccine_vaccine, and a warning)
+    care = ss.treat(cure=0.9, coverage=0.5, at=2005) # Its product would be "treatment", but a later delivery is called that
+    sim = ss.Sim(make_pars(), interventions=[care, ss.treat(cure=0.5, at=2010, name='treatment')]).init()
+    assert [p.name for p in sim.products()] == ['care_product', 'treatment_product']
     for intervention in [campaign]: # Also bound to a loop variable, and passed through sim.new()
         assert 'campaign' in ss.Sim(make_pars(), interventions=intervention).init().interventions
         assert 'campaign' in ss.Sim(make_pars()).new(interventions=intervention).init().interventions

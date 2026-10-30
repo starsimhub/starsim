@@ -334,7 +334,7 @@ def test_screen():
         assert np.isclose(res.screening.positive[ti] + res.screening.negative[ti], res.screening.delivered[ti])
         assert np.isclose(res.treatment.cured[ti] + res.treatment.failed[ti] + res.treatment.unneeded[ti], res.treatment.delivered[ti])
         assert 'test' not in res and 'drug' not in res # Products have no results of their own
-        assert np.isclose(sim.summarize()['screening_coverage'], 0.4, rtol=0.03) # Over the rounds, not averaged with the steps between them (was 0.06)
+        assert np.isclose(sim.summarize('screening_coverage'), 0.4, rtol=0.03) # Over the rounds, not averaged with the steps between them (was 0.06)
     check_close(sims, lambda sim: sim.results.screening.positive.sum())
 
     # Test half of new infections, and cure those found

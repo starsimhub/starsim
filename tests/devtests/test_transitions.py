@@ -430,8 +430,8 @@ def test_outcomes():
     assert np.isclose(zeros, 0.5) # Cases exact (0), deaths 1; before, the raw count of deaths (about 420 a week) swamped the cases
     refit = ss.Sim(make(0.15), pars=fit.pars, **pars).run() # The best-fit values can be passed to another sim
     assert np.allclose(refit.results.sir.I, fit.sim.results.sir.I)
-    named = ss.Sim(make(0.3), pars=dict(dur=ss.days(5), rand_seed=2), **pars).run() # A parameter named like a sim setting is the model's; a sim setting is the sim's
-    assert named.results.sir.I.max() < 0.5*res.I.max() and named.pars.rand_seed == 2 # Before, dur= was taken as the sim's duration, and changed nothing
+    named = ss.Sim(make(0.3), pars=dict(dur_I=ss.days(5), rand_seed=2), **pars).run() # A parameter of the model's and a sim setting, given together
+    assert named.results.sir.I.max() < 0.5*res.I.max() and named.pars.rand_seed == 2
     assert ss.Sim(ss.SIS(), ss.RandomNet(), ss.SexualNet(), pars=dict(dur=10), n_agents=100, verbose=0).init().pars.dur == 10 # But a setting of networks written as code is not fitted, so dur= is the sim's
 
     short = ss.Sim(make(0.3), data=df, **(pars | dict(stop='2020-03-01'))).init()
@@ -633,7 +633,7 @@ def test_modify():
         dis = ss.Disease(recovery=I >> R @ dur, first='I', name='sir')
         size = dict(n_agents=10_000) if solver == 'abm' else dict(total_pop=10_000)
         return ss.Sim(dis, interventions=mods(dis) if mods else None, unit='day', dt=0.1, stop=40, solver=solver, rand_seed=1, verbose=0, **size).run().results.sir.I.values
-    shorter = lambda dis: ss.modify(dis.pars.dur, multiply=0.5, start=20)
+    shorter = lambda dis: ss.modify(dis.pars.dur_I, multiply=0.5, start=20)
     varying = ss.timeseries({0: ss.days(20), 10: ss.days(2)})
     for dur, mods, i in [(ss.days(10), shorter, 250), (varying, None, 150)]:
         ode, abm = cohort('ode', dur, mods)[i], cohort('abm', dur, mods)[i]
@@ -1008,7 +1008,7 @@ def test_time_values():
     fast = ss.Disease(infection=ss.Transition(S, I, rate=0.6 * I), recovery=ss.Transition(I, R, dur=4), init_prev=0.01, name='fast')
     stepped = ss.Sim(fast, solver='binomial', substeps=1, unit='day', stop=60, total_pop=1e6, **kw) # Whole steps (by default, the chain binomial takes enough substeps)
     df = stepped.check_dt(output=True)
-    assert any('22% leave in a step' in note for note in stepped.new().init().notes) # 1 - exp(-1/4)
+    assert any('consider a shorter step' in note and 'infection transmits at up to 0.6' in note and 'I is fast too' in note for note in stepped.new().init().notes) # The transmission is the fastest (0.6 a day), then leaving I (1/4)
     assert 0.05 < df.change[df.result == 'I'].iloc[0] < 0.2
     with sc.capture() as txt: # With its default substeps, the chain binomial takes substeps of the same size whatever the step, so says so (it printed a table of zeros)
         S, E, I, R = ss.states('S E I R')
@@ -1034,7 +1034,7 @@ def test_time_values():
     def school_run(make):
         S, E, I, R = ss.states('S E I R')
         m = ss.Disease(S >> E @ make()*I, E >> I @ ss.days(10), I >> R @ ss.days(8), init=dict(I=0.001), name='measles').stratify(age={0: 0.3, 15: 0.6, 65: 0.1})
-        return ss.Sim(m, networks=ss.contacts([[12, 6, 0.5], [3, 8, 1], [1.5, 6, 3]]), start='2000-01-01', stop='2000-03-01', dt=ss.days(1), **kw).run().results.measles.S_to_E.values
+        return ss.Sim(m, networks=ss.contacts([[12, 6, 0.5], [3, 8, 1], [1.5, 6, 3]]), start='2000-01-01', stop='2000-03-01', dt=ss.days(1), **kw).run().results.measles.infection.values
     beta = ss.perday(0.125) * ss.by(age=[school, 1, 1])
     assert np.allclose(school_run(lambda: beta), school_run(lambda: ss.perday(0.125) * ss.by(age=[school, 1, 1])))
     with pytest.raises(TypeError, match='outside'):
@@ -1516,7 +1516,7 @@ def test_inflow_add():
     with pytest.raises(ValueError, match='inflow'):
         S, I = ss.states('S I')
         sir = ss.Disease(S >> I @ ss.perday(0.1)*I, name='sir')
-        ss.Sim(diseases=sir, interventions=ss.modify('sir.S_to_I', add=1), n_agents=100, verbose=0).init() # Not an inflow
+        ss.Sim(diseases=sir, interventions=ss.modify('sir.infection', add=1), n_agents=100, verbose=0).init() # Not an inflow
     return sim
 
 

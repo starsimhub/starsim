@@ -71,8 +71,7 @@ A country's administrative units come from `starsim_data`: level 1 is its counti
 ```{python}
 kenya = ss.geo.geography('Kenya', level=1)
 
-seed = ss.by(dict(patch=['Nairobi'], value=[10])) # 10 infectious people in Nairobi, and none elsewhere
-measles_kenya = ss.Disease(infection, recovery, init_n=dict(I=seed))
+measles_kenya = ss.Disease(infection, recovery, init_n=dict(I=ss.by(patch={'Nairobi': 10}))) # 10 infectious people in Nairobi, and none in the other 46 counties
 measles_kenya.stratify(patch=kenya, mobility=ss.geo.gravity(away=0.001))
 
 sim = ss.Sim(measles_kenya, stop=ss.days(60), verbose=0)
@@ -83,11 +82,6 @@ for county in ['Nairobi', 'Kiambu', 'Mombasa', 'Turkana']:
 ```
 
 Kiambu borders Nairobi, Mombasa is the second city, 440 km away, and Turkana is a remote county in the northwest; as an ODE, the outbreak reaches all of them within days (see [below](#under-compartments-and-agents) for why agents differ).
-
-::: {.callout-warning}
-## [PROPOSAL]
-Starting an outbreak in one place of many should be `init_n=dict(I=ss.by(patch={'Nairobi': 10}))`, with the places left out at 0. Today a dict by label must give every level (here all 47 counties), and raises an error otherwise; the table form above, `ss.by(dict(patch=['Nairobi'], value=[10]))`, fills the rest with 0. For starting values (`init`, `init_n`), a missing level should be 0 (P11).
-:::
 
 A geography with no populations (`names=` only) gives places of equal size, unless the stratification is given a `split=`. A place's population sets the share of people who start there.
 
@@ -150,7 +144,7 @@ Lakeside's outbreak starts with the infectious people among those who moved; Hil
 
 ## Values by place
 
-Anything that can vary by level of a stratification can vary by place, with `ss.by(patch=...)`: a value for each place, in order, or a dict by name. Above, `init_n=dict(I=ss.by(patch=[10, 0, 0]))` starts the outbreak in one place; a transmission rate by place is `S >> I @ ss.by(patch=[1.9, 1.9, 1.0])*I`. Results are by place too: `by('patch')` splits a result into one column for each place, and `select()` picks one, e.g. `sim.results.measles.I.select(patch='Hillside')`. Contact matrices act within each place, so a model can be stratified by age and by place together, with a contact matrix by age (see [Population data](populations_data.qmd)).
+Anything that can vary by level of a stratification can vary by place, with `ss.by(patch=...)`: a value for each place, in order, or a dict by name. Above, `init_n=dict(I=ss.by(patch=[10, 0, 0]))` starts the outbreak in one place, as does `ss.by(patch={'Riverton': 10})`: in a starting value (`init`, `init_n`, or `init_prev`), a place left out of a dict starts with 0, while a rate or other parameter by name needs every place, since a missing one there is more likely a mistake; a transmission rate by place is `S >> I @ ss.by(patch=[1.9, 1.9, 1.0])*I`. Results are by place too: `by('patch')` splits a result into one column for each place, and `select()` picks one, e.g. `sim.results.measles.I.select(patch='Hillside')`. Contact matrices act within each place, so a model can be stratified by age and by place together, with a contact matrix by age (see [Population data](populations_data.qmd)).
 
 The amount of movement can be fitted to data like any other parameter, by giving it bounds: `ss.geo.gravity(away=ss.par(0.01, bounds=[0.001, 0.1]))` (see [Fitting a model](calibration_fitting.qmd)).
 
@@ -173,15 +167,11 @@ As an ODE, Hillside and Lakeside peak 3 or 4 days after Riverton; as agents, 7 a
 
 ## Pitfalls
 
-- **A name does not make a place.** A stratification is spatial when it is given a geography (`patch=towns`) or `kind='space'` (`stratify(patch=['a', 'b'], kind='space')`). A list of names alone, even `patch=['north', 'south']`, makes ordinary groups, whose people mix with each other. `describe()` gives the kind of each stratification: `patch (space)` or `patch (plain)`.
+- **A name does not make a place.** A stratification is spatial when it is given a geography (`patch=towns`) or `kind='space'` (`stratify(patch=['a', 'b'], kind='space')`). A list of names alone, even `patch=['north', 'south']`, makes ordinary groups, whose people mix with each other; a stratification named like places (`patch`, `region`, `district`, `county`, `province`, `place`, or `location`) given only names says so in a note, unless `kind=` is given. `describe()` gives the kind of each stratification: `patch (space)` or `patch (plain)`.
 
-::: {.callout-warning}
-## [PROPOSAL]
-A stratification whose name suggests places (`patch`, `region`, `district`, ...) but which is given only a list of names should print a note saying that its levels mix as ordinary groups, and how to make them places (`kind='space'`, or a geography), as the spec's section on dimensions says it does. Today nothing is printed, and the outbreak silently spreads between the "places" as if they were one population (P13).
-:::
 - **A movement model needs a geography.** `ss.geo.gravity()` and `ss.geo.radiation()` work out the movement from the places' populations and distances, so on a stratification with no geography they raise an error; give a geography, or the movement itself as a matrix.
 - **Too much movement.** With `k=` instead of `away=`, the gravity formula can send people from a small place to a large one for more than all of their time; Starsim then caps it at all of it, with a warning. Give `away=` unless `k` has been fitted.
-- **Start the outbreak somewhere.** `init_prev=0.01` infects 1% of people in every place; to start it in one place, give `init_n` (or `init`) by place.
+- **Start the outbreak somewhere.** `init_prev=0.01` infects 1% of people in every place; to start it in one place, give `init_n` (or `init`) by place, e.g. `init_n=dict(I=ss.by(patch={'Nairobi': 10}))`.
 - **Check the links.** Before trusting a spatial model, seed one place and check that the others stay free of infection with no movement (as above), and that with migration, the population of each place changes as it should. With agents that each stand for several people, the number of people who move and the number of agents who move are not the same.
 - **Strata multiply.** Every place multiplies the number of compartments: 47 counties × 16 age groups × 3 states is 2,256 compartments. An ODE handles that easily, but results by group take memory, and a model can grow large by accident; `describe()` lists each stratification with its levels.
 

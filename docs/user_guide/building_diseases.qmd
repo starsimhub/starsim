@@ -61,7 +61,7 @@ measles = ss.Disease(
 )
 ```
 
-A transition that has no variable or keyword to be named by gets a name from its states (`S_to_I`). A disease can also be written as a class, which is the form for a disease that goes into a library ([below](#diseases-as-classes)).
+A transition that has no variable or keyword to be named by is named `infection` if it is the disease's only transmission, and otherwise gets a name from its states (`I_to_R`). A disease can also be written as a class, which is the form for a disease that goes into a library ([below](#diseases-as-classes)).
 
 ## Transmission
 

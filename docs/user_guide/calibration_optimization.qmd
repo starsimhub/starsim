@@ -98,11 +98,6 @@ from_april.summarize()
 
 The best allocation from April is the same, but it averts fewer infections (about 360 rather than 440) than the same change from the start, since the first three months have already happened at the even split.
 
-::: {.callout-warning}
-## [PROPOSAL]
-`start=` should work for a sim whose start and stop are dates (`start='2025-01-01'`). Today, `ss.fit.optimize()` gives the spending from `start=` on as an `ss.timeseries` keyed by years as numbers (e.g. 2025.25), which a sim with dates reads as a number of days after its start, so the new allocation never takes effect and the search returns the current one. A sim whose start and stop are years as numbers (`start=2025, stop=2026`, as here) works; the timeseries should be keyed by dates when the sim has them.
-:::
-
 ## Limits on each program
 
 Programs can rarely be cut to nothing or grown without limit: a program may have contracts to honor, or be unable to expand faster than it can hire staff. `bounds=` gives the least and most each program can have, in dollars, by name, with `None` for no limit (a program not named has none beyond 0 and the total):
@@ -116,19 +111,14 @@ With testing capped at $60,000, the rest goes to bed nets, and the result is bet
 
 ## A different total
 
-`total=` sets the total to divide, for the question "what if the budget were larger?". The total should be at least the current one: see the note below. Here, the best allocation of twice the budget:
+`total=` sets the total to divide, for the question "what if the budget were larger (or smaller)?"; the search starts from the current shares of the spending, scaled to the total. Here, the best allocation of twice the budget:
 
 ```{python}
 double = ss.fit.optimize(sim, spend=['tests', 'nets'], minimize='sir.R', total=200e3, verbose=False)
 double.summarize()
 ```
 
-::: {.callout-warning}
-## [PROPOSAL]
-`total=` smaller than the current total of the spending parameters should give the best allocation of that total. Today it returns the current allocation unchanged (whose total is larger than the one asked for), since the search starts from the current shares scaled by the wrong total and the fallback to the starting allocation doesn't rescale it. Until this is fixed, start the sim at an allocation of the total wanted, e.g. `ss.fit.optimize(sim.new(pars=dict(tests=25e3, nets=25e3)), ...)` for $50,000.
-:::
-
-For a curve of the best result against the budget (the "production function" of the programs together), run it at a range of totals, starting each from an even split of its total:
+For a curve of the best result against the budget (the "production function" of the programs together), run it at a range of totals:
 
 ```{python}
 import matplotlib.pyplot as plt
@@ -136,8 +126,7 @@ import matplotlib.pyplot as plt
 totals = [25e3, 50e3, 100e3, 200e3, 400e3]
 infections = []
 for total in totals:
-    start_at = sim.new(pars=dict(tests=total/2, nets=total/2)) # An even split of this total, to start from
-    opt = ss.fit.optimize(start_at, spend=['tests', 'nets'], minimize='sir.R', verbose=False)
+    opt = ss.fit.optimize(sim, spend=['tests', 'nets'], minimize='sir.R', total=total, verbose=False)
     infections.append(opt.value)
 
 plt.plot(np.array(totals)/1e3, infections, 'o-')

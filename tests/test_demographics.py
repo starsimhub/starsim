@@ -492,8 +492,6 @@ def test_declared_demographics_alone():
     assert ss.Sim(demographics=flows(), n_agents=500, start=2000, dur=2, verbose=0).run().solver == 'abm'
     with pytest.warns(RuntimeWarning, match='per person'): # 30 per 1,000, given as 30 per person
         ss.birth(rate=ss.peryear(30))
-    with pytest.raises(ValueError, match='not in starsim_data'): # No age-specific fertility by place
-        ss.Pregnancy(fertility_rate='Nigeria')
     return ode
 
 

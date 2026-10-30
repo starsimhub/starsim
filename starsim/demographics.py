@@ -54,6 +54,8 @@ def bare_rate(rate, name):
     Returns the rate, and a note saying how a bare number was read (None for anything else), which is said with `say_bare()`
     once the module is in a sim: a bare number is the usual way to give these rates, so it is not a warning
 
+    A time series of bare numbers is read the same way, its values together (so 40 falling to 0.5 is per 1,000 throughout).
+
     Args:
         rate (any): the rate as given
         name (str): what it is, for the note (e.g. "rate")
@@ -61,12 +63,18 @@ def bare_rate(rate, name):
     Examples:
         ```python
         rate, note = ss.demographics.bare_rate(30, 'rate') # ss.peryear(0.03): 30 per 1,000 people per year
+        rate, note = ss.demographics.bare_rate(ss.timeseries({2000: 40, 2030: 20}), 'rate') # ss.peryear(0.04) falling to ss.peryear(0.02)
         ```
     """
-    if not sc.isnumber(rate):
+    series = isinstance(rate, ss.timeseries) and len(rate.values) and all(sc.isnumber(v) for v in rate.values)
+    if not (sc.isnumber(rate) or series):
         return rate, None
-    units = infer_rate_units(None, rate, name, hint=f'Give a typed rate to say which, e.g. ss.peryear({rate:n}) per person or ss.peryear({rate/1000:n}) for {rate:n} per 1,000.')
+    first = rate.values[0] if series else rate
+    units = infer_rate_units(None, rate.values if series else rate, name, hint=f'Give a typed rate to say which, e.g. ss.peryear({first:n}) per person or ss.peryear({first/1000:n}) for {first:n} per 1,000.')
     what = ' per 1,000 people' if units == 1e-3 else ' per person'
+    if series:
+        out = ss.timeseries(rate.times, [ss.peryear(v*units) for v in rate.values], mode=rate.mode, period=rate.period)
+        return out, f'the values of {name}= are bare numbers, so they are taken as{what} per year'
     return ss.peryear(rate*units), f'{name}={rate:n} is a bare number, so it is taken as {rate:n}{what} per year'
 
 
@@ -598,7 +606,7 @@ class Pregnancy(Demographics, ss.Disease):
 
     Args:
         fertility (rate/func): the hazard of conception: by default `conception_rate()`, from `fertility_rate`; or a rate, or a function of `(sim, uids)` giving a rate for those agents
-        fertility_rate (rate/dataframe): age-specific fertility rates, or one rate (default per 1000: see `rate_units`)
+        fertility_rate (rate/dataframe/str): age-specific fertility rates, or one rate (default per 1000: see `rate_units`), or a country by name, for its UN rates (e.g. 'Nigeria')
         rel_fertility (float): multiplier on the fertility rate
         p_infertile (bernoulli): primary infertility
         min_age (float): minimum age of conception
@@ -619,6 +627,9 @@ class Pregnancy(Demographics, ss.Disease):
         preg = ss.Pregnancy(fertility_rate=ss.freqperyear(80))
         sim = ss.Sim(demographics=preg, n_agents=5000, start=2000, stop=2010, dt=ss.months(1)).run()
         sim.results.pregnancy.conception.sum()
+
+        # Nigeria's age-specific fertility rates, from the UN
+        preg = ss.Pregnancy(fertility_rate='Nigeria')
 
         # Lactational amenorrhea: fewer conceptions while breastfeeding, in the first 6 months
         lam = ss.modify(preg.conception, multiply=0.1, where=preg.lactating & (preg.since_birth < ss.months(6)))
@@ -698,10 +709,10 @@ class Pregnancy(Demographics, ss.Disease):
         unknown = [k for k in given if k not in self.pars]
         if unknown:
             raise sc.KeyNotFoundError(f'"{self.name}" has no parameter named {sc.strjoin(unknown)}. Its parameters are {sc.strjoin(self.pars.keys())}{ss.expressions.did_you_mean(unknown[0], self.pars.keys())}')
-        if isinstance(given.get('fertility_rate'), str): # Not bundled: starsim_data has crude birth rates by place, but not age-specific fertility
-            errormsg = (f'fertility_rate="{given["fertility_rate"]}": age-specific fertility rates by place are not in starsim_data (it has crude birth rates, for ss.Births("{given["fertility_rate"]}")). '
-                        f'Give the rates as a dataframe (e.g. the UN World Population Prospects ASFR, with columns Time, AgeGrp, ASFR) or as one rate, e.g. ss.freqperyear(100)')
-            raise ValueError(errormsg)
+        if isinstance(given.get('fertility_rate'), str): # A named place: its UN age-specific fertility rates, per 1,000 women, by year and 5-year age group
+            given['fertility_rate'] = ss.data.rates(given['fertility_rate'], 'fertility')
+            given.setdefault('rate_units', 1000)
+            metadata = sc.mergedicts(sc.objdict(data_cols=dict(year='Time', age='AgeGrpStart', value='ASFR')), metadata)
         own = self.code_pars
         self.update_pars({k:v for k,v in given.items() if k in own})
         graph = {k:v for k,v in given.items() if k not in own}

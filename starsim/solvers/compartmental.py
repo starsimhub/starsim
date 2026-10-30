@@ -969,10 +969,13 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
             self.arrive(dst.name, total, y)
         return (total, recorded) if syn is not None else total
 
-    def move_some(self, srcs, dst, p=None, n=None):
-        """ A one-off move from code (`ss.move()`): a share `p` of the people in some states (or `n` of them, exactly where the solver keeps whole people) to a state, or of a count, to and from outside the model too (`dst` or `srcs` empty); returns the number moved """
+    def move_some(self, srcs, dst, p=None, n=None, where=None):
+        """ A one-off move from code (`ss.move()`): a share `p` of the people in some states (or `n` of them, exactly where the solver keeps whole people; of those for whom `where` holds) to a state, or of a count, to and from outside the model too (`dst` or `srcs` empty); returns the number moved """
         comps = [comp for state in srcs for comp in self.state_comps[state.name]]
+        sel = 1.0 if where is None else np.broadcast_to(np.asarray(self.selector.select(where), dtype=float), self.selector.shape) # The share of each state and group for whom it holds
         have = self.y[comps]
+        if where is not None:
+            have = have*np.array([sel[self.selector.states.index(state.name)] for state in srcs for _ in self.state_comps[state.name]])
         total = have.sum()
         if n is not None:
             p = min(n/total, 1.0) if total > 0 else 0.0
@@ -988,7 +991,7 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
             draw = self.rng.multivariate_hypergeometric(np.round(have).astype(np.int64).ravel(), int(min(round(n), round(total))))
             given = dict(zip(comps, draw.reshape(have.shape).astype(float)))
         frac = np.full(self.selector.shape, float(p)) if np.ndim(p) == 0 else np.broadcast_to(p, self.selector.shape)
-        return float(self.move_states(frac, srcs, dst, given=given).sum())
+        return float(self.move_states(frac*sel, srcs, dst, given=given).sum())
 
     def move_share(self, tr, frac, srcs):
         """ Move a share of each state and group (within the sources `srcs`) along a triggered transition: with p=, that share of them; with several destinations, split between them """

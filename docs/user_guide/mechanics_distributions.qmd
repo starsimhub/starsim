@@ -22,13 +22,13 @@ import starsim as ss
 ss.options(jupyter=True)
 
 durations = {
-    'Exponential':       ss.expon(scale=10, strict=False),
-    'Erlang, 4 stages':  ss.erlang(k=4, mean=10, strict=False),
-    'Lognormal, std 2':  ss.lognorm_ex(mean=10, std=2, strict=False),
+    'Exponential':       ss.expon(scale=ss.days(10)),
+    'Erlang, 4 stages':  ss.erlang(k=4, mean=ss.days(10)),
+    'Lognormal, std 2':  ss.lognorm_ex(mean=ss.days(10), std=ss.days(2)),
 }
 plt.figure()
 for label, dist in durations.items():
-    draws = dist.rvs(10_000)
+    draws = dist.rvs(10_000) # In days, the unit it was given in
     print(label, '- share under 4 days:', np.mean(draws < 4).round(2))
     plt.hist(draws, bins=np.arange(0, 40), histtype='step', lw=2, label=label)
 plt.xlabel('Days')
@@ -37,11 +37,6 @@ plt.show()
 ```
 
 With an exponential distribution, a third of people leave within 4 days, and a few stay for a month or more. An Erlang distribution with `k` stages (a gamma distribution with a whole-number shape) has less spread, a standard deviation of the mean divided by √k, and a lognormal is given by its mean and standard deviation directly, as a study would report them. A fixed duration, `ss.constant(ss.days(10))`, has no spread at all.
-
-::: {.callout-warning}
-## [PROPOSAL]
-A distribution of durations made on its own should draw and plot in its own unit, with no extra arguments: `ss.erlang(k=4, mean=ss.days(10)).plot_hist()`, with days on the axis, and `rvs(1000)` in days. Today a distribution with a unit can't draw outside a sim ("Cannot do predraw scaling of timepar"), and `mock()` draws it in years (0.027 for 10 days), so the example above uses plain numbers and `strict=False`, which is ceremony a reader shouldn't need (P13). Its printed form should also keep what was given: `ss.erlang(k=4, mean=ss.days(10))` prints as `ss.gamma(a=4, scale=2.5, loc=0.0)`.
-:::
 
 In a model, a distribution of durations goes after `@`, or as `dur=`:
 
@@ -120,15 +115,18 @@ print('Mean age of the rest:', sim.people.age[not_chosen].mean().round(1))
 
 ## Working with a distribution
 
-A distribution can be made, drawn from, and looked at on its own. Outside a sim, `strict=False` lets it draw without the sim's random numbers:
+A distribution can be made, drawn from, and looked at on its own. Outside a sim, one with a unit draws in that unit, here days, and shows what it was made from:
 
 ```{python}
-dist = ss.normal(loc=0, scale=1, strict=False)
-print(dist.rvs(5)) # Five draws
+dist = ss.lognorm_ex(mean=ss.days(5), std=ss.days(2))
+print(dist)
+print(dist.rvs(5)) # Five draws, in days
 print('Mean:', dist.dist.mean())
 print('95% of draws are between', dist.dist.ppf([0.025, 0.975]).round(2))
 draws = dist.plot_hist(n=1000, bins=30) # Returns the draws
 ```
+
+In a sim, the same distribution draws in steps of its module instead, and from the sim's random numbers ([Random numbers](mechanics_random.qmd)). One with no unit, such as `ss.normal(0, 1)`, draws outside a sim when made with `strict=False`, which says it need not use the sim's random numbers.
 
 `dist.dist` is the [SciPy](https://docs.scipy.org/doc/scipy/reference/stats.html) distribution with its parameters, for its mean, quantiles (`ppf`), density, and so on.
 

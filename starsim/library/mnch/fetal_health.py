@@ -73,6 +73,10 @@ class FetalHealth(ss.Module):
 
     At delivery: `birth_weight = baseline_for_GA × percentile × (1 - restriction)`
 
+    The results are counts of births and outcomes on each step, and means and rates over a step's births
+    (`mean_birth_weight`, `lbw_rate`, ...), which are NaN on a step with no births, and are left out of a
+    mean over time (e.g. `res.mean_birth_weight.resample('year')`).
+
     Note: CRN safe.
 
     Args:
@@ -105,6 +109,7 @@ class FetalHealth(ss.Module):
         [34, 2100], [35, 2400], [36, 2600], [37, 2850], [38, 3050],
         [39, 3250], [40, 3400], [41, 3500], [42, 3550],
     ], dtype=float)
+    means = ['mean_birth_weight', 'mean_ga_at_birth', 'mean_exposures', 'lbw_rate', 'sga_rate', 'svn_rate'] # The results over the births of a step, which are NaN on a step with none
 
     def __init__(self, pars=None, **kwargs):
         super().__init__(name='fetal_health')
@@ -148,18 +153,20 @@ class FetalHealth(ss.Module):
     def init_results(self):
         super().init_results()
         self.define_results(
-            ss.Result('n_births',          dtype=int, label='Births'),
-            ss.Result('n_lbw',             dtype=int, label='Low birth weight'),
-            ss.Result('n_vlbw',            dtype=int, label='Very low birth weight'),
-            ss.Result('n_sga',             dtype=int, label='Small for gestational age'),
-            ss.Result('n_svn',             dtype=int, label='Small vulnerable newborns'),
-            ss.Result('mean_birth_weight', scale=False, label='Mean birth weight (g)'),
-            ss.Result('mean_ga_at_birth',  scale=False, label='Mean GA at birth (weeks)'),
-            ss.Result('mean_exposures',    scale=False, label='Mean exposures per pregnancy'),
-            ss.Result('lbw_rate',          scale=False, label='LBW rate'),
-            ss.Result('sga_rate',          scale=False, label='SGA rate'),
-            ss.Result('svn_rate',          scale=False, label='SVN rate'),
+            ss.Result('n_births',          dtype=int, label='Births', kind='flow'),
+            ss.Result('n_lbw',             dtype=int, label='Low birth weight', kind='flow'),
+            ss.Result('n_vlbw',            dtype=int, label='Very low birth weight', kind='flow'),
+            ss.Result('n_sga',             dtype=int, label='Small for gestational age', kind='flow'),
+            ss.Result('n_svn',             dtype=int, label='Small vulnerable newborns', kind='flow'),
+            ss.Result('mean_birth_weight', label='Mean birth weight (g)'),
+            ss.Result('mean_ga_at_birth',  label='Mean GA at birth (weeks)'),
+            ss.Result('mean_exposures',    label='Mean exposures per pregnancy'),
+            ss.Result('lbw_rate',          label='LBW rate'),
+            ss.Result('sga_rate',          label='SGA rate'),
+            ss.Result('svn_rate',          label='SVN rate'),
         )
+        for key in self.means:
+            self.results[key][:] = np.nan # Undefined on a step with no births, so that it is left out of a mean over time
         return
 
     def on_conception(self, uids):
@@ -183,6 +190,9 @@ class FetalHealth(ss.Module):
 
         # Compute birth weight using mother states (handles twins via parent lookup)
         parents = self.sim.people.parent[newborn_uids]
+        unset = np.unique(parents[np.isnan(self.weight_percentile[parents])])
+        if len(unset): # Pregnant at the start (ss.Pregnancy's burnin=), so on_conception() was not called for them
+            self.on_conception(ss.uids(unset))
         birth_weights, ga_wk = self.compute_birth_weight(parents)
 
         # Store outcomes on newborns
@@ -203,20 +213,19 @@ class FetalHealth(ss.Module):
         svn = preterm | lbw | sga
         self.svn[newborn_uids] = svn
 
-        # Results
-        n  = len(newborn_uids)
+        # Results: the means are over the births of the step, which may come in more than one call
+        res = self.results
         ti = self.ti
-        self.results['n_births'][ti]          += n
-        self.results['n_lbw'][ti]             += lbw.sum()
-        self.results['n_vlbw'][ti]            += vlbw.sum()
-        self.results['n_sga'][ti]             += sga.sum()
-        self.results['n_svn'][ti]             += svn.sum()
-        self.results['mean_birth_weight'][ti]  = birth_weights.mean() if n else 0
-        self.results['mean_ga_at_birth'][ti]   = ga_wk.mean() if n else 0
-        self.results['mean_exposures'][ti]     = self.n_exposures[parents].mean() if n else 0
-        self.results['lbw_rate'][ti]           = lbw.mean() if n else 0
-        self.results['sga_rate'][ti]           = sga.mean() if n else 0
-        self.results['svn_rate'][ti]           = svn.mean() if n else 0
+        n, before = len(newborn_uids), res['n_births'][ti]
+        values = dict(mean_birth_weight=birth_weights, mean_ga_at_birth=ga_wk, mean_exposures=self.n_exposures[parents], lbw_rate=lbw, sga_rate=sga, svn_rate=svn)
+        for key in self.means:
+            total = values[key].sum() + (res[key][ti]*before if before else 0)
+            res[key][ti] = total/(before + n)
+        res['n_births'][ti] += n
+        res['n_lbw'][ti]    += lbw.sum()
+        res['n_vlbw'][ti]   += vlbw.sum()
+        res['n_sga'][ti]    += sga.sum()
+        res['n_svn'][ti]    += svn.sum()
         return
 
     def apply_timing_shift(self, uids, shift_weeks):

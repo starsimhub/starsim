@@ -154,7 +154,7 @@ Only the starting population is ever at risk here, so the condition dies out wit
 
 ## SIR, SIS, and SEIR written as code
 
-The core `ss.SIR`, `ss.SIS`, and `ss.SEIR` are declared, as states and transitions, so they run under any solver; they are the textbook models, with exponential durations and no deaths unless `p_death` is given. `ssl.AgentSIR`, `ssl.AgentSIS`, and `ssl.AgentSEIR` are Starsim 3's versions of the same models, written as code: durations are lognormal (`dur_inf=ss.lognorm_ex(mean=ss.years(6))` by default), and `AgentSIR` and `AgentSEIR` have `p_death=0.01`. `AgentSIS` also has a level of immunity for each agent, boosted by each infection (`imm_boost`) and waning exponentially (`waning`), which lowers that agent's susceptibility. They are the classes to build on for a disease that changes how infection, progression, or recovery happens for each agent, as the outbreak diseases above do; a Starsim 3 subclass of `ss.SIR` that replaces its methods can build on `ssl.AgentSIR` instead, unchanged (see [Starsim v3](conversion/starsim3.qmd)).
+The core `ss.SIR`, `ss.SIS`, and `ss.SEIR` are declared, as states and transitions, so they run under any solver; they are the textbook models, with exponential durations and no deaths unless `p_death` is given. `ssl.AgentSIR`, `ssl.AgentSIS`, and `ssl.AgentSEIR` are Starsim 3's versions of the same models, written as code: durations are lognormal (`dur_inf=ss.lognorm_ex(mean=ss.years(6))` by default), and `AgentSIR` and `AgentSEIR` have `p_death=0.01`. They schedule each course in whole steps as the agent engine does a declared disease's, so each case, seeds included, is infectious for `dur_inf` on average (in Starsim 3, each case was half a step short, and the seeds half a step long). `AgentSIS` also has a level of immunity for each agent, boosted by each infection (`imm_boost`) and waning exponentially (`waning`), which lowers that agent's susceptibility. They are the classes to build on for a disease that changes how infection, progression, or recovery happens for each agent, as the outbreak diseases above do; a Starsim 3 subclass of `ss.SIR` that replaces its methods can build on `ssl.AgentSIR` instead, unchanged (see [Starsim v3](conversion/starsim3.qmd)).
 
 With the same mean duration and no deaths, the two SIRs differ only in the shape of the duration: the lognormal of `AgentSIR` (with a standard deviation of one year) makes almost every infection last about 6 years, while the exponential of `ss.SIR` has many short infections and a few very long ones. Fewer people recover early on, so the epidemic of `AgentSIR` peaks higher and ends more sharply:
 
@@ -191,7 +191,7 @@ class WaningMeasles(ssl.Measles):
         super().__init__(**kwargs)
         self.define_pars(dur_immune=dur_immune)
         self.update_pars(**kwargs)
-        self.define_states(ss.FloatArr('ti_susceptible', label='Time of losing immunity'))
+        self.define_states(ss.TimeArr('ti_susceptible', label='Time of losing immunity'))
         return
 
     def set_prognoses(self, uids, sources=None):
@@ -201,7 +201,7 @@ class WaningMeasles(ssl.Measles):
 
     def step_state(self):
         super().step_state()
-        waned = (self.recovered & (self.ti_susceptible <= self.ti)).uids
+        waned = (self.recovered & self.ti_susceptible.due()).uids
         self.recovered[waned] = False
         self.susceptible[waned] = True
         return

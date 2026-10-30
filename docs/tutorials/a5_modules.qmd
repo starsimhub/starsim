@@ -52,7 +52,7 @@ class SIRS(ssl.AgentSIR):
 
         # SIR states are added automatically; here we add the time of losing immunity
         self.define_states(
-            ss.FloatArr('ti_susceptible', label='Time of becoming susceptible again'),
+            ss.TimeArr('ti_susceptible', label='Time of becoming susceptible again'),
         )
         return
 
@@ -66,7 +66,7 @@ class SIRS(ssl.AgentSIR):
     def step_state(self):
         """ Do the usual SIR transitions, then return agents whose immunity has waned to susceptible """
         super().step_state()
-        waning = (self.recovered & (self.ti_susceptible <= self.ti)).uids
+        waning = (self.recovered & self.ti_susceptible.due()).uids # Those whose time has come
         self.recovered[waning] = False
         self.susceptible[waning] = True
         return
@@ -93,8 +93,8 @@ declared = ss.Disease(
 )
 
 pars = dict(networks=ss.MixingPool(n_contacts=1), n_agents=10_000, stop=ss.days(2*365), verbose=0)
-sim_coded = ss.Sim(coded, dt=ss.days(0.25), **pars) # A step of a quarter of a day; see below
-sim_declared = ss.Sim(declared, dt=ss.days(0.25), **pars)
+sim_coded = ss.Sim(coded, **pars)
+sim_declared = ss.Sim(declared, **pars)
 sim_coded.run()
 sim_declared.run()
 
@@ -105,14 +105,14 @@ plt.ylabel('Number infectious')
 plt.legend();
 ```
 
-The two are the same model, and give much the same epidemic, up to chance: a large first wave, and then smaller waves as immunity wanes. They are run here with a step of a quarter of a day, since with daily steps they differ: each takes whole steps in its own way (the coded disease, as in Starsim 3, turns the rate of infection into a chance per day and rounds each duration to whole days), and with an infectious period of only 7 days this makes the first wave of the coded one about a third smaller. A shorter step brings both close to the ODE. What differs is what Starsim knows about them. The declared disease can be shown (`describe()`, `diagram()`, `equations()`), run as an ODE or a stochastic compartmental model as well as agents, and fitted with `sim.fit()`; its results are named after its states and transitions. The coded one is a set of methods: it runs only as agents, and Starsim can't show what it does. So for a model that can be declared, declare it. Write a disease as code when its course is easier to say in code than in transitions, or to keep a Starsim 3 model as it was (a Starsim 3 subclass of `ss.SIR` can subclass `ssl.AgentSIR` unchanged).
+The two are the same model, and give the same epidemic, up to chance: a large first wave, and then smaller waves as immunity wanes. They work out the chance of infection in a step the same way (the rate times the share of people who are infectious, turned into a chance), and round each duration to whole steps the same way, so they agree at any step: over four seeds at daily steps, the first wave peaks at 3032 people infectious when coded, and 3015 when declared. What differs is what Starsim knows about them. The declared disease can be shown (`describe()`, `diagram()`, `equations()`), run as an ODE or a stochastic compartmental model as well as agents, and fitted with `sim.fit()`; its results are named after its states and transitions. The coded one is a set of methods: it runs only as agents, and Starsim can't show what it does. So for a model that can be declared, declare it. Write a disease as code when its course is easier to say in code than in transitions, or to keep a Starsim 3 model as it was (a Starsim 3 subclass of `ss.SIR` can subclass `ssl.AgentSIR` unchanged).
 
 ## The parts of a module
 
 The class above shows the parts that most modules have:
 
 - **Parameters.** In `__init__()`, call `super().__init__()` first, then declare the parameters with their defaults with `self.define_pars()`, then apply any user-supplied overrides with `self.update_pars()`, which raises an error for a parameter that wasn't declared (catching typos early). Rates and durations should use Starsim's time parameters (e.g. `ss.days()`, `ss.peryear()`), so they scale correctly with the timestep.
-- **States.** Per-agent arrays that persist across timesteps, declared with `self.define_states()`: `ss.BoolState` for true or false, and `ss.FloatArr` for a number. Each becomes an attribute (`self.ti_susceptible`); it grows as agents are born, and each `ss.BoolState` gives a result, the number of people for whom it is true. Track per-agent data this way, never as a plain Python attribute or a hand-built array.
+- **States.** Per-agent arrays that persist across timesteps, declared with `self.define_states()`: `ss.BoolState` for true or false, `ss.FloatArr` for a number, and `ss.TimeArr` for a time, as a step number (`due()` gives those whose time has come, rounding a time between steps up or down at random in proportion, so durations keep their mean). Each becomes an attribute (`self.ti_susceptible`); it grows as agents are born, and each `ss.BoolState` gives a result, the number of people for whom it is true. Track per-agent data this way, never as a plain Python attribute or a hand-built array.
 - **Results.** Time series of your own, declared in `init_results()` with `self.define_results()` and filled in each step at `self.ti`.
 - **The work.** `step()` (or, for a disease, `step_state()` and the methods it calls), which Starsim calls once per timestep. Inside it, `self.sim` gives access to the whole simulation, `self.ti` is the current timestep, and `self.t.dt` is the module's timestep. Use `self.sim` rather than a variable from outside the class, since the sim works on its own copy of each module.
 - **Randomness.** For anything random, use a Starsim distribution (e.g. `ss.expon`, `ss.bernoulli`, `ss.normal`) as a parameter or an attribute, rather than calling `np.random` directly, so your results stay reproducible and scenarios differ only where they should; see [Random numbers](../user_guide/mechanics_random.qmd).
@@ -141,7 +141,7 @@ class Antibodies(ss.Module):
     def init_results(self):
         super().init_results()
         self.define_results(
-            ss.Result('mean_level', scale=False, label='Mean antibody level'), # A mean, so not scaled by the number of people per agent
+            ss.Result('mean_level', label='Mean antibody level'), # A mean (a ratio), so not scaled by the number of people per agent
         )
         return
 

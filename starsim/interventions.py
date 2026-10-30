@@ -319,10 +319,11 @@ class Delivery(ss.products.EventSource, Intervention):
         strain (str/Strain): with `move=` into a state where people carry a strain (e.g. `move=S >> E`), the strain they arrive with: the import of a strain on a date, e.g. `ss.Delivery(move=S >> E, strain='alpha', at=['2021-01-01'], capacity=20)`
         increment (str/dict): instead of a product, a counter that goes up for the people reached: its name, which adds 1 (`increment='doses'`), or a dict of the amount for each (`dict(doses=2)`)
         at_age (dur/float): routine delivery to people as they reach this age (a bare number is in years), e.g. `at_age=ss.months(9)`; not to people
-            already past it when delivery starts, nor (as agents) to those who arrive past it later, e.g. immigrants
-        start (date/float): when delivery starts, within the sim (default: the start of the sim); a number is a time in the sim's unit (in a sim with dates, that long after the start)
+            already past it when delivery starts, nor (as agents) to those who arrive past it later, e.g. immigrants. As compartments, people
+            reach it by aging into the age group it starts, so the sim needs age groups with an edge at the age (an error otherwise)
+        start (date/float): when delivery starts, within the sim (default: the start of the sim); a number is a calendar year from 1900 on (e.g. `2030`), and otherwise a time in the sim's unit (in a sim with dates, that long after the start)
         stop (date/float): when delivery stops (default: never); a stop after the end of the sim never stops it
-        at (list): deliver in rounds at these times (a campaign), each within the sim; a calendar year in a sim with dates is written as a date, e.g. '2030'
+        at (list): deliver in rounds at these times (a campaign), each within the sim: dates, or numbers, read as `start` is
         interval (dur): deliver in rounds this far apart, between `start` and `stop`
         where (Cond/func): who can receive it, joined to who= with `&`: a condition (e.g. `ss.ppl.age < 5`), or a function of the sim
         coverage (float): the fraction of eligible people reached; also `ss.by(...)`, a function of the sim returning a probability per person, or a typed rate or probability
@@ -336,8 +337,8 @@ class Delivery(ss.products.EventSource, Intervention):
         queue (bool/dur): what happens to people not served for lack of capacity (agents only): None (the default), they are lost; True, they wait until
             served; a duration, they wait at most that long, and those still waiting then are the outcome `never_ran`. Those waiting are served
             before anyone newly reached in their class (longest first), and leave the queue if they stop being eligible (`left`)
-        on (event/func): the event part of who=, joined to it with `&`: a transition (e.g. `on=sir.infection`), a delivery or an outcome
-            of one, or a function of the sim returning the people; for the people in a state, use `where=` (e.g. `where=sir.I, interval=1`)
+        on (event/str/func): the event part of who=, joined to it with `&`: a transition (e.g. `on=sir.infection`, or by its path, `on='sir.infection'`,
+            found when the sim is initialized), a delivery or an outcome of one, or a function of the sim returning the people; for the people in a state, use `where=` (e.g. `where=sir.I, interval=1`)
         delay (dur/Dist): for a triggered step, the time from the trigger to delivery (agents only): a duration, or a distribution of
             durations, drawn per person (e.g. `ss.uniform(ss.months(1), ss.months(8))`). The people triggered receive it then if they are
             eligible then (who='s condition, and coverage=, are applied when it is due); someone waiting is not triggered again
@@ -421,9 +422,9 @@ class Delivery(ss.products.EventSource, Intervention):
             if rounds or interval is not None or trigger is not None or deliver is not None:
                 errormsg = 'at_age= is routine delivery, to people as they reach the age, so it cannot have at=, interval=, an event in who= (or on=), or deliver='
                 raise ValueError(errormsg)
-            age = ss.years(at_age).value if isinstance(at_age, ss.TimePar) else at_age
-            reached = ss.conditions.Cond('people', 'age') >= age
-            eligible = reached if eligible is None else reached & ss.conditions.as_cond(eligible)
+            self.where_given = None if eligible is None else ss.conditions.as_cond(eligible) # Checked for a compartmental form apart from the age: see age_reason()
+            reached = ss.conditions.Cond('people', 'age') >= (ss.years(at_age).value if isinstance(at_age, ss.TimePar) else at_age)
+            eligible = reached if self.where_given is None else reached & self.where_given
         self.at_age = at_age
         self.start = start
         self.stop = stop
@@ -550,6 +551,31 @@ class Delivery(ss.products.EventSource, Intervention):
         lost = self.holds and self.product.waning is not None # Once lost (or for waning by a function, at once), they would be eligible again, and given it again at the next step
         rate = isinstance(self.coverage, ss.TimePar) or self.typed_function() # Typed coverage (or a function giving it) is a rate among those eligible, offered at every step
         return self.routine and not rate and (self.at_age is not None or not ((self.holds or self.move) and full and not lost))
+
+    @property
+    def age_years(self):
+        """ With `at_age=`: the age, in years """
+        return ss.years(self.at_age).value if isinstance(self.at_age, ss.TimePar) else self.at_age
+
+    def age_reason(self, sim):
+        """
+        With `at_age=`: why a compartmental run cannot deliver it, or None. As compartments, people reach the age by aging from
+        the age group below it into the one it starts, so the sim needs age groups with an edge at the age. It is an error
+        rather than a reason for `solver='auto'` to run as agents (see `ss.solvers.init_capabilities()`), since a comparison
+        with a baseline without it would then compare two solvers.
+        """
+        if self.at_age is None:
+            return None
+        age = self.age_years
+        strat = next((strat for strat in sim.groups.strats if strat.name == 'age' and strat.edges is not None), None)
+        if strat is None:
+            return (f'at_age= of "{self.name}" needs people\'s ages, which a compartmental run has as age groups: stratify by age with an edge at {age:n} '
+                    f'(e.g. sim.stratify(age=[0, {age:n}, ...])), or run as agents (solver="abm")')
+        edges = [int(e) if e == int(e) else float(e) for e in strat.edges]
+        if ss.conditions.on_edge(strat, age) is None and age > strat.edges[0]: # As ss.conditions.group_reasons() finds it
+            return (f'at_age={age:n} of "{self.name}" falls inside an age group (the edges are {edges}), so a compartmental run cannot tell who reaches it: '
+                    f'add {age:n} as an edge of the age groups, or run as agents (solver="abm")')
+        return None
 
     @property
     def move_names(self):
@@ -739,9 +765,19 @@ class Delivery(ss.products.EventSource, Intervention):
             if self.interval is not None:
                 steps = self.convert(self.interval)/self.dt_sim
                 every = max(1, int(round(steps)))
+                last = min(self.ti_stop, npts) # The step after the last that can have a round
                 if steps < 0.5: # E.g. every 30 days with yearly steps: a round once a year
                     ss.note(f'the interval of "{self.name}" is {steps:.2g} of a step, so it has one round per step; use a smaller dt to deliver it as often as that', sim=sim)
-                tis += list(range(self.ti_start, min(self.ti_stop, npts), every))
+                interval = self.interval if isinstance(self.interval, ss.dur) else ss.time.get_dur_class(sim.unit_base)(self.convert(self.interval))
+                if steps < 0.5 or (abs(steps - every) < 1e-9 and interval.base in ['days', 'weeks']): # A whole number of steps of fixed length (e.g. weekly rounds on daily steps), or less than one step
+                    tis += list(range(self.ti_start, last, every))
+                else: # Each round on the first step from its time, the start plus a whole number of intervals, as dates: yearly rounds on weekly steps are a year apart, not 52 weeks (364 days)
+                    yearvec = np.asarray(sim.t.yearvec, dtype=float)
+                    n = int((yearvec[last - 1] - yearvec[self.ti_start - 1])/interval.years) + 1
+                    times = [sim.t.tvec[self.ti_start - 1] + interval*k for k in range(n)] # One by one, since a calendar interval (ss.datedur) doesn't take an array
+                    years = np.array([time.years if isinstance(time, ss.date) else time.to('year').value for time in times])
+                    found = np.searchsorted(yearvec, years - 1e-6) + 1 # As to_ti() finds them, allowing for rounding
+                    tis += [int(ti) for ti in found if ti < last]
             self.round_tis = set(tis)
             tis = sorted(self.round_tis)
             gaps = np.diff(tis)
@@ -1036,8 +1072,7 @@ class Delivery(ss.products.EventSource, Intervention):
         self.started = True
         if selector.abm:
             self._seen = self.sim.people.uid.len_used
-        age = ss.years(self.at_age).value if isinstance(self.at_age, ss.TimePar) else self.at_age
-        past = selector.select(ss.conditions.Cond('people', 'age') >= age + self.t.dt_year*selector.abm)
+        past = selector.select(ss.conditions.Cond('people', 'age') >= self.age_years + self.t.dt_year*selector.abm)
         if new is not None:
             if not new.any():
                 return

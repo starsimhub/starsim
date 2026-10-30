@@ -30,7 +30,8 @@ The package is in `starsim/`. Each file holds one area, named as users meet it (
 - `io/`: importers and exporters for other frameworks, and the Starsim 3 migration script (`python -m starsim.io.migrate`).
 - `library/`: example and reference modules (`import starsim.library as ssl`), which build on core Starsim but are not part of it.
 
-A compact index of the whole public API is in `docs/llms.txt`, built by `python make_api.py` in `docs/` (and at [docs.starsim.org/llms.txt](https://docs.starsim.org/llms.txt)).
+A compact index of the whole public API is in `docs/llms.txt`, built by `python make_api.py` in `docs/` (and at [starsim.org/v4/llms.txt](https://starsim.org/v4/llms.txt)).
+<!-- V4-PREVIEW: restore the link above to docs.starsim.org/llms.txt for normal publishing -->
 
 ## Testing
 

@@ -97,8 +97,9 @@ class Source:
         return
 
     def skip(self, name, why):
-        """ Something in the source that was not translated """
-        self.incomplete.append((name, why))
+        """ Something in the source that was not translated: listed once, however often its code is written (`write()` writes each disease twice, the first time for the names it takes) """
+        if (name, why) not in self.incomplete:
+            self.incomplete.append((name, why))
         return
 
     def __repr__(self):
@@ -836,4 +837,4 @@ def handoff(imported):
     source = sc.path(imported.file).name if imported.file else 'the model'
     prompt = (f'Finish importing {source} ({imported.format}) into Starsim: save its code, sim.imported.code, to a file, translate each part listed in '
               f'sim.imported.incomplete (the code\'s "Not translated" comments), and check the result against the original with the validate-import skill.')
-    return f'To finish the import, ask an AI assistant with the import-model skill loaded (skills/import-model in the Starsim repo, "Finishing an incomplete import"): "{prompt}"'
+    return f'To finish the import, ask an AI assistant with the import-model skill loaded (printed by `starsim ai show import-model`, or starsim_ai/import-model in the Starsim repo; see "Finishing an incomplete import"): "{prompt}"'

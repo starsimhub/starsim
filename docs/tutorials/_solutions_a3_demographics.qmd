@@ -80,14 +80,11 @@ A: In the larger town, more children are born each year, so the susceptible peop
 **Q: Add contraception (`ss.modify(pregnancy.conception, multiply=0.7, start=2010)`) to the Nigeria model with pregnancy. How many fewer people are there in 2030?**
 
 ```{python}
-import pandas as pd
-
-fertility = pd.read_csv('test_data/nigeria_asfr.csv')
 pars = dict(start=2000, stop=2030, dt=ss.months(1))
 
 sims = {}
 for label in ['Baseline', 'Contraception']:
-    pregnancy = ss.Pregnancy(fertility_rate=fertility)
+    pregnancy = ss.Pregnancy(fertility_rate='Nigeria')
     contraception = ss.modify(pregnancy.conception, multiply=0.7, start=2010) if label == 'Contraception' else None
     people = ss.people('Nigeria', n_agents=5000)
     sims[label] = ss.Sim(people=people, demographics=[pregnancy, ss.Deaths(death_rate='Nigeria')], interventions=contraception, **pars)

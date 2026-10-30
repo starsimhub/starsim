@@ -73,7 +73,7 @@ A bare number is also accepted. The slot says what it is (after `@`, it is a rat
 5. `start` or `stop` given as years (years);
 6. none of these: time is counted in steps.
 
-So in the measles model as the tutorials write it, `S >> I @ 1.9*I` is per day because `ss.days(8)` is in days. When the unit comes from rules 2 to 5, it is a guess at what the bare numbers meant, and the sim says where it came from in a note. If the typed values have different units (days for the disease, years for births, say), the unit is the shortest of them, and the step is one of it; if there are bare numbers too, which unit those are in can't be known, and the sim stops with an error asking for `unit=`.
+So in the measles model as the tutorials write it, `S >> I @ 1.9*I` is per day because `ss.days(8)` is in days. When the unit comes from rules 2 to 5, it is a guess at what the bare numbers meant, and the sim says where it came from in a note. If the typed values have different units (days for the disease, years for births, say), the unit is the shortest of them, and the step is one of it (with a warning, unless `dt=` is given or the run is written in that unit, e.g. `stop=ss.days(100)` or dates); if there are bare numbers too, which unit those are in can't be known, and the sim stops with an error asking for `unit=`.
 
 ### Time in steps
 
@@ -287,7 +287,7 @@ These are Starsim's answers, although different answers would also be valid:
 
 1. **A month is exactly 1/12 of a year**, so a monthly rate gives the same number of events in February as in March, and in 2004 as in 2005.
 2. **A year is 365 days** (with some stretching where needed to make whole years and calendar dates line up).
-3. **A number given as `start` is a year if it looks like one** (`2025`), and a time since the start otherwise (`0`, or `stop=ss.days(50)`), in which case results are in time since the start rather than dated.
+3. **A number given as `start` is a year if it looks like one** (`2025`), and a time since the start otherwise (`0`, or `stop=ss.days(50)`), in which case results are in time since the start rather than dated. The same goes for any number given as a time, such as `at=2030` or a time of an `ss.timeseries()`: from 1900 on it is a calendar year, even in a sim with dates, and below that a time in the sim's unit after the start (for 2,000 days, write `ss.days(2000)`).
 4. **Dates are whole days**, unless a smaller step is asked for explicitly (`dt=ss.days(0.25)`).
 5. **Units are loose when compared with plain numbers** (`ss.days(5) == 5` is true), **but strict between units** (`ss.years(1) == ss.days(365)` is true).
 6. **A rate is per person-time**: of 1,000 people with a death rate of `ss.peryear(0.1)`, about 95 die in a year. If 100 is what the data means, it is a probability, `ss.prob(0.1, 'year')`.
@@ -318,12 +318,14 @@ p_death = death_rate.to_prob() * rel_death_age * rel_death_ses
 States such as `ti_infected` or `ti_recovered` hold *step numbers*, not times, so a duration has to be converted to steps before it is added to one:
 
 ```python
-# Right: the duration as a number of steps
-self.ti_clearance[uids] = self.ti_infected[uids] + self.pars.dur_persist.to_dt()
+# Right: the duration as a number of steps (from the step after the infection, which is dated at the end of its step)
+self.ti_clearance[uids] = self.ti_infected[uids] + 1 + self.pars.dur_persist.to_dt()
 
 # Wrong: ss.years(100), ss.months(100), and ss.days(100) would all mean "100 steps"
-self.ti_clearance[uids] = self.ti_infected[uids] + self.pars.dur_persist
+self.ti_clearance[uids] = self.ti_infected[uids] + 1 + self.pars.dur_persist
 ```
+
+Declare such a state as an `ss.TimeArr`, and take the move when `self.ti_clearance.due()`, which rounds a time between steps up or down at random in proportion, so the duration keeps its mean, as a declared disease's does (see `ss.Infection`).
 
 `.to_dt()` also takes a step, to convert to: `ss.years(100).to_dt(ss.months(1))` is 1,200 monthly steps. A duration or rate is never silently a plain number: `float(ss.peryear(0.1))` is an error, since `ss.peryear(1)`, `ss.permonth(1)`, and `ss.perday(1)` would all give 1, though they differ by a factor of 365. Use `.to_dt()`, `.to_prob()`, `.to('year')` (or `.years`, e.g. to compare with an agent's age), or `.value` (the number in its own unit) if you really do want it. Values drawn from a distribution of durations (`self.pars.dur_inf.rvs(uids)`) are already in steps. See [Custom modules](building_modules.qmd).
 

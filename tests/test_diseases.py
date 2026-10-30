@@ -263,6 +263,11 @@ def test_ncd():
     assert sim2.results.background.new_infections.sum() == 0 # Not transmitted
     assert isinstance(anemia, ss.Disease) and not isinstance(anemia, ss.Infection) and isinstance(sim2.diseases.background, ss.Disease)
     assert not hasattr(anemia, 'susceptible') and 'infect' not in anemia.describe(output=True) # No states of an infection forced on it
+
+    # An infection written as code with a beta but nothing to transmit it over is an error, not a run with no infections; with beta=0 it is not transmitted by design
+    with pytest.raises(ValueError, match='has none'):
+        ss.Sim(diseases=ssl.AgentSIR(), n_agents=100, verbose=0).init()
+    ss.Sim(diseases=ssl.AgentSIR(beta=0), n_agents=100, verbose=0).init()
     return sim
 
 
@@ -463,6 +468,12 @@ def test_current_state():
         sir.current_state(['X'])
     res = sim.run().results.sir
     assert (res.I[0], res.R[0]) == (2, 1) # The start counts the agents moved before the first step
+
+    # Only the people for whom a condition holds (where=), under every solver
+    for kw in [dict(n_agents=1000), dict(solver='ode')]:
+        d = ss.Sim(diseases=ss.SIR(), stratify=dict(age=[0, 15]), stop=2001, verbose=0, **kw).init().diseases.sir
+        young = d.count((ss.ppl.age < 15) & d.S)
+        assert np.isclose(d.move(d.S, d.R, where=ss.ppl.age < 15), young) and np.isclose(d.count(d.R), young)
     S, I, R = ss.states('S I R')
     ode = ss.Sim(diseases=ss.Disease(name='sir', infection=ss.Transition(S, I, rate=0.3 * I), recovery=ss.Transition(I, R, dur=4)), stop=2001, verbose=0).init()
     with pytest.raises(ss.CapabilityError, match='agents'):
@@ -502,17 +513,17 @@ def test_same_transmission():
         def __init__(self, **kwargs):
             super().__init__()
             self.define_pars(beta=ss.perday(0.1), dur_inf=10, init_prev=ss.bernoulli(seeds))
-            self.define_states(ss.BoolState('recovered'), ss.FloatArr('ti_recovered'))
+            self.define_states(ss.BoolState('recovered'), ss.TimeArr('ti_recovered'))
             self.update_pars(**kwargs)
         def step_state(self):
-            done = (self.infected & (self.ti_recovered < self.ti)).uids # At the start of the step after dur_inf, as a declared dwell time ends
+            done = (self.infected & self.ti_recovered.due()).uids # At the start of the step after dur_inf, as a declared dwell time ends
             self.infected[done] = False
             self.recovered[done] = True
         def set_prognoses(self, uids, sources=None):
             super().set_prognoses(uids, sources)
             self.infected[uids] = True
             self.ti_infected[uids] = self.ti
-            self.ti_recovered[uids] = self.ti + self.pars.dur_inf - (not self.sim.initialized) # The seeds are infected at the start, as a declared state's are, not in the first step
+            self.ti_recovered[uids] = self.ti + 1 + self.pars.dur_inf # Infected at the end of the step (the seeds at the start, step 0), as ss.Infection teaches
 
     kw = dict(n_agents=n_agents, stop=50, unit='day', verbose=0, analyzers=ss.infection_log(), networks=[ss.RandomNet(n_contacts=4), ss.RandomNet(n_contacts=2, name='other')],
               connectors=[ss.modify('sir.rel_sus', multiply=0.5, where=lambda sim: sim.people.age > 40), ss.modify('other.pars.n_contacts', multiply=0.5)],
@@ -536,11 +547,11 @@ def test_same_strains():
         def __init__(self, seed_strain, imm=None, **kwargs):
             super().__init__(strains=strains(imm and 'recovered'))
             self.define_pars(beta=ss.perday(0.1), dur_inf=10, init_prev=ss.bernoulli(seeds))
-            self.define_states(ss.BoolState('recovered'), ss.FloatArr('ti_recovered'))
+            self.define_states(ss.BoolState('recovered'), ss.TimeArr('ti_recovered'))
             self.seed_strain = seed_strain # The strain of each seed, as the declared one gives them
             self.update_pars(**kwargs)
         def step_state(self):
-            done = (self.infected & (self.ti_recovered < self.ti)).uids
+            done = (self.infected & self.ti_recovered.due()).uids
             self.infected[done] = False
             self.recovered[done] = True
             self.susceptible[done] = bool(self.strains.immunity) # With protection due to recovery, they can be infected by the other strain (R >> I, as the declared one is)
@@ -551,7 +562,7 @@ def test_same_strains():
             self.infected[uids] = True
             self.recovered[uids] = False
             self.ti_infected[uids] = self.ti
-            self.ti_recovered[uids] = self.ti + self.pars.dur_inf - (not self.sim.initialized)
+            self.ti_recovered[uids] = self.ti + 1 + self.pars.dur_inf
 
     def same(imm=None):
         kw = dict(n_agents=n_agents, stop=40, unit='day', verbose=0, analyzers=ss.infection_log(), networks=[ss.RandomNet(n_contacts=4), ss.RandomNet(n_contacts=2, name='other')])
@@ -751,6 +762,8 @@ def test_define_transitions():
             self.define_transitions(extra=self.R >> self.I @ ss.peryear(0.1))
     extra = Extra()
     assert 'extra' in extra.transitions and 'code_par' in extra.code_pars
+    with pytest.raises(ss.CapabilityError, match='was built when it was made'): # Declared after the disease was made
+        extra.define_results(share_I=extra.I.frac)
 
     class Fitted(ss.Disease): # A parameter given with bounds is a value, not a declaration, so the states and transitions can follow
         def __init__(self, **kwargs):

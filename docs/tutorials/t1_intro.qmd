@@ -53,7 +53,7 @@ The disease is named `measles`, after its variable. These are the standard equat
 measles.equations()
 ```
 
-Here `dur` is the infectious period (8 days), so `I / dur` is the rate of recovery.
+Here `dur_I` is the infectious period (8 days), the mean time in I, so `I / dur_I` is the rate of recovery.
 
 ## Running the model
 

@@ -320,7 +320,7 @@ exporters = dict(
 
 def export_to(sim, format, filename=None, verbose=None):
     """
-    Write a sim in another format (`ss.save()` writes Starsim's own: a saved sim, or code with a `.py` file)
+    Write a sim in another format (`sim.save()` and `ss.save()` write Starsim's own, a gzipped pickle that `ss.load()` reads)
 
     What the format cannot carry is listed as `ss.errors.LossyExport`; the export still
     writes everything it can.

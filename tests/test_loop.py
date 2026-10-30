@@ -43,7 +43,7 @@ def test_run_options():
         s2.run_one_step()
     s2.finalize()
 
-    assert s1.summary == s2.summary, 'Sims do not match'
+    assert s1.summary.equals(s2.summary), 'Sims do not match'
 
     # A non-profiled run should still produce a usable plan DataFrame, just without cpu_time (test_loop_plotting() profiles one)
     assert not len(s1.loop.cpu_time), 'Default run should not record CPU times'
@@ -87,7 +87,7 @@ def test_memory_cleanup():
     s2 = ss.Sim(small_pars)
     s2.run(until=1)
     s2.run()
-    assert s1.summary == s2.summary, 'Split run does not match uninterrupted run'
+    assert s1.summary.equals(s2.summary), 'Split run does not match uninterrupted run'
 
     # Partial and completed sims should be collectable without shrink()
     sim = ss.Sim(small_pars)
@@ -130,7 +130,7 @@ def test_callable_cache_cleanup():
         assert getattr(dist, '_callable_args', None) is None
         assert getattr(dist, '_callable_keys', None) is None
     s2.run()
-    assert s1.summary == s2.summary, 'Callable cache regeneration changed results'
+    assert s1.summary.equals(s2.summary), 'Callable cache regeneration changed results'
 
     # The cleanup finally block should run even when the loop raises
     sim = ss.Sim(pars).init()

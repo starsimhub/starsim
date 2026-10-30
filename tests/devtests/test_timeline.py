@@ -85,7 +85,7 @@ def test_units(do_plot=False):
 
     # Check that results match to within stochastic uncertainty
     rtol = 0.05
-    vals = [sim.summary.sis_cum_infections for sim in [sims.y, sims.d]]
+    vals = [sim.summary.value.sis_cum_infections for sim in [sims.y, sims.d]]
     assert np.isclose(*vals, rtol=rtol), f'Values for cum_infections do not match ({vals})'
 
     return sims

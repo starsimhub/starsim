@@ -81,7 +81,7 @@ class Strat:
             errormsg = f'mobility= is for a spatial stratification, but "{name}" is of kind "{self.kind}"; pass kind="space" if it is a place'
             raise ValueError(errormsg)
         self.mobility = mobility
-        levels = list(levels)
+        levels = [ss.years(v).value if isinstance(v, ss.TimePar) else v for v in levels] # Ages given as durations (e.g. ss.weeks(6)) are edges in years, as people's ages are
         numeric = all(sc.isnumber(v) and not isinstance(v, bool) for v in levels)
         self.edges = None
         if numeric: # Bin edges; the last bin is open-ended
@@ -103,6 +103,9 @@ class Strat:
         if self.kind == 'age' and self.edges is None and kind is None: # Age groups given as labels have no ages, so nobody ages between them
             self.kind = 'plain'
             self.guessed['kind'] = 'plain, since the age groups are labels and not ages'
+        self.like_places = kind is None and self.kind == 'plain' and name in place_names # Named as places, but given only names: see Groups.init()
+        if self.like_places:
+            self.guessed['kind'] = 'plain (groups that mix as one population), since it was given only names'
         self.adjust = sc.objdict()
         for key,vals in (adjust or {}).items():
             vals = np.array(vals, dtype=float)
@@ -384,6 +387,7 @@ def transfer_stages(sim, mod, tf, strat):
 
 
 strat_options = ['split', 'adjust', 'kind', 'states', 'where', 'mobility']
+place_names = ['patch', 'region', 'district', 'county', 'province', 'place', 'location'] # Names that suggest places, which a list of names alone does not make (see Strat)
 strat_kinds = ['age', 'space', 'plain'] # The kinds stratify() takes (a strain dimension is made by ss.Strains, and a disease one by the solvers)
 
 
@@ -548,6 +552,10 @@ class Groups:
                 raise ValueError(f'the sim has a dimension called "{strat.name}", which is also the name of a disease whose states are tracked jointly with another\'s; rename one of them.')
             strats[strat.name] = strat
         self.strats = list(strats.values())
+        mixed = {dim for net in sim.pars.networks.values() for dim in (getattr(net, 'dims', None) or (getattr(net, 'full', None) or {}).get('dims') or [])} # Dimensions with contacts of their own (a matrix over several together keeps them in net.full)
+        for strat in self.strats: # A name like patch= does not make places: say so, since people at its levels mix as one population (unless contacts say otherwise)
+            if getattr(strat, 'like_places', False) and strat.name not in mixed:
+                ss.note(f'"{strat.name}" is given only names, so its levels are groups whose people mix as one population, not places; to make them places, give kind="space" or a geography, e.g. stratify({strat.name}=ss.geo.geography(names=[...], pop=[...]))', sim=sim)
         named = getattr(sim, 'named_people', None)
         given = getattr(sim, 'given_pyramid', None)
         for strat in self.strats: # Age groups with no split of their own take that of a named population, or of the people given to a compartmental run

@@ -38,7 +38,7 @@ class Wealth(ss.Module):
     def init_results(self):
         super().init_results()
         self.define_results(
-            ss.Result('gini', scale=False, label='Gini coefficient'),
+            ss.Result('gini', label='Gini coefficient'),
         )
         return
 
@@ -105,7 +105,7 @@ class Boids(ss.Module):
 
     def init_results(self):
         super().init_results()
-        self.define_results(ss.Result('aligned', scale=False, label='Alignment with neighbors'))
+        self.define_results(ss.Result('aligned', label='Alignment with neighbors'))
         return
 
     def offsets(self):

@@ -50,7 +50,7 @@ A delivery says who can receive the product, when, and how many. There is one de
 | `at_age=` | Routine delivery to people as they reach an age, e.g. `at_age=ss.months(9)` |
 | `where=` | Who can receive it: a condition, or a function of the sim |
 | `who=` | Who receives it: an event (such as `screening.positive` or `sis.infection`), a condition, or both, joined with `&` |
-| `on=` | The event part of `who=`, e.g. `on=sis.infection` |
+| `on=` | The event part of `who=`, e.g. `on=sis.infection`, or a transition by its path, e.g. `on='sis.infection'` |
 | `coverage=` | The share of eligible people reached |
 | `capacity=` | The number that can be delivered (per round, per step, or as a rate) |
 | `priority=` | Who is served first when capacity runs short |
@@ -89,6 +89,22 @@ scenarios = {
 }
 msim = ss.parallel(scenarios)
 msim.plot('sis.I')
+```
+
+As agents, each person has an age, so `at_age=` can be any age. As compartments, people have only an age group, and reach an age by aging from the group below it into the one it starts, so `at_age=` needs age groups with an edge at that age; otherwise it is an error (it never runs the model as agents instead). To compare several ages of delivery with the same compartments, give fine age groups once, with an edge at each age to try:
+
+```{python}
+S, I, R = ss.states('S I R')
+measles = ss.Disease(S, I, R, infection=S >> I @ ss.peryear(500)*I, recovery=I >> R @ ss.days(8), births=ss.birth(S, rate=ss.peryear(0.03)), init=dict(I=0.001, R=0.85), name='measles')
+measles.stratify(age=[0, 0.25, 0.5, 0.75, 1, 1.25, 1.5, 5, 15]) # Edges every 3 months up to 18 months
+
+sims = {}
+for months in [6, 9, 12, 15]:
+    mcv1 = ss.vaccinate(efficacy=0.85, coverage=0.8, at_age=ss.months(months), name='mcv1')
+    sims[f'At {months} months'] = ss.Sim(measles, interventions=mcv1, total_pop=1e6, start=2000, stop=2005, dt=ss.weeks(1), verbose=0)
+msim = ss.parallel(sims)
+for label in sims:
+    print(f'{label}: {msim.sims[label].results.measles.infection.sum():,.0f} infections')
 ```
 
 ### Coverage and capacity

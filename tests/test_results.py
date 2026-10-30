@@ -31,6 +31,14 @@ def test_export():
     rs1 = sim.results.sis1
     rs2 = sim.results.sis2
 
+    # A name that is not a result says so, with the closest, also in a sim given a module that was given to another sim before; the module given holds none, and says where they are
+    sim2 = ss.Sim(n_agents=small, diseases=d1, networks='random', dur=1, verbose=0).run()
+    for res in [rs1, sim2.results.sis1]:
+        with pytest.raises(AttributeError, match='did you mean new_infections'):
+            res.new_infectionz
+    with pytest.raises(AttributeError, match='runs its own copy'):
+        d1.results.new_infections
+
     # Export a single result to a series or dataframe
     res = rs1.new_infections
     res_df = res.to_df()
@@ -52,7 +60,7 @@ def test_export():
 
     # Export results of a whole module to a dataframe
     dfs = rs1.to_df()
-    assert res_df.value.sum() == dfs.cum_infections.values[-1] == sim.summary.sis1_cum_infections
+    assert res_df.value.sum() == dfs.cum_infections.values[-1] == sim.summary.value.sis1_cum_infections
 
     # Export resampled summary of results to dataframe
     dfy1 = rs1.to_df(resample='year')
@@ -65,6 +73,11 @@ def test_export():
     sim_df = sim.to_df(resample='year', use_years=True)
     assert sim_df.sis1_infected.values[0] == rs1.infected[12]
     assert sim_df.sis2_infected.values[0] == rs2.infected[2] # The end of the first year, as for sis1
+
+    # Calendar periods are labeled by their end, not by the last weekly time point (2004-01-04 for 2003), or the end of the run if sooner
+    weekly = ss.Sim(ss.SIR(), solver='ode', start='2000-01-01', stop='2004-06-01', dt=ss.weeks(1), verbose=0).run().results.sir.infection
+    assert [str(d) for d in weekly.resample('year').timevec] == ['2001-01-01', '2002-01-01', '2003-01-01', '2004-01-01', str(weekly.timevec[-1])]
+    assert str(weekly.resample('month').timevec[0]) == '2000-02-01'
 
     # Plot
     res.plot()
@@ -113,7 +126,7 @@ def test_2d_results():
     assert res.to_df().columns.tolist() == ['time', 'female', 'male']
     assert 'by female, male' in repr(res) # Each column labelled (it was an unlabelled array)
     assert 'bysex_infected_male' in sim.to_df().columns # Dataframe columns for each result column
-    assert sim.summary.bysex_infected_male == res['male'][-1] # Summarized by column, a stock by its last value
+    assert sim.summary.value.bysex_infected_male == res['male'][-1] # Summarized by column, a stock by its last value
     res.plot()
     sim.plot()
     with pytest.raises(ValueError):
@@ -170,6 +183,8 @@ def test_summarize_by():
     res = ss.Result('new_infections', values=np.arange(5.0))
     assert res.kind == 'flow' and res.summarize_by == 'sum' and res.summarize() == 10 and ss.Result('n_infected').kind == 'stock' and ss.Result('prevalence').summarize_by == 'mean'
     assert ss.Result('x', values=np.arange(5.0), kind='stock').summarize() == 4
+    assert ss.Result('doses', dtype=int).kind == 'flow' and ss.Result('doses').kind == 'ratio' # A count with no name to go on is a flow
+    assert ss.Result('new_x').scale and ss.Result('n_x').scale and not ss.Result('prevalence').scale and ss.Result('prevalence', scale=True).scale # Scaled by kind, unless told
     mean = ss.Result('x', values=np.arange(5.0), kind='flow', summarize_by='mean') # A flow summarized another way is still a flow
     assert mean.summarize() == 2 and mean.cum[-1] == 10
     assert ss.Result('x', summarize_by='last').kind == 'stock' # The kind follows the summary if only that is given
@@ -197,6 +212,17 @@ def test_summarize_by():
     annual = sim.results.resample('year')
     assert 'timer' not in annual.a and len(annual.sis.I) == 2
     assert 'a_timer' not in sim.to_df(resample='year') and 'a_timer' in sim.to_df()
+
+    # What has no one number is left out of the summary, rather than failing the run: a 2D result with no columns=, a list, and other data
+    assert ss.Result('times', dtype=list).kind is None
+    class Odd(ss.Analyzer):
+        def init_results(self):
+            super().init_results()
+            self.define_results(ss.Result('by_age', dtype=int, shape=(self.t.npts, 3)), ss.Result('times', dtype=list, scale=False))
+            self.results['log'] = dict(net=[[0, None]])
+    sim = ss.Sim(ss.SIS(), analyzers=Odd(name='odd'), n_agents=small, stop=5, verbose=0).run()
+    assert 'sis_I' in sim.summary.index and not any(k.startswith('odd') for k in sim.summary.index)
+    assert len(sim.summarize('odd.by_age')) == 3 # Asked for by key, it is one number per column
     return res
 
 
@@ -271,7 +297,7 @@ def test_results_by_group():
     ppl, dis = sim.people, sim.diseases.agentsis
     assert res.n_infected[-1] == (ppl.alive.raw & dis.infected.raw).sum() and res.n_infected.by('sex').shape == (sim.t.npts, 2)
     with pytest.raises(ValueError, match='groups=True'):
-        ss.Sim(ssl.AgentSIS(), stratify=dict(sex=['female', 'male']), n_agents=small, verbose=0).init() # Nothing uses it
+        ss.Sim(ssl.AgentSIS(), networks='random', stratify=dict(sex=['female', 'male']), n_agents=small, verbose=0).init() # Nothing uses it
     return sim
 
 
@@ -331,6 +357,10 @@ def test_destinations():
     data = pd.DataFrame({'course.C': truth.values[1:]}, index=truth.timevec[1:]) # Daily, as the flow is
     fit = cohort('ode', p=ss.par(0.5, bounds=[0.05, 0.95], name='p'), data=data).fit(gof='rmse')
     assert np.isclose(fit.table.best.iloc[0], 0.3, rtol=1e-2)
+    fig = fit.plot(residuals=True) # The residuals below the model and the data, lined up as the fit compares them
+    expected, model = ss.results.compare(fit.sim)['course.C']
+    assert len(fig.axes) == 2 and np.allclose(fig.axes[1].collections[0].get_offsets()[:, 1], expected - model)
+    plt.close('all')
     return res
 
 
@@ -348,6 +378,13 @@ def test_compare_data():
     assert np.allclose(compared['sis.infection'][1][1:], [res.infection.values[(sim.t.yearvec > y-1) & (sim.t.yearvec <= y)].sum() for y in years[1:]]) # A flow, summed over the year to each
     for col,(W,expected,rows) in lined.items(): # The same matrix as calibration uses
         assert np.allclose(W @ ss.results.match_column(sim, col).values, compared[col][1])
+    typo = ss.Sim(diseases='sis', networks='random', n_agents=small, start=2000, stop=2010, data=df.rename(columns={'sis.infection': 'infectoin'}), verbose=0).init()
+    assert any("aliases=dict(infection='infectoin')" in note for note in typo.notes) # The code to rename it, with the closest result filled in, to paste as it is
+    two = ss.Sim(diseases=['sir', 'sis'], networks='random', n_agents=small, start=2000, stop=2010, verbose=0).init()
+    with pytest.raises(KeyError, match=r"aliases=\{'sir.infection': 'infectoin'\}"): # A result named by module is not a keyword, so the code is a dict literal
+        ss.results.check_data(two, df.rename(columns={'sis.infection': 'infectoin'}), die=True)
+    with pytest.raises(KeyError, match=r"(?s)No result is close; the results are .*aliases=dict\(result='zzzzqqq'\)"): # Nothing close is not a guess
+        ss.results.check_data(two, df.rename(columns={'sis.infection': 'zzzzqqq'}), die=True)
     return compared
 
 
@@ -363,6 +400,24 @@ def test_plot():
     assert lines(sim.sir.plot(['S', 'I'])) == [['S', 'I']]
     assert len(sim.sir.plot('S', 'I').axes) == 2
     assert len(sim.plot().axes) == 5 # The number alive and the deaths of a closed population are left out
+
+    # In Jupyter, the figure is returned when not shown, and a figure given is not shown; results can be overlaid, on a log scale, and saved
+    res = sim.results.sir
+    assert res.I.plot(is_jupyter=True, do_show=True) is None
+    fig = res.I.plot(is_jupyter=True, do_show=False, label='I')
+    filename = 'test_plot_overlay.png'
+    assert res.S.plot(fig=fig, label='S', log=True, is_jupyter=True, filename=filename) is fig
+    assert len(fig.axes) == 1 and fig.axes[0].get_yscale() == 'log' and len(fig.axes[0].get_legend().get_texts()) == 2
+    sc.rmpath(filename)
+    assert res.I.df.equals(res.I.to_df()) and res.df.shape == res.to_df().shape
+
+    # A flow with weekly data over part of a daily run: its weekly totals over the whole run, not only the weeks with data
+    S, I, R = ss.states('S I R')
+    make = lambda data=None: ss.Sim(ss.Disease(infection=S >> I @ 0.3*I, recovery=I >> R @ ss.days(10), init_n=dict(I=5), name='sir'), data=data, total_pop=10_000, start='2025-01-01', stop='2025-04-01', verbose=0)
+    data = make().run().to_data('sir.infection', resample='week').iloc[:6] # The first six weeks
+    sim = make(data).run()
+    ax = sim.plot('sir.infection').axes[0]
+    assert len(ax.lines[0].get_xdata()) == 12 # The 12 whole weeks of the run (6 with data)
     plt.close('all')
     return sim
 

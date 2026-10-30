@@ -47,6 +47,8 @@ def test_dist(m=m):
 
     # Test other options
     dist.plot_hist()
+    normal = ss.normal(3, 1) # Not initialized: plotted from a copy, leaving it for a sim to initialize
+    assert np.isclose(normal.plot_hist().mean(), 3, atol=0.2) and not normal.initialized
     return rvs
 
 
@@ -609,6 +611,25 @@ def test_shape_scale():
     return vals
 
 
+@sc.timer()
+def test_own_unit():
+    """ Test that a distribution with a unit draws and plots in it outside a sim, and shows what it was made from """
+    sc.heading('Testing distributions in their own unit')
+    dist = ss.erlang(k=4, mean=ss.days(10))
+    assert repr(dist) == 'ss.erlang(k=4, mean=ss.days(10))' # Not ss.gamma(a=4, scale=2.5, loc=0.0)
+    vals = dist.rvs(n) # In days, with no sim and no strict=False
+    assert np.isclose(vals.mean(), 10, rtol=0.05) and np.isclose(vals.std(), 5, rtol=0.1)
+    dist.plot_hist()
+    assert plt.gca().get_xlabel() == 'Days'
+    plt.close('all')
+    assert np.isclose(ss.normal(3, 0.1, unit='weeks').rvs(n).mean(), 3, rtol=0.01)
+    with pytest.raises(ss.errors.DistNotInitializedError): # One with no unit still needs a sim, or strict=False
+        ss.normal(0, 1).rvs(5)
+    dist.set(a=3)
+    assert repr(dist).startswith('ss.gamma(a=3') # Changed, so shown by its parameters
+    return vals
+
+
 def test_engine_copy():
     """ Test that the copy of a distribution a declared model draws from (in the sim's unit) draws what the distribution does """
     sc.heading('Testing that the engine draws what each distribution draws')
@@ -664,6 +685,7 @@ if __name__ == '__main__':
     o16 = test_choose_n()
     o17 = test_round()
     o18 = test_shape_scale()
+    o18b = test_own_unit()
     o19 = test_engine_copy()
 
     T.toc()

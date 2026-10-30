@@ -376,6 +376,45 @@ def test_init_prev_by_agent():
     return sim
 
 
+@sc.timer()
+def test_places_by_name():
+    sc.heading('Testing starting values by place name, and the note for names that are not places')
+    def make(init_n=None, init_prev=None, beta=0.3):
+        S, I, R = ss.states('S I R')
+        return ss.Disease(S >> I @ beta*I, I >> R @ ss.days(8), init_n=init_n, init_prev=init_prev, name='m')
+    patch = dict(patch=['a', 'b', 'c'], kind='space')
+
+    # A place left out of a starting value by name starts at 0, as agents and as compartments, but a rate needs every place
+    for n_agents in [None, 2000]:
+        given = dict(stratify=patch, stop=3, unit='day', **kw) | (dict(n_agents=n_agents) if n_agents else {})
+        by_name = ss.Sim(make(init_n=dict(I=ss.by(patch={'b': 10}))), **given).run().results.m.I.by('patch').values[0]
+        in_order = ss.Sim(make(init_n=dict(I=ss.by(patch=[0, 10, 0]))), **given).run().results.m.I.by('patch').values[0]
+        assert np.allclose(by_name, in_order) and in_order[1] > 0
+    seed = ss.by(patch={'c': 0.1})
+    prev = ss.Sim(make(init_prev=seed), stratify=patch, stop=3, unit='day', **kw).run().results.m.I.by('patch').values[0]
+    assert prev[0] == prev[1] == 0 and prev[2] > 0
+    assert seed.rest is None # A copy is the starting value, so the same ss.by elsewhere still needs every place
+    later = ss.SIR(beta=ss.perday(0.1), dur_inf=ss.days(8))
+    later.pars.init_prev = ss.by(patch={'c': 0.1}) # A parameter of a built-in disease, set after it is made, as agents and as compartments
+    for sir in [ss.SIR(beta=ss.perday(0.1), dur_inf=ss.days(8), init_prev=ss.by(patch={'c': 0.1})), later]:
+        for n_agents in [None, 2000]:
+            given = dict(stratify=patch, stop=3, unit='day', **kw) | (dict(n_agents=n_agents) if n_agents else {})
+            prev = ss.Sim(diseases=sc.dcp(sir), **given).run().results.sir.I.by('patch').values[0]
+            assert prev[0] == prev[1] == 0 and prev[2] > 0
+    with pytest.raises(ValueError, match='has no value for b, c'):
+        ss.Sim(make(init_n=dict(I=ss.by(patch={'b': 10})), beta=0.3*ss.by(patch={'a': 1.0})), stratify=patch, stop=3, unit='day', **kw).run()
+    with pytest.raises(ValueError, match='bb, which is not a level'): # A misspelled place is not quietly 0
+        ss.Sim(make(init_n=dict(I=ss.by(patch={'bb': 10}))), stratify=patch, stop=3, unit='day', **kw).run()
+
+    # A name like patch given only names mixes as one population, which a note says; kind= given says what it is, as do contacts by it
+    notes = lambda nets=None, **strat: [note for note in ss.Sim(make(init_prev=0.01), stratify=strat, stop=3, unit='day', **kw, **(dict(networks=nets) if nets else {})).init().notes if 'mix as one population' in note]
+    assert not notes(ss.contacts(dict(region=[[0.8, 0.2], [0.2, 0.8]])), region=['north', 'south'])
+    assert not notes(ss.contacts(np.eye(4), dims=['region', 'risk']), region=['north', 'south'], risk=['low', 'high']) # Contacts over several dimensions together
+    assert len(notes(region=['north', 'south'])) == 1
+    assert not notes(region=['north', 'south'], kind='plain') and not notes(region=['north', 'south'], kind='space') and not notes(risk=['low', 'high'])
+    return
+
+
 if __name__ == '__main__':
     clearance = test_strain_clearance()
     cure    = test_strain_cure()
@@ -386,3 +425,4 @@ if __name__ == '__main__':
     splits  = test_given_splits()
     sex     = test_sex()
     initp   = test_init_prev_by_agent()
+    places  = test_places_by_name()

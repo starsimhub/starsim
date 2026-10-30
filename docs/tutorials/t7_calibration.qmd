@@ -144,20 +144,11 @@ sims = {
 msim = ss.parallel(sims)
 ```
 
-To see the whole year, plot the weekly totals of the cases (`resample('week')`), with the data:
+To see the whole year, plot the cases with the data. Since the data is weekly, the plot shows the model's weekly totals, as the fit compares them, over the weeks with data and the rest of the year:
 
 ```{python}
-import matplotlib.pyplot as plt
-fig, ax = plt.subplots()
-ax.scatter(ss.DateArray(data.date), data.cases, c='k', s=15, label='Data')
-weekly = msim.results.measles.cases.resample('week') # Weekly totals of the daily cases
-weekly.plot(ax=ax)
+msim.plot('measles.cases')
 ```
-
-::: {.callout-note}
-## [PROPOSAL]
-`msim.plot('measles.cases')` shows the weekly totals only over the weeks that have data, since that is what the fit compares, so the projection after mid-April is cut off. It would be better if a sim or MultiSim with data plotted the totals over every period of the run, with the data on the periods it covers, so that `msim.plot('measles.cases')` alone would give the plot above.
-:::
 
 ```{python}
 msim.summarize().loc['measles_cases']

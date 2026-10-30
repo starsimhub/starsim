@@ -182,7 +182,7 @@ print('Seeded:', round(sim.results.seeding.delivered.sum()))
 
 ## Bringing your model in
 
-There is no importer for LASER models, since a LASER model is Python code with components rather than a model file. The import-model skill for AI assistants (`skills/import-model/references/laser.md` in the Starsim repository) maps each LASER component to its Starsim form.
+There is no importer for LASER models, since a LASER model is Python code with components rather than a model file. The import-model skill for AI assistants (`starsim_ai/import-model/references/laser.md` in the Starsim repository) maps each LASER component to its Starsim form.
 
 See [Import/export](index.qmd) for importing in general: checking an import, keeping it as code, and finishing one that is incomplete.
 

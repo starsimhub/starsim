@@ -126,7 +126,7 @@ The next tutorials leave deaths out, since they are few and change little else i
 
 ## Naming the parameters
 
-Starsim names the parameters of a model itself (`beta`, `dur_progression`, ...), as [Tutorial 2](t2_model.qmd) showed. To name them yourself, and to say more about them, write them with `ss.par()`. Each takes its name from its variable, and can have a description (`doc=`), where its value comes from (`source=`), and bounds, the range of values it could plausibly take:
+Starsim names the parameters of a model itself (`beta`, `dur_E`, ...), as [Tutorial 2](t2_model.qmd) showed. To name them yourself, and to say more about them, write them with `ss.par()`. Each takes its name from its variable, and can have a description (`doc=`), where its value comes from (`source=`), and bounds, the range of values it could plausibly take:
 
 ```{python}
 S, E, I, R = ss.states('S E I R')

@@ -57,7 +57,7 @@ class Progress:
     def line(self):
         t = self.sim.t
         share = t.ti/max(1, t.npts - 1)
-        now = ss.sim.time_str(t.tvec[t.ti], self.sim.unit_name) # The end of the step being run, so that the last says the end of the run: a date, or e.g. day 27
+        now = ss.sim.time_str(t.tvec[t.ti], self.sim) # The end of the step being run, so that the last says the end of the run: a date, or e.g. day 27
         return f'  {self.bar(share)} {share:4.0%}  {now}  {self.sim.elapsed:.1f} s'
 
     def update(self):
@@ -706,7 +706,11 @@ def describe_sim(sim, output=False, verbose=False):
             add('', f'{cap.ingredient}: {cap.reason}')
         if not guessed: # What auto would have done
             reasons = ss.solvers.auto_reasons(sim)
-            add('', f'auto would choose: ' + (f'abm ({reasons[0]})' if reasons else 'ode (every part of the model has a compartmental form)'))
+            stops = [cap.reason for cap in sim.capabilities if not cap.get('switch', True)] # E.g. at_age= with no age group starting at that age, which auto does not run as agents
+            if stops:
+                add('', f'auto would stop: {stops[0]}')
+            else:
+                add('', f'auto would choose: ' + (f'abm ({reasons[0]})' if reasons else 'ode (every part of the model has a compartmental form)'))
         if sim.solver == 'abm':
             scale = f', each standing for {pars.pop_scale:n} people' if pars.pop_scale != 1 else ''
             add('', f'{pars.n_agents:,} agents{scale}', None if 'n_agents' in sim.given else 'guessed')

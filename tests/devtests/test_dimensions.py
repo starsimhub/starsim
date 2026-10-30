@@ -1018,9 +1018,9 @@ def test_contacts_ages():
     pars = dict(total_pop=100_000, n_agents=10_000, stop=ss.days(30), rand_seed=1, **kw)
     for solver in ['abm', 'ode']: # ages= combines with another dimension's matrix as age= does (it was "unrecognized argument area")
         sims = [ss.Sim(make(), networks=net, solver=solver, **pars).run() for net in [ss.contacts(dict(age=C, area=area)), ss.contacts(dict(age=C, area=area), ages=[0, 15, 65])]]
-        assert np.allclose(*[sim.results.measles.S_to_E.values for sim in sims])
+        assert np.allclose(*[sim.results.measles.infection.values for sim in sims])
         assert sum('not reciprocal' in note and '"age"' in note for note in sims[1].notes) == 1 # Checked over its own groups, once, as agents too (it was never checked for ages=, and then only in a compartmental run)
-    res = sims[0].results.measles.S_to_E
+    res = sims[0].results.measles.infection
     assert np.allclose(res.by('age').select(area='rural').values, res.select(area='rural').by('age').values) # In either order (it was "is not stratified")
     assert 'contact matrix by age and area' in sims[0].describe(output=True) # It was "by age"
 

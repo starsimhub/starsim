@@ -1031,7 +1031,7 @@ class Family(ss.Module):
         for mod,name in zip(members, first): # Only those in the first state of every member can be seeded
             naive &= mod[name].raw[uids]
         uids = uids[naive]
-        init_prev = self.init_prev
+        init_prev = ss.parameters.starting(self.init_prev)
         if isinstance(init_prev, ss.by):
             p = init_prev.lookup(sim)[uids] if init_prev.on_people(sim) else init_prev.per_group(sim)[sim.groups.group_raw()[uids]]
         elif callable(init_prev) and not isinstance(init_prev, ss.Dist):

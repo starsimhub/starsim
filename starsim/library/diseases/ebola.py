@@ -88,41 +88,41 @@ class Ebola(AgentSEIR):
             ss.BoolState('buried', label='Buried'),
 
             # Timepoint states
-            ss.FloatArr('ti_severe', label='Time of severe symptoms'),
-            ss.FloatArr('ti_buried', label='Time of burial'),
+            ss.TimeArr('ti_severe', label='Time of severe symptoms'),
+            ss.TimeArr('ti_buried', label='Time of burial'),
         )
         return
 
     def step_state(self):
         """ Progress exposed -> infectious -> severe -> recovered/dead -> buried """
         p = self.pars
-        ti = self.ti
 
         # Progress exposed -> infectious (as in ssl.AgentSEIR; super() isn't called since it would remove bodies before burial)
-        infectious = (self.exposed & (self.ti_infectious <= ti)).uids
+        infectious = (self.exposed & self.ti_infectious.due()).uids
         self.exposed[infectious] = False
         self.infectious[infectious] = True
 
         # Progress infectious -> severe
-        severe = (self.infectious & (self.ti_severe <= ti)).uids
+        severe = (self.infectious & self.ti_severe.due()).uids
         self.severe[severe] = True
 
         # Progress infectious/severe -> recovered
-        recovered = (self.infectious & (self.ti_recovered <= ti)).uids
+        recovered = (self.infectious & self.ti_recovered.due()).uids
         self.clear_infection(recovered)
         self.recovered[recovered] = True
         self.severe[recovered] = False
 
         # Progress dead -> buried: unburied bodies stay in the population (and infectious) until burial, when they are removed
-        self.severe[self.ti_dead <= ti] = False
-        buried = (self.ti_buried <= ti).uids
+        dead = self.ti_dead.due()
+        self.severe[dead] = False
+        buried = self.ti_buried.due().uids
         self.buried[buried] = True
         self.sim.people.request_death(buried, cause=self)
 
         # Update transmissibility: severe agents and unburied bodies are more infectious
         self.rel_trans[:] = 1.0
         self.rel_trans[self.severe] = p.sev_factor
-        unburied = ((self.ti_dead <= ti) & (self.ti_buried > ti)).uids
+        unburied = (dead & ~self.ti_buried.due()).uids
         self.rel_trans[unburied] = p.unburied_factor
         return
 

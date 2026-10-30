@@ -81,7 +81,7 @@ A distribution is shown as it was given, with its units (`erlang(k=4, mean=8 day
 
 ### Equations, diagram, and transitions
 
-`equations()` writes out the system of differential equations of a declared disease, with its parameters by name. Here β was named `beta`, since it multiplies the share infectious, and the infectious period `dur`:
+`equations()` writes out the system of differential equations of a declared disease, with its parameters by name. Here β was named `beta`, since it multiplies the share infectious, and the infectious period `dur_I`, the mean time in I:
 
 ```{python}
 S, I, R = ss.states('S I R')

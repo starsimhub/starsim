@@ -48,7 +48,7 @@ def test_deepcopy():
     s1.run()
     s2.run()
     ss.debugtools.diff_sims(s1, s2, full=True)
-    assert np.allclose(s1.summary[:], s2.summary[:], rtol=0, atol=0, equal_nan=True)
+    assert np.allclose(s1.summary.value, s2.summary.value, rtol=0, atol=0, equal_nan=True)
 
     return s1, s2
 
@@ -63,7 +63,7 @@ def test_deepcopy_until():
     s1.run()
     s2.run()
     s1.plot() # Plotting a sim that was copied part way through
-    assert np.allclose(s1.summary[:], s2.summary[:], rtol=0, atol=0, equal_nan=True)
+    assert np.allclose(s1.summary.value, s2.summary.value, rtol=0, atol=0, equal_nan=True)
 
     return s1, s2
 
@@ -90,6 +90,49 @@ def test_custom_imports():
                 pass
 
     return sim
+
+
+@sc.timer()
+def test_pickle_script_classes():
+    sc.heading('Testing that classes defined in a script pickle by value, as ss.parallel() sends them')
+    import dill
+    script = """
+class MyDis(ss.SIR):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.f = lambda x: 2*x
+
+class MySim(ss.Sim):
+    def init(self, **kwargs):
+        return super().init(**kwargs)
+"""
+    import sys, types
+    main = sys.modules['__main__']
+    sys.modules['__main__'] = script_main = types.ModuleType('__main__') # A script's classes are in __main__, which dill pickles by value
+    try:
+        script_main.ss = ss
+        exec(script, script_main.__dict__)
+        sim = script_main.MySim(diseases=script_main.MyDis(), networks='random', n_agents=small, stop=5, verbose=0)
+        data = dill.dumps(sim) # Was "cannot pickle '_thread._local' object": the wrappers of __init__() and init() were closures, so dill copied starsim.diseases' globals, with Sciris if not in site-packages
+        assert len(data) < 200_000, len(data) # Not the modules that wrap them
+        dill.loads(data).run()
+    finally:
+        sys.modules['__main__'] = main
+    return
+
+
+@sc.timer()
+def test_greek_letters():
+    sc.heading('Testing that Greek letters render in the Starsim fonts, which lack them, from the sans-serif fonts')
+    import warnings
+    for kw in [dict(), dict(font='Raleway')]:
+        with ss.style(**kw), warnings.catch_warnings():
+            warnings.simplefilter('error') # Matplotlib warns "Glyph 946 (GREEK SMALL LETTER BETA) missing from font(s) Mulish"
+            fig = plt.figure()
+            plt.title('Rate β and γ')
+            fig.canvas.draw()
+            plt.close(fig)
+    return
 
 
 @sc.timer()
@@ -191,6 +234,30 @@ def test_cli(tmp_path, monkeypatch, capsys):
     assert 'name: import-model' in capsys.readouterr().out
     cli.main(['ai', 'uninstall'])
     assert not skill.exists() and other.exists()
+    return
+
+
+def test_jax_platform(monkeypatch):
+    """ ss.options.jax chooses JAX's platform, and a GPU plugin of another version than jaxlib is warned of before JAX starts (it can crash XLA) """
+    sc.heading('Testing the platform of JAX')
+    with pytest.raises(ValueError, match='JAX platform'):
+        ss.options.jax = 3
+    with ss.options.context(jax='cpu'):
+        assert ss.options.jax == 'cpu'
+    assert ss.options.jax == 'auto'
+
+    import importlib.metadata as md
+    pytest.importorskip('jax')
+    real = md.distributions
+    class Plugin:
+        version = '0.0.1'
+        metadata = {'Name': 'jax_cuda12_plugin'}
+    monkeypatch.setattr(md, 'distributions', lambda: list(real()) + [Plugin()])
+    monkeypatch.delenv('JAX_PLATFORMS', raising=False)
+    with pytest.warns(RuntimeWarning, match='STARSIM_JAX=cpu'):
+        ss.gradients.check_plugins()
+    monkeypatch.setenv('JAX_PLATFORMS', 'cpu') # Chosen already: nothing to say
+    ss.gradients.check_plugins()
     return
 
 
