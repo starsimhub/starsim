@@ -4,7 +4,7 @@ Skills that measure v4 against [targets.md](../targets.md). Each one is a folder
 
 | Skill | Checks | Report |
 |---|---|---|
-| `/v4.review <model>` | One Starsim-family model against its v3 version: `covasim`, `fpsim`, `hpvsim`, `malariasim`, `stisim`, or `tbsim`. Run each in its own session | `<date>/reviews/<model>.md` |
+| `/v4.review <model>` | One Starsim-family model against its v3 version: `covasim`, `fpsim`, `hpvsim`, `malariasim`, `mighti`, `stisim`, `tbsim`, or `typhoidsim`. Run each in its own session | `<date>/reviews/<model>.md` |
 | `/v4.others` | Ghana measles, LASER, and the models from the approaches survey | `<date>/reviews/others.md` |
 | `/v4.canon` | The textbook canon (Keeling and Rohani, Vynnycky and White) | `<date>/reviews/canon.md` |
 | `/v4.naive` | The naive-user benchmark | `<date>/reviews/naive.md` |

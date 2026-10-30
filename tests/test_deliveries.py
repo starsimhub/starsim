@@ -421,18 +421,18 @@ def test_treat_any_transition():
     return res
 
 
-def test_effective():
+def test_current_value():
     sc.heading('Testing base and effective values')
     sir = make_sir()
     protect = ss.modify(sir.rel_sus, multiply=0.4, where=sir.R, name='protect')
     sim = ss.Sim(sir, interventions=protect, solver='abm', n_agents=2000, stop=40, **kw).run()
     arr = sim.diseases.sir.rel_sus
     R = sim.diseases.sir.R.uids
-    assert np.allclose(sim.diseases.sir.effective('rel_sus', R), 0.4*arr[R]) # The base is untouched by the modifier
+    assert np.allclose(sim.diseases.sir.current_value('rel_sus', R), 0.4*arr[R]) # The base is untouched by the modifier
     assert 'protect' in sim.what_modifies(arr, output=True)
     ode = ss.Sim(make_sir(), interventions=ss.vaccinate(ss.Vaccine(efficacy=0.9), at=[5]), solver='ode', stop=40, **kw).run()
     with pytest.raises(ss.CapabilityError): # There are no agents to have values
-        ode.diseases.sir.effective('rel_sus')
+        ode.diseases.sir.current_value('rel_sus')
     assert 'multiply=0.1 ' in ode.what_modifies('sir.rel_sus', output=True) # Not 0.09999999999999998
     hiv = ssl.HIV() # A disease written as code: its rel_sus is tracked, and its parameters are said not to be (it was a KeyError)
     coded = ss.Sim(hiv, networks=ss.RandomNet(), connectors=ss.modify(hiv.rel_sus, multiply=0.5, name='half'), n_agents=200, verbose=0).init()
@@ -611,7 +611,7 @@ if __name__ == '__main__':
     held   = test_triggers()
     cover  = test_coverage_by_group()
     anytr  = test_treat_any_transition()
-    effective = test_effective()
+    current = test_current_value()
     delay  = test_delay()
     coded  = test_coded_disease()
     agents = test_agents_only()

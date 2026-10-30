@@ -24,7 +24,6 @@ from .utils import (
 
 from .internals import errors # Errors, warnings, and notes (e.g. ss.errors.AtBound); ss.CapabilityError, ss.AlreadyRunError, and ss.note() also here
 from .internals.errors import *
-
 from .internals import debugtools
 
 from .arrays import (

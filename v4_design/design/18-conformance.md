@@ -108,7 +108,7 @@ Tested by `test_transitions.py::test_functions` and `test_auto`, `test_deliverie
 
 ### 7. `ss.modify`
 
-- **Base and effective.** While a modifier is active, reading the array (`sir.rel_sus`) gives the base, and `sir.effective('rel_sus')` the value with the active modifiers applied (agents only). When the modifier's condition stops holding, or `stop=` passes, the value the engine uses is the base again, exactly, with no bookkeeping by the user (`test_deliveries.py::test_effective`, `test_change`).
+- **Base and effective.** While a modifier is active, reading the array (`sir.rel_sus`) gives the base, and `sir.current_value('rel_sus')` the value with the active modifiers applied (agents only). When the modifier's condition stops holding, or `stop=` passes, the value the engine uses is the base again, exactly, with no bookkeeping by the user (`test_deliveries.py::test_effective`, `test_change`).
 - **Combination.** Set, then multiply, then add, whatever order the modifiers were declared in. Two `set=` modifiers active at the same time give a note, and the later one in the loop is used (`test_deliveries.py::test_modify_where`).
 - **Assignment goes to the base.** `arr[uids] = x` while a modifier is active changes the base, and the modifier still applies on top (not yet tested).
 - **Any named numeric quantity.** A parameter, `rel_sus` and `rel_trans`, a transition, and a network parameter as a path (`'school.pars.n_contacts'`) work as targets (`test_deliveries.py::test_modify_where`, `test_network_contacts`); a boolean state or a plain number raises a `KeyError` (`test_transitions.py::test_modify`, `test_deliveries.py::test_network_contacts`).

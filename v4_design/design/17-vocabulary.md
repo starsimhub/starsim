@@ -130,7 +130,7 @@ Fitting is the submodule `ss.fit`, which `import starsim` does not import (its f
 | A state or a sum of states | **`n`** **`n_trans`** **`frac`** **`total`** **`time`** **`progress`** **`enter`** **`exit`** |
 | A product that people hold (`ss.Vaccine`, `ss.Treatment`) | **`coverage`** |
 | A transition | **`to`** **`incidence`** **`uids`** **`ever`** **`count`** **`since`** |
-| A modifiable array (`sir.rel_sus`) | **`effective`** |
+| A modifiable quantity (`sir.rel_sus`, a parameter) | **`current_value()`** |
 | `ss.Sim` | `init` `run` `plot` `summarize` `to_df` `loop` `results` **`describe`** **`stratify`** `to_json` **`fit`** **`sensitivity`** **`check_dt`** **`what_modifies`** **`new`** **`gradient`** **`to_data`** |
 | `sim.loop` | `insert` `to_df` `plot` |
 | A result | **`select`** **`by`** **`cum`** `resample` `sum` |
@@ -139,7 +139,7 @@ Fitting is the submodule `ss.fit`, which `import starsim` does not import (its f
 | `fit` | **`sim`** `pars` `plot` `summarize` `to_df` **`project`** **`samples`** |
 | What `ss.fit.compare_models` returns | **`fits`** `plot` `summarize` `to_df` |
 
-The split is deliberate: `describe`, `diagram`, `equations` are about the model; `plot`, `summarize`, `to_df` are about results, as in Starsim. `values` is Starsim's name for the array behind a result; on a MultiSim result it is the full runs-by-time array. `.n` is the number in a state in each place (`(w*I).n` with each person counted by `w`, and `.n_trans` by their infectiousness), and `.total` in the whole population; `.frac` is the share; `.dwell` is the time each person has spent in it (in `p=` and rates out of it). On a transition with several destinations, `.X` is the flow to its destination `X` (`cin.X`, read `res.cin.X`), not a new name. Reading `sir.rel_sus` gives the base value; `sir.effective('rel_sus')` gives it with the active modifiers applied (agents only). `msim.check_runs()` is deferred and not listed.
+The split is deliberate: `describe`, `diagram`, `equations` are about the model; `plot`, `summarize`, `to_df` are about results, as in Starsim. `values` is Starsim's name for the array behind a result; on a MultiSim result it is the full runs-by-time array. `.n` is the number in a state in each place (`(w*I).n` with each person counted by `w`, and `.n_trans` by their infectiousness), and `.total` in the whole population; `.frac` is the share; `.dwell` is the time each person has spent in it (in `p=` and rates out of it). On a transition with several destinations, `.X` is the flow to its destination `X` (`cin.X`, read `res.cin.X`), not a new name. Reading `sir.rel_sus` gives the base value; `sir.current_value('rel_sus')` gives it with the active modifiers applied (agents only). `msim.check_runs()` is deferred and not listed.
 
 A simple SIR uses four of these names: `ss.states`, `ss.Disease`, `ss.Sim`, and `run` (five with `plot`, and `ss.days` if the duration is typed). A stratified, calibrated national model with interventions uses perhaps forty.
 
@@ -270,7 +270,7 @@ Since the review of October 2026, these names went, or were promised and never b
 | `sim.crn_report()` | Never built | `ss.options.crn`, and paired runs ([11-random.md](11-random.md)) |
 | `dependence=` and `n_ref=` on `ss.MixingPool` | Never built; density dependence is a count in the rate | `beta * I.n` |
 | `.prev` on a state | The code's name is `.frac` | `.frac`, and `.n` or `.total` for counts |
-| `.base` on a modifiable array | Reading the array gives the base value | `sir.rel_sus` for the base, `sir.effective('rel_sus')` for the value with modifiers applied |
+| `.base` on a modifiable array | Reading the array gives the base value | `sir.rel_sus` for the base, `sir.current_value('rel_sus')` for the value with modifiers applied |
 | `ss.rate`, `ss.time_prob`, `ss.rate_prob` | Starsim 2 names, deprecated in Starsim 3 (Starsim's other time names are kept) | `ss.peryear(x)`, `ss.probperyear(x)` |
 | `solver='sde'`, `'stochastic'`, `'ctmc'` | One solver per method | `'gillespie'` (exact), `'tau'` (tau-leaping), `'binomial'` |
 | `ss.Calibration` as the result of a fit | `sim.fit()` returns an `ss.fit.Fit` | `ss.fit.Fit` (Starsim 3's `ss.Calibration` is removed) |

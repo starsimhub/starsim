@@ -1,0 +1,32 @@
+
+
+# CK code review
+
+- [ ] Tidy up `__init__.py` -- group imports better, remove cruft
+- [ ] Move to subfolder (internals?):
+  - [ ] arrays.py
+  - [ ] conditions.py
+  - [ ] dates.py
+  - [ ] dimensions.py
+  - [ ] distributions.py (probably should split into dists.py and distributions.py, internal and here)
+  - [ ] loop.py
+  - [ ] modules.py
+  - [ ] parameters.py (but move SimPars into sim.py)
+  - [ ] time.py (unsure about timeline)
+  - [ ] 
+- [ ] For each file, say whether it's used with agents, compartments, or both ("declared"/"coded" in other words)
+- [ ] Replace sc.objdict with sc.obj throughout; replace sc.dictobj with sc.obj if (and only if) not slower
+- [ ] Get rid of "ss.utils.NoDists" and have a list of not-searched classes instead
+- [ ] Use American spellings ("labeled")
+- [ ] Ensure each function has args listed (e.g. run_each) if for the user; if not for the user, start the docstring with "Not for the user"
+- [ ] Overall, explain (briefly) why each thing exists and what it does.
+- [ ] sim.py:same_value() could be replaced by sc.equal(), unless it's on a hot path, no? Or sc.equal() could be made more performant if needed for these simple comparisons?
+- [ ] These are really what defines if something's declared?? "ss.Transition, ss.outcome, ss.transitions.FlowSum" ... okay
+- [ ] Most/all of the functions at the top of sim.py should move to utils.py
+- [ ] Rename sim.pyramid() to sim.age_pyramid(). Also ... not sure this belongs as a sim method?
+- [ ] Use sc.prettyobj() for most classes
+- [ ] Move _mark_partners and find_contacts to networks.py, standardize_netkey and route_beta to maybe diseases.py or networks.py, combine_rands to distributions.py
+- [ ] I don't understand why Graph() subclasses Presentation(). Seems like Graph is lower level? What does Graph().describe(sim=sim) mean/do? I also don't love the name presentation.py, but I'm not sure what else to call it. "ui.py" could imply graphics or API I guess ... maybe "descriptions.py" could work but I don't love that either.
+- [ ] I think ICER should be a module (class). Add a DALYs module too, which ICER should use by default, but the user can also specify their own. You can flesh this out a bit more, e.g. i want to be able to do icer = ssl.ICER(msim); icer.plot() and things like that.
+- [ ] Refactor library.networks -- add a real (data-driven) spatial network and maybe one or two other spatial networks, and other theoretical networks like ERGM if it's not too difficult. And it would be nice if we could merge RandomSafeNet with RandomNet, but if it would be too difficult, we don't have to.
+- [ ] Expand library.diseases to include simple/canonical versions of more diseases -- eg Ross-Macdonald malaria etc. Aim for maybe 5-15 new diseases, including overlap with downstream models where it makes sense to (e.g., you can also include the LSHTM TB model, or another common malaria model). These should mostly, but need not entirely, be declared. You can also draw on the examples adapted from the other libraries.

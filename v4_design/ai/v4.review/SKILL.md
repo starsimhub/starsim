@@ -1,11 +1,11 @@
 ---
 name: v4.review
-description: Review one Starsim-family model (covasim, fpsim, hpvsim, malariasim, stisim, or tbsim) on Starsim v4 against its Starsim 3 version, for the targets in v4_design/targets.md (fewer lines, faster as ABM, no hacks, no single-model code in v4, and the model's compartmental goal), and write one report to v4_design/<date>/reviews/<model>.md. Use when Cliff runs /v4.review <model>; one model per session.
+description: Review one Starsim-family model (covasim, fpsim, hpvsim, malariasim, mighti, stisim, tbsim, or typhoidsim) on Starsim v4 against its Starsim 3 version, for the targets in v4_design/targets.md (fewer lines, faster as ABM, no hacks, no single-model code in v4, and the model's compartmental goal), and write one report to v4_design/<date>/reviews/<model>.md. Use when Cliff runs /v4.review <model>; one model per session.
 ---
 
 # Starsim-family model review
 
-Arguments: the model name, one of `covasim`, `fpsim`, `hpvsim`, `malariasim`, `stisim`, `tbsim`. If none is given or it isn't one of these, ask which. Review only that model; the others are run in their own sessions.
+Arguments: the model name, one of `covasim`, `fpsim`, `hpvsim`, `malariasim`, `mighti`, `stisim`, `tbsim`, `typhoidsim`. If none is given or it isn't one of these, ask which. Review only that model; the others are run in their own sessions.
 
 Checks the "Starsim-family models" targets in `v4_design/targets.md` for this model. Read [../README.md](../README.md) first: its rules (snapshot, line counts, timing, subagents, report shape) apply here. Like the earlier port reviews, this is a test of **v4**: what matters is what v4 should change so that each target is met, not the model's own bugs (note those briefly, at the end).
 
@@ -17,8 +17,10 @@ Checks the "Starsim-family models" targets in `v4_design/targets.md` for this mo
 | fpsim | `/home/cliffk/idm/fpsim` | `main` | `v4` branch, and `v4port/` | `oct17/fpsim_review.md`, `oct21/fpsim_recheck.md` | Not required; report whether it works or how close it is |
 | hpvsim | `/home/cliffk/idm/hpvsim` | `main` | `v4` branch, and `v4port/` | `oct17/hpvsim_review.md`, `oct21/hpvsim_recheck.md` | Works, except with networks, including with strains (genotypes) |
 | malariasim | `/home/cliffk/idm/starsim-malaria` | `main` | `v4` branch, and `v4port/` | `oct17/malaria_review.md`, `oct21/malaria_recheck.md` | Unified compartmental and ABM representations, for both mosquitoes and humans |
+| mighti | `/home/cliffk/idm/mighti` | `main` | `v4` branch | `mighti/v4_port_oct26.md` (in the model's repo, on its `v4` branch) | Either compartmental or agent-based, but much simplified |
 | stisim | `/home/cliffk/idm/stisim` | `main` | `v4` branch, and `v4port/` | `oct17/stisim_review.md`, `oct21/stisim_port.md` | Compartmental works for each disease alone; networks and some combinations of diseases may not be expressible |
 | tbsim | `/home/cliffk/idm/tbsim` | `main` | `v1.0.0` branch (the first real port to v4) | `oct21/tbsim_recheck.md` | Unified compartmental and ABM representation, except for households and the like |
+| typhoidsim | `/home/cliffk/idm/typhoid/typhoidsim` | `main` | `v4` branch | None | Unified compartmental and ABM representation, except for genetics, networks, and the like |
 
 Check these before relying on them: `git -C <repo> branch --show-current`, `git -C <repo> log --oneline -3 <branch>`, and `git -C <repo> status --short`. The checkout is live (Cliff may be working in it), so read the branches with `git -C <repo> show` or a detached worktree in the scratchpad, never by switching branches, and never change the checkout's files. If the table is out of date (a branch renamed, a port merged), say so in the report and suggest the fix to this file.
 

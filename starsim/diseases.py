@@ -106,7 +106,7 @@ class Disease(ss.Module):
     engine = None # Runs the declared part (see ss.solvers.make_engine()); created when the sim is initialized
     infection_log = None # An InfectionLog, if the sim has an ss.infection_log analyzer
     code_pars = () # Parameters of a declared module that its own code reads rather than its graph (e.g. ss.Pregnancy's fertility rates)
-    reads_modifiers = () # For a disease written as code: which of rel_sus and rel_trans its own code reads, with effective(), so ss.modify() of them is applied (an ss.Infection with a beta reads both)
+    allow_modifiers = () # For a disease written as code: which of rel_sus, rel_trans, and its parameters its own code reads, with current_value(), so ss.modify() of them is applied (an ss.Infection with a beta reads both)
 
     _infection_methods = ['set_prognoses', 'transmit', 'set_outcomes', 'finalize_infections', 'compute_transmission', 'transmit_route', 'set_congenital'] # Methods of ss.Infection's transmission, which a declared transition never calls
 
@@ -747,30 +747,36 @@ class Disease(ss.Module):
             self.infection_log.add_entries(uids, sources, self.t.tvec[self.ti]) # At the step's time point, as ti_infected is
         return
 
-    def effective(self, key, uids=None):
+    def current_value(self, key, uids=None):
         """
         `rel_sus` or `rel_trans` (`key`) of each agent with the modifiers and products active on it applied (`ss.modify(dis.rel_sus, ...)`), as agents:
-        what transmission uses, whereas reading `dis.rel_sus` gives the base values, which a modifier never changes
+        what transmission uses, whereas reading `dis.rel_sus` gives the base values, which a modifier never changes. Or a parameter (`key` is its
+        name) with the modifiers active on it, in its own type, declared or written as code: one value, or one for each agent if they differ between agents.
 
         A disease written as code that reads one in its own code (other than in an `ss.Infection`'s transmission) says so in its class,
-        `reads_modifiers = ('rel_sus',)`, so that modifiers of it are applied rather than refused.
+        `allow_modifiers = ('rel_sus',)`, so that modifiers of it are applied rather than refused. A parameter it doesn't say this of is
+        read from `self.pars` with the modifiers applied, which is one value, so a modifier of it can't differ between agents.
 
         Args:
-            key (str): 'rel_sus' or 'rel_trans'
+            key (str): 'rel_sus', 'rel_trans', or the name of a parameter
             uids (uids): the agents to give the values of (default: an array of every agent, by UID)
 
         **Example**::
 
-            sim.diseases.sir.effective('rel_sus') # With a vaccine's efficacy applied
+            sim.diseases.sir.current_value('rel_sus') # With a vaccine's efficacy applied
 
             class Diabetes(ss.Disease):
-                reads_modifiers = ('rel_sus',) # ss.modify(diabetes.rel_sus, ...) scales its onset
+                allow_modifiers = ('rel_sus',) # ss.modify(diabetes.rel_sus, ...) scales its onset
                 def step(self):
                     uids = self.at_risk.uids
-                    onset = self.pars.p_onset.rvs(uids)*self.effective('rel_sus', uids) # ...
+                    onset = self.pars.p_onset.rvs(uids)*self.current_value('rel_sus', uids) # ...
         """
+        if key not in ['rel_sus', 'rel_trans']:
+            if self.graph is not None and not isinstance(self.engine, ss.solvers.Transmission) and uids is not None:
+                raise ss.CapabilityError(f'{self.name}.current_value() of some agents needs agents, which a compartmental run does not have; leave out uids, or use sim.what_modifies().')
+            return self.engine.current_par(key, uids)
         if not isinstance(self.engine, ss.solvers.Transmission):
-            raise ss.CapabilityError(f'{self.name}.effective() is the value of each agent with the modifiers applied, which only a run as agents has; in a compartmental run, sim.what_modifies({self.name}.{key}) lists the modifiers')
+            raise ss.CapabilityError(f'{self.name}.current_value() is the value of each agent with the modifiers applied, which only a run as agents has; in a compartmental run, sim.what_modifies({self.name}.{key}) lists the modifiers')
         arr = self[key]
         vals = arr.asnew(arr.raw*self.engine.mult_raw(key), cls=ss.FloatArr, copy=False)
         return vals if uids is None else vals[uids]

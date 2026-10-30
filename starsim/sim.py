@@ -10,14 +10,12 @@ import sciris as sc
 import starsim as ss
 
 
-
 def same_value(a, b):
     """ Whether two settings have the same value (e.g. 10000 and 10000.0); False if they cannot be compared to one True or False """
     try:
         return bool(a == b)
     except Exception:
         return False
-
 
 
 def given_modules(*inputs):
@@ -47,6 +45,7 @@ def make_disease(arg, names):
     disease = ss.Disease(*transitions, _names=names)
     disease.setattribute('_implicit', True)
     return [obj for obj in flat if not declared(obj)] + [disease]
+
 
 def copy_given(*inputs):
     """ The sim's inputs merged and copied together, so the modules given are never run themselves and can be given to other sims, and refer to each other as given """

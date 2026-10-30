@@ -34,6 +34,20 @@ def convert(val, unit, cache=None):
     return val
 
 
+def unconvert(val, number, unit):
+    """ The reverse of `convert()`: a number, or an array, in a unit as a typed quantity like `val` """
+    if not isinstance(val, ss.TimePar):
+        return number
+    if isinstance(val, ss.prob):
+        period = 1.0 if val.unit is None else val.unit.to(unit).value
+        out = sc.dcp(val)
+        out.value = -np.expm1(-number*period)
+        return out
+    out = val.to(unit)
+    out.value = number
+    return out
+
+
 def ratio_parts(expr):
     """ A result's numerator and denominator, if it is a ratio (scaled by a number, e.g. infection/N*1e5, is a numerator scaled by it); else the whole """
     BinOp, number = ss.expressions.BinOp, lambda e: isinstance(e, ss.par) and e.literal and sc.isnumber(e.raw)
@@ -334,6 +348,18 @@ class Effects:
     def reduce(self, value, state=None, what=None):
         """ A modified value as the engine uses it; see the subclasses """
         return value
+
+    def current_par(self, name, uids=None):
+        """ A parameter with the modifiers active on it, in its own type: one value, or, if they differ between people, one for each of `uids` (see `ss.Disease.current_value()`) """
+        raw = self.mod.pars[name]
+        raw = raw.raw if isinstance(raw, ss.par) else raw
+        mods = self.sim.modifiers.get((self.mod.name, 'par', name))
+        value = self.convert(raw)
+        if mods:
+            value = self.clip(self.reduce(ss.connectors.combine(mods, value, self), what=name), f'{self.mod.name}.pars.{name}')
+        if np.ndim(value) and uids is not None:
+            value = np.asarray(value)[uids]
+        return unconvert(raw, value, self.sim.unit_base)
 
     def mult_raw(self, kind, name=None, state=None):
         """ The multiplier on a quantity that is not a parameter (`rel_sus`, `rel_trans`, or a transition's rate) from the modifiers active on it, at least 0 (1 if there are none) """

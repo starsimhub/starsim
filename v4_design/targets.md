@@ -28,6 +28,8 @@ Specific goals:
 - [ ] TBsim: Unified compartmental/ABM representation, except for households etc
 - [ ] Typhoidsim: Unified compartmental/ABM, except for genetics, networks, etc
 
+R-Starsim wraps Starsim rather than modeling a disease, so the targets above don't apply, but it can still break when Starsim changes: its tests are run by `.github/workflows/test_r.yml`, and the others' by `test_downstream.yml`. Rotasim is not tested yet, since it has no `v4` branch.
+
 ## Other models
 
 The originals are in `lingua_franca_design/examples/<framework>/<model>/` (with their line counts and reference timings in `meta.yaml` and `README.md`), and the Starsim versions, with `compare.py` and a comparison table, are in `lingua_franca_design/vignettes/<framework>/<model>/`. Reviewed with `/v4.others`.
