@@ -1230,7 +1230,7 @@ class Agents(Engine, Transmission):
             if len(vals) != 2:
                 raise ValueError(f'ss.by({by.dim}=...) has {len(vals)} values; sex has two levels, women and then men.')
             return np.where(sim.people.female.raw[uids], vals[0], vals[1])
-        return np.asarray(super().by_group(by))[self.groups(uids)]
+        return np.asarray(super().by_group(by))[self.groups(slice(None) if uids is None else uids)] # With no agents being evaluated, for everyone, by UID
 
     def agent_values(self, by):
         """ A parameter of a distribution with a value for each group, as a function the distribution calls for the agents it draws for """

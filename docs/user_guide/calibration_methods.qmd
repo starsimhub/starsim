@@ -1,0 +1,179 @@
+---
+title: Fitting methods
+jupyter: python3
+authorship:
+  human: 0
+  ai: 100
+  note: Claude draft, not yet reviewed
+---
+
+`sim.fit()` chooses a method that suits the model, so most fits don't need to name one. This page is for choosing one yourself: what each method gives, what it needs, and what its settings are. [Fitting a model](calibration_fitting.qmd) covers the data, the parameters, and the goodness of fit, which are the same for every method.
+
+## Choosing a method
+
+| Method | Gives | The model | Likelihood needed? | Use it when | Avoid it when |
+|---|---|---|---|---|---|
+| `'nelder-mead'` | Best fit | Any; default for an ODE with one or two parameters, or one with no gradients | No | Few parameters, or a model that can't be differentiated | There are many parameters, where it gets slow |
+| `'l-bfgs-b'` | Best fit | ODE with gradients; default for three or more parameters | No | Many parameters of a deterministic model | The model is stochastic |
+| `'optuna'` | Best fit | Any; default for stochastic models and agents | No | Runs are noisy, or there is no better option | You need a posterior, or a precise optimum (follow it with `'nelder-mead'`) |
+| `'if2'` | Maximum-likelihood best fit | Stochastic compartmental | Yes | You want the maximum likelihood of a stochastic model, whose noise makes a local search unreliable | A parameter has several values (by group, or a time series), or you need a posterior |
+| `'nuts'` | Posterior | ODE with gradients | Yes | You need a posterior of a deterministic model; it's the most efficient sampler here | The model is stochastic or has no gradients |
+| `'pmcmc'` | Posterior | Stochastic compartmental | Yes | You need a posterior of a stochastic model, with its process noise counted | The model runs as agents, or is deterministic (use `'nuts'`) |
+| `'abc-smc'` | Approximate posterior | Any, including agents | No | You need a posterior but have no likelihood, or the model runs as agents | A likelihood-based posterior is possible, which is usually sharper |
+
+A "stochastic compartmental" model has `solver='binomial'`, `'gillespie'`, or `'tau'`, and is one that the kernels run from start to finish, which `sim.kernel_only()` checks. If it doesn't, `'if2'` and `'pmcmc'` raise an error that gives the reason.
+
+Any other method of `scipy.optimize.minimize` can also be named, e.g. `'powell'`. A list runs methods in turn: see [below](#several-methods-in-turn).
+
+A setting that the method doesn't take is an error, so a mistyped name can't be ignored by accident.
+
+## The model
+
+Every example fits the transmission rate of the same SIR model, with half of infections reported, to weekly cases drawn from a run with `beta=0.5`. The likelihood says how the reported cases vary around what the model gives, here Poisson.
+
+```{python}
+import starsim as ss
+
+beta = ss.par(0.3, bounds=[0.1, 1])
+S, I, R = ss.states(3)
+infection = S >> I @ beta*I
+cases = ss.outcome(0.5*infection)
+sir = ss.Disease(infection, I >> R @ ss.days(8), cases, init=dict(I=0.01), name='sir')
+
+pars = dict(total_pop=10_000, unit='day', stop=60)
+data = ss.Sim(sir, pars=dict(beta=0.5), solver='binomial', rand_seed=2, **pars).run().to_data('cases', resample='week')
+
+deterministic = ss.Sim(sir, data=data, verbose=0, **pars)
+stochastic = ss.Sim(sir, data=data, solver='binomial', verbose=0, **pars)
+likelihood = dict(cases=ss.poisson())
+```
+
+## Best fits
+
+### SciPy: `'nelder-mead'`, `'l-bfgs-b'`, and others
+
+These search from the best few points of a scan over the bounds. The gradient-based methods take their gradients from JAX (see [Gradients](calibration_gradients.qmd)). The fit has converged if the two best searches end at the same value.
+
+| Setting | Default | Meaning |
+|---|---|---|
+| `scan` | 10 per parameter, at most 100 | The number of points tried over the bounds |
+| `restarts` | 3 (1 for one parameter of a deterministic model) | The number of searches, each from one of the best points that are apart |
+| Others | SciPy's | The method's own options, e.g. `maxiter=500`; see `scipy.optimize.show_options()` |
+
+```{python}
+fit = deterministic.fit(method='nelder-mead', scan=5, restarts=2, maxiter=200, verbose=False)
+fit.pars
+```
+
+### Optuna: `'optuna'`
+
+[Optuna](https://optuna.org) learns where to look from the scores so far, which suits noisy scores: each trial takes fresh random seeds, so the search averages over chance.
+
+| Setting | Default | Meaning |
+|---|---|---|
+| `n_trials` | 100 | The number of sets of values to try |
+| `n_workers` | 1 | The number of processes running trials at once |
+| `storage` | None | A file or database URL that keeps the trials, so a fit that stopped can be resumed |
+| Others | Optuna's | The keywords of `study.optimize()`, e.g. `timeout=600` |
+
+```{python}
+fit = stochastic.fit(method='optuna', n_trials=50, verbose=False)
+fit.pars
+```
+
+### Iterated filtering: `'if2'`
+
+Iterated filtering (IF2; [Ionides et al. 2015](https://doi.org/10.1073/pnas.1410597112)) finds maximum-likelihood values of a stochastic model. It runs a particle filter many times. Each particle has its own parameter values, which take a small random step at each data point, and particles that fit the data well are kept along with their values. The steps shrink from one pass of the filter to the next, so the particles settle on the best values. It's the method of the [pomp](https://kingaa.github.io/pomp/) package for R.
+
+Each of several chains starts from its own point, and the fit has converged if they end within 2 of each other in log-likelihood. If they don't, try more passes or more particles, as the message says.
+
+| Setting | Default | Meaning |
+|---|---|---|
+| `particles` | 1000 | The number of particles in each pass; more gives a less noisy likelihood |
+| `iterations` | 50 | The number of passes of the filter in each chain |
+| `chains` | 4 | The number of chains, each from its own start |
+| `sd` | 0.05 | The first size of a random step, on the scale searched on (the logit of a value's place between its bounds, of its log for wide bounds) |
+| `cooling` | 0.5 | The share of the first step size that is left after 50 passes (pomp's `cooling.fraction.50`) |
+
+```{python}
+fit = stochastic.fit(method='if2', likelihood=likelihood, particles=300, verbose=False)
+fit.summarize()
+```
+
+`fit.table` gives the range of the chains' estimates. That shows how far the chains agree, and it is not a confidence interval; `ss.fit.profile()` gives one, and `'pmcmc'` gives a posterior. Every data series needs a likelihood, and each fitted parameter needs to be a single value of one of the model's rates.
+
+`fit.trials` has the estimate and log-likelihood at each pass, which shows whether a chain has settled:
+
+```{python}
+fit.trials.groupby('chain').tail(1)
+```
+
+## Posteriors
+
+A posterior uses each parameter's `prior=` if it has one, and otherwise a uniform prior over its bounds. Its draws are in `fit.samples`, and `fit.table` adds the median, the 95% interval, and for chains R-hat and the effective sample size. [Fit diagnostics](calibration_diagnostics.qmd) covers how to read them. The examples below take few draws so that this page runs quickly, so they can report that they have not converged; a real fit should use the defaults or more.
+
+### NUTS: `'nuts'`
+
+The No-U-Turn sampler uses gradients to move through the posterior of a deterministic model. It needs JAX and BlackJAX.
+
+| Setting | Default | Meaning |
+|---|---|---|
+| `draws` | 500 | The number of draws kept from each chain |
+| `warmup` | 500 | The number of warm-up steps of each chain |
+| `chains` | 4 | The number of chains |
+| `scan` | 10 per parameter, at most 100 | The number of points tried for the chains' starts |
+
+```{python}
+fit = deterministic.fit(method='nuts', likelihood=likelihood, draws=200, warmup=200, chains=2, verbose=False)
+fit.table
+```
+
+### Particle MCMC: `'pmcmc'`
+
+Particle MCMC takes a random walk over the parameters, with the likelihood at each point estimated by a particle filter, so it includes the model's process noise. Its draws are more correlated than those of NUTS, so it takes more of them.
+
+| Setting | Default | Meaning |
+|---|---|---|
+| `draws` | 1000 | The number of draws kept from each chain |
+| `warmup` | 1000 | The number of warm-up draws of each chain |
+| `chains` | 4 | The number of chains |
+| `particles` | Chosen in the warm-up | The number of particles |
+| `parallel` | True | Whether to run the chains at the same time |
+| `scan` | 10 per parameter, at most 100 | The number of points tried for the start |
+
+```{python}
+fit = stochastic.fit(method='pmcmc', likelihood=likelihood, draws=200, warmup=200, chains=2, particles=100, verbose=False)
+fit.table
+```
+
+### ABC-SMC: `'abc-smc'`
+
+Approximate Bayesian computation keeps the parameter values whose runs come closest to the data, by the goodness of fit, over generations with a shrinking tolerance. It needs no likelihood and works for agents, but each generation takes many runs, and the result is only as sharp as the final tolerance.
+
+| Setting | Default | Meaning |
+|---|---|---|
+| `particles` | 200 | The number of particles, which are the draws of the posterior |
+| `generations` | 8 | The most generations to run |
+| `quantile` | 0.5 | The quantile of the distances that sets the next tolerance |
+| `tolerance` | None | The distance to stop at |
+
+```{python}
+fit = stochastic.fit(method='abc-smc', particles=100, generations=6, verbose=False)
+fit.table
+```
+
+## Several methods in turn
+
+With a list, each method starts from the best values of the one before, and the list stops at a method that doesn't converge. A broad search followed by a local one is the usual pairing. A setting goes to the stages that take it, and an entry can be a dict to give one stage its own settings:
+
+```{python}
+fit = deterministic.fit(method=['optuna', dict(method='nelder-mead', maxiter=100)], n_trials=30, verbose=False)
+fit.pars
+```
+
+## Further reading
+
+- [Ionides et al. 2015, "Inference for dynamic and latent variable models via iterated filtering"](https://doi.org/10.1073/pnas.1410597112): the IF2 algorithm
+- [pomp: Statistical inference for partially observed Markov processes](https://kingaa.github.io/pomp/): the R package for iterated filtering and particle MCMC
+- [Andrieu et al. 2010, "Particle Markov chain Monte Carlo methods"](https://doi.org/10.1111/j.1467-9868.2009.00736.x): particle MCMC
+- [Hoffman and Gelman 2014, "The No-U-Turn sampler"](https://jmlr.org/papers/v15/hoffman14a.html): NUTS

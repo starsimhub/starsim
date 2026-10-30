@@ -423,6 +423,7 @@ class by_func:
     """
     def __init__(self, dim, func):
         self.dim = dim
+        self.dims = [dim] # As for ss.by
         self.func = func
         self.__name__ = f'ss.by({dim}={getattr(func, "__name__", "function")})'
         return

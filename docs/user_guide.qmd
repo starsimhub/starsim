@@ -56,6 +56,7 @@ The user guide is organized by topic: each page covers one in full, to read thro
 ## Calibration
 
 - [Fitting a model](user_guide/calibration_fitting.qmd): fitting parameters to data
+- [Fitting methods](user_guide/calibration_methods.qmd): each method, what it needs, its settings, and an example
 - [Fit diagnostics](user_guide/calibration_diagnostics.qmd): checking a fit
 - [Parameter identification](user_guide/calibration_identification.qmd): which parameters the data can pin down
 - [Gradients](user_guide/calibration_gradients.qmd): derivatives of results with respect to parameters

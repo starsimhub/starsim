@@ -912,7 +912,7 @@ class Sim(ss.Base):
             rand_seed (int): the random seed for the fitting method (default: the sim's, so a fit gives the same answer each time)
             nopython (bool): for a deterministic sim with gradients and a likelihood for every series, whether the gradients (and a NUTS posterior) have to be taken with the log-likelihood as one function in JAX; if the model has something JAX does not cover yet, the fit is then an error that says what, and with `nopython=False` it takes them with Python in the loop instead, which is much slower
             verbose (bool): whether to print progress
-            kwargs (dict): passed to the fitting method, e.g. `n_trials=200` for Optuna (and `n_workers=4` to run trials in 4 processes at once, and `storage='fit.log'` to keep the trials in a file, so that calling it again resumes the fit; see `ss.fit.fit_optuna()`), `maxiter=500` for SciPy, `draws=500`, `warmup=500`, and `chains=4` for NUTS (the defaults; 1,000 draws and 1,000 warm-up draws for particle MCMC, whose draws are more correlated), `particles=` for particle MCMC (default: chosen by each chain in its warm-up; see `ss.fit.pmmh()`), or `parallel=False` to run its chains one after another; for IF2, `particles=1000`, `iterations=50` (passes of the filter), `cooling=0.5` (the share of the first size of the random walk's steps that is left after 50 passes, as pomp's `cooling.fraction.50`), `sd=0.05` (that first size, on the scale searched on: the logit of each value's place between its bounds, of its log for wide bounds), and `chains=4` (each from its own start: the best of the initial values and a spread of points over the bounds, by the filter)
+            kwargs (dict): passed to the fitting method (each method's settings are in the docs of `ss.fit.fit_scipy()`, `fit_optuna()`, `fit_if2()`, `fit_pmcmc()`, `fit_abc_smc()`, and `fit_nuts()`, and one the method does not take is an error), e.g. `n_trials=200` for Optuna (and `n_workers=4` to run trials in 4 processes at once, and `storage='fit.log'` to keep the trials in a file, so that calling it again resumes the fit; see `ss.fit.fit_optuna()`), `maxiter=500` for SciPy, `draws=500`, `warmup=500`, and `chains=4` for NUTS (the defaults; 1,000 draws and 1,000 warm-up draws for particle MCMC, whose draws are more correlated), `particles=` for particle MCMC (default: chosen by each chain in its warm-up; see `ss.fit.pmmh()`), or `parallel=False` to run its chains one after another; for IF2, `particles=1000`, `iterations=50` (passes of the filter), `cooling=0.5` (the share of the first size of the random walk's steps that is left after 50 passes, as pomp's `cooling.fraction.50`), `sd=0.05` (that first size, on the scale searched on: the logit of each value's place between its bounds, of its log for wide bounds), and `chains=4` (each from its own start: the best of the initial values and a spread of points over the bounds, by the filter)
 
         Returns:
             An `ss.fit.Fit`, with the calibrated sim as `fit.sim` and the best-fit values as `fit.pars`
@@ -938,9 +938,7 @@ class Sim(ss.Base):
                 raise ValueError(errormsg)
         problem = fit.Problem(self, pars=pars, data=data, weights=weights, likelihood=likelihood, gof=gof, penalty=penalty, n_runs=n_runs, reseed=reseed, rand_seed=rand_seed, nopython=nopython, verbose=verbose)
         method = problem.choose(method)
-        if method != 'optuna' and ('n_workers' in kwargs or 'storage' in kwargs):
-            errormsg = f'n_workers= and storage= are for method="optuna", not method="{method}"'
-            raise ValueError(errormsg)
+        fit.check_options(method, kwargs)
         problem.start()
         out = fit.methods[method](problem, **kwargs)
         return problem.result(method, out)
@@ -1576,7 +1574,7 @@ class Sim(ss.Base):
                     f'its results leave them out. {imp.prompt}', ss.errors.ImportIncomplete)
         new_solver = solver is not None and solver != (self.solver if self.initialized else self.pars.solver)
         if n_runs is not None:
-            return ss.parallel(self.new(solver=solver) if new_solver else self, n_runs=n_runs, run_args=None if until is None else dict(until=until))
+            return ss.parallel(self.new(solver=solver) if new_solver else self, n_runs=n_runs, **(dict(run_args=dict(until=until)) if until is not None else {}))
         if new_solver and self.initialized: # Built for another solver, so built again
             self.new(solver=solver, inplace=True)
         elif solver is not None and not self.initialized:

@@ -162,6 +162,7 @@ website:
         - section: "Calibration"
           contents:
             - user_guide/calibration_fitting.qmd
+            - user_guide/calibration_methods.qmd
             - user_guide/calibration_diagnostics.qmd
             - user_guide/calibration_identification.qmd
             - user_guide/calibration_gradients.qmd

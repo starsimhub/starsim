@@ -968,7 +968,7 @@ class Result(ss.arrays.BaseArr):
         bins = np.ceil(t/width - eps).astype(int) - 1 # A period includes its end and not its start, as for data: a flow at a time point is over the step that ends there
         return np.maximum(bins, 0), None # The start is in the first period
 
-    def resample(self, new_unit=None, summarize_by=None, use_years=False, **kwargs):
+    def resample(self, new_unit=None, summarize_by=None, use_years=False):
         """
         Resample the result to a longer time unit, by its `summarize_by` (which by default follows its kind)
 
@@ -985,7 +985,6 @@ class Result(ss.arrays.BaseArr):
             new_unit (str/dur): the new unit: 'day', 'week', 'month', 'year', or a duration, e.g. `ss.weeks(2)`
             summarize_by (str): resample this way instead of by the result's own, e.g. 'mean' to average a stock over each period
             use_years (bool): label the periods by their year (as integers)
-            kwargs (dict): not used
 
         Returns:
             Result: a new Result with resampled values

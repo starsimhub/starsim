@@ -46,6 +46,10 @@ Starsim 4 adds a way to write a model as declared states and transitions, which 
 - *Migration*: some things that used to pass silently now raise: `at_age=` in a compartmental run needs an age group starting at that age, and an `ss.Infection` with a nonzero `beta` needs a network or mixing pool.
 
 ### Bugfixes and performance
+- `sim.run(n_runs=)` restarts one built sim again, and uses JAX for a long chain-binomial run; a stray argument had turned both off.
+- `sim.fit()` raises an error for a setting the method does not take, instead of ignoring it, as does `Result.resample()`. With a list of methods, a setting goes to the stages that take it.
+- A module named like a setting of the sim (e.g. `name='branching'`) no longer overwrites that setting, which had silently turned a model into a branching process.
+- As agents, a value by a stratified dimension (`ss.by(sex=...)`) over a contact matrix no longer raises an `IndexError`.
 - Many fixes found by porting models (Covasim, STIsim, HPVsim, FPsim and others) and by reviewing the docs; see the [full changelog](https://starsim.org/v4/migration/v4_changelog.html). The main ones: coded and declared diseases now agree under the same solver, and so do agents and compartments; `ss.MixingPool` transmission is fixed; and `ss.parallel()` works from scripts.
 <!-- V4-PREVIEW: restore the link above to docs.starsim.org for normal publishing -->
 - Faster: `ss.by` tables are indexed with NumPy, time-varying values are tabulated once per run, and the agent engine runs compiled passes over the agents.

@@ -181,7 +181,7 @@ By default a fit is a best fit (a single set of values), by a method that suits 
 | Stochastic compartmental | `'optuna'` | `'pmcmc'` (particle MCMC), given a likelihood for every series |
 | Agent-based | `'optuna'` | `'abc-smc'` (approximate Bayesian computation), which needs no likelihood |
 
-Any other method of `scipy.optimize.minimize` can be given, as can `'if2'` (iterated filtering, for a stochastic compartmental model). A list, such as `method=['optuna', 'nelder-mead']`, runs each method in turn, each starting from the best values the one before found, and stops at a method that doesn't converge.
+Any other method of `scipy.optimize.minimize` can be given, as can `'if2'` (iterated filtering, for a stochastic compartmental model). [Fitting methods](calibration_methods.qmd) compares them all, with the settings of each and an example. A list, such as `method=['optuna', 'nelder-mead']`, runs each method in turn, each starting from the best values the one before found, and stops at a method that doesn't converge.
 
 The gradient-based methods and their posteriors are covered in [Gradients](calibration_gradients.qmd).
 

@@ -1009,7 +1009,8 @@ class Fit(sc.prettyobj):
         if self.converged is not None:
             print(f'{"Converged" if self.converged else "Not converged"}: {self.why}')
         if 'spread_lower' in self.table:
-            print('spread_lower and spread_upper: the range of the best 10% of the trials, an indication of the uncertainty only, not an interval')
+            spread = "the chains' estimates" if self.method == 'if2' else 'the best 10% of the trials'
+            print(f'spread_lower and spread_upper: the range of {spread}, an indication of the uncertainty only, not an interval')
         if self.samples is not None:
             n_chains = self.samples.chain.nunique()
             print(f'Posterior: {len(self.samples):,} draws from {n_chains} chain{"s" if n_chains != 1 else ""} (best: the draw with the highest posterior density; median, lower, and upper: the median and 95% interval of the posterior)')
@@ -1691,17 +1692,38 @@ def fit_stages(sim, stages, verbose=None, **kwargs):
         sim (Sim): the sim to fit
         stages (list): the stages, each a method's name, or a dict with `method=` and its settings
         verbose (bool): whether to say what is being done (default: `ss.options.verbose`)
-        kwargs (dict): passed to `sim.fit()` for every stage
+        kwargs (dict): passed to `sim.fit()` for every stage, except that a setting of a fitting method goes only to the stages whose method takes it
+
+    Examples:
+        ```python
+        import starsim as ss
+
+        beta = ss.par(0.3, bounds=[0.1, 1])
+        S, I, R = ss.states(3)
+        infection = S >> I @ beta*I
+        sir = ss.Disease(infection, I >> R @ ss.days(8), init=dict(I=0.01), name='sir')
+        pars = dict(total_pop=10_000, unit='day', stop=60)
+        data = ss.Sim(sir, pars=dict(beta=0.5), **pars).run().to_data('I')
+        fit = ss.Sim(sir, data=data, **pars).fit(method=['optuna', dict(method='nelder-mead', maxiter=100)], n_trials=30) # A search, then a polish
+        print(fit.pars)
+        ```
     """
     verbose = sc.ifelse(verbose, ss.options.verbose)
     stages = [dict(method=stage) if isinstance(stage, str) else dict(stage) for stage in stages]
+    settings = [key for key in kwargs if key not in inspect.signature(ss.Sim.fit).parameters] # Those of the fitting methods
+    takes = {stage['method'].lower():method_options(stage['method'].lower()) for stage in stages if stage['method'].lower() in methods}
+    known = {key for options in takes.values() for key in options} # A SciPy method takes what no other stage does, which SciPy checks (see fit_scipy())
+    unused = [key for key in settings if key not in known and not any(method in scipy_methods for method in takes)]
+    if unused:
+        raise TypeError(f'fit(method={list(takes)}) takes {sc.strjoin([f"{key}=" for key in sorted(known)])}, not {sc.strjoin(unused)}')
     fit, good = None, None
     current = sim
     for i,stage in enumerate(stages):
         method = stage.pop('method')
         if verbose:
             print(f'Stage {i+1} of {len(stages)}: {method}' + (f', started from stage {i}' if i else ''))
-        fit = current.fit(method=method, verbose=verbose, **sc.mergedicts(kwargs, stage))
+        shared = {key:val for key,val in kwargs.items() if key not in settings or key in takes.get(method.lower(), []) or (key not in known and method.lower() in scipy_methods)}
+        fit = current.fit(method=method, verbose=verbose, **sc.mergedicts(shared, stage))
         if not fit.converged:
             if i < len(stages) - 1:
                 ss.warn(f'stage {i+1} ({method}) did not converge ({fit.why}), so the stages after it were not run; returning {"stage " + str(i) if good is not None else "its best attempt"}')
@@ -2166,7 +2188,21 @@ def fit_scipy(problem, method='nelder-mead', scan=None, restarts=None, **options
         method (str): the method of `scipy.optimize.minimize`
         scan (int): the number of points in the scan (default: see `Problem.scan_size()`)
         restarts (int): the number of searches
-        options (dict): passed to `scipy.optimize.minimize` as `options=`
+        options (dict): passed to `scipy.optimize.minimize` as `options=`, e.g. `maxiter=500`; see `scipy.optimize.show_options()` (a setting SciPy does not know is an error)
+
+    Examples:
+        ```python
+        import starsim as ss
+
+        beta = ss.par(0.3, bounds=[0.1, 1])
+        S, I, R = ss.states(3)
+        infection = S >> I @ beta*I
+        sir = ss.Disease(infection, I >> R @ ss.days(8), ss.outcome(0.5*infection, name='cases'), init=dict(I=0.01), name='sir')
+        pars = dict(total_pop=10_000, unit='day', stop=60)
+        data = ss.Sim(sir, pars=dict(beta=0.5), rand_seed=2, **pars).run().to_data('cases', resample='week')
+        fit = ss.Sim(sir, data=data, **pars).fit(method='nelder-mead', scan=5, restarts=2, maxiter=200)
+        print(fit.pars, fit.converged)
+        ```
     """
     import scipy.optimize as spo
     p = problem
@@ -2181,7 +2217,13 @@ def fit_scipy(problem, method='nelder-mead', scan=None, restarts=None, **options
         search = lambda start: spo.minimize(fun, p.encode(start), method=method, jac=True, bounds=bounds, options=options)
     else:
         search = lambda start: spo.minimize(lambda z: p.objective(p.decode(z)), p.encode(start), method=method, bounds=bounds, options=options)
-    results = sorted([search(start) for start in p.scan(scan, top=restarts)], key=lambda res: res.fun)
+    starts = p.scan(scan, top=restarts)
+    with warnings.catch_warnings():
+        warnings.filterwarnings('error', message='Unknown solver options') # SciPy would only warn about a setting it does not know
+        try:
+            results = sorted([search(start) for start in starts], key=lambda res: res.fun)
+        except spo.OptimizeWarning as E:
+            raise TypeError(f'fit(method="{method}") takes scan=, restarts=, and the options of this SciPy method (see `scipy.optimize.show_options()`); SciPy says: {E}') from E
     result = results[0]
     evals = sum(res.nfev for res in results)
     if len(results) == 1: # Nothing to compare it with, so SciPy's own stopping rule
@@ -2242,7 +2284,7 @@ def optuna_worker(worker, n, problem, storage, kwargs):
     return
 
 
-def fit_optuna(problem, n_trials=100, scan=None, n_workers=None, storage=None, **kwargs): # The search starts from the initial values, not from a scan
+def fit_optuna(problem, n_trials=100, n_workers=None, storage=None, **kwargs): # The search starts from the initial values, not from a scan
     """
     Optuna's tree-structured Parzen estimator, from the initial values: a best fit, with the spread of the best trials, and Optuna's study (`fit.study`)
 
@@ -2251,20 +2293,28 @@ def fit_optuna(problem, n_trials=100, scan=None, n_workers=None, storage=None, *
         n_workers (int): the number of processes that propose and run trials at once, sharing what they have learned (default 1)
         storage (str): where the trials are kept, so that a fit that stopped can be resumed by calling it again with the same storage:
             a file name (kept as an Optuna journal), a database URL (e.g. `'sqlite:///fit.db'`), or an Optuna storage
-        kwargs (dict): Optuna's own keywords for `study.optimize()`
+        kwargs (dict): Optuna's own keywords for `study.optimize()`, e.g. `timeout=600`
         problem (Problem): the fit, as `sim.fit()` sets it up
-        scan (int): not used, since the search starts from the initial values
 
     It has not converged if the best trial is the initial values or one of the first 10 (which are random), or if the best improved
     by 1% or more over the last quarter of the trials.
+
+    Examples:
+        ```python
+        import starsim as ss
+
+        beta = ss.par(0.3, bounds=[0.1, 1])
+        S, I, R = ss.states(3)
+        infection = S >> I @ beta*I
+        sir = ss.Disease(infection, I >> R @ ss.days(8), ss.outcome(0.5*infection, name='cases'), init=dict(I=0.01), name='sir')
+        pars = dict(total_pop=10_000, unit='day', stop=60, solver='binomial')
+        data = ss.Sim(sir, pars=dict(beta=0.5), rand_seed=2, **pars).run().to_data('cases', resample='week')
+        fit = ss.Sim(sir, data=data, **pars).fit(method='optuna', n_trials=50, n_runs=4)
+        print(fit.pars, fit.converged)
+        ```
     """
     import optuna
     p = problem
-    known = [key for key in inspect.signature(optuna.Study.optimize).parameters if key not in ['self', 'func', 'n_trials']]
-    unknown = [key for key in kwargs if key not in known]
-    if unknown:
-        errormsg = f'fit(method="optuna") takes n_trials= (the number of trials), n_workers=, storage=, and Optuna\'s own keywords ({sc.strjoin(known)}), not {sc.strjoin(unknown)}'
-        raise TypeError(errormsg)
     n_workers = n_workers or 1
     temp = None
     if n_workers > 1 and storage is None: # The workers share their trials through a file, deleted afterwards
@@ -2314,17 +2364,36 @@ def fit_optuna(problem, n_trials=100, scan=None, n_workers=None, storage=None, *
     return sc.obj(best=best, converged=converged, why=why, spread=spread, study=study)
 
 
-def fit_if2(problem, particles=1000, iterations=50, cooling=0.5, sd=0.05, chains=4, **kwargs):
-    """ Maximum likelihood by iterated filtering: passes of a particle filter in which each particle's values are perturbed by a shrinking random walk, and selected with it (see `Swarm`)
+def fit_if2(problem, particles=1000, iterations=50, cooling=0.5, sd=0.05, chains=4):
+    """
+    Maximum likelihood by iterated filtering (IF2; Ionides et al. 2015): passes of a particle filter in which each particle's values are perturbed by a shrinking random walk, and selected with it (see `Swarm`)
+
+    For a stochastic compartmental sim that the kernels run whole, with a likelihood for every data series, and parameters
+    that are single values of the model's rates. It gives the best values, not a posterior, with the range of the chains' estimates
+    in `fit.table`; for a posterior, use `method='pmcmc'`. It has converged if the chains end within 2 of each other in log-likelihood.
 
     Args:
         problem (Problem): the fit, as `sim.fit()` sets it up
-        particles (int): the number of particles
-        iterations (int): the number of passes of the filter
-        cooling (float): the share of its first size that a step has after 50 passes
-        sd (float): the first size of a step of the random walk
-        chains (int): the number of chains, from different starts
-        kwargs (dict): not used
+        particles (int): the number of particles in each pass; more gives a less noisy likelihood
+        iterations (int): the number of passes of the filter in each chain
+        cooling (float): the share of its first size that a step has after 50 passes, as `cooling.fraction.50` in pomp
+        sd (float): the first size of a step of the random walk, on the scale searched on: the logit of each value's place between its bounds, or of its log for wide bounds
+        chains (int): the number of chains, each from its own start: the best of the initial values and a spread of points over the bounds
+
+    Examples:
+        ```python
+        import starsim as ss
+
+        beta = ss.par(0.3, bounds=[0.1, 1])
+        S, I, R = ss.states(3)
+        infection = S >> I @ beta*I
+        sir = ss.Disease(infection, I >> R @ ss.days(8), ss.outcome(0.5*infection, name='cases'), init=dict(I=0.01), name='sir')
+        pars = dict(total_pop=10_000, unit='day', stop=60, solver='binomial')
+        data = ss.Sim(sir, pars=dict(beta=0.5), rand_seed=2, **pars).run().to_data('cases', resample='week')
+        sim = ss.Sim(sir, data=data, **pars)
+        fit = sim.fit(method='if2', likelihood=dict(cases=ss.poisson()), particles=300, iterations=50)
+        print(fit.pars, fit.converged)
+        ```
     """
     p = problem
     filt = ParticleFilter(p.runner.restart(), likelihood=p.likelihood, weights=p.weights)
@@ -2362,18 +2431,35 @@ def fit_if2(problem, particles=1000, iterations=50, cooling=0.5, sd=0.05, chains
     return sc.obj(best=ests[int(np.argmax(lls))], converged=converged, why=why, spread=(np.min(ests, axis=0), np.max(ests, axis=0)))
 
 
-def fit_pmcmc(problem, scan=None, particles=None, draws=1000, warmup=1000, chains=4, parallel=True, **kwargs):
-    """ Particle MCMC: a random walk, on a likelihood estimated by a particle filter (see `pmmh()`), from the best of the initial values and a spread of points
+def fit_pmcmc(problem, scan=None, particles=None, draws=1000, warmup=1000, chains=4, parallel=True):
+    """
+    Particle MCMC: a random walk, on a likelihood estimated by a particle filter (see `pmmh()`), from the best of the initial values and a spread of points
+
+    For a stochastic compartmental sim that the kernels run whole, with a likelihood for every data series. It gives a posterior (`fit.samples`).
 
     Args:
         problem (Problem): the fit, as `sim.fit()` sets it up
-        scan (int): the number of points in the scan
-        particles (int): the number of particles
+        scan (int): the number of points tried for the start (default: see `Problem.scan_size()`)
+        particles (int): the number of particles (default: chosen by each chain in its warm-up)
         draws (int): the number of draws in each chain, after the warmup
         warmup (int): the number of draws to discard at the start of each chain
         chains (int): the number of chains
         parallel (bool): whether to run the chains in parallel
-        kwargs (dict): not used
+
+    Examples:
+        ```python
+        import starsim as ss
+
+        beta = ss.par(0.3, bounds=[0.1, 1])
+        S, I, R = ss.states(3)
+        infection = S >> I @ beta*I
+        sir = ss.Disease(infection, I >> R @ ss.days(8), ss.outcome(0.5*infection, name='cases'), init=dict(I=0.01), name='sir')
+        pars = dict(total_pop=10_000, unit='day', stop=60, solver='binomial')
+        data = ss.Sim(sir, pars=dict(beta=0.5), rand_seed=2, **pars).run().to_data('cases', resample='week')
+        sim = ss.Sim(sir, data=data, **pars)
+        fit = sim.fit(method='pmcmc', likelihood=dict(cases=ss.poisson()), draws=200, warmup=200, chains=2, particles=100)
+        print(fit.table, fit.samples.head())
+        ```
     """
     p = problem
     filt = ParticleFilter(p.runner.restart(), likelihood=p.likelihood, weights=p.weights)
@@ -2390,16 +2476,33 @@ def fit_pmcmc(problem, scan=None, particles=None, draws=1000, warmup=1000, chain
     return sc.obj(zs=zs, logdens=logdens, acceptance=acceptance)
 
 
-def fit_abc_smc(problem, particles=None, generations=8, quantile=0.5, tolerance=None, **kwargs):
-    """ A posterior without a likelihood, by approximate Bayesian computation (see `abc_smc()`): the runs within a shrinking distance of the data
+def fit_abc_smc(problem, particles=None, generations=8, quantile=0.5, tolerance=None):
+    """
+    A posterior without a likelihood, by approximate Bayesian computation (see `abc_smc()`): the runs within a shrinking distance of the data
+
+    For any sim, including agents. The distance is the goodness of fit (`gof=`), and each generation takes many runs of the sim. It has converged
+    once the tolerance has stopped shrinking.
 
     Args:
         problem (Problem): the fit, as `sim.fit()` sets it up
-        particles (int): the number of particles
-        generations (int): the number of generations
+        particles (int): the number of particles, which are the draws of the posterior (default 200)
+        generations (int): the most generations
         quantile (float): the quantile of the distances that sets the next generation's tolerance
-        tolerance (float): the distance to stop at
-        kwargs (dict): not used
+        tolerance (float): the distance to stop at (default: run every generation)
+
+    Examples:
+        ```python
+        import starsim as ss
+
+        beta = ss.par(0.3, bounds=[0.1, 1])
+        S, I, R = ss.states(3)
+        infection = S >> I @ beta*I
+        sir = ss.Disease(infection, I >> R @ ss.days(8), ss.outcome(0.5*infection, name='cases'), init=dict(I=0.01), name='sir')
+        pars = dict(total_pop=10_000, unit='day', stop=60, solver='binomial')
+        data = ss.Sim(sir, pars=dict(beta=0.5), rand_seed=2, **pars).run().to_data('cases', resample='week')
+        fit = ss.Sim(sir, data=data, **pars).fit(method='abc-smc', particles=100, generations=6)
+        print(fit.table, fit.samples.head())
+        ```
     """
     p = problem
     def distance(z, seed):
@@ -2420,16 +2523,33 @@ def fit_abc_smc(problem, particles=None, generations=8, quantile=0.5, tolerance=
     return sc.obj(zs=zs, logdens=logdens, ess=ess, converged=bool(settled), why=why)
 
 
-def fit_nuts(problem, draws=500, warmup=500, chains=4, scan=None, **kwargs):
-    """ The No-U-Turn sampler, each chain from an optimum found from one of the best points of a scan that are apart: the best, and others nearly as good (so that chains caught in different modes disagree, and none starts in a mode far below the best), on the log-density as one function in JAX if the model allows (see `ss.gradients.Density`), else with Python in the loop
+def fit_nuts(problem, draws=500, warmup=500, chains=4, scan=None):
+    """
+    The No-U-Turn sampler, each chain from an optimum found from one of the best points of a scan that are apart: the best, and others nearly as good (so that chains caught in different modes disagree, and none starts in a mode far below the best), on the log-density as one function in JAX if the model allows (see `ss.gradients.Density`), else with Python in the loop
+
+    For a deterministic sim with gradients, with a likelihood for every data series. It gives a posterior (`fit.samples`), and needs JAX and BlackJAX.
 
     Args:
         problem (Problem): the fit, as `sim.fit()` sets it up
         draws (int): the number of draws in each chain, after the warmup
         warmup (int): the number of warmup steps of each chain
         chains (int): the number of chains
-        scan (int): the number of points in the scan
-        kwargs (dict): not used
+        scan (int): the number of points in the scan (default: see `Problem.scan_size()`)
+
+    Examples:
+        ```python
+        import starsim as ss
+
+        beta = ss.par(0.3, bounds=[0.1, 1])
+        S, I, R = ss.states(3)
+        infection = S >> I @ beta*I
+        sir = ss.Disease(infection, I >> R @ ss.days(8), ss.outcome(0.5*infection, name='cases'), init=dict(I=0.01), name='sir')
+        pars = dict(total_pop=10_000, unit='day', stop=60)
+        data = ss.Sim(sir, pars=dict(beta=0.5), rand_seed=2, **pars).run().to_data('cases', resample='week')
+        sim = ss.Sim(sir, data=data, **pars)
+        fit = sim.fit(method='nuts', likelihood=dict(cases=ss.poisson()), draws=200, warmup=200, chains=2)
+        print(fit.table, fit.samples.head())
+        ```
     """
     p = problem
     sampling = dict(draws=draws, warmup=warmup, chains=chains)
@@ -2493,6 +2613,24 @@ reverse_min = 5000 # The values times the compartments at which a gradient of on
 grad_methods = ['l-bfgs-b', 'bfgs', 'cg', 'tnc', 'slsqp', 'trust-constr'] # The SciPy methods that use gradients, when the sim has them
 sampling_methods = ['nuts', 'pmcmc', 'abc-smc'] # The methods that give a posterior
 methods = {'nuts':fit_nuts, 'pmcmc':fit_pmcmc, 'abc-smc':fit_abc_smc, 'if2':fit_if2, 'optuna':fit_optuna} | {name:functools.partial(fit_scipy, method=name) for name in scipy_methods} # The methods that sim.fit() knows, by name
+
+
+def method_options(method):
+    """ The settings that a fitting method takes, as keywords of `sim.fit()`: its own, and Optuna's for Optuna; a SciPy method also takes SciPy's, which SciPy checks (see `fit_scipy()`) """
+    options = [key for key,par in inspect.signature(methods[method]).parameters.items() if key not in ['problem', 'method'] and par.kind != par.VAR_KEYWORD]
+    if method == 'optuna':
+        import optuna
+        options += [key for key in inspect.signature(optuna.Study.optimize).parameters if key not in ['self', 'func', 'n_trials']]
+    return options
+
+
+def check_options(method, kwargs):
+    """ Raise an error for a keyword of `sim.fit()` that the fitting method does not take, which would otherwise be a mistake that went unnoticed """
+    options = method_options(method)
+    unknown = [key for key in kwargs if key not in options]
+    if unknown and method not in scipy_methods:
+        raise TypeError(f'fit(method="{method}") takes {sc.strjoin([f"{key}=" for key in options])}, not {sc.strjoin(unknown)}')
+    return
 
 
 def split_data(df, holdout=0.25, folds=None):
