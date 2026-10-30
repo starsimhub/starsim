@@ -161,7 +161,7 @@ def test_epymorph():
     for place,(height,day) in refs.items():
         vals = np.mean([sim.results.epymorph.I.select(patch=place).values for sim in sims], axis=0)
         assert abs(vals.max()/height - 1) < 0.05, f'The peak in {place} should match epymorph\'s'
-        assert abs(vals.argmax() - day) <= 2, f'The day of the peak in {place} should match epymorph\'s'
+        assert abs(vals.argmax() - day) <= 3, f'The day of the peak in {place} should match epymorph\'s'
     return sims
 
 

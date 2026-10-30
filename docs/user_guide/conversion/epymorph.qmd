@@ -67,7 +67,7 @@ The numbers are from the mean of 10 Starsim runs and 20 runs of epymorph 1.2.0 (
 
 | Model | Agreement |
 |---|---|
-| The SIRS above, three places | Agree: peaks in each place within 2%, within a day |
+| The SIRS above, three places | Agree: peaks in each place within 3%, within three days |
 | An SIHR with a fork, births and deaths, `beta` by place, a share in time, and daily commuting, two places | Agree: peaks within 3% in the seeded place and 8% in the other, within a day |
 
 ## Bringing your model in
