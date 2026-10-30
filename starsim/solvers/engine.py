@@ -907,7 +907,7 @@ class Engine(Telling, Effects):
             if by.varies and (self.year is None or ss.solvers.Compartmental.held(by)): # At the start of the step: worked out for every step at once, as in call()
                 self.cache[key] = np.array(self.held_value(by))
             else:
-                self.cache[key] = by.per_group(self.sim, self.convert, year=None if ss.solvers.Compartmental.held(by) else self.year) # A step function at the start of the step, as in call()
+                self.cache[key] = by.per_group(self.sim, self.convert) if ss.solvers.Compartmental.held(by) else np.array(self.held_value(by, self.year)) # A step function at the start of the step, as in call()
         return self.cache[key]
 
     def check_counted_strains(self):
@@ -1072,7 +1072,7 @@ class Engine(Telling, Effects):
         if isinstance(func, ss.parameters.TimeValue): # Its values converted, then interpolated as numbers
             if self.year is None or ss.solvers.Compartmental.held(func): # A step function is held at its value at the start of the step, as in a whole run (see Compartmental.tables())
                 return self.held_value(func)
-            return func.series([self.year], self.sim, self.convert)[0]
+            return self.held_value(func, self.year)
         if self.n_args(func) >= 2:
             return self.call_uids(func, p)
         key = ('called', id(func))
@@ -1080,18 +1080,21 @@ class Engine(Telling, Effects):
             self.cache[key] = func(self.sim)
         return self.cache[key]
 
-    def held_value(self, func):
-        """ A value that varies in time (or an `ss.by` of them, for each group), at the start of the current step: worked out for every step at once, the first time it is needed (as in `Compartmental.tables()`), rather than at each call """
-        key = ('held', id(func))
+    def held_value(self, func, year=None):
+        """ A value that varies in time (or an `ss.by` of them, for each group), at the start of the current step, or at a year within it (a stage of an ODE step, see `Compartmental.at_time()`): worked out for every step (or stage) at once, the first time it is needed (as in `Compartmental.tables()`), rather than at each call """
+        key = ('held', id(func), year)
         if key in self.cache: # Already looked up this step
             return self.cache[key]
         t = self.sim.t
+        years = t.yearvec if year is None else np.union1d(t.yearvec, (t.yearvec[:-1] + t.yearvec[1:])/2) # The steps' starts, or also their middles
         inner = tuple(p.raw for p in getattr(func, 'pars', [])) # The values of any parameters inside it, which can change between runs
-        kept = self.held_series.get(id(func))
+        kept = self.held_series.get((id(func), year is None))
         if kept is None or kept[0] is not func or kept[1] != inner:
-            kept = self.held_series[id(func)] = (func, inner, func.series(t.yearvec, self.sim, self.convert))
-        ti = max(t.ti - 1, 0) # The step's start: the loop's ti is its end (the start of the run before the first step)
-        if ti < len(kept[2]):
+            kept = self.held_series[(id(func), year is None)] = (func, inner, func.series(years, self.sim, self.convert))
+        ti = max(t.ti - 1, 0) if year is None else int(np.searchsorted(years, year)) # The step's start: the loop's ti is its end (the start of the run before the first step)
+        if year is not None and (ti >= len(years) or years[ti] != year):
+            out = func.series([year], self.sim, self.convert)[0]
+        elif ti < len(kept[2]):
             out = kept[2][ti]
         else: # Before or after the run
             out = func.series([t.now('year')], self.sim, self.convert)[0]
