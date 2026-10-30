@@ -6,7 +6,6 @@ These solutions build on the SIRS model from the tutorial, so we define it again
 import numpy as np
 import matplotlib.pyplot as plt
 import starsim as ss
-ss.options(jupyter=True)
 
 def make_cold(dur_imm=ss.days(180), dur_latent=None):
     """ A respiratory infection with waning immunity: SIRS, or SEIRS with a latent period; β is 0.4 per day """

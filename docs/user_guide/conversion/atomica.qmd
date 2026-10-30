@@ -49,7 +49,6 @@ In Starsim, the compartments are states, each parameter is an `ss.par`, and each
 
 ```{python}
 import starsim as ss
-ss.options(jupyter=True)
 
 transpercontact = ss.par(0.008, doc='Transmission probability per contact')
 contacts        = ss.par(80,    doc='Number of contacts annually')

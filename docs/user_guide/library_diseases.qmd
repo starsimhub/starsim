@@ -20,7 +20,6 @@ Library classes are available both at the top level and through their submodule;
 ```{python}
 import starsim as ss
 import starsim.library as ssl
-ss.options(jupyter=True)
 
 print(ssl.Measles is ssl.diseases.Measles)
 ```

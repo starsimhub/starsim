@@ -15,7 +15,6 @@ This page covers how Starsim handles randomness, so that runs are reproducible a
 
 ```{python}
 import starsim as ss
-ss.options(jupyter=True)
 
 S, I, R = ss.states('S I R')
 sir = ss.Disease(infection=S >> I @ 0.2 * I, recovery=I >> R @ ss.days(10), init_prev=0.01, name='sir')

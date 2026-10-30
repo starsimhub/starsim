@@ -40,7 +40,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 import starsim as ss
 import starsim.library as ssl
-ss.options(jupyter=True)
 
 class SIRS(ssl.AgentSIR):
     def __init__(self, pars=None, *args, **kwargs):

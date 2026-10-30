@@ -26,7 +26,6 @@ This is the measles model from [T7 – Data and calibration](t7_calibration.qmd)
 
 ```{python}
 import starsim as ss
-ss.options(jupyter=True) # Plots and tables suited to a notebook
 
 S, E, I, R = ss.states('S E I R')
 infection   = S >> E @ 0.16*I         # β = 0.16 per contact per day

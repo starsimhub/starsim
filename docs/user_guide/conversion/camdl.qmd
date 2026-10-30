@@ -63,7 +63,6 @@ In Starsim, parameters carry their bounds and priors, a bare state in a rate is 
 
 ```{python}
 import starsim as ss
-ss.options(jupyter=True)
 
 beta  = ss.par(ss.perday(0.4),  bounds=[0.05, 1.0], prior=ss.lognorm_im(mean=-1.0, sigma=0.5), doc='transmission rate')
 gamma = ss.par(ss.perday(0.15), bounds=[0.01, 0.5], prior=ss.lognorm_im(mean=-2.0, sigma=0.5), doc='recovery rate')

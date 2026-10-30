@@ -12,7 +12,7 @@ Core Starsim has the networks most models need: random contacts (`ss.RandomNet`)
 | Class | Based on | What it is | Main parameters |
 | --- | --- | --- | --- |
 | `ssl.ClusterNet` | `ss.Network` | Fully connected clusters, such as households | `cluster_size`, `age_range`, `dynamic` |
-| `ssl.HybridNet` | `ss.Network` | Covasim's households, schools, workplaces, and community | `household_size`, `contacts`, `beta`, `school_ages`, `work_ages` |
+| `ssl.HybridNet` | `ss.Network` | Covasim's households, schools, workplaces, and community | `household_size`, `contacts`, `beta`, `school_ages`, `work_ages`, `clustered` |
 | `ssl.HouseholdNet` | `ss.Network` | Households built from survey data in the format of the Demographic and Health Surveys (DHS), optionally changing over time | `dhs_data`, `dynamic`, `prob_move_out` |
 | `ssl.DiskNet` | `ss.Network` | People who move in a unit square, in contact with everyone within a radius | `r`, `v` |
 | `ssl.StaticNet` | `ss.Network` | A fixed network from a NetworkX graph, or a function that makes one | `graph`, `p`, `n_contacts` |
@@ -33,7 +33,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 import starsim as ss
 import starsim.library as ssl
-ss.options(jupyter=True)
 
 sir = lambda: ss.SIR(beta=ss.perday(0.05), dur_inf=ss.days(10), init_prev=0.005)
 kw = dict(n_agents=2000, start='2000-01-01', dur=ss.days(200), dt=ss.days(1))
@@ -45,7 +44,7 @@ msim = ss.parallel(scenarios, n_runs=3, parallel=False)
 msim.plot(['sir.I', 'sir.R'])
 ```
 
-`ssl.HybridNet` is the population of [Covasim](https://docs.covasim.org/): households (`h`, a `ClusterNet` with sizes drawn from a Poisson distribution with a mean of 2, as in Covasim, which gives about 2 contacts per person), schools for ages 6 to 22 (`s`), workplaces for ages 22 to 65 (`w`), and the community (`c`), each of the last three a random network with a Poisson number of contacts (`contacts`, by default 20, 16, and 20). When added to a sim, it becomes four networks, each reached by name and each with its own weight on transmission (`beta`, by default Covasim's 3, 0.6, 0.6, and 0.3), so that a contact at home counts for 10 times one in the community:
+`ssl.HybridNet` is the population of [Covasim](https://docs.covasim.org/): households (`h`, a `ClusterNet` with sizes drawn from a Poisson distribution with a mean of 2, as in Covasim, which gives about 2 contacts per person), schools for ages 6 to 22 (`s`), workplaces for ages 22 to 65 (`w`), and the community (`c`). Schools and workplaces are clusters too, and the community is a random network, with a Poisson number of contacts in each (`contacts`, by default 20, 16, and 20); `clustered=False` makes schools and workplaces random networks, as in Covasim. When added to a sim, it becomes four networks, each reached by name and each with its own weight on transmission (`beta`, by default Covasim's 3, 0.6, 0.6, and 0.3), so that a contact at home counts for 10 times one in the community:
 
 ```{python}
 sim = ss.Sim(diseases=ss.SIS(beta=ss.perday(0.002)), networks=ssl.HybridNet(), n_agents=2000, start='2000', dur=ss.days(100), dt=ss.days(1))

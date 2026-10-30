@@ -23,7 +23,6 @@ Two different mechanisms decide what happens to people after a state, and a mode
 
 ```{python}
 import starsim as ss
-ss.options(jupyter=True)
 
 S, I, R, H, D = ss.states('S I R H D')
 infection = S >> I @ 0.3*I

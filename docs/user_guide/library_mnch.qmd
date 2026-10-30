@@ -22,7 +22,6 @@ Like the rest of the library, these are illustrative: the probabilities and effe
 ```{python}
 import starsim as ss
 import starsim.library as ssl
-ss.options(jupyter=True)
 
 mnch_pars = dict(start='2000', stop='2005', n_agents=2000, dt=ss.weeks(1))
 demographics = lambda: [ss.Pregnancy(fertility_rate=ss.freqperyear(100), burnin=True), ss.Deaths()]

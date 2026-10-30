@@ -9,7 +9,6 @@ A: With a chance of infection of 0.083 per contact per day and 3 contacts a day,
 ```{python}
 import starsim as ss
 import starsim.library as ssl
-ss.options(jupyter=True)
 
 S, I, R = ss.states('S I R')
 infection = S >> I @ 0.083*I

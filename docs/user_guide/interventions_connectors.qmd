@@ -16,7 +16,6 @@ Measles, the running example of the tutorials, is a poor fit here: its interacti
 ```{python}
 import starsim as ss
 import starsim.library as ssl
-ss.options(jupyter=True)
 
 hiv = ssl.HIV(beta={'sexualnet': ss.peract(m2f=0.0008, f2m=0.0004)}, init_prev=0.2)
 

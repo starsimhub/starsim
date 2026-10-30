@@ -21,7 +21,6 @@ Each person's wealth is a state, and whom each giver gives to is drawn from a St
 import numpy as np
 import matplotlib.pyplot as plt
 import starsim as ss
-ss.options(jupyter=True)
 
 class Wealth(ss.Module):
     """ Each person starts with 1 unit of wealth; each step, everyone with any gives 1 unit to someone chosen at random """

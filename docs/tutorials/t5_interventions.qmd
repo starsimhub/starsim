@@ -22,7 +22,6 @@ This is the measles model from [T4 – Age groups and contacts](t4_ages.qmd): an
 
 ```{python}
 import starsim as ss
-ss.options(jupyter=True) # Plots and tables suited to a notebook
 
 S, E, I, R = ss.states('S E I R')
 beta = ss.par(0.14, bounds=[0.05, 0.5]) # The rate of infection per contact with an infectious person, per day

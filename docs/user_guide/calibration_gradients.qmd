@@ -23,7 +23,6 @@ The model is a measles outbreak in a town of 100,000, 90% of whom are immune, wi
 import numpy as np
 import matplotlib.pyplot as plt
 import starsim as ss
-ss.options(jupyter=True)
 
 S, E, I, R = ss.states('S E I R')
 beta   = ss.par(1.5, bounds=[0.5, 4])  # Transmission rate per day

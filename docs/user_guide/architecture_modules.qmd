@@ -41,7 +41,6 @@ Modules can be given to a sim by keyword (`diseases=`, `networks=`, ...), as pos
 
 ```{python}
 import starsim as ss
-ss.options(jupyter=True)
 
 def make_sir():
     S, I, R = ss.states('S I R')
