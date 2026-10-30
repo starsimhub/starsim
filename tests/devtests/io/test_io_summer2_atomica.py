@@ -9,8 +9,8 @@ import pandas as pd
 import sciris as sc
 import starsim as ss
 import paths
-from starsim.io.summer2 import load_summer2, outputs
-from starsim.io.atomica import load_atomica
+from starsim.converters.summer2 import load_summer2, outputs
+from starsim.converters.atomica import load_atomica
 
 lfd = paths.lfd/'examples' # The original examples, if they are here
 summer2_python = paths.lfd/'_envs/summer2/bin/python' # summer2's environment, to write a live model with Starsim's summer2.py
@@ -166,7 +166,7 @@ def test_summer2():
             tmp = sc.path(tmp)
             sc.savetext(tmp/'tb.py', summer2_tb)
             sc.savejson(tmp/'pars.json', dict(contact_rate=10.0, rr_reinf=0.21, detect_max=1.5))
-            subprocess.run([str(summer2_python), '-I', str(tmp/'tb.py'), str(sc.path(ss.io.__file__).parent / 'summer2.py'), str(tmp)], check=True, capture_output=True)
+            subprocess.run([str(summer2_python), '-I', str(tmp/'tb.py'), str(sc.path(ss.converters.__file__).parent / 'summer2.py'), str(tmp)], check=True, capture_output=True)
             tb = load_summer2(str(tmp/'tb.json'), **kw)
             ref = sc.loadjson(tmp/'ref.json')
         assert not tb.imported.incomplete
@@ -267,7 +267,7 @@ def test_atomica_junction():
     sc.heading('Testing an Atomica model whose junction splits by a share that changes with the counts')
     with tempfile.TemporaryDirectory() as tmp:
         fw, db = atomica_files(tmp, junction=True)
-        sim = ss.io.convert(fw, format='atomica', databook=db, dt=1, **kw) # Read, and the code saved beside the framework
+        sim = ss.converters.convert(fw, format='atomica', databook=db, dt=1, **kw) # Read, and the code saved beside the framework
         code = sim.imported.code
         assert sim.imported.filename.read_text() == code
     assert '\nch_prev = ' in code and code.count('ch_prev') > code.count('\nch_prev = ') + 1, 'The characteristic should be written once and used by name'

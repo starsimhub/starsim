@@ -1,5 +1,9 @@
 """
-Result structures.
+Results: the values a sim records at each time point (`ss.Result`), the containers that hold them (`ss.Results`), and how they are compared with data (`ss.simdata`)
+
+These exist so that a result knows its own time points, scale, and how to resample and plot itself, whichever solver wrote it.
+
+Used with: agents and compartments; declared and coded modules
 """
 import os
 import functools
@@ -12,10 +16,18 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 
 
-class Levels(sc.objdict):
+class Levels(sc.obj):
     """ A result across runs split by a dimension: a result across runs for each level, which can be plotted together """
     def plot(self, fig=None, ax=None, lines=False, log=False, **kwargs):
-        """ Plot each level's median and interval (or every run, if `lines=True`) on the same axes; the other arguments are as for `ss.Result.plot()` """
+        """ Plot each level's median and interval (or every run, if `lines=True`) on the same axes; the other arguments are as for `ss.Result.plot()`
+
+        Args:
+            fig (Figure): the figure to plot on
+            ax (Axes): the axes to plot on
+            lines (bool): if True, plot every run rather than the median and interval
+            log (bool): whether to use a log scale for the y-axis
+            kwargs (dict): passed to `ss.plot_args()`
+        """
         kw = ss.plot_args(kwargs, alpha=0.8)
         given = fig is not None or ax is not None
         with ss.style(**kw.style):
@@ -88,7 +100,7 @@ def in_people(*results):
     return
 
 
-class Result(ss.utils.NoDists, ss.arrays.BaseArr):
+class Result(ss.arrays.BaseArr):
     """
     Array-like container for holding sim results.
 
@@ -179,7 +191,7 @@ class Result(ss.utils.NoDists, ss.arrays.BaseArr):
     def __repr__(self):
         """ Show all data """
         cls_name = self.__class__.__name__
-        if self.columns is not None and self.runs is None and np.ndim(self.values) == 2 and np.shape(self.values)[1] == len(self.columns): # A column for each group, e.g. from res.by('sex'), labelled
+        if self.columns is not None and self.runs is None and np.ndim(self.values) == 2 and np.shape(self.values)[1] == len(self.columns): # A column for each group, e.g. from res.by('sex'), labeled
             index = self.timevec if self.timevec is not None and len(self.timevec) == len(self.values) else None
             return f'{cls_name}({self.key}), by {", ".join(map(str, self.columns))}:\n{pd.DataFrame(self.values, columns=self.columns, index=index)}'
         arrstr = super().__repr__().removeprefix(cls_name)
@@ -202,7 +214,11 @@ class Result(ss.utils.NoDists, ss.arrays.BaseArr):
         return out
 
     def to_str(self, label=True):
-        """ Convert Result object to a string """
+        """ Convert Result object to a string
+
+        Args:
+            label (bool): whether to include the label
+        """
         return self.__str__(label=label)
 
     def disp(self):
@@ -373,7 +389,11 @@ class Result(ss.utils.NoDists, ss.arrays.BaseArr):
         return out
 
     def take(self, inds):
-        """ Some of the runs of a result across runs: a result of one run for a position, or across runs for a list of them """
+        """ Some of the runs of a result across runs: a result of one run for a position, or across runs for a list of them
+
+        Args:
+            inds (int/list): the position or positions of the runs
+        """
         one = np.ndim(inds) == 0
         pick = lambda arr: None if arr is None else np.asarray(arr)[inds]
         values = pick(self.values)
@@ -442,14 +462,24 @@ class Result(ss.utils.NoDists, ss.arrays.BaseArr):
         return super().__iter__()
 
     def median(self, *args, **kwargs):
-        """ For a result across runs, the median over the runs of each scenario (as a result of one run, if there is one scenario); otherwise the median of the values """
+        """ For a result across runs, the median over the runs of each scenario (as a result of one run, if there is one scenario); otherwise the median of the values
+
+        Args:
+            args (list): passed to `np.median()`, for a result not across runs
+            kwargs (dict): passed to `np.median()`, for a result not across runs
+        """
         if self.runs is None or args or kwargs:
             return np.median(self.values, *args, **kwargs)
         self._check_runs('median()')
         return self.over_runs(lambda arr: np.median(arr, axis=0))
 
     def mean(self, *args, **kwargs):
-        """ For a result across runs, the mean over the runs of each scenario (as a result of one run, if there is one scenario); otherwise the mean of the values """
+        """ For a result across runs, the mean over the runs of each scenario (as a result of one run, if there is one scenario); otherwise the mean of the values
+
+        Args:
+            args (list): passed to the mean of the values, for a result not across runs
+            kwargs (dict): passed to the mean of the values, for a result not across runs
+        """
         if self.runs is None or args or kwargs:
             return self.values.mean(*args, **kwargs)
         self._check_runs('mean()')
@@ -467,10 +497,10 @@ class Result(ss.utils.NoDists, ss.arrays.BaseArr):
         self._check_runs('diff()')
         groups = self.scenarios()
         if baseline not in groups:
-            errormsg = f'No runs are labelled "{baseline}"; the labels are {list(groups)}'
+            errormsg = f'No runs are labeled "{baseline}"; the labels are {list(groups)}'
             raise KeyError(errormsg)
         base = self.take(groups[baseline])
-        out = sc.objdict()
+        out = sc.obj()
         for label,inds in groups.items():
             if label != baseline:
                 if len(inds) != len(base.values):
@@ -705,7 +735,11 @@ class Result(ss.utils.NoDists, ss.arrays.BaseArr):
         return out
 
     def col(self, col):
-        """ Return a 1D result for one column of a 2D result, e.g. `res.col('alpha')`; its values are a view, so modifying them modifies the 2D result """
+        """ Return a 1D result for one column of a 2D result, e.g. `res.col('alpha')`; its values are a view, so modifying them modifies the 2D result
+
+        Args:
+            col (str/int): the column, by name or position
+        """
         i = self._col_index(col)
         col = self.columns[i]
         label = sc.ifelse(self.label, self.name)
@@ -719,17 +753,25 @@ class Result(ss.utils.NoDists, ss.arrays.BaseArr):
 
     def by_column(self):
         """ Return a dict of 1D results, one per column, for a 2D result """
-        return sc.objdict({col:self.col(col) for col in self.columns})
+        return sc.obj({col:self.col(col) for col in self.columns})
 
     def stack(self, results):
-        """ Make a copy of this 2D result from a list of 1D results, one per column (e.g. after resampling) """
+        """ Make a copy of this 2D result from a list of 1D results, one per column (e.g. after resampling)
+
+        Args:
+            results (list): the 1D results, one per column
+        """
         def stack_key(key):
             return None if results[0][key] is None else np.stack([res[key] for res in results], axis=-1)
         values = stack_key('values')
         return self.asnew(values=values, low=stack_key('low'), high=stack_key('high'), timevec=results[0].timevec, _shape=values.shape)
 
     def apply_scale(self, scale):
-        """ Multiply the values by the population scale: a number, or an array with one entry per timestep """
+        """ Multiply the values by the population scale: a number, or an array with one entry per timestep
+
+        Args:
+            scale (float/array): the population scale
+        """
         if getattr(self, 'in_people', False): # Written in people already: see people_scale()
             return self
         scale = np.asarray(scale)
@@ -741,7 +783,12 @@ class Result(ss.utils.NoDists, ss.arrays.BaseArr):
         return self
 
     def update(self, *args, **kwargs):
-        """ Update parameters, and initialize values if needed """
+        """ Update parameters, and initialize values if needed
+
+        Args:
+            args (list): the attributes to update, as a dict
+            kwargs (dict): the attributes to update, by name
+        """
         if 'shape' in kwargs: # Handle shape, which is renamed _shape as an attribute
             kwargs['_shape'] = kwargs.pop('shape')
         super().update(*args, **kwargs)
@@ -833,17 +880,17 @@ class Result(ss.utils.NoDists, ss.arrays.BaseArr):
         The result over the whole run, by its `summarize_by`: the total of a flow ('sum'), the final value of a stock ('last'),
         and the mean of a ratio ('mean'; over time, of its numerator and denominator if it has them, each summed and then
         divided); one for each run, for a result across runs (and with several scenarios, a dict of these by scenario, as `diff()`
-        gives); and for a result by group (`res.by('age')`), a pandas Series labelled by group
+        gives); and for a result by group (`res.by('age')`), a pandas Series labeled by group
         """
         out = self._summarize()
         if self.columns is not None and self.runs is None and np.ndim(out) == 1 and len(out) == len(self.columns):
             out = pd.Series(out, index=pd.Index(self.columns, name=getattr(self, 'by_dim', None)), name=self.name)
         elif self.runs is not None and self.runs['scenario'].nunique() > 1:
-            out = sc.objdict({scenario:out[inds] for scenario,inds in self.scenarios().items()})
+            out = sc.obj({scenario:out[inds] for scenario,inds in self.scenarios().items()})
         return out
 
     def _summarize(self):
-        """ The summary of `summarize()`, unlabelled """
+        """ The summary of `summarize()`, unlabeled """
         if self.summarize_by is None:
             errormsg = f'"{self.name}" is not summarized over time (summarize_by=None)'
             raise ValueError(errormsg)
@@ -882,6 +929,9 @@ class Result(ss.utils.NoDists, ss.arrays.BaseArr):
 
         Returns the period of each time point (a non-decreasing array of integers from 0), and for calendar
         months and years, the date each period ends (the first day of the next month or year; else None).
+
+        Args:
+            new_unit (str/dur): the new unit; see `resample()`
         """
         tv = self.timevec
         if tv is None:
@@ -935,6 +985,7 @@ class Result(ss.utils.NoDists, ss.arrays.BaseArr):
             new_unit (str/dur): the new unit: 'day', 'week', 'month', 'year', or a duration, e.g. `ss.weeks(2)`
             summarize_by (str): resample this way instead of by the result's own, e.g. 'mean' to average a stock over each period
             use_years (bool): label the periods by their year (as integers)
+            kwargs (dict): not used
 
         Returns:
             Result: a new Result with resampled values
@@ -1026,6 +1077,7 @@ class Result(ss.utils.NoDists, ss.arrays.BaseArr):
             set_name (bool): whether to set the name of the series to the name of the result
             resample (str): if provided, resample the data to this frequency
             kwargs: passed to the resample method
+            sep (str): the separator between the name and column in each column of a 2D result
 
         For a 2D result, return a dataframe with one column per result column, e.g. `new_infections_alpha`.
         """
@@ -1209,7 +1261,7 @@ class Result(ss.utils.NoDists, ss.arrays.BaseArr):
         else: # Across runs
             res = self if lines or 'quantile' in self.runs else self.quantiles()
             groups = res.scenarios()
-        named = len(groups) > 1 or len(colors or {}) > 1 # Scenarios among several are labelled by their names
+        named = len(groups) > 1 or len(colors or {}) > 1 # Scenarios among several are labeled by their names
         for scenario,inds in groups.items():
             plot_kw = sc.mergedicts(kw.plot, dict(label=scenario if named else label))
             if colors and scenario in colors and not {'color', 'c'} & set(plot_kw):
@@ -1242,8 +1294,14 @@ def resamplable(res, kwargs=None):
     return not (isinstance(res, Result) and res.summarize_by is None and (kwargs or {}).get('summarize_by') is None)
 
 
-class Results(ss.utils.NoDists, ss.ndict):
-    """ Container for storing results """
+class Results(ss.ndict):
+    """ Container for storing results
+
+    Args:
+        module (Module/str): the module the results belong to, or its name
+        args (list): passed to `ss.ndict`
+        kwargs (dict): passed to `ss.ndict`
+    """
     def __init__(self, module=None, *args, **kwargs):
         if module is not None and not isinstance(module, str):
             modlabel = getattr(module, 'label', None)
@@ -1290,6 +1348,12 @@ class Results(ss.utils.NoDists, ss.ndict):
         return self.__repr__(indent=indent, head_col=head_col, key_col=key_col)
 
     def disp(self, *args, **kwargs):
+        """ Print the results in full
+
+        Args:
+            args (list): passed to `str()` of the `ss.ndict`
+            kwargs (dict): passed to `str()` of the `ss.ndict`
+        """
         print(super().__str__(*args, **kwargs))
         return
 
@@ -1342,14 +1406,19 @@ class Results(ss.utils.NoDists, ss.ndict):
         if isinstance(value, Result) and isinstance(key, str):
             total = key.rpartition('.')[0]
             if '.' in key and isinstance(self.get(total), Result):
-                self[total].dests = sc.objdict({**(self[total].__dict__.get('dests') or {}), key.rpartition('.')[2]:value}) # A new dict, since a copy of a result (asnew) shares it
+                self[total].dests = sc.obj({**(self[total].__dict__.get('dests') or {}), key.rpartition('.')[2]:value}) # A new dict, since a copy of a result (asnew) shares it
             elif '.' not in key and (value.__dict__.get('dests') or any('.' in str(k) for k in self.keys())):
                 dests = {k.rpartition('.')[2]:v for k,v in self.items() if isinstance(k, str) and k.startswith(f'{key}.') and isinstance(v, Result)}
-                value.dests = sc.objdict(dests) if dests else None
+                value.dests = sc.obj(dests) if dests else None
         return
 
     def append(self, arg, key=None):
-        """ This is activated by adding as well, e.g. results += result """
+        """ This is activated by adding as well, e.g. results += result
+
+        Args:
+            arg (Result/list/tuple): the result, or the arguments to make one
+            key (str): the key to add it under (default: its name)
+        """
         if isinstance(arg, (list, tuple)):
             result = ss.Result(*arg, module=self._module)
         elif isinstance(arg, dict):
@@ -1374,6 +1443,13 @@ class Results(ss.utils.NoDists, ss.ndict):
         Turn from a nested dictionary into a flat dictionary, keeping only results by default; keys keep their case, as in `to_df()` (e.g. `sis_I`)
 
         If `columns=True`, split each 2D result into one 1D result per column, e.g. `sis_new_infections_alpha`.
+
+        Args:
+            sep (str): the separator between the parts of each key
+            only_results (bool): whether to keep only results
+            only_auto (bool): whether to keep only results that are plotted by default
+            columns (bool): whether to split each 2D result into one per column
+            kwargs (dict): `resample=` to resample each result, with any other keywords for `ss.Result.resample()`
         """
         out = sc.flattendict(self, sep=sep)
         if columns:
@@ -1388,13 +1464,18 @@ class Results(ss.utils.NoDists, ss.ndict):
             resample = kwargs.pop('resample')
             out = {k:(v.resample(new_unit=resample, **kwargs) if isinstance(v, Result) else v) for k,v in out.items() if resamplable(v, kwargs)}
         if only_results:
-            out = sc.objdict({k:v for k,v in out.items() if isinstance(v, Result)})
+            out = sc.obj({k:v for k,v in out.items() if isinstance(v, Result)})
             if only_auto:
-                out = sc.objdict({k:v for k,v in out.items() if v.auto_plot})
+                out = sc.obj({k:v for k,v in out.items() if v.auto_plot})
         return out
 
     def resample(self, new_unit, **kwargs):
-        """ Resample all the results to a longer time unit (e.g. 'year'), each by its `summarize_by`, returning a new Results object; see `ss.Result.resample()`; results not summarized over time (`summarize_by=None`) are left out, as in `sim.summarize()` """
+        """ Resample all the results to a longer time unit (e.g. 'year'), each by its `summarize_by`, returning a new Results object; see `ss.Result.resample()`; results not summarized over time (`summarize_by=None`) are left out, as in `sim.summarize()`
+
+        Args:
+            new_unit (str/dur): the new unit; see `ss.Result.resample()`
+            kwargs (dict): passed to `ss.Result.resample()`
+        """
         new = Results(self._module)
         timevec = None
         for key, res in self.items():
@@ -1430,9 +1511,9 @@ class Results(ss.utils.NoDists, ss.ndict):
             for key,val in self.items():
                 if isinstance(val, Result):
                     own[key] = val
-            parts = sc.objdict(sim=own.to_df(sep=sep, set_date_index=set_date_index, **kwargs))
+            parts = sc.obj(sim=own.to_df(sep=sep, set_date_index=set_date_index, **kwargs))
             parts.update({key:val.to_df(sep=sep, set_date_index=set_date_index, **kwargs) for key,val in self.items() if isinstance(val, Results)})
-            return sc.objdict({key:df for key,df in parts.items() if df is not None})
+            return sc.obj({key:df for key,df in parts.items() if df is not None})
         timevec = flat[0].convert_timevec()
         data = {key:res.values for key,res in flat.items()}
         return sc.dataframe(data, index=timevec) if set_date_index else sc.dataframe(dict(time=timevec) | data)
@@ -1509,7 +1590,7 @@ class Results(ss.utils.NoDists, ss.ndict):
                             res = group[i] = res.asnew(values=vals, _shape=vals.shape, timevec=entry[2], low=None, high=None, strata=None)
                             summed = True
                     several = res._draw(ax, kw, label=sc.ifelse(res.label, res.name) if len(group) > 1 else label, lines=lines, floor=False, colors=colors)
-                    many = many or (several and res.columns is None) # Several scenarios, labelled once
+                    many = many or (several and res.columns is None) # Several scenarios, labeled once
                 if log:
                     log_scale(ax)
                 elif all(res.values.min() >= 0 for res in group):
@@ -1583,7 +1664,7 @@ def match_result_keys(results, key, show_skipped=False, flattened=False):
         flat = results[key].flatten() # e.g. sim.results['sis']
         key = None # We've already used the key, so reset it
     else: # Main use case: flatten the dict, e.g. sim.plot()
-        flat = sc.objdict(results) if flattened else results.flatten() # Copy so the original results aren't modified below
+        flat = sc.obj(results) if flattened else results.flatten() # Copy so the original results aren't modified below
 
     # Configuration
     flat_orig = flat # Copy reference before we modify in place
@@ -1655,7 +1736,11 @@ class simdata:
         return f'ss.simdata({source}{aliases}); data.load() gives the dataframe'
 
     def load(self, sim=None):
-        """ Load the data and rename the columns """
+        """ Load the data and rename the columns
+
+        Args:
+            sim (Sim): the sim the data is for
+        """
         if isinstance(self.source, (str, os.PathLike)): # Separated by commas, tabs, or semicolons, whichever the file uses
             df = sc.dataframe(pd.read_csv(self.source, sep=None, engine='python'))
         else:
@@ -1825,6 +1910,11 @@ def check_data(sim, df, die=False):
 
     A column that matches no result is noted (data on a sim can be just for plotting, or read by a fit's own `gof=`); with
     `die=True`, as when a fit compares every column with its result, it is an error.
+
+    Args:
+        sim (Sim): the sim
+        df (dataframe): the data
+        die (bool): whether a column that matches no result is an error
     """
     options = [f'{mod.name}.{key}' for mod in sim.modules for key,res in mod.results.items() if isinstance(res, ss.Result)]
     for col in df.columns:
@@ -1950,12 +2040,16 @@ def compare(sim, df=None):
     left out (see `check_data()`).
 
     Returns a dict of `{column: (data values, model values)}`.
+
+    Args:
+        sim (Sim): the sim
+        df (dataframe): the data (default: the sim's)
     """
     df = given_data(sim, df)
     sim_t, data_t = data_times(sim, df)
     if data_t.max() < sim_t.min() or data_t.min() > sim_t.max():
         raise ValueError(f'the data ({df.index[0]} to {df.index[-1]}) lies entirely outside the simulated period ({sim.t.start} to {sim.t.stop}).')
-    out = sc.objdict()
+    out = sc.obj()
     for col,(W,expected,rows) in lineup(sim, df).items():
         values = np.asarray(match_column(sim, col).values, dtype=float)
         out[col] = (expected, np.where(W != 0, W*values, 0).sum(axis=1)) # Only the steps used, so a value missing elsewhere (e.g. the prevalence among no one) is not read
@@ -2050,7 +2144,7 @@ def lineup(sim, df=None):
     df = given_data(sim, df)
     annual = by_year(df)
     weights = {} # By timeline and whether summed, since most results share them
-    out = sc.objdict()
+    out = sc.obj()
     for col in df.columns:
         res = match_column(sim, col)
         if res is None:

@@ -24,6 +24,8 @@ a dict of the model (as `model`) and the arguments of `simulate()` (`start_date`
 the last call to `simulate()` or `run_simulations()` with the model gives the run
 settings: the dates, the step, the initial numbers in each compartment and age group,
 and any parameters passed to the run (such as `beta` in a calibration wrapper).
+
+Used with: compartments; declared modules
 """
 import os
 import sys
@@ -190,7 +192,7 @@ def load_epydemix(source, start=None, stop=None, verbose=None, **kwargs):
         if c in init and np.sum(init[c]) > np.sum(init.get(rest, 0)):
             rest = c
     if rest != comps[0]:
-        src.states = sc.objdict({rest:src.states[rest], **{k:v for k,v in src.states.items() if k != rest}})
+        src.states = sc.obj({rest:src.states[rest], **{k:v for k,v in src.states.items() if k != rest}})
     src.states[rest].init = None
     people = Nk # The number in each group
     if init:
@@ -368,7 +370,14 @@ def model_dict(model, run=None):
 
 
 def dump(model, filename, run=None):
-    """ Write the model (and the settings of a run, if given or recorded) to a JSON file """
+    """
+    Write the model (and the settings of a run, if given or recorded) to a JSON file
+
+    Args:
+        model (`EpiModel`): the epydemix model, or a dict of it and the arguments of `simulate()`
+        filename (str): the JSON file to write
+        run (dict): the settings of the run; if None, those recorded
+    """
     with open(filename, 'w') as f:
         json.dump(model_dict(model, run=run), f, indent=1)
     return filename

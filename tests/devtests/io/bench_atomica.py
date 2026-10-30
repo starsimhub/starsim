@@ -35,7 +35,7 @@ def port(): # Read the workbooks, and write the code
 
 def final(sim):
     """ The final compartments and every result, as arrays """
-    out = sc.objdict()
+    out = sc.obj()
     for mod in sim.diseases.values():
         out[f'{mod.name}.y'] = np.array(mod.engine.y)
     for key,res in sim.results.flatten().items():
@@ -58,7 +58,7 @@ def main(save=False, stop=stop, profile=False, reread=False):
         return
     folder.mkdir(parents=True, exist_ok=True)
     codefile = folder/'bench_IND.py'
-    times = sc.objdict()
+    times = sc.obj()
     if reread or not codefile.exists():
         t = time.perf_counter()
         sc.savetext(codefile, port())

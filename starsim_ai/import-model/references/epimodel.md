@@ -6,7 +6,7 @@ EpiModel is an R package. A model is an R script with three kinds: `dcm()` (a de
 
 ## Getting the model out
 
-The script is run in EpiModel's environment by `starsim/io/dump_epimodel.R` (it needs only EpiModel and jsonlite), with `netest()`, `netdx()`, `netsim()`, `dcm()`, and `icm()` replaced by functions that record their arguments, so nothing is fitted or simulated and it takes about a second. Each call of `netsim()`, `dcm()`, or `icm()` is a run; statements that fail afterwards (plots of the results) are skipped. A saved `netsim()` result or `netest()` (`.rds`) works too.
+The script is run in EpiModel's environment by `starsim/converters/dump_epimodel.R` (it needs only EpiModel and jsonlite), with `netest()`, `netdx()`, `netsim()`, `dcm()`, and `icm()` replaced by functions that record their arguments, so nothing is fitted or simulated and it takes about a second. Each call of `netsim()`, `dcm()`, or `icm()` is a run; statements that fail afterwards (plots of the results) are skipped. A saved `netsim()` result or `netest()` (`.rds`) works too.
 
 ```bash
 Rscript dump_epimodel.R intro_sis.R model.json

@@ -10,6 +10,8 @@ becomes a disease with its transitions; a network fitted by `netest()` becomes a
 since it is not an ERGM); and
 modules written in R (`infection.FUN = infect`, ...) are listed, with their source in
 `sim.imported.modules`, to be written by hand.
+
+Used with: agents and compartments; declared modules
 """
 import os
 import shutil
@@ -34,7 +36,12 @@ modules = dict(netsim='infection.FUN recovery.FUN departures.FUN arrivals.FUN'.s
 
 
 def dump(filename):
-    """ Run `dump_epimodel.R` on an R script or an RDS file, and return the JSON it writes """
+    """
+    Run `dump_epimodel.R` on an R script or an RDS file, and return the JSON it writes
+
+    Args:
+        filename (str): the R script or RDS file
+    """
     rscript = shutil.which('Rscript')
     if rscript is None:
         errormsg = f'To read "{filename}", put Rscript (with EpiModel installed) on the path, or run dump_epimodel.R on it and load the JSON'
@@ -85,7 +92,7 @@ def network(net, src, name, acts=None):
     for t in net['terms']:
         if t['term'] == 'offset':
             src.skip(f'{name}: {t["text"]}', 'a term with a fixed coefficient (e.g. no partnerships within a group) has no declared form; restrict partners with a custom network')
-    kw = sc.objdict()
+    kw = sc.obj()
     arglist = lambda t: {j:a for j,a in enumerate(t['args'])} if isinstance(t['args'], list) else t['args'] or {} # Positional arguments only, or by name
     attr_of = lambda args: str(args.get(0, args.get('attr'))).strip('"')
     sizes = [1]*len(terms) # The number of statistics of each term: one, except nodefactor's, one for each level but the first
@@ -182,7 +189,7 @@ def load_epimodel(source, unit='day', verbose=None, **kwargs):
     prob, rate = probs[unit], rates[unit]
     src = Source(name=pyname(typ or 'epimodel').lower(), format='epimodel', file=file)
     src.totals = ['N']
-    custom = sc.objdict({k:sc.objdict(m) for k,m in mapping(r['modules']).items() if not m['builtin']})
+    custom = sc.obj({k:sc.obj(m) for k,m in mapping(r['modules']).items() if not m['builtin']})
 
     # States, as EpiModel's status: s, i, and r (a model of custom modules has whatever its modules give it)
     builtin = typ in ('SI', 'SIS', 'SIR')
@@ -288,10 +295,10 @@ def load_epimodel(source, unit='day', verbose=None, **kwargs):
         tr = dis.transitions.get('infection')
         if tr is not None:
             tr.guessed.pop('import', None)
-    sim.imported.modules = sc.objdict({m.name:m.source for m in custom.values()})
-    sim.imported.functions = sc.objdict(d.get('functions') or {})
-    sim.imported.pars = sc.objdict({k:v for k,v in param.items() if not k.startswith('.')})
-    sim.imported.scenarios = sc.objdict()
+    sim.imported.modules = sc.obj({m.name:m.source for m in custom.values()})
+    sim.imported.functions = sc.obj(d.get('functions') or {})
+    sim.imported.pars = sc.obj({k:v for k,v in param.items() if not k.startswith('.')})
+    sim.imported.scenarios = sc.obj()
     for id,other in zip(ids, runs):
         changed = {k:v for k,v in mapping(other['param']).items() if not k.startswith('.') and param.get(k) != v}
         sim.imported.scenarios[id] = changed

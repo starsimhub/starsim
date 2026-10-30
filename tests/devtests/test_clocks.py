@@ -22,7 +22,7 @@ def make_seir(**kwargs):
 @sc.timer()
 def test_events():
     sc.heading('Testing events: transitions, branches, and entering and leaving states')
-    checked = sc.objdict(n=0)
+    checked = sc.obj(n=0)
     def check(sim): # After the transmission, every event of the step is visible
         d = sim.diseases.d
         st = d.states

@@ -40,12 +40,12 @@ def make_sis():
 
 def run_each(make, stop=150, **kwargs):
     """ Run the sim that `make` returns with each solver """
-    return sc.objdict({solver:make(solver=solver, stop=stop, **kw, **kwargs).run() for solver in solvers})
+    return sc.obj({solver:make(solver=solver, stop=stop, **kw, **kwargs).run() for solver in solvers})
 
 
 def check_close(sims, func, rtol=0.1):
     """ Check that a number from each sim matches the ODE's """
-    vals = sc.objdict({solver:func(sim) for solver,sim in sims.items()})
+    vals = sc.obj({solver:func(sim) for solver,sim in sims.items()})
     assert np.allclose(vals[:], vals.ode, rtol=rtol), f'Expected the solvers to agree, not {vals}'
     return vals
 
@@ -483,7 +483,7 @@ def test_memory():
         retest = ss.screen(ss.Diagnostic(sensitivity=0.9, name='pcr'), who=screening.positive & (screening.positive.count == 1), coverage=0.5)
         return ss.Sim(sis, interventions=[screening, retest], start=2000, stop=2030, dt=0.5, total_pop=20_000, verbose=0, **kwargs) # A step of half the dwell, so agents and the ODE differ little by whole steps
     check_agents(make)
-    sims = sc.objdict(abm=make(n_agents=20_000).run())
+    sims = sc.obj(abm=make(n_agents=20_000).run())
     sim = sims.abm
     tested = sim.interventions.screening.product.count_event.raw
     assert tested.max() <= 6 and np.isclose(tested.sum(), sim.results.screening.delivered.sum()) # At most once in five years: six times in 30 years
@@ -533,7 +533,7 @@ def test_coinfection_compartments():
         vx = ss.vaccinate(ss.Vaccine(efficacy=1.0), where=hiv.I, coverage=1.0, at=[2010], disease='syph') if interventions else None
         return ss.Sim(diseases=[hiv, syph], connectors=coinfection if coinfect else None, interventions=vx, solver=solver,
                       start=2000, stop=2030, dt=ss.years(0.1), total_pop=20_000, verbose=0)
-    sims = sc.objdict({solver:make(solver).run() for solver in solvers})
+    sims = sc.obj({solver:make(solver).run() for solver in solvers})
     base = make(coinfect=False).run()
 
     # The states of the two diseases are tracked jointly, so they have the same people, and the results of each can be split by the other
@@ -590,7 +590,7 @@ def test_newborns_and_events():
         sir = make_sir(births=ss.birth(rate=ss.peryear(0.03)), deaths=ss.death(rate=ss.peryear(0.03))).stratify(age=[0, 5])
         kids = ss.vaccinate(ss.Vaccine(efficacy=0.9), where=ppl.age < 5, name='kids')
         return ss.Sim(sir, interventions=kids, solver=solver, **pars).run()
-    sims = sc.objdict(ode=make('ode'), abm=make('abm'))
+    sims = sc.obj(ode=make('ode'), abm=make('abm'))
     for sim in sims.values():
         assert sim.results.kids.delivered[-365:].sum() > 0.5*50_000*0.03 # Still delivering in the last year, to newborns
     check_close(sims, lambda sim: sim.results.kids.delivered.sum())

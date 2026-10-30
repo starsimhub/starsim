@@ -1,5 +1,9 @@
 """
-Set parameters
+Parameters: the container of a module's or sim's parameters (`ss.Pars`), and values that vary by level or in time (`ss.by`, `ss.timeseries`, `ss.seasonal`)
+
+They exist so that a parameter is checked when set, and can vary in the same way however a model is written or run.
+
+Used with: agents and compartments; declared and coded modules
 """
 from numbers import Number
 import numpy as np
@@ -7,7 +11,7 @@ import pandas as pd
 import sciris as sc
 import starsim as ss
 import datetime as dt
-from .internals.expressions import as_expr, evaluate, Expr, par
+from .expressions import as_expr, evaluate, Expr, par
 
 
 # Define classes to not descend into further -- based on sciris.sc_nested
@@ -19,11 +23,11 @@ def has_par(value):
     return type(value) is dict and any(isinstance(v, ss.par) for v in value.values())
 
 
-class Pars(sc.objdict):
+class Pars(sc.obj):
     """
     Dict-like container of parameters
 
-    Acts like an `sc.objdict()`, except that adding new keys are disallowed by
+    Acts like an `sc.obj()`, except that adding new keys are disallowed by
     default, and auto-updates known types.
 
     Args:
@@ -103,6 +107,9 @@ class Pars(sc.objdict):
         Parameters are locked when the sim is initialized, so that e.g. a typo in
         `sim.pars['rand_sed'] = 2` raises an error rather than silently doing nothing.
         Use `pars.lock(False)` to unlock, or `pars.update(create=True)` to add a new key.
+
+        Args:
+            locked (bool): whether to lock, or unlock with False
         """
         object.__setattr__(self, '_locked', locked) # Set as an attribute, not a key
         return self
@@ -306,7 +313,7 @@ class Pars(sc.objdict):
         value may have been meant: for that, give `ss.constant(...)`. To change other parameters, use its own method, e.g. `pars.dur_inf.set(mean=8, std=2)`.
         """
         if isinstance(new, dict) and 'type' in new: # A distribution given by its type and parameters, e.g. dict(type='poisson', lam=4)
-            new = ss.distributions.make_dist(new)
+            new = ss.dists.make_dist(new)
 
         # It's a Dist, e.g. dur_inf = ss.normal(6,2); use directly
         if isinstance(new, ss.Dist):
@@ -360,7 +367,12 @@ class Pars(sc.objdict):
         return
 
     def to_json(self, **kwargs):
-        """ Convert to JSON representation """
+        """
+        Convert to JSON representation
+
+        Args:
+            **kwargs (dict): passed to `sc.jsonify()`
+        """
         return sc.jsonify(dict(self), **kwargs)
 
 
@@ -382,420 +394,6 @@ def replaced_dist(key, old, new):
     return
 
 
-class SimPars(Pars):
-    """
-    Create the parameters for the simulation. Typically, this function is used
-    internally rather than called by the user; e.g. typical use would be to do
-    sim = ss.Sim() and then inspect sim.pars, rather than calling this function
-    directly.
-
-    Args:
-        label (str): The name of the simulation
-        n_agents (int/float): The number of agents to run (default 10,000)
-        total_pop (int/float): If provided, scale the agents to this effective population size
-        pop_scale (float): If provided, use this agent-to-population scale factor (total_pop = n_agents*pop_scale)
-        rescale (bool): If True, start with a scale factor of 1 and increase it to pop_scale as the agents stop being naive, making some of them naive again each time (dynamic rescaling, as in Covasim; default False)
-        rescale_threshold (float): If rescaling, the fraction of agents who are not naive that triggers rescaling (default 0.05)
-        rescale_factor (float): If rescaling, the minimum factor by which to increase the scale each time (default 1.2)
-        unit (str): The time unit for the simulation (default 'year'; other choices are 'day', 'week', 'month')
-        start (float/str/date): The starting date for the simulation (default 2000); can be a year or date
-        stop (float/str/date): If provided, the ending date for the simulation (if not provided, calculate from "dur")
-        dur (int): How many timesteps to simulate, if "stop" is not provided (default 50)
-        dt (float): The timestep, in units of "unit" (default 1.0)
-        rand_seed (int): The overall random seed for the simulation (used to set module-specific random seeds)
-        use_aging (bool): Specify whether agents age (by default, agents age if and only if births and/or deaths are included)
-        people_results (bool): Whether to collect the automatic People-level results (alive, female, new_deaths, cum_deaths, etc.) every timestep (default True); set to False to skip this per-timestep cost in lightweight/ODE-style sims that do not need them (note: some modules, e.g. demographics, rely on results.alive)
-        people (People): If provided, use a pre-existing People object rather than creating one (in which case n_agents will be ignored)
-        networks (str/list/Module): The network module(s); can be a string, single module (i.e. Network), or list
-        demographics (str/list/Module/bool): births, deaths, and migration of everyone: declared (`ss.birth()`, `ss.death()`, which run under every solver), or modules of agents (e.g. `ss.Births()`, `ss.Pregnancy()`); True for births and deaths at 20 and 10 per 1,000 people per year
-        diseases (str/list/Module): As above
-        connectors (str/list/Module): As above
-        interventions (str/list/Module): As above
-        analyzers (str/list/Module): As above
-        verbose (int/float): How much to print: 0 nothing, 1 the solver, notes, and progress (default), 2 everything (e.g. each step); a fraction is as 1, with progress every that share of the run (e.g. 0.1 for every 10%)
-    """
-    def __init__(self, pars=None, create=True, **kwargs):
-
-        # General parameters
-        self.label   = '' # The label of the simulation
-        self.verbose = ss.options.verbose # How much to print: 0 (nothing), 1 (the solver, notes, and progress; default), or 2 (everything)
-
-        # Population parameters
-        self.n_agents  = 10e3 # Number of agents
-        self.total_pop = None # If defined, used for calculating the scale factor
-        self.pop_scale = None # How much to scale the population
-        self.rescale   = False # Whether to rescale the population dynamically (see docstring)
-        self.rescale_threshold = 0.05 # Fraction of non-naive agents that triggers rescaling
-        self.rescale_factor    = 1.2 # Minimum factor to rescale by each time
-        self.people_results = True # Whether to collect automatic People-level results every timestep (see docstring)
-
-        # Simulation parameters
-        self.start     = None  # Start of the simulation (default 2000)
-        self.stop      = None  # End of the simulation
-        self.dur       = None  # Duration of time to run, if stop isn't specified (default 50 steps of self.unit)
-        self.dt        = None  # Timestep
-        self.rand_seed = 1     # Random seed; if None, don't reset
-
-        # How the model is run; these only apply to modules with declared states and transitions (see ss.Disease)
-        self.unit       = None   # The unit for bare numbers, e.g. 'day'; if nothing in the model has a unit, time is in timesteps
-        self.solver     = 'auto' # 'auto', 'ode', 'ide' (dwell times as they are, not as stages), 'binomial', 'gillespie' (exact), 'tau' (tau-leaping), or 'abm'
-        self.branching  = False  # Whether to run as a branching process: infection takes no one from the uninfected, nor gives anyone back (see ss.Sim)
-        self.approx     = None   # None prints a note for each approximation; True keeps the note in sim.notes without printing it; False makes it an error
-        self.integrator = None   # The ODE integration scheme: 'rk4' (the default) or 'euler'
-        self.substeps   = None   # The number of substeps per timestep: for the 'rk4' and 'euler' integrators (default: enough that no compartment turns over, or grows through its inflows, by more than a quarter in one), and the 'binomial' solver (default: enough that no more than about a tenth of the people in a compartment leave it in one; 1 takes each step whole, as discrete-time chain-binomial models do)
-        self.stratify   = None   # People dimensions for every module, e.g. dict(age=[0, 15, 65])
-        self.results    = None   # The results to keep by group, by name, e.g. ['I', 'cases'] or ['sir.I']; the others keep only their totals (default: all, every few steps if every step would take more than about 100 MB: see ss.solvers.group_rows())
-
-        # Demographic parameters
-        self.use_aging  = None # True if demographics, false otherwise
-
-        # Modules
-        self.people = None
-        self._reset_modules()
-
-        # Update with any supplied parameter values and generate things that need to be generated
-        self.update(pars, create=create, **kwargs)
-        return
-
-    _names = None # The names of the sim parameters: see names()
-    _frozen = False # Whether the sim is initialized: see freeze()
-
-    def freeze(self, frozen=True):
-        """ Once the sim is initialized, its settings belong to that run (`sim.new()` copies the sim as it was before), so setting one raises; but not its label, which only names it """
-        object.__setattr__(self, '_frozen', frozen)
-        return self
-
-    def __setitem__(self, key, value):
-        if self._frozen and key in self and key != 'label': # A key that does not exist raises as for any locked parameters
-            val = repr(value) if len(repr(value)) < 40 else '...'
-            errormsg = f'Cannot set sim.pars.{key} once the sim is initialized, since a run (and a rerun) uses the settings it had then; make a new sim with it instead, e.g. sim.new({key}={val})'
-            raise RuntimeError(errormsg)
-        return super().__setitem__(key, value)
-
-    removed = dict( # Sim parameters that have been removed (or that are often guessed), and what replaces them
-        track_writes = 'track_writes= has been removed: sim.what_modifies() lists the modifiers on a quantity, which are declared; code that assigns rel_sus or rel_trans directly is not tracked',
-        birth_rate = 'birth_rate= (births per 1,000 people per year) has been removed: declare births for the population, per person, e.g. ss.Sim(..., demographics=[ss.birth(rate=ss.peryear(0.02))]) for 20 per 1,000, which runs under every solver; or use ss.Births(birth_rate=...) for data by year',
-        death_rate = 'death_rate= (deaths per 1,000 people per year) has been removed: declare deaths for the population, per person, e.g. ss.Sim(..., demographics=[ss.death(rate=ss.peryear(0.01))]) for 10 per 1,000, which runs under every solver; or use ss.Deaths(death_rate=...) for data by year, age, and sex',
-        age_dist = 'age_dist= is not a sim parameter: for age groups with given shares, stratify the disease, e.g. sir.stratify(age=[0, 15, 65], split=[0.3, 0.6, 0.1]), which runs under every solver; for the ages of agents, use ss.Sim(..., people=ss.People(n_agents, age_data=df)), with columns age and value',
-    )
-
-    def check_key_mismatch(self, pars):
-        """ As for any parameters, with the removed sim parameters named """
-        for key in pars:
-            if key in self.removed:
-                raise ValueError(self.removed[key])
-        return super().check_key_mismatch(pars)
-
-    @classmethod
-    def names(cls):
-        """ The names of the sim parameters (as opposed to keys added later, e.g. one per module) """
-        if cls._names is None:
-            cls._names = set(cls().keys())
-        return cls._names
-
-    def _reset_modules(self):
-        """ Initialize ndicts for module storage """
-        self.custom        = ss.ndict()
-        self.demographics  = ss.ndict()
-        self.connectors    = ss.ndict()
-        self.networks      = ss.ndict()
-        self.interventions = ss.ndict()
-        self.diseases      = ss.ndict()
-        self.analyzers     = ss.ndict()
-        self.modules       = ss.ndict()
-        return
-
-    def is_default(self, key):
-        """ Check if the provided value matches the default """
-        default_pars = SimPars() # Create a default SimPars object
-        default_val = default_pars[key]
-        current_val = self[key]
-        match = (current_val == default_val) # Check if the value matches # TODO: consider sc.equal() instead
-        return match
-
-    def validate(self):
-        """ Call parameter validation methods """
-        self.validate_sim_pars()
-        self.validate_modules()
-        return
-
-    def validate_sim_pars(self):
-        """ Validate each of the parameter values """
-        self.validate_verbose()
-        self.validate_whole()
-        self.validate_agents()
-        self.validate_total_pop()
-        return
-
-    def validate_verbose(self):
-        """ Validate verbosity """
-        self.verbose = check_verbose(self.verbose)
-        return
-
-    def validate_whole(self):
-        """ Take a whole number given as a float as an integer where one is needed, e.g. rand_seed=2.0 from R """
-        for key in ['rand_seed', 'substeps']:
-            val = self[key]
-            if sc.isnumber(val) and not isinstance(val, (bool, np.bool_)) and val == int(val):
-                dict.__setitem__(self, key, int(val))
-        return
-
-    def validate_agents(self):
-        """ Check that n_agents is supplied and convert to an integer (the nearest, e.g. for a value a fit chose) """
-        named = getattr(self.people, 'named', None)
-        if named is not None and named.n_agents is None: # A named population is made at the sim's number of agents: see ss.solvers.choose.init_named_people()
-            self.n_agents = round(self.n_agents)
-        elif self.people is not None:
-            len_people = len(self.people)
-            if (len_people != round(self.n_agents)) and not self.is_default('n_agents'):
-                errormsg = f'Cannot set a custom value of n_agents ({self.n_agents}) that does not match a pre-created People object ({len_people}); use n_agents to create the People object instead'
-                raise ValueError(errormsg)
-            self.n_agents = len_people
-        elif self.n_agents is None: # Not given, as if left out
-            self.n_agents = int(SimPars().n_agents)
-        elif self.n_agents == 0:
-            errormsg = 'n_agents=0 gives no agents to run; for a compartmental run, leave out n_agents (or give solver="ode")'
-            raise ValueError(errormsg)
-        else:
-            self.n_agents = round(self.n_agents)
-        return
-
-    def validate_total_pop(self):
-        """ Ensure one but not both of total_pop and pop_scale are defined """
-        if self.total_pop is not None:  # In future, if no pop_scale has been provided, try to get it from the location
-            if self.pop_scale is not None:
-                errormsg = f'You can define total_pop ({self.total_pop}) or pop_scale ({self.pop_scale}), but not both, since one is calculated from the other'
-                raise ValueError(errormsg)
-            total_pop = self.total_pop
-        else:
-            if self.pop_scale is not None:
-                total_pop = self.pop_scale * self.n_agents
-            else:
-                total_pop = self.n_agents
-        self.total_pop = total_pop
-        if self.pop_scale is None:
-            self.pop_scale = total_pop / self.n_agents
-        return
-
-    def validate_modules(self):
-        """ Validate modules passed in pars"""
-
-        # Do special validation on demographics (must be before modules are created)
-        self.validate_demographics()
-
-        # Get all modules into a consistent list format
-        modmap = ss.modules.module_map()
-        for modkey in modmap.keys():
-            if not isinstance(self[modkey], ss.ndict):
-                self[modkey] = [m for entry in sc.tolist(self[modkey]) for m in (entry if isinstance(entry, list) else [entry])] # One level of nested lists, e.g. a helper that returns several interventions
-
-        # Convert any modules that are not already Module objects
-        modules = self.convert_modules()
-        modules = self.expand_modules(modules)
-        flows = any(isinstance(mod, ss.demographics.Flows) for source,mod in modules)
-        if flows and not any(getattr(mod, 'graph', None) is not None for source,mod in modules): # With no declared disease, births and deaths declared for the population are held by everyone alive, a declared module like any other
-            modules.append(('demographics', ss.demographics.Population()))
-        self._reset_modules()
-        products = []
-        names = {} # Module names must be unique across all types, since they share namespaces (e.g. sim.people.<name>, sim.results.<name>)
-        for source, mod in modules:
-            if source == 'modules':
-                # Modules from 'modules=' get sorted by type
-                for modkey, modclass in modmap.items():
-                    if isinstance(mod, modclass) or (modkey == 'diseases' and isinstance(mod, ss.strains.Family)): # Strains with courses of their own are with the diseases
-                        break
-                else:
-                    modkey = 'custom'
-            else:
-                # Modules from specific containers stay where the user put them
-                modkey = source
-            self.validate_name(mod, modkey, names)
-            if getattr(mod, 'has_product', False) and not any(mod.product is p for p,d in products): # Products share the same namespaces; the same product can be used by more than one intervention
-                products.append((mod.product, mod))
-            self[modkey].append(mod)
-        for product, delivery in products: # Named after all the other modules, so that a product named for its kind ("treatment") never takes a name the user gave a module
-            self.validate_name(product, 'products', names, delivery=delivery)
-
-        # Do special validation on networks (must be after modules are created)
-        self.validate_networks()
-        return
-
-    @staticmethod
-    def expand_modules(modules):
-        """
-        Replace any module that defines an `expand()` method with the modules it returns, e.g. `ssl.HybridNet()` → four networks
-
-        Args:
-            modules (list): (source, module) tuples, as returned by `convert_modules()`
-        """
-        out = []
-        for source, mod in modules:
-            if hasattr(mod, 'expand'):
-                out += [(source, m) for m in mod.expand()]
-            else:
-                out.append((source, mod))
-        return out
-
-    @staticmethod
-    def validate_name(mod, modkey, names, delivery=None):
-        """
-        Ensure the module name is unique, renaming it if it is the default name (e.g. "sir" → "sir_1")
-
-        A product that a delivery made from its keywords (`campaign = ss.vaccinate(efficacy=0.9, ...)`) keeps the
-        name of its kind ("vaccine") if it is free, and is otherwise named for its delivery ("campaign_product"),
-        with no warning, since the user did not make it
-
-        Args:
-            mod (`ss.Module`): the module to validate
-            modkey (str): the type of module, e.g. "diseases"
-            names (dict): the names used so far, mapped to their module type; updated in place
-            delivery (`ss.Delivery`): for a product, the delivery it was found in
-        """
-        name = mod.name
-        if name in names:
-            if mod._default_name and getattr(mod, '_from_keywords', False) and delivery is not None:
-                mod.name = mod.label = sc.uniquename(f'{delivery.name}_product', list(names), style='_%d')
-            elif mod._default_name and isinstance(mod, ss.Product) and names[name] == 'interventions': # e.g. bcg = ss.vaccinate(tbsim.BCG(...)), where the delivery takes the name of its variable: the product is named for its kind, bcg_vaccine
-                kind = next((cls for cls in (ss.Vaccine, ss.Treatment, ss.Diagnostic) if isinstance(mod, cls)), ss.Product)
-                mod.name = mod.label = sc.uniquename(f'{name}_{kind.__name__.lower()}', list(names), style='_%d')
-            elif mod._default_name: # A name the user did not give is simply numbered (e.g. a second clip_edges is clip_edges_1)
-                mod.name = sc.uniquename(name, list(names), style='_%d')
-                if isinstance(mod, ss.Product): # Another product of the same default name
-                    cls = type(mod)
-                    cls = f'ss.{cls.__name__}' if cls.__module__.startswith('starsim.') else cls.__name__ # E.g. ss.Treatment, or a package's own hpv.dx
-                    ss.warn(f'The product "{name}" is renamed "{mod.name}", since another module (in {names[name]}) is also called "{name}"; give the product a name to avoid this warning, e.g. {cls}(..., name="{name}_product")')
-            else:
-                errormsg = f'Cannot add module "{name}" to {modkey}: a module with that name already exists in {names[name]}; please give one of them a different name'
-                raise ValueError(errormsg)
-        names[mod.name] = modkey
-        return
-
-    def validate_demographics(self):
-        """ Validate demographics-related input parameters"""
-        # demographics=True is births and deaths at the default rates (20 and 10 per 1,000 people per year), declared for the population
-        demog = self.demographics
-        if demog in [True, 1]:
-            demog = [ss.birth(rate=ss.peryear(0.02)), ss.death(rate=ss.peryear(0.01))]
-        elif demog in [False, 0]:
-            demog = ss.ndict()
-
-        # Births, deaths, and migration declared for the population are held together, until the sim adds them to a disease: see ss.demographics.Flows
-        if not isinstance(demog, ss.ndict):
-            demog = sc.tolist(demog)
-            flows = [mod for mod in demog if isinstance(mod, ss.Transition)]
-            if flows:
-                demog = [mod for mod in demog if not isinstance(mod, ss.Transition)] + [ss.demographics.Flows(flows)]
-        self.demographics = demog
-
-        # Decide whether to use aging based on if demographics modules are present
-        if self.use_aging is None:
-            self.use_aging = True if self.demographics else False
-        return
-
-    def validate_networks(self):
-        """ Validate networks """
-        return
-
-    def convert_modules(self):
-        """
-        Convert different types of representations for modules into a
-        standardized object representation that can be parsed and used by
-        a Sim object
-
-        Returns a flat list of (source_key, ss.Module) tuples
-        """
-
-        out = []
-        modmap = ss.modules.module_map() # List of modules and parent module classes, e.g. ss.Disease
-        modmap['modules'] = ss.Module # Enable passing in modules of any type via `Pars(modules=[...])`
-        modmap['custom'] = ss.Module # Enable passing in modules of any type via `Pars(custom=[...])`
-        supported_modules = ss.modules.find_modules() # Each individual module class option, e.g. ss.SIR
-        supported_modules['modules'] = sc.objdict({k:v for vv in supported_modules.values() for k,v in vv.items()})
-        supported_modules['custom'] = supported_modules['modules']
-
-        for modkey, ssmoddict in supported_modules.items():
-
-            moddictkeys = ssmoddict.keys()
-            moddictvals = ssmoddict.values()
-            expected_cls = modmap[modkey]
-
-            given = self[modkey]
-            if isinstance(given, list) and len(given) == 1 and isinstance(given[0], dict): # A dict, wrapped in a list on the way in
-                given = given[0]
-            if isinstance(given, dict) and not isinstance(given, ss.ndict) and len(given) and all(isinstance(v, ss.Module) for v in given.values()): # Modules by name, e.g. networks=dict(main=..., casual=...)
-                modlist = []
-                for name,mod in given.items():
-                    if mod._default_name:
-                        mod.name = mod.label = name
-                        mod._default_name = False
-                    modlist.append(mod)
-            elif isinstance(self[modkey], list):
-                modlist = self[modkey]
-            elif isinstance(self[modkey], ss.ndict):
-                # If it is an ndict, then assume the keys specify names the values represent modules
-                # They may already be module instances, in which case we will simply verify that the type
-                # matches the expected type
-                modlist = list(self[modkey].values())
-            else:
-                # If it is a dict with a single entry, then we wrap this in a list assuming that it is a dict
-                # representation of a single module (as opposed to a dict containing modules)
-                modlist = sc.promotetolist(self[modkey])
-
-            for i,mod in enumerate(modlist):
-
-                # Convert first from a string to a dict
-                if isinstance(mod, str):
-                    mod = dict(type=mod)
-
-                # Convert from class to class instance (for any module type)
-                if isinstance(mod, type) and issubclass(mod, ss.Module):
-                    mod = mod() # Call it to create a class instance
-
-                # Now convert from a dict to a module
-                if isinstance(mod, dict):
-
-                    # Get the module type as a string
-                    if 'type' in mod:
-                        modtype = mod.pop('type')
-                    else:
-                        errormsg = f'When specifying a {modkey} module with a dict, one of the keys must be "type"; you supplied {mod}'
-                        raise ValueError(errormsg)
-
-                    # Get the module type as a class
-                    if isinstance(modtype, str): # Usual case, a string, e.g. dict(type='sir', dur_inf=6)
-                        modtype = modtype.lower() # Because our map is in lowercase
-                        if modtype in moddictkeys:
-                            modcls = ssmoddict[modtype]
-                        else:
-                            errormsg = f'Invalid module name "{modtype}" for "{modkey}"; must be one of {moddictkeys}'
-                            raise TypeError(errormsg)
-                    else: # Allow supplying directly as a class, e.g. dict(type=ss.SIR, dur_inf=6)
-                        if modtype in moddictvals:
-                            modcls = modtype
-                        else:
-                            errormsg = f'Invalid module class "{modtype}" for "{modkey}"; must be one of {moddictvals}'
-                            raise TypeError(errormsg)
-
-                    # Create the module and store it in the list
-                    mod = modcls(**mod)
-
-                # Convert class and function to class instance (for any module type). expected_cls is the
-                # parent class for this key (e.g. ss.Disease), or ss.Module for 'modules'/'custom'.
-                if isinstance(mod, type) and issubclass(mod, expected_cls):
-                    mod = mod()  # Convert from a class to an instance of a class
-                elif not isinstance(mod, ss.Module) and callable(mod):
-                    mod = expected_cls.from_func(mod)
-
-                # Do final check
-                if isinstance(expected_cls, type) and not isinstance(mod, (expected_cls, ss.Module)): # TEMP: check if this check still works?
-                    errormsg = f'Was expecting {modkey} entry {i} to be class {expected_cls} or Module, but was {type(mod)} instead'
-                    raise TypeError(errormsg)
-
-                out.append((modkey, mod))
-
-        return out
-
-
 def check_verbose(verbose):
     """ Check that `verbose` is 0 (print nothing), a fraction (as 1, with progress every that share of the run, e.g. 0.1 for every 10%), 1 (the solver, notes, and progress), or 2 or more (everything), and return it as an integer or the fraction """
     if sc.isnumber(verbose) and verbose >= 0 and verbose == int(verbose): # Includes True and False
@@ -804,7 +402,7 @@ def check_verbose(verbose):
         return verbose
     errormsg = f'verbose must be 0 (print nothing), a fraction (progress every that share of the run), 1 (the solver, notes, and progress), or 2 or more (everything), not {verbose!r}'
     if verbose in ['brief', -1]:
-        errormsg += '. verbose="brief" (or -1) in Starsim 3 is now verbose=0, which the migration script rewrites (python -m starsim.io.migrate mypackage/)'
+        errormsg += '. verbose="brief" (or -1) in Starsim 3 is now verbose=0, which the migration script rewrites (python -m starsim.converters.migrate mypackage/)'
     raise ValueError(errormsg)
 
 
@@ -971,11 +569,16 @@ class by:
         if self.array is not None:
             return dict(by=self.dims, array=self.array.tolist())
         elif self.table is not None:
-            return dict(by=self.dims, table={col:ss.presentation.quantity_json(list(vals), None, None) for col,vals in self.table.items()})
-        values = {dim:dict(keyed={str(k):ss.presentation.quantity_json(v, None, None) for k,v in vals.items()}) if isinstance(vals, dict) else ss.presentation.quantity_json(list(vals), None, None) for dim,vals in self.given.items()}
+            return dict(by=self.dims, table={col:ss.display.quantity_json(list(vals), None, None) for col,vals in self.table.items()})
+        values = {dim:dict(keyed={str(k):ss.display.quantity_json(v, None, None) for k,v in vals.items()}) if isinstance(vals, dict) else ss.display.quantity_json(list(vals), None, None) for dim,vals in self.given.items()}
         return dict(by=self.dims, values=values[self.dims[0]]) if len(self.dims) == 1 else dict(by=self.dims, product=values)
     def map(self, func):
-        """ A new ss.by with a function applied to each value, e.g. `1/by` (with several dimensions as keywords, only scaling, since the value of a group is their product) """
+        """
+        A new ss.by with a function applied to each value, e.g. `1/by` (with several dimensions as keywords, only scaling, since the value of a group is their product)
+
+        Args:
+            func (func): the function, called on each value
+        """
         if self.array is not None:
             return by(func(self.array if self.wrap is None else self.wrap(self.array)), dims=self.dims)
         elif self.table is not None:
@@ -1276,6 +879,11 @@ class by:
         """
         The value for each group of the sim at each of an array of years (years by groups), as `per_group()` gives them one year at a time, with
         each value that varies in time worked out for every year at once (a value for each level of some dimensions: otherwise a year at a time)
+
+        Args:
+            years (array): the years, as decimals
+            sim (`ss.Sim`): the sim
+            convert (func): the function to convert each value to a number
         """
         years = np.asarray(years, dtype=float)
         ds, strats = self.check(sim)
@@ -1411,7 +1019,14 @@ class by:
         return out[index]
 
     def per_group(self, sim, convert=None, year=None):
-        """ The value for each group of the sim """
+        """
+        The value for each group of the sim
+
+        Args:
+            sim (`ss.Sim`): the sim
+            convert (func): the function to convert each value to a number
+            year (float): the year, for a value that varies in time; if None, the current time
+        """
         ds, grid = self.grid(sim, convert, year)
         grid, index = sim.groups.grid_index(ds, grid)
         return grid[index]
@@ -1441,7 +1056,11 @@ def starting(val):
 
 
 class Static:
-    """ What an expression of parameters alone is evaluated with, outside the engine: see `const_value()` """
+    """
+    What an expression of parameters alone is evaluated with, outside the engine: see `const_value()`
+
+    It exists so that such an expression can be read before the sim has an engine.
+    """
     @staticmethod
     def value(p):
         return p.raw
@@ -1517,7 +1136,11 @@ def current_value(val, sim, cache=None):
 
 
 class TimeValue:
-    """ Base class for values that vary in time: called with the sim, they return the value at the current time """
+    """
+    Base class for values that vary in time: called with the sim, they return the value at the current time
+
+    It exists so that `ss.timeseries` and `ss.seasonal` can be used wherever a number can.
+    """
     fields = [] # The attributes that can hold parameters
     _is_expr = True # So a typed value defers to it, and ss.perday(0.1) * ss.timeseries(...) is an expression as the other order is
 
@@ -1530,7 +1153,14 @@ class TimeValue:
         return self.at(sim.t.now('year'), sim)
 
     def series(self, years, sim, convert):
-        """ The value at each of an array of years, converted to plain numbers by `convert` """
+        """
+        The value at each of an array of years, converted to plain numbers by `convert`
+
+        Args:
+            years (array): the years, as decimals
+            sim (`ss.Sim`): the sim
+            convert (func): the function to convert each value to a number
+        """
         return np.array([convert(self.at(year, sim)) for year in years], dtype=float)
 
     @property
@@ -1630,7 +1260,12 @@ class timeseries(TimeValue):
         return self.values
 
     def years(self, sim):
-        """ The times as years on the sim's timeline (for a sim with no dates, the time since the start, in years) """
+        """
+        The times as years on the sim's timeline (for a sim with no dates, the time since the start, in years)
+
+        Args:
+            sim (`ss.Sim`): the sim
+        """
         if self._years is None or self._years[0] is not sim:
             out = []
             for time in self.times:
@@ -1650,7 +1285,13 @@ class timeseries(TimeValue):
     fields = ['values']
 
     def weights(self, year, sim):
-        """ For a year (or an array of them), the index of the value before it, and the weight of the value after it """
+        """
+        For a year (or an array of them), the index of the value before it, and the weight of the value after it
+
+        Args:
+            year (float/array): the year or years, as decimals
+            sim (`ss.Sim`): the sim
+        """
         years = self.years(sim)
         if self.period is not None: # Fold the time into one period from the first time
             period = self.period.years if isinstance(self.period, ss.dur) else float(self.period)
@@ -1665,6 +1306,13 @@ class timeseries(TimeValue):
         return year, i, j, w
 
     def at(self, year, sim):
+        """
+        The value at a year, interpolated between the times given
+
+        Args:
+            year (float): the year, as a decimal
+            sim (`ss.Sim`): the sim
+        """
         vals = [const_value(v) for v in self.values]
         year, i, j, w = self.weights(year, sim)
         i, j, w = int(i), int(j), float(w)
@@ -1673,6 +1321,14 @@ class timeseries(TimeValue):
         return vals[i]*(1 - w) + vals[j]*w
 
     def series(self, years, sim, convert):
+        """
+        The value at each of an array of years, converted to plain numbers by `convert`
+
+        Args:
+            years (array): the years, as decimals
+            sim (`ss.Sim`): the sim
+            convert (func): the function to convert each value to a number
+        """
         vals = [const_value(v) for v in self.values]
         if any(isinstance(v, ss.prob) for v in vals): # A probability is not converted in proportion to its value
             return super().series(years, sim, convert)
@@ -1688,9 +1344,9 @@ class timeseries(TimeValue):
         return new
 
     def to_json(self):
-        out = dict(timeseries={str(time):ss.presentation.quantity_json(val, None, None) for time,val in zip(self.times, self.values)}, mode=self.mode)
+        out = dict(timeseries={str(time):ss.display.quantity_json(val, None, None) for time,val in zip(self.times, self.values)}, mode=self.mode)
         if self.period is not None:
-            out['period'] = ss.presentation.quantity_json(self.period, 'dur', None)
+            out['period'] = ss.display.quantity_json(self.period, 'dur', None)
         return out
 
 
@@ -1754,20 +1410,40 @@ class seasonal(TimeValue):
     fields = ['mean', 'amplitude']
 
     def factor(self, year):
-        """ The value relative to the mean, at a year or an array of them """
+        """
+        The value relative to the mean, at a year or an array of them
+
+        Args:
+            year (float/array): the year or years, as decimals
+        """
         return np.maximum(0.0, 1 + const_value(self.amplitude)*np.cos(2*np.pi*(year - self.peak_frac)/self.period_years))
 
     def at(self, year, sim=None):
+        """
+        The value at a year
+
+        Args:
+            year (float): the year, as a decimal
+            sim (`ss.Sim`): not used; present to match `ss.timeseries`
+        """
         return const_value(self.mean)*float(self.factor(year))
 
     def series(self, years, sim, convert):
+        """
+        The value at each of an array of years, converted to plain numbers by `convert`
+
+        Args:
+            years (array): the years, as decimals
+            sim (`ss.Sim`): the sim
+            convert (func): the function to convert each value to a number
+        """
         mean = const_value(self.mean)
         if isinstance(mean, ss.prob): # A probability is not converted in proportion to its value
             return super().series(years, sim, convert)
         return convert(mean)*self.factor(np.asarray(years, dtype=float)) # Converted once, rather than at each time
 
     def to_json(self):
-        out = dict(mean=ss.presentation.quantity_json(self.mean, None, None), amplitude=self.amplitude, peak=self.peak)
+        out = dict(mean=ss.display.quantity_json(self.mean, None, None), amplitude=self.amplitude, peak=self.peak)
         if self.period is not None:
-            out['period'] = ss.presentation.quantity_json(self.period, 'dur', None)
+            out['period'] = ss.display.quantity_json(self.period, 'dur', None)
         return dict(seasonal=out)

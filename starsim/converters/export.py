@@ -1,6 +1,8 @@
 """
 Export a sim to other formats
 
+Exports use the compartmental form of declared diseases, turning a sim run as agents into it. `to_hub()` reads results alone, however they were made.
+
 `ss.export_to(sim, format, filename=...)` writes a sim's declared diseases in another
 format; see `v4_design/design/16-interop.md`. Each is read from the built model (each
 disease's graph and engine). The formats carry less than a sim, and what is left out or
@@ -10,12 +12,14 @@ cannot be carried.
 - `sbml`: the compartmental form as species and reactions (https://sbml.org), for any SBML tool
 - `odin`: the compartmental form as `deriv()` equations (https://mrc-ide.github.io/odin)
 
-The runs of a MultiSim are written as a submission to a hub (by scenario, as quantiles or samples) by `ss.io.to_hub()`.
+The runs of a MultiSim are written as a submission to a hub (by scenario, as quantiles or samples) by `ss.converters.to_hub()`.
 
 SBML and odin are written from the compartmental form of the model (what
 `sir.equations()` prints), with the numbers in the sim's unit of time: a dwell time
 that is not exponential is its Erlang stages, and each stratification is summed into
 one group. Both are read back by `ss.import_from()`.
+
+Used with: agents and compartments; declared and coded modules
 """
 import re
 import ast
@@ -90,7 +94,7 @@ def flatten(sim):
     """
     The compartmental form of a sim's declared diseases, as plain data for the exporters
 
-    Returns an `sc.objdict` with the unit of time; the compartments and their initial
+    Returns an `sc.obj` with the unit of time; the compartments and their initial
     numbers; the parameters (numbers in that unit); named expressions (a state with
     several stages is their sum, and `N` is the people in a disease); the flows, each
     with its compartments and its rate in total; and what was left out or changed.
@@ -100,12 +104,12 @@ def flatten(sim):
     lost = [how] if how else []
     diseases = [mod for mod in sim.diseases.values() if getattr(mod, 'graph', None) is not None]
     many = len(diseases) > 1
-    out = sc.objdict(name=diseases[0].name if len(diseases) == 1 else 'model', unit=unit, comps=sc.objdict(), pars=sc.objdict(), exprs=sc.objdict(), flows=[], lost=lost, n_states=0, n_transitions=0)
+    out = sc.obj(name=diseases[0].name if len(diseases) == 1 else 'model', unit=unit, comps=sc.obj(), pars=sc.obj(), exprs=sc.obj(), flows=[], lost=lost, n_states=0, n_transitions=0)
 
     for mod in diseases:
         g, e = mod.graph, mod.engine
         pre = f'{mod.name}_' if many else ''
-        names, flows = g.flow_terms(e)
+        names, flows = ss.display.flow_terms(g, e)
         Y = np.asarray(e.y).sum(axis=1) # Summed over the groups of any stratification
         table = {}
         for i,name in enumerate(names):
@@ -153,7 +157,7 @@ def flatten(sim):
                 if counts[flow.tr.name] > 1:
                     seen[flow.tr.name] += 1
                     name = f'{name}_{seen[flow.tr.name]}'
-                out.flows.append(sc.objdict(name=name, src=src, dst=None if dst is None else table[names[dst]], rate=rename(term, table, unit), transition=flow.tr.name))
+                out.flows.append(sc.obj(name=name, src=src, dst=None if dst is None else table[names[dst]], rate=rename(term, table, unit), transition=flow.tr.name))
 
     # Anything a rate uses that is not exported
     known = set(out.comps) | set(out.pars) | set(out.exprs)
@@ -222,7 +226,12 @@ def mathml(node):
 
 
 def to_sbml(sim):
-    """ The compartmental form of a sim as an SBML model (Level 3 Version 1): compartments as species, flows as reactions """
+    """
+    The compartmental form of a sim as an SBML model (Level 3 Version 1): compartments as species, flows as reactions
+
+    Args:
+        sim (`ss.Sim`): the sim
+    """
     flat = flatten(sim)
     sb = 'http://www.sbml.org/sbml/level3/version1/core'
     ET.register_namespace('', sb)
@@ -279,7 +288,12 @@ def to_sbml(sim):
 #%% odin
 
 def to_odin(sim):
-    """ The compartmental form of a sim as an odin model: a `deriv()` equation for each compartment, with each flow a named variable """
+    """
+    The compartmental form of a sim as an odin model: a `deriv()` equation for each compartment, with each flow a named variable
+
+    Args:
+        sim (`ss.Sim`): the sim
+    """
     flat = flatten(sim)
     r = lambda text: text.replace('**', '^')
     lines = [f'## {flat.name}, exported from Starsim {ss.__version__}; time is in {flat.unit}s', '']
@@ -327,7 +341,7 @@ def export_to(sim, format, filename=None, verbose=None):
 
     Args:
         sim (`ss.Sim`): the sim, with declared diseases
-        format (str): one of `ss.io.exporters`: 'sbml' or 'odin'
+        format (str): one of `ss.converters.exporters`: 'sbml' or 'odin'
         filename (str): the file to write, if any
         verbose (bool): whether to print what was exported (by default, unless something was lost)
 
@@ -382,7 +396,7 @@ def to_hub(msim, targets, origin_date=None, by=None, every='week', output_type='
     **Example**:
 
         msim = ss.parallel(baseline=s1, lockdown=s2, n_runs=20)
-        hub = ss.io.to_hub(msim, targets=dict(infection=['inc inf', 'cum inf']), origin_date='2020-03-01', by='patch')
+        hub = ss.converters.to_hub(msim, targets=dict(infection=['inc inf', 'cum inf']), origin_date='2020-03-01', by='patch')
     """
     msim.check_run('to_hub')
     steps = dict(day=1, week=7)[every]

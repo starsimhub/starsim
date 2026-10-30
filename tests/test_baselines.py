@@ -16,7 +16,7 @@ sc.options(interactive=False) # Assume not running interactively
 # ss.options.warnings = 'error' # For additional debugging
 
 # Define the parameters
-pars = sc.objdict(
+pars = sc.obj(
     n_agents  = 10e3, # Number of agents
     start     = 2000, # Starting year
     dur       = 20,   # Number of years to simulate

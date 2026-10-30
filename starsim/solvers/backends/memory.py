@@ -7,6 +7,8 @@ to 32 MB, or by trimming the top of the heap), so each new one starts with a pag
 fills with zeros: 15-25% of the run of a sim with a random network (see v4_design/oct25/backlog/perf_jax.md). Keeping them in the
 heap, as jemalloc and tcmalloc do, avoids that: memory freed is still reused, but the process keeps its peak size until it
 ends (or `release()` is called). Linux with glibc only; elsewhere nothing changes.
+
+Used with: agents; declared and coded modules
 """
 import sys
 import ctypes

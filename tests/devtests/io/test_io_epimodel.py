@@ -5,7 +5,7 @@ import copy
 import numpy as np
 import sciris as sc
 import starsim as ss
-from starsim.io.epimodel import load_epimodel
+from starsim.converters.epimodel import load_epimodel
 
 # EpiModel's introduction (lingua_franca_design/examples/epimodel/sis-network), as dump_epimodel.R writes it
 sis = dict(format='epimodel', runs=[dict(

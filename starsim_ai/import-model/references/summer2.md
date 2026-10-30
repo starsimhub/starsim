@@ -6,7 +6,7 @@ A summer2 model is Python: a `summer2.CompartmentalModel` built in code, with co
 
 ## Getting the model out
 
-The model is built in summer2's own environment and written to JSON by `starsim/io/summer2.py`, which needs only summer2 (copy it into the summer2 environment):
+The model is built in summer2's own environment and written to JSON by `starsim/converters/summer2.py`, which needs only summer2 (copy it into the summer2 environment):
 
 ```bash
 python summer2.py my_model.py:build_model model.json   # a function that returns the model
@@ -29,7 +29,7 @@ Then, in Starsim, `sim = ss.import_from('model.json')`. If the source builds sev
 | `AgeStratification` | Numeric levels with `kind='age'`; Starsim ages people itself, so summer2's aging flows are left out, and the unit is years | yes |
 | Mixing matrices (`Data(...)` or a plain array) | `networks=ss.contacts(dict(age=..., location=...))` (multiplied together, as summer2's Kronecker product) | yes |
 | A flow into a stratified compartment with adjustments | The shares as the split (an `ss.by` over an earlier dimension with `source_strata`), and the flow multiplied by their sum | yes |
-| Derived outputs | `ss.io.summer2.outputs(sim)`, which works them out from the results | yes |
+| Derived outputs | `ss.converters.summer2.outputs(sim)`, which works them out from the results | yes |
 | A named `Parameter` | A parameter of that name, with the value given in `params.json` (or `ss.import_from(model, pars=...)` for a live model) | yes |
 | `get_linear_interpolation_function(x, y)`, `get_sigmoidal_interpolation_function(x, y)`, and products of them with named Parameters | `ss.timeseries(..., mode='linear')` (at the points, or the sigmoid sampled every tenth of a step; the reviewer's TB model by age agrees with summer2 to 7e-6 of the population in every compartment) | yes |
 | Another parameter that is a function of time | `ss.timeseries(..., mode='linear')` or `ss.seasonal(...)` | no |

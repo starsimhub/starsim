@@ -1,5 +1,9 @@
 """
-Defines the People class and functions associated with making people
+The people in a sim (`ss.People`), lazy references to their properties (`ss.ppl`), and how they are made
+
+People hold what every module shares, such as age, sex, and who is alive. In a compartmental run, each row is a group of people rather than an agent.
+
+Used with: agents and compartments; declared and coded modules
 """
 import numpy as np
 import pandas as pd
@@ -34,6 +38,10 @@ class LazyPeople:
         """
         `ss.ppl.<name>`, or `default` for everyone if nothing adds the property `<name>` to the people, e.g. one that a
         module adds (`people.add_state()`), read by a rate whether or not that module is in the sim
+
+        Args:
+            name (str): the name of the property
+            default (float): the value for everyone if nothing adds the property
 
         **Example**::
 
@@ -322,6 +330,11 @@ class People:
         return engine.n_people(total=False) if hasattr(engine, 'n_people') else np.full(self.n_agents_init, np.nan)
 
     def brief(self, output=False):
+        """ Print a one-line summary of the people
+
+        Args:
+            output (bool): if True, return the text rather than printing it
+        """
         n = self.n_agents_init
         if self.grouped and self.initialized: # A compartmental run: the rows are groups of people
             age = '' if 'age' in self.__dict__.get('_no_groups', []) else f'; age={self.age.mean():0.1f}±{self.age.std():0.1f} over the groups' # Not when unstratified by age
@@ -412,7 +425,7 @@ class People:
         self.sim = sim # Store the sim
         for arr in [self.ti_dead, self.ti_removed]:
             arr.t = sim.t
-        ss.distributions.link_dists(obj=self.states, sim=sim, module=self, skip=[ss.Sim, ss.Module], init=init)
+        ss.dists.link_dists(obj=self.states, sim=sim, module=self, skip=[ss.Sim, ss.Module], init=init)
         return
 
     @property
@@ -475,6 +488,8 @@ class People:
         - `People.<module>` will be a reference to the module itself, enabling access via `people.hiv.susceptible`
         - `People.states['<module>.<state>']` will be a reference to the state, enabling access via `people.states['hiv.susceptible']`
 
+        Args:
+            module (Module): the module to add
         """
 
         # Connect the module as People attribute
@@ -525,7 +540,7 @@ class People:
         state.link_people(self)
         sim = self.__dict__.get('sim')
         if sim is not None:
-            dists = ss.distributions.link_dists(obj=state, sim=sim, module=self, skip=[ss.Sim, ss.Module, People]) # Its own (not those of the people it links to)
+            dists = ss.dists.link_dists(obj=state, sim=sim, module=self, skip=[ss.Sim, ss.Module, People]) # Its own (not those of the people it links to)
             if self.initialized: # Initialized with the others otherwise (see ss.Sim.init())
                 for trace,dist in dists.items():
                     dist.init(trace=f'people_{name}_{trace}', seed=sim.dists.base_seed, sim=sim)
@@ -578,7 +593,7 @@ class People:
         raw = np.zeros(self.uid.len_tot, dtype=bool)
         raw[:n] = ~self.alive.raw[:n] & ~np.isnan(self.ti_dead.raw[:n])
         dead = self.alive.asnew(raw, cls=ss.BoolArr, name='dead', copy=False)
-        dead.people = sc.objdict(auids=ss.uids(np.arange(n))) # Cover all agents, not just active ones
+        dead.people = sc.obj(auids=ss.uids(np.arange(n))) # Cover all agents, not just active ones
         return dead
 
     @property
@@ -667,6 +682,9 @@ class People:
         """
         Return the scaled versions of the flows -- replacement for len(inds)
         followed by scale factor multiplication
+
+        Args:
+            inds (array): the agents to count
         """
         return self.scale[inds].sum()
 
@@ -718,7 +736,11 @@ class People:
         return
 
     def died_of(self, cause):
-        """ The agents who died in this step of a cause (a module or a name), once each death is resolved to one cause (see `request_death()`) """
+        """ The agents who died in this step of a cause (a module or a name), once each death is resolved to one cause (see `request_death()`)
+
+        Args:
+            cause (Module/str): the module, or its name
+        """
         name = cause.name if isinstance(cause, ss.Module) else cause
         return self._died_of.get(name, ss.uids())
 
@@ -767,6 +789,9 @@ class People:
         """
         Request an agent to be removed from the simulation
         Similar to request_death, but in this case the agent will be recorded as removed instead of dead
+
+        Args:
+            uids (array): the agents to remove
         """
         self.ti_removed[uids] = self.sim.ti
         return
@@ -779,7 +804,7 @@ class People:
             deaths = ss.solvers.backends.passes.due(self.auids.view(np.ndarray), self.ti_dead.raw, self.ti_removed.raw, ti)
         death_uids = ss.uids(deaths)
         self.resolve_causes(death_uids[self.ti_dead.raw[death_uids] <= ti])
-        self.alive[death_uids] = False  # Whilst not dead, removed agents should not be included in alive totals
+        self.alive[death_uids] = False  # While not dead, removed agents should not be included in alive totals
         self._dying = death_uids # Still active until the end of the step: see update_results() and remove_dead()
 
         # Execute deaths that took place this timestep (i.e., changing the `alive` state of the agents). This is executed
@@ -1038,6 +1063,9 @@ class People:
         """
         Get all the properties for a single person.
 
+        Args:
+            ind (int): the index of the person
+
         Examples:
             ```python
             sim = ss.Sim(diseases='sir', networks='random', n_agents=100).run()
@@ -1080,11 +1108,11 @@ def people(place, year=None, n_agents=None, revision=None):
     ages = np.array(ss.data.age_edges(pop.index))
     total = (pop.female + pop.male).values
     ppl = People(n_agents=sc.ifelse(n_agents, ss.SimPars().n_agents), age_data=ss.data.to_age_data(ages, total), p_female=pop.female.sum()/total.sum())
-    ppl.named = sc.objdict(place=place, year=year, n_agents=n_agents, revision=revision, total=float(total.sum()), ages=ages, counts=total, ref=pop.attrs['ref'])
+    ppl.named = sc.obj(place=place, year=year, n_agents=n_agents, revision=revision, total=float(total.sum()), ages=ages, counts=total, ref=pop.attrs['ref'])
     return ppl
 
 
-class Person(sc.objdict):
+class Person(sc.obj):
     """
     A simple class to hold all attributes of a person
 

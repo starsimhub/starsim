@@ -1,8 +1,12 @@
 """
-Define options for Starsim.
-All options should be set using set() or directly, e.g.:
+Options for Starsim, and the plotting style
+
+These exist so that behavior that isn't part of a model (how much to print, how to treat warnings, which
+kernels to use) is set in one place. All options should be set using set() or directly, e.g.:
 
     ss.options(verbose=False)
+
+Used with: agents and compartments; declared and coded modules
 """
 import numpy as np
 import numba as nb
@@ -42,7 +46,7 @@ rc_starsim = {
 
 
 # Not public to avoid confusion with ss.options
-class Options(sc.objdict):
+class Options(sc.obj):
     """
     Set options for Starsim.
 
@@ -83,8 +87,8 @@ class Options(sc.objdict):
         """
 
         # Options acts like a class, but is actually an objdict for simplicity
-        optdesc = sc.objdict()  # Help for the options
-        options = sc.objdict()  # The options
+        optdesc = sc.obj()  # Help for the options
+        options = sc.obj()  # The options
 
         optdesc.verbose = 'Set default level of verbosity: 0 prints nothing, 1 the solver, notes, and progress, and 2 everything (e.g. each step).'
         options.verbose = sc.parse_env('STARSIM_VERBOSE', 1, int)
@@ -147,7 +151,12 @@ class Options(sc.objdict):
         return self.set(*args, **kwargs)
 
     def update(self, *args, **kwargs):
-        """ Set several options, as `set()` does (so e.g. the kernels are swapped) """
+        """ Set several options, as `set()` does (so e.g. the kernels are swapped)
+
+        Args:
+            args (dict): the options to set, as a dict
+            kwargs (dict): the options to set, by name
+        """
         return self.set(**dict(*args, **kwargs))
 
     def __setitem__(self, key, value):
@@ -228,10 +237,10 @@ class Options(sc.objdict):
             return
 
         n = 15 # Size of indent
-        optdict = sc.objdict()
+        optdict = sc.obj()
         orig_keys = self.orig_options.keys()
         for key in orig_keys:
-            entry = sc.objdict()
+            entry = sc.obj()
             entry.key = key
             entry.current = sc.indent(n=n, width=None, text=sc.pp(self[key], output=True)).rstrip()
             entry.default = sc.indent(n=n, width=None, text=sc.pp(self.orig_options[key], output=True)).rstrip()
@@ -241,7 +250,7 @@ class Options(sc.objdict):
 
         if len(args):
             try:
-                optdict = sc.objdict({k:optdict[k] for k in args})
+                optdict = sc.obj({k:optdict[k] for k in args})
             except Exception as e:
                 errormsg = f'Cannot provide help on invalid setting(s) "{sc.strjoin(args)}"; valid keys are:\n{sc.newlinejoin(sorted(orig_keys))}'
                 raise sc.KeyNotFoundError(errormsg) from e
@@ -330,6 +339,9 @@ class Options(sc.objdict):
         """
         Alias to set(), for use in a "with" block.
 
+        Args:
+            kwargs (dict): the options to set, by name, until the end of the "with" block
+
         Examples:
             ```python
             # Silence all output
@@ -355,7 +367,11 @@ class Options(sc.objdict):
         return self
 
     def get_default(self, key):
-        """ Helper function to get the original default options """
+        """ Helper function to get the original default options
+
+        Args:
+            key (str): the name of the option
+        """
         return self.orig_options[key]
 
     @property
@@ -369,7 +385,11 @@ class Options(sc.objdict):
         return
 
     def set_precision(self, refresh=True):
-        """ Change the arithmetic precision used by Starsim/NumPy """
+        """ Change the arithmetic precision used by Starsim/NumPy
+
+        Args:
+            refresh (bool): whether to pass the new data types on to the modules that keep their own copies
+        """
         if self.precision == 32:
             dtypes.update(dict(
                 int       = np.int64, # Never set this or result_float to 32-bit since messed up array indexing
@@ -395,7 +415,7 @@ class Options(sc.objdict):
 
     def refresh_references(self):
         """ Many modules copy settings into them for speed; here we refresh those """
-        files = ['arrays', 'demographics', 'diseases', 'distributions', 'networks']
+        files = ['arrays', 'demographics', 'diseases', 'dists', 'distributions', 'networks']
 
         # Update precision
         for file in files:
@@ -437,6 +457,7 @@ def load_fonts(folder=None, name='Mulish', rebuild=False, verbose=False, **kwarg
         name (str): the name of the font to load
         rebuild (bool): whether to rebuild the font cache
         verbose (bool): whether to print out progress/errors
+        kwargs (dict): passed to `sc.fonts()`
     """
     if folder is None:
         folder = str(sc.thispath(__file__) / 'internals' / 'assets')

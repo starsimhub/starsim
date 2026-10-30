@@ -236,7 +236,7 @@ sim.people.person(10)
 
 In a compartmental run there are no agents. `sim.people` then has one row for each group the model is split into, and asking for a property of each person, such as `sim.people.age` in a model not split by age, raises an error saying to stratify by it or to run as agents. Results, `describe()`, and conditions such as `where=ss.ppl.age < 5` (for a model stratified by age) work the same either way.
 
-The API reference for this page: [People](../api/people.qmd), [Arrays](../api/arrays.qmd).
+The API reference for this page: [People](../api/people.qmd), [Arrays](../api/internals.arrays.qmd).
 
 ## Further reading
 

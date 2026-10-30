@@ -16,7 +16,7 @@ n = 5 # Default number of samples
 def make_dists():
     """ Make a Dists object with two distributions in it """
     sim = ss.Sim(n_agents=100).init() # Need an empty sim to initialize properly
-    dists = ss.distributions.Dists([ss.random(name='test'), ss.random(name='test')])
+    dists = ss.dists.Dists([ss.random(name='test'), ss.random(name='test')])
     dists.init(sim=sim)
     return dists
 
@@ -158,7 +158,7 @@ def test_worlds(do_plot=False):
     """ Test that one extra birth leads to one extra infection """
     sc.heading('Testing worlds...')
 
-    res = sc.objdict()
+    res = sc.obj()
 
     pars = dict(
         start = 2000,
@@ -225,7 +225,7 @@ def test_independence(do_plot=False, thresh=0.1):
 
     # Assemble measures
     st = sim.people.states
-    arrs = sc.objdict()
+    arrs = sc.obj()
     arrs.age = st.age.values
     arrs.sex = st.female.values
     for key,disease in sim.diseases.items():
@@ -279,10 +279,10 @@ def test_combine_rands(do_plot=False):
     np.random.seed(2)
     a = np.random.randint(np.iinfo(np.uint64).max, size=n, dtype=np.uint64)
     b = np.random.randint(np.iinfo(np.uint64).max, size=n, dtype=np.uint64)
-    c = ss.utils.combine_rands(a, b)
+    c = ss.distributions.combine_rands(a, b)
     if do_plot:
         plt.figure()
-        for i,k,v in sc.objdict(a=a,b=b,combined=c).enumitems():
+        for i,k,v in sc.obj(a=a,b=b,combined=c).enumitems():
             plt.subplot(3,1,i+1)
             plt.hist(v)
             plt.title(k)
@@ -297,7 +297,7 @@ def test_combine_rands(do_plot=False):
     # Signed input would give values in [-0.5, 0.5] rather than [0, 1], so it should be refused
     # rather than cast, since casting would silently copy the array
     with pytest.raises(TypeError):
-        ss.utils.combine_rands(a.view(np.int64), b.view(np.int64))
+        ss.distributions.combine_rands(a.view(np.int64), b.view(np.int64))
 
     return c
 

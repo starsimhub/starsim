@@ -1,12 +1,13 @@
 """
-Costs, discounting, and incremental cost-effectiveness ratios (ICERs).
+Costs and discounting.
+
+Used with: agents and compartments; declared and coded modules
 """
 import numpy as np
-import pandas as pd
 import sciris as sc
 import starsim as ss
 
-__all__ = ['Costs', 'discount', 'icer']
+__all__ = ['Costs', 'discount']
 
 
 def get_result(results, path):
@@ -67,27 +68,33 @@ class Costs(ss.Analyzer):
         names = [mod.name for mod in self.sim.modules if self.deliveries and mod is not self and 'cost' in mod.results]
         names += [path.replace('.', '_') for path in self.unit_costs]
         names += ['fixed'] if self.fixed else []
-        self.define_results(*[ss.Result(name, kind='flow') for name in names + ['total']]) # Costs in each step; scaling them does nothing, since they are filled in after the sim's results are scaled
+        self.define_results(*[ss.Result(name, kind='flow') for name in names + ['total']]) # Costs in each step; filled in again after the sim's results are scaled
         return
 
-    def step(self):
-        """ Costs are worked out once the sim has run, in `finalize_results()` """
-        pass
-
-    def finalize_results(self):
-        super().finalize_results()
+    def fill(self, ind=slice(None)):
+        """ Work out the costs of some time points """
         res = self.results
         for mod in self.sim.modules:
             if mod.name in res and mod is not self:
-                res[mod.name][:] = mod.results.cost
+                res[mod.name][ind] = mod.results.cost[ind]
         for path, unit_cost in self.unit_costs.items():
-            res[path.replace('.', '_')][:] = unit_cost * get_result(self.sim.results, path)
+            res[path.replace('.', '_')][ind] = unit_cost * get_result(self.sim.results, path)[ind]
         if self.fixed:
             t = self.t.yearvec
             start = t[0] if self.start is None else in_years(ss.connectors.to_time(self.sim, self.start))
             width = np.diff(t, append=t[-1]) # The years from each time point to the next
-            res.fixed[:] = self.fixed * width * (t >= start)
-        res.total[:] = sum(r.values for k, r in res.items() if isinstance(r, ss.Result) and k != 'total')
+            res.fixed[ind] = (self.fixed * width * (t >= start))[ind]
+        res.total[ind] = sum(np.asarray(r.values)[ind] for k, r in res.items() if isinstance(r, ss.Result) and k not in ['total', 'timevec'])
+        return
+
+    def step(self):
+        """ The costs so far, for what runs during the sim, such as `ssl.ICER`; the results are final after `finalize_results()` """
+        self.fill(self.ti)
+        return
+
+    def finalize_results(self):
+        super().finalize_results()
+        self.fill()
         return
 
 
@@ -116,63 +123,3 @@ def discount(values, rate, start=None, t=None):
     start = t[0] if start is None else ss.date(start).years
     weights = (1 + rate) ** -np.maximum(t - start, 0)
     return values * weights # The time axis is last, so this works for the runs of a MultiSim too
-
-
-def icer(sims, outcome, baseline=None, cost='costs.total', rate=0, start=None):
-    """
-    Compare the costs and effects of scenarios: incremental cost-effectiveness ratios
-
-    Each scenario's cost and outcome are totaled over the run (discounted if `rate` is
-    given), and the outcome averted is that of the baseline less the scenario's. The
-    scenarios are ordered by cost, and each is compared with the next cheaper one that
-    it is not dominated by: a scenario that costs more and averts no more than a cheaper
-    one is dominated, and has no ratio. With several runs of each scenario (a MultiSim
-    run with `n_runs`), their means are compared.
-
-    Args:
-        sims (MultiSim/dict/list): the sims of each scenario, labeled by scenario: a run MultiSim, a dict of run sims by label, or a list of run sims
-        outcome (str): the path of the result to avert, e.g. 'measles.infection' or 'hiv.new_deaths'
-        baseline (str): the label of the scenario to compare with (default: the first)
-        cost (str): the path of the cost result (default: the total of `ssl.Costs`)
-        rate (float): the discount rate per year for both costs and outcomes (see `ssl.discount()`)
-        start (float/str): when discounting starts
-
-    Returns:
-        A dataframe with a row for each scenario and columns `cost`, `outcome`, `averted`, `incremental cost`, `incremental averted`, `ICER`, and `dominated`
-
-    Examples:
-        ```python
-        msim = ss.parallel({'Nothing': base, 'Vaccine': base.new(interventions=vx)})
-        ssl.icer(msim, outcome='measles.infection', rate=0.03, start=2010)
-        ```
-    """
-    def total(res):
-        return np.asarray(discount(res, rate, start)).sum(axis=-1)
-
-    # Totals of each scenario, as the mean of their runs
-    if isinstance(sims, ss.MultiSim):
-        scenarios = list(sims.runs['scenario'])
-        costs, outcomes = [total(get_result(sims.results, path)) for path in [cost, outcome]]
-    else:
-        sims = sims if isinstance(sims, dict) else {sim.label:sim for sim in sims}
-        scenarios = list(sims.keys())
-        costs, outcomes = [[total(get_result(sim.results, path)) for sim in sims.values()] for path in [cost, outcome]]
-    df = pd.DataFrame(dict(scenario=scenarios, cost=costs, outcome=outcomes)).groupby('scenario', sort=False).mean()
-    baseline = df.index[0] if baseline is None else baseline
-    df['averted'] = df.outcome[baseline] - df.outcome
-    df = df.sort_values(['cost', 'averted'], ascending=[True, False])
-
-    # Compare each scenario with the next cheaper one that is not dominated (simple dominance)
-    df['incremental cost'] = df['incremental averted'] = df['ICER'] = np.nan
-    df['dominated'] = False
-    last = None
-    for label, row in df.iterrows():
-        if last is not None and row.averted <= df.averted[last]:
-            df.loc[label, 'dominated'] = True
-            continue
-        if last is not None:
-            df.loc[label, 'incremental cost'] = row.cost - df.cost[last]
-            df.loc[label, 'incremental averted'] = row.averted - df.averted[last]
-            df.loc[label, 'ICER'] = df.loc[label, 'incremental cost'] / df.loc[label, 'incremental averted']
-        last = label
-    return df

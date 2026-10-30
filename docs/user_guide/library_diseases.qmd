@@ -38,7 +38,7 @@ sim.plot('measles')
 The library's outbreak diseases give their natural history in days: incubation periods of a week or two, and illness lasting days. Starsim chooses a step of a day for them, from the units of their durations. With a step of a year (`dt=ss.years(1)`), those durations are shorter than a step, and the dynamics are meaningless: `ssl.Cholera`, for example, then gives no infections at all, because its environmental reservoir never has time to build up. See [Time](building_time.qmd) for more on steps.
 :::
 
-The library has five example diseases, from a simple outbreak to a chronic infection and a disease that is not transmitted, and an SIR, SIS, and SEIR written as code:
+The library has two groups of diseases. The first, below, are written as code, so they run as agents: five example diseases, from a simple outbreak to a chronic infection and a disease that is not transmitted, plus an SIR, SIS, and SEIR written as code. The second, [further down](#declared-diseases), are declared as states and transitions, each a short version of a published model, so they run as compartments or as agents.
 
 | Class | Based on | Description |
 | --- | --- | --- |
@@ -173,6 +173,59 @@ plt.show()
 ```
 
 Their results are named differently: the declared model's are named after its states (`I`) and transitions (`infection`), while the version written as code has Starsim 3's names (`infected`, `new_infections`).
+
+## Declared diseases
+
+The rest of the library's diseases are declared, as states and transitions ([Diseases](building_diseases.qmd)), so each runs as a compartmental model or as agents. Each is a short version of a published model, with its default parameters from that source, named for the disease rather than for the model, so the source is given here and in each class's docstring. They are still illustrative: each is the simplest version of its model that shows what makes it interesting, and none has been fitted to a particular place.
+
+| Class | What it shows | The model, and where the parameters come from |
+| --- | --- | --- |
+| `ssl.Malaria` | A vector: people and mosquitoes in one model, the mosquitoes as counts rather than people | The Ross-Macdonald model, in the form of Keeling MJ, Rohani P, *Modeling Infectious Diseases in Humans and Animals*, Princeton University Press, 2008, Program 4.4, which gives every parameter |
+| `ssl.MalariaImmunity` | Immunity that builds with exposure: inoculation that saturates, superinfection, and a faster recovery once immune | The Garki model of Dietz K, Molineaux L, Thomas A, *Bull World Health Organ* 1974;50:347-357, as given in Molineaux L, Gramiccia G, *The Garki Project*, WHO, 1980, ch. 10, Table 31 |
+| `ssl.TB` | A spectrum of disease, with movement back and forth between states and reinfection | The LSHTM model of Schwalb A et al., *PLOS Glob Public Health* 2025;5(1):e0005050, in the form of TBsim's reference ODE (`lshtm_ode.R`), which gives every parameter |
+| `ssl.COVID` | A chain of increasingly severe states, each of which some people leave by recovering | The simple SECIR example of MEmilio (Kühn MJ et al., *Mathematical Biosciences* 2021), which gives every parameter |
+| `ssl.Influenza` | A yearly cycle in transmission (`ss.seasonal`) with waning immunity | Natural history from Carrat F et al., *Am J Epidemiol* 2008;167:775-785; R0 of 1.3 from Biggerstaff M et al., *BMC Infect Dis* 2014;14:480; the cycle is illustrative |
+| `ssl.RSV` | Maternal immunity: babies born protected, in a seasonal MSEIRS model | Weber A, Weber M, Milligan P, *Math Biosci* 2001;172:95-113, for the infectious period, the seasonal form, and R0 |
+| `ssl.Pertussis` | Immunity that wanes over decades, giving epidemics that return every few years | Wearing HJ, Rohani P, *PLoS Pathogens* 2009;5(10):e1000647, for the natural history, R0, and duration of immunity |
+| `ssl.Dengue` | Several serotypes (`ss.Strains`), each with a vector, and partial cross-protection between them | The Ross-Macdonald structure above, with indicative dengue values; cross-protection as found by Reich NG et al., *J R Soc Interface* 2013;10:20130414 |
+| `ssl.Typhoid` | Chronic carriers: a few people shed for life, at a hundredth of the infectiousness of an acute case | Pitzer VE et al., *PLoS Negl Trop Dis* 2014;8(1):e2642, for the carriers, waning, and R0 of 2.8 |
+| `ssl.Polio` | A rare outcome as a branch: about 1 infection in 200 causes paralysis | US CDC *Pink Book* for the paralytic fraction; Fine PEM, Carneiro IAM, *Am J Epidemiol* 1999;150:1001-1021, for R0 |
+| `ssl.Syphilis` | Stages, with the one thing that cannot be declared (infectiousness that falls with time since the latent stage began) written as code | STIsim's syphilis module, which cites its own sources |
+| `ssl.Gonorrhea` | An SIS infection on a sexual network | STIsim's gonorrhea module |
+
+Malaria is the clearest example of what declaring buys: mosquitoes are states like any other, declared with `people=False` so that they are counts rather than people, and `R0()` works out the reproduction number from the model itself:
+
+```{python}
+malaria = ssl.Malaria()
+print('R0:', round(malaria.R0(), 1))
+
+sim = ss.Sim(malaria, total_pop=10_000, unit='day', stop=600, verbose=0)
+sim.run()
+sim.diseases.malaria.plot('Ih', 'Iv')
+```
+
+Starsim's `R0()` counts each passage through a mosquito as a generation, so it is the square root of the classical Ross-Macdonald value, m·a²·b·c/(γ·μ_v) = 213.
+
+The Garki model adds immunity, and with it the result the source is known for: malaria dies out below a critical vectorial capacity, (α₁ + δ)/g, which is 0.022 contacts per person per day with these parameters:
+
+```{python}
+critical = 0.022
+for C in [0.5*critical, 2*critical, 0.2]:
+    sim = ss.Sim(ssl.MalariaImmunity(C=C), total_pop=10_000, unit='day', dt=ss.days(5), stop=365*30, verbose=0)
+    sim.run()
+    res = sim.results.malariaimmunity
+    print(f'Vectorial capacity {C:.3f}: parasite rate {res.prevalence[-1]:.3f}, of which detected {res.detected[-1]:.3f}')
+```
+
+The same declaration runs as agents (`n_agents=` instead of `total_pop=`), where the prevalence is the same but each run differs by chance.
+
+Since these are declared, `describe()`, `diagram()`, and `equations()` work on any of them, which is the quickest way to see what a model does (`ssl.Dengue` is a family of serotypes, so each serotype is shown in its own right, e.g. `sim.diseases.den1.diagram()`):
+
+```{python}
+ssl.Typhoid().equations()
+```
+
+Two of them need agents rather than compartments: `ssl.Dengue`, because serotypes that protect each other are followed per person, and `ssl.Syphilis`, because the falling infectiousness of latent syphilis is a quantity each person carries, set in its `step()`. The rest run under any solver.
 
 ## Adapting a library module
 

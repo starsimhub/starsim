@@ -1,5 +1,10 @@
 """
-Define array-handling classes, including agent states
+Arrays of agents' values: states such as age or infection status, and the UIDs that index them
+
+A state holds a value for every agent, and reads only the active ones, so code can use it like a NumPy array as agents are born and die.
+A few classes here stand in for them when a run has groups of people rather than agents (`GroupAges`, `GroupAlive`).
+
+Used with: agents and compartments; declared and coded modules
 """
 import itertools
 import numbers
@@ -74,6 +79,8 @@ def nb_count(auids, raw):
 class BaseArr(np.lib.mixins.NDArrayOperatorsMixin):
     """
     An object that acts exactly like a NumPy array, except stores the values in self.values.
+
+    It exists so that a state works in NumPy expressions while carrying what Starsim keeps with its values.
     """
     columns = None # Column names for 2D arrays, e.g. ['wild', 'alpha']
 
@@ -668,7 +675,12 @@ class Arr(BaseArr):
             return uids(np.arange(len(self.raw)))
 
     def count(self, axis=None):
-        """ Count the number of nonzero (truthy) values among active agents (for 2D arrays, use `axis=0` to count each column) """
+        """
+        Count the number of nonzero (truthy) values among active agents (for 2D arrays, use `axis=0` to count each column)
+
+        Args:
+            axis (int): the axis to count along, for a 2D array; if None, count all values
+        """
         auids = self.auids
         if axis is None and self.raw.ndim == 1 and auids.size >= numba_indexing and len(self.raw) != auids.size:
             return int(nb_count(auids.view(np.ndarray), self.raw))
@@ -688,7 +700,13 @@ class Arr(BaseArr):
                 return np.array([])
 
     def set(self, uids, new_vals=None):
-        """ Set the values for the specified UIDs"""
+        """
+        Set the values for the specified UIDs
+
+        Args:
+            uids (`ss.uids`): the agents to set values for
+            new_vals (array): the values; if None, use the default of the array
+        """
         if new_vals is None:
             if isinstance(self.default, ss.Dist):
                 new_vals = self.default.rvs(uids)
@@ -704,7 +722,12 @@ class Arr(BaseArr):
         return new_vals
 
     def set_nan(self, uids):
-        """ Shortcut function to set values to NaN """
+        """
+        Shortcut function to set values to NaN
+
+        Args:
+            uids (`ss.uids`): the agents to set to NaN
+        """
         if self.shared is not None:
             self.own()
         self.raw[uids] = self.nan
@@ -827,7 +850,15 @@ class Arr(BaseArr):
         return obj
 
     def asnew(self, arr=None, cls=None, name=None, copy=None):
-        """ Duplicate and copy (rather than link) data, optionally resetting the array """
+        """
+        Duplicate and copy (rather than link) data, optionally resetting the array
+
+        Args:
+            arr (array): the values of the new array; if None, a copy of the active values
+            cls (type): the class of the new array; if None, the same class
+            name (str): the name of the new array
+            copy (bool): whether to copy `arr`; if None, copy if `arr` is None or is a different size than the array
+        """
         if cls is None:
             cls = self.__class__
         if copy is None:
@@ -853,7 +884,13 @@ class Arr(BaseArr):
         return new
 
     def astype(self, cls, copy=False):
-        """ Convert the Arr type, e.g. `arr.astype(ss.IntArr)`; other types (e.g. `int`) return a NumPy array """
+        """
+        Convert the Arr type, e.g. `arr.astype(ss.IntArr)`; other types (e.g. `int`) return a NumPy array
+
+        Args:
+            cls (type): the class to convert to, e.g. `ss.IntArr`, or a NumPy type such as `int`
+            copy (bool): whether to copy the values, for an `ss.Arr` class
+        """
         if not (isinstance(cls, type) and issubclass(cls, Arr)):
             return self.values.astype(cls)
 
@@ -899,6 +936,9 @@ class Arr(BaseArr):
         For arrays with more dimensions, returns an `Arr` with one fewer dimension.
         The new `Arr` is a view, so setting its values also changes the original array.
         It is not linked to `People`, so should not be stored (since it will not grow).
+
+        Args:
+            v (int/str): the column, by position or by name
         """
         new = self.asnew(self.raw[:, self._col_index(v)], name=f'{self.name}[{v}]', copy=False)
         new.columns = None
@@ -923,7 +963,10 @@ class Arr(BaseArr):
 
 
 class FloatArr(Arr):
-    """ Subclass of `ss.Arr` with defaults for floats and ints.
+    """
+    Subclass of `ss.Arr` with defaults for floats and ints.
+
+    It exists so that a state can be defined by name alone, e.g. `ss.FloatArr('cd4')`.
 
     Note: Starsim does not support integer arrays by default since they introduce
     ambiguity in dealing with NaNs, and float arrays are suitable for most purposes.
@@ -984,12 +1027,22 @@ class TimeArr(FloatArr):
         return self.asnew(self.shifted(self.raw) + self.people.phase() < self.t.ti + 1, cls=BoolArr)
 
     def isclose(self, other):
-        """ Whose time is taken at step `other` (e.g. `self.ti_infectious.isclose(self.ti)`, those who became infectious this step, as `due()` counts them), as a boolean array """
+        """
+        Whose time is taken at step `other` (e.g. `self.ti_infectious.isclose(self.ti)`, those who became infectious this step, as `due()` counts them), as a boolean array
+
+        Args:
+            other (int): the timestep
+        """
         vals = self.shifted(self.raw) + self.people.phase()
         return self.asnew((vals >= other) & (vals < other + 1), cls=BoolArr)
 
     def eq(self, other):
-        """ Whose time is exactly `other`, as a boolean array (`==` and `!=` are refused: see `__eq__()`) """
+        """
+        Whose time is exactly `other`, as a boolean array (`==` and `!=` are refused: see `__eq__()`)
+
+        Args:
+            other (float/array): the timestep or timesteps to compare with
+        """
         return self._boolmath('==', other)
 
     def __eq__(self, other):
@@ -1097,7 +1150,10 @@ class GroupAges(FloatArr):
 
 
 class IntArr(Arr):
-    """ Subclass of `ss.Arr` with defaults for ints.
+    """
+    Subclass of `ss.Arr` with defaults for ints.
+
+    It exists so that a state can be defined by name alone, e.g. `ss.IntArr('n_doses')`.
 
     Note: Because integer arrays do not handle NaN values natively, users are
     recommended to use `ss.FloatArr()` in most cases instead.
@@ -1110,6 +1166,8 @@ class IntArr(Arr):
 class BoolArr(Arr):
     """
     Subclass of `ss.Arr` with defaults for booleans.
+
+    It exists so that a flag can be defined by name alone, and adds what is useful for booleans, such as `.uids`.
 
     Examples:
         ```python
@@ -1306,7 +1364,15 @@ class BoolState(BoolArr):
         return
 
     def asnew(self, arr=None, cls=None, name=None, copy=None):
-        """ As `Arr.asnew()`; a copy whose values are not the state's own is not counted (see `watch`) """
+        """
+        As `Arr.asnew()`; a copy whose values are not the state's own is not counted (see `watch`)
+
+        Args:
+            arr (array): the values of the new array; if None, a copy of the active values
+            cls (type): the class of the new array; if None, the same class
+            name (str): the name of the new array
+            copy (bool): whether to copy `arr`; see `Arr.asnew()`
+        """
         new = super().asnew(arr=arr, cls=cls, name=name, copy=copy)
         if new.raw is not self.raw and new.__dict__.get('watch') is not None:
             new.__dict__['watch'] = None
@@ -1340,7 +1406,13 @@ class BoolState(BoolArr):
         return
 
     def set(self, uids, new_vals=None):
-        """ Set the values for the specified UIDs, telling whatever keeps count of the state (see `__setitem__()`) """
+        """
+        Set the values for the specified UIDs, telling whatever keeps count of the state (see `__setitem__()`)
+
+        Args:
+            uids (`ss.uids`): the agents to set values for
+            new_vals (array): the values; if None, use the default of the array
+        """
         engine = self._counter()
         if engine is None:
             return super().set(uids, new_vals=new_vals)
@@ -1354,7 +1426,13 @@ class BoolState(BoolArr):
         return out
 
     def grow(self, new_uids=None, new_vals=None):
-        """ Add new agents (see `Arr.grow()`); they were not counted before, so whatever keeps count of the state counts those who start in it """
+        """
+        Add new agents (see `Arr.grow()`); they were not counted before, so whatever keeps count of the state counts those who start in it
+
+        Args:
+            new_uids (`ss.uids`): the UIDs of the new agents
+            new_vals (array): their values; if None, use the default of the array
+        """
         engine = self._counter()
         if engine is None:
             return super().grow(new_uids, new_vals=new_vals)
@@ -1420,10 +1498,10 @@ class GroupAlive(BoolState):
         self.no_agents('uids')
 
 
-class Watch(ss.utils.NoDists):
+class Watch:
     """
     The link from a state to the engine that keeps count of who is in it (`BoolState.watch`), which is told of
-    every change to it (see `ss.solvers.Agents.wrote()`). It is never searched for distributions (see `ss.distributions.no_dists()`),
+    every change to it (see `ss.solvers.Agents.wrote()`). It is never searched for distributions (see `ss.dists.no_dists()`),
     so the link does not change where they are found, which gives each its random numbers.
     """
     __slots__ = ['engine']
@@ -1518,7 +1596,10 @@ class UIDArr(IndexArr):
 
 
 class uids(np.ndarray):
-    """ Class to specify that integers should be interpreted as UIDs.
+    """
+    Class to specify that integers should be interpreted as UIDs.
+
+    It exists so that indexing an `ss.Arr` with these reads those agents by UID, not by position.
 
     For all practical purposes, behaves like a NumPy integer array. However,
     has additional methods `uids.concatenate()`, `uids.remove()`, and
@@ -1572,6 +1653,9 @@ class uids(np.ndarray):
             ss.uids.concatenate([x, y])    # single iterable of arrays
             ss.uids.concatenate([None, x]) # None elements are filtered out
             ss.uids.concatenate()          # returns empty ss.uids()
+
+        Args:
+            *args (`ss.uids`): the UIDs to join, as arrays or as one list of arrays; None is treated as empty
         """
         # Handle a single input argument: my_uids.concatenate([uids1, uids2])
         if len(args) == 1 and np.iterable(args[0]) and (not isinstance(args[0], (uids, np.ndarray))):
@@ -1621,27 +1705,50 @@ class uids(np.ndarray):
         return arr.ndim == 1 and (arr.size < 2 or bool((arr[1:] > arr[:-1]).all()))
 
     def remove(self, other, **kw):
-        """ Remove provided UIDs from current array"""
+        """
+        Remove provided UIDs from current array
+
+        Args:
+            other (`ss.uids`/`ss.BoolArr`): the UIDs to remove
+            **kw (dict): passed to `np.setdiff1d()`
+        """
         if isinstance(other, BoolArr):
             other = other.uids
         kw.setdefault('assume_unique', self._increasing(self) and self._increasing(other))
         return self._ensure_int(np.setdiff1d(self, other, **kw))
 
     def intersect(self, other, **kw):
-        """ Keep only UIDs that are also present in the other array """
+        """
+        Keep only UIDs that are also present in the other array
+
+        Args:
+            other (`ss.uids`/`ss.BoolArr`): the UIDs to keep, if they are also in this array
+            **kw (dict): passed to `np.intersect1d()`
+        """
         if isinstance(other, BoolArr):
             other = other.uids
         kw.setdefault('assume_unique', self._increasing(self) and self._increasing(other))
         return self._ensure_int(np.intersect1d(self, other, **kw))
 
     def union(self, other):
-        """ Return all UIDs present in either array, sorted, without repeats (as np.union1d() gives them, faster: see unique()) """
+        """
+        Return all UIDs present in either array, sorted, without repeats (as np.union1d() gives them, faster: see unique())
+
+        Args:
+            other (`ss.uids`/`ss.BoolArr`): the UIDs to add
+        """
         if isinstance(other, BoolArr):
             other = other.uids
         return self._ensure_int(np.concatenate([self, np.asarray(other)])).unique()
 
     def xor(self, other, **kw):
-        """ Return UIDs present in only one of the arrays """
+        """
+        Return UIDs present in only one of the arrays
+
+        Args:
+            other (`ss.uids`/`ss.BoolArr`): the UIDs to compare with
+            **kw (dict): passed to `np.setxor1d()`
+        """
         if isinstance(other, BoolArr):
             other = other.uids
         return self._ensure_int(np.setxor1d(self, other, **kw))
@@ -1651,7 +1758,12 @@ class uids(np.ndarray):
         return self.view(np.ndarray)
 
     def unique(self, return_index=False):
-        """ Return unique UIDs; equivalent to np.unique() """
+        """
+        Return unique UIDs; equivalent to np.unique()
+
+        Args:
+            return_index (bool): whether to also return the position of the first time each UID appears
+        """
         if return_index:
             arr, index = np.unique(self, return_index=True)
             return self._ensure_int(arr), index # index is a position array, not a uids

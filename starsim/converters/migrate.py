@@ -4,8 +4,8 @@ Rewrite Starsim 3 code for Starsim 4
 Makes the mechanical changes of the upgrade in place, and lists what needs a person
 (or an assistant with the migrate-starsim3 skill), by file and line:
 
-    python -m starsim.io.migrate mypackage/ tests/   # Rewrite in place
-    python -m starsim.io.migrate mymodel.py --check  # Only list what would change
+    python -m starsim.converters.migrate mypackage/ tests/   # Rewrite in place
+    python -m starsim.converters.migrate mymodel.py --check  # Only list what would change
 
 It reads `.py` files, and the Python code cells of notebooks (`.ipynb`), Quarto (`.qmd`), and Markdown (`.md`).
 
@@ -18,6 +18,8 @@ way), `copy_inputs=` (removed: a sim always copies its inputs), `ss.uids.cat()` 
 (now `preg.lactating`), `ss.RandomNet(uniform_targets=True)` (now `method='uniform'`), and the counts of the states of Starsim's own
 modules after results (`results.n_alive`, `res['n_infected']`, now `results.alive`, `res['infected']`; a result the code makes
 itself keeps its name, and other counts are listed). Read the diff afterwards: each change is listed with its line.
+
+Used with: agents; coded modules
 """
 import re
 import ast
@@ -36,7 +38,7 @@ renames = [
     (r'\bss\.rate_prob\(',         'ss.peryear(',                    'ss.rate_prob is ss.peryear'),
     (r'\bss\.RandomExactNet\(\)',  "ss.RandomNet(method='exact')",   "ss.RandomExactNet is ss.RandomNet(method='exact')"),
     (r'\bss\.RandomExactNet\(',    "ss.RandomNet(method='exact', ", "ss.RandomExactNet is ss.RandomNet(method='exact')"),
-    (r'\bss\.(RandomSafeNet|ClusterNet|HybridNet|StaticNet)\b', r'ssl.\1', 'these networks moved to the library (ssl.)'),
+    (r'\bss\.(ClusterNet|HybridNet|StaticNet)\b', r'ssl.\1', 'these networks moved to the library (ssl.)'),
     (r'\bss\.MFNet\b',            'ss.SexualNet',                   "ss.MFNet is ss.SexualNet (between='mf' is its default)"),
     (r'\bss\.(networks\.)?SexualNetwork\b', 'ss.SexualNet',         'ss.SexualNetwork is ss.SexualNet, which has parameters and forms partnerships itself, unless a subclass overrides step()'),
     (r'\bss\.MSMNet\(\)',          "ss.SexualNet(between='mm')",       "ss.MSMNet is ss.SexualNet(between='mm'), whose defaults are those of ss.SexualNet: give participation=0.1, dur=ss.lognorm_ex(mean=ss.years(2), std=ss.years(1)) for Starsim 3's"),
@@ -60,12 +62,14 @@ renames = [
 
 # Internal helpers that are now only in their submodules, by submodule
 moved = dict(
-    distributions = 'link_dists make_dist dist_list Dists',
+    distributions = 'dist_list',
+    dists         = 'link_dists make_dist Dists',
     settings      = 'load_fonts',
     modules       = 'module_map module_types find_modules',
     results       = 'validate_sim_data',
     debugtools    = 'metadata diff_sims check_sims_match Profile Diagnostics mock_time mock_sim mock_people mock_module',
-    utils         = 'find_contacts standardize_data standardize_netkey shrink',
+    utils         = 'standardize_data shrink',
+    networks      = 'find_contacts standardize_netkey',
     arrays        = 'BaseArr',
 )
 for submodule, names in moved.items():
@@ -73,6 +77,7 @@ for submodule, names in moved.items():
 
 # What needs a person: a regular expression, and what to write instead
 flags = [
+    (r'\bss\.RandomSafeNet\b', "ss.RandomSafeNet is ss.RandomNet(method='safe'), with n_contacts twice its n_edges"),
     (r'\bss\.(distributions\.)?(scale_types|rand_raw)\b', "ss.scale_types and ss.rand_raw were removed: a distribution's scaling is a string on the class ('predraw', 'postdraw', both as a list, or None; see the ss.Dist docstring), and raw uint64 draws for ss.combine_rands() are ss.randint(low=0, high=np.iinfo('uint64').max, dtype=np.uint64)"),
     (r'\bss\.(routine|campaign)_(vx|screening|triage)\b', "a delivery: ss.vaccinate(efficacy=e, coverage=p, start=y, interval=ss.years(1)) for routine (Starsim 3's prob= was a share reached each year), at=[...] for a campaign; ss.screen() for screening, and for triage a second ss.screen(who=screening.positive) of its own"),
     (r'\bss\.(RoutineDelivery|CampaignDelivery|BaseTest|BaseScreening|BaseTriage|BaseTreatment|BaseVaccination)\b', "Starsim 3's delivery classes were removed: ss.screen(), ss.vaccinate(), or ss.treat() with coverage= (prob=p is coverage=ss.probperyear(p), offered at every step), start= and stop= (start_year=, end_year=; stop is not included), at= (a campaign's years=), and where= (eligibility=); a subclass that overrides step() is an ss.Intervention written as code"),
@@ -154,13 +159,13 @@ def find_names(texts):
                     templates.add(re.sub(r'\{[^}]*\}', '{}', ast.unparse(name)[2:-1]))
             elif func in ['ss.State', 'ss.BoolState'] and isinstance(name, ast.Constant) and isinstance(name.value, str):
                 states.add(name.value)
-    return sc.objdict(own=own, templates=templates, states=states)
+    return sc.obj(own=own, templates=templates, states=states)
 
 
 def file_context(text):
     """ What a file uses, which says what some of its names mean: declared diseases (ss.SIR and the others) """
     declares = bool(re.search(r"""\bss\.(SIR|SIS|SEIR|states|Transition)\(|\b(type|diseases)\s*=\s*\[?\s*['"](sir|sis|seir)['"]""", text))
-    return sc.objdict(declares=declares)
+    return sc.obj(declares=declares)
 
 
 def rename_counts(line, names):
@@ -536,8 +541,8 @@ def migrate(*paths, check=False, verbose=True):
 
     **Example**:
 
-        from starsim.io.migrate import migrate
-        migrate('mypackage') # Or from a shell: python -m starsim.io.migrate mypackage
+        from starsim.converters.migrate import migrate
+        migrate('mypackage') # Or from a shell: python -m starsim.converters.migrate mypackage
     """
     files = []
     for path in paths:
@@ -549,7 +554,7 @@ def migrate(*paths, check=False, verbose=True):
     codes = [code for b in blocks.values() for _,code in b]
     analyzers = find_analyzers(codes)
     names = find_names(codes)
-    out = sc.objdict(changed=sc.objdict(), todo=sc.objdict())
+    out = sc.obj(changed=sc.obj(), todo=sc.obj())
     for f, text in texts.items():
         new, changes, todo = [], [], []
         imported = False # Whether an earlier cell imports starsim.library as ssl

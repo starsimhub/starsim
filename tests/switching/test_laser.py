@@ -31,7 +31,7 @@ def make_places(total, seed=1):
     np.fill_diagonal(gravity, 0)
     gravity *= 0.045/gravity.sum(axis=1).mean()
     gravity *= np.minimum(1, 0.2/gravity.sum(axis=1))[:, None] # The mean share exported is 0.045, and at most 0.2
-    return sc.objdict(names=[f'p{i}' for i in range(n_places)], popsize=np.round(pop*total/pop.sum()), dist=dist, gravity=gravity)
+    return sc.obj(names=[f'p{i}' for i in range(n_places)], popsize=np.round(pop*total/pop.sum()), dist=dist, gravity=gravity)
 
 
 def make_sim(total, days=30, declared=False):

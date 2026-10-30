@@ -19,7 +19,7 @@ def test_states():
     def make():
         return ss.Pregnancy(fertility_rate=ss.freqperyear(100), p_abortion=0.1, p_loss=ss.bernoulli(ss.probpermonth(0.02)), loss_threshold=thr)
 
-    ga = sc.objdict(miscarriage=[], stillbirth=[], seen=set())
+    ga = sc.obj(miscarriage=[], stillbirth=[], seen=set())
     def check(sim): # Each loss is classified by the gestational age it happened at
         preg = sim.demographics.pregnancy
         for b in preg.engine.batches:
@@ -157,7 +157,7 @@ def test_events():
     test = lambda name: ss.Diagnostic(sensitivity=dict(I=0.9), specificity=0.99, name=name)
     anc = ss.screen(test('t1'), where=preg.P & (preg.P.time >= anc_ga), coverage=0.85, disease='d', name='anc') # Once a pregnancy, at its visit
     first = ss.screen(test('t2'), on=preg.conception, coverage=0.5, disease='d', name='first')
-    seen = sc.objdict(child=0, flagged=0, fresh=0, gap=[])
+    seen = sc.obj(child=0, flagged=0, fresh=0, gap=[])
     def check(sim):
         p = sim.demographics.pregnancy
         moms = np.unique(sim.people.parent[p.birth.uids]) # The mothers of the children born
@@ -207,7 +207,7 @@ def mother_cond(by_path):
     tested = ss.mother(screening.positive.since <= ss.years(1), born=True)
     trigger = dict(on=ss.state('pregnancy.birth') & tested) if by_path else dict(who=preg.birth & tested)
     newborn = ss.screen(ss.Diagnostic(sensitivity=1.0, name='nbdx'), **trigger, disease='d', name='newborn')
-    seen = sc.objdict(last={}, n=0)
+    seen = sc.obj(last={}, n=0)
     def check(sim): # Run after both screens, so it sees their events
         ppl = sim.people
         fired = lambda event: np.flatnonzero(ss.networks.people_mask(sim, ss.conditions.as_cond(event)))
@@ -279,7 +279,7 @@ def test_lactation():
             init=dict(I=0.3), name='d')
         mods = [ss.modify(preg.conception, multiply=0.1, where=preg.lactating & (preg.since_birth < ss.months(6)))] if lam else []
         return dict(demographics=preg, diseases=d, connectors=mods, networks=[ss.MaternalNet(), ss.BreastfeedingNet()])
-    checked = sc.objdict(n=0, weaned=0, stopped=0, last=None)
+    checked = sc.obj(n=0, weaned=0, stopped=0, last=None)
     def check(sim):
         preg, net = sim.demographics.pregnancy, sim.networks.breastfeedingnet
         assert np.all(preg.lactating[net.p1]), 'every breastfeeding pair has a lactating mother'
@@ -372,7 +372,7 @@ def test_starsim3():
         mtct      = S >> C @ ss.peryear(3)*ss.mother(I),
         flag      = S >> F @ ss.on(preg.conception),
         unflag    = F >> S @ ss.on(preg.delivery), name='d')
-    seen = sc.objdict(conceived=0, delivered=0)
+    seen = sc.obj(conceived=0, delivered=0)
     def count(sim):
         if sim.ti == 0: # Callbacks, for modules written as code
             p = sim.demographics.pregnancy
@@ -459,7 +459,7 @@ def make_postpartum(**kwargs):
 @sc.timer()
 def test_postpartum():
     sc.heading('Port: FPsim postpartum, the time since the last birth surviving later losses, and parity as a counter moved on delivery')
-    seen = sc.objdict(n=0)
+    seen = sc.obj(n=0)
     def check(sim): # Every loss after a birth leaves the time since it running
         p = sim.demographics.pregnancy
         lost = p.loss.uids

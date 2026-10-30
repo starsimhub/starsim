@@ -20,7 +20,7 @@ def test_bv_debut():
             onset = CST1 >> CST4 @ ss.peryear(0.2),
             clear = CST4 >> CST1 @ ss.months(6),
             first='U', name='bv')
-    checked = sc.objdict(n=0)
+    checked = sc.obj(n=0)
     def check(sim): # After every module has stepped, nobody who qualifies is still waiting
         bv, ppl = sim.diseases.bv, sim.people
         u = bv.U.uids

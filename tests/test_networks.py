@@ -41,7 +41,7 @@ def test_manual():
     nw2.add_pairs(mother_uids=[1, 2, 3], unborn_uids=[100, 101, 102])
 
     # Tidy
-    o = sc.objdict(nw1=nw1, nw2=nw2)
+    o = sc.obj(nw1=nw1, nw2=nw2)
     return o
 
 
@@ -68,7 +68,7 @@ def test_random():
     assert len(s4.networks[0]) == 0 and s4.results.sir.infection.sum() == 0
 
     # Tidy
-    o = sc.objdict(nw1=nw1, nw2=nw2, nw3=nw3)
+    o = sc.obj(nw1=nw1, nw2=nw2, nw3=nw3)
     return o
 
 
@@ -111,7 +111,7 @@ def test_randomfast():
         loops.append((e.p1 == e.p2).sum())
     assert loops[0] > 0 and loops[1] == 0, f'remove_self_loops=True should drop the edges joining an agent to itself, not leave {loops[1]} of {loops[0]}'
 
-    o = sc.objdict(nw1=nw1, nw2=nw2, nw4=nw4)
+    o = sc.obj(nw1=nw1, nw2=nw2, nw4=nw4)
     return o
 
 
@@ -127,9 +127,9 @@ def test_randomsafe():
         return similarity
 
     # Set up a sim with some small number of births and deaths
-    pars = sc.objdict(n_agents=small, dur=5, verbose=False)
+    pars = sc.obj(n_agents=small, dur=5, verbose=False)
     births = ss.Births(birth_rate=ss.time.freq(5, 'year'))
-    simil = sc.objdict()
+    simil = sc.obj()
 
     # Confirm that non-safe networks diverge immediately
     s1 = ss.Sim(pars, networks='random', label='random-nobirths').run()
@@ -144,8 +144,8 @@ def test_randomsafe():
     assert simil.rand < 0.5, 'Random networks were more similar than expected'
 
     # Confirm that safe networks don't
-    s3 = ss.Sim(pars, networks=ssl.RandomSafeNet(), label='safe-nobirths').run()
-    s4 = ss.Sim(pars, networks=ssl.RandomSafeNet(), label='safe-births', demographics=births).run()
+    s3 = ss.Sim(pars, networks=ss.RandomNet(method='safe'), label='safe-nobirths').run()
+    s4 = ss.Sim(pars, networks=ss.RandomNet(method='safe'), label='safe-births', demographics=births).run()
 
     n3 = s3.networks[0].to_edgelist()
     n4 = s4.networks[0].to_edgelist()
@@ -157,12 +157,12 @@ def test_randomsafe():
 
     # With many agents, some random numbers are tied; check that these edges don't all go to agent 0
     n = 20_000
-    s5 = ss.Sim(n_agents=n, networks=ssl.RandomSafeNet(n_edges=10), rand_seed=1).init()
+    s5 = ss.Sim(n_agents=n, networks=ss.RandomNet(n_contacts=20, method='safe'), rand_seed=1).init()
     nw5 = s5.networks[0]
     deg5 = np.bincount(np.concatenate([np.asarray(nw5.p1), np.asarray(nw5.p2)]), minlength=n)
     assert deg5.max() < 40, f'No agent should have many more than 20 contacts, but agent {deg5.argmax()} has {deg5.max()}'
 
-    o = sc.objdict(s1=s1, s2=s2, s3=s3, s4=s4, similarity=simil)
+    o = sc.obj(s1=s1, s2=s2, s3=s3, s4=s4, similarity=simil)
     return o
 
 
@@ -199,7 +199,7 @@ def test_random_stratified():
     # Most edges should involve the high-risk core on both ends, as with method='exact'
     assert np.isclose(fast_core, exact_core, rtol=0.1), f'RandomNet core clustering {fast_core:n} does not match the exact method {exact_core:n}'
 
-    o = sc.objdict(exact_deg=exact_deg, fast_deg=fast_deg, exact_core=exact_core, fast_core=fast_core)
+    o = sc.obj(exact_deg=exact_deg, fast_deg=fast_deg, exact_core=exact_core, fast_core=fast_core)
     return o
 
 
@@ -207,8 +207,8 @@ def test_random_stratified():
 def test_network_uids():
     """ Test that all networks form edges between valid UIDs, not positional indices (issue #1418) """
     sc.heading('Testing that network edges reference valid UIDs')
-    netclasses = [ss.RandomNet, lambda: ss.RandomNet(method='exact'), ssl.RandomSafeNet]
-    out = sc.objdict()
+    netclasses = [ss.RandomNet, lambda: ss.RandomNet(method='exact'), lambda: ss.RandomNet(method='safe')]
+    out = sc.obj()
     for netclass in netclasses:
         name = netclass.__name__
         # A sim with births and deaths, so the UIDs of living agents are not contiguous
@@ -285,7 +285,7 @@ def test_erdosrenyi():
     assert np.array_equal(nw1.p2, nw2.p2), 'Implicit and explicit creation should give the same network'
 
     # Tidy
-    o = sc.objdict(nw1=nw1, nw2=nw2, nw3=nw3)
+    o = sc.obj(nw1=nw1, nw2=nw2, nw3=nw3)
     return o
 
 
@@ -341,7 +341,7 @@ def test_static():
     assert target/2 < len(nw1) < target*2, f'Network should be approximately length {target}'
 
     # Tidy
-    o = sc.objdict(nw1=nw1, nw2=nw2)
+    o = sc.obj(nw1=nw1, nw2=nw2)
     return o
 
 
@@ -461,7 +461,7 @@ def test_edge_ops():
     # Find contacts (both directions, including the agents themselves if they're each other's contacts), as an array or a set
     net2 = ss.Network(p1=[1,2,3,4], p2=[2,3,1,4])
     assert np.array_equal(net2.find_contacts([1,3]), [1,2,3])
-    assert ss.utils.find_contacts(net2.p1, net2.p2, [1,3]) == {1,2,3}
+    assert ss.networks.find_contacts(net2.p1, net2.p2, [1,3]) == {1,2,3}
     assert net.beta.sum() == 4 # Beta defaults to 1
 
     net.from_df(dict(p1=[0, 1], p2=[1, 2], beta=[1, 2])) # Replace the edges with a dict of arrays

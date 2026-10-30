@@ -1,8 +1,13 @@
 """
-Many runs of a compartmental program stepped forward together: the particles of a particle filter
+Not for the user: many runs of a compartmental program stepped forward together: the particles of a particle filter
+
+It exists so that a particle filter can advance many runs at once.
+
+Used with: compartments; declared modules
 """
 import numpy as np
 import numba as nb
+import sciris as sc
 import starsim as ss
 from .crossing import Crossing
 from .compartmental import kernel_list
@@ -10,7 +15,7 @@ from .compartmental import kernel_list
 __all__ = ['Particles']
 
 
-class Particles:
+class Particles(sc.prettyobj):
     """
     Many runs of an engine's program, from its start, each with its own compartments and random numbers, stepped forward together; for `ss.fit.ParticleFilter`
 

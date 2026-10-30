@@ -132,7 +132,7 @@ pub fn count_gone<T: Copy>(auids: &[i64], alive: &[bool], ti_dead: &[T], ti_remo
     (deaths, removed)
 }
 
-/// Mark the partners of the agents flagged in is_ind, in both directions of each edge (`utils._mark_partners()`)
+/// Mark the partners of the agents flagged in is_ind, in both directions of each edge (`networks._mark_partners()`)
 pub fn mark_partners<I: Ix>(p1: &[I], p2: &[I], is_ind: &[bool], is_partner: &mut [bool]) {
     for (&a, &b) in p1.iter().zip(p2) {
         let (a, b) = (a.ix(), b.ix());

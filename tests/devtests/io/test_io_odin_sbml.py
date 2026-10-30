@@ -10,8 +10,8 @@ import pandas as pd
 import sciris as sc
 import starsim as ss
 import paths
-from starsim.io.odin import load_odin
-from starsim.io.sbml import load_sbml
+from starsim.converters.odin import load_odin
+from starsim.converters.sbml import load_sbml
 
 lfd = paths.lfd # The examples, with the originals' results, if this folder is here
 kw = dict(verbose=False)

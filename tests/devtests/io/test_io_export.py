@@ -1,5 +1,5 @@
 """
-Test exporting a sim to other formats (ss.export_to()): SBML and odin, read back with ss.import_from(); and runs as a hub submission (ss.io.to_hub())
+Test exporting a sim to other formats (ss.export_to()): SBML and odin, read back with ss.import_from(); and runs as a hub submission (ss.converters.to_hub())
 """
 import tempfile
 import warnings
@@ -99,7 +99,7 @@ def test_hub():
         sir = ss.Disease(infection=S >> I @ ss.par(0.4, prior=ss.uniform(0.3, 0.5))*I, recovery=I >> R @ 0.2, init_n=dict(I=10), name='sir')
         return ss.Sim(sir, interventions=ss.modify(sir.infection, multiply=beta), total_pop=1e5, start='2020-02-01', stop='2020-05-01', unit='day', label=label, **kw)
     msim = ss.parallel(make(1.0, 'base'), make(0.5, 'lockdown'), n_runs=4, priors=True, parallel=False)
-    hub = ss.io.to_hub(msim, targets=dict(infection=['inc inf', 'cum inf', 'peak size inf']), origin_date='2020-03-01', output_type=['quantile', 'sample'], location='US')
+    hub = ss.converters.to_hub(msim, targets=dict(infection=['inc inf', 'cum inf', 'peak size inf']), origin_date='2020-03-01', output_type=['quantile', 'sample'], location='US')
     assert list(hub.columns) == ['origin_date', 'scenario_id', 'location', 'target', 'horizon', 'output_type', 'output_type_id', 'value']
     assert set(hub.scenario_id) == {'base', 'lockdown'} and set(hub.origin_date) == {'2020-03-01'}
     inc = hub[(hub.target == 'inc inf') & (hub.output_type == 'sample')]
@@ -115,7 +115,7 @@ def test_hub():
     med = hub[(hub.target == 'inc inf') & (hub.output_type_id == 0.5)].groupby('scenario_id').value.sum()
     assert med['lockdown'] < med['base'], 'The scenarios should not be pooled'
     undated = ss.parallel(make(1.0, 'base').new(start=None, stop=60), n_runs=2, parallel=False) # Without dates, the origin is a time (it was an AttributeError on strftime)
-    assert set(ss.io.to_hub(undated, targets=dict(infection=['inc inf'])).origin_date) == {0.0}
+    assert set(ss.converters.to_hub(undated, targets=dict(infection=['inc inf'])).origin_date) == {0.0}
     return hub
 
 

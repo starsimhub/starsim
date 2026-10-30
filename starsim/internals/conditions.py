@@ -6,6 +6,8 @@ sim, e.g. `(ppl.age > 65) & ~sir.vaccinated`. Written before the sim exists, it
 is lazy: an expression that is evaluated each time it is needed during a run, on
 agents in an agent-based run and on groups in a compartmental one. A function of
 the sim does the same job, for anything the operators cannot say.
+
+Used with: agents and compartments; declared and coded modules
 """
 import operator
 import numpy as np
@@ -56,7 +58,14 @@ class Cond:
         return ufunc(*[ss.expressions.as_expr(x) if isinstance(x, Cond) else x for x in inputs])
 
     def clip(self, min=None, max=None, out=None):
-        """ The value kept between two values, as an expression for a rate (`np.clip(0.5*ss.ppl.age, 0, 1)` calls this) """
+        """
+        The value kept between two values, as an expression for a rate (`np.clip(0.5*ss.ppl.age, 0, 1)` calls this)
+
+        Args:
+            min (float): the lowest value; if None, no lower limit
+            max (float): the highest value; if None, no upper limit
+            out (None): not used; present since `np.clip()` passes it
+        """
         return ss.expressions.as_expr(self).clip(min, max)
 
     def __init__(self, op, *args):
@@ -193,6 +202,12 @@ class Cond:
         return self
 
     def isin(self, values):
+        """
+        Whether the value is one of some values, as a condition, e.g. `ppl.age.isin([1, 2])`
+
+        Args:
+            values (list): the values
+        """
         return Cond('isin', self, tuple(values))
 
     def __getitem__(self, uids):
@@ -355,6 +370,8 @@ class Named:
     """
     An event a module records that is not one of its transitions (e.g. `preg.live_birth`), or several events (a tuple of names), for `ss.conditions.Event`
 
+    It exists so that such events can be used wherever a transition can, e.g. in `on=`.
+
     Args:
         module (Module/str): the module that records it
         name (str/tuple): the name of the event, or of several
@@ -409,7 +426,7 @@ def state(path):
 
     Examples:
         ```python
-        cancelled = (S + P + C + L) >> Z @ ss.on(ss.state('hpv18.X') | ss.state('hpv31.X'))
+        canceled = (S + P + C + L) >> Z @ ss.on(ss.state('hpv18.X') | ss.state('hpv31.X'))
         seek = ss.treat(drug, on=ss.state('ng.C').enter) # For a module made from a string
         ```
     """
@@ -765,9 +782,11 @@ def lazy(op, arr, other=None):
     return Cond(op, from_arr(arr), as_cond(other))
 
 
-class Selector:
+class Selector(sc.prettyobj):
     """
     Evaluates conditions for one module's engine, and holds the arithmetic for selecting people
+
+    It exists so that one set of rules turns a condition into people as agents, or into shares of groups as compartments.
 
     In an agent-based run, a selection is a boolean per agent (indexed by UID). In a
     compartmental run it is the fraction selected of each state in each group, an

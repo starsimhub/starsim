@@ -77,7 +77,7 @@ def test_summer2_tb():
     return res
 
 
-@pytest.mark.xfail(reason='summer2 1.3.6 needs JAX 0.4 (it imports jax.core.call), so it cannot be installed with Starsim and a live model cannot be imported in the same process; the same model written by starsim/io/summer2.py in summer2\'s environment imports with nothing missing and matches make_tb(ages=False) to 1e-13 (and tests/devtests/io/test_io_summer2_atomica.py checks it by age against summer2)', strict=False)
+@pytest.mark.xfail(reason='summer2 1.3.6 needs JAX 0.4 (it imports jax.core.call), so it cannot be installed with Starsim and a live model cannot be imported in the same process; the same model written by starsim/converters/summer2.py in summer2\'s environment imports with nothing missing and matches make_tb(ages=False) to 1e-13 (and tests/devtests/io/test_io_summer2_atomica.py checks it by age against summer2)', strict=False)
 def test_summer2_import_live():
     sc.heading('summer2: the live model, with its parameters and its sigmoid, imported')
     summer2 = pytest.importorskip('summer2')

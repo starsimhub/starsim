@@ -8,7 +8,7 @@ import pandas as pd
 import sciris as sc
 import starsim as ss
 import paths
-from starsim.io.siminf import load_siminf, read_script, event_register, as_matrix, predefined, Unknown
+from starsim.converters.siminf import load_siminf, read_script, event_register, as_matrix, predefined, Unknown
 
 examples = paths.lfd/'examples/siminf' # The originals, if present
 kw = dict(verbose=False)

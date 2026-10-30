@@ -45,7 +45,7 @@ def check_cancel(sim, names=('hpv16', 'hpv18')):
 
 @sc.timer()
 def test_hpv_cancel():
-    sc.heading('Port: HPV, cancelling the other genotypes when one reaches cancer, with ss.on(), as agents and as compartments')
+    sc.heading('Port: HPV, canceling the other genotypes when one reaches cancer, with ss.on(), as agents and as compartments')
     names = ['hpv16', 'hpv18']
     def make(g):
         S, P, C, X, Z = ss.states('S P C X Z')
@@ -55,15 +55,15 @@ def test_hpv_cancel():
             precin    = P >> C @ ss.years(2),
             clear     = C >> S @ ss.years(4),
             cancer    = C >> X @ ss.years(4),
-            cancelled = (S + P + C) >> Z @ ss.on(other), # Was rate=ss.peryear(1e3), where=other_cancer
+            canceled = (S + P + C) >> Z @ ss.on(other), # Was rate=ss.peryear(1e3), where=other_cancer
             name = g)
     sims = [ss.Sim([make(g) for g in order], analyzers=check_cancel, n_agents=5000, start=2000, stop=2020, unit='year', **kw).run() for order in [names, names[::-1]]]
     for sim in sims:
-        assert sim.results.hpv16.cancelled.sum() > 50 and sim.results.hpv18.cancelled.sum() > 50
+        assert sim.results.hpv16.canceled.sum() > 50 and sim.results.hpv18.canceled.sum() > 50
 
-    # As compartments, tracked jointly; arrivals by the other's move are cancelled at the next loop time
+    # As compartments, tracked jointly; arrivals by the other's move are canceled at the next loop time
     ode = ss.Sim([make(g) for g in names], solver='ode', total_pop=5000, start=2000, stop=2020, unit='year', **kw).run()
-    assert ode.crossings and np.isclose(ode.results.hpv16.cancelled.sum(), sims[0].results.hpv16.cancelled.sum(), rtol=0.25)
+    assert ode.crossings and np.isclose(ode.results.hpv16.canceled.sum(), sims[0].results.hpv16.canceled.sum(), rtol=0.25)
     return ode
 
 
@@ -78,7 +78,7 @@ def test_syphilis_stay():
         else:
             tertiary = ss.Transition(LL, [T, ss.stay], p=[0.35, None], dur=dur)
         return ss.Disease(LL, T, Sp, tertiary=tertiary, cure=(LL + T) >> Sp, first='LL', name='syph') # Everyone starts in LL; cure is undriven, so not the remainder
-    out = sc.objdict()
+    out = sc.obj()
     with pytest.raises(ValueError, match='ss.stay'): # The rest stay only if asked to, with ss.stay
         make('implicit')
     for solver in ['abm', 'ode']:
@@ -126,7 +126,7 @@ def test_ct_by_sex():
             clear_y = Y >> S @ ss.months(3),
             first='E', name='ct') # Everyone starts in E
     kw2 = dict(start=2000, stop=2002, dt=ss.months(0.25), unit='year', **kw)
-    sims = sc.objdict()
+    sims = sc.obj()
     for key,form,strat in [('nostrat', 'pars', None), ('pars', 'pars', dict(sex=['female', 'male'])), ('dists', 'dists', dict(sex=['female', 'male']))]:
         sims[key] = ss.Sim(make(form), n_agents=10_000, stratify=strat, **kw2).run() # As agents, sex needs no stratification
     ct, ppl = sims.nostrat.diseases.ct, sims.nostrat.people
@@ -260,22 +260,22 @@ def make_hpv_cancel(order, names=('hpv16', 'hpv18')):
             infection = S >> P @ ss.peryear(0.3),
             precin    = P >> C @ ss.years(2),
             cin       = cin[g],
-            cancelled = ss.Transition([S, P, C], Z, on=cin[o].to(states[o][3])), # The other genotype's branch to cancer
+            canceled = ss.Transition([S, P, C], Z, on=cin[o].to(states[o][3])), # The other genotype's branch to cancer
             name = g))
     return mods
 
 
 def test_hpv_cancel_event():
-    sc.heading('HPV: cancelling the other genotypes on the event of one reaching cancer, ss.on(other.cin.to(X)), as agents and as compartments')
+    sc.heading('HPV: canceling the other genotypes on the event of one reaching cancer, ss.on(other.cin.to(X)), as agents and as compartments')
     names = ['hpv16', 'hpv18']
     common = dict(start=2000, stop=2020, unit='year', **kw)
     abm = ss.Sim(make_hpv_cancel(names), analyzers=check_cancel, n_agents=20_000, **common).run()
-    assert all(abm.results[g].cancelled.sum() > 0 for g in names)
+    assert all(abm.results[g].canceled.sum() > 0 for g in names)
     odes = [ss.Sim(make_hpv_cancel(order), solver='ode', total_pop=20_000, **common).run() for order in [names, names[::-1]]]
     for ode in odes:
         for g in names:
             a, o = abm.results[g], ode.results[g]
-            assert np.isclose(o.cancelled.sum(), a.cancelled.sum(), rtol=0.05), f'{g}: {o.cancelled.sum():.0f} cancelled as an ODE, {a.cancelled.sum():.0f} as agents'
+            assert np.isclose(o.canceled.sum(), a.canceled.sum(), rtol=0.05), f'{g}: {o.canceled.sum():.0f} canceled as an ODE, {a.canceled.sum():.0f} as agents'
             other = ode.results[next(n for n in names if n != g)]
             assert np.isclose(o.Z[-1], other.X[-1], rtol=1e-6)
     return abm

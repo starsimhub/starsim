@@ -25,7 +25,7 @@ def test_burnin_ode():
 @sc.timer()
 def test_burnin_pregnancies():
     sc.heading('Testing burnin=: women pregnant at the start count their pregnancies, so deliveries plus losses are pregnancies')
-    seen = sc.objdict(start=None, lost=None)
+    seen = sc.obj(start=None, lost=None)
     def check(sim):
         p = sim.demographics.pregnancy
         if sim.ti == 0:

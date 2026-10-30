@@ -38,7 +38,7 @@ def test_uniforms():
     sc.heading('Testing the counter-based uniforms, and the draws run as plain Python')
     slots = rng.integers(0, 10**9, 1000)
     u = np.array([D.uniform(D.key(11, 4), s) for s in slots])
-    assert np.array_equal(u, ss.distributions.hash_uniforms(11, 4, slots, dtype=np.float64)) # The same hash as ss.Dist's common random numbers
+    assert np.array_equal(u, ss.dists.hash_uniforms(11, 4, slots, dtype=np.float64)) # The same hash as ss.Dist's common random numbers
     assert np.array_equal(D.uniforms(D.key(11, 4), 5, np.empty(3)), [D.uniform(D.key(11, 4), i) for i in [5, 6, 7]])
 
     # The plain Python copy gives the same draws
@@ -68,11 +68,11 @@ def test_dist_ppf():
     n = rng.integers(1, 200, 20_000)
     lam = 10**rng.uniform(-3, 2, 20_000) # Some above a mean of 30, which SciPy takes
     cases = [
-        (ss.distributions.inverse('expon', u, 3.0), sps.expon.ppf(u, scale=3)),
-        (ss.distributions.inverse('weibull', u, 1.7, 2.0), sps.weibull_min.ppf(u, 1.7, scale=2)),
-        (ss.distributions.inverse('binomial', u, n, 0.3, big=n*0.3 > 30, fallback=lambda v, i: sps.binom.ppf(v, n[i], 0.3)), sps.binom.ppf(u, n, 0.3)),
-        (ss.distributions.inverse('nbinom', u, 2.0, 0.3), sps.nbinom.ppf(u, 2, 0.3)),
-        (ss.distributions.inverse('poisson', u, lam, big=lam > 30, fallback=lambda v, i: sps.poisson.ppf(v, lam[i])), sps.poisson.ppf(u, lam)),
+        (ss.dists.inverse('expon', u, 3.0), sps.expon.ppf(u, scale=3)),
+        (ss.dists.inverse('weibull', u, 1.7, 2.0), sps.weibull_min.ppf(u, 1.7, scale=2)),
+        (ss.dists.inverse('binomial', u, n, 0.3, big=n*0.3 > 30, fallback=lambda v, i: sps.binom.ppf(v, n[i], 0.3)), sps.binom.ppf(u, n, 0.3)),
+        (ss.dists.inverse('nbinom', u, 2.0, 0.3), sps.nbinom.ppf(u, 2, 0.3)),
+        (ss.dists.inverse('poisson', u, lam, big=lam > 30, fallback=lambda v, i: sps.poisson.ppf(v, lam[i])), sps.poisson.ppf(u, lam)),
     ]
     for ours, scipy in cases:
         assert np.allclose(ours, scipy, rtol=1e-12) # The same values (up to rounding at a step of a discrete CDF, which is about as likely as a uniform landing on it)

@@ -10,26 +10,26 @@ People have to want to write models in this language for any of this to matter. 
 
 ## One build step for every importer
 
-An importer reads another framework's model into an `ss.io.Source`: its states, parameters, flows as rate expressions in the source's own terms, stratifications, outcomes, and what it could not translate. `ss.io.write()` writes a source as Starsim code (a declared `ss.Disease` and its `ss.Sim`) by the same rules for every format (below), and `ss.io.build()` runs that code to make the sim, so each framework needs one reader, and there is one path: the foreign model, then code, then the sim. Starsim never turns a sim back into code. An exporter writes a sim's compartmental form in another format, read from the built model. There are no direct framework-to-framework converters.
+An importer reads another framework's model into an `ss.converters.Source`: its states, parameters, flows as rate expressions in the source's own terms, stratifications, outcomes, and what it could not translate. `ss.converters.write()` writes a source as Starsim code (a declared `ss.Disease` and its `ss.Sim`) by the same rules for every format (below), and `ss.converters.build()` runs that code to make the sim, so each framework needs one reader, and there is one path: the foreign model, then code, then the sim. Starsim never turns a sim back into code. An exporter writes a sim's compartmental form in another format, read from the built model. There are no direct framework-to-framework converters.
 
 ```
 EMULSION, odin, SBML, SimInf,
-flepiMoP, summer2, Atomica, camdl,  ─▶ reader ─▶ ss.io.Source ─▶ write() ─▶ code ─▶ run ─▶ sim ─▶ SBML, odin (ss.export_to(sim, format))
+flepiMoP, summer2, Atomica, camdl,  ─▶ reader ─▶ ss.converters.Source ─▶ write() ─▶ code ─▶ run ─▶ sim ─▶ SBML, odin (ss.export_to(sim, format))
 EpiModel, epydemix, MEmilio                                                (sim.imported.code)
 ```
 
 ## Import
 
 ```python
-sim = ss.import_from('model.xml',  format='sbml') # ss.io is imported when first used, as ss.fit is
+sim = ss.import_from('model.xml',  format='sbml') # ss.converters is imported when first used, as ss.fit is
 sim = ss.import_from('model.yaml', format='emulsion')
 sim = ss.import_from('config.yml', format='flepimop')
 sim = ss.import_from('framework.xlsx', format='atomica', databook='databook.xlsx')
 sim = ss.import_from(summer_model)                 # a Python object from another framework; format taken from its type
-sim = ss.io.convert('framework.xlsx', format='atomica', databook='databook.xlsx', filename='model.py') # Read it, and save the code (to run from then on)
+sim = ss.converters.convert('framework.xlsx', format='atomica', databook='databook.xlsx', filename='model.py') # Read it, and save the code (to run from then on)
 ```
 
-The result is an ordinary sim (`ss.io.importers` lists the importers; the format is told from the file or object where it can be). `sim.describe()` prints it, it can be stratified, run, and fitted like one written by hand, and its code (`sim.imported.code`, which says where the model came from, how each rate was read, and what was not translated) is the user's to save and change, which is the usual next step. `sim.imported` records how it was read: the format and file, the code (`code`), how each rate was read (`choices`), what could not be translated (`incomplete`), and the prompt for finishing it (`prompt`). A rate is checked before it is written (only arithmetic, comparisons, a few functions, and the names the model declares), so a source's expression is never run as it is; a value the writer cannot write as code (e.g. a network) is given by the importer as `ss.io.Code`, the Python that makes it. A framework with no importer can still fill in an `ss.io.Source` by hand and call `ss.io.build()`.
+The result is an ordinary sim (`ss.converters.importers` lists the importers; the format is told from the file or object where it can be). `sim.describe()` prints it, it can be stratified, run, and fitted like one written by hand, and its code (`sim.imported.code`, which says where the model came from, how each rate was read, and what was not translated) is the user's to save and change, which is the usual next step. `sim.imported` records how it was read: the format and file, the code (`code`), how each rate was read (`choices`), what could not be translated (`incomplete`), and the prompt for finishing it (`prompt`). A rate is checked before it is written (only arithmetic, comparisons, a few functions, and the names the model declares), so a source's expression is never run as it is; a value the writer cannot write as code (e.g. a network) is given by the importer as `ss.converters.Code`, the Python that makes it. A framework with no importer can still fill in an `ss.converters.Source` by hand and call `ss.converters.build()`.
 
 An importer SHOULD:
 
@@ -65,12 +65,12 @@ Rules 2 and 3 are guesses about what the source meant, and the difference matter
 | **SBML** | `'sbml'` (XML) | Species as states, reactions as transitions, classified by the rules above |
 | **SimInf** | `'siminf'` (an R script with `mparse()` or a predefined model) | The transitions, run by `gillespie`; several nodes as a stratification of places, with the scheduled events as a movement register (`ss.geo.Mobility(data=...)`); the continuous state `v` as a state that is not people |
 | **flepiMoP** | `'flepimop'` (the config YAML) | Compartment products, `proportional_to` rates, the outcomes chain as `ss.outcome`, `seir_modifiers` (every scenario kept in `sim.imported.scenarios`), and drawn parameters with their distributions as priors |
-| **summer2** | `'summer2'` (a JSON dump, or the model) | Each flow kind as one transition, `stratify_with` as `stratify`, adjustments as `adjust=`, and the mixing matrix; the derived outputs are worked out from the results by `ss.io.summer2.outputs()` |
+| **summer2** | `'summer2'` (a JSON dump, or the model) | Each flow kind as one transition, `stratify_with` as `stratify`, adjustments as `adjust=`, and the mixing matrix; the derived outputs are worked out from the results by `ss.converters.summer2.outputs()` |
 | **Atomica** | `'atomica'` (the framework, databook, and program book workbooks) | Compartments, transitions, characteristics, and the databook's values (a series without the points equal to those on either side, which change nothing); the program book's spending as parameters whose coverage moves the parameters they affect; a junction whose shares change (with the counts, or in time) as a transition to each destination with its share as a factor of the rate, which is the same flow, since people pass through a junction at once |
 | **camdl** | `'camdl'` (a `.camdl` file, or camdlc's JSON) | The model, with the parameter values of one of its scenarios (`scenario=`), as an ODE or a chain binomial as camdl's backends run it |
 | **EpiModel** | `'epimodel'` (a JSON dump from `dump_epimodel.R`, or the R script) | `netsim()`, `dcm()`, and `icm()` runs with the built-in models and networks (`ss.DegreeNet` for the network model's targets); custom modules are listed with their R source |
-| **epydemix** | `'epydemix'` (a JSON dump from `starsim/io/epydemix.py` run as a script, or the model) | The transitions, the population, and its contact matrices |
-| **MEmilio** | `'memilio'` (a JSON dump from `starsim/io/memilio.py` run as a script) | The ODE models (`osir`, `oseir`, `oseirdb`, `osecir`), alone, on a mobility graph (as places with commuting), or in a parameter study (its distributions as priors) |
+| **epydemix** | `'epydemix'` (a JSON dump from `starsim/converters/epydemix.py` run as a script, or the model) | The transitions, the population, and its contact matrices |
+| **MEmilio** | `'memilio'` (a JSON dump from `starsim/converters/memilio.py` run as a script) | The ODE models (`osir`, `oseir`, `oseirdb`, `osecir`), alone, on a mobility graph (as places with commuting), or in a parameter study (its distributions as priors) |
 
 A Starsim 3 model is not imported: its modules written as code still run (with the names removed from Starsim 4 changed, as the migration guide and the `migrate-starsim3` skill say), and turning `step()` logic into declared transitions is done by hand with the `import-model` skill. LASER and the other models MEmilio has are translated by hand, with the skill's guides. Each importer is tested against its framework's examples (`tests/test_interop_*.py`) and in the switching demos (`tests/switching/`).
 
@@ -104,7 +104,7 @@ An export does not fail because something cannot be carried; it writes what it c
 
 Petri nets and the other frameworks' formats are not exported (`v4_design/admin/deferred.md`, "Won't do"). SBML and odin are written from the compartmental form of the model (what `sir.equations()` prints), with the numbers in the sim's unit (SBML's `timeUnits`): a dwell time that is not exponential is written as its Erlang stages, and a stratification as one group, both listed. Both read back with `ss.import_from()`. `ss.export_to(sim, format)` returns the text without writing a file.
 
-The diagram is a Mermaid flowchart, from `sir.diagram()`, with each arrow labelled with its transition's name and value (`recovery: 10 days`) and, for a transition with `p=`, the share that takes it. It is a string of the flowchart's text (`print()` gives it), which a notebook draws: JupyterLab and Quarto draw it from a Markdown block. There is no drawn (Matplotlib) diagram: Mermaid is drawn by GitHub, Quarto, JupyterLab, and most Markdown viewers.
+The diagram is a Mermaid flowchart, from `sir.diagram()`, with each arrow labeled with its transition's name and value (`recovery: 10 days`) and, for a transition with `p=`, the share that takes it. It is a string of the flowchart's text (`print()` gives it), which a notebook draws: JupyterLab and Quarto draw it from a Markdown block. There is no drawn (Matplotlib) diagram: Mermaid is drawn by GitHub, Quarto, JupyterLab, and most Markdown viewers.
 
 ## Comparing two models
 

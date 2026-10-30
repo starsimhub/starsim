@@ -15,15 +15,15 @@ sc.options(interactive=False) # Assume not running interactively
 
 
 def make_sim_pars(beta=0.1, **kwargs):
-    pars = sc.objdict(
+    pars = sc.obj(
         n_agents = n_agents,
         start = 2000,
         dur = 10,
         demographics = True,
         networks = 'random',
-        diseases = sc.objdict(type='sis', beta=beta), # To allow for modification later
+        diseases = sc.obj(type='sis', beta=beta), # To allow for modification later
     )
-    return sc.objdict(pars, **kwargs)
+    return sc.obj(pars, **kwargs)
 
 
 class BySex(ss.Analyzer):
@@ -202,7 +202,7 @@ def test_scenarios():
     with pytest.raises(KeyError, match='how= names "sir_II"'): # Rather than quietly summarized the usual way
         sim.summarize(how=dict(sir_II='max'))
 
-    # The sims by scenario, labelled by it when swept
+    # The sims by scenario, labeled by it when swept
     assert [k for k,v in msim.sims.items()] == ['Base', 'Vaccine'] and len(msim.sims.items()[0][1]) == 10
     swept = ss.parallel(ss.Sim(sir, **kw), pars={'sir.beta': [0.2, 0.3]}, n_runs=2) # Restarted for their runs
     assert [s.label for s in swept.sims] == ['sir.beta=0.2']*2 + ['sir.beta=0.3']*2

@@ -13,6 +13,8 @@ These are tables. The model objects that take a place by name read them from her
 `starsim_data` (https://github.com/starsimhub/starsim_data), which bundles what is
 small and common and fetches the rest on demand. Each lookup returns the data with a
 record of where it came from (`ref`; for a table, in `.attrs['ref']`), which `sim.describe()` shows.
+
+Used with: agents and compartments; declared and coded modules
 """
 import re
 import numpy as np
@@ -27,7 +29,7 @@ layers = ['all', 'home', 'school', 'work', 'community'] # The settings of the co
 
 # The default ages of the people of a declared model, as a guess: the world's population in 2024 by 5-year age group
 # (the last is 100 and over), in millions; the sum of the 187 countries of the UN World Population Prospects 2024 in starsim_data
-world = sc.objdict(
+world = sc.obj(
     ages   = np.arange(0, 101, 5, dtype=float),
     counts = np.array([664.2, 666.0, 663.6, 647.4, 625.3, 609.7, 601.1, 566.7, 530.8, 498.0, 452.7,
                        410.7, 353.9, 296.2, 219.8, 154.3, 98.6, 49.7, 19.8, 4.7, 0.6]),
@@ -51,6 +53,26 @@ def is_age_index(index):
     if index.name == 'age':
         return True
     return not isinstance(index, pd.RangeIndex) and len(index) > 0 and all(re.fullmatch(r'\d+(\.\d+)?(-\d+(\.\d+)?|\+)?', str(label).strip()) for label in index)
+
+
+def age_pyramid(sim, strat=None):
+    """
+    The people by 5-year age group (their lower edges, and the number in each) that a sim's ages come from:
+    a named population's, or, as a guess, the world's; None if there is no named population and the split of
+    the age groups was given
+
+    Args:
+        sim (Sim): the sim
+        strat (Strat): the age stratification, if any
+    """
+    named = getattr(sim, 'named_people', None)
+    if named is not None:
+        return named.ages, named.counts
+    elif getattr(sim, 'given_pyramid', None) is not None:
+        return sim.given_pyramid
+    elif strat is None or strat.guessed.get('split') == world.guess:
+        return world.ages, world.counts
+    return None
 
 
 def to_age_data(ages, counts):

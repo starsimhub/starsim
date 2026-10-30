@@ -1,5 +1,5 @@
 """
-Exact random draws in Numba, from one uniform each where possible
+Not for the user: exact random draws in Numba, from one uniform each where possible
 
 Every draw here is a function of a uniform u in (0, 1): by inversion of the CDF where
 that is cheap (binomial and Poisson up to a mean of 30, negative binomial, exponential,
@@ -8,7 +8,7 @@ Weibull), so the draw is monotone in u, which suits common random numbers; other
 by a rejection sampler (BTPE, PTRS, Marsaglia and Tsang) that takes its own uniforms from a
 stream seeded by the bits of u, so the same u still gives the same draw. The uniforms
 themselves are counter-based: `uniform(key, i)` is a SplitMix64 hash of a key and an index,
-the hash of `ss.distributions.hash_uniforms()` (which calls `key()` and `crn_uniform()`, as
+the hash of `ss.dists.hash_uniforms()` (which calls `key()` and `crn_uniform()`, as
 the passes over agents and the kernels do), so a stream does not depend on how the work is
 split. Other distributions are drawn by SciPy (see v4_design/oct25/backlog/perf_jax.md).
 
@@ -26,6 +26,8 @@ The tricks that make them cheap (see v4_design/oct21/jax_plan.md):
 
 The functions run as plain Python too (in the copy `plain_copy()` makes, used by
 `ss.kernels.uncompiled()`), with the same results.
+
+Used with: agents and compartments; declared and coded modules
 """
 
 import math
@@ -125,17 +127,17 @@ def mix(z):
 
 @jit()
 def key(seed, ind):
-    """ The key of a stream of uniforms, from a seed and the index of a call (as `ss.distributions.hash_uniforms()`), as an int64 with the same bits (so Python can pass it back) """
+    """ The key of a stream of uniforms, from a seed and the index of a call (as `ss.dists.hash_uniforms()`), as an int64 with the same bits (so Python can pass it back) """
     return I64(mix((U64(seed) ^ (U64(ind)*GOLDEN)) + GOLDEN))
 
 @jit(inline='always')
 def uniform(k, i):
-    """ Uniform i in (0, 1) of the stream with key k (as `ss.distributions.hash_uniforms()` gives for slot i) """
+    """ Uniform i in (0, 1) of the stream with key k (as `ss.dists.hash_uniforms()` gives for slot i) """
     return max(mix((U64(i) + U64(k))*GOLDEN) >> U11, 0.5)*INV53
 
 @jit(inline='always')
 def crn_uniform(k, slot, shift, scale):
-    """ Uniform `slot` in (0, 1) of the stream with key k, from the hash's top bits: (shift, scale) are (11, 2^-53) for a float64, as `uniform()`, or (40, 2^-24) for a float32, so every value is exact at that width (as `ss.distributions.hash_uniforms()` gives for an agent's slot) """
+    """ Uniform `slot` in (0, 1) of the stream with key k, from the hash's top bits: (shift, scale) are (11, 2^-53) for a float64, as `uniform()`, or (40, 2^-24) for a float32, so every value is exact at that width (as `ss.dists.hash_uniforms()` gives for an agent's slot) """
     return max(mix((U64(slot) + U64(k))*GOLDEN) >> shift, 0.5)*scale
 
 def crn_bits(dtype):
@@ -619,5 +621,5 @@ def arrays(f, npars):
             return out
     return from_u
 
-many = sc.objdict({name: arrays(f, n) for name, f, n in [ # E.g. many.weibull(c, scale, u, out)
+many = sc.obj({name: arrays(f, n) for name, f, n in [ # E.g. many.weibull(c, scale, u, out)
     ('expon', expon, 1), ('weibull', weibull, 2), ('binomial', binomial, 2), ('poisson', poisson, 1), ('nbinom', nbinom, 2)]})

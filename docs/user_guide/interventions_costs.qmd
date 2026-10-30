@@ -9,7 +9,7 @@ authorship:
 
 A program has to be paid for, and the question that decides between programs is often not only how much each prevents, but at what cost. Every product in Starsim takes a `cost=`, the cost of each delivery, and each delivery then records what it spent as a result, next to the number it delivered. With the results of a scenario without the program, that gives the cost of a program and the cost per outcome averted.
 
-This page covers costing a program, comparing the costs and effects of several, costs with uncertainty, and costs that are not per delivery, such as discounting and fixed costs. Most sims have no costs, so core Starsim stops at the `cost` result of each delivery; the tools for adding costs up, discounting them, and comparing scenarios are in the Starsim library (`import starsim.library as ssl`), in `ssl.econ`: the analyzer `ssl.Costs`, and the functions `ssl.discount()` and `ssl.icer()`. They are short, so they can be copied and changed for an evaluation that needs something else. What each product does is on [Products](interventions_products.qmd), and how they are delivered on [Interventions](interventions_interventions.qmd). To find the best way to spend a fixed budget across programs, see [Optimization](calibration_optimization.qmd).
+This page covers costing a program, comparing the costs and effects of several, costs with uncertainty, and costs that are not per delivery, such as discounting and fixed costs. Most sims have no costs, so core Starsim stops at the `cost` result of each delivery; the tools for adding costs up, discounting them, and comparing scenarios are in the Starsim library (`import starsim.library as ssl`), in `ssl.econ`: the analyzer `ssl.Costs`, the analyzer `ssl.DALYs`, the function `ssl.discount()`, and `ssl.ICER`. They are short, so they can be copied and changed for an evaluation that needs something else. What each product does is on [Products](interventions_products.qmd), and how they are delivered on [Interventions](interventions_interventions.qmd). To find the best way to spend a fixed budget across programs, see [Optimization](calibration_optimization.qmd).
 
 ## Costing a vaccination program
 
@@ -81,10 +81,29 @@ msim = ss.parallel({
     'Routine and campaigns':  costed.new(interventions=[routine, campaign]),
 })
 
-ssl.icer(msim, outcome='measles.infection').round()
+icer = ssl.ICER(msim, outcome='measles.infection')
+icer.df.round()
 ```
 
-The campaigns cost more than routine vaccination, and avert more infections, but each extra infection they avert costs more than with the routine program alone: the campaigns mostly reach children whom routine vaccination has already protected, or who would not have been infected anyway. Whether that is worth paying for is a judgment the model informs but does not make; it depends on what else the money could buy. `ssl.Costs` gives each sim a result for the cost of each delivery, and their total, `costs.total`. `ssl.icer()` totals the cost and the outcome named (any result: infections, deaths, or a model's DALYs) for each scenario, takes the outcome averted from that of the baseline (the first scenario, unless `baseline=` names another), and orders the scenarios by cost. Each is compared with the next cheaper one, except that a program that costs more and averts no more than a cheaper one is dominated, and has no ratio. It works the same for any number of programs, for a dict or list of sims as well as a MultiSim, and with several runs of each scenario compares their means. A table that needs more than this, such as extended dominance or a different measure of effect, can be built the same way from the results.
+The campaigns cost more than routine vaccination, and avert more infections, but each extra infection they avert costs more than with the routine program alone: the campaigns mostly reach children whom routine vaccination has already protected, or who would not have been infected anyway. Whether that is worth paying for is a judgment the model informs but does not make; it depends on what else the money could buy. `ssl.Costs` gives each sim a result for the cost of each delivery, and their total, `costs.total`. `ssl.ICER` totals the cost and the outcome named (any result: infections, deaths, or a model's DALYs) for each scenario, takes the outcome averted from that of the baseline (the first scenario, unless `baseline=` names another), and orders the scenarios by cost. Each is compared with the next cheaper one, except that a program that costs more and averts no more than a cheaper one is dominated, and has no ratio. It works the same for any number of programs, for a dict or list of sims as well as a MultiSim, and with several runs of each scenario compares their means. A table that needs more than this, such as extended dominance or a different measure of effect, can be built the same way from the results.
+
+With several runs of each scenario, `icer.plot()` shows each one on the cost-effectiveness plane, `icer.plot_ceac()` shows how often each scenario is the best at each willingness to pay, and `icer.best(wtp=1000)` gives the best scenario at one value.
+
+## Disability-adjusted life years
+
+`ssl.DALYs` counts disability-adjusted life years as results: the time people spend in a state, multiplied by its disability weight, plus the years of life lost to deaths. `ssl.ICER` compares these by default, so the outcome doesn't need naming:
+
+```python
+analyzers = [ssl.Costs(), ssl.DALYs(weights={'hiv.I': 0.2})]
+msim = ss.parallel({'No treatment': ss.Sim(..., analyzers=analyzers), 'Treatment': ss.Sim(..., analyzers=analyzers)})
+ssl.ICER(msim).df
+```
+
+With agents, the years of life lost come from each person's age at death and a standard life table. Compartmental runs don't record ages at death, so they take a number: `ssl.DALYs(weights=..., life_lost=30)`.
+
+## Comparing during a run
+
+`ssl.ICER` can also be an analyzer, after `ssl.Costs` and `ssl.DALYs`. The sim then counts as one more scenario, compared at each step with the finished sims it is given, over the same period, so that a sim can act on the result: for example, an intervention can follow `sim.analyzers.icer.best(wtp=1000)`. `window=1` compares the latest step alone.
 
 ## Costs with uncertainty
 
@@ -139,13 +158,13 @@ msim = ss.parallel({
     'No vaccination': ss.Sim(measles, analyzers=ssl.Costs(unit_costs=care), **pars),
     'Routine':        ss.Sim(measles, interventions=routine, analyzers=ssl.Costs(unit_costs=care, fixed=20_000, start=2010), **pars),
 })
-df = ssl.icer(msim, outcome='measles.infection', rate=0.03, start=2010) # Discounted, as above
+df = ssl.ICER(msim, outcome='measles.infection', rate=0.03, start=2010).df # Discounted, as above
 print(df[['cost', 'averted']].round())
 net = df.cost['Routine'] - df.cost['No vaccination']
 print('Net cost per infection averted ($):', round(net/df.averted['Routine'], 2))
 ```
 
-A net cost below zero means a program saves more than it costs; `ssl.icer()` then marks the scenario without it as dominated.
+A net cost below zero means a program saves more than it costs; `ssl.ICER` then marks the scenario without it as dominated.
 
 ## Optimizing spending
 

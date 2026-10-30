@@ -18,7 +18,7 @@ Order does not arise in a compartmental ODE run: all declared flows are evaluate
 
 ## The order of calls in one step
 
-The loop calls these functions, in this order, at every step. This is the order in `starsim/loop.py`; nothing here is new.
+The loop calls these functions, in this order, at every step. This is the order in `starsim/internals/loop.py`; nothing here is new.
 
 | # | Called on | Function | What happens |
 |---|---|---|---|

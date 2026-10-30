@@ -1,5 +1,9 @@
 """
 Household contact networks built from DHS-style survey data
+
+This exists for models that need realistic households, with the ages of the people in each, including how households change with births and moves. It has no compartmental form, since it follows individuals.
+
+Used with: agents; declared and coded modules
 """
 import numpy as np
 import pandas as pd
@@ -45,6 +49,7 @@ class HouseholdNet(ss.Network):
             Default 0.7. Only used when `dynamic=True`.
         update_freq (int): How often (in timesteps) to update the network.
             Default 1. Only used when `dynamic=True`.
+        pars (dict): the same parameters, as a dict
 
     The expected dataframe format is::
 
@@ -117,12 +122,22 @@ class HouseholdNet(ss.Network):
         return
 
     def init_pre(self, sim):
+        """ Initialize the network, and check that a dynamic network has `ss.Pregnancy`
+
+        Args:
+            sim (Sim): the sim being initialized
+        """
         super().init_pre(sim)
         if self.dynamic and sim.get_module(ss.Pregnancy, die=False) is None: # By type, so a subclass with its own name is found
             raise ValueError('A dynamic HouseholdNet requires a Pregnancy module. Add ss.Pregnancy() to demographics.')
         return
 
     def init_post(self, add_pairs=True):
+        """ Add the first edges, and add a random fraction of a year to each age
+
+        Args:
+            add_pairs (bool): whether to add edges
+        """
         super().init_post(add_pairs)
         ppl = self.sim.people
         # DHS age data is in integer years; add a random fractional age for realism

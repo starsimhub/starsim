@@ -18,7 +18,7 @@ medium = 1000
 @sc.timer()
 def test_arrs():
     sc.heading('Testing Arr objects')
-    o = sc.objdict()
+    o = sc.obj()
 
     # Create a sim with only births
     pars = dict(n_agents=medium, diseases='sis', networks='random')

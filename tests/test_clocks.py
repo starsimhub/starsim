@@ -19,7 +19,7 @@ def test_clocks():
             ab    = A >> B @ ss.days(4),
             bc    = ss.Transition(B, C, rate=rate) if rate is not None else B >> C @ ss.days(4),
             init  = dict(B=0.1), name='d', **kwargs), (A | B)
-    seen = sc.objdict(n=0)
+    seen = sc.obj(n=0)
     def check(sim):
         d = sim.diseases.d
         st = d.states # The declarations, in the sim; a clock of a set is made before the sim, so it is kept

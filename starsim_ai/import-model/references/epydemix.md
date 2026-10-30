@@ -6,7 +6,7 @@ epydemix is a Python package for age-structured compartmental models, run as a s
 
 ## Getting the model out
 
-The model is built in epydemix's own environment and written to JSON by `starsim/io/epydemix.py`, which needs only epydemix:
+The model is built in epydemix's own environment and written to JSON by `starsim/converters/epydemix.py`, which needs only epydemix:
 
 ```bash
 python epydemix.py my_model.py model.json               # a script that makes a variable called model

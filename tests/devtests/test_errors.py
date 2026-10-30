@@ -262,11 +262,11 @@ def _(): ss.export_to(ss.Sim(sir(), networks='random', n_agents=100, **kw), 'odi
 
 @trigger('season: a time function', ss.errors.ImportIncomplete)
 def _():
-    src = ss.io.Source('si', format='test')
+    src = ss.converters.Source('si', format='test')
     src.add_state('S', init=99); src.add_state('I', init=1); src.add_par('beta', 0.3)
     src.add_flow('S', 'I', rate='beta * I / (S + I)')
     src.skip('season', 'a time function')
-    ss.io.build(src, verbose=0)
+    ss.converters.build(src, verbose=0)
 
 
 # %% Notes
@@ -318,7 +318,7 @@ def _():
         return sc.findinds(x > 0) # Numba can't call Sciris
     with ss.options.context(verbose=1), sc.capture() as said: # With no sim, the note is printed, not kept
         uncompilable(np.arange(3))
-    return sc.objdict(notes=said.splitlines()) # In place of the sim's notes
+    return sc.obj(notes=said.splitlines()) # In place of the sim's notes
 
 
 # %% Define the tests

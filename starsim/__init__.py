@@ -1,136 +1,101 @@
 """
 Import all Starsim modules
+
+The order matters: each group builds on the ones before it, and within a group,
+later modules use earlier ones as they are imported.
 """
 
 # Assign the root folder
 import sciris as sc
 root = sc.thispath(__file__).parent
 
-# Start imports: version and settings
+#%% Setup: version, settings, utilities, and errors
 from .version import __version__, __versiondate__, __license__
-from .settings import dtypes, options, style # Also ss.settings.load_fonts
-
-# Double-check key requirements -- should match pyproject.toml
-sc.require(reqs=['sciris>=3.2.8', 'pandas>=2.0.0'], die=False,
-    message = f'\n\nThe following dependencies for Starsim {__version__} were not met:\n  <MISSING>.\nYou can update with: pip install <MISSING> --upgrade\n'
-)
-
-# Finish imports
-from .utils import (
-    ndict, warn,
-    load, save, plot_args, show,
-    return_fig,
-)
-
-from .internals import errors # Errors, warnings, and notes (e.g. ss.errors.AtBound); ss.CapabilityError, ss.AlreadyRunError, and ss.note() also here
+from .settings import dtypes, options, style
+from .utils import ndict, warn, load, save, plot_args, show, return_fig
+from .internals import errors, debugtools
 from .internals.errors import *
-from .internals import debugtools
 
-from .arrays import (
-    Arr, FloatArr, TimeArr, IntArr, BoolArr, BoolState, IndexArr, uids, # Also ss.arrays.BaseArr
-)
+#%% Building blocks: arrays, distributions, time, and parameters
+from .internals import arrays
+from .internals.arrays import Arr, FloatArr, TimeArr, IntArr, BoolArr, BoolState, IndexArr, uids
 
-from .distributions import ( # Also ss.distributions.Dists, link_dists, make_dist, dist_list
-    Dist, random, uniform, normal, truncnorm, lognorm_ex, lognorm_im, expon,
+from .internals import dists
+from .internals.dists import Dist
+from .distributions import (
+    random, uniform, normal, truncnorm, lognorm_ex, lognorm_im, expon,
     poisson, nbinom, binom, beta_dist, beta_mean, weibull, gamma, erlang, constant,
-    randint, bernoulli, choose_n, choice, histogram,
-    multi_random,
+    randint, bernoulli, choose_n, choice, histogram, multi_random,
 )
 
-from .time import (
+from .internals import time, dates, timeline, parameters
+from .internals.time import (
     TimePar, dur, Rate, prob, per, freq, peract,
     years, months, weeks, days, year, month, week, day,
     perday, perweek, permonth, peryear,
     probperday, probperweek, probpermonth, probperyear,
     freqperday, freqperweek, freqpermonth, freqperyear,
 )
+from .internals.dates import DateArray, date, datedur
+from .internals.timeline import Timeline
+from .internals.parameters import Pars, by, timeseries, seasonal
 
-from .dates import DateArray, date, datedur
-
-from .timeline import Timeline
-
-from .parameters import Pars, SimPars, by, timeseries, seasonal
-
+#%% People and modules
 from .people import People, people, ppl
-
-from .modules import (
-    register_modules, required,
-    Base, Module,
-)
-
+from .internals import modules
+from .internals.modules import register_modules, required, Base, Module
 from .networks import (
     Network, DynamicNetwork,
     RandomNet, DegreeNet, SexualNet,
     PrenatalNet, MaternalNet, PostnatalNet, BreastfeedingNet,
     AgeGroup, MixingPools, MixingPool, contacts,
 )
-from . import geo # Places and the movement between them: ss.geo.geography, ss.geo.Mobility, ss.geo.gravity, ss.geo.radiation
-
+from . import geo
 from .results import Result, Results, simdata
-
 from .products import Product, Vaccine, Treatment, Diagnostic, box
-
-from .interventions import (
-    Intervention, Delivery, vaccinate, treat, screen,
-)
-
+from .interventions import Intervention, Delivery, vaccinate, treat, screen
 from .analyzers import Analyzer, infection_log
-
 from .connectors import Connector, modify, change
 
-from . import conditions
-from .conditions import state # Conditions on a state by path
-from .solvers.backends import kernels # The machinery for speed is in ss.solvers.backends (the kernels, passes, and exact draws)
-from .solvers.backends.kernels import compile # Compile the solver kernels ahead of time
-
+#%% Declared models: conditions, expressions, transitions, and the solvers that run them
+from .internals import conditions
+from .internals.conditions import state
+from .solvers.backends import kernels
+from .solvers.backends.kernels import compile
 from .internals import expressions
 from .internals.expressions import par, mother, attr
 from .transitions import (
     State, states, pars, null, stay, on,
     Transition, move, birth, death, lifetable, immigration, emigration, outcome,
 )
+from .internals import graph, display, dimensions
+from .internals.dimensions import transfer
+from . import solvers
 
-from .internals import graph, presentation # The graph of a declared module (ss.graph.Graph), and how it is shown
-
-from .dimensions import transfer # Also ss.dimensions.Strat, ss.dimensions.Groups
-
-from . import solvers # The engines are internal: ss.solvers.Compartmental, ss.solvers.Agents
-
+#%% Diseases and demographics
 from .diseases import Disease, Infection, SIR, SEIR, SIS
 from .strains import immunity, Strains
-
 from .demographics import Demographics, Births, Deaths, Pregnancy # After the diseases, since a pregnancy is one
 
-from .loop import Loop
-
-from . import data # Data by place, from starsim_data: ss.data.age('Kenya'), ss.data.population(), ss.data.contacts(), ss.data.geography(); starsim_data is imported only when they are used
-
-from .internals import gradients # Used as ss.gradients; JAX is imported only when it is used
-
-from .solvers.backends import jit # Compile users' own code; the machinery for speed is in ss.solvers.backends
-
-from .sim import Sim, demo
-
+#%% Running: the loop, the sim, and many sims
+from .internals import loop
+from .internals.loop import Loop
+from . import data # starsim_data is imported only when this is used
+from .internals import gradients # JAX is imported only when this is used
+from .solvers.backends import jit
+from .sim import SimPars, Sim, demo
 from .run import MultiSim, parallel
 
-from . import io # Importing from and exporting to other frameworks: ss.io.importers, ss.io.exporters, ss.io.convert()
-from .io import import_from, export_to
+#%% Importing from and exporting to other frameworks
+from . import converters
+from .converters import import_from, export_to
 
-# ss.fit (fitting to data) is imported when it is first used, so that import starsim stays fast
 def __getattr__(name):
-    if name == 'fit': # Imported when first used
+    """ Import ss.fit when it is first used, so that import starsim stays fast """
+    if name == 'fit':
         import importlib
         return importlib.import_module(f'.{name}', __name__)
     hint = '; import it first: import starsim.library as ssl' if name == 'library' else ''
-    if not hint and not name.startswith('_'):
-        try:
-            from .io.migrate import removed # A name of Starsim 3's: its replacement, from the migration script's tables (loaded only now)
-            note = removed(name)
-        except Exception: # E.g. asked for while starsim is still being imported
-            note = None
-        if note:
-            errormsg = f'module "starsim" has no attribute "{name}" (removed in Starsim 4): {note}. The migration script rewrites Starsim 3 code: python -m starsim.io.migrate mypackage/'
-            raise AttributeError(errormsg, name=name, obj=None) # No object, so Python suggests no closest name (e.g. "emigration" for "Calibration")
     raise AttributeError(f'module "starsim" has no attribute "{name}"{hint}')
 
 # The kernels: Rust if it has been built (or asked for by STARSIM_KERNELS), else Numba (see ss.options.kernels)

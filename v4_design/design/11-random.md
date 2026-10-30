@@ -45,7 +45,7 @@ Each built-in module says in its docstring whether it keeps CRN. A module is CRN
 |---|---|
 | Declared diseases (`ss.Disease`, `ss.SIR`, `ss.SEIR`, `ss.SIS`), `ss.Pregnancy`, declared births, deaths, and migration, `ss.geo.Mobility`, mixing pools, deliveries (`ss.Delivery`, `ss.vaccinate()`, `ss.screen()`, `ss.treat()`) and their products | Safe as agents (a compartmental run has no agents to pair) |
 | Diseases written as code (`ss.Infection`, `ssl.AgentSIR` and the other `ssl` diseases), `ss.Births`, `ss.Deaths`, `ss.modify`, analyzers, `ssl.mnch` modules, `ssl.ART` | Safe |
-| `ss.PrenatalNet`, `ss.MaternalNet`, `ss.PostnatalNet`, `ss.BreastfeedingNet`, `ssl.RandomSafeNet`, `ssl.ErdosRenyiNet`, `ssl.DiskNet`, `ssl.StaticNet`, `ssl.NullNet`, `ss.Network` with its edges given | Safe |
+| `ss.PrenatalNet`, `ss.MaternalNet`, `ss.PostnatalNet`, `ss.BreastfeedingNet`, `ss.RandomNet(method='safe')`, `ssl.ErdosRenyiNet`, `ssl.DiskNet`, `ssl.StaticNet`, `ssl.NullNet`, `ss.Network` with its edges given | Safe |
 | `ssl.ClusterNet`, `ssl.HybridNet` | Safe, unless `dynamic=True` and people are born or die |
 | `ss.RandomNet` | Not safe when people are born or die, unless `dynamic=False`: one death rewires almost every edge (pairing by position in a list of all agents) |
 | `ss.SexualNet`, `ss.DegreeNet` | Not safe when people are born or die: people are paired in turn, so one fewer shifts the partners of those after them |

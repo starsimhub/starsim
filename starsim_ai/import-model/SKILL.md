@@ -54,13 +54,13 @@ An import that could not translate everything is not refused: `ss.import_from()`
 | summer2 | `format='summer2'` (a JSON dump of the model object) | `references/summer2.md` |
 | Atomica | `format='atomica'` (the framework and databook workbooks) | `references/atomica.md` |
 | EpiModel | `format='epimodel'` (a JSON dump from `dump_epimodel.R`; built-in models and networks, custom modules listed with their R source) | `references/epimodel.md` |
-| epydemix | `format='epydemix'` (a JSON dump from `starsim/io/epydemix.py` run as a script, or a live model) | `references/epydemix.md` |
+| epydemix | `format='epydemix'` (a JSON dump from `starsim/converters/epydemix.py` run as a script, or a live model) | `references/epydemix.md` |
 | LASER, laser-measles | by hand | `references/laser.md` |
-| MEmilio | `format='memilio'` (a JSON dump from `starsim/io/memilio.py` run as a script; the ODE models `osir`, `oseir`, `oseirdb`, and `osecir`, alone, on a `MobilityGraph` (places with commuting), or in a parameter study (distributions as priors)); the other models (`osecirvvs`, IDE, LCT, SDE, agent-based) by hand | `references/memilio.md` |
+| MEmilio | `format='memilio'` (a JSON dump from `starsim/converters/memilio.py` run as a script; the ODE models `osir`, `oseir`, `oseirdb`, and `osecir`, alone, on a `MobilityGraph` (places with commuting), or in a parameter study (distributions as priors)); the other models (`osecirvvs`, IDE, LCT, SDE, agent-based) by hand | `references/memilio.md` |
 | camdl | `format='camdl'` (a `.camdl` file, camdlc's JSON, or a pycamdl model) | `references/camdl.md` |
 | Starsim v3 | upgrade first with the migrate-starsim3 skill (removed names, changed results); then declared transitions by hand | `references/starsim3.md` |
 
-`ss.io.importers` lists the importers this version has. For a framework with no importer, it can still help to fill in an `ss.io.Source` (states, parameters, flows as written in the source) and call `ss.io.build(source)`, which classifies the rates by the same rules, prints how it read each one, and writes the model as code (`ss.io.write(source)` gives the code alone).
+`ss.converters.importers` lists the importers this version has. For a framework with no importer, it can still help to fill in an `ss.converters.Source` (states, parameters, flows as written in the source) and call `ss.converters.build(source)`, which classifies the rates by the same rules, prints how it read each one, and writes the model as code (`ss.converters.write(source)` gives the code alone).
 
 ## Rules
 

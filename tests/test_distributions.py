@@ -57,10 +57,10 @@ def test_custom_dists(n=n, do_plot=False):
     """ Test all custom dists """
     sc.heading('Testing all custom distributions')
 
-    o     = sc.objdict()
-    dists = sc.objdict()
-    rvs   = sc.objdict()
-    times = sc.objdict()
+    o     = sc.obj()
+    dists = sc.obj()
+    rvs   = sc.obj()
+    times = sc.obj()
     for name in ss.distributions.dist_list:
         dist_class = getattr(ss.distributions, name)
         dist = dist_class(name='test', strict=False)
@@ -91,14 +91,14 @@ def test_dists(n=n, do_plot=False):
 
         # Create a complex object containing various distributions
         obj = sc.prettyobj()
-        obj.a = sc.objdict()
+        obj.a = sc.obj()
         obj.a.mylist = [ss.random(), ss.Dist(distname='uniform', low=2, high=3)]
         obj.b = dict(d3=ss.weibull(c=2), d4=ss.constant(v=0.3))
-        dists = ss.distributions.Dists(obj).init(sim=make_sim())
+        dists = ss.dists.Dists(obj).init(sim=make_sim())
 
         # Call each distribution twice
         for j in range(2):
-            rvs = sc.objdict()
+            rvs = sc.obj()
             for key,dist in dists.dists.items():
                 rvs[str(dist)] = dist(n)
                 dist.jump() # Reset
@@ -112,7 +112,7 @@ def test_dists(n=n, do_plot=False):
     if do_plot:
         plot_rvs(rvs)
 
-    o = sc.objdict()
+    o = sc.obj()
     o.dists = dists
     o.rvs = rvs
     return dists
@@ -354,7 +354,7 @@ def test_callable_default():
 
 def make_mock_modules():
     """ Create mock modules for the tests to use """
-    mod = sc.objdict()
+    mod = sc.obj()
     mod.year  = ss.debugtools.mock_module(dt=ss.years(1))
     mod.month = ss.debugtools.mock_module(dt=ss.months(1))
     mod.week  = ss.debugtools.mock_module(dt=ss.weeks(1))
@@ -373,7 +373,7 @@ def test_timepar_dists():
     mock_mods = make_mock_modules()
 
     # Create time parameters
-    v = sc.objdict()
+    v = sc.obj()
     v.base = 30.0
     v.dur = ss.years(30)
     v.freq = ss.time.freq(30, 'year')
@@ -395,7 +395,7 @@ def test_timepar_dists():
         dist_class = getattr(ss, name)
         for module in mock_mods.values():
             # Create the dists, the first parameter of which should have time units, and their random variates
-            rvs = sc.objdict({key:dist_class(**{par:val}, name=key, module=module, strict=False).init().rvs(n) for key,val in v.items()})
+            rvs = sc.obj({key:dist_class(**{par:val}, name=key, module=module, strict=False).init().rvs(n) for key,val in v.items()})
 
             # Check that the distributions match
             ratio = ss.years(1)/module.t.dt
@@ -439,7 +439,7 @@ def test_timepar_dists():
     mean = 10
     std = 0.1
 
-    d = sc.objdict()
+    d = sc.obj()
     d.a = ss.normal(ss.years(mean), ss.years(std)).mock(**kw)
     d.b = ss.normal(mean, std, unit=ss.years).mock(**kw)
     with pytest.raises(TypeError): # The unit goes on the parameters, or unit=

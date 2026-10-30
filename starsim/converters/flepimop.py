@@ -13,6 +13,8 @@ mixes in the places its people visit for half the day); each transition becomes 
 classified by the shared rules; the modifiers of a scenario become `ss.modify` interventions;
 and the outcomes become `ss.outcome`s. Parameters drawn from a distribution are imported at
 their mean, and listed as not translated.
+
+Used with: compartments; declared modules
 """
 import ast
 import itertools

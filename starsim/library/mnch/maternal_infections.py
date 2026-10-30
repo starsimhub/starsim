@@ -46,6 +46,8 @@ Usage::
     # Check results; note that stillbirths are recorded by the Pregnancy module
     print('Stillbirths:', sim.results.pregnancy.stillbirth.sum())
     print('Congenital infections:', sim.diseases.congenitaldisease.congenital.sum())
+
+Used with: agents; coded modules
 """
 
 import numpy as np
@@ -69,6 +71,7 @@ class CongenitalDisease(AgentSIR):
         birth_outcome_keys (list): outcome names — each needs a `ti_<key>` state
         birth_outcomes (objdict):  `ss.choice` distributions keyed by category;
             use 'default' for a single distribution applied to all infections
+        pars (dict): the same parameters, as a dict
 
     Attributes:
         ti_stillborn (FloatArr):  timestep when stillbirth fires (triggers request_death)
@@ -83,7 +86,7 @@ class CongenitalDisease(AgentSIR):
         self.define_pars(
             # Keys define the possible outcomes; probabilities sum to 1
             birth_outcome_keys = ['stillborn', 'congenital', 'normal'],
-            birth_outcomes     = sc.objdict(
+            birth_outcomes     = sc.obj(
                 default=ss.choice(a=3, p=np.array([0.3, 0.4, 0.3])),
             ),
         )
@@ -123,7 +126,7 @@ class CongenitalDisease(AgentSIR):
 
             self.define_pars(
                 birth_outcome_keys = ['stillborn', 'congenital', 'normal'],
-                birth_outcomes     = sc.objdict(default=ss.choice(a=3, p=[0.3, 0.4, 0.3])),  # Illustrative placeholder
+                birth_outcomes     = sc.obj(default=ss.choice(a=3, p=[0.3, 0.4, 0.3])),  # Illustrative placeholder
             )
 
         Each outcome name needs a matching `ti_<name>` FloatArr state; non-lethal
@@ -142,6 +145,10 @@ class CongenitalDisease(AgentSIR):
 
         Call `step_congenital` from the disease's `step_state()` to
         execute the scheduled events each timestep.
+
+        Args:
+            target_uids (array): the unborn agents infected
+            source_uids (array): the agents who infected them
         """
         if 'birth_outcomes' not in self.pars or self.pars.birth_outcomes is None:
             return

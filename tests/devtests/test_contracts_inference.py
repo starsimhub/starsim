@@ -63,13 +63,13 @@ def make_inside(x, data=None, **kwargs):
 
 
 # Each model with data: how to make it (with the fitted value first), the data series, its dates, and the fitted value that makes the data
-models = sc.objdict(
-    outcomes = sc.objdict(build=lambda x, **kw: corpus.outcomes(beta=x, **kw),   col='cases',     dates=outcome_weeks, truth=0.3),
-    ts       = sc.objdict(build=lambda x, **kw: make_beta('ts', x, **kw),        col='infection', dates=weeks,         truth=0.5),
-    season   = sc.objdict(build=lambda x, **kw: make_beta('season', x, **kw),    col='infection', dates=weeks,         truth=0.5),
-    both     = sc.objdict(build=lambda x, **kw: make_beta('both', x, **kw),      col='infection', dates=weeks,         truth=0.5),
-    detect   = sc.objdict(build=lambda x, **kw: make_detection(x, **kw),         col='detection', dates=weeks,         truth=0.2),
-    inside   = sc.objdict(build=lambda x, **kw: make_inside(x, **kw),            col='infection', dates=weeks,         truth=np.array([0.5, 0.3, 0.25])),
+models = sc.obj(
+    outcomes = sc.obj(build=lambda x, **kw: corpus.outcomes(beta=x, **kw),   col='cases',     dates=outcome_weeks, truth=0.3),
+    ts       = sc.obj(build=lambda x, **kw: make_beta('ts', x, **kw),        col='infection', dates=weeks,         truth=0.5),
+    season   = sc.obj(build=lambda x, **kw: make_beta('season', x, **kw),    col='infection', dates=weeks,         truth=0.5),
+    both     = sc.obj(build=lambda x, **kw: make_beta('both', x, **kw),      col='infection', dates=weeks,         truth=0.5),
+    detect   = sc.obj(build=lambda x, **kw: make_detection(x, **kw),         col='detection', dates=weeks,         truth=0.2),
+    inside   = sc.obj(build=lambda x, **kw: make_inside(x, **kw),            col='infection', dates=weeks,         truth=np.array([0.5, 0.3, 0.25])),
 )
 
 

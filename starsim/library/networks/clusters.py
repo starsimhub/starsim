@@ -1,5 +1,9 @@
 """
 Networks of clusters (e.g. households), and Covasim's hybrid population of households, schools, workplaces, and community
+
+These exist for diseases that spread in fixed groups, where the contacts of one person are also contacts of each other. They have no compartmental form, since their edges are between individuals.
+
+Used with: agents; declared and coded modules
 """
 import numpy as np
 import sciris as sc
@@ -28,6 +32,7 @@ class ClusterNet(ss.Network):
         age_range (list): if supplied, only agents with `age_range[0] <= age < age_range[1]` are included
         beta (float): the beta value for each edge
         dynamic (bool): if True, the clusters are recreated on each timestep; if False (default), they are created once and never change
+        pars (dict): the same parameters, as a dict
 
     Example:
         ```python
@@ -49,7 +54,7 @@ class ClusterNet(ss.Network):
             ss.FloatArr('cluster', label='Cluster ID'),
         )
         self.rng_order = ss.random() # Order in which agents are assigned to clusters
-        self.rng_order.hash_dtype = np.float64 # Avoid ties, as for ssl.RandomSafeNet
+        self.rng_order.hash_dtype = np.float64 # Avoid ties, as for ss.RandomNet(method='safe')
         self.n_clusters = 0
         return
 
@@ -127,6 +132,7 @@ class HybridNet(ss.Network):
         dynamic (bool): whether the networks are recreated on each timestep
         method (str): how the targets of edges in random networks are chosen (see `ss.RandomNet`); 'uniform' as in Covasim v3
         clustered (bool): if True (default), schools and workplaces are `ssl.ClusterNet`s, sized to give `contacts` for Poisson and constant distributions (other distributions are used directly as cluster sizes, which gives a different mean); if False, they are `ss.RandomNet`s, as in Covasim v3
+        pars (dict): the same parameters, as a dict
 
     Examples:
         ```python
@@ -150,7 +156,7 @@ class HybridNet(ss.Network):
             method = 'fast',
             clustered = True,
         )
-        defaults = sc.dcp(sc.objdict(contacts=self.pars.contacts, beta=self.pars.beta))
+        defaults = sc.dcp(sc.obj(contacts=self.pars.contacts, beta=self.pars.beta))
         self.update_pars(pars, **kwargs)
         for key,default in defaults.items(): # Allow partial dicts, e.g. contacts=dict(s=10)
             self.pars[key] = sc.mergedicts(default, self.pars[key])
