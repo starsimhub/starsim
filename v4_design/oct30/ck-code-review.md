@@ -1,5 +1,3 @@
-
-
 # CK code review
 
 - [ ] Tidy up `__init__.py` -- group imports better, remove cruft
@@ -13,7 +11,8 @@
   - [ ] modules.py
   - [ ] parameters.py (but move SimPars into sim.py)
   - [ ] time.py (unsure about timeline)
-  - [ ] 
+  - [ ] transitions.py
+  - [ ] utils.py
 - [ ] For each file, say whether it's used with agents, compartments, or both ("declared"/"coded" in other words)
 - [ ] Replace sc.objdict with sc.obj throughout; replace sc.dictobj with sc.obj if (and only if) not slower
 - [ ] Get rid of "ss.utils.NoDists" and have a list of not-searched classes instead
