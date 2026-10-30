@@ -23,13 +23,35 @@ class Undeclared(Transmission):
     """
     The engine of a disease that declares no states or transitions (see `ss.Disease`): there is nothing for it to run, so the disease's own
     code is all of it. It gives that code what a declared disease's engine gives its own, as agents: the modifiers and products on its
-    `rel_sus` and `rel_trans` (`dis.effective()`), transmission over the networks (`ss.Infection.transmit_route()`; see `Transmission`),
+    `rel_sus`, `rel_trans`, and parameters (`dis.current_value()`, and `self.pars` while it runs), transmission over the networks (`ss.Infection.transmit_route()`; see `Transmission`),
     and, for a delivery, the people its conditions select and a cure (`force()`)
     """
     def nothing(self):
         """ Nothing to run: each step of the lifecycle is the disease's own code """
         return
-    init_pre = init_post = step_state = step_funcs = finalize_results = nothing
+    init_pre = step_state = step_funcs = nothing
+
+    def init_post(self):
+        """ The parameters its code reads from `self.pars`, with their base values, which have modifiers (see `write_pars()`) """
+        reads = getattr(self.mod, 'allow_modifiers', ())
+        self.base_pars = {name:self.mod.pars[name] for (modname, kind, name) in getattr(self.sim, 'modifiers', ()) if modname == self.mod.name and kind == 'par' and name not in reads}
+        return
+
+    def write_pars(self):
+        """ Put the modified value of each of these parameters in `self.pars`, which is what the disease's code reads """
+        for name in self.base_pars:
+            self.mod.pars[name] = self.base_pars[name] # current_par() reads the base value
+            value = self.current_par(name)
+            if np.ndim(getattr(value, 'value', value)):
+                raise ss.CapabilityError(f'the modifiers of {self.mod.name}.pars.{name} give it a value for each person, but "{self.mod.name}" is written as code and reads one value, self.pars.{name}. '
+                                         f'Read self.current_value(\'{name}\', uids) in its code, and say so in its class: allow_modifiers = (\'{name}\',).')
+            self.mod.pars[name] = value
+        return
+
+    def finalize_results(self):
+        """ Parameters are back to their base values after the run """
+        self.mod.pars.update(self.base_pars)
+        return
 
     def define(self):
         """ With strains, the distributions of who infects whom and of protection (see `Transmission.pick_sources()`), by the names a declared disease's transmission called `infection` (e.g. `ss.SIR`'s) gives them, so the same model draws the same numbers both ways """
@@ -43,6 +65,7 @@ class Undeclared(Transmission):
     def start_step(self):
         """ Values held for a step (e.g. the modifiers of a network's contacts) are worked out again: at the step's start, and once the interventions have run (the disease's step()) """
         self.cache.clear()
+        self.write_pars()
         return
     step = start_step
 
@@ -69,14 +92,23 @@ class Undeclared(Transmission):
             self.mod.clear_infection(uids)
         return len(uids)
 
-    def unapplied(self, kind):
-        """ Why the disease would not apply the modifiers on its `rel_sus` or `rel_trans` (`kind`), or None if it would: a transmitted `ss.Infection` reads them in `transmit_route()` (see `ss.connectors.check_applied()`) """
+    def unapplied(self, kind, name=None, mods=()):
+        """ Why the disease would not apply the modifiers (`mods`) on a parameter (`name`) or on its `rel_sus` or `rel_trans` (`kind`), or None if it would: a transmitted `ss.Infection` reads those in `transmit_route()` (see `ss.connectors.check_applied()`) """
         mod = self.mod
-        if (isinstance(mod, ss.Infection) and 'beta' in mod.pars) or kind in getattr(mod, 'reads_modifiers', ()): # Or its own code reads them, with mod.effective()
+        if kind == 'par':
+            value = mod.pars[name]
+            value = value.raw if isinstance(value, ss.par) else value
+            if not (sc.isnumber(value) or isinstance(value, ss.TimePar)):
+                return f'"{name}" of "{mod.name}" is a {type(value).__name__}, and a disease written as code reads a number, a rate, a probability, or a duration from a parameter a modifier changes. Modify its rel_sus or rel_trans, or declare the disease (see ss.Disease).'
+            if name not in mod.allow_modifiers and any(getattr(m, 'where', None) is not None for m in mods):
+                return (f'"{mod.name}" is written as code, so it reads one value of "{name}", self.pars.{name}, which cannot differ between people. '
+                        f'Read self.current_value(\'{name}\', uids) in its code, and say so in its class: allow_modifiers = (\'{name}\',).')
+            return None
+        if (isinstance(mod, ss.Infection) and 'beta' in mod.pars) or kind in getattr(mod, 'allow_modifiers', ()): # Or its own code reads them, with mod.current_value()
             return None
         why = 'it is not an ss.Infection' if not isinstance(mod, ss.Infection) else 'it has no beta'
         return (f'"{mod.name}" is written as code and is not transmitted ({why}), so nothing reads its rel_sus or rel_trans; a product or modifier acts on it only through its transmission. '
-                f'If its own code reads {kind} with {mod.name}.effective(\'{kind}\', uids), say so in its class: reads_modifiers = (\'{kind}\',).')
+                f'If its own code reads {kind} with {mod.name}.current_value(\'{kind}\', uids), say so in its class: allow_modifiers = (\'{kind}\',).')
 
 
 def make_engine(module, sim):

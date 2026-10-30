@@ -74,11 +74,11 @@ targets = [
 ]
 ```
 
-A target is a reference to the quantity, not a copy of its current value: `ss.modify(sir.pars.beta, ...)` refers to the parameter, and the string path is the same reference spelled as text, for when the object is not in scope. A transfer ([05-dimensions.md](05-dimensions.md#moving-between-coordinates-sstransfer)) is a target as a transition is. The contacts of a network are a target only as a path, since `school.pars.n_contacts` is a plain value. It works under every solver; as agents, a multiplier below 1 makes each contact happen with that probability in a step. Of a disease written as code (an `ss.Infection`), only `rel_sus` and `rel_trans` can be targets: its parameters are plain values that its own code reads, so modifying one raises `CapabilityError`. It has no transmission to name, so a modifier on a route is of its `rel_sus` (`ss.modify(hiv.rel_sus, efficacy=0.8, share=lambda net: net.edges.condoms, route='mf')`), of the people who would be infected over it, as for a declared disease's transmission; the modifiers of a network's contacts apply to it as well.
+A target is a reference to the quantity, not a copy of its current value: `ss.modify(sir.pars.beta, ...)` refers to the parameter, and the string path is the same reference spelled as text, for when the object is not in scope. A transfer ([05-dimensions.md](05-dimensions.md#moving-between-coordinates-sstransfer)) is a target as a transition is. The contacts of a network are a target only as a path, since `school.pars.n_contacts` is a plain value. It works under every solver; as agents, a multiplier below 1 makes each contact happen with that probability in a step. A parameter of a disease written as code is a target as a declared one is. Its code reads a plain value, `self.pars.x`, which is one number, so while the sim runs that value is the modified one for everyone (the base value is kept, and is back in `pars` once the run ends); this takes a number or a rate, probability, or duration, and a distribution or a value by level raises a `ValueError`. A modifier that differs between people (`where=`, or an amount with one value per person) needs a value per person, which code reads with `self.current_value('x', uids)`, in the parameter's own type, and says so in its class, `allow_modifiers = ('x',)`, as for `rel_sus`. `current_value()` means the same for a declared disease. It has no transmission to name, so a modifier on a route is of its `rel_sus` (`ss.modify(hiv.rel_sus, efficacy=0.8, share=lambda net: net.edges.condoms, route='mf')`), of the people who would be infected over it, as for a declared disease's transmission; the modifiers of a network's contacts apply to it as well.
 
 A modifier on a transition chosen with `p=`, one of several branches out of a state, changes its probability, and the other branches share the rest. If the target cannot be resolved when the sim is built (a plain number, a boolean state, a name that does not exist), a `KeyError` is raised, listing the quantities that can be modified. Boolean flips and anything else that is not "change a number" belong in `step()` code.
 
-Nothing is accepted and then ignored. When the sim is built, after every modifier, change, and efficacy of a product has been registered against the quantity it changes, one pass asks the module each quantity belongs to whether it reads it, and raises a `ValueError` if not, naming the modifier, the quantity, and why. A declared module answers from its graph: a plain parameter (not an `ss.par` of its model, so only its own code reads it), the `rel_sus` or `rel_trans` of a module with no acquisition or transmission, a condition on people (`where=`, or holding a product) on an inflow or a transition of counts, and an efficacy on a transition with several destinations (name the destination, e.g. `'precin.C'`) are refused. A disease written as code reads its `rel_sus` and `rel_trans` only if it is a transmitted `ss.Infection`; they are applied in `transmit_route()`, so a disease that overrides `transmit()` (e.g. to loop over variants) has them too. A modifier of an inflow (`ss.change(mal.emergence, by=0.5)`) applies under every solver. Likewise `stratify()` on a disease written as code, and a sim stratification that nothing uses (no declared module, no module with values by it, and no result kept by group, `ss.Result(..., groups=True)`), raise a `ValueError`.
+Nothing is accepted and then ignored. When the sim is built, after every modifier, change, and efficacy of a product has been registered against the quantity it changes, one pass asks the module each quantity belongs to whether it reads it, and raises a `ValueError` if not, naming the modifier, the quantity, and why. A declared module answers from its graph: a plain parameter (not an `ss.par` of its model, so only its own code reads it), the `rel_sus` or `rel_trans` of a module with no acquisition or transmission, a condition on people (`where=`, or holding a product) on an inflow or a transition of counts, and an efficacy on a transition with several destinations (name the destination, e.g. `'precin.C'`) are refused. A disease written as code reads its `rel_sus` and `rel_trans` only if it is a transmitted `ss.Infection`; they are applied in `transmit_route()`, so a disease that overrides `transmit()` (e.g. to loop over variants) has them too. It reads a parameter for each person only if it says so in `allow_modifiers`; otherwise a modifier that differs between people raises a `ValueError` (`where=` when the sim is built; an amount with one value per person raises `CapabilityError` on the first step it applies), since `self.pars.x` is one number. A modifier of an inflow (`ss.change(mal.emergence, by=0.5)`) applies under every solver. Likewise `stratify()` on a disease written as code, and a sim stratification that nothing uses (no declared module, no module with values by it, and no result kept by group, `ss.Result(..., groups=True)`), raise a `ValueError`.
 
 ### How modifiers combine
 
@@ -133,25 +133,25 @@ A quantity with no active modifier has the same base and effective value. Three 
 
 1. **Reading gives the base value.** `sir.rel_sus[uids]` returns the quantity's own value, as code written for Starsim 3 expects when it reads and writes it.
 2. **Assigning sets the base.** `sir.rel_sus[uids] = 0.8` changes the quantity's own value. Any active modifiers still apply on top of the new base.
-3. **`.effective` reads the effective value.** `sir.rel_sus.effective[uids]` returns what the transmission step will use, with the active modifiers applied.
+3. **`current_value()` reads the effective value.** `sir.current_value('rel_sus')[uids]` returns what the transmission step will use, with the active modifiers applied.
 
-These are arrays of agents, so `.effective` exists only in an agent-based run; in a compartmental run the modifiers act on the groups' rates inside the solver, and nothing reads them from code.
+Per-person values exist only in an agent-based run, so `current_value()` of `rel_sus`, `rel_trans`, or some agents needs agents; in a compartmental run the modifiers act on the groups' rates inside the solver, and only a parameter's value as a whole can be read.
 
 A modifier never changes the base, which is why nothing has to be restored when it ends. One person, followed through a campaign that halves susceptibility (`ss.modify(sir.rel_sus, multiply=0.5, where=campaign.protected)`):
 
 ```python
 sir.rel_sus[uid] = 0.8              # assign: the base is 0.8
-sir.rel_sus.effective[uid]          # 0.8   nothing modifies it yet
+sir.current_value('rel_sus')[uid]          # 0.8   nothing modifies it yet
 
 # ... the person becomes protected, so the modifier is active for them
-sir.rel_sus.effective[uid]          # 0.4   effective = base 0.8 × 0.5
+sir.current_value('rel_sus')[uid]          # 0.4   effective = base 0.8 × 0.5
 sir.rel_sus[uid]                    # 0.8   the base is untouched
 
 sir.rel_sus[uid] = 1.0              # assign: the base is now 1.0
-sir.rel_sus.effective[uid]          # 0.5   the modifier still applies
+sir.current_value('rel_sus')[uid]          # 0.5   the modifier still applies
 
 # ... protection ends
-sir.rel_sus.effective[uid]          # 1.0   back to the base, with nothing saved or restored
+sir.current_value('rel_sus')[uid]          # 1.0   back to the base, with nothing saved or restored
 ```
 
 The `orig_rel_sus` copies seen in Starsim interventions, which remember a value in order to put it back later, are not needed.

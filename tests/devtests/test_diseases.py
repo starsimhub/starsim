@@ -400,11 +400,68 @@ def test_coded_seeds():
 
 
 @sc.timer()
+def test_coded_par_modifiers():
+    sc.heading('Testing modifiers of the parameters of a disease written as code')
+
+    class Coded(ss.Infection):
+        def __init__(self, **kwargs):
+            super().__init__()
+            self.define_pars(beta=0.1, init_prev=0.1, level=0.4, rate=ss.peryear(0.2), risk=ss.probperyear(0.3), spread=ss.normal(1, 1))
+            self.update_pars(**kwargs)
+            self.seen = []
+            return
+        def step_state(self):
+            self.seen.append([self.pars.level, self.pars.rate.to('year').value, self.pars.risk.value])
+            return
+
+    class PerPerson(Coded):
+        allow_modifiers = ('rate',)
+        def step_state(self):
+            self.rates = self.current_value('rate', self.sim.people.auids)
+            return
+
+    pars = dict(n_agents=200, start=2000, stop=2004, dt=ss.years(1), networks='random', verbose=0)
+    make = lambda **kwargs: ss.modify(kwargs.pop('target', 'coded.pars.rate'), **kwargs)
+
+    # For everyone, code reading self.pars sees the modified value while it applies, and the base value is back after the run
+    mods = [make(target='coded.pars.level', multiply=0.5, start=2002), make(multiply=2), make(target='coded.pars.risk', set=ss.probperyear(0.6))]
+    dis = ss.Sim(diseases=Coded(), connectors=mods, **pars).run().diseases.coded
+    level, rate, risk = np.array(dis.seen).T
+    assert np.allclose(level, [0.4, 0.4, 0.2, 0.2])
+    assert np.allclose(rate, 0.4)
+    assert np.allclose(risk, 0.6)
+    assert dis.pars.level == 0.4 and dis.pars.rate == ss.peryear(0.2) and dis.pars.risk == ss.probperyear(0.3)
+    assert np.isclose(dis.current_value('level'), 0.2)
+
+    # For some people, code reads a value for each of them, and says so; otherwise it is refused
+    where = lambda sim: sim.people.female
+    dis = ss.Sim(diseases=PerPerson(), connectors=make(target='perperson.pars.rate', set=ss.peryear(1.0), where=where), **pars).run().diseases.perperson
+    ppl = dis.sim.people
+    rates = dis.rates.to('year').value
+    assert np.allclose(rates, np.where(ppl.female[ppl.auids], 1.0, 0.2))
+    with pytest.raises(ValueError, match='allow_modifiers'):
+        ss.Sim(diseases=Coded(), connectors=make(multiply=0.5, where=where), **pars).init()
+    with pytest.raises(ss.CapabilityError, match='allow_modifiers'):
+        ss.Sim(diseases=Coded(), connectors=make(multiply=lambda sim: np.full(len(sim.people), 0.5)), **pars).run()
+    with pytest.raises(ValueError, match='normal'):
+        ss.Sim(diseases=Coded(), connectors=make(target='coded.pars.spread', multiply=0.5), **pars).init()
+
+    # The same call on a declared disease, as agents and as compartments
+    for solver in ['abm', 'ode']:
+        sir = ss.SIR()
+        kw = dict(networks='random') if solver == 'abm' else dict()
+        sim = ss.Sim(diseases=sir, connectors=ss.modify(sir.pars.beta, multiply=0.5), solver=solver, n_agents=200, start=2000, stop=2004, dt=ss.years(1), verbose=0, **kw).run()
+        beta = sim.diseases.sir
+        assert np.isclose(beta.current_value('beta').to('year').value, beta.pars.beta.value.to('year').value*0.5)
+    return dis
+
+
+@sc.timer()
 def test_coded_modifiers():
     sc.heading('Testing modifiers of rel_sus on a disease written as code that reads them (MG1), a property a module adds to the people (MG3), and the cause of death by hazard (MG8)')
 
     class Condition(ss.Disease):
-        reads_modifiers = ('rel_sus',)
+        allow_modifiers = ('rel_sus',)
         def __init__(self, **kwargs):
             super().__init__()
             self.define_pars(p_onset=ss.probperyear(0.2))
@@ -417,7 +474,7 @@ def test_coded_modifiers():
             return
         def step(self):
             uids = (~self.affected).uids
-            p = -np.expm1(-self.pars.p_onset.rate*self.t.dt_year*self.effective('rel_sus', uids))
+            p = -np.expm1(-self.pars.p_onset.rate*self.t.dt_year*self.current_value('rel_sus', uids))
             self.affected[uids[self.sim.people.housing[uids] | (np.random.default_rng(self.ti).random(len(uids)) < p)]] = True
             return
 
@@ -427,8 +484,8 @@ def test_coded_modifiers():
     assert np.all(d.affected[ppl.female.uids] == ppl.housing[ppl.female.uids]) # Only those housed: the onset of women is modified away
     assert (d.affected & ppl.male & ~ppl.housing).sum() > 100
     assert np.isclose(ppl.housing.mean(), 0.5, atol=0.05)
-    Condition.reads_modifiers = ()
-    with pytest.raises(ValueError, match='reads_modifiers'):
+    Condition.allow_modifiers = ()
+    with pytest.raises(ValueError, match='allow_modifiers'):
         cond = Condition(name='cond')
         ss.Sim(diseases=cond, interventions=ss.modify(cond.rel_sus, multiply=0.0), n_agents=100, start=2000, stop=2001, verbose=0).init()
 
@@ -471,4 +528,5 @@ if __name__ == '__main__':
     branch  = test_strains_branch_flows()
     cond    = test_condition_by_sex()
     seeds   = test_coded_seeds()
+    par_mods = test_coded_par_modifiers()
     mods    = test_coded_modifiers()

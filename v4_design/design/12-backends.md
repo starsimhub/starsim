@@ -345,7 +345,7 @@ The agent-based solver is Starsim's, and its architecture is kept: typed per-age
 | a transition with `dur=` | sample a duration on entry and schedule the exit |
 | competing rates out of one state | one draw per agent ([10-execution.md](10-execution.md)) |
 | `sir.stratify(risk=[...])` | an agent property; continuous ones stay continuous |
-| `ss.modify(target, multiply=, where=)` | applied where the quantity is used; `sir.rel_sus` reads the base value and `sir.effective('rel_sus')` the value with the active modifiers |
+| `ss.modify(target, multiply=, where=)` | applied where the quantity is used; `sir.rel_sus` reads the base value and `sir.current_value('rel_sus')` the value with the active modifiers |
 | `ss.outcome(...)` | a thinned, delayed draw from the source events |
 
 - **Custom code** is ordinary Starsim: boolean state arrays, `dist.filter(uids)` to select with a probability, and direct reads and writes of other modules' state ([07-effects.md](07-effects.md)).

@@ -211,7 +211,7 @@ def check_applied(sim):
         if getattr(mod, 'graph', None) is not None:
             why = unapplied(mod.graph, modname, kind, name, mods)
         elif isinstance(mod, ss.Disease):
-            why = mod.engine.unapplied(kind)
+            why = mod.engine.unapplied(kind, name, mods)
         else: # A network's contacts, read by every transmission over it
             continue
         if why:
@@ -264,7 +264,7 @@ class modify(Connector):
 
     Args:
         target (par/str): the quantity to change: a parameter (`sir.pars.beta`), a transition (`sir.recovery`, which
-            scales its rate, or its probability if it is a branch with `p=`), `sir.rel_sus` or `sir.rel_trans`, or the path of
+            scales its rate, or its probability if it is a branch with `p=`), `sir.rel_sus` or `sir.rel_trans`, a parameter of a disease written as code, or the path of
             any of these as a string (`'sir.pars.beta'`); or the contacts of a network, as the network (`ss.contacts('Kenya', layer='school')`,
             matched by its name) or as a path (`'school.pars.n_contacts'`)
         multiply (float): multiply the quantity by this; like `add` and `set`, it can also be `ss.by(...)` or a function of the sim
@@ -360,14 +360,13 @@ class modify(Connector):
         options += [f'{net}.pars.n_contacts' for net in nets]
         found = False
         coded = {key:dis for key,dis in sim.diseases.items() if isinstance(dis, ss.Disease) and dis.graph is None}
+        options += [f'{key}.{path}' for key,dis in coded.items() for path in [*[f'pars.{k}' for k in dis.pars], 'rel_sus', 'rel_trans']]
         if modname in nets and modname not in mods: # The contacts of a network: see Engine.contact_mult()
             found = kind in [None, 'par'] and name == 'n_contacts'
             kind = 'par'
-        elif modname in coded: # A disease written as code: its rel_sus and rel_trans, as agents
-            if kind not in ['rel_sus', 'rel_trans']:
-                raise ss.CapabilityError(f'the target of the modifier "{self.name}", {self.target}, is a parameter of "{modname}", which is written as code ({type(coded[modname]).__name__}), so its own code reads the value and a modifier cannot change it.\n'
-                                 f'     Modify its rel_sus or rel_trans (e.g. ss.modify({modname}.rel_trans, multiply=0.5)), or declare the disease (see ss.Disease) to modify its parameters and transitions.')
-            found = True
+        elif modname in coded: # A disease written as code: its rel_sus and rel_trans, as agents, and its parameters
+            kind = kind or 'par'
+            found = kind in ['rel_sus', 'rel_trans'] or (kind == 'par' and name in coded[modname].pars)
         elif modname in mods:
             graph = mods[modname].graph
             if kind is None:

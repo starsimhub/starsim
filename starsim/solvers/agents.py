@@ -43,7 +43,7 @@ class Transmission(Effects):
     """
     Transmission as agents, the same for a declared disease (`Agents`, for its transmissions) and one written as code (`ss.Infection.transmit_route()`,
     through its engine, `ss.solvers.Undeclared`): who can transmit and be infected, with the modifiers and products on `rel_trans` and `rel_sus`
-    applied (`effective()`); who is infected over a network (`over_network()`); and who infected whom (`first_infections()`)
+    applied (`current_value()`); who is infected over a network (`over_network()`); and who infected whom (`first_infections()`)
 
     Where the two differ, the caller says how:
 
@@ -58,7 +58,7 @@ class Transmission(Effects):
       gives the same edges the same numbers, declared or written as code; and so are the draws of who infects whom, and of protection, which
       are keyed by the step alone (`step_draw()`).
     """
-    def effective(self, kind, *factors):
+    def current_value(self, kind, *factors):
         """ `rel_sus` or `rel_trans` (`kind`) of every agent (by UID), times the factors (e.g. whether each is susceptible), with the modifiers and products active on it applied; may be the array itself, so it is not to be changed """
         return times(self.mod[kind].raw, *factors, self.mult_raw(kind))
 
@@ -3689,7 +3689,7 @@ class Agents(Engine, Transmission):
             self._infecting = False
         self.step_per(mod.ti)
         self.write_derived(self.sim.people.auids)
-        self.cache.clear() # Who is in each state has changed (including by the same-step cascade), so values read after the step (e.g. dis.effective('rel_sus')) are worked out again
+        self.cache.clear() # Who is in each state has changed (including by the same-step cascade), so values read after the step (e.g. dis.current_value('rel_sus')) are worked out again
         if self.sim.mixing.register is not None and mod is self.sim.declared[-1]: # The events dated at the end of the step, after every module's transmissions; the people are the same for every module, so it is done once
             self.step_register(mod.ti)
         self.record_stocks() # Deaths later in the step are taken out of them: see die()
@@ -3832,7 +3832,7 @@ class Agents(Engine, Transmission):
 
     def susceptibility(self, tr, src):
         """ The effective susceptibility of each agent (by UID) to a transmission from a state: `rel_sus` for those in the state, with the state's own, the modifiers on it and on the transmission, and the adjust= of the stratifications """
-        out = times(self.effective('rel_sus', self.mod[src.name].raw, src.rel_sus), self.mult_raw('transition', tr.name))
+        out = times(self.current_value('rel_sus', self.mod[src.name].raw, src.rel_sus), self.mult_raw('transition', tr.name))
         return out if self.adjust[tr.name] is None else out*self.adjust[tr.name][self.sim.groups.group_raw()]
 
     #%% Branching processes
@@ -4125,7 +4125,7 @@ class Agents(Engine, Transmission):
                 share = (c/ref)*state.rel_trans
                 w = mod[state.name].raw if np.ndim(share) == 0 and share == 1 else mod[state.name].raw*share # The usual case, one source state, needs no product
                 weights = w if weights is None else weights + w
-            rel_trans = mod.rel_trans.asnew(times(self.effective('rel_trans', weights), by_strain), copy=False)
+            rel_trans = mod.rel_trans.asnew(times(self.current_value('rel_trans', weights), by_strain), copy=False)
             beta = -np.expm1(-ref*dt)
             if isinstance(route, ss.Network):
                 for pair in self.over_network(i, route, rel_trans.raw, route_sus.raw, [beta, beta], tr.name):
@@ -4227,7 +4227,7 @@ class Agents(Engine, Transmission):
             weights = mod.rel_trans.raw*0
             for state in pairs[0][0].terms:
                 weights = weights + mod[state.name].raw*(first[state.name]/ref)*state.rel_trans
-            rel_trans = self.effective('rel_trans', weights)
+            rel_trans = self.current_value('rel_trans', weights)
             route_sus = sum(s*(b/top) for s,b in zip(sus, betas)) # Each transmission's chance, as a share of the largest
             for _, trgs, _ in self.over_network(0, route, rel_trans, route_sus, [top, top], None):
                 for i,(tr,src) in enumerate(pairs):
@@ -4400,7 +4400,7 @@ class Agents(Engine, Transmission):
         hazards = {state: np.asarray(self.route_beta(coef, nkey, route), dtype=float) for state,coef in tr.terms.items()} # Directions (by groups) for each source state
         if not any(np.any(h > 0) for h in hazards.values()):
             return
-        trans = times(self.effective('rel_trans'), by_strain)
+        trans = times(self.current_value('rel_trans'), by_strain)
         n_slots = len(mod.rel_sus.raw)
         groups = sim.groups.group_raw() if any(h.ndim > 1 and h.shape[1] != n_slots for h in hazards.values()) else None
         mult = self.route_mult(tr.name, route)

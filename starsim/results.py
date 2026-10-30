@@ -12,7 +12,6 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 
 
-
 class Levels(sc.objdict):
     """ A result across runs split by a dimension: a result across runs for each level, which can be plotted together """
     def plot(self, fig=None, ax=None, lines=False, log=False, **kwargs):
