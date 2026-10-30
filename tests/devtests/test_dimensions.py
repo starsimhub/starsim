@@ -1089,6 +1089,8 @@ def test_by_function():
     m.stratify(patch=ss.geo.geography(names=['a', 'b', 'c']))
     with pytest.raises(ValueError, match='3 levels'):
         ss.Sim(diseases=m, n_agents=300, dur=ss.days(3), dt=ss.days(1), verbose=0).run()
+    inflow = lambda rate, S=ss.State('S'): ss.Sim(diseases=ss.Disease(S, arrive=ss.null >> S @ rate, name='m').stratify(pop={'a': 0.2, 'b': 0.8}), solver='ode', total_pop=100, stop=2002, verbose=0).run().results.m.arrive.by('pop')[1]
+    assert np.allclose(inflow(ss.by(pop=lambda sim: np.array([10., 5.]))), inflow(ss.by(pop=[10., 5.]))) # An inflow by level is the inflow at each level, not shared out again
     return sim
 
 

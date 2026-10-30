@@ -441,7 +441,7 @@ class Engine(Telling, Effects):
         for tr in graph.inflows: # A birth rate for each level of a property of people would be births from the people at each level, which cannot be declared yet
             if tr.rate is None: # Driven by a flow (ss.birth(per=))
                 continue
-            dims = [dim for leaf in tr.rate.leaves if isinstance(leaf, ss.par) and isinstance(leaf.raw, ss.by) for dim in leaf.raw.dims]
+            dims = [dim for leaf in tr.rate.leaves if isinstance(leaf, ss.par) and isinstance(leaf.raw, (ss.by, ss.parameters.by_func)) for dim in leaf.raw.dims]
             others = [dim for dim in dims if sim.groups.strats[sim.groups.dim_index(dim)].kind != 'space']
             if tr.per_capita and others:
                 errormsg = (f'The birth rate of "{tr.name}" is given for each level of {sc.strjoin(others)}, which would be births from the people at each level into the first state; that cannot be declared yet. '
@@ -599,7 +599,7 @@ class Engine(Telling, Effects):
             return self.inflow_splits[name]
         if self.sim.mixing.space is not None and any(isinstance(leaf, ss.expressions.Count) for leaf in tr.rate.leaves): # A rate that uses the number in a place gives the inflow in that place
             return self.inflow_local[name]
-        given = [leaf.raw for leaf in tr.rate.leaves if isinstance(leaf, ss.par) and isinstance(leaf.raw, ss.by)]
+        given = [leaf.raw for leaf in tr.rate.leaves if isinstance(leaf, ss.par) and isinstance(leaf.raw, (ss.by, ss.parameters.by_func))]
         if given: # A rate given for each level of some dimensions is the inflow at that level, so is shared out over the other dimensions only
             dims = {self.sim.groups.dim_index(dim) for by in given for dim in by.dims}
             factors = self.inflow_factors[name]
