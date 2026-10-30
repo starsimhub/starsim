@@ -108,7 +108,6 @@ In Starsim, one model is run two ways, as compartments (`solver='binomial'`, sto
 
 ```{python}
 import starsim as ss
-ss.options(jupyter=True)
 
 S, I, R = ss.states('S I R')
 sir = ss.Disease(

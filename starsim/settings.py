@@ -98,7 +98,7 @@ class Options(sc.objdict):
         optdesc.max_steps = 'The number of timesteps above which a sim warns that it may be slow (0 to never warn)'
         options.max_steps = sc.parse_env('STARSIM_MAX_STEPS', 50_000, int) # More than a century at a daily step, which the textbooks' models run
 
-        optdesc.jupyter = 'Set whether to use Jupyter settings: -1=auto, 0=False, 1=True'
+        optdesc.jupyter = 'Set whether to use Jupyter settings (retina figures): -1=auto, 0=False, 1=True'
         options.jupyter = sc.parse_env('STARSIM_JUPYTER', -1, int)
 
         optdesc.style = 'Set the plotting style: choices are "starsim", "fancy", "simple", or any of Matplotlib\'s'
@@ -360,12 +360,12 @@ class Options(sc.objdict):
 
     @property
     def is_jupyter(self):
-        """ Check if we're in an Jupyter environment """
-        return [False, True, sc.isjupyter()][self.jupyter] # 0 = False, 1 = True, -1 = sc.isjupyter()
+        """ Check if we're in an Jupyter environment; jupyter=False doesn't change this, since a notebook still shows what is returned """
+        return self.jupyter == 1 or sc.isjupyter()
 
     def set_jupyter(self):
         """ Set Sciris' Jupyter settings as well """
-        sc.options(jupyter=self.is_jupyter)
+        sc.options(jupyter=bool(self.jupyter) and self.is_jupyter) # 0 = False, 1 = True, -1 = sc.isjupyter()
         return
 
     def set_precision(self, refresh=True):
@@ -471,6 +471,12 @@ if options.install_fonts:
 
 # Set the style
 options.set_style()
+
+# In a notebook, use Jupyter's settings (retina figures) as if ss.options(jupyter=True) had been called, unless another backend was chosen (e.g. %matplotlib widget)
+if options.jupyter and options.is_jupyter:
+    import matplotlib as mpl
+    if 'inline' in mpl.get_backend():
+        options.set_jupyter()
 
 
 def style(style=None, **kwargs):

@@ -15,7 +15,6 @@ A sim needs a model and, usually, a population and a time span. Here is a measle
 
 ```{python}
 import starsim as ss
-ss.options(jupyter=True)
 
 S, I, R = ss.states('S I R')
 beta = ss.par(1.9)                    # Transmission rate per day

@@ -23,7 +23,6 @@ Closing schools is one of the first measures considered against a new respirator
 
 ```{python}
 import starsim as ss
-ss.options(jupyter=True)
 
 S, E, I, R = ss.states('S E I R')
 flu = ss.Disease(

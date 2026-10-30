@@ -23,7 +23,6 @@ A sexually transmitted infection spreads only within partnerships, which form an
 
 ```{python}
 import starsim as ss
-ss.options(jupyter=True)
 
 S, I = ss.states('S I')
 infection = S >> I @ dict(sexual=ss.peract(m2f=0.08, f2m=0.05)) * I  # Per act, on the sexual network

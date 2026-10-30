@@ -19,7 +19,6 @@ Here is measles in a population of a million people over 30 years, with births a
 import numpy as np
 import starsim as ss
 import starsim.library as ssl
-ss.options(jupyter=True)
 
 S, I, R = ss.states('S I R')
 infection = S >> I @ 1.9*I        # β = 1.9 per day

@@ -74,9 +74,8 @@ class ClusterNet(ss.Network):
         sizes = np.empty(0, dtype=ss_int)
         while sizes.sum() < n:
             new = np.round(self.pars.cluster_size.rvs(n)).astype(ss_int) # n clusters is enough unless some have size 0
-            if not np.any(new > 0): # Avoid an infinite loop
-                errormsg = f'The cluster size distribution for {self.name} did not produce any clusters of size 1 or more: {self.pars.cluster_size}'
-                raise ValueError(errormsg)
+            if not sizes.size and not np.any(new > 0): # No clusters at all, e.g. a size of 0; as for an ss.RandomNet with no contacts, the network is empty
+                return
             sizes = np.concatenate([sizes, new[new > 0]])
         n_clusters = np.searchsorted(np.cumsum(sizes), n) + 1
         sizes = sizes[:n_clusters]
@@ -104,10 +103,13 @@ class HybridNet(ss.Network):
     """
     Covasim v3's "hybrid" population: households, schools, workplaces, and community
 
-    When added to a sim, this expands into four separate networks: households (`h`,
-    an `ssl.ClusterNet`), and schools (`s`), workplaces (`w`), and community (`c`), each
-    an `ss.RandomNet` with Poisson-distributed contacts. As in Covasim v3, the networks
-    are static, and schools and workplaces are random networks restricted by age.
+    When added to a sim, this expands into four separate networks: households (`h`),
+    schools (`s`), and workplaces (`w`), each an `ssl.ClusterNet`, and community (`c`),
+    an `ss.RandomNet` with Poisson-distributed contacts. Schools and workplaces are
+    restricted by age. As in Covasim v3, the networks are static; unlike it, schools and
+    workplaces are clusters by default, so that a person's contacts also know each other
+    (use `clustered=False` for Covasim v3's random networks). With the default Poisson
+    sizes, clusters give the same mean number of contacts as a random network.
     Each network can then be modified separately, e.g. `sim.networks.s`.
 
     The default `beta` values are Covasim v3's per-layer relative transmissibility,
@@ -123,7 +125,8 @@ class HybridNet(ss.Network):
         school_ages (list): the age range of agents in schools
         work_ages (list): the age range of agents in workplaces
         dynamic (bool): whether the networks are recreated on each timestep
-        method (str): how the targets of edges in schools, workplaces, and community are chosen (see `ss.RandomNet`); 'uniform' as in Covasim v3
+        method (str): how the targets of edges in random networks are chosen (see `ss.RandomNet`); 'uniform' as in Covasim v3
+        clustered (bool): if True (default), schools and workplaces are `ssl.ClusterNet`s, sized to give `contacts` for Poisson and constant distributions (other distributions are used directly as cluster sizes, which gives a different mean); if False, they are `ss.RandomNet`s, as in Covasim v3
 
     Examples:
         ```python
@@ -135,7 +138,7 @@ class HybridNet(ss.Network):
         hybrid = ssl.HybridNet(household_size=ss.poisson(3), contacts=dict(s=10))
         ```
     """
-    def __init__(self, pars=None, household_size=_, contacts=_, beta=_, school_ages=_, work_ages=_, dynamic=_, method=_, **kwargs):
+    def __init__(self, pars=None, household_size=_, contacts=_, beta=_, school_ages=_, work_ages=_, dynamic=_, method=_, clustered=_, **kwargs):
         super().__init__()
         self.define_pars(
             household_size = ss.poisson(lam=2.0), # Covasim v3 default (contacts['h'])
@@ -145,6 +148,7 @@ class HybridNet(ss.Network):
             work_ages = [22, 65],
             dynamic = False,
             method = 'fast',
+            clustered = True,
         )
         defaults = sc.dcp(sc.objdict(contacts=self.pars.contacts, beta=self.pars.beta))
         self.update_pars(pars, **kwargs)
@@ -158,10 +162,20 @@ class HybridNet(ss.Network):
         n = {k: ss.poisson(lam=v) if sc.isnumber(v) else v for k,v in p.contacts.items()}
         kw = dict(dynamic=p.dynamic, dt=self.t.dt, start=self.t.start, stop=self.t.stop) # Pass the timeline to each network # TODO: make this more general for one module creating another
         rkw = dict(method=p.method, **kw)
+
+        def group(name, label, ages):
+            """ Make a school or workplace network """
+            if p.clustered:
+                size = n[name]
+                if isinstance(size, ss.constant): # A cluster of N people gives each N-1 contacts (Poisson sizes already give the right mean)
+                    size = ss.constant(size.pars.v + 1)
+                return ClusterNet(name=name, label=label, cluster_size=size, age_range=ages, beta=p.beta[name], **kw)
+            return ss.RandomNet(name=name, label=label, n_contacts=n[name], age_range=ages, beta=p.beta[name], **rkw)
+
         networks = [
             ClusterNet(name='h', label='Households', cluster_size=p.household_size, beta=p.beta['h'], **kw),
-            ss.RandomNet(name='s', label='Schools', n_contacts=n['s'], age_range=p.school_ages, beta=p.beta['s'], **rkw),
-            ss.RandomNet(name='w', label='Workplaces', n_contacts=n['w'], age_range=p.work_ages, beta=p.beta['w'], **rkw),
+            group('s', 'Schools', p.school_ages),
+            group('w', 'Workplaces', p.work_ages),
             ss.RandomNet(name='c', label='Community', n_contacts=n['c'], beta=p.beta['c'], **rkw),
         ]
         return networks

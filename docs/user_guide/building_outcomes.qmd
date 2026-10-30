@@ -20,7 +20,6 @@ Every declared disease has a result for each state and each transition, named af
 
 ```{python}
 import starsim as ss
-ss.options(jupyter=True)
 
 S, E, I, R = ss.states('S E I R')
 infection = S >> E @ 1.9*I

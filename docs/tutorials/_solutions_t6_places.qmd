@@ -4,7 +4,6 @@ Each solution starts from the model of the tutorial, in four towns:
 
 ```{python}
 import starsim as ss
-ss.options(jupyter=True)
 
 towns = ss.geo.geography(
     names = ['Riverton', 'Hillside', 'Lakeview', 'Fairfield'],

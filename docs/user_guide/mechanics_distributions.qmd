@@ -19,7 +19,6 @@ A duration given as a single value, such as `I >> R @ ss.days(8)`, is the mean o
 import numpy as np
 import matplotlib.pyplot as plt
 import starsim as ss
-ss.options(jupyter=True)
 
 durations = {
     'Exponential':       ss.expon(scale=ss.days(10)),

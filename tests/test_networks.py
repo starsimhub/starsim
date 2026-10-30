@@ -515,9 +515,14 @@ def test_hybrid():
     assert np.all(sim.people.age[nets.s.members] < 22) # Schools are age-restricted
     assert nets.h.edges.beta[0] == 3.0 # Default v3 per-network beta
     assert nets.c.pars.n_contacts.pars.lam == 10 # Partial update of contacts
+    assert isinstance(nets.s, ssl.ClusterNet) and isinstance(nets.w, ssl.ClusterNet) # Clusters by default
+    constant = ss.Sim(n_agents=small, networks=ssl.HybridNet(contacts=dict(s=ss.constant(20))), verbose=0).init().networks.s
+    assert constant.pars.cluster_size.pars.v == 21 # A cluster of 21 gives 20 contacts each
+    closed = ss.Sim(n_agents=small, diseases='sis', networks=ssl.HybridNet(contacts=dict(s=0)), verbose=0).run()
+    assert len(closed.networks.s) == 0 and len(closed.networks.w) > 0 # No contacts is an empty network
 
-    # As in Covasim v3, choose the targets of random edges uniformly
-    sim2 = ss.Sim(n_agents=medium, diseases='sis', networks=ssl.HybridNet(method='uniform'), verbose=0).init()
+    # As in Covasim v3, use random schools and workplaces, and choose the targets of edges uniformly
+    sim2 = ss.Sim(n_agents=medium, diseases='sis', networks=ssl.HybridNet(clustered=False, method='uniform'), verbose=0).init()
     assert all(sim2.networks[k].pars.method == 'uniform' for k in ['s', 'w', 'c'])
     return sim
 

@@ -11,7 +11,6 @@ A model can go wrong in three ways: it stops with an error, it runs but gives an
 
 ```{python}
 import starsim as ss
-ss.options(jupyter=True)
 
 S, I, R = ss.states('S I R')
 infection = S >> I @ 1.9*I        # β = 1.9 per day
@@ -138,7 +137,6 @@ These are mistakes that have actually caught people out, collected from question
 
 ```{python}
 import starsim as ss
-ss.options(jupyter=True)
 
 def make_measles(beta=1.9):
     """ The measles SIR of the tutorials, with weekly reported cases (half of infections) """

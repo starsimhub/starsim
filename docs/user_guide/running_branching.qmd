@@ -36,7 +36,6 @@ Here is an influenza-like infection with R0 = 2 (β = 0.2 per day, infectious fo
 import numpy as np
 import matplotlib.pyplot as plt
 import starsim as ss
-ss.options(jupyter=True)
 
 S, I, R = ss.states('S I R')
 infection = S >> I @ 0.2*I        # β = 0.2 per day

@@ -25,7 +25,6 @@ Infection depends on the concentration of bacteria, with a dose-response curve t
 
 ```{python}
 import starsim as ss
-ss.options(jupyter=True)
 
 S, I, R = ss.states('S I R')
 W = ss.State(people=False) # Bacteria in the water: a count, not people

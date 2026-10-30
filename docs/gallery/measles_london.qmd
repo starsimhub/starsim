@@ -34,7 +34,6 @@ import matplotlib.pyplot as plt
 import scipy.stats as sps
 import sciris as sc
 import starsim as ss
-ss.options(jupyter=True)
 
 pars = sc.objdict(
     R0=56.8, sigma=28.9/365.25, gamma=30.4/365.25, mu=0.02/365.25, # Latent and infectious periods of about 12 days; deaths per day

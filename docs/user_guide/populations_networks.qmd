@@ -23,7 +23,6 @@ Here is the same disease under three kinds of mixing. With no route, β = 0.05 p
 ```{python}
 import starsim as ss
 import starsim.library as ssl
-ss.options(jupyter=True)
 
 S, I, R = ss.states('S I R')
 infection = S >> I @ 0.05*I       # β = 0.05: per day with no route, per contact with one
@@ -80,7 +79,7 @@ print('Number of households:', msim.sims[1].networks.households.n_clusters)
 
 Adding households raises the number infected at the endemic level: they reach children and older people, who have no contacts at work, and give each person a few more contacts. Each network's transmission is counted separately, so the same β applies on every layer unless it is given by route (see below).
 
-`ssl.HybridNet` gives the four layers of [Covasim](https://covasim.org/) in one: households (`h`, a `ssl.ClusterNet`), schools (`s`), workplaces (`w`), and the community (`c`), each a random network limited by age where it should be. Once in a sim, it becomes four networks, each reached (and changed) on its own, e.g. `sim.networks.s`; a `dt`, `start`, or `stop` given to it is passed to all four:
+`ssl.HybridNet` gives the four layers of [Covasim](https://covasim.org/) in one: households (`h`), schools (`s`), and workplaces (`w`), each a `ssl.ClusterNet` limited by age where it should be, and the community (`c`), a random network. Once in a sim, it becomes four networks, each reached (and changed) on its own, e.g. `sim.networks.s`; a `dt`, `start`, or `stop` given to it is passed to all four:
 
 ```{python}
 hybrid = ss.Sim(sis, networks=ssl.HybridNet(household_size=3), n_agents=2000, stop=ss.days(100), verbose=0)
@@ -225,7 +224,7 @@ The library (`import starsim.library as ssl`) has more:
 | Network | What it is | Main parameters |
 |---|---|---|
 | `ssl.ClusterNet` | Fully connected clusters, such as households | `cluster_size`, `dynamic`, `age_range` |
-| `ssl.HybridNet` | Households, schools, workplaces, and community, as in Covasim | `household_size`, `contacts`, `school_ages`, `work_ages` |
+| `ssl.HybridNet` | Households, schools, workplaces, and community, as in Covasim | `household_size`, `contacts`, `school_ages`, `work_ages`, `clustered` |
 | `ssl.StaticNet` | A fixed network from a NetworkX graph | `graph`, `p`, `n_contacts` |
 | `ssl.ErdosRenyiNet` | Each pair of people connected with a probability | `p`, `dur` |
 | `ssl.DiskNet` | People who move in a plane, in contact within a radius | `r`, `v` |

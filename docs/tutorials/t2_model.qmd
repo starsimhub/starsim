@@ -23,7 +23,6 @@ This is the model from Tutorial 1: measles in a town of 100,000 people, as an SI
 
 ```{python}
 import starsim as ss
-ss.options(jupyter=True) # Plots and tables suited to a notebook
 
 S, I, R = ss.states('S I R')
 infection = S >> I @ 1.9*I        # β = 1.9 per day

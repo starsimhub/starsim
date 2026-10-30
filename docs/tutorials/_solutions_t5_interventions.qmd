@@ -4,7 +4,6 @@ Each solution starts from the model of the tutorial:
 
 ```{python}
 import starsim as ss
-ss.options(jupyter=True)
 
 def make_measles(init_n=10):
     """ The measles model of T5, with the number infectious at the start given """

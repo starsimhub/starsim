@@ -23,7 +23,6 @@ Each transition says where people move from and to, and at what rate. These four
 
 ```{python}
 import starsim as ss
-ss.options(jupyter=True)
 
 spellings = {}
 

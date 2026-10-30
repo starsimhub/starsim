@@ -67,7 +67,6 @@ with three CSV files: the populations (9,000 and 1,000), the commuters (100 from
 ```{python}
 import numpy as np
 import starsim as ss
-ss.options(jupyter=True)
 
 pop     = dict(large_province=9000, small_province=1000)
 commute = [[0, 100/9000], [20/1000, 0]] # The share of each province's residents who travel to the other

@@ -19,7 +19,6 @@ The measles model from the core tutorials, in a town of 20,000 people:
 import numpy as np
 import matplotlib.pyplot as plt
 import starsim as ss
-ss.options(jupyter=True)
 
 S, I, R = ss.states('S I R')
 infection = S >> I @ 1.9*I        # β = 1.9 per day

@@ -18,7 +18,6 @@ This page covers how spending is put into a model, the search itself, limits on 
 ```{python}
 import numpy as np
 import starsim as ss
-ss.options(jupyter=True)
 
 S, I, R = ss.states('S I R')
 tests = ss.par(50e3, name='tests') # Spending on testing, in dollars

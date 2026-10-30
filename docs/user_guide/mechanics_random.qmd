@@ -35,7 +35,6 @@ The module draws from two Starsim distributions, one for each decision:
 
 ```{python}
 import starsim as ss
-ss.options(jupyter=True)
 
 class Fishing(ss.Module):
     """ Each person goes fishing with a chance p_fishing, and catches a fish with a chance p_catch """

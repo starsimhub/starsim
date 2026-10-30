@@ -17,7 +17,6 @@ Births and deaths for the whole population go in `demographics=`. `ss.birth(rate
 
 ```{python}
 import starsim as ss
-ss.options(jupyter=True)
 
 S, I, R = ss.states('S I R')
 infection = S >> I @ 1.9*I       # β = 1.9 per day

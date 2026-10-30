@@ -17,7 +17,6 @@ An SIR in a population of 1,000, with an infectious period of 10 days and β = R
 import numpy as np
 import matplotlib.pyplot as plt
 import starsim as ss
-ss.options(jupyter=True)
 
 def make_sir(R0):
     S, I, R = ss.states('S I R')

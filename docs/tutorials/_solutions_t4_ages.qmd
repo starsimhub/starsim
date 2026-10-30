@@ -4,7 +4,6 @@ Each solution starts from the model of the tutorial: measles in a town of 100,00
 
 ```{python}
 import starsim as ss
-ss.options(jupyter=True)
 
 def make_measles(immune=ss.by(age=[0.8, 0.92, 0.98])):
     """ The measles model of T4, with the share immune in each age group given """

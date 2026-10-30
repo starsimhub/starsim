@@ -30,7 +30,6 @@ Here is the SIR model of Tutorial 2 next to the SEIR model, both run for 150 day
 
 ```{python}
 import starsim as ss
-ss.options(jupyter=True) # Plots and tables suited to a notebook
 
 # The SIR model of Tutorials 1 and 2
 S, I, R = ss.states('S I R')

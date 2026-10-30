@@ -25,7 +25,6 @@ Here is the measles model over the first two months of 2025:
 
 ```{python}
 import starsim as ss
-ss.options(jupyter=True)
 
 S, I, R = ss.states('S I R')
 infection = S >> I @ ss.perday(1.9)*I # β = 1.9 per day
