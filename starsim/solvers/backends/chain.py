@@ -1,5 +1,5 @@
 """
-The chain-binomial and tau-leaping solvers in JAX: a whole run as one compiled function, with all of a step's draws in one native call
+Not for the user: the chain-binomial and tau-leaping solvers in JAX: a whole run as one compiled function, with all of a step's draws in one native call
 
 The rates come from `ss.gradients.Run.rates()` (the program's rates by group, in JAX, as
 for the ODE); the draws are the exact one-uniform draws of `_draws` (Numba), made for a
@@ -18,6 +18,8 @@ seeds or parameter sets) give the same draws as runs taken one at a time.
 Everything here is CPU only, and is imported only when used (it imports JAX; Numba caches the
 handler, so it compiles once per install, in about 20 s, with a note, or ahead of time with
 `ss.compile()`, or not at all with the Rust kernels; under `ss.options.kernels = 'python'`, the kernels take the run instead).
+
+Used with: compartments; declared modules
 """
 import os
 import re

@@ -34,6 +34,8 @@ their dampings (and the matrix the model uses at the start and either side of ea
 damping), and the run's times. For a graph, it is the first node's model, plus each
 node's model and each edge's mobility coefficients (`graph`); for a parameter study,
 also the number of runs (`study`).
+
+Used with: compartments; declared modules
 """
 import os
 import sys
@@ -561,7 +563,15 @@ def graph_dict(graph, t0=0.0, tmax=100.0, dt=0.5, function='MobilitySimulation')
 
 
 def dump(model, filename, runs=None, **kwargs):
-    """ Write the model or graph (and its run's times, as kwargs t0, tmax, dt; and the number of runs of a parameter study) to a JSON file """
+    """
+    Write the model or graph (and its run's times, as kwargs t0, tmax, dt; and the number of runs of a parameter study) to a JSON file
+
+    Args:
+        model (object): the MEmilio model or graph
+        filename (str): the JSON file to write
+        runs (int): the number of runs, for a parameter study
+        **kwargs (dict): the times of the run: `t0`, `tmax`, and `dt`
+    """
     is_graph = hasattr(model, 'num_nodes')
     d = graph_dict(model, **kwargs) if is_graph else model_dict(model, **kwargs)
     return write(d, filename, runs=runs)

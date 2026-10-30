@@ -17,6 +17,8 @@ arrays coupled by a contact matrix (`sum(s_ij[i, ])`), which become a stratifica
 with that matrix.
 `delay()` of a flow into a state becomes a fixed dwell time in that state. What is
 listed as not translated is left for a person, or the import-model skill, to add.
+
+Used with: compartments; declared modules
 """
 import re
 import ast

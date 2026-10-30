@@ -278,7 +278,7 @@ def starsim3(**kwargs):
 
 #%% All of them, by name
 
-models = sc.objdict(
+models = sc.obj(
     sir=sir, seir=seir, erlang=erlang, lognormal=lognormal, branching=branching, ages=ages, patches=patches, vaccination=vaccination,
     coinfection=coinfection, network=network, cholera=cholera, malaria=malaria, screening=screening, custom=custom, outcomes=outcomes,
     threshold=threshold, tb=tb, flu_rsv=flu_rsv, seasonal=seasonal, age_vaccine=age_vaccine, patch_matrix=patch_matrix,

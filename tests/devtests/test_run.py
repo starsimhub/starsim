@@ -15,15 +15,15 @@ sc.options(interactive=False) # Assume not running interactively
 
 
 def make_sim_pars(beta=0.1, **kwargs):
-    pars = sc.objdict(
+    pars = sc.obj(
         n_agents = n_agents,
         start = 2000,
         dur = 10,
         demographics = True,
         networks = 'random',
-        diseases = sc.objdict(type='sis', beta=beta), # To allow for modification later
+        diseases = sc.obj(type='sis', beta=beta), # To allow for modification later
     )
-    return sc.objdict(pars, **kwargs)
+    return sc.obj(pars, **kwargs)
 
 
 class BySex(ss.Analyzer):

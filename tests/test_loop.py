@@ -13,14 +13,14 @@ import starsim as ss
 
 sc.options(interactive=False) # Assume not running interactively
 
-pars = sc.objdict(
+pars = sc.obj(
     dur      = ss.years(20),
     n_agents = 1000,
     diseases = 'sis',
     networks = 'random',
 )
 
-small_pars = sc.objdict(
+small_pars = sc.obj(
     dur = 5,
     n_agents = 100,
     diseases = 'sis',
@@ -52,7 +52,7 @@ def test_run_options():
     assert df.time.dtype == float # Plain numbers, not durations (it showed days(0), day, days(2))
 
     # One time index during a step: every module sees the same one, the step's, where its results go (the first step is ti == 1)
-    seen = sc.objdict(rate=[], intv=[])
+    seen = sc.obj(rate=[], intv=[])
     def rate(sim):
         seen.rate.append(sim.ti)
         return 0.1
@@ -114,7 +114,7 @@ def test_callable_cache_cleanup():
     def custom_duration(module, sim, uids):
         return 5 + sim.people.age[uids] * 0
 
-    pars = sc.objdict(
+    pars = sc.obj(
         dur = 5,
         n_agents = 100,
         diseases = ss.SIR(init_prev=0.2, dur_inf=ss.normal(loc=custom_duration, scale=0.1)),

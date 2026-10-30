@@ -112,7 +112,7 @@ def seed_north(sim):
 @sc.timer()
 def test_states():
     sc.heading('Testing dimensions that apply to some states only')
-    sims = sc.objdict()
+    sims = sc.obj()
     for solver in solvers:
         malaria = make_malaria()
         states = malaria.states
@@ -142,7 +142,7 @@ def test_states():
         hiv.stratify(stage=['early', 'mid', 'late'], split=[1, 0, 0], states=[I], adjust={'recovery': [1.0, 0.5, 0.25]},
                      decline=ss.transfer(stage=('early', 'mid'), rate=0.05), decline2=ss.transfer(stage=('mid', 'late'), rate=0.05))
         return hiv
-    staged = sc.objdict({solver:run(make(), solver, unit='day', stop=300, total_pop=20_000) for solver in solvers})
+    staged = sc.obj({solver:run(make(), solver, unit='day', stop=300, total_pop=20_000) for solver in solvers})
     res = staged.ode.results.hiv
     assert np.allclose(res.infection.by('stage').values.sum(axis=0)[1:], 0) # Everyone starts in the first stage
     assert getattr(res.S, 'strata', None) is None # Susceptible people have no stage
@@ -198,7 +198,7 @@ def test_states():
 @sc.timer()
 def test_strains():
     sc.heading('Testing a strain: a new infection takes the strain of its source')
-    sims = sc.objdict()
+    sims = sc.obj()
     for solver in solvers:
         sims[solver] = run(make_tb(), solver, start=2000, stop=2050, dt=ss.years(0.1), total_pop=100_000)
     tb = sims.ode.diseases.tb
@@ -405,7 +405,7 @@ def test_strain_solvers():
 @sc.timer()
 def test_space():
     sc.heading('Testing places, with and without movement between them')
-    mobility = sc.objdict(
+    mobility = sc.obj(
         none    = None,
         gravity = ss.geo.gravity(k=2e-4), # Commuting, with the share of time away from the gravity model
         away    = ss.geo.Mobility(ss.geo.gravity(), away=0.2), # Commuting, with 20% of time spent away
@@ -413,7 +413,7 @@ def test_space():
         migrate = ss.geo.Mobility(ss.geo.gravity(k=2e-5), kind='migrate'),
         force   = ss.geo.Mobility(ss.geo.gravity(), away=0.2, kind='force'), # Nobody moves; 20% of each town's force of infection goes to the others
     )
-    peaks = sc.objdict()
+    peaks = sc.obj()
     for key,mob in mobility.items():
         for solver in solvers:
             sim = ss.Sim(make_towns(mobility=mob), stop=150, unit='day', solver=solver, total_pop=100_000, **(dict(n_agents=10_000) if solver == 'abm' else {}), **kw)
@@ -600,7 +600,7 @@ def test_mixing():
         sir.stratify(location=['urban', 'rural'], split=[0.7, 0.3])
         return sir
     mixing = ss.contacts(dict(age=[[0.2, 0.3], [0.5, 0.7]], location=[[0.8, 0.2], [0.2, 0.8]]))
-    sims = sc.objdict({solver:run(make(), solver, networks=mixing, total_pop=10_000, dt=0.1, stop=20) for solver in solvers})
+    sims = sc.obj({solver:run(make(), solver, networks=mixing, total_pop=10_000, dt=0.1, stop=20) for solver in solvers})
     res = sims.ode.results.sir
     assert sims.ode.groups.strats[0].kind == 'plain'
     attack = {(a,l):res.R.select(age=a, location=l)[-1]/res.S.select(age=a, location=l)[0] for a in ['young', 'old'] for l in ['urban', 'rural']}
@@ -728,7 +728,7 @@ def test_ragged():
         sir.stratify(sex=['female', 'male'])
         sir.stratify(age=[15, 25, 35, 50], where=dict(sex='female'), adjust=dict(recovery=[2, 1, 1, 0.5]))
         return sir
-    sims = sc.objdict({solver:run(make(), solver, unit='day', stop=150, total_pop=100_000) for solver in solvers})
+    sims = sc.obj({solver:run(make(), solver, unit='day', stop=150, total_pop=100_000) for solver in solvers})
     ode = sims.ode
     assert np.all(ode.groups.group_levels[ode.groups.group_coords[:, 0] == 1, 1] == -1) # Men have no age group
     res = ode.results.sir
@@ -874,7 +874,7 @@ def test_by_properties():
         clear_f = ss.Transition(A, R, dur=ss.lognorm_ex(ss.months(8), ss.months(2)), where=ss.ppl.female)
         clear_m = ss.Transition(A, S, dur=ss.lognorm_ex(mean=ss.by(sex=dict(female=ss.months(6), male=ss.months(6))), std=ss.months(3)), where=where_m)
         return ss.Disease(S, A, R, clear_f=clear_f, clear_m=clear_m, init=dict(S=0.5, A=0.5), name='d').stratify(sex=['female', 'male'])
-    left = sc.objdict()
+    left = sc.obj()
     for solver,pop in [('ode', dict(total_pop=20_000)), ('binomial', dict(total_pop=20_000)), ('abm', dict(n_agents=20_000))]:
         n = ss.Sim(clearance(), unit='month', dt=0.25, stop=10, solver=solver, verbose=0, **pop).run().results.d.A.by('sex').values
         left[solver] = n[32]/n[0] # Still infected at 8 months

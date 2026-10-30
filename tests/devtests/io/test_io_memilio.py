@@ -8,11 +8,11 @@ import pytest
 import sciris as sc
 import starsim as ss
 import paths
-from starsim.io.memilio import load_memilio
+from starsim.converters.memilio import load_memilio
 
 lfd = paths.lfd # The examples, with the originals' results, if this folder is here
 python = lfd / '_envs/memilio/bin/python' # MEmilio's environment
-dump = sc.path(ss.io.__file__).parent / 'memilio.py' # Run as a script in MEmilio's environment, it writes the model as JSON
+dump = sc.path(ss.converters.__file__).parent / 'memilio.py' # Run as a script in MEmilio's environment, it writes the model as JSON
 kw = dict(verbose=False)
 
 graph_script = '''
@@ -261,7 +261,7 @@ def test_examples(example, tmp_path):
     script = next((folder / 'original').glob('*.py'))
     path = tmp_path / 'model.json'
     subprocess.run([str(python), '-I', str(dump), str(script), str(path)], check=True, cwd=tmp_path, capture_output=True)
-    sim = ss.import_from(str(path), format=ss.io.sniff(str(path)), **kw).run()
+    sim = ss.import_from(str(path), format=ss.converters.sniff(str(path)), **kw).run()
     ref = pd.read_csv(folder / 'reference/results.csv')
     total = ref[ref.time == 0].value.sum()
     res = sim.results.osecir

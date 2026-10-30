@@ -5,12 +5,12 @@ Reading models from other frameworks into Starsim, writing Starsim models out to
 ```python
 sim = ss.import_from('model.yaml')                       # The format is told from the file where it can be
 ss.export_to(sim, 'sbml', filename='model.xml')
-sim = ss.io.convert('model.yaml', filename='model.py')   # Import, and save the Starsim code it wrote
+sim = ss.converters.convert('model.yaml', filename='model.py')   # Import, and save the Starsim code it wrote
 ```
 
 ## Importing
 
-Each importer reads its framework's model into an `ss.io.Source`, and `core.py` writes that as Starsim code by the same rules for every format, then runs the code to make the sim (the code is kept in `sim.imported.code`). `ss.io.importers` lists the formats:
+Each importer reads its framework's model into an `ss.converters.Source`, and `core.py` writes that as Starsim code by the same rules for every format, then runs the code to make the sim (the code is kept in `sim.imported.code`). `ss.converters.importers` lists the formats:
 
 | Framework | File |
 |---|---|
@@ -30,8 +30,8 @@ Some frameworks can't be installed alongside Starsim, so their models are first 
 
 ## Exporting
 
-`export.py` writes a sim's declared diseases as SBML or odin (`ss.export_to()`, with the formats in `ss.io.exporters`), listing what the format can't carry, and a MultiSim's runs as a submission to a forecast hub (`ss.io.to_hub()`).
+`export.py` writes a sim's declared diseases as SBML or odin (`ss.export_to()`, with the formats in `ss.converters.exporters`), listing what the format can't carry, and a MultiSim's runs as a submission to a forecast hub (`ss.converters.to_hub()`).
 
 ## Migrating
 
-`migrate.py` rewrites Starsim 3 code for Starsim 4: `python -m starsim.io.migrate mypackage/`.
+`migrate.py` rewrites Starsim 3 code for Starsim 4: `python -m starsim.converters.migrate mypackage/`.

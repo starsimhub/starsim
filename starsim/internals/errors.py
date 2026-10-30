@@ -6,6 +6,8 @@ that is not found); the few kept as classes here are those that code may want to
 catch by kind, e.g. `ss.CapabilityError`. A note is a line about something that
 was assumed or approximated: it is kept in `sim.notes` and printed when `verbose`
 is 1 or more (see `ss.note()`).
+
+Used with: agents and compartments; declared and coded modules
 """
 import sciris as sc
 import starsim as ss

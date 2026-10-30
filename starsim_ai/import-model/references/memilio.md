@@ -6,7 +6,7 @@ MEmilio is a C++ library with Python bindings (`memilio.simulation`) for compart
 
 ## Getting the model out
 
-The ODE models `osir`, `oseir`, `oseirdb`, and `osecir` import mechanically. The model is built in MEmilio's own environment and written to JSON by `starsim/io/memilio.py`, which needs only MEmilio's Python bindings. It runs the script as it is and records the first model the script simulates (with `simulate()`, `simulate_flows()`, a `Simulation` or `MobilitySimulation` that is advanced, or a `ParameterStudy` or `GraphParameterStudy` that is run):
+The ODE models `osir`, `oseir`, `oseirdb`, and `osecir` import mechanically. The model is built in MEmilio's own environment and written to JSON by `starsim/converters/memilio.py`, which needs only MEmilio's Python bindings. It runs the script as it is and records the first model the script simulates (with `simulate()`, `simulate_flows()`, a `Simulation` or `MobilitySimulation` that is advanced, or a `ParameterStudy` or `GraphParameterStudy` that is run):
 
 ```bash
 python memilio.py ode_secir_simple.py model.json          # a script that runs a simulation

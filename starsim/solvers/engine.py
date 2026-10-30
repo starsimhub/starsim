@@ -1,5 +1,9 @@
 """
-The base of the engines that run a declared model (`Engine`), and what they share
+Not for the user: the base of the engines that run a declared model (`Engine`), and what they share
+
+It exists so that the solvers read one model the same way. What it gives modules that act on a disease (`Effects`) applies to diseases written as code too, through `ss.solvers.Undeclared`.
+
+Used with: agents and compartments; declared and coded modules
 """
 import zlib
 import inspect
@@ -174,6 +178,8 @@ class CountState:
     """
     A state as it is at run time when it holds a count rather than agents
 
+    It exists so that code reading a state, such as `dis.I`, also works in a compartmental run.
+
     Args:
         engine (Engine): the engine that holds the values
         state (`ss.State`): the declared state
@@ -267,7 +273,11 @@ class Evaluating:
 
 
 class Telling:
-    """ The notes and warnings about a layout (of an engine, or of the mixing), which are held while it is made to choose the solver (see `ss.solvers.choose.lay_out()`), and said only once it is used """
+    """
+    The notes and warnings about a layout (of an engine, or of the mixing), which are held while it is made to choose the solver (see `ss.solvers.choose.lay_out()`), and said only once it is used
+
+    It exists so that a layout tried and not used says nothing.
+    """
     unsaid = None # The notes and warnings held, as calls; None to say them at once
 
     def tell(self, func, *args, **kwargs):
@@ -286,7 +296,7 @@ class Telling:
         return
 
 
-class Effects:
+class Effects(sc.prettyobj):
     """
     What the engine of every disease gives the modules that act on it, whether the disease is declared or written as code: the modifiers
     and products active on its quantities (`mult_raw()`, `contact_mult()`), for the people their conditions select (`selector`), in the sim's unit
@@ -373,6 +383,8 @@ class Engine(Telling, Effects):
     """
     Base class for the engines that run a graph
 
+    It exists to keep what does not depend on the solver in one place.
+
     Args:
         module (`ss.Module`): the module whose graph is run
         sim (`ss.Sim`): the sim
@@ -389,9 +401,9 @@ class Engine(Telling, Effects):
         self.arities = dict() # The number of arguments of each user function: see n_args()
         self.held_series = dict() # Values that vary in time, at the start of each step of the sim: see held_value()
         self.rng = self.make_rng() # For draws that are not per agent
-        self.dwells = sc.objdict() # Dwell-time information for each transition that has one
-        self.flowcounts = sc.objdict({name:0.0 for name in list(self.graph.transitions) + self.graph.destinations()}) # Events in the current step, and those of each destination of a transition with several ('cin.X')
-        self.stocks = sc.objdict() # The number in each state at the start of the step
+        self.dwells = sc.obj() # Dwell-time information for each transition that has one
+        self.flowcounts = sc.obj({name:0.0 for name in list(self.graph.transitions) + self.graph.destinations()}) # Events in the current step, and those of each destination of a transition with several ('cin.X')
+        self.stocks = sc.obj() # The number in each state at the start of the step
         self._by_group = False # Whether rates are being worked out for groups rather than for agents (in an agent-based run, for the states that are counts)
         self.strain = None # The position of the module's strain dimension, if it has one
         self.move_levels = dict() # For each transition with move=: see moves()
@@ -447,12 +459,12 @@ class Engine(Telling, Effects):
                 errormsg = (f'The birth rate of "{tr.name}" is given for each level of {sc.strjoin(others)}, which would be births from the people at each level into the first state; that cannot be declared yet. '
                             f'Give one birth rate, or a total inflow for each level that people arrive at (ss.null >> {tr.dst[0].name} @ ss.by({others[0]}=[...])).')
                 raise ValueError(errormsg)
-        self.applies = sc.objdict() # For each state: whether each dimension applies to it
-        self.state_split = sc.objdict() # The share of a state's initial people (or count) in each group
-        self.inflow_splits = sc.objdict() # Where an inflow into each state arrives
-        self.inflow_factors = sc.objdict() # The same, as a factor for each dimension
-        self.inflow_local = sc.objdict() # The same, for an inflow whose rate is worked out for each place, so is already the inflow there
-        self.collapse = sc.objdict() # The group that each group's members are counted in
+        self.applies = sc.obj() # For each state: whether each dimension applies to it
+        self.state_split = sc.obj() # The share of a state's initial people (or count) in each group
+        self.inflow_splits = sc.obj() # Where an inflow into each state arrives
+        self.inflow_factors = sc.obj() # The same, as a factor for each dimension
+        self.inflow_local = sc.obj() # The same, for an inflow whose rate is worked out for each place, so is already the inflow there
+        self.collapse = sc.obj() # The group that each group's members are counted in
         self.maps = dict()
         for state in graph.states.values():
             flags = []
@@ -935,10 +947,10 @@ class Engine(Telling, Effects):
         """ The multiplier on each transition in each group, from the adjust= of every stratification """
         sim = self.sim
         self.check_counted_strains()
-        self.adjust = sc.objdict({name:None for name in self.graph.transitions})
+        self.adjust = sc.obj({name:None for name in self.graph.transitions})
         self.branch_adjust = dict() # For a branch chosen with p=: a multiplier on its probability, as for a modifier on it (TL16: the dwell time was divided instead)
-        self.adjust_dims = sc.objdict({name:set() for name in self.graph.transitions}) # The dimensions each transition's multiplier is by
-        self.strain_adjust = sc.objdict({name:None for name in self.graph.transitions}) # For a transmission: a multiplier for each strain, which is the strain of the person it comes from
+        self.adjust_dims = sc.obj({name:set() for name in self.graph.transitions}) # The dimensions each transition's multiplier is by
+        self.strain_adjust = sc.obj({name:None for name in self.graph.transitions}) # For a transmission: a multiplier for each strain, which is the strain of the person it comes from
         self.rel_adjust = dict(rel_trans=[], rel_sus=[]) # Multipliers on infectiousness and susceptibility, as (dimension, value for each level), for the states the dimension applies to
         for strat in self.graph.strats + [s for s in sim.groups.sim_strats if s not in self.graph.strats]:
             d = sim.groups.dim_index(strat.name)
@@ -1003,7 +1015,7 @@ class Engine(Telling, Effects):
         funcs = {getattr(f, '__name__', 'a function'):f for f in self.graph.funcs.values()}
         funcs.update({getattr(p.raw, '__name__', 'a function'):p.raw for p in self.graph.all_pars() if callable(p.raw) and not isinstance(p.raw, (ss.Dist, ss.parameters.TimeValue))})
         for fname,func in funcs.items():
-            source = ss.presentation.func_source(func) or ''
+            source = ss.display.func_source(func) or ''
             read = [name for name in modified if re.search(rf'\bpars\.{name}\b|\[[\'"]{name}[\'"]\]', source)]
             if read:
                 ss.note(f'{sc.strjoin(read)} of "{self.mod.name}" {"is" if len(read) == 1 else "are"} changed by a modifier and read inside {fname}: arithmetic on the parameter there (e.g. 1 - {self.mod.name}.pars.{read[0]}) gives the changed value, but float(par), par.value, and par.raw give the value without the change', sim=self.sim)
@@ -1031,7 +1043,7 @@ class Engine(Telling, Effects):
         """
         nkey, route = self._route
         if isinstance(raw, dict):
-            val = ss.utils.route_beta(raw, nkey)
+            val = ss.networks.route_beta(raw, nkey)
             if val is None:
                 raise ValueError(f'beta for "{self.mod.name}" has keys {list(raw.keys())}, but there is a network called "{nkey}" with no value.')
             raw = val
@@ -1393,8 +1405,8 @@ class Engine(Telling, Effects):
     def init_fractions(self):
         """ The fraction of people who start in each state, and the count in each state that is not people """
         graph = self.graph
-        fracs = sc.objdict({s.name:0.0 for s in graph.people_states})
-        counts = sc.objdict({s.name:0.0 for s in graph.count_states})
+        fracs = sc.obj({s.name:0.0 for s in graph.people_states})
+        counts = sc.obj({s.name:0.0 for s in graph.count_states})
         for state in graph.states.values():
             is_n = state.init_n is not None # init_n= is a number of people, and init= a share of them (or, for a state that is not people, its amount)
             init = state.init_n if is_n else state.init
@@ -1624,13 +1636,13 @@ class Engine(Telling, Effects):
 
         # Stratified results are one result with a dimension for each stratification: see res.select() and res.by()
         ng = self.sim.groups.n_groups
-        self.stock_groups = sc.objdict()
-        self.flow_groups = sc.objdict()
+        self.stock_groups = sc.obj()
+        self.flow_groups = sc.obj()
         self.rows = self.group_ti = None # The row of each time point in the results by group, and the time point of each row, if they are kept every few steps: see ss.solvers.group_rows()
-        self.row_flows = sc.objdict() # Then, the flows by group so far in the current row
+        self.row_flows = sc.obj() # Then, the flows by group so far in the current row
         if ng > 1:
             names = [strat.name for strat in self.sim.groups.strats]
-            dims = sc.objdict() # The dimensions of each result
+            dims = sc.obj() # The dimensions of each result
             for state in graph.states.values():
                 dims[state.name] = self.applies[state.name]
             for name,tr in graph.transitions.items():
@@ -1639,8 +1651,8 @@ class Engine(Telling, Effects):
                     dims[f'{name}.{end}'] = dims[name]
             for name in graph.transfers:
                 dims[name] = np.ones(len(names), dtype=bool)
-            self.ratios = sc.objdict() # The results that are a ratio of two sums of states, as (numerator, denominator)
-            self.denom_dims = sc.objdict() # For a ratio whose denominator has fewer dimensions than its numerator: the denominator's
+            self.ratios = sc.obj() # The results that are a ratio of two sums of states, as (numerator, denominator)
+            self.denom_dims = sc.obj() # For a ratio whose denominator has fewer dimensions than its numerator: the denominator's
             for name,expr in graph.exprs.items(): # A sum of states (or flows) that all have the same dimensions has them too; so does a ratio of two, which keeps both, so that selecting groups adds up each before dividing
                 parts = ratio_parts(expr)
                 plain = all(all(isinstance(leaf, (ss.expressions.Stock, ss.par, ss.expressions.Flow)) for leaf in part.leaves) and not any(op in ss.expressions.format_expr(part) for op in ['/', '**']) for part in parts)
@@ -1683,10 +1695,10 @@ class Engine(Telling, Effects):
         """
         mod = self.mod
         sim = self.sim
-        self.derived_res = sc.objdict() # The stratification of each result kept by one
-        self.stock_derived = sc.objdict()
-        self.flow_derived = sc.objdict()
-        self.derived_trs = sc.objdict() # The stratification each transition is recorded by
+        self.derived_res = sc.obj() # The stratification of each result kept by one
+        self.stock_derived = sc.obj()
+        self.flow_derived = sc.obj()
+        self.derived_trs = sc.obj() # The stratification each transition is recorded by
         ng = sim.groups.n_groups
         names = [s.name for s in sim.groups.strats]
         for strat in self.graph.derived:
@@ -1718,7 +1730,7 @@ class Engine(Telling, Effects):
         trans = ss.transitions
         abm = self.solver == 'abm'
         dt = self.dt
-        self.outcomes = sc.objdict()
+        self.outcomes = sc.obj()
         todo = dict(graph.outcomes)
         while todo: # Outcomes can chain, so compute each one after its sources
             progress = False
@@ -1732,7 +1744,7 @@ class Engine(Telling, Effects):
                     sources.append((key, weight))
                 if any(key in todo for key,weight in sources):
                     continue
-                info = sc.objdict(sources=sources, now=0.0, n=0.0)
+                info = sc.obj(sources=sources, now=0.0, n=0.0)
 
                 # The delay, as the share of events that are reported after each number of steps
                 delay = oc.delay
@@ -1886,8 +1898,8 @@ class Engine(Telling, Effects):
         if not extra:
             return self.stocks, self.stock_groups
         people = [state.name for state in self.graph.people_states]
-        stocks = sc.objdict(self.stocks)
-        stock_groups = sc.objdict(self.stock_groups)
+        stocks = sc.obj(self.stocks)
+        stock_groups = sc.obj(self.stock_groups)
         first = self.graph.first
         if any(self.mod is mod for mod in sim.diseases()): # In its first state
             if first.people:
@@ -1934,7 +1946,7 @@ class Engine(Telling, Effects):
             res[key].store_group(ti, self.stock_derived.get(key, 0.0) if key in self.graph.states else self.flow_derived.get(key, 0.0))
         if self.rows is not None: # The flows by group so far in this row, for the results worked out from them
             if ti == 0 or self.rows[ti] != self.rows[ti-1]:
-                self.row_flows = sc.objdict()
+                self.row_flows = sc.obj()
             for name,val in self.flow_groups.items():
                 self.row_flows[name] = self.row_flows.get(name, 0) + val
         if graph.exprs:
@@ -1984,7 +1996,7 @@ class Engine(Telling, Effects):
                     raise KeyError(errormsg)
             own = [name for name in (states or []) if name in placed]
             shift = {name:to for name,to in zip(states, to_states) if name in placed} if to_states is not None else {} # Where the people chosen from each state go
-            out.append(sc.objdict(states=states, to_states=to_states, chosen=own or placed, added=own or placed[:1], shift=shift))
+            out.append(sc.obj(states=states, to_states=to_states, chosen=own or placed, added=own or placed[:1], shift=shift))
         if np.any((ev.src < 0) & np.array([key[0] is None for key in ev.sets], dtype=bool)[ev.set_of]):
             ss.note(f'people added by the movement register go into {placed[0]}, the first state of "{self.mod.name}", since the register does not name states for them', sim=sim)
         return out
@@ -2023,9 +2035,11 @@ class Engine(Telling, Effects):
         return
 
 
-class StockCtx:
+class StockCtx(sc.prettyobj):
     """
     Evaluates result expressions (sums and ratios of states, and of flows) from the counts after the step
+
+    It exists so that results are worked out the same way for every solver.
 
     Args:
         engine (`ss.solvers.Engine`): the engine

@@ -1,5 +1,9 @@
 """
-The compartmental engine: a declared model run as groups of people (`ode`, `binomial`, `gillespie`, and tau-leaping)
+Not for the user: the compartmental engine: a declared model run as groups of people (`ode`, `binomial`, `gillespie`, and tau-leaping)
+
+It exists so that a model with nothing per person can run faster than as agents, from the same declaration.
+
+Used with: compartments; declared modules
 """
 import importlib
 import numpy as np
@@ -82,10 +86,12 @@ def run_many_parts(owner, rngs, ys, args, per_step, n_cols, outputs, state_of, r
     return
 
 
-class Compartmental(ss.utils.NoDists, Engine): # Never searched for distributions: it draws from its own generator, and the distributions in the model are found through its graph
+class Compartmental(Engine): # Never searched for distributions (see ss.dists.no_dists()): it draws from its own generator, and the distributions in the model are found through its graph
     """
     Runs a graph as compartments: deterministically (`ode`) or stochastically
     (`binomial`, `gillespie`, or `tau`, the exact solver's fallback for long runs)
+
+    It exists so that the deterministic and stochastic forms share one engine.
 
     The states are expanded into compartments (one per branch and sub-stage) and the
     transitions into a flat list of flows, each with a source compartment, a rate,
@@ -165,7 +171,7 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
                 rates = self.aging_rates(strat)/ss.years(1).to(sim.unit_base).value
                 src = np.flatnonzero(coords[:, d] < strat.n - 1)
                 matrix = self.mover_matrix(src, src + int(mults[d]), rates[coords[src, d]])
-                self.movers.append(sc.objdict(name=None, comps=comps, matrix=matrix, transfer=None))
+                self.movers.append(sc.obj(name=None, comps=comps, matrix=matrix, transfer=None))
         for name,tf in graph.transfers.items():
             d = sim.groups.dim_index(tf.dim)
             strat = sim.groups.strats[d]
@@ -186,26 +192,26 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
             if s is not None: # Erlang stages (see ss.dimensions.transfer_stages()): up a stage at k over the mean, and from the last to the level it moves to, at its first stage
                 src = src[sim.groups.group_inside[src, s]] if sim.groups.group_fold is not None else src
                 up = coords[src, s] < k - 1
-                self.movers.append(sc.objdict(name=None, comps=comps, matrix=self.mover_matrix(src[up], src[up] + int(mults[s]), float(k)), transfer=tf, dest=None))
+                self.movers.append(sc.obj(name=None, comps=comps, matrix=self.mover_matrix(src[up], src[up] + int(mults[s]), float(k)), transfer=tf, dest=None))
                 src = src[~up]
                 shift = (k - 1)*int(mults[s])
             moved = [src + (np.broadcast_to(dst, (ng,))[src] - coords[src, d])*int(mults[d]) - shift for dst in dsts]
             matrix = self.mover_matrix(np.tile(src, len(dsts)), np.concatenate(moved), np.repeat(np.arange(1.0, len(dsts) + 1), len(src))) # Tagged by the level each entry moves people to
             dest = matrix.data.astype(int) - 1 if tf.p is not None else None # With several, the share of each is applied with the rate: see mover_rates()
             matrix.data[:] = float(k)
-            self.movers.append(sc.objdict(name=name, comps=comps, matrix=matrix, transfer=tf, dest=dest))
+            self.movers.append(sc.obj(name=name, comps=comps, matrix=matrix, transfer=tf, dest=dest))
         if sim.mixing.migration is not None and graph.people_states and shared: # People relocating between places
             d = sim.mixing.space
             rates = sim.mixing.migration
             src, dst = np.nonzero(rates[coords[:, d]]) # Each group, and each place its people move to
             matrix = self.mover_matrix(src, src + (dst - coords[src, d])*int(mults[d]), rates[coords[src, d], dst])
-            self.movers.append(sc.objdict(name=None, comps=self.people_comps, matrix=matrix, transfer=None, places=(src, dst, int(mults[d])))) # Where each entry goes, for a restart with new rates: see restart_movement()
+            self.movers.append(sc.obj(name=None, comps=self.people_comps, matrix=matrix, transfer=None, places=(src, dst, int(mults[d])))) # Where each entry goes, for a restart with new rates: see restart_movement()
         for move in (sim.groups.dim_moves if shared else []): # Movement that belongs to the sim, not to this module: e.g. the protection of a product waning
             d = sim.groups.dim_index(move.dim)
             src = np.flatnonzero(coords[:, d] == move.src)
             matrix = self.mover_matrix(src, src + (move.dst - move.src)*int(mults[d]), 1/self.convert(move.dur))
             comps = [ind for state in graph.people_states if self.applies[state.name][d] for ind in self.state_comps[state.name]]
-            self.movers.append(sc.objdict(name=None, comps=comps, matrix=matrix, transfer=None))
+            self.movers.append(sc.obj(name=None, comps=comps, matrix=matrix, transfer=None))
         for mover in self.movers: # The people due to leave a conveyor leave it over the step (in the ODE), so are not moved between groups within it
             mover.comps = [c for c in mover.comps if c not in self.leaving]
         return
@@ -315,8 +321,8 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
         """ Expand the states into compartments and the transitions into flows """
         graph = self.graph
         self.comps = [] # One per (state, track, stage)
-        self.state_comps = sc.objdict({name:[] for name in graph.states})
-        self.tracks = sc.objdict() # For each state: the tracks an arrival is split between
+        self.state_comps = sc.obj({name:[] for name in graph.states})
+        self.tracks = sc.obj() # For each state: the tracks an arrival is split between
         self.flows = []
         self.init_triggers()
         self.tr_index = {name:i for i,name in enumerate(list(graph.transitions) + graph.destinations())} # After the transitions, the flow to each destination of a transition with several ('cin.X')
@@ -581,7 +587,7 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
         too (see `Agents.stayed()`). A dwell time with a minimum stay starts after it, so its stages come
         after the conveyor; a fixed delay with one is a longer conveyor (see `delay_steps()`).
         """
-        stays = sc.objdict()
+        stays = sc.obj()
         for tr in competing + staged + exits.contact:
             after = getattr(tr, 'after', None)
             if after is None:
@@ -602,7 +608,7 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
         """ Set the initial conditions """
         fracs, counts = self.init_fractions()
         self.update_targets()
-        amounts = sc.objdict({name:frac*self.total_pop*self.state_split[name] for name,frac in fracs.items()})
+        amounts = sc.obj({name:frac*self.total_pop*self.state_split[name] for name,frac in fracs.items()})
         first = self.graph.first.name if self.graph.people_states else None
         if first in amounts and len(amounts) > 1: # The first state has the rest of the people in each of its groups (which, for a dimension it does not have, take in every level)
             others = np.broadcast_to(sum(val for name,val in amounts.items() if name != first), (self.n_groups,))
@@ -840,7 +846,7 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
         for row,p,fixed in pars.values():
             if fixed:
                 consts[row] = float(p.raw)
-        self.tape = sc.objdict(
+        self.tape = sc.obj(
             roots  = roots, # The position of each expression on the tape, by its id
             held   = held,
             pars   = [(row, p) for row,p,fixed in pars.values() if not fixed], # Those worked out each step
@@ -1302,7 +1308,7 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
 
     def update_targets(self):
         """ Work out where each flow's arrivals go; done once per step, since branch probabilities can change (and only worked out again if they have) """
-        probs = sc.objdict()
+        probs = sc.obj()
         for name,tracks in self.tracks.items():
             plain = [tr for tr in tracks if not getattr(tr, 'trigger', False)]
             apart = [track for track in plain if getattr(track, 'apart', False)]
@@ -1317,7 +1323,7 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
                     masks.append(mask)
                     left = left - mask
                 probs[name] = [p*left for p in probs[name]] + masks
-        dests = sc.objdict() # The probability of each destination of each transition, worked out once
+        dests = sc.obj() # The probability of each destination of each transition, worked out once
         def dest_probs(tr):
             if tr.name not in dests:
                 dests[tr.name] = self.branch_probs(tr)
@@ -1327,7 +1333,7 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
         if last is not None and len(last) == len(key) and all(np.array_equal(a, b) for a,b in zip(last, key)):
             return
         self._target_key = key
-        self.entry = sc.objdict() # For each state: [(compartment, weight)] and [(transition index, weight, parent)], where a credit's parent is the one it is nested in (its index in the list), or -1
+        self.entry = sc.obj() # For each state: [(compartment, weight)] and [(transition index, weight, parent)], where a credit's parent is the one it is nested in (its index in the list), or -1
 
         def enter(name, weight, comps, credits, path=(), parent=-1):
             if name in path: # The same-step cascade, by construction: see ss.solvers.Agents.junctions
@@ -1528,7 +1534,7 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
         flow.routes = None
         if flow.kind != 'contact':
             return None
-        nets = {ss.utils.standardize_netkey(name):net for name,net in self.sim.all_networks().items()}
+        nets = {ss.networks.standardize_netkey(name):net for name,net in self.sim.all_networks().items()}
         terms = self.sim.mixing.terms
         lasting = any('partnership' in term for term in terms) # Under the partner-change model, by source state
         acts = lasting or any(getattr(net, 'has_acts', False) for net in nets.values())
@@ -1538,8 +1544,8 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
         if betas:
             raw = betas[0].raw
             def route(term, state=None): # The keys of a dict are checked when the sim is initialized
-                key = ss.utils.standardize_netkey(term.name)
-                val = ss.utils.route_beta(raw, term.name) if isinstance(raw, dict) else raw
+                key = ss.networks.standardize_netkey(term.name)
+                val = ss.networks.route_beta(raw, term.name) if isinstance(raw, dict) else raw
                 net = nets.get(key)
                 if 'partnership' in term:
                     return self.partnership_chance(val, net, term, flow, state)
@@ -1718,7 +1724,7 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
                     plains[k] = not isinstance(e, (ss.State, ss.expressions.Prop)) and not (isinstance(e, ss.par) and id(e) in self.func_exprs)
             return plains[k]
 
-        shared = sc.objdict(common={}, local={}, done={}, uses={}) # The register of each part several rates share, and of each one rate uses twice; those worked out so far; and the uses in the rate being flattened
+        shared = sc.obj(common={}, local={}, done={}, uses={}) # The register of each part several rates share, and of each one rate uses twice; those worked out so far; and the uses in the rate being flattened
 
         def flatten(expr, strain, routes=None, rtr=None, keep=True):
             """
@@ -2547,13 +2553,13 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
         states = list(graph.states)
         n_flows = self.n_trans + len(self.movers)
         kept_s, kept_f = self.group_needs()
-        totals = sc.objdict(stocks=np.zeros((len(states), npts)), flows=np.zeros((n_flows, npts)))
-        groups = sc.objdict(stocks=np.zeros((len(ends), len(kept_s), ng)), flows=np.zeros((len(ends), len(kept_f), ng))) # Only those needed
+        totals = sc.obj(stocks=np.zeros((len(states), npts)), flows=np.zeros((n_flows, npts)))
+        groups = sc.obj(stocks=np.zeros((len(ends), len(kept_s), ng)), flows=np.zeros((len(ends), len(kept_f), ng))) # Only those needed
         pos_s, pos_f = {i:j for j,i in enumerate(kept_s)}, {i:j for j,i in enumerate(kept_f)}
         grouped = self.outcomes and ng > 1 # Outcomes are then worked out by group, from the flows they come from by group at each step
         sources = sorted({key for info in self.outcomes.values() for key,weight in info.sources if key in self.tr_index}) if grouped else []
         whole = grouped and not any(isinstance(weight, ss.expressions.Expr) for info in self.outcomes.values() for key,weight in info.sources) # For the whole run at once (see derived_outcomes()), unless a weight is an expression, which can change in time: then a step at a time, as a stepped run does
-        src = sc.objdict({key:np.zeros((npts, ng)) for key in sources}) if whole else None # The flows the outcomes come from, by step and group
+        src = sc.obj({key:np.zeros((npts, ng)) for key in sources}) if whole else None # The flows the outcomes come from, by step and group
         if grouped:
             for name in self.outcomes:
                 for key in [name, f'n_{name}']:
@@ -2574,11 +2580,11 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
                 for j,ti in enumerate(tis):
                     mod.t.ti = ti
                     self.cache.clear() # Values held for a step (see Engine.call() and by_group()) are for another step
-                    self.flow_groups = sc.objdict({key:flows[j, self.tr_index[key]] for key in sources})
+                    self.flow_groups = sc.obj({key:flows[j, self.tr_index[key]] for key in sources})
                     self.step_outcomes()
         if whole:
             tis = np.arange(npts)
-            for key,vals in self.derived_outcomes(sc.objdict({key:vals.T for key,vals in src.items()})).items():
+            for key,vals in self.derived_outcomes(sc.obj({key:vals.T for key,vals in src.items()})).items():
                 vals = np.ascontiguousarray(vals.T) # Steps by groups
                 res[key][:] = vals.sum(axis=1)
                 if getattr(res[key], 'strata', None) is not None:
@@ -2586,19 +2592,19 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
                         add_rows(res[key].strata, rows, tis, vals)
                     else: # The number at the end of each row
                         at_ends(res[key].strata, rows, ends, tis, vals)
-        self.flow_groups = sc.objdict()
+        self.flow_groups = sc.obj()
         self.sim.t.ti = mod.t.ti = npts - 1
         store = self.store_run
         stock_g = lambda i: groups.stocks[:, pos_s[i]] if i in pos_s else None # By group, if needed
         flow_g = lambda ind: groups.flows[:, pos_f[ind]] if ind in pos_f else None
-        n = sc.objdict({name:store(name, totals.stocks[i], stock_g(i)) for i,name in enumerate(states)})
-        new = sc.objdict({name:store(name, totals.flows[ind], flow_g(ind)) for name,ind in self.tr_index.items()})
+        n = sc.obj({name:store(name, totals.stocks[i], stock_g(i)) for i,name in enumerate(states)})
+        new = sc.obj({name:store(name, totals.flows[ind], flow_g(ind)) for name,ind in self.tr_index.items()})
         for name,ind in self.transfer_index.items():
             store(name, totals.flows[ind], flow_g(ind))
         derived = self.derived(n, new, outcomes=not grouped)
         stratified = [name for name in self.ratio_names() if getattr(res[name], 'strata', None) is not None]
         if stratified: # Sums and ratios of states by group: from the states at the end of each row, and the flows over it
-            ctx = StockCtx(self, sc.objdict({name:stock_g(i) for i,name in enumerate(states)}), sc.objdict({name:flow_g(ind) for name,ind in self.tr_index.items()}))
+            ctx = StockCtx(self, sc.obj({name:stock_g(i) for i,name in enumerate(states)}), sc.obj({name:flow_g(ind) for name,ind in self.tr_index.items()}))
             for name in stratified:
                 if name in self.ratios:
                     res[name].strata[:], res[name].denom[:] = [ss.expressions.evaluate(part, ctx) for part in self.ratios[name]]
@@ -2663,7 +2669,7 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
         else:
             run_many_parts(self, rngs, ys, args, self.per_step(), ng, (stocks, flows, stocks_g, flows_g, tally, tally_g), state_of, rows, grp_state, grp_flow)
         out = self.collect(stocks, flows, grouped=None if rows is None else (stocks_g, flows_g, kept_s, kept_f, group_ti), seeds=seeds)
-        out.deliveries = sc.objdict({mod.name:mod.compartments.many_shifts(tally[:, :, self.shift_of[k]], None if rows is None else tally_g[:, :, self.shift_of[k]], group_ti) for k,mod in enumerate(self.deliveries)})
+        out.deliveries = sc.obj({mod.name:mod.compartments.many_shifts(tally[:, :, self.shift_of[k]], None if rows is None else tally_g[:, :, self.shift_of[k]], group_ti) for k,mod in enumerate(self.deliveries)})
         return out
 
     def collect(self, stocks, flows, expected=False, grouped=None, seeds=None):
@@ -2683,8 +2689,8 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
         res = self.mod.results
         states = list(graph.states)
         by_group = grouped is None and stocks.shape[-1] == self.n_groups and self.sim.groups.strats != [] # Whether the values of each group were kept
-        groups = sc.objdict()
-        denoms = sc.objdict() # The denominators by group of the ratios kept by group
+        groups = sc.obj()
+        denoms = sc.obj() # The denominators by group of the ratios kept by group
         group_ti = None
         if by_group or grouped is not None:
             if by_group:
@@ -2699,7 +2705,7 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
                     groups[name] = flows_g[:, :, pos[ind], :]
             stratified = [name for name in self.ratio_names() if getattr(res.get(name), 'strata', None) is not None]
             if stratified and all(name in groups for name in states): # Sums and ratios of states by group, as in run_all()
-                ctx = StockCtx(self, sc.objdict({name:groups[name] for name in states}), sc.objdict({name:groups[name] for name in self.tr_index if name in groups}))
+                ctx = StockCtx(self, sc.obj({name:groups[name] for name in states}), sc.obj({name:groups[name] for name in self.tr_index if name in groups}))
                 for name in stratified:
                     if name in self.ratios:
                         groups[name], denoms[name] = [ss.expressions.evaluate(part, ctx) for part in self.ratios[name]]
@@ -2712,15 +2718,15 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
                 outs_g = self.derived_outcomes(new_g, expected=expected, seeds=seeds)
                 for key,vals in outs_g.items():
                     groups[key] = np.moveaxis(vals, 1, -1)
-                outcomes = sc.objdict({key:vals.sum(axis=1) for key,vals in outs_g.items()})
+                outcomes = sc.obj({key:vals.sum(axis=1) for key,vals in outs_g.items()})
         if groups:
             for key in list(groups.keys()):
                 if getattr(res.get(key), 'strata', None) is None:
                     del groups[key]
         stocks, flows = stocks.sum(axis=-1), flows.sum(axis=-1)
-        n = sc.objdict({name:stocks[:, :, i] for i,name in enumerate(states)})
-        new = sc.objdict({name:flows[:, :, ind] for name,ind in self.tr_index.items()})
-        out = sc.objdict({name:vals for name,vals in n.items()})
+        n = sc.obj({name:stocks[:, :, i] for i,name in enumerate(states)})
+        new = sc.obj({name:flows[:, :, ind] for name,ind in self.tr_index.items()})
+        out = sc.obj({name:vals for name,vals in n.items()})
         out.update(new)
         out.update({name:flows[:, :, ind] for name,ind in self.transfer_index.items()})
         out.update(self.derived(n, new, outcomes=outcomes is None, expected=expected, seeds=seeds))
@@ -2747,7 +2753,7 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
         This is what `update_results()` does on each step, for every step at once.
         """
         graph = self.graph
-        out = self.derived_outcomes(new, expected=expected, seeds=seeds) if outcomes else sc.objdict()
+        out = self.derived_outcomes(new, expected=expected, seeds=seeds) if outcomes else sc.obj()
         if graph.exprs:
             ctx = StockCtx(self, n, new)
             for name,expr in graph.exprs.items():
@@ -2764,9 +2770,9 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
                 self.rng = self.make_rng(seed=seed)
                 runs.append(self.derived_outcomes({k:v[r:r+1] for k,v in new.items()}, names=names))
             self.rng = saved
-            return sc.objdict({k:np.concatenate([run[k] for run in runs]) for k in runs[0]})
-        out = sc.objdict()
-        todo = sc.objdict({name:info for name,info in self.outcomes.items() if names is None or name in names})
+            return sc.obj({k:np.concatenate([run[k] for run in runs]) for k in runs[0]})
+        out = sc.obj()
+        todo = sc.obj({name:info for name,info in self.outcomes.items() if names is None or name in names})
         if draw and todo: # A step at a time, each outcome in turn, as step_outcomes() draws them, so a run drawn whole is the run taken a step at a time
             return self.drawn_outcomes(todo, new)
         for name,info in todo.items():
@@ -2799,11 +2805,11 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
         flat = lambda vals: np.broadcast_to(vals, shape).reshape(-1, n_steps) # Runs and groups side by side, by steps
         flows = {key:flat(np.asarray(vals, dtype=float)) for key,vals in new.items()}
         width = int(np.prod(shape[:-1]))
-        out = sc.objdict()
-        bufs = sc.objdict()
-        weights = sc.objdict()
+        out = sc.obj()
+        bufs = sc.obj()
+        weights = sc.obj()
         for name,info in todo.items():
-            bufs[name] = sc.objdict(pending=np.zeros((len(info.kernel) + 1, width)), leaving=None if info.stay is None else np.zeros((len(info.stay) + 1, width)), n=np.zeros(width))
+            bufs[name] = sc.obj(pending=np.zeros((len(info.kernel) + 1, width)), leaving=None if info.stay is None else np.zeros((len(info.stay) + 1, width)), n=np.zeros(width))
             weights[name] = []
             for key,weight in info.sources:
                 weight = self.eval(weight) if isinstance(weight, ss.expressions.Expr) else weight
@@ -2821,7 +2827,7 @@ class Compartmental(ss.utils.NoDists, Engine): # Never searched for distribution
                 out[name][:, ti] = self.report_outcome(info, bufs[name], np.asarray(amount, dtype=float), ti, True)
                 if f'n_{name}' in out:
                     out[f'n_{name}'][:, ti] = bufs[name].n
-        return sc.objdict({key:vals.reshape(shape) for key,vals in out.items()})
+        return sc.obj({key:vals.reshape(shape) for key,vals in out.items()})
 
     #%% Stepping
 

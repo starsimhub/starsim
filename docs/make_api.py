@@ -63,7 +63,7 @@ links = [ # Extra pointers, following the llms.txt convention
 ]
 
 # The order the modules are listed in, from most to least commonly used; anything else is appended alphabetically
-module_titles = sc.objdict(
+module_titles = sc.obj(
     sim           = 'Simulations',
     people        = 'People',
     modules       = 'Modules',
@@ -78,6 +78,7 @@ module_titles = sc.objdict(
     dates         = 'Dates',
     timeline      = 'Timelines',
     distributions = 'Distributions',
+    dists         = 'How distributions work',
     parameters    = 'Parameters',
     results       = 'Results',
     run           = 'Running multiple simulations',
@@ -92,7 +93,7 @@ module_titles = sc.objdict(
 module_order = list(module_titles.keys())
 
 # The library subpackages, each listed after the core modules
-libraries = sc.objdict(
+libraries = sc.obj(
     diseases = 'Library: diseases',
     mnch     = 'Library: maternal, newborn, and child health',
     networks = 'Library: networks',

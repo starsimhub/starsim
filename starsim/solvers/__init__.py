@@ -12,6 +12,8 @@ compartmental run), `compartmental` and `agents` (the two engines), `crossing`
 `particles` (many runs of a program stepped together, for a particle filter).
 Their names are all found here, e.g. `ss.solvers.Compartmental`. The kernels they run
 are in `backends` (`ss.solvers.backends`, and `ss.kernels`), with a copy in Rust in `rust/`.
+
+Used with: agents and compartments; declared and coded modules
 """
 from .engine import *
 from .mixing import *

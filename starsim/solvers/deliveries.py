@@ -1,5 +1,5 @@
 """
-Deliveries in a compartmental run
+Not for the user: deliveries in a compartmental run
 
 `ss.Delivery` is the one class for deliveries, and its methods are how it runs as agents. In a compartmental
 run, a delivery also makes a `CompartmentalDelivery` (`delivery.compartments`), which holds what only that
@@ -7,6 +7,8 @@ needs: a selection is the share of the people in each state and group, so who is
 cured, or tested is a share of each, and moving them moves shares of the engine's compartments between
 groups, carrying the events of the step along. The schedule, coverage, capacity, conditions, products,
 and results stay the delivery's.
+
+Used with: compartments; declared modules
 """
 import numpy as np
 import sciris as sc
@@ -140,7 +142,7 @@ def water_fill(amount, n, keys):
     return out.reshape(np.shape(amount))
 
 
-class CompartmentalDelivery:
+class CompartmentalDelivery(sc.prettyobj):
     """
     A delivery in a compartmental run (`delivery.compartments`): what differs from agents, where a selection is the share of the people in each state and group
 
@@ -580,11 +582,11 @@ class CompartmentalDelivery:
         """
         d = self.delivery
         delivered, eligible = tally[:, :, 0], tally[:, :, 1]
-        out = sc.objdict(delivered=delivered.sum(axis=-1), eligible=eligible.sum(axis=-1))
+        out = sc.obj(delivered=delivered.sum(axis=-1), eligible=eligible.sum(axis=-1))
         if 'cost' in d.results:
             out.cost = out.delivered*d.product.cost
         out.coverage = np.divide(out.delivered, out.eligible, out=np.zeros_like(out.delivered), where=out.eligible>0)
-        out.groups = sc.objdict()
+        out.groups = sc.obj()
         out.group_ti = group_ti
         if tally_g is not None:
             delivered, eligible = tally_g[:, :, 0], tally_g[:, :, 1]

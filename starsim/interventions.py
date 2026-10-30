@@ -1,7 +1,9 @@
 """
-Define interventions, which are used to modify the state of the sim during run.
+Interventions, which change the course of a sim during a run
 
-Interventions typically include things like testing, treatment, and vaccination.
+Interventions typically include things like testing, treatment, and vaccination. A delivery (`ss.Delivery`, and `ss.vaccinate()`, `ss.screen()`, and `ss.treat()`) gives a product to the people chosen, and exists so that the same intervention can be written once and run under any solver. It also works with a disease written as code, as agents.
+
+Used with: agents and compartments; declared and coded modules
 """
 import inspect
 import starsim as ss
@@ -17,6 +19,11 @@ class Intervention(ss.Module):
     The key method of the intervention is `step()`, which is called with the sim
     on each timestep. Interventions can modify disease states (e.g. treating or vaccinating
     agents); to deliver a product, see `ss.vaccinate()`, `ss.screen()`, and `ss.treat()`.
+
+    Args:
+        args (list): passed to `ss.Module`
+        eligibility (func): a function of the sim that returns who is eligible
+        kwargs (dict): passed to `ss.Module`
     """
 
     def __init__(self, *args, eligibility=None, **kwargs):
@@ -30,6 +37,11 @@ class Intervention(ss.Module):
         return hasattr(self, 'product') and self.product is not None
 
     def init_pre(self, sim):
+        """ Initialize the module, and its product if it has one
+
+        Args:
+            sim (Sim): the sim being initialized
+        """
         super().init_pre(sim)
         if self.has_product:
             self.product.init_pre(self.sim)
@@ -351,6 +363,7 @@ class Delivery(ss.products.EventSource, Intervention):
             run); replaces `where`, `coverage`, and the rounds
         disease (str): the disease the product acts on (default: the only one)
         name (str): the name; if not given, taken from the variable the delivery is assigned to
+        label (str): a human-readable name
 
     Examples:
         ```python
@@ -628,7 +641,7 @@ class Delivery(ss.products.EventSource, Intervention):
         if self.boxed(sim):
             return self.product.box_form.moves(self.product.dim)
         if self.holds and self.product.loses:
-            return [sc.objdict(dim=self.product.dim, src=1, dst=0, dur=self.product.waning)]
+            return [sc.obj(dim=self.product.dim, src=1, dst=0, dur=self.product.waning)]
         return []
 
     def agent_reasons(self):
@@ -692,6 +705,11 @@ class Delivery(ss.products.EventSource, Intervention):
         return
 
     def init_pre(self, sim):
+        """ Find the disease and the product, check them against the sim, and set up what is delivered
+
+        Args:
+            sim (Sim): the sim being initialized
+        """
         declared = [mod.name for mod in sim.declared]
         ss.conditions.check_path_events(sim, self.on, self.name)
         if self.disease_list is None and isinstance(self.disease, str) and isinstance(sim.diseases.get(self.disease), ss.strains.Family): # A disease whose strains have courses of their own, by name: as when given as the disease (see __init__())
@@ -1578,17 +1596,17 @@ class Delivery(ss.products.EventSource, Intervention):
         sim = getattr(self, 'sim', None)
         unit = sim.unit_name if sim is not None else None
         if self.interval is not None: # When the rounds are, and how many they reach
-            how += f' every {ss.presentation.quantity_str(self.interval, "dur", unit)}'
+            how += f' every {ss.display.quantity_str(self.interval, "dur", unit)}'
             if self.start is not None:
                 how += f' from {unit or "step"} {self.start:n}' if sc.isnumber(self.start) else f' from {self.start}'
         if self.delay is not None:
-            how += f', after {ss.presentation.quantity_str(self.delay, "dur", unit) if isinstance(self.delay, ss.TimePar) else self.delay}'
+            how += f', after {ss.display.quantity_str(self.delay, "dur", unit) if isinstance(self.delay, ss.TimePar) else self.delay}'
         if self.coverage is not None and not callable(self.coverage):
             how += f', coverage {ss.expressions.value_str(self.coverage)}'
         if self.priority is not None:
             how += f'; {self.priority} first'
         if self.queue is not None:
-            how += '; those not served wait' + ('' if self.queue is True else f' up to {ss.presentation.quantity_str(self.queue, "dur", unit)}')
+            how += '; those not served wait' + ('' if self.queue is True else f' up to {ss.display.quantity_str(self.queue, "dur", unit)}')
         dims = [strat.name for strat in self.dims(getattr(self, 'sim', None))]
         added = f'; adds {sc.strjoin(dims)} as {"a property" if len(dims) == 1 else "properties"} of people' if dims else ''
         waiting = '; nobody waiting for a result is tested again' if self.waits else ''

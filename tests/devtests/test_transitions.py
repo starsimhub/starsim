@@ -174,17 +174,17 @@ def test_counts():
             self.peak = 0.0
             self.peaks = []
         def step(self):
-            d = self.sim.diseases.behaviour
+            d = self.sim.diseases.behavior
             self.peak = max(self.peak, d.I.n/self.sim.people.alive.sum())
             self.peaks.append(self.peak)
     slowing = lambda sim: np.exp(-5*sim.connectors.track.peak)
     S, I, R = ss.states(3)
-    behaviour = ss.Disease(infection=S >> I @ ss.perday(0.3)*I*slowing, recovery=I >> R @ ss.days(10), init_n=dict(I=10), name='behaviour')
-    sim = ss.Sim(behaviour, connectors=Track(name='track'), unit='day', stop=200, n_agents=10_000, **kw).run()
-    frac = sim.results.behaviour.I.values/10_000
+    behavior = ss.Disease(infection=S >> I @ ss.perday(0.3)*I*slowing, recovery=I >> R @ ss.days(10), init_n=dict(I=10), name='behavior')
+    sim = ss.Sim(behavior, connectors=Track(name='track'), unit='day', stop=200, n_agents=10_000, **kw).run()
+    frac = sim.results.behavior.I.values/10_000
     assert np.allclose(sim.connectors.track.peaks, np.maximum.accumulate(frac)[:-1]) # Set from the start of each step
     assert frac.max() < 0.15 # Without the slowing, 30% are infectious at the peak
-    ode = ss.Sim(behaviour, connectors=Track(name='track'), unit='day', stop=200, total_pop=10_000, solver='ode', **kw).run() # The same code, as compartments: the number alive is the number of people, not of groups
+    ode = ss.Sim(behavior, connectors=Track(name='track'), unit='day', stop=200, total_pop=10_000, solver='ode', **kw).run() # The same code, as compartments: the number alive is the number of people, not of groups
     assert ode.people.alive.sum() == 10_000 and np.isclose(ode.connectors.track.peak, frac.max(), rtol=0.2)
 
     # A comparison is 1 or 0, so a rate can stop at a capacity
@@ -210,11 +210,11 @@ def test_births():
             init      = dict(I=0.01),
             name      = 'sir',
         )
-    sims = sc.objdict()
+    sims = sc.obj()
     for solver in ['ode', 'abm']:
         pars = dict(n_agents=5_000) if solver == 'abm' else {} # The agents grow past the space first set aside for them
         sims[solver] = ss.Sim(make(), unit='day', stop=365, total_pop=10_000, solver=solver, **pars, **kw).run()
-    n = sc.objdict({solver:sum(sim.results.sir[s][-1] for s in 'SIR') for solver,sim in sims.items()})
+    n = sc.obj({solver:sum(sim.results.sir[s][-1] for s in 'SIR') for solver,sim in sims.items()})
     assert np.isclose(n.ode, 10_000*np.exp(0.3), rtol=1e-3)
     assert np.isclose(n.abm, n.ode, rtol=0.03), f'Expected as many people as agents ({n.abm:n}) as as compartments ({n.ode:n})'
     assert np.isclose(sims.abm.results.sir.births.cum[-1], sims.ode.results.sir.births.cum[-1], rtol=0.05)
@@ -279,7 +279,7 @@ def test_births():
 def test_stratify():
     sc.heading('Testing stratification by age with a contact matrix')
     matrix = [[12, 4, 1], [3, 8, 2], [1, 3, 4]] # Contacts per day of each age group (rows) with each age group
-    sims = sc.objdict()
+    sims = sc.obj()
     for solver in ['ode', 'binomial', 'abm']:
         sir = make_sir().stratify(age=[0, 15, 65], adjust={'recovery': [1.5, 1.0, 0.5]})
         sir.pars.beta.value = 0.03
@@ -319,7 +319,7 @@ def test_stratify():
         assert np.allclose(other.infection.by('age').values.sum(axis=0), res.infection.by('age').values.sum(axis=0), rtol=0.1)
 
     # A mixing pool of everyone and a random network with the same number of contacts agree, as agents and as an ODE
-    finals = sc.objdict()
+    finals = sc.obj()
     for key,pars in dict(pool_ode=dict(networks=ss.MixingPool(n_contacts=10)), pool_abm=dict(networks=ss.MixingPool(n_contacts=10), n_agents=20_000),
                          net_abm=dict(networks=ss.RandomNet(n_contacts=10), n_agents=20_000), net_ode=dict(networks=ss.RandomNet(n_contacts=10), solver='ode'),
                          typed_ode=dict(networks=ss.MixingPool(n_contacts=ss.perweek(70))), typed_abm=dict(networks=ss.MixingPool(n_contacts=ss.perweek(70)), n_agents=20_000)).items(): # Contacts per unit time, given as a rate

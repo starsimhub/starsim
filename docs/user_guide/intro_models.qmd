@@ -28,7 +28,7 @@ Specific models that have been created using the Starsim framework are kept in t
 
 One of the strengths of Starsim is that all of these models are inter-compatible. For example, an HIV-TB coinfection model can be created by combining the HIV module from STIsim and the TB module from TBsim.
 
-These models were written for Starsim 3, and are being ported to Starsim 4; check each model's own documentation for the version of Starsim it needs. For moving your own Starsim 3 code to Starsim 4, see [Starsim v3](conversion/starsim3.qmd); much of the rewriting is done by the migration script, `python -m starsim.io.migrate`.
+These models were written for Starsim 3, and are being ported to Starsim 4; check each model's own documentation for the version of Starsim it needs. For moving your own Starsim 3 code to Starsim 4, see [Starsim v3](conversion/starsim3.qmd); much of the rewriting is done by the migration script, `python -m starsim.converters.migrate`.
 
 Note: the Starsim suite also includes [Covasim](https://github.com/institutefordiseasemodeling/covasim) (for modeling COVID-19). Covasim is built on the same principles as Starsim, but unlike the above tools, it is a separate codebase and is not inter-operable with the other models.
 

@@ -144,7 +144,7 @@ def test_timeline():
 def test_timeline_syntax():
     sc.heading('Test all ss.Timeline input options')
 
-    kw = sc.objdict()
+    kw = sc.obj()
 
     # Categories of tests
     keymap = dict(
@@ -237,7 +237,7 @@ def test_timeline_syntax():
             sc.printgreen('✓ Success')
         else:
             sc.printred('× Mismatch :(')
-            mismatches.append(sc.objdict(key=key, args=args, expected=expected, actual=actual))
+            mismatches.append(sc.obj(key=key, args=args, expected=expected, actual=actual))
 
     if len(mismatches):
         errormsg = f'{len(mismatches)} output(s) did not match expected value(s):\n'

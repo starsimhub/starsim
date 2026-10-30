@@ -39,7 +39,7 @@ sim.plot()
 
 `stratify()` splits each state of a disease into groups: here, by age, into three groups, 0–14, 15–64, and 65 and over. Each group is given by its lower edge, with the share of the population in it, here 30%, 60%, and 10%. The model then has a compartment for each state in each age group: `S` for children, `S` for adults, and so on.
 
-On its own, this changes nothing about the epidemic: everyone still mixes with everyone else equally, so each group is infected at the same rate, in proportion to its size. Age groups matter when something differs between them. The first thing that differs in a real town is immunity. Suppose the town has had a vaccination program for years, so that 92% of adults under 65 and 98% of older adults are immune (from vaccination or from past infection), but only 80% of children, since coverage has slipped recently. [`ss.by()`](../api/parameters.qmd) gives a value for each level of a stratification, and `init` gives the share of each group that starts in a state; `init_n` starts 10 people infectious, as if measles had just been brought into the town by travelers. The run is for a year, from 1 January 2025:
+On its own, this changes nothing about the epidemic: everyone still mixes with everyone else equally, so each group is infected at the same rate, in proportion to its size. Age groups matter when something differs between them. The first thing that differs in a real town is immunity. Suppose the town has had a vaccination program for years, so that 92% of adults under 65 and 98% of older adults are immune (from vaccination or from past infection), but only 80% of children, since coverage has slipped recently. [`ss.by()`](../api/internals.parameters.qmd) gives a value for each level of a stratification, and `init` gives the share of each group that starts in a state; `init_n` starts 10 people infectious, as if measles had just been brought into the town by travelers. The run is for a year, from 1 January 2025:
 
 ```{python}
 S, E, I, R = ss.states('S E I R')
@@ -124,7 +124,7 @@ print((infections / [30_000, 60_000, 10_000]).round(3))
 
 Children have nearly two thirds of the infections, though they are under a third of the town: 18% of them are infected, more than three times the share of adults.
 
-## Births, deaths, and ageing
+## Births, deaths, and aging
 
 Over a year, a town's population hardly changes. Over decades, though, children are born susceptible, and this is what makes measles come back: an epidemic leaves too few susceptible people for the next one, until enough children have been born since. Births and deaths are given to the sim as `demographics`. [`ss.birth()`](../api/transitions.qmd) takes a crude birth rate, here 30 births a year per 1,000 people, and `ss.death()` a death rate, here 20 deaths a year per 1,000 people at every age (a simplification; [A3 – Demographics](a3_demographics.qmd) uses death rates by age, from data). Children born into `S` move up the age groups as they grow older. Here is the model over 20 years, with and without births and deaths:
 

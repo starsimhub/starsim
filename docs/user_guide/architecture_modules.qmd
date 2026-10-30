@@ -4,14 +4,14 @@ jupyter: python3
 authorship:
   human: 0
   ai: 100
-  note: Written by AI from the code of starsim/modules.py, loop.py, sim.py, and diseases.py
+  note: Written by AI from the code of starsim/internals/modules.py, internals/loop.py, sim.py, and diseases.py
 ---
 
 Everything a sim runs, apart from the people themselves, is a *module*: each disease, network, demographic process, intervention, connector and analyzer. This page explains what a module is, what happens to it from the moment it is given to a sim to the end of the run, how declared modules and modules written as code live side by side, how modules find each other, and how to read the loop that calls them. It is the view from inside; for how to write a module of your own, see [Custom modules](building_modules.qmd) and the tutorials [T9](../tutorials/t9_modules.qmd) and [A5](../tutorials/a5_modules.qmd).
 
 ## What a module is
 
-A module is an instance of `ss.Module` (`starsim/modules.py`), or of a subclass. Every module has the same parts:
+A module is an instance of `ss.Module` (`starsim/internals/modules.py`), or of a subclass. Every module has the same parts:
 
 - a **name** (`sir`, `randomnet`), unique in the sim, and a **label** for plots;
 - its **parameters**, `mod.pars` (an `ss.Pars`), given with `define_pars()` and set from the user's arguments with `update_pars()`, which raises an error for one that wasn't defined;
@@ -182,7 +182,7 @@ An array that most agents never change (a relative susceptibility that is 1 unti
 
 ## Reading the loop
 
-The loop (`sim.loop`, an `ss.Loop` in `starsim/loop.py`) is built at the end of `sim.init()` by `Loop.collect_funcs()`, which walks the sim's modules in the order above and collects each method to call. Its plan is every (time, method) pair, sorted by time and then by that order; a module with a timeline of its own appears only at its own times. `sim.loop.to_df()` gives the plan as a table, so the order can always be checked rather than remembered. For the sim above, as agents, one step is:
+The loop (`sim.loop`, an `ss.Loop` in `starsim/internals/loop.py`) is built at the end of `sim.init()` by `Loop.collect_funcs()`, which walks the sim's modules in the order above and collects each method to call. Its plan is every (time, method) pair, sorted by time and then by that order; a module with a timeline of its own appears only at its own times. `sim.loop.to_df()` gives the plan as a table, so the order can always be checked rather than remembered. For the sim above, as agents, one step is:
 
 ```{python}
 sim = ss.Sim(

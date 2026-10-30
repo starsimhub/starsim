@@ -116,7 +116,7 @@ class Transmission(ss.Module):
         self.population.recovery_timer[newly_infected_indices] = np.random.randint(5, 15, size=newly_infected_indices.size)  # Random recovery time
 
 
-params = sc.objdict({
+params = sc.obj({
     "n_agents": 100_000,
     "dur": 160,
 })

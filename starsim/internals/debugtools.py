@@ -1,5 +1,9 @@
 """
-Utilities to help with debugging Starsim runs
+Tools for debugging and profiling Starsim runs: `sim.profile()`, detailed diagnostics, and mock objects for testing a module without a sim
+
+They exist so that a slow or surprising run can be looked into without changing the model.
+
+Used with: agents and compartments; declared and coded modules
 """
 import sys
 import platform
@@ -69,7 +73,12 @@ class Profile(sc.profile):
         return self.init_prof
 
     def run(self, disp=None):
-        """ Profile the performance of the simulation """
+        """
+        Profile the performance of the simulation
+
+        Args:
+            disp (bool): whether to show the results
+        """
         sim = self.sim
         if not self.sim.initialized:
             self.sim.init() # Don't profile
@@ -91,7 +100,14 @@ class Profile(sc.profile):
         return self
 
     def disp(self, bytime=1, maxentries=10, skiprun=True):
-        """ Same as sc.profile.disp(), but skip the run function by default """
+        """
+        Same as sc.profile.disp(), but skip the run function by default
+
+        Args:
+            bytime (int): 1 to sort by the time in each function; see `sc.profile.disp()`
+            maxentries (int): the number of functions to show
+            skiprun (bool): whether to leave out the run function itself
+        """
         return super().disp(bytime=bytime, maxentries=maxentries, skiprun=skiprun)
 
     def plot_cpu(self):
@@ -101,7 +117,10 @@ class Profile(sc.profile):
 
 
 class Diagnostics(sc.quickobj):
-    """ Helper class for storing detailed diagnostic information; see sim.set_diagnostics() for usage; not to be used directly
+    """
+    Helper class for storing detailed diagnostic information; see sim.set_diagnostics() for usage; not to be used directly
+
+    It exists to find where two runs that should match first differ.
 
     Args:
         sim (ss.Sim): the sim to attach diagnostics to
@@ -115,17 +134,17 @@ class Diagnostics(sc.quickobj):
         self.states = None
         self.detailed = detailed
         if rvs:
-            self.rvs = sc.objdict()
+            self.rvs = sc.obj()
             self.rvs_file = rvs if isinstance(rvs, str) else 'debug_rvs.json'
         if states:
-            self.states = sc.objdict()
+            self.states = sc.obj()
             self.states_file = states if isinstance(states, str) else 'debug_states.json'
         return
 
     @staticmethod
     def compute_stats(v):
         """ Compute length, mean, min, max, and unique hash """
-        stats = sc.objdict(
+        stats = sc.obj(
             n = len(v),
             mean = v.mean(),
             min = v.min(),
@@ -140,7 +159,7 @@ class Diagnostics(sc.quickobj):
 
     def store_rvs(self, dist, rvs):
         """ Store random numbers (random variates) """
-        entry = self.rvs.setdefault(self.ti_key, sc.objdict())
+        entry = self.rvs.setdefault(self.ti_key, sc.obj())
 
         if self.detailed:
             entry[dist.trace] = rvs
@@ -151,7 +170,7 @@ class Diagnostics(sc.quickobj):
     def store_states(self, key=None):
         """ Store all states from people """
         store_key = sc.ifelse(key, self.ti_key)
-        entry = sc.objdict()
+        entry = sc.obj()
         for state_key, state in self.sim.people.states.items():
             if self.detailed:
                 entry[state_key] = state.values.copy() # Copy, since values may be the live array
@@ -171,18 +190,23 @@ class Diagnostics(sc.quickobj):
 
 
 def metadata(comments=None):
-    """ Store metadata; like `sc.metadata()`, but optimized for speed """
-    md = sc.objdict(
+    """
+    Store metadata; like `sc.metadata()`, but optimized for speed
+
+    Args:
+        comments (str): any comments to store with the metadata
+    """
+    md = sc.obj(
         version = ss.__version__,
         versiondate = ss.__versiondate__,
         timestamp = sc.getdate(),
         user      = sc.getuser(),
-        system = sc.objdict(
+        system = sc.obj(
             platform   = platform.platform(),
             executable = sys.executable,
             version    = sys.version,
         ),
-        versions = sc.objdict(
+        versions = sc.obj(
             python     = platform.python_version(),
             numpy      = np.__version__,
             numba      = nb.__version__,
@@ -197,8 +221,15 @@ def metadata(comments=None):
 
 
 def mock_time(dt=1.0, dur=10, start=2000):
-    """ Create a minimal mock "Time" object """
-    t = sc.objdict(
+    """
+    Create a minimal mock "Time" object
+
+    Args:
+        dt (float): the timestep
+        dur (float): the duration
+        start (float): the start
+    """
+    t = sc.obj(
         dt = dt,
         ti = 0,
         start = start,
@@ -220,15 +251,15 @@ def mock_sim(n_agents=100, **kwargs):
         **kwargs (dict): passed to `ss.debugtools.mock_time()`
     """
     t = mock_time(**kwargs)
-    sim = sc.objdict(
+    sim = sc.obj(
         label = 'mock_sim',
         people = mock_people(n_agents),
         t = t,
         dt = kwargs.get('dt', ss.years(1.0)),
         pars = t,
-        results = sc.objdict(),
-        networks = sc.objdict(), # Needed for infections
-        analyzers = sc.objdict(), # Needed for infection log
+        results = sc.obj(),
+        networks = sc.obj(), # Needed for infections
+        analyzers = sc.obj(), # Needed for infection log
         diagnostics = None,
         initialized = True, # A mock sim stands in for an initialized sim
     )
@@ -236,9 +267,17 @@ def mock_sim(n_agents=100, **kwargs):
 
 
 def mock_people(n_agents=100, min_age=0, max_age=70, age_seed=1):
-    """ Create a minimal mock "People" object with ages """
+    """
+    Create a minimal mock "People" object with ages
+
+    Args:
+        n_agents (int): the number of agents
+        min_age (float): the youngest age
+        max_age (float): the oldest age
+        age_seed (int): the random seed for the ages
+    """
     rng = np.random.default_rng(seed=age_seed)
-    people = sc.objdict(
+    people = sc.obj(
         uid = np.arange(n_agents),
         auids = np.arange(n_agents),
         slot = np.arange(n_agents),
@@ -251,8 +290,14 @@ def mock_people(n_agents=100, min_age=0, max_age=70, age_seed=1):
 
 
 def mock_module(dur=10, **kwargs):
-    """ Create a minimal mock "Module" object; kwargs are passed to `ss.debugtools.mock_time()` """
-    mod = sc.objdict(
+    """
+    Create a minimal mock "Module" object; kwargs are passed to `ss.debugtools.mock_time()`
+
+    Args:
+        dur (float): the duration
+        **kwargs (dict): passed to `mock_time()`
+    """
+    mod = sc.obj(
         name = 'mock_module',
         t = mock_time(dur=dur, **kwargs),
         dt = kwargs.get('dt', ss.years(1.0)),
@@ -283,7 +328,7 @@ def diff_sims(sim1, sim2, skip_key_diffs=False, skip=None, full=False, output=Fa
     '''
 
     # Convert to dict
-    as_dict = lambda sim: sc.objdict(sim.summarize().value.to_dict()) if isinstance(sim, ss.Sim) else sc.objdict(sim.summarize().to_dict('index')) # A MultiSim's: each result's mean, std, ...
+    as_dict = lambda sim: sc.obj(sim.summarize().value.to_dict()) if isinstance(sim, ss.Sim) else sc.obj(sim.summarize().to_dict('index')) # A MultiSim's: each result's mean, std, ...
     if isinstance(sim1, (ss.Sim, ss.MultiSim)):
         sim1 = as_dict(sim1)
     if isinstance(sim2, (ss.Sim, ss.MultiSim)):
@@ -295,8 +340,8 @@ def diff_sims(sim1, sim2, skip_key_diffs=False, skip=None, full=False, output=Fa
 
 
     # Check if it's a multisim
-    sim1 = sc.objdict(sim1)
-    sim2 = sc.objdict(sim2)
+    sim1 = sc.obj(sim1)
+    sim2 = sc.obj(sim2)
     multi = isinstance(sim1[0], dict) # If it's a dict, then it's a multisim
     if multi:
         for sim in [sim1, sim2]:
@@ -322,7 +367,7 @@ def diff_sims(sim1, sim2, skip_key_diffs=False, skip=None, full=False, output=Fa
     skip = sc.tolist(skip)
     for key in sim2.keys():  # To ensure order
         if key in sim1_keys and key not in skip:  # If a key is missing, don't count it as a mismatch
-            d = sc.objdict()
+            d = sc.obj()
             if multi:
                 d.sim1 = sim1[key]['mean']
                 d.sim2 = sim2[key]['mean']

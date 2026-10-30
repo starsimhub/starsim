@@ -115,7 +115,7 @@ An import gives Starsim code: the importer writes the model as Python, and the s
 print(sim.imported.code)
 ```
 
-The code is yours, a starting point to edit: a transition can be given a better name (`infection` rather than `S_to_E`), a rate can be written as the duration it stands for, and anything Starsim has that the original doesn't (age groups, interventions, a fit to data) can be added. `sc.savetext('measles.py', sim.imported.code)` writes it to a file, and `ss.io.convert(filename)` imports a model and saves its code in one step (beside the original, with the extension `.py`, unless `filename=` is given). Reading some formats takes a while (a large workbook, or a script that has to be run in R first), and the saved code then runs in a fraction of the time. From then on, the file is the model: to compare it with another version, compare their results or their `describe()`, or the two files in a text editor.
+The code is yours, a starting point to edit: a transition can be given a better name (`infection` rather than `S_to_E`), a rate can be written as the duration it stands for, and anything Starsim has that the original doesn't (age groups, interventions, a fit to data) can be added. `sc.savetext('measles.py', sim.imported.code)` writes it to a file, and `ss.converters.convert(filename)` imports a model and saves its code in one step (beside the original, with the extension `.py`, unless `filename=` is given). Reading some formats takes a while (a large workbook, or a script that has to be run in R first), and the saved code then runs in a fraction of the time. From then on, the file is the model: to compare it with another version, compare their results or their `describe()`, or the two files in a text editor.
 
 ## Finishing an incomplete import
 
@@ -179,7 +179,7 @@ For a longer model, with more that isn't translated, `sim.imported.prompt` is a 
 
 ## The formats
 
-`ss.import_from()` reads these formats, and tells which one a file is from by its contents (or give `format=`); `ss.io.importers` lists them:
+`ss.import_from()` reads these formats, and tells which one a file is from by its contents (or give `format=`); `ss.converters.importers` lists them:
 
 | Framework | Reads | Notes |
 |---|---|---|
@@ -195,34 +195,34 @@ For a longer model, with more that isn't translated, `sim.imported.prompt` is a 
 | [SimInf](siminf.qmd) | An R file (read without R), with its initial state and events | Nodes become places; events a movement register |
 | [summer2](summer2.qmd) | A live model, or the JSON written by `summer2.py` | Each stratification, with its mixing matrix |
 
-For epydemix, MEmilio, and summer2, Starsim's importer for that framework (e.g. `starsim/io/memilio.py`) also runs as a script in the framework's own environment, needing neither Starsim nor Sciris there, and writes what it built as JSON for Starsim to read; for EpiModel, `starsim/io/dump_epimodel.R` does the same in R. The others are read directly. Each importer is tested against its framework's own examples. A Starsim 3 script is not imported, but rewritten: see [Starsim v3](starsim3.qmd).
+For epydemix, MEmilio, and summer2, Starsim's importer for that framework (e.g. `starsim/converters/memilio.py`) also runs as a script in the framework's own environment, needing neither Starsim nor Sciris there, and writes what it built as JSON for Starsim to read; for EpiModel, `starsim/converters/dump_epimodel.R` does the same in R. The others are read directly. Each importer is tested against its framework's own examples. A Starsim 3 script is not imported, but rewritten: see [Starsim v3](starsim3.qmd).
 
 ## How an import is built
 
-Every importer reads its format into the same intermediate object, `ss.io.Source`: its states, parameters, flows as rate expressions, stratifications, outcomes, and what it couldn't translate. One function, `ss.io.write()`, writes a `Source` as Starsim code (a declared `ss.Disease`, with its parameters, states, and transitions as variables, ending with `sim = ss.Sim(...)`), by the same rules for every format, and `ss.io.build()` runs that code to make the sim. So there is one path, from another framework's model to code to a sim; each framework needs only a reader. A value that can't be written as a simple value, such as a network, is given by the importer as `ss.io.Code('...')`, the Python that makes it.
+Every importer reads its format into the same intermediate object, `ss.converters.Source`: its states, parameters, flows as rate expressions, stratifications, outcomes, and what it couldn't translate. One function, `ss.converters.write()`, writes a `Source` as Starsim code (a declared `ss.Disease`, with its parameters, states, and transitions as variables, ending with `sim = ss.Sim(...)`), by the same rules for every format, and `ss.converters.build()` runs that code to make the sim. So there is one path, from another framework's model to code to a sim; each framework needs only a reader. A value that can't be written as a simple value, such as a network, is given by the importer as `ss.converters.Code('...')`, the Python that makes it.
 
 ```{mermaid}
 %%| echo: false
 flowchart LR
-  F["odin, SBML, EMULSION, SimInf,<br>flepiMoP, summer2, Atomica, camdl,<br>EpiModel, epydemix, MEmilio"] --> R[reader] --> S["ss.io.Source"] --> W["ss.io.write()"] --> C["Starsim code"] --> Sim[sim]
+  F["odin, SBML, EMULSION, SimInf,<br>flepiMoP, summer2, Atomica, camdl,<br>EpiModel, epydemix, MEmilio"] --> R[reader] --> S["ss.converters.Source"] --> W["ss.converters.write()"] --> C["Starsim code"] --> Sim[sim]
   Sim --> E["SBML, odin"]
 ```
 
 A `Source` can also be filled in by hand, to bring in a model from a framework that has no importer (here, an SIR from a spreadsheet or a paper):
 
 ```{python}
-src = ss.io.Source('sir', format='by hand')
+src = ss.converters.Source('sir', format='by hand')
 for name, n in dict(S=990, I=10, R=0).items():
     src.add_state(name, init=n)
 src.add_par('beta', 0.3)
 src.add_par('gamma', 0.1)
 src.add_flow('S', 'I', rate='beta * S * I / (S + I + R)', per='total', name='infection')
 src.add_flow('I', 'R', rate='gamma * I', per='total', name='recovery')
-sir = ss.io.build(src, stop=100)
+sir = ss.converters.build(src, stop=100)
 print(sir.imported.code)
 ```
 
-`ss.io.write(src)` gives the code without running it. How the importers and exporters are built is described in [Architecture](../architecture_index.qmd).
+`ss.converters.write(src)` gives the code without running it. How the importers and exporters are built is described in [Architecture](../architecture_index.qmd).
 
 ## Exporting a model
 
@@ -256,11 +256,11 @@ A sim made in Starsim is not written back out as Starsim code: its code is the s
 
 ## Forecast hubs
 
-`ss.io.to_hub()` writes the runs of a MultiSim as a submission to a forecast hub (in the [hubverse](https://hubverse.io/) format used by the US forecast and scenario modeling hubs): each target, by scenario, location, and period, as quantiles over the runs or as the runs themselves. Here, weekly infections from 20 stochastic runs of the imported model:
+`ss.converters.to_hub()` writes the runs of a MultiSim as a submission to a forecast hub (in the [hubverse](https://hubverse.io/) format used by the US forecast and scenario modeling hubs): each target, by scenario, location, and period, as quantiles over the runs or as the runs themselves. Here, weekly infections from 20 stochastic runs of the imported model:
 
 ```{python}
 msim = sim.run(solver='binomial', n_runs=20)
-hub = ss.io.to_hub(msim, targets=dict(S_to_E='inc inf'), every='week', location='town')
+hub = ss.converters.to_hub(msim, targets=dict(S_to_E='inc inf'), every='week', location='town')
 hub.head()
 ```
 

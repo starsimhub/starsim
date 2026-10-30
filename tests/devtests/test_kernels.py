@@ -62,7 +62,7 @@ def make_delay():
                       recovery=ss.Transition(I, R, dur=ss.days(8)), death=ss.death([E, I], rate=ss.perday(0.02)), init_prev=0.01, name='delay')
 
 
-models = sc.objdict(
+models = sc.obj(
     sir     = (make_sir,     dict(total_pop=10_000, unit='day', stop=ss.weeks(12))),
     seir    = (make_seir,    dict(unit='day', stop=200)),
     ages    = (make_ages,    dict(unit='day', stop=100, networks=ss.contacts(np.array([[8, 3, 1], [3, 6, 2], [1, 2, 3]])))),
@@ -103,7 +103,7 @@ def test_stochastic():
         pop = 2000 if solver == 'gillespie' else 10_000
         for key in keys:
             for seed in range(2):
-                sims = sc.objdict({how:run(key, how, solver=solver, rand_seed=seed, total_pop=pop) for how in ['step', 'all']})
+                sims = sc.obj({how:run(key, how, solver=solver, rand_seed=seed, total_pop=pop) for how in ['step', 'all']})
                 assert largest_diff(sims.all, sims.step) == 0, f'{key} under {solver}: the whole run differs from the stepped one'
                 n_I = sims.all.results[sims.all.declared[0].name].I.values
                 assert np.all(n_I == np.round(n_I)) # Whole people
@@ -120,7 +120,7 @@ def test_stochastic():
         sim.run_one_step()
     kn, cross = ss.kernels, sim.crossings[0]
     p, places = cross.program, np.arange(cross.program.n_places)
-    out = sc.objdict()
+    out = sc.obj()
     for how in ['sparse', 'dense']:
         times = []
         for rep in range(3):

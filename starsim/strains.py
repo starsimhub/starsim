@@ -1,5 +1,9 @@
 """
 Strains of a disease (`ss.Strains`), and protection between them (`ss.immunity`)
+
+These exist so that one disease can have several strains, with their own values and with protection between them, without being written as several diseases. A declared disease can share its states between strains or give each its own course (`ss.strains.Family`); a disease written as code carries one strain at a time, as agents (`ss.Infection.define_strains()`).
+
+Used with: agents and compartments; declared and coded modules
 """
 import copy
 import itertools
@@ -91,7 +95,7 @@ class immunity:
             raise TypeError(errormsg)
         self.due_to = due_to
         self.combine = combine
-        self.values = sc.objdict() # The protection on each quantity: 'rel_sus', 'rel_trans', or 'dur.<state>'
+        self.values = sc.obj() # The protection on each quantity: 'rel_sus', 'rel_trans', or 'dur.<state>'
         items = [('rel_sus', rel_sus), ('rel_trans', rel_trans)] + [(f'dur.{k}', v) for k,v in (dur or {}).items()]
         for key,val in items:
             if val is not None:
@@ -123,7 +127,12 @@ class immunity:
         return [getattr(x, 'name', x) for x in sc.tolist(self.due_to)]
 
     def matrix(self, key, n):
-        """ The protection on a quantity as an n×n matrix """
+        """ The protection on a quantity as an n×n matrix
+
+        Args:
+            key (str): the quantity, e.g. `'rel_sus'`
+            n (int): the number of strains
+        """
         val = self.values[key]
         if val.ndim == 0:
             return np.full((n, n), float(val))
@@ -151,6 +160,11 @@ class Strain:
     `move=DS >> (DS, RIF)` (emergence: DS acquires resistance). A tuple is a set of strains carried
     together (`move=(A, B) >> A`: of someone carrying both, only A progresses); between two tuples,
     which `>>` cannot write, use `strains.move((A, B), (A, C))`.
+
+    Args:
+        name (str): the name of the strain
+        index (int): its position among the strains
+        strains (Strains): the strains it belongs to
     """
     def __init__(self, name, index, strains):
         self.name = name
@@ -307,7 +321,7 @@ class Strains:
         self.names = names
         self.strains = [Strain(n, i, self) for i,n in enumerate(names)]
         n = len(names)
-        self.values = sc.objdict()
+        self.values = sc.obj()
         for key,vals in values.items():
             vals = np.array(vals, dtype=float)
             if vals.shape != (n,):
@@ -399,7 +413,12 @@ class Strains:
         return f'Strains({self.name}: {sc.strjoin(self.names)})'
 
     def move(self, src, dst):
-        """ A change of the strains people carry, from a strain or a tuple of them to a strain or a tuple of them: `strains.move((DS, INH), (RIF, INH))`, for what `>>` cannot write between two tuples """
+        """ A change of the strains people carry, from a strain or a tuple of them to a strain or a tuple of them: `strains.move((DS, INH), (RIF, INH))`, for what `>>` cannot write between two tuples
+
+        Args:
+            src (Strain/tuple): the strain or strains people carry
+            dst (Strain/tuple): the strain or strains they carry afterward
+        """
         out = StrainMove(src, dst)
         if out.strains is not self:
             errormsg = f'{out} changes the strains of "{out.strains.name}", not of "{self.name}"'
@@ -567,7 +586,7 @@ def prepare(strains, trs):
             tr.p = [ss.by(**{strains.name:none.tolist()}), None]
             named = isinstance(given, str) and name in strains.values # Values by the transition's name multiply its rate when the chances are named values; with a number, they multiply the chances instead
             tr.strain_adjust = strains._level_values(name) if named else np.ones(L)
-        tr.move = sc.objdict({strains.name:('matrix', tuple(map(tuple, Q.tolist())))})
+        tr.move = sc.obj({strains.name:('matrix', tuple(map(tuple, Q.tolist())))})
     return
 
 
@@ -685,7 +704,11 @@ def attach_members(dis, strains, args, pars, kwargs):
 
 
 class Union(ss.conditions.Cond):
-    """ The people in a state (or a named sum of states) of at least one member of a family: a condition, e.g. `where=hpv.infected` """
+    """ The people in a state (or a named sum of states) of at least one member of a family: a condition, e.g. `where=hpv.infected`
+
+    Args:
+        parts (list): the conditions, one for each member
+    """
     def __init__(self, parts):
         a = parts[0]
         for b in parts[1:]:
@@ -703,8 +726,16 @@ class Union(ss.conditions.Cond):
         return out
 
 
-class Protection:
-    """ The effect of an `ss.immunity` on one quantity of one strain with its own course, as agents: a multiplier, like a modifier (see `ss.connectors.combine()`) """
+class Protection(sc.prettyobj):
+    """ The effect of an `ss.immunity` on one quantity of one strain with its own course, as agents: a multiplier, like a modifier (see `ss.connectors.combine()`)
+
+    Args:
+        family (Family): the family of strains
+        index (int): the index of the `ss.immunity` among those of the strains
+        key (str): the quantity it lowers
+        member (int): the position of the member it protects, in the family
+        state (State): for a time spent, the state whose exits it speeds up
+    """
     op = 'multiply'
     active = True
     tabulated = False
@@ -768,6 +799,13 @@ class Family(ss.Module):
     Results: for each state or named sum of states that every member has (a stock), the number in it in
     any member (`I`, `infected`); for each transition every member has (a flow), the sum (`cancer`).
     `res.by('<strain dimension>')` gives each member's own.
+
+    Args:
+        name (str): the name of the family, usually that of the disease
+        members (list): the declared diseases, one for each strain
+        strains (Strains): the strains
+        init_prev (float): the share of people who start infected
+        label (str): the label, for plots and printing
     """
     compartmental = False
     graph = None # It has no states of its own; its members have
@@ -800,7 +838,7 @@ class Family(ss.Module):
                 raise ValueError(f'split= of "{name}" gives sets of strains ({sc.strjoin(l for l in strains.split_sets if "+" in l)}), but its strains have courses of their own, each seeded alone; give one share for each strain')
             strains.split = np.array([strains.split_sets.get(n, 0.0) for n in names])
         self.split = None if strains.split is None else strains.split.copy()
-        self.guessed = sc.objdict()
+        self.guessed = sc.obj()
         if self.split is not None:
             if not np.isclose(self.split.sum(), 1):
                 self.guessed['split'] = f'normalized, since it summed to {self.split.sum():n}'
@@ -817,7 +855,7 @@ class Family(ss.Module):
                     errormsg = f'"{name}" seeds its strains (init_prev=), but its strain "{mod.name}" has {sc.strjoin(own)} of its own as well; give one or the other'
                     raise ValueError(errormsg)
                 mod.graph.seeded_by = name # Seeded by the family (see ss.solvers.Engine.init_fractions())
-        self.stocks = sc.objdict() # The results that are unions: for each name, the states of each member that make it up
+        self.stocks = sc.obj() # The results that are unions: for each name, the states of each member that make it up
         for key in self.common(members, 'states'):
             if all(mod.graph.states[key].people for mod in members):
                 self.stocks[key] = [[key] for mod in members]
@@ -893,7 +931,11 @@ class Family(ss.Module):
         return [self.sim.diseases[name] for name in self.member_names]
 
     def init_pre(self, sim):
-        """ Check the family against the sim, resolve its references by name, and add its protection to the modifiers of its members """
+        """ Check the family against the sim, resolve its references by name, and add its protection to the modifiers of its members
+
+        Args:
+            sim (Sim): the sim being initialized
+        """
         if self.dim in [strat.name for strat in sim.groups.strats]: # Checked first, since the people would refuse the name too
             errormsg = f'the strains of "{self.name}" are called "{self.dim}", which is also the name of a dimension; give the strains another name (ss.Strains(..., name=...))'
             raise ValueError(errormsg)
@@ -1189,8 +1231,13 @@ class Family(ss.Module):
         return
 
     def describe(self, output=False, out=None):
-        """ The family: its members, protection, seeding, and results; as for `ss.Disease.describe()` """
-        desc = ss.presentation.Description() if out is None else out
+        """ The family: its members, protection, seeding, and results; as for `ss.Disease.describe()`
+
+        Args:
+            output (bool): if True, return the text rather than printing it
+            out (`ss.display.Description`): if given, add the description to it and return it
+        """
+        desc = ss.display.Description() if out is None else out
         members = self.member_names
         shared = f'; shared: {sc.strjoin(self.exclusive)}' if self.exclusive else ''
         desc.section(f'Strains of {self.name}', f'{len(members)} with courses of their own ({sc.strjoin(members)}), stepped in this order{shared}')

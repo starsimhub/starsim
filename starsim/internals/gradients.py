@@ -1,5 +1,5 @@
 """
-The ODE run in JAX: gradients of results with respect to parameters, and many runs at once
+Not for the user: the ODE run in JAX: gradients of results with respect to parameters, and many runs at once
 
 A compartmental engine flattens its flows into a `ss.kernels.Program`. The Numba
 kernels step through it; `run()` here takes the same program and runs the same
@@ -13,6 +13,8 @@ are Python (working out those numbers from the parameters, and the results from
 the run, including outcomes and the goodness of fit), and are differentiated by
 central differences along the direction the run is differentiated in. They are cheap
 and smooth, so this is accurate to about 1e-9 of the value.
+
+Used with: compartments; declared modules
 """
 import os
 import sys
@@ -120,9 +122,11 @@ def reason(sim):
 
 #%% The run
 
-class OneHot:
+class OneHot(sc.prettyobj):
     """
     Which of n rows each group is in (e.g. its place), applied as a one-hot matrix would be, but as sums and indexing (O(groups), not O(groups²)): nothing at all when each group is its own row
+
+    It exists to avoid a large dense matrix in the run.
 
     Args:
         index (array): the row of each group
@@ -163,7 +167,7 @@ class OneHot:
         return self.spread(self.sum(v))
 
 
-class Run:
+class Run(sc.prettyobj):
     """
     One engine's run, as a function of the numbers in it
 
@@ -605,7 +609,7 @@ def compile_run(run, kind):
     return jx.jit(lambda X, dX: jx.vmap(lambda d: jx.jvp(run, (X,), (d,))[1][:3])(dX)) # The substeps a step needs have no derivative
 
 
-class CrossRun:
+class CrossRun(sc.prettyobj):
     """
     The diseases of a crossing, run together by the crossing's program (see `ss.solvers.Crossing`)
 
@@ -816,7 +820,7 @@ def run_sets(sim, par_sets):
             captured[j].append(capture(mod.engine))
     outs = outputs(sim, captured, kind='many')
     base = sim.par_values
-    results = sc.objdict()
+    results = sc.obj()
     for j,mod in enumerate(mods): # The number in each state, by group
         engine = mod.engine
         states = list(engine.graph.states)
@@ -832,7 +836,7 @@ def run_sets(sim, par_sets):
             ss.solvers.set_par_values(sim)
             engine.cache.clear()
             runs.append(engine.collect(stocks[i:i+1], flows[i:i+1]))
-        results[mod.name] = sc.objdict({key:(sc.objdict({k:np.concatenate([run[key][k] for run in runs]) for k in runs[0][key]}) if key in ['groups', 'denoms'] else np.concatenate([run[key] for run in runs])) for key in runs[0] if key != 'group_ti'})
+        results[mod.name] = sc.obj({key:(sc.obj({k:np.concatenate([run[key][k] for run in runs]) for k in runs[0][key]}) if key in ['groups', 'denoms'] else np.concatenate([run[key] for run in runs])) for key in runs[0] if key != 'group_ti'})
         results[mod.name].group_ti = None # The values by group, if kept, are at every time point
     sim.par_values = base
     ss.solvers.set_par_values(sim)
@@ -854,7 +858,7 @@ def gradient(sim, set_pars, x0, read, rel_step=1e-5):
         sim (`ss.Sim`): an initialized sim that `reason()` allows, which is left as its run at x0
         set_pars (func): called with an array of values; restarts the sim with them (e.g. `lambda x: sim.restart(pars=dict(beta=x[0]))`)
         x0 (array): the values to work out the derivative at
-        read (func): called with the sim after its run; returns a number or an array (or an `sc.objdict` of arrays)
+        read (func): called with the sim after its run; returns a number or an array (or an `sc.obj` of arrays)
         rel_step (float): the step for the central differences, relative to each value (or absolute, for a value of 0)
 
     Returns:
@@ -900,18 +904,18 @@ def gradient(sim, set_pars, x0, read, rel_step=1e-5):
 def difference(a, b, h):
     """ (a - b)/2h, for numbers, arrays, or dicts of them """
     if isinstance(a, dict):
-        return sc.objdict({key:difference(a[key], b[key], h) for key in a})
+        return sc.obj({key:difference(a[key], b[key], h) for key in a})
     return (np.asarray(a, dtype=float) - np.asarray(b, dtype=float))/(2*h)
 
 
 def find_pars(sim, names=None, several=False):
     """
-    The parameters named (by name, or 'module.name' where needed), or every one that has bounds: an `sc.objdict` of them by name
+    The parameters named (by name, or 'module.name' where needed), or every one that has bounds: an `sc.obj` of them by name
 
     Args:
         several (bool): whether a parameter may have several values (a value for each level, an array, or a time series), and a name may be of one of them ("beta[a]"); see `entries()`
     """
-    out = sc.objdict()
+    out = sc.obj()
     wanted = None if names is None else [base_name(name) if several else name for name in names]
     for mod in sim.declared:
         for name,p in mod.graph.pars.items():
@@ -951,7 +955,7 @@ def entries(sim, names=None):
     found, levels, elements = ss.fit.expand(sim, find_pars(sim, names, several=True))
     if names is not None: # Only the values named, of a parameter with several ("beta[a]")
         named = lambda key: any(n in [key, base_name(key)] or key.endswith(f'.{n}') or base_name(key).endswith(f'.{n}') for n in names)
-        found = sc.objdict({key:p for key,p in found.items() if named(key)})
+        found = sc.obj({key:p for key,p in found.items() if named(key)})
     raws = [ss.fit.entry(name, p, levels, elements) for name,p in found.items()]
     x0, types = ss.fit.start_values(raws)
     bounds = np.array([elements[name][2:4] if name in elements else [ss.fit.bound_value(b, raw) for b in p.bounds] if p.bounds is not None else [x, x] for name,p,raw,x in zip(found.keys(), found.values(), raws, x0)], dtype=float).T
@@ -973,24 +977,28 @@ def of_results(sim, results=None, pars=None):
     found, set_pars, x0, bounds = entries(sim, None if pars is None else sc.tolist(pars))
 
     def read(sim):
-        out = sc.objdict()
+        out = sc.obj()
         for mod in sim.declared:
             for key,res in mod.results.items():
                 if isinstance(res, ss.Result) and np.ndim(res.values) == 1 and (results is None or key in sc.tolist(results) or f'{mod.name}.{key}' in sc.tolist(results)):
-                    out.setdefault(mod.name, sc.objdict())[key] = np.array(res.values, dtype=float)
+                    out.setdefault(mod.name, sc.obj())[key] = np.array(res.values, dtype=float)
         return out
 
     value, derivs = gradient(sim, set_pars, x0, results if callable(results) else read)
     if not callable(results) and not value:
         errormsg = f'Found no result named {sc.strjoin(sc.tolist(results))}'
         raise ValueError(errormsg)
-    return sc.objdict(zip(found.keys(), derivs))
+    return sc.obj(zip(found.keys(), derivs))
 
 
 #%% The log-density in JAX
 
 class Unsupported(Exception):
-    """ Something in the model that the log-density in JAX does not cover yet """
+    """
+    Something in the model that the log-density in JAX does not cover yet
+
+    It exists so that the reason can be given to the user rather than a JAX error.
+    """
     pass
 
 
@@ -1072,7 +1080,7 @@ def time_value(raw, ctx, years, values=None):
     raise Unsupported(f'a fitted parameter inside {raw}')
 
 
-class Context:
+class Context(sc.prettyobj):
     """ What expressions are evaluated with in JAX: the fitted parameters as JAX values, the others as the engine has them, and (for results) the number in each state """
     def __init__(self, density, engine, x, n=None, series=False):
         self.density = density
@@ -1135,7 +1143,7 @@ class Context:
         return self.stock(state)
 
 
-class Density:
+class Density(sc.prettyobj):
     """
     The log of the posterior density of a sim's fitted parameters, as one function in JAX, so that it can be compiled and differentiated whole (see `sim.fit()` with method='nuts')
 
@@ -1387,7 +1395,7 @@ class Density:
                 raise Unsupported(f'the outcome "{name}"')
             W, expected, rows = lined[col]
             rows, cols = np.nonzero(W) # Each data point is a step's value, or the total over the steps since the last: kept as the entries that are not zero, since the whole matrix is the data points times the steps
-            self.series.append(sc.objdict(col=col, j=j, name=name, keep=keep, W=(rows, cols, W[rows, cols], W.shape[0]), expected=expected, lik=liks[col], weight=ss.fit.series_weight(self.weights, col)))
+            self.series.append(sc.obj(col=col, j=j, name=name, keep=keep, W=(rows, cols, W[rows, cols], W.shape[0]), expected=expected, lik=liks[col], weight=ss.fit.series_weight(self.weights, col)))
         return
 
     def outcomes(self, engine, ctx, new, npts):
@@ -1503,7 +1511,7 @@ class Density:
         return total, need
 
 
-class LogDensity:
+class LogDensity(sc.prettyobj):
     """
     The log of the posterior density of a sim's fitted parameters as a function of their values, in JAX, for use outside `sim.fit()`: see `ss.Sim.log_density()`
 

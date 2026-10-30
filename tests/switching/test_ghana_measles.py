@@ -21,7 +21,7 @@ northern = [0, 4, 8, 12, 16] # The synthetic districts standing in for the five 
 def make_districts(n=20, seed=1):
     """ A synthetic stand-in for Ghana's districts """
     rng = np.random.default_rng(seed)
-    return sc.objdict(names=[f'd{i}' for i in range(n)], popsize=rng.lognormal(np.log(90_000), 0.6, n), lat=rng.uniform(5, 11, n), lon=rng.uniform(-3, 1, n))
+    return sc.obj(names=[f'd{i}' for i in range(n)], popsize=rng.lognormal(np.log(90_000), 0.6, n), lat=rng.uniform(5, 11, n), lon=rng.uniform(-3, 1, n))
 
 
 def make_measles(d, beta=ss.perday(1.75), away=0.01, report=0.005):

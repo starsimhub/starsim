@@ -17,15 +17,15 @@ sc.options(interactive=False) # Assume not running interactively
 
 
 def make_sim_pars():
-    pars = sc.objdict(
+    pars = sc.obj(
         n_agents = n_agents,
         start = 2000, # Calendar years, for the interventions below
         demographics = [ss.birth(rate=ss.peryear(0.02)), ss.death(rate=ss.peryear(0.015))],
-        networks = sc.objdict(
+        networks = sc.obj(
             type = 'randomnet',
             n_contacts = 4,
         ),
-        diseases = sc.objdict(
+        diseases = sc.obj(
             type = 'sir',
             dur_inf = 10,
             beta = 0.1,
@@ -480,7 +480,7 @@ def test_update_pars():
 def test_save():
     """ Test save and export """
     sc.heading('Testing save and export...')
-    f = sc.objdict() # Filenames
+    f = sc.obj() # Filenames
     f.sim  = 'temp.sim'
     f.json = 'sim.json'
     sim = ss.Sim(n_agents=n_agents, diseases=ss.SIS(dur_inf=ss.lognorm_ex(mean=ss.years(10))), networks='random').run()

@@ -1,6 +1,7 @@
 """
-How Starsim works under the hood, for developers rather than modelers: the graph of a declared module and how it
-is shown, expressions, gradients, errors, debugging tools, and the command line
+How Starsim works under the hood: the machinery that the modules and solvers are built on
 
-Each is also at the top level: ss.errors, ss.expressions, ss.graph, ss.presentation, ss.gradients, ss.debugtools.
+The files here that users reach directly (`ss.time`, `ss.arrays`, `ss.parameters`, and others) are also at the top level, as are ss.errors, ss.expressions, ss.graph, ss.display, ss.gradients, ss.debugtools.
+
+Used with: agents and compartments; declared and coded modules
 """

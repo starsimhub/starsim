@@ -185,7 +185,7 @@ def test_register():
         sir = ss.Disease(infection=ss.Transition(S, I, rate=ss.perday(0.3) * I), recovery=ss.Transition(I, R, dur=ss.days(10)), init_n=dict(I=init), name='sir')
         return sir.stratify(place=['a', 'b', 'c'], kind='space', split=[0.5, 0.3, 0.2], mobility=ss.geo.Mobility(data=data))
 
-    sims = sc.objdict()
+    sims = sc.obj()
     for solver in ['ode', 'gillespie', 'abm']:
         with pytest.warns(RuntimeWarning, match='more people than there were'): # Nobody in c is ever infected, so the last event finds nobody to move
             sims[solver] = sim = run(make(), solver, total_pop=10_000, unit='day', stop=60)

@@ -4,10 +4,12 @@ Import models from other frameworks, and export sims to them
 `ss.import_from(filename, format=...)` reads another framework's model into a sim, and
 `ss.export_to(sim, format)` writes a sim in another framework's format; see
 `v4_design/design/16-interop.md`. Each importer reads its format into an
-`ss.io.Source`, and `ss.io.build()` writes that as Starsim code by the
-same rules for every format (`ss.io.write()`) and runs the code to make the sim:
+`ss.converters.Source`, and `ss.converters.build()` writes that as Starsim code by the
+same rules for every format (`ss.converters.write()`) and runs the code to make the sim:
 the code is kept in `sim.imported.code`, how each rate was read is printed, and what
 could not be translated is listed as `ss.errors.ImportIncomplete` and kept in `sim.imported`.
+
+Used with: agents and compartments; declared and coded modules
 """
 import os
 import re
@@ -95,7 +97,7 @@ def import_from(source, format=None, **kwargs):
 
     Args:
         source (str/any): the file (or, for some formats, the model object)
-        format (str): the framework, one of `ss.io.importers`; if not given, told from the file or object (see `sniff()`)
+        format (str): the framework, one of `ss.converters.importers`; if not given, told from the file or object (see `sniff()`)
         kwargs (dict): passed to the importer
 
     Returns:
@@ -128,7 +130,7 @@ def convert(source, filename=None, format=None, **kwargs):
 
     **Example**:
 
-        sim = ss.io.convert('tb_framework.xlsx', format='atomica', databook='IND.xlsx', filename='tb_india.py')
+        sim = ss.converters.convert('tb_framework.xlsx', format='atomica', databook='IND.xlsx', filename='tb_india.py')
         sim.run() # Or later: python tb_india.py, or runpy.run_path('tb_india.py')['sim']
     """
     if filename is None:

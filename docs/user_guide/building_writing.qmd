@@ -93,7 +93,7 @@ measles.equations()
 
 These are the equations whatever the model is run as: as agents, each person moves between states at the same rates. A model with a non-exponential duration shows the stages it is run with, and a model with contacts by age shows its mixing.
 
-`diagram()` draws the model's diagram, with each arrow labelled with its transition's name and value:
+`diagram()` draws the model's diagram, with each arrow labeled with its transition's name and value:
 
 ```{python}
 measles.diagram()

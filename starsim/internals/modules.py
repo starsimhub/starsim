@@ -1,6 +1,9 @@
 """
-General module class -- base class for diseases, interventions, etc. Also
-defines Analyzers and Connectors.
+The base classes of the parts of a sim: `ss.Base` and `ss.Module`, which diseases, networks, interventions, and the rest inherit from
+
+They exist so that every part of a model has the same parameters, timeline, results, and place in the integration loop.
+
+Used with: agents and compartments; declared and coded modules
 """
 import inspect
 import functools as ft
@@ -21,7 +24,7 @@ def module_map(key=None):
     This is the source of truth about module types. Modules with types that do not
     map to anything in the module_map are treated as custom modules.
     """
-    module_map = sc.objdict(
+    module_map = sc.obj(
         demographics  = ss.Demographics,
         networks      = ss.networks.Route, # NB, not ss.Network!
         diseases      = ss.Disease,
@@ -72,8 +75,15 @@ def register_modules(*args):
 
 
 def find_modules(key=None, flat=False, verbose=False):
-    """ Find all subclasses of Module present in Starsim, divided by type """
-    modules = sc.objdict()
+    """
+    Find all subclasses of Module present in Starsim, divided by type
+
+    Args:
+        key (str): the type of module to return, e.g. 'diseases'; if None, return all
+        flat (bool): whether to return one flat dict, not one for each type
+        verbose (bool): whether to print each custom module as it is loaded
+    """
+    modules = sc.obj()
     modmap = module_map()
     attr_lists = [[ss, dir(ss)]] # Find all attributes in Starsim (note: does not parse user code; use register_modules() for that)
     for custom in custom_modules:
@@ -85,8 +95,8 @@ def find_modules(key=None, flat=False, verbose=False):
 
     # Initialize dict
     for modkey in modmap.keys():
-        modules[modkey] = sc.objdict()
-    modules['modules'] = sc.objdict() # Catch-all for modules that do not match a standard type (e.g. user-created ss.Module classes)
+        modules[modkey] = sc.obj()
+    modules['modules'] = sc.obj() # Catch-all for modules that do not match a standard type (e.g. user-created ss.Module classes)
 
     # Loop over all attributes
     for pymodule,attrs in attr_lists:
@@ -123,7 +133,7 @@ def find_modules(key=None, flat=False, verbose=False):
                     if verbose: print(f'     Module modules.{low_attr} added')
 
     if flat:
-        modules = sc.objdict({k:v for vv in modules.values() for k,v in vv.items()}) # Unpack the nested dict into a flat one
+        modules = sc.obj({k:v for vv in modules.values() for k,v in vv.items()}) # Unpack the nested dict into a flat one
     return modules if key is None else modules[key]
 
 
@@ -168,6 +178,8 @@ def required():
 class Base:
     """
     The parent class for Sim and Module objects
+
+    It holds what both have in common, such as how they are shown.
     """
     def __bool__(self):
         """ Ensure that zero-length modules (e.g. networks) are still truthy """
@@ -183,7 +195,13 @@ class Base:
         return sc.prepr(self)
 
     def disp(self, output=False, **kwargs):
-        """ Display the full object """
+        """
+        Display the full object
+
+        Args:
+            output (bool): whether to return the text rather than print it
+            **kwargs (dict): passed to `sc.prepr()`
+        """
         out = sc.prepr(self, **kwargs)
         if not output:
             print(out)
@@ -355,7 +373,13 @@ class Module(Base):
         return
 
     def brief(self, output=False, extra=''):
-        """ Show a brief representation of the module, with any extra text after its name (e.g. a network's number of edges); used by __repr__ """
+        """
+        Show a brief representation of the module, with any extra text after its name (e.g. a network's number of edges); used by __repr__
+
+        Args:
+            output (bool): whether to return the text rather than print it
+            extra (str): text to show after the name
+        """
         name = self.name # e.g. 'sir'
         label = self.label # e.g. 'My SIR'
         class_name = self.__class__.__name__ # e.g. 'SIR'
@@ -413,7 +437,13 @@ class Module(Base):
 
     @required()
     def set_metadata(self, name=None, label=None):
-        """ Set metadata for the module """
+        """
+        Set metadata for the module
+
+        Args:
+            name (str): the name of the module; if None, the lowercase name of its class
+            label (str): the label of the module; if None, its name
+        """
         # Validation
         for key,val in dict(name=name, label=label).items():
             if val is not None:
@@ -522,6 +552,10 @@ class Module(Base):
 
         Note: this method also automatically pulls in keyword arguments from the
         calling function (which is almost always a module's `__init__()` method)
+
+        Args:
+            inherit (bool): whether to merge with the parameters already defined, rather than replace them
+            **kwargs (dict): the parameters
         """
         if inherit: # Merge with existing
             declared = '_declared' in vars(self) or getattr(self, 'graph', None) is not None # Declared, or being declared (see ss.Disease.define_transitions()), without building it
@@ -559,6 +593,10 @@ class Module(Base):
     def update_pars(self, pars=None, **kwargs):
         """
         Pull out recognized parameters and update them; raises on unrecognized keys
+
+        Args:
+            pars (dict): the parameters to update
+            **kwargs (dict): more parameters, merged into `pars`
         """
         # Merge pars and kwargs
         if isinstance(pars, ss.Pars): # E.g. a package's full set of defaults for the module: those given as ss.par keep their bounds
@@ -719,7 +757,12 @@ class Module(Base):
         return
 
     def define_results(self, *args):
-        """ Add results to the module """
+        """
+        Add results to the module
+
+        Args:
+            *args (`ss.Result`/list/dict): the results; a list or dict is passed to `ss.Result()`
+        """
         auto_names = {state.name for state in self.auto_state_list} | set(self.derived_state_names) # Names that already generate a result of the same name, their count
         for arg in args:
             if isinstance(arg, (list, tuple)):
@@ -750,10 +793,14 @@ class Module(Base):
         This method is called once, as part of initializing a Sim. Note: after
         initialization, initialized=False until init_vals() is called (which is after
         distributions are initialized).
+
+        Args:
+            sim (`ss.Sim`): the sim
+            force (bool): whether to run again if already done
         """
         if force or not self.pre_initialized:
             self.setattribute('sim', sim) # Link back to the sim object
-            ss.distributions.link_dists(self, sim, skip=[ss.Sim, ss.Module]) # Link the distributions to sim and module, skipping any nested sim or module instances
+            ss.dists.link_dists(self, sim, skip=[ss.Sim, ss.Module]) # Link the distributions to sim and module, skipping any nested sim or module instances
             self.t.init(sim=self.sim) # Initialize time vector
             self.link_timepars() # Add module dt to the timepars
             self.check_bare_units(sim)
@@ -790,8 +837,11 @@ class Module(Base):
 
         This is what lets a timepar resolve itself against the timestep with no
         argument, e.g. `self.pars.death_rate.to_prob()` or `self.pars.dur_inf.to_dt()`.
+
+        Args:
+            force (bool): whether to relink parameters that are already linked
         """
-        timepars = sc.search(self, type=ss.TimePar, skip=dict(keys=ss.utils.skipkeys(['sim', 'module', 't'] + list(getattr(self, 'timepar_skip', []))), subclasses=ss.distributions.no_dists())) # Skip the timeline, else the module's own dt would be linked to itself
+        timepars = sc.search(self, type=ss.TimePar, skip=dict(keys=ss.utils.skipkeys(['sim', 'module', 't'] + list(getattr(self, 'timepar_skip', []))), subclasses=ss.dists.no_dists())) # Skip the timeline, else the module's own dt would be linked to itself
 
         # Initialize them with the parent module
         dt = self.t.dt
@@ -831,7 +881,13 @@ class Module(Base):
         return
 
     def init_mock(self, n_agents=100, dur=10):
-        """ Initialize with a mock simulation -- for debugging purposes only """
+        """
+        Initialize with a mock simulation -- for debugging purposes only
+
+        Args:
+            n_agents (int): the number of agents in the mock sim
+            dur (float): the duration of the mock sim
+        """
         sim = ss.debugtools.mock_sim(n_agents=n_agents, dur=dur)
         self.init_pre(sim)
         for state in self.state_list: # Manually link the people
@@ -840,7 +896,7 @@ class Module(Base):
         dists = sc.search(obj, type=ss.Dist)
         for i,dist in dists.enumvals():
             dist.trace = f'dist_{i}'
-        ss.distributions.link_dists(obj=obj, sim=sim, module=self, skip=[ss.Sim, ss.Module], init=True)
+        ss.dists.link_dists(obj=obj, sim=sim, module=self, skip=[ss.Sim, ss.Module], init=True)
         self.init_post()
         return self
 
@@ -892,7 +948,12 @@ class Module(Base):
         return [key for key,alias in self._state_aliases.items() if callable(alias)]
 
     def match_time_inds(self, inds=None):
-        """ Find the nearest matching sim time indices for the current module """
+        """
+        Find the nearest matching sim time indices for the current module
+
+        Args:
+            inds (array): indices to return if the module and sim have the same number of timesteps; if None, all of them
+        """
         self_tvec = self.t.yearvec
         sim_tvec = self.sim.t.yearvec
         if len(self_tvec) == len(sim_tvec): # Shortcut to avoid doing matching

@@ -10,7 +10,9 @@ them. A transition can be written with operators or in full, which build the sam
 The `ss.graph.Graph` class (in `internals/graph.py`) collects the states and transitions of one module, names
 them, fills in defaults (recording each guess), and checks them. The expressions are in `ss.expressions`,
 the values that vary (`ss.by`, `ss.timeseries`, `ss.seasonal`) in `ss.parameters`, how a model is shown in
-`ss.presentation`, and its stratifications in `ss.dimensions`.
+`ss.display`, and its stratifications in `ss.dimensions`.
+
+Used with: agents and compartments; declared modules
 """
 import re
 import copy
@@ -21,7 +23,7 @@ import numpy as np
 import sciris as sc
 import starsim as ss
 from .internals.expressions import as_expr, BinOp, dists_in, Count, did_you_mean, dimension, Expr, Flow, format_expr, is_one, linear, Nameable, par, value_str
-from .parameters import by, TimeValue
+from .internals.parameters import by, TimeValue
 
 __all__ = ['pars', 'State', 'states', 'null',
            'Transition', 'move', 'birth', 'death', 'lifetable', 'immigration', 'emigration', 'outcome']
@@ -74,7 +76,7 @@ class State(Nameable, Expr):
         self.label = label
         self.order = next(State._counter)
         self.module = None # Set by the graph
-        self.guessed = sc.objdict() # Which fields were guessed (people), and why
+        self.guessed = sc.obj() # Which fields were guessed (people), and why
         return
 
     __hash__ = object.__hash__
@@ -185,7 +187,7 @@ def pars(defaults, **kwargs):
         defaults (dict): the default of each parameter: a value, or an `ss.par` (with bounds, say)
         kwargs (dict): the values given, e.g. the keywords of the disease's `__init__()`
 
-    Returns an `sc.objdict` of the parameters, by name.
+    Returns an `sc.obj` of the parameters, by name.
 
     Examples:
         ```python
@@ -199,7 +201,7 @@ def pars(defaults, **kwargs):
     if unknown:
         errormsg = f'Unknown parameter(s) {sc.strjoin(unknown)}; the parameters are {sc.strjoin(defaults.keys())}{did_you_mean(unknown[0], list(defaults))}'
         raise sc.KeyNotFoundError(errormsg)
-    out = sc.objdict()
+    out = sc.obj()
     for key,default in defaults.items():
         given = kwargs.get(key)
         default = sc.dcp(default) if isinstance(default, par) else par(sc.dcp(default)) if default is not None else None
@@ -261,7 +263,7 @@ def parse_increment(increment, what):
     if not isinstance(increment, dict) or not increment:
         errormsg = f'increment= of {what} is the name of a counter (increment="parity", which adds 1) or a dict of the amount to add to each (increment=dict(parity=2)), not {increment!r}'
         raise TypeError(errormsg)
-    out = sc.objdict()
+    out = sc.obj()
     for dim,k in increment.items():
         if not sc.isnumber(k) or isinstance(k, bool) or k != int(k) or k == 0:
             errormsg = f'increment= of {what} adds a whole number of levels to a counter, so "{dim}" needs a whole number other than 0 (e.g. 1, 2, or -1), not {k!r}; a level to go to is move=dict({dim}=...)'
@@ -304,7 +306,7 @@ class on:
     Examples:
         ```python
         debut = U >> CST1 @ ss.on(ss.ppl.female & (ss.ppl.age >= 15))
-        cancelled = (S + P + C) >> Z @ ss.on(ss.state('hpv18.X') | ss.state('hpv31.X'))
+        canceled = (S + P + C) >> Z @ ss.on(ss.state('hpv18.X') | ss.state('hpv31.X'))
         ```
     """
     def __init__(self, x):
@@ -420,7 +422,7 @@ class Transition(Nameable):
         self.move_given = dict(move) if move else None # As given
         self.move_from = {} # The levels it applies to, from a pair (from, to) in move=: {dim: [levels]}
         if move:
-            self.move = sc.objdict()
+            self.move = sc.obj()
             for dim,level in move.items():
                 if type(level).__name__ == 'StrainMove': # Each level that carries the strains it changes, to the level that carries them changed
                     mapping = level.mapping()
@@ -459,7 +461,7 @@ class Transition(Nameable):
         self.dies = False # Whether ss.null is one of several destinations, kept out of dst: those who take it die, as by an outflow
         self.p_die = None # Its probability, if given (otherwise the rest)
         self._ends_at = {} # Where ss.stay and ss.null were among the destinations given, so their entries of p= can be taken out
-        self.guessed = sc.objdict() # Which fields were guessed, and why
+        self.guessed = sc.obj() # Which fields were guessed, and why
         if src is not None:
             self._set_src(src)
         if dst is not None:
@@ -500,6 +502,9 @@ class Transition(Nameable):
 
         It is the rate those agents would face if they were in its source state now (0 for a transition with no rate).
 
+        Args:
+            uids (array): the agents
+
         **Example**::
 
             h = tb.death.hazard(uids) # The hazard of death from TB for each of these agents
@@ -514,7 +519,11 @@ class Transition(Nameable):
         return np.broadcast_to(np.maximum(np.asarray(out, dtype=float), 0), len(uids)).copy()
 
     def to(self, dst):
-        """ The event of taking one branch of this transition, e.g. `precin.to(S)`: a condition, `on=`, or `.uids` """
+        """ The event of taking one branch of this transition, e.g. `precin.to(S)`: a condition, `on=`, or `.uids`
+
+        Args:
+            dst (State): the state the branch leads to
+        """
         return ss.conditions.Event('to', self, dst)
 
     @property
@@ -670,7 +679,7 @@ class Transition(Nameable):
     def _copy(self):
         """ A copy, so that a partial transition (S >> I, or I @ rate) can be used to build more than one """
         new = sc.cp(self)
-        new.guessed = sc.objdict(self.guessed)
+        new.guessed = sc.obj(self.guessed)
         return new
 
     def _arith(self, op, other, reverse=False):
@@ -685,7 +694,7 @@ class Transition(Nameable):
             errormsg = f'Cannot apply "{op}" to two transitions'
             raise TypeError(errormsg)
         new = sc.cp(self)
-        new.guessed = sc.objdict()
+        new.guessed = sc.obj()
         if self.rate is not None:
             new.rate = BinOp(op, other, self.rate) if reverse else BinOp(op, self.rate, other)
         elif self.dur is not None and self.src is None: # e.g. R @ ss.days(10) * 2, which would otherwise be dropped
@@ -1014,18 +1023,31 @@ class lifetable:
         return f'lifetable(ages {self.edges[0]:n} to {self.edges[-1]:n})'
 
     def survive(self, age):
-        """ The share of a cohort alive at each age """
+        """ The share of a cohort alive at each age
+
+        Args:
+            age (float/array): the age or ages
+        """
         return np.interp(age, self.edges, self.survival, left=1.0, right=0.0)
 
     def draw(self, age, u):
-        """ The age at death of people of some ages, from uniform random numbers: a cohort's survival to it is a share (1 - u) of its survival to their age """
+        """ The age at death of people of some ages, from uniform random numbers: a cohort's survival to it is a share (1 - u) of its survival to their age
+
+        Args:
+            age (array): the ages of the people
+            u (array): uniform random numbers, one for each person
+        """
         target = self.survive(age)*(1 - np.asarray(u))
         keep = np.r_[True, np.diff(self.survival[::-1]) > 0] # The survival curve is flat where nobody dies, which is not a point it can be inverted at
         out = np.interp(target, self.survival[::-1][keep], self.edges[::-1][keep])
         return np.maximum(out, age)
 
     def hazards(self, edges):
-        """ The death rate per year in each of some age groups (given by their lower edges; the last is open), as a compartmental run takes it """
+        """ The death rate per year in each of some age groups (given by their lower edges; the last is open), as a compartmental run takes it
+
+        Args:
+            edges (array): the lower edge of each age group
+        """
         edges = np.asarray(edges, dtype=float)
         out = []
         for k,lo in enumerate(edges):
@@ -1130,6 +1152,7 @@ class outcome(Nameable):
         duration (any): if given, also produces `n_<name>`: the number currently in this outcome
         likelihood (`ss.Dist`/func): optional likelihood, for calibration: a distribution, or a function `fn(observed, model)` returning the log-likelihood of each value (see `ss.fit.logpdf()`)
         name (str): the name; if not given, taken from the keyword or the variable it is assigned to
+        label (str): a human-readable name
 
     Examples:
         ```python
@@ -1192,7 +1215,12 @@ class outcome(Nameable):
 
 
 class Destination:
-    """ The flow to one destination of a transition with several, e.g. `cin.X`: its name is `'cin.X'`, and it is used in outcomes and results as a transition is """
+    """ The flow to one destination of a transition with several, e.g. `cin.X`: its name is `'cin.X'`, and it is used in outcomes and results as a transition is
+
+    Args:
+        tr (Transition): the transition
+        state (State): the destination
+    """
     def __init__(self, tr, state):
         self.tr = tr
         self.state = state
@@ -1252,8 +1280,17 @@ def route_rate(rates):
     return sum(parts[1:], parts[0])
 
 
+def is_declaration(obj):
+    """ Whether something given to a sim is a piece of a model to build a disease from (a transition, an outcome, or a sum of them), rather than a module; a module that is declared is one with a graph, whichever way it was written """
+    return isinstance(obj, (Transition, outcome, FlowSum))
+
+
 class FlowSum:
-    """ A weighted sum of flows (transitions and outcomes), or a share of one, used as the source of an outcome: 0.1*mild + 0.5*severe, or 0.5*infection """
+    """ A weighted sum of flows (transitions and outcomes), or a share of one, used as the source of an outcome: 0.1*mild + 0.5*severe, or 0.5*infection
+
+    Args:
+        items (list): the flows and their weights
+    """
     def __init__(self, items):
         self.items = [] # Each flow, with its weight
         for item in items:

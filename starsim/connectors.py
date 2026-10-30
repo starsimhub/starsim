@@ -5,6 +5,8 @@ While most of the coupling between disease modules happens automatically via sha
 (e.g., shared susceptibility), connectors allow explicit cross-module logic such as seasonal
 forcing or co-infection effects; `ss.modify()` changes a named quantity, e.g. a seasonal
 `ss.modify(sir.rel_trans, multiply=ss.seasonal(amplitude=0.2, peak='January'))`.
+
+Used with: agents and compartments; declared and coded modules
 """
 import numpy as np
 import sciris as sc
@@ -22,7 +24,13 @@ class Connector(ss.Module):
 
 
 class Target:
-    """ A reference to a quantity of a module that is not a parameter, e.g. `sir.rel_sus`; used as the target of `ss.modify()` """
+    """ A reference to a quantity of a module that is not a parameter, e.g. `sir.rel_sus`; used as the target of `ss.modify()`
+
+    Args:
+        module (Module/str): the module the quantity belongs to, or its name
+        kind (str): the kind of quantity, e.g. `'rel_sus'`, `'transition'`, or `'branch'`
+        name (str): the name of the quantity, if the kind has several
+    """
     def __init__(self, module, kind, name=None):
         self.module = module
         self.kind = kind
@@ -350,6 +358,11 @@ class modify(Connector):
         return f'{modname}.pars.{name}' if kind == 'par' else f'{modname}.{name or kind}'
 
     def init_pre(self, sim):
+        """ Find the quantity this modifies, by name if it was given as a string, and register the modifier with the sim
+
+        Args:
+            sim (Sim): the sim being initialized
+        """
         super().init_pre(sim)
         modname = self.target_module if isinstance(self.target_module, str) else self.target_module.name
         mods = {mod.name:mod for mod in sim.declared}

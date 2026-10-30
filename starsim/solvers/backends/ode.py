@@ -1,10 +1,12 @@
 """
-The ODE in NumPy: the RK4 and Euler step of `ss.kernels.step()`, vectorized over groups (and over the flows whose
+Not for the user: the ODE in NumPy: the RK4 and Euler step of `ss.kernels.step()`, vectorized over groups (and over the flows whose
 rates have the same operations), so that a deterministic run needs no compiling
 
 It takes the same program, and gives the same results to rounding. Anything else (the stochastic solvers, the
 entry points other than `run()` and `one_step()`, and a step with an infinite rate) is passed to the kernels as
 plain Python (`ss.kernels.uncompiled()`).
+
+Used with: compartments; declared modules
 """
 import os
 import numpy as np
@@ -42,7 +44,11 @@ def matrix(rows, cols, shape):
 
 
 class Layout:
-    """ What a program's structure gives, once: who goes where, as index arrays and matrices of ones """
+    """
+    What a program's structure gives, once: who goes where, as index arrays and matrices of ones
+
+    It exists so that a step does not repeat this work.
+    """
     def __init__(self, p, nc, ng):
         nf = len(p.src)
         nflows = p.n_trans + p.n_movers

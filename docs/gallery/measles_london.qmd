@@ -35,7 +35,7 @@ import scipy.stats as sps
 import sciris as sc
 import starsim as ss
 
-pars = sc.objdict(
+pars = sc.obj(
     R0=56.8, sigma=28.9/365.25, gamma=30.4/365.25, mu=0.02/365.25, # Latent and infectious periods of about 12 days; deaths per day
     alpha=0.976, iota=2.9, sigma_se=0.0878,  # Mixing, imported infections, and the noise
     amplitude=0.554, cohort=0.557,           # School terms, and the share of births entering at school start

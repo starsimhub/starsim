@@ -1,5 +1,7 @@
 """
 The shared part of every importer: a neutral description of the source model, and the rules that turn its rates into transitions
+
+Used with: agents and compartments; declared modules
 """
 import re
 import ast
@@ -32,29 +34,46 @@ class Source:
         self.name = name
         self.format = format
         self.file = file
-        self.states = sc.objdict() # Name: dict(init, people, label)
-        self.pars = sc.objdict() # Name: dict(value, doc)
-        self.exprs = sc.objdict() # Named expressions of states and parameters, substituted where they are used
+        self.states = sc.obj() # Name: dict(init, people, label)
+        self.pars = sc.obj() # Name: dict(value, doc)
+        self.exprs = sc.obj() # Named expressions of states and parameters, substituted where they are used
         self.totals = [] # Names that mean the number of people in the model
         self.flows = [] # See add_flow()
-        self.results = sc.objdict() # Results to declare: name: expression of states and parameters
+        self.results = sc.obj() # Results to declare: name: expression of states and parameters
         self.strats = [] # Arguments to stratify(), applied in order
-        self.outcomes = sc.objdict() # Reported quantities; see add_outcome()
+        self.outcomes = sc.obj() # Reported quantities; see add_outcome()
         self.notes = [] # Other things the importer chose, printed with how each flow was read
-        self.config = sc.objdict() # Arguments to ss.Sim (an object that is not a plain value, e.g. a network, as the Code that makes it)
+        self.config = sc.obj() # Arguments to ss.Sim (an object that is not a plain value, e.g. a network, as the Code that makes it)
         self.choices = [] # How each flow was read, as printed
         self.incomplete = [] # What could not be translated, as (name, why)
         self.declared = False # Whether the format says which states are people; if not, they are worked out here (see linked_states())
         return
 
     def add_state(self, name, init=None, people=True, label=None):
-        """ A state; init is a number of people """
-        self.states[name] = sc.objdict(init=init, people=people, label=label)
+        """
+        A state; init is a number of people
+
+        Args:
+            name (str): the name of the state
+            init (float): the initial number of people
+            people (bool): whether the state counts people
+            label (str): the label of the state
+        """
+        self.states[name] = sc.obj(init=init, people=people, label=label)
         return
 
     def add_par(self, name, value, doc=None, bounds=None, prior=None):
-        """ A parameter: a number in the sim's unit, maybe with bounds and a prior (`ss.Dist`) for calibration """
-        self.pars[name] = sc.objdict(value=value, doc=doc, bounds=bounds, prior=prior)
+        """
+        A parameter: a number in the sim's unit, maybe with bounds and a prior (`ss.Dist`) for calibration
+
+        Args:
+            name (str): the name of the parameter
+            value (float): its value
+            doc (str): what it is
+            bounds (tuple): its bounds, for calibration
+            prior (`ss.Dist`): its prior, for calibration
+        """
+        self.pars[name] = sc.obj(value=value, doc=doc, bounds=bounds, prior=prior)
         return
 
     def add_flow(self, src, dst, rate=None, per='person', dur=None, name=None, label=None, p=None, after=None):
@@ -72,7 +91,7 @@ class Source:
             p (list): for a branch (dst a list of states), the probability of each destination, as expressions of parameters (None for the rest)
             after (dur): a minimum stay in src before the flow can happen (see `ss.Transition`)
         """
-        self.flows.append(sc.objdict(src=src, dst=dst, rate=None if rate is None else str(rate), per=per, dur=dur, name=name, label=label, p=p, after=after))
+        self.flows.append(sc.obj(src=src, dst=dst, rate=None if rate is None else str(rate), per=per, dur=dur, name=name, label=label, p=p, after=after))
         return
 
     def add_outcome(self, name, source, p=None, delay=None, duration=None, doc=None, likelihood=None):
@@ -88,16 +107,27 @@ class Source:
             doc (str): a description of the share, for its parameter
             likelihood (func): a function of the parameters (by name) that gives the likelihood, e.g. `lambda pars: ss.nbinom(n=pars.k)`
         """
-        self.outcomes[name] = sc.objdict(source=source, p=p, delay=delay, duration=duration, doc=doc, likelihood=likelihood)
+        self.outcomes[name] = sc.obj(source=source, p=p, delay=delay, duration=duration, doc=doc, likelihood=likelihood)
         return
 
     def stratify(self, **kwargs):
-        """ A stratification of the disease, as the arguments to `ss.Disease.stratify()` """
+        """
+        A stratification of the disease, as the arguments to `ss.Disease.stratify()`
+
+        Args:
+            **kwargs (dict): passed to `ss.Disease.stratify()`
+        """
         self.strats.append(kwargs)
         return
 
     def skip(self, name, why):
-        """ Something in the source that was not translated: listed once, however often its code is written (`write()` writes each disease twice, the first time for the names it takes) """
+        """
+        Something in the source that was not translated: listed once, however often its code is written (`write()` writes each disease twice, the first time for the names it takes)
+
+        Args:
+            name (str): the name of what was not translated
+            why (str): why not
+        """
         if (name, why) not in self.incomplete:
             self.incomplete.append((name, why))
         return
@@ -153,8 +183,12 @@ def terms(node):
     return [node]
 
 
-class Rates:
-    """ Turn the rates of a source into the rates of transitions, by the rules in 16-interop.md """
+class Rates(sc.prettyobj):
+    """
+    Turn the rates of a source into the rates of transitions, by the rules in 16-interop.md
+
+    It exists so that every importer reads a rate the same way.
+    """
     def __init__(self, source):
         self.source = source
         self.people = [k for k,s in source.states.items() if s.people]
@@ -330,7 +364,11 @@ reserved = {'ss', 'ssl', 'np', 'pd', 'expit', 'sim'} # Names the code uses for i
 
 
 class Code(str):
-    """ Python to write as it is, for a value an importer gives that `code_value()` does not write, e.g. a network """
+    """
+    Python to write as it is, for a value an importer gives that `code_value()` does not write, e.g. a network
+
+    It exists so that an importer can pass on what has no plain value.
+    """
     pass
 
 
@@ -437,7 +475,7 @@ def code_value(val, pars=None):
             return f'pd.DataFrame({cols})'
         name = '' if idx.name is None else f', name={cv(idx.name)}'
         return f'pd.DataFrame({cols}, index=pd.Index({cv(idx.tolist())}{name}))'
-    errormsg = f'An importer gave {type(val).__name__} ({val!r}), which cannot be written as code: give it as ss.io.Code(), the Python that makes it'
+    errormsg = f'An importer gave {type(val).__name__} ({val!r}), which cannot be written as code: give it as ss.converters.Code(), the Python that makes it'
     raise TypeError(errormsg)
 
 
@@ -456,7 +494,7 @@ def linked_states(source):
     return linked | (set(source.states) - touched)
 
 
-class Named:
+class Named(sc.prettyobj):
     """
     The named expressions of a source (e.g. an Atomica model's parameter functions and characteristics) that its rates use,
     each written once, with states as their counts (I.n), so a rate or share that contains one is written with its name
@@ -466,7 +504,7 @@ class Named:
     """
     def __init__(self, source, rates, exclude):
         self.ids = dict() # A number for what each node is made of, so equal nodes have the same number
-        self.forms = sc.objdict() # The full form of each, by its name
+        self.forms = sc.obj() # The full form of each, by its name
         self.by_id = dict() # The name of each, by its form's number
         self.used = [] # Those used so far
         self.found = [] # Those found by the last fold
@@ -507,7 +545,7 @@ class Named:
 
     def definitions(self):
         """ Each named expression used, and those they use, as (name, its expression as text), each after those it uses """
-        out = sc.objdict()
+        out = sc.obj()
         def define(name):
             if name not in out:
                 self.found = []
@@ -535,16 +573,16 @@ def disease_code(source, var, total=None):
     lines = []
     add = lines.append
     choices = []
-    guessed = sc.objdict()
+    guessed = sc.obj()
     naming = {flow.rate for flow in source.flows if flow.name is None and flow.rate in source.exprs} # Named expressions that name transitions
     named = Named(source, rates, taken | naming)
     code_names = names | set(named.forms) # What a rate can use, written with its named expressions
 
     # Parameters, including the shares of outcomes that are not parameters of the source
-    shares = sc.objdict()
+    shares = sc.obj()
     for name,o in source.outcomes.items():
         if not (o.p is None or isinstance(o.p, str) or (sc.isnumber(o.p) and o.p == 1)):
-            shares[f'p_{name}'] = sc.objdict(value=o.p, doc=o.doc)
+            shares[f'p_{name}'] = sc.obj(value=o.p, doc=o.doc)
     for name,p in {**source.pars, **shares}.items():
         extra = ''.join(f', {k}={code_value(p.get(k))}' for k in ['doc', 'bounds', 'prior'] if p.get(k) is not None)
         add(f'{name} = ss.par({code_value(p.value)}{extra})')
@@ -591,7 +629,7 @@ def disease_code(source, var, total=None):
                 if name not in taken:
                     break
                 name = f'{base}_{i}'
-        kw = sc.objdict()
+        kw = sc.obj()
         if flow.dur is not None:
             kw.dur = code_value(flow.dur)
             choices.append(f'  {arrow:16s} a dwell time of {flow.dur}')
@@ -654,7 +692,7 @@ def disease_code(source, var, total=None):
         add('')
 
     # Results, as expressions of counts
-    results = sc.objdict()
+    results = sc.obj()
     for name,text in source.results.items():
         if name not in taken:
             node = rates.parse(text)
@@ -694,7 +732,7 @@ def disease_code(source, var, total=None):
 
     # The disease, and its stratifications
     args = list(source.states) + [name for name,code in members]
-    kw = sc.objdict(results)
+    kw = sc.obj(results)
     kw.update(init=code_value(init) if init else None, init_n=code_value(init_n) if init_n else None, first=None if first is None else repr(first), name=repr(source.name), strains='strains' if strains else None)
     add(f'{var} = ss.Disease(')
     for i in range(0, len(args), 8):
@@ -739,16 +777,16 @@ def write(sources, **kwargs):
         kwargs (dict): passed to `ss.Sim()`, after each source's `config`
 
     Returns:
-        An `sc.objdict` of the code, how each flow was read (`choices`, a line each), and what was guessed about each transition (`guessed`, by disease and transition)
+        An `sc.obj` of the code, how each flow was read (`choices`, a line each), and what was guessed about each transition (`guessed`, by disease and transition)
     """
     sources = sc.tolist(sources)
-    cfg = sc.objdict()
+    cfg = sc.obj()
     for source in sources:
         cfg.update(source.config)
     cfg.update(kwargs)
     if 'total_pop' not in cfg:
         cfg.total_pop = max(sum(total_init(s.init) for s in src.states.values() if s.people) for src in sources) or cfg.get('n_agents')
-    lines, choices, guessed, diseases = [], [], sc.objdict(), []
+    lines, choices, guessed, diseases = [], [], sc.obj(), []
     placeholder = '_disease_'
     taken = reserved.union(*(assigned(disease_code(s, placeholder)[0]) for s in sources if s.states)) - {placeholder} # Every name the diseases' code defines, which no disease's variable may take
     for source in sources:
@@ -777,7 +815,7 @@ def write(sources, **kwargs):
             + ['import starsim.library as ssl'] * bool(re.search(r'\bssl\.', body)) + ['from scipy.special import expit'] * bool(re.search(r'\bexpit\(', body))
     text = '\n'.join([f'# {line}'.rstrip() for line in header] + [''] + imports + [''] + lines + [''] + [f'# {line}' for line in footer] + ([''] if footer else [])
                      + ["if __name__ == '__main__':", '    sim.run()', '    sim.plot()', ''])
-    return sc.objdict(code=text, choices=choices, guessed=guessed)
+    return sc.obj(code=text, choices=choices, guessed=guessed)
 
 
 def build(sources, verbose=None, **kwargs):
@@ -817,7 +855,7 @@ def build(sources, verbose=None, **kwargs):
         for name,guess in out.guessed.get(dis.name, {}).items():
             dis.transitions[name].guessed.update(guess)
     incomplete = [item for source in sources for item in source.incomplete]
-    sim.imported = sc.objdict(format=first.format, file=first.file, choices=out.choices, incomplete=incomplete, code=out.code, prompt=None, warned=False)
+    sim.imported = sc.obj(format=first.format, file=first.file, choices=out.choices, incomplete=incomplete, code=out.code, prompt=None, warned=False)
     if incomplete:
         sim.imported.prompt = handoff(sim.imported)
         items = '\n'.join(f'  {name}: {why}' for name,why in incomplete)

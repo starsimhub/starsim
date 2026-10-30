@@ -1,5 +1,5 @@
 """
-Numba's on-disk cache, made stale by the files a module's functions call into, and saying when something is compiled
+Not for the user: Numba's on-disk cache, made stale by the files a module's functions call into, and saying when something is compiled
 
 Numba checks only the file of a cached function, so a change to a function it calls in
 another file (e.g. a draw in `draws.py`, called by the kernels) would leave the old
@@ -9,6 +9,8 @@ Compiling takes seconds the first time (and after a change to the code), so `com
 what is being compiled and about how long it takes, once a session for each thing: for Numba,
 when it starts compiling (not when it loads from its cache) one of the sets of functions in
 `slow`, or a function from `ss.jit`; for JAX, where Starsim compiles something.
+
+Used with: agents and compartments; declared and coded modules
 """
 
 import os
@@ -42,6 +44,7 @@ def depends(py_file, *others):
 def with_deps(cls):
     """ A locator that adds the stamps of the files its source file depends on (see deps) """
     class Locator(cls):
+        """ The locator, with those stamps added """
         def get_source_stamp(self):
             stamp = super().get_source_stamp()
             others = deps.get(os.path.abspath(getattr(self, '_py_file', '')))

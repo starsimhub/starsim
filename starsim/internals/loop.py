@@ -1,5 +1,9 @@
 """
-Parent class for the integration loop.
+The integration loop: the order in which each module's code runs in each timestep
+
+It exists so that modules with different timesteps run together in one fixed order, which can be inspected with `sim.loop`.
+
+Used with: agents and compartments; declared and coded modules
 """
 import time
 import functools as ft
@@ -16,6 +20,8 @@ import matplotlib.pyplot as plt
 class LoopEntry:
     """
     One executable event in the integration loop
+
+    It exists to give each step of the plan its time, module, and function in one small record.
 
     Note: `slots=True` is used primarily to reduce the memory footprint across the
     10⁴–10⁵ instances created for a typical plan (no per-instance `__dict__`).
@@ -306,8 +312,8 @@ class Loop:
         numeric arrays are what `make_plan()` uses to decide uniformity and to sort,
         so that date/dur objects are never compared during plan construction.
         """
-        self.abs_tvecs = sc.objdict()
-        self.abs_numvecs = sc.objdict()
+        self.abs_tvecs = sc.obj()
+        self.abs_numvecs = sc.obj()
 
         # Handle the sim and people first
         sim = self.sim

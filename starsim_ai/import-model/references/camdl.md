@@ -6,7 +6,7 @@ camdl is a compartmental modeling language (a compiler, `camdlc`, in OCaml; a ru
 
 ## Getting the model out
 
-`ss.import_from('model.camdl', pars=dict(...))` compiles the file with `camdlc` (from the PATH, `CAMDLC`, or `camdlc=`) and reads the IR; `ss.import_from('model.json')` reads an IR written by `camdlc model.camdl --no-state-grad > model.json`. Give parameter values that the model leaves to the command line (`--param beta=0.4`) as `pars=`; a model's scenarios fill in values too (`scenario=`, default the first). A pycamdl model is written in the same form by `starsim/io/dump_pycamdl.py`, which needs only pycamdl:
+`ss.import_from('model.camdl', pars=dict(...))` compiles the file with `camdlc` (from the PATH, `CAMDLC`, or `camdlc=`) and reads the IR; `ss.import_from('model.json')` reads an IR written by `camdlc model.camdl --no-state-grad > model.json`. Give parameter values that the model leaves to the command line (`--param beta=0.4`) as `pars=`; a model's scenarios fill in values too (`scenario=`, default the first). A pycamdl model is written in the same form by `starsim/converters/dump_pycamdl.py`, which needs only pycamdl:
 
 ```bash
 python dump_pycamdl.py stratified.py model.json        # a module that makes a model called m or model

@@ -68,7 +68,7 @@ def parse_pytest(txt, perf_ratio):
                 data[m["name"]] = float(m["dur"])
 
     # Assemble data
-    data = sc.objdict(data)
+    data = sc.obj(data)
     data.sort('values', reverse=True)
     data[:] *= perf_ratio # Scale results by the performance ratio
     for k,v in data.items():
@@ -76,7 +76,7 @@ def parse_pytest(txt, perf_ratio):
     total = data[:].sum()
 
     # Tidy up
-    out = sc.objdict()
+    out = sc.obj()
     out.cpu_performance = round(perf_ratio, 3)
     out.scaled_time = round(total, 3)
     out.actual_time = round(total/perf_ratio, 3)

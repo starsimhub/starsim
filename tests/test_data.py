@@ -57,7 +57,7 @@ def test_geo():
     assert np.all(kenya.pop > 0) and abs(kenya.pop.sum()/nodes.population.sum() - 1) < 1e-9
     assert np.allclose(kenya.distances, ssd.distances('Kenya', level=1).values, rtol=1e-3) # Great-circle distances in km, as the provider's
     i, j = kenya.names.index('Nairobi'), kenya.names.index('Kiambu')
-    assert kenya.adjacency[i, j] and kenya.adjacency[j, i] and not kenya.adjacency[i, i] # Neighbours
+    assert kenya.adjacency[i, j] and kenya.adjacency[j, i] and not kenya.adjacency[i, i] # Neighbors
     assert not kenya.adjacency[i, kenya.names.index('Mombasa')]
 
     # A subset, and several countries
@@ -124,7 +124,7 @@ def test_people():
     assert abs(abm.people.female.mean() - female.sum()/(female + male).sum()) < 0.01
 
     # In a compartmental run, people age out of each age group as the population's own pyramid has them do, as agents do
-    growth = sc.objdict()
+    growth = sc.obj()
     for solver,n_agents in [('ode', None), ('abm', 20_000)]:
         sim = ss.Sim(make_sir(), people=ss.people('Kenya', year=2024, n_agents=n_agents), stratify=dict(age=[0, 15, 65]), solver=solver, use_aging=True, unit='day', stop=365, **kw).run()
         n = sum(sim.results.sir[k].by('age').values for k in 'SIR')

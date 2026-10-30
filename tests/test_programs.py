@@ -44,7 +44,7 @@ def test_hpv_algorithm():
     sim = make(total_pop=100_000, n_agents=20_000, verbose=0).run()
     res = sim.results
     q = res.tx_visit
-    n = sc.objdict({k:q[k].sum() for k in ['eligible', 'delivered', 'never_ran', 'left']})
+    n = sc.obj({k:q[k].sum() for k in ['eligible', 'delivered', 'never_ran', 'left']})
     print(f'{n}, waiting at the end {q.waiting[-1]:.0f}')
     cap = 10*365.25/4/7 # 10 a week, about 13 weeks a quarter
     full = q.waiting[26:] > 1 # Steps with people queueing, when the capacity is all used

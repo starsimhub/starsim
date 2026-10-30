@@ -15,6 +15,8 @@ a state: the transitions into it branch to where its outflows lead. A calibratio
 y-factors Atomica saves with `ParameterSet.save_calibration()`) scales the values it calibrates.
 A program book's programs become parameters of spending, whose coverage changes the
 parameters they affect (see `read_progbook()`).
+
+Used with: compartments; declared modules
 """
 import ast
 import re
@@ -158,7 +160,7 @@ def read_progbook(filename):
         if blank(row[0]):
             continue
         name = str(row[1] if not blank(row[1]) else row[0]).strip()
-        programs[name] = sc.objdict(abbr=str(row[0]).strip(), pops=[str(head[j]).strip() for j in pop_cols if yes(row[j])], comps=[str(head[j]).strip() for j in comp_cols if not blank(head[j]) and yes(row[j])], spend=None, cost=None, other=[])
+        programs[name] = sc.obj(abbr=str(row[0]).strip(), pops=[str(head[j]).strip() for j in pop_cols if yes(row[j])], comps=[str(head[j]).strip() for j in comp_cols if not blank(head[j]) and yes(row[j])], spend=None, cost=None, other=[])
 
     # Spending: a block for each program, with a row for each quantity, an assumption, and values by year
     rows = find('spending data').values.tolist()
@@ -194,7 +196,7 @@ def read_progbook(filename):
         if current is None or blank(row[0]):
             continue
         cols = {j:str(h).strip() for j,h in enumerate(head) if j >= 5 and not blank(h)}
-        current[str(row[0]).strip()] = sc.objdict(base=None if blank(row[1]) else float(row[1]), interaction=None if blank(row[2]) else str(row[2]).strip(),
+        current[str(row[0]).strip()] = sc.obj(base=None if blank(row[1]) else float(row[1]), interaction=None if blank(row[2]) else str(row[2]).strip(),
                                                    impact=None if blank(row[3]) else str(row[3]).strip(), outcomes={cols[j]:float(row[j]) for j in cols if not blank(row[j])})
     return programs, effects
 
@@ -493,7 +495,7 @@ def load_atomica(framework, databook=None, progbook=None, calibration=None, star
 
     # Programs: spending buys a number of people reached a year, coverage is that number over everyone it targets (at most all of them), and each
     # parameter a program affects moves from its baseline towards the program's outcome in proportion to its coverage (Atomica's additive interaction)
-    programs = sc.objdict() # The spending parameter of each program, by its name in the book
+    programs = sc.obj() # The spending parameter of each program, by its name in the book
     if progbook is not None:
         progs, effects = read_progbook(progbook)
         pop_names = pop_labels(databook) if databook is not None else {}

@@ -10,6 +10,8 @@ predefined SISe models (the environmental infectious pressure `phi`) becomes a s
 that is not people. The R is read, not run: what the script computes (e.g. `u0_SIR()`
 or a data file) can be passed in instead, e.g. `load_siminf('model.R', u0='u0.csv',
 events='events.csv')`, and C code (`pts_fun`) is listed as not translated.
+
+Used with: compartments; declared modules
 """
 import re
 import ast

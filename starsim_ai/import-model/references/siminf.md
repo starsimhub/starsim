@@ -27,7 +27,7 @@ The import reads the R script without running R: literal numbers, strings, `c()`
 
 ## What needs care
 
-- **Data computed in R.** Have R write it after sourcing the script: `write.csv(cbind(node = seq_len(ncol(model@u0)), as.data.frame(t(model@u0))), "u0.csv", row.names = FALSE)` and `write.csv(as.data.frame(events(model)), gzfile("events.csv.gz"), row.names = FALSE)`. The script's own assignments to `u0` are applied to what is passed. Everything can also be given as a dict: `ss.io.siminf.load_siminf(dict(transitions=[...], compartments=[...], u0=df, gdata=dict(...), tspan=..., events=df, E=..., N=...))`.
+- **Data computed in R.** Have R write it after sourcing the script: `write.csv(cbind(node = seq_len(ncol(model@u0)), as.data.frame(t(model@u0))), "u0.csv", row.names = FALSE)` and `write.csv(as.data.frame(events(model)), gzfile("events.csv.gz"), row.names = FALSE)`. The script's own assignments to `u0` are applied to what is passed. Everything can also be given as a dict: `ss.converters.siminf.load_siminf(dict(transitions=[...], compartments=[...], u0=df, gdata=dict(...), tspan=..., events=df, E=..., N=...))`.
 - **A daily update in `pts_fun`**, `v' = v*(1 - b) + g`, is a decay at rate `-log(1 - b)` plus an inflow at `g*(-log(1 - b))/b`, which give the same `v` at the end of each day:
 
 ```python

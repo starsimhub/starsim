@@ -1,12 +1,16 @@
 """
-Simulation and module timelines
+Timelines: the time vectors of a sim and of each of its modules
+
+They exist so that `sim.t` and `module.t` give the current step and date, and a module can step at its own rate.
+
+Used with: agents and compartments; declared and coded modules
 """
 import sciris as sc
 import numpy as np
 import starsim as ss
 
 
-class Timeline(ss.utils.NoDists):
+class Timeline:
     """
     Handle time vectors and sequencing ("timelines") for both simulations and modules.
 
@@ -172,7 +176,7 @@ class Timeline(ss.utils.NoDists):
 
     def to_dict(self):
         """ Return a dictionary of all time vectors """
-        out = sc.objdict()
+        out = sc.obj()
         for key in self._time_vecs:
             out[key] = getattr(self, key)
         return out
@@ -445,7 +449,14 @@ class Timeline(ss.utils.NoDists):
         return
 
     def init(self, sim=None, max_steps=None, force=False):
-        """ Initialize all vectors """
+        """
+        Initialize all vectors
+
+        Args:
+            sim (`ss.Sim`): the sim to take missing values from; if None, the timeline stands alone
+            max_steps (int): the number of steps above which to warn; if None, use `ss.options.max_steps`
+            force (bool): whether to initialize again
+        """
 
         # Don't re-initialize if already initialized
         if self.initialized and not force:
@@ -466,8 +477,8 @@ class Timeline(ss.utils.NoDists):
                         return self
 
         # Build the canonical vectors: tvec (ss.date/ss.dur) and yearvec (float years). We need to
-        # decide which to prioritise, since calendar dates don't convert consistently into fractional
-        # years (varying month/year lengths); we prioritise based on the type the user gave for start.
+        # decide which to prioritize, since calendar dates don't convert consistently into fractional
+        # years (varying month/year lengths); we prioritize based on the type the user gave for start.
         # The human-friendly datevec/timevec/relvec are derived lazily (see the properties above), so
         # they are not eagerly constructed here.
         if isinstance(self.dt, ss.datedur):

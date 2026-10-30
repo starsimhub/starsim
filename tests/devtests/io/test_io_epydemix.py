@@ -8,7 +8,7 @@ import pytest
 import sciris as sc
 import starsim as ss
 import paths
-from starsim.io.epydemix import load_epydemix
+from starsim.converters.epydemix import load_epydemix
 
 lfd = paths.lfd/'examples' # The original examples, if they are here
 kw = dict(verbose=False)
