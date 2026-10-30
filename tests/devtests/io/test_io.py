@@ -89,7 +89,7 @@ def emulsion_file(folder):
 
 def test_rates():
     sc.heading('Testing how rates from other frameworks are read')
-    src = ss.io.Source('rates', format='test')
+    src = ss.converters.Source('rates', format='test')
     for s in ['S', 'I', 'R']:
         src.add_state(s, init=dict(S=990, I=10).get(s, 0))
     src.add_state('W', people=False)
@@ -107,7 +107,7 @@ def test_rates():
         ('S', 'I', 'beta * S * I / pop', 'total'),     # 2: a parameter equal to the number of people is the total
         ('S', 'I', 'beta * S * I / K2', 'total'),      # 3: one that is not, is not
     ]
-    rates = ss.io.core.Rates(src)
+    rates = ss.converters.core.Rates(src)
     out = [rates.classify(sc.obj(src=a, dst=b, rate=r, per=per))[0] for a,b,r,per in flows]
     assert out == ['beta * I', 'beta * I', 'beta * I.n', 'gamma', 'beta * W.n / (W.n + K)', 'xi * I.n', 'mu * (S + I + R).n', 'beta * I', 'beta * I.n / K2'], out
     rules = [rates.classify(sc.obj(src=a, dst=b, rate=r, per=per))[2] for a,b,r,per in flows]
@@ -185,7 +185,7 @@ def test_code(tmp_path):
     assert 'Imported from EMULSION' in code and '# Not translated (ImportIncomplete):' in code and 'force_of_infection = S >> E @ ' in code
 
     # Every kind of value an importer gives: bounds and a prior, a time series, a seasonal value, values by group, a dwell time as a distribution, a branch, an outcome with a delay and a likelihood, a result, and a stratification
-    src = ss.io.Source('model', format='test')
+    src = ss.converters.Source('model', format='test')
     src.add_state('S', init=950)
     src.add_state('I', init=ss.by(risk=[30, 20]), label='Infectious')
     src.add_state('R')
@@ -200,7 +200,7 @@ def test_code(tmp_path):
     src.totals = ['N']
     src.stratify(risk=['lo', 'hi'], split=[0.6, 0.4], adjust={'rel_sus': [1, 2]})
     src.config.update(unit='day', stop=ss.days(60), solver='ode')
-    sim = ss.io.build(src, verbose=False)
+    sim = ss.converters.build(src, verbose=False)
     code = check(sim)
     for text in ["beta = ss.par(ss.timeseries({0: 0.3, 20.5: 0.2}, mode='linear'), bounds=[0.1, 1], prior=ss.uniform(low=0.1, high=1))",
                  'infection = S >> I @ (beta * season * I)', 'p=[0.99, None]', 'likelihood=ss.nbinom(n=k, p=0.5)', 'cases = ss.outcome(p_cases*infection, delay=ss.days(3)',
@@ -210,29 +210,29 @@ def test_code(tmp_path):
 
     # A value the code cannot say is refused, with what to do instead
     src.config.networks = ss.RandomNet()
-    with pytest.raises(TypeError, match='ss.io.Code'):
-        ss.io.build(src, verbose=False)
-    src.config.networks = ss.io.Code('ss.RandomNet()')
-    assert 'networks=ss.RandomNet()' in ss.io.write(src).code
+    with pytest.raises(TypeError, match='ss.converters.Code'):
+        ss.converters.build(src, verbose=False)
+    src.config.networks = ss.converters.Code('ss.RandomNet()')
+    assert 'networks=ss.RandomNet()' in ss.converters.write(src).code
 
     # Values written as code keep what they are: a table's index (so data is compared at its own times), and a rate's unit
-    code_value = ss.io.core.code_value
+    code_value = ss.converters.core.code_value
     for val in [pd.DataFrame(dict(I=[5.0, 20, 40]), index=[10, 20, 30]), pd.DataFrame(dict(I=[1.0, 2]), index=pd.to_datetime(['2020-01-01', '2020-02-01']))]:
         assert eval(code_value(val), dict(pd=pd)).equals(val)
     rate = eval(code_value(ss.Rate(0.3, ss.weeks(2))), dict(ss=ss))
     assert rate.value == 0.3 and rate.unit == ss.weeks(2)
 
     # Several sources: a disease's variable is not a name another source defines (here a state)
-    host = ss.io.Source('host', format='test')
+    host = ss.converters.Source('host', format='test')
     for state in 'SIR':
         host.add_state(state, init=990 if state == 'S' else 10*(state == 'I'))
     host.add_par('beta', 0.3)
     host.add_flow('S', 'I', 'beta*S*I/(S+I+R)', per='total', name='infection')
-    vector = ss.io.Source('vector', format='test')
+    vector = ss.converters.Source('vector', format='test')
     vector.add_state('V', init=100)
     vector.add_state('host', init=0)
     vector.add_flow('V', 'host', 0.05, name='bite')
-    sim = ss.io.build([host, vector], verbose=False, stop=10, unit='day').run()
+    sim = ss.converters.build([host, vector], verbose=False, stop=10, unit='day').run()
     assert sim.results.host.I[-1] > 10 and sim.results.vector.host[-1] > 0
     return code
 

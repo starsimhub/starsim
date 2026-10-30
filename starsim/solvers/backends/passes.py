@@ -1,5 +1,5 @@
 """
-Compiled passes for agents: over the agents (who is infected, the counts of each state, who has died and who is kept alive at the
+Not for the user: compiled passes for agents: over the agents (who is infected, the counts of each state, who has died and who is kept alive at the
 end of each step, who leaves a state by competing rates, the women of an age for births, and who reaches their debut on a sexual
 network), and over a network's edges (new random edges, the edges that might and that can transmit, those that end, and copies
 without some)
@@ -8,8 +8,10 @@ Each is one pass (or two) in place of several NumPy passes and their temporaries
 a large network or population (see `ss.options.threads`; one thread in the workers of `ss.parallel()`). Lists are kept in
 order, and random numbers come from counters, so the results do not depend on the number of threads. See
 v4_design/oct25/backlog/perf_jax.md for the timings. Called by `ss.People`, `ss.Network`, `ss.RandomNet`, `ss.SexualNet`,
-`ss.Births`, `ss.solvers.Agents` and the groups of `ss.dimensions`; not for the user. They are kept apart from the
+`ss.Births`, `ss.solvers.Agents` and the groups of `ss.dimensions`. They are kept apart from the
 compartmental kernels (`ss.kernels`), so a change to either does not make Numba compile the other again.
+
+Used with: agents; declared and coded modules
 """
 import numpy as np
 import numba as nb

@@ -13,6 +13,8 @@ These are tables. The model objects that take a place by name read them from her
 `starsim_data` (https://github.com/starsimhub/starsim_data), which bundles what is
 small and common and fetches the rest on demand. Each lookup returns the data with a
 record of where it came from (`ref`; for a table, in `.attrs['ref']`), which `sim.describe()` shows.
+
+Used with: agents and compartments; declared and coded modules
 """
 import re
 import numpy as np

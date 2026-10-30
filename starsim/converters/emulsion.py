@@ -10,6 +10,8 @@ is listed as not translated (conditions, calendars, actions on crossing, offspri
 productions, levels above the population, and variables of individuals) is left for a
 person, or the import-model skill, to add; a minimum stay (a state's duration) becomes
 `after=` on the ways out of it.
+
+Used with: agents and compartments; declared modules
 """
 import ast
 import math

@@ -11,7 +11,7 @@ import sciris as sc
 import scipy.integrate as spi
 import starsim as ss
 import paths
-from starsim.io.flepimop import load_flepimop
+from starsim.converters.flepimop import load_flepimop
 
 kw = dict(verbose=0)
 examples = paths.lfd/'examples/flepimop' # The originals and their reference results

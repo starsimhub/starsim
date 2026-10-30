@@ -1,5 +1,9 @@
 """
-Many runs of a compartmental program stepped forward together: the particles of a particle filter
+Not for the user: many runs of a compartmental program stepped forward together: the particles of a particle filter
+
+It exists so that a particle filter can advance many runs at once.
+
+Used with: compartments; declared modules
 """
 import numpy as np
 import numba as nb

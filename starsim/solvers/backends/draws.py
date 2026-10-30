@@ -1,5 +1,5 @@
 """
-Exact random draws in Numba, from one uniform each where possible
+Not for the user: exact random draws in Numba, from one uniform each where possible
 
 Every draw here is a function of a uniform u in (0, 1): by inversion of the CDF where
 that is cheap (binomial and Poisson up to a mean of 30, negative binomial, exponential,
@@ -26,6 +26,8 @@ The tricks that make them cheap (see v4_design/oct21/jax_plan.md):
 
 The functions run as plain Python too (in the copy `plain_copy()` makes, used by
 `ss.kernels.uncompiled()`), with the same results.
+
+Used with: agents and compartments; declared and coded modules
 """
 
 import math

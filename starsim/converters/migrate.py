@@ -4,8 +4,8 @@ Rewrite Starsim 3 code for Starsim 4
 Makes the mechanical changes of the upgrade in place, and lists what needs a person
 (or an assistant with the migrate-starsim3 skill), by file and line:
 
-    python -m starsim.io.migrate mypackage/ tests/   # Rewrite in place
-    python -m starsim.io.migrate mymodel.py --check  # Only list what would change
+    python -m starsim.converters.migrate mypackage/ tests/   # Rewrite in place
+    python -m starsim.converters.migrate mymodel.py --check  # Only list what would change
 
 It reads `.py` files, and the Python code cells of notebooks (`.ipynb`), Quarto (`.qmd`), and Markdown (`.md`).
 
@@ -18,6 +18,8 @@ way), `copy_inputs=` (removed: a sim always copies its inputs), `ss.uids.cat()` 
 (now `preg.lactating`), `ss.RandomNet(uniform_targets=True)` (now `method='uniform'`), and the counts of the states of Starsim's own
 modules after results (`results.n_alive`, `res['n_infected']`, now `results.alive`, `res['infected']`; a result the code makes
 itself keeps its name, and other counts are listed). Read the diff afterwards: each change is listed with its line.
+
+Used with: agents; coded modules
 """
 import re
 import ast
@@ -539,8 +541,8 @@ def migrate(*paths, check=False, verbose=True):
 
     **Example**:
 
-        from starsim.io.migrate import migrate
-        migrate('mypackage') # Or from a shell: python -m starsim.io.migrate mypackage
+        from starsim.converters.migrate import migrate
+        migrate('mypackage') # Or from a shell: python -m starsim.converters.migrate mypackage
     """
     files = []
     for path in paths:

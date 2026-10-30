@@ -1,5 +1,9 @@
 """
-Who meets whom in a compartmental run: the contact rates between groups that the networks become
+Not for the user: who meets whom in a compartmental run: the contact rates between groups that the networks become
+
+It exists so that the networks of a model, usually written as code, can run without agents. A run as agents uses it too, for the contact matrices of mixing pools and the movement between places.
+
+Used with: agents and compartments; declared and coded modules
 """
 import numpy as np
 import scipy.sparse as sps

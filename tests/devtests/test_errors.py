@@ -262,11 +262,11 @@ def _(): ss.export_to(ss.Sim(sir(), networks='random', n_agents=100, **kw), 'odi
 
 @trigger('season: a time function', ss.errors.ImportIncomplete)
 def _():
-    src = ss.io.Source('si', format='test')
+    src = ss.converters.Source('si', format='test')
     src.add_state('S', init=99); src.add_state('I', init=1); src.add_par('beta', 0.3)
     src.add_flow('S', 'I', rate='beta * I / (S + I)')
     src.skip('season', 'a time function')
-    ss.io.build(src, verbose=0)
+    ss.converters.build(src, verbose=0)
 
 
 # %% Notes

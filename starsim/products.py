@@ -1,5 +1,9 @@
 """
-Define products
+Products: vaccines, treatments, and diagnostics, and the protection people hold from them
+
+A product says what something does (e.g. its efficacy), and a delivery (`ss.vaccinate()`, `ss.treat()`, `ss.screen()`) says who gets it and when. They are kept apart so that one product can be delivered in several ways. A product written as code (`administer()`) runs as agents.
+
+Used with: agents and compartments; declared and coded modules
 """
 import inspect
 import starsim as ss
@@ -114,6 +118,9 @@ class EventSource:
 
         Its last step is the current one once it has run in it, and otherwise the one before: so code that runs after the
         interventions (a disease or an analyzer) reads the people of the step just taken, as for an event.
+
+        Args:
+            outcome (str): the outcome (default: everyone reached)
         """
         if self.sim.solver != 'abm':
             raise ss.CapabilityError(f'"{self.name}".reached() is the UIDs of the people it reached, which exist only per agent; with solver="{self.sim.solver}", read its results')
@@ -174,6 +181,9 @@ class Product(EventSource, ss.Module):
         events of the delivery, as a test's are, which can trigger the steps that follow. The outcomes are those that
         `outcome_names()` lists.
 
+        Args:
+            uids (array): the people who were given the product
+
         Examples:
             ```python
             class Bednet(ss.Product):
@@ -204,7 +214,11 @@ class Product(EventSource, ss.Module):
         return isinstance(vals, dict) and any(isinstance(k, ss.Module) or k in names for k in vals)
 
     def init_pre(self, sim):
-        """ Initialize the product, and its events, once: both the sim and its deliveries initialize it """
+        """ Initialize the product, and its events, once: both the sim and its deliveries initialize it
+
+        Args:
+            sim (Sim): the sim being initialized
+        """
         if getattr(self, 'linked', False):
             return
         self.linked = True
@@ -216,7 +230,13 @@ class Product(EventSource, ss.Module):
 #%% Products for declared models: what is delivered by ss.vaccinate(), ss.screen(), and ss.treat()
 
 class Effect(sc.prettyobj):
-    """ The effect of a product on one quantity, for the people who hold it: a multiplier of `1 - efficacy` """
+    """ The effect of a product on one quantity, for the people who hold it: a multiplier of `1 - efficacy`
+
+    Args:
+        product (Product): the product
+        key (str): what it acts on, e.g. `'acquisition'`
+        efficacy (float): the share of the quantity it removes
+    """
     op = 'multiply'
     active = True
 
@@ -355,6 +375,16 @@ class Held(Product):
 
     Holding the product is a property of people, named after the product (e.g. `has_bcg`):
     a boolean per agent in an agent-based run, and a stratification in a compartmental one.
+
+    Args:
+        efficacy (float/dict): protection; see `ss.Vaccine`
+        waning (dur/box/func/dict): how protection is lost; see `ss.Vaccine`
+        doses (list): the relative efficacy after each dose; see `ss.Vaccine`
+        during (Cond): if given, it is held only while people are in these states
+        cost (float): the cost of each delivery
+        name (str): the name; if not given, taken from the variable it is assigned to
+        label (str): the label, for plots and printing
+        kwargs (dict): passed to `ss.Product`
     """
     compartmental = True
     default_key = 'acquisition'
@@ -469,6 +499,11 @@ class Held(Product):
         As agents: the share of protection left for each agent (by UID) who holds the product, by a function of the time since
         delivery: `fn(t)` or `fn(t, sim, uids)`, with `t` a duration in the sim's unit (e.g. `ss.days`, so `t < ss.days(180)` and
         `t.years` read the same in any sim), for the agents `uids` who hold it (so `sim.people.age[uids] - t.years` is their age when it was given)
+
+        Args:
+            fn (func): the function of the time since delivery
+            holds (array): whether each agent holds the product
+            engine (Engine): the engine running the disease
         """
         uids = ss.uids(np.flatnonzero(holds))
         out = np.zeros(len(holds))
@@ -492,6 +527,11 @@ class Held(Product):
         return out
 
     def init_pre(self, sim):
+        """ Work out what the product acts on, once: both the sim and its deliveries initialize it
+
+        Args:
+            sim (Sim): the sim being initialized
+        """
         if getattr(self, 'linked', False): # Both the sim and the deliveries initialize a product
             return
         super().init_pre(sim)
@@ -941,6 +981,8 @@ class Diagnostic(Product):
         detects (Cond/func): the condition the test detects (default: being in an infected state of the disease)
         cost (float): the cost of each delivery
         name (str): the name; if not given, taken from the variable the test is assigned to
+        label (str): the label, for plots and printing
+        kwargs (dict): passed to `ss.Product`
 
     Examples:
         ```python

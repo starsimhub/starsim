@@ -1,5 +1,9 @@
 """
 Numerical utilities and other helper functions
+
+What is shared by the rest of the code, and doesn't belong to any one part of it: named dictionaries of modules (`ss.ndict`), warnings, cleaning input data, plotting arguments, and returning figures and tables.
+
+Used with: agents and compartments; declared and coded modules
 """
 import os
 import types
@@ -66,6 +70,8 @@ class ndict(sc.obj):
 
     Args:
         type (type): The expected type of items.
+        args (list): the items to add, each a named item, or a list or dict of them
+        kwargs (dict): more items to add, by key
 
     Examples:
         ```python
@@ -85,6 +91,12 @@ class ndict(sc.obj):
         return self.values()
 
     def append(self, arg, key=None):
+        """ Add an item, or a list or dict of them
+
+        Args:
+            arg (Module/list/dict): the item to add, or a list or dict of them
+            key (str): the key to add it under (default: its name)
+        """
         valid = False
         if arg is None:
             return  # Nothing to do
@@ -176,7 +188,12 @@ class ndict(sc.obj):
             raise TypeError(errormsg)
 
     def extend(self, *args, **kwargs):
-        """ Add new items to the ndict, by item, list, or dict """
+        """ Add new items to the ndict, by item, list, or dict
+
+        Args:
+            args (list): the items to add
+            kwargs (dict): more items to add, by key
+        """
         args = sc.mergelists(*args)
         for arg in args:
             self.append(arg)
@@ -185,7 +202,11 @@ class ndict(sc.obj):
         return self
 
     def merge(self, other):
-        """ Merge another dictionary with this one """
+        """ Merge another dictionary with this one
+
+        Args:
+            other (dict): the dictionary to merge
+        """
         for key, arg in other.items():
             self.append(arg, key=key)
         return self
@@ -234,7 +255,14 @@ def nlist_to_dict(nlist, die=True):
 
 
 def warn(msg, category=None, verbose=None, die=None):
-    """ Helper function to handle warnings -- shortcut to warnings.warn """
+    """ Helper function to handle warnings -- shortcut to warnings.warn
+
+    Args:
+        msg (str): the text of the warning
+        category (Warning): the type of warning (default: `RuntimeWarning`)
+        verbose (bool): whether to print it, if `ss.options.warnings` is 'print' (default: `ss.options.verbose`)
+        die (bool): if True, raise it as an error, whatever `ss.options.warnings` is
+    """
 
     # Handle inputs
     warnopt = ss.options.warnings if not die else 'error'
@@ -388,6 +416,8 @@ def standardize_data(data=None, metadata=None, min_year=1800, out_of_range=0, de
         metadata (dict): Dictionary specifiying index columns, the value column, and optionally mapping for sex labels
         min_year (float): Optionally specify a minimum year allowed in the data. Default is 1800.
         out_of_range (float): Value to use for negative ages - typically 0 is a reasonable choice but other values (e.g., np.inf or np.nan) may be useful depending on the calculation. This will automatically be added to the dataframe with an age of `-np.inf`
+        default_age (float): the age to use if the data has no age column
+        default_year (float): the year to use if the data has no year column
 
     Returns:
 
@@ -578,7 +608,12 @@ def save(filename, obj, **kwargs):
 
 
 class Shrunk:
-    """ Define a class to indicate an object has been shrunken """
+    """ Define a class to indicate an object has been shrunken
+
+    Args:
+        obj (object): the object that was shrunken
+        attr (str): the name of its attribute that was shrunken
+    """
     def __init__(self, obj=None, attr=None):
         try:
             self.obj_type = type(getattr(obj, attr))
@@ -742,7 +777,11 @@ def plot_args(kwargs=None, _debug=False, **defaults):
 
 
 def show(**kwargs):
-    """ Shortcut for matplotlib.pyplot.show() """
+    """ Shortcut for matplotlib.pyplot.show()
+
+    Args:
+        kwargs (dict): passed to `plt.show()`
+    """
     return plt.show(**kwargs)
 
 
@@ -777,6 +816,10 @@ def return_table(df, **kwargs):
     """
     Return a table to show it: in a notebook or at an interactive prompt, which show what is returned, it is only returned, so it
     isn't shown twice; in a script, it is printed too (with `df.to_string(**kwargs)`). For summaries that print and return a table.
+
+    Args:
+        df (dataframe): the table
+        kwargs (dict): passed to `df.to_string()`
     """
     if not (ss.options.is_jupyter or hasattr(sys, 'ps1')): # sys.ps1 is the prompt of an interactive session (Python or IPython)
         print(df.to_string(**kwargs))

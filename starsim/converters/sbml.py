@@ -10,6 +10,8 @@ and function definitions are written out where they are called. What is listed a
 not translated (events, rate rules, algebraic rules, reversible reactions, and
 reactions with other stoichiometries) is left for a person, or the import-model
 skill, to add. Only the standard library is used to read the file.
+
+Used with: compartments; declared modules
 """
 import ast
 import math

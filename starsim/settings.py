@@ -1,8 +1,12 @@
 """
-Define options for Starsim.
-All options should be set using set() or directly, e.g.:
+Options for Starsim, and the plotting style
+
+These exist so that behavior that isn't part of a model (how much to print, how to treat warnings, which
+kernels to use) is set in one place. All options should be set using set() or directly, e.g.:
 
     ss.options(verbose=False)
+
+Used with: agents and compartments; declared and coded modules
 """
 import numpy as np
 import numba as nb
@@ -147,7 +151,12 @@ class Options(sc.obj):
         return self.set(*args, **kwargs)
 
     def update(self, *args, **kwargs):
-        """ Set several options, as `set()` does (so e.g. the kernels are swapped) """
+        """ Set several options, as `set()` does (so e.g. the kernels are swapped)
+
+        Args:
+            args (dict): the options to set, as a dict
+            kwargs (dict): the options to set, by name
+        """
         return self.set(**dict(*args, **kwargs))
 
     def __setitem__(self, key, value):
@@ -330,6 +339,9 @@ class Options(sc.obj):
         """
         Alias to set(), for use in a "with" block.
 
+        Args:
+            kwargs (dict): the options to set, by name, until the end of the "with" block
+
         Examples:
             ```python
             # Silence all output
@@ -355,7 +367,11 @@ class Options(sc.obj):
         return self
 
     def get_default(self, key):
-        """ Helper function to get the original default options """
+        """ Helper function to get the original default options
+
+        Args:
+            key (str): the name of the option
+        """
         return self.orig_options[key]
 
     @property
@@ -369,7 +385,11 @@ class Options(sc.obj):
         return
 
     def set_precision(self, refresh=True):
-        """ Change the arithmetic precision used by Starsim/NumPy """
+        """ Change the arithmetic precision used by Starsim/NumPy
+
+        Args:
+            refresh (bool): whether to pass the new data types on to the modules that keep their own copies
+        """
         if self.precision == 32:
             dtypes.update(dict(
                 int       = np.int64, # Never set this or result_float to 32-bit since messed up array indexing
@@ -437,6 +457,7 @@ def load_fonts(folder=None, name='Mulish', rebuild=False, verbose=False, **kwarg
         name (str): the name of the font to load
         rebuild (bool): whether to rebuild the font cache
         verbose (bool): whether to print out progress/errors
+        kwargs (dict): passed to `sc.fonts()`
     """
     if folder is None:
         folder = str(sc.thispath(__file__) / 'internals' / 'assets')

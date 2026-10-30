@@ -10,7 +10,9 @@ them. A transition can be written with operators or in full, which build the sam
 The `ss.graph.Graph` class (in `internals/graph.py`) collects the states and transitions of one module, names
 them, fills in defaults (recording each guess), and checks them. The expressions are in `ss.expressions`,
 the values that vary (`ss.by`, `ss.timeseries`, `ss.seasonal`) in `ss.parameters`, how a model is shown in
-`ss.presentation`, and its stratifications in `ss.dimensions`.
+`ss.display`, and its stratifications in `ss.dimensions`.
+
+Used with: agents and compartments; declared modules
 """
 import re
 import copy
@@ -500,6 +502,9 @@ class Transition(Nameable):
 
         It is the rate those agents would face if they were in its source state now (0 for a transition with no rate).
 
+        Args:
+            uids (array): the agents
+
         **Example**::
 
             h = tb.death.hazard(uids) # The hazard of death from TB for each of these agents
@@ -514,7 +519,11 @@ class Transition(Nameable):
         return np.broadcast_to(np.maximum(np.asarray(out, dtype=float), 0), len(uids)).copy()
 
     def to(self, dst):
-        """ The event of taking one branch of this transition, e.g. `precin.to(S)`: a condition, `on=`, or `.uids` """
+        """ The event of taking one branch of this transition, e.g. `precin.to(S)`: a condition, `on=`, or `.uids`
+
+        Args:
+            dst (State): the state the branch leads to
+        """
         return ss.conditions.Event('to', self, dst)
 
     @property
@@ -1014,18 +1023,31 @@ class lifetable:
         return f'lifetable(ages {self.edges[0]:n} to {self.edges[-1]:n})'
 
     def survive(self, age):
-        """ The share of a cohort alive at each age """
+        """ The share of a cohort alive at each age
+
+        Args:
+            age (float/array): the age or ages
+        """
         return np.interp(age, self.edges, self.survival, left=1.0, right=0.0)
 
     def draw(self, age, u):
-        """ The age at death of people of some ages, from uniform random numbers: a cohort's survival to it is a share (1 - u) of its survival to their age """
+        """ The age at death of people of some ages, from uniform random numbers: a cohort's survival to it is a share (1 - u) of its survival to their age
+
+        Args:
+            age (array): the ages of the people
+            u (array): uniform random numbers, one for each person
+        """
         target = self.survive(age)*(1 - np.asarray(u))
         keep = np.r_[True, np.diff(self.survival[::-1]) > 0] # The survival curve is flat where nobody dies, which is not a point it can be inverted at
         out = np.interp(target, self.survival[::-1][keep], self.edges[::-1][keep])
         return np.maximum(out, age)
 
     def hazards(self, edges):
-        """ The death rate per year in each of some age groups (given by their lower edges; the last is open), as a compartmental run takes it """
+        """ The death rate per year in each of some age groups (given by their lower edges; the last is open), as a compartmental run takes it
+
+        Args:
+            edges (array): the lower edge of each age group
+        """
         edges = np.asarray(edges, dtype=float)
         out = []
         for k,lo in enumerate(edges):
@@ -1130,6 +1152,7 @@ class outcome(Nameable):
         duration (any): if given, also produces `n_<name>`: the number currently in this outcome
         likelihood (`ss.Dist`/func): optional likelihood, for calibration: a distribution, or a function `fn(observed, model)` returning the log-likelihood of each value (see `ss.fit.logpdf()`)
         name (str): the name; if not given, taken from the keyword or the variable it is assigned to
+        label (str): a human-readable name
 
     Examples:
         ```python
@@ -1192,7 +1215,12 @@ class outcome(Nameable):
 
 
 class Destination:
-    """ The flow to one destination of a transition with several, e.g. `cin.X`: its name is `'cin.X'`, and it is used in outcomes and results as a transition is """
+    """ The flow to one destination of a transition with several, e.g. `cin.X`: its name is `'cin.X'`, and it is used in outcomes and results as a transition is
+
+    Args:
+        tr (Transition): the transition
+        state (State): the destination
+    """
     def __init__(self, tr, state):
         self.tr = tr
         self.state = state
@@ -1258,7 +1286,11 @@ def is_declaration(obj):
 
 
 class FlowSum:
-    """ A weighted sum of flows (transitions and outcomes), or a share of one, used as the source of an outcome: 0.1*mild + 0.5*severe, or 0.5*infection """
+    """ A weighted sum of flows (transitions and outcomes), or a share of one, used as the source of an outcome: 0.1*mild + 0.5*severe, or 0.5*infection
+
+    Args:
+        items (list): the flows and their weights
+    """
     def __init__(self, items):
         self.items = [] # Each flow, with its weight
         for item in items:

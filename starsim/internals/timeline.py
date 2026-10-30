@@ -1,5 +1,9 @@
 """
-Simulation and module timelines
+Timelines: the time vectors of a sim and of each of its modules
+
+They exist so that `sim.t` and `module.t` give the current step and date, and a module can step at its own rate.
+
+Used with: agents and compartments; declared and coded modules
 """
 import sciris as sc
 import numpy as np
@@ -445,7 +449,14 @@ class Timeline:
         return
 
     def init(self, sim=None, max_steps=None, force=False):
-        """ Initialize all vectors """
+        """
+        Initialize all vectors
+
+        Args:
+            sim (`ss.Sim`): the sim to take missing values from; if None, the timeline stands alone
+            max_steps (int): the number of steps above which to warn; if None, use `ss.options.max_steps`
+            force (bool): whether to initialize again
+        """
 
         # Don't re-initialize if already initialized
         if self.initialized and not force:

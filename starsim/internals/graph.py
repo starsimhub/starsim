@@ -1,5 +1,9 @@
 """
-The graph of one module: its states, transitions, and parameters, collected, named, completed with defaults (each guess recorded), and checked
+Not for the user: the graph of one module: its states, transitions, and parameters, collected, named, completed with defaults (each guess recorded), and checked
+
+It exists as the one description of a declared model, which every solver runs and `describe()` shows, so that a model can be written once.
+
+Used with: agents and compartments; declared modules
 """
 import types
 import itertools

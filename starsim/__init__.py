@@ -68,7 +68,7 @@ from .transitions import (
     State, states, pars, null, stay, on,
     Transition, move, birth, death, lifetable, immigration, emigration, outcome,
 )
-from .internals import graph, presentation, dimensions
+from .internals import graph, display, dimensions
 from .internals.dimensions import transfer
 from . import solvers
 
@@ -87,8 +87,8 @@ from .sim import SimPars, Sim, demo
 from .run import MultiSim, parallel
 
 #%% Importing from and exporting to other frameworks
-from . import io
-from .io import import_from, export_to
+from . import converters
+from .converters import import_from, export_to
 
 def __getattr__(name):
     """ Import ss.fit when it is first used, so that import starsim stays fast """

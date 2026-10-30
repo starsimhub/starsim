@@ -1,5 +1,5 @@
 """
-Numba kernels for the compartmental solvers
+Not for the user: Numba kernels for the compartmental solvers
 
 A compartmental engine flattens its flows into a `Program`: a set of arrays that
 say where each flow comes from, where it goes, and how its rate is worked out.
@@ -9,6 +9,8 @@ call per flow, per term, and per stage of the integrator.
 A rate that depends on the state of the model within a step (a force of infection,
 or anything that uses `I.n`) is stored as a short list of operations on a stack, one
 value per group. Everything else is a number per group that Python sets once a step.
+
+Used with: compartments; declared modules
 """
 
 import os

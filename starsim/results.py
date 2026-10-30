@@ -1,5 +1,9 @@
 """
-Result structures.
+Results: the values a sim records at each time point (`ss.Result`), the containers that hold them (`ss.Results`), and how they are compared with data (`ss.simdata`)
+
+These exist so that a result knows its own time points, scale, and how to resample and plot itself, whichever solver wrote it.
+
+Used with: agents and compartments; declared and coded modules
 """
 import os
 import functools
@@ -15,7 +19,15 @@ import matplotlib.pyplot as plt
 class Levels(sc.obj):
     """ A result across runs split by a dimension: a result across runs for each level, which can be plotted together """
     def plot(self, fig=None, ax=None, lines=False, log=False, **kwargs):
-        """ Plot each level's median and interval (or every run, if `lines=True`) on the same axes; the other arguments are as for `ss.Result.plot()` """
+        """ Plot each level's median and interval (or every run, if `lines=True`) on the same axes; the other arguments are as for `ss.Result.plot()`
+
+        Args:
+            fig (Figure): the figure to plot on
+            ax (Axes): the axes to plot on
+            lines (bool): if True, plot every run rather than the median and interval
+            log (bool): whether to use a log scale for the y-axis
+            kwargs (dict): passed to `ss.plot_args()`
+        """
         kw = ss.plot_args(kwargs, alpha=0.8)
         given = fig is not None or ax is not None
         with ss.style(**kw.style):
@@ -202,7 +214,11 @@ class Result(ss.arrays.BaseArr):
         return out
 
     def to_str(self, label=True):
-        """ Convert Result object to a string """
+        """ Convert Result object to a string
+
+        Args:
+            label (bool): whether to include the label
+        """
         return self.__str__(label=label)
 
     def disp(self):
@@ -373,7 +389,11 @@ class Result(ss.arrays.BaseArr):
         return out
 
     def take(self, inds):
-        """ Some of the runs of a result across runs: a result of one run for a position, or across runs for a list of them """
+        """ Some of the runs of a result across runs: a result of one run for a position, or across runs for a list of them
+
+        Args:
+            inds (int/list): the position or positions of the runs
+        """
         one = np.ndim(inds) == 0
         pick = lambda arr: None if arr is None else np.asarray(arr)[inds]
         values = pick(self.values)
@@ -442,14 +462,24 @@ class Result(ss.arrays.BaseArr):
         return super().__iter__()
 
     def median(self, *args, **kwargs):
-        """ For a result across runs, the median over the runs of each scenario (as a result of one run, if there is one scenario); otherwise the median of the values """
+        """ For a result across runs, the median over the runs of each scenario (as a result of one run, if there is one scenario); otherwise the median of the values
+
+        Args:
+            args (list): passed to `np.median()`, for a result not across runs
+            kwargs (dict): passed to `np.median()`, for a result not across runs
+        """
         if self.runs is None or args or kwargs:
             return np.median(self.values, *args, **kwargs)
         self._check_runs('median()')
         return self.over_runs(lambda arr: np.median(arr, axis=0))
 
     def mean(self, *args, **kwargs):
-        """ For a result across runs, the mean over the runs of each scenario (as a result of one run, if there is one scenario); otherwise the mean of the values """
+        """ For a result across runs, the mean over the runs of each scenario (as a result of one run, if there is one scenario); otherwise the mean of the values
+
+        Args:
+            args (list): passed to the mean of the values, for a result not across runs
+            kwargs (dict): passed to the mean of the values, for a result not across runs
+        """
         if self.runs is None or args or kwargs:
             return self.values.mean(*args, **kwargs)
         self._check_runs('mean()')
@@ -705,7 +735,11 @@ class Result(ss.arrays.BaseArr):
         return out
 
     def col(self, col):
-        """ Return a 1D result for one column of a 2D result, e.g. `res.col('alpha')`; its values are a view, so modifying them modifies the 2D result """
+        """ Return a 1D result for one column of a 2D result, e.g. `res.col('alpha')`; its values are a view, so modifying them modifies the 2D result
+
+        Args:
+            col (str/int): the column, by name or position
+        """
         i = self._col_index(col)
         col = self.columns[i]
         label = sc.ifelse(self.label, self.name)
@@ -722,14 +756,22 @@ class Result(ss.arrays.BaseArr):
         return sc.obj({col:self.col(col) for col in self.columns})
 
     def stack(self, results):
-        """ Make a copy of this 2D result from a list of 1D results, one per column (e.g. after resampling) """
+        """ Make a copy of this 2D result from a list of 1D results, one per column (e.g. after resampling)
+
+        Args:
+            results (list): the 1D results, one per column
+        """
         def stack_key(key):
             return None if results[0][key] is None else np.stack([res[key] for res in results], axis=-1)
         values = stack_key('values')
         return self.asnew(values=values, low=stack_key('low'), high=stack_key('high'), timevec=results[0].timevec, _shape=values.shape)
 
     def apply_scale(self, scale):
-        """ Multiply the values by the population scale: a number, or an array with one entry per timestep """
+        """ Multiply the values by the population scale: a number, or an array with one entry per timestep
+
+        Args:
+            scale (float/array): the population scale
+        """
         if getattr(self, 'in_people', False): # Written in people already: see people_scale()
             return self
         scale = np.asarray(scale)
@@ -741,7 +783,12 @@ class Result(ss.arrays.BaseArr):
         return self
 
     def update(self, *args, **kwargs):
-        """ Update parameters, and initialize values if needed """
+        """ Update parameters, and initialize values if needed
+
+        Args:
+            args (list): the attributes to update, as a dict
+            kwargs (dict): the attributes to update, by name
+        """
         if 'shape' in kwargs: # Handle shape, which is renamed _shape as an attribute
             kwargs['_shape'] = kwargs.pop('shape')
         super().update(*args, **kwargs)
@@ -882,6 +929,9 @@ class Result(ss.arrays.BaseArr):
 
         Returns the period of each time point (a non-decreasing array of integers from 0), and for calendar
         months and years, the date each period ends (the first day of the next month or year; else None).
+
+        Args:
+            new_unit (str/dur): the new unit; see `resample()`
         """
         tv = self.timevec
         if tv is None:
@@ -935,6 +985,7 @@ class Result(ss.arrays.BaseArr):
             new_unit (str/dur): the new unit: 'day', 'week', 'month', 'year', or a duration, e.g. `ss.weeks(2)`
             summarize_by (str): resample this way instead of by the result's own, e.g. 'mean' to average a stock over each period
             use_years (bool): label the periods by their year (as integers)
+            kwargs (dict): not used
 
         Returns:
             Result: a new Result with resampled values
@@ -1026,6 +1077,7 @@ class Result(ss.arrays.BaseArr):
             set_name (bool): whether to set the name of the series to the name of the result
             resample (str): if provided, resample the data to this frequency
             kwargs: passed to the resample method
+            sep (str): the separator between the name and column in each column of a 2D result
 
         For a 2D result, return a dataframe with one column per result column, e.g. `new_infections_alpha`.
         """
@@ -1243,7 +1295,13 @@ def resamplable(res, kwargs=None):
 
 
 class Results(ss.ndict):
-    """ Container for storing results """
+    """ Container for storing results
+
+    Args:
+        module (Module/str): the module the results belong to, or its name
+        args (list): passed to `ss.ndict`
+        kwargs (dict): passed to `ss.ndict`
+    """
     def __init__(self, module=None, *args, **kwargs):
         if module is not None and not isinstance(module, str):
             modlabel = getattr(module, 'label', None)
@@ -1290,6 +1348,12 @@ class Results(ss.ndict):
         return self.__repr__(indent=indent, head_col=head_col, key_col=key_col)
 
     def disp(self, *args, **kwargs):
+        """ Print the results in full
+
+        Args:
+            args (list): passed to `str()` of the `ss.ndict`
+            kwargs (dict): passed to `str()` of the `ss.ndict`
+        """
         print(super().__str__(*args, **kwargs))
         return
 
@@ -1349,7 +1413,12 @@ class Results(ss.ndict):
         return
 
     def append(self, arg, key=None):
-        """ This is activated by adding as well, e.g. results += result """
+        """ This is activated by adding as well, e.g. results += result
+
+        Args:
+            arg (Result/list/tuple): the result, or the arguments to make one
+            key (str): the key to add it under (default: its name)
+        """
         if isinstance(arg, (list, tuple)):
             result = ss.Result(*arg, module=self._module)
         elif isinstance(arg, dict):
@@ -1374,6 +1443,13 @@ class Results(ss.ndict):
         Turn from a nested dictionary into a flat dictionary, keeping only results by default; keys keep their case, as in `to_df()` (e.g. `sis_I`)
 
         If `columns=True`, split each 2D result into one 1D result per column, e.g. `sis_new_infections_alpha`.
+
+        Args:
+            sep (str): the separator between the parts of each key
+            only_results (bool): whether to keep only results
+            only_auto (bool): whether to keep only results that are plotted by default
+            columns (bool): whether to split each 2D result into one per column
+            kwargs (dict): `resample=` to resample each result, with any other keywords for `ss.Result.resample()`
         """
         out = sc.flattendict(self, sep=sep)
         if columns:
@@ -1394,7 +1470,12 @@ class Results(ss.ndict):
         return out
 
     def resample(self, new_unit, **kwargs):
-        """ Resample all the results to a longer time unit (e.g. 'year'), each by its `summarize_by`, returning a new Results object; see `ss.Result.resample()`; results not summarized over time (`summarize_by=None`) are left out, as in `sim.summarize()` """
+        """ Resample all the results to a longer time unit (e.g. 'year'), each by its `summarize_by`, returning a new Results object; see `ss.Result.resample()`; results not summarized over time (`summarize_by=None`) are left out, as in `sim.summarize()`
+
+        Args:
+            new_unit (str/dur): the new unit; see `ss.Result.resample()`
+            kwargs (dict): passed to `ss.Result.resample()`
+        """
         new = Results(self._module)
         timevec = None
         for key, res in self.items():
@@ -1655,7 +1736,11 @@ class simdata:
         return f'ss.simdata({source}{aliases}); data.load() gives the dataframe'
 
     def load(self, sim=None):
-        """ Load the data and rename the columns """
+        """ Load the data and rename the columns
+
+        Args:
+            sim (Sim): the sim the data is for
+        """
         if isinstance(self.source, (str, os.PathLike)): # Separated by commas, tabs, or semicolons, whichever the file uses
             df = sc.dataframe(pd.read_csv(self.source, sep=None, engine='python'))
         else:
@@ -1825,6 +1910,11 @@ def check_data(sim, df, die=False):
 
     A column that matches no result is noted (data on a sim can be just for plotting, or read by a fit's own `gof=`); with
     `die=True`, as when a fit compares every column with its result, it is an error.
+
+    Args:
+        sim (Sim): the sim
+        df (dataframe): the data
+        die (bool): whether a column that matches no result is an error
     """
     options = [f'{mod.name}.{key}' for mod in sim.modules for key,res in mod.results.items() if isinstance(res, ss.Result)]
     for col in df.columns:
@@ -1950,6 +2040,10 @@ def compare(sim, df=None):
     left out (see `check_data()`).
 
     Returns a dict of `{column: (data values, model values)}`.
+
+    Args:
+        sim (Sim): the sim
+        df (dataframe): the data (default: the sim's)
     """
     df = given_data(sim, df)
     sim_t, data_t = data_times(sim, df)

@@ -1,5 +1,9 @@
 """
 Dates: `ss.date`, an array of them (`ss.DateArray`), and calendar durations (`ss.datedur`)
+
+They give every module one way to work with calendar time, in calendar dates or in decimal years.
+
+Used with: agents and compartments; declared and coded modules
 """
 import numbers
 import operator
@@ -16,7 +20,11 @@ __all__ = ['DateArray', 'date', 'datedur']
 
 
 class DateArray(np.ndarray):
-    """ Lightweight wrapper for an array of dates """
+    """
+    Lightweight wrapper for an array of dates
+
+    It exists so that a time vector, of dates or of durations, can be plotted and compared as one.
+    """
     # TODO: Consider splitting out into DurArray which could have additional validation/functionality for mixed duration types
     def __new__(cls, arr=None, unit=None):
         arr = sc.toarray(arr)
@@ -150,7 +158,13 @@ class DateArray(np.ndarray):
             return ss.DateArray(vals, unit=ss.date)
 
     def to_float(self, inplace=False, to_numpy=False):
-        """ Convert to a float, returning a new DateArray unless inplace=True """
+        """
+        Convert to a float, returning a new DateArray unless inplace=True
+
+        Args:
+            inplace (bool): whether to change this array rather than return a new one
+            to_numpy (bool): whether to return a NumPy array rather than a `DateArray`
+        """
         if not len(self):
             vals = []
         elif self.is_dur and not self.is_datedur:
@@ -189,6 +203,9 @@ class DateArray(np.ndarray):
         Exact (elapsed) number of days between each date and start, as an array of floats
 
         The same as `dates - start` (which gives `ss.days`), but as plain numbers, all at once.
+
+        Args:
+            start (`ss.date`/str): the date to count from
 
         **Example**:
 
@@ -290,13 +307,24 @@ class date(pd.Timestamp):
         return self.__repr__(bracket=False)
 
     def replace(self, *args, **kwargs):
-        """ Returns a new ss.date(); pd.Timestamp is immutable """
+        """
+        Returns a new ss.date(); pd.Timestamp is immutable
+
+        Args:
+            *args (list): passed to `pd.Timestamp.replace()`
+            **kwargs (dict): passed to `pd.Timestamp.replace()`, e.g. `year=2030`
+        """
         out = super().replace(*args, **kwargs)
         out = self.__class__._reset_class(out)
         return out
 
     def disp(self, **kwargs):
-        """ Show the full object """
+        """
+        Show the full object
+
+        Args:
+            **kwargs (dict): passed to `sc.pr()`
+        """
         return sc.pr(self, **kwargs)
 
     @classmethod
@@ -370,16 +398,25 @@ class date(pd.Timestamp):
 
     @staticmethod
     def subdaily(years): # TODO: add to dur as well? Could define a DateTime class that both inherit from, with this and any other duplicate methods
-        """ Check if a subdaily timestep is used
+        """
+        Check if a subdaily timestep is used
 
-        A date has no concept of a timestep, but add this as a convienence method since
+        A date has no concept of a timestep, but add this as a convenience method since
         this is required by other methods (e.g. `ss.date.arange()`).
+
+        Args:
+            years (float): the timestep, in years
         """
         days = years*factors.years.days
         return days < 1.0
 
     def round(self, to='d'):
-        """ Round to a given interval (by default a day) """
+        """
+        Round to a given interval (by default a day)
+
+        Args:
+            to (str): the interval, as `pd.Timestamp.round()` reads it, e.g. 'h'
+        """
         timestamp = super().round(to)
         return self._reset_class(timestamp)
 
@@ -689,6 +726,9 @@ class datedur(dur):
 
         A `datedur` stores a date offset rather than a number, so the finest unit it was given in is
         used, e.g. `ss.datedur(days=10).replace(20)` is `ss.days(20)`.
+
+        Args:
+            value (float): the new value
         """
         return self.to_dur().replace(value)
 
@@ -697,7 +737,12 @@ class datedur(dur):
         return sum(self.kwds.get(k, 0)/v for k,v in factors[normalize_unit(unit)].items())
 
     def to(self, unit):
-        """ As a plain duration in a unit (e.g. 'year' or ss.years), approximately, as other durations are, e.g. ss.datedur(months=6).to('years') is ss.years(0.5) """
+        """
+        As a plain duration in a unit (e.g. 'year' or ss.years), approximately, as other durations are, e.g. ss.datedur(months=6).to('years') is ss.years(0.5)
+
+        Args:
+            unit (str/type): the unit, e.g. 'year' or `ss.years`
+        """
         cls = get_unit_class('dur', unit)
         return cls(self._number(cls.base))
 

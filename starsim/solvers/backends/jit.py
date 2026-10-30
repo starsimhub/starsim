@@ -1,6 +1,8 @@
 """
 `ss.jit`: compile a function with Numba or JAX, or run it as it is
 
+It exists so that users' own code can run at compiled speed, in a module written as code or in a function of a declared one.
+
 Nothing here needs reading to use `ss.jit`; see its docstring. How it works:
 
 - A function is compiled by Numba the first time it is called (and kept in Numba's cache on disk), or
@@ -9,6 +11,8 @@ Nothing here needs reading to use `ss.jit`; see its docstring. How it works:
   as NumPy's do and with the same numbers, which Numba alone can't.
 - What Numba can't compile is an error, saying why; with `nopython=False`, it runs as written, as Python, with one line
   saying why (once a function).
+
+Used with: agents and compartments; coded modules
 """
 import re
 import ast
@@ -66,7 +70,11 @@ def jit(func=None, *, nopython=True):
 
 
 class Unsupported(Exception):
-    """ Why a function can't be compiled """
+    """
+    Why a function can't be compiled
+
+    It exists so that the error can say why.
+    """
 
 
 def plain(x):
@@ -92,7 +100,11 @@ def reason(err):
 #%% Functions
 
 class Function:
-    """ A function compiled by Numba, or traced by JAX when called with JAX arrays """
+    """
+    A function compiled by Numba, or traced by JAX when called with JAX arrays
+
+    It exists so that one callable can go to whichever compiler its arguments need.
+    """
 
     def __init__(self, func, nopython=True):
         self.py_func = func
@@ -214,6 +226,7 @@ def rewrite_gens(func, gens):
     """ Rewrite rng.binomial(...) and rng.poisson(...), for each Generator argument rng, to helpers that take arrays as NumPy does """
     fdef = parse(func)
     class Rewrite(ast.NodeTransformer):
+        """ Replaces those calls with the helpers """
         def visit_Call(self, node):
             self.generic_visit(node)
             f = node.func

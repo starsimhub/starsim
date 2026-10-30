@@ -14,6 +14,6 @@ The Starsim package. The files at this level are what a modeler might read; the 
 ## Folders
 
 - `solvers/`: the engines that run declared models, as compartments or as agents, and their kernels (`solvers/backends/`, and a copy in Rust in `solvers/rust/`)
-- `io/`: importing models from other frameworks (`ss.import_from()`), exporting to them (`ss.export_to()`), and rewriting Starsim 3 code
+- `converters/`: importing models from other frameworks (`ss.import_from()`), exporting to them (`ss.export_to()`), and rewriting Starsim 3 code
 - `internals/`: how Starsim works under the hood (the graph of a declared model, expressions, gradients, errors, debugging tools, the command line, and the fonts)
 - `library/`: example and reference modules that build on Starsim but are not part of it (`import starsim.library as ssl`)

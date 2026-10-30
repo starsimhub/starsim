@@ -15,6 +15,8 @@ a state: the transitions into it branch to where its outflows lead. A calibratio
 y-factors Atomica saves with `ParameterSet.save_calibration()`) scales the values it calibrates.
 A program book's programs become parameters of spending, whose coverage changes the
 parameters they affect (see `read_progbook()`).
+
+Used with: compartments; declared modules
 """
 import ast
 import re

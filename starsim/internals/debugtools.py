@@ -1,5 +1,9 @@
 """
-Utilities to help with debugging Starsim runs
+Tools for debugging and profiling Starsim runs: `sim.profile()`, detailed diagnostics, and mock objects for testing a module without a sim
+
+They exist so that a slow or surprising run can be looked into without changing the model.
+
+Used with: agents and compartments; declared and coded modules
 """
 import sys
 import platform
@@ -69,7 +73,12 @@ class Profile(sc.profile):
         return self.init_prof
 
     def run(self, disp=None):
-        """ Profile the performance of the simulation """
+        """
+        Profile the performance of the simulation
+
+        Args:
+            disp (bool): whether to show the results
+        """
         sim = self.sim
         if not self.sim.initialized:
             self.sim.init() # Don't profile
@@ -91,7 +100,14 @@ class Profile(sc.profile):
         return self
 
     def disp(self, bytime=1, maxentries=10, skiprun=True):
-        """ Same as sc.profile.disp(), but skip the run function by default """
+        """
+        Same as sc.profile.disp(), but skip the run function by default
+
+        Args:
+            bytime (int): 1 to sort by the time in each function; see `sc.profile.disp()`
+            maxentries (int): the number of functions to show
+            skiprun (bool): whether to leave out the run function itself
+        """
         return super().disp(bytime=bytime, maxentries=maxentries, skiprun=skiprun)
 
     def plot_cpu(self):
@@ -101,7 +117,10 @@ class Profile(sc.profile):
 
 
 class Diagnostics(sc.quickobj):
-    """ Helper class for storing detailed diagnostic information; see sim.set_diagnostics() for usage; not to be used directly
+    """
+    Helper class for storing detailed diagnostic information; see sim.set_diagnostics() for usage; not to be used directly
+
+    It exists to find where two runs that should match first differ.
 
     Args:
         sim (ss.Sim): the sim to attach diagnostics to
@@ -171,7 +190,12 @@ class Diagnostics(sc.quickobj):
 
 
 def metadata(comments=None):
-    """ Store metadata; like `sc.metadata()`, but optimized for speed """
+    """
+    Store metadata; like `sc.metadata()`, but optimized for speed
+
+    Args:
+        comments (str): any comments to store with the metadata
+    """
     md = sc.obj(
         version = ss.__version__,
         versiondate = ss.__versiondate__,
@@ -197,7 +221,14 @@ def metadata(comments=None):
 
 
 def mock_time(dt=1.0, dur=10, start=2000):
-    """ Create a minimal mock "Time" object """
+    """
+    Create a minimal mock "Time" object
+
+    Args:
+        dt (float): the timestep
+        dur (float): the duration
+        start (float): the start
+    """
     t = sc.obj(
         dt = dt,
         ti = 0,
@@ -236,7 +267,15 @@ def mock_sim(n_agents=100, **kwargs):
 
 
 def mock_people(n_agents=100, min_age=0, max_age=70, age_seed=1):
-    """ Create a minimal mock "People" object with ages """
+    """
+    Create a minimal mock "People" object with ages
+
+    Args:
+        n_agents (int): the number of agents
+        min_age (float): the youngest age
+        max_age (float): the oldest age
+        age_seed (int): the random seed for the ages
+    """
     rng = np.random.default_rng(seed=age_seed)
     people = sc.obj(
         uid = np.arange(n_agents),
@@ -251,7 +290,13 @@ def mock_people(n_agents=100, min_age=0, max_age=70, age_seed=1):
 
 
 def mock_module(dur=10, **kwargs):
-    """ Create a minimal mock "Module" object; kwargs are passed to `ss.debugtools.mock_time()` """
+    """
+    Create a minimal mock "Module" object; kwargs are passed to `ss.debugtools.mock_time()`
+
+    Args:
+        dur (float): the duration
+        **kwargs (dict): passed to `mock_time()`
+    """
     mod = sc.obj(
         name = 'mock_module',
         t = mock_time(dur=dur, **kwargs),

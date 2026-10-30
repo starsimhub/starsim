@@ -36,6 +36,8 @@ To extend for a different disease, subclass `fetal_infection` and override
 `_apply_damage` with disease-specific logic (e.g. stage-dependent penalties).
 To extend `treat_pregnant`, subclass and override `step()` with custom
 eligibility criteria or reversal logic.
+
+Used with: agents; coded modules
 """
 
 import numpy as np
@@ -87,6 +89,7 @@ class FetalHealth(ss.Module):
         vlbw_threshold (float):         birth weight in grams below which VLBW is declared
         min_ga (dur):                   floor for timing shifts (delivery can't be brought before this GA)
         percentile_dist (Dist):         distribution for baseline fetal weight percentile
+        pars (dict): the same parameters, as a dict
 
     Examples:
         ```python
@@ -141,7 +144,11 @@ class FetalHealth(ss.Module):
         return
 
     def init_pre(self, sim):
-        """ Register callbacks with the Pregnancy module """
+        """ Register callbacks with the Pregnancy module
+
+        Args:
+            sim (Sim): the sim being initialized
+        """
         super().init_pre(sim)
         preg = sim.get_module(ss.Pregnancy, die=False) # By type, so a subclass with its own name (e.g. FPsim's fp) is found
         if preg is None:
@@ -170,7 +177,11 @@ class FetalHealth(ss.Module):
         return
 
     def on_conception(self, uids):
-        """ Initialize fetal health for new pregnancies (called by Pregnancy) """
+        """ Initialize fetal health for new pregnancies (called by Pregnancy)
+
+        Args:
+            uids (array): the women who conceived
+        """
         self.weight_percentile[uids] = self.pars.percentile_dist.rvs(uids)
         self.growth_restriction[uids] = 0.0
         self.timing_shift[uids] = 0.0
@@ -184,6 +195,9 @@ class FetalHealth(ss.Module):
         Birth weight is computed from the mother's pregnancy-time states
         (weight_percentile, growth_restriction). Outcomes (birth_weight,
         lbw, vlbw, sga) are stored on the newborn agents.
+
+        Args:
+            newborn_uids (array): the newborns
         """
         if not len(newborn_uids):
             return
@@ -327,6 +341,9 @@ class FetalHealth(ss.Module):
         Override this method to customize the birth weight formula. The
         interpolation function can be swapped via `pars.interp_fn`.
 
+        Args:
+            uids (array): the newborns
+
         Returns:
             tuple: (birth_weights, ga_weeks) arrays
         """
@@ -364,6 +381,7 @@ class treat_pregnant(ss.Intervention):
         p_treat (Dist):             par: probability of treating an eligible woman per timestep
         tx_growth_reversal (float): par: fraction of growth restriction to reverse (0-1)
         tx_timing_reversal (float): par: fraction of timing shift to reverse (0-1)
+        pars (dict): the same parameters, as a dict
 
     Attributes:
         ti_treated (FloatArr):  timestep when each agent was treated
@@ -390,6 +408,11 @@ class treat_pregnant(ss.Intervention):
         return
 
     def init_pre(self, sim):
+        """ Check that the sim has the disease and `ssl.mnch.FetalHealth`, and fill in the years
+
+        Args:
+            sim (Sim): the sim being initialized
+        """
         super().init_pre(sim)
 
         # Validate that the required disease and FetalHealth modules exist
@@ -452,6 +475,7 @@ class fetal_infection(ss.Connector):
     Args:
         timing_shift (Dist):    weeks to shift delivery forward per infection (default: lognormal mean=3, std=1)
         growth_penalty (float): fractional birth weight reduction per infection (default: 0.15 = 15%)
+        pars (dict): the same parameters, as a dict
 
     To adapt for a different disease::
 
@@ -487,6 +511,11 @@ class fetal_infection(ss.Connector):
         return self.sim.custom['fetal_health']
 
     def init_pre(self, sim):
+        """ Check that the sim has what the connector needs
+
+        Args:
+            sim (Sim): the sim being initialized
+        """
         super().init_pre(sim)
 
         # Validate that the required modules exist

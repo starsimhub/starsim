@@ -1,7 +1,12 @@
 """
 The machinery of random-number-safe distributions: `ss.Dist`, and how the distributions of a sim are found, seeded, and drawn from
 
+It exists so that each decision in a sim has its own random stream, which keeps two runs comparable (common random numbers).
+As compartments, a distribution mostly describes a dwell time or a parameter: the engine draws from its own generator.
+
 The distributions themselves are in `ss.distributions`.
+
+Used with: agents and compartments; declared and coded modules
 """
 import inspect
 import sciris as sc
@@ -151,7 +156,13 @@ def link_dists(obj, sim, module=None, overwrite=False, init=False, skip=None, **
 
 
 def make_dist(pars=None, **kwargs):
-    """ Make a distribution from a dictionary """
+    """
+    Make a distribution from a dictionary
+
+    Args:
+        pars (dict): the distribution, with its name under `type`, e.g. `dict(type='normal', loc=1, scale=0.5)`
+        **kwargs (dict): merged into `pars`
+    """
     pars = sc.mergedicts(pars, kwargs)
     if 'type' not in pars:
         errormsg = 'To make a distribution from a dict, one of the keys must be "type" to specify the distribution'
@@ -166,7 +177,11 @@ def make_dist(pars=None, **kwargs):
 
 
 class Dists(sc.prettyobj):
-    """ Class for managing a collection of Dist objects """
+    """
+    Class for managing a collection of Dist objects
+
+    It exists so that the sim can seed, jump, and reset every distribution in one place.
+    """
     def __init__(self, obj=None, *args, base_seed=None, sim=None):
         if len(args): obj = [obj] + list(args)
         self.obj = obj
@@ -472,7 +487,14 @@ class Dist:
         return self.rvs(n=n)
 
     def set(self, *args, dist=None, **kwargs):
-        """ Set (change) the distribution type, or one or more parameters of the distribution """
+        """
+        Set (change) the distribution type, or one or more parameters of the distribution
+
+        Args:
+            *args (list): new values of the parameters, in order
+            dist (`scipy.stats.rv_continuous`): a new distribution, to change the type
+            **kwargs (dict): new values of the parameters, by name
+        """
         if dist:
             self.dist = dist
             self.process_dist()
@@ -586,6 +608,9 @@ class Dist:
         Use 0 for original state, -1 for most recent state. Note: with `ss.options.crn=False`,
         the state is only stored for `rvs(reset=True)`, so -1 may refer to an earlier state.
 
+        Args:
+            state (int/dict): the position in the history to restore, or a state of the generator
+
         Examples:
             ```python
             dist = ss.random(seed=5, strict=False)
@@ -610,7 +635,14 @@ class Dist:
         return self.state
 
     def jump(self, to=None, delta=1, force=False):
-        """ Advance the RNG, e.g. to timestep "to", by jumping """
+        """
+        Advance the RNG, e.g. to timestep "to", by jumping
+
+        Args:
+            to (int): the index to jump to; if None, jump by `delta`
+            delta (int): the number of jumps from the current index
+            force (bool): whether to jump even if already past `to`, or with `ss.options.crn=False`
+        """
 
         # Under crn=False, jumping is pure waste: the RNG stream advances naturally on each
         # draw, giving fresh, valid, same-seed-reproducible numbers without a reseed. Skip it
@@ -1095,7 +1127,12 @@ class Dist:
         return
 
     def rand(self, size):
-        """ Simple way to get simple random numbers """
+        """
+        Simple way to get simple random numbers
+
+        Args:
+            size (int/tuple): the number or shape of values
+        """
         return self.rng.random(size, dtype=ss.dtypes.float) # Up to 2x faster with float32
 
     def make_rvs(self):
@@ -1314,7 +1351,15 @@ class Dist:
         return
 
     def plot_hist(self, n=1000, bins=None, fig_kw=None, hist_kw=None):
-        """ Plot the current state of the RNG as a histogram (from a copy initialized on its own, if this one has no sim yet); outside a sim, a distribution with a unit is drawn and labeled in it (e.g. days) """
+        """
+        Plot the current state of the RNG as a histogram (from a copy initialized on its own, if this one has no sim yet); outside a sim, a distribution with a unit is drawn and labeled in it (e.g. days)
+
+        Args:
+            n (int): the number of values to draw
+            bins (int/array): the bins of the histogram
+            fig_kw (dict): passed to `plt.figure()`
+            hist_kw (dict): passed to `plt.hist()`
+        """
         plt.figure(**sc.mergedicts(fig_kw))
         dist = self if self.initialized else sc.dcp(self).init(force=True) # Leave this one to be initialized by its sim
         rvs = dist.rvs(n, reset=True) # As if nothing ever happened

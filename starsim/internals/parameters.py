@@ -1,5 +1,9 @@
 """
-Set parameters
+Parameters: the container of a module's or sim's parameters (`ss.Pars`), and values that vary by level or in time (`ss.by`, `ss.timeseries`, `ss.seasonal`)
+
+They exist so that a parameter is checked when set, and can vary in the same way however a model is written or run.
+
+Used with: agents and compartments; declared and coded modules
 """
 from numbers import Number
 import numpy as np
@@ -103,6 +107,9 @@ class Pars(sc.obj):
         Parameters are locked when the sim is initialized, so that e.g. a typo in
         `sim.pars['rand_sed'] = 2` raises an error rather than silently doing nothing.
         Use `pars.lock(False)` to unlock, or `pars.update(create=True)` to add a new key.
+
+        Args:
+            locked (bool): whether to lock, or unlock with False
         """
         object.__setattr__(self, '_locked', locked) # Set as an attribute, not a key
         return self
@@ -360,7 +367,12 @@ class Pars(sc.obj):
         return
 
     def to_json(self, **kwargs):
-        """ Convert to JSON representation """
+        """
+        Convert to JSON representation
+
+        Args:
+            **kwargs (dict): passed to `sc.jsonify()`
+        """
         return sc.jsonify(dict(self), **kwargs)
 
 
@@ -390,7 +402,7 @@ def check_verbose(verbose):
         return verbose
     errormsg = f'verbose must be 0 (print nothing), a fraction (progress every that share of the run), 1 (the solver, notes, and progress), or 2 or more (everything), not {verbose!r}'
     if verbose in ['brief', -1]:
-        errormsg += '. verbose="brief" (or -1) in Starsim 3 is now verbose=0, which the migration script rewrites (python -m starsim.io.migrate mypackage/)'
+        errormsg += '. verbose="brief" (or -1) in Starsim 3 is now verbose=0, which the migration script rewrites (python -m starsim.converters.migrate mypackage/)'
     raise ValueError(errormsg)
 
 
@@ -557,11 +569,16 @@ class by:
         if self.array is not None:
             return dict(by=self.dims, array=self.array.tolist())
         elif self.table is not None:
-            return dict(by=self.dims, table={col:ss.presentation.quantity_json(list(vals), None, None) for col,vals in self.table.items()})
-        values = {dim:dict(keyed={str(k):ss.presentation.quantity_json(v, None, None) for k,v in vals.items()}) if isinstance(vals, dict) else ss.presentation.quantity_json(list(vals), None, None) for dim,vals in self.given.items()}
+            return dict(by=self.dims, table={col:ss.display.quantity_json(list(vals), None, None) for col,vals in self.table.items()})
+        values = {dim:dict(keyed={str(k):ss.display.quantity_json(v, None, None) for k,v in vals.items()}) if isinstance(vals, dict) else ss.display.quantity_json(list(vals), None, None) for dim,vals in self.given.items()}
         return dict(by=self.dims, values=values[self.dims[0]]) if len(self.dims) == 1 else dict(by=self.dims, product=values)
     def map(self, func):
-        """ A new ss.by with a function applied to each value, e.g. `1/by` (with several dimensions as keywords, only scaling, since the value of a group is their product) """
+        """
+        A new ss.by with a function applied to each value, e.g. `1/by` (with several dimensions as keywords, only scaling, since the value of a group is their product)
+
+        Args:
+            func (func): the function, called on each value
+        """
         if self.array is not None:
             return by(func(self.array if self.wrap is None else self.wrap(self.array)), dims=self.dims)
         elif self.table is not None:
@@ -862,6 +879,11 @@ class by:
         """
         The value for each group of the sim at each of an array of years (years by groups), as `per_group()` gives them one year at a time, with
         each value that varies in time worked out for every year at once (a value for each level of some dimensions: otherwise a year at a time)
+
+        Args:
+            years (array): the years, as decimals
+            sim (`ss.Sim`): the sim
+            convert (func): the function to convert each value to a number
         """
         years = np.asarray(years, dtype=float)
         ds, strats = self.check(sim)
@@ -997,7 +1019,14 @@ class by:
         return out[index]
 
     def per_group(self, sim, convert=None, year=None):
-        """ The value for each group of the sim """
+        """
+        The value for each group of the sim
+
+        Args:
+            sim (`ss.Sim`): the sim
+            convert (func): the function to convert each value to a number
+            year (float): the year, for a value that varies in time; if None, the current time
+        """
         ds, grid = self.grid(sim, convert, year)
         grid, index = sim.groups.grid_index(ds, grid)
         return grid[index]
@@ -1027,7 +1056,11 @@ def starting(val):
 
 
 class Static:
-    """ What an expression of parameters alone is evaluated with, outside the engine: see `const_value()` """
+    """
+    What an expression of parameters alone is evaluated with, outside the engine: see `const_value()`
+
+    It exists so that such an expression can be read before the sim has an engine.
+    """
     @staticmethod
     def value(p):
         return p.raw
@@ -1103,7 +1136,11 @@ def current_value(val, sim, cache=None):
 
 
 class TimeValue:
-    """ Base class for values that vary in time: called with the sim, they return the value at the current time """
+    """
+    Base class for values that vary in time: called with the sim, they return the value at the current time
+
+    It exists so that `ss.timeseries` and `ss.seasonal` can be used wherever a number can.
+    """
     fields = [] # The attributes that can hold parameters
     _is_expr = True # So a typed value defers to it, and ss.perday(0.1) * ss.timeseries(...) is an expression as the other order is
 
@@ -1116,7 +1153,14 @@ class TimeValue:
         return self.at(sim.t.now('year'), sim)
 
     def series(self, years, sim, convert):
-        """ The value at each of an array of years, converted to plain numbers by `convert` """
+        """
+        The value at each of an array of years, converted to plain numbers by `convert`
+
+        Args:
+            years (array): the years, as decimals
+            sim (`ss.Sim`): the sim
+            convert (func): the function to convert each value to a number
+        """
         return np.array([convert(self.at(year, sim)) for year in years], dtype=float)
 
     @property
@@ -1216,7 +1260,12 @@ class timeseries(TimeValue):
         return self.values
 
     def years(self, sim):
-        """ The times as years on the sim's timeline (for a sim with no dates, the time since the start, in years) """
+        """
+        The times as years on the sim's timeline (for a sim with no dates, the time since the start, in years)
+
+        Args:
+            sim (`ss.Sim`): the sim
+        """
         if self._years is None or self._years[0] is not sim:
             out = []
             for time in self.times:
@@ -1236,7 +1285,13 @@ class timeseries(TimeValue):
     fields = ['values']
 
     def weights(self, year, sim):
-        """ For a year (or an array of them), the index of the value before it, and the weight of the value after it """
+        """
+        For a year (or an array of them), the index of the value before it, and the weight of the value after it
+
+        Args:
+            year (float/array): the year or years, as decimals
+            sim (`ss.Sim`): the sim
+        """
         years = self.years(sim)
         if self.period is not None: # Fold the time into one period from the first time
             period = self.period.years if isinstance(self.period, ss.dur) else float(self.period)
@@ -1251,6 +1306,13 @@ class timeseries(TimeValue):
         return year, i, j, w
 
     def at(self, year, sim):
+        """
+        The value at a year, interpolated between the times given
+
+        Args:
+            year (float): the year, as a decimal
+            sim (`ss.Sim`): the sim
+        """
         vals = [const_value(v) for v in self.values]
         year, i, j, w = self.weights(year, sim)
         i, j, w = int(i), int(j), float(w)
@@ -1259,6 +1321,14 @@ class timeseries(TimeValue):
         return vals[i]*(1 - w) + vals[j]*w
 
     def series(self, years, sim, convert):
+        """
+        The value at each of an array of years, converted to plain numbers by `convert`
+
+        Args:
+            years (array): the years, as decimals
+            sim (`ss.Sim`): the sim
+            convert (func): the function to convert each value to a number
+        """
         vals = [const_value(v) for v in self.values]
         if any(isinstance(v, ss.prob) for v in vals): # A probability is not converted in proportion to its value
             return super().series(years, sim, convert)
@@ -1274,9 +1344,9 @@ class timeseries(TimeValue):
         return new
 
     def to_json(self):
-        out = dict(timeseries={str(time):ss.presentation.quantity_json(val, None, None) for time,val in zip(self.times, self.values)}, mode=self.mode)
+        out = dict(timeseries={str(time):ss.display.quantity_json(val, None, None) for time,val in zip(self.times, self.values)}, mode=self.mode)
         if self.period is not None:
-            out['period'] = ss.presentation.quantity_json(self.period, 'dur', None)
+            out['period'] = ss.display.quantity_json(self.period, 'dur', None)
         return out
 
 
@@ -1340,20 +1410,40 @@ class seasonal(TimeValue):
     fields = ['mean', 'amplitude']
 
     def factor(self, year):
-        """ The value relative to the mean, at a year or an array of them """
+        """
+        The value relative to the mean, at a year or an array of them
+
+        Args:
+            year (float/array): the year or years, as decimals
+        """
         return np.maximum(0.0, 1 + const_value(self.amplitude)*np.cos(2*np.pi*(year - self.peak_frac)/self.period_years))
 
     def at(self, year, sim=None):
+        """
+        The value at a year
+
+        Args:
+            year (float): the year, as a decimal
+            sim (`ss.Sim`): not used; present to match `ss.timeseries`
+        """
         return const_value(self.mean)*float(self.factor(year))
 
     def series(self, years, sim, convert):
+        """
+        The value at each of an array of years, converted to plain numbers by `convert`
+
+        Args:
+            years (array): the years, as decimals
+            sim (`ss.Sim`): the sim
+            convert (func): the function to convert each value to a number
+        """
         mean = const_value(self.mean)
         if isinstance(mean, ss.prob): # A probability is not converted in proportion to its value
             return super().series(years, sim, convert)
         return convert(mean)*self.factor(np.asarray(years, dtype=float)) # Converted once, rather than at each time
 
     def to_json(self):
-        out = dict(mean=ss.presentation.quantity_json(self.mean, None, None), amplitude=self.amplitude, peak=self.peak)
+        out = dict(mean=ss.display.quantity_json(self.mean, None, None), amplitude=self.amplitude, peak=self.peak)
         if self.period is not None:
-            out['period'] = ss.presentation.quantity_json(self.period, 'dur', None)
+            out['period'] = ss.display.quantity_json(self.period, 'dur', None)
         return dict(seasonal=out)

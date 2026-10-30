@@ -1,5 +1,7 @@
 """
 The shared part of every importer: a neutral description of the source model, and the rules that turn its rates into transitions
+
+Used with: agents and compartments; declared modules
 """
 import re
 import ast
@@ -48,12 +50,29 @@ class Source:
         return
 
     def add_state(self, name, init=None, people=True, label=None):
-        """ A state; init is a number of people """
+        """
+        A state; init is a number of people
+
+        Args:
+            name (str): the name of the state
+            init (float): the initial number of people
+            people (bool): whether the state counts people
+            label (str): the label of the state
+        """
         self.states[name] = sc.obj(init=init, people=people, label=label)
         return
 
     def add_par(self, name, value, doc=None, bounds=None, prior=None):
-        """ A parameter: a number in the sim's unit, maybe with bounds and a prior (`ss.Dist`) for calibration """
+        """
+        A parameter: a number in the sim's unit, maybe with bounds and a prior (`ss.Dist`) for calibration
+
+        Args:
+            name (str): the name of the parameter
+            value (float): its value
+            doc (str): what it is
+            bounds (tuple): its bounds, for calibration
+            prior (`ss.Dist`): its prior, for calibration
+        """
         self.pars[name] = sc.obj(value=value, doc=doc, bounds=bounds, prior=prior)
         return
 
@@ -92,12 +111,23 @@ class Source:
         return
 
     def stratify(self, **kwargs):
-        """ A stratification of the disease, as the arguments to `ss.Disease.stratify()` """
+        """
+        A stratification of the disease, as the arguments to `ss.Disease.stratify()`
+
+        Args:
+            **kwargs (dict): passed to `ss.Disease.stratify()`
+        """
         self.strats.append(kwargs)
         return
 
     def skip(self, name, why):
-        """ Something in the source that was not translated: listed once, however often its code is written (`write()` writes each disease twice, the first time for the names it takes) """
+        """
+        Something in the source that was not translated: listed once, however often its code is written (`write()` writes each disease twice, the first time for the names it takes)
+
+        Args:
+            name (str): the name of what was not translated
+            why (str): why not
+        """
         if (name, why) not in self.incomplete:
             self.incomplete.append((name, why))
         return
@@ -154,7 +184,11 @@ def terms(node):
 
 
 class Rates(sc.prettyobj):
-    """ Turn the rates of a source into the rates of transitions, by the rules in 16-interop.md """
+    """
+    Turn the rates of a source into the rates of transitions, by the rules in 16-interop.md
+
+    It exists so that every importer reads a rate the same way.
+    """
     def __init__(self, source):
         self.source = source
         self.people = [k for k,s in source.states.items() if s.people]
@@ -330,7 +364,11 @@ reserved = {'ss', 'ssl', 'np', 'pd', 'expit', 'sim'} # Names the code uses for i
 
 
 class Code(str):
-    """ Python to write as it is, for a value an importer gives that `code_value()` does not write, e.g. a network """
+    """
+    Python to write as it is, for a value an importer gives that `code_value()` does not write, e.g. a network
+
+    It exists so that an importer can pass on what has no plain value.
+    """
     pass
 
 
@@ -437,7 +475,7 @@ def code_value(val, pars=None):
             return f'pd.DataFrame({cols})'
         name = '' if idx.name is None else f', name={cv(idx.name)}'
         return f'pd.DataFrame({cols}, index=pd.Index({cv(idx.tolist())}{name}))'
-    errormsg = f'An importer gave {type(val).__name__} ({val!r}), which cannot be written as code: give it as ss.io.Code(), the Python that makes it'
+    errormsg = f'An importer gave {type(val).__name__} ({val!r}), which cannot be written as code: give it as ss.converters.Code(), the Python that makes it'
     raise TypeError(errormsg)
 
 

@@ -1,5 +1,9 @@
 """
 Spatial networks, in which contacts are determined by where agents are.
+
+These exist for models in which distance matters. A compartmental run can use `GeoNet` and `GridNet` only by their mean number of contacts, which leaves out where people are; `DiskNet` runs as agents only.
+
+Used with: agents and compartments; declared and coded modules
 """
 import numpy as np
 import scipy.sparse as spsp
@@ -24,6 +28,7 @@ class DiskNet(ss.Network):
     Args:
         r (float):  radius within which edges are formed
         v (freq):   speed at which agents move
+        pars (dict): the same parameters, as a dict
 
     Attributes:
         x (FloatArr):       x position, in [0, 1]
@@ -106,6 +111,7 @@ class GeoNet(ss.RandomNet):
         local (float): the share of contacts in an agent's own place
         c (float): how quickly contacts fall off with distance
         kwargs (dict): passed to `ss.RandomNet`, e.g. `n_contacts` and `dur`
+        pars (dict): the same parameters, as a dict
 
     Examples:
         ```python
@@ -178,6 +184,7 @@ class GridNet(StaticNet):
     Args:
         diagonal (bool): if True, agents have 8 neighbors rather than 4
         periodic (bool): if True, the edges of the grid wrap around, so that everyone has the same number of neighbors
+        pars (dict): the same parameters, as a dict
 
     Examples:
         ```python

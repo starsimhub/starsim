@@ -1,5 +1,5 @@
 """
-Deliveries in a compartmental run
+Not for the user: deliveries in a compartmental run
 
 `ss.Delivery` is the one class for deliveries, and its methods are how it runs as agents. In a compartmental
 run, a delivery also makes a `CompartmentalDelivery` (`delivery.compartments`), which holds what only that
@@ -7,6 +7,8 @@ needs: a selection is the share of the people in each state and group, so who is
 cured, or tested is a share of each, and moving them moves shares of the engine's compartments between
 groups, carrying the events of the step along. The schedule, coverage, capacity, conditions, products,
 and results stay the delivery's.
+
+Used with: compartments; declared modules
 """
 import numpy as np
 import sciris as sc

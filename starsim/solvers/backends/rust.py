@@ -1,5 +1,5 @@
 """
-Starsim's compiled kernels in Rust, as the other kernels to Numba's: with `ss.options.kernels = 'auto'` (the default) when they have been
+Not for the user: Starsim's compiled kernels in Rust, as the other kernels to Numba's: with `ss.options.kernels = 'auto'` (the default) when they have been
 built, or `'rust'` (or `STARSIM_KERNELS=rust`), the
 serial and threaded passes over the agents and a network's edges (`ss.solvers.backends.passes`), the small kernels of `ss.arrays`, `ss.networks`,
 `ss.distributions`, `ss.people` and `ss.utils`, the draws of `ss.Dist` (`draws.many`), the compartmental kernels (`ss.kernels`: see
@@ -12,6 +12,8 @@ and waits between passes without spinning. Only `ss.jit` (users' own code) stays
 Build them from the crate in `starsim/solvers/rust/` (needs a Rust toolchain; about 15 s):
 
     cd starsim/solvers/rust && ./build
+
+Used with: agents and compartments; declared and coded modules
 """
 import sys
 import importlib
@@ -135,6 +137,8 @@ class Compartmental:
     The compartmental kernels in Rust (`ss.kernels` when the Rust kernels are in use): the entries that the engines call
     (`run()`, `run_many()`, `one_step()`, `advance()`, `advance_threads()`, `apply_events()`, `apply_shifts()`,
     `settle_places()`, `evaluate()`), with the same arguments and results as Numba's; every other name is ss.kernels' own
+
+    It exists so that the engine can call the Rust kernels and the Numba ones alike.
     """
     def __init__(self, rs):
         for name in ss.kernels.entries + ['evaluate']:

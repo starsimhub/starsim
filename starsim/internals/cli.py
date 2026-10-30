@@ -1,6 +1,8 @@
 """
 The starsim command, available after installing Starsim:
 
+It exists for the setup done once, outside Python.
+
     starsim init                # Both of the below: what most users run once, after pip install starsim
     starsim compile             # Compile Starsim's numerical code (once per install)
     starsim ai                  # Install the Starsim skill for AI coding agents (Claude Code, Codex, Kimi, ...)
@@ -9,6 +11,8 @@ The starsim command, available after installing Starsim:
     starsim ai uninstall        # Remove it
 
 `python -m starsim` does the same, e.g. where the command is not on the path.
+
+Used with: agents and compartments; declared and coded modules
 """
 import sys
 import shutil

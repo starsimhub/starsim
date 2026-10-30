@@ -115,7 +115,7 @@ sim.describe()
 
 Every `[guessed: ...]` is a choice you didn't make: 10,000 people, the ODE solver, homogeneous mixing, 11 Erlang stages for the lognormal dwell time, and `beta` starting at the geometric middle of its bounds. Each guess is tested both ways: a model that makes it has it marked, and one that doesn't, doesn't.
 
-Because the model is data, its other views come for free. They are all in `starsim/internals/presentation.py`:
+Because the model is data, its other views come for free. They are all in `starsim/internals/display.py`:
 
 ```{python}
 sir.equations()
@@ -139,26 +139,26 @@ A sim made in Starsim is never written back out as Starsim code: its code is the
 
 ## Importers and exporters
 
-Every importer reads another framework's model into one intermediate object, `ss.io.Source`: its states, parameters, flows as rate expressions, stratifications, outcomes, and what it couldn't translate. One function, `ss.io.write()`, writes a `Source` as Starsim code (a declared `ss.Disease`, with its parameters, states, and transitions as variables, ending with `sim = ss.Sim(...)`), by the same rules for every format, and `ss.io.build()` runs that code to make the sim. So there is one path, from a foreign model to code to a sim, and never from a sim back to code; each framework needs only a reader, and there are no framework-to-framework converters. The code is kept as `sim.imported.code`, for the user to keep and change. A value the writer can't write as code, such as a network, is given by the importer as `ss.io.Code('...')`, the Python that makes it.
+Every importer reads another framework's model into one intermediate object, `ss.converters.Source`: its states, parameters, flows as rate expressions, stratifications, outcomes, and what it couldn't translate. One function, `ss.converters.write()`, writes a `Source` as Starsim code (a declared `ss.Disease`, with its parameters, states, and transitions as variables, ending with `sim = ss.Sim(...)`), by the same rules for every format, and `ss.converters.build()` runs that code to make the sim. So there is one path, from a foreign model to code to a sim, and never from a sim back to code; each framework needs only a reader, and there are no framework-to-framework converters. The code is kept as `sim.imported.code`, for the user to keep and change. A value the writer can't write as code, such as a network, is given by the importer as `ss.converters.Code('...')`, the Python that makes it.
 
 ```{mermaid}
 %%| echo: false
 flowchart LR
-  F["odin, SBML, EMULSION, SimInf,<br>flepiMoP, summer2, Atomica, camdl,<br>EpiModel, epydemix, MEmilio"] --> R[reader] --> S["ss.io.Source"] --> W["ss.io.write()"] --> C["Starsim code"] --> Sim[sim]
+  F["odin, SBML, EMULSION, SimInf,<br>flepiMoP, summer2, Atomica, camdl,<br>EpiModel, epydemix, MEmilio"] --> R[reader] --> S["ss.converters.Source"] --> W["ss.converters.write()"] --> C["Starsim code"] --> Sim[sim]
   Sim --> E["SBML, odin"]
 ```
 
 The hardest part of importing is reading rates. Most frameworks write a flow as a total, such as `beta * S * I / N`; the importer turns it into a per-person rate on a transition, and says how it read each one. A rate divided by the population total is exposure through the routes (`beta * I`); one without the division is density-dependent and is kept as a count (`beta * I.n`); anything else is kept literally, as an expression of counts, which is exact under every solver. A `Source` can also be filled in by hand, which shows each step:
 
 ```{python}
-src = ss.io.Source('sir', format='by hand')
+src = ss.converters.Source('sir', format='by hand')
 for name, n in dict(S=990, I=10, R=0).items():
     src.add_state(name, init=n)
 src.add_par('beta', 0.3)
 src.add_par('gamma', 0.1)
 src.add_flow('S', 'I', rate='beta * S * I / (S + I + R)', per='total', name='infection')
 src.add_flow('I', 'R', rate='gamma * I', per='total', name='recovery')
-sim = ss.io.build(src, stop=100)
+sim = ss.converters.build(src, stop=100)
 print(sim.imported.code)
 ```
 
@@ -168,9 +168,9 @@ The flow `beta * S * I / (S + I + R)` was read as frequency-dependent exposure, 
 print(ss.export_to(sim, 'odin'))
 ```
 
-An importer keeps the source's names, marks what it guessed (as `[guessed]` in `describe()`, like a hand-written model), keeps going when something doesn't map onto a built-in piece, and lists what it couldn't translate by name (`ss.errors.ImportIncomplete`, also in `sim.imported.incomplete`). An incomplete import still runs, without the listed parts, and the warning says how to finish it with the `import-model` skill for AI assistants (in `starsim_ai/`). Exporters work the other way: SBML and odin are written from the built model (each disease's graph and engine, in its compartmental form), and each export lists what it left out or changed (`ss.errors.LossyExport`), one line per declaration. A network, a module written as code, and a function are always listed as left out. `ss.io.to_hub()` writes the runs of a MultiSim as a forecast-hub submission.
+An importer keeps the source's names, marks what it guessed (as `[guessed]` in `describe()`, like a hand-written model), keeps going when something doesn't map onto a built-in piece, and lists what it couldn't translate by name (`ss.errors.ImportIncomplete`, also in `sim.imported.incomplete`). An incomplete import still runs, without the listed parts, and the warning says how to finish it with the `import-model` skill for AI assistants (in `starsim_ai/`). Exporters work the other way: SBML and odin are written from the built model (each disease's graph and engine, in its compartmental form), and each export lists what it left out or changed (`ss.errors.LossyExport`), one line per declaration. A network, a module written as code, and a function are always listed as left out. `ss.converters.to_hub()` writes the runs of a MultiSim as a forecast-hub submission.
 
-The code is in `starsim/io/`: `core.py` holds `Source`, `write()`, and `build()`, there is one file per framework, and `export.py` has the exporters. The files for epydemix, MEmilio, and summer2 also run as scripts in those frameworks' own environments (needing neither Starsim nor Sciris), where they write the model as JSON for the importer to read; EpiModel's equivalent is an R script (`dump_epimodel.R`). Each importer is tested against its framework's own examples (`tests/devtests/io/`) and in a scaled-down demo per framework (`tests/switching/`). For the modeler's view, see [Import and export](conversion/index.qmd) and the conversion pages for each framework.
+The code is in `starsim/converters/`: `core.py` holds `Source`, `write()`, and `build()`, there is one file per framework, and `export.py` has the exporters. The files for epydemix, MEmilio, and summer2 also run as scripts in those frameworks' own environments (needing neither Starsim nor Sciris), where they write the model as JSON for the importer to read; EpiModel's equivalent is an R script (`dump_epimodel.R`). Each importer is tested against its framework's own examples (`tests/devtests/io/`) and in a scaled-down demo per framework (`tests/switching/`). For the modeler's view, see [Import and export](conversion/index.qmd) and the conversion pages for each framework.
 
 ## The vocabulary
 

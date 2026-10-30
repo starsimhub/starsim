@@ -10,6 +10,7 @@ modules live in the corresponding test files (e.g. test_diseases.py).
 import inspect
 import sciris as sc
 import numpy as np
+import pytest
 import starsim as ss
 import starsim.library as ssl
 
@@ -142,7 +143,7 @@ def test_networks():
 
 @sc.timer()
 def test_econ():
-    """ Check that ssl.Costs adds up every cost, that ssl.discount() weights by time, and that ssl.icer() compares scenarios with the baseline """
+    """ Check that ssl.Costs adds up every cost, that ssl.discount() weights by time, that ssl.DALYs counts years of life, and that ssl.ICER compares scenarios with the baseline """
     sc.heading('Testing health economics...')
 
     S, I = ss.states('S I')
@@ -166,13 +167,123 @@ def test_econ():
     assert disc.sum() < res.costs.total.sum(), 'Discounting should lower the total'
 
     # The ICER is the incremental cost over the incremental outcome averted
-    df = ssl.icer(msim, outcome='sis.infection', baseline='None')
+    df = ssl.ICER(msim, outcome='sis.infection', baseline='None').df
     print(df)
     assert df.averted['None'] == 0 and df.averted['Vaccine'] > 0, 'Expected vaccination to avert infections'
     row = df.loc['Vaccine']
     assert np.isclose(row.ICER, (row.cost - df.cost['None'])/row.averted), 'Expected the ICER to be the incremental cost per infection averted'
 
+    # A mix of two others can beat a scenario (extended dominance)
+    icer = ssl.ICER()
+    icer.t_years = np.zeros(1)
+    for label,cost,outcome in [('A', 0, 100), ('B', 10, 95), ('C', 100, 90), ('D', 110, 50)]:
+        icer.scenarios[label] = sc.obj(cost=np.array([[cost]], dtype=float), outcome=np.array([[outcome]], dtype=float))
+    assert icer.df.extended['C'] and np.isnan(icer.df.ICER['C']) and icer.best(wtp=1000) == 'D'
+
+    # Years of life lost: from ages with agents, or given; and compared while a sim runs
+    pars = dict(diseases=ss.SIR(p_death=0.2, beta=ss.perday(0.3), dur_inf=ss.days(10)), networks='random', n_agents=1000, start=2000, dur=ss.years(1), dt=ss.days(7), verbose=0)
+    make = lambda *extra: [ssl.Costs(unit_costs={'sir.infection': 1}), ssl.DALYs(weights={'sir.I': 0.1})] + list(extra)
+    ref = ss.Sim(**pars, analyzers=make()).run()
+    dalys = ref.results.dalys
+    assert 30 < dalys.yll.sum()/ref.results.sir.death.sum() < 89, 'Expected the years of life lost per death to be from the life table'
+    assert np.isclose(dalys.dalys.sum(), dalys.yld.sum() + dalys.yll.sum())
+    live = ss.Sim(**pars, label='Live', analyzers=make(ssl.ICER(dict(Reference=ref)))).run()
+    assert set(live.analyzers.icer.df.index) == {'Reference', 'Live'}
+    with pytest.raises(ValueError, match='life_lost'):
+        ss.Sim(sis, analyzers=ssl.DALYs(), total_pop=1000, verbose=0).init()
+
     return df
+
+
+def malaria(): # The square root of the classical Ross-Macdonald value, m·a²·b·c/(γ·μ_v), since a vector doubles the generations
+    dis = ssl.Malaria()
+    sim = ss.Sim(dis, total_pop=10_000, unit='day', stop=400, verbose=0).run()
+    assert np.isclose(dis.R0(), np.sqrt(10.09*0.5**2*0.5*0.8/(0.033*0.143)), rtol=0.01)
+    assert sim.results.malaria.prevalence.max() > 0.5, 'Expected malaria to take off'
+
+
+def malaria_immunity(): # Malaria dies out below the critical vectorial capacity, (alpha1 + delta)/g = 0.022 per day
+    prev = lambda C: ss.Sim(ssl.MalariaImmunity(C=C), total_pop=10_000, unit='day', dt=ss.days(10), stop=365*20, verbose=0).run().results.malariaimmunity
+    assert prev(0.011).prevalence[-1] < 0.001, 'Expected malaria to die out below the critical vectorial capacity'
+    above = prev(0.044)
+    assert above.prevalence[-1] > 0.1, 'Expected malaria to be endemic above the critical vectorial capacity'
+    assert above.detected[-1] < above.prevalence[-1], 'Expected immune people to be detected less often'
+
+
+def tb(): # The LSHTM reference, in which TB declines slowly over centuries; the population is held constant by replacing TB deaths
+    sim = ss.Sim(ssl.TB(init=dict(Y=0.01)), solver='ode', total_pop=100_000, start=1900, stop=2100, dt=ss.years(1), verbose=0).run()
+    res = sim.results.tb
+    assert np.isclose(res.prevalence[100], 0.0025, atol=0.0005), 'Expected the prevalence of the reference ODE in 2000'
+    assert np.isclose(sum(res[k][-1] for k in ['S', 'L', 'C', 'R', 'N', 'A', 'Y']), 100_000, rtol=0.01), 'Expected a constant population'
+
+
+def covid():
+    sim = ss.Sim(ssl.COVID(), total_pop=83_000, unit='day', stop=120, verbose=0).run()
+    res = sim.results.covid
+    assert 2 < sim.diseases.covid.R0() < 3.5, 'Expected an R0 of about 2.7 for the MEmilio example'
+    assert res.ICr.max() > 0 and res.outcome.sum() > 0, 'Expected critical cases and deaths'
+
+
+def influenza(): # Transmission peaks each January, so epidemics return each winter
+    sim = ss.Sim(ssl.Influenza(), total_pop=100_000, start='2000-01-01', stop='2006-01-01', dt=ss.days(1), verbose=0).run()
+    yearly = np.array([sim.results.influenza.infection[i*365:(i + 1)*365].sum() for i in range(6)])
+    assert (yearly[4:] > 0.05*100_000).all(), 'Expected influenza epidemics to keep returning'
+
+
+def rsv(): # Babies are born with maternal antibodies, then become susceptible
+    sim = ss.Sim(ssl.RSV(), total_pop=100_000, start='2000-01-01', stop='2004-01-01', dt=ss.days(1), verbose=0).run()
+    res = sim.results.rsv
+    assert res.M[-1] > 0 and res.maternal.sum() > 0, 'Expected babies to be born protected and to lose that protection'
+    assert res.prevalence[-1] > 0, 'Expected RSV to persist'
+
+
+def pertussis():
+    assert 11 < ssl.Pertussis().R0() < 15, 'Expected the R0 of 11 to 15 estimated by Wearing and Rohani'
+    sim = ss.Sim(ssl.Pertussis(), total_pop=100_000, start='1920-01-01', stop='1960-01-01', dt=ss.days(5), verbose=0).run()
+    assert sim.results.pertussis.waning.sum() > 0, 'Expected immunity to wane'
+
+
+def dengue(): # Having had one serotype protects in part against the others, so there are fewer infections
+    total = lambda cross: ss.Sim(diseases=ssl.Dengue(cross=cross), n_agents=500, unit='day',
+                                 stop=365, rand_seed=1, verbose=0).run().results.dengue.infection.sum()
+    assert total(1.0) < 0.8*total(0.0), 'Expected cross-protection to reduce the infections'
+
+
+def typhoid(): # Carriers are a hundredth as infectious, but shed for life, so they matter for R0
+    assert np.isclose(ssl.Typhoid().R0(), 2.8, atol=0.1), 'Expected the R0 of 2.8 estimated by Pitzer et al.'
+    assert ssl.Typhoid(p_carrier=0).R0() < ssl.Typhoid().R0(), 'Expected the carriers to add to R0'
+    sim = ss.Sim(ssl.Typhoid(), total_pop=20_000, start=2000, stop=2040, dt=ss.weeks(4), verbose=0).run()
+    assert sim.results.typhoid.C[-1] > 0, 'Expected chronic carriers'
+
+
+def polio(): # About 1 infection in 200 causes paralysis
+    sim = ss.Sim(ssl.Polio(), total_pop=100_000, start=1980, stop=1990, dt=ss.days(5), verbose=0).run()
+    res = sim.results.polio
+    assert np.isclose(res['outcome.P'].sum()/res.onset.sum(), 1/200, rtol=0.2), 'Expected about 1 paralytic case per 200 infections'
+
+
+def sti(): # Both run on a sexual network; syphilis sets each latent person's infectiousness in code
+    net = lambda: ss.SexualNet(dur=ss.years(2), n_contacts=ss.poisson(1))
+    pars = dict(n_agents=1000, start=2000, stop=2020, dt=ss.months(2), rand_seed=1, verbose=0)
+    syph = ss.Sim(diseases=ssl.Syphilis(), networks=net(), **pars).run()
+    dis = syph.diseases.syphilis
+    latent = dis.El.uids
+    assert len(latent) and dis.rel_trans[latent].max() <= 1 and dis.rel_trans[latent].min() < 0.9, 'Expected latent infectiousness to fall with time'
+    gono = ss.Sim(diseases=ssl.Gonorrhea(), networks=net(), **pars).run()
+    assert gono.results.gonorrhea.prevalence[-1] > 0, 'Expected gonorrhea to persist'
+
+
+declared = dict(malaria=malaria, malaria_immunity=malaria_immunity, tb=tb, covid=covid, influenza=influenza,
+                rsv=rsv, pertussis=pertussis, dengue=dengue, typhoid=typhoid, polio=polio, sti=sti)
+
+
+@pytest.mark.parametrize('key', declared.keys())
+def test_declared_diseases(key):
+    """ Check each declared library disease against a value from the source it came from, or its headline mechanism """
+    sc.heading(f'Testing {key}...')
+    with sc.timer(key):
+        declared[key]()
+    return
 
 
 if __name__ == '__main__':
@@ -180,3 +291,5 @@ if __name__ == '__main__':
     diseases = test_diseases()
     hiv      = test_hiv()
     econ     = test_econ()
+    for _key in declared:
+        test_declared_diseases(_key)

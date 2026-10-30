@@ -1,5 +1,9 @@
 """
-The compartmental engine: a declared model run as groups of people (`ode`, `binomial`, `gillespie`, and tau-leaping)
+Not for the user: the compartmental engine: a declared model run as groups of people (`ode`, `binomial`, `gillespie`, and tau-leaping)
+
+It exists so that a model with nothing per person can run faster than as agents, from the same declaration.
+
+Used with: compartments; declared modules
 """
 import importlib
 import numpy as np
@@ -86,6 +90,8 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
     """
     Runs a graph as compartments: deterministically (`ode`) or stochastically
     (`binomial`, `gillespie`, or `tau`, the exact solver's fallback for long runs)
+
+    It exists so that the deterministic and stochastic forms share one engine.
 
     The states are expanded into compartments (one per branch and sub-stage) and the
     transitions into a flat list of flows, each with a source compartment, a rate,

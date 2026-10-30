@@ -6,8 +6,8 @@ import numpy as np
 import sciris as sc
 import starsim as ss
 import starsim.library as ssl
-from starsim.io import migrate
-from starsim.io.migrate import migrate_text
+from starsim.converters import migrate
+from starsim.converters.migrate import migrate_text
 import matplotlib.pyplot as plt
 
 sc.options.interactive = False # Assume not running interactively

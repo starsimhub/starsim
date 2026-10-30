@@ -1,5 +1,9 @@
 """
 Dimensions: how a model is divided into groups by the properties of people (age, sex, place, ...)
+
+A stratification is declared once and read by every module and solver, as levels held by each agent or as groups of compartments.
+
+Used with: agents and compartments; declared and coded modules
 """
 import numpy as np
 import sciris as sc
@@ -273,7 +277,11 @@ class Strat:
 
 
 class Transfer:
-    """ Movement between the levels of a stratification, without a change of disease state: see `ss.transfer()`, which makes it """
+    """
+    Movement between the levels of a stratification, without a change of disease state: see `ss.transfer()`, which makes it
+
+    It exists so that movement such as aging or moving between risk groups is declared beside the disease, not as one transition per state.
+    """
     def __init__(self, rate=None, dur=None, p=None, states=None, name=None, label=None, increment=None, **kwargs):
         increment = parse_increment(increment, 'ss.transfer()')
         if len(kwargs) + len(increment or {}) != 1:

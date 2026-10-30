@@ -26,8 +26,8 @@ Starsim's compiled kernels have two copies that give the same numbers bit for bi
 The package is in `starsim/`. Each file holds one area, named as users meet it (`sim.py`, `people.py`, `diseases.py`, `networks.py`, `interventions.py`, `fit.py`, ...); its classes and functions are at the top level (`ss.Sim`, `ss.SIR`). The rest is in subfolders:
 
 - `solvers/`: the engines that run declared models (`compartmental.py`, `agents.py`), who meets whom in a compartmental run (`mixing.py`), and how the solver is chosen (`choose.py`); `solvers/backends/` has the compiled kernels (Numba, JAX, and the loader for Rust), and `solvers/rust/` the Rust copies.
-- `internals/`: how Starsim works under the hood: the graph of a declared module (`graph.py`), expressions in rates (`expressions.py`), how a model is shown (`presentation.py`), gradients (`gradients.py`), errors (`errors.py`), and debugging tools (`debugtools.py`).
-- `io/`: importers and exporters for other frameworks, and the Starsim 3 migration script (`python -m starsim.io.migrate`).
+- `internals/`: how Starsim works under the hood: the graph of a declared module (`graph.py`), expressions in rates (`expressions.py`), how a model is shown (`display.py`), gradients (`gradients.py`), errors (`errors.py`), and debugging tools (`debugtools.py`).
+- `converters/`: importers and exporters for other frameworks, and the Starsim 3 migration script (`python -m starsim.converters.migrate`).
 - `library/`: example and reference modules (`import starsim.library as ssl`), which build on core Starsim but are not part of it.
 
 A compact index of the whole public API is in `docs/llms.txt`, built by `python make_api.py` in `docs/` (and at [starsim.org/v4/llms.txt](https://starsim.org/v4/llms.txt)).
@@ -87,8 +87,8 @@ The performance guard is timing-sensitive, so run it on its own on a quiet machi
 | Interventions and modifiers (`interventions.py`, `products.py`, `connectors.py`, `solvers/deliveries.py`) | Both engines, the loop order, and whether a whole compartmental run is possible | `test_deliveries.py`, `test_interventions.py`, `test_products.py` |
 | The loop or module lifecycle (`loop.py`, `modules.py`, `sim.py`) | Every sim, including modules written as code | `test_loop.py`, `test_sim.py`, `test_baselines.py` |
 | Fitting (`fit.py`, `gradients.py`) | `sim.fit()` and every fitting method | `test_contracts_inference.py`, `test_calibration.py`, `test_gradients.py` |
-| The importers' code writer or the exporters (`io/core.py`, `io/export.py`) | Every import, and every export | `devtests/io/`, `switching/` |
-| An importer or exporter (`io/`) | That framework's users, and its switching demo | its file in `devtests/io/`, and its demo in `switching/` |
+| The importers' code writer or the exporters (`converters/core.py`, `converters/export.py`) | Every import, and every export | `devtests/io/`, `switching/` |
+| An importer or exporter (`converters/`) | That framework's users, and its switching demo | its file in `devtests/io/`, and its demo in `switching/` |
 | An error, warning or note | Its message | `test_errors.py` |
 | Anything on a hot path | Run time | `test_baselines.py::test_performance_guard` |
 

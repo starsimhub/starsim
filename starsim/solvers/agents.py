@@ -1,5 +1,9 @@
 """
-The agent engine: a declared model run as agents (`abm`)
+Not for the user: the agent engine: a declared model run as agents (`abm`)
+
+It also holds the transmission that diseases written as code use, so that both give the same numbers.
+
+Used with: agents; declared and coded modules
 """
 import functools
 import operator
@@ -144,6 +148,8 @@ class Transmission(Effects):
 class Agents(Engine, Transmission):
     """
     Runs a graph as agents
+
+    It exists so that a declared model can run with individuals, for what compartments cannot hold.
 
     Each state that holds people is a boolean array over agents. A dwell time is
     sampled when an agent enters a state and the exit is scheduled; rates that depend

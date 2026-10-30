@@ -1,5 +1,10 @@
 """
 Expressions: the parameters (`ss.par`), counts, and arithmetic that rates, results, and conditions are made of, and how they are evaluated and printed
+
+They exist so that a rate or result written once can be read by any solver, printed as an equation, and differentiated.
+They belong to declared models, and a module written as code can also use `ss.par` and do arithmetic on such values.
+
+Used with: agents and compartments; declared and coded modules
 """
 import operator
 import weakref
@@ -156,7 +161,14 @@ class Expr:
         return NotImplemented
 
     def clip(self, min=None, max=None, out=None):
-        """ The expression kept between two values (`np.clip(x, lo, hi)` calls this) """
+        """
+        The expression kept between two values (`np.clip(x, lo, hi)` calls this)
+
+        Args:
+            min (float): the lowest value; if None, no lower limit
+            max (float): the highest value; if None, no upper limit
+            out (None): not used; present since `np.clip()` passes it
+        """
         out = self if min is None else Func('maximum', self, min)
         return out if max is None else Func('minimum', out, max)
 
@@ -303,7 +315,12 @@ class par(Nameable, Expr):
         return self.value
 
     def merge(self, other):
-        """ Take what another parameter gives (its value, bounds, prior, and description), keeping this one's name and module, e.g. for `sir.pars.beta = ss.par(0.1, bounds=[0.05, 1])` """
+        """
+        Take what another parameter gives (its value, bounds, prior, and description), keeping this one's name and module, e.g. for `sir.pars.beta = ss.par(0.1, bounds=[0.05, 1])`
+
+        Args:
+            other (`ss.par`): the parameter to take values from
+        """
         for attr in ['value', 'bounds', 'source', 'doc', 'label']:
             if getattr(other, attr) is not None:
                 setattr(self, attr, getattr(other, attr))
@@ -450,7 +467,11 @@ comparisons = dict(less='<', less_equal='<=', greater='>', greater_equal='>=')
 
 
 class Func(Expr):
-    """ A NumPy function of one or two expressions, e.g. `np.minimum(I.n, K)` or `np.exp(-k * I.n)` """
+    """
+    A NumPy function of one or two expressions, e.g. `np.minimum(I.n, K)` or `np.exp(-k * I.n)`
+
+    It exists so that NumPy functions keep working on expressions.
+    """
     names = dict(exp=1, log=1, sqrt=1, absolute=1, sin=1, cos=1, expit=1, minimum=2, maximum=2, less=2, less_equal=2, greater=2, greater_equal=2) # The functions, and how many arguments each takes (expit is SciPy's, from scipy.special)
 
     def __init__(self, name, *args):
@@ -798,7 +819,11 @@ def per_person_in(expr):
 
 
 class BinOp(Expr):
-    """ Arithmetic between two expressions """
+    """
+    Arithmetic between two expressions
+
+    It exists so that `beta * I.n / N` builds an expression that can be evaluated or printed later.
+    """
     def __init__(self, op, a, b):
         self.op = op
         self.a = as_expr(a)
@@ -1073,11 +1098,11 @@ def format_expr(expr, values=False, bare=None, mul='*', exact=False, unit=None):
                 return e.name
             raw = e.raw
             if values == 'number' and isinstance(raw, ss.seasonal):
-                return ss.presentation.seasonal_str(raw, value_str(float(getattr(raw.mean, 'value', raw.mean))))
+                return ss.display.seasonal_str(raw, value_str(float(getattr(raw.mean, 'value', raw.mean))))
             if values == 'number' and isinstance(raw, ss.timeseries):
-                return ss.presentation.timeseries_str(raw)
+                return ss.display.timeseries_str(raw)
             if values == 'number' and unit is not None and isinstance(raw, ss.Rate) and raw.unit is not None and type(raw.unit).base.removesuffix('s') != unit:
-                return ss.presentation.quantity_str(raw, 'rate', unit)
+                return ss.display.quantity_str(raw, 'rate', unit)
             text = value_str(raw.value if isinstance(raw, ss.TimePar) and values == 'number' else raw)
             if exact and isinstance(raw, float) and float(text) != raw: # E.g. 1 + 1e-9, which is "1" to six figures
                 text = repr(float(raw))

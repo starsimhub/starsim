@@ -49,7 +49,7 @@ Results now follow the convention of other frameworks: `<state>[0]` (e.g. `I[0]`
 
 ## Upgrading the code
 
-Most of the changes are mechanical, and a tool makes them: `python -m starsim.io.migrate` rewrites Starsim 3 code for Starsim 4, in `.py` files and in the code cells of notebooks, Quarto, and Markdown files. It renames what was renamed (`ss.MFNet` is `ss.SexualNet`, `ss.time_prob()` is `ss.probperyear()`, the library's modules are `ssl.X`), turns subclasses of Starsim 3's `ss.SIR`, `ss.SIS`, and `ss.SEIR` written as code into subclasses of `ssl.AgentSIR` and the like, rewrites a `beta` pair on a sexual network as a probability per act in each direction, and renames the results that count people in a state. Everything else it lists by file and line, as something for a person to check. Give `--check` to see what it would change without changing anything. For this Starsim 3 script, `mymodel.py`:
+Most of the changes are mechanical, and a tool makes them: `python -m starsim.converters.migrate` rewrites Starsim 3 code for Starsim 4, in `.py` files and in the code cells of notebooks, Quarto, and Markdown files. It renames what was renamed (`ss.MFNet` is `ss.SexualNet`, `ss.time_prob()` is `ss.probperyear()`, the library's modules are `ssl.X`), turns subclasses of Starsim 3's `ss.SIR`, `ss.SIS`, and `ss.SEIR` written as code into subclasses of `ssl.AgentSIR` and the like, rewrites a `beta` pair on a sexual network as a probability per act in each direction, and renames the results that count people in a state. Everything else it lists by file and line, as something for a person to check. Give `--check` to see what it would change without changing anything. For this Starsim 3 script, `mymodel.py`:
 
 ```python
 import starsim as ss
@@ -68,7 +68,7 @@ print(sim.results.mysis.n_infected[-1])
 it says:
 
 ```bash
-python -m starsim.io.migrate mymodel.py --check
+python -m starsim.converters.migrate mymodel.py --check
 ```
 ```
 mymodel.py: would change 6 line(s)

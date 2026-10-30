@@ -10,6 +10,8 @@ becomes a disease with its transitions; a network fitted by `netest()` becomes a
 since it is not an ERGM); and
 modules written in R (`infection.FUN = infect`, ...) are listed, with their source in
 `sim.imported.modules`, to be written by hand.
+
+Used with: agents and compartments; declared modules
 """
 import os
 import shutil
@@ -34,7 +36,12 @@ modules = dict(netsim='infection.FUN recovery.FUN departures.FUN arrivals.FUN'.s
 
 
 def dump(filename):
-    """ Run `dump_epimodel.R` on an R script or an RDS file, and return the JSON it writes """
+    """
+    Run `dump_epimodel.R` on an R script or an RDS file, and return the JSON it writes
+
+    Args:
+        filename (str): the R script or RDS file
+    """
     rscript = shutil.which('Rscript')
     if rscript is None:
         errormsg = f'To read "{filename}", put Rscript (with EpiModel installed) on the path, or run dump_epimodel.R on it and load the JSON'

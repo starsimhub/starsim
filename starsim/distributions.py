@@ -1,7 +1,9 @@
 """
 The distributions to choose from: `ss.uniform`, `ss.normal`, `ss.poisson`, and so on, each a random-number-safe `ss.Dist`
 
-How they work is in `ss.dists`.
+These exist so that a model can use any distribution for a parameter or a draw, with the same random numbers for the same agent across scenarios. How they work is in `ss.dists`. As agents, they are drawn for each agent; in a compartmental run, most are read for what they say about the group, such as their mean.
+
+Used with: agents and compartments; declared and coded modules
 """
 import inspect
 import numpy as np
@@ -50,7 +52,12 @@ dist_list = ['random', 'uniform', 'normal', 'truncnorm', 'lognorm_ex', 'lognorm_
 
 
 class random(Dist):
-    """ Random distribution, with values on the interval (0, 1) """
+    """ Random distribution, with values on the interval (0, 1)
+
+    Args:
+        dtype (type): the data type of the values (default: `ss.dtypes.float`)
+        kwargs (dict): passed to `ss.Dist`
+    """
     valid_pars = ['dtype']
     scaling = None # Always (0,1), can't be scaled
     def __init__(self, dtype=None, **kwargs):
@@ -458,6 +465,7 @@ class randint(Dist):
     Args:
         low (int): the lower bound of the distribution (default 0)
         high (int): the upper bound of the distribution (default of maximum integer size: 9,223,372,036,854,775,807)
+        dtype (type): the data type of the values
     """
     scaling = 'predraw'
     unit_pars = ('low', 'high')
@@ -662,7 +670,12 @@ class bernoulli(Dist):
         return rvs
 
     def filter(self, uids=None, both=False):
-        """ Return UIDs that correspond to True, or optionally return both True and False """
+        """ Return UIDs that correspond to True, or optionally return both True and False
+
+        Args:
+            uids (array): the agents to choose among (default: all active agents)
+            both (bool): if True, return the UIDs for both True and False
+        """
         if uids is None:
             uids = self.sim.people.auids # All active UIDs
         elif isinstance(uids, (ss.BoolArr, ss.IndexArr)):
@@ -675,7 +688,11 @@ class bernoulli(Dist):
             return uids[bools]
 
     def split(self, uids=None):
-        """ Alias to filter(uids, both=True) """
+        """ Alias to filter(uids, both=True)
+
+        Args:
+            uids (array): the agents to choose among (default: all active agents)
+        """
         return self.filter(uids=uids, both=True)
 
 
@@ -726,13 +743,24 @@ class choose_n(Dist):
         return rands
 
     def rvs(self, n=1, round=None, reset=False):
-        """ Return a boolean array of whether each agent is chosen (n can be UIDs or a size), so ss.choose_n() can be used in place of ss.bernoulli() """
+        """ Return a boolean array of whether each agent is chosen (n can be UIDs or a size), so ss.choose_n() can be used in place of ss.bernoulli()
+
+        Args:
+            n (int/array): the UIDs, or a size
+            round (bool): not used; as in `ss.Dist.rvs()`
+            reset (bool): not used; as in `ss.Dist.rvs()`
+        """
         chosen = np.zeros(n if np.isscalar(n) else len(n), dtype=bool)
         chosen[self._choose(n)] = True
         return chosen
 
     def filter(self, uids=None, both=False):
-        """ Return the chosen UIDs (sorted), i.e. min(n, len(uids)) of them; if both=True, also return the UIDs not chosen (as ss.bernoulli.filter()) """
+        """ Return the chosen UIDs (sorted), i.e. min(n, len(uids)) of them; if both=True, also return the UIDs not chosen (as ss.bernoulli.filter())
+
+        Args:
+            uids (array): the agents to choose among (default: all active agents)
+            both (bool): if True, also return the UIDs not chosen
+        """
         if uids is None:
             uids = self.sim.people.auids # All active UIDs
         elif isinstance(uids, (ss.BoolArr, ss.IndexArr)):
@@ -743,7 +771,11 @@ class choose_n(Dist):
         return chosen
 
     def split(self, uids=None):
-        """ Alias to filter(uids, both=True) """
+        """ Alias to filter(uids, both=True)
+
+        Args:
+            uids (array): the agents to choose among (default: all active agents)
+        """
         return self.filter(uids=uids, both=True)
 
     def _choose(self, n):
@@ -787,6 +819,7 @@ class choice(Dist):
     Args:
         a (int or array): the number of choices, or the choices themselves (default 2)
         p (array/func): if supplied, the probability of each choice (default, 1/a for a choices); or a 2D array (or a function returning one) with a row of probabilities (or weights) for each agent
+        replace (bool): whether an option can be chosen more than once (default True)
 
     Examples:
         ```python
@@ -964,6 +997,7 @@ class histogram(Dist):
         Args:
             parts (list): the histograms (`ss.histogram`), one for each group
             group: each person's group, as an index into `parts` (e.g. `ss.by(urban={False: 0, True: 1})`, or a function of the agents)
+            kwargs (dict): passed to `ss.histogram`
         """
         values, bins, density = parts[0].hist
         dist = cls(values=values, bins=bins, density=density, group=group, **kwargs)
@@ -1024,17 +1058,32 @@ class multi_random(sc.prettyobj):
         return len(self.dists)
 
     def init(self, *args, **kwargs):
-        """ Not usually needed since each dist will handle this automatically; for completeness only """
+        """ Not usually needed since each dist will handle this automatically; for completeness only
+
+        Args:
+            args (list): passed to the `init()` of each distribution
+            kwargs (dict): passed to the `init()` of each distribution
+        """
         for dist in self.dists: dist.init(*args, **kwargs)
         return
 
     def reset(self, *args, **kwargs):
-        """ Not usually needed since each dist will handle this automatically; for completeness only """
+        """ Not usually needed since each dist will handle this automatically; for completeness only
+
+        Args:
+            args (list): passed to the `reset()` of each distribution
+            kwargs (dict): passed to the `reset()` of each distribution
+        """
         for dist in self.dists: dist.reset(*args, **kwargs)
         return
 
     def jump(self, *args, **kwargs):
-        """ Not usually needed since each dist will handle this automatically; for completeness only """
+        """ Not usually needed since each dist will handle this automatically; for completeness only
+
+        Args:
+            args (list): passed to the `jump()` of each distribution
+            kwargs (dict): passed to the `jump()` of each distribution
+        """
         for dist in self.dists: dist.jump(*args, **kwargs)
         return
 
@@ -1062,7 +1111,11 @@ class multi_random(sc.prettyobj):
         return rand_ints / int_max
 
     def rvs(self, *args):
-        """ Get random variates from each of the underlying distributions and combine them efficiently """
+        """ Get random variates from each of the underlying distributions and combine them efficiently
+
+        Args:
+            args (list): the UIDs for each distribution, in order
+        """
         # Validation
         n_args = len(args)
         n_dists = len(self)

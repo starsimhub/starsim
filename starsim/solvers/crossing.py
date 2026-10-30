@@ -1,5 +1,9 @@
 """
-Diseases whose states are tracked jointly in a compartmental run
+Not for the user: diseases whose states are tracked jointly in a compartmental run
+
+It exists since a condition in one disease on a state of another (e.g. coinfection) needs the people counted by both.
+
+Used with: compartments; declared modules
 """
 import importlib
 import numpy as np

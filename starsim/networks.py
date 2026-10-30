@@ -1,5 +1,9 @@
 """
-Networks that connect people within a population
+Networks and mixing pools: who meets whom, and so who can infect whom
+
+A network holds the contacts (edges) between people, over which a disease spreads. Mixing pools (`ss.MixingPool`, `ss.MixingPools`) and contact matrices (`ss.contacts()`) spread it between groups instead, without edges. These exist so that a model's contacts are separate from its diseases, and one network can carry several diseases. In a compartmental run, a network is replaced by what it implies: contact rates, a matrix, or a model of partner change.
+
+Used with: agents and compartments; declared and coded modules
 """
 import re
 import itertools
@@ -159,7 +163,14 @@ class Route(ss.Module):
     sets_unit = False # Its typed defaults (e.g. how long partnerships last) do not set the unit of the model's bare numbers: see ss.solvers.choose.init_unit()
     one_step = False # Whether every edge lasts one step: the edges of the dead then end at the next step anyway, so People.remove_dead() leaves them (see RandomNet)
     def compute_transmission(self, rel_sus, rel_trans, disease_beta, disease=None):
-        """ Compute transmission probabilities along this route (must be overridden by subclasses). """
+        """ Compute transmission probabilities along this route (must be overridden by subclasses).
+
+        Args:
+            rel_sus (array): the relative susceptibility of each agent
+            rel_trans (array): the relative transmissibility of each agent
+            disease_beta (float): the disease's transmission probability
+            disease (Disease): the disease
+        """
         errormsg = 'compute_transmission() must be defined by Route subclasses'
         raise NotImplementedError(errormsg)
 
@@ -378,7 +389,11 @@ class Network(Route):
         return
 
     def init_pre(self, sim):
-        """ Initialize with the sim, initialize the edges, and validate p1 and p2 """
+        """ Initialize with the sim, initialize the edges, and validate p1 and p2
+
+        Args:
+            sim (Sim): the sim being initialized
+        """
         super().init_pre(sim)
 
         # Define states using placeholder values
@@ -392,6 +407,11 @@ class Network(Route):
         return
 
     def init_post(self, add_pairs=True):
+        """ Add the first edges
+
+        Args:
+            add_pairs (bool): whether to add them
+        """
         super().init_post()
         if add_pairs: self.add_pairs()
         return
@@ -402,6 +422,9 @@ class Network(Route):
         this network by, and where it comes from; or None, and why, if it has no such approximation (the default). A network of
         partnerships has none: its contacts last, so their number per unit time is not its number of partners (it uses the
         partner-change model instead: see `ss.solvers.Mixing.partnerships()`).
+
+        Args:
+            sim (Sim): the sim being initialized
         """
         return None, ''
 
@@ -446,6 +469,9 @@ class Network(Route):
         age of debut varies by sex and over time, and participation rates vary by age.
         Each time states are dynamically grown, this function should be called to set the network
         states that depend on other states.
+
+        Args:
+            people (People): the people
         """
         pass
 
@@ -465,6 +491,9 @@ class Network(Route):
 
         If dtype is incorrect, try to convert automatically; if length is incorrect,
         do not.
+
+        Args:
+            force (bool): not used
         """
         if not len(self.edges): # No edges have been added yet
             return
@@ -556,6 +585,7 @@ class Network(Route):
 
         Args:
             edges (dict): a dictionary of arrays with keys p1,p2,beta, as returned from network.pop_inds()
+            kwargs (dict): the arrays of `edges`, by key
         """
         edges = sc.mergedicts(edges, kwargs)
         for key in self.meta_keys():
@@ -721,6 +751,9 @@ class Network(Route):
         Remove interactions involving specified UIDs
         This method is typically called via `People.remove()` and
         is specifically used when removing agents from the simulation.
+
+        Args:
+            uids (array): the agents to remove
         """
         p1, p2 = self.edges.p1, self.edges.p2
         n = len(self.sim.people.alive.raw) if self.initialized else max(np.max(p1, initial=-1), np.max(p2, initial=-1)) + 1 # Every UID in the network
@@ -743,6 +776,11 @@ class Network(Route):
         The probability that each edge transmits in a step, given the disease's probability (in the step, or on a network with acts, per act)
 
         A network written as code can override this (see `custom_beta`).
+
+        Args:
+            disease_beta (float): the disease's probability
+            inds (array): the edges (default: all of them)
+            disease (Disease): the disease
         """
         if inds is None: inds = Ellipsis
         if self.has_acts: # The number of acts in each partnership in the step
@@ -769,6 +807,8 @@ class DynamicNetwork(Network):
         memory (dur): how long it remembers partnerships that have ended (default: not at all); `find_contacts()`, and so
             contact tracing (`trace=` of a delivery), then also reaches the partners of the last `memory`, e.g. `memory=ss.months(12)`
             for partner notification of the past year's partners
+        pars (dict): passed to `ss.Network`
+        edges (dict/dataframe): passed to `ss.Network`
     """
     def __init__(self, pars=None, edges=None, memory=None, **kwargs):
         super().__init__(pars=pars, edges=edges, **kwargs)
@@ -805,7 +845,12 @@ class DynamicNetwork(Network):
         return
 
     def find_contacts(self, inds, as_array=True):
-        """ Find all contacts of the specified people (see `ss.Network.find_contacts()`), including, with memory=, their partners of the last `memory` """
+        """ Find all contacts of the specified people (see `ss.Network.find_contacts()`), including, with memory=, their partners of the last `memory`
+
+        Args:
+            inds (array): the people
+            as_array (bool): if True, return a sorted array rather than a set
+        """
         if self.history is None:
             return super().find_contacts(inds, as_array=as_array)
         p1, p2 = np.concatenate([self.edges.p1, self.history.p1]), np.concatenate([self.edges.p2, self.history.p2])
@@ -881,6 +926,7 @@ class RandomNet(DynamicNetwork):
             (so agents who join later, e.g. newborns, are not added)
         method (str): how the other end of each contact is drawn: 'fast' (the default), 'exact', or 'uniform' (see above)
         remove_self_loops (bool): if True, drop the few edges that join an agent to itself (as any of the methods can make; e.g. about 1 in 25 edges with 50 agents, and far fewer in larger populations), so agents have slightly fewer contacts; off by default since such edges transmit nothing anyway. The same pair of agents can still be joined by more than one edge.
+        pars (dict): the same parameters, as a dict
 
     Note: n_contacts = 10 will create *5* edges per agent. Since disease transmission
     usually occurs bidirectionally, this means that the effective number of contacts
@@ -918,7 +964,11 @@ class RandomNet(DynamicNetwork):
         return
 
     def mean_contacts(self, sim):
-        """ Its mean number of contacts (see `ss.Network.mean_contacts()`) """
+        """ Its mean number of contacts (see `ss.Network.mean_contacts()`)
+
+        Args:
+            sim (Sim): the sim being initialized
+        """
         n_contacts = self.pars.get('n_contacts')
         if n_contacts is None:
             return super().mean_contacts(sim)
@@ -1120,7 +1170,9 @@ class DegreeNet(DynamicNetwork):
     at random, and people look for new ones at a rate that depends on how many
     they already have, chosen so that the distribution of the number of partners
     stays at the target. Everyone moves through it over time, as in EpiModel's
-    networks fitted to target statistics. The network starts at the target. In an
+    networks fitted to target statistics: this covers the same ground as a dyad-independent
+    exponential random graph model (ERGM), with the terms for edges, degree, and mixing, but not
+    terms such as triangles. The network starts at the target. In an
     open population, partnerships that end at a constant rate (`dur` a mean) end less
     often by as many as are ended by a partner leaving (dying), as EpiModel's d.rate
     correction does, so they last as long as given on average; with any other
@@ -1149,6 +1201,7 @@ class DegreeNet(DynamicNetwork):
         concurrency (float): if given, the share of people with two or more partners at once; the distribution of `n_contacts` is adjusted to give it, keeping its mean
         max_contacts (int): if given, nobody has more partners than this at once
         match (dict): if given, the share of partnerships between people at the same level of a property of people (a stratification, or an attribute such as `'female'`), e.g. `dict(risk=0.8)`, as EpiModel's nodematch; or of each of several, e.g. `dict(risk=0.8, region=0.6)`
+        pars (dict): the same parameters, as a dict
 
     The realized network is recorded in the results (`mean_degree`, `concurrency`, and
     `match`, or with several properties `match_<name>` for each), and `net.check()` compares it with the targets.
@@ -1232,7 +1285,11 @@ class DegreeNet(DynamicNetwork):
         return super().side_raw()
 
     def active(self, people):
-        """ Return boolean array of agents who can have partners: alive, and with `where=`, those it gives, and with `between`, those in one of its groups """
+        """ Return boolean array of agents who can have partners: alive, and with `where=`, those it gives, and with `between`, those in one of its groups
+
+        Args:
+            people (People): the people
+        """
         active = people.alive
         if self.pars.get('where') is not None:
             active = active & people_mask(self.sim, self.pars.where)
@@ -1478,7 +1535,11 @@ class DegreeNet(DynamicNetwork):
         return len(p1)
 
     def init_post(self, add_pairs=True):
-        """ Start at the target: give each person a number of partners, and pair them at random (with match=, some within their level) """
+        """ Start at the target: give each person a number of partners, and pair them at random (with match=, some within their level)
+
+        Args:
+            add_pairs (bool): whether to add partnerships
+        """
         if self.forms_own: # Start no partnerships for a subclass that forms its own, unless with its own add_pairs()
             super().init_post(add_pairs=add_pairs and type(self).add_pairs is not DegreeNet.add_pairs)
             return
@@ -1505,7 +1566,11 @@ class DegreeNet(DynamicNetwork):
         return
 
     def remove_uids(self, uids):
-        """ Remove the partnerships of people who leave, counting them (see `end_times()`) """
+        """ Remove the partnerships of people who leave, counting them (see `end_times()`)
+
+        Args:
+            uids (array): the agents who leave
+        """
         n = len(self)
         super().remove_uids(uids)
         self.lost += n - len(self)
@@ -1681,6 +1746,7 @@ class SexualNet(DegreeNet):
         max_contacts (int): with `n_contacts`, the most partners anyone has at once
         match (dict): if given, the share of partnerships between people at the same level of a property of people (a stratification, or an attribute), e.g. `dict(risk=0.8)`
         kwargs (dict): the other parameters of `ss.DegreeNet` (e.g. `where`)
+        pars (dict): the same parameters, as a dict
 
     Examples:
         ```python
@@ -1718,11 +1784,20 @@ class SexualNet(DegreeNet):
         return
 
     def active(self, people):
-        """ Return boolean array of agents who are alive, participating, past sexual debut, and in a group of `between` """
+        """ Return boolean array of agents who are alive, participating, past sexual debut, and in a group of `between`
+
+        Args:
+            people (People): the people
+        """
         return self.participant & (people.age > self.debut) & super().active(people)
 
     def available(self, people, sex):
-        """ Return UIDs of active agents of the given sex who are not currently partnered. """
+        """ Return UIDs of active agents of the given sex who are not currently partnered.
+
+        Args:
+            people (People): the people
+            sex (str): 'male' or 'female'
+        """
         available = people[sex] & self.active(people)
         available[self.edges.p1] = False
         available[self.edges.p2] = False
@@ -1758,6 +1833,12 @@ class PrenatalNet(Network):
         pass
 
     def add_pairs(self, mother_uids=None, unborn_uids=None):
+        """ Add an edge from each mother to her unborn child; called by `ss.Pregnancy`
+
+        Args:
+            mother_uids (array): the mothers
+            unborn_uids (array): the unborn children
+        """
         n = len(mother_uids) if mother_uids is not None else 0
         if n:
             self.append(p1=mother_uids, p2=unborn_uids, beta=np.ones(n))
@@ -1808,6 +1889,12 @@ class PostnatalNet(DynamicNetwork):
         return
 
     def add_pairs(self, mother_uids=None, infant_uids=None):
+        """ Add an edge from each mother to her infant
+
+        Args:
+            mother_uids (array): the mothers, with repeats if a mother has several infants
+            infant_uids (array): the infants
+        """
         # Note that the mother_uids should contain repeat entries if a mother has multiple infants
         n = len(mother_uids) if mother_uids is not None else 0
         p = self.pars
@@ -1832,6 +1919,9 @@ class BreastfeedingNet(PostnatalNet):
     status from the `Pregnancy` module (`preg.lactating`).
 
     Note: CRN safe.
+
+    Args:
+        pars (dict): passed to `ss.PostnatalNet`
     """
 
     def __init__(self, pars=None, **kwargs):
@@ -1840,7 +1930,11 @@ class BreastfeedingNet(PostnatalNet):
         return
 
     def init_pre(self, sim):
-        """ Find the sim's ss.Pregnancy, which pairs each newborn with a mother who breastfeeds (see `ss.Pregnancy.lactate()`) """
+        """ Find the sim's ss.Pregnancy, which pairs each newborn with a mother who breastfeeds (see `ss.Pregnancy.lactate()`)
+
+        Args:
+            sim (Sim): the sim being initialized
+        """
         super().init_pre(sim)
         pregs = [mod for mod in self.sim.modules if isinstance(mod, ss.Pregnancy)]
         if len(pregs) != 1:
@@ -1861,7 +1955,13 @@ class BreastfeedingNet(PostnatalNet):
 
 
 class AgeGroup(sc.prettyobj):
-    """ A simple age-based filter that returns uids of agents that match the criteria """
+    """ A simple age-based filter that returns uids of agents that match the criteria
+
+    Args:
+        low (float): the lower age, inclusive
+        high (float): the upper age, exclusive (None for no upper limit)
+        do_cache (bool): whether to reuse the UIDs within a step
+    """
     def __init__(self, low, high, do_cache=True):
         self.low = low
         self.high = high
@@ -1919,6 +2019,7 @@ class MixingPools(Route):
         dst (inds): destination agents; as above
         beta (float): overall transmission via these mixing pools
         n_contacts (array): the relative connectivity between different mixing pools (can be float or Dist)
+        pars (dict): the same parameters, as a dict
 
     Examples:
         ```python
@@ -2016,6 +2117,11 @@ class MixingPools(Route):
         return
 
     def init_pre(self, sim):
+        """ Create a mixing pool for each pair of groups, unless declared diseases use the matrix directly
+
+        Args:
+            sim (Sim): the sim being initialized
+        """
         super().init_pre(sim)
         self.to_unit(sim)
         p = self.pars
@@ -2075,7 +2181,11 @@ class MixingPools(Route):
         return new_cases
 
     def remove_uids(self, uids):
-        """ Remove UIDs from each mixing pool """
+        """ Remove UIDs from each mixing pool
+
+        Args:
+            uids (array): the agents to remove
+        """
         for mp in self.pools:
             mp.remove_uids(uids)
         return
@@ -2176,7 +2286,11 @@ class MixingPool(Route):
             return 0
 
     def init_pre(self, sim):
-        """ A number of contacts given as a rate (e.g. `ss.perday(10)`) is a number per unit of the sim's time, as a bare number is """
+        """ A number of contacts given as a rate (e.g. `ss.perday(10)`) is a number per unit of the sim's time, as a bare number is
+
+        Args:
+            sim (Sim): the sim being initialized
+        """
         n = self.pars.n_contacts
         rate = n.pars.v if isinstance(n, ss.constant) else n
         if isinstance(rate, ss.Rate):
@@ -2208,6 +2322,11 @@ class MixingPool(Route):
         return
 
     def get_uids(self, func_or_array):
+        """ The people in a group of this pool
+
+        Args:
+            func_or_array (func/uids): the people, as a function of the sim or as UIDs (default: all active agents)
+        """
         if func_or_array is None:
             return self.sim.people.auids
         elif callable(func_or_array):
@@ -2219,7 +2338,11 @@ class MixingPool(Route):
         raise TypeError(errormsg)
 
     def remove_uids(self, uids):
-        """ If UIDs are supplied explicitly, remove them if people die """
+        """ If UIDs are supplied explicitly, remove them if people die
+
+        Args:
+            uids (array): the agents to remove
+        """
         for key in ['src', 'dst']:
             inds = self.pars[key]
             if isinstance(inds, ss.uids):

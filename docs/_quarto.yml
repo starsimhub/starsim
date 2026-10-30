@@ -251,7 +251,7 @@ website:
             - api/data.qmd
         - section: "**I/O**"
           contents:
-            - api/io.qmd
+            - api/converters.qmd
         - section: "**Library**"
           contents:
             - api/library.diseases.qmd
@@ -272,7 +272,7 @@ website:
             - api/internals.dists.qmd
             - api/internals.expressions.qmd
             - api/internals.graph.qmd
-            - api/internals.presentation.qmd
+            - api/internals.display.qmd
             - api/internals.errors.qmd
             - api/internals.debugtools.qmd
             - api/internals.gradients.qmd
@@ -337,11 +337,11 @@ quartodoc:
       desc: Importing models from other frameworks, and exporting sims to them.
       contents:
         - kind: page
-          path: io
+          path: converters
           package: starsim
           contents:
             - kind: auto
-              name: io
+              name: converters
               include_imports: true
               children: embedded
     - title: Internals
@@ -360,7 +360,7 @@ quartodoc:
         - internals.loop
         - internals.modules
         - internals.parameters
-        - internals.presentation
+        - internals.display
         - internals.time
         - internals.timeline
     - title: Library

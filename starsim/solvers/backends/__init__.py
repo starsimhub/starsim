@@ -13,6 +13,8 @@ come in several sets (Numba's here, and Rust's, built from `../rust/`), which gi
     ss.solvers.backends.rust                             # Swaps in the Rust kernels, once built (see ss.options.kernels)
     ss.solvers.backends.keep_memory(), release_memory()  # Keep large freed arrays for reuse (the default; see ss.options.keep_memory), or give them back
     ss.solvers.backends.compiling()                      # Say what is being compiled, and about how long it takes
+
+Used with: agents and compartments; declared and coded modules
 """
 import starsim as ss
 from . import draws

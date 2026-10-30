@@ -1,5 +1,9 @@
 """
-Base classes for diseases
+Diseases: the base class (`ss.Disease`), diseases with transmission written as code (`ss.Infection`), and the textbook models (`ss.SIR`, `ss.SIS`, `ss.SEIR`)
+
+`ss.Disease` exists so that one class can hold a disease declared from states and transitions, written as code, or both. A declared disease runs with any solver; `ss.Infection` and other code that works on individual agents runs as agents.
+
+Used with: agents and compartments; declared and coded modules
 """
 import inspect
 import numpy as np
@@ -187,7 +191,14 @@ class Disease(ss.Module):
         return
 
     def declare(self, args=(), kwargs=None, names=None, overwrite=False):
-        """ Add declared members (states, transitions, results), to be built with the rest; see `define_transitions()` """
+        """ Add declared members (states, transitions, results), to be built with the rest; see `define_transitions()`
+
+        Args:
+            args (list): the members to add, without names
+            kwargs (dict): the members to add, by name
+            names (dict): the names of the variables the members were assigned to, if known
+            overwrite (bool): whether a member can replace one of the same name
+        """
         if self.__dict__.get('_graph') is not None:
             errormsg = (f'"{self.name}" was built when it was made, so nothing more can be declared in it now: its states, transitions, and results must be declared before that, '
                         f'in its __init__() or class body (or given to ss.Disease() with the rest). A plain ss.Result can still be added, as to any module')
@@ -291,6 +302,10 @@ class Disease(ss.Module):
     def define_results(self, *args, **kwargs):
         """
         Define results: for a declared disease, sums and ratios of states by name (e.g. `prevalence=I/(S + I + R)`, or `active=(E + I).frac`); otherwise `ss.Result` objects (see `ss.Module.define_results()`)
+
+        Args:
+            args (list): the results, as `ss.Result` objects or expressions
+            kwargs (dict): the results of a declared disease, by name
         """
         declared = (ss.expressions.Expr, ss.outcome, ss.transitions.FlowSum)
         if not kwargs and not any(isinstance(arg, declared) for arg in args):
@@ -326,6 +341,10 @@ class Disease(ss.Module):
         For a declared disease, a parameter defined here that is not one of its graph's (e.g. by a subclass, after
         `super().__init__()`, for its own code to read) is added to `code_pars`, so the sim does not reject it as one
         that nothing reads. A parameter set any other way (e.g. a misspelling in `pars=`) is still rejected.
+
+        Args:
+            inherit (bool): whether to add to the parameters that exist, rather than replace them
+            kwargs (dict): the parameters, by name
         """
         out = super().define_pars(inherit=inherit, **kwargs)
         if '_declared' in vars(self): # Being declared: sorted once it is built, so more can still be declared after this
@@ -335,7 +354,11 @@ class Disease(ss.Module):
         return out
 
     def add_code_pars(self, keys):
-        """ Parameters its own code reads, not its graph's: see `define_pars()` """
+        """ Parameters its own code reads, not its graph's: see `define_pars()`
+
+        Args:
+            keys (list): the names of the parameters
+        """
         self.code_pars = list(self.code_pars) + [k for k in keys if k not in self.graph.pars and k not in self.code_pars]
         return
 
@@ -528,13 +551,13 @@ class Disease(ss.Module):
 
         Args:
             output (bool): if True, return the text rather than printing it
-            out (`ss.presentation.Description`): if given, add the description to it and return it
+            out (`ss.display.Description`): if given, add the description to it and return it
         """
-        desc = ss.presentation.Description() if out is None else out
+        desc = ss.display.Description() if out is None else out
         if self.family is not None: # Strains with courses of their own
             self.family.describe(out=desc)
         elif self.graph is not None:
-            ss.presentation.describe_graph(self.graph, self.sim, out=desc)
+            ss.display.describe_graph(self.graph, self.sim, out=desc)
             if self.strains is not None:
                 self.strains.describe(self.graph, out=desc)
         else: # Written as code: its class, arrays, and parameters
@@ -554,12 +577,12 @@ class Disease(ss.Module):
         Args:
             output (bool): if True, return the text rather than printing it
         """
-        text = '\n'.join(ss.presentation.equations(self.graph, self.engine))
+        text = '\n'.join(ss.display.equations(self.graph, self.engine))
         return text if output else print(text)
 
     def diagram(self):
         """
-        The state-transition diagram, as a Mermaid flowchart (https://mermaid.js.org), which a notebook draws (see `ss.presentation.Diagram`)
+        The state-transition diagram, as a Mermaid flowchart (https://mermaid.js.org), which a notebook draws (see `ss.display.Diagram`)
 
         People states are rounded and counts slanted; transmissions are dashed; each
         arrow is labeled with its transition's name and value (`recovery: 10 days`), and
@@ -571,7 +594,7 @@ class Disease(ss.Module):
             sir = ss.Disease(infection=S >> I @ 0.3*I, recovery=ss.Transition(I, R, dur=ss.days(10)))
             sir.diagram()
         """
-        return ss.presentation.Diagram('\n'.join(['flowchart LR'] + ss.presentation.diagram(self.graph)))
+        return ss.display.Diagram('\n'.join(['flowchart LR'] + ss.display.diagram(self.graph)))
 
     def R0(self, matrix=False):
         """
@@ -617,7 +640,11 @@ class Disease(ss.Module):
 
     @ss.required()
     def init_pre(self, sim):
-        """ Link the disease to the sim, create its engine and objects, initialize results, and start its infection log if there is an `ss.infection_log` analyzer; see Module.init_pre() for details """
+        """ Link the disease to the sim, create its engine and objects, initialize results, and start its infection log if there is an `ss.infection_log` analyzer; see Module.init_pre() for details
+
+        Args:
+            sim (Sim): the sim being initialized
+        """
         if self.graph is not None and any(st.given_init for st in self.graph.states.values()): # A starting value set after the disease was made (e.g. by an importer) turns off the default seeding
             self.graph.unset_default_init_prev()
         unknown = [key for key in self.pars if key not in self.graph.pars and key not in self.code_pars] if self.graph is not None else [] # Added after the disease was made, so nothing reads it (TL58: pars.init was ignored)
@@ -648,19 +675,38 @@ class Disease(ss.Module):
 
     # The hooks the solvers call on a declared module, for one that needs more than its states and transitions (e.g. ss.Pregnancy)
     def compartmental_form(self, sim):
-        """ A module that runs only as agents unless it defines this: make its small compartmental form, used only when a compartmental solver is named, and return the note that says what it leaves out """
+        """ A module that runs only as agents unless it defines this: make its small compartmental form, used only when a compartmental solver is named, and return the note that says what it leaves out
+
+        Args:
+            sim (Sim): the sim being initialized
+        """
         return None
 
     def burnin_plan(self, engine):
-        """ People part way through at the start: None for none (the default), or the plan for them (see `ss.Pregnancy.burnin_plan()` and `ss.solvers.Agents.backfill_burnin()`) """
+        """ People part way through at the start: None for none (the default), or the plan for them (see `ss.Pregnancy.burnin_plan()` and `ss.solvers.Agents.backfill_burnin()`)
+
+        Args:
+            engine (Engine): the engine running this module
+        """
         return None
 
     def make_children(self, tr, parents, ti):
-        """ As agents, the children of the parents who went through a transition with births (`ss.birth(per=)`); returns their UIDs """
+        """ As agents, the children of the parents who went through a transition with births (`ss.birth(per=)`); returns their UIDs
+
+        Args:
+            tr (Transition): the transition with births
+            parents (array): the parents
+            ti (int): the step of the births
+        """
         return self.engine.grow_children(tr, parents, ti)
 
     def also_happened(self, name, uids):
-        """ As agents, others an event (a transition, by name) also happens to, as UIDs (e.g. the fetuses of a mother at a delivery); None for nobody else """
+        """ As agents, others an event (a transition, by name) also happens to, as UIDs (e.g. the fetuses of a mother at a delivery); None for nobody else
+
+        Args:
+            name (str): the name of the transition
+            uids (array): the agents it happened to
+        """
         return None
 
     def add_callback(self, event, fn):
@@ -728,6 +774,9 @@ class Disease(ss.Module):
         Unlike other methods during the integration loop, this method is not called directly
         by the sim; instead, it is called by people.step_die(), which reconciles the UIDs of
         the agents who will die.
+
+        Args:
+            uids (array): the agents who died
         """
         if isinstance(self.engine, ss.solvers.Agents):
             self.engine.die(uids)
@@ -788,6 +837,10 @@ class Disease(ss.Module):
     def move(self, *args, **kwargs):
         """
         Move people between this disease's states from code, the same way under every solver: `ss.move()` with the disease given
+
+        Args:
+            args (list): passed to `ss.move()`: what to move, from where, and to where
+            kwargs (dict): passed to `ss.move()`, e.g. `p` or `uids`
 
         **Examples**::
 
@@ -981,7 +1034,11 @@ class Infection(Disease):
         return
 
     def define_strains(self, strains):
-        """ Give the disease strains (`ss.Strains`, also as `strains=` to the disease), carried one at a time: the strain of each person (`self.strain`, added when the sim is initialized, set for those infected by transmission, at the start, and by `infect()`; code that infects people itself sets it), and the strain of those infected at the start, by its split """
+        """ Give the disease strains (`ss.Strains`, also as `strains=` to the disease), carried one at a time: the strain of each person (`self.strain`, added when the sim is initialized, set for those infected by transmission, at the start, and by `infect()`; code that infects people itself sets it), and the strain of those infected at the start, by its split
+
+        Args:
+            strains (Strains): the strains
+        """
         n = len(strains)
         why = ('its strains are diseases of their own' if strains.members is not None else f'max_strains={strains.max_strains}' if strains.max_strains > 1 else
                'it has states of its own for each strain (shared=False)' if strains.shared is not True else
@@ -992,7 +1049,12 @@ class Infection(Disease):
         return
 
     def update_pars(self, pars=None, **kwargs):
-        """ As `ss.Module.update_pars()`, and `strains=` for `define_strains()`, so a subclass that passes its keywords on here takes it too (e.g. `ssl.AgentSIR(strains=...)`) """
+        """ As `ss.Module.update_pars()`, and `strains=` for `define_strains()`, so a subclass that passes its keywords on here takes it too (e.g. `ssl.AgentSIR(strains=...)`)
+
+        Args:
+            pars (dict): the parameters to update
+            kwargs (dict): more parameters to update, by name
+        """
         if isinstance(pars, dict) and 'strains' in pars: # Also in a dict of parameters
             pars = dict(pars)
             kwargs['strains'] = pars.pop('strains')
@@ -1002,7 +1064,12 @@ class Infection(Disease):
         return super().update_pars(pars, **kwargs)
 
     def strain_value(self, key, uids):
-        """ The value of `key` (given to `ss.Strains`, e.g. `rel_trans=[1, 1.5]`) for the strain each of some agents carries (1 if it has none) """
+        """ The value of `key` (given to `ss.Strains`, e.g. `rel_trans=[1, 1.5]`) for the strain each of some agents carries (1 if it has none)
+
+        Args:
+            key (str): the name of the value
+            uids (array): the agents
+        """
         vals = self.strains.values[key] if key in self.strains.values else np.ones(len(self.strains))
         strain = self.strain[uids]
         return np.where(strain >= 0, vals[np.maximum(strain, 0)], 1.0)
@@ -1012,6 +1079,9 @@ class Infection(Disease):
         The share of their susceptibility to strain `k` that each agent (by UID) keeps: `1 − protection` from each `ss.immunity` of the
         strains, for those in its state (e.g. `due_to='recovered'`) by the strain they had; a disease with protection of its own (e.g.
         from antibodies) overrides this
+
+        Args:
+            k (int): the index of the strain
         """
         out = 1.0
         strain = self.strain.raw
@@ -1022,7 +1092,11 @@ class Infection(Disease):
 
     @ss.required()
     def init_pre(self, sim):
-        """ Link the disease to the sim and initialize results; see `ss.Module.init_pre()` """
+        """ Link the disease to the sim and initialize results; see `ss.Module.init_pre()`
+
+        Args:
+            sim (Sim): the sim being initialized
+        """
         if self.strains is not None and not isinstance(getattr(self, 'strain', None), ss.IntArr): # The strain of each person, and of those infected at the start, by the split
             n = len(self.strains)
             self.define_states(ss.IntArr('strain', default=-1, label='Strain of the current or last infection'))
@@ -1375,6 +1449,10 @@ class Infection(Disease):
 
         A disease with outcomes at birth overrides this, e.g. `ssl.CongenitalDisease` (`import starsim.library as ssl`),
         which schedules a birth outcome (a stillbirth, a congenital infection) for each.
+
+        Args:
+            uids (array): the people infected before birth
+            sources (array): the people who infected them
         """
         return
 
@@ -1461,7 +1539,11 @@ class InfectionLog:
         return string
 
     def disp(self, **kwargs):
-        """ Full display of the infection log """
+        """ Full display of the infection log
+
+        Args:
+            kwargs (dict): passed to `sc.pr()`
+        """
         return sc.pr(self, **kwargs)
 
     def add_entries(self, uids, sources=None, time=np.nan, **kwargs):
@@ -1483,7 +1565,14 @@ class InfectionLog:
         return
 
     def append(self, source, target, t, **kwargs):
-        """ Record a single infection """
+        """ Record a single infection
+
+        Args:
+            source (int): who did the infecting
+            target (int): who was infected
+            t (int): the time of the infection
+            kwargs (dict): other data to store with the entry
+        """
         self.add_entries([target], [source], t, **kwargs)
         return
 
@@ -1576,6 +1665,7 @@ class SIR(Disease):
         dur_inf (float/`ss.dur`/`ss.Dist`): the mean time that people are infected for (by default 6 years; a number is in years), as an exponential; give a distribution (e.g. `ss.lognorm_ex(mean=ss.years(6))`) for another shape
         p_death (float/`ss.bernoulli`): the probability of death from infection, at the end of the infection (by default 0)
         kwargs (dict): passed to `ss.Disease`, e.g. `name`
+        pars (dict): the same parameters, as a dict
 
     An SIR model written as code, with a lognormal `dur_inf` and `p_death=0.01`,
     is `ssl.AgentSIR`.
@@ -1614,6 +1704,7 @@ class SEIR(Disease):
         dur_inf (float/`ss.dur`/`ss.Dist`): the mean time that people are infectious for (by default 6 years), as an exponential
         p_death (float/`ss.bernoulli`): the probability of death from infection, at the end of the infection (by default 0)
         kwargs (dict): passed to `ss.Disease`, e.g. `name`
+        pars (dict): the same parameters, as a dict
 
     As in `ss.SIR`, each duration is exponential unless a distribution is given, and
     nobody dies of the infection unless `p_death` is given.
@@ -1653,6 +1744,7 @@ class SIS(Disease):
         init_prev (float/`ss.bernoulli`/`ss.choose_n`): the fraction of people who start infected (or a number of people)
         dur_inf (float/`ss.dur`/`ss.Dist`): the mean time that people are infected for (by default 10 years; a number is in years), as an exponential unless a distribution is given
         kwargs (dict): passed to `ss.Disease`, e.g. `name`
+        pars (dict): the same parameters, as a dict
 
     An SIS model with a per-agent immunity level, boosted by each infection and
     waning over time (`waning=`, `imm_boost=`), which has no declared form, is

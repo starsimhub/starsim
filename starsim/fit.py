@@ -1,7 +1,11 @@
 """
 Fitting sims to data: likelihoods, particle filters, samplers, and what `sim.fit()` runs
 
+These exist so that a model can be fitted, with its uncertainty, in the same way whichever solver runs it. Parameters are chosen by giving them bounds (`ss.par`), in declared modules or in the parameters of modules written as code. Some methods are for some solvers only: gradients come from JAX, and particle filters need a stochastic compartmental solver.
+
 Imported when it is first used (by `ss.fit.X`, `sim.fit()`, or `sim.sensitivity()`), not by `import starsim`.
+
+Used with: agents and compartments; declared and coded modules
 """
 import os
 import inspect
@@ -581,6 +585,7 @@ def abc_smc(distance, logprior, z0, particles=200, generations=8, quantile=0.5, 
         tolerance (float): stop once the tolerance is this small
         min_acceptance (float): stop once a generation accepts fewer of its proposals than this
         seed (int): the random seed
+        verbose (bool): whether to say what is being done
 
     Returns the population (particles × values, on the sampler's scale), its normalized weights and
     distances, the tolerance and acceptance rate of each generation, and the number of runs.
@@ -908,6 +913,9 @@ def diagnose(draws):
 
     Both are rank-normalized and from split chains (Vehtari et al. 2021, as Stan, ArviZ, and BlackJAX work them out): the
     R-hat is the larger of that of the draws and that of their distance from the median, and the effective sample size is of the bulk.
+
+    Args:
+        draws (array): the draws, with shape (chains, draws, values)
     """
     rhat, ess = [], []
     for j in range(draws.shape[2]):
@@ -929,6 +937,7 @@ class Fit(sc.prettyobj):
         before (`ss.Sim`): the sim with the initial values, already run
         mismatch (float): the goodness of fit of the calibrated sim, or its negative log-likelihood if the fit used likelihoods
         measure (str): what `mismatch` measures
+        mismatch_before (float): the same, before the fit
         converged (bool): whether the searches from the best few points of the scan that are apart end at the same value (for SciPy; with a single search, SciPy's own stopping rule), stopped improving (for Optuna: by less than 1% over the last quarter of the trials), or has chains that agree (for NUTS and particle MCMC: an R-hat of at most 1.01, and no divergent draws; for IF2: chains from different starts that end within 2 of the best log-likelihood)
         why (str): what `converged` is based on
         scores (list): the score of the best-fit values in each run (one for a deterministic sim); `mismatch` is their mean, so it is the score that was minimized
@@ -1677,6 +1686,12 @@ def fit_stages(sim, stages, verbose=None, **kwargs):
     Each stage is a method's name, or a dict with `method=` and that method's settings. A stage
     that does not converge stops the sequence (with a warning), and the fit returned is that
     of the last stage that did, or the first stage's best attempt if it was the one that failed.
+
+    Args:
+        sim (Sim): the sim to fit
+        stages (list): the stages, each a method's name, or a dict with `method=` and its settings
+        verbose (bool): whether to say what is being done (default: `ss.options.verbose`)
+        kwargs (dict): passed to `sim.fit()` for every stage
     """
     verbose = sc.ifelse(verbose, ss.options.verbose)
     stages = [dict(method=stage) if isinstance(stage, str) else dict(stage) for stage in stages]
@@ -2145,6 +2160,13 @@ def fit_scipy(problem, method='nelder-mead', scan=None, restarts=None, **options
     A `scipy.optimize.minimize` method, from each of the best few points of a scan that are apart (`restarts`), with gradients
     from JAX for the methods that use them; it has converged if the best two searches end at the same value. By default 3 searches,
     or 1 for a single parameter of a deterministic sim, where the scan already finds the right valley and SciPy's own stopping rule is enough.
+
+    Args:
+        problem (Problem): the fit, as `sim.fit()` sets it up
+        method (str): the method of `scipy.optimize.minimize`
+        scan (int): the number of points in the scan (default: see `Problem.scan_size()`)
+        restarts (int): the number of searches
+        options (dict): passed to `scipy.optimize.minimize` as `options=`
     """
     import scipy.optimize as spo
     p = problem
@@ -2230,6 +2252,8 @@ def fit_optuna(problem, n_trials=100, scan=None, n_workers=None, storage=None, *
         storage (str): where the trials are kept, so that a fit that stopped can be resumed by calling it again with the same storage:
             a file name (kept as an Optuna journal), a database URL (e.g. `'sqlite:///fit.db'`), or an Optuna storage
         kwargs (dict): Optuna's own keywords for `study.optimize()`
+        problem (Problem): the fit, as `sim.fit()` sets it up
+        scan (int): not used, since the search starts from the initial values
 
     It has not converged if the best trial is the initial values or one of the first 10 (which are random), or if the best improved
     by 1% or more over the last quarter of the trials.
@@ -2291,7 +2315,17 @@ def fit_optuna(problem, n_trials=100, scan=None, n_workers=None, storage=None, *
 
 
 def fit_if2(problem, particles=1000, iterations=50, cooling=0.5, sd=0.05, chains=4, **kwargs):
-    """ Maximum likelihood by iterated filtering: passes of a particle filter in which each particle's values are perturbed by a shrinking random walk, and selected with it (see `Swarm`) """
+    """ Maximum likelihood by iterated filtering: passes of a particle filter in which each particle's values are perturbed by a shrinking random walk, and selected with it (see `Swarm`)
+
+    Args:
+        problem (Problem): the fit, as `sim.fit()` sets it up
+        particles (int): the number of particles
+        iterations (int): the number of passes of the filter
+        cooling (float): the share of its first size that a step has after 50 passes
+        sd (float): the first size of a step of the random walk
+        chains (int): the number of chains, from different starts
+        kwargs (dict): not used
+    """
     p = problem
     filt = ParticleFilter(p.runner.restart(), likelihood=p.likelihood, weights=p.weights)
     swarm = Swarm(p.runner, p.fitted, p.restart, p.to_x, p.to_z(p.x0), sd=sd, cooling=cooling, n_points=len({row for s in filt.series for row in s.rows}))
@@ -2329,7 +2363,18 @@ def fit_if2(problem, particles=1000, iterations=50, cooling=0.5, sd=0.05, chains
 
 
 def fit_pmcmc(problem, scan=None, particles=None, draws=1000, warmup=1000, chains=4, parallel=True, **kwargs):
-    """ Particle MCMC: a random walk, on a likelihood estimated by a particle filter (see `pmmh()`), from the best of the initial values and a spread of points """
+    """ Particle MCMC: a random walk, on a likelihood estimated by a particle filter (see `pmmh()`), from the best of the initial values and a spread of points
+
+    Args:
+        problem (Problem): the fit, as `sim.fit()` sets it up
+        scan (int): the number of points in the scan
+        particles (int): the number of particles
+        draws (int): the number of draws in each chain, after the warmup
+        warmup (int): the number of draws to discard at the start of each chain
+        chains (int): the number of chains
+        parallel (bool): whether to run the chains in parallel
+        kwargs (dict): not used
+    """
     p = problem
     filt = ParticleFilter(p.runner.restart(), likelihood=p.likelihood, weights=p.weights)
     rng = np.random.default_rng(p.rand_seed)
@@ -2346,7 +2391,16 @@ def fit_pmcmc(problem, scan=None, particles=None, draws=1000, warmup=1000, chain
 
 
 def fit_abc_smc(problem, particles=None, generations=8, quantile=0.5, tolerance=None, **kwargs):
-    """ A posterior without a likelihood, by approximate Bayesian computation (see `abc_smc()`): the runs within a shrinking distance of the data """
+    """ A posterior without a likelihood, by approximate Bayesian computation (see `abc_smc()`): the runs within a shrinking distance of the data
+
+    Args:
+        problem (Problem): the fit, as `sim.fit()` sets it up
+        particles (int): the number of particles
+        generations (int): the number of generations
+        quantile (float): the quantile of the distances that sets the next generation's tolerance
+        tolerance (float): the distance to stop at
+        kwargs (dict): not used
+    """
     p = problem
     def distance(z, seed):
         return p.measure(p.run(p.to_x(z)[0], seed=seed if p.stochastic else None)) # A stochastic run takes a seed of its own, so the posterior includes chance
@@ -2367,7 +2421,16 @@ def fit_abc_smc(problem, particles=None, generations=8, quantile=0.5, tolerance=
 
 
 def fit_nuts(problem, draws=500, warmup=500, chains=4, scan=None, **kwargs):
-    """ The No-U-Turn sampler, each chain from an optimum found from one of the best points of a scan that are apart: the best, and others nearly as good (so that chains caught in different modes disagree, and none starts in a mode far below the best), on the log-density as one function in JAX if the model allows (see `ss.gradients.Density`), else with Python in the loop """
+    """ The No-U-Turn sampler, each chain from an optimum found from one of the best points of a scan that are apart: the best, and others nearly as good (so that chains caught in different modes disagree, and none starts in a mode far below the best), on the log-density as one function in JAX if the model allows (see `ss.gradients.Density`), else with Python in the loop
+
+    Args:
+        problem (Problem): the fit, as `sim.fit()` sets it up
+        draws (int): the number of draws in each chain, after the warmup
+        warmup (int): the number of warmup steps of each chain
+        chains (int): the number of chains
+        scan (int): the number of points in the scan
+        kwargs (dict): not used
+    """
     p = problem
     sampling = dict(draws=draws, warmup=warmup, chains=chains)
     logs, span, base_lows = p.logs, p.span, p.base_lows
@@ -2442,6 +2505,11 @@ def split_data(df, holdout=0.25, folds=None):
     or time, everything from it on is held out.
 
     Returns a list of (fitting data, held-out data) pairs, one per fold.
+
+    Args:
+        df (dataframe): the data
+        holdout (float/date): the share of each series to hold out, or the date or time from which to hold out everything
+        folds (int): the number of folds
     """
     k = folds or 1
     out = []
@@ -2480,6 +2548,8 @@ class ModelComparison(sc.prettyobj):
         table (df): the fitted parameters, the error on the data fitted to, the prediction error, and the rank of each model
         holdout (str): a description of what was held out
         measure (str): how the fit error and the prediction error are measured (the same for every model)
+        splits (list): the data fitted to and the data held out, for each fold
+        clear (bool): whether the best model is clearly better, given the spread across folds
     """
     def __init__(self, fits, table, holdout, measure, splits, clear=True):
         self.fits = fits
@@ -2504,7 +2574,11 @@ class ModelComparison(sc.prettyobj):
         return self.table
 
     def plot(self, **kwargs):
-        """ Plot each model's fit and prediction against the data, with the held-out data hollow; kwargs are as for `ss.plot_args()` """
+        """ Plot each model's fit and prediction against the data, with the held-out data hollow; kwargs are as for `ss.plot_args()`
+
+        Args:
+            kwargs (dict): passed to `ss.plot_args()`
+        """
         train, test = self.splits[-1]
         cols = list(train.columns)
         kw = ss.plot_args(kwargs, alpha=0.8)

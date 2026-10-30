@@ -1,5 +1,9 @@
 """
 Running many sims: ss.parallel() and ss.MultiSim
+
+These exist so that a model can be run many times, across seeds, parameter values, or scenarios, with the results gathered in one place for comparing and plotting.
+
+Used with: agents and compartments; declared and coded modules
 """
 import collections.abc as cabc
 import time
@@ -311,7 +315,11 @@ class MultiSim:
         raise AttributeError(f"'{type(self).__name__}' object has no attribute '{attr}'")
 
     def init_sims(self, **kwargs):
-        """ Make the sim of each run, and initialize them without running them """
+        """ Make the sim of each run, and initialize them without running them
+
+        Args:
+            kwargs (dict): the same arguments as `msim.run()`
+        """
         kwargs = sc.mergedicts(self.run_args, kwargs)
         sims, n_runs, pars, draws = self.resolve(kwargs.get('n_runs'), kwargs.get('pars'), kwargs.get('priors'))
         self.sims, self.runs = self.expand(sims, n_runs, pars, draws, **self.own_options(kwargs))
@@ -355,7 +363,7 @@ class MultiSim:
                     return self
             sims, self.runs = self.expand(base, n_runs, pars, draws, **opts)
 
-        progress = ss.presentation.RunsProgress(sims) if verbose and not kwargs['verbose'] else None # The runs' own progress, if they say nothing
+        progress = ss.display.RunsProgress(sims) if verbose and not kwargs['verbose'] else None # The runs' own progress, if they say nothing
         run_sims = run_each(sims, progress=progress, **kwargs) # This does all the work! Output sims are copies due to the pickling during parallelization
         if inplace:
             for old,new in zip(sims, run_sims):
@@ -629,7 +637,11 @@ class MultiSim:
         return self.results.diff(baseline)
 
     def to_df(self, quantiles=(0.025, 0.5, 0.975)):
-        """ Every result across the runs, as quantiles at each time for each scenario: a long dataframe with columns `module`, `result`, `scenario`, `time`, `quantile`, and `value` (with `quantiles=None`, one row per run and time instead) """
+        """ Every result across the runs, as quantiles at each time for each scenario: a long dataframe with columns `module`, `result`, `scenario`, `time`, `quantile`, and `value` (with `quantiles=None`, one row per run and time instead)
+
+        Args:
+            quantiles (tuple): the quantiles to compute, from 0 to 1
+        """
         self.check_run('to_df')
         return self.results.to_df(quantiles=quantiles)
 
@@ -654,7 +666,16 @@ class MultiSim:
         return self.results.plot(key=key, fig=fig, legend=legend, lines=lines, data=data, **kwargs)
 
     def plot_each(self, key=None, fig=None, legend=True, show_data=True, log=False, **kwargs):
-        """ Plot each run on its own time axis, for sims with different time points (see `plot()`): each scenario in a color of its own """
+        """ Plot each run on its own time axis, for sims with different time points (see `plot()`): each scenario in a color of its own
+
+        Args:
+            key (str/list): the result or results to plot (default: as for `plot()`)
+            fig (Figure): the figure to plot on
+            legend (bool): whether to show a legend
+            show_data (bool): whether to show the sim's data, if any
+            log (bool): whether to use a log scale for the y-axis
+            kwargs (dict): passed to `ss.plot_args()`
+        """
         sims = list(self.sims)
         scenarios = list(self.runs['scenario'])
         def get(sim, res, origin=sims[0]): # The same result of another sim, or of its one disease if the origin's was named differently (see own_disease())
@@ -827,7 +848,11 @@ class Branching(sc.prettyobj):
 
     @staticmethod
     def fit_offspring(counts):
-        """ The mean of some offspring counts, and the dispersion k of a negative binomial with that mean fitted to them by maximum likelihood (infinite if they are no more variable than a Poisson's) """
+        """ The mean of some offspring counts, and the dispersion k of a negative binomial with that mean fitted to them by maximum likelihood (infinite if they are no more variable than a Poisson's)
+
+        Args:
+            counts (array): the number of offspring of each case
+        """
         import scipy.optimize as spo
         import scipy.special as sps
         counts = np.asarray(counts, dtype=float)
@@ -841,7 +866,11 @@ class Branching(sc.prettyobj):
         return float(R), float(np.exp(res.x))
 
     def plot(self, **kwargs):
-        """ The distribution of the chains' sizes (and, as agents, of their lengths in generations) """
+        """ The distribution of the chains' sizes (and, as agents, of their lengths in generations)
+
+        Args:
+            kwargs (dict): passed to `ss.plot_args()`
+        """
         agents = self.lengths is not None
         kw = ss.plot_args(kwargs)
         with ss.style(**kw.style):
@@ -875,7 +904,7 @@ def single_run(sim, ind=0, shrink=True, run_args=None, verbose=None, copy_sim=Fa
         run_args (dict): arguments passed to `sim.run()`
         verbose (int): detail to print
         copy_sim (bool): whether to run a copy of the sim (as pickling gives when running in parallel)
-        track (bool): whether to put how far the run has got in `globaldict`, by `ind` (see `ss.presentation.RunsProgress`)
+        track (bool): whether to put how far the run has got in `globaldict`, by `ind` (see `ss.display.RunsProgress`)
         globaldict (dict): a dict shared with the other runs (given by `sc.parallelize()`, or by `run_each()` when run in a loop)
         show (func): what shows the progress, when run in this process
     """
@@ -884,7 +913,7 @@ def single_run(sim, ind=0, shrink=True, run_args=None, verbose=None, copy_sim=Fa
     if not sim.label:
         sim.label = f'Sim {ind}'
     if track:
-        sim.progress = ss.presentation.Share(sim, globaldict, ind, show)
+        sim.progress = ss.display.Share(sim, globaldict, ind, show)
     sim.run(**sc.mergedicts({'verbose': verbose}, run_args))
     if track:
         globaldict[ind] = 1.0
@@ -903,7 +932,7 @@ def run_each(sims, parallel=True, n_cpus=None, par_args=None, shrink=None, verbo
     still uses the parallelization methods (just on a single core), while the latter
     simply runs in a loop.
 
-    With `progress` (an `ss.presentation.RunsProgress`), each run puts how far it has got in a dict shared with
+    With `progress` (an `ss.display.RunsProgress`), each run puts how far it has got in a dict shared with
     this process (Sciris' `globaldict`), from which the progress is drawn ten times a second.
 
     Args:
@@ -914,7 +943,7 @@ def run_each(sims, parallel=True, n_cpus=None, par_args=None, shrink=None, verbo
         shrink (bool): whether to shrink each sim after it runs
         verbose (float): how much to print
         run_args (dict): passed to `sim.run()`
-        progress (`ss.presentation.RunsProgress`): the progress to draw
+        progress (`ss.display.RunsProgress`): the progress to draw
 
     Returns the list of run sims (copies, since they are pickled to run in parallel).
     """
@@ -975,7 +1004,12 @@ class MultiResults(ss.Results):
     Each result is an `ss.Result` (see there for what one across runs does), e.g. `msim.results.sir.I.quantiles()`.
     """
     def to_df(self, quantiles=None, **kwargs):
-        """ Every result across the runs, as a long dataframe with columns for the module and result: one row per run and time (see `ss.Result.to_df()`), or with `quantiles=`, per scenario, quantile, and time """
+        """ Every result across the runs, as a long dataframe with columns for the module and result: one row per run and time (see `ss.Result.to_df()`), or with `quantiles=`, per scenario, quantile, and time
+
+        Args:
+            quantiles (tuple): the quantiles to compute, from 0 to 1 (default: one row per run)
+            kwargs (dict): passed to `ss.Result.to_df()`
+        """
         dfs = []
         for modname,key,res in self.walk():
             parts = res.by_column().items() if res.columns is not None else [(None, res)]
@@ -987,7 +1021,11 @@ class MultiResults(ss.Results):
         return sc.dataframe(pd.concat(dfs, ignore_index=True))
 
     def diff(self, baseline):
-        """ The difference of every result from the baseline scenario: a dict by scenario, then module, then result """
+        """ The difference of every result from the baseline scenario: a dict by scenario, then module, then result
+
+        Args:
+            baseline (str): the name of the baseline scenario
+        """
         out = sc.obj()
         for modname,key,res in self.walk():
             if baseline in res.scenarios():
@@ -1097,7 +1135,11 @@ class MultiResults(ss.Results):
         return out
 
     def take(self, inds):
-        """ The results of some of the runs, by position """
+        """ The results of some of the runs, by position
+
+        Args:
+            inds (array): the positions of the runs
+        """
         arrays = {}
         runs = None
         inds = list(sc.toarray(inds))

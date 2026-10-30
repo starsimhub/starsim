@@ -19,7 +19,7 @@ Starsim 4 adds a way to write a model as declared states and transitions, which 
 - **Results and fitting**: `ss.outcome()` declares reported quantities. `sim.fit()` fits to data by optimization, MCMC (with gradients in JAX), particle MCMC, iterated filtering or ABC-SMC, with `fit.profile()` and `sim.sensitivity()`; `ss.fit.optimize()` allocates budgets.
 - **Scenarios and runs**: `ss.parallel()` and `sim.run(n_runs=)` return a MultiSim whose results have a run dimension, with summaries, bands and comparisons by scenario. Sims with different steps can be run together.
 - **Importing and exporting**: `ss.import_from()` reads models from EMULSION, odin, SBML, SimInf, flepiMoP, summer2, Atomica, camdl, EpiModel, epydemix and MEmilio; `ss.export_to()` writes SBML and odin. `python -m starsim.io.migrate` rewrites Starsim 3 code.
-- **Library**: `starsim.library` (`ssl`) holds HIV, cholera, Ebola, measles, maternal and newborn health, more networks, and health economics (`ssl.Costs`, `ssl.discount()`, `ssl.icer()`).
+- **Library**: `starsim.library` (`ssl`) holds HIV, cholera, Ebola, measles, malaria, TB, COVID, influenza, dengue, and other simple disease models, maternal and newborn health, more networks, and health economics (`ssl.Costs`, `ssl.DALYs`, `ssl.discount()`, `ssl.ICER`).
 - **Command line and speed**: `starsim init` and `starsim compile`; Numba kernels throughout, with optional Rust copies that give the same numbers; optional JAX for gradients.
 
 ### Changes that may affect results

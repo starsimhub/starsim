@@ -1,5 +1,9 @@
 """
-Define core Sim classes
+The sim (`ss.Sim`) and its parameters (`ss.SimPars`)
+
+This is what a user runs. It exists to gather the people, modules, and settings of a model in one object; to choose how to run it (the solver); and to hold the results. It works the same way for every kind of model.
+
+Used with: agents and compartments; declared and coded modules
 """
 import os
 import itertools
@@ -40,6 +44,7 @@ class SimPars(ss.Pars):
         interventions (str/list/Module): As above
         analyzers (str/list/Module): As above
         verbose (int/float): How much to print: 0 nothing, 1 the solver, notes, and progress (default), 2 everything (e.g. each step); a fraction is as 1, with progress every that share of the run (e.g. 0.1 for every 10%)
+        create (bool): whether a key that doesn't exist yet can be added
     """
     def __init__(self, pars=None, create=True, **kwargs):
 
@@ -88,7 +93,11 @@ class SimPars(ss.Pars):
     _frozen = False # Whether the sim is initialized: see freeze()
 
     def freeze(self, frozen=True):
-        """ Once the sim is initialized, its settings belong to that run (`sim.new()` copies the sim as it was before), so setting one raises; but not its label, which only names it """
+        """ Once the sim is initialized, its settings belong to that run (`sim.new()` copies the sim as it was before), so setting one raises; but not its label, which only names it
+
+        Args:
+            frozen (bool): whether setting a value raises an error
+        """
         object.__setattr__(self, '_frozen', frozen)
         return self
 
@@ -133,7 +142,11 @@ class SimPars(ss.Pars):
         return
 
     def is_default(self, key):
-        """ Check if the provided value matches the default """
+        """ Check if the provided value matches the default
+
+        Args:
+            key (str): the name of the parameter
+        """
         default_pars = SimPars() # Create a default SimPars object
         default_val = default_pars[key]
         current_val = self[key]
@@ -539,7 +552,7 @@ class Sim(ss.Base):
         self.complete = False  # Whether a simulation has completed running
         self.results_ready = False  # Whether results are ready
         self.elapsed = None # The time required to run
-        self.progress = None # How far a run has got, shown as it goes (see ss.presentation.Progress)
+        self.progress = None # How far a run has got, shown as it goes (see ss.display.Progress)
         self.summary = None  # For storing a summary of the results
         self.filename = None # Store the filename, if saved
         self.diagnostics = None # Store diagnostics results
@@ -779,7 +792,7 @@ class Sim(ss.Base):
             how = (f'{self.pars.total_pop:,.0f} people, ' if people else '') + 'as ' + (f'a branching process ({short.get(solver, solver)})' if self.pars.branching else kind.get(solver, solver))
         label = f' "{self.label}"' if self.label else ''
         what = f'{sc.strjoin(mods)}, ' if mods else ''
-        lines = [ss.presentation.style(f'Sim{label}: {what}{how}, {when}', 'bold', color=ss.presentation.in_color())]
+        lines = [ss.display.style(f'Sim{label}: {what}{how}, {when}', 'bold', color=ss.display.in_color())]
         if self.solver != 'abm':
             for dis in self.declared:
                 sources = dis.graph.infectious or dis.graph.density_sources
@@ -933,7 +946,11 @@ class Sim(ss.Base):
         return problem.result(method, out)
 
     def sensitivity(self, **kwargs):
-        """ Which parameters matter: partial rank correlations of each parameter with bounds and each result, over samples within the bounds; see `ss.fit.sensitivity()` """
+        """ Which parameters matter: partial rank correlations of each parameter with bounds and each result, over samples within the bounds; see `ss.fit.sensitivity()`
+
+        Args:
+            kwargs (dict): passed to `ss.fit.sensitivity()`
+        """
         from . import fit
         return fit.sensitivity(self, **kwargs)
 
@@ -957,7 +974,7 @@ class Sim(ss.Base):
             ss.Sim(sir, solver='binomial', unit='day', stop=100).check_dt()
             ```
         """
-        return ss.presentation.check_dt(self, factor=factor, output=output)
+        return ss.display.check_dt(self, factor=factor, output=output)
 
     def what_modifies(self, target, output=False):
         """
@@ -967,13 +984,16 @@ class Sim(ss.Base):
             target (par/str): the quantity, as for `ss.modify()`: e.g. `sir.pars.beta`, `sir.rel_sus`, or `'sir.pars.beta'`
             output (bool): return the text instead of printing it
         """
-        return ss.presentation.what_modifies(self, target, output=output)
+        return ss.display.what_modifies(self, target, output=output)
 
     def stratify(self, **kwargs):
         """
         Stratify every module in the sim by a property of people, e.g. `sim.stratify(age=[0, 15, 65])`
 
         Takes the same arguments as `ss.Disease.stratify()`, and returns the sim.
+
+        Args:
+            kwargs (dict): passed to `ss.Disease.stratify()`
         """
         if self.initialized:
             errormsg = 'Cannot stratify a sim that has already been initialized; stratify it first'
@@ -999,7 +1019,11 @@ class Sim(ss.Base):
         return bool(self.pars.demographics) or any(ss.solvers.flows_of(mod) for mod in self.declared)
 
     def get_declared(self, name):
-        """ A module with declared states and transitions, by name """
+        """ A module with declared states and transitions, by name
+
+        Args:
+            name (str): the name of the module
+        """
         mods = {mod.name:mod for mod in self.declared}
         if name not in mods:
             errormsg = f'No module named "{name}" with declared transitions was found; these are {sc.strjoin(mods.keys())}'
@@ -1016,7 +1040,7 @@ class Sim(ss.Base):
             output (bool): if True, return the text rather than printing it
             verbose (bool): also show what each rate and dwell time is per step: the probability of leaving in a step, as the solvers that take whole steps use it, and the stages of a dwell time
         """
-        return ss.presentation.describe_sim(self, output=output, verbose=verbose)
+        return ss.display.describe_sim(self, output=output, verbose=verbose)
 
     def add_module(self, module, key=None):
         """
@@ -1270,7 +1294,11 @@ class Sim(ss.Base):
         return
 
     def lock_pars(self, locked=True):
-        """ Lock the sim and module parameters, so setting a parameter that doesn't exist raises an error """
+        """ Lock the sim and module parameters, so setting a parameter that doesn't exist raises an error
+
+        Args:
+            locked (bool): whether to lock the parameters
+        """
         self.pars.lock(locked)
         for mod in self.modules:
             mod.pars.lock(locked)
@@ -1408,7 +1436,12 @@ class Sim(ss.Base):
         return
 
     def init_data(self, data=None, check=True):
-        """ Initialize or add data to the sim; with check=False, only load and validate it, since the results it is checked against do not exist yet """
+        """ Initialize or add data to the sim; with check=False, only load and validate it, since the results it is checked against do not exist yet
+
+        Args:
+            data (dataframe/str): the data, or the name of a file holding it (default: `sim.data`)
+            check (bool): whether to check it against the results
+        """
         data = data if data is not None else self.data
         if isinstance(data, (str, os.PathLike)):
             data = ss.simdata(data)
@@ -1512,6 +1545,9 @@ class Sim(ss.Base):
         function call.
 
         Note: the verbose here is only for the Loop object, not the sim.
+
+        Args:
+            verbose (bool): how much to print; passed to the `Loop` object
         """
         if not self.initialized: self.init() # Automatically initialize if not initialized
         t = self.t
@@ -1567,7 +1603,7 @@ class Sim(ss.Base):
 
         self.stopped = None # The time point a condition given as until= stopped the run at
         if self.verbose: # Otherwise none, or how far it has got for a MultiSim's progress (see ss.run.single_run())
-            self.progress = ss.presentation.Progress(self)
+            self.progress = ss.display.Progress(self)
         try:
             # Main simulation loop -- just one line!!!
             reason = self.kernel_reason() if until is None and not profile else None
@@ -2020,7 +2056,11 @@ class Sim(ss.Base):
         return missing
 
     def to_df(self, **kwargs):
-        """ The results as a dataframe, with a column for each (e.g. `sir_prevalence`); see `ss.Results.to_df()` for the arguments """
+        """ The results as a dataframe, with a column for each (e.g. `sir_prevalence`); see `ss.Results.to_df()` for the arguments
+
+        Args:
+            kwargs (dict): passed to `ss.Results.to_df()`
+        """
         self.check_results_ready('Please run the sim before exporting the results')
         return self.results.to_df(**kwargs)
 
@@ -2160,6 +2200,7 @@ class Sim(ss.Base):
             keys (str/list): attributes to write to json (choices: 'pars', 'summary', and/or 'results')
             verbose (bool): detail to print
             **kwargs (dict): passed to `sc.jsonify()`
+            indent (int): the number of spaces to indent by
 
         Returns:
             A dictionary representation of the parameters and/or summary results

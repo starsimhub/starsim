@@ -1,5 +1,5 @@
 """
-The ODE run in JAX: gradients of results with respect to parameters, and many runs at once
+Not for the user: the ODE run in JAX: gradients of results with respect to parameters, and many runs at once
 
 A compartmental engine flattens its flows into a `ss.kernels.Program`. The Numba
 kernels step through it; `run()` here takes the same program and runs the same
@@ -13,6 +13,8 @@ are Python (working out those numbers from the parameters, and the results from
 the run, including outcomes and the goodness of fit), and are differentiated by
 central differences along the direction the run is differentiated in. They are cheap
 and smooth, so this is accurate to about 1e-9 of the value.
+
+Used with: compartments; declared modules
 """
 import os
 import sys
@@ -123,6 +125,8 @@ def reason(sim):
 class OneHot(sc.prettyobj):
     """
     Which of n rows each group is in (e.g. its place), applied as a one-hot matrix would be, but as sums and indexing (O(groups), not O(groups²)): nothing at all when each group is its own row
+
+    It exists to avoid a large dense matrix in the run.
 
     Args:
         index (array): the row of each group
@@ -990,7 +994,11 @@ def of_results(sim, results=None, pars=None):
 #%% The log-density in JAX
 
 class Unsupported(Exception):
-    """ Something in the model that the log-density in JAX does not cover yet """
+    """
+    Something in the model that the log-density in JAX does not cover yet
+
+    It exists so that the reason can be given to the user rather than a JAX error.
+    """
     pass
 
 

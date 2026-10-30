@@ -1,5 +1,9 @@
 """
 Theoretical networks, useful for comparison against analytic results and for debugging.
+
+A compartmental run can use `StaticNet` and those built on it only by their mean number of contacts; the others run as agents only.
+
+Used with: agents and compartments; declared and coded modules
 """
 import inspect
 import numpy as np
@@ -31,6 +35,7 @@ class ErdosRenyiNet(ss.DynamicNetwork):
     Args:
         p (float):      probability that each possible edge is created per timestep
         dur (dur/Dist): how long edges persist; 0 means new edges each timestep
+        pars (dict): the same parameters, as a dict
 
     Examples:
         ```python
@@ -111,6 +116,11 @@ class NullNet(ss.Network):
         return
 
     def init_pre(self, sim):
+        """ Initialize the network, with the number of people from the sim if not given
+
+        Args:
+            sim (Sim): the sim being initialized
+        """
         super().init_pre(sim)
         popsize = sim.pars['n_agents']
         if self.n is None:
@@ -167,6 +177,11 @@ class StaticNet(ss.Network):
         return
 
     def init_pre(self, sim):
+        """ Initialize the network, with a random (Erdős–Rényi) graph if none is given
+
+        Args:
+            sim (Sim): the sim being initialized
+        """
         super().init_pre(sim)
         self.n_agents = sim.pars.n_agents
         if self.nx_graph is None:
@@ -178,7 +193,11 @@ class StaticNet(ss.Network):
         return
 
     def mean_contacts(self, sim):
-        """ The mean degree of its graph (see `ss.Network.mean_contacts()`), or for a random graph not yet made, its number of contacts or its chance of each pair """
+        """ The mean degree of its graph (see `ss.Network.mean_contacts()`), or for a random graph not yet made, its number of contacts or its chance of each pair
+
+        Args:
+            sim (Sim): the sim being initialized
+        """
         graph = self.nx_graph
         if graph is not None and not callable(graph):
             return 2*graph.number_of_edges()/max(graph.number_of_nodes(), 1), 'the mean degree of its graph'
@@ -204,6 +223,11 @@ class StaticNet(ss.Network):
         return
 
     def validate_pop(self, n_agents):
+        """ Check that the graph fits the number of agents and has edges
+
+        Args:
+            n_agents (int): the number of agents
+        """
         n_nodes = self.nx_graph.number_of_nodes()
         if n_nodes > n_agents:
             errmsg = (f"Please ensure the number of nodes in graph ({n_nodes}) is less than "
@@ -251,6 +275,7 @@ class SmallWorldNet(StaticNet):
     Args:
         k (int): the number of neighbors of each agent
         p (float): the probability of rewiring each contact
+        pars (dict): the same parameters, as a dict
     """
     def __init__(self, k=4, p=0.1, pars=None, **kwargs):
         super().__init__(graph=small_world, pars=pars, p=p, k=k, **kwargs)
@@ -266,6 +291,7 @@ class ScaleFreeNet(StaticNet):
 
     Args:
         m (int): the number of contacts each new agent makes
+        pars (dict): the same parameters, as a dict
     """
     def __init__(self, m=2, pars=None, **kwargs):
         super().__init__(graph=scale_free, pars=pars, m=m, **kwargs)

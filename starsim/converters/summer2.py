@@ -7,7 +7,7 @@ the JSON written by this file run as a script (see below), which runs in summer2
 flow becomes one transition with the matching kind of rate, each `stratify_with()` a
 stratification (with its population split, flow adjustments, infectiousness
 adjustments, and mixing matrix), and the derived outputs can be worked out from the
-results with `ss.io.summer2.outputs()`.
+results with `ss.converters.summer2.outputs()`.
 
 Writing the JSON: run as a script, this file runs where summer2 is installed, and
 needs neither Starsim nor Sciris, so it can be copied into any summer2 environment.
@@ -21,6 +21,8 @@ before it is run (it need not be run), with each flow as it was added (before
 stratification), the stratifications in the order they were applied, and the initial
 number in every stratified compartment. A function of time (summer2's linear and
 sigmoidal interpolations) is written as its values over time.
+
+Used with: compartments; declared modules
 """
 import os
 import sys
@@ -298,7 +300,7 @@ def load_summer2(source, pars=None, verbose=None):
     sim = build(src, verbose=verbose)
     sim.imported.outputs = outs
     if outs:
-        sim.imported.choices.append(f'  {len(outs)} derived outputs: worked out from the results by ss.io.summer2.outputs(sim)')
+        sim.imported.choices.append(f'  {len(outs)} derived outputs: worked out from the results by ss.converters.summer2.outputs(sim)')
     return sim
 
 
@@ -522,7 +524,14 @@ def model_dict(model, pars=None):
 
 
 def dump(model, filename, pars=None):
-    """ Write a summer2 model to a JSON file, with the values of its parameters (pars, else their defaults) """
+    """
+    Write a summer2 model to a JSON file, with the values of its parameters (pars, else their defaults)
+
+    Args:
+        model (`CompartmentalModel`): the summer2 model
+        filename (str): the JSON file to write
+        pars (dict): the values of its parameters
+    """
     d = model_dict(model, pars=pars) # Before opening the file, so a failure leaves no empty file
     with open(filename, 'w') as f:
         json.dump(d, f, indent=1)

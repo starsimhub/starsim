@@ -1,5 +1,9 @@
 """
 Places and the movement between them: a geography (`ss.geo.geography`), and movement between its places (`ss.geo.Mobility`, from a matrix, a data file of moves, or a movement model: `ss.geo.gravity` or `ss.geo.radiation`)
+
+These exist so that a model of more than one place can be built from named places and a standard movement model. Movement applies to a declared model stratified by place (`sir.stratify(patch=...)`); a geography can also be used by a network (`ssl.GeoNet`), for a disease of either kind.
+
+Used with: agents and compartments; declared and coded modules
 """
 import numpy as np
 import pandas as pd
@@ -149,7 +153,11 @@ class gravity:
         return f'gravity({amount}a={self.a}, b={self.b}, c={self.c})'
 
     def matrix(self, strat):
-        """ The movement between each pair of levels of a stratification, from its geography """
+        """ The movement between each pair of levels of a stratification, from its geography
+
+        Args:
+            strat (Strat): the stratification, whose geography gives the populations and distances
+        """
         place = strat.geo
         if place is None or place.distances is None or place.pop is None:
             raise ValueError(f'ss.geo.gravity() is used on "{strat.name}", which has no geography to give the populations and distances it needs.\n'
@@ -196,7 +204,11 @@ class radiation:
         return f'radiation({amount})'
 
     def matrix(self, strat):
-        """ The movement between each pair of levels of a stratification, from its geography """
+        """ The movement between each pair of levels of a stratification, from its geography
+
+        Args:
+            strat (Strat): the stratification, whose geography gives the populations and distances
+        """
         place = strat.geo
         if place is None or place.distances is None or place.pop is None:
             raise ValueError(f'ss.geo.radiation() is used on "{strat.name}", which has no geography to give the populations and distances it needs.\n'
@@ -400,7 +412,11 @@ class Mobility:
                           states=states[set_of], to_states=to_states[set_of], sets=sets, set_of=set_of)
 
     def matrix(self, strat):
-        """ The movement between each pair of levels, with nothing on the diagonal """
+        """ The movement between each pair of levels, with nothing on the diagonal
+
+        Args:
+            strat (Strat): the stratification
+        """
         if self.data is not None:
             errormsg = 'A movement register has no matrix of rates; its events are applied on their dates'
             raise ValueError(errormsg)
@@ -415,13 +431,21 @@ class Mobility:
         return out
 
     def coupling(self, strat):
-        """ For a moving force of infection: the share of the force of infection of each level (columns) that each level (rows) receives, as a sparse array """
+        """ For a moving force of infection: the share of the force of infection of each level (columns) that each level (rows) receives, as a sparse array
+
+        Args:
+            strat (Strat): the stratification
+        """
         out = spsp.csr_array(self.time_share(strat).T) # Each place keeps its own share, and receives what each other place's force sends it
         out.sort_indices()
         return out
 
     def time_share(self, strat):
-        """ For commuting: the share of their time that people from each level (rows) spend in each level; rows sum to 1. A sparse array, since most pairs of places share no one """
+        """ For commuting: the share of their time that people from each level (rows) spend in each level; rows sum to 1. A sparse array, since most pairs of places share no one
+
+        Args:
+            strat (Strat): the stratification
+        """
         out = self.matrix(strat)
         total = np.asarray(out.sum(axis=1)).ravel()
         away = None if self.away is None else float(self.away) # A fitted ss.par, as its value

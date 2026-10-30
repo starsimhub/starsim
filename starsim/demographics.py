@@ -1,5 +1,9 @@
 """
-Define pregnancy, deaths, etc.
+Births, deaths, migration, and pregnancy
+
+These exist so that the population can change during a run. `ss.Births` and `ss.Deaths` are written as code, `ss.birth()` and the like declare the same flows for the whole population, and `ss.Pregnancy` is declared, so that conception and delivery are transitions that other modules can modify or respond to.
+
+Used with: agents and compartments; declared and coded modules
 """
 import numpy as np
 import starsim as ss
@@ -191,6 +195,11 @@ class Flows(Demographics):
         return
 
     def init_pre(self, sim):
+        """ Note any rates given as bare numbers
+
+        Args:
+            sim (Sim): the sim being initialized
+        """
         super().init_pre(sim)
         for tr in self.transitions:
             say_bare(getattr(tr, 'rate_note', None), sim) # Births and deaths given as bare numbers
@@ -218,6 +227,7 @@ class Births(Demographics):
         max_age (float): the age before which a mother is younger (default 50)
         rate_units (float): what the rates are per: 1000 (or 1e-3) for per 1,000 people, 1 for per person; by default, per 1,000 if the largest rate is above 1, otherwise per person, with a warning if it could be either (see `ss.demographics.infer_rate_units()`). The crude birth rate result (`cbr`) is in the same units.
         metadata (dict): dict with data column mappings for birth rate data (if birth_rate is a dataframe)
+        pars (dict): the same parameters, as a dict
 
     Examples:
         ```python
@@ -271,6 +281,11 @@ class Births(Demographics):
         return birth_rate
 
     def init_pre(self, sim):
+        """ Note if the birth rates are far apart in time
+
+        Args:
+            sim (Sim): the sim being initialized
+        """
         super().init_pre(sim)
         if not self.named_data:
             note_sparse(self.birth_rows, self.t.yearvec, sim, 'birth rates')
@@ -523,6 +538,11 @@ class Deaths(Demographics):
         return p_death
 
     def init_pre(self, sim):
+        """ Note if the death rates are far apart in time
+
+        Args:
+            sim (Sim): the sim being initialized
+        """
         super().init_pre(sim)
         if not self.named_data:
             note_sparse(self.death_rows, self.t.yearvec, sim, 'death rates')
@@ -621,6 +641,7 @@ class Pregnancy(Demographics, ss.Disease):
         p_abortion (float): chance a pregnancy ends in an abortion, at conception
         burnin (bool): whether women are pregnant at the start, at the gestational ages they would have reached (default True; see `burnin_plan()`); agents only
         metadata (dict): data column mappings for fertility rate data if a dataframe is supplied
+        pars (dict): the same parameters, as a dict
 
     Examples:
         ```python
@@ -805,6 +826,11 @@ class Pregnancy(Demographics, ss.Disease):
         return a
 
     def init_pre(self, sim):
+        """ Prepare the fertility rates, then initialize as a disease
+
+        Args:
+            sim (Sim): the sim being initialized
+        """
         pars = self.pars
         if pars.fertility_rate is not None:
             self.fertility_rate_data = standardize_fertility_data(self)
@@ -841,6 +867,9 @@ class Pregnancy(Demographics, ss.Disease):
         (abortion, losses, and delivery, with no births), so the start has the gestational ages and the first steps
         their deliveries. In the compartmental form, the same share
         of each group, less the abortions and the losses on the way, is spread evenly over gestation (see `ss.solvers.Compartmental.backfill_burnin()`).
+
+        Args:
+            engine (Engine): the engine running this module
         """
         if not self.pars.burnin:
             return None
@@ -884,6 +913,9 @@ class Pregnancy(Demographics, ss.Disease):
         (`ss.birth(per=preg.delivery)`). The losses do not read the gestational age (`P.time`): the loss rate is split
         between miscarriage and stillbirth by the share of the mean gestation below `loss_threshold`. It has no fetuses,
         no links between mothers and children, no breastfeeding, no preterm risk, and no deaths at delivery (`p_maternal_death`). Returns the note that says so
+
+        Args:
+            sim (Sim): the sim being initialized
         """
         g = self.graph
         trs = g.transitions
@@ -949,7 +981,12 @@ class Pregnancy(Demographics, ss.Disease):
         return ss.uids(auids[keep])
 
     def also_happened(self, name, uids):
-        """ A delivery happens to the fetuses as well as the mother, before they are born, so ss.on(preg.delivery) can remove a fetus as a stillbirth """
+        """ A delivery happens to the fetuses as well as the mother, before they are born, so ss.on(preg.delivery) can remove a fetus as a stillbirth
+
+        Args:
+            name (str): the name of the transition
+            uids (array): the agents it happened to
+        """
         return self._unborn(uids) if self.fetus and name == 'delivery' else None
 
     def _conceive(self, moms, ti):
@@ -1032,7 +1069,12 @@ class Pregnancy(Demographics, ss.Disease):
         return
 
     def lactate(self, moms, ti):
-        """ At a live birth (agents): each mother breastfeeds, or breastfeeds again, with `p_breastfeed`, for `dur_breastfeed` from step `ti` """
+        """ At a live birth (agents): each mother breastfeeds, or breastfeeds again, with `p_breastfeed`, for `dur_breastfeed` from step `ti`
+
+        Args:
+            moms (array): the mothers who gave birth
+            ti (int): the step of the birth
+        """
         fed = self.pars.p_breastfeed.rvs(moms)
         self.lactating[moms] = fed
         self.ti_weaned[moms[fed]] = ti + self.pars.dur_breastfeed.rvs(moms[fed])
@@ -1055,7 +1097,13 @@ class Pregnancy(Demographics, ss.Disease):
         return
 
     def make_children(self, tr, parents, ti):
-        """ As agents, at a delivery: the children of the mothers (see `ss.solvers.Agents.step_per()`), and the events on the mothers """
+        """ As agents, at a delivery: the children of the mothers (see `ss.solvers.Agents.step_per()`), and the events on the mothers
+
+        Args:
+            tr (Transition): the transition that makes the children
+            parents (array): the mothers
+            ti (int): the step of the delivery
+        """
         engine = self.engine
         ppl = self.sim.people
         self.parity[parents] += 1
@@ -1096,6 +1144,11 @@ class Pregnancy(Demographics, ss.Disease):
         Reschedule the deliveries of some pregnant women to a step (its index, as `ti_exit_P` reads; each scheduled exit of P is the delivery: losses are
         rates, which compete with it), with the gestational age they will have then (`dur_gestation`): `weeks` if given,
         otherwise the weeks from conception to that step. A step already past is the next step, the first a delivery can be taken in.
+
+        Args:
+            uids (array): the women to reschedule
+            ti (int/array): the step of the delivery, for all of them or for each
+            weeks (float/array): the gestational age at delivery, in weeks
         """
         uids = ss.uids(uids)
         ti = np.broadcast_to(np.asarray(ti, dtype=float), (len(uids),))
@@ -1190,6 +1243,9 @@ class Pregnancy(Demographics, ss.Disease):
         As agents: take the dead out of the states. The death of the last fetus of a pregnancy is a miscarriage or a
         stillbirth for the mother, by gestational age; a mother who dies while pregnant loses her fetuses, counted the
         same way; and a death before the age of 1 is an infant death for the mother.
+
+        Args:
+            uids (array): the agents who died
         """
         if not self.abm or not len(uids):
             return super().step_die(uids)
@@ -1252,6 +1308,9 @@ class Pregnancy(Demographics, ss.Disease):
 
         An override can instead take `(sim, uids)` and return a rate for each of those agents (as agents only), e.g.
         `ss.peryear(table[self.method[uids]])`, rather than one for every slot of the raw arrays.
+
+        Args:
+            sim (Sim): the sim
         """
         pars = self.pars
         ppl = sim.people

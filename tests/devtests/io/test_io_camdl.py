@@ -11,7 +11,7 @@ import sciris as sc
 import pytest
 import starsim as ss
 import paths
-from starsim.io.camdl import load_camdl
+from starsim.converters.camdl import load_camdl
 
 lfd = paths.lfd # The examples, with the originals' results, if this folder is here
 camdlc = lfd / '_envs/camdl/bin/camdlc' if (lfd / '_envs/camdl/bin/camdlc').exists() else shutil.which('camdlc') or 'camdlc' # The one built for the examples; another on the PATH may be older

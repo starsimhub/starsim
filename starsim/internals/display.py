@@ -1,5 +1,9 @@
 """
-How a model is shown: `describe()`, `diagram()`, and `equations()`; and how a sim is (`sim.describe()`, `sim.what_modifies()`, `sim.check_dt()`)
+Not for the user: how a model is shown: `describe()`, `diagram()`, and `equations()`; and how a sim is (`sim.describe()`, `sim.what_modifies()`, `sim.check_dt()`)
+
+Users reach these through `ss.Disease` and `ss.Sim`. They are kept apart from the graph, which holds the model, so showing it does not change it. A declared model is shown in full; a module written as code is shown by what the sim knows of it.
+
+Used with: agents and compartments; declared and coded modules
 """
 import os
 import sys
@@ -37,6 +41,8 @@ class Progress:
     """
     The progress of a run as it goes: a bar redrawn in place in a terminal or a notebook, or otherwise (e.g. to a
     file) a line every tenth of the run, or every `verbose` share of it for a fraction (e.g. `verbose=0.05`)
+
+    It exists to give one progress display for a sim, in any environment.
     """
     width = 30 # Of the bar
 
@@ -153,7 +159,11 @@ class RunsProgress(Progress):
 
 
 class Share:
-    """ How far one of a MultiSim's runs has got, as the run's `sim.progress`: put in `store` (see `RunsProgress`) at most ten times a second, and shown with `show()` if given (when run in this process) """
+    """
+    How far one of a MultiSim's runs has got, as the run's `sim.progress`: put in `store` (see `RunsProgress`) at most ten times a second, and shown with `show()` if given (when run in this process)
+
+    It exists so that a run in another process can report its progress.
+    """
     def __init__(self, sim, store, ind, show=None):
         self.sim = sim
         self.store = store

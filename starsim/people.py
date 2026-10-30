@@ -1,5 +1,9 @@
 """
-Defines the People class and functions associated with making people
+The people in a sim (`ss.People`), lazy references to their properties (`ss.ppl`), and how they are made
+
+People hold what every module shares, such as age, sex, and who is alive. In a compartmental run, each row is a group of people rather than an agent.
+
+Used with: agents and compartments; declared and coded modules
 """
 import numpy as np
 import pandas as pd
@@ -34,6 +38,10 @@ class LazyPeople:
         """
         `ss.ppl.<name>`, or `default` for everyone if nothing adds the property `<name>` to the people, e.g. one that a
         module adds (`people.add_state()`), read by a rate whether or not that module is in the sim
+
+        Args:
+            name (str): the name of the property
+            default (float): the value for everyone if nothing adds the property
 
         **Example**::
 
@@ -322,6 +330,11 @@ class People:
         return engine.n_people(total=False) if hasattr(engine, 'n_people') else np.full(self.n_agents_init, np.nan)
 
     def brief(self, output=False):
+        """ Print a one-line summary of the people
+
+        Args:
+            output (bool): if True, return the text rather than printing it
+        """
         n = self.n_agents_init
         if self.grouped and self.initialized: # A compartmental run: the rows are groups of people
             age = '' if 'age' in self.__dict__.get('_no_groups', []) else f'; age={self.age.mean():0.1f}±{self.age.std():0.1f} over the groups' # Not when unstratified by age
@@ -475,6 +488,8 @@ class People:
         - `People.<module>` will be a reference to the module itself, enabling access via `people.hiv.susceptible`
         - `People.states['<module>.<state>']` will be a reference to the state, enabling access via `people.states['hiv.susceptible']`
 
+        Args:
+            module (Module): the module to add
         """
 
         # Connect the module as People attribute
@@ -667,6 +682,9 @@ class People:
         """
         Return the scaled versions of the flows -- replacement for len(inds)
         followed by scale factor multiplication
+
+        Args:
+            inds (array): the agents to count
         """
         return self.scale[inds].sum()
 
@@ -718,7 +736,11 @@ class People:
         return
 
     def died_of(self, cause):
-        """ The agents who died in this step of a cause (a module or a name), once each death is resolved to one cause (see `request_death()`) """
+        """ The agents who died in this step of a cause (a module or a name), once each death is resolved to one cause (see `request_death()`)
+
+        Args:
+            cause (Module/str): the module, or its name
+        """
         name = cause.name if isinstance(cause, ss.Module) else cause
         return self._died_of.get(name, ss.uids())
 
@@ -767,6 +789,9 @@ class People:
         """
         Request an agent to be removed from the simulation
         Similar to request_death, but in this case the agent will be recorded as removed instead of dead
+
+        Args:
+            uids (array): the agents to remove
         """
         self.ti_removed[uids] = self.sim.ti
         return
@@ -1037,6 +1062,9 @@ class People:
     def person(self, ind):
         """
         Get all the properties for a single person.
+
+        Args:
+            ind (int): the index of the person
 
         Examples:
             ```python

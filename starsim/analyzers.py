@@ -3,6 +3,8 @@ Define analyzers, which are used to track variables when the sim is run.
 
 Analyzers typically include things like additional tracking states by age or another
 conditional.
+
+Used with: agents and compartments; declared and coded modules
 """
 import numpy as np
 import sciris as sc
@@ -79,7 +81,11 @@ class infection_log(Analyzer):
         return self.log.to_df()
 
     def plot(self, **kwargs):
-        """ Plot all of the infection logs """
+        """ Plot all of the infection logs
+
+        Args:
+            kwargs (dict): passed to `ss.plot_args()`, for the figure and plot options
+        """
         kw = ss.plot_args(kwargs, alpha=0.7)
         with ss.style(**kw.style):
             fig,axs = sc.getrowscols(len(self.logs), make=True, **kw.fig)
@@ -102,6 +108,7 @@ class infection_log(Analyzer):
             framerate (float): how many frames per second to display
             clear (bool): whether to clear the frame on each step
             cmap (str): the colormap to use
+            kwargs (dict): passed to `ss.plot_args()`
         """
         # Get data
         log = self.logs[key]

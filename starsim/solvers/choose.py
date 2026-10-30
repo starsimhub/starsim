@@ -1,5 +1,9 @@
 """
-Choosing the solver: which engine runs a declared model, and why (`choose_solver()`), and the steps that build a declared model before it is run (parameters by name, births and deaths of the population, a named population, the unit, life tables)
+Not for the user: choosing the solver: which engine runs a declared model, and why (`choose_solver()`), and the steps that build a declared model before it is run (parameters by name, births and deaths of the population, a named population, the unit, life tables)
+
+It exists so that a model need not say how it runs: the choice is made from what it holds, and the reason is kept. Modules written as code are taken into account, and get an engine too.
+
+Used with: agents and compartments; declared and coded modules
 """
 import inspect
 import importlib
@@ -25,6 +29,8 @@ class Undeclared(Transmission):
     code is all of it. It gives that code what a declared disease's engine gives its own, as agents: the modifiers and products on its
     `rel_sus`, `rel_trans`, and parameters (`dis.current_value()`, and `self.pars` while it runs), transmission over the networks (`ss.Infection.transmit_route()`; see `Transmission`),
     and, for a delivery, the people its conditions select and a cure (`force()`)
+
+    It exists so that code written for a disease can act on any disease in the same way.
     """
     def nothing(self):
         """ Nothing to run: each step of the lifecycle is the disease's own code """
@@ -124,7 +130,11 @@ def make_engine(module, sim):
 
 
 class MixedNetworks(ss.ndict):
-    """ The networks of a compartmental run, which are none: they became contact rates; asking for one by name says where it is """
+    """
+    The networks of a compartmental run, which are none: they became contact rates; asking for one by name says where it is
+
+    It exists to turn a confusing error into a useful one.
+    """
     def __init__(self, names=None):
         super().__init__()
         self.__dict__['_mixed_names'] = list(names or [])

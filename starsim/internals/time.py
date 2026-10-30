@@ -1,5 +1,7 @@
 """
-Functions and classes for handling time
+Durations and rates, each with its unit (`ss.days`, `ss.peryear`, `ss.probperyear`, ...), and plotting dates and durations with Matplotlib
+
+Units are kept with the values so that a module, whatever its timestep, reads a parameter correctly, and mistakes such as adding a rate to a duration raise an error.
 
 Hierarchy of TimePars:
 
@@ -28,6 +30,8 @@ TimePar  # All time parameters
         ├── freqpermonth
         └── freqperyear
 ```
+
+Used with: agents and compartments; declared and coded modules
 """
 import types
 import warnings
@@ -128,7 +132,11 @@ def wrong_dimension(a, op, b):
 #%% Define TimePars
 
 class TimePar:
-    """ Parent class for all TimePars -- dur, Rate, etc. """
+    """
+    Parent class for all TimePars -- dur, Rate, etc.
+
+    It holds what durations and rates share: a value, a unit, conversion, and arithmetic.
+    """
     base = None # e.g. 'years', 'days', etc
     timepar_type = None # 'dur' or 'rate'
     timepar_subtype = None # e.g. 'datedur' or 'prob'
@@ -335,12 +343,22 @@ Examples:
         return out
 
     def to(self, unit):
-        """ Convert this TimePar to one of a different class """
+        """
+        Convert this TimePar to one of a different class
+
+        Args:
+            unit (str/type): the unit to convert to, e.g. 'year' or `ss.years`
+        """
         unit = get_unit_class(self.timepar_type, unit)
         return unit(self)
 
     def set_default_dur(self, dur):
-        """ Set the default duration, e.g. `module.dt`, so `.to_dt()` and `.to_prob()` can be used with no input """
+        """
+        Set the default duration, e.g. `module.dt`, so `.to_dt()` and `.to_prob()` can be used with no input
+
+        Args:
+            dur (`ss.dur`): the default duration
+        """
         self.default_dur = dur
         return self
 
@@ -389,7 +407,12 @@ Examples:
 
     @classmethod
     def to_base(cls, other):
-        """ Class method to convert another TimePar object to this TimePar's base units; in most cases """
+        """
+        Class method to convert another TimePar object to this TimePar's base units; in most cases
+
+        Args:
+            other (`ss.TimePar`): the value to convert
+        """
         if isinstance(other, TimePar):
             return getattr(other, cls.base) # e.g. other.years
         else:
@@ -492,7 +515,12 @@ class dur(TimePar):
     __hash__ = TimePar.__hash__ # Defining __eq__ below would otherwise remove it
 
     def to_dt(self, dt=None):
-        """ Convert this duration to a number of timesteps; see `TimePar.to_dt()` """
+        """
+        Convert this duration to a number of timesteps; see `TimePar.to_dt()`
+
+        Args:
+            dt (`ss.dur`): the timestep; if None, the module's `dt`
+        """
         return self/self._get_dt(dt)
 
     @property
@@ -654,6 +682,8 @@ class Rate(TimePar):
     Store a value per unit time e.g., 2 per day
     - self.value - the numerator (e.g., 2) - a scalar float
     - self.unit - the denominator (e.g., 1 day) - a dur object
+
+    It exists so that a rate converts correctly to a different unit or timestep.
     """
     base = None
     factors = None
@@ -749,7 +779,12 @@ class Rate(TimePar):
         return TypeError(errormsg)
 
     def to_dt(self, dt=None):
-        """ Convert this rate to its per-timestep value; see `TimePar.to_dt()` """
+        """
+        Convert this rate to its per-timestep value; see `TimePar.to_dt()`
+
+        Args:
+            dt (`ss.dur`): the timestep; if None, the module's `dt`
+        """
         return self*self._get_dt(dt)
 
     def to(self, unit):
@@ -764,6 +799,9 @@ class Rate(TimePar):
         Note that for `ss.prob` the conversion is not linear, since a probability has to be
         converted via the underlying rate: `ss.probperyear(0.5).to(ss.probpermonth)` gives
         `probpermonth(0.0561)`, not `probpermonth(0.0417)`. This matches `prob.to_prob()`.
+
+        Args:
+            unit (str/type): the rate class or duration unit to convert to, e.g. `ss.permonth` or 'month'
         """
         if unit is None:
             errormsg = f'Cannot convert {self!r} to unit None; specify the unit to convert to, e.g. rate.to(ss.permonth) or rate.to("month")'
@@ -938,7 +976,12 @@ class Rate(TimePar):
             raise TypeError(errormsg)
 
     def to_events(self, dur=None):
-        """ Simple multiplication: calculate the number of events over the time period """
+        """
+        Simple multiplication: calculate the number of events over the time period
+
+        Args:
+            dur (`ss.dur`/float): the period; if None, the default duration
+        """
         if dur is None:
             dur = self.default_dur # May also be None
 
@@ -1261,7 +1304,12 @@ class peract:
         return
 
     def resolve(self, net):
-        """ The value for each direction of a network, in the order of `net.directions`; checks the keys against them """
+        """
+        The value for each direction of a network, in the order of `net.directions`; checks the keys against them
+
+        Args:
+            net (`ss.Network`): the network
+        """
         name = getattr(net, 'name', net)
         dirs = net.directions
         if self.value is not None:
@@ -1299,7 +1347,12 @@ class peract:
 # Value at which to switch over from interpreting a value from a year duration to a calendar year
 cal_year_threshold = 1900
 def assume_cal_year(val):
-    """ Whether a value should be interpreted as a calendar year -- by default, a number greater than 1900 """
+    """
+    Whether a value should be interpreted as a calendar year -- by default, a number greater than 1900
+
+    Args:
+        val (float/`ss.date`/`ss.dur`): the value
+    """
     is_date    = isinstance(val, ss.date) # e.g. ss.date('1990.1.1')
     is_cal_dur = isinstance(val, ss.dur) and val.years >= cal_year_threshold # e.g. ss.years(2000)
     is_cal_num = sc.isnumber(val) and val >= cal_year_threshold # e.g. 2010
@@ -1308,6 +1361,7 @@ def assume_cal_year(val):
 
 # Durations
 class years(dur):
+    """ A duration in years, e.g. `ss.years(5)`; the default unit, which also reads a date as a decimal year """
     base = 'years'
     def __init__(self, value=1, base=None):
         # Convert date or date-string input(s) to decimal years, since dates only map cleanly onto years
@@ -1326,9 +1380,15 @@ class years(dur):
         else:
             return super().__str__()
 
-class months(dur): base = 'months'
-class weeks(dur):  base = 'weeks'
-class days(dur):   base = 'days'
+class months(dur):
+    """ A duration in months, e.g. `ss.months(6)` """
+    base = 'months'
+class weeks(dur):
+    """ A duration in weeks, e.g. `ss.weeks(6)` """
+    base = 'weeks'
+class days(dur):
+    """ A duration in days, e.g. `ss.days(6)` """
+    base = 'days'
 
 # Duration shortcuts
 year = years(1)
@@ -1337,22 +1397,46 @@ week = weeks(1)
 day = days(1)
 
 # per
-class perday(per):   base = 'days'
-class perweek(per):  base = 'weeks'
-class permonth(per): base = 'months'
-class peryear(per):  base = 'years'
+class perday(per):
+    """ An instantaneous rate per day, e.g. `ss.perday(0.1)` """
+    base = 'days'
+class perweek(per):
+    """ An instantaneous rate per week, e.g. `ss.perweek(0.1)` """
+    base = 'weeks'
+class permonth(per):
+    """ An instantaneous rate per month, e.g. `ss.permonth(0.1)` """
+    base = 'months'
+class peryear(per):
+    """ An instantaneous rate per year, e.g. `ss.peryear(0.1)` """
+    base = 'years'
 
 # prob
-class probperday(prob):   base = 'days'
-class probperweek(prob):  base = 'weeks'
-class probpermonth(prob): base = 'months'
-class probperyear(prob):  base = 'years'
+class probperday(prob):
+    """ A probability per day, e.g. `ss.probperday(0.1)` """
+    base = 'days'
+class probperweek(prob):
+    """ A probability per week, e.g. `ss.probperweek(0.1)` """
+    base = 'weeks'
+class probpermonth(prob):
+    """ A probability per month, e.g. `ss.probpermonth(0.1)` """
+    base = 'months'
+class probperyear(prob):
+    """ A probability per year, e.g. `ss.probperyear(0.1)` """
+    base = 'years'
 
 # freq
-class freqperday(freq):   base = 'days'
-class freqperweek(freq):  base = 'weeks'
-class freqpermonth(freq): base = 'months'
-class freqperyear(freq):  base = 'years'
+class freqperday(freq):
+    """ A number of events per day, e.g. `ss.freqperday(2)` """
+    base = 'days'
+class freqperweek(freq):
+    """ A number of events per week, e.g. `ss.freqperweek(2)` """
+    base = 'weeks'
+class freqpermonth(freq):
+    """ A number of events per month, e.g. `ss.freqpermonth(2)` """
+    base = 'months'
+class freqperyear(freq):
+    """ A number of events per year, e.g. `ss.freqperyear(2)` """
+    base = 'years'
 
 #%% Class mappings
 
@@ -1360,7 +1444,13 @@ dur_classes = {cls.base:cls for cls in [days, weeks, months, years]} # By normal
 rate_classes = {cls.__name__:cls for cls in [perday, perweek, permonth, peryear, probperday, probperweek, probpermonth, probperyear, freqperday, freqperweek, freqpermonth, freqperyear]}
 
 def get_unit_class(which, unit):
-    """ Take a string or class and return the corresponding TimePar class; which is 'dur', 'rate', or 'full' (either) """
+    """
+    Take a string or class and return the corresponding TimePar class; which is 'dur', 'rate', or 'full' (either)
+
+    Args:
+        which (str): 'dur', 'rate', or 'full' (either)
+        unit (str/type/`ss.TimePar`): the unit, e.g. 'year' or `ss.years`
+    """
     if isinstance(unit, type) and issubclass(unit, ss.TimePar):
         return unit
     elif isinstance(unit, ss.TimePar):
@@ -1381,11 +1471,21 @@ def get_unit_class(which, unit):
         raise TypeError(errormsg)
 
 def get_dur_class(unit):
-    """ Helper function to get a Dur class """
+    """
+    Helper function to get a Dur class
+
+    Args:
+        unit (str/type): the unit, e.g. 'year' or `ss.years`
+    """
     return get_unit_class('dur', unit)
 
 def get_rate_class(unit):
-    """ Helper function to get a Rate class """
+    """
+    Helper function to get a Rate class
+
+    Args:
+        unit (str/type): the unit, e.g. 'peryear' or `ss.peryear`
+    """
     return get_unit_class('rate', unit)
 
 
@@ -1430,6 +1530,8 @@ class MockAxis():
 class FloatYearLocator(matplotlib.ticker.Locator):
     """
     Locator to calculate tick positions for float year axes
+
+    It exists so that a plot against decimal years gets tick marks at sensible dates.
 
     Matplotlib's AutoDateLocator is the standard way to calculating date-based tick
     positions, incorporating a lot of functionality around sensibly setting the tick intervals
@@ -1503,6 +1605,8 @@ class FloatYearFormatter(sc.ScirisDateFormatter):
     """
     Formatter that renders float years as calendar dates
 
+    It exists so that a plot against decimal years shows dates on its axis.
+
     This class provides the same formatting as sc.ScirisDateFormatter, but works with
     axis values that are float years, rather than matplotlib date values (days since 1970-01-01)
     """
@@ -1520,6 +1624,8 @@ class FloatYearFormatter(sc.ScirisDateFormatter):
 class DateConverter(matplotlib.units.ConversionInterface):
     """
     Starsim date conversion interface for matplotlib
+
+    It exists so that Matplotlib can plot `ss.date` and `ss.dur` values directly.
 
     This class gets registered with matplotlib as the converter for Starsim
     date and DateArray types, allowing them to be used directly as axis values. This achieves

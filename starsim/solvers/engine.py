@@ -1,5 +1,9 @@
 """
-The base of the engines that run a declared model (`Engine`), and what they share
+Not for the user: the base of the engines that run a declared model (`Engine`), and what they share
+
+It exists so that the solvers read one model the same way. What it gives modules that act on a disease (`Effects`) applies to diseases written as code too, through `ss.solvers.Undeclared`.
+
+Used with: agents and compartments; declared and coded modules
 """
 import zlib
 import inspect
@@ -174,6 +178,8 @@ class CountState:
     """
     A state as it is at run time when it holds a count rather than agents
 
+    It exists so that code reading a state, such as `dis.I`, also works in a compartmental run.
+
     Args:
         engine (Engine): the engine that holds the values
         state (`ss.State`): the declared state
@@ -267,7 +273,11 @@ class Evaluating:
 
 
 class Telling:
-    """ The notes and warnings about a layout (of an engine, or of the mixing), which are held while it is made to choose the solver (see `ss.solvers.choose.lay_out()`), and said only once it is used """
+    """
+    The notes and warnings about a layout (of an engine, or of the mixing), which are held while it is made to choose the solver (see `ss.solvers.choose.lay_out()`), and said only once it is used
+
+    It exists so that a layout tried and not used says nothing.
+    """
     unsaid = None # The notes and warnings held, as calls; None to say them at once
 
     def tell(self, func, *args, **kwargs):
@@ -372,6 +382,8 @@ class Effects(sc.prettyobj):
 class Engine(Telling, Effects):
     """
     Base class for the engines that run a graph
+
+    It exists to keep what does not depend on the solver in one place.
 
     Args:
         module (`ss.Module`): the module whose graph is run
@@ -1003,7 +1015,7 @@ class Engine(Telling, Effects):
         funcs = {getattr(f, '__name__', 'a function'):f for f in self.graph.funcs.values()}
         funcs.update({getattr(p.raw, '__name__', 'a function'):p.raw for p in self.graph.all_pars() if callable(p.raw) and not isinstance(p.raw, (ss.Dist, ss.parameters.TimeValue))})
         for fname,func in funcs.items():
-            source = ss.presentation.func_source(func) or ''
+            source = ss.display.func_source(func) or ''
             read = [name for name in modified if re.search(rf'\bpars\.{name}\b|\[[\'"]{name}[\'"]\]', source)]
             if read:
                 ss.note(f'{sc.strjoin(read)} of "{self.mod.name}" {"is" if len(read) == 1 else "are"} changed by a modifier and read inside {fname}: arithmetic on the parameter there (e.g. 1 - {self.mod.name}.pars.{read[0]}) gives the changed value, but float(par), par.value, and par.raw give the value without the change', sim=self.sim)
@@ -2026,6 +2038,8 @@ class Engine(Telling, Effects):
 class StockCtx(sc.prettyobj):
     """
     Evaluates result expressions (sums and ratios of states, and of flows) from the counts after the step
+
+    It exists so that results are worked out the same way for every solver.
 
     Args:
         engine (`ss.solvers.Engine`): the engine
