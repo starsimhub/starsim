@@ -2,7 +2,9 @@
 # Build & publish site to GitHub Pages
 set -euo pipefail # Fail fast if needed
 
-quarto render --cache-refresh
+QUARTO=${QUARTO:-quarto}
+jobs=$($QUARTO render --help | grep -- '--jobs' > /dev/null && echo "--jobs $(( $(nproc) / 2 ))" || true) # Parallel if this Quarto supports it (custom build), serial otherwise (e.g. CI)
+$QUARTO render --cache-refresh $jobs
 
 # Publish the site as a single commit with no history, replacing the gh-pages
 # branch, so old copies of the rendered figures don't accumulate in the repo
