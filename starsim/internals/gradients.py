@@ -21,7 +21,7 @@ import numpy as np
 import sciris as sc
 import starsim as ss
 
-__all__ = [] # Used as ss.gradients
+__all__ = ['jax', 'Run', 'CrossRun', 'run', 'run_sets', 'gradient', 'of_results', 'Density', 'LogDensity', 'Unsupported'] # Used as ss.gradients (not imported into ss); these are the names documented
 
 # The parts of the program that are numbers, and so can be differentiated (the rest says how the flows are put together)
 diff_fields = ['inflow', 'contacts', 'mat', 'sh_val', 'tgt_w', 'crd_w', 'maps', 'mov_rate']

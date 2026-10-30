@@ -2749,13 +2749,14 @@ def fork_unsafe():
 
 def start_method():
     """
-    How to start the workers of `ss.parallel()` and of a calibration: as the platform does (on Linux, by fork, the
-    fastest), unless this process has started threads that a fork can deadlock on (see `fork_unsafe()`); then by
-    forkserver, whose workers start clean (W17)
+    How to start the workers of `ss.parallel()` and of a calibration: on Linux, by fork, the fastest, unless this process
+    has started threads that a fork can deadlock on (see `fork_unsafe()`); then by forkserver, whose workers start clean
+    (W17). Elsewhere (macOS, Windows), as the platform does. Python 3.14 made forkserver the default on Linux, so fork is
+    asked for by name.
     """
-    if mp.get_all_start_methods()[0] != 'fork': # The first is the platform's default
+    if sys.platform == 'darwin' or 'fork' not in mp.get_all_start_methods(): # Fork is not safe on macOS, and Windows has none
         return None
-    return 'forkserver' if fork_unsafe() else None
+    return 'forkserver' if fork_unsafe() else 'fork'
 
 
 def forked(method):

@@ -69,7 +69,7 @@ website:
       - href: contributing/index.qmd
         text: Contributing
       - href: api/index.qmd
-        text: API reference
+        text: API
 
   sidebar: # Each section of the site has its own sidebar, starting with a link home
     - id: gallery
@@ -210,7 +210,8 @@ website:
         - href: index.qmd#top
           text: "**Home**"
         - contributing/index.qmd
-        - contributing/conduct.qmd
+        - href: contributing/conduct.qmd
+          text: Code of conduct
         - contributing/developer.qmd
     - id: api
       collapse-level: 2
@@ -218,7 +219,7 @@ website:
         - href: index.qmd#top
           text: "**Home**"
         - href: api/index.qmd
-          text: "**API reference**"
+          text: "**API**"
         - section: "**Basics**"
           contents:
             - api/sim.qmd
@@ -246,9 +247,10 @@ website:
           contents:
             - api/run.qmd
             - api/fit.qmd
-            - api/internals.gradients.qmd
             - api/geo.qmd
             - api/data.qmd
+        - section: "**I/O**"
+          contents:
             - api/io.qmd
         - section: "**Library**"
           contents:
@@ -272,16 +274,45 @@ website:
             - api/internals.presentation.qmd
             - api/internals.errors.qmd
             - api/internals.debugtools.qmd
+            - api/internals.gradients.qmd
+        - section: "**Solvers**"
+          contents:
+            - api/solvers.agents.qmd
+            - api/solvers.choose.qmd
+            - api/solvers.compartmental.qmd
+            - api/solvers.crossing.qmd
+            - api/solvers.deliveries.qmd
+            - api/solvers.engine.qmd
+            - api/solvers.mixing.qmd
+            - api/solvers.particles.qmd
+    - id: main # The pages that aren't in a section of their own (e.g. Home and Tour): the same links as the navbar. Last, so the pages above keep their own sidebars
+      contents:
+        - href: index.qmd
+          text: Home
+        - href: tour.qmd
+          text: Tour
+        - href: gallery.qmd
+          text: Gallery
+        - href: tutorials.qmd
+          text: Tutorials
+        - href: user_guide.qmd
+          text: User guide
+        - href: whatsnew.qmd
+          text: What's new
+        - href: contributing/index.qmd
+          text: Contributing
+        - href: api/index.qmd
+          text: API
 
 quartodoc:
   package: starsim
-  title: API reference
+  title: API
   style: pkgdown
   dir: api
   parser: google
   render_interlinks: true
   sections:
-    - contents: # No title/desc here: the page already shows an "API reference" heading from the top-level title above (issue #1330)
+    - contents: # No title/desc here: the page already shows an "API" heading from the top-level title above (issue #1330)
         - analyzers
         - arrays
         - conditions
@@ -294,12 +325,6 @@ quartodoc:
         - distributions
         - fit
         - geo
-        - internals.debugtools
-        - internals.errors
-        - internals.expressions
-        - internals.gradients
-        - internals.graph
-        - internals.presentation
         - interventions
         - loop
         - modules
@@ -316,6 +341,9 @@ quartodoc:
         - timeline
         - transitions
         - utils
+    - title: I/O
+      desc: Importing models from other frameworks, and exporting sims to them.
+      contents:
         - kind: page
           path: io
           package: starsim
@@ -324,6 +352,15 @@ quartodoc:
               name: io
               include_imports: true
               children: embedded
+    - title: Internals
+      desc: How Starsim works under the hood, for developers rather than modelers.
+      contents:
+        - internals.debugtools
+        - internals.errors
+        - internals.expressions
+        - internals.gradients
+        - internals.graph
+        - internals.presentation
     - title: Library
       desc: |
         Example and reference modules that build on core Starsim but are not part of it.
@@ -368,6 +405,17 @@ quartodoc:
               include_imports: true
               children: embedded
 
+    - title: Solvers
+      desc: The engines that run declared models, as compartments or as agents.
+      contents:
+        - solvers.agents
+        - solvers.choose
+        - solvers.compartmental
+        - solvers.crossing
+        - solvers.deliveries
+        - solvers.engine
+        - solvers.mixing
+        - solvers.particles
 format:
   html:
     theme: 

@@ -4,7 +4,8 @@ All notable changes to the codebase are documented in this file. Changes that ma
 
 ## Version 4.0.0 (in development)
 
-Starsim 4 adds a way to write a model as declared states and transitions, which can then be run as an ODE, as a stochastic compartmental model, or as agents. Models written as code (`ss.SIR`, custom `step()` methods) still run, but their results are one step later than in Starsim 3, so they agree with it statistically, not number for number. The migration guide is `docs/migration/v3_v4.md`, and every change is listed in detail in `docs/migration/v4_changelog.md`.
+Starsim 4 adds a way to write a model as declared states and transitions, which can then be run as an ODE, as a stochastic compartmental model, or as agents. Models written as code (`ss.SIR`, custom `step()` methods) still run, but their results are one step later than in Starsim 3, so they agree with it statistically, not number for number. The [migration guide](https://starsim.org/v4/migration/v3_v4.html) maps Starsim 3 code to Starsim 4, and every change is listed in detail in the [full changelog](https://starsim.org/v4/migration/v4_changelog.html).
+<!-- V4-PREVIEW: restore the two links above to docs.starsim.org for normal publishing -->
 
 ### New features
 - **States and transitions**: a disease can be declared from `ss.State` and `ss.Transition` objects, written with operators (`S >> I @ beta*I`), and shown with `describe()`, `diagram()` and `equations()`. Diseases can also be written as code, or as a mix of both.
@@ -45,7 +46,8 @@ Starsim 4 adds a way to write a model as declared states and transitions, which 
 - *Migration*: some things that used to pass silently now raise: `at_age=` in a compartmental run needs an age group starting at that age, and an `ss.Infection` with a nonzero `beta` needs a network or mixing pool.
 
 ### Bugfixes and performance
-- Many fixes found by porting models (Covasim, STIsim, HPVsim, FPsim and others) and by reviewing the docs; see `v4_changelog.md`. The main ones: coded and declared diseases now agree under the same solver, and so do agents and compartments; `ss.MixingPool` transmission is fixed; and `ss.parallel()` works from scripts.
+- Many fixes found by porting models (Covasim, STIsim, HPVsim, FPsim and others) and by reviewing the docs; see the [full changelog](https://starsim.org/v4/migration/v4_changelog.html). The main ones: coded and declared diseases now agree under the same solver, and so do agents and compartments; `ss.MixingPool` transmission is fixed; and `ss.parallel()` works from scripts.
+<!-- V4-PREVIEW: restore the link above to docs.starsim.org for normal publishing -->
 - Faster: `ss.by` tables are indexed with NumPy, time-varying values are tabulated once per run, and the agent engine runs compiled passes over the agents.
 
 

@@ -47,7 +47,7 @@ How to report a bug, suggest a feature, or contribute code.
 :::
 
 ::: {.g-col-4}
-[**API reference**](api/index.qmd)
+[**API**](api/index.qmd)
 
 Full details on all classes and functions.
 :::

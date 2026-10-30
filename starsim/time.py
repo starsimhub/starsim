@@ -2,6 +2,8 @@
 Functions and classes for handling time
 
 Hierarchy of TimePars:
+
+```
 TimePar  # All time parameters
 ├── dur  # All durations, units of *time*
 │   ├── days  # Duration with units of days
@@ -25,6 +27,7 @@ TimePar  # All time parameters
         ├── freqperweek
         ├── freqpermonth
         └── freqperyear
+```
 """
 import types
 import warnings

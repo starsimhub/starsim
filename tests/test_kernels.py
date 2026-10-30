@@ -231,7 +231,7 @@ def test_worker_threads():
             assert ss.kernels.fork_unsafe() is None # TBB is safe to fork, so a large sim no longer makes ss.parallel() start its workers by forkserver
         with mock.patch.object(ss.kernels.nb, 'threading_layer', lambda: 'omp'):
             assert 'omp' in ss.kernels.fork_unsafe()
-    ss.kernels.workers_failed(EOFError(), None) # By fork: not this
+    ss.kernels.workers_failed(EOFError(), 'fork') # By fork: not this
     with pytest.raises(RuntimeError, match='__main__'):
         ss.kernels.workers_failed(EOFError('unexpected EOF'), 'forkserver')
     return
