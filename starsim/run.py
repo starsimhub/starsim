@@ -203,7 +203,7 @@ class MultiSim:
 
     @property
     def sims(self):
-        """ The sim of each run, by position (`msim.sims[0]`) or by scenario (`msim.sims['Vaccine']`: its sim, or a list of them if it has several runs; and `msim.sims.items()`), each labelled by its scenario """
+        """ The sim of each run, by position (`msim.sims[0]`) or by scenario (`msim.sims['Vaccine']`: its sim, or a list of them if it has several runs; and `msim.sims.items()`), each labeled by its scenario """
         sims = self.__dict__.get('_sims', self.__dict__.get('sims'))
         runs = self.__dict__.get('runs')
         if isinstance(sims, (Sims, RestartedSims)):
@@ -223,7 +223,7 @@ class MultiSim:
         if not runs or any(b is None for b in runs):
             return None
         if 'size' not in runs[0]: # Several declared modules: by module
-            return sc.objdict({name:Branching([b[name] for b in runs]) for name in runs[0].keys()})
+            return sc.obj({name:Branching([b[name] for b in runs]) for name in runs[0].keys()})
         return Branching(runs)
 
     @property
@@ -265,7 +265,7 @@ class MultiSim:
         return sims, n_runs, pars, draws
 
     def expand(self, sims, n_runs=None, pars=None, draws=False, **opts):
-        """ The sim of each run, each with its own seed (see `run_seed()`) and set of values (see `make_run()`), labelled by its scenario, and a dataframe of the runs; a set of values swept is a scenario of its own, and a draw (`draws=True`) or a seed swept is a run of its sim's scenario """
+        """ The sim of each run, each with its own seed (see `run_seed()`) and set of values (see `make_run()`), labeled by its scenario, and a dataframe of the runs; a set of values swept is a scenario of its own, and a draw (`draws=True`) or a seed swept is a run of its sim's scenario """
         sets = par_sets(pars)
         out = []
         rows = []
@@ -275,7 +275,7 @@ class MultiSim:
                     seed = run_seed(sim.pars.rand_seed, p, j, i, n_runs, draws)
                     row = run_row(sim, p, seed, draws)
                     run = sim if n_runs is None and p is None else self.make_run(sim, p, seed, **opts) # A sim run once as it is is run itself
-                    if row['scenario'] and run.label != row['scenario']: # Labelled by its scenario, e.g. with the values swept
+                    if row['scenario'] and run.label != row['scenario']: # Labeled by its scenario, e.g. with the values swept
                         run.label = row['scenario']
                     out.append(run)
                     rows.append(row)
@@ -504,7 +504,7 @@ class MultiSim:
         rows = {}
         n_scenarios = len(set(self.runs['scenario'])) if self.runs is not None else 1 # A result of only some of the runs (e.g. of an intervention one scenario has) has fewer
         if baseline is not None and (self.runs is None or baseline not in set(self.runs['scenario'])):
-            errormsg = f'No runs are labelled "{baseline}"; the labels are {list(dict.fromkeys(self.runs["scenario"])) if self.runs is not None else []}'
+            errormsg = f'No runs are labeled "{baseline}"; the labels are {list(dict.fromkeys(self.runs["scenario"])) if self.runs is not None else []}'
             raise KeyError(errormsg)
         flat = self.results.flatten(sep='_', columns=True)
         one = key is not None
@@ -686,13 +686,13 @@ class MultiSim:
                 entry = data.get((first.module, first.name))
                 if entry is not None:
                     ax.scatter(entry[0], entry[1], **kw.data)
-                labelled = set()
+                labeled = set()
                 for sim,scenario in zip(sims, scenarios):
                     res = get(sim, first)
                     if res is None: # E.g. of an intervention only some scenarios have
                         continue
-                    plot_kw = sc.mergedicts(dict(color=colors[scenario]), kw.plot, dict(alpha=0.3, lw=1) if several else {}, dict(label=None if scenario in labelled else scenario))
-                    labelled.add(scenario)
+                    plot_kw = sc.mergedicts(dict(color=colors[scenario]), kw.plot, dict(alpha=0.3, lw=1) if several else {}, dict(label=None if scenario in labeled else scenario))
+                    labeled.add(scenario)
                     ax.plot(res.timevec, res.values, **plot_kw)
                 if log:
                     ss.results.log_scale(ax)
@@ -866,7 +866,7 @@ class Branching(sc.prettyobj):
 
 def single_run(sim, ind=0, shrink=True, run_args=None, verbose=None, copy_sim=False, track=False, globaldict=None, show=None):
     """
-    Run one sim, as `run_each()` does: labelled by its position if it has no label, and shrunk afterwards if `shrink`
+    Run one sim, as `run_each()` does: labeled by its position if it has no label, and shrunk afterwards if `shrink`
 
     Args:
         sim (Sim): the sim to run
@@ -905,6 +905,16 @@ def run_each(sims, parallel=True, n_cpus=None, par_args=None, shrink=None, verbo
 
     With `progress` (an `ss.presentation.RunsProgress`), each run puts how far it has got in a dict shared with
     this process (Sciris' `globaldict`), from which the progress is drawn ten times a second.
+
+    Args:
+        sims (list): the sims to run
+        parallel (bool): if True (default), run in parallel; if False, run in a loop
+        n_cpus (int): the number of CPUs to use (default: all of them)
+        par_args (dict): passed to `sc.parallelize()`
+        shrink (bool): whether to shrink each sim after it runs
+        verbose (float): how much to print
+        run_args (dict): passed to `sim.run()`
+        progress (`ss.presentation.RunsProgress`): the progress to draw
 
     Returns the list of run sims (copies, since they are pickled to run in parallel).
     """
@@ -978,15 +988,15 @@ class MultiResults(ss.Results):
 
     def diff(self, baseline):
         """ The difference of every result from the baseline scenario: a dict by scenario, then module, then result """
-        out = sc.objdict()
+        out = sc.obj()
         for modname,key,res in self.walk():
             if baseline in res.scenarios():
                 for label,diff in res.diff(baseline).items():
-                    entry = out.setdefault(label, sc.objdict())
+                    entry = out.setdefault(label, sc.obj())
                     if modname is None:
                         entry[key] = diff
                     else:
-                        entry.setdefault(modname, sc.objdict())[key] = diff
+                        entry.setdefault(modname, sc.obj())[key] = diff
         return out
 
     @classmethod
@@ -1225,7 +1235,7 @@ class RestartedSims(ByScenario, cabc.Sequence):
             runner = self.runners[r]
             p = self.sets[r][(ind // self.n_runs) % len(self.sets[r])]
             sim = sc.dcp(runner)
-            if getattr(self, 'scenarios', None): # Labelled by its scenario, e.g. with the values swept
+            if getattr(self, 'scenarios', None): # Labeled by its scenario, e.g. with the values swept
                 sim.label = self.scenarios[ind] or sim.label
             self.made[ind] = sim.restart(pars=p, rand_seed=self.seeds[ind]).run()
         return self.made[ind]
@@ -1264,8 +1274,8 @@ def restart_runs(sims, n_runs, pars=None, draws=False):
     with at least `jax_runs` runs (and JAX installed) takes them all in one call to JAX
     (see `ss.gradients`), which is faster than the kernels for that many.
     """
-    declared = lambda sim: any(getattr(mod, 'graph', None) is not None for mod in ss.sim.given_modules(sim.pars)) # Only a sim with a declared module can be run whole
-    if not all(declared(sim) for sim in sims):
+    has_graph = lambda sim: any(getattr(mod, 'graph', None) is not None for mod in ss.utils.given_modules(sim.pars)) # Only a sim with a declared module can be run whole
+    if not all(has_graph(sim) for sim in sims):
         return None
     sets = par_sets(pars)
     runners = []
@@ -1342,7 +1352,7 @@ def parallel(*args, n_runs=None, pars=None, priors=False, **kwargs):
         n_runs (int): if provided, run each sim this many times, each with its own seed (the sim's seed, plus 1, 2, ...)
         pars (dict/list): sets of values of parameters to run each sim with: a dict with a list of values for each parameter (`dict(beta=[0.2, 0.3])`), or a list of dicts; each set is run `n_runs` times (default 1), with the same seeds for every set, and each set is a scenario of its own; the values are in `msim.runs` (and can be selected, e.g. `res.select(beta=0.2)`), with each run's `rand_seed`. Seeds can be given too, e.g. `pars=dict(rand_seed=[1, 5, 9])`, as runs of the scenario rather than scenarios
         priors (bool/dict): draw `n_runs` sets of values from the priors of the parameters (`ss.par(prior=...)`, or uniform over its bounds), one run each: a projection that carries the uncertainty in the values; or the draws themselves, as for `pars=` (e.g. from a posterior, as `fit.project()` passes them). Unlike a sweep with `pars=`, the draws are runs of their sim's scenario, each with a seed of its own (the sim's seed, plus 1, 2, ...), so quantiles over a scenario's runs include both the draws and chance
-        kwargs (dict): sims passed as keywords are labelled with the keyword, e.g. `ss.parallel(baseline=s1, vaccine=s2)`;
+        kwargs (dict): sims passed as keywords are labeled with the keyword, e.g. `ss.parallel(baseline=s1, vaccine=s2)`;
             everything else is passed to `ss.MultiSim()`, e.g. `parallel=False`, `n_cpus`, `shrink`
 
     Returns:

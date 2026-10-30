@@ -140,7 +140,7 @@ def water_fill(amount, n, keys):
     return out.reshape(np.shape(amount))
 
 
-class CompartmentalDelivery:
+class CompartmentalDelivery(sc.prettyobj):
     """
     A delivery in a compartmental run (`delivery.compartments`): what differs from agents, where a selection is the share of the people in each state and group
 
@@ -580,11 +580,11 @@ class CompartmentalDelivery:
         """
         d = self.delivery
         delivered, eligible = tally[:, :, 0], tally[:, :, 1]
-        out = sc.objdict(delivered=delivered.sum(axis=-1), eligible=eligible.sum(axis=-1))
+        out = sc.obj(delivered=delivered.sum(axis=-1), eligible=eligible.sum(axis=-1))
         if 'cost' in d.results:
             out.cost = out.delivered*d.product.cost
         out.coverage = np.divide(out.delivered, out.eligible, out=np.zeros_like(out.delivered), where=out.eligible>0)
-        out.groups = sc.objdict()
+        out.groups = sc.obj()
         out.group_ti = group_ti
         if tally_g is not None:
             delivered, eligible = tally_g[:, :, 0], tally_g[:, :, 1]

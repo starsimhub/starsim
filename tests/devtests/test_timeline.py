@@ -74,7 +74,7 @@ def test_units(do_plot=False):
         n_agents = small,
     )
 
-    sims = sc.objdict()
+    sims = sc.obj()
     sims.y = ss.Sim(pars, label='Year', start=2000, stop=2002, dt=1/365, verbose=0)
     sims.d = ss.Sim(pars, label='Day', start='2000-01-01', stop='2002-01-01', dt=ss.days(1), verbose=0)
 

@@ -55,7 +55,7 @@ Starsim has four time types: durations (`ss.days(10)`), hazard rates (`ss.perday
 
 ## The loop
 
-Each step, the loop calls the modules in Starsim's long-standing order (`starsim/loop.py`):
+Each step, the loop calls the modules in Starsim's long-standing order (`starsim/internals/loop.py`):
 
 | Order | Who | What happens |
 |---|---|---|
@@ -92,10 +92,10 @@ schedule     every day: sir
 
 These are the objects that hold a run's state, and that a module written as code reads and writes.
 
-- **Modules.** Diseases, networks, demographics, interventions, connectors, and analyzers are all `ss.Module` (`starsim/modules.py`), with one lifecycle: `init_pre()` and `init_post()`, then the step functions above, then `finalize()`. They differ in what they contain, not in how they are scheduled. See [Modules](architecture_modules.qmd).
+- **Modules.** Diseases, networks, demographics, interventions, connectors, and analyzers are all `ss.Module` (`starsim/internals/modules.py`), with one lifecycle: `init_pre()` and `init_post()`, then the step functions above, then `finalize()`. They differ in what they contain, not in how they are scheduled. See [Modules](architecture_modules.qmd).
 - **Engines.** A declared disease's `step()` hands its transitions to its engine (`ss.solvers.make_engine()`): `Agents` or `Compartmental`, or one that runs nothing for a disease written as code. This is the seam between model and solver: no method of `ss.Disease` asks which solver it has. A subclass that overrides `step()` calls `super().step()`, then does anything else.
 - **People.** As agents, `sim.people` (`starsim/people.py`) has one entry per agent: age, sex, whether alive, and every module's states. In a compartmental run it has one row per group, so `people.age` in a model not stratified by age raises an `ss.CapabilityError` saying to stratify or run as agents.
-- **Arrays.** As agents, a declared state is an `ss.BoolState` over agents (`starsim/arrays.py`), beside the `ss.FloatArr` and others that code adds. `arr[uids]` reads and writes some agents (`ss.uids`), and `arr.values` those alive. Arrays grow as agents are born; the dead leave at the end of the step. Writes by code to a declared state (`sir.I[uids] = True`) are tracked, so counts see them; writes through `.raw`, the NumPy array underneath, are not. See [Array indexing](mechanics_indexing.qmd).
+- **Arrays.** As agents, a declared state is an `ss.BoolState` over agents (`starsim/internals/arrays.py`), beside the `ss.FloatArr` and others that code adds. `arr[uids]` reads and writes some agents (`ss.uids`), and `arr.values` those alive. Arrays grow as agents are born; the dead leave at the end of the step. Writes by code to a declared state (`sir.I[uids] = True`) are tracked, so counts see them; writes through `.raw`, the NumPy array underneath, are not. See [Array indexing](mechanics_indexing.qmd).
 
 ## Errors, warnings, and notes
 

@@ -51,7 +51,7 @@ class infection_log(Analyzer):
     """
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.logs = sc.objdict()
+        self.logs = sc.obj()
         return
 
     def step(self):
@@ -122,7 +122,7 @@ class infection_log(Analyzer):
         colors = sc.vectocolor(len(unique_t), cmap=cmap)
         for i,t in enumerate(unique_t):
             thisdf = df[df.t == t]
-            frames += sc.objdict(t=t, x=thisdf.x, y=thisdf.y, c=colors[i])
+            frames += sc.obj(t=t, x=thisdf.x, y=thisdf.y, c=colors[i])
 
         # Plot
         kw = ss.plot_args(kwargs, alpha=0.7)

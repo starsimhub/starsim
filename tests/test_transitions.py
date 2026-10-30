@@ -58,7 +58,7 @@ def make_cholera():
 @sc.timer()
 def test_forms():
     sc.heading('Testing that every way of writing a model gives the same model')
-    forms = sc.objdict()
+    forms = sc.obj()
 
     # Operators
     S, I, R = ss.states(3)
@@ -88,7 +88,7 @@ def test_forms():
     recovery = ss.Transition(I, R, dur=10)
     forms.flow = ss.Disease(infection, recovery, name='sir')
 
-    sims = sc.objdict()
+    sims = sc.obj()
     for key,sir in forms.items():
         sims[key] = ss.Sim(sir, stop=50, **kw)
         assert list(sir.states.keys()) == ['S', 'I', 'R']
@@ -642,7 +642,7 @@ def test_load():
 @sc.timer()
 def test_transfer():
     sc.heading('Testing vaccination as a stratification plus a transfer')
-    sims = sc.objdict()
+    sims = sc.obj()
     for solver in ['ode', 'abm']:
         sir = make_sir()
         sir.pars.beta.value = 0.2
@@ -765,14 +765,14 @@ def test_cross_disease_rate():
         assert np.isclose(final(True, solver), final(False, solver), rtol=1e-9) # syph.I is syphilis's, not HIV's own I
 
     # The same for a condition: where=a.C is the other disease's C, whether or not this one has a C too
-    def cancelled(names, solver):
+    def canceled(names, solver):
         S, I, C = ss.states('S I C')
         a = ss.Disease(infection=S >> I @ ss.peryear(2)*I, cancer=I >> C @ ss.years(2), init_prev=0.2, name='a')
         S, I, C, X = ss.states(names)
         b = ss.Disease(infection=S >> I @ ss.peryear(2)*I, cancer=I >> C @ ss.years(2), cancel=ss.Transition(I, X, rate=ss.peryear(4), where=a.C), init_prev=0.2, name='b')
         return ss.Sim([a, b], n_agents=2000, total_pop=2000, stop=2005, solver=solver, verbose=0).run().results.b.cancel.sum()
     for solver in ['ode', 'abm']:
-        assert np.isclose(cancelled('S I C X', solver), cancelled('S I D X', solver), rtol=1e-9) # Was 0 (b's own C) with agents, and an error with the ODE
+        assert np.isclose(canceled('S I C X', solver), canceled('S I D X', solver), rtol=1e-9) # Was 0 (b's own C) with agents, and an error with the ODE
 
     # A state of the other disease read before that disease is declared: a would keep an empty state of its own, so it is refused
     Sa, Ia, Sb, Ib, Rb = ss.states('Sa Ia Sb Ib Rb')
@@ -1256,7 +1256,7 @@ def test_split_null():
         S, I, R = ss.states('S I R')
         dst = [R if d == 'R' else d for d in dst]
         return ss.Disease(S, I, R, infection=ss.Transition(S, I, rate=0.0), death=ss.Transition(I, dst, dur=ss.days(10), p=p), init=dict(S=0.5, I=0.5), name='d') # Nobody is infected: those in I at the start each take it once
-    out = sc.objdict()
+    out = sc.obj()
     for solver in ['abm', 'ode', 'binomial']:
         size = dict(n_agents=20_000) if solver == 'abm' else dict(total_pop=20_000)
         sim = ss.Sim(make([ss.null, ss.stay], [0.05, None]), unit='day', stop=200, solver=solver, verbose=0, **size).run()

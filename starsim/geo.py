@@ -330,7 +330,7 @@ class Mobility:
             errormsg = f'A movement register needs the columns date, from, to, and n (and optionally states), but {sc.strjoin(missing)} {"is" if len(missing) == 1 else "are"} missing; its columns are {list(df.columns)}'
             raise KeyError(errormsg)
         out = sc.dataframe(date=df['date'].values, n=np.asarray(df['n'], dtype=float))
-        empty = sc.objdict() # Whether each entry of each column is blank
+        empty = sc.obj() # Whether each entry of each column is blank
         for col in ['from', 'to', 'states', 'to_states']:
             vals = np.array(df[col].values, dtype=object) if col in df.columns else np.full(len(df), None, dtype=object)
             blanks, codes = Mobility.by_value(vals, Mobility.blank, True)
@@ -396,7 +396,7 @@ class Mobility:
         states, to_states = np.empty(len(sets), dtype=object), np.empty(len(sets), dtype=object) # Filled one at a time, since NumPy would read a list of tuples as rows
         for i,(a,b) in enumerate(sets):
             states[i], to_states[i] = a, b
-        return sc.objdict(ti=ti[rows], src=places('from'), dst=places('to'), n=np.asarray(df['n'].values[rows], dtype=float),
+        return sc.obj(ti=ti[rows], src=places('from'), dst=places('to'), n=np.asarray(df['n'].values[rows], dtype=float),
                           states=states[set_of], to_states=to_states[set_of], sets=sets, set_of=set_of)
 
     def matrix(self, strat):

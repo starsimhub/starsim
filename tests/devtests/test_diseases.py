@@ -279,7 +279,7 @@ def test_strains_immunity_attr():
             return ss.Sim(diseases=family(gens, immunity=ss.immunity(due_to='nab', rel_sus=m, combine='sum')), rand_seed=seed, **pars).run()
         mods = [ss.modify(h.rel_sus, multiply=1 - np.clip(sum(m[k, g]*gens[k].nab for k in range(2)), 0, 1), name=f'nab_{h.name}') for g,h in enumerate(gens)] if how == 'modify' else []
         return ss.Sim(diseases=gens, connectors=mods, rand_seed=seed, **pars).run()
-    out = sc.objdict()
+    out = sc.obj()
     for how in ['family', 'modify', 'none']:
         sim = run(how)
         out[how] = np.array([sim.results[name].infection.sum() for name in ['hpv16', 'hpv18']])
@@ -357,7 +357,7 @@ def test_strains_branch_flows():
         return ss.Disease(infection=S >> P @ ss.peryear(beta)*P, progression=P >> CIN @ ss.years(1), cin=cin,
                           cancers=ss.outcome(cin.to(CA)), init_prev=0.1, name=name)
     pars = dict(start=2000, stop=2015, dt=0.25, total_pop=10_000, verbose=0)
-    out = sc.objdict()
+    out = sc.obj()
     for solver in ['abm', 'ode']:
         sim = ss.Sim(diseases=family([make('a', 3.0), make('b', 2.5)]), solver=solver, n_agents=10_000, rand_seed=1, **pars).run()
         res = sim.results

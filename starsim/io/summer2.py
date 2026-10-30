@@ -176,7 +176,7 @@ def load_summer2(source, pars=None, verbose=None):
         sname, strata = strat['name'], strat['strata']
         n = len(strata)
         full = sorted(strat['compartments']) == sorted(comps)
-        kw = sc.objdict()
+        kw = sc.obj()
         if strat['ageing']:
             kw[sname] = [float(s) for s in strata]
             kw.kind = 'age'
@@ -189,7 +189,7 @@ def load_summer2(source, pars=None, verbose=None):
             kw.states = list(strat['compartments'])
         split = [strat['population_split'][s] for s in strata]
         kw.split = split
-        adjust = sc.objdict()
+        adjust = sc.obj()
 
         # Flow adjustments
         for fname,items in strat['flow_adjustments'].items():
@@ -343,7 +343,7 @@ def outputs(sim):
     dis = sim.diseases[0]
     res = sim.results[dis.name]
     dt = sim.t.dt if sc.isnumber(sim.t.dt) else float(sim.t.dt.value)
-    out = sc.objdict()
+    out = sc.obj()
     def select(result, strata):
         return (result.select(**strata) if strata else result).values
     def get(name):

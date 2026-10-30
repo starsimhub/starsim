@@ -7,9 +7,8 @@ import numpy as np
 import sciris as sc
 import starsim as ss
 from .expressions import as_expr, BinOp, Count, count_power, did_you_mean, Expr, is_one, linear, par, per_person
-from ..parameters import by, TimeValue
+from .parameters import by, TimeValue
 from ..transitions import FlowSum, outcome, State, Transition
-from .presentation import Presentation, TransitionTable
 
 __all__ = ['Graph']
 
@@ -48,7 +47,34 @@ def bad_end(end, side):
     return f'the destination of a transition is a state or a list of states (a split, with p=), not {end}; for a split between them, write [{", ".join(names)}] with p=[...]'
 
 
-class Graph(Presentation):
+class TransitionTable(sc.obj):
+    """ The transitions of a module; printing it shows one row per transition, and the matrix of sources by destinations """
+    def __repr__(self):
+        if not len(self):
+            return 'No transitions'
+        rows = [['name', 'from', 'to', 'driven by', 'kind']]
+        for name,tr in self.items():
+            src = ' | '.join(s.name for s in tr.src) or '(outside)'
+            dst = ' | '.join(s.name for s in tr.dst) or '(outside)'
+            kind = f'transmission, from {" + ".join(s.name for s in tr.terms)}' if tr.contact else 'spontaneous'
+            rows.append([name, src, dst, tr.driver_str, kind])
+        widths = [max(len(row[i]) for row in rows) + 2 for i in range(5)]
+        out = '\n'.join(''.join(cell.ljust(w) for cell,w in zip(row, widths)).rstrip() for row in rows)
+
+        # The matrix
+        names = list(dict.fromkeys(s.name for tr in self.values() for s in tr.src + tr.dst))
+        grid = {(a,b):[] for a in names for b in names}
+        for name,tr in self.items():
+            for a in tr.src:
+                for b in tr.dst:
+                    grid[(a.name, b.name)].append(name)
+        cells = [[''] + names] + [[a] + [', '.join(grid[(a,b)]) or '.' for b in names] for a in names]
+        widths = [max(len(row[i]) for row in cells) + 2 for i in range(len(names) + 1)]
+        out += '\n\n' + '\n'.join(''.join(cell.ljust(w) for cell,w in zip(row, widths)).rstrip() for row in cells)
+        return out
+
+
+class Graph:
     """
     The states and transitions of one module
 
@@ -79,17 +105,17 @@ class Graph(Presentation):
             init_prev.name = init_prev.name or 'init_prev'
         self.init = dict(init or {})
         self.init_n = dict(init_n or {})
-        self.states = sc.objdict()
+        self.states = sc.obj()
         self.transitions = TransitionTable()
-        self.pars = sc.objdict()
-        self.outcomes = sc.objdict()
-        self.exprs = sc.objdict() # Results that are sums or ratios of states
-        self.funcs = sc.objdict() # Custom per-step behavior
-        self.attrs = sc.objdict() # Values for each person: see ss.attr
+        self.pars = sc.obj()
+        self.outcomes = sc.obj()
+        self.exprs = sc.obj() # Results that are sums or ratios of states
+        self.funcs = sc.obj() # Custom per-step behavior
+        self.attrs = sc.obj() # Values for each person: see ss.attr
         self.derived = [] # Stratifications by a derived attribute, which add no groups: see stratify()
-        self.guessed = sc.objdict()
+        self.guessed = sc.obj()
         self.strats = [] # Stratifications, filled by stratify()
-        self.transfers = sc.objdict() # Movement between the levels of a stratification
+        self.transfers = sc.obj() # Movement between the levels of a stratification
 
         self.collect(list(args or []), dict(members or {}))
         if isinstance(init_prev, par):
@@ -534,7 +560,7 @@ class Graph(Presentation):
         # Name the anonymous ones after their slot: a duration by its state and a rate by its transition, and any other qualified by the transition where two would clash
         anon = [(tr, slot, p) for tr,slot,p in slots if p.literal or getattr(p, 'slot_named', False) or (p.name is None and self.names.get(id(p)) is None)] # Including an ss.par written in the slot itself, e.g. beta=ss.par(0.3, bounds=[0.1, 1]), and one named after its slot before (in a class this one subclasses), which is named again
         anon = [(tr, slot, p) for i,(tr,slot,p) in enumerate(anon) if not any(q is p for _,_,q in anon[:i])] # One used in several transitions (e.g. beta = ss.seasonal(...)) is one parameter, named after the first
-        counts = sc.objdict()
+        counts = sc.obj()
         for tr,slot,p in anon:
             counts[slot] = counts.get(slot, 0) + 1
         inner = {q.name or self.names.get(id(q)) for tr,slot,p in slots for q in inner_pars(p.value)} # The names of parameters inside values that vary in time, e.g. ss.seasonal(mean=beta), or inside a probability per act, which are registered below
@@ -589,9 +615,9 @@ class Graph(Presentation):
 
     def resolve_exits(self):
         """ Group the transitions out of each state: those with p= split on entry, the rest compete """
-        self.exits = sc.objdict()
+        self.exits = sc.obj()
         for state in self.states.values():
-            self.exits[state.name] = sc.objdict(branches=[], timed=[], hazards=[], contact=[], rest=[], triggered=[])
+            self.exits[state.name] = sc.obj(branches=[], timed=[], hazards=[], contact=[], rest=[], triggered=[])
         self.inflows = []
         for tr in self.transitions.values():
             if tr.undriven: # To the engines, a rate of 0 that nothing modifies; a delivery moves people along it (see ss.Treatment)

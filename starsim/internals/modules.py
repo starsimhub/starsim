@@ -21,7 +21,7 @@ def module_map(key=None):
     This is the source of truth about module types. Modules with types that do not
     map to anything in the module_map are treated as custom modules.
     """
-    module_map = sc.objdict(
+    module_map = sc.obj(
         demographics  = ss.Demographics,
         networks      = ss.networks.Route, # NB, not ss.Network!
         diseases      = ss.Disease,
@@ -73,7 +73,7 @@ def register_modules(*args):
 
 def find_modules(key=None, flat=False, verbose=False):
     """ Find all subclasses of Module present in Starsim, divided by type """
-    modules = sc.objdict()
+    modules = sc.obj()
     modmap = module_map()
     attr_lists = [[ss, dir(ss)]] # Find all attributes in Starsim (note: does not parse user code; use register_modules() for that)
     for custom in custom_modules:
@@ -85,8 +85,8 @@ def find_modules(key=None, flat=False, verbose=False):
 
     # Initialize dict
     for modkey in modmap.keys():
-        modules[modkey] = sc.objdict()
-    modules['modules'] = sc.objdict() # Catch-all for modules that do not match a standard type (e.g. user-created ss.Module classes)
+        modules[modkey] = sc.obj()
+    modules['modules'] = sc.obj() # Catch-all for modules that do not match a standard type (e.g. user-created ss.Module classes)
 
     # Loop over all attributes
     for pymodule,attrs in attr_lists:
@@ -123,7 +123,7 @@ def find_modules(key=None, flat=False, verbose=False):
                     if verbose: print(f'     Module modules.{low_attr} added')
 
     if flat:
-        modules = sc.objdict({k:v for vv in modules.values() for k,v in vv.items()}) # Unpack the nested dict into a flat one
+        modules = sc.obj({k:v for vv in modules.values() for k,v in vv.items()}) # Unpack the nested dict into a flat one
     return modules if key is None else modules[key]
 
 
@@ -753,7 +753,7 @@ class Module(Base):
         """
         if force or not self.pre_initialized:
             self.setattribute('sim', sim) # Link back to the sim object
-            ss.distributions.link_dists(self, sim, skip=[ss.Sim, ss.Module]) # Link the distributions to sim and module, skipping any nested sim or module instances
+            ss.dists.link_dists(self, sim, skip=[ss.Sim, ss.Module]) # Link the distributions to sim and module, skipping any nested sim or module instances
             self.t.init(sim=self.sim) # Initialize time vector
             self.link_timepars() # Add module dt to the timepars
             self.check_bare_units(sim)
@@ -791,7 +791,7 @@ class Module(Base):
         This is what lets a timepar resolve itself against the timestep with no
         argument, e.g. `self.pars.death_rate.to_prob()` or `self.pars.dur_inf.to_dt()`.
         """
-        timepars = sc.search(self, type=ss.TimePar, skip=dict(keys=ss.utils.skipkeys(['sim', 'module', 't'] + list(getattr(self, 'timepar_skip', []))), subclasses=ss.distributions.no_dists())) # Skip the timeline, else the module's own dt would be linked to itself
+        timepars = sc.search(self, type=ss.TimePar, skip=dict(keys=ss.utils.skipkeys(['sim', 'module', 't'] + list(getattr(self, 'timepar_skip', []))), subclasses=ss.dists.no_dists())) # Skip the timeline, else the module's own dt would be linked to itself
 
         # Initialize them with the parent module
         dt = self.t.dt
@@ -840,7 +840,7 @@ class Module(Base):
         dists = sc.search(obj, type=ss.Dist)
         for i,dist in dists.enumvals():
             dist.trace = f'dist_{i}'
-        ss.distributions.link_dists(obj=obj, sim=sim, module=self, skip=[ss.Sim, ss.Module], init=True)
+        ss.dists.link_dists(obj=obj, sim=sim, module=self, skip=[ss.Sim, ss.Module], init=True)
         self.init_post()
         return self
 

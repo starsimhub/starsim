@@ -55,7 +55,7 @@ class Undeclared(Transmission):
 
     def define(self):
         """ With strains, the distributions of who infects whom and of protection (see `Transmission.pick_sources()`), by the names a declared disease's transmission called `infection` (e.g. `ss.SIR`'s) gives them, so the same model draws the same numbers both ways """
-        self.dists = sc.objdict()
+        self.dists = sc.obj()
         if getattr(self.mod, 'strains', None) is not None:
             for key in ['pick_infection', 'protect_infection']:
                 self.dists[key] = ss.random(name=f'rng_{key}')
@@ -262,7 +262,7 @@ def init_layouts(sim):
     if solver not in ['auto', 'abm'] or auto_reasons(sim):
         return joints, mixing
     def refused(ingredient, e):
-        sim.capabilities.append(sc.objdict(ingredient=ingredient, reason=str(e).split('\n')[0], fatal=False))
+        sim.capabilities.append(sc.obj(ingredient=ingredient, reason=str(e).split('\n')[0], fatal=False))
         return
     for mod in sim.declared:
         try:
@@ -285,7 +285,7 @@ def init_layouts(sim):
             except ss.CapabilityError as e:
                 reason = str(e).split('\n')[0]
             if reason:
-                sim.capabilities.append(sc.objdict(ingredient=f'jointly: {" × ".join(sorted(group.names))}', reason=reason, fatal=False))
+                sim.capabilities.append(sc.obj(ingredient=f'jointly: {" × ".join(sorted(group.names))}', reason=reason, fatal=False))
     return joints, mixing
 
 
@@ -652,7 +652,7 @@ def init_named_people(sim):
         places = {net.ref['place']:name for name,net in pars.networks.items() if getattr(net, 'ref', None)} # Each country's contact matrices
         if len(places) == 1:
             place, net = list(places.items())[0]
-            named = sc.objdict(place=place, year=None, n_agents=None, revision=None)
+            named = sc.obj(place=place, year=None, n_agents=None, revision=None)
             sim.people_from = net
             ss.note(f'the ages of the people are those of {place}, since the contacts "{net}" are; give people= for others', sim=sim)
     if named is None:
@@ -883,9 +883,9 @@ def check_routes(sim):
     for mod in sim.declared:
         for tr in mod.graph.transmissions:
             for p in [leaf for leaf in tr.rate.leaves if isinstance(leaf, ss.par) and isinstance(leaf.raw, dict)]:
-                given = [ss.utils.standardize_netkey(k) for k in p.raw if k != 'default']
-                unknown = [k for k in p.raw if k != 'default' and ss.utils.standardize_netkey(k) not in [ss.utils.standardize_netkey(r) for r in routes]]
-                missing = [r for r in routes if ss.utils.standardize_netkey(r) not in given]
+                given = [ss.networks.standardize_netkey(k) for k in p.raw if k != 'default']
+                unknown = [k for k in p.raw if k != 'default' and ss.networks.standardize_netkey(k) not in [ss.networks.standardize_netkey(r) for r in routes]]
+                missing = [r for r in routes if ss.networks.standardize_netkey(r) not in given]
                 if 'default' in p.raw: # Written for any sim, e.g. by a library: the routes it does not name take the default, and the names that are not routes of this sim are not used
                     if unknown:
                         ss.note(f'the beta of "{mod.name}.{tr.name}" names {sc.strjoin(unknown)}, which {"is not a route" if len(unknown) == 1 else "are not routes"} of the sim, so {"it is" if len(unknown) == 1 else "they are"} not used; the routes are {sc.strjoin(routes) or "none"}, and those not named take the default', sim=sim)
@@ -931,7 +931,7 @@ def check_betas(sim, nets):
             for p in [leaf for leaf in tr.rate.leaves if isinstance(leaf, ss.par)]:
                 raw = p.raw
                 if isinstance(raw, dict):
-                    vals = [(net, ss.utils.route_beta(raw, net.name)) for net in nets] # The names that are not routes are checked above
+                    vals = [(net, ss.networks.route_beta(raw, net.name)) for net in nets] # The names that are not routes are checked above
                 elif isinstance(raw, (ss.peract, list, tuple)) or p.slot == 'rate': # The same beta on every route
                     vals = [(net, raw) for net in nets]
                 else:
@@ -1022,7 +1022,7 @@ def crossing_groups(sim):
     groups = []
     for name in names:
         if len(links[name]) > 1 and links[name] not in [g.names for g in groups]:
-            groups.append(sc.objdict(names=links[name], reasons=why[name]))
+            groups.append(sc.obj(names=links[name], reasons=why[name]))
     return groups
 
 
@@ -1067,7 +1067,7 @@ def joint_layout(sim, group, solver):
     joint = int(np.prod(people))
     rows = joint + sum(c*(joint//p) for p,c in zip(people, others))
     cols = int(np.prod([strat.n for strat in sim.groups.strats if strat.kind != 'disease']))
-    return sc.objdict(names=members, reasons=group.reasons, strats=strats, sizes=people, rows=rows, cols=cols, cells=rows*cols)
+    return sc.obj(names=members, reasons=group.reasons, strats=strats, sizes=people, rows=rows, cols=cols, cells=rows*cols)
 
 
 def over_budget(layout):
@@ -1146,7 +1146,7 @@ def init_capabilities(sim, modules):
     """
     caps = []
     def add(ingredient, reason, fatal=False, switch=True):
-        caps.append(sc.objdict(ingredient=ingredient, reason=reason, fatal=fatal, switch=switch))
+        caps.append(sc.obj(ingredient=ingredient, reason=reason, fatal=fatal, switch=switch))
         return
 
     approx = sim.pars.approx

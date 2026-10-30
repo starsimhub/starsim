@@ -32,12 +32,12 @@ def make_hpv(name, beta=1.5):
 
 
 def run_both(make, pop=10_000, n_agents=10_000, **kwargs):
-    return sc.objdict(ode=make(solver='ode', total_pop=pop, **kw, **kwargs).run(),
+    return sc.obj(ode=make(solver='ode', total_pop=pop, **kw, **kwargs).run(),
                       abm=make(solver='abm', total_pop=pop, n_agents=n_agents, **kw, **kwargs).run())
 
 
 def check_close(sims, func, rtol=0.1):
-    vals = sc.objdict({solver:func(sim) for solver,sim in sims.items()})
+    vals = sc.obj({solver:func(sim) for solver,sim in sims.items()})
     assert np.allclose(vals[:], vals.ode, rtol=rtol), f'Expected the solvers to agree, not {vals}'
     return vals
 
@@ -82,7 +82,7 @@ def test_vaccine_diseases():
 
 def test_any():
     sc.heading('Testing a condition across diseases in detects= and eligible=, with the disease taken from the conditions')
-    seen = sc.objdict()
+    seen = sc.obj()
     def make(**kwargs):
         genos = [make_hpv('hpv16'), make_hpv('hpv18', beta=1.2)]
         any_cin, any_ca = genos[0].CIN | genos[1].CIN, genos[0].CA | genos[1].CA
@@ -102,7 +102,7 @@ def test_any():
         if solver == 'ode': # Independent genotypes: from the marginals
             f = {x:[r[g][x][k-1]/10_000 for g in ['hpv16', 'hpv18']] for x in ['CIN', 'CA']} # At the start of the step it was delivered in
             no_ca = np.prod([1 - p for p in f['CA']])
-            exp = sc.objdict(eligible=10_000*no_ca, found=0.9*10_000*(no_ca - np.prod([1 - a - b for a,b in zip(f['CA'], f['CIN'])])))
+            exp = sc.obj(eligible=10_000*no_ca, found=0.9*10_000*(no_ca - np.prod([1 - a - b for a,b in zip(f['CA'], f['CIN'])])))
         assert np.isclose(r.prog.eligible[k], exp.eligible) and np.isclose(r.prog.positive[k], exp.found, rtol=1e-6 if solver == 'ode' else 0.05), solver
     assert any('tracked jointly' in note for note in sims.ode.notes)
     return sims

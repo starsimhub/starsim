@@ -91,7 +91,7 @@ class immunity:
             raise TypeError(errormsg)
         self.due_to = due_to
         self.combine = combine
-        self.values = sc.objdict() # The protection on each quantity: 'rel_sus', 'rel_trans', or 'dur.<state>'
+        self.values = sc.obj() # The protection on each quantity: 'rel_sus', 'rel_trans', or 'dur.<state>'
         items = [('rel_sus', rel_sus), ('rel_trans', rel_trans)] + [(f'dur.{k}', v) for k,v in (dur or {}).items()]
         for key,val in items:
             if val is not None:
@@ -307,7 +307,7 @@ class Strains:
         self.names = names
         self.strains = [Strain(n, i, self) for i,n in enumerate(names)]
         n = len(names)
-        self.values = sc.objdict()
+        self.values = sc.obj()
         for key,vals in values.items():
             vals = np.array(vals, dtype=float)
             if vals.shape != (n,):
@@ -567,7 +567,7 @@ def prepare(strains, trs):
             tr.p = [ss.by(**{strains.name:none.tolist()}), None]
             named = isinstance(given, str) and name in strains.values # Values by the transition's name multiply its rate when the chances are named values; with a number, they multiply the chances instead
             tr.strain_adjust = strains._level_values(name) if named else np.ones(L)
-        tr.move = sc.objdict({strains.name:('matrix', tuple(map(tuple, Q.tolist())))})
+        tr.move = sc.obj({strains.name:('matrix', tuple(map(tuple, Q.tolist())))})
     return
 
 
@@ -703,7 +703,7 @@ class Union(ss.conditions.Cond):
         return out
 
 
-class Protection:
+class Protection(sc.prettyobj):
     """ The effect of an `ss.immunity` on one quantity of one strain with its own course, as agents: a multiplier, like a modifier (see `ss.connectors.combine()`) """
     op = 'multiply'
     active = True
@@ -800,7 +800,7 @@ class Family(ss.Module):
                 raise ValueError(f'split= of "{name}" gives sets of strains ({sc.strjoin(l for l in strains.split_sets if "+" in l)}), but its strains have courses of their own, each seeded alone; give one share for each strain')
             strains.split = np.array([strains.split_sets.get(n, 0.0) for n in names])
         self.split = None if strains.split is None else strains.split.copy()
-        self.guessed = sc.objdict()
+        self.guessed = sc.obj()
         if self.split is not None:
             if not np.isclose(self.split.sum(), 1):
                 self.guessed['split'] = f'normalized, since it summed to {self.split.sum():n}'
@@ -817,7 +817,7 @@ class Family(ss.Module):
                     errormsg = f'"{name}" seeds its strains (init_prev=), but its strain "{mod.name}" has {sc.strjoin(own)} of its own as well; give one or the other'
                     raise ValueError(errormsg)
                 mod.graph.seeded_by = name # Seeded by the family (see ss.solvers.Engine.init_fractions())
-        self.stocks = sc.objdict() # The results that are unions: for each name, the states of each member that make it up
+        self.stocks = sc.obj() # The results that are unions: for each name, the states of each member that make it up
         for key in self.common(members, 'states'):
             if all(mod.graph.states[key].people for mod in members):
                 self.stocks[key] = [[key] for mod in members]

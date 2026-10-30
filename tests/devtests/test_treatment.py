@@ -25,11 +25,11 @@ def w209(sim):
 
 def run_both(make, stop=200, pop=20_000, **kwargs):
     """ Run the sim that `make` returns as an ODE and as agents """
-    return sc.objdict(ode=make(solver='ode', total_pop=pop, stop=stop, **kw, **kwargs).run(), abm=make(solver='abm', n_agents=pop, stop=stop, **kw, **kwargs).run())
+    return sc.obj(ode=make(solver='ode', total_pop=pop, stop=stop, **kw, **kwargs).run(), abm=make(solver='abm', n_agents=pop, stop=stop, **kw, **kwargs).run())
 
 
 def check_close(sims, func, rtol=0.1):
-    vals = sc.objdict({solver:func(sim) for solver,sim in sims.items()})
+    vals = sc.obj({solver:func(sim) for solver,sim in sims.items()})
     assert np.allclose(vals[:], vals.ode, rtol=rtol), f'Expected the solvers to agree, not {vals}'
     return vals
 
@@ -64,7 +64,7 @@ def test_sti_failure():
         res = sim.results
         for key in ['clinic', 'mass']:
             r = res[key]
-            n = sc.objdict({k:r[k].sum() for k in ['delivered', 'cured', 'failed', 'unneeded']})
+            n = sc.obj({k:r[k].sum() for k in ['delivered', 'cured', 'failed', 'unneeded']})
             print(f'{solver} {key}: {n}')
             assert np.isclose(n.cured + n.failed + n.unneeded, n.delivered)
             assert np.isclose(n.cured/(n.cured + n.failed), 0.9, atol=0.03)

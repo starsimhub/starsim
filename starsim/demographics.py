@@ -244,7 +244,7 @@ class Births(Demographics):
         # Process metadata. The year column may equivalently be labeled "Time" (as in UN data);
         # see ss.col_synonyms
         self.metadata = sc.mergedicts(
-            sc.objdict(data_cols=dict(year='Year', value='CBR')),
+            sc.obj(data_cols=dict(year='Year', value='CBR')),
             metadata,
         )
 
@@ -451,7 +451,7 @@ class Deaths(Demographics):
 
         # Process metadata. Defaults here are the labels used by UN data
         self.metadata = sc.mergedicts(
-            sc.objdict(
+            sc.obj(
                 data_cols = dict(year='Time', sex='Sex', age='AgeGrpStart', value='mx'),
                 sex_keys = {'Female':'f', 'Male':'m'},
             ),
@@ -712,7 +712,7 @@ class Pregnancy(Demographics, ss.Disease):
         if isinstance(given.get('fertility_rate'), str): # A named place: its UN age-specific fertility rates, per 1,000 women, by year and 5-year age group
             given['fertility_rate'] = ss.data.rates(given['fertility_rate'], 'fertility')
             given.setdefault('rate_units', 1000)
-            metadata = sc.mergedicts(sc.objdict(data_cols=dict(year='Time', age='AgeGrpStart', value='ASFR')), metadata)
+            metadata = sc.mergedicts(sc.obj(data_cols=dict(year='Time', age='AgeGrpStart', value='ASFR')), metadata)
         own = self.code_pars
         self.update_pars({k:v for k,v in given.items() if k in own})
         graph = {k:v for k,v in given.items() if k not in own}
@@ -729,7 +729,7 @@ class Pregnancy(Demographics, ss.Disease):
         birth = self.graph.transitions.birth
         birth.n_born = self.pars.embryos_per_pregnancy
         birth.sex = self.pars.sex_ratio
-        self.metadata = sc.mergedicts(sc.objdict(data_cols=dict(year='Time', age='AgeGrp', value='ASFR')), metadata)
+        self.metadata = sc.mergedicts(sc.obj(data_cols=dict(year='Time', age='AgeGrp', value='ASFR')), metadata)
         self.fertility_rate_data = None # Set in init_pre()
         self.mean_dur_pregnancy = None # In years; set in init_pre()
         self.define_states(
@@ -874,7 +874,7 @@ class Pregnancy(Demographics, ss.Disease):
                         mod.engine.live = None
                         mod.engine.record_stocks()
         note = f'{self.name}: women pregnant at the start, conceived over the {"step" if steps == 1 else f"{steps} steps"} before it (burnin=True)'
-        return sc.objdict(share=share, steps=steps, tr=self.graph.transitions.conception, target=['P'], note=note, after=after)
+        return sc.obj(share=share, steps=steps, tr=self.graph.transitions.conception, target=['P'], note=note, after=after)
 
     def compartmental_form(self, sim):
         """

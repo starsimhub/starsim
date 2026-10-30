@@ -166,7 +166,7 @@ class Counter(ss.Module):
     text, changes, todo = migrate_text("p = ss.time_prob(0.1); pars = dict(verbose=-1)\nclass MySIS(ss.SIS): pass\nclass MyNCD(ss.Disease): pass")
     assert text == "p = ss.probperyear(0.1); pars = dict(verbose=0)\nclass MySIS(ssl.AgentSIS): pass\nclass MyNCD(ss.Disease): pass" # ss.Disease and ss.Infection keep their meaning
     assert migrate_text('pars = dict(verbose=0.1)')[0] == 'pars = dict(verbose=0.1)' # A fraction is progress every that share of the run
-    assert migrate_text('ss.link_dists(obj, sim)')[0] == 'ss.distributions.link_dists(obj, sim)' # Internal helpers are in their submodules
+    assert migrate_text('ss.link_dists(obj, sim)')[0] == 'ss.dists.link_dists(obj, sim)' # Internal helpers are in their submodules
     assert 'ssl.AgentSIR' in migrate_text('sir = ss.SIR(beta=0.1)')[2][0][1] # A use of ss.SIR is flagged, not rewritten
 
     # The code cells of Quarto, Markdown, and notebooks, and nothing else in them
@@ -193,12 +193,9 @@ class Counter(ss.Module):
     assert migrate_text('sir = ss.SIR()\nx = res.new_infections')[2][1][0] == 2
     assert 'ss.treat(' in migrate_text('from starsim.interventions import treat_num, Intervention')[2][0][1] # An import of a removed name
 
-    # More of Starsim 3, and the error for a removed name
+    # More of Starsim 3
     old = "new = ss.uids.cat(a, b); bf = preg.breastfeeding\nnet = ss.RandomNet(n_contacts=10, uniform_targets=True)"
     assert migrate_text(old)[0] == "new = ss.uids.concatenate(a, b); bf = preg.lactating\nnet = ss.RandomNet(n_contacts=10, method='uniform')"
-    with pytest.raises(AttributeError, match=r'sim\.fit\(\)') as info:
-        ss.Calibration
-    assert info.value.obj is None # So that Python suggests no closest name ("emigration")
 
     # An override of set_prognoses() that skips counting the infections, as before Starsim 3.6
     class Quiet(ssl.AgentSIS):

@@ -32,12 +32,12 @@ def make_hpv(name, beta=1.5):
 
 
 def run_both(make, pop=10_000, n_agents=10_000, **kwargs):
-    return sc.objdict(ode=make(solver='ode', total_pop=pop, **kw, **kwargs).run(),
+    return sc.obj(ode=make(solver='ode', total_pop=pop, **kw, **kwargs).run(),
                       abm=make(solver='abm', total_pop=pop, n_agents=n_agents, **kw, **kwargs).run())
 
 
 def check_close(sims, func, rtol=0.1):
-    vals = sc.objdict({solver:func(sim) for solver,sim in sims.items()})
+    vals = sc.obj({solver:func(sim) for solver,sim in sims.items()})
     assert np.allclose(vals[:], vals.ode, rtol=rtol), f'Expected the solvers to agree, not {vals}'
     return vals
 
@@ -60,7 +60,7 @@ def run_abm(make, pop=10_000, n_agents=10_000, **kwargs):
 def test_test_diseases():
     sc.heading('Testing a test keyed by states of several diseases: each detected independently')
     s16, s18 = [0, 0.6, 0.9, 0], [0, 0.5, 0.8, 0] # By S, I, CIN, CA
-    seen = sc.objdict()
+    seen = sc.obj()
     def make(**kwargs):
         g16, g18 = make_hpv('hpv16'), make_hpv('hpv18')
         dna = ss.Diagnostic(sensitivity={g16.I: 0.6, g16.CIN: 0.9, 'hpv18.I': 0.5, g18.CIN: 0.8}, specificity=0.95)
@@ -103,7 +103,7 @@ def test_test_diseases():
 def test_outcomes():
     sc.heading('Testing a test with several results: colposcopy, the worst over genotypes, a follow-up for some results, and a delay for one')
     table = dict(lsil=dict(I=0.15, CIN=0.2), hsil=dict(CIN=0.7, CA=0.1), cancer=dict(CA=0.85)) # P(result | state), the same for each genotype
-    seen = sc.objdict()
+    seen = sc.obj()
     def make(delay=None, **kwargs):
         genos = [make_hpv('hpv16'), make_hpv('hpv18', beta=1.2)]
         results = {res:{g[x]:p for g in genos for x,p in probs.items()} for res,probs in reversed(table.items())} | dict(normal=None) # Most severe first
@@ -177,7 +177,7 @@ def test_outcomes():
 
 def test_result_none():
     sc.heading('Testing the None key of results=: people in none of the states keyed, once however many diseases, unlike a result by state for each')
-    seen = sc.objdict()
+    seen = sc.obj()
     def run(abn):
         g16, g18 = make_hpv('hpv16'), make_hpv('hpv18')
         keyed = [x for x in abn if x is not None]
@@ -270,9 +270,9 @@ def test_hpv_vaccines():
         return ss.Sim(genos, interventions=progs, **kwargs)
     inf = lambda sim, g: sim.results[g].infection[sim.t.yearvec >= 2002].sum()
     check_agents(make, product='bivalent') # The second dose reads vx.since, which only agents keep
-    out = sc.objdict({key:run_abm(make, product=None if key == 'base' else key) for key in ['base', 'bivalent', 'nonavalent']})
+    out = sc.obj({key:run_abm(make, product=None if key == 'base' else key) for key in ['base', 'bivalent', 'nonavalent']})
     base, bi, nona = out.values()
-    drop = sc.objdict({k:np.array([1 - inf(sim, g)/inf(base, g) for g in ['hpv16', 'hpv18', 'hi5']]) for k,sim in dict(bi=bi, nona=nona).items()})
+    drop = sc.obj({k:np.array([1 - inf(sim, g)/inf(base, g) for g in ['hpv16', 'hpv18', 'hi5']]) for k,sim in dict(bi=bi, nona=nona).items()})
     assert drop.bi[2] < 0.75*drop.nona[2] and abs(drop.bi[0] - drop.nona[0]) < 0.05, drop # Less against hi5, the same against hpv16
     r = bi.results
     start = int(np.flatnonzero(r.dose1.delivered)[0])

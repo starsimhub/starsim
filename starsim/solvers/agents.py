@@ -120,7 +120,7 @@ class Transmission(Effects):
         elif not ss.options.crn:
             return dist.rvs(uids)
         slots = self.sim.people.slot_raw()
-        return ss.distributions.hash_uniforms(dist.seed, ROUNDS + self.mod.t.ti*ROUND_MAX, uids if slots is None else slots[uids], dtype=dist.hash_dtype)
+        return ss.dists.hash_uniforms(dist.seed, ROUNDS + self.mod.t.ti*ROUND_MAX, uids if slots is None else slots[uids], dtype=dist.hash_dtype)
 
     def pick_sources(self, pairs, name):
         """
@@ -260,7 +260,7 @@ class Agents(Engine, Transmission):
             arrs.append(ss.FloatArr(a.name, default=None if a.kind == 'derived' else a.default, label=a.label or a.name))
             if a.combine == 'first':
                 arrs.append(ss.BoolArr(f'had_{a.name}', label=f'Whether {a.name} has been set'))
-        self.sets = sc.objdict() # The sets of states with a clock, and the name of the array of the time each person entered the set: see ss.expressions.Clock
+        self.sets = sc.obj() # The sets of states with a clock, and the name of the array of the time each person entered the set: see ss.expressions.Clock
         people = [state.name for state in graph.people_states]
         for names in ss.expressions.Clock.sets:
             if all(name in people for name in names):
@@ -297,7 +297,7 @@ class Agents(Engine, Transmission):
             mod.setattribute(state.name, CountState(self, state))
 
         # Distributions: each is called at most once per step
-        self.dists = sc.objdict()
+        self.dists = sc.obj()
         self.by_groups = dict() # Whether the rate of each transmission is the same for everyone in a group: see same_in_group()
         add = self.add_dist
         def copy(dist):
@@ -2076,7 +2076,7 @@ class Agents(Engine, Transmission):
         dsts = [(dst, uids[mask], frm[mask]) for dst,mask in zip(tr.dst, masks)]
         if tr.dies: # Those who took ss.null die, as by an outflow
             self.split_deaths(tr, srcs, uidlist, uids[masks[-1]], frm[masks[-1]])
-        if tr.stays: # What the others leave over stays: the move is cancelled
+        if tr.stays: # What the others leave over stays: the move is canceled
             stayed = rvs >= edges[-1]
             self.stay(tr, uids[stayed], frm[stayed])
         if tr.ends: # The flow to each destination
@@ -2192,7 +2192,7 @@ class Agents(Engine, Transmission):
         if len(new):
             dur = self.draw(f'after_{tr.name}', new)
             if not isinstance(ss.transitions.by_dist(getattr(self.delays[tr.name], 'raw', None)), ss.Dist): # A scalar: an exponential with that mean
-                dur = ss.distributions.inverse('expon', dur, np.broadcast_to(np.asarray(self.eval_for(self.delays[tr.name], new), dtype=float), len(new)))
+                dur = ss.dists.inverse('expon', dur, np.broadcast_to(np.asarray(self.eval_for(self.delays[tr.name], new), dtype=float), len(new)))
             due[new] = self.ti + self.whole_steps(new, dur) # As for a dwell time
             pending = np.sort(np.concatenate([pending, new])) # As np.union1d(), since none of the new ones is pending
         now = pending[due.raw[pending] <= self.ti]
@@ -2561,7 +2561,7 @@ class Agents(Engine, Transmission):
             if not len(uids):
                 return np.array([], dtype=dist.hash_dtype or ss.dtypes.float) # Uniforms, as below
             slots = self.sim.people.slot_raw()
-            rvs = ss.distributions.hash_uniforms(dist.seed, self.draw_ind(), uids if slots is None else slots[uids], dtype=dist.hash_dtype)
+            rvs = ss.dists.hash_uniforms(dist.seed, self.draw_ind(), uids if slots is None else slots[uids], dtype=dist.hash_dtype)
             if how == 'uniform':
                 return rvs
             elif how == 'expon':
@@ -2964,7 +2964,7 @@ class Agents(Engine, Transmission):
         dw = self.dwells[name]
         active = [m for m in dw.mods if m.active]
         sets = [m for m in active if m.op == 'set']
-        new = dw.sets[next(i for i,m in enumerate(dw.mods) if m is sets[-1])] if sets else sc.objdict(key=f'dwell_{name}', mean=dw.mean)
+        new = dw.sets[next(i for i,m in enumerate(dw.mods) if m is sets[-1])] if sets else sc.obj(key=f'dwell_{name}', mean=dw.mean)
         mult = ss.connectors.combine([m for m in active if m.op == 'multiply'], 1.0, self)
         add = ss.connectors.combine([m for m in active if m.op == 'add'], 0.0, self)
         return new.key, new.mean, mult, add
@@ -3128,7 +3128,7 @@ class Agents(Engine, Transmission):
             self._moved = []
         for name in self.flowcounts: # Not part of the run
             self.flowcounts[name] = 0.0
-        self.flow_groups = sc.objdict()
+        self.flow_groups = sc.obj()
         self.events = dict()
         self.batches = []
         self._died = []

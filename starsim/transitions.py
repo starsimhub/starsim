@@ -21,7 +21,7 @@ import numpy as np
 import sciris as sc
 import starsim as ss
 from .internals.expressions import as_expr, BinOp, dists_in, Count, did_you_mean, dimension, Expr, Flow, format_expr, is_one, linear, Nameable, par, value_str
-from .parameters import by, TimeValue
+from .internals.parameters import by, TimeValue
 
 __all__ = ['pars', 'State', 'states', 'null',
            'Transition', 'move', 'birth', 'death', 'lifetable', 'immigration', 'emigration', 'outcome']
@@ -74,7 +74,7 @@ class State(Nameable, Expr):
         self.label = label
         self.order = next(State._counter)
         self.module = None # Set by the graph
-        self.guessed = sc.objdict() # Which fields were guessed (people), and why
+        self.guessed = sc.obj() # Which fields were guessed (people), and why
         return
 
     __hash__ = object.__hash__
@@ -185,7 +185,7 @@ def pars(defaults, **kwargs):
         defaults (dict): the default of each parameter: a value, or an `ss.par` (with bounds, say)
         kwargs (dict): the values given, e.g. the keywords of the disease's `__init__()`
 
-    Returns an `sc.objdict` of the parameters, by name.
+    Returns an `sc.obj` of the parameters, by name.
 
     Examples:
         ```python
@@ -199,7 +199,7 @@ def pars(defaults, **kwargs):
     if unknown:
         errormsg = f'Unknown parameter(s) {sc.strjoin(unknown)}; the parameters are {sc.strjoin(defaults.keys())}{did_you_mean(unknown[0], list(defaults))}'
         raise sc.KeyNotFoundError(errormsg)
-    out = sc.objdict()
+    out = sc.obj()
     for key,default in defaults.items():
         given = kwargs.get(key)
         default = sc.dcp(default) if isinstance(default, par) else par(sc.dcp(default)) if default is not None else None
@@ -261,7 +261,7 @@ def parse_increment(increment, what):
     if not isinstance(increment, dict) or not increment:
         errormsg = f'increment= of {what} is the name of a counter (increment="parity", which adds 1) or a dict of the amount to add to each (increment=dict(parity=2)), not {increment!r}'
         raise TypeError(errormsg)
-    out = sc.objdict()
+    out = sc.obj()
     for dim,k in increment.items():
         if not sc.isnumber(k) or isinstance(k, bool) or k != int(k) or k == 0:
             errormsg = f'increment= of {what} adds a whole number of levels to a counter, so "{dim}" needs a whole number other than 0 (e.g. 1, 2, or -1), not {k!r}; a level to go to is move=dict({dim}=...)'
@@ -304,7 +304,7 @@ class on:
     Examples:
         ```python
         debut = U >> CST1 @ ss.on(ss.ppl.female & (ss.ppl.age >= 15))
-        cancelled = (S + P + C) >> Z @ ss.on(ss.state('hpv18.X') | ss.state('hpv31.X'))
+        canceled = (S + P + C) >> Z @ ss.on(ss.state('hpv18.X') | ss.state('hpv31.X'))
         ```
     """
     def __init__(self, x):
@@ -420,7 +420,7 @@ class Transition(Nameable):
         self.move_given = dict(move) if move else None # As given
         self.move_from = {} # The levels it applies to, from a pair (from, to) in move=: {dim: [levels]}
         if move:
-            self.move = sc.objdict()
+            self.move = sc.obj()
             for dim,level in move.items():
                 if type(level).__name__ == 'StrainMove': # Each level that carries the strains it changes, to the level that carries them changed
                     mapping = level.mapping()
@@ -459,7 +459,7 @@ class Transition(Nameable):
         self.dies = False # Whether ss.null is one of several destinations, kept out of dst: those who take it die, as by an outflow
         self.p_die = None # Its probability, if given (otherwise the rest)
         self._ends_at = {} # Where ss.stay and ss.null were among the destinations given, so their entries of p= can be taken out
-        self.guessed = sc.objdict() # Which fields were guessed, and why
+        self.guessed = sc.obj() # Which fields were guessed, and why
         if src is not None:
             self._set_src(src)
         if dst is not None:
@@ -670,7 +670,7 @@ class Transition(Nameable):
     def _copy(self):
         """ A copy, so that a partial transition (S >> I, or I @ rate) can be used to build more than one """
         new = sc.cp(self)
-        new.guessed = sc.objdict(self.guessed)
+        new.guessed = sc.obj(self.guessed)
         return new
 
     def _arith(self, op, other, reverse=False):
@@ -685,7 +685,7 @@ class Transition(Nameable):
             errormsg = f'Cannot apply "{op}" to two transitions'
             raise TypeError(errormsg)
         new = sc.cp(self)
-        new.guessed = sc.objdict()
+        new.guessed = sc.obj()
         if self.rate is not None:
             new.rate = BinOp(op, other, self.rate) if reverse else BinOp(op, self.rate, other)
         elif self.dur is not None and self.src is None: # e.g. R @ ss.days(10) * 2, which would otherwise be dropped
@@ -1250,6 +1250,11 @@ def route_rate(rates):
     states = list(dict.fromkeys(state for const,terms in split.values() for state in terms))
     parts = [BinOp('*', par({route:terms.get(state, 0.0) for route,(const,terms) in split.items()}, literal=True), state) for state in states]
     return sum(parts[1:], parts[0])
+
+
+def is_declaration(obj):
+    """ Whether something given to a sim is a piece of a model to build a disease from (a transition, an outcome, or a sum of them), rather than a module; a module that is declared is one with a graph, whichever way it was written """
+    return isinstance(obj, (Transition, outcome, FlowSum))
 
 
 class FlowSum:

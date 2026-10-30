@@ -26,9 +26,9 @@ placeholder = '<!-- The list of skills is added here by `starsim ai show` -->' #
 marker = 'installed by `starsim ai`' # In the installed SKILL.md, so that a skill of the same name from elsewhere is not overwritten
 
 # Where coding agents look for a user's skills: each is a folder of skills, one per subfolder with a SKILL.md
-targets = sc.objdict(
-    claude = sc.objdict(folder='~/.claude/skills', agents='Claude Code (as /starsim)', needs='~/.claude'),
-    agents = sc.objdict(folder='~/.agents/skills', agents='Codex ($starsim), Kimi Code (/skill:starsim), Deep Code, and other agents that read the shared folder', needs=None),
+targets = sc.obj(
+    claude = sc.obj(folder='~/.claude/skills', agents='Claude Code (as /starsim)', needs='~/.claude'),
+    agents = sc.obj(folder='~/.agents/skills', agents='Codex ($starsim), Kimi Code (/skill:starsim), Deep Code, and other agents that read the shared folder', needs=None),
 )
 
 
@@ -40,7 +40,7 @@ def compile(args=None):
 
 def skills():
     """ The skills that "starsim ai show" serves, by name, with their descriptions """
-    out = sc.objdict()
+    out = sc.obj()
     for file in sorted(ai_folder.glob('*/SKILL.md')):
         name = file.parent.name
         if name != skill_name:

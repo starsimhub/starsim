@@ -18,7 +18,7 @@ filename = sc.thisdir(__file__, 'benchmark_large.yaml')
 
 # Define the parameters
 default_repeats = 10
-pars = sc.objdict(
+pars = sc.obj(
     n_agents = 100_000,   # Number of agents
     dur      = 100,       # Number of years to simulate
     dt       = 1.0,       # Timestep
@@ -52,7 +52,7 @@ def run_benchmark(repeats=default_repeats):
 
     # Keep the best (fastest) run and normalize by the performance ratio
     best = min(times)
-    out = sc.objdict()
+    out = sc.obj()
     out.version = ss.__version__
     out.date = sc.getdate(dateformat='%Y-%m-%d')
     out.cpu_performance = round(perf_ratio, 3)
@@ -64,9 +64,9 @@ def run_benchmark(repeats=default_repeats):
 def load_benchmarks():
     """ Load the saved per-version benchmarks, or an empty dict if none exist yet. """
     try:
-        return sc.objdict(sc.loadyaml(filename))
+        return sc.obj(sc.loadyaml(filename))
     except FileNotFoundError:
-        return sc.objdict()
+        return sc.obj()
 
 
 def compare_benchmark(out):

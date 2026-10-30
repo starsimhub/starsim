@@ -108,9 +108,9 @@ def test_rates():
         ('S', 'I', 'beta * S * I / K2', 'total'),      # 3: one that is not, is not
     ]
     rates = ss.io.core.Rates(src)
-    out = [rates.classify(sc.objdict(src=a, dst=b, rate=r, per=per))[0] for a,b,r,per in flows]
+    out = [rates.classify(sc.obj(src=a, dst=b, rate=r, per=per))[0] for a,b,r,per in flows]
     assert out == ['beta * I', 'beta * I', 'beta * I.n', 'gamma', 'beta * W.n / (W.n + K)', 'xi * I.n', 'mu * (S + I + R).n', 'beta * I', 'beta * I.n / K2'], out
-    rules = [rates.classify(sc.objdict(src=a, dst=b, rate=r, per=per))[2] for a,b,r,per in flows]
+    rules = [rates.classify(sc.obj(src=a, dst=b, rate=r, per=per))[2] for a,b,r,per in flows]
     assert rules[:5] == [2, 2, 3, 4, 5] and rules[7:] == [2, 3]
     return out
 

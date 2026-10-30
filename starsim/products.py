@@ -215,7 +215,7 @@ class Product(EventSource, ss.Module):
 
 #%% Products for declared models: what is delivered by ss.vaccinate(), ss.screen(), and ss.treat()
 
-class Effect:
+class Effect(sc.prettyobj):
     """ The effect of a product on one quantity, for the people who hold it: a multiplier of `1 - efficacy` """
     op = 'multiply'
     active = True
@@ -341,11 +341,11 @@ class box:
     def moves(self, dim):
         """ The moves between those levels, each at a rate (as `dur=`, the mean time at a level) """
         k = self.stages
-        out = [sc.objdict(dim=dim, src=i, dst=i+1, dur=self.dur/k) for i in range(1, k)]
+        out = [sc.obj(dim=dim, src=i, dst=i+1, dur=self.dur/k) for i in range(1, k)]
         last = k + 1 if self.decay is not None else 0
-        out.append(sc.objdict(dim=dim, src=k, dst=last, dur=self.dur/k))
+        out.append(sc.obj(dim=dim, src=k, dst=last, dur=self.dur/k))
         if self.decay is not None:
-            out.append(sc.objdict(dim=dim, src=last, dst=0, dur=self.decay))
+            out.append(sc.obj(dim=dim, src=last, dst=0, dur=self.decay))
         return out
 
 
@@ -807,11 +807,11 @@ class Treatment(Held):
             if unknown:
                 raise sc.KeyNotFoundError(f'the treatment "{self.name}" has a cure for {sc.strjoin(unknown)}, which {"is" if len(unknown) == 1 else "are"} not a state of "{disease}" (written as code, so its boolean states). Its states are {sc.strjoin(states)}.')
             self.cures = f'from {sc.strjoin(cures)} with {disease}.clear_infection()'
-            return [sc.objdict(dis=disease, tr=None, dst=None, srcs=[sc.objdict(name=name, people=True)], eff=p) for name,p in cures.items()]
+            return [sc.obj(dis=disease, tr=None, dst=None, srcs=[sc.obj(name=name, people=True)], eff=p) for name,p in cures.items()]
         if self.moves is None:
             dis = sim.get_declared(disease)
             tr, dst, srcs = self.recovery(dis)
-            return [sc.objdict(dis=dis.name, tr=tr, dst=dst, srcs=list(srcs), eff=self.cure)]
+            return [sc.obj(dis=dis.name, tr=tr, dst=dst, srcs=list(srcs), eff=self.cure)]
         edges = []
         for spec,eff in self.edge_specs():
             name = self.edge_disease(spec) or disease
@@ -823,7 +823,7 @@ class Treatment(Held):
             tr = graph.transitions[trname]
             if len(tr.dst) != 1 or not tr.people:
                 raise sc.KeyNotFoundError(f'the treatment "{self.name}" moves people along "{trname}" ({tr.arrow}), which has to go from states of people to one state of people.')
-            edges.append(sc.objdict(dis=dis.name, tr=tr, dst=tr.dst[0], srcs=[s for s in tr.src if s.people], eff=eff))
+            edges.append(sc.obj(dis=dis.name, tr=tr, dst=tr.dst[0], srcs=[s for s in tr.src if s.people], eff=eff))
         for i,a in enumerate(edges): # Each person treated moves along at most one transition of each disease
             for b in edges[i+1:]:
                 both = [s.name for s in a.srcs if a.dis == b.dis and s in b.srcs]

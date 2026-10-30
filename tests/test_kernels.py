@@ -65,7 +65,7 @@ def make_delay():
                       recovery=ss.Transition(I, R, dur=ss.days(8)), death=ss.death([E, I], rate=ss.perday(0.02)), init_prev=0.01, name='delay')
 
 
-models = sc.objdict(
+models = sc.obj(
     sir     = (make_sir,     dict(total_pop=10_000, unit='day', stop=ss.weeks(12))),
     seir    = (make_seir,    dict(unit='day', stop=200)),
     ages    = (make_ages,    dict(unit='day', stop=100, networks=ss.contacts(np.array([[8, 3, 1], [3, 6, 2], [1, 2, 3]])))),
@@ -103,7 +103,7 @@ def largest_diff(sim1, sim2):
 def test_ode():
     sc.heading('Testing that the ODE gives the same run in one call to the kernels as step by step')
     for key in models:
-        sims = sc.objdict({how:run(key, how) for how in ['step', 'all']})
+        sims = sc.obj({how:run(key, how) for how in ['step', 'all']})
         diff = largest_diff(sims.all, sims.step)
         print(f'{key:8s} whole run against stepped {diff:0.1e}')
         assert diff < 1e-9, f'{key}: the whole run differs from the stepped one by {diff}' # A value that varies in time is tabulated for a whole run, and worked out at each stage when stepped
@@ -139,7 +139,7 @@ def test_stages():
             init      = dict(I=0.001),
             name      = 'seir',
         )
-    peaks = sc.objdict()
+    peaks = sc.obj()
     for solver in ['ode', 'binomial', 'tau', 'abm']:
         pars = dict(n_agents=20_000) if solver == 'abm' else {}
         sims = [ss.Sim(make(), unit='day', stop=150, total_pop=200_000, solver=solver, rand_seed=seed, **pars, **kw).run() for seed in range(1 if solver == 'ode' else 3)]
@@ -166,7 +166,7 @@ def test_seasonal_steps():
         sim = ss.Sim(sis, solver=solver, dt=dt, stop=ss.years(2), total_pop=pop, rand_seed=seed, **kw).run()
         return sim.results.sis.infection.sum()/pop, sim.solver
     ode = make('ode', ss.days(1))[0]
-    out = sc.objdict()
+    out = sc.obj()
     for solver,pop in dict(gillespie=5000, tau=500_000).items(): # Steps of a quarter of a year: holding beta for the whole step gave 5-6% too many infections
         runs = [make(solver, ss.days(91), seed, pop) for seed in range(3)]
         out[solver] = np.mean([run[0] for run in runs])

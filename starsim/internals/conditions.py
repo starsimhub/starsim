@@ -409,7 +409,7 @@ def state(path):
 
     Examples:
         ```python
-        cancelled = (S + P + C + L) >> Z @ ss.on(ss.state('hpv18.X') | ss.state('hpv31.X'))
+        canceled = (S + P + C + L) >> Z @ ss.on(ss.state('hpv18.X') | ss.state('hpv31.X'))
         seek = ss.treat(drug, on=ss.state('ng.C').enter) # For a module made from a string
         ```
     """
@@ -765,7 +765,7 @@ def lazy(op, arr, other=None):
     return Cond(op, from_arr(arr), as_cond(other))
 
 
-class Selector:
+class Selector(sc.prettyobj):
     """
     Evaluates conditions for one module's engine, and holds the arithmetic for selecting people
 

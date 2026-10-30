@@ -260,13 +260,13 @@ class Crossing:
             n_rows += len(counts)*O
             idx = np.full((engine.n_comps, sim.groups.n_groups), -1, dtype=np.int64)
             idx[:, valid] = rowmap[:, o_of[valid]]*R + r_of[valid]
-            self.layout.append(sc.objdict(O=O, valid=valid, slice_of=np.where(valid, o_of, -1), r_of=r_of, cols=cols, rowmap=rowmap, idx=idx, counts=counts, toff=n_trans, moff=n_movers))
+            self.layout.append(sc.obj(O=O, valid=valid, slice_of=np.where(valid, o_of, -1), r_of=r_of, cols=cols, rowmap=rowmap, idx=idx, counts=counts, toff=n_trans, moff=n_movers))
             n_trans += engine.n_trans*O
             n_movers += len(engine.movers)*O
         self.n_rows = n_rows
         self.n_trans = n_trans
         self.n_movers = n_movers
-        self.pieces = sc.objdict(y=[])
+        self.pieces = sc.obj(y=[])
         for k,(engine,L) in enumerate(zip(self.engines, self.layout)):
             ivalid = np.flatnonzero(L.valid)
             o, r = L.slice_of[ivalid], r_of[ivalid]
@@ -780,6 +780,6 @@ class Crossing:
             states = range(len(engine.graph.states))
             by_group = (self.engine_stocks(k, stocks_g), self.engine_flows(k, flows_g), states, range(engine.n_trans + len(engine.movers)), group_ti) if grouped else None
             out = engine.collect(self.engine_stocks(k, stocks, by_group=False), self.engine_flows(k, flows, by_group=False), grouped=by_group, seeds=seeds)
-            out.deliveries = sc.objdict()
+            out.deliveries = sc.obj()
             outs.append((engine.mod.name, out))
         return outs

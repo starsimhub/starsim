@@ -42,7 +42,7 @@ rc_starsim = {
 
 
 # Not public to avoid confusion with ss.options
-class Options(sc.objdict):
+class Options(sc.obj):
     """
     Set options for Starsim.
 
@@ -83,8 +83,8 @@ class Options(sc.objdict):
         """
 
         # Options acts like a class, but is actually an objdict for simplicity
-        optdesc = sc.objdict()  # Help for the options
-        options = sc.objdict()  # The options
+        optdesc = sc.obj()  # Help for the options
+        options = sc.obj()  # The options
 
         optdesc.verbose = 'Set default level of verbosity: 0 prints nothing, 1 the solver, notes, and progress, and 2 everything (e.g. each step).'
         options.verbose = sc.parse_env('STARSIM_VERBOSE', 1, int)
@@ -228,10 +228,10 @@ class Options(sc.objdict):
             return
 
         n = 15 # Size of indent
-        optdict = sc.objdict()
+        optdict = sc.obj()
         orig_keys = self.orig_options.keys()
         for key in orig_keys:
-            entry = sc.objdict()
+            entry = sc.obj()
             entry.key = key
             entry.current = sc.indent(n=n, width=None, text=sc.pp(self[key], output=True)).rstrip()
             entry.default = sc.indent(n=n, width=None, text=sc.pp(self.orig_options[key], output=True)).rstrip()
@@ -241,7 +241,7 @@ class Options(sc.objdict):
 
         if len(args):
             try:
-                optdict = sc.objdict({k:optdict[k] for k in args})
+                optdict = sc.obj({k:optdict[k] for k in args})
             except Exception as e:
                 errormsg = f'Cannot provide help on invalid setting(s) "{sc.strjoin(args)}"; valid keys are:\n{sc.newlinejoin(sorted(orig_keys))}'
                 raise sc.KeyNotFoundError(errormsg) from e
@@ -395,7 +395,7 @@ class Options(sc.objdict):
 
     def refresh_references(self):
         """ Many modules copy settings into them for speed; here we refresh those """
-        files = ['arrays', 'demographics', 'diseases', 'distributions', 'networks']
+        files = ['arrays', 'demographics', 'diseases', 'dists', 'distributions', 'networks']
 
         # Update precision
         for file in files:

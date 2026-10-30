@@ -1527,10 +1527,10 @@ class DateConverter(matplotlib.units.ConversionInterface):
 
     1. When Starsim date or DateArray values are plotted, the x-axis values are automatically converted
        to float years for plotting. If this class is not used, matplotlib will instead convert them to
-       days since 1970-01-01, which is the default behaviour for pd.Timestamp.
+       days since 1970-01-01, which is the default behavior for pd.Timestamp.
     2. If the first plotting command used on an axis has date/DateArray as the x-axis, our standard
        custom date locators and formatters will be used, so that the float years will automatically be
-       labelled with dates.
+       labeled with dates.
 
     Together, this means that users can freely plot both Starsim date/DateArray values and
     plain float years on the same axis without needing any conversions, and they'll also automatically

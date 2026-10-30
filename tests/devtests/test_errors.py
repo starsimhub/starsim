@@ -318,7 +318,7 @@ def _():
         return sc.findinds(x > 0) # Numba can't call Sciris
     with ss.options.context(verbose=1), sc.capture() as said: # With no sim, the note is printed, not kept
         uncompilable(np.arange(3))
-    return sc.objdict(notes=said.splitlines()) # In place of the sim's notes
+    return sc.obj(notes=said.splitlines()) # In place of the sim's notes
 
 
 # %% Define the tests

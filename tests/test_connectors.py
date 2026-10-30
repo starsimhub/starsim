@@ -99,12 +99,12 @@ def test_connectors(do_plot=False):
 
     # Sims with a connector, without one, and with a connector and SIS treatment
     args = make_args()
-    sims = sc.objdict()
+    sims = sc.obj()
     sims.con = ss.Sim(label='With connector', connectors=hiv_sis(), **args).run()
     sims.nocon = ss.Sim(label='Without connector', **args).run()
     sims.treat = ss.Sim(label='With treatment', connectors=hiv_sis(), interventions=TreatSIS(), **args).run()
     diseases = ['sis', 'hiv']
-    results = sc.odict({sim.label: sc.objdict({d: sim.results[d].infected for d in diseases}) for sim in sims.values()})
+    results = sc.odict({sim.label: sc.obj({d: sim.results[d].infected for d in diseases}) for sim in sims.values()})
 
     if do_plot:
         plt.figure()

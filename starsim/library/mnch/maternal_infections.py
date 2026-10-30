@@ -83,7 +83,7 @@ class CongenitalDisease(AgentSIR):
         self.define_pars(
             # Keys define the possible outcomes; probabilities sum to 1
             birth_outcome_keys = ['stillborn', 'congenital', 'normal'],
-            birth_outcomes     = sc.objdict(
+            birth_outcomes     = sc.obj(
                 default=ss.choice(a=3, p=np.array([0.3, 0.4, 0.3])),
             ),
         )
@@ -123,7 +123,7 @@ class CongenitalDisease(AgentSIR):
 
             self.define_pars(
                 birth_outcome_keys = ['stillborn', 'congenital', 'normal'],
-                birth_outcomes     = sc.objdict(default=ss.choice(a=3, p=[0.3, 0.4, 0.3])),  # Illustrative placeholder
+                birth_outcomes     = sc.obj(default=ss.choice(a=3, p=[0.3, 0.4, 0.3])),  # Illustrative placeholder
             )
 
         Each outcome name needs a matching `ti_<name>` FloatArr state; non-lethal

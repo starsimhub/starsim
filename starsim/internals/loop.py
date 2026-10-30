@@ -306,8 +306,8 @@ class Loop:
         numeric arrays are what `make_plan()` uses to decide uniformity and to sort,
         so that date/dur objects are never compared during plan construction.
         """
-        self.abs_tvecs = sc.objdict()
-        self.abs_numvecs = sc.objdict()
+        self.abs_tvecs = sc.obj()
+        self.abs_numvecs = sc.obj()
 
         # Handle the sim and people first
         sim = self.sim

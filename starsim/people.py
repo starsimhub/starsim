@@ -412,7 +412,7 @@ class People:
         self.sim = sim # Store the sim
         for arr in [self.ti_dead, self.ti_removed]:
             arr.t = sim.t
-        ss.distributions.link_dists(obj=self.states, sim=sim, module=self, skip=[ss.Sim, ss.Module], init=init)
+        ss.dists.link_dists(obj=self.states, sim=sim, module=self, skip=[ss.Sim, ss.Module], init=init)
         return
 
     @property
@@ -525,7 +525,7 @@ class People:
         state.link_people(self)
         sim = self.__dict__.get('sim')
         if sim is not None:
-            dists = ss.distributions.link_dists(obj=state, sim=sim, module=self, skip=[ss.Sim, ss.Module, People]) # Its own (not those of the people it links to)
+            dists = ss.dists.link_dists(obj=state, sim=sim, module=self, skip=[ss.Sim, ss.Module, People]) # Its own (not those of the people it links to)
             if self.initialized: # Initialized with the others otherwise (see ss.Sim.init())
                 for trace,dist in dists.items():
                     dist.init(trace=f'people_{name}_{trace}', seed=sim.dists.base_seed, sim=sim)
@@ -578,7 +578,7 @@ class People:
         raw = np.zeros(self.uid.len_tot, dtype=bool)
         raw[:n] = ~self.alive.raw[:n] & ~np.isnan(self.ti_dead.raw[:n])
         dead = self.alive.asnew(raw, cls=ss.BoolArr, name='dead', copy=False)
-        dead.people = sc.objdict(auids=ss.uids(np.arange(n))) # Cover all agents, not just active ones
+        dead.people = sc.obj(auids=ss.uids(np.arange(n))) # Cover all agents, not just active ones
         return dead
 
     @property
@@ -779,7 +779,7 @@ class People:
             deaths = ss.solvers.backends.passes.due(self.auids.view(np.ndarray), self.ti_dead.raw, self.ti_removed.raw, ti)
         death_uids = ss.uids(deaths)
         self.resolve_causes(death_uids[self.ti_dead.raw[death_uids] <= ti])
-        self.alive[death_uids] = False  # Whilst not dead, removed agents should not be included in alive totals
+        self.alive[death_uids] = False  # While not dead, removed agents should not be included in alive totals
         self._dying = death_uids # Still active until the end of the step: see update_results() and remove_dead()
 
         # Execute deaths that took place this timestep (i.e., changing the `alive` state of the agents). This is executed
@@ -1080,11 +1080,11 @@ def people(place, year=None, n_agents=None, revision=None):
     ages = np.array(ss.data.age_edges(pop.index))
     total = (pop.female + pop.male).values
     ppl = People(n_agents=sc.ifelse(n_agents, ss.SimPars().n_agents), age_data=ss.data.to_age_data(ages, total), p_female=pop.female.sum()/total.sum())
-    ppl.named = sc.objdict(place=place, year=year, n_agents=n_agents, revision=revision, total=float(total.sum()), ages=ages, counts=total, ref=pop.attrs['ref'])
+    ppl.named = sc.obj(place=place, year=year, n_agents=n_agents, revision=revision, total=float(total.sum()), ages=ages, counts=total, ref=pop.attrs['ref'])
     return ppl
 
 
-class Person(sc.objdict):
+class Person(sc.obj):
     """
     A simple class to hold all attributes of a person
 

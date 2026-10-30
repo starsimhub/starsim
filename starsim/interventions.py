@@ -628,7 +628,7 @@ class Delivery(ss.products.EventSource, Intervention):
         if self.boxed(sim):
             return self.product.box_form.moves(self.product.dim)
         if self.holds and self.product.loses:
-            return [sc.objdict(dim=self.product.dim, src=1, dst=0, dur=self.product.waning)]
+            return [sc.obj(dim=self.product.dim, src=1, dst=0, dur=self.product.waning)]
         return []
 
     def agent_reasons(self):

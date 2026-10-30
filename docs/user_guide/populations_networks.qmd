@@ -227,8 +227,10 @@ The library (`import starsim.library as ssl`) has more:
 | `ssl.HybridNet` | Households, schools, workplaces, and community, as in Covasim | `household_size`, `contacts`, `school_ages`, `work_ages`, `clustered` |
 | `ssl.StaticNet` | A fixed network from a NetworkX graph | `graph`, `p`, `n_contacts` |
 | `ssl.ErdosRenyiNet` | Each pair of people connected with a probability | `p`, `dur` |
+| `ssl.GeoNet` | People in real places, with contacts falling off with distance | `places`, `local`, `c`, `n_contacts` |
+| `ssl.GridNet` | People on a square grid | `diagonal`, `periodic` |
+| `ssl.SmallWorldNet`, `ssl.ScaleFreeNet` | The classic small-world and scale-free graphs | `k`, `p`; `m` |
 | `ssl.DiskNet` | People who move in a plane, in contact within a radius | `r`, `v` |
-| `ssl.RandomSafeNet` | A random network whose draws keep scenario comparisons free of chance differences | `n_edges`, `dur` |
 | `ssl.NullNet` | No contacts, for testing | none |
 
 ## Writing a network

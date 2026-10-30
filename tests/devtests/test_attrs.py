@@ -145,12 +145,12 @@ def test_attr_rules():
 def test_burnin():
     sc.heading('Seeds part way through their natural history: a sim that starts earlier (burn-in), which replaces ss.spread')
     kw2 = dict(stop=1996, dt=ss.months(1), unit='year', n_agents=10_000, **kw)
-    out = sc.objdict()
+    out = sc.obj()
     for label,start in [('plain', 1990), ('burnin', 1980)]:
         hiv, mods = make_hiv(art=ss.peryear(0))
         r = ss.Sim(hiv, connectors=mods, start=start, **kw2).run().results.hiv
         i = (1990 - start)*12 # The step of 1990
-        out[label] = sc.objdict(falling=r.falling[i], prog=r.progression[i:i+37].sum(), aids=r.aids_death[i:i+37].sum())
+        out[label] = sc.obj(falling=r.falling[i], prog=r.progression[i:i+37].sum(), aids=r.aids_death[i:i+37].sum())
     p, b = out.plain, out.burnin
     assert p.prog == 0 and p.falling == 0 # Without it, nobody progresses for years
     assert b.falling > 50 and b.prog > 100 and b.aids > 50, out

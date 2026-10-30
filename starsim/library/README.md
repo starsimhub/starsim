@@ -37,7 +37,13 @@ Classes can be accessed either at the top level (`ssl.Measles`) or via their sub
 | Class | Base | Description |
 | --- | --- | --- |
 | `HouseholdNet` | `ss.Network` | Households built from DHS-style survey data, optionally evolving over time as women move out and give birth |
+| `ClusterNet` | `ss.Network` | Fully connected clusters, such as households |
+| `HybridNet` | `ss.Network` | Covasim's households, schools, workplaces, and community |
 | `DiskNet` | `ss.Network` | Agents move within a unit square and connect to others within a given radius |
+| `GeoNet` | `ss.RandomNet` | Agents in real places, with most contacts near home and the rest in places that are large and near |
+| `GridNet` | `StaticNet` | Agents on a square grid, in contact with their neighbors |
+| `SmallWorldNet` | `StaticNet` | A Watts-Strogatz graph: mostly local contacts, with a few long-range ones |
+| `ScaleFreeNet` | `StaticNet` | A Barabási-Albert graph: a few agents have many contacts |
 | `ErdosRenyiNet` | `ss.DynamicNetwork` | Every possible edge is created with probability `p` each timestep |
 | `NullNet` | `ss.Network` | Self-connections only, with zero transmission; useful as a placeholder or for debugging |
 | `StaticNet` | `ss.Network` | A fixed network from a NetworkX graph, or a function that makes one |

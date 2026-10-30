@@ -11,7 +11,7 @@ import pytest
 
 def make_pars(n_agents=2_000, start=2000, stop=2020):
     """ Lightweight SIS sim params shared across delivery tests """
-    return sc.objdict(
+    return sc.obj(
         n_agents = n_agents,
         start    = start,
         stop     = stop,

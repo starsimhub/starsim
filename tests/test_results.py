@@ -124,7 +124,7 @@ def test_2d_results():
     assert np.array_equal(res.male, res[:,1]) and res['male'].label == 'Infected (male)' # Each column is a 1D result
     assert res.resample('year').shape == (len(np.unique(res.timevec.years.astype(int))) - 1, 2) # Resampled along time only: each point after the start closes the year before it
     assert res.to_df().columns.tolist() == ['time', 'female', 'male']
-    assert 'by female, male' in repr(res) # Each column labelled (it was an unlabelled array)
+    assert 'by female, male' in repr(res) # Each column labeled (it was an unlabeled array)
     assert 'bysex_infected_male' in sim.to_df().columns # Dataframe columns for each result column
     assert sim.summary.value.bysex_infected_male == res['male'][-1] # Summarized by column, a stock by its last value
     res.plot()

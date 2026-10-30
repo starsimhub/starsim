@@ -60,7 +60,7 @@ def test_diagnostics_states():
 @sc.timer()
 def test_mock_objects():
     sc.heading('Testing mock objects')
-    o = sc.objdict()
+    o = sc.obj()
 
     μ = 5
     mock = 100

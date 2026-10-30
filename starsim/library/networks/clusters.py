@@ -49,7 +49,7 @@ class ClusterNet(ss.Network):
             ss.FloatArr('cluster', label='Cluster ID'),
         )
         self.rng_order = ss.random() # Order in which agents are assigned to clusters
-        self.rng_order.hash_dtype = np.float64 # Avoid ties, as for ssl.RandomSafeNet
+        self.rng_order.hash_dtype = np.float64 # Avoid ties, as for ss.RandomNet(method='safe')
         self.n_clusters = 0
         return
 
@@ -150,7 +150,7 @@ class HybridNet(ss.Network):
             method = 'fast',
             clustered = True,
         )
-        defaults = sc.dcp(sc.objdict(contacts=self.pars.contacts, beta=self.pars.beta))
+        defaults = sc.dcp(sc.obj(contacts=self.pars.contacts, beta=self.pars.beta))
         self.update_pars(pars, **kwargs)
         for key,default in defaults.items(): # Allow partial dicts, e.g. contacts=dict(s=10)
             self.pars[key] = sc.mergedicts(default, self.pars[key])

@@ -190,7 +190,7 @@ def load_epydemix(source, start=None, stop=None, verbose=None, **kwargs):
         if c in init and np.sum(init[c]) > np.sum(init.get(rest, 0)):
             rest = c
     if rest != comps[0]:
-        src.states = sc.objdict({rest:src.states[rest], **{k:v for k,v in src.states.items() if k != rest}})
+        src.states = sc.obj({rest:src.states[rest], **{k:v for k,v in src.states.items() if k != rest}})
     src.states[rest].init = None
     people = Nk # The number in each group
     if init:

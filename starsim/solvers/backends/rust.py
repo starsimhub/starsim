@@ -46,15 +46,15 @@ def fallback(rs, nb):
 
 def modules():
     """ Where the kernels are: modules, a class (whose kernels are static methods), and `draws.many` (a dict) """
-    return sc.objdict(passes=passes, arrays=ss.arrays, networks=ss.networks, distributions=ss.distributions,
-                      people=sys.modules['starsim.people'], utils=sys.modules['starsim.utils'], multi_random=ss.distributions.multi_random, many=draws.many)
+    return sc.obj(passes=passes, arrays=ss.arrays, networks=ss.networks, dists=ss.dists,
+                      people=sys.modules['starsim.people'], multi_random=ss.distributions.multi_random, many=draws.many)
 
 single = ['levels', 'crossed', 'infection_probs'] # The passes of ss.solvers.backends.passes with no threaded version
 pairs = ['census', 'flatnonzero', 'infect', 'due', 'count_people', 'keep_alive', 'due_alive', 'count_alive', 'keep_raw'] # Those with a serial and a threaded driver by name, both the same Rust kernel (the number of chunks says which)
 tuples = dict(edges='random_edges', candidates='candidates', can='can_transmit', ending='ending', touching='touching', women='women', debut='debuts', compress='compress', exits='competing_exits', agent_exits='competing_agent_exits') # Those whose two drivers are a pair, by the Rust kernel
 names = dict(passes=single + [f'{k}_{kind}' for k in pairs for kind in ['serial', 'threaded']] + [f'{k}_drivers' for k in tuples],
-             arrays=['nb_true_raw', 'nb_indexer', 'nb_true', 'nb_count'], networks=['nb_transmit', 'fisher_yates_shuffle'], distributions=['_hash_uniforms_fill'],
-             people=['count_gone'], utils=['_mark_partners'], multi_random=['combine_rvs', 'combine2_rvs'], many=['expon', 'weibull', 'binomial', 'poisson', 'nbinom'])
+             arrays=['nb_true_raw', 'nb_indexer', 'nb_true', 'nb_count'], networks=['nb_transmit', 'fisher_yates_shuffle', '_mark_partners'], dists=['_hash_uniforms_fill'],
+             people=['count_gone'], multi_random=['combine_rvs', 'combine2_rvs'], many=['expon', 'weibull', 'binomial', 'poisson', 'nbinom'])
 numba = None # The Numba kernels, once replaced
 
 def get(where, k):
@@ -111,16 +111,16 @@ def use(rust=True):
             ('arrays', 'nb_true_raw'):        fallback(rs.true_raw, numba['arrays', 'nb_true_raw']),
             ('arrays', 'nb_indexer'):         fallback(rs.indexer, numba['arrays', 'nb_indexer']),
             ('networks', 'nb_transmit'):      fallback(rs.transmit, numba['networks', 'nb_transmit']),
-            ('distributions', '_hash_uniforms_fill'): fallback(rs.hash_uniforms, numba['distributions', '_hash_uniforms_fill']),
+            ('dists', '_hash_uniforms_fill'): fallback(rs.hash_uniforms, numba['dists', '_hash_uniforms_fill']),
             ('arrays', 'nb_true'):            fallback(rs.true_vals, numba['arrays', 'nb_true']),
             ('arrays', 'nb_count'):           fallback(rs.count, numba['arrays', 'nb_count']),
             ('networks', 'fisher_yates_shuffle'): fallback(rs.shuffle, numba['networks', 'fisher_yates_shuffle']),
             ('people', 'count_gone'):         fallback(rs.count_gone, numba['people', 'count_gone']),
-            ('utils', '_mark_partners'):      fallback(rs.mark_partners, numba['utils', '_mark_partners']),
+            ('networks', '_mark_partners'):   fallback(rs.mark_partners, numba['networks', '_mark_partners']),
             ('multi_random', 'combine_rvs'):  fallback(rs.combine_rvs, numba['multi_random', 'combine_rvs'].__func__),
             ('multi_random', 'combine2_rvs'): fallback(rs.combine2_rvs, numba['multi_random', 'combine2_rvs'].__func__),
         })
-        for k in names['many']: # The draws of ss.Dist (see ss.distributions.inverse())
+        for k in names['many']: # The draws of ss.Dist (see ss.dists.inverse())
             kernels['many', k] = fallback(getattr(rs, 'many_' + k), numba['many', k])
     else:
         kernels = numba

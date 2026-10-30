@@ -44,7 +44,7 @@ def make_germany(n, k=20, seed=1):
     M = 0.15*M/M.sum(1, keepdims=True)
     seeds = np.zeros(n)
     seeds[rng.choice(n, 10, replace=False)] = 1
-    return sc.objdict(popsize=pop, x=x, y=y, M=M, seeds=seeds, names=[f'c{i:03d}' for i in range(n)])
+    return sc.obj(popsize=pop, x=x, y=y, M=M, seeds=seeds, names=[f'c{i:03d}' for i in range(n)])
 
 
 def make_secir(d, beta=None, damping=True):

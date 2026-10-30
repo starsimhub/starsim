@@ -90,7 +90,7 @@ def flatten(sim):
     """
     The compartmental form of a sim's declared diseases, as plain data for the exporters
 
-    Returns an `sc.objdict` with the unit of time; the compartments and their initial
+    Returns an `sc.obj` with the unit of time; the compartments and their initial
     numbers; the parameters (numbers in that unit); named expressions (a state with
     several stages is their sum, and `N` is the people in a disease); the flows, each
     with its compartments and its rate in total; and what was left out or changed.
@@ -100,12 +100,12 @@ def flatten(sim):
     lost = [how] if how else []
     diseases = [mod for mod in sim.diseases.values() if getattr(mod, 'graph', None) is not None]
     many = len(diseases) > 1
-    out = sc.objdict(name=diseases[0].name if len(diseases) == 1 else 'model', unit=unit, comps=sc.objdict(), pars=sc.objdict(), exprs=sc.objdict(), flows=[], lost=lost, n_states=0, n_transitions=0)
+    out = sc.obj(name=diseases[0].name if len(diseases) == 1 else 'model', unit=unit, comps=sc.obj(), pars=sc.obj(), exprs=sc.obj(), flows=[], lost=lost, n_states=0, n_transitions=0)
 
     for mod in diseases:
         g, e = mod.graph, mod.engine
         pre = f'{mod.name}_' if many else ''
-        names, flows = g.flow_terms(e)
+        names, flows = ss.presentation.flow_terms(g, e)
         Y = np.asarray(e.y).sum(axis=1) # Summed over the groups of any stratification
         table = {}
         for i,name in enumerate(names):
@@ -153,7 +153,7 @@ def flatten(sim):
                 if counts[flow.tr.name] > 1:
                     seen[flow.tr.name] += 1
                     name = f'{name}_{seen[flow.tr.name]}'
-                out.flows.append(sc.objdict(name=name, src=src, dst=None if dst is None else table[names[dst]], rate=rename(term, table, unit), transition=flow.tr.name))
+                out.flows.append(sc.obj(name=name, src=src, dst=None if dst is None else table[names[dst]], rate=rename(term, table, unit), transition=flow.tr.name))
 
     # Anything a rate uses that is not exported
     known = set(out.comps) | set(out.pars) | set(out.exprs)

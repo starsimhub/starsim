@@ -54,7 +54,7 @@ def test_diseases():
         ebola   = ssl.Ebola(beta=ss.perday(0.1), init_prev=0.1),
         measles = ssl.Measles(beta=ss.perday(0.3), init_prev=0.1),
     )
-    sims = sc.objdict()
+    sims = sc.obj()
     for name, disease in diseases.items():
         sim = ss.Sim(diseases=disease, networks=ss.RandomNet(), **outbreak_pars)
         sim.run()
@@ -122,6 +122,22 @@ def test_hiv():
     assert 0 < cd4.mean() <= 500, f'Expected CD4 counts in (0, 500], not {cd4.mean()}'
 
     return s1, s2
+
+
+@sc.timer()
+def test_networks():
+    """ Library networks, as a sim would use them """
+    sc.heading('Testing library networks')
+    n = 400
+    nets = dict(geo=ssl.GeoNet('Kenya', n_contacts=6), grid=ssl.GridNet(periodic=True), small=ssl.SmallWorldNet(k=4), free=ssl.ScaleFreeNet(m=2))
+    sims = {k:ss.Sim(n_agents=n, diseases='sis', networks=net, dur=2, verbose=0).run() for k,net in nets.items()}
+    degree = {k:np.bincount(np.r_[sim.networks[0].p1, sim.networks[0].p2], minlength=n) for k,sim in sims.items()}
+    assert (degree['grid'] == 4).all() and (degree['small'].mean() == 4)
+    assert degree['free'].max() > 3*degree['free'].mean() # A few have many contacts
+    geo = sims['geo'].networks[0]
+    assert np.isclose(degree['geo'].mean(), 6, rtol=0.05)
+    assert (geo.place.raw[geo.p1] == geo.place.raw[geo.p2]).mean() > 0.5 # Mostly within a place
+    return degree
 
 
 @sc.timer()

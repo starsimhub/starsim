@@ -41,12 +41,12 @@ def make_sis():
 
 def run_each(make, stop=150, **kwargs):
     """ Run the sim that `make` returns with each solver """
-    return sc.objdict({solver:make(solver=solver, stop=stop, **kw, **kwargs).run() for solver in solvers})
+    return sc.obj({solver:make(solver=solver, stop=stop, **kw, **kwargs).run() for solver in solvers})
 
 
 def check_close(sims, func, rtol=0.1):
     """ Check that a number from each sim matches the ODE's """
-    vals = sc.objdict({solver:func(sim) for solver,sim in sims.items()})
+    vals = sc.obj({solver:func(sim) for solver,sim in sims.items()})
     assert np.allclose(vals[:], vals.ode, rtol=rtol), f'Expected the solvers to agree, not {vals}'
     return vals
 
@@ -137,7 +137,7 @@ def test_applied():
             betamap = self.validate_beta()
             rel_trans = self.rel_trans.asnew(self.infectious.raw*self.rel_trans.raw, copy=False)
             rel_sus = self.rel_sus.asnew(self.susceptible.raw*self.rel_sus.raw, copy=False)
-            out = [self.transmit_route(i, route, betamap[ss.utils.standardize_netkey(key)], rel_trans, rel_sus) for i,(key,route) in enumerate(self.sim.networks.items())]
+            out = [self.transmit_route(i, route, betamap[ss.networks.standardize_netkey(key)], rel_trans, rel_sus) for i,(key,route) in enumerate(self.sim.networks.items())]
             return self.finalize_infections(*zip(*out))
     sim = ss.Sim(diseases=OwnTransmit(name='sis'), networks='random', connectors=ss.modify('sis.rel_sus', multiply=0), n_agents=1000, verbose=0).run()
     assert sim.results.sis.new_infections.sum() == 0
@@ -172,7 +172,7 @@ def test_conditions():
         n_S = sim.results.sir.S.by('age').values[5, 0]
         assert np.isclose(sim.results.kids.delivered[6], n_S, rtol=0.02) # Every susceptible child at time 5, and nobody else, in the step from it
         assert np.allclose(sim.results.kids.delivered.by('age').values[6], [sim.results.kids.delivered[6], 0, 0]) # By stratum: all in the youngest group
-        total = sim.results.kids.delivered.by('age').summarize() # Labelled by group
+        total = sim.results.kids.delivered.by('age').summarize() # Labeled by group
         assert isinstance(total, pd.Series) and len(total) == 3 and np.isclose(total.iloc[0], sim.results.kids.delivered.summarize())
     check_close(sims, lambda sim: sim.results.kids.delivered.sum(), rtol=0.05)
 

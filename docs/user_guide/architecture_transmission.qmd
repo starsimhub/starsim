@@ -120,7 +120,7 @@ Extinction and bimodality can't be seen in a median, which is why `msim.plot(lin
 - Modifiers on one quantity combine by the one rule above. Protection from several strains a person holds needs a different rule (the strongest, or a capped sum), which is `ss.immunity`; anything else is `step()` code.
 - `when=` functions and `ss.modify` keep no memory apart from `hold=`; anything that must remember is a class.
 
-The code is in `starsim/networks.py` and `solvers/mixing.py` (routes), `connectors.py` and `conditions.py` (effects), `interventions.py`, `products.py` and `solvers/deliveries.py` (interventions), and `results.py`. For the modeler's view, see the user guide on [contact networks](populations_networks.qmd), [population data and contact matrices](populations_data.qmd), [geography](populations_geography.qmd), [connectors](interventions_connectors.qmd), [products](interventions_products.qmd), [interventions](interventions_interventions.qmd), [results](building_results.qmd), and [scenarios and many runs](running_scenarios.qmd).
+The code is in `starsim/networks.py` and `solvers/mixing.py` (routes), `connectors.py` and `internals/conditions.py` (effects), `interventions.py`, `products.py` and `solvers/deliveries.py` (interventions), and `results.py`. For the modeler's view, see the user guide on [contact networks](populations_networks.qmd), [population data and contact matrices](populations_data.qmd), [geography](populations_geography.qmd), [connectors](interventions_connectors.qmd), [products](interventions_products.qmd), [interventions](interventions_interventions.qmd), [results](building_results.qmd), and [scenarios and many runs](running_scenarios.qmd).
 
 ## In the design record
 

@@ -1420,10 +1420,10 @@ class GroupAlive(BoolState):
         self.no_agents('uids')
 
 
-class Watch(ss.utils.NoDists):
+class Watch:
     """
     The link from a state to the engine that keeps count of who is in it (`BoolState.watch`), which is told of
-    every change to it (see `ss.solvers.Agents.wrote()`). It is never searched for distributions (see `ss.distributions.no_dists()`),
+    every change to it (see `ss.solvers.Agents.wrote()`). It is never searched for distributions (see `ss.dists.no_dists()`),
     so the link does not change where they are found, which gives each its random numbers.
     """
     __slots__ = ['engine']

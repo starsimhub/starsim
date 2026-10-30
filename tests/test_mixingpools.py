@@ -30,7 +30,7 @@ def run(networks, sir=None, do_plot=False):
 def test_single(do_plot=do_plot):
     """ Test a single MixingPool: with defaults, by UIDs, by age, and by sex """
     sc.heading('Testing single mixing pools...')
-    sims = sc.objdict()
+    sims = sc.obj()
     sims.defaults = run(ss.MixingPool(), do_plot=do_plot)
 
     # In this arrangement, src transmits to dst, but can never go the other way, so the epidemic dies out once everyone in src recovers

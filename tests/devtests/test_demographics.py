@@ -38,7 +38,7 @@ def test_background_loss():
         )
         sim.run()
         res = sim.demographics.pregnancy.results
-        results[label] = sc.objdict(mc=res.miscarriage.sum(), sb=res.stillbirth.sum(), births=res.birth.sum())
+        results[label] = sc.obj(mc=res.miscarriage.sum(), sb=res.stillbirth.sum(), births=res.birth.sum())
         results[label].losses = results[label].mc + results[label].sb
         print(f'  p_loss={p_loss}: {results[label]}')
 

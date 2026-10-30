@@ -28,7 +28,7 @@ def test_mnch():
 
     demographics = lambda: [ss.Pregnancy(fertility_rate=ss.time.freq(100, 'year'), burnin=True), ss.Deaths()]
     networks = lambda: [ss.PrenatalNet(), ss.RandomNet()]
-    sims = sc.objdict()
+    sims = sc.obj()
 
     # Congenital disease: mother-to-child transmission with birth outcomes
     sim = ss.Sim(diseases=ssl.mnch.CongenitalDisease(beta=ss.peryear(20), init_prev=0.2),

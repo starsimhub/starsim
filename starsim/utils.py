@@ -2,13 +2,11 @@
 Numerical utilities and other helper functions
 """
 import os
-import re
 import types
 import functools
 import sys
 import warnings
 import numpy as np
-import numba as nb
 import pandas as pd
 import sciris as sc
 import matplotlib.pyplot as plt
@@ -16,11 +14,6 @@ import starsim as ss
 
 
 # %% Helper functions
-
-class NoDists:
-    """ A base for objects that never hold a distribution (or a time parameter), so are not searched for them (see `ss.distributions.no_dists()`) """
-    pass
-
 
 class method_wrapper:
     """
@@ -65,7 +58,7 @@ def skipkeys(names):
     return [skipkey(name) for name in names]
 
 
-class ndict(sc.objdict):
+class ndict(sc.obj):
     """
     A dictionary-like class that provides additional functionalities for handling named items.
 
@@ -223,7 +216,7 @@ class ndict(sc.objdict):
 
 def nlist_to_dict(nlist, die=True):
     """ Convert a list of named items (e.g. modules, states) to a dictionary; not for the user """
-    out = sc.objdict()
+    out = sc.obj()
     collisions = []
     for obj in nlist:
         key = obj.name
@@ -327,71 +320,7 @@ def n_args(func):
     return sum(1 for p in inspect.signature(func).parameters.values() if p.kind in kinds and p.default is inspect.Parameter.empty)
 
 
-@nb.jit(cache=True)
-def _mark_partners(p1, p2, is_ind, is_partner):
-    """ Mark the partners of the agents flagged in is_ind, in both directions of each edge; used by find_contacts() """
-    for i in range(len(p1)):
-        if is_ind[p1[i]]:
-            is_partner[p2[i]] = True
-        if is_ind[p2[i]]:
-            is_partner[p1[i]] = True
-    return
-
-
-def find_contacts(p1, p2, inds, as_array=False):
-    """
-    Find the partners of the specified agents in an edge list; see also `Network.find_contacts()`.
-
-    By default, a set is returned so that custom tracing interventions can efficiently add extra
-    people; with `as_array=True`, a sorted array of unique UIDs is returned instead, which is faster.
-
-    Args:
-        p1 (array): the first agent of each edge
-        p2 (array): the second agent of each edge
-        inds (array): the agents whose partners to find
-        as_array (bool): if True, return a sorted array rather than a set
-    """
-    p1 = np.asarray(p1)
-    p2 = np.asarray(p2)
-    inds = np.asarray(inds, dtype=np.int64)
-
-    # Make lookup tables of which people are in inds, and which are their partners (much faster than np.isin() or a set)
-    n = max(np.max(p1, initial=-1), np.max(p2, initial=-1), np.max(inds, initial=-1)) + 1
-    is_ind = np.zeros(n, dtype=bool)
-    is_ind[inds] = True
-    is_partner = np.zeros(n, dtype=bool)
-    _mark_partners(p1, p2, is_ind, is_partner)
-
-    partners = np.flatnonzero(is_partner).astype(ss.dtypes.int, copy=False)
-    if not as_array:
-        partners = set(partners.tolist())
-    return partners
-
-
 # %% Data cleaning and processing
-
-def standardize_netkey(key):
-    """ 
-    Standardize network key names
-    
-    Networks can be upper or lowercase, have a suffix 'net' or not, and may include
-    a number added to make the name unique; this function standardizes them. For
-    example, 'RandomNet', 'randomnet', and 'randomnet_1' would all be standardized
-    to 'random'.
-    """
-    return re.sub(r'net(_\d+)?$', r'\1', key.lower())
-
-
-def route_beta(betas, route):
-    """
-    The value of a beta for each route (a dict by route name) on one route, or None if it has none
-
-    The dict may give `default`, the value of every route it does not name, e.g.
-    `dict(sexualnet=ss.peract(0.01), msm=ss.peract(0.1), default=0)`.
-    """
-    keys = {standardize_netkey(k):v for k,v in betas.items() if k != 'default'}
-    return keys.get(standardize_netkey(route), betas.get('default'))
-
 
 # Alternative column names accepted for standard data columns, used only if the configured
 # column name is absent from the data (e.g. UN World Population Prospects data uses "Time"
@@ -485,7 +414,7 @@ def standardize_data(data=None, metadata=None, min_year=1800, out_of_range=0, de
         errormsg = f'The metadata is missing a column name for "value", which must be provided if the input data is in the form of a DataFrame, Series, or dict. Data columns are:\n{metadata["data_cols"]}'
         raise ValueError(errormsg)
     values = sc.promotetoarray(data[resolve_data_col(data, 'value', metadata['data_cols']['value'])])
-    index = sc.objdict()
+    index = sc.obj()
     for k, col in metadata['data_cols'].items():
         if k != 'value':
             index[k] = data[resolve_data_col(data, k, col)]
@@ -523,32 +452,85 @@ def standardize_data(data=None, metadata=None, min_year=1800, out_of_range=0, de
     return output
 
 
-def combine_rands(a, b):
-    """
-    Efficient algorithm for combining two arrays of random integers into an array
-    of floats.
+# %% Helpers for the sim
 
-    See ss.multi_random() for the user-facing version.
+def same_value(a, b):
+    """ Whether two settings have the same value (e.g. 10000 and 10000.0); False if they cannot be compared to one True or False """
+    try:
+        return bool(a == b)
+    except Exception:
+        return False
 
-    Inputs must be uint64: signed integers would produce output in [-0.5, 0.5] rather than
-    [0, 1], so they raise an error rather than being cast, since casting would silently copy
-    the array. To reinterpret existing bits for free, use `arr.view(np.uint64)`.
 
-    Args:
-        a (array): array of random uint64 integers between 0 and np.iinfo(np.uint64).max, as from ss.randint(low=0, high=np.iinfo('uint64').max, dtype=np.uint64)
-        b (array): ditto, same size as a
+def given_modules(*inputs):
+    """ The modules among a sim's inputs, alone or in lists or dicts (e.g. `diseases=[sir, sis]`) """
+    mods = []
+    for inp in inputs:
+        for val in (inp or {}).values():
+            vals = val.values() if isinstance(val, dict) else sc.tolist(val) if isinstance(val, (list, tuple, ss.Module)) else []
+            mods += [v for v in vals if isinstance(v, ss.Module)]
+    return mods
 
-    Returns:
-        A new array of uniformly distributed random numbers in [0, 1], the same size as a and b
-    """
-    a_dtype = getattr(a, 'dtype', type(a).__name__)
-    b_dtype = getattr(b, 'dtype', type(b).__name__)
-    if a_dtype != np.uint64 or b_dtype != np.uint64:
-        errormsg = f'combine_rands() requires uint64 arrays, not a={a_dtype} and b={b_dtype}. Signed integers give output in [-0.5, 0.5] instead of [0, 1]. Use ss.randint(low=0, high=np.iinfo(np.uint64).max, dtype=np.uint64), or arr.view(np.uint64) to reinterpret the bits without copying.'
-        raise TypeError(errormsg)
-    c = np.bitwise_xor(a*b, a-b)
-    u = c / np.iinfo(np.uint64).max
-    return u
+
+def make_disease(arg, names):
+    """ Transitions given to the sim (alone or in a list, among modules) as one disease, named from its states (e.g. "sir"), whose results are also at the top of the sim's (`sim.results.I`) """
+    items = sc.tolist(arg) if isinstance(arg, (list, tuple)) or ss.transitions.is_declaration(arg) else None
+    if items is None:
+        return arg
+    flat = [obj for item in items for obj in (item if isinstance(item, (list, tuple)) else [item])]
+    transitions = [obj for obj in flat if ss.transitions.is_declaration(obj)]
+    if not transitions:
+        return arg
+    disease = ss.Disease(*transitions, _names=names)
+    disease.setattribute('_implicit', True)
+    return [obj for obj in flat if not ss.transitions.is_declaration(obj)] + [disease]
+
+
+def copy_given(*inputs):
+    """ The sim's inputs merged and copied together, so the modules given are never run themselves and can be given to other sims, and refer to each other as given """
+    for mod in given_modules(*inputs): # Marked, so that what is added to them later, which this sim would never see, raises (see ss.Module.check_not_given())
+        mod.setattribute('_given', True)
+    out = sc.mergedicts(*inputs, _copy=True)
+    for mod in given_modules(out): # The sim's own copies are its to change, and hold their own results (also if the module given was given to a sim before)
+        mod.setattribute('_given', False)
+        if isinstance(getattr(mod, 'results', None), ss.Results):
+            mod.results.__dict__.pop('_given_to', None)
+    for mod in given_modules(*inputs): # The modules given hold no results (the sim runs its copies), so reading one says where they are
+        if isinstance(getattr(mod, 'results', None), ss.Results) and not len(mod.results):
+            mod.results.setattribute('_given_to', mod.name)
+    return out
+
+
+class outermost(method_wrapper):
+    """ The outermost call to a sim's init() (Sim's, or a subclass's that calls it) first keeps a copy of the sim as it is, which `sim.new()` copies """
+    def __call__(self, sim, *args, **kwargs):
+        if sim.initialized or sim.__dict__.get('_in_init'):
+            return self.func(sim, *args, **kwargs)
+        if '_before_init' not in sim.__dict__: # Not again after an init() that failed
+            try:
+                sim._before_init = sc.dcp(sim)
+            except Exception as E: # Something in the sim cannot be copied: it still runs, but new() says why it cannot copy it
+                sim._before_init = f'sim.new() copies the sim as it was before it was initialized, but this {type(sim).__name__} could not be copied ({type(E).__name__}: {E}); make it again instead'
+        sim._in_init = True
+        try:
+            return self.func(sim, *args, **kwargs)
+        finally:
+            sim.__dict__.pop('_in_init', None)
+
+
+def num_str(x):
+    """ A time as text: a number (or a duration, by its value) without a needless decimal point (100, not 100.0), or a date """
+    x = x.value if isinstance(x, ss.TimePar) else x
+    return f'{x:n}' if sc.isnumber(x) else str(x)
+
+
+def time_str(x, sim=None, plural=False):
+    """ A time point as text, for what a run prints: a date as a date (without a time of day, e.g. 2020-01-08), a duration with its own unit (e.g. year 2000.02, as on a timeline in calendar years), or a number in the sim's unit (e.g. day 27, or step 27 in a sim with no unit, whose times are days underneath) """
+    if isinstance(x, (ss.date, pd.Timestamp)):
+        return str(ss.date(x)).partition(' ')[0]
+    unitless = sim is not None and sim.t.unitless
+    unit_name = type(x).base.removesuffix('s') if isinstance(x, ss.dur) and not unitless else sim.unit_name
+    return f'{unit_name}{"s"*plural} {num_str(x)}'
 
 
 #%% Other helper functions
@@ -672,7 +654,7 @@ def shrink(obj=None, attrs=None, verbose=False):
 #%% Plotting helper functions
 
 # Specify known/common keywords
-plotting_kw = sc.objdict()
+plotting_kw = sc.obj()
 plotting_kw.fig = ['figsize', 'nrows', 'ncols', 'ratio', 'num', 'dpi', 'facecolor'] # For sc.getrowscols()
 plotting_kw.plot = ['alpha', 'c', 'color', 'lw', 'linewidth', 'ls', 'linestyle', 'marker', 'markersize', 'ms'] # For plt.plot()
 plotting_kw.data = {'data_alpha':'alpha', 'data_color':'color', 'data_size':'markersize'} # For plt.scatter()
@@ -722,10 +704,10 @@ def plot_args(kwargs=None, _debug=False, **defaults):
     suffix='_kw'
     _None = '<None>'
     kwargs = sc.mergedicts(defaults, kwargs) # Input arguments, e.g. ss.plot_args(kwargs, figsize=(8,6))
-    kw = sc.objdict() # Output arguments
+    kw = sc.obj() # Output arguments
     for subtype,args in plotting_kw.items():
         if _debug: print('Subtype & args:', subtype, args)
-        kw[subtype] = sc.objdict() # e.g. kw.fig
+        kw[subtype] = sc.obj() # e.g. kw.fig
 
         # Handle kwargs, e.g. "figsize"
         if isinstance(args, list): # Ensure everything's a dict, although only kw.data is

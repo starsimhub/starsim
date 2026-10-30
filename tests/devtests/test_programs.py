@@ -18,12 +18,12 @@ def make_sir():
 
 def run_both(make, stop=100, pop=50_000, n_agents=10_000, **kwargs):
     """ Run the sim that `make` returns as an ODE and as agents (each agent standing for several people) """
-    return sc.objdict(ode=make(solver='ode', total_pop=pop, stop=stop, **kw, **kwargs).run(),
+    return sc.obj(ode=make(solver='ode', total_pop=pop, stop=stop, **kw, **kwargs).run(),
                       abm=make(solver='abm', total_pop=pop, n_agents=n_agents, stop=stop, **kw, **kwargs).run())
 
 
 def check_close(sims, func, rtol=0.1):
-    vals = sc.objdict({solver:func(sim) for solver,sim in sims.items()})
+    vals = sc.obj({solver:func(sim) for solver,sim in sims.items()})
     assert np.allclose(vals[:], vals.ode, rtol=rtol), f'Expected the solvers to agree, not {vals}'
     return vals
 
@@ -37,19 +37,19 @@ def check_agents(make, stop=100, pop=50_000, **kwargs):
 
 
 def run_abm(make, stop=100, pop=50_000, n_agents=10_000, **kwargs):
-    return sc.objdict(abm=make(solver='abm', total_pop=pop, n_agents=n_agents, stop=stop, **kw, **kwargs).run())
+    return sc.obj(abm=make(solver='abm', total_pop=pop, n_agents=n_agents, stop=stop, **kw, **kwargs).run())
 
 
 # %% Define the tests
 
 def test_people():
     sc.heading('Testing numbers are people: capacity and results read during a run')
-    seen = sc.objdict()
+    seen = sc.obj()
     def make(**kwargs):
         sir = make_sir()
         def look(sim): # Results read during the run are people, with 5 people to an agent
             if sim.ti == 30:
-                seen[sim.solver] = sc.objdict(I=sim.results.sir.I[sim.ti - 1], delivered=sim.results.stock.delivered[sim.ti - 1])
+                seen[sim.solver] = sc.obj(I=sim.results.sir.I[sim.ti - 1], delivered=sim.results.stock.delivered[sim.ti - 1])
             return True
         stock = ss.vaccinate(ss.Vaccine(efficacy=0.9), capacity=ss.perday(500), start=10, when=look)
         return ss.Sim(sir, interventions=stock, **kwargs)
@@ -107,7 +107,7 @@ def test_queue():
         sis = make_sis()
         clinic = ss.treat(ss.Treatment(moves=sis.cure), on=sis.infection, where=sis.I, capacity=ss.perday(20), queue=queue)
         return ss.Sim(sis, interventions=clinic, **kwargs)
-    out = sc.objdict()
+    out = sc.obj()
     for label,queue in dict(none=None, days=ss.days(5), true=True).items():
         if queue is None:
             sims = run_both(make, stop=150, queue=queue)
@@ -116,7 +116,7 @@ def test_queue():
             sims = run_abm(make, stop=150, queue=queue)
         for solver,sim in sims.items():
             r = sim.results.clinic
-            n = sc.objdict({k:r[k].sum() for k in ['eligible', 'delivered', 'lost_capacity'] + (['left'] if queue is not None else [])})
+            n = sc.obj({k:r[k].sum() for k in ['eligible', 'delivered', 'lost_capacity'] + (['left'] if queue is not None else [])})
             print(f'{queue} {solver}: {n}, waiting at the end {r.waiting[-1] if queue is not None else 0:.0f}')
             assert np.all(r.delivered <= 20*1.0001) and r.delivered.max() > 19.9
             if queue is None:
@@ -241,7 +241,7 @@ def test_hiv_art():
         priority = [hiv.cd4_lo, hiv.post_art, hiv.cd4_mid, hiv.cd4_hi] if prioritize else None # Lowest CD4 first
         art_prog = ss.treat(ss.Treatment(moves=hiv.start_art), capacity=ss.peryear(1200), priority=priority)
         return ss.Sim(hiv, interventions=art_prog, start=2000, stop=2014, dt=ss.months(1), unit='year', **kwargs) # The bare numbers (the years) are years
-    both = lambda prioritize: sc.objdict(ode=make(prioritize, solver='ode', total_pop=100_000, verbose=0).run(), abm=make(prioritize, solver='abm', total_pop=100_000, n_agents=20_000, verbose=0).run())
+    both = lambda prioritize: sc.obj(ode=make(prioritize, solver='ode', total_pop=100_000, verbose=0).run(), abm=make(prioritize, solver='abm', total_pop=100_000, n_agents=20_000, verbose=0).run())
     sims, base = both(True), both(False)
     for solver,sim in sims.items():
         r, res, res0 = sim.results.art_prog, sim.results.hiv, base[solver].results.hiv

@@ -156,7 +156,7 @@ def test_crn_pairing():
     def susceptible(seed, uid=None): # Who is still susceptible at the end; with uid, that agent is made immune at the start
         intv = ss.vaccinate(efficacy=1.0, coverage=1.0, at=[0], where=lambda sim: ss.uids([uid]), name='vx') if uid is not None else None
         sir = ss.SIR(beta=ss.perday(0.05), dur_inf=ss.days(10), init_prev=0.02)
-        sim = ss.Sim(n_agents=1000, diseases=sir, networks=ssl.RandomSafeNet(n_edges=2), interventions=intv, solver='abm', unit='day', stop=100, rand_seed=seed, verbose=0) # A network that keeps CRN when people are born or die (ss.RandomNet does not)
+        sim = ss.Sim(n_agents=1000, diseases=sir, networks=ss.RandomNet(n_contacts=4, method='safe'), interventions=intv, solver='abm', unit='day', stop=100, rand_seed=seed, verbose=0) # A network that keeps CRN when people are born or die (ss.RandomNet does not)
         return sim.run().diseases.sir['S'].raw.copy()
     changed = dict()
     for crn in [True, False]:

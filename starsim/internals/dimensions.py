@@ -4,10 +4,10 @@ Dimensions: how a model is divided into groups by the properties of people (age,
 import numpy as np
 import sciris as sc
 import starsim as ss
-from .internals.expressions import as_expr, did_you_mean
+from .expressions import as_expr, did_you_mean
 from .parameters import by
-from .geo import geography, gravity, radiation, Mobility
-from .transitions import level_pair, parse_increment
+from ..geo import geography, gravity, radiation, Mobility
+from ..transitions import level_pair, parse_increment
 
 __all__ = ['Strat', 'Transfer', 'transfer', 'Groups']
 
@@ -49,7 +49,7 @@ class Strat:
         self.name = name
         self.geo = levels if isinstance(levels, geography) else None
         self.kind = kind or ('space' if (self.geo is not None or mobility is not None) else 'age' if name == 'age' else 'plain')
-        self.guessed = sc.objdict()
+        self.guessed = sc.obj()
         self.states = states
         if where is not None and not isinstance(where, dict):
             errormsg = f'where= takes a dict of a dimension and its level (or levels), e.g. dict(sex="female"), not {type(where).__name__}'
@@ -106,7 +106,7 @@ class Strat:
         self.like_places = kind is None and self.kind == 'plain' and name in place_names # Named as places, but given only names: see Groups.init()
         if self.like_places:
             self.guessed['kind'] = 'plain (groups that mix as one population), since it was given only names'
-        self.adjust = sc.objdict()
+        self.adjust = sc.obj()
         for key,vals in (adjust or {}).items():
             vals = np.array(vals, dtype=float)
             if len(vals) != self.n:
@@ -382,7 +382,7 @@ def transfer_stages(sim, mod, tf, strat):
     out = Strat(f'{tf.name}_stage', [f'stage {i+1}' for i in range(k)], split=[1.0] + [0.0]*(k - 1), states=tf.states, where={tf.dim:levels})
     out.owner = mod.name
     out.stages_of = (mod.name, tf.name)
-    out.dwell = sc.objdict(mean=mean, std=std, k=k, family=type(raw).__name__, exact=trans.exact_stages(raw) is not None) # For the note on how close the stages are: see ss.solvers.Engine.note_stages()
+    out.dwell = sc.obj(mean=mean, std=std, k=k, family=type(raw).__name__, exact=trans.exact_stages(raw) is not None) # For the note on how close the stages are: see ss.solvers.Engine.note_stages()
     return out
 
 
@@ -467,7 +467,7 @@ def parse_stratify(kwargs, graphs, sim=False):
 
 #%% The groups of a sim
 
-class Groups:
+class Groups(sc.prettyobj):
     """
     The groups of a sim: its stratifications (`ss.dimensions.Strat`), and how their levels combine into groups
 
@@ -491,7 +491,7 @@ class Groups:
         """ Collect the stratifications of the sim and its modules, and work out the groups they give """
         sim = self.sim
         self.version += 1
-        strats = sc.objdict()
+        strats = sc.obj()
         self.sim_strats = [] # The ones given to the sim, which apply to every module
         for call in sc.tolist(sim.pars.stratify):
             for strat in parse_stratify(call, graphs=[mod.graph for mod in sim.declared], sim=True)[0]:

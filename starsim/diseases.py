@@ -153,7 +153,7 @@ class Disease(ss.Module):
             names = (_names or ss.utils.caller_names(1)) if given else {} # The names of the variables of the code that made it; or, made by the sim from the transitions it was given, of the code that made the sim
             if not given: # A parameter's value given by keyword (e.g. with bounds) sets the parameter of that name that the transitions declared next use, as pars= does
                 pars = sc.mergedicts(pars, {key:kwargs.pop(key) for key in list(kwargs) if isinstance(kwargs[key], ss.par)})
-            self._declared = sc.objdict(args=list(args), members=members, pars=pars, kwargs=kwargs, names=names, strains=strains, stratify=stratify, code_pars=[])
+            self._declared = sc.obj(args=list(args), members=members, pars=pars, kwargs=kwargs, names=names, strains=strains, stratify=stratify, code_pars=[])
             if given: # Built now, so a subclass's __init__() can use it (e.g. self.pars) after super().__init__()
                 self.build_graph()
             else: # Built once the subclass's __init__() has declared the rest
@@ -194,7 +194,7 @@ class Disease(ss.Module):
             raise ss.CapabilityError(errormsg)
         d = self.__dict__.get('_declared')
         if d is None: # The first declaration of a disease that called super().__init__() with none
-            d = self._declared = sc.objdict(args=[], members=ss.transitions.class_members(type(self)), pars=None, kwargs={}, names={}, strains=None, stratify=None, code_pars=[])
+            d = self._declared = sc.obj(args=[], members=ss.transitions.class_members(type(self)), pars=None, kwargs={}, names={}, strains=None, stratify=None, code_pars=[])
         names = names or {}
         kwargs = kwargs or {}
         for obj in args: # Positional members, named by name= or by the variable they were assigned to
@@ -496,7 +496,7 @@ class Disease(ss.Module):
     @property
     def states(self):
         """ Its declared states (`ss.State`) by name, e.g. `'second_line' in tb.states` or `[s for s in tb.states.values() if s.people]`; empty for a disease written as code. (The arrays behind them are `state_dict`.) """
-        return sc.objdict(self.graph.states) if self.graph is not None else sc.objdict()
+        return sc.obj(self.graph.states) if self.graph is not None else sc.obj()
 
     def count(self, where=None):
         """
@@ -520,7 +520,7 @@ class Disease(ss.Module):
     @property
     def strats(self):
         """ Its stratifications by name, e.g. `tb.strats.age.edges` or `tb.strats.risk.labels` (as a condition, a level is `tb.age`) """
-        return sc.objdict({strat.name:strat for strat in self.graph.strats}) if self.graph is not None else sc.objdict()
+        return sc.obj({strat.name:strat for strat in self.graph.strats}) if self.graph is not None else sc.obj()
 
     def describe(self, output=False, out=None):
         """
@@ -534,7 +534,7 @@ class Disease(ss.Module):
         if self.family is not None: # Strains with courses of their own
             self.family.describe(out=desc)
         elif self.graph is not None:
-            self.graph.describe(self.sim, out=desc)
+            ss.presentation.describe_graph(self.graph, self.sim, out=desc)
             if self.strains is not None:
                 self.strains.describe(self.graph, out=desc)
         else: # Written as code: its class, arrays, and parameters
@@ -554,7 +554,7 @@ class Disease(ss.Module):
         Args:
             output (bool): if True, return the text rather than printing it
         """
-        text = '\n'.join(self.graph.equations(self.engine))
+        text = '\n'.join(ss.presentation.equations(self.graph, self.engine))
         return text if output else print(text)
 
     def diagram(self):
@@ -562,7 +562,7 @@ class Disease(ss.Module):
         The state-transition diagram, as a Mermaid flowchart (https://mermaid.js.org), which a notebook draws (see `ss.presentation.Diagram`)
 
         People states are rounded and counts slanted; transmissions are dashed; each
-        arrow is labelled with its transition's name and value (`recovery: 10 days`), and
+        arrow is labeled with its transition's name and value (`recovery: 10 days`), and
         the share that takes it for a transition with `p=`. `print(sir.diagram())` gives the text.
 
         **Example**:
@@ -571,7 +571,7 @@ class Disease(ss.Module):
             sir = ss.Disease(infection=S >> I @ 0.3*I, recovery=ss.Transition(I, R, dur=ss.days(10)))
             sir.diagram()
         """
-        return ss.presentation.Diagram('\n'.join(['flowchart LR'] + self.graph.diagram()))
+        return ss.presentation.Diagram('\n'.join(['flowchart LR'] + ss.presentation.diagram(self.graph)))
 
     def R0(self, matrix=False):
         """
@@ -1104,9 +1104,9 @@ class Infection(Disease):
         def scalar_beta(β):
             return isinstance(β, ss.Rate) or sc.isnumber(β)
 
-        nets = {ss.utils.standardize_netkey(k):net for k,net in sim.networks.items()}
+        nets = {ss.networks.standardize_netkey(k):net for k,net in sim.networks.items()}
         def both_ways(k, β): # A single beta applies in both directions, except on a maternal network: from mother to child only
-            net = nets.get(ss.utils.standardize_netkey(k))
+            net = nets.get(ss.networks.standardize_netkey(k))
             return [β, β*0] if getattr(net, 'one_way', False) else [β, β]
 
         def as_pair(β, nkey):
@@ -1121,18 +1121,18 @@ class Infection(Disease):
 
         # If beta is a scalar, apply this bi-directionally to all networks
         if scalar_beta(β) or isinstance(β, ss.peract):
-            betamap = {ss.utils.standardize_netkey(k):both_ways(k, β) if scalar_beta(β) else as_pair(β, ss.utils.standardize_netkey(k)) for k in sim.networks.keys()}
+            betamap = {ss.networks.standardize_netkey(k):both_ways(k, β) if scalar_beta(β) else as_pair(β, ss.networks.standardize_netkey(k)) for k in sim.networks.keys()}
 
         # If beta is a dict, check all entries are bi-directional; a default is the beta of every network it does not name, and the names that are not networks are not used
         elif isinstance(β, dict):
             betamap = dict()
             if 'default' in β:
-                unknown = [k for k in β if k != 'default' and ss.utils.standardize_netkey(k) not in nets]
+                unknown = [k for k in β if k != 'default' and ss.networks.standardize_netkey(k) not in nets]
                 if unknown:
                     ss.note(f'the beta of "{self.name}" names {sc.strjoin(unknown)}, which {"is not a network" if len(unknown) == 1 else "are not networks"} of the sim, so {"it is" if len(unknown) == 1 else "they are"} not used; the networks not named take the default', sim=sim)
-                β = {k:ss.utils.route_beta(β, k) for k in sim.networks.keys()}
+                β = {k:ss.networks.route_beta(β, k) for k in sim.networks.keys()}
             for k,thisbeta in β.items():
-                nkey = ss.utils.standardize_netkey(k)
+                nkey = ss.networks.standardize_netkey(k)
                 if scalar_beta(thisbeta):
                     betamap[nkey] = both_ways(nkey, thisbeta)
                 else:
@@ -1143,7 +1143,7 @@ class Infection(Disease):
             raise TypeError(errormsg)
 
         # Check that it matches the network
-        netkeys = [ss.utils.standardize_netkey(k) for k in list(sim.networks.keys())]
+        netkeys = [ss.networks.standardize_netkey(k) for k in list(sim.networks.keys())]
         if set(betamap.keys()) != set(netkeys):
             missing = sorted(set(netkeys) - set(betamap.keys()))
             extra = sorted(set(betamap.keys()) - set(netkeys))
@@ -1273,7 +1273,7 @@ class Infection(Disease):
         rel_trans, rel_sus = self.rel_trans.asnew(trans, copy=False), self.rel_sus.asnew(sus, copy=False)
         pairs = []
         for i, (nkey,route) in enumerate(self.sim.networks.items()):
-            betas = betamap[ss.utils.standardize_netkey(nkey)]
+            betas = betamap[ss.networks.standardize_netkey(nkey)]
             if self.strains is None or isinstance(route, ss.Network): # On a network, each case has a source, whose strain they take
                 target_uids, source_uids, network_ids = self.transmit_route(i, route, betas, rel_trans, rel_sus)
                 pairs.append((source_uids, target_uids, network_ids) + ((held[source_uids],) if self.strains is not None else ()))
@@ -1692,7 +1692,7 @@ def library_kwargs(cls, kwargs):
             pars.update({key: val})
             kwargs[key] = pars[key]
         elif isinstance(val, dict) and 'type' in val:
-            kwargs[key] = ss.distributions.make_dist(val)
+            kwargs[key] = ss.dists.make_dist(val)
         elif isinstance(val, (list, dict)): # Starsim 3's values of its default lognormal, e.g. dur_inf=[10, 2]
             raise TypeError(f'{key}={val} set the values of the lognormal that was Starsim 3\'s default; {key} is now the mean of an exponential.\n'
                             f'     Give a number (in years) for that, or the distribution, e.g. {key}=ss.lognorm_ex(mean=ss.years(10), std=ss.years(2)); ssl.Agent{cls.__name__} is Starsim 3\'s model')

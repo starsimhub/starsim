@@ -223,19 +223,19 @@ website:
         - section: "**Basics**"
           contents:
             - api/sim.qmd
-            - api/loop.qmd
+            - api/internals.loop.qmd
             - api/people.qmd
-            - api/parameters.qmd
+            - api/internals.parameters.qmd
             - api/results.qmd
         - section: "**Models**"
           contents:
             - api/transitions.qmd
-            - api/conditions.qmd
-            - api/dimensions.qmd
+            - api/internals.conditions.qmd
+            - api/internals.dimensions.qmd
             - api/strains.qmd
         - section: "**Modules**"
           contents:
-            - api/modules.qmd
+            - api/internals.modules.qmd
             - api/diseases.qmd
             - api/networks.qmd
             - api/demographics.qmd
@@ -260,15 +260,16 @@ website:
             - api/library.networks.qmd
         - section: "**Utilities**"
           contents:
-            - api/arrays.qmd
-            - api/time.qmd
-            - api/dates.qmd
-            - api/timeline.qmd
+            - api/internals.arrays.qmd
+            - api/internals.time.qmd
+            - api/internals.dates.qmd
+            - api/internals.timeline.qmd
             - api/distributions.qmd
             - api/settings.qmd
             - api/utils.qmd
         - section: "**Internals**"
           contents:
+            - api/internals.dists.qmd
             - api/internals.expressions.qmd
             - api/internals.graph.qmd
             - api/internals.presentation.qmd
@@ -314,22 +315,15 @@ quartodoc:
   sections:
     - contents: # No title/desc here: the page already shows an "API" heading from the top-level title above (issue #1330)
         - analyzers
-        - arrays
-        - conditions
         - connectors
         - data
-        - dates
         - demographics
-        - dimensions
         - diseases
         - distributions
         - fit
         - geo
         - interventions
-        - loop
-        - modules
         - networks
-        - parameters
         - people
         - products
         - results
@@ -337,8 +331,6 @@ quartodoc:
         - settings
         - sim
         - strains
-        - time
-        - timeline
         - transitions
         - utils
     - title: I/O
@@ -355,12 +347,22 @@ quartodoc:
     - title: Internals
       desc: How Starsim works under the hood, for developers rather than modelers.
       contents:
+        - internals.arrays
+        - internals.conditions
+        - internals.dates
         - internals.debugtools
+        - internals.dimensions
+        - internals.dists
         - internals.errors
         - internals.expressions
         - internals.gradients
         - internals.graph
+        - internals.loop
+        - internals.modules
+        - internals.parameters
         - internals.presentation
+        - internals.time
+        - internals.timeline
     - title: Library
       desc: |
         Example and reference modules that build on core Starsim but are not part of it.
