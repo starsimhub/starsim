@@ -5,7 +5,7 @@ The whole public Starsim API fits in a single file, which makes it possible for 
 tool (an IDE, a documentation search, or an LLM agent) to load the entire map of
 the library in one shot. This script introspects `starsim` and `starsim.library`
 and projects them into three artifacts, all generated from the same data and all
-published with the docs (e.g. <https://docs.starsim.org/llms.txt>):
+published with the docs (e.g. <https://starsim.org/v4/llms.txt>):
 
 - `api.json`: the canonical index, as structured data
 - `llms.txt`: a compact Markdown index (name, signature, summary, default parameters, aliases, and each class's own public methods)
@@ -56,7 +56,7 @@ notes = [
     'Many runs (`sim.run(n_runs=10)` or `ss.parallel(sim, n_runs=10)`) give an `ss.MultiSim`, whose results have a run axis first: `msim.results.sir.infection.values` has one row per run, and `.median()` and `.quantiles()` summarize over the runs. `msim.sims` has the sim of each run.',
 ]
 links = [ # Extra pointers, following the llms.txt convention
-    ('Documentation', 'https://docs.starsim.org', 'tutorials, user guide, and API reference'),
+    ('Documentation', 'https://starsim.org/v4', 'tutorials, user guide, and API reference'), # V4-PREVIEW: restore to https://docs.starsim.org (and in the docstring above) for normal publishing
     ('Source', 'https://github.com/starsimhub/starsim', 'the Starsim repository'),
     ('Style guide', 'https://github.com/starsimhub/styleguide', 'the Starsim style guide'),
     ('Sciris', 'https://docs.sciris.org/llms.txt', 'the equivalent index for Sciris (`sc`), which Starsim uses extensively'),

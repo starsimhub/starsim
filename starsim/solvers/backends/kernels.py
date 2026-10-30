@@ -15,7 +15,6 @@ import os
 import sys
 import ast
 import importlib
-import ctypes
 import contextlib
 import functools as ft
 import collections
@@ -2682,51 +2681,6 @@ def worker(func):
     return ft.partial(one_thread, func, main_modules=modules, kernels=ss.options.kernels)
 
 
-blas_threads = [('openblas_set_num_threads', 'openblas_get_num_threads'), ('openblas_set_num_threads64_', 'openblas_get_num_threads64_'), ('scipy_openblas_set_num_threads', 'scipy_openblas_get_num_threads'),
-                ('scipy_openblas_set_num_threads64_', 'scipy_openblas_get_num_threads64_'), ('MKL_Set_Num_Threads', 'MKL_Get_Max_Threads')] # How each BLAS library sets and gives its number of threads
-blas_env = ['OMP_NUM_THREADS', 'OPENBLAS_NUM_THREADS', 'MKL_NUM_THREADS', 'NUMEXPR_NUM_THREADS']
-
-@contextlib.contextmanager
-def one_blas_thread():
-    """
-    One thread for NumPy's BLAS (OpenBLAS or MKL), and for numexpr (which pandas uses), while the workers of `ss.parallel()` or
-    of a calibration are started, as threadpoolctl's `threadpool_limits(1)` would: in the kernels, a dense mixing matrix of more
-    than 16 levels is a matrix product, which would otherwise take every core in each worker. It is set here, before the
-    workers are forked (who keep it), since setting it in a forked worker starts OpenBLAS's threads again there, which made
-    each run twice as long; workers started afresh take it from the environment. The libraries are found among those loaded,
-    on Linux; elsewhere (e.g. Accelerate on a Mac) only the environment is set. Restored afterwards.
-    """
-    libs = []
-    if os.path.exists('/proc/self/maps'):
-        with open('/proc/self/maps') as f:
-            paths = {line.split()[-1] for line in f if 'blas' in line.lower() or 'libmkl_rt' in line.lower()}
-        for path in sorted(paths):
-            try:
-                lib = ctypes.CDLL(path)
-            except OSError:
-                continue
-            libs += [(getattr(lib, setter), getattr(lib, getter)) for setter,getter in blas_threads if hasattr(lib, setter) and hasattr(lib, getter)]
-    numexpr = sys.modules.get('numexpr')
-    if numexpr is not None: # Its pool is made when it is imported, of NUMEXPR_NUM_THREADS threads (or as many as the cores, to 16)
-        libs.append((numexpr.set_num_threads, numexpr.get_num_threads))
-    env = {key:os.environ.get(key) for key in blas_env}
-    before = [getter() for setter,getter in libs]
-    try:
-        os.environ.update({key:'1' for key in blas_env})
-        for setter,getter in libs:
-            setter(1)
-        yield
-    finally:
-        for (setter,getter),n in zip(libs, before):
-            setter(n)
-        for key,val in env.items():
-            if val is None:
-                os.environ.pop(key, None)
-            else:
-                os.environ[key] = val
-    return
-
-
 def unguarded_main():
     """
     Whether this is called from the top level of the main script outside `if __name__ == '__main__':`, which a worker started
@@ -2756,8 +2710,7 @@ def unguarded_main():
 @contextlib.contextmanager
 def starting_workers(method=None):
     """
-    While the workers of `ss.parallel()` or of a calibration are started: one thread for NumPy's BLAS (see `one_blas_thread()`), and if
-    they are started afresh (by `method`, as `start_method()` gives) from the main script outside `if __name__ == '__main__':` (see
+    While the workers of `ss.parallel()` or of a calibration are started: if they are started afresh (by `method`, as `start_method()` gives) from the main script outside `if __name__ == '__main__':` (see
     `unguarded_main()`), the script hidden from them
 
     A forked worker is a copy of this process, so it keeps the script as it is. A worker started afresh (by forkserver, once threads that are not safe to fork have started; see `start_method()`) would otherwise
@@ -2772,8 +2725,7 @@ def starting_workers(method=None):
         if hide:
             del main.__file__
             main.__spec__ = None
-        with one_blas_thread():
-            yield
+        yield
     finally:
         for key,val in hidden.items():
             setattr(main, key, val)

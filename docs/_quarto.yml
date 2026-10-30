@@ -14,7 +14,7 @@ project:
 
 website:
   title: "Starsim"
-  site-url: https://docs.starsim.org
+  site-url: https://starsim.org/v4 # V4-PREVIEW: restore to https://docs.starsim.org for normal publishing
   image: /assets/starsim-logo.png
   favicon: /assets/favicon.ico
   google-analytics: "G-SVDSQH04EM"

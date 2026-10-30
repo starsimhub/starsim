@@ -221,12 +221,8 @@ def test_engine_choice():
 
 @sc.timer()
 def test_worker_threads():
-    sc.heading('Testing the threads of the workers of ss.parallel(): numexpr limited while they start, forkserver only for threads unsafe to fork, and a clear error if they run the script again')
-    import os, sys, numexpr
-    before = numexpr.get_num_threads()
-    with ss.kernels.one_blas_thread():
-        assert numexpr.get_num_threads() == 1 and os.environ['NUMEXPR_NUM_THREADS'] == '1'
-    assert numexpr.get_num_threads() == before
+    sc.heading('Testing the threads of the workers of ss.parallel(): forkserver only for threads unsafe to fork, and a clear error if they run the script again')
+    import sys
     with mock.patch.dict(sys.modules, {'jax': mock.MagicMock()}):
         assert 'JAX' in ss.kernels.fork_unsafe()
     with mock.patch.dict(sys.modules): # Without JAX, which another test may have imported
