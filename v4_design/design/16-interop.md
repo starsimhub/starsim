@@ -15,7 +15,8 @@ An importer reads another framework's model into an `ss.converters.Source`: its 
 ```
 EMULSION, odin, SBML, SimInf,
 flepiMoP, summer2, Atomica, camdl,  ─▶ reader ─▶ ss.converters.Source ─▶ write() ─▶ code ─▶ run ─▶ sim ─▶ SBML, odin (ss.export_to(sim, format))
-EpiModel, epydemix, MEmilio                                                (sim.imported.code)
+EpiModel, epipack, epydemix,
+epymorph, MEmilio                                                          (sim.imported.code)
 ```
 
 ## Import
@@ -70,6 +71,8 @@ Rules 2 and 3 are guesses about what the source meant, and the difference matter
 | **camdl** | `'camdl'` (a `.camdl` file, or camdlc's JSON) | The model, with the parameter values of one of its scenarios (`scenario=`), as an ODE or a chain binomial as camdl's backends run it |
 | **EpiModel** | `'epimodel'` (a JSON dump from `dump_epimodel.R`, or the R script) | `netsim()`, `dcm()`, and `icm()` runs with the built-in models and networks (`ss.DegreeNet` for the network model's targets); custom modules are listed with their R source |
 | **epydemix** | `'epydemix'` (a JSON dump from `starsim/converters/epydemix.py` run as a script, or the model) | The transitions, the population, and its contact matrices |
+| **epipack** | `'epipack'` (a JSON dump from `starsim/converters/epipack.py` run as a script, or the model) | The reaction processes of `EpiModel`, `SymbolicEpiModel`, and a well-mixed `StochasticEpiModel`; the run's solver and end time, if one was recorded; a network as its mean degree, which is listed as not translated |
+| **epymorph** | `'epymorph'` (a JSON dump from `starsim/converters/epymorph.py` run as a script) | The compartments and edges of a RUME; its parameters as resolved, by place and in time; its initial numbers; and its movement clauses run and averaged into commuting (`ss.geo.Mobility`); a RUME with several strata is refused |
 | **MEmilio** | `'memilio'` (a JSON dump from `starsim/converters/memilio.py` run as a script) | The ODE models (`osir`, `oseir`, `oseirdb`, `osecir`), alone, on a mobility graph (as places with commuting), or in a parameter study (its distributions as priors) |
 
 A Starsim 3 model is not imported: its modules written as code still run (with the names removed from Starsim 4 changed, as the migration guide and the `migrate-starsim3` skill say), and turning `step()` logic into declared transitions is done by hand with the `import-model` skill. LASER and the other models MEmilio has are translated by hand, with the skill's guides. Each importer is tested against its framework's examples (`tests/test_interop_*.py`) and in the switching demos (`tests/switching/`).

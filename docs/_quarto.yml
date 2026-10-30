@@ -183,7 +183,9 @@ website:
                 - user_guide/conversion/camdl.qmd
                 - user_guide/conversion/emulsion.qmd
                 - user_guide/conversion/epimodel.qmd
+                - user_guide/conversion/epipack.qmd
                 - user_guide/conversion/epydemix.qmd
+                - user_guide/conversion/epymorph.qmd
                 - user_guide/conversion/flepimop.qmd
                 - user_guide/conversion/laser.qmd
                 - user_guide/conversion/memilio.qmd

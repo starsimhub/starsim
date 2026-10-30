@@ -187,7 +187,9 @@ For a longer model, with more that isn't translated, `sim.imported.prompt` is a 
 | [camdl](camdl.qmd) | A `.camdl` file (compiled with `camdlc`), or its JSON form | Parameters keep their bounds and priors; observations become outcomes with their likelihoods |
 | [EMULSION](emulsion.qmd) | A model file (`.yaml`) | Each state machine becomes a disease |
 | [EpiModel](epimodel.qmd) | An R script, run first in R by `dump_epimodel.R` | A fitted network becomes `ss.DegreeNet` |
+| [epipack](epipack.qmd) | A live model, or the JSON written by `epipack.py` | Each reaction process becomes a flow; a network is read at its mean degree |
 | [epydemix](epydemix.qmd) | A live model, or the JSON written by `epydemix.py` | Runs as a chain binomial in daily steps, as epydemix does |
+| [epymorph](epymorph.qmd) | The JSON written by `epymorph.py` | Nodes become places; movement clauses are run and averaged into commuting |
 | [flepiMoP](flepimop.qmd) | A configuration file (`.yml`), with the files it names | Places become a stratification with commuting between them |
 | [MEmilio](memilio.qmd) | The JSON written by `memilio.py` | Contact matrices with their changes over time; a graph of places |
 | [odin](odin.qmd) | An R file in odin's language (read without R) | odin 1 and odin2 syntax; arrays become stratifications |
@@ -195,7 +197,7 @@ For a longer model, with more that isn't translated, `sim.imported.prompt` is a 
 | [SimInf](siminf.qmd) | An R file (read without R), with its initial state and events | Nodes become places; events a movement register |
 | [summer2](summer2.qmd) | A live model, or the JSON written by `summer2.py` | Each stratification, with its mixing matrix |
 
-For epydemix, MEmilio, and summer2, Starsim's importer for that framework (e.g. `starsim/converters/memilio.py`) also runs as a script in the framework's own environment, needing neither Starsim nor Sciris there, and writes what it built as JSON for Starsim to read; for EpiModel, `starsim/converters/dump_epimodel.R` does the same in R. The others are read directly. Each importer is tested against its framework's own examples. A Starsim 3 script is not imported, but rewritten: see [Starsim v3](starsim3.qmd).
+For epipack, epydemix, epymorph, MEmilio, and summer2, Starsim's importer for that framework (e.g. `starsim/converters/memilio.py`) also runs as a script in the framework's own environment, needing neither Starsim nor Sciris there, and writes what it built as JSON for Starsim to read; for EpiModel, `starsim/converters/dump_epimodel.R` does the same in R. The others are read directly. Each importer is tested against its framework's own examples. A Starsim 3 script is not imported, but rewritten: see [Starsim v3](starsim3.qmd).
 
 ## How an import is built
 
@@ -204,7 +206,7 @@ Every importer reads its format into the same intermediate object, `ss.converter
 ```{mermaid}
 %%| echo: false
 flowchart LR
-  F["odin, SBML, EMULSION, SimInf,<br>flepiMoP, summer2, Atomica, camdl,<br>EpiModel, epydemix, MEmilio"] --> R[reader] --> S["ss.converters.Source"] --> W["ss.converters.write()"] --> C["Starsim code"] --> Sim[sim]
+  F["odin, SBML, EMULSION, SimInf,<br>flepiMoP, summer2, Atomica, camdl,<br>EpiModel, epipack, epydemix,<br>epymorph, MEmilio"] --> R[reader] --> S["ss.converters.Source"] --> W["ss.converters.write()"] --> C["Starsim code"] --> Sim[sim]
   Sim --> E["SBML, odin"]
 ```
 

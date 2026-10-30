@@ -41,7 +41,9 @@ Each of the [conversion](user_guide/conversion/index.qmd) pages starts with a sh
 | [camdl](user_guide/conversion/camdl.qmd#the-same-model-in-both) | A closed SIR, observed through weekly reported cases |
 | [EMULSION](user_guide/conversion/emulsion.qmd#the-same-model-in-both) | EMULSION's compartmental SIR |
 | [EpiModel](user_guide/conversion/epimodel.qmd#the-same-model-in-both) | An SIS over partnerships that form and dissolve |
+| [epipack](user_guide/conversion/epipack.qmd#the-same-model-in-both) | An SIRS written as reaction processes |
 | [epydemix](user_guide/conversion/epydemix.qmd#the-same-model-in-both) | An SIR in Kenya's population, with contact matrices between five age groups |
+| [epymorph](user_guide/conversion/epymorph.qmd#the-same-model-in-both) | An SIRS in three places, with commuting between them |
 | [flepiMoP](user_guide/conversion/flepimop.qmd#the-same-model-in-both) | An SEIR in two provinces whose residents commute between them |
 | [LASER](user_guide/conversion/laser.qmd#the-same-model-in-both) | An SEIR in a city and fifteen smaller places, coupled by gravity |
 | [MEmilio](user_guide/conversion/memilio.qmd#the-same-model-in-both) | An age-resolved SECIR with seasonality and a cut in contacts |
