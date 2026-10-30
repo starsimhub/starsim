@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+# Build & publish the v4 site to GitHub Pages, at starsim.org/v4
+set -euo pipefail # Fail fast if needed
+
+QUARTO=${QUARTO:-quarto}
+jobs=$($QUARTO render --help | grep -- '--jobs' > /dev/null && echo "--jobs $(( $(nproc) / 2 ))" || true) # Parallel if this Quarto supports it (custom build), serial otherwise (e.g. CI)
+$QUARTO render --cache-refresh $jobs
+
+# Publish the site as a single commit with no history, replacing the gh-pages
+# branch, so old copies of the rendered figures don't accumulate in the repo
+export GIT_INDEX_FILE="$(git rev-parse --absolute-git-dir)/index-gh-pages" # Temporary index, so the real one is untouched
+rm -f "$GIT_INDEX_FILE"
+touch _site/.nojekyll # Tell GitHub Pages not to run Jekyll
+rm -f _site/CNAME # The v4 site has no domain of its own (starsim.org/v4 comes from the org's site)
+git --work-tree=_site add --all --force
+commit=$(git commit-tree "$(git write-tree)" -m "Built site for gh-pages")
+git push --force https://github.com/starsimhub/v4.git "$commit:refs/heads/gh-pages"
+rm -f "$GIT_INDEX_FILE"
