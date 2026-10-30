@@ -808,10 +808,10 @@ class Module(Base):
                 self.pars.check_added(self.name) # A parameter set but never defined, e.g. renamed (MG7)
             if isinstance(self.pars, ss.Pars):
                 self.pars.bind(self) # Arithmetic on a value that varies is on its value now, once the sim is initialized
-            if self.name in sim.pars:
-                sim.pars[self.name] = self.pars
-            else: # Add a new key, which is allowed even if the sim's parameters are locked
+            if self.name not in sim.pars: # Add a new key, which is allowed even if the sim's parameters are locked
                 sim.pars.update({self.name: self.pars}, create=True)
+            elif isinstance(sim.pars[self.name], ss.Pars): # Not a setting of the sim with the same name, e.g. a module called "branching", which is left as it is
+                sim.pars[self.name] = self.pars
             sim.results[self.name] = self.results
             sim.people.add_module(self) # Connect the states to the people
             self.init_results()

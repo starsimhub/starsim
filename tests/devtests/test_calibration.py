@@ -214,6 +214,10 @@ def test_fit_what_is_not_a_parameter():
     assert len(fit.study.trials) == 6 # Optuna's study, kept in memory although its workers shared a file
     with pytest.raises(TypeError, match='n_trials='): # One name for the number of trials
         sim.fit(method='optuna', trials=6, verbose=0)
+    with pytest.raises(TypeError, match='maxitr'): # SciPy would only warn about a setting it does not know
+        sim.fit(method='nelder-mead', maxitr=6, verbose=0)
+    with pytest.raises(TypeError, match='particle'): # Of any method
+        sim.fit(method='abc-smc', particle=6, verbose=0)
     problem = ss.fit.Problem(sim, reseed=False, verbose=0)
     assert problem.choose('optuna') == 'optuna' and not problem.fresh # The same seeds at every point, even under Optuna
 

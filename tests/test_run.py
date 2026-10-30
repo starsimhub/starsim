@@ -59,6 +59,16 @@ def test_parallel():
 
 
 @sc.timer()
+def test_restarted():
+    """ Many runs of a compartmental sim restart one built sim, rather than building each """
+    sc.heading('Testing that sim.run(n_runs=) restarts one sim')
+    S, I, R = ss.states(3)
+    sir = ss.Disease(S >> I @ 0.3*I, I >> R @ ss.days(8), init=dict(I=0.01), name='sir')
+    msim = ss.Sim(sir, unit='day', stop=30, total_pop=1000, solver='binomial', verbose=0).run(n_runs=4)
+    assert len(msim.sims.runners) == 1
+    return
+
+
 def test_multisim():
     """ Check MultiSim methods """
     sc.heading('Testing MultiSim')

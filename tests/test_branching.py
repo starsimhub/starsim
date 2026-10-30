@@ -3,6 +3,7 @@ Test branching processes (ss.Sim(branching=True)) under every solver, stopping a
 """
 
 # %% Imports and settings
+import pytest
 import numpy as np
 import scipy.optimize as spo
 import sciris as sc
@@ -18,6 +19,17 @@ def make_sir(n=1, beta=0.3, dur=10):
 
 
 @sc.timer()
+def test_named_branching():
+    """ A module named like a setting of the sim leaves the setting alone: it isn't a branching process """
+    sc.heading('Testing a module named "branching"')
+    S, I, R = ss.states(3)
+    sir = ss.Disease(S >> I @ 0.3*I, I >> R @ ss.days(8), init=dict(I=0.01), name='branching')
+    with pytest.warns(RuntimeWarning, match='has an attribute'):
+        sim = ss.Sim(sir, unit='day', stop=100, total_pop=1000, verbose=0).run()
+    assert sim.pars.branching is False and sim.diseases.branching.results.S[-1] < 500
+    return
+
+
 def test_held():
     sc.heading('Infection takes no one from the uninfected under every solver, whose own flows act as usual')
     for solver in ['ode', 'binomial', 'gillespie', 'tau', 'abm']:
