@@ -242,7 +242,7 @@ class SimPars(ss.Pars):
             if source == 'modules':
                 # Modules from 'modules=' get sorted by type
                 for modkey, modclass in modmap.items():
-                    if isinstance(mod, modclass) or (modkey == 'diseases' and isinstance(mod, ss.strains.Family)): # Strains with courses of their own are with the diseases
+                    if isinstance(mod, modclass):
                         break
                 else:
                     modkey = 'custom'
@@ -553,7 +553,7 @@ class Sim(ss.Base):
         self.results_ready = False  # Whether results are ready
         self.elapsed = None # The time required to run
         self.progress = None # How far a run has got, shown as it goes (see ss.display.Progress)
-        self.summary = None  # For storing a summary of the results
+        self.summary = None  # For storing a summary of the results, made when first asked for
         self.filename = None # Store the filename, if saved
         self.diagnostics = None # Store diagnostics results
         return
@@ -1846,9 +1846,6 @@ class Sim(ss.Base):
         if hasattr(self, '_orig_verbose'):
             self.verbose = self._orig_verbose
             delattr(self, '_orig_verbose')
-
-        # Generate the summary and finish up
-        self.summarize() # Create summary
         return
 
     def check_finite(self):
@@ -1884,6 +1881,17 @@ class Sim(ss.Base):
             self.results.cum_deaths[:] = np.cumsum(self.results.new_deaths)
         self.results_ready = True # Results are ready to use
         return
+
+    @property
+    def summary(self):
+        """ The table of `summarize()`, made the first time it is asked for after a run """
+        if self._summary is None and self.results_ready:
+            self.summarize()
+        return self._summary
+
+    @summary.setter
+    def summary(self, value):
+        self._summary = value
 
     def summarize(self, key=None, how=None):
         """

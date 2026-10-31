@@ -92,6 +92,25 @@ def test_odin(tmp_path):
     return back
 
 
+def test_rates():
+    sc.heading('Testing that contacts and rates that vary in time are carried by an export')
+    sim = ss.Sim(sir(), networks='random', n_agents=500, unit='day', stop=10, **kw)
+    with pytest.warns(ss.errors.LossyExport) as record:
+        text = ss.export_to(sim, 'odin', verbose=False)
+    assert 'contacts <- user(10)' in text and 'infection <- beta * contacts * S * I / N' in text
+    assert '10 contacts per day' in str(record[0].message)
+
+    S, I, R = ss.states('S I R')
+    dis = ss.Disease(infection=S >> I @ ss.seasonal(ss.perday(0.3), amplitude=0.2, peak=0.1)*I, recovery=I >> R @ ss.perday(0.1), init_prev=0.01, name='seasonal')
+    sim = ss.Sim(dis, total_pop=1000, unit='day', stop=10, **kw)
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore', ss.errors.LossyExport)
+        odin, sbml = [ss.export_to(sim, fmt, verbose=False) for fmt in ['odin', 'sbml']]
+    assert 'beta_mean <- user(0.3)' in odin and 'NA' not in odin and 'cos(' in odin
+    assert 'symbols/time' in sbml and 'nan' not in sbml.lower()
+    return
+
+
 def test_hub():
     sc.heading('Testing runs of two scenarios as a hub submission')
     def make(beta, label):

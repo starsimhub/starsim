@@ -112,7 +112,7 @@ The same text runs as a stochastic compartmental model with `sim.run(solver='bin
 
 ## Timings
 
-Lines are lines of model code (not counting blank lines, comments, imports, or plotting, and counting a line over 100 characters twice); times are for one run. Both are measured by Starsim's north-star script, `tests/north_star.py` (see the [index page](../library_landscape.qmd#how-these-numbers-were-made)). LASER's times were recorded on the same machine, on all 20 cores; Starsim runs a sim on one core.
+Lines are lines of model code (not counting blank lines, comments, imports, or plotting, and counting a line over 100 characters twice); times are for one run. Both are measured by Starsim's north-star script, `tests/north_star/north_star.py` in the lingua_franca_design repo (see the [index page](../library_landscape.qmd#how-these-numbers-were-made)). LASER's times were recorded on the same machine, on all 20 cores; Starsim runs a sim on one core.
 
 | Model | Lines: LASER | Lines: Starsim | One run: LASER | One run: Starsim | |
 |---|---|---|---|---|---|
@@ -124,7 +124,7 @@ The last row was measured on 17 October 2026, on a machine shared with other job
 
 ## What works and what does not yet
 
-These are from Starsim's switching demo for LASER users (`tests/switching/test_laser.py`), which compares speed and memory per agent with LASER's, and from the review it was built from. "Fails" means the demo's check does not pass today.
+These are from Starsim's switching demo for LASER users (`tests/switching/test_laser.py` in the lingua_franca_design repo), which compares speed and memory per agent with LASER's, and from the review it was built from. "Fails" means the demo's check does not pass today.
 
 | Task | Today |
 |---|---|

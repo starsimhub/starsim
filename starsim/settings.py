@@ -137,6 +137,9 @@ class Options(sc.obj):
         optdesc.threads = 'The number of threads that the passes over the agents of a large sim, and the particles of a particle filter, take: 0 (default) for as many as Numba has (by default, one per core), 1 for none. Each worker of ss.parallel() and of a calibration takes one, since the workers share the cores already'
         options.threads = sc.parse_env('STARSIM_THREADS', 0, int)
 
+        optdesc.num_threads = 'The number of threads for BLAS, the linear algebra in NumPy and SciPy (for the threads of Starsim itself, see "threads"): 1 (default), or 0 to leave BLAS as it is. See the "Deployment" page of the user guide.'
+        options.num_threads = sc.parse_env('STARSIM_NUM_THREADS', int(os.getenv('SCIRIS_NUM_THREADS') or 0), int)
+
         optdesc.kernels = 'Which kernels run the solvers (all give the same results, except as said for "python"): "auto" (default) for Rust if it is there (in the wheels, or built: see starsim/solvers/rust/README.md), and otherwise Numba, with compartmental runs taken as plain Python until Numba has compiled (if a run, or the runs of a session, would take longer as plain Python than compiling takes, about two minutes once per install, Numba compiles first; a note says which); "rust" for Rust, compiled ahead of time, so a first run takes no compiling; "numba" to always compile with Numba first (see ss.compile()); "python" for the compartmental kernels as plain Python (and the kernels, not JAX, for the chain binomial, whose draws in JAX are compiled, so a long seeded chain-binomial run gives other numbers than with the others; the passes over agents are Numba). JAX is chosen by the run (see sim.jax), and ss.jit is always Numba'
         options.kernels = sc.parse_env('STARSIM_KERNELS', 'auto', str)
 
@@ -341,6 +344,8 @@ class Options(sc.obj):
                     self.set_jupyter()
                 elif key == 'precision':
                     self.set_precision()
+                elif key == 'num_threads':
+                    self.set_num_threads()
                 elif key == 'style':
                     self.set_style()
 
@@ -393,6 +398,15 @@ class Options(sc.obj):
     def set_jupyter(self):
         """ Set Sciris' Jupyter settings as well """
         sc.options(jupyter=bool(self.jupyter) and self.is_jupyter) # 0 = False, 1 = True, -1 = sc.isjupyter()
+        return
+
+    def set_num_threads(self):
+        """ Set the number of BLAS threads, for the libraries already loaded and any loaded later, as in new workers; unlike `sc.limit_threads()`, this can also raise it """
+        n = self.num_threads
+        if n:
+            os.environ.update({key:str(n) for key in sc._threadvars})
+            for setter,getter in sc.limit_threads.find_libs():
+                setter(n)
         return
 
     def set_precision(self, refresh=True):
@@ -487,6 +501,7 @@ def load_fonts(folder=None, name='Mulish', rebuild=False, verbose=False, **kwarg
 # Create the options on module load
 options = Options()
 options.set_precision(refresh=False) # Other modules are not loaded yet, so nothing to refresh
+options.set_num_threads()
 
 # Load the fonts, rebuilding Matplotlib's font cache the first time (marked by a file in internals/assets/; if it can't be written, the cache isn't rebuilt)
 marker = sc.thispath(__file__) / 'internals' / 'assets' / 'fonts_installed_successfully'

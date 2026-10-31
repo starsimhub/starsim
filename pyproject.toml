@@ -38,12 +38,16 @@ dependencies = [
     "networkx",
     "matplotlib",
     "optuna",
-    "jax>=0.8",
-    "blackjax",
     "starsim_data>=2.1.0",
 ]
 
 [project.optional-dependencies]
+
+# Gradients, fitting with them, and long runs in JAX: recommended, and optional only since JAX has no builds for some platforms (Intel Macs, Windows on ARM)
+jax = [
+    "jax>=0.8",
+    "blackjax",
+]
 
 # For running the tests
 test = [
@@ -65,7 +69,7 @@ doc = [
 
 # Everything needed for development (tests + docs)
 dev = [
-    "starsim[test,doc]",
+    "starsim[jax,test,doc]",
 ]
 
 # Accelerates numerical performance on some Intel systems
@@ -116,12 +120,12 @@ lock = [
     "python-dateutil==3.0.0",
     "pyyaml==6.0.3",
     "scipy==1.18.1",
-    "sciris==3.6.2",
+    "sciris==3.7.0",
     "setuptools==84.2.1",
     "six==1.17.0",
     "smmap==5.0.3",
     "sqlalchemy==2.1.6",
-    "starsim-data==2.1.0",
+    "starsim-data==2.2.0",
     "tqdm==4.70.1",
     "typing-extensions==4.16.0",
     "tzdata==2026.6",
@@ -170,7 +174,6 @@ build = "cp311-*"
 skip = "*-musllinux*"
 archs = ["auto64"]
 test-command = "python -c \"import starsim as ss; assert ss.solvers.backends.rust.on; print(ss.compile_status()); ss.Sim(diseases='sir', networks='random', n_agents=1000, stop=20, verbose=0).run()\""
-test-skip = "*-macosx_x86_64" # JAX, a dependency, has no wheels for it
 
 [tool.cibuildwheel.linux]
 before-all = "curl -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal"

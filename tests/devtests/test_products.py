@@ -214,10 +214,10 @@ def test_strain_efficacy():
 
 
 def test_disease_list():
-    sc.heading('Testing disease= as a list or strains with courses of their own (agents only): a bivalent vaccine, a test and a cure of each, and their counts')
-    def make(dis=None, vx=True, **kwargs):
+    sc.heading('Testing disease= as a list (agents only): a bivalent vaccine, a test and a cure of each, and their counts')
+    def make(vx=True, **kwargs):
         g16, g18 = make_geno('hpv16'), make_geno('hpv18')
-        given = ss.Disease(name='hpv', strains=ss.Strains([g16, g18])) if dis == 'strains' else [g16, g18]
+        given = [g16, g18]
         ivs = [ss.vaccinate(ss.Vaccine(efficacy=0.95 if vx else 0.0), coverage=0.8, at=[2001], disease=given, name='vx')]
         if kwargs.get('solver') == 'abm':
             dna = ss.screen(ss.Diagnostic(sensitivity=0.9, specificity=1.0), coverage=0.5, at=[2005], disease=given, name='dna')
@@ -229,8 +229,6 @@ def test_disease_list():
     assert r.hpv16.I[8] < 0.5*r0.hpv16.I[8] and r.hpv18.I[8] < 0.5*r0.hpv18.I[8] # The vaccine protects against both
     assert r.dna.positive.sum() > 0 and r.tx.cured.select(disease='hpv16').sum() > 0 and r.tx.cured.select(disease='hpv18').sum() > 0 # Detected and cured in each
     assert r.hpv18.I[21] < r.hpv18.I[20]
-    family = make('strains', solver='abm', n_agents=10_000, **kw).run().results # The same as the list
-    assert np.array_equal(family.hpv18.I, r.hpv18.I) and family.tx.cured.sum() == r.tx.cured.sum()
 
     # A scalar cure is the dict over every infected state; a test's count and cost are one per person tested
     def cure(c, **kwargs):

@@ -82,6 +82,9 @@ def times(x, *factors):
 def add_rows(out, rows, tis, vals):
     """ Add values at consecutive time points `tis` (along the first axis of `vals`) into the rows of `out` they belong to: see `ss.solvers.group_rows()` """
     r = rows[tis]
+    if r[-1] - r[0] == len(r) - 1: # Each in a row of its own
+        out[r[0]:r[-1]+1] += vals
+        return
     firsts = np.flatnonzero(np.diff(r, prepend=-1)) # Where each row starts
     out[r[firsts]] += np.add.reduceat(vals, firsts, axis=0)
     return
@@ -89,6 +92,9 @@ def add_rows(out, rows, tis, vals):
 
 def at_ends(out, rows, ends, tis, vals):
     """ Put the values at the time points among `tis` that end a row into that row of `out` """
+    if len(ends) == len(rows): # Each ends a row of its own
+        out[rows[tis[0]]:rows[tis[-1]]+1] = vals
+        return
     last = np.isin(tis, ends)
     out[rows[tis[last]]] = vals[last]
     return
@@ -1032,8 +1038,6 @@ class Engine(Telling, Effects):
             out = self.cache[key]
         if getattr(self, 'rel_adjust', None) and self.rel_adjust.get(kind):
             out = out*self.adjusted_rel(kind, state)
-        if kind in self.__dict__.get('rel_scale', ()): # A strain with its own course: its value (see ss.Strains)
-            out = out*self.rel_scale[kind]
         return out
 
     def adjusted_rel(self, kind, state=None):
@@ -1123,14 +1127,6 @@ class Engine(Telling, Effects):
                         current = 1.0 if self.adjust[name] is None else self.adjust[name]
                         self.adjust[name] = current*sim.groups.group_vals(d, vals)
                         self.adjust_dims[name].add(d)
-        self.rel_scale = {}
-        for name,val in (getattr(self.graph, 'scale', None) or {}).items(): # A strain with its own course: its values, which multiply as adjust= does (see ss.Strains)
-            if name in self.rel_adjust:
-                self.rel_scale[name] = val
-            elif self.graph.modifier_kind(name) == 'branch':
-                self.branch_adjust[name] = self.branch_adjust.get(name, 1.0)*val
-            else:
-                self.adjust[name] = (np.ones(sim.groups.n_groups) if self.adjust[name] is None else self.adjust[name])*val
         for name,tr in self.graph.transitions.items(): # A value by level of a dimension that the states moved have no level of: there is no level to take (it took the first)
             ends = tr.src or tr.dst or []
             for expr in [tr.rate, tr.dur] + sc.tolist(tr.p):
@@ -1616,11 +1612,6 @@ class Engine(Telling, Effects):
 
         # Initial prevalence is seeded through the transmission, so people start wherever a new infection starts
         init_prev = graph.init_prev
-        share = 1.0
-        family = getattr(graph, 'seeded_by', None)
-        if family is not None and self.solver != 'abm': # A strain with its own course, seeded by the disease (ss.Strains(shared=...)): the disease's share, times this member's split (independently of the other members, so unlike agents some are seeded with two)
-            family = self.sim.diseases[family]
-            init_prev, share = ss.parameters.starting(family.init_prev), family.split[family.member_names.index(self.mod.name)]
         if isinstance(init_prev, ss.expressions.par): # A parameter (e.g. sir.pars.init_prev), whose value can be a value for each level (worked out for each group below, not for each agent)
             init_prev = init_prev.raw if isinstance(init_prev.raw, (ss.Dist, ss.by)) else self.value(init_prev)
         if isinstance(init_prev, ss.Dist):
@@ -1636,7 +1627,6 @@ class Engine(Telling, Effects):
                 raise ValueError(f'init_prev of "{self.mod.name}" gives a share of more than 1 for some groups ({np.max(init_prev):n}); a value for each group is a share of the people in it')
             elif np.ndim(init_prev) == 0 and init_prev > 1: # More than 1 is a number of people, and up to 1 a share (1.0 is everyone)
                 init_prev = init_prev/self.total_pop
-            init_prev = init_prev*share
             trs = self.seed_transmissions()
             if not trs:
                 errormsg = f'"{self.mod.name}" has no transmission or acquisition to seed init_prev through; use init= on a state instead'
@@ -2234,7 +2224,8 @@ class StockCtx(sc.prettyobj):
 
     def stock(self, state):
         """ The number of people (or the count) in a state """
-        return self.stocks[state.name]*(self.scale if state.people else 1.0)
+        scale = self.scale if state.people else 1.0
+        return self.stocks[state.name] if np.ndim(scale) == 0 and scale == 1 else self.stocks[state.name]*scale
 
     def count(self, states):
         return sum(self.stock(s) for s in states)

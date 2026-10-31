@@ -310,6 +310,39 @@ for waning in [None, ss.days(90)]:
 
 States and transitions can also be given as lists, or one at a time with `name=` (e.g. in a loop over strains); `overwrite=True` replaces one that was declared already, e.g. with its rate changed.
 
+## Strains
+
+A disease can have several strains that share its states: a person has one course through the states, carrying one strain or several, and each strain has its own values, given as multipliers on the transitions and on `rel_trans`. `ss.immunity()` gives the protection between them, here against infection in people who have recovered:
+
+```{python}
+S, I, R = ss.states('S I R')
+strains = ss.Strains(['wild', 'variant'], rel_trans=[1, 1.5], immunity=ss.immunity(due_to=R, rel_sus=[[1, 0.5], [0.5, 1]]))
+flu = ss.Disease(infection=S >> I @ ss.peryear(8)*I, recovery=I >> R @ ss.years(0.1), waning=R >> S @ ss.years(1), init=dict(I=0.01), name='flu', strains=strains)
+sim = ss.Sim(flu, total_pop=100_000, start=2000, stop=2005, verbose=0).run()
+sim.results.flu.I.by('strain').plot();
+```
+
+With `max_strains=2`, people can carry two at once; `ss.Strains` lists the other options.
+
+### Strains with courses of their own
+
+Some diseases don't fit this, because each strain moves through the states on its own: someone can have CIN from one HPV genotype and be clearing another. Starsim tried one way of writing that, `ss.strains.Family`, in which the strains of one disease each followed their own course, with immunity between them, and with results over all of them. It was tested on HPVsim, its main use case, and it isn't part of Starsim: the results were similar to HPVsim's coded genotypes, but a declared genotype took about 2.5 ms a step against about 0.75 ms coded, which made the whole model about 1.5× slower, and it needed agents anyway once the strains protected each other.
+
+If the strains can share one course, use `ss.Strains` as above. Otherwise, make each strain a disease of its own, and connect them with a [connector](interventions_connectors.qmd). For protection that depends only on which states people are in, that is one `ss.modify()` for each strain:
+
+```{python}
+def serotype(name):
+    S, I, R = ss.states('S I R')
+    return ss.Disease(infection=S >> I @ ss.perday(0.3)*I, recovery=I >> R @ ss.days(7), init=dict(I=0.001), name=name)
+
+den1, den2 = serotype('den1'), serotype('den2')
+cross = [ss.modify(den1.rel_sus, multiply=0.7, where=den2.R), ss.modify(den2.rel_sus, multiply=0.7, where=den1.R)]
+sim = ss.Sim([den1, den2], connectors=cross, n_agents=5_000, unit='day', stop=200, verbose=0).run()
+print(sim.results.den1.infection.sum(), sim.results.den2.infection.sum())
+```
+
+Each strain then has its own results (`sim.results.den1`), and a delivery can act on several (`disease=[den1, den2]`). `ssl.Dengue` is built this way. Anything more involved, such as a matrix of protection from each person's antibody levels, is a connector written as code; this is how HPVsim's `cross_genotype.py` works.
+
 ## Diseases written as code
 
 A disease that needs something states and transitions can't say, such as a quantity that each person carries and that changes continuously (a CD4 count, a viral load, or an immunity level that wanes), is written as a Python class, with arrays for each person and methods that update them. It runs as agents, and can sit in the same sim as declared diseases. There are two base classes:

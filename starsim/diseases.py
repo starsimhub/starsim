@@ -65,7 +65,7 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
         init (dict): the share of people who start in each state, e.g. `dict(S=0.90, I=0.01, R=0.09)`; each value can be an `ss.by` or a function of the sim
         init_n (dict): instead, the number of people who start in each state, e.g. `dict(I=1)` for one person
         first (str): the state that everyone not put elsewhere starts in, and is born into; by default, the one named `S` or `susceptible`, else the first state of people made (in the class form, `first = 'N'` in the class body)
-        strains (Strains): its strains (`ss.Strains`): in its states, which they share, or each with a course of its own; then `dis.strains`
+        strains (Strains): its strains (`ss.Strains`), which share its states; then `dis.strains`
         stratify (dict/list): as `stratify()`, e.g. `dict(age={0: 0.3, 15: 0.6, 65: 0.1})`; a list of dicts for one call each
         kwargs (dict): one keyword per state, transition, parameter, result, function, or modifier (`ss.modify()`, of its own quantities, e.g. `fading=ss.modify('rel_trans', multiply=0.5, where=I)`); also `name`, `label`, and `dt`
 
@@ -134,12 +134,9 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
     def __init__(self, *args, pars=None, strains=None, stratify=None, _names=None, **kwargs):
         super().__init__()
         self.strains = None # Its ss.Strains, if it has strains
-        self.family = None # For strains with courses of their own: the module that runs them (see ss.strains.Family)
         self.callbacks = [] # Functions called with the agents an event happened to: see add_callback()
         if len(args) and (args[0] is None or isinstance(args[0], dict)): # Parameters can also be the first argument
             pars, args = args[0], args[1:]
-        if strains is not None and getattr(strains, 'members', None) is not None: # Strains written as diseases of their own
-            return ss.strains.attach_members(self, strains, args, pars, kwargs)
         members = ss.transitions.class_members(type(self))
         if members and all(isinstance(val, ss.modify) for val in members.values()):
             errormsg = f'{sc.strjoin(members)} of {type(self).__name__} is a modifier, which is a member of a declared disease; for a disease written as code, give it to the sim, in connectors='
@@ -172,7 +169,7 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
             return
         if not (d.args or d.members or d.strains is not None or d.stratify is not None or self.has_structure(d.kwargs)): # Nothing was declared, only parameters given: written as code
             return self.update_pars(d.pars, **d.kwargs)
-        if d.strains is not None and getattr(d.strains, 'shared', None) is True: # An outcome for each strain carried, before the transitions are built
+        if isinstance(d.strains, ss.Strains): # An outcome for each strain carried, before the transitions are built
             ss.strains.prepare(d.strains, [(x.name, x) for x in d.args + sc.tolist(d.kwargs.get('transitions'))] + list(d.kwargs.items()) + list(d.members.items()))
         self.init_graph(d.args, d.members, d.pars, d.kwargs, names=d.names)
         self.add_code_pars(d.code_pars)
@@ -294,17 +291,6 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
                 raise ValueError(errormsg)
         self.declare(args, kwargs, names=names)
         return
-
-    def __getattr__(self, attr):
-        """ For strains with courses of their own, what is over all of them, e.g. `where=hpv.infected` (see `ss.strains.Family`) """
-        family = self.__dict__.get('family')
-        if family is not None and not attr.startswith('_'):
-            return getattr(family, attr)
-        return super().__getattr__(attr)
-
-    def expand(self):
-        """ The modules the sim takes for the disease: itself, or for strains with courses of their own, one disease per strain and the module that runs them together """
-        return [self] if self.family is None else self.family.expand()
 
     def define_pars(self, inherit=True, **kwargs):
         """
@@ -540,9 +526,7 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
             out (`ss.display.Description`): if given, add the description to it and return it
         """
         desc = ss.display.Description() if out is None else out
-        if self.family is not None: # Strains with courses of their own
-            self.family.describe(out=desc)
-        elif self.graph is not None:
+        if self.graph is not None:
             ss.display.describe_graph(self.graph, self.sim, out=desc)
             if self.strains is not None:
                 self.strains.describe(self.graph, out=desc)
@@ -1026,11 +1010,8 @@ class Infection(Disease):
             strains (Strains): the strains
         """
         n = len(strains)
-        why = ('its strains are diseases of their own' if strains.members is not None else f'max_strains={strains.max_strains}' if strains.max_strains > 1 else
-               'it has states of its own for each strain (shared=False)' if strains.shared is not True else
-               next((f'ss.immunity lowers {sc.strjoin(imm.values)}, not only rel_sus' for imm in strains.immunity if list(imm.values) != ['rel_sus']), None))
-        if why:
-            raise ss.CapabilityError(f'"{self.name}" is written as code, so its strains are carried one at a time, sharing its states, with protection on rel_sus due to its own states; but {why}. Declare the disease (see ss.Disease) for more.')
+        if strains.max_strains > 1:
+            raise ss.CapabilityError(f'"{self.name}" is written as code, so its strains are carried one at a time, sharing its states, with protection on rel_sus due to its own states; but max_strains={strains.max_strains}. Declare the disease (see ss.Disease) for more.')
         self.strains = strains # Its arrays are added when the sim is initialized (see init_pre()), so a subclass may define its own states after this, even with reset=True
         return
 
@@ -1073,7 +1054,7 @@ class Infection(Disease):
         strain = self.strain.raw
         for imm in self.strains.immunity:
             held = np.logical_or.reduce([self[name].raw for name in imm.names]) & (strain >= 0)
-            out = out*np.where(held, 1 - imm.matrix('rel_sus', len(self.strains))[np.maximum(strain, 0), k], 1.0)
+            out = out*np.where(held, 1 - imm.matrix(len(self.strains))[np.maximum(strain, 0), k], 1.0)
         return out
 
     @ss.required()
@@ -1165,7 +1146,7 @@ class Infection(Disease):
             return isinstance(β, ss.Rate) or sc.isnumber(β)
 
         nets = {ss.networks.standardize_netkey(k):net for k,net in sim.networks.items()}
-        def in_unit(k, β): # A bare number is a rate in the sim's unit, as in a declared disease (on a network with acts, a probability per act); a dict of them stays a probability per step, as Starsim 3's
+        def in_unit(k, β): # A bare number is a rate in the sim's unit, as in a declared disease (on a network with acts, a probability per act)
             has_acts = getattr(nets.get(ss.networks.standardize_netkey(k)), 'has_acts', False)
             return ss.per(β, unit) if sc.isnumber(β) and β and unit and not has_acts else β
 
@@ -1198,9 +1179,11 @@ class Infection(Disease):
             for k,thisbeta in β.items():
                 nkey = ss.networks.standardize_netkey(k)
                 if scalar_beta(thisbeta):
-                    betamap[nkey] = both_ways(nkey, thisbeta)
-                else:
+                    betamap[nkey] = both_ways(nkey, in_unit(k, thisbeta))
+                elif isinstance(thisbeta, ss.peract):
                     betamap[nkey] = as_pair(thisbeta, nkey)
+                else:
+                    betamap[nkey] = [in_unit(k, b) for b in thisbeta]
 
         else:
             errormsg = f'Invalid type {type(β)} for beta'

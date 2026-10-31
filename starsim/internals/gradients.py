@@ -49,7 +49,11 @@ def jax():
             os.environ['XLA_FLAGS'] = f'{os.environ.get("XLA_FLAGS", "")} --xla_force_host_platform_device_count={os.cpu_count() or 1}'.strip()
         if ss.options.jax != 'auto':
             os.environ['JAX_PLATFORMS'] = ss.options.jax
-    import jax
+    try:
+        import jax
+    except ImportError as E:
+        errormsg = 'Gradients need JAX, which is not installed: use pip install "starsim[jax]". Fitting by methods without gradients works without it.'
+        raise ImportError(errormsg) from E
     from jax._src import xla_bridge
     if not xla_bridge.backends_are_initialized(): # The first use, by Starsim or anything else
         if ss.options.jax != 'auto':
@@ -483,7 +487,7 @@ class Run(sc.prettyobj):
         """
         The numbers of a run, with what is worked out from them once a run: the time share as a matrix from place to
         place, if it is dense (a product with it is much faster in XLA than adding into an array at indices: 4x for 50
-        places), and its transpose (since XLA transposes a matrix that is an input again at every step: 10x slower for Ghana)
+        places), and its transpose (since XLA transposes a matrix that is an input again at every step: 10x slower for 260 places)
         """
         if not self.dense_share:
             return X

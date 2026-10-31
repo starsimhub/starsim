@@ -79,7 +79,7 @@ In SISe3, what SimInf does in C (the environmental pressure, its decay, and its 
 
 ## Timings
 
-Lines are lines of model code (not counting blank lines, comments, imports, or plotting, and counting a line over 100 characters twice); times are for one run. Both are measured by Starsim's north-star script, `tests/north_star.py` (see the [index page](../library_landscape.qmd#how-these-numbers-were-made)). SimInf 11.1.0's times were recorded on the same machine. Starsim fails the north star's test of lines on both models, and its tests of time on SISe3.
+Lines are lines of model code (not counting blank lines, comments, imports, or plotting, and counting a line over 100 characters twice); times are for one run. Both are measured by Starsim's north-star script, `tests/north_star/north_star.py` in the lingua_franca_design repo (see the [index page](../library_landscape.qmd#how-these-numbers-were-made)). SimInf 11.1.0's times were recorded on the same machine. Starsim fails the north star's test of lines on both models, and its tests of time on SISe3.
 
 | Model | Lines: SimInf | Lines: Starsim | One run: SimInf | One run: Starsim | |
 |---|---|---|---|---|---|
@@ -91,7 +91,7 @@ The times were measured on 18 October 2026 on a machine shared with other jobs. 
 
 ## What works and what does not yet
 
-These are from Starsim's switching demo for SimInf users (`tests/switching/test_siminf.py`), which checks each task against SimInf's numbers, and from the review it was built from. "Fails" means the demo's check does not pass today.
+These are from Starsim's switching demo for SimInf users (`tests/switching/test_siminf.py` in the lingua_franca_design repo), which checks each task against SimInf's numbers, and from the review it was built from. "Fails" means the demo's check does not pass today.
 
 | Task | Today |
 |---|---|

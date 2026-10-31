@@ -195,7 +195,6 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
         self.init_dwells()
         modifies = lambda m: isinstance(m, ss.modify) or bool(getattr(getattr(m, 'product', None), 'effects', None)) # A modifier, or a delivery of a product with an efficacy (TL17: these were left out, so a product did nothing against a dwell time)
         rescalable = any(modifies(m) for m in list(self.sim.interventions()) + list(self.sim.connectors())) or any(self.varies(dw) for dw in self.dwells.values()) # Whether a dwell time can change after it is drawn: see rescale_exits()
-        rescalable = rescalable or any(isinstance(fam, ss.strains.Family) and any(key.startswith('dur.') for imm in fam.immunity for key in imm.values) for fam in self.sim.diseases()) # Or protection on the time in a state, from a family
         strats = list(graph.strats) + [s for s in self.sim.groups.sim_strats if s not in graph.strats]
         adjusted = {self.sim.groups.dim_index(s.name) for s in strats if any(key.rpartition('.')[2] in graph.transitions for key in s.adjust)}
         rescalable = rescalable or bool(adjusted & self.changing_dims) # Or a multiplier by level, for people who can change level
@@ -210,7 +209,8 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
             for d in {d.name for tr in onward for d in (tr.dst or []) if getattr(d, 'people', False)} - infected:
                 infected.add(d)
                 todo.append(d)
-        self.halved = infected & {s.name for s in graph.infectious if graph.exits[s.name].hazards}
+        hazards = {state.name:[tr for tr in graph.exits[state.name].hazards if not tr.undriven] for state in graph.people_states} # The rates out of each state; a transition with no driver is only by intervention, so nothing to draw
+        self.halved = infected & {s.name for s in graph.infectious if hazards[s.name]}
         self.late = set() # The states with a late_ array: see enter()
         unkept = [state.name for state in graph.people_states if read is not None and not state.keep_time and state.name not in read and state.name not in self.scheduled and state.name not in clocked and not any(getattr(tr, 'after', None) is not None for tr in graph.exits[state.name].hazards)]
         exited = {s.name for tr in graph.transitions.values() if any(getattr(d, 'people', False) for d in (tr.dst or [])) for s in (tr.src or []) if getattr(s, 'people', False)}
@@ -228,7 +228,7 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
                          ss.Arr(f'exit_{name}', dtype=np.int8, nan=-1, label=f'Scheduled exit from {name}')] # Which of the exits, as 8-bit integers
                 if rescalable: # Only needed if a rate can change after dwell times are drawn: see rescale_exits()
                     arrs.append(ss.FloatArr(f'mult_{name}', default=1.0, label=f'Speed of the scheduled exit from {name}, when it was scheduled'))
-            if graph.exits[name].hazards and (name in self.scheduled or name in self.halved): # See enter()
+            if hazards[name] and (name in self.scheduled or name in self.halved): # See enter()
                 arrs.append(ss.FloatArr(f'late_{name}', default=0.0, label=f'The share of a step of the competing rates out of {name} missed in the step of entering it (less than 0 if too much)'))
                 self.late.add(name)
         self.attrs = graph.attrs # Attributes: an array each (for a derived one, its values when last worked out); see fire() and attr_values()
@@ -307,7 +307,7 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
         self.lifetables = {name:None for name,tr in graph.transitions.items() if getattr(tr, 'lifetable', None) is not None} # Who dies in each step by each life table: see step_lifetables()
         for name in self.lifetables:
             add(f'life_{name}', ss.random())
-        self.competing = {state.name: [tr for tr in graph.exits[state.name].hazards if tr.name not in self.lifetables] for state in graph.people_states} # The rates drawn each step: a life table's deaths are drawn once for each person instead, see step_lifetables()
+        self.competing = {state.name: [tr for tr in hazards[state.name] if tr.name not in self.lifetables] for state in graph.people_states} # The rates drawn each step: a life table's deaths are drawn once for each person instead, see step_lifetables()
         for name,competing in self.competing.items():
             if competing:
                 add(f'entry_{name}', ss.random()) # The competing rates of the step people enter in: see finish_moves()
@@ -437,11 +437,21 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
         return self.cache[key]
 
     def mult_raw_extra(self, kind):
-        """ Whether mult_raw() has a multiplier on a kind of quantity other than its modifiers: the adjust= of the stratifications, or a strain's own value """
-        return bool(getattr(self, 'rel_adjust', None) and self.rel_adjust.get(kind)) or kind in self.__dict__.get('rel_scale', ())
+        """ Whether mult_raw() has a multiplier on a kind of quantity other than its modifiers: the adjust= of the stratifications """
+        return bool(getattr(self, 'rel_adjust', None) and self.rel_adjust.get(kind))
+
+    def lifelong_mods(self, mods):
+        """ Whether modifiers only say who a quantity is for, by something that never changes (e.g. a transition with `where=ss.ppl.female`), so each person's multiplier stays the same for the whole run """
+        return all(type(m) is ss.modify and m.op == 'multiply' and m.start is None and m.stop is None and m.when is None and m.hold is None and m.share is None and sc.isnumber(m.amount) and m.where is not None and self.is_fixed(m.where) for m in mods)
 
     def mult(self, kind, name, uids):
         """ The multiplier on a quantity for some agents, from its modifiers """
+        mods = self.sim.modifiers.get((self.mod.name, kind, name))
+        if mods and kind == 'transition' and self.lifelong_mods(mods): # For these agents only
+            out = 1.0
+            for m in mods:
+                out = out*np.where(self.selector.select(m.where)[uids] > 0, m.amount, 1.0)
+            return out
         out = self.mult_raw(kind, name)
         return out if np.ndim(out) == 0 else out[uids]
 
@@ -769,7 +779,7 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
     def seed(self, uids, log=True):
         """
         Seed some agents who are in the first state: put them where a new infection puts them, the destinations of the first
-        transmission in its shares, as init_prev does (and the strains with courses of their own, for each); returns those seeded
+        transmission in its shares, as init_prev does; returns those seeded
 
         Args:
             uids (uids): the agents; those not in the first state are left where they are

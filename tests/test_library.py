@@ -228,8 +228,9 @@ def pertussis():
 
 
 def dengue(): # Having had one serotype protects in part against the others, so there are fewer infections
-    total = lambda cross: ss.Sim(diseases=ssl.Dengue(cross=cross), n_agents=500, unit='day',
-                                 stop=365, rand_seed=1, verbose=0).run().results.dengue.infection.sum()
+    run = lambda cross: ss.Sim(diseases=ssl.Dengue(cross=cross), n_agents=500, unit='day',
+                                 stop=365, rand_seed=1, verbose=0).run().results
+    total = lambda cross: sum(res.infection.sum() for res in [run(cross)[f'den{i + 1}'] for i in range(4)])
     assert total(1.0) < 0.8*total(0.0), 'Expected cross-protection to reduce the infections'
 
 

@@ -16,8 +16,6 @@ times:
   fseis10_init: 0.0301
   fseis10_run: 0.8009
   het_init: 0.0555
-  hpv_init: 0.3372
-  hpv_run: 2.2157
   strains_ode_run: 0.0464
   tb1k_run: 0.6068
   tb_init: 0.0886

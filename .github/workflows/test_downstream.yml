@@ -16,6 +16,9 @@
 #   7. MIGHTI
 #   8. Typhoidsim
 #
+# The other frameworks are tested in frameworks.yml, in the lingua_franca_design repo: one job for
+# each, which builds it if its recipe has changed, and runs the import and export tests and the benchmark.
+#
 # R-Starsim is tested in test_r.yml, since it needs R.
 #
 # TBC:
@@ -34,6 +37,12 @@ on:
       - v4
 
 jobs:
+
+  frameworks:
+    uses: starsimhub/lingua_franca_design/.github/workflows/frameworks.yml@main
+    with:
+      starsim_repo: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
+      starsim_ref: ${{ github.sha }}
 
   test_downstream:
     name: ${{ matrix.model }} tests

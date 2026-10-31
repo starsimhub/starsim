@@ -2,67 +2,14 @@
 Test importing summer2 and Atomica models
 """
 import os
-import subprocess
 import tempfile
 import numpy as np
 import pandas as pd
 import sciris as sc
 import starsim as ss
-import paths
 from starsim.converters.summer2 import load_summer2, outputs
 from starsim.converters.atomica import load_atomica
 
-lfd = paths.lfd/'examples' # The original examples, if they are here
-summer2_python = paths.lfd/'_envs/summer2/bin/python' # summer2's environment, to write a live model with Starsim's summer2.py
-summer2_tb = '''
-import sys, json
-import numpy as np
-import summer2
-from summer2.parameters import Parameter
-from summer2.functions.time import get_sigmoidal_interpolation_function
-
-def build(): # The TB model of v4_design/oct17/switching/summer2.md: named Parameters, a sigmoidal scale-up of detection, and ages with a plain-array mixing matrix
-    m = summer2.CompartmentalModel(times=[1950.0, 2025.0], compartments=list('SELITR'), infectious_compartments=['I'], timestep=1.0)
-    m.set_initial_population(distribution={'S': 1e6 - 1000, 'I': 1000})
-    beta = Parameter('contact_rate')
-    m.add_infection_frequency_flow('infection', beta, 'S', 'E')
-    m.add_infection_frequency_flow('reinfection_L', beta*Parameter('rr_reinf'), 'L', 'E')
-    m.add_infection_frequency_flow('reinfection_R', beta*Parameter('rr_reinf'), 'R', 'E')
-    for name,rate,src,dst in [('stabilisation', 2.0, 'E', 'L'), ('early_activation', 0.2, 'E', 'I'), ('late_activation', 0.002, 'L', 'I'), ('self_recovery', 0.2, 'I', 'R'), ('treatment_end', 2.0, 'T', 'R')]:
-        m.add_transition_flow(name, rate, src, dst)
-    m.add_transition_flow('detection', get_sigmoidal_interpolation_function([1950.0, 1990.0, 2020.0], [0.0, 0.5, 1.0])*Parameter('detect_max'), 'I', 'T')
-    m.add_death_flow('tb_death', 0.2, 'I')
-    m.add_universal_death_flows('universal_death', death_rate=1/70)
-    m.add_crude_birth_flow('birth', 0.02, 'S')
-    ages = ['0', '5', '15', '35', '50', '70']
-    strat = summer2.AgeStratification('age', [int(a) for a in ages], list('SELITR'))
-    strat.set_mixing_matrix(np.array([[3, 1, 1.5, 1, 0.5, 0.3], [1, 8, 2, 1.5, 0.8, 0.4], [1.5, 2, 5, 2.5, 1.5, 0.6], [1, 1.5, 2.5, 4, 2, 0.8], [0.5, 0.8, 1.5, 2, 3, 1.2], [0.3, 0.4, 0.6, 0.8, 1.2, 2]])/4)
-    strat.set_flow_adjustments('early_activation', dict(zip(ages, [summer2.Multiply(3.0), summer2.Multiply(1.5), None, None, None, None])))
-    strat.add_infectiousness_adjustments('I', dict(zip(ages, [summer2.Multiply(0.1), summer2.Multiply(0.2), None, None, None, None])))
-    m.stratify_with(strat)
-    m.request_output_for_flow('notifications', 'detection')
-    return m
-
-if __name__ == '__main__': # Write it with Starsim's summer2.py (the file given), then run it and write the compartments at the end and the notifications
-    import importlib.util
-    spec = importlib.util.spec_from_file_location('starsim_summer2', sys.argv[1]) # By another name, so it doesn't hide summer2 itself
-    dumper = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(dumper)
-    pars = json.load(open(f'{sys.argv[2]}/pars.json'))
-    dumper.dump(build(), f'{sys.argv[2]}/tb.json', pars=pars)
-    m = build()
-    m.run(pars)
-    comps = {str(c):float(v) for c,v in zip(m.compartments, m.outputs[-1])}
-    json.dump(dict(comps=comps, notifications=m.get_derived_outputs_df().notifications.tolist()), open(f'{sys.argv[2]}/ref.json', 'w'))
-'''
-atomica_lib = paths.lfd/'_envs/atomica/lib/python3.12/site-packages/atomica/library' # Atomica's library workbooks, in its environment
-atomica_demos = dict( # Atomica 1.32.4's own runs at dt=1 (start, stop, values at the end), from v4_design/oct17/switching/atomica.md
-    udt      = (2016, 2023, dict(dx=2450.0, tx=3550.0)),
-    dt       = (2016, 2024, dict(dx=240.0, tx=3360.0)),
-    diabetes = (2014, 2035, dict(sus=1218222.500392, sc_uncomp=775.919855)),
-    combined = (2000, 2023, {'SIR_0-4:rec':728.476002}), # The first population type only, as listed
-    hiv_dyn  = (2016, 2035, dict(all_vs=1596938.31)), # A characteristic of one compartment, under its own name
-)
 kw = dict(verbose=False)
 
 
@@ -152,33 +99,6 @@ def test_summer2():
         sim2 = load_summer2(d, **kw)
     assert sim2.pars.networks is not None
     assert any('recovery' in name for name,why in sim2.imported.incomplete)
-
-    # Against the original's results, if the example is here
-    folder = f'{lfd}/summer2/seir-age-clinical'
-    if os.path.exists(folder):
-        ref = pd.read_csv(f'{folder}/reference/results.csv')
-        theirs = ref[ref.series == 'I_old_hospital'].value.values
-        assert np.abs(res.I.select(age='old', clinical='hospital').values - theirs).max() < 0.01, 'Should agree with summer2'
-
-    # A live summer2 model with named Parameters, a sigmoidal scale-up, and ages with an array mixing matrix, written by summer2.py in summer2's environment, against summer2's own run
-    if summer2_python.exists():
-        with tempfile.TemporaryDirectory() as tmp:
-            tmp = sc.path(tmp)
-            sc.savetext(tmp/'tb.py', summer2_tb)
-            sc.savejson(tmp/'pars.json', dict(contact_rate=10.0, rr_reinf=0.21, detect_max=1.5))
-            subprocess.run([str(summer2_python), '-I', str(tmp/'tb.py'), str(sc.path(ss.converters.__file__).parent / 'summer2.py'), str(tmp)], check=True, capture_output=True)
-            tb = load_summer2(str(tmp/'tb.json'), **kw)
-            ref = sc.loadjson(tmp/'ref.json')
-        assert not tb.imported.incomplete
-        tbres = tb.run().results.summer2
-        levels = dict(zip(['0', '5', '15', '35', '50', '70'], ['0-4', '5-14', '15-34', '35-49', '50-69', '70+'])) # summer2's age groups, as Starsim labels them
-        for c,val in ref['comps'].items():
-            state, age = c.split('Xage_')
-            ours = tbres[state].select(age=levels[age]).values[-1]
-            assert np.isclose(ours, val, rtol=1e-3), f'{c} in 2025 should agree with summer2' # The sigmoid is sampled every tenth of a step
-        notif = outputs(tb).notifications
-        for year in [1990, 2010, 2024]:
-            assert np.isclose(notif[year - 1950], ref['notifications'][year - 1950], rtol=0.005), f'Notifications in {year} should agree with summer2' # summer2's is the mean of the rates at either end of the year
     return sim
 
 
@@ -241,25 +161,6 @@ def test_atomica():
         x = np.array([s - flows['si'] - flows['sr'], inf + flows['si'] - flows['ir'] - flows['id'], r + flows['sr'] + flows['ir'], d + flows['id']])
     assert np.allclose([res.sus[-1], res.inf[-1], res.rec[-1], res.dead[-1]], x), 'Should match Atomica\'s Euler step'
     assert np.isclose(res.ch_prev[0], 0.05)
-
-    # Against the original's results, if the example is here
-    folder = f'{lfd}/atomica/sir'
-    if os.path.exists(folder):
-        sim2 = load_atomica(f'{folder}/original/sir_framework.xlsx', f'{folder}/original/sir_databook.xlsx', dt=1, **kw).run()
-        ref = pd.read_csv(f'{folder}/reference/results.csv')
-        for comp in ['sus', 'inf', 'rec', 'dead']:
-            theirs = ref[ref.series == f'adults_{comp}'].value.values
-            assert np.allclose(sim2.results.SIR[comp].values, theirs), f'{comp} should agree with Atomica'
-
-    # Atomica's own library workbooks, if its environment is here: lower-case headings, numbers in the databook, the setup weights, a timed duration, several population types
-    if atomica_lib.exists():
-        for demo,(start,stop,ref) in atomica_demos.items():
-            sim3 = load_atomica(atomica_lib/f'{demo}_framework.xlsx', atomica_lib/f'{demo}_databook.xlsx', start=start, stop=stop, dt=1, **kw)
-            sim3.pars.verbose = 0
-            res = sim3.run().results[sim3.diseases[0].name]
-            for key,val in ref.items():
-                ours = res[key].values[-1] if ':' not in key else res[key.split(':')[1]].select(population=key.split(':')[0]).values[-1]
-                assert np.isclose(ours, val, rtol=1e-6), f'{demo}: {key} is {ours} in {stop}, against {val} in Atomica'
     return sim
 
 

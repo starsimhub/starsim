@@ -35,4 +35,6 @@ Each file holds its kernels and, at the bottom, their bindings, added to the mod
 - `kernels.rs` and `kernels/`: the compartmental kernels (`starsim/solvers/backends/kernels.py`)
 - `py.rs`: what the bindings share (NumPy arrays as slices, a body run for each element type, `avx2!`)
 
+`step()` is compiled twice from one body (`step_groups()`), for one group, where the loops over groups go away, and for many, with AVX2 where the CPU has it; Numba's has one body, which takes a model of one group about 5× as long as Rust's does.
+
 `ss.jit` (users' own code) has no Rust copy: it is compiled by Numba (or traced by JAX).

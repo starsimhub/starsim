@@ -40,7 +40,7 @@ Why do we need a lingua franca? Why can't LLMs just write disease models directl
 - `best-practices` distills the modeling landscape into best practices for each type of modeling. *[second pass done after human review]*
 - `design` contains design specifications for the language, based on the best practices described. *[second pass done after human review; brought in line with the code after the review of October 2026, and its code blocks, error catalog, and vocabulary counts are checked by `tests/devtests/test_spec.py`]*
 - `examples` contains examples of models written in other frameworks to be expressed by the lingua franca. *[done in the `lingua_franca_design` repository, which holds the originals; this folder has only the README. The smaller fixtures the tests need are in `tests/`, and the build-set models are in `tests/corpus.py`]*
-- `vignettes` contains translations of the model examples into the lingua franca. *[23 done, in the `lingua_franca_design` repository (this folder has only the README); `tests/north_star.py` measures them, and `tests/switching/` runs a scaled-down demo for each of 13 frameworks]*
+- `vignettes` contains translations of the model examples into the lingua franca. *[23 done, in the `lingua_franca_design` repository (this folder has only the README); `tests/north_star/north_star.py` in the lingua_franca_design repo measures them, and `tests/switching/` in the lingua_franca_design repo runs a scaled-down demo for each of 13 frameworks]*
 - `webapp` is a tool for viewing `examples` models side by side with their `vignettes` translations, with diff-style markup. *[not done]*
 
 ## AI disclaimer

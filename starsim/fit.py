@@ -859,7 +859,7 @@ def diagnose(draws):
 
     Both are BlackJAX's, rank-normalized and from split chains (Vehtari et al. 2021, as in Stan and ArviZ): the R-hat is the
     larger of that of the draws and that of their distance from the median, and the effective sample size is of the bulk.
-    Both are NaN for chains of fewer than 4 draws, too short to tell.
+    Both are NaN for chains of fewer than 4 draws, too short to tell, and without BlackJAX (`pip install "starsim[jax]"`).
 
     Args:
         draws (array): the draws, with shape (chains, draws, values)
@@ -867,7 +867,12 @@ def diagnose(draws):
     if draws.shape[1] < 4:
         nans = np.full(draws.shape[2], np.nan)
         return nans, nans.copy()
-    import blackjax.diagnostics as bd
+    try:
+        import blackjax.diagnostics as bd
+    except ImportError:
+        ss.note('the R-hat and effective sample size need JAX, which is not installed, so they are NaN: use pip install "starsim[jax]"')
+        nans = np.full(draws.shape[2], np.nan)
+        return nans, nans.copy()
     jax = ss.gradients.jax()
     with jax.enable_x64(True): # Otherwise in single precision
         return np.array(bd.rhat(draws)).reshape(draws.shape[2]), np.array(bd.ess_bulk(draws)).reshape(draws.shape[2]) # BlackJAX drops an axis of one value

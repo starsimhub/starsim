@@ -134,7 +134,7 @@ Descriptions and sources can be kept with `doc=` and `source=` on an `ss.par`, a
 
 ## Timings
 
-Lines are lines of model code (not counting blank lines, comments, imports, or plotting, and counting a line over 100 characters twice), against the lines of EMULSION's YAML; times are for one run. Both are measured by Starsim's north-star script, `tests/north_star.py` (see the [index page](../library_landscape.qmd#how-these-numbers-were-made)). EMULSION 1.1.1's times were recorded on the same machine, as a whole command (`emulsion run`), of which about 0.7 s is starting Python and reading the model.
+Lines are lines of model code (not counting blank lines, comments, imports, or plotting, and counting a line over 100 characters twice), against the lines of EMULSION's YAML; times are for one run. Both are measured by Starsim's north-star script, `tests/north_star/north_star.py` in the lingua_franca_design repo (see the [index page](../library_landscape.qmd#how-these-numbers-were-made)). EMULSION 1.1.1's times were recorded on the same machine, as a whole command (`emulsion run`), of which about 0.7 s is starting Python and reading the model.
 
 | Model | Lines: EMULSION | Lines: Starsim | One run: EMULSION | One run: Starsim | |
 |---|---|---|---|---|---|
@@ -147,7 +147,7 @@ The last two rows were measured on 17 October 2026, on a machine shared with oth
 
 ## What works and what does not yet
 
-These are from Starsim's switching demo for EMULSION users (`tests/switching/test_emulsion.py`), which checks each task against EMULSION's published output, and from the review it was built from. "Fails" means the demo's check does not pass today.
+These are from Starsim's switching demo for EMULSION users (`tests/switching/test_emulsion.py` in the lingua_franca_design repo), which checks each task against EMULSION's published output, and from the review it was built from. "Fails" means the demo's check does not pass today.
 
 | Task | Today |
 |---|---|

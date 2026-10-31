@@ -929,8 +929,6 @@ class Selector(sc.prettyobj):
             return arr.raw if self.abm else np.asarray(arr.raw)[None, :sim.groups.n_groups]
         name = args[1]
         mod = self.module(modname(args[0]))
-        if isinstance(mod, ss.strains.Family): # A state of a disease whose strains have courses of their own: the people in it in any of them (e.g. ss.state('hpv.Ca'))
-            return as_cond(getattr(mod, name)).eval(self)
         if args[0] is None: # A state or transition given without its module: look in this module first, then the others
             for other in [self.mod] + [m for m in sim.declared if m is not self.mod]:
                 if getattr(other, 'graph', None) is not None and (name in other.graph.states or name in other.graph.transitions):
@@ -1124,11 +1122,16 @@ class Selector(sc.prettyobj):
             out = cond.eval(self) if isinstance(cond, Cond) else self.expr(cond) if isinstance(cond, ss.expressions.Expr) else cond
         return self.to_selection(out, cond)
 
-    def expr(self, expr):
-        """ An expression of the model (a clock, a count, a parameter): one value per agent, or per group """
+    def expr(self, expr, mask=None):
+        """ An expression of the model (a clock, a count, a parameter): one value per agent, or per group; given a mask, as agents, worked out only for those in it (0 for the others) """
         engine = self.mod.engine
         if self.abm:
-            return engine.eval_for(expr, ss.uids(np.arange(self.shape[0])))
+            if mask is None:
+                return engine.eval_for(expr, ss.uids(np.arange(self.shape[0])))
+            uids = ss.uids(np.flatnonzero(mask))
+            out = np.zeros(self.shape)
+            out[uids] = engine.eval_for(expr, uids)
+            return out
         return engine.eval(expr)
 
     def to_selection(self, out, cond=None):
@@ -1171,8 +1174,8 @@ class Selector(sc.prettyobj):
         out = out > 0 if out.dtype != bool and out.dtype.kind in 'iu' else out
         return np.broadcast_to(out, self.shape).astype(float)
 
-    def per_person(self, val, convert=None):
-        """ A value (a number, `ss.by`, or a function of the sim) as a scalar or one value per agent or per group """
+    def per_person(self, val, convert=None, mask=None):
+        """ A value (a number, `ss.by`, or a function of the sim) as a scalar or one value per agent or per group; given a mask (see `expr()`), one that reads a clock is worked out only for those in it """
         sim = self.sim
         if isinstance(val, ss.expressions.Expr) and any(isinstance(leaf, (ss.State, ss.expressions.Prop)) for leaf in val.leaves): # Of people's properties or states (of any module), read for each person as where= reads them, e.g. multiply=1 - 0.9*meth.on
             val = person_cond(val)
@@ -1180,7 +1183,7 @@ class Selector(sc.prettyobj):
             val = val.eval(self)
             val = val.astype(float) if isinstance(val, np.ndarray) and val.dtype == bool else val
         if isinstance(val, ss.expressions.Expr) and self.mod is not None: # A parameter (e.g. one that is fitted), or an expression of parameters
-            val = self.expr(val) if ss.expressions.clocks_in(val) else self.mod.engine.eval(val) # One that reads a clock has a value for each agent
+            val = self.expr(val, mask) if ss.expressions.clocks_in(val) else self.mod.engine.eval(val) # One that reads a clock has a value for each agent
         if isinstance(val, ss.by):
             if self.abm and val.on_people(sim): # Read from each person
                 return val.lookup(sim)

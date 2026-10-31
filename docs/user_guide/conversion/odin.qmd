@@ -103,7 +103,7 @@ msim = sim.run(n_runs=20)
 
 ## Timings
 
-Lines are lines of model code (not counting blank lines, comments, imports, or plotting, and counting a line over 100 characters twice); times are for one run. Both are measured by Starsim's north-star script, `tests/north_star.py` (see the [index page](../library_landscape.qmd#how-these-numbers-were-made)). odin 1.2.7's times were recorded on the same machine, as a whole command (`Rscript`), which includes starting R and compiling the generated C code.
+Lines are lines of model code (not counting blank lines, comments, imports, or plotting, and counting a line over 100 characters twice); times are for one run. Both are measured by Starsim's north-star script, `tests/north_star/north_star.py` in the lingua_franca_design repo (see the [index page](../library_landscape.qmd#how-these-numbers-were-made)). odin 1.2.7's times were recorded on the same machine, as a whole command (`Rscript`), which includes starting R and compiling the generated C code.
 
 | Model | Lines: odin | Lines: Starsim | One run: odin | One run: Starsim | |
 |---|---|---|---|---|---|
@@ -115,7 +115,7 @@ The last row was measured on 17 October 2026, on a machine shared with other job
 
 ## What works and what does not yet
 
-These are from Starsim's switching demo for odin users (`tests/switching/test_odin.py`), which checks each task against odin's numbers, and from the review it was built from. "Fails" means the demo's check does not pass today.
+These are from Starsim's switching demo for odin users (`tests/switching/test_odin.py` in the lingua_franca_design repo), which checks each task against odin's numbers, and from the review it was built from. "Fails" means the demo's check does not pass today.
 
 | Task | Today |
 |---|---|

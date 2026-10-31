@@ -9,7 +9,6 @@ import numpy as np
 import pandas as pd
 import sciris as sc
 import starsim as ss
-import paths
 import corpus
 
 kw = dict(verbose=0)
@@ -151,19 +150,6 @@ def test_emulsion(tmp_path):
     assert 'import-model' in weekly.imported.prompt # What to ask an AI assistant to finish it
     left = weekly.new(solver='ode', substeps=None).run().results.weekly.I[1]/1000 # The ODE with its own substeps (EMULSION's compartments take whole steps)
     assert np.isclose(left, 0.9**7, rtol=1e-3) # 47.8% still infectious after a 7-day step, as in EMULSION (90% if the probability were per step)
-
-    # The originals: EMULSION's SIR as compartments, individuals, and hybrid groups, against 200 EMULSION runs
-    if paths.lfd.exists():
-        folder = paths.lfd/'examples/emulsion/sir'
-        ref = sc.dataframe.read_csv(folder/'reference/results.csv')
-        for kind in ['compart', 'IBM', 'hybrid']:
-            sir = ss.import_from(folder/f'original/{kind}_SIR.yaml', **kw)
-            assert not sir.imported.incomplete and 'n=100;' in repr(sir) # 100 animals, not the default number of agents
-            final = sir.run(n_runs=200).results[f'{kind}_SIR'].R.values[:, -1].mean() # With one infected at the start, many runs die out, so the mean needs many
-            series = dict(compart='compartment', IBM='ibm', hybrid='hybrid')[kind] + '_R'
-            expected = ref[(ref.series == series) & (ref.time == 100)].value.iloc[0]
-            rtol = 0.1 if kind == 'compart' else 0.2 # As agents, more runs die out at a daily step (24% of them, against 19% at a tenth of a day), a difference of order dt; the runs that take off agree to within 1%
-            assert np.isclose(final, expected, rtol=rtol), f'{kind}: {final} recovered at day 100 against EMULSION\'s {expected}'
     return sim
 
 

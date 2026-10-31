@@ -36,7 +36,7 @@ class Stepping:
         self.place_newcomers()
         self.renew_events()
         self.step_lifetables()
-        quick = set() if self.unscheduled is None or self.late or any(self.competing[name] for name in self.listed) else {name for name in self.listed if name not in self.unscheduled and self.exits_of[name] and not self.rescaled_of(name)} # States with only scheduled exits, all scheduled already: who leaves them is found in one pass over the agents, with no need to list who is in them (see leave())
+        quick = set() if self.unscheduled is None or self.late else {name for name in self.listed if name not in self.unscheduled and self.exits_of[name] and not self.competing[name] and not self.rescaled_of(name)} # States with only scheduled exits, all scheduled already: who leaves them is found in one pass over the agents, with no need to list who is in them (see leave())
         members = self.start_counts([name for name in self.listed if name not in quick])
         self.step_counts(dt) # States that are not people, from the people at the start of the step, so that a rate of people that uses a count (a bite rate) takes it once advanced
         if self.held is not None:

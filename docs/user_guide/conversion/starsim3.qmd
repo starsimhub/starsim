@@ -86,7 +86,7 @@ Without `--check`, it makes the changes in place (so run it on code that is unde
 
 ## What works and what does not yet
 
-These are from Starsim's switching demo for Starsim 3 users (`tests/switching/test_starsim3.py`), and from the review it was built from. All four of the demo's checks pass today.
+These are from Starsim's switching demo for Starsim 3 users (`tests/switching/test_starsim3.py` in the lingua_franca_design repo), and from the review it was built from. All four of the demo's checks pass today.
 
 | Task | Today |
 |---|---|

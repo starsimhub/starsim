@@ -18,7 +18,7 @@ Starsim 4 adds a way to write a model as declared states and transitions, which 
 - **Pregnancy and demographics**: declared `ss.Pregnancy`, `ss.birth()` and `ss.death()`. Named data: `ss.people('Kenya')`, and birth, death and fertility rates by country (from `starsim_data`).
 - **Results and fitting**: `ss.outcome()` declares reported quantities. `sim.fit()` fits to data by optimization, MCMC (with gradients in JAX), particle MCMC, iterated filtering or ABC-SMC, with `fit.profile()` and `sim.sensitivity()`; `ss.fit.optimize()` allocates budgets.
 - **Scenarios and runs**: `ss.parallel()` and `sim.run(n_runs=)` return a MultiSim whose results have a run dimension, with summaries, bands and comparisons by scenario. Sims with different steps can be run together.
-- **Importing and exporting**: `ss.import_from()` reads models from EMULSION, odin, SBML, SimInf, flepiMoP, summer2, Atomica, camdl, EpiModel, epydemix and MEmilio; `ss.export_to()` writes SBML and odin. `python -m starsim.io.migrate` rewrites Starsim 3 code.
+- **Importing and exporting**: `ss.import_from()` reads models from EMULSION, odin, SBML, SimInf, flepiMoP, summer2, Atomica, camdl, EpiModel, epydemix and MEmilio; `ss.export_to()` writes SBML and odin. `python -m starsim.converters.migrate` rewrites Starsim 3 code.
 - **Library**: `starsim.library` (`ssl`) holds HIV, cholera, Ebola, measles, malaria, TB, COVID, influenza, dengue, and other simple disease models, maternal and newborn health, more networks, and health economics (`ssl.Costs`, `ssl.DALYs`, `ssl.discount()`, `ssl.ICER`).
 - **Command line and speed**: `starsim init` and `starsim compile`; Numba kernels throughout, with optional Rust copies that give the same numbers; optional JAX for gradients.
 
@@ -32,7 +32,7 @@ Starsim 4 adds a way to write a model as declared states and transitions, which 
 - *Regression*: `ss.Deaths` and `ss.Births` hold each period's rate until the next; delivery rounds are timed by date.
 - *Regression*: with `rescale=True`, a declared disease's results (and `alive`) include the people no agent stands for yet.
 - *Regression*: fixed delays under the chain binomial and tau-leaping last their full length on average, with default substeps counting them; final sizes were up to 14% low.
-- *Regression*: a bare `beta` in a disease written as code is a rate in the sim's unit, unless on a network with acts.
+- *Regression*: a bare `beta` in a disease written as code is a rate in the sim's unit, alone or in a dict by network, unless on a network with acts.
 - *Regression*: a daily timeline started from a numeric year has whole-day dates.
 - *Regression*: values that vary smoothly in time are taken once a step, at its middle (at its start by Euler's method), for every solver.
 
@@ -43,6 +43,7 @@ Starsim 4 adds a way to write a model as declared states and transitions, which 
   - deliveries take `at=` and `where=` (were `years=`/`dates=` and `eligible=`);
   - `ss.Infection` transmits in `transmit()` (was `infect()`);
   - lactation is part of `ss.Pregnancy`.
+- *Migration*: `ss.strains.Family` is removed, so `ss.Strains` takes the names of strains that share a disease's states, without `shared=` or diseases as strains, and `ss.immunity()` takes `rel_sus=` due to a state, without `rel_trans=`, `dur=`, or an attribute. Strains with courses of their own are one disease per strain, connected by a connector (see the [Diseases](https://docs.starsim.org/user_guide/building_diseases.html#strains) guide). `ssl.Dengue()` is now a list of serotypes, with results `sim.results.den1` and so on, not `sim.results.dengue`.
 - *Migration*: there is no model spec: `sim.to_code()`, `ss.diff()` and `sim.hash()` are removed.
 - *Migration*: `ss.Disease` is the one disease class, declared, written as code, or both; `ss.Infection` adds only transmission.
 - *Migration*: an unnamed transition that is a disease's only transmission is named `infection`, a duration written inline is named by its state (`dur_I`), and a rate by its transition (`rate_death`).
@@ -60,6 +61,7 @@ Starsim 4 adds a way to write a model as declared states and transitions, which 
 - `res.by(dim)` across runs is an `ss.Result` with a column for each level.
 - `ss.solvers.why_not()` replaces `ss.gradients.reason()`.
 - The chain binomial and tau-leaping always run in the kernels: their JAX engine is removed, since it was no faster, so a seeded run no longer changes when it gets long. `sim.jax` is now for the ODE only.
+- In `init_post()`, diseases come before networks, so a disease that seeds from a network's states has to call that network's `init_post()` first (or seed later). This silently gave no infections in STIsim and HPVsim until they were changed.
 
 ### Bugfixes and performance
 - `sim.run(n_runs=)` restarts one built sim again; a stray argument had turned that off.
@@ -84,9 +86,11 @@ Starsim 4 adds a way to write a model as declared states and transitions, which 
 - A compartmental run beside a module with a step of its own is about 4.6× faster, and an empty `step()` no longer stops a run being taken whole.
 - The compartmental kernels are up to 1.8× faster with 100 groups, and `import starsim` no longer imports `scipy.stats`.
 - Which engine runs a model is one table of rules, shown by `ss.solvers.solver_table()`.
-- Mixing between many places is up to 5× faster in the kernels, by BLAS when every pair of places has a time share (Ghana measles, 260 districts: 4.8 s to 1.6 s a run; 600 places: 22.6 s to 4.4 s).
+- Mixing between many places is up to 5× faster in the kernels, by BLAS when every pair of places has a time share (measles metapop, 260 districts: 4.8 s to 1.6 s a run; 600 places: 22.6 s to 4.4 s).
 - `pip install starsim` is set up to include the compiled Rust kernels, as one wheel per platform for Python 3.11 and later; the sdist includes the crate, and Numba's kernels remain the fallback.
 - `ss.compile()` works under Numba.
+- `import starsim` limits BLAS to one thread, whatever was imported first, since more never made Starsim faster on any platform tested, and slowed its start and its workers. Use `STARSIM_NUM_THREADS` or `ss.options.num_threads` to change it.
+- JAX is optional, and recommended: `pip install "starsim[jax]"`. Without it, gradients aren't available, and the R-hat and effective sample size of a fit are NaN. It has no builds for Intel Macs or Windows on ARM, on which Starsim could not be installed.
 - A rate or duration that reads another disease's count is no longer frozen in a whole run.
 - A change in code to a modifier's amount or a product's efficacy takes effect in a stepped run.
 - Results read time-varying values at each time point.
@@ -95,6 +99,11 @@ Starsim 4 adds a way to write a model as declared states and transitions, which 
 - Runs swept over a rate can be selected.
 - `sum()` of durations works, and a transition in a class body can use a sibling transition as its event.
 - `python -m starsim.converters.migrate` renames prefixed names only for the diseases in the file.
+- Compartmental models with one group run up to 1.7× faster in the Rust kernels, and those with many groups up to 1.3× faster on CPUs with AVX2.
+- `sim.run()` of a compartmental model with many groups is up to 1.5× faster, from less copying as results are stored.
+- `sim.summary` is made the first time it is read, not at the end of every run.
+- A modifier whose amount reads a clock (e.g. `multiply=0.5**(El.time/half_life)`) is worked out only for the people in its `where=`, so a declared `ssl.Syphilis` runs within about 6% of the version with `step()`.
+- As agents, a transition with no driver (moved only by an intervention) is no longer drawn each step, a `where=` by sex no longer makes dwell times rescale, and the one-pass exit check applies per state.
 
 ## Version 3.7.2 (2026-10-06)
 - `ss.ClusterNet` (and so `ss.HybridNet`) and `ss.MSMNet` now shuffle agents using `float64` random numbers and a stable sort. Previously, tied `float32` random numbers were ordered differently on different CPUs, so the same seed could give slightly different results on different machines.

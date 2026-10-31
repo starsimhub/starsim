@@ -7,7 +7,6 @@ Each covers a kind of model the other benchmarks miss:
 - counts:  a declared model with counts (Ross-Macdonald malaria, mosquitoes as counts), as agents
 - coded:   a disease written as code (an ss.Infection subclass), over a network, with demographics
 - by_age:  a declared model with ss.by age tables (Covasim's prognoses, FPsim's deaths by age and sex)
-- hpv:     genotypes as ss.Strains, with attributes and branch chances that depend on a clock (HPVsim)
 - tb:      a declared disease as agents with four transmissions over one network, at 1,000 and 10,000 agents (tbsim)
 - contra:  a declared choice among many states, by regression and tables by age and destination (FPsim's contraception)
 - strains_ode: 16 sets of strains under the ODE (tbsim's drug resistance)
@@ -192,52 +191,6 @@ def make_by_age(n_agents=20_000):
     sus = ss.modify(covid.rel_sus, multiply=by_age('sus'), name='sus_by_age')
     return ss.Sim(diseases=covid, connectors=sus, demographics=[ss.death(rate=mortality)], networks=ss.RandomNet(n_contacts=20), n_agents=n_agents,
                   start='2020-03-01', dur=ss.days(120), dt=ss.days(1), use_aging=False, rand_seed=0, verbose=0)
-
-
-#%% hpv: genotypes as ss.Strains, with attributes and branch chances of a clock
-
-def make_hpv(n_agents=10_000, n_genotypes=4):
-    """
-    HPVsim's natural history as declared (the 2026-10-22 review's hpv_v4.py, condensed): genotypes as own courses of one
-    disease, sharing cancer, with cross-immunity from attributes set at clearance, and branch chances that depend on the
-    time spent in a state (HP63), 2000-2040 quarterly
-    """
-    yrs = ss.years(1)
-    lognorm = lambda mean, std: ss.lognorm_ex(mean=ss.years(mean), std=ss.years(std))
-    def logf2(x, k, ttc=50): # Severity after x years (hpvsim.utils.logf2)
-        t1 = 1 + np.exp(-k*ttc)
-        lo, hi = t1/(t1 - 2), -t1/(t1 - 2)
-        return np.minimum(1, lo + (hi - lo)/(1 + np.exp(-k*x)))
-    def genotype(name, rel_beta, k, tp):
-        S, P, C, Ca, L, X = ss.states('S P C Ca L X')
-        sev = np.abs(ss.ppl.rel_sev)
-        p_cin = logf2(sev*P.time/yrs, k)
-        p_ca = 1 - (1 - tp)**(logf2(sev*C.time/yrs, k)**2)
-        precin = ss.Transition(P, [C, L, S], dur=lognorm(2.5, 9), p=[p_cin, 0*p_cin, None], where=ss.ppl.female)
-        cin = ss.Transition(C, [Ca, L, S], dur=lognorm(5, 20), p=[p_ca, 0*p_ca, None])
-        cleared = precin.to(S) | cin.to(S)
-        sero = ss.attr(ss.bernoulli(0.6), on=cleared, combine='max', init=0)
-        return ss.Disease(S, P, C, Ca, L, X, name=name,
-            infection    = ss.Transition(S, P, rate={'randomnet': ss.peryear(0.4*rel_beta)}*(P + C)),
-            male_clear   = ss.Transition(P, S, dur=lognorm(1, 1), where=~ss.ppl.female),
-            precin       = precin,
-            cin          = cin,
-            reactivation = ss.Transition(L, P, rate=ss.probperyear(0.025)),
-            cancer_death = ss.Transition(Ca, ss.null, dur=lognorm(8, 3)),
-            sero         = sero,
-            nab          = ss.attr(ss.uniform(0.5, 0.95)*sero, on=cleared, combine='max', init=0),
-            cell         = ss.attr(ss.uniform(0.3, 0.9), on=cleared, combine='max', init=0),
-            infected     = P + C,
-        )
-    specs = [('hpv16', 1.0, 0.3, 2e-3), ('hpv18', 0.75, 0.25, 2e-3), ('hi5', 0.9, 0.2, 1.5e-3), ('ohr', 0.9, 0.2, 1.5e-3)][:n_genotypes]
-    members = [genotype(*spec) for spec in specs]
-    n = len(members)
-    sus = np.full((n, n), 0.3) + 0.6*np.eye(n)
-    sev = np.full((n, n), 0.5) + 0.4*np.eye(n)
-    immunity = [ss.immunity(due_to='nab', rel_sus=sus, combine='sum'), ss.immunity(due_to='cell', dur=dict(P=sev), combine=lambda p: np.minimum(p.sum(0), 0.999))]
-    hpv = ss.Disease(name='hpv', init_prev=0.1, strains=ss.Strains(members, shared=['Ca'], immunity=immunity, name='genotype'))
-    people = ss.People(n_agents, age_data=ss.uniform(0, 60), extra_states=[ss.FloatArr('rel_sev', default=ss.normal(1.0, 0.2))])
-    return ss.Sim(diseases=hpv, people=people, networks=ss.RandomNet(n_contacts=2), start=2000, stop=2040, dt=ss.years(0.25), rand_seed=1, verbose=0)
 
 
 #%% tb: tbsim's LSHTM spectrum of disease, as agents on a network

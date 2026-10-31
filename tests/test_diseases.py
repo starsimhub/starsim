@@ -362,43 +362,6 @@ def test_congenital():
     return sim
 
 
-def family(members, name='hpv', init_prev=None, **kwargs):
-    """ A disease whose strains are diseases of their own (ss.Strains of diseases), each with its own course """
-    return ss.Disease(name=name, init_prev=init_prev, strains=ss.Strains(members, **kwargs))
-
-
-def make_genotype(name, beta=3.0, **kwargs):
-    """ One genotype of a toy HPV: infection, clearance with immunity that wanes, and cancer (for strains with courses of their own) """
-    S, I, R, Ca = ss.states('S I R Ca')
-    return ss.Disease(
-        infection   = S >> I @ ss.peryear(beta)*I,
-        clearance   = I >> R @ ss.years(1),
-        reinfection = R >> I @ ss.peryear(beta)*I,
-        waning      = R >> S @ ss.years(5),
-        cancer      = I >> Ca @ ss.years(20),
-        death       = Ca >> ss.null @ ss.years(5),
-        X           = ss.State(people=True), # Where someone with cancer from another genotype goes
-        infected    = I + Ca,
-        name        = name,
-        **kwargs,
-    )
-
-
-@sc.timer()
-def test_strains_seeding():
-    sc.heading('Testing joint seeding: one member for each person seeded, in the shares given')
-    names = ['hpv16', 'hpv18', 'hpv31']
-    def make(seed):
-        hpv = family([make_genotype(name) for name in names], init_prev=0.2, split=[0.5, 0.3, 0.2])
-        return ss.Sim(diseases=hpv, n_agents=20_000, start=2000, stop=2005, rand_seed=seed, verbose=0).init()
-    held = lambda sim: np.array([sim.diseases[name].I.raw for name in names])
-    seeded = held(make(1))
-    assert (seeded.sum(0) > 1).sum() == 0 # Nobody is seeded with two
-    assert np.isclose(seeded.sum()/20_000, 0.2, atol=0.01) and np.allclose(seeded.sum(1)/seeded.sum(), [0.5, 0.3, 0.2], atol=0.02)
-    assert np.array_equal(seeded, held(make(1))) and not np.array_equal(seeded, held(make(2))) # The family's own random numbers
-    return seeded
-
-
 @sc.timer()
 def test_seeding_routes():
     sc.heading('Testing seeding through several transmissions out of the first state: each seeds those it can infect')
@@ -410,39 +373,6 @@ def test_seeding_routes():
     assert not (g.M.raw & female).any() and not (g.F.raw & ~female).any() # Men are seeded as men, women as women
     assert np.isclose((g.M.raw | g.F.raw).sum(), 0.3*5000, rtol=0.1)
     return sim
-
-
-@sc.timer()
-def test_strains_errors():
-    sc.heading('Testing what strains with courses of their own refuse')
-    pair = lambda **kwargs: family([make_genotype('hpv16'), make_genotype('hpv18')], **kwargs)
-    build = lambda hpv, **kwargs: ss.Sim(diseases=hpv, n_agents=100, stop=2001, verbose=0, **kwargs).init()
-    with pytest.raises(ss.CapabilityError): # A strain written as code, whose states the others cannot see
-        family([make_genotype('hpv16'), ssl.AgentSIS()])
-    with pytest.raises(KeyError): # A state the members do not have
-        build(pair(immunity=ss.immunity(due_to='nab', rel_sus=0.5)))
-    with pytest.raises(ss.CapabilityError): # A combine= function under sim.gradient()
-        ss.Sim(diseases=pair(immunity=ss.immunity(due_to='R', rel_sus=0.5, combine=lambda p: p.max(0))), stop=2001, verbose=0).gradient()
-    with pytest.raises(ValueError): # Strains named like a dimension
-        build(ss.Disease(name='hpv', strains=ss.Strains([make_genotype('hpv16').stratify(risk=['low', 'high']), make_genotype('hpv18')], name='risk')))
-    with pytest.raises(ValueError): # A strain with its own initial values in a disease that seeds
-        family([make_genotype('hpv16', init_prev=0.1), make_genotype('hpv18')], init_prev=0.1)
-    with pytest.raises(ValueError): # A protection of 1 on a time spent
-        build(pair(immunity=ss.immunity(due_to='R', dur=dict(I=0.6), combine='sum')))
-    with pytest.raises(KeyError, match='to move to; add one'): # A shared state with no state to move to
-        def sis(name):
-            S, I = ss.states('S I')
-            return ss.Disease(infection=ss.Transition(S, I, rate=0.1 * I), recovery=ss.Transition(I, S, dur=10), name=name)
-        build(family([sis('a'), sis('b')], name='flu', shared='I'))
-    with pytest.raises(TypeError): # The protection is the value of what it lowers, not a positional matrix
-        ss.immunity(np.eye(2), due_to='R')
-    with pytest.raises(ValueError, match='but there are 2 strains'):
-        build(pair(immunity=ss.immunity(due_to='R', rel_sus=np.eye(3))))
-    with pytest.raises(ValueError): # The disease's own states as well as strains with natural histories of their own
-        S, I = ss.states('S I')
-        ss.Disease(infection=S >> I @ ss.peryear(1)*I, strains=ss.Strains([make_genotype('hpv16'), make_genotype('hpv18')]))
-    assert family([make_genotype('hpv16'), make_genotype('hpv18')]).member_names == ['hpv16', 'hpv18']
-    return
 
 
 @sc.timer()
@@ -835,6 +765,4 @@ if __name__ == '__main__':
     mixed = test_mixed_disease()
     seams = test_code_seams()
     cong  = test_congenital()
-    seeded = test_strains_seeding()
-    test_strains_errors()
     define = test_define_transitions()

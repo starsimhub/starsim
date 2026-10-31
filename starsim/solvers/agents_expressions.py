@@ -423,6 +423,19 @@ class Expressions:
                 out |= (~src_in & dst_in) if kind == 'enter' else (src_in & ~dst_in)
         return out
 
+    def attrs_on(self, tr, dst):
+        """ The attributes that a move along a transition to a state can set, kept for the run """
+        key = (None if tr is None else tr.name, dst)
+        out = self.__dict__.setdefault('_attrs_on', {}).get(key)
+        if out is None:
+            def can(e):
+                kind, obj, to = e.args
+                if kind in ['tr', 'to']:
+                    return tr is not None and tr.name == obj.name and (kind == 'tr' or dst == self.state_index.get(getattr(to, 'name', to)))
+                return kind != 'enter' or dst in [self.state_index[s[1] if isinstance(s, tuple) else s.name] for s in obj]
+            out = self._attrs_on[key] = [a for a in self.on_event if any(can(e) for e in a.events)]
+        return out
+
     def fire(self, tr, uids, srcs, dst):
         """
         Set the attributes an event sets, for the agents it happens to, in the order they are declared: inside
@@ -437,10 +450,13 @@ class Expressions:
         """
         if not getattr(self, 'on_event', None) or not len(uids):
             return
+        on_move = self.attrs_on(tr, dst)
+        if not on_move:
+            return
         mod = self.mod
         srcs = np.broadcast_to(srcs, len(uids))
         with self.evaluating(leaving=(uids, srcs)):
-            for a in self.on_event:
+            for a in on_move:
                 mask = self.event_mask(a.events, tr, srcs, dst)
                 if not mask.any():
                     continue

@@ -380,7 +380,7 @@ class Graph:
         return
 
     def unset_default_init_prev(self):
-        """ Remove the default init_prev, e.g. of a strain that its disease seeds """
+        """ Remove the default init_prev """
         if self.guessed.pop('init_prev', None) is not None:
             self.init_prev = None
             self.pars.pop('init_prev')

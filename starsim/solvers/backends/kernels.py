@@ -302,7 +302,7 @@ def plain_seconds(p, y, npts, solver, n_sub=1):
     for a model whatever has run before and whatever else the machine is doing: 10 µs each time the rates are worked
     out (see `evals()`), plus 0.6 µs for each operation that takes (see `work()`); the exact solver takes about one
     event for each person and flow. Measured once (W8, 2026-10-25) on 13 plain runs of the ODE (declared SIRs with 1
-    to 100 groups, over 20 and 50 places, Ghana measles over 260 districts, MEmilio's 50 counties, two SEIRs with
+    to 100 groups, over 20 and 50 places, measles metapop over 260 districts, MEmilio's 50 counties, two SEIRs with
     stages tracked jointly, a stiff SIS, and an SIS with aging), it is within 0.75 to 1.6 times the time taken, and
     0.35 for the SIS with aging, whose epidemic needs more substeps than its rates at the start (see `substeps()`):
     enough to choose whether to compile. The binomial and tau-leaping solvers add 70 µs for each draw, one for each flow, group, and
@@ -323,7 +323,7 @@ def compiled_seconds(p, y, npts, solver, n_sub=1):
     `plain_seconds()` is, and never timed): 0.5 ms a run, plus 0.1 µs each time the rates are worked out (see
     `evals()`) and 2 ns for each operation that takes (see `work()`). Measured once (W8, 2026-10-25, on a quiet machine)
     on 24 runs (the models of `plain_seconds()` and MEmilio's 100 to 400 counties, some with Euler steps), it is within
-    0.93 to 1.6 times the time taken for the runs of more than 0.05 s (Ghana's 260 districts over 16 years: 3.7 s
+    0.93 to 1.6 times the time taken for the runs of more than 0.05 s (260 districts over 16 years: 3.7 s
     against 4.0 s; MEmilio's 400 counties: 0.95 s against 0.62 s), and 0.34 to 1.4 times for the shorter ones (the
     lowest the SIS with aging, and two SEIRs tracked jointly, 0.41). See `ss.solvers.kernel_seconds()`.
     """
@@ -2278,8 +2278,8 @@ def step(rng, y, p, w, dt, n_sub, solver, flows, varying):
         step_end(rng, y, p, w, flows)
     for c in range(nc):
         for g in range(ng):
-            if y[c, g] < 0:
-                y[c, g] = 0
+            v = y[c, g]
+            y[c, g] = 0.0 if v < 0 else v # Always written, so the loop is vectorized
     return
 
 

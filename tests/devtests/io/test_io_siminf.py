@@ -2,15 +2,11 @@
 Test importing SimInf models
 """
 import tempfile
-import pytest
 import numpy as np
 import pandas as pd
 import sciris as sc
-import starsim as ss
-import paths
-from starsim.converters.siminf import load_siminf, read_script, event_register, as_matrix, predefined, Unknown
+from starsim.converters.siminf import load_siminf, read_script, event_register, as_matrix, predefined
 
-examples = paths.lfd/'examples/siminf' # The originals, if present
 kw = dict(verbose=False)
 
 script = '''
@@ -87,37 +83,10 @@ def test_events():
     return reg
 
 
-def test_examples():
-    sc.heading('Testing the SimInf examples (if present)')
-    folder = examples / 'sir_herds'
-    if not folder.exists():
-        pytest.skip(paths.no_lfd)
-    script = folder/'original'/'events_SIR.R'
-    assert [k for k,v in read_script(script).items() if isinstance(v, Unknown)] == ['u0', 'events'] # Computed in R, by u0_SIR() and events_SIR()
-    sim = load_siminf(script, u0=folder/'reference'/'u0.csv', events=folder/'reference'/'events.csv.gz', stop=100, **kw) # So passed in, as R wrote them
-    assert not sim.imported.incomplete
-    sim.run()
-    ref = pd.read_csv(folder/'reference'/'results.csv')
-    ref = ref[(ref.series == 'S') & (ref.time == 100)].iloc[0]
-    S = sim.results.events_SIR.S.values[100]
-    assert ref.low - 50 <= S <= ref.high + 50, f'Expected S on day 100 near SimInf\'s {ref.low:n} to {ref.high:n}, not {S:n}'
-
-    folder = examples / 'sise3'
-    events = pd.read_csv(folder/'reference'/'events.csv.gz')
-    events = events[events.time <= 20] # Only those in the run, since translating all 780k events takes ~15 s
-    sim = load_siminf(folder/'original'/'events_SISe3.R', u0=folder/'reference'/'u0.csv', events=events, stop=20, **kw)
-    sim.run()
-    res = sim.results.events_SISe3
-    assert res.phi.values[-1] > 0 # The infected shed into phi
-    assert all(sim.diseases[0].states[s].people for s in ['S_2', 'I_3']) # People, though only aging joins them to S_1
-    return sim
-
-
 if __name__ == '__main__':
     T = sc.timer()
     args = test_r_reader()
     sim1 = test_mparse()
     sim2 = test_dict()
     reg = test_events()
-    sim3 = test_examples()
     T.toc()

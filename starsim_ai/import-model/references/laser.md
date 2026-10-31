@@ -1,8 +1,8 @@
-# LASER (and Ghana measles' laser-measles)
+# LASER (and measles metapop' laser-measles)
 
 ## What the source is
 
-LASER (`laser-core`, `laser-generic`, and the measles-specific `laser-measles`) is IDM's Python framework for fast agent-based models over many places. A model is a script: a `GeoDataFrame` of places (name, population, geometry, initial `S`/`E`/`I`/`R`); a `PropertySet` of parameters (`nticks`, `beta`, `gravity_k`, `gravity_a`/`b`/`c`, seasonality); `Model(scenario, parameters)`; and `model.components = [...]`, a list of component classes run in order each tick (`SEIR.Susceptible`, `SEIR.Exposed(model, incubation_dist, infectious_dist, ...)`, `SEIR.Infectious`, `SEIR.Transmission`, births, mortality by a life-table estimator, importation, seasonality). Distributions come from `laser.core.distributions` (`normal`, `gamma`, ...). Each component is a Numba-compiled loop over agents or places; custom components are classes with `step(tick)`. The Ghana measles model is a NumPy/Sciris rewrite (`gm-port`) of a laser-measles notebook: a chain-binomial over districts.
+LASER (`laser-core`, `laser-generic`, and the measles-specific `laser-measles`) is IDM's Python framework for fast agent-based models over many places. A model is a script: a `GeoDataFrame` of places (name, population, geometry, initial `S`/`E`/`I`/`R`); a `PropertySet` of parameters (`nticks`, `beta`, `gravity_k`, `gravity_a`/`b`/`c`, seasonality); `Model(scenario, parameters)`; and `model.components = [...]`, a list of component classes run in order each tick (`SEIR.Susceptible`, `SEIR.Exposed(model, incubation_dist, infectious_dist, ...)`, `SEIR.Infectious`, `SEIR.Transmission`, births, mortality by a life-table estimator, importation, seasonality). Distributions come from `laser.core.distributions` (`normal`, `gamma`, ...). Each component is a Numba-compiled loop over agents or places; custom components are classes with `step(tick)`. The measles metapop model is a NumPy/Sciris rewrite of a notebook: a chain-binomial over districts.
 
 ## Mapping
 
@@ -14,7 +14,7 @@ LASER (`laser-core`, `laser-generic`, and the measles-specific `laser-measles`) 
 | `gamma(shape=40, scale=0.25)` | `ss.erlang(k=40, mean=ss.days(10))` | Exact |
 | Gravity coupling of the force of infection | `dis.stratify(patch=places, mobility=ss.geo.Mobility(ss.geo.gravity(c=2.5), kind='force', away=3/32))` | Exact (`kind='force'` is LASER's form) |
 | Gravity with laser-measles' scaling (mean share exported `k`, capped per place) | Build the matrix in NumPy and pass `ss.geo.Mobility(matrix=gravity, kind='force')` | Exact |
-| Ghana's mixing (residents make a share of contacts elsewhere) | `ss.geo.Mobility(ss.geo.gravity(c=1.5), kind='visit', away=0.01)` | Exact |
+| Gravity mixing (residents make a share of contacts elsewhere) | `ss.geo.Mobility(ss.geo.gravity(c=1.5), kind='visit', away=0.01)` | Exact |
 | Initial infections in one place | `init_n=dict(I=ss.by(patch=[0, 100] + [0]*14))` | Exact |
 | Births at a crude rate | `ss.birth(S, rate=ss.peryear(cbr/1000))`; vaccinated births as a second `ss.birth(R, ...)` | Exact |
 | Deaths at a constant rate | `ss.death(rate=ss.peryear(0.007))` | Exact |
@@ -39,7 +39,7 @@ LASER (`laser-core`, `laser-generic`, and the measles-specific `laser-measles`) 
 
 ## Worked example
 
-`lingua_franca_design/vignettes/laser/hub_spoke_seir/model.py` (an SEIR on a hub and spokes), `lingua_franca_design/vignettes/laser/england_wales/model.py` (measles in England and Wales, with the life-table and importation workarounds), and `lingua_franca_design/vignettes/ghana_measles/seir_districts/model.py` (Ghana's 260 districts). The hub and spoke:
+`lingua_franca_design/vignettes/laser/hub_spoke_seir/model.py` (an SEIR on a hub and spokes), `lingua_franca_design/vignettes/laser/england_wales/model.py` (measles in England and Wales, with the life-table and importation workarounds), and `lingua_franca_design/vignettes/measles_metapop/seir_districts/model.py` (260 districts). The hub and spoke:
 
 ```python
 angles = 2*np.pi*np.arange(5)/5
@@ -62,7 +62,7 @@ sim = ss.Sim(seir, total_pop=sum(pop), n_agents=175_000, stop=ss.days(365))
 
 ## Running the original
 
-- Environment: `lingua_franca_design/_envs/laser` (a `uv` venv with `laser-generic` 1.1.0 and `laser-core` 1.0.5; Numba compiles on the first run). Build with `python _envs/envs.py install laser`. The England and Wales data (`EnglandWalesMeasles`, `EnglandWalesDistances.npy`) is in the installed `laser-generic` source under `_envs/laser/src/`. Ghana measles needs no env: NumPy, pandas, and Sciris, from a checkout of `ghana-measles/gm-port` next to the repository (or `GHANA_MEASLES`).
+- Environment: `lingua_franca_design/_envs/laser` (a `uv` venv with `laser-generic` 1.1.0 and `laser-core` 1.0.5; Numba compiles on the first run). Build with `python _envs/envs.py install laser`. The England and Wales data (`EnglandWalesMeasles`, `EnglandWalesDistances.npy`) is in the installed `laser-generic` source under `_envs/laser/src/`.
 - The examples run a `simulate.py` in the env (`tools.run(['python', 'simulate.py', str(n_runs)], 'laser')`), which builds and runs the model `n_runs` times and prints the time series of each node's compartments as JSON (`model.nodes.S[:, node]`, and so on, indexed by tick).
 - Series: counts by place and tick (`S`, `E`, `I`, `R` per node; or summed), and summaries such as total infections, final recovered, peak size and time by place, and the share of weeks with no infections. LASER's `nodes.X[t]` is the count at the start of tick `t` (for comparison with Starsim's `X[t-1]`); check the first row against the initial conditions.
 - Stochastic: 5 to 50 runs, depending on cost; compare means and ranges, and run-to-run spread for fade-outs.

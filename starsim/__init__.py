@@ -5,6 +5,13 @@ The order matters: each group builds on the ones before it, and within a group,
 later modules use earlier ones as they are imported.
 """
 
+# Ask for one BLAS thread (see ss.options.num_threads) before Sciris imports NumPy, which starts them; if something else already has, the options limit them
+import os as _os
+_threads = _os.getenv('STARSIM_NUM_THREADS') or _os.getenv('SCIRIS_NUM_THREADS') or '1'
+if _threads != '0':
+    _os.environ['SCIRIS_NUM_THREADS'] = _threads
+del _os, _threads
+
 # Assign the root folder
 import sciris as sc
 root = sc.thispath(__file__).parent

@@ -241,6 +241,8 @@ def test_strains():
         assert total(np.eye(2), combine=combine, kwargs=dict(solver='abm', n_agents=10_000)) == abm
     with pytest.raises(ss.CapabilityError): # A function has no compartmental form (nor a gradient)
         total(np.ones((2, 2)), combine=lambda p: p.max(0), kwargs=dict(solver='ode'))
+    with pytest.raises(TypeError): # The protection is the value of rel_sus=, not a positional matrix
+        ss.immunity(np.eye(2), due_to='R')
     with pytest.raises(ValueError, match='but there are 2 strains'):
         total(np.eye(3))
 

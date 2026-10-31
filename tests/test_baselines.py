@@ -187,8 +187,6 @@ def perf_cases():
         'coded_run':          (bm.make_coded, 'run', True),
         'by_age_init':        (bm.make_by_age, 'init', True),
         'by_age_run':         (bm.make_by_age, 'run', True),
-        'hpv_init':           (bm.make_hpv, 'init', True),
-        'hpv_run':            (bm.make_hpv, 'run', True),
         'tb_init':            (bm.make_tb, 'init', True),
         'tb_run':             (bm.make_tb, 'run', True),
         'tb1k_run':           (lambda: bm.make_tb(n_agents=1000), 'run', True),
@@ -236,7 +234,7 @@ def test_performance_guard(do_save=False, verbose=True):
 
     repeats = dict(bare_init=8, bare_run=4, bare_run_no_people=4, het_init=8, births_run=4, crn_false_run=4)
     repeats.update({f'{name}_{which}':(8 if which == 'init' else 3) for name in ['fseis10', 'counts', 'coded', 'by_age', 'tb'] for which in ['init', 'run']})
-    repeats.update(hpv_init=4, hpv_run=2, contra_init=4, contra_run=2, tb1k_run=3, strains_ode_run=2)
+    repeats.update(contra_init=4, contra_run=2, tb1k_run=3, strains_ode_run=2)
 
     # Measure, bracketed by CPU benchmarks for normalization
     r1 = sc.benchmark(which='numpy')

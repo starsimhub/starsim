@@ -94,7 +94,7 @@ With data attached (`ss.Sim(..., data=...)`, a table with columns `time` and `ca
 
 ## Timings
 
-Lines are lines of model code (not counting blank lines, comments, imports, or plotting, and counting a line over 100 characters twice), against the lines of the `.camdl` file; times are for one run. Both are measured by Starsim's north-star script, `tests/north_star.py` (see the [index page](../library_landscape.qmd#how-these-numbers-were-made)). camdl's times were recorded on the same machine.
+Lines are lines of model code (not counting blank lines, comments, imports, or plotting, and counting a line over 100 characters twice), against the lines of the `.camdl` file; times are for one run. Both are measured by Starsim's north-star script, `tests/north_star/north_star.py` in the lingua_franca_design repo (see the [index page](../library_landscape.qmd#how-these-numbers-were-made)). camdl's times were recorded on the same machine.
 
 | Model | Lines: camdl | Lines: Starsim | One run: camdl | One run: Starsim | |
 |---|---|---|---|---|---|
@@ -107,7 +107,7 @@ The last two rows were measured on 18 October 2026, on a machine shared with oth
 
 ## What works and what does not yet
 
-These are from Starsim's switching demo for camdl users (`tests/switching/test_camdl.py`), which checks each task against camdl's numbers, and from the review it was built from. "Fails" means the demo's check does not pass today.
+These are from Starsim's switching demo for camdl users (`tests/switching/test_camdl.py` in the lingua_franca_design repo), which checks each task against camdl's numbers, and from the review it was built from. "Fails" means the demo's check does not pass today.
 
 | Task | Today |
 |---|---|
