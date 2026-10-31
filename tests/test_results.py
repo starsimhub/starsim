@@ -310,7 +310,7 @@ def test_time_points():
     dis = ss.Disease(infection=ss.Transition(S, I, rate=0.0 * I), init_n=dict(I=1), kill=kill, name='dis')
     res = ss.Sim(dis, people=ss.People(1000), unit='day', stop=4, verbose=0).run().results
     assert np.array_equal(res.alive, [1000, 998, 996, 994, 992])
-    assert np.array_equal(res.new_deaths, [0, 2, 2, 2, 2])
+    assert np.array_equal(res.died, [0, 2, 2, 2, 2])
 
     # Weekly data is matched to the total of a flow over each week, whatever the rounding of the sim's times, and whatever the flow is called
     S, I, R = ss.states(3)

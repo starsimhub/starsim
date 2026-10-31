@@ -35,7 +35,7 @@ class SimPars(ss.Pars):
         dt (float): The timestep, in units of "unit" (default 1.0)
         rand_seed (int): The overall random seed for the simulation (used to set module-specific random seeds)
         use_aging (bool): Specify whether agents age (by default, agents age if and only if births and/or deaths are included)
-        people_results (bool): Whether to collect the automatic People-level results (alive, female, new_deaths, cum_deaths, etc.) every timestep (default True); set to False to skip this per-timestep cost in lightweight/ODE-style sims that do not need them (note: some modules, e.g. demographics, rely on results.alive)
+        people_results (bool): Whether to collect the automatic People-level results (alive, female, died, emigrated, etc.) every timestep (default True); set to False to skip this per-timestep cost in lightweight/ODE-style sims that do not need them (note: some modules, e.g. demographics, rely on results.alive)
         people (People): If provided, use a pre-existing People object rather than creating one (in which case n_agents will be ignored)
         networks (str/list/Module): The network module(s); can be a string, single module (i.e. Network), or list
         demographics (str/list/Module/bool): births, deaths, and migration of everyone: declared (`ss.birth()`, `ss.death()`, which run under every solver), or modules of agents (e.g. `ss.Births()`, `ss.Pregnancy()`); True for births and deaths at 20 and 10 per 1,000 people per year
@@ -1877,8 +1877,6 @@ class Sim(ss.Base):
                     res.apply_scale(stock_scale if res.kind == 'stock' else scale)
                 if np.all(res == res[0]): # Results were not modified during the sim
                     self.results[reskey].auto_plot = False
-        if self.pars.rescale and self.pars.people_results: # With a scale that varies over time, cumulative results must be summed after scaling
-            self.results.cum_deaths[:] = np.cumsum(self.results.new_deaths)
         self.results_ready = True # Results are ready to use
         return
 

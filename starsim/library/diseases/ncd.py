@@ -83,14 +83,14 @@ class NCD(ss.Disease):
         self.define_results(
             ss.Result('not_at_risk',   dtype=int,   label='Not at risk', kind='stock'),
             ss.Result('prevalence',    dtype=float, label='Prevalence'),
-            ss.Result('new_deaths',    dtype=int,   label='Deaths'),
+            ss.Result('death',         dtype=int,   label='Deaths', kind='flow'),
         )
         return
 
     def update_results(self):
         super().update_results()
         ti = self.ti
-        self.results.new_deaths[ti] = len(self.sim.people.died_of(self)) # Deaths attributable to this module in this step, once each has one cause
+        self.results.death[ti] = len(self.sim.people.died_of(self)) # Deaths attributable to this module in this step, once each has one cause
         self.results.not_at_risk[ti]   = np.count_nonzero(self.not_at_risk)
         self.results.prevalence[ti]    = np.count_nonzero(self.affected)/self.sim.people.n_alive
         return

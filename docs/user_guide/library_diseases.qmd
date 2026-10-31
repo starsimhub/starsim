@@ -103,14 +103,14 @@ scenarios = {
     'With ART': ss.Sim(diseases=hiv(), networks=net(), analyzers=ssl.CD4_analyzer(), interventions=art, **endemic),
 }
 msim = ss.parallel(scenarios, parallel=False)
-msim.plot(['hiv.prevalence', 'hiv.new_deaths'])
+msim.plot(['hiv.prevalence', 'hiv.death'])
 ```
 
 The deaths over the whole run, and the prevalence in 2030 (the final value), for each scenario:
 
 ```{python}
 summary = msim.summarize()
-summary.loc[['hiv_new_deaths', 'hiv_prevalence']]
+summary.loc[['hiv_death', 'hiv_prevalence']]
 ```
 
 Each sim's analyzer holds the CD4 counts of every agent. The mean count among those infected falls without treatment, and recovers as treatment is scaled up:
@@ -146,7 +146,7 @@ scenarios = {
     '15% at risk': ss.Sim(diseases=ssl.NCD(initial_risk=0.15), **chronic),
 }
 msim = ss.parallel(scenarios, parallel=False)
-msim.plot(['ncd.prevalence', 'ncd.new_deaths'])
+msim.plot(['ncd.prevalence', 'ncd.death'])
 ```
 
 Only the starting population is ever at risk here, so the condition dies out with them; a model of a real risk factor would put newborns and others at risk too, which is a change of `init_post()` and `step()` (see [Adapting a library module](#adapting-a-library-module)).

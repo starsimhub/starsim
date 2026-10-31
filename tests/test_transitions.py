@@ -1266,7 +1266,7 @@ def test_split_null():
         assert np.isclose(died/n0, 0.05, rtol=0.15), f'{solver}: {died/n0:n} of those in I died, not 0.05'
         assert np.isclose(r.I[-1]/n0, 0.95, rtol=0.01), f'{solver}: the rest should stay in I, never taking it again, but {r.I[-1]/n0:n} are left'
         if solver == 'abm':
-            assert sim.results.new_deaths.values.sum() == died # Counted as deaths, as a transition to ss.null is
+            assert sim.results.died.values.sum() == died # Counted as deaths, as a transition to ss.null is
         out[solver] = died/n0
 
         # With a state: the deaths are res.<transition>.null
@@ -1277,7 +1277,7 @@ def test_split_null():
         assert np.isclose(r['death.null'].values.sum() + r['death.R'].values.sum(), r.death.values.sum())
         assert np.isclose(r.S[-1] + r.I[-1] + r.R[-1] + r['death.null'].values.sum(), r.S[0] + n0), f'{solver}: everyone is in a state or dead'
         if solver == 'abm':
-            assert sim.results.new_deaths.values.sum() == r['death.null'].values.sum()
+            assert sim.results.died.values.sum() == r['death.null'].values.sum()
     assert np.isclose(out.abm, out.ode, rtol=0.15)
 
     # The messages for a source or destination that is not a state or a list of states

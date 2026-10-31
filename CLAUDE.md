@@ -152,7 +152,7 @@ The framework uses a modular architecture where all components inherit from base
 - Use built-in Starsim plotting commands if possible, only falling back to Matplotlib if necessary
 - Use Sciris where possible to shorten commands
 - When creating a multiline dictionary, put a space around the equals for arguments (as if it were a class)
-- The framework requires Python 3.11+
+- The framework requires Python 3.12+
 - All modules inherit from base classes in `internals/modules.py`
 - Parameter handling is centralized through `internals/parameters.py` and the `SimPars` class in `sim.py`
 - By default, use "Sentence case", not "Title Case", for headings (e.g. Markdown headings, table column headings, etc)

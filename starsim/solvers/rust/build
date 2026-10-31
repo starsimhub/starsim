@@ -4,6 +4,8 @@
 set -e
 cd "$(dirname "$0")"
 cargo build --release
-lib=$(ls target/release/lib_rs.so target/release/lib_rs.dylib 2>/dev/null | head -1) # Linux or macOS
-cp "$lib" ../backends/_rs.abi3.so
-echo "Built starsim/solvers/backends/_rs.abi3.so; use it with ss.options(kernels='rust') or STARSIM_KERNELS=rust"
+lib=$(ls target/release/lib_rs.so target/release/lib_rs.dylib target/release/_rs.dll 2>/dev/null | head -1) # Linux, macOS, or Windows (from Git Bash)
+name=_rs.abi3.so
+[[ $lib == *.dll ]] && name=_rs.pyd
+cp "$lib" ../backends/$name
+echo "Built starsim/solvers/backends/$name; use it with ss.options(kernels='rust') or STARSIM_KERNELS=rust"

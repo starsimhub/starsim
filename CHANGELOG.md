@@ -57,6 +57,7 @@ Starsim 4 adds a way to write a model as declared states and transitions, which 
 - Removed `ss.Pregnancy(p_loss=)`, `Network.custom_beta`, `Network.edge_net_beta()`, `Agents.backdate()`, `Pars.dict_update()`, `Dist.state_int`, `Arr.notnanvals`, and the options `warn_convert`, `install_fonts`, and `keep_memory`. `python -m starsim.converters.migrate` handles or flags these.
 - Delivery keywords: `on=` is now `where=`; `who=` chooses people or compartments, and `when=` is a condition on time. `ss.Transition(on=)` is `where=` too.
 - `ss.Infection`'s results are `infection` and `infection.cum`, as for a declared disease, not `new_infections` and `cum_infections`.
+- The sim's results `new_deaths`, `cum_deaths`, and `new_emigrants` are now `died`, `died.cum`, and `emigrated`, so that they don't shadow a disease's `death` flow; `ssl.HIV`, `ssl.NCD`, and `ssl.Cholera` now have the flow `death`, and `ss.DegreeNet`'s `new_partnerships` is now `formed`.
 - `ss.change()` is removed: use `ss.modify()` of an `ss.timeseries()`.
 - `msim.to_df()` gives one row per run by default; pass `quantiles=` for quantiles.
 - `res.by(dim)` across runs is an `ss.Result` with a column for each level.
@@ -88,10 +89,10 @@ Starsim 4 adds a way to write a model as declared states and transitions, which 
 - The compartmental kernels are up to 1.8× faster with 100 groups, and `import starsim` no longer imports `scipy.stats`.
 - Which engine runs a model is one table of rules, shown by `ss.solvers.solver_table()`.
 - Mixing between many places is up to 5× faster in the kernels, by BLAS when every pair of places has a time share (measles metapop, 260 districts: 4.8 s to 1.6 s a run; 600 places: 22.6 s to 4.4 s).
-- `pip install starsim` is set up to include the compiled Rust kernels, as one wheel per platform for Python 3.11 and later; the sdist includes the crate, and Numba's kernels remain the fallback.
+- `pip install starsim` is set up to include the compiled Rust kernels, as one wheel per platform for Python 3.12 and later (Linux and Windows, x86-64 and Arm, and macOS on Arm); the sdist includes the crate, and Numba's kernels remain the fallback.
 - `ss.compile()` works under Numba.
 - `import starsim` limits BLAS to one thread, whatever was imported first, since more never made Starsim faster on any platform tested, and slowed its start and its workers. Use `STARSIM_NUM_THREADS` or `ss.options.num_threads` to change it.
-- JAX is optional, and recommended: `pip install "starsim[jax]"`. Without it, gradients aren't available, and the R-hat and effective sample size of a fit are NaN. It has no builds for Intel Macs or Windows on ARM, on which Starsim could not be installed.
+- JAX is optional, and recommended: `pip install "starsim[jax]"`. Without it, gradients aren't available, and the R-hat and effective sample size of a fit are NaN. It has no builds for Windows on Arm, on which Starsim could not be installed.
 - A rate or duration that reads another disease's count is no longer frozen in a whole run.
 - A change in code to a modifier's amount or a product's efficacy takes effect in a stepped run.
 - Results read time-varying values at each time point.

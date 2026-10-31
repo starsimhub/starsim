@@ -50,7 +50,7 @@ If you're new to Python, check out our [getting started guide](https://starsim.o
 
 ### Requirements
 
-Python 3.11-3.14 or R.
+Python 3.12-3.14 or R.
 
 We recommend, but do not require, installing Starsim in a virtual environment, such as [uv](https://github.com/astral-sh/uv) or [conda](https://conda-forge.org/download/).
 
@@ -62,7 +62,7 @@ pip install "starsim[jax]"
 starsim init
 ```
 
-JAX is recommended, for gradients, fitting with them, and long runs. It is optional since it has no builds for some platforms (Intel Macs and Windows on ARM): there, use `pip install starsim`, and everything else works.
+JAX is recommended, for gradients, fitting with them, and long runs. It is optional since it has no builds for Windows on Arm: there, use `pip install starsim`, and everything else works.
 
 `starsim init` compiles Starsim (once, which takes a few minutes and makes the first runs faster) and installs its skill for AI coding agents such as Claude Code and Codex (type `/starsim` to use it). To do just one of these, run `starsim compile` or `starsim ai`.
 

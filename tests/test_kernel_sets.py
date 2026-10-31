@@ -162,8 +162,8 @@ def test_stale():
     with mock.patch.object(R, 'source_hash', lambda: 0):
         with pytest.raises(AttributeError, match='rebuild'):
             R.use(True)
-    if rust:
-        assert R.source_hash() == R.load().source_hash, 'Rebuild the Rust kernels' # None if the source is not here, but these tests are run from it
+    if rust and R.source_hash() is not None: # None when run against a wheel, which has no source beside it
+        assert R.source_hash() == R.load().source_hash, 'Rebuild the Rust kernels'
     return
 
 

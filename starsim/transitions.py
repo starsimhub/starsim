@@ -1137,7 +1137,7 @@ def emigration(state=None, rate=None, dur=None, name=None, label=None):
     """
     People leaving the population, e.g. `ss.emigration(rate=ss.peryear(0.01))`
 
-    As `ss.death()`, but as agents they are recorded as having left (`results.new_emigrants`)
+    As `ss.death()`, but as agents they are recorded as having left (`results.emigrated`)
     rather than as having died.
 
     Args:

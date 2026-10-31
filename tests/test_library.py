@@ -94,8 +94,8 @@ def test_hiv():
     for sim in [s1, s2]:
         sim.run()
 
-    d1 = s1.results.hiv.new_deaths.sum()
-    d2 = s2.results.hiv.new_deaths.sum()
+    d1 = s1.results.hiv.death.sum()
+    d2 = s2.results.hiv.death.sum()
     n_art = s2.results.art.n_art.max()
     print(f'  Deaths without ART: {d1:n}; with ART: {d2:n}; peak on ART: {n_art:n}')
     assert n_art > 0, 'Expected some agents on ART'

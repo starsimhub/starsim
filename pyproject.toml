@@ -7,7 +7,7 @@ name = "starsim"
 dynamic = ["version"]
 description = "A fast, flexible agent-based disease modeling framework"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 license = "MIT"
 keywords = ["agent-based model", "simulation", "disease", "epidemiology"]
 
@@ -43,7 +43,7 @@ dependencies = [
 
 [project.optional-dependencies]
 
-# Gradients, fitting with them, and long runs in JAX: recommended, and optional only since JAX has no builds for some platforms (Intel Macs, Windows on ARM)
+# Gradients, fitting with them, and long runs in JAX: recommended, and optional only since JAX has no builds for Windows on Arm
 jax = [
     "jax>=0.8",
     "blackjax",
@@ -157,7 +157,7 @@ starsim_ai = ["**/*"]
 [tool.setuptools.dynamic]
 version = {attr = "starsim.version.__version__"}
 
-# The Rust kernels, as one abi3 extension for Python 3.11 and later. Optional: where a wheel doesn't fit and there is no toolchain, pip installs from the sdist without them, and Numba's kernels run
+# The Rust kernels, as one abi3 extension for Python 3.12 and later. Optional: where a wheel doesn't fit and there is no toolchain, pip installs from the sdist without them, and Numba's kernels run
 [[tool.setuptools-rust.ext-modules]]
 target = "starsim.solvers.backends._rs"
 path = "starsim/solvers/rust/Cargo.toml"
@@ -166,14 +166,17 @@ optional = true
 args = ["--locked"]
 
 [tool.distutils.bdist_wheel]
-py-limited-api = "cp311"
+py-limited-api = "cp312"
 
-# One wheel per platform (see .github/workflows/pypi_release.yml): built on the oldest Python, which later ones load through abi3
+# One wheel per platform (see .github/workflows/pypi_release.yml): built on the oldest Python, which later ones load through abi3. Each is tested by comparing its Rust kernels with Numba's
 [tool.cibuildwheel]
-build = "cp311-*"
+build = "cp312-*"
 skip = "*-musllinux*"
 archs = ["auto64"]
-test-command = "python -c \"import starsim as ss; assert ss.solvers.backends.rust.on; print(ss.compile_status()); ss.Sim(diseases='sir', networks='random', n_agents=1000, stop=20, verbose=0).run()\""
+test-sources = ["tests"]
+test-requires = ["pytest", "pytest-env"]
+test-environment = { STARSIM_RUST_REQUIRED = "1", STARSIM_KERNELS = "rust" }
+test-command = "pytest tests/test_kernel_sets.py -v"
 
 [tool.cibuildwheel.linux]
 before-all = "curl -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal"

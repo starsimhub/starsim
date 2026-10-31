@@ -36,7 +36,7 @@ def test_people():
     sim = ss.Sim(n_agents=small, diseases=dict(type='sir', init_prev=0.2, p_death=0.5), networks='random', verbose=0).run()
     dead = sim.people.dead
     assert len(dead) == sim.people.n_uids > len(sim.people)
-    assert dead.sum() == sim.results.cum_deaths[-1] > 0
+    assert dead.sum() == sim.results.died.cum[-1] > 0
     assert not np.isin(dead.uids, sim.people.auids).any()
 
     # Agents that stand for fewer people (people.scale, as HPVsim's finer agents) count for less in the results (before, every agent counted as one)

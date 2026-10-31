@@ -458,8 +458,8 @@ class People:
         Result for 'alive' (the number alive). For identical behavior that does not automatically
         generate results, use `ss.BoolArr` instead of `ss.BoolState`.
 
-        This method also creates the standard people-related results like new_deaths,
-        new_emigrants, and cum_deaths.
+        This method also creates the standard people-related results like died and
+        emigrated, the flows of people who died or left (`results.died.cum` is the cumulative total).
 
         If `sim.pars.people_results` is False, People-level result collection is disabled
         (no results are created here and `People.update_results` is skipped in the loop).
@@ -475,9 +475,8 @@ class People:
 
         # Add standard people-related results
         results.extend([
-            ss.Result('new_deaths', label='Deaths', **kw),
-            ss.Result('new_emigrants', label='Emigrants', **kw),
-            ss.Result('cum_deaths', label='Cumulative deaths', **kw),
+            ss.Result('died', label='Deaths', kind='flow', **kw),
+            ss.Result('emigrated', label='Emigrants', kind='flow', **kw),
         ])
 
         # Add results to the sim
@@ -883,7 +882,7 @@ class People:
             else: # From the active agents themselves
                 counts = ss.solvers.backends.passes.count_people(self.auids.view(np.ndarray), tuple(state.raw for state in states), self.alive.raw, self.ti_dead.raw, self.ti_removed.raw, ti)
         if self.scale.weighted: # Agents of different weights make fractions of people
-            for key in [state.name for state in states] + ['new_deaths', 'new_emigrants', 'cum_deaths']:
+            for key in [state.name for state in states] + ['died', 'emigrated']:
                 if res[key].values.dtype.kind in 'iu':
                     res[key].init_values(dtype=float, force=True)
         unborn = self.unborn_uids()
@@ -897,12 +896,11 @@ class People:
             for state,count in zip(states, counts):
                 res[state.name][ti] = count
             # Those who died or left in this step are no longer alive, and are taken out at the end of it (see finish_step()); whenever in the step it was requested
-            res.new_deaths[ti], res.new_emigrants[ti] = counts[-2:]
+            res.died[ti], res.emigrated[ti] = counts[-2:]
         else:
             for state in states:
                 res[state.name][ti] = state.count()
-            res.new_deaths[ti], res.new_emigrants[ti] = count_gone(self.auids.view(np.ndarray), self.alive.raw, self.ti_dead.raw, self.ti_removed.raw, ti)
-        res.cum_deaths[ti] = res.new_deaths[ti] if ti == 0 else res.cum_deaths[ti-1] + res.new_deaths[ti]
+            res.died[ti], res.emigrated[ti] = count_gone(self.auids.view(np.ndarray), self.alive.raw, self.ti_dead.raw, self.ti_removed.raw, ti)
         return
 
     def unborn_uids(self):

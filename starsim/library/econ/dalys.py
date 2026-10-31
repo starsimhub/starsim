@@ -31,7 +31,7 @@ class DALYs(ss.Analyzer):
     Args:
         weights (dict): the disability weight of a result that counts people, by its path, e.g. `{'hiv.I': 0.2}`
         life_lost (float): the years of life lost for each death; by default, with agents, those left at each person's age at death in a standard life table (from the Global Burden of Disease 2019 study). Without agents, ages at death aren't known, so give this
-        deaths (list): the paths of the results that count deaths, needed only with `life_lost` (default: each disease's `death` or `new_deaths`)
+        deaths (list): the paths of the results that count deaths, needed only with `life_lost` (default: each disease's `death`)
 
     Examples:
         ```python
@@ -64,8 +64,7 @@ class DALYs(ss.Analyzer):
         if self.deaths is not None:
             return self.deaths
         res = self.sim.results
-        keys = {dis.name:[key for key in ['death', 'new_deaths'] if key in res[dis.name]] for dis in self.sim.diseases.values()}
-        return [f'{name}.{found[0]}' for name,found in keys.items() if found]
+        return [f'{dis.name}.death' for dis in self.sim.diseases.values() if 'death' in res[dis.name]]
 
     def fill(self, ind=slice(None)):
         """ Work out the years lived with disability and, given `life_lost`, the years of life lost, at some time points """

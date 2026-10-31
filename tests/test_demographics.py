@@ -426,7 +426,7 @@ def test_period_rates():
     assert ss.demographics.period_year([2010, 2010, 2015, 2015], 2014.9) == 2010 and ss.demographics.period_year([2010, 2015], 2015) == 2015
     data = pd.DataFrame(dict(Time=[2010, 2010, 2015, 2015], Sex=['Female', 'Male']*2, AgeGrpStart=0, mx=[0.04, 0.04, 0.0, 0.0]))
     sim = ss.Sim(n_agents=10_000, demographics=ss.Deaths(death_rate=data, rate_units=1), start=2010, stop=2015, dt=ss.months(1), verbose=0).run()
-    deaths = sim.results.new_deaths.values[1:]
+    deaths = sim.results.died.values[1:]
     assert deaths.min() > 0, 'Every step before 2015 has the 2010 rate'
     expected = 10_000*(1 - np.exp(-0.04*5))
     assert abs(deaths.sum() - expected) < 4*np.sqrt(expected), f'Expected about {expected:.0f} deaths, not {deaths.sum()}'
@@ -553,7 +553,7 @@ def test_cause_of_death():
     sis = ss.Disease(infection=S >> I @ ss.peryear(0)*I, death=ss.death(I, rate=ss.peryear(1.0)), init_n=dict(I=10_000), name='sis')
     sim = ss.Sim(diseases=sis, demographics=ss.Deaths(death_rate=ss.peryear(1.0), rate_units=1), n_agents=10_000, start=2010, stop=2011, dt=ss.months(1), verbose=0).run()
     r = sim.results
-    by_disease, by_deaths, total = r.sis.death.sum(), r.deaths.new.sum(), r.new_deaths.sum()
+    by_disease, by_deaths, total = r.sis.death.sum(), r.deaths.new.sum(), r.died.sum()
     assert by_disease + by_deaths == total # Before, about 4.5% were counted twice
     ppl = sim.people
     dead = ss.uids(np.flatnonzero(~ppl.alive.raw[:ppl.uid.len_used]))

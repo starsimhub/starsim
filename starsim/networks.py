@@ -1427,7 +1427,7 @@ class DegreeNet(DynamicNetwork):
         super().init_results()
         if self.targeted:
             self.define_results(
-                ss.Result('new_partnerships', label='Partnerships formed', auto_plot=False),
+                ss.Result('formed', label='Partnerships formed', kind='flow', auto_plot=False),
                 ss.Result('mean_degree', label='Mean number of partners', scale=False, auto_plot=False), # Per person, so not scaled by the population
                 ss.Result('concurrency', label='Share with two or more partners', scale=False, auto_plot=False),
             )
@@ -1620,7 +1620,7 @@ class DegreeNet(DynamicNetwork):
     def update_results(self):
         super().update_results()
         if self.targeted:
-            self.results.new_partnerships[self.ti] = getattr(self, 'formed', 0)
+            self.results.formed[self.ti] = getattr(self, 'formed', 0)
             degree = self.degrees(self.active(self.sim.people).uids)
             self.results.mean_degree[self.ti] = degree.mean() if len(degree) else 0
             self.results.concurrency[self.ti] = (degree >= 2).mean() if len(degree) else 0
@@ -1658,9 +1658,9 @@ class DegreeNet(DynamicNetwork):
             res = net.results
             half = len(res.mean_degree)//2
             row = dict(mean_degree=res.mean_degree[half:].mean(), concurrency=res.concurrency[half:].mean(), max_contacts=net.degrees(net.active(run.people).uids).max())
-            if 'new_partnerships' in res and getattr(net, 'mean_dur', None) is not None and res.new_partnerships[half:].mean() > 0: # Little's law: partnerships = rate formed × how long they last
+            if 'formed' in res and getattr(net, 'mean_dur', None) is not None and res.formed[half:].mean() > 0: # Little's law: partnerships = rate formed × how long they last
                 n_alive = len(run.people.alive.uids)
-                row['dur'] = res.mean_degree[half:].mean()*n_alive/2/res.new_partnerships[half:].mean()
+                row['dur'] = res.mean_degree[half:].mean()*n_alive/2/res.formed[half:].mean()
             if getattr(net, 'by_level', None) is not None:
                 uids = net.active(run.people).uids
                 level = np.asarray(net.levels(net.by_level))[uids].astype(int)
