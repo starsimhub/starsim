@@ -10,9 +10,9 @@ stream seeded by the bits of u, so the same u still gives the same draw. The uni
 themselves are counter-based: `uniform(key, i)` is a SplitMix64 hash of a key and an index,
 the hash of `ss.dists.hash_uniforms()` (which calls `key()` and `crn_uniform()`, as
 the passes over agents and the kernels do), so a stream does not depend on how the work is
-split. Other distributions are drawn by SciPy (see v4_design/oct25/backlog/perf_jax.md).
+split. Other distributions are drawn by SciPy.
 
-The tricks that make them cheap (see v4_design/oct21/jax_plan.md):
+The tricks that make them cheap:
 
 - Draws already settled cost nothing: n = 0, p = 0 or 1; and u <= 1 - mean is a 0, since
   (1-p)^n >= 1 - np and exp(-lam) >= 1 - lam, so most small draws need no exp or log.

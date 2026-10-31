@@ -3,7 +3,7 @@ Import models from other frameworks, and export sims to them
 
 `ss.import_from(filename, format=...)` reads another framework's model into a sim, and
 `ss.export_to(sim, format)` writes a sim in another framework's format; see
-`v4_design/design/16-interop.md`. Each importer reads its format into an
+`docs/design/16-interop.md` in the lingua_franca_design repo. Each importer reads its format into an
 `ss.converters.Source`, and `ss.converters.build()` writes that as Starsim code by the
 same rules for every format (`ss.converters.write()`) and runs the code to make the sim:
 the code is kept in `sim.imported.code`, how each rate was read is printed, and what

@@ -219,9 +219,9 @@ A compartmental run that is taken by the kernels in one call doesn't use the pla
 
 ## In the design record
 
-- [Objects and construction](https://github.com/starsimhub/starsim/blob/v4/v4_design/design/01-objects.md): `ss.Sim`, the lifecycle, and the module contract
-- [Execution](https://github.com/starsimhub/starsim/blob/v4/v4_design/design/10-execution.md): the loop, deferred removals, and per-module timesteps
-- [Backends](https://github.com/starsimhub/starsim/blob/v4/v4_design/design/12-backends.md): how a model is laid out for each solver, and what needs agents
+- [Objects and construction](https://github.com/starsimhub/lingua_franca_design/blob/main/docs/design/01-objects.md): `ss.Sim`, the lifecycle, and the module contract
+- [Execution](https://github.com/starsimhub/lingua_franca_design/blob/main/docs/design/10-execution.md): the loop, deferred removals, and per-module timesteps
+- [Backends](https://github.com/starsimhub/lingua_franca_design/blob/main/docs/design/12-backends.md): how a model is laid out for each solver, and what needs agents
 
 ## Further reading
 

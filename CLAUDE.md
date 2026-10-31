@@ -9,7 +9,7 @@ Starsim is an agent-based modeling framework for simulating disease spread among
 For a compact index of the whole public API (signatures, summaries, and default parameters), see https://starsim.org/v4/llms.txt (or `llms-full.txt`, which adds an example for each entry). These are generated when the docs are built and are not committed; to generate them locally for the current branch (as `docs/llms.txt` etc.), run `cd docs && python make_api.py`. The equivalent for Sciris is at https://docs.sciris.org/llms.txt.
 <!-- V4-PREVIEW: while v4 is in development its docs are at starsim.org/v4 (see docs/publish); restore the link above to docs.starsim.org for normal publishing -->
 
-The design record of v4 (the constitution, the spec, the current plan, and what was deferred or decided against) is in `v4_design/`; start at `v4_design/README.md`.
+The design record of v4 (the constitution, the spec, the current plan, and what was deferred or decided against) is in the [lingua_franca_design](https://github.com/starsimhub/lingua_franca_design) repo (`../lingua_franca_design` beside this checkout); start at its `README.md`.
 
 ## Core architecture
 

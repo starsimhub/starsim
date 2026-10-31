@@ -168,7 +168,7 @@ args = ["--locked"]
 [tool.distutils.bdist_wheel]
 py-limited-api = "cp312"
 
-# One wheel per platform (see .github/workflows/pypi_release.yml): built on the oldest Python, which later ones load through abi3. Each is tested by comparing its Rust kernels with Numba's
+# One wheel per platform (see .github/workflows/build_wheels.yml): built on the oldest Python, which later ones load through abi3. Each is tested by comparing its Rust kernels with Numba's
 [tool.cibuildwheel]
 build = "cp312-*"
 skip = "*-musllinux*"

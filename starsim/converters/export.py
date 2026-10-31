@@ -4,7 +4,7 @@ Export a sim to other formats
 Exports use the compartmental form of declared diseases, turning a sim run as agents into it. `to_hub()` reads results alone, however they were made.
 
 `ss.export_to(sim, format, filename=...)` writes a sim's declared diseases in another
-format; see `v4_design/design/16-interop.md`. Each is read from the built model (each
+format; see `docs/design/16-interop.md` in the lingua_franca_design repo. Each is read from the built model (each
 disease's graph and engine). The formats carry less than a sim, and what is left out or
 changed is listed as `ss.errors.LossyExport`. An export does not fail because something
 cannot be carried.

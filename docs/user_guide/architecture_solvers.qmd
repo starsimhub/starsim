@@ -148,9 +148,9 @@ The [developer guide](../contributing/developer.qmd#testing) explains the suites
 
 ## In the design record
 
-- [12-backends.md](https://github.com/starsimhub/starsim/blob/v4/v4_design/design/12-backends.md): the solvers, the approximations, and how a model is built for each
-- [10-execution.md](https://github.com/starsimhub/starsim/blob/v4/v4_design/design/10-execution.md): the loop the engines are called from
-- [18-conformance.md](https://github.com/starsimhub/starsim/blob/v4/v4_design/design/18-conformance.md): the agreement contracts between solvers
+- [12-backends.md](https://github.com/starsimhub/lingua_franca_design/blob/main/docs/design/12-backends.md): the solvers, the approximations, and how a model is built for each
+- [10-execution.md](https://github.com/starsimhub/lingua_franca_design/blob/main/docs/design/10-execution.md): the loop the engines are called from
+- [18-conformance.md](https://github.com/starsimhub/lingua_franca_design/blob/main/docs/design/18-conformance.md): the agreement contracts between solvers
 
 ## Further reading
 
