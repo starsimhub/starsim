@@ -138,6 +138,8 @@ msim = ss.MultiSim(sims)
 msim.plot()
 ```
 
+Dask's workers set `MALLOC_TRIM_THRESHOLD_` so that freed memory goes back to the system at once, which slows sims down by making them fault in new pages. On Linux with glibc, importing Starsim overrides this, so nothing needs to be set; a task that needs that memory back during a long job can call `ss.solvers.backends.release_memory()`.
+
 The same pattern (a function that makes, runs, and shrinks one sim, given a seed and the values that differ) works with other tools, such as [Joblib](https://joblib.readthedocs.io/).
 
 ## On a cluster with a job scheduler

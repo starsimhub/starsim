@@ -1994,7 +1994,7 @@ class MixingPools(Route):
         src (inds): source agents; can be AgeGroup(), ss.uids(), or lambda(sim); None indicates all alive agents
         dst (inds): destination agents; as above
         beta (float): overall transmission via these mixing pools
-        n_contacts (array): the relative connectivity between different mixing pools (can be float or Dist)
+        n_contacts (array): the number of contacts of each destination group with each source group: a number is the same for everyone in the group, and a `ss.Dist` is drawn once for each person in the group, which is much slower (a state for each pair of groups, and a draw for each pair for each new person)
         pars (dict): the same parameters, as a dict
 
     Examples:
@@ -2022,7 +2022,11 @@ class MixingPools(Route):
         )
         self.update_pars(pars, **kwargs)
         self.validate_pars()
-        self.pools = []
+        self.pools = [] # A pool for each pair of groups, only if contacts differ between people or beta is not a number: see plain_contacts()
+        self.matrix = None # Otherwise, the number of contacts between groups, [source, destination]
+        self.src_uids = None # With a matrix: the people in each source group and each destination group, from step()
+        self.dst_uids = None
+        self.diseases = None
         self.edges = None # The lower edges of the matrix's own age bands (from ss.contacts()), whose exposure agents work out by band: see band_exposure()
         self.dims = None # The matrices over the model's own dimensions (from ss.contacts())
         self.age_edges = None # The lower edges of the age matrix's own groups, if given with ages= (see ss.solvers.Mixing.dim_matrices())
@@ -2088,8 +2092,16 @@ class MixingPools(Route):
             raise ValueError(f'the contact matrix of "{self.name}" has shape {shape}, but {levels}, so it needs shape {counts*2} (or {(int(np.prod(counts)),)*2}, the first stratification slowest).')
         return
 
+    def plain_contacts(self):
+        """ The contacts as an array of numbers, if each is the same for everyone in its group and beta is a number; else None """
+        p = self.pars
+        values = [n.pars.v if isinstance(n, ss.constant) else n for n in p.n_contacts.flat]
+        if sc.isnumber(p.beta) and all(sc.isnumber(v) for v in values):
+            return np.array(values, dtype=float).reshape(p.n_contacts.shape)
+        return None
+
     def init_pre(self, sim):
-        """ Create a mixing pool for each pair of groups, unless declared diseases use the matrix directly
+        """ Create a mixing pool for each pair of groups, unless the contacts between groups can be used directly
 
         Args:
             sim (Sim): the sim being initialized
@@ -2100,6 +2112,9 @@ class MixingPools(Route):
         time_args = {k:p.get(k) for k in ss.Timeline.time_args} # get() allows None
         self.pools = []
         if self.edges is not None or self.dims is not None or self.full is not None or self.name in sim.mixing.pool_terms: # Used from the counts in each group or band, not with a pool for each pair: see ss.solvers.Mixing.init_pools()
+            return
+        self.matrix = self.plain_contacts()
+        if self.matrix is not None: # Everyone in a group has the same contacts, so one pass over the groups does the work of a pool for each pair
             return
         for i,sk,src in p.src.enumitems():
             for j,dk,dst in p.dst.enumitems():
@@ -2113,10 +2128,11 @@ class MixingPools(Route):
         return
 
     def init_post(self):
-        """ Initialize each mixing pool """
+        """ Initialize each mixing pool, and find the diseases that use them """
         super().init_post()
         for mp in self.pools:
             mp.init_post()
+        self.diseases = pool_diseases(self)
         return
 
     def band_exposure(self, weights):
@@ -2138,10 +2154,26 @@ class MixingPools(Route):
         expo[ok] = (self.pars.n_contacts.T @ prev)[band[ok]] # n_contacts is indexed [source, destination]
         return auids, self.pars.beta*expo
 
+    def group_exposure(self, weights):
+        """
+        As agents, for a matrix of numbers: the UIDs of the people alive, and the exposure of each, as the pools for each pair of
+        groups would give, from the infectiousness-weighted share of each source group (`weights`, one for each agent)
+        """
+        share = np.array([weights[uids].mean() if len(uids) else 0.0 for uids in self.src_uids])
+        expo = np.zeros(len(weights))
+        for uids,value in zip(self.dst_uids, self.matrix.T @ share): # A person in several destination groups has the exposure of each
+            expo[uids] += value
+        auids = self.sim.people.auids
+        return auids, self.pars.beta*expo[auids]
+
+    def exposure(self, weights):
+        """ As agents, with no pool for each pair of groups: see `band_exposure()` and `group_exposure()` """
+        return self.band_exposure(weights) if self.edges is not None else self.group_exposure(weights)
+
     def compute_transmission(self, rel_sus, rel_trans, disease_beta, disease):
         """
-        Calculate transmission, for a disease written as code: through each pool, or for a matrix from `ss.contacts()`, from the counts in
-        each group or band, as a declared disease's is (see `ss.solvers.Agents.transmit()`), since everyone in a group has the same contacts
+        Calculate transmission, for a disease written as code: through each pool, or for a matrix, from the share of each group or band
+        that is infectious, as a declared disease's is (see `ss.solvers.Agents.transmit()`), since everyone in a group has the same contacts
 
         Args:
             rel_sus (Arr): Relative susceptibility
@@ -2149,6 +2181,8 @@ class MixingPools(Route):
             disease_beta (float): The beta value for the disease, as the probability in the step
             disease (Disease): The disease
         """
+        if disease_beta == 0 or disease not in self.diseases:
+            return []
         if self.pools:
             return [uid for mp in self.pools for uid in mp.compute_transmission(rel_sus, rel_trans, disease_beta, disease)]
         sim = self.sim
@@ -2158,7 +2192,7 @@ class MixingPools(Route):
             n, infectious = [np.bincount(groups, weights=w, minlength=sim.groups.n_groups) for w in [None, rel_trans.raw[auids]]]
             expo = sim.mixing.term_exposure(sim.mixing.pool_terms[self.name], infectious, n.astype(float))[groups]
         else:
-            auids, expo = self.band_exposure(rel_trans.raw)
+            auids, expo = self.exposure(rel_trans.raw)
         self.p_acquire.set(p=1 - (1 - disease_beta)**(expo*rel_sus.raw[auids]))
         return self.p_acquire.filter(auids)
 
@@ -2170,11 +2204,20 @@ class MixingPools(Route):
         """
         for mp in self.pools:
             mp.remove_uids(uids)
+        for key in ['src', 'dst']:
+            groups = self.pars[key]
+            for k,group in groups.items():
+                if isinstance(group, ss.uids):
+                    groups[k] = group.remove(uids)
         return
 
     def step(self):
+        """ Update each mixing pool, or the people in each group """
         for mp in self.pools:
             mp.step()
+        if self.matrix is not None:
+            self.src_uids = [pool_uids(self.sim, group) for group in self.pars.src.values()]
+            self.dst_uids = [pool_uids(self.sim, group) for group in self.pars.dst.values()]
         return
 
     def shrink(self):
@@ -2182,6 +2225,10 @@ class MixingPools(Route):
         super().shrink()
         for mp in self.pools:
             mp.shrink()
+        shrunk = ss.utils.shrink()
+        self.diseases = shrunk
+        self.src_uids = shrunk
+        self.dst_uids = shrunk
         return
 
 
@@ -2190,6 +2237,43 @@ def transmits(disease):
     if disease.graph is not None:
         return len(disease.graph.transmissions) > 0
     return 'beta' in disease.pars
+
+
+def pool_diseases(route):
+    """ The diseases that transmit over a mixing pool or pools: those in its `diseases` parameter, or all communicable diseases """
+    sim = route.sim
+    names = sc.tolist(route.pars.diseases)
+    if len(names) == 0:
+        return [d for d in sim.diseases.values() if transmits(d)] # Assume the user wants all communicable diseases
+    diseases = []
+    for d in names:
+        if not isinstance(d, str):
+            raise TypeError(f'Diseases can be specified as disease objects or strings, not {type(d)}')
+        if d not in sim.diseases:
+            raise KeyError(f'Could not find disease with name {d} in the list of diseases.')
+        dis = sim.diseases[d]
+        if not transmits(dis):
+            raise TypeError(f'Cannot create a mixing pool for disease {d}. Mixing pools only work for communicable diseases.')
+        diseases.append(dis)
+    return diseases
+
+
+def pool_uids(sim, group):
+    """ The people in a group of a mixing pool
+
+    Args:
+        sim (Sim): the sim
+        group (func/uids): the people, as a function of the sim or as UIDs (default: all active agents)
+    """
+    if group is None:
+        return sim.people.auids
+    elif callable(group):
+        out = group(sim)
+        return out.uids if isinstance(out, ss.BoolArr) else out # A boolean array (e.g. sim.people.female) is over the agents alive, so is converted to their UIDs
+    elif isinstance(group, ss.uids):
+        return group
+    errormsg = f'src must be either a callable function, e.g. lambda sim: ss.uids(sim.people.age<5), or an array of uids, not {type(group)}'
+    raise TypeError(errormsg)
 
 
 class MixingPool(Route):
@@ -2293,40 +2377,8 @@ class MixingPool(Route):
     def init_post(self):
         super().init_post()
 
-        if len(self.pars.diseases) == 0:
-            self.diseases = [d for d in self.sim.diseases.values() if transmits(d)] # Assume the user wants all communicable diseases
-        else:
-            self.diseases = []
-            for d in self.pars.diseases:
-                if not isinstance(d, str):
-                    raise TypeError(f'Diseases can be specified as disease objects or strings, not {type(d)}')
-                if d not in self.sim.diseases:
-                    raise KeyError(f'Could not find disease with name {d} in the list of diseases.')
-
-                dis = self.sim.diseases[d]
-                if not transmits(dis):
-                    raise TypeError(f'Cannot create a mixing pool for disease {d}. Mixing pools only work for communicable diseases.')
-                self.diseases.append(dis)
-
-            if len(self.diseases) == 0:
-                raise ValueError('You must specify at least one transmissible disease to use mixing pools')
+        self.diseases = pool_diseases(self)
         return
-
-    def get_uids(self, func_or_array):
-        """ The people in a group of this pool
-
-        Args:
-            func_or_array (func/uids): the people, as a function of the sim or as UIDs (default: all active agents)
-        """
-        if func_or_array is None:
-            return self.sim.people.auids
-        elif callable(func_or_array):
-            out = func_or_array(self.sim)
-            return out.uids if isinstance(out, ss.BoolArr) else out # A boolean array (e.g. sim.people.female) is over the agents alive, so is converted to their UIDs
-        elif isinstance(func_or_array, ss.uids):
-            return func_or_array
-        errormsg = f'src must be either a callable function, e.g. lambda sim: ss.uids(sim.people.age<5), or an array of uids, not {type(func_or_array)}'
-        raise TypeError(errormsg)
 
     def remove_uids(self, uids):
         """ If UIDs are supplied explicitly, remove them if people die
@@ -2376,8 +2428,8 @@ class MixingPool(Route):
 
     def step(self):
         """ Update source and target UIDs """
-        self.src_uids = self.get_uids(self.pars.src)
-        self.dst_uids = self.get_uids(self.pars.dst)
+        self.src_uids = pool_uids(self.sim, self.pars.src)
+        self.dst_uids = pool_uids(self.sim, self.pars.dst)
         return
 
 

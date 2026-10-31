@@ -2,7 +2,7 @@
 
 All notable changes to the codebase are documented in this file. Changes that may result in differences in model output are flagged with the term "Regression". Changes that may require update to downstream code are flagged with the term "Migration".
 
-## Version 4.0.0 (in development)
+## Version 4.0.0 (2026-10-31)
 
 Starsim 4 adds a way to write a model as declared states and transitions, which can then be run as an ODE, as a stochastic compartmental model, or as agents. Models written as code (`ss.SIR`, custom `step()` methods) still run, but their results are one step later than in Starsim 3, so they agree with it statistically, not number for number. The [migration guide](https://starsim.org/v4/migration/v3_v4.html) maps Starsim 3 code to Starsim 4, and every change is listed in detail in the [full changelog](https://starsim.org/v4/migration/v4_changelog.html).
 <!-- V4-PREVIEW: restore the two links above to docs.starsim.org for normal publishing -->
@@ -27,6 +27,7 @@ Starsim 4 adds a way to write a model as declared states and transitions, which 
 - *Regression*: as agents, the engine schedules exits when people enter a state, and keys its random draws by stream, step and round, so runs don't depend on how work is batched.
 - *Regression*: `ss.SIR`, `ss.SIS` and `ss.SEIR` are the textbook models: exponential durations, and no deaths unless `p_death` is given. A disease with a transmission seeds 1% of people by default.
 - *Regression*: R0 is the basic reproduction number, with everyone not infected susceptible.
+- *Regression*: a number in the `n_contacts` matrix of `ss.MixingPools` is the same for everyone in the group, as in `ss.MixingPool` and `ss.contacts()`, rather than a Poisson draw kept for life, which left some people with no contacts at all: runs have somewhat more infections (9% in one test). Give `ss.poisson()` in the matrix for the old behavior. Such a matrix also makes no pool for each pair of groups, so 16 age groups run 2 to 3.5× faster and build 5 to 20× faster. `diseases=` of a mixing pool now applies to declared diseases, which ignored it.
 - *Regression*: a bare number given as a time is a calendar year from 1900 on, and otherwise a time in the sim's unit after the start. A bare birth or death rate is per year, and per 1,000 if above 1.
 - *Regression*: `res.resample('year')` of a stock gives its value at the end of each year (Starsim 3's `annualize()` gave the mean). A result's `scale` follows its kind, so ratios aren't scaled.
 - *Regression*: `ss.Deaths` and `ss.Births` hold each period's rate until the next; delivery rounds are timed by date.

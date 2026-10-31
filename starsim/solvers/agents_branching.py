@@ -292,6 +292,8 @@ class Branching:
             if self.strain_adjust[tr.name] is not None:
                 by_strain = self.strain_adjust[tr.name][strain_raw]
         for i,(nkey,route) in enumerate(routes):
+            if isinstance(route, (ss.MixingPool, ss.MixingPools)) and mod not in route.diseases: # Not one of the diseases it is for
+                continue
             if isinstance(route, ss.Network) and route.has_acts: # A probability per act, in each direction
                 if len(route):
                     self.transmit_acts(tr, i, nkey, route, rel_sus, by_strain, new_cases, pairs)
@@ -326,11 +328,11 @@ class Branching:
                     infectious = np.bincount(groups[auids], weights=(rel_trans.raw*share)[auids], minlength=sim.groups.n_groups)
                     expo = sim.mixing.term_exposure(sim.mixing.pool_terms[route.name], infectious, n)
                     pool_hazard[k] += ref*expo[groups]*route_sus.raw*mult(None, slice(None))
-            elif isinstance(route, ss.MixingPools) and route.edges is not None and not route.pools: # A matrix with its own age bands: from the counts in each band
+            elif isinstance(route, ss.MixingPools) and not route.pools: # A matrix of numbers: from the share of each group or band that is infectious
                 any_pools = True
                 for k,strain in enumerate(strains):
                     share = 1.0 if strain is None else self.strain_weights[strain_raw, strain]
-                    auids, expo = route.band_exposure(rel_trans.raw*share)
+                    auids, expo = route.exposure(rel_trans.raw*share)
                     pool_hazard[k][auids] += ref*expo*route_sus.raw[auids]*mult(None, auids)
             elif isinstance(route, (ss.MixingPool, ss.MixingPools)): # Has no direction
                 any_pools = True

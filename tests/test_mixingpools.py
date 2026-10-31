@@ -118,6 +118,47 @@ def test_contacts_coded():
     return
 
 
+@sc.timer()
+def test_matrix():
+    """ A matrix of numbers makes no pool for each pair of groups, and gives the epidemic those pools would """
+    sc.heading('Testing MixingPools with a matrix of numbers...')
+    matrix = np.array([[3.0, 1], [1, 2]])
+    groups = dict(young=ss.AgeGroup(0, 30), old=ss.AgeGroup(30, None))
+    pools = np.vectorize(lambda v: ss.uniform(v, v), otypes=[object])(matrix) # A distribution makes a pool for each pair, here with the same contacts for everyone
+    sims = [ss.Sim(ss.SIS(init_prev=0.02, beta=ss.perday(0.05)), networks=ss.MixingPools(src=groups, dst=groups, n_contacts=n), n_agents=n_agents, unit='day', stop=40, solver='abm', verbose=0).run() for n in [matrix, pools]]
+    assert len(sims[0].networks[0].pools) == 0 and len(sims[1].networks[0].pools) == 4
+    assert np.isclose(*[sim.results.sis.infection.sum() for sim in sims], rtol=0.05)
+
+    # Groups can overlap, and be people who die
+    uids = ss.uids(np.arange(100))
+    sim = ss.Sim(ss.SIS(init_prev=0.1, beta=ss.perday(0.05)), networks=ss.MixingPools(src=dict(a=uids, b=None), dst=dict(a=uids, b=None), n_contacts=[[1, 1], [1, 1]]), demographics=ss.Deaths(), n_agents=1000, unit='year', stop=30, solver='abm', verbose=0).run()
+    assert len(sim.networks[0].pars.src.a) < 100
+
+    # A pool transmits only the diseases it is for, written as code or declared
+    def make(name, cls=None):
+        S, I = ss.states('S I')
+        return cls(init_prev=0.05, beta=ss.perday(0.1), name=name) if cls else ss.Disease(S >> I @ 0.1*I, I >> S @ ss.days(10), init_prev=0.05, name=name)
+    for cls in [None, ssl.AgentSIR]:
+        for net in [ss.MixingPool(diseases='a', n_contacts=4), ss.MixingPools(diseases='a', src=dict(x=None), dst=dict(x=None), n_contacts=[[4]])]:
+            sim = ss.Sim(diseases=[make('a', cls), make('b', cls)], networks=net, n_agents=1000, unit='day', stop=20, solver='abm', verbose=0).run()
+            assert sim.results.a.infection.sum() > 10*sim.results.b.infection.sum()
+    return
+
+
+def test_keep_memory(monkeypatch):
+    """ Older glibc refuses a threshold above 32 MB, which should not stop the rest of the setting """
+    memory = ss.solvers.backends.memory
+    class Lib:
+        calls = []
+        def mallopt(self, key, value):
+            self.calls.append((key, value))
+            return int(key != memory.M_MMAP_THRESHOLD or value <= 2**25)
+    monkeypatch.setattr(memory, 'libc', Lib)
+    assert memory.keep()
+    assert Lib.calls[-2:] == [(memory.M_MMAP_THRESHOLD, 2**25), (memory.M_TRIM_THRESHOLD, 2**31 - 1)]
+    return
+
+
 if __name__ == '__main__':
     do_plot = True
     sc.options(interactive=do_plot)

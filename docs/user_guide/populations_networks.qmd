@@ -143,7 +143,7 @@ See [Demographics](populations_demographics.qmd) for pregnancy and births.
 
 ## Mixing pools
 
-A mixing pool is homogeneous mixing among a group of people: no individual contacts, but each person has an effective number of contacts in the pool (drawn once, from `n_contacts`, and kept for the whole run). With no groups, a pool is everyone, as in the first example on this page. `src=` and `dst=` restrict it to the people who can infect (the sources) and the people who can be infected (the destinations), so a pool can be one-way. Each is a condition on people, a function of the sim returning a boolean array or UIDs, or `ss.AgeGroup(low, high)`, which works out who is in an age group once for each step and so is faster when there are many pools:
+A mixing pool is homogeneous mixing among a group of people: no individual contacts, but each person has an effective number of contacts in the pool (`n_contacts`: a number is the same for everyone, and a distribution is drawn once for each person and kept for the whole run). With no groups, a pool is everyone, as in the first example on this page. `src=` and `dst=` restrict it to the people who can infect (the sources) and the people who can be infected (the destinations), so a pool can be one-way. Each is a condition on people, a function of the sim returning a boolean array or UIDs, or `ss.AgeGroup(low, high)`, which works out who is in an age group once for each step and so is faster when there are many pools:
 
 ```{python}
 pool = ss.MixingPool(
@@ -160,9 +160,9 @@ sim.run()
 sim.plot('sir')
 ```
 
-Each person in a pool has an effective number of contacts, drawn once from `n_contacts`. On each step, the force of infection in the pool is the mean infectiousness of the sources (the share of them infectious, weighted by each one's `rel_trans`), and each susceptible destination has a hazard of β × that mean × their number of contacts × their `rel_sus`, so is infected in the step with probability 1 − exp(−hazard × dt). This is the term β × S × I/N of the ODE, applied to each person.
+On each step, the force of infection in the pool is the mean infectiousness of the sources (the share of them infectious, weighted by each one's `rel_trans`), and each susceptible destination has a hazard of β × that mean × their number of contacts × their `rel_sus`, so is infected in the step with probability 1 − exp(−hazard × dt). This is the term β × S × I/N of the ODE, applied to each person.
 
-Of the 5,000 people, 250 start infected, and the epidemic goes no further than the adults whom children infect: it dies out once the infected children recover, since nobody infects children in this pool and adults infect nobody. `ss.MixingPools` (plural) is a set of pools between groups, with `src` and `dst` as dicts of groups and `n_contacts` as a matrix, sources by row and destinations by column. For mixing by age, the usual case, `ss.contacts()` makes the `ss.MixingPools` from a contact matrix and a stratified model gives results by group: see [Population data](populations_data.qmd).
+Of the 5,000 people, 250 start infected, and the epidemic goes no further than the adults whom children infect: it dies out once the infected children recover, since nobody infects children in this pool and adults infect nobody. `ss.MixingPools` (plural) is a set of pools between groups, with `src` and `dst` as dicts of groups and `n_contacts` as a matrix, sources by row and destinations by column. A matrix of numbers is much faster than one of distributions, which needs a pool for each pair of groups and a draw for each pair for each person born; to have the number of contacts differ between people, use a distribution, e.g. `ss.poisson(lam=2)`, in the matrix. For mixing by age, the usual case, `ss.contacts()` makes the `ss.MixingPools` from a contact matrix and a stratified model gives results by group: see [Population data](populations_data.qmd).
 
 In a declared disease, β belongs to the transmission, not to the pool: a pool's own `beta` must be left at its default of 1, and any other value raises an error that says to give it to the transmission instead (e.g. `dict(mixingpool=...)`).
 
