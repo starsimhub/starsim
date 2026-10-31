@@ -173,7 +173,7 @@ sim.run()
 sim.results.flu.I.by('age').plot()
 ```
 
-As agents, a contact matrix is a set of mixing pools, one for each pair of groups (`ss.MixingPools`; see [Contact networks](populations_networks.qmd#mixing-pools)). It is not a network: nobody has particular contacts, so contact tracing needs a network instead.
+As agents, a contact matrix works as a set of mixing pools, one for each pair of groups (`ss.MixingPools`; see [Contact networks](populations_networks.qmd#mixing-pools)). It is not a network: nobody has particular contacts, so contact tracing needs a network instead.
 
 ## Data of your own
 
