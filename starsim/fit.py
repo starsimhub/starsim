@@ -21,6 +21,10 @@ import sciris as sc
 import starsim as ss
 from .results import compare, lineup, match_column, match_name, parse_column, column_levels, flow_at_data
 
+__all__ = ['mismatch', 'loglik', 'prior_draws', 'sensitivity', 'profile', 'optimize', 'compare_models', 'split_data', 'diagnose', 'fit_stages',
+           'fit_scipy', 'fit_optuna', 'fit_if2', 'fit_pmcmc', 'fit_abc_smc', 'fit_nuts', 'abc_smc', 'pmmh', 'nuts',
+           'Fit', 'Optimization', 'ModelComparison', 'ParticleFilter', 'Swarm']
+
 
 #%% Data and fitting for models with declared parameters
 
@@ -376,8 +380,8 @@ class ParticleFilter(sc.prettyobj):
         for k,row in enumerate(order):
             if swarm is not None: # The rows of the tables (of those that vary in time) for the steps to this data point
                 swarm.perturb(rng)
-                row0 = runs.done*runs.per_step
-                tables = swarm.tables(rows=slice(row0, max(last[k], runs.done)*runs.per_step))
+                row0 = runs.done
+                tables = swarm.tables(rows=slice(row0, max(last[k], runs.done)))
                 shares = swarm.shares() if swarm.moving else None
             runs.advance(last[k], tables, shares, row0)
             stocks, flows = runs.stocks, runs.flows
@@ -849,81 +853,24 @@ def nuts_traced(jax, blackjax, logdensity, starts, key, draws, warmup, verbose, 
     return out
 
 
-def rank_normalize(x):
-    """ Draws (chains × draws) replaced by the normal quantiles of their ranks among all of them """
-    ranks = sps.rankdata(x, method='average').reshape(x.shape)
-    return sps.norm.ppf((ranks - 3/8)/(x.size + 1/4))
-
-
-def split_chains(x):
-    """ Each chain (chains × draws) cut into its first and second halves """
-    half = x.shape[1]//2
-    return np.concatenate([x[:, :half], x[:, -half:]])
-
-
-def basic_rhat(x):
-    """ The potential scale reduction of draws (chains × draws) """
-    n = x.shape[1]
-    if n < 2:
-        return np.nan
-    within = x.var(axis=1, ddof=1).mean()
-    between = n*x.mean(axis=1).var(ddof=1)
-    return np.sqrt((between/within + n - 1)/n) if within > 0 else np.nan
-
-
-def basic_ess(x):
-    """ The effective sample size of draws (chains × draws), from their autocorrelation, with Geyer's initial monotone sequence (as Stan and ArviZ work it out) """
-    m, n = x.shape
-    if n < 4: # Too few draws to estimate an autocorrelation
-        return np.nan
-    centered = x - x.mean(axis=1, keepdims=True)
-    size = 2**int(np.ceil(np.log2(2*n)))
-    acov = np.fft.irfft(np.abs(np.fft.rfft(centered, size, axis=1))**2, axis=1)[:, :n]/n # Each chain's autocovariance, by lag
-    mean_var = acov[:, 0].mean()*n/(n - 1)
-    var_plus = mean_var*(n - 1)/n + (x.mean(axis=1).var(ddof=1) if m > 1 else 0)
-    if var_plus <= 0:
-        return float(m*n)
-    rho = np.zeros(n)
-    rho[0] = 1.0
-    even = 1.0
-    odd = 1 - (mean_var - acov[:, 1].mean())/var_plus
-    rho[1] = odd
-    t = 1
-    while t < n - 3 and even + odd > 0: # Sum pairs of lags while they are positive
-        even = 1 - (mean_var - acov[:, t+1].mean())/var_plus
-        odd = 1 - (mean_var - acov[:, t+2].mean())/var_plus
-        if even + odd >= 0:
-            rho[t+1], rho[t+2] = even, odd
-        t += 2
-    max_t = t - 2
-    if even > 0:
-        rho[max_t+1] = even
-    t = 1
-    while t <= max_t - 2: # Make the pairs fall monotonically
-        if rho[t+1] + rho[t+2] > rho[t-1] + rho[t]:
-            rho[t+1] = rho[t+2] = (rho[t-1] + rho[t])/2
-        t += 2
-    tau = -1 + 2*rho[:max_t+1].sum() + rho[max_t+1]
-    return m*n/max(tau, 1/np.log10(m*n))
-
-
 def diagnose(draws):
     """
     The R-hat (near 1 if the chains agree) and the effective sample size of each value, from draws (chains × draws × values)
 
-    Both are rank-normalized and from split chains (Vehtari et al. 2021, as Stan, ArviZ, and BlackJAX work them out): the
-    R-hat is the larger of that of the draws and that of their distance from the median, and the effective sample size is of the bulk.
+    Both are BlackJAX's, rank-normalized and from split chains (Vehtari et al. 2021, as in Stan and ArviZ): the R-hat is the
+    larger of that of the draws and that of their distance from the median, and the effective sample size is of the bulk.
+    Both are NaN for chains of fewer than 4 draws, too short to tell.
 
     Args:
         draws (array): the draws, with shape (chains, draws, values)
     """
-    rhat, ess = [], []
-    for j in range(draws.shape[2]):
-        x = split_chains(draws[:, :, j])
-        folded = np.abs(x - np.median(x))
-        rhat.append(max(basic_rhat(rank_normalize(x)), basic_rhat(rank_normalize(folded))))
-        ess.append(basic_ess(rank_normalize(x)))
-    return np.array(rhat), np.array(ess)
+    if draws.shape[1] < 4:
+        nans = np.full(draws.shape[2], np.nan)
+        return nans, nans.copy()
+    import blackjax.diagnostics as bd
+    jax = ss.gradients.jax()
+    with jax.enable_x64(True): # Otherwise in single precision
+        return np.array(bd.rhat(draws)).reshape(draws.shape[2]), np.array(bd.ess_bulk(draws)).reshape(draws.shape[2]) # BlackJAX drops an axis of one value
 
 
 class Fit(sc.prettyobj):
@@ -1161,7 +1108,7 @@ def correlated_pairs(names, values, threshold):
 
 gof_names = ['nae', 'rmse'] # The goodness-of-fit measures that mismatch() knows
 max_scan = 100 # The most points a scan before a search tries by default: 10 per parameter up to 10 parameters
-scipy_methods = ['nelder-mead', 'powell', 'cg', 'bfgs', 'newton-cg', 'l-bfgs-b', 'tnc', 'cobyla', 'cobyqa', 'slsqp', 'trust-constr', 'dogleg', 'trust-ncg', 'trust-exact', 'trust-krylov']
+scipy_methods = ['nelder-mead', 'powell', 'l-bfgs-b', 'slsqp'] # With and without gradients, all keeping to the bounds
 
 
 class Optimization(sc.prettyobj):
@@ -1751,7 +1698,7 @@ def default_method(sim, use_lik, no_grad=None, n_pars=None):
         no_grad (str): why there are no gradients, if the fit knows a reason the sim does not (e.g. a parameter that sets contact rates)
         n_pars (int): the number of fitted parameters; a point estimate of one or two uses Nelder-Mead even with gradients, since it is faster there
     """
-    no_grad = no_grad or ss.gradients.reason(sim)
+    no_grad = no_grad or ss.solvers.why_not(sim, 'jax')
     if sim.solver != 'ode':
         method, why = 'optuna', 'a stochastic sim'
         posterior = 'pmcmc' if use_lik and ParticleFilter.reason(sim) is None else 'abc-smc'
@@ -1844,7 +1791,7 @@ class Problem(sc.prettyobj):
         self.runner = runner = base.new() # If the sim is nothing but compartments, it is built once and restarted for each evaluation
         runner.data = base.data
         self.can_restart = runner.init().kernel_only() and not contacts and not settings # The mixing is worked out when the sim is built, as are its settings, so a new value needs a new sim
-        self.no_grad = ss.gradients.reason(runner) or (f'{contacts[0]} sets the mixing when the sim is built' if contacts else None) or (f'{settings[0]} is a setting of the sim' if settings else None) # Why there are no gradients, if there are not
+        self.no_grad = ss.solvers.why_not(runner, 'jax') or (f'{contacts[0]} sets the mixing when the sim is built' if contacts else None) or (f'{settings[0]} is a setting of the sim' if settings else None) # Why there are no gradients, if there are not
         self.trials = [] # Every evaluation
         self._density = None # The log-likelihood in JAX, once built: see jax_density()
         return
@@ -2179,7 +2126,7 @@ class Problem(sc.prettyobj):
 
 def fit_scipy(problem, method='nelder-mead', scan=None, restarts=None, **options):
     """
-    A `scipy.optimize.minimize` method, from each of the best few points of a scan that are apart (`restarts`), with gradients
+    A method of `scipy.optimize.minimize` (one of `scipy_methods`), from each of the best few points of a scan that are apart (`restarts`), with gradients
     from JAX for the methods that use them; it has converged if the best two searches end at the same value. By default 3 searches,
     or 1 for a single parameter of a deterministic sim, where the scan already finds the right valley and SciPy's own stopping rule is enough.
 
@@ -2225,9 +2172,15 @@ def fit_scipy(problem, method='nelder-mead', scan=None, restarts=None, **options
         except spo.OptimizeWarning as E:
             raise TypeError(f'fit(method="{method}") takes scan=, restarts=, and the options of this SciPy method (see `scipy.optimize.show_options()`); SciPy says: {E}') from E
     result = results[0]
+    best = p.decode(result.x)
+    if not p.stochastic: # A search can end short of the best point it tried (e.g. if a line search fails); a deterministic sim's scores are exact, so take that point
+        scores = [trial['objective'] for trial in p.trials]
+        tried = int(np.nanargmin(scores))
+        if scores[tried] < result.fun:
+            best = np.array([p.trials[tried][name] for name in p.names])
     evals = sum(res.nfev for res in results)
     if len(results) == 1: # Nothing to compare it with, so SciPy's own stopping rule
-        return sc.obj(best=p.decode(result.x), converged=bool(result.success), why=f'{result.message} ({evals} evaluations)')
+        return sc.obj(best=best, converged=bool(result.success), why=f'{result.message} ({evals} evaluations)')
     tol = 0.1 if p.use_lik else max(1e-3*abs(result.fun), 1e-6) # A tenth of a unit of log-likelihood, or 0.1% of a goodness of fit (which can be 0)
     at = lambda res: f' at {sc.strjoin([f"{name}={val:.4g}" for name,val in zip(p.names, p.decode(res.x))])}' if len(p.names) <= 3 else '' # Where each search ended, if that is short
     ends = sc.strjoin([f'{res.fun:.4g}{at(res)}' for res in results], sep='; ')
@@ -2238,7 +2191,7 @@ def fit_scipy(problem, method='nelder-mead', scan=None, restarts=None, **options
         why = f'the {len(results)} searches, from points of the scan that are apart, ended at different objective values ({ends}; {evals} evaluations), so the best may be a local optimum; try a larger scan (scan=) or more searches (restarts=)'
         if not p.use_lik and 0 <= result.fun < results[1].fun/10:
             why += '. The best is far below the others, which may have stalled where the fit is flat (e.g. where there is no epidemic), so it is likely the best there is'
-    return sc.obj(best=p.decode(result.x), converged=converged, why=why)
+    return sc.obj(best=best, converged=converged, why=why)
 
 
 def smoothed_best(zs, values):
@@ -2610,7 +2563,7 @@ def fit_nuts(problem, draws=500, warmup=500, chains=4, scan=None):
 
 
 reverse_min = 5000 # The values times the compartments at which a gradient of one number is taken in reverse mode (one pass) rather than forward mode (one direction per value): forward is faster for 40 values of an SIR (3.1 ms against 14 ms), and for 20 places (5 against 20 ms); reverse for 100 places (26 against 117 ms)
-grad_methods = ['l-bfgs-b', 'bfgs', 'cg', 'tnc', 'slsqp', 'trust-constr'] # The SciPy methods that use gradients, when the sim has them
+grad_methods = ['l-bfgs-b', 'slsqp'] # The SciPy methods that use gradients, when the sim has them
 sampling_methods = ['nuts', 'pmcmc', 'abc-smc'] # The methods that give a posterior
 methods = {'nuts':fit_nuts, 'pmcmc':fit_pmcmc, 'abc-smc':fit_abc_smc, 'if2':fit_if2, 'optuna':fit_optuna} | {name:functools.partial(fit_scipy, method=name) for name in scipy_methods} # The methods that sim.fit() knows, by name
 

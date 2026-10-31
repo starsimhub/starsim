@@ -1,21 +1,22 @@
 """
-Not for the user: Starsim's compiled kernels in Rust, as the other kernels to Numba's: with `ss.options.kernels = 'auto'` (the default) when they have been
-built, or `'rust'` (or `STARSIM_KERNELS=rust`), the
+Not for the user: Starsim's compiled kernels in Rust, as the other kernels to Numba's: with `ss.options.kernels = 'auto'` (the default) when they are there (in
+the wheels, or built), or `'rust'` (or `STARSIM_KERNELS=rust`), the
 serial and threaded passes over the agents and a network's edges (`ss.solvers.backends.passes`), the small kernels of `ss.arrays`, `ss.networks`,
-`ss.distributions`, `ss.people` and `ss.utils`, the draws of `ss.Dist` (`draws.many`), the compartmental kernels (`ss.kernels`: see
-`compartmental()`), and the chain binomial's draws in JAX (`ss.solvers.backends.chain`) run in Rust, with the same arguments and results (the same
+`ss.distributions`, `ss.people` and `ss.utils`, the draws of `ss.Dist` (`draws.many`), and the compartmental kernels (`ss.kernels`: see
+`compartmental()`) run in Rust, with the same arguments and results (the same
 numbers, bit for bit, whatever the number of threads). The Rust kernels are compiled ahead of time, so a first run takes no compiling, and
 they run at least as fast as Numba's in nearly every case. A threaded pass takes as many threads as Numba has (see `ss.options.threads`),
 from a pool of its own that starts the first time a pass is threaded (so the workers of `ss.parallel()`, with one thread each, start none)
 and waits between passes without spinning. Only `ss.jit` (users' own code) stays in Numba. See ../rust/README.md.
 
-Build them from the crate in `starsim/solvers/rust/` (needs a Rust toolchain; about 15 s):
+The wheels include them (see `pyproject.toml`); from a clone, build them from the crate in `starsim/solvers/rust/` (needs a Rust toolchain; about 90 s the first time):
 
     cd starsim/solvers/rust && ./build
 
 Used with: agents and compartments; declared and coded modules
 """
 import sys
+import zlib
 import importlib
 import collections
 import sciris as sc
@@ -73,6 +74,17 @@ def put(where, k, f):
         setattr(where, k, f)
     return
 
+def source_hash():
+    """ The hash of the crate's source beside this file (as `starsim/solvers/rust/build.rs` works it out when it builds the library), or None if there is no source (a wheel has none, and nothing to go stale) """
+    crate = sc.thispath(__file__).parent/'rust'
+    if not (crate/'Cargo.toml').exists():
+        return None
+    files = sorted([crate/'Cargo.toml', *(crate/'src').rglob('*.rs')], key=lambda path: path.relative_to(crate).as_posix())
+    crc = 0
+    for path in files:
+        crc = zlib.crc32(path.read_bytes(), crc)
+    return crc
+
 def load():
     """ The compiled Rust kernels, with a clear error if they have not been built or cannot be loaded """
     try:
@@ -86,7 +98,7 @@ def load():
     return _rs
 
 def auto():
-    """ For ss.options.kernels = 'auto': the Rust kernels if they have been built, else Numba's, also with a warning if a build cannot be used (e.g. one older than the Python that calls it) """
+    """ For ss.options.kernels = 'auto': the Rust kernels if they have been built, else Numba's, also with a warning if a build cannot be used (e.g. one older than the Python that calls it, or than its source) """
     if built():
         try:
             return use(True)
@@ -102,9 +114,13 @@ def use(rust=True):
         numba = {(m, k): get(mods[m], k) for m, ks in names.items() for k in ks}
     if rust:
         rs = load()
-        missing = [k for k in ss.kernels.entries + ['evaluate'] if not hasattr(rs.kernels, k)] + [k for k in ['chain_handler'] if not hasattr(rs, k)]
+        missing = [k for k in ss.kernels.entries + ['evaluate'] if not hasattr(rs.kernels, k)]
         if missing: # Checked now rather than at the first run that needs them, as for every other kernel
             errormsg = f'The Rust kernels are older than the Python that calls them (missing {sc.strjoin(missing)}): rebuild them with "./build" in the starsim/solvers/rust/ folder'
+            raise AttributeError(errormsg)
+        source = source_hash()
+        if source is not None and source != getattr(rs, 'source_hash', None): # An old library would give old numbers, with nothing to say so
+            errormsg = 'The Rust kernels were built from different source than is here, so may give different numbers: rebuild them with "./build" in the starsim/solvers/rust/ folder'
             raise AttributeError(errormsg)
         kernels = {('passes', k): fallback(getattr(rs, k), numba['passes', k]) for k in single}
         kernels.update({('passes', f'{k}_{kind}'): fallback(getattr(rs, k), numba['passes', f'{k}_{kind}']) for k in pairs for kind in ['serial', 'threaded']})

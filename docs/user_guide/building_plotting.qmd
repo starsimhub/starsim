@@ -147,7 +147,7 @@ with ss.style():
     plt.show()
 ```
 
-The results are also tables: `res.to_df()` gives a dataframe, which can be plotted with pandas or seaborn, and `msim.to_df()` gives the quantiles of every result across runs, in long form, for a plotting library that works with tables.
+The results are also tables: `res.to_df()` gives a dataframe, which can be plotted with pandas or seaborn, and `msim.to_df(quantiles=[0.025, 0.5, 0.975])` gives the quantiles of every result across runs, in long form, for a plotting library that works with tables.
 
 ## Other plots
 

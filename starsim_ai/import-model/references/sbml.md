@@ -16,7 +16,7 @@ An SBML model is an XML file (from BioModels, COPASI, libRoadRunner, and many ot
 | An assignment rule | A named expression (`N = S + I + R` makes `beta * S * I / N` exposure) | yes |
 | A function definition | Written out where it is called | yes |
 | MathML arithmetic, power, exp, ln, log, root, abs, min, max, comparisons | The same in the rate | yes |
-| An event at a time | `ss.timeseries` as a parameter's value, or `ss.change(at=...)` | no |
+| An event at a time | `ss.timeseries` as a parameter's value, or `ss.modify(start=...)` | no |
 | An event on a condition | A rate multiplied by a comparison (`beta * (I.n < K)`), or an intervention with `where=` | no |
 | A rate rule for a parameter | A state that is not people, `ss.State(people=False)`, with flows against `ss.null` | no |
 | An algebraic rule | By hand, solved for the variable | no |

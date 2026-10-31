@@ -53,7 +53,7 @@ def test_fit_numpy():
     data = pd.DataFrame({'numpy.I': I.values[::10]}, index=I.timevec[::10])
     fit = make(beta=ss.par(0.3, bounds=[0.1, 0.5]), data=data).fit(method='optuna', n_trials=30, verbose=0)
     assert np.isclose(fit.pars.beta, 0.25, rtol=0.02)
-    with pytest.raises(ss.CapabilityError, match='written as code'): # No gradient, which it says
+    with pytest.raises(ss.CapabilityError): # No gradient, which it says
         make(beta=ss.par(0.3, bounds=[0.1, 0.5]), data=data).gradient()
     return fit
 

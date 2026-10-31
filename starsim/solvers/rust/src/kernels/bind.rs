@@ -14,24 +14,24 @@ use super::*;
 type Keep<'py> = Vec<Bound<'py, PyAny>>;
 
 /// An array's pointer, shape, and strides (in elements), converted if it is not of type T with a contiguous last axis (or refused, if the kernel writes to it)
-fn raw<'py, T: Element + Copy>(o: &Bound<'py, PyAny>, keep: &mut Keep<'py>, write: bool, ndim: usize) -> PyResult<(*mut T, Vec<usize>, Vec<usize>)> {
+fn raw<'py, T: Element + Copy>(o: &Bound<'py, PyAny>, keep: &mut Keep<'py>, write: bool, ndim: usize) -> PyResult<(*mut T, [usize; 8], [usize; 8])> {
     let py = o.py();
-    let ok = |a: &Bound<'py, PyAny>| -> Option<(*mut T, Vec<usize>, Vec<usize>)> {
+    let ok = |a: &Bound<'py, PyAny>| -> Option<(*mut T, [usize; 8], [usize; 8])> {
         let arr = a.cast::<PyArrayDyn<T>>().ok()?;
         if arr.ndim() != ndim {
             return None;
         }
         let size = std::mem::size_of::<T>() as isize;
-        let shape = arr.shape().to_vec();
-        let mut strides = Vec::with_capacity(ndim);
+        let mut shape = [0; 8]; // On the stack, since a step reads some 50 arrays
+        shape[..ndim].copy_from_slice(arr.shape());
+        let mut strides = [0; 8];
         let empty = arr.len() == 0; // Its strides are never used
         for (k, &s) in arr.strides().iter().enumerate() {
-            if shape[k] <= 1 || empty {
-                strides.push(0);
-            } else if s < 0 || s % size != 0 || (k == ndim - 1 && s != size) {
-                return None;
-            } else {
-                strides.push((s/size) as usize);
+            if shape[k] > 1 && !empty {
+                if s < 0 || s % size != 0 || (k == ndim - 1 && s != size) {
+                    return None;
+                }
+                strides[k] = (s/size) as usize;
             }
         }
         Some((arr.data(), shape, strides))
@@ -66,7 +66,7 @@ fn a3<'py, T: Element + Copy>(o: &Bound<'py, PyAny>, k: &mut Keep<'py>, w: bool)
 
 fn nd<'py, const N: usize>(o: &Bound<'py, PyAny>, k: &mut Keep<'py>, w: bool) -> PyResult<Nd<f64, N>> {
     let (p, n, s) = raw::<f64>(o, k, w, N)?;
-    Ok(Nd::new(p, n.try_into().unwrap(), s.try_into().unwrap()))
+    Ok(Nd::new(p, n[..N].try_into().unwrap(), s[..N].try_into().unwrap()))
 }
 
 /// A boolean array, as bytes
@@ -199,7 +199,7 @@ fn view3(a: &Bound<PyArrayDyn<f64>>) -> A3<f64> { let s = a.shape(); A3::new(a.d
 #[allow(clippy::too_many_arguments)]
 fn py_run<'py>(py: Python<'py>, rng: &Bound<'py, PyAny>, y: &Bound<'py, PyAny>, p: &Bound<'py, PyAny>, dt: f64, npts: usize, solver: i64, n_sub: i64, fixed: &Bound<'py, PyAny>,
             mult: &Bound<'py, PyAny>, consts: &Bound<'py, PyAny>, rel_trans: &Bound<'py, PyAny>, reg: &Bound<'py, PyAny>, sh: &Bound<'py, PyAny>, tally: &Bound<'py, PyAny>,
-            per_step: i64, start: usize) -> PyResult<(Bound<'py, PyAny>, Bound<'py, PyAny>, Bound<'py, PyAny>, f64)> {
+            start: usize) -> PyResult<(Bound<'py, PyAny>, Bound<'py, PyAny>, Bound<'py, PyAny>, f64)> {
     blas(py)?;
     let mut k = Keep::new();
     let (g, prog, t, r, s) = (gen_of(rng)?, program(p, &mut k)?, tables_of([fixed, mult, consts, rel_trans], &mut k)?, register_of(reg, &mut k)?, shifts(sh, &mut k)?);
@@ -209,18 +209,18 @@ fn py_run<'py>(py: Python<'py>, rng: &Bound<'py, PyAny>, y: &Bound<'py, PyAny>, 
     let n = npts.checked_sub(start).ok_or_else(|| pyo3::exceptions::PyValueError::new_err("negative dimensions not allowed (start is after npts)"))?;
     let stocks = zeros(py, [n, nc, ng])?;
     let flows = zeros(py, [n, prog.n_trans + prog.n_movers, ng])?;
-    let short = super::run(g, yv, &prog, dt, npts, solver, n_sub, &t, &r, &s, tl, per_step, start, view3(&stocks), view3(&flows));
+    let short = super::run(g, yv, &prog, dt, npts, solver, n_sub, &t, &r, &s, tl, start, view3(&stocks), view3(&flows));
     Ok((yo.into_any(), stocks.into_any(), flows.into_any(), short))
 }
 
 #[pyfunction]
 #[pyo3(name = "run_many")]
-#[pyo3(signature = (rngs, ys, p, dt, start, npts, solver, n_sub, fixed, mult, consts, rel_trans, reg, sh, stocks, flows, stocks_g, flows_g, tally, tally_g, state_of, rows, grp_state, grp_flow, per_step=1))]
+#[pyo3(signature = (rngs, ys, p, dt, start, npts, solver, n_sub, fixed, mult, consts, rel_trans, reg, sh, stocks, flows, stocks_g, flows_g, tally, tally_g, state_of, rows, grp_state, grp_flow))]
 #[allow(clippy::too_many_arguments)]
 fn py_run_many<'py>(py: Python<'py>, rngs: &Bound<'py, PyAny>, ys: &Bound<'py, PyAny>, p: &Bound<'py, PyAny>, dt: f64, start: usize, npts: usize, solver: i64, n_sub: i64,
                  fixed: &Bound<'py, PyAny>, mult: &Bound<'py, PyAny>, consts: &Bound<'py, PyAny>, rel_trans: &Bound<'py, PyAny>, reg: &Bound<'py, PyAny>, sh: &Bound<'py, PyAny>,
                  stocks: &Bound<'py, PyAny>, flows: &Bound<'py, PyAny>, stocks_g: &Bound<'py, PyAny>, flows_g: &Bound<'py, PyAny>, tally: &Bound<'py, PyAny>, tally_g: &Bound<'py, PyAny>,
-                 state_of: &Bound<'py, PyAny>, rows: &Bound<'py, PyAny>, grp_state: &Bound<'py, PyAny>, grp_flow: &Bound<'py, PyAny>, per_step: i64) -> PyResult<()> {
+                 state_of: &Bound<'py, PyAny>, rows: &Bound<'py, PyAny>, grp_state: &Bound<'py, PyAny>, grp_flow: &Bound<'py, PyAny>) -> PyResult<()> {
     blas(py)?;
     let mut k = Keep::new();
     let gs = gens_of(rngs, &mut k)?;
@@ -228,42 +228,42 @@ fn py_run_many<'py>(py: Python<'py>, rngs: &Bound<'py, PyAny>, ys: &Bound<'py, P
     let o = ManyOut { stocks: nd(stocks, &mut k, true)?, flows: nd(flows, &mut k, true)?, stocks_g: nd(stocks_g, &mut k, true)?, flows_g: nd(flows_g, &mut k, true)?,
                       tally: nd(tally, &mut k, true)?, tally_g: nd(tally_g, &mut k, true)? };
     super::run_many(&gs, a3(ys, &mut k, true)?, &prog, dt, start, npts, solver, n_sub, &t, &r, &s, &o, a1(state_of, &mut k, false)?, a1(rows, &mut k, false)?,
-                    a1(grp_state, &mut k, false)?, a1(grp_flow, &mut k, false)?, per_step);
+                    a1(grp_state, &mut k, false)?, a1(grp_flow, &mut k, false)?);
     Ok(())
 }
 
 /// What advance() and advance_threads() share
 #[allow(clippy::too_many_arguments)]
 fn advance_args<'a, 'py>(dt: f64, start: usize, end: usize, solver: i64, n_sub: i64, t: [&Bound<'py, PyAny>; 4], sh_vals: &Bound<'py, PyAny>, reg: &'a Register, sh: &'a Shifts,
-                         state_of: &Bound<'py, PyAny>, stocks: &Bound<'py, PyAny>, flows: &Bound<'py, PyAny>, per_step: i64, row0: i64, k: &mut Keep<'py>) -> PyResult<Advance<'a>> {
+                         state_of: &Bound<'py, PyAny>, stocks: &Bound<'py, PyAny>, flows: &Bound<'py, PyAny>, row0: i64, k: &mut Keep<'py>) -> PyResult<Advance<'a>> {
     Ok(Advance { dt, start, end, solver, n_sub, tables: [nd(t[0], k, false)?, nd(t[1], k, false)?, nd(t[2], k, false)?, nd(t[3], k, false)?], sh_vals: a2(sh_vals, k, false)?,
-                 reg, sh, state_of: a1(state_of, k, false)?, stocks: nd(stocks, k, true)?, flows: nd(flows, k, true)?, per_step, row0 })
+                 reg, sh, state_of: a1(state_of, k, false)?, stocks: nd(stocks, k, true)?, flows: nd(flows, k, true)?, row0 })
 }
 
 #[pyfunction]
 #[pyo3(name = "advance")]
-#[pyo3(signature = (rngs, p, ys, first, last, dt, start, end, solver, n_sub, fixed, mult, consts, rel_trans, sh_vals, reg, sh, state_of, stocks, flows, per_step=1, row0=0))]
+#[pyo3(signature = (rngs, p, ys, first, last, dt, start, end, solver, n_sub, fixed, mult, consts, rel_trans, sh_vals, reg, sh, state_of, stocks, flows, row0=0))]
 #[allow(clippy::too_many_arguments)]
 fn py_advance<'py>(py: Python<'py>, rngs: &Bound<'py, PyAny>, p: &Bound<'py, PyAny>, ys: &Bound<'py, PyAny>, first: usize, last: usize, dt: f64, start: usize, end: usize, solver: i64,
                 n_sub: i64, fixed: &Bound<'py, PyAny>, mult: &Bound<'py, PyAny>, consts: &Bound<'py, PyAny>, rel_trans: &Bound<'py, PyAny>, sh_vals: &Bound<'py, PyAny>,
-                reg: &Bound<'py, PyAny>, sh: &Bound<'py, PyAny>, state_of: &Bound<'py, PyAny>, stocks: &Bound<'py, PyAny>, flows: &Bound<'py, PyAny>, per_step: i64,
+                reg: &Bound<'py, PyAny>, sh: &Bound<'py, PyAny>, state_of: &Bound<'py, PyAny>, stocks: &Bound<'py, PyAny>, flows: &Bound<'py, PyAny>,
                 row0: i64) -> PyResult<()> {
     blas(py)?;
     let mut k = Keep::new();
     let gs = gens_of(rngs, &mut k)?;
     let (prog, r, s) = (program(p, &mut k)?, register_of(reg, &mut k)?, shifts(sh, &mut k)?);
-    let a = advance_args(dt, start, end, solver, n_sub, [fixed, mult, consts, rel_trans], sh_vals, &r, &s, state_of, stocks, flows, per_step, row0, &mut k)?;
+    let a = advance_args(dt, start, end, solver, n_sub, [fixed, mult, consts, rel_trans], sh_vals, &r, &s, state_of, stocks, flows, row0, &mut k)?;
     super::advance(&gs, &prog, a3(ys, &mut k, true)?, first, last, &a);
     Ok(())
 }
 
 #[pyfunction]
 #[pyo3(name = "advance_threads")]
-#[pyo3(signature = (rngs, progs, ys, dt, start, end, solver, n_sub, fixed, mult, consts, rel_trans, sh_vals, reg, sh, state_of, stocks, flows, per_step=1, row0=0))]
+#[pyo3(signature = (rngs, progs, ys, dt, start, end, solver, n_sub, fixed, mult, consts, rel_trans, sh_vals, reg, sh, state_of, stocks, flows, row0=0))]
 #[allow(clippy::too_many_arguments)]
 fn py_advance_threads<'py>(py: Python<'py>, rngs: &Bound<'py, PyAny>, progs: &Bound<'py, PyAny>, ys: &Bound<'py, PyAny>, dt: f64, start: usize, end: usize, solver: i64, n_sub: i64,
                         fixed: &Bound<'py, PyAny>, mult: &Bound<'py, PyAny>, consts: &Bound<'py, PyAny>, rel_trans: &Bound<'py, PyAny>, sh_vals: &Bound<'py, PyAny>,
-                        reg: &Bound<'py, PyAny>, sh: &Bound<'py, PyAny>, state_of: &Bound<'py, PyAny>, stocks: &Bound<'py, PyAny>, flows: &Bound<'py, PyAny>, per_step: i64,
+                        reg: &Bound<'py, PyAny>, sh: &Bound<'py, PyAny>, state_of: &Bound<'py, PyAny>, stocks: &Bound<'py, PyAny>, flows: &Bound<'py, PyAny>,
                         row0: i64) -> PyResult<()> {
     blas(py)?;
     let mut k = Keep::new();
@@ -275,7 +275,7 @@ fn py_advance_threads<'py>(py: Python<'py>, rngs: &Bound<'py, PyAny>, progs: &Bo
         k.push(p);
     }
     let (r, s) = (register_of(reg, &mut k)?, shifts(sh, &mut k)?);
-    let a = advance_args(dt, start, end, solver, n_sub, [fixed, mult, consts, rel_trans], sh_vals, &r, &s, state_of, stocks, flows, per_step, row0, &mut k)?;
+    let a = advance_args(dt, start, end, solver, n_sub, [fixed, mult, consts, rel_trans], sh_vals, &r, &s, state_of, stocks, flows, row0, &mut k)?;
     let y = a3(ys, &mut k, true)?;
     py.detach(|| super::advance_threads(&gs, &ps, y, &a));
     Ok(())
@@ -294,7 +294,11 @@ fn py_one_step<'py>(py: Python<'py>, rng: &Bound<'py, PyAny>, y: &Bound<'py, PyA
     let (yo, yv) = copy2(py, a2(y, &mut k, false)?)?;
     let flows = zeros(py, [prog.n_trans + prog.n_movers, yv.n1()])?;
     let w = workspace(yv.n0(), yv.n1(), &prog);
-    step(g, yv, &prog, &w, dt, n_sub, solver, view2(&flows), &t, row);
+    if row >= 0 {
+        super::set_step(super::parts(&prog), row, &t);
+        super::set_movers(&prog);
+    }
+    step(g, yv, &prog, &w, dt, n_sub, solver, view2(&flows), row >= 0);
     Ok((yo.into_any(), flows.into_any()))
 }
 

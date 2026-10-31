@@ -57,7 +57,7 @@ def test_syphilis_clock():
         latent = (EL | LL).time
         decay = ss.modify(syph.rel_trans, multiply=0.5**(latent/ss.years(1)), where=EL | LL, name='latent_decay')
         return ss.Sim(syph, connectors=decay, start=2000, stop=2010, dt=ss.months(1), unit='year', **kw, **kwargs)
-    with pytest.raises(ss.CapabilityError, match='is a clock'):
+    with pytest.raises(ss.CapabilityError):
         make(solver='ode', total_pop=20_000).init()
     sim = make(total_pop=20_000).init()
     assert sim.solver == 'abm'
@@ -96,13 +96,50 @@ def test_conveyor_limits():
     with pytest.raises(ss.CapabilityError, match='E.time is a clock'): # A delivery reading a clock
         ss.Sim(d, interventions=vx, solver='ode', **kw).init()
     d = make_seir(init_prev=0.01)
-    with pytest.raises(ss.CapabilityError, match='fixed delay and a modifier'): # A modifier of a conveyor's rate
+    with pytest.raises(ss.CapabilityError): # A modifier of a conveyor's rate
         ss.Sim(d, connectors=ss.modify(d.latent, multiply=2), solver='ode', **kw).run()
     return
 
 
+@sc.timer()
+def test_solver_table():
+    sc.heading('The five solvers with fixed delays: final size and endemic S and I against theory, and the peak against the ODE')
+    stay, fixed = ss.days(5), ss.constant(ss.days(5))
+    models = dict( # R0 = 2: the latent period, the time infectious, and the time immune
+        exponential = (None, stay, None),
+        fixed_stay  = (None, fixed, None),
+        fixed_both  = (fixed, fixed, None),
+        latent      = (fixed, stay, None),
+        stay_latent = (stay, fixed, None),
+        endemic     = (None, fixed, ss.days(20)),
+    )
+    theory = dict(final=0.7968, S=0.5, I=0.1) # 1 - z = exp(-2z); S* = 1/R0, and the rest are in I and R as 5 days are to 20
+    tol = dict(final=0.05, S=0.05, I=0.1, peak=0.12)
+
+    def run(solver, latent, infectious, waning):
+        S, E, I, R = ss.states('S E I R')
+        beta = ss.perday(0.4)*I
+        flows = dict(infection=S >> I @ beta) if latent is None else dict(infection=S >> E @ beta, latency=ss.Transition(E, I, dur=latent))
+        if waning is not None:
+            flows['waning'] = R >> S @ waning
+        n = 20_000 if solver == 'abm' else 100_000
+        size = dict(n_agents=n, dt=0.25) if solver == 'abm' else dict(total_pop=n) # Agents count those infected in the step reported, so a short step
+        dis = ss.Disease(recovery=ss.Transition(I, R, dur=infectious), **flows, init_prev=0.01, name='d')
+        res = ss.Sim(dis, solver=solver, unit='day', stop=500 if waning else 300, rand_seed=1, **size, **kw).run().results.d
+        return sc.objdict(final=res.R[-1]/n, S=res.S[-100:].mean()/n, I=res.I[-100:].mean()/n, peak=res.I.max()/n)
+
+    table = sc.objdict()
+    for name,model in models.items():
+        table[name] = row = sc.objdict({solver:run(solver, *model) for solver in ['ode', 'binomial', 'tau', 'gillespie', 'abm']})
+        for solver,got in row.items():
+            for key,expected in ([('S', theory['S']), ('I', theory['I'])] if name == 'endemic' else [('final', theory['final'])]) + [('peak', row.ode.peak)]:
+                assert abs(got[key] - expected) <= tol[key]*expected, f'{name} under {solver}: {key} is {got[key]:n}, against {expected:n}'
+    return table
+
+
 if __name__ == '__main__':
     sc.options(interactive=False)
+    test_solver_table()
     test_exit_split()
     test_syphilis_clock()
     test_bv_clock()

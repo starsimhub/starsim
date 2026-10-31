@@ -351,6 +351,16 @@ def test_sim_start_stop_dur():
 
 
 # Run as a script
+@sc.timer()
+def test_daily_dates():
+    sc.heading('A daily step from a year as a number has whole days, all at once')
+    t = ss.Sim(start=2020, stop=2022, dt=ss.days(1), verbose=0).init().t
+    assert not t.tvec.subdaily
+    assert t.timevec[59] == ss.date('2020-02-29') and t.timevec[-1] == ss.date('2022-01-01') # A leap year, and the end
+    assert all(d == d.normalize() for d in t.timevec), 'Expected whole days'
+    return
+
+
 if __name__ == '__main__':
     do_plot = True
     sc.options(interactive=do_plot)
@@ -365,5 +375,6 @@ if __name__ == '__main__':
     o8 = test_step_count()
     o9 = test_coded_unit()
     o10 = test_sim_start_stop_dur()
+    o11 = test_daily_dates()
 
     T.toc()

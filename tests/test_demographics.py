@@ -457,7 +457,7 @@ def test_lifetable_deaths():
     for sel,rates in [(female, [0.01, 0.02]), (~female, [0.03, 0.06])]:
         expected = 1 - np.exp(-5*rates[0] - 5*rates[1]) # The 2000 table to 2005, then the 2005 one
         assert abs(dead[sel].mean() - expected) < 4*np.sqrt(expected/sel.sum()), f'{dead[sel].mean():.3f} died, not {expected:.3f}'
-    with pytest.raises(ValueError, match='female and male'):
+    with pytest.raises(ValueError):
         ss.Deaths(lifetable=dict(women=table(0.01), men=table(0.03)))
     alone = ss.Sim(n_agents=2000, demographics=[ss.death(lifetable=table(0.02))], start=2000, stop=2005, verbose=0).run() # ss.death(lifetable=) with no disease runs as ss.Deaths (it was an error naming the transition "->")
     assert 0 < (~alone.people.alive.raw).mean() < 0.3

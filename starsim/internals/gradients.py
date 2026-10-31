@@ -93,33 +93,6 @@ def check_plugins():
     return
 
 
-def reason(sim):
-    """ Why the sim cannot be run in JAX, in a few words, or None if it can """
-    families = [mod for mod in sim.diseases() if isinstance(mod, ss.strains.Family)]
-    funcs = [(fam.name, getattr(imm.combine, '__name__', 'function')) for fam in families for imm in fam.immunity if callable(imm.combine)]
-    if funcs:
-        return f'"{funcs[0][0]}" combines protection with a function ({funcs[0][1]}), which has no gradient; the rules "max", "sum", and "multiply" do'
-    elif not getattr(sim, 'declared', None): # Code of its own, whose gradient is not known (a fit of it uses the runs alone)
-        return 'the model is written as code, with no declared states and transitions, so it has no gradient'
-    elif families: # Its step works out the couplings and unions in Python
-        return f'"{families[0].name}" has strains with courses of their own (ss.Strains(shared=...)), which are run a step at a time for now'
-    elif sim.solver != 'ode':
-        return f'solver="{sim.solver}" is stochastic (gradients are for solver="ode" only)'
-    elif not sim.kernel_only():
-        return sim.kernel_reason()
-    for mod in sim.declared:
-        engine = mod.engine
-        if engine.register is not None and len(engine.register.src):
-            return f'"{mod.name}" has a movement register'
-        name = mod.engine.certain() if hasattr(mod.engine, 'certain') else None
-        if name is not None:
-            return f'"{mod.name}" has a probability of 1 over a period ({name}), an infinite rate, which the kernels take as everyone moving at once'
-        varying = [name for name,tf in mod.graph.transfers.items() if mod.engine.par_transfer(tf)]
-        if varying:
-            return f'the rate of the transfer "{varying[0]}" of "{mod.name}" changes in time, which only the kernels take at each step'
-    return None
-
-
 #%% The run
 
 class OneHot(sc.prettyobj):
@@ -177,16 +150,14 @@ class Run(sc.prettyobj):
         npts (int): the number of steps
         solver (int): 0 for RK4, 1 for Euler (see `ss.kernels.solvers`)
         n_sub (int): the number of substeps a step, or 0 for enough that no compartment turns over, or grows through its inflows, by more than a quarter in one
-        per_step (int): the rows of the tables for each step (see `ss.solvers.Compartmental.per_step()`)
         n_max (int): the most substeps a step can take; a run that needs more is taken again with more
     """
-    def __init__(self, program, dt, npts, solver, n_sub, per_step, n_max):
+    def __init__(self, program, dt, npts, solver, n_sub, n_max):
         self.p = program
         self.dt = dt
         self.npts = npts
         self.solver = solver
         self.n_sub = n_sub
-        self.per_step = per_step
         self.n_max = n_sub if n_sub else n_max
         self.fixed = False # Whether a clamped step always takes n_max substeps (those past the ones it needs change nothing), so the run can be differentiated in reverse mode
         self.compiled = dict()
@@ -194,10 +165,10 @@ class Run(sc.prettyobj):
         return
 
     @staticmethod
-    def key(program, dt, npts, solver, n_sub, per_step):
+    def key(program, dt, npts, solver, n_sub):
         """ What a compiled run depends on, apart from the numbers in it """
         static = [getattr(program, name) for name in program._fields if name not in diff_fields + table_fields]
-        return (dt, npts, solver, n_sub, per_step) + tuple(np.asarray(v).tobytes() + str(np.shape(v)).encode() for v in static)
+        return (dt, npts, solver, n_sub) + tuple(np.asarray(v).tobytes() + str(np.shape(v)).encode() for v in static)
 
     def layout(self):
         """ Work out, once, the matrices that put the flows together """
@@ -410,24 +381,16 @@ class Run(sc.prettyobj):
         jx = jax()
         jnp = jx.numpy
         lax = jx.lax
-        dt, per_step, n_max = self.dt, self.per_step, self.n_max
+        dt, n_max = self.dt, self.n_max
         rk4 = self.solver == 0
         rows = {}
 
-        def at(table, ti, th):
-            """ A table's value at a fraction th of the way through step ti (see ss.kernels.interp()) """
-            if table.shape[0] == 1:
-                return table[0]
-            row = ti*per_step
-            if per_step == 3:
-                a = (2*th - 1)*(th - 1)
-                b = 4*th*(1 - th)
-                c = th*(2*th - 1)
-                return a*table[row] + b*table[row+1] + c*table[row+2]
-            return table[row]
+        def at(table, ti):
+            """ A table's value at step ti """
+            return table[0] if table.shape[0] == 1 else table[ti]
 
-        def vals(ti, th):
-            return [at(rows[name], 0, th) if name in rows else at(X[name], ti, th) for name in table_fields] + [X]
+        def vals(ti):
+            return [rows[name] if name in rows else at(X[name], ti) for name in table_fields] + [X]
 
         def step(y, ti, step_rows=None):
             nonlocal rows
@@ -435,7 +398,7 @@ class Run(sc.prettyobj):
             due = y[self.cv_last] # The people due to leave each conveyor, at a constant rate over the step (see ss.kernels.convey())
 
             if len(self.cv_flow): # The people due to leave each conveyor leave at a constant rate over the step, as the inflow of its flow (whose last target is its last slot, with a share of -1), lowered so that the slot is empty at its end with its other exits (see ss.kernels.release_rates())
-                x = self.cv_exits @ jnp.maximum(self.rates(y, vals(ti, 0.0)), 0.0)*dt
+                x = self.cv_exits @ jnp.maximum(self.rates(y, vals(ti)), 0.0)*dt
                 small = x < 1e-12
                 share = jnp.where(small, 1.0, jnp.where(small, 1.0, x)/jnp.expm1(jnp.where(small, 1.0, x)))
                 Xs = dict(X, inflow=X['inflow'].at[self.cv_flow].set(due/dt*share))
@@ -444,7 +407,7 @@ class Run(sc.prettyobj):
             if self.n_sub:
                 n = self.n_sub
             else: # Enough substeps that no compartment turns over by more than a quarter in one, nor grows by more than a quarter through its inflows (see ss.kernels.step())
-                rates0 = self.rates(y, vals(ti, 0.0))
+                rates0 = self.rates(y, vals(ti))
                 fastest = jnp.max(rates0[self.leaves]) if len(self.leaves) else 0.0
                 if len(self.p.mov_rate):
                     fastest = jnp.maximum(fastest, jnp.max(X['mov_rate']))
@@ -467,17 +430,16 @@ class Run(sc.prettyobj):
                 need = n
             h = dt/n
 
-            def derivs(ys, th):
-                return self.derivs(ys, self.rates(ys, vals(ti, th)), Xs, h)
+            def derivs(ys):
+                return self.derivs(ys, self.rates(ys, vals(ti)), Xs, h)
 
             def sub(s, carry):
                 y, flows = carry
-                th = lambda frac: (s + frac)/n
-                dy1, df1 = derivs(y, th(0.0))
+                dy1, df1 = derivs(y)
                 if rk4:
-                    dy2, df2 = derivs(y + h/2*dy1, th(0.5))
-                    dy3, df3 = derivs(y + h/2*dy2, th(0.5))
-                    dy4, df4 = derivs(y + h*dy3, th(1.0))
+                    dy2, df2 = derivs(y + h/2*dy1)
+                    dy3, df3 = derivs(y + h/2*dy2)
+                    dy4, df4 = derivs(y + h*dy3)
                     new_y = y + h/6*(dy1 + 2*dy2 + 2*dy3 + dy4)
                     new_f = flows + h/6*(df1 + 2*df2 + 2*df3 + df4)
                 else:
@@ -543,8 +505,7 @@ class Run(sc.prettyobj):
             X = self.prepare(X)
             step = self.stepper(X, clamp)
             steps = self.npts - 1
-            per_step = self.per_step
-            rows = {name:X[name][:steps*per_step].reshape((steps, per_step) + X[name].shape[1:]) for name in table_fields if X[name].shape[0] > 1} # Each step's rows of the tables that vary in time, given to it by the scan, rather than read from the whole table at each step (which reverse mode turns into adding into a table as large at every step)
+            rows = {name:X[name][:steps] for name in table_fields if X[name].shape[0] > 1} # Each step's row of the tables that vary in time, given to it by the scan, rather than read from the whole table at each step (which reverse mode turns into adding into a table as large at every step)
             def body(y, xs):
                 ti, step_rows = xs
                 y = self.deliver(y, X, ti)
@@ -620,13 +581,11 @@ class CrossRun(sc.prettyobj):
     Args:
         cross (`ss.solvers.Crossing`): the crossing
         run (Run): the run of its program
-        reps (list): for each disease, the rows of the program's tables for each row of its own
     """
-    def __init__(self, cross, run, reps):
+    def __init__(self, cross, run):
         self.cross = cross
         self.run = run
         self.runs = [run]
-        self.reps = reps
         self.npts = run.npts
         self.n_sub = run.n_sub
         self.compiled = dict()
@@ -646,7 +605,7 @@ class CrossRun(sc.prettyobj):
         inner = self.run.function(clamp)
 
         def run(Xs): # The crossing is looked up when traced, so a run shared by the sims of a model keeps only the latest one's (see `joint_runner()`)
-            y_end, stocks, flows, n = inner(self.cross.numbers(list(Xs), xp=jnp, reps=self.reps))
+            y_end, stocks, flows, n = inner(self.cross.numbers(list(Xs), xp=jnp))
             parts = [self.cross.split(k, y_end, stocks, flows, xp=jnp) for k in range(len(Xs))]
             return tuple(part[0] for part in parts), tuple(part[1] for part in parts), tuple(part[2] for part in parts), n
 
@@ -673,7 +632,7 @@ def capture(engine, compact=True):
     sh = engine.shifts # The deliveries, with where each group's people go as matrices
     onehot = lambda to: np.eye(engine.n_groups)[to] if len(to) else np.zeros((0, engine.n_groups, engine.n_groups))
     X.update(sh_due=sh.due.astype(float), sh_sel=sh.sel, sh_cov=sh.cov, sh_to=onehot(sh.to), sh_rest=onehot(sh.rest), sh_land=sh.land, sh_moves=(sh.land.sum(axis=(1, 2)) > 0).astype(float))
-    return program, (dt, npts, solver, n_sub, engine.per_step()), X
+    return program, (dt, npts, solver, n_sub), X
 
 
 runs = {} # The runs made in this session, by what they depend on apart from the numbers in them (see `Run.key()`), so a new sim of the same model is not traced and compiled again
@@ -696,13 +655,12 @@ def joint_runner(cross, captured, n_max=None):
     programs = [program for program,how in captured]
     if cross.program is None or cross.built != [id(p) for p in programs]:
         cross.build(programs)
-    reps = cross.reps()
-    how = captured[0][1][:4] + (cross.per_step(),)
+    how = captured[0][1][:4]
     if n_max is not None:
-        return CrossRun(cross, Run(cross.program, *how, n_max=n_max), reps)
-    key = (Run.key(cross.program, *how), tuple(reps)) + tuple(Run.key(program, *eng_how) for program,eng_how in captured) # The engines' programs fix where each one's numbers go in the crossing's
+        return CrossRun(cross, Run(cross.program, *how, n_max=n_max))
+    key = (Run.key(cross.program, *how),) + tuple(Run.key(program, *eng_how) for program,eng_how in captured) # The engines' programs fix where each one's numbers go in the crossing's
     if key not in runs:
-        runs[key] = CrossRun(cross, Run(cross.program, *how, n_max=4), reps)
+        runs[key] = CrossRun(cross, Run(cross.program, *how, n_max=4))
     runs[key].cross = cross # Put together the same way, so the same run; the numbers are gathered from this crossing (and an earlier sim's is not kept)
     return runs[key]
 
@@ -804,7 +762,7 @@ def run_sets(sim, par_sets):
     Run a sim with many sets of parameter values, taking the runs in one call to JAX
 
     Each set is a dict of values by name, as for `sim.restart(pars=...)`. Only for a
-    sim that `reason()` allows: an ODE that the kernels run from start to finish.
+    sim that `ss.solvers.why_not(sim, 'jax')` allows: an ODE that the kernels run from start to finish.
 
     Args:
         sim (`ss.Sim`): an initialized sim
@@ -855,7 +813,7 @@ def gradient(sim, set_pars, x0, read, rel_step=1e-5):
     module docstring for the rest.
 
     Args:
-        sim (`ss.Sim`): an initialized sim that `reason()` allows, which is left as its run at x0
+        sim (`ss.Sim`): an initialized sim that `ss.solvers.why_not(sim, 'jax')` allows, which is left as its run at x0
         set_pars (func): called with an array of values; restarts the sim with them (e.g. `lambda x: sim.restart(pars=dict(beta=x[0]))`)
         x0 (array): the values to work out the derivative at
         read (func): called with the sim after its run; returns a number or an array (or an `sc.obj` of arrays)
@@ -970,7 +928,7 @@ def entries(sim, names=None):
 
 def of_results(sim, results=None, pars=None):
     """ The derivative of results, or of a function of the run sim, with respect to parameters: see `ss.Sim.gradient()` """
-    why = reason(sim)
+    why = ss.solvers.why_not(sim, 'jax')
     if why:
         errormsg = f'Gradients need a sim that runs in JAX, and this one cannot, since {why}'
         raise ss.CapabilityError(errormsg)
@@ -978,9 +936,10 @@ def of_results(sim, results=None, pars=None):
 
     def read(sim):
         out = sc.obj()
+        wanted = None if results is None else [sim.results.find(name) for name in sc.tolist(results)]
         for mod in sim.declared:
             for key,res in mod.results.items():
-                if isinstance(res, ss.Result) and np.ndim(res.values) == 1 and (results is None or key in sc.tolist(results) or f'{mod.name}.{key}' in sc.tolist(results)):
+                if isinstance(res, ss.Result) and np.ndim(res.values) == 1 and (wanted is None or any(res is want for want in wanted)):
                     out.setdefault(mod.name, sc.obj())[key] = np.array(res.values, dtype=float)
         return out
 
@@ -1055,14 +1014,7 @@ def fixed_rate(flow, dw, ctx):
 
 def table_years(engine, raw):
     """ The year of each row of an engine's tables, for a value that varies in time, as `ss.solvers.Compartmental.tables()` works them out """
-    t = engine.mod.t
-    npts = t.npts
-    years = np.array(t.yearvec[:npts], dtype=float)
-    if engine.per_step() == 3: # The start, middle, and end of each step, or the start for a held value
-        ends = np.append(years[1:], years[-1] + (years[-1] - years[-2] if npts > 1 else 0))
-        times = np.ravel(np.column_stack([years, (years + ends)/2, ends]))
-        return times[np.arange(len(times)) // 3 * 3] if engine.held(raw) else times
-    return years[np.minimum(np.arange(npts) + 1, npts - 1)] # The values for the step from ti, which is step ti+1
+    return engine.table_years(raw)
 
 
 def time_value(raw, ctx, years, values=None):
@@ -1108,7 +1060,7 @@ class Context(sc.prettyobj):
         if years is not None: # A value that varies in time with fitted parameters inside it, or fitted value by value: at every row of the tables, or at every step for a result
             positions = density.series_of.get(id(p))
             val = time_value(p.raw, self, years, values=None if positions is None else density.values(positions, self.x, self.engine))
-            return val[:, None] if self.series else val[::self.engine.per_step()]
+            return val[:, None] if self.series else val
         kept = self.engine.series.get(id(p)) if self.series else None
         if kept is not None: # Rows by groups, as in the engine's tables
             return kept[1]
@@ -1154,7 +1106,7 @@ class Density(sc.prettyobj):
     likelihood and priors. If anything is not covered, `Unsupported` says what.
 
     Args:
-        sim (`ss.Sim`): an initialized sim that `reason()` allows
+        sim (`ss.Sim`): an initialized sim that `ss.solvers.why_not(sim, 'jax')` allows
         fitted (dict): the fitted parameters, by name
         x0 (array): their values to start from
         set_pars (func): restarts the sim with an array of values
@@ -1521,7 +1473,7 @@ class LogDensity(sc.prettyobj):
         fn (func): the function itself, of a JAX array of values, which can be composed with JAX (`jax.grad`, `jax.vmap`, ...)
     """
     def __init__(self, sim, pars=None, likelihood=None):
-        why = reason(sim)
+        why = ss.solvers.why_not(sim, 'jax')
         if why:
             errormsg = f'The log-density in JAX needs a sim that runs in JAX, and this one cannot, since {why}'
             raise ss.CapabilityError(errormsg)

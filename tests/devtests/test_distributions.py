@@ -25,7 +25,7 @@ def test_hist_plotting():
 
     # Based on the advanced distributions user guide
     sir = ss.SIR(
-        init_prev = ss.bernoulli(p=0.15),
+        init_prev = 0.15,
         dur_inf = ss.weibull(c=2, loc=1, scale=2)
     )
     sim = ss.Sim(n_agents=100, diseases=sir, dur=15, networks=ss.RandomNet())

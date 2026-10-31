@@ -832,7 +832,7 @@ class Groups(sc.prettyobj):
         sim = self.sim
         self._group_cache = None
         for mod in getattr(sim, 'declared', []): # The agent engines keep counts by group: see ss.solvers.Agents.regroup()
-            if isinstance(mod.engine, ss.solvers.Agents):
+            if mod.engine.agents:
                 mod.engine.regroup(uids)
         dirty = getattr(self, '_group_dirty', None)
         if uids is None or dirty is False:
@@ -953,7 +953,7 @@ class Groups(sc.prettyobj):
             self.regrouped(*moved)
         elif rebuild and cache is not None: # Worked out again from scratch: whatever keeps counts by group counts again
             for mod in getattr(sim, 'declared', []):
-                if isinstance(mod.engine, ss.solvers.Agents):
+                if mod.engine.agents:
                     mod.engine.regroup()
         return self._group_cache[1]
 
@@ -965,7 +965,7 @@ class Groups(sc.prettyobj):
             return
         uids, before, after = uids[changed], before[changed], after[changed]
         for mod in getattr(self.sim, 'declared', []):
-            if isinstance(mod.engine, ss.solvers.Agents):
+            if mod.engine.agents:
                 mod.engine.moved_groups(uids, before, after)
         return
 

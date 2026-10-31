@@ -58,7 +58,7 @@ def test_products(do_plot=False):
 
     # Treatment of a fixed number each step (Starsim 3's treat_num): those not served wait, and leave the queue if no longer infected
     sis = ss.SIS(beta=ss.peryear(0.5))
-    treatment = ss.treat(ss.Treatment(cure=0.8), on=sis.infection, capacity=50, queue=True)
+    treatment = ss.treat(ss.Treatment(cure=0.8), where=sis.infection, capacity=50, queue=True)
     res = ss.Sim(make_pars() | dict(diseases=sis), interventions=treatment).run().results.treatment
     assert res.delivered.max() == 50 and res.waiting.max() > 0, 'Expected at most 50 treated each step, and a queue'
 
@@ -164,9 +164,20 @@ def test_campaign_delivery():
     assert np.all(np.diff(n_screened[on]) > 0), 'Expected each round to reach its own coverage'
 
     # A campaign after the sim ends
-    with pytest.raises(ValueError, match='is outside the sim'):
+    with pytest.raises(ValueError):
         ss.Sim(pars, interventions=ss.screen(make_dx(), coverage=0.5, at=[2030], name='screening')).init()
     return sim
+
+
+@sc.timer()
+def test_disease_resolved_once():
+    sc.heading('The disease of a delivery is worked out once, when it is initialized')
+    S, I, R = ss.states(3)
+    sir = ss.Disease(S >> I @ ss.perday(0.3)*I, I >> R @ ss.days(8), init=dict(I=0.01), name='sir')
+    treatment = ss.treat(ss.Treatment(cure=0.8), where=I, capacity=20, interval=1, name='treatment')
+    sim = ss.Sim(sir, interventions=treatment, unit='day', stop=5, solver='ode', verbose=0).init()
+    assert sim.interventions.treatment.__dict__['_disease'] == 'sir'
+    return
 
 
 if __name__ == '__main__':
@@ -177,5 +188,6 @@ if __name__ == '__main__':
     prod2 = test_two_products()
     rout  = test_routine_delivery()
     camp  = test_campaign_delivery()
+    once  = test_disease_resolved_once()
 
     T.toc()

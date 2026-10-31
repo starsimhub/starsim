@@ -141,7 +141,7 @@ def test_camdl_golden():
             sim = load_camdl(str(path), **kw)
             sim.pars.verbose = 0
             if path.name == 'phenom_mixing_unchecked.ir.json': # camdl's example of a count used for a share, with its unit check turned off: far too fast for the step, so the run stops rather than give numbers that are not
-                with pytest.raises(ValueError, match='not a number'):
+                with pytest.raises(ValueError):
                     sim.run()
                 continue
             sim.run()

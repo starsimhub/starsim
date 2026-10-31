@@ -558,7 +558,7 @@ def flow_terms(graph, engine=None):
     out of it, and the compartments it enters, each with its share of the flow (none for an outflow)
     """
     mod = graph.module
-    if engine is None or not hasattr(engine, 'flows'): # Not in a compartmental sim, so lay the model out with a stand-in
+    if engine is None or not engine.compartmental: # Not in a compartmental sim, so lay the model out with a stand-in
         mock = sc.obj(unit_base='day', solver='ode', groups=sc.obj(n_groups=1), pars=sc.obj(rand_seed=0, total_pop=1, approx=True, solver='ode', branching=False), unit=None, unit_name='day', crossings=[])
         engine = ss.solvers.Compartmental(mod, mock)
         engine.init_dwells()
@@ -655,7 +655,7 @@ def check_dt(sim, factor=2, output=False):
     if output:
         return df
     dt, unit = coarse.t.dt.to(coarse.unit_base).value, coarse.unit_name
-    inner = lambda sim: [mod.engine.dt/max(mod.engine.substeps(), 1) for mod in sim.declared if hasattr(mod.engine, 'substeps')]
+    inner = lambda sim: [mod.engine.dt/max(mod.engine.substeps(), 1) for mod in sim.declared if mod.engine.compartmental]
     if coarse.solver == 'binomial' and coarse.pars.substeps is None and len(inner(coarse)) and np.allclose(inner(coarse), inner(fine)): # It takes substeps of the same size whatever the step
         print(f'The chain-binomial solver takes enough substeps by default (here of {inner(coarse)[0]:n} {unit}s) that the step does not change its results: '
               f'a step of {dt:n} or {dt/factor:n} {unit}s gives the same run. Give substeps=1 to take whole steps, as most chain-binomial models do, and see how much they matter')
@@ -1042,7 +1042,7 @@ def partnership_lines(mod, tr, sim, name):
     """ For describe(), under the partner-change model (see `ss.solvers.Mixing.partnerships()`): how often partnerships form, and the chance one transmits in each direction, from each source state """
     engine = getattr(mod, 'engine', None)
     terms = [term for term in getattr(getattr(sim, 'mixing', None), 'terms', []) if term.name == name and 'partnership' in term]
-    if not terms or not hasattr(engine, 'partnership_info'):
+    if not terms or engine is None or not engine.compartmental:
         return []
     for flow in engine.flows: # Worked out once, when first needed
         if flow.kind == 'contact' and flow.tr.name == tr.name and flow.routes is False:

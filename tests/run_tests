@@ -7,5 +7,8 @@
 export SCIRIS_BACKEND='agg'
 export STARSIM_SHOW=0
 
+# Compile Numba's kernels first, once and visibly, if they aren't cached; otherwise the tests that compare them with Rust's each compile them, silently, near the end
+STARSIM_KERNELS=numba starsim compile --check || STARSIM_KERNELS=numba starsim compile
+
 # Run the tests (the developer tests, in devtests/, are slower and run separately: pytest devtests -n auto)
 pytest test_*.py -n auto --durations=0

@@ -45,7 +45,7 @@ def test_undriven():
     assert not w209(sim)
     assert 'undriven: moved by treatment' in sim.diseases.sis.describe(output=True)
     sis = make_sis(forms['op'])
-    assert not w209(ss.Sim(sis, interventions=ss.screen(ss.Diagnostic(), on=sis.cure), stop=10, **kw))
+    assert not w209(ss.Sim(sis, interventions=ss.screen(ss.Diagnostic(), where=sis.cure), stop=10, **kw))
     sis = make_sis(lambda S, I: I >> S @ 0)
     assert not sis.cure.undriven and not w209(ss.Sim(sis, stop=10, **kw))
 

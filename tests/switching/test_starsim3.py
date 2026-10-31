@@ -36,7 +36,7 @@ def test_starsim3_unchanged():
     sc.heading('Starsim 3: the v3 SIS, as code (ssl.AgentSIS, one changed name), gives the v3 answer')
     sis = ssl.AgentSIS(name='sis', beta=dict(randomnet=0.05), dur_inf=ss.years(1), init_prev=0.01, waning=ss.peryear(1e6))
     sim = ss.Sim(diseases=sis, dt=1/12, rand_seed=1, **kw()).run()
-    infections = sim.results.sis.cum_infections[-1]
+    infections = sim.results.sis.infection.cum[-1]
     assert np.isclose(infections, ref_v3_sis_dict, rtol=ref_seed_noise), f'Unchanged v3 code gave {infections:n} infections, not about {ref_v3_sis_dict:n}'
     return sim
 
@@ -45,7 +45,7 @@ def test_starsim3_verbs():
     sc.heading('Starsim 3: v4 verbs on the HIV module written as code')
     halve = lambda hiv: ss.modify(hiv.rel_trans, multiply=0.5, start=2005) # A v4 verb on the v3 disease
     msim = ss.parallel(baseline=make_hiv_sis(), prep=make_hiv_sis(halve), n_runs=2)
-    averted = -msim.diff('baseline').prep.hiv.cum_infections.values[:, -1].mean()
+    averted = -msim.diff('baseline').prep.hiv.infection.cum.values[:, -1].mean()
     assert averted > 0, f'Halving HIV infectiousness from 2005 should avert infections, not {averted}'
     return msim
 

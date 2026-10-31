@@ -85,7 +85,7 @@ Some interventions don't give people anything, but change how the disease spread
 response = ss.modify(measles.pars.beta, multiply=0.7, start='2025-03-01')
 ```
 
-`ss.change()` does the same at several dates, each value holding until the next: for example, `ss.change(measles.pars.beta, at=['2025-03-01', '2025-06-01'], by=[0.7, 0.9])` cuts transmission by 30% from March, and by 10% from June, as the response is scaled down. [Interventions](../user_guide/interventions_interventions.qmd) covers the other options, such as changing a parameter only for some people, or only while cases are high.
+A time series does the same at several dates, each value holding until the next: for example, `ss.modify(measles.pars.beta, multiply=ss.timeseries({'2025-03-01': 0.7, '2025-06-01': 0.9}), start='2025-03-01')` cuts transmission by 30% from March, and by 10% from June, as the response is scaled down. [Interventions](../user_guide/interventions_interventions.qmd) covers the other options, such as changing a parameter only for some people, or only while cases are high.
 
 ## Comparing scenarios
 

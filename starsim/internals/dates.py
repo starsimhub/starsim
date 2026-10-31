@@ -408,7 +408,7 @@ class date(pd.Timestamp):
             years (float): the timestep, in years
         """
         days = years*factors.years.days
-        return days < 1.0
+        return days < 1.0 - 1e-6 # A step of one day, read from decimal years, can be a little under
 
     def round(self, to='d'):
         """

@@ -179,7 +179,7 @@ def test_with_conveyor():
         a = ss.Disease(sa=ss.Transition(S, I, rate=ss.peryear(0.5)), name='a')
         E, I, Z = ss.states('E I Z')
         latent = E >> I @ (ss.peryear(1)*(E.time > ss.years(1))) if clock else ss.Transition(E, I, dur=ss.constant(ss.years(2)))
-        return [a, ss.Disease(E, I, Z, latent=latent, flag=ss.Transition(E, Z, on=a.I), first='E', name='b')] # The trigger tracks a and b jointly
+        return [a, ss.Disease(E, I, Z, latent=latent, flag=ss.Transition(E, Z, where=a.I), first='E', name='b')] # The trigger tracks a and b jointly
     out = [ss.Sim(make(False), solver=solver, start=2000, stop=2004, dt=ss.months(1), unit='year', **size(solver), **kw).run().results.b for solver in ['abm', 'ode']]
     for key in ['I', 'Z']:
         assert np.allclose(out[0][key], out[1][key], atol=300), f'{key}: {out[0][key][::12]} as agents, {out[1][key][::12]} as compartments'
@@ -195,7 +195,7 @@ def test_after_event():
     def make(**kw):
         a = ss.Disease(A, B, go=ss.Transition(A, B, dur=ss.uniform(ss.days(5), ss.days(15))), first='A', name='a')
         X, Y = ss.states('X Y')
-        return [a, ss.Disease(X, Y, end=ss.Transition(X, Y, on=a.go, **kw), first='X', name='b')]
+        return [a, ss.Disease(X, Y, end=ss.Transition(X, Y, where=a.go, **kw), first='X', name='b')]
     for delay,lag in [(None, 0), (ss.constant(ss.days(5)), 5)]:
         res = ss.Sim(diseases=make(**({} if delay is None else dict(dur=delay))), n_agents=2000, unit='day', stop=30, verbose=0).run().results
         assert np.array_equal(res.b.end.values[lag:], res.a.go.values[:len(res.a.go) - lag]) # Each person leaves X when a.go happens to them, or exactly 5 days after
@@ -213,7 +213,7 @@ def test_stay_keeps_course():
     S, A, P = ss.states('S A P')
     infection = S >> A @ ss.peryear(1.0)
     clearance = A >> S @ ss.constant(ss.months(6))
-    progress = ss.Transition(A, [P, ss.stay], p=[0.0, None], on=infection, dur=ss.constant(ss.months(1)))
+    progress = ss.Transition(A, [P, ss.stay], p=[0.0, None], where=infection, dur=ss.constant(ss.months(1)))
     res = ss.Sim(ss.Disease(infection, clearance, progress, name='d'), **common).run().results.d
     assert np.array_equal(res.clearance.values[6:], res.infection.values[:-6]) # Everyone clears exactly 6 months after infection
 
@@ -221,8 +221,8 @@ def test_stay_keeps_course():
     S, P, Y = ss.states('S P Y')
     infection = S >> P @ ss.peryear(1.0)
     symptoms = P >> Y @ ss.constant(ss.months(1))
-    seek = ss.Transition(Y, [Y, ss.stay], p=[0.5, None], on=symptoms, dur=ss.constant(ss.months(3)))
-    clearance = ss.Transition(Y, S, on=symptoms, dur=ss.constant(ss.months(3)))
+    seek = ss.Transition(Y, [Y, ss.stay], p=[0.5, None], where=symptoms, dur=ss.constant(ss.months(3)))
+    clearance = ss.Transition(Y, S, where=symptoms, dur=ss.constant(ss.months(3)))
     sought = []
     count = lambda sim: sought.append(len(sim.diseases.d.seek.uids)) # Its event: those who sought care, not those who stayed
     res = ss.Sim(ss.Disease(infection, symptoms, seek, clearance, name='d'), analyzers=count, **common).run().results.d
@@ -260,7 +260,7 @@ def make_hpv_cancel(order, names=('hpv16', 'hpv18')):
             infection = S >> P @ ss.peryear(0.3),
             precin    = P >> C @ ss.years(2),
             cin       = cin[g],
-            canceled = ss.Transition([S, P, C], Z, on=cin[o].to(states[o][3])), # The other genotype's branch to cancer
+            canceled = ss.Transition([S, P, C], Z, where=cin[o].to(states[o][3])), # The other genotype's branch to cancer
             name = g))
     return mods
 

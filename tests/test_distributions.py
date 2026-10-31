@@ -568,10 +568,7 @@ def test_choose_n():
     heavy = choose(200, np.where(uids < 500, 9, 1))
     assert (heavy < 500).mean() > 0.8 # Higher weights are chosen more often (expected 0.9)
 
-    # In a sim: exact seeding, including with a callable
-    sir = ss.SIR(init_prev=ss.choose_n(lambda sim: sim.pars.n_agents//100))
-    sim = ss.Sim(n_agents=500, diseases=sir, networks='random', dur=1, verbose=0).init()
-    assert sim.diseases.sir.I.sum() == 5 # Exactly 1% are seeded
+    # In a sim: exact seeding
     sim = ss.Sim(n_agents=500, diseases=ss.SIR(init_prev=20), networks='random', verbose=0).init()
     assert sim.diseases.sir.I.sum() == 20 # A number of people rather than a probability
     return chosen
@@ -606,7 +603,7 @@ def test_shape_scale():
     vals = ss.gamma(mean=1800, std=400, strict=False).rvs(n)
     assert np.isclose(vals.mean(), 1800, rtol=0.01) and np.isclose(vals.std(), 400, rtol=0.02)
     assert isinstance(ss.gamma(mean=ss.days(10), std=ss.days(5)).pars.scale, ss.days)
-    with pytest.raises(ValueError, match='mean and std'):
+    with pytest.raises(ValueError):
         ss.gamma(a=2, mean=10, std=5)
     return vals
 

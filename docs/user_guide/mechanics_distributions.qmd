@@ -82,13 +82,13 @@ See the [API reference](../api/distributions.qmd) for each. A distribution of yo
 
 ## A fixed number of people
 
-Some things are a number of people, not a share: to start an outbreak with exactly 5 infectious people, give a number (`init_n=dict(I=5)`), or `ss.choose_n(5)` where a share or a Bernoulli distribution would go:
+Some things are a number of people, not a share: to start an outbreak with exactly 5 infectious people, give a number (`init_n=dict(I=5)`, or `init_prev=5`, since above 1 it is a number of people):
 
 ```{python}
 S, I, R = ss.states('S I R')
 infection = S >> I @ 1.9*I
 recovery  = I >> R @ ss.days(8)
-measles = ss.Disease(infection, recovery, init_prev=ss.choose_n(5))
+measles = ss.Disease(infection, recovery, init_prev=5)
 
 sim = ss.Sim(measles, n_agents=10_000, stop=ss.days(50), verbose=0)
 sim.init()

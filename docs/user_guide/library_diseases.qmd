@@ -64,7 +64,7 @@ scenarios = {
     'Every burial safe':         ss.Sim(diseases=ebola(1.0),  networks=ss.RandomNet(), **outbreak),
 }
 msim = ss.parallel(scenarios, n_runs=5, parallel=False)
-msim.plot(['ebola.infectious', 'ebola.cum_infections'])
+msim.plot(['ebola.infectious', 'ebola.infection.cum'])
 ```
 
 In these runs, burying every body safely cuts the infections over the year by about a quarter.
@@ -78,7 +78,7 @@ scenarios = {
     'Person to person only':      ss.Sim(diseases=cholera(beta_env=0), networks=ss.RandomNet(), **outbreak),
 }
 msim = ss.parallel(scenarios, parallel=False)
-msim.plot(['cholera.infectious', 'cholera.cum_infections', 'cholera.env_conc'])
+msim.plot(['cholera.infectious', 'cholera.infection.cum', 'cholera.env_conc'])
 ```
 
 With these values, transmission from person to person alone barely sustains itself, and the reservoir turns a small outbreak into a large one. The results `env_prev` (the share of people shedding) and `env_conc` (the concentration of bacteria) track the reservoir.
@@ -172,7 +172,7 @@ plt.legend()
 plt.show()
 ```
 
-Their results are named differently: the declared model's are named after its states (`I`) and transitions (`infection`), while the version written as code has Starsim 3's names (`infected`, `new_infections`).
+Their results are named differently: the declared model's are named after its states (`I`) and transitions (`infection`), while the version written as code has Starsim 3's names for its states (`infected`), and the same `infection`.
 
 ## Declared diseases
 

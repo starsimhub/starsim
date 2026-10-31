@@ -763,17 +763,6 @@ class Arr(BaseArr):
         out = self.values != self.nan if self.nan_eq else ~np.isnan(self.values)
         return self.asnew(out, cls=BoolArr)
 
-    @property
-    def notnanvals(self):
-        """ Return values that are not-NaN """
-        vals = self.values # Shorten and avoid double indexing
-        if self.ndim > 1: # For 2D (or higher) arrays, return a flat array of all non-NaN values
-            return vals[vals != self.nan] if self.nan_eq else vals[~np.isnan(vals)]
-        elif self.nan_eq:
-            return vals[np.nonzero(vals != self.nan)[0]]
-        else:
-            return vals[np.nonzero(~np.isnan(vals))[0]]
-
     def grow(self, new_uids=None, new_vals=None):
         """ Add new agents to an Arr
 
@@ -1485,7 +1474,7 @@ class GroupAlive(BoolState):
 
     def no_agents(self, what):
         raise ss.CapabilityError(f'people.alive.{what} was asked for, but this run has no agents: it has one row for each group of people.\n'
-                                 f'     Use the number alive (people.alive.sum()) or the number in a disease\'s states (e.g. sir.I.n), or run with solver="abm"; a module written as code that reads agents can say so with compartmental = False.')
+                                 f'     Use the number alive (people.alive.sum()) or the number in a disease\'s states (e.g. sir.I.n), or run with solver="abm", e.g. ss.Sim(..., solver="abm") or sim.run(solver="abm"); a module written as code that reads agents can say so with compartmental = False.')
 
     def sum(self, *args, **kwargs): return self.n_alive()
     def count(self, *args, **kwargs): return self.n_alive()

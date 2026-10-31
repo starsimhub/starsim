@@ -22,7 +22,7 @@ deps = {} # The extra files each source file's cache depends on
 
 # Starsim's functions that take long enough to compile to say so, by module and function (or by module): what they are, and how long compiling them takes on a laptop (s)
 slow = {
-    'starsim.solvers.backends.kernels.run':             ('the compartmental solvers', 30, 90),
+    'starsim.solvers.backends.kernels.run':             ('the compartmental solvers', 60, 130),
     'starsim.solvers.backends.kernels.run_many':        ('the compartmental solvers for many runs', 4, 15),
     'starsim.solvers.backends.kernels.one_step':        ('a step of the compartmental solvers', 3, 10),
     'starsim.solvers.backends.kernels.advance':         ("the particle filter's steps", 10, 30),

@@ -15,9 +15,13 @@ Starsim 3's SIR, SIS, and SEIR written as code (e.g. `ss.SIS` to `ssl.AgentSIS`;
 their meaning), a `beta` pair on `ss.MFNet` (`beta={'mf': [0.08, 0.04]}`, which was [men to women, women to men]: now
 `ss.peract(m2f=0.08, f2m=0.04)`) or on a mother-to-child network (`[b, 0]`, which is now `b`, since those networks transmit one
 way), `copy_inputs=` (removed: a sim always copies its inputs), `ss.uids.cat()` (now `ss.uids.concatenate()`), an override of `ss.Infection`'s `infect()` (now `transmit()`), `preg.breastfeeding`
-(now `preg.lactating`), `ss.RandomNet(uniform_targets=True)` (now `method='uniform'`), and the counts of the states of Starsim's own
+(now `preg.lactating`), `ss.RandomNet(uniform_targets=True)` (now `method='uniform'`), the keywords of `ss.SIR`, `ss.SIS`, and `ss.SEIR` that Starsim 3 read itself
+(`init_prev=ss.bernoulli(0.1)` and `p_death=ss.bernoulli(0.1)` are numbers, `init_prev=ss.choose_n(20)` is `init_prev=20`, and `dur_inf=10` is
+`ss.years(10)`, since a bare number is in the model's unit), `p_loss=` of `ss.Pregnancy` (now `loss_rate=ss.probperweek(...)`), and the counts of the states of Starsim's own
 modules after results (`results.n_alive`, `res['n_infected']`, now `results.alive`, `res['infected']`; a result the code makes
-itself keeps its name, and other counts are listed). Read the diff afterwards: each change is listed with its line.
+itself keeps its name, and other counts are listed), the results of `ss.Infection` (`new_infections` is `infection`, and `cum_infections` is
+`infection.cum`), `on=` of a delivery or transition (now `where=`), and `ss.change()` (now `ss.modify()` of an `ss.timeseries()`). Read the diff
+afterwards: each change is listed with its line.
 
 Used with: agents; coded modules
 """
@@ -81,10 +85,10 @@ flags = [
     (r'\bss\.(distributions\.)?(scale_types|rand_raw)\b', "ss.scale_types and ss.rand_raw were removed: a distribution's scaling is a string on the class ('predraw', 'postdraw', both as a list, or None; see the ss.Dist docstring), and raw uint64 draws for ss.combine_rands() are ss.randint(low=0, high=np.iinfo('uint64').max, dtype=np.uint64)"),
     (r'\bss\.(routine|campaign)_(vx|screening|triage)\b', "a delivery: ss.vaccinate(efficacy=e, coverage=p, start=y, interval=ss.years(1)) for routine (Starsim 3's prob= was a share reached each year), at=[...] for a campaign; ss.screen() for screening, and for triage a second ss.screen(who=screening.positive) of its own"),
     (r'\bss\.(RoutineDelivery|CampaignDelivery|BaseTest|BaseScreening|BaseTriage|BaseTreatment|BaseVaccination)\b', "Starsim 3's delivery classes were removed: ss.screen(), ss.vaccinate(), or ss.treat() with coverage= (prob=p is coverage=ss.probperyear(p), offered at every step), start= and stop= (start_year=, end_year=; stop is not included), at= (a campaign's years=), and where= (eligibility=); a subclass that overrides step() is an ss.Intervention written as code"),
-    (r'\bss\.treat_num\b', 'ss.treat(cure=e, on=dis.infection (or who=screening.positive), capacity=n, queue=True): those not served wait, and leave the queue when no longer eligible'),
+    (r'\bss\.treat_num\b', 'ss.treat(cure=e, where=dis.infection (or who=screening.positive), capacity=n, queue=True): those not served wait, and leave the queue when no longer eligible'),
     (r'\bss\.(Dx|Tx|Vx)\b', "Starsim 3's products written as code were removed: ss.Diagnostic (a table of more than two results is results=dict(...), most severe first), ss.Treatment (cure=, or cure=dict(<state>=...) by state), ss.Vaccine (efficacy=); an administer() of your own is administer(self, uids) on a subclass of ss.Product, returning its outcomes as dict(positive=uids)"),
     (r'\bss\.simple_vx\b', 'ss.Vaccine(efficacy=e)'),
-    (r'\bclass\s+\w+\(\s*(ss\.)?Pregnancy\s*\)', "ss.Pregnancy is now the declared module (states and transitions, with Starsim 3's arguments), and Starsim 3's pregnancy written as code was removed: a subclass that overrides its methods raises. Rewrite onto its seams: conception_rate(sim) for who conceives, ss.modify() of its transitions (preg.conception, preg.miscarriage, ...), infant_rate= for infant mortality, since_birth and preg.lactating for postpartum and breastfeeding, ss.on(preg.birth) or preg.add_callback(preg.birth, fn) at a delivery"),
+    (r'\bclass\s+\w+\(\s*(ss\.)?Pregnancy\s*\)', "ss.Pregnancy is now the declared module (states and transitions, with Starsim 3's arguments), and Starsim 3's pregnancy written as code was removed: its old methods are never called, so a subclass that overrides them does nothing. Rewrite onto its seams: conception_rate(sim) for who conceives, ss.modify() of its transitions (preg.conception, preg.miscarriage, ...), infant_rate= for infant mortality, since_birth and preg.lactating for postpartum and breastfeeding, ss.on(preg.birth) or preg.add_callback(preg.birth, fn) at a delivery"),
     (r'\.add_(conception|delivery)_callback\(', "ss.Pregnancy's add_conception_callback(fn) is preg.add_callback(preg.conception, fn); add_delivery_callback(fn), which was called with (mothers, newborns), is preg.add_callback(preg.birth, fn), called with the newborns (their mothers are sim.people.parent[newborns]). Both are called at the end of the pregnancy's step"),
     (r'\bss\.(demographics\.)?PregnancyPars\b', "ss.PregnancyPars was removed: ss.Pregnancy defines its parameters itself, and ss.Pregnancy().pars has them (e.g. k in ss.Pregnancy().pars; its fertility is the conception rate, a method, so leave it out when passing the values on). A subclass of it is an ss.Pars with the keys it uses"),
     (r'\b(slot_scale|min_slots|p_survive_maternal_death|trimesters)\s*=(?!=)', "if this is a parameter of ss.Pregnancy, it was removed, since nothing read it: drop slot_scale, min_slots, and p_survive_maternal_death; for trimesters, the gestational age is preg.P.time (e.g. preg.P & (preg.P.time < ss.weeks(13)))"),
@@ -96,6 +100,10 @@ flags = [
     (r'\.(make_embryos|make_pregnancies|make_p_conceive|select_conceivers|process_delivery|process_newborns|process_maternal_deaths|process_neonatal_deaths|process_prenatal_deaths|progress_pregnancies|update_breastfeeding|update_maternal_deaths|set_breastfeeding|set_rel_sus|draw_dur_pregnancy|updates_pre)\(', "a method of Starsim 3's pregnancy written as code, which was removed; ss.Pregnancy does this with its transitions and events (preg.conception, preg.delivery, preg.birth), or preg.add_callback(event, fn) from code"),
     (r'\bss\.SIS\(.*\b(waning|imm_boost)\s*=', "ssl.AgentSIS(waning=..., imm_boost=...): the declared ss.SIS has no immunity level"),
     (r'''\bss\.(SIR|SIS|SEIR)\(|\b(type|diseases)\s*=\s*['"](sir|sis|seir)['"]''', "ss.SIR, ss.SIS, and ss.SEIR are now the textbook models (an exponential dur_inf and dur_exp, and p_death=0): for Starsim 3's model (a lognormal dur_inf and p_death=0.01), use ssl.AgentSIR, ssl.AgentSIS, or ssl.AgentSEIR"),
+    (r'\binit_prev\s*=\s*ss\.(bernoulli|choose_n)\(', "if this is a declared disease (ss.SIR, ss.Disease with transitions, ...): init_prev is a share, a number of people above 1, or a function of (sim, uids) giving a share; for a function that took (self, sim, uids), drop self. A disease written as code keeps its distribution"),
+    (r'\bdur_(inf|exp)\s*=\s*(dict\(|\{|\[)', "if this is ss.SIR, ss.SIS, or ss.SEIR: give the distribution itself, e.g. dur_inf=ss.lognorm_ex(mean=ss.years(10), std=ss.years(2)) for [10, 2] or dict(type='lognorm_ex', ...); a duration is otherwise the mean of an exponential"),
+    (r'\bdef net_beta\(', "net_beta() of a network is called for the edges of a disease written as code as net_beta(disease_beta=None, inds=None, disease=None): the edges are inds= (not uids=), and disease_beta has a value for each of them. A declared disease does not call it on a network with acts: use ss.modify(dis.infection, route=net.name, efficacy=e, share=s)"),
+    (r'\bp_loss\s*=', "if this is a parameter of ss.Pregnancy, it is loss_rate=ss.probperweek(p) (or any other rate), the hazard of a spontaneous loss"),
     (r'\bss\.seasonality\b', 'ss.modify(dis.rel_trans, multiply=ss.seasonal(amplitude=a, peak=p)), in connectors='),
     (r'\bss\.multi_run\(', 'ss.parallel(sim, n_runs=n).sims (iterpars= is pars=)'),
     (r'\bss\.single_run\(', 'ss.single_run() was removed: sim.run() runs one sim (sim.copy().run() keeps the original as it was), and ss.parallel() runs many; a subclass of ss.MultiSim changes the sim of each run in its make_run()'),
@@ -121,10 +129,12 @@ flags = [
     (r'\bclass\s+\w+\(.*\bss\.SexualNet\b', 'ss.SexualNet has parameters and forms partnerships itself (between=, n_contacts=, dur=, ...): a subclass that forms its own overrides step(), and the base then starts none for it'),
     (r'\bkeep_case\s*=', 'Results.flatten() always keeps the case of keys now (as to_df() does): drop keep_case='),
     (r'\bmatch_result_keys\b', 'ss.utils.match_result_keys() is gone: res.flatten() gives a flat dict of results'),
+    (r'\bss\.change\(', 'ss.change() is ss.modify() of a time series, from its first time: ss.modify(target, multiply=ss.timeseries({t1: x1, t2: x2}), start=t1) for by=, and set= for to='),
 ]
 
 # The names of results that depend on the rest of the code: the counts of states (n_<state>), and the results of ss.SIR and the others
 counts_note = 'the count of a state is the result named after the state (e.g. results.alive, res.infected, results["sir.infected"])'
+infections_note = "ss.Infection's results are those of a declared disease: new_infections is infection, and cum_infections is infection.cum (sis_infection in sim.summary, which is its total)"
 results_like = r'(?:\bresults(?:\.\w+)*|\bres\w*)' # An object of results: results, sim.results.sir, res, res_sir, ...
 fstring_pattern = r"""\bf(['"])([^'"]*\bn_\{[^'"]*)\1"""
 make_results = r'(\w*Result)$' # A call that makes a result, e.g. ss.Result('n_ill', ...)
@@ -163,9 +173,10 @@ def find_names(texts):
 
 
 def file_context(text):
-    """ What a file uses, which says what some of its names mean: declared diseases (ss.SIR and the others) """
+    """ What a file uses, which says what some of its names mean: declared diseases (ss.SIR and the others), and the names its diseases could go by (hiv, from ssl.HIV(), name='hiv', class HIV(...), results.hiv., or diseases='hiv'), which a summary's names start with """
     declares = bool(re.search(r"""\bss\.(SIR|SIS|SEIR|states|Transition)\(|\b(type|diseases)\s*=\s*\[?\s*['"](sir|sis|seir)['"]""", text))
-    return sc.obj(declares=declares)
+    found = re.findall(r"""\bssl?\.(\w+)\(|\bclass\s+(\w+)\(|\bname\s*=\s*['"](\w+)['"]|\bresults\.(\w+)\.|\bdiseases\s*=\s*\[?\s*['"](\w+)['"]""", text)
+    return sc.obj(declares=declares, diseases={name.lower() for names in found for name in names if name})
 
 
 def rename_counts(line, names):
@@ -185,6 +196,21 @@ def rename_counts(line, names):
     return new, new != line
 
 
+def rename_infections(line, names, context):
+    """ Rename the results of `ss.Infection` to those of a declared disease, the flow `infection` and its total `infection.cum`, in `res.new_infections`, `res['new_infections']`, summaries (`sis_cum_infections`), and paths (`'hiv.new_infections'`), unless the code makes a result of that name itself; a name with a prefix only if that is a disease of the file, since `df['obs_new_infections']` is not (see `count_flags()`); returns the line and whether it changed """
+    new = line
+    summary = lambda m: f'{m[1]}_infection' if m[1].lower() in context.diseases else m[0]
+    if 'cum_infections' not in names.own:
+        new = re.sub(r'(?<!self)\.cum_infections\b', '.infection.cum', new)
+        new = re.sub(r"""\[(['"])cum_infections\1\]""", r'[\1infection\1].cum', new)
+        new = re.sub(r'\b(\w+)_cum_infections\b', summary, new)
+    if 'new_infections' not in names.own:
+        new = re.sub(r'(?<!self)\.new_infections\b', '.infection', new)
+        new = re.sub(r"""\[(['"])new_infections\1\]""", r'[\1infection\1]', new)
+        new = re.sub(r'\b(\w+)_new_infections\b', summary, new)
+    return new, new != line
+
+
 def count_flags(line, names, context):
     """ What needs a person on a line, by what the code defines and uses (see `find_names()` and `file_context()`) """
     out = []
@@ -197,8 +223,8 @@ def count_flags(line, names, context):
         if re.sub(r'\{[^}]*\}', '{}', m.group(2)) not in names.templates:
             out.append("if this makes the name of a state's count (e.g. f'n_{state}'), the count is now the result named after the state, e.g. f'{state}'")
             break
-    if context.declares and re.search(r'\b(new|cum)_infections\b', line):
-        out.append("if this is a result of ss.SIR, ss.SIS, ss.SEIR, or another declared disease: new_infections is the flow of the transition that infects (res.infection), and cum_infections its running total (res.infection.cum; sir_infection in sim.summary); a disease written as code (ssl.AgentSIR, ss.Infection) keeps both")
+    if any(f'{kind}_infections' not in names.own for kind in re.findall(r'\b\w+_(new|cum)_infections\b', line)):
+        out.append("if this is a disease's result in a summary (e.g. sis_new_infections), it is now named after its flow (sis_infection)")
     return out
 
 
@@ -214,6 +240,7 @@ def removed(name):
     return None
 
 
+targeted = ['ss.Delivery', 'ss.vaccinate', 'ss.screen', 'ss.treat', 'ss.modify', 'ss.Transition'] # What takes who=, where=, when=, or on=
 agent_bases = {'SIR': 'ssl.AgentSIR', 'SIS': 'ssl.AgentSIS', 'SEIR': 'ssl.AgentSEIR'} # Starsim 3's diseases written as code, which are declared in Starsim 4
 mf_keys = {'mf', 'mfnet'} # ss.MFNet (now ss.SexualNet), which puts men in p1, so a pair [p1 to p2, p2 to p1] is [m2f, f2m]
 one_way_keys = {'prenatal', 'prenatalnet', 'maternal', 'maternalnet', 'postnatal', 'postnatalnet', 'breastfeeding', 'breastfeedingnet'} # Mother to child only
@@ -414,6 +441,61 @@ def migrate_ast(text, analyzers=None):
                 if remove_kw(call, kw, 'copy_inputs= is removed: a sim always copies the modules it is given'):
                     found.append((kw.lineno, 'a sim copies the modules it is given (copy_inputs= is removed): read them, and their results, from the sim (sim.diseases.sir, sim.analyzers.myanalyzer), not from the objects given'))
 
+    # Keywords of deliveries and transitions: on= is where=, and when= is a condition on time; ss.change() is ss.modify() of a time series
+    for call in [n for n in ast.walk(tree) if isinstance(n, ast.Call)]:
+        func = ast.unparse(call.func)
+        keywords = {kw.arg:kw for kw in call.keywords}
+        if func in targeted and 'on' in keywords:
+            kw = keywords['on']
+            if 'where' in keywords:
+                found.append((kw.lineno, f'on= of {func} is where=, and this call has a where= too: join them with &, e.g. where=event & condition (for a delivery, the condition can stay as who=)'))
+            else:
+                edits.replace(kw.lineno, kw.col_offset, kw.col_offset + len('on'), 'where', f'on= of {func} is where=')
+        if func in targeted and 'when' in keywords:
+            found.append((keywords['when'].lineno, f'when= of {func} is a condition on time, a function of the timeline (e.g. lambda t: t.ti > 5); if it reads anything else of the sim, it goes in where='))
+        if func == 'ss.change' and call.args and call.lineno == call.end_lineno and {'at', 'by', 'to'} & set(keywords):
+            values = keywords.get('by', keywords.get('to'))
+            literals = [item.elts if isinstance(item, (ast.List, ast.Tuple)) else [item] if not isinstance(item, (ast.Name, ast.Call, ast.Attribute)) or isinstance(item, ast.Constant) else None for item in [keywords['at'].value, values.value]]
+            if None in literals or len(literals[0]) != len(literals[1]):
+                continue # Left for a person (see flags)
+            key = 'multiply' if 'by' in keywords else 'set'
+            series = ', '.join(f'{ast.unparse(t)}: {ast.unparse(v)}' for t,v in zip(*literals))
+            amount = ast.unparse(literals[1][0]) if len(literals[0]) == 1 else f'ss.timeseries({{{series}}})'
+            rest = [ast.unparse(arg) for arg in call.args] + [f'{key}={amount}', f'start={ast.unparse(literals[0][0])}'] + [ast.unparse(kw) if kw.arg is None else f'{kw.arg}={ast.unparse(kw.value)}' for kw in call.keywords if kw.arg not in ['at', 'by', 'to']]
+            edits.add(call, f'ss.modify({", ".join(rest)})', 'ss.change() is ss.modify() of a time series, from its first time')
+
+    # Keywords of ss.SIR, ss.SIS, and ss.SEIR that Starsim 3 read itself, and of ss.Pregnancy
+    def bernoulli_p(node):
+        """ The probability of `ss.bernoulli(p)` or `ss.bernoulli(p=p)` as source code, if it is a number or a typed value, not a function """
+        if isinstance(node, ast.Call) and ast.unparse(node.func) == 'ss.bernoulli' and len(node.args) + len(node.keywords) == 1:
+            p = node.args[0] if node.args else node.keywords[0].value
+            return None if isinstance(p, (ast.Lambda, ast.Name)) else ast.unparse(p)
+        return None
+
+    sexual = re.search(r"""\bss\.(MFNet|SexualNet|SexualNetwork|MSMNet)\b|['"](mf|mfnet|msm|msmnet|sexual|sexualnet)['"]""", text)
+    for call in [n for n in ast.walk(tree) if isinstance(n, ast.Call)]:
+        func = ast.unparse(call.func)
+        keywords = {kw.arg:kw for kw in call.keywords}
+        if func in ['ss.SIR', 'ss.SIS', 'ss.SEIR']:
+            if sexual and not {'beta', 'pars', None} & set(keywords) and not call.args:
+                found.append((call.lineno, f"{func}() on a network with acts needs a beta: a rate per unit time, its default, has no meaning there. Give the probability per act, e.g. {func}(beta=ss.peract(0.05)); Starsim 3 read the default so"))
+            for key in ['init_prev', 'p_death']:
+                p = bernoulli_p(keywords[key].value) if key in keywords else None
+                if p is not None:
+                    edits.add(keywords[key].value, p, f'{key} of {func} is a number, not an ss.bernoulli')
+            if 'init_prev' in keywords:
+                value = keywords['init_prev'].value
+                if isinstance(value, ast.Call) and ast.unparse(value.func) == 'ss.choose_n' and len(value.args) == 1 and not value.keywords and not isinstance(value.args[0], (ast.Lambda, ast.Name)):
+                    edits.add(value, ast.unparse(value.args[0]), f'init_prev= of {func} above 1 is a number of people, as ss.choose_n() was')
+            for key in ['dur_inf', 'dur_exp']:
+                value = keywords[key].value if key in keywords else None
+                if isinstance(value, ast.Constant) and isinstance(value.value, (int, float)):
+                    edits.add(value, f'ss.years({value.value})', f"a bare number is in the model's unit; Starsim 3's {key} was in years")
+        elif func == 'ss.Pregnancy' and 'p_loss' in keywords:
+            value = keywords['p_loss'].value
+            p = bernoulli_p(value) or ast.unparse(value)
+            edits.add(keywords['p_loss'], f'loss_rate={p}' if re.match(r'ss\.\w+\(', p) else f'loss_rate=ss.probperweek({p})', "p_loss of ss.Pregnancy is loss_rate, the hazard of a spontaneous loss")
+
     # Calls to the methods of the base written as code, e.g. ss.SIS.set_prognoses(self, ...)
     for node in ast.walk(tree):
         if isinstance(node, ast.Attribute) and base_name(node.value) in ['SIR', 'SIS', 'SEIR'] and isinstance(node.ctx, ast.Load):
@@ -458,6 +540,9 @@ def migrate_text(text, analyzers=None, imported=False, names=None, context=None)
             changes.append((i+1, counts_note))
             if context.declares:
                 declared_counts.append(i+1)
+        new, n = rename_infections(new, names, context)
+        if n:
+            changes.append((i+1, infections_note))
         lines[i] = new
     text = ''.join(lines)
 

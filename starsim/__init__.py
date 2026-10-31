@@ -55,13 +55,13 @@ from .results import Result, Results, simdata
 from .products import Product, Vaccine, Treatment, Diagnostic, box
 from .interventions import Intervention, Delivery, vaccinate, treat, screen
 from .analyzers import Analyzer, infection_log
-from .connectors import Connector, modify, change
+from .connectors import Connector, modify
 
 #%% Declared models: conditions, expressions, transitions, and the solvers that run them
 from .internals import conditions
 from .internals.conditions import state
 from .solvers.backends import kernels
-from .solvers.backends.kernels import compile
+from .solvers.backends.kernels import compile, compile_status
 from .internals import expressions
 from .internals.expressions import par, mother, attr
 from .transitions import (

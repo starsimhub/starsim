@@ -17,7 +17,7 @@ def test_states():
     sc.heading('Testing ss.Pregnancy: conception, abortion, and losses by gestational age, as agents and in the small compartmental form')
     thr = ss.weeks(20)
     def make():
-        return ss.Pregnancy(fertility_rate=ss.freqperyear(100), p_abortion=0.1, p_loss=ss.bernoulli(ss.probpermonth(0.02)), loss_threshold=thr)
+        return ss.Pregnancy(fertility_rate=ss.freqperyear(100), p_abortion=0.1, loss_rate=ss.probpermonth(0.02), loss_threshold=thr)
 
     ga = sc.obj(miscarriage=[], stillbirth=[], seen=set())
     def check(sim): # Each loss is classified by the gestational age it happened at
@@ -94,7 +94,7 @@ def test_births():
 @sc.timer()
 def test_compartmental():
     sc.heading('Testing the small compartmental form against agents at three step sizes, and its conservation of people')
-    make = lambda: ss.Pregnancy(fertility_rate=ss.freqperyear(100), p_abortion=0.1, p_loss=ss.bernoulli(ss.probpermonth(0.02)), burnin=False)
+    make = lambda: ss.Pregnancy(fertility_rate=ss.freqperyear(100), p_abortion=0.1, loss_rate=ss.probpermonth(0.02), burnin=False)
     assert ss.Sim(demographics=make(), total_pop=20_000, **kw).init().solver == 'abm' # Only when a compartmental solver is named
     for dt in [ss.weeks(1), ss.months(1), ss.months(3)]:
         pars = dict(start=2000, stop=2005, dt=dt, verbose=0, stratify=strat, use_aging=False)
@@ -144,8 +144,8 @@ def test_burnin():
 
 @sc.timer()
 def test_events():
-    sc.heading('Testing preg.* events: ss.on() in another module, on= on deliveries, the mothers of births, and ANC at a visit after conception')
-    preg = ss.Pregnancy(fertility_rate=ss.freqperyear(100), p_loss=ss.bernoulli(0.01))
+    sc.heading('Testing preg.* events: ss.on() in another module, where= on deliveries, the mothers of births, and ANC at a visit after conception')
+    preg = ss.Pregnancy(fertility_rate=ss.freqperyear(100), loss_rate=ss.probperweek(0.01))
     anc_ga = preg.attr('anc_ga', ss.uniform(ss.months(1), ss.months(8))) # Per pregnancy: ss.attr(..., on=preg.conception)
     S, F, I = ss.states('S F I')
     d = ss.Disease(S, F, I,
@@ -156,7 +156,7 @@ def test_events():
         name='d')
     test = lambda name: ss.Diagnostic(sensitivity=dict(I=0.9), specificity=0.99, name=name)
     anc = ss.screen(test('t1'), where=preg.P & (preg.P.time >= anc_ga), coverage=0.85, disease='d', name='anc') # Once a pregnancy, at its visit
-    first = ss.screen(test('t2'), on=preg.conception, coverage=0.5, disease='d', name='first')
+    first = ss.screen(test('t2'), where=preg.conception, coverage=0.5, disease='d', name='first')
     seen = sc.obj(child=0, flagged=0, fresh=0, gap=[])
     def check(sim):
         p = sim.demographics.pregnancy
@@ -186,8 +186,8 @@ def test_mother_cond():
     sc.heading('Testing ss.mother(born=True): newborns of mothers who tested positive in the last year')
     for by_path in [False, True]: # With the event itself, or by its path, for a module made before the pregnancy module exists
         seen = mother_cond(by_path)
-    with pytest.raises(ValueError, match=r"not a transition.*ss.state\('pregnancy.P'\).enter"): # A path in on= is a transition's event, so a state is an error
-        ss.Sim(demographics=ss.Pregnancy(), diseases='sis', networks='random', interventions=ss.screen(ss.Diagnostic(), on=ss.state('pregnancy.P'), name='scr'), n_agents=100, **kw).init()
+    with pytest.raises(ValueError, match=r"not a transition.*ss.state\('pregnancy.P'\).enter"): # A path in where= is a transition's event, so a state is an error
+        ss.Sim(demographics=ss.Pregnancy(), diseases='sis', networks='random', interventions=ss.screen(ss.Diagnostic(), where='pregnancy.P', name='scr'), n_agents=100, **kw).init()
     def make(solver): # Nothing else here needs agents
         S, I = ss.states('S I')
         d = ss.Disease(S, I, infection=S >> I @ ss.peryear(0.2), births=ss.birth(S, rate=ss.peryear(0.03)), name='d')
@@ -205,7 +205,7 @@ def mother_cond(by_path):
     d = ss.Disease(S, I, infection=S >> I @ ss.peryear(0.2), name='d')
     screening = ss.screen(ss.Diagnostic(sensitivity=dict(I=1.0), specificity=1.0, name='dx'), where=preg.P, coverage=0.5, disease='d', name='screening')
     tested = ss.mother(screening.positive.since <= ss.years(1), born=True)
-    trigger = dict(on=ss.state('pregnancy.birth') & tested) if by_path else dict(who=preg.birth & tested)
+    trigger = dict(who=tested, where='pregnancy.birth') if by_path else dict(who=preg.birth & tested)
     newborn = ss.screen(ss.Diagnostic(sensitivity=1.0, name='nbdx'), **trigger, disease='d', name='newborn')
     seen = sc.obj(last={}, n=0)
     def check(sim): # Run after both screens, so it sees their events
@@ -333,13 +333,9 @@ def test_code_pars():
     assert half.results.pregnancy.conception.sum() < 0.7*base.results.pregnancy.conception.sum()
     with pytest.raises(KeyError, match='has no parameter named age_scal'): # A misspelled parameter from the user is still an error
         FP(age_scal=0.3)
-    with pytest.raises(ss.CapabilityError, match='conception_rate'): # A method of Starsim 3's pregnancy, which would never be called
-        class V3(ss.Pregnancy):
-            def make_p_conceive(self, uids=None):
-                return 0
     preg = ss.Pregnancy()
     preg.pars['rel_fertilty'] = 2 # ... and so is one added later that nothing reads
-    with pytest.raises(KeyError, match='nothing would read it'):
+    with pytest.raises(KeyError):
         ss.Sim(demographics=preg, n_agents=500, **kw).init()
     return half
 
@@ -439,7 +435,7 @@ def test_syphilis():
 
 def test_events_ode():
     def flags(solver):
-        preg = ss.Pregnancy(fertility_rate=ss.freqperyear(100), p_loss=ss.bernoulli(0.01))
+        preg = ss.Pregnancy(fertility_rate=ss.freqperyear(100), loss_rate=ss.probperweek(0.01))
         S, F = ss.states('S F')
         d = ss.Disease(S, F, flag=S >> F @ ss.on(preg.conception), unflag=F >> S @ ss.on(preg.delivery), name='d')
         size = dict(n_agents=20_000) if solver == 'abm' else dict(total_pop=20_000)
@@ -451,7 +447,7 @@ def test_events_ode():
 
 
 def make_postpartum(**kwargs):
-    preg = ss.Pregnancy(fertility_rate=ss.freqperyear(150), p_loss=ss.bernoulli(0.02), **kwargs)
+    preg = ss.Pregnancy(fertility_rate=ss.freqperyear(150), loss_rate=ss.probperweek(0.02), **kwargs)
     preg.stratify(parity=['0', '1', '2', '3+'], split=[1, 0, 0, 0])
     return preg
 

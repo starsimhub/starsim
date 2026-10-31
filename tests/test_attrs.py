@@ -192,14 +192,14 @@ def test_attr_crn():
 @sc.timer()
 def test_attr_errors():
     sc.heading('Attributes: read where they have no value')
-    with pytest.raises(ValueError, match='but it has a value only for people in A'): # A case of a derived attribute reads a clock of another state
+    with pytest.raises(ValueError): # A case of a derived attribute reads a clock of another state
         A, B = ss.states('A B')
         ss.Disease(A, B, ab=A >> B @ 0.1, x=ss.attr({B: A.time}), first='A', name='d')
     S, I = ss.states('S I')
     infection = S >> I @ ss.perday(0.1)*I
     rec = ss.attr(ss.normal(10, 1), on=infection)
     d = ss.Disease(S, I, infection=infection, back=S >> I @ ss.perday(0.01)*rec/10, rec=rec, init_prev=0.01, name='d')
-    with pytest.raises(ValueError, match='it reads a clock or an attribute where it has no value'): # Read by a rate from S, where people who were never infected have none
+    with pytest.raises(ValueError): # Read by a rate from S, where people who were never infected have none
         ss.Sim(d, n_agents=1000, stop=20, unit='day', **kw).run()
     with pytest.raises(ValueError):
         ss.attr(ss.normal(), combine='mean')

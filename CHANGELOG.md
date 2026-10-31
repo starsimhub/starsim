@@ -31,6 +31,10 @@ Starsim 4 adds a way to write a model as declared states and transitions, which 
 - *Regression*: `res.resample('year')` of a stock gives its value at the end of each year (Starsim 3's `annualize()` gave the mean). A result's `scale` follows its kind, so ratios aren't scaled.
 - *Regression*: `ss.Deaths` and `ss.Births` hold each period's rate until the next; delivery rounds are timed by date.
 - *Regression*: with `rescale=True`, a declared disease's results (and `alive`) include the people no agent stands for yet.
+- *Regression*: fixed delays under the chain binomial and tau-leaping last their full length on average, with default substeps counting them; final sizes were up to 14% low.
+- *Regression*: a bare `beta` in a disease written as code is a rate in the sim's unit, unless on a network with acts.
+- *Regression*: a daily timeline started from a numeric year has whole-day dates.
+- *Regression*: values that vary smoothly in time are taken once a step, at its middle (at its start by Euler's method), for every solver.
 
 ### Changes that may require migration
 - *Migration*: removed Starsim 3 names have no aliases; the migration script and guide cover them. The main ones:
@@ -44,9 +48,21 @@ Starsim 4 adds a way to write a model as declared states and transitions, which 
 - *Migration*: an unnamed transition that is a disease's only transmission is named `infection`, a duration written inline is named by its state (`dur_I`), and a rate by its transition (`rate_death`).
 - *Migration*: `sim.summarize()` is a dataframe, the same table as `msim.summarize()`; `ss.data.population()` and `ss.data.contacts()` return labeled dataframes rather than tuples.
 - *Migration*: some things that used to pass silently now raise: `at_age=` in a compartmental run needs an age group starting at that age, and an `ss.Infection` with a nonzero `beta` needs a network or mixing pool.
+- `ss.SIR`, `ss.SIS`, and `ss.SEIR` are plain declared diseases: a bare `dur_inf=10` is in the model's unit, and `beta` is required on a network with acts.
+- Declared diseases take `init_prev=` as a share, a number of people, or a function, not a distribution.
+- `ss.days(1) + 1` raises, as `ss.perday(1) + 1` does.
+- `sim.fit()` keeps four SciPy methods: `'nelder-mead'`, `'l-bfgs-b'`, `'powell'`, and `'slsqp'`.
+- Removed `ss.Pregnancy(p_loss=)`, `Network.custom_beta`, `Network.edge_net_beta()`, `Agents.backdate()`, `Pars.dict_update()`, `Dist.state_int`, `Arr.notnanvals`, and the options `warn_convert`, `install_fonts`, and `keep_memory`. `python -m starsim.converters.migrate` handles or flags these.
+- Delivery keywords: `on=` is now `where=`; `who=` chooses people or compartments, and `when=` is a condition on time. `ss.Transition(on=)` is `where=` too.
+- `ss.Infection`'s results are `infection` and `infection.cum`, as for a declared disease, not `new_infections` and `cum_infections`.
+- `ss.change()` is removed: use `ss.modify()` of an `ss.timeseries()`.
+- `msim.to_df()` gives one row per run by default; pass `quantiles=` for quantiles.
+- `res.by(dim)` across runs is an `ss.Result` with a column for each level.
+- `ss.solvers.why_not()` replaces `ss.gradients.reason()`.
+- The chain binomial and tau-leaping always run in the kernels: their JAX engine is removed, since it was no faster, so a seeded run no longer changes when it gets long. `sim.jax` is now for the ODE only.
 
 ### Bugfixes and performance
-- `sim.run(n_runs=)` restarts one built sim again, and uses JAX for a long chain-binomial run; a stray argument had turned both off.
+- `sim.run(n_runs=)` restarts one built sim again; a stray argument had turned that off.
 - `sim.fit()` raises an error for a setting the method does not take, instead of ignoring it, as does `Result.resample()`. With a list of methods, a setting goes to the stages that take it.
 - A module named like a setting of the sim (e.g. `name='branching'`) no longer overwrites that setting, which had silently turned a model into a branching process.
 - As agents, a value by a stratified dimension (`ss.by(sex=...)`) over a contact matrix no longer raises an `IndexError`.
@@ -54,6 +70,31 @@ Starsim 4 adds a way to write a model as declared states and transitions, which 
 <!-- V4-PREVIEW: restore the link above to docs.starsim.org for normal publishing -->
 - Faster: `ss.by` tables are indexed with NumPy, time-varying values are tabulated once per run, and the agent engine runs compiled passes over the agents.
 
+- A condition on a count in `where=` (`where=d.I.n > 1000`) is worked out at each step under every solver.
+- `people.n_alive` and `len(people)` give the population under compartments, `people.auids` raises there, and `hasattr(sim.people, 'age')` is False.
+- A declared disease with transmission has a `prevalence` result, and `define_results()` works in `__init__()`.
+- A modifier can read the clock of a state with no exit, and a plain `ss.Module` can be an intervention.
+- `ss.treat()` and other deliveries are about 3.7× faster with a capacity, and `init()` is 2 to 3× faster for daily runs from a numeric year.
+- A compartmental run that has to step says which module made it do so, the header says why a declared model runs as agents, and repeated ODE runs say they are identical.
+- `import starsim` works with no writable Numba cache, and `sim.fit()` returns the best point tried for a deterministic sim.
+- The Rust kernels carry a hash of their source, so a stale library is not used.
+- `ss.modify()` can be a member of a declared disease, and reaches any module written as code; `ssl.Syphilis` is wholly declared.
+- `sim.results.find(name)` finds a result however it is spelled, and everything that takes a result's name uses it.
+- `ss.contacts()` with a disease written as code no longer gives no infections for a matrix with its own age groups.
+- A compartmental run beside a module with a step of its own is about 4.6× faster, and an empty `step()` no longer stops a run being taken whole.
+- The compartmental kernels are up to 1.8× faster with 100 groups, and `import starsim` no longer imports `scipy.stats`.
+- Which engine runs a model is one table of rules, shown by `ss.solvers.solver_table()`.
+- Mixing between many places is up to 5× faster in the kernels, by BLAS when every pair of places has a time share (Ghana measles, 260 districts: 4.8 s to 1.6 s a run; 600 places: 22.6 s to 4.4 s).
+- `pip install starsim` is set up to include the compiled Rust kernels, as one wheel per platform for Python 3.11 and later; the sdist includes the crate, and Numba's kernels remain the fallback.
+- `ss.compile()` works under Numba.
+- A rate or duration that reads another disease's count is no longer frozen in a whole run.
+- A change in code to a modifier's amount or a product's efficacy takes effect in a stepped run.
+- Results read time-varying values at each time point.
+- `select(to=, edge=, disease=)` holds through `take()`, medians, quantiles, `resample()`, and `.cum`, and across runs.
+- `'sis.infection.cum'` finds its result, and a flow's cumulative result is named `infection.cum`.
+- Runs swept over a rate can be selected.
+- `sum()` of durations works, and a transition in a class body can use a sibling transition as its event.
+- `python -m starsim.converters.migrate` renames prefixed names only for the diseases in the file.
 
 ## Version 3.7.2 (2026-10-06)
 - `ss.ClusterNet` (and so `ss.HybridNet`) and `ss.MSMNet` now shuffle agents using `float64` random numbers and a stable sort. Previously, tied `float32` random numbers were ordered differently on different CPUs, so the same seed could give slightly different results on different machines.

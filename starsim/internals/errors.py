@@ -60,6 +60,9 @@ class CapabilityError(ValueError):
     would fix it
     """
 
+class NoAgentAttribute(CapabilityError, AttributeError):
+    """ An attribute of people that exists only per agent, asked for in a compartmental run: also an `AttributeError`, so `hasattr()` gives False """
+
 class AlreadyRunError(RuntimeError):
     """ A sim that has already run (or been finalized) is stepped, finalized, or added to again; `sim.run()` runs it again from the start """
     def __init__(self, *args):

@@ -116,7 +116,7 @@ The value is a parameter like any other: `fit.pars.symp_prob`, `ss.Sim(pars=dict
 
 ## The data
 
-The data has a time column (`date`, `year`, `t`, or `time`; an integer `year` is a calendar year) and one column for each data series, named like the result it is compared with: here `cases`. With several modules, a column that could match more than one result is named with its module, e.g. `measles.cases`. Any result can have data, including an analyzer's (`by_age.cancers_0_15`), a result nested deeper in `sim.results` (`hpv.genotype.cancers`), and a column of a result with columns (`sis.new_infections.alpha`), so `gof=` is needed only for targets worked out from the results, such as a share.
+The data has a time column (`date`, `year`, `t`, or `time`; an integer `year` is a calendar year) and one column for each data series, named like the result it is compared with: here `cases`. With several modules, a column that could match more than one result is named with its module, e.g. `measles.cases`. Any result can have data, including an analyzer's (`by_age.cancers_0_15`), a result nested deeper in `sim.results` (`hpv.genotype.cancers`), and a column of a result with columns (`sis.infection.alpha`), so `gof=` is needed only for targets worked out from the results, such as a share.
 
 The data need not be on the model's time step, and nothing needs to say how to line the two up, since each result knows what kind of quantity it is:
 
@@ -181,7 +181,7 @@ By default a fit is a best fit (a single set of values), by a method that suits 
 | Stochastic compartmental | `'optuna'` | `'pmcmc'` (particle MCMC), given a likelihood for every series |
 | Agent-based | `'optuna'` | `'abc-smc'` (approximate Bayesian computation), which needs no likelihood |
 
-Any other method of `scipy.optimize.minimize` can be given, as can `'if2'` (iterated filtering, for a stochastic compartmental model). [Fitting methods](calibration_methods.qmd) compares them all, with the settings of each and an example. A list, such as `method=['optuna', 'nelder-mead']`, runs each method in turn, each starting from the best values the one before found, and stops at a method that doesn't converge.
+`'powell'` and `'slsqp'` (two more methods of `scipy.optimize.minimize`) can also be given, as can `'if2'` (iterated filtering, for a stochastic compartmental model). [Fitting methods](calibration_methods.qmd) compares them all, with the settings of each and an example. A list, such as `method=['optuna', 'nelder-mead']`, runs each method in turn, each starting from the best values the one before found, and stops at a method that doesn't converge.
 
 The gradient-based methods and their posteriors are covered in [Gradients](calibration_gradients.qmd).
 

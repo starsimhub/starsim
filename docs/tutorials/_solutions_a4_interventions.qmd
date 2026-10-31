@@ -22,7 +22,7 @@ settings = dict(
 )
 
 drug = ss.Treatment(cure=0.95)
-care = ss.treat(drug, on=sti.infection, coverage=0.3, delay=ss.uniform(ss.weeks(1), ss.months(2)))
+care = ss.treat(drug, where=sti.infection, coverage=0.3, delay=ss.uniform(ss.weeks(1), ss.months(2)))
 young = (ss.ppl.age >= 15) & (ss.ppl.age < 30)
 screening = ss.screen(sensitivity=0.9, specificity=0.98, where=young, coverage=0.5, interval=ss.months(6), start='2010')
 treatment = ss.treat(drug, who=screening.positive)

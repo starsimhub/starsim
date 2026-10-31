@@ -40,15 +40,15 @@ max_example = 12 # Maximum number of lines in an example
 max_method = 90 # Maximum number of characters in the summary of a method
 skip_methods = ['disp', 'brief', 'show', 'to_str'] # Display methods, which every class has
 
-description = 'A fast, flexible agent-based disease modeling framework' # Matches pyproject.toml
+description = 'A fast, flexible disease modeling framework, from compartments to agents'
 notes = [
-    'Starsim is an agent-based modeling framework for simulating disease spread among agents via dynamic transmission networks, including co-transmission of multiple diseases and the effect of interventions.',
+    'Starsim is a framework for modeling the spread of disease, as compartments (deterministic or stochastic, in one place or many) or as agents on dynamic transmission networks, including co-transmission of multiple diseases and the effect of interventions. A sim with `solver="auto"` (the default) runs as compartments if it can, and as agents if it needs them.',
     'Everything in the core package is available from the top level: `import starsim as ss`, then e.g. `ss.Sim()`. Do not import submodules directly.',
     'Example and reference modules (e.g. `ssl.Cholera`) are in the library: `import starsim.library as ssl`. They are illustrative rather than validated.',
     'Signatures are as introspected from the current version; summaries are the first paragraph of each docstring.',
     'Module arguments default to `None` in the signature; the actual defaults are listed as "Default pars", and can be overridden by keyword or via `pars=dict(...)`.',
     'Aliases are alternative names for the same object; the canonical name is the one listed, and is the one to prefer when writing new code.',
-    'Methods are listed under the class that defines them (e.g. `ss.Result.select()` under `ss.Result`), not under each subclass that inherits them.',
+    'Methods are listed under the class that defines them (e.g. `ss.Result.select()` under `ss.Result`), not under each subclass that inherits them, and only those that the documentation uses; the others are internal.',
     'Any model that is not in the library (an SIRS, an SEIRS, a model with more states) is written as a declared disease: `S, I, R = ss.states(3)`, then `ss.Disease(S >> I @ beta * I, I >> R @ ss.days(7), R >> S @ ss.days(90))`. There a duration alone (`ss.days(7)`) is the mean of an exponential.',
     'The library `ss.SIR`, `ss.SIS`, and `ss.SEIR` are the textbook models: a duration is the mean of an exponential, and nobody dies of the infection unless `p_death` is given. Starsim 3\'s versions (lognormal `dur_inf`, `p_death=0.01`) are `ssl.AgentSIR`, `ssl.AgentSIS`, and `ssl.AgentSEIR`.',
     '`init_prev=` seeds the state a new infection enters (`E` in an SEIR, so nobody starts infectious); `init_n=dict(I=10)` starts people in a named state.',
@@ -82,7 +82,9 @@ module_titles = sc.obj(
     parameters    = 'Parameters',
     results       = 'Results',
     run           = 'Running multiple simulations',
-    calibration   = 'Calibration',
+    fit           = 'Fitting to data',
+    geo           = 'Places and movement',
+    data          = 'Data by place',
     arrays        = 'Arrays and agent indexing',
     loop          = 'Integration loop',
     utils         = 'Utilities',
@@ -156,13 +158,19 @@ def _getpars(obj):
     return out
 
 
-def _getmethods(obj):
-    """ The public methods (with `()`) and properties that a class defines itself, each with the first sentence of its docstring """
+def _docnames():
+    """ The names that the tutorials, user guide, and examples use as attributes (`.name`) or define as methods (`def name(self`), which are what is public """
+    text = '\n'.join(path.read_text() for folder in ['tutorials', 'user_guide', 'examples'] for path in (thisdir/folder).rglob('*.qmd'))
+    return set(re.findall(r'\.(\w+)', text)) | set(re.findall(r'def (\w+)\(self', text))
+
+
+def _getmethods(obj, public):
+    """ The public methods (with `()`) and properties that a class defines itself (of `public`, the names to keep), each with the first sentence of its docstring """
     if not inspect.isclass(obj):
         return {}
     out = {}
     for name,attr in vars(obj).items():
-        if name.startswith('_') or name in skip_methods:
+        if name.startswith('_') or name in skip_methods or name not in public:
             continue
         if isinstance(attr, (staticmethod, classmethod)):
             attr = attr.__func__
@@ -234,8 +242,9 @@ def _getnames(prefix):
     """ Get the public names to index for a namespace """
     if prefix == 'ss':
         return [name for name in dir(ss) if not name.startswith('_')]
-    else:
+    elif prefix == 'ssl':
         return [name for name in ssl.__all__ if name not in libraries]
+    return getattr(ss, prefix.removeprefix('ss.')).__all__ # e.g. ss.fit
 
 
 def make_index():
@@ -257,7 +266,8 @@ def make_index():
     """
     entries = []
     aliasmap = {}
-    for prefix, namespace in [('ss', ss), ('ssl', ssl)]:
+    public = _docnames()
+    for prefix, namespace in [('ss', ss), ('ss.fit', ss.fit), ('ss.geo', ss.geo), ('ss.data', ss.data), ('ssl', ssl)]:
 
         # Group names by object, so aliases collapse into one entry
         groups = {} # Map id(obj) to the list of names pointing at it
@@ -286,7 +296,7 @@ def make_index():
                 signature  = _getsignature(obj),
                 summary    = _getsummary(obj, doc),
                 pars       = _getpars(obj),
-                methods    = _getmethods(obj),
+                methods    = _getmethods(obj, public),
                 example    = _getexample(doc),
                 aliases    = aliases,
                 deprecated = _isdeprecated(doc),

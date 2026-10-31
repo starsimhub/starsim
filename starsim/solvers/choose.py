@@ -5,7 +5,10 @@ It exists so that a model need not say how it runs: the choice is made from what
 
 Used with: agents and compartments; declared and coded modules
 """
+import re
 import inspect
+import itertools
+import collections
 import importlib
 import importlib.util
 import math
@@ -16,7 +19,7 @@ from .compartmental import Compartmental
 from .agents import Agents, Transmission
 from .engine import convert
 
-__all__ = ['solver_names', 'integrators', 'Undeclared', 'make_engine', 'choose_solver', 'choose_engine', 'kernel_seconds', 'init_crossings', 'init_capabilities', 'auto_reasons', 'set_par_values', 'flows_of', 'init_group_values', 'settle_start', 'group_people']
+__all__ = ['solver_names', 'integrators', 'Undeclared', 'make_engine', 'choose_solver', 'choose_engine', 'kernel_seconds', 'init_crossings', 'init_capabilities', 'auto_reasons', 'why_not', 'solver_table', 'rules', 'set_par_values', 'flows_of', 'init_group_values', 'settle_start', 'group_people']
 
 
 solver_names = ['auto', 'ode', 'ide', 'binomial', 'gillespie', 'tau', 'abm'] # The solvers that can be asked for ('ide' runs as the ODE, with each dwell time as it is: see Compartmental.slot_rates())
@@ -37,27 +40,8 @@ class Undeclared(Transmission):
         return
     init_pre = step_state = step_funcs = nothing
 
-    def init_post(self):
-        """ The parameters its code reads from `self.pars`, with their base values, which have modifiers (see `write_pars()`) """
-        reads = getattr(self.mod, 'allow_modifiers', ())
-        self.base_pars = {name:self.mod.pars[name] for (modname, kind, name) in getattr(self.sim, 'modifiers', ()) if modname == self.mod.name and kind == 'par' and name not in reads}
-        return
-
-    def write_pars(self):
-        """ Put the modified value of each of these parameters in `self.pars`, which is what the disease's code reads """
-        for name in self.base_pars:
-            self.mod.pars[name] = self.base_pars[name] # current_par() reads the base value
-            value = self.current_par(name)
-            if np.ndim(getattr(value, 'value', value)):
-                raise ss.CapabilityError(f'the modifiers of {self.mod.name}.pars.{name} give it a value for each person, but "{self.mod.name}" is written as code and reads one value, self.pars.{name}. '
-                                         f'Read self.current_value(\'{name}\', uids) in its code, and say so in its class: allow_modifiers = (\'{name}\',).')
-            self.mod.pars[name] = value
-        return
-
-    def finalize_results(self):
-        """ Parameters are back to their base values after the run """
-        self.mod.pars.update(self.base_pars)
-        return
+    init_post = Transmission.init_pars
+    finalize_results = Transmission.reset_pars
 
     def define(self):
         """ With strains, the distributions of who infects whom and of protection (see `Transmission.pick_sources()`), by the names a declared disease's transmission called `infection` (e.g. `ss.SIR`'s) gives them, so the same model draws the same numbers both ways """
@@ -102,14 +86,7 @@ class Undeclared(Transmission):
         """ Why the disease would not apply the modifiers (`mods`) on a parameter (`name`) or on its `rel_sus` or `rel_trans` (`kind`), or None if it would: a transmitted `ss.Infection` reads those in `transmit_route()` (see `ss.connectors.check_applied()`) """
         mod = self.mod
         if kind == 'par':
-            value = mod.pars[name]
-            value = value.raw if isinstance(value, ss.par) else value
-            if not (sc.isnumber(value) or isinstance(value, ss.TimePar)):
-                return f'"{name}" of "{mod.name}" is a {type(value).__name__}, and a disease written as code reads a number, a rate, a probability, or a duration from a parameter a modifier changes. Modify its rel_sus or rel_trans, or declare the disease (see ss.Disease).'
-            if name not in mod.allow_modifiers and any(getattr(m, 'where', None) is not None for m in mods):
-                return (f'"{mod.name}" is written as code, so it reads one value of "{name}", self.pars.{name}, which cannot differ between people. '
-                        f'Read self.current_value(\'{name}\', uids) in its code, and say so in its class: allow_modifiers = (\'{name}\',).')
-            return None
+            return self.unapplied_par(name, mods)
         if (isinstance(mod, ss.Infection) and 'beta' in mod.pars) or kind in getattr(mod, 'allow_modifiers', ()): # Or its own code reads them, with mod.current_value()
             return None
         why = 'it is not an ss.Infection' if not isinstance(mod, ss.Infection) else 'it has no beta'
@@ -175,14 +152,14 @@ def choose_solver(sim):
     population is made ready for it (`init_agents()` or `init_compartments()`), and checked.
     The layouts are made once: a compartmental run uses them, unless its groups changed since.
     """
-    modules = gather_modules(sim)
+    gather_modules(sim)
     init_model(sim)
     if sim.pars.solver not in ['auto', 'abm']: # A module's own compartmental form, used only when a compartmental solver is named (e.g. ss.Pregnancy's)
         for mod in sim.declared:
             note = mod.compartmental_form(sim)
             if note is not None:
                 ss.note(note, sim=sim)
-    init_capabilities(sim, modules)
+    init_capabilities(sim)
     joints, mixing = init_layouts(sim)
 
     # The choice
@@ -215,11 +192,10 @@ def choose_solver(sim):
 
 
 def gather_modules(sim):
-    """ The sim's modules, and the declared ones, as `sim.declared` """
-    pars = sim.pars
-    modules = [mod for key in ss.modules.module_types() + ['custom'] for mod in pars[key].values()]
-    sim.declared = [mod for mod in modules if getattr(mod, 'graph', None) is not None]
-    return modules
+    """ The sim's modules as given, as `sim.gathered` (the rules read these, not the modifiers `init_where()` adds), and the declared ones, as `sim.declared` """
+    sim.gathered = [mod for key in ss.modules.module_types() + ['custom'] for mod in sim.pars[key].values()]
+    sim.declared = [mod for mod in sim.gathered if getattr(mod, 'graph', None) is not None]
+    return
 
 
 def init_model(sim):
@@ -238,7 +214,7 @@ def init_model(sim):
     sim.unitless = False # Whether time is counted in timesteps, with no unit: set in init_unit()
     sim.unit_base = 'year' # The unit that bare numbers are in; with no unit, this is whatever the timestep is
     sim.unit_source = None
-    sim.modifiers = sc.ddict(list) # The modifiers on each quantity: ss.modify(), ss.change(), and the efficacy of products
+    sim.modifiers = sc.ddict(list) # The modifiers on each quantity: ss.modify(), and the efficacy of products
     sim.overlaps = [] # Pairs of modifiers that set the same quantity at once, which is noted
     sim.clipped = set() # Quantities whose modifiers took them out of their range, which were clipped to it
     sim.crossings = [] # Diseases whose states are tracked jointly in a compartmental run: see init_crossings()
@@ -261,43 +237,16 @@ def init_model(sim):
 def init_layouts(sim):
     """
     Under `auto` or `abm`, with nothing yet that needs agents: what the layout of the compartments refuses, found by making it
-    as the ODE would (which runs none of the model's code), and added to `sim.capabilities`, so that it is said in one place:
-    the layout of each declared module (see `lay_out()`), of the mixing, and, under `auto`, of the diseases to track jointly
-    (see `joint_layout()`). What is made is kept, for a compartmental run to use; its notes are said only then.
+    as the ODE would (which runs none of the model's code), and added to `sim.capabilities`, so that it is said in one place: see
+    `layouts`. What is made is kept, for a compartmental run to use; its notes are said only then.
 
     Returns the layouts of the diseases to track jointly, and the mixing, if they were made.
     """
-    pars = sim.pars
-    solver = pars.solver
-    joints = mixing = None
-    if solver not in ['auto', 'abm'] or auto_reasons(sim):
-        return joints, mixing
-    def refused(ingredient, e):
-        sim.capabilities.append(sc.obj(ingredient=ingredient, reason=str(e).split('\n')[0], fatal=False))
-        return
-    for mod in sim.declared:
-        try:
-            lay_out(sim, mod, 'ode')
-        except ss.CapabilityError as e:
-            refused(f'module: {mod.name}', e)
-    try:
-        mixing = ss.solvers.Mixing(sim)
-        mixing.unsaid = [] # Said if it is used (see init_compartments())
-        mixing.init(approx=pars.approx, solver='ode')
-    except ss.CapabilityError as e:
-        mixing = None
-        refused('networks', e)
-    if solver == 'auto' and not auto_reasons(sim) and len(sim.declared) > 1: # Diseases tracked jointly, counted before anything is made: agents, if they cannot be, or take more than the budget
-        joints = []
-        for group in crossing_groups(sim):
-            try:
-                joints.append(joint_layout(sim, group, 'ode'))
-                reason = over_budget(joints[-1])
-            except ss.CapabilityError as e:
-                reason = str(e).split('\n')[0]
-            if reason:
-                sim.capabilities.append(sc.obj(ingredient=f'jointly: {" × ".join(sorted(group.names))}', reason=reason, fatal=False))
-    return joints, mixing
+    sim.laid = sc.obj(joints=None, mixing=None)
+    if sim.pars.solver in ['auto', 'abm'] and not auto_reasons(sim):
+        add_records(sim, layouts)
+    laid = sim.__dict__.pop('laid') # As for sim.gathered
+    return laid.joints, laid.mixing
 
 
 def lay_out(sim, mod, solver):
@@ -405,17 +354,13 @@ jax_after = 0.5 # The seconds above which a run taken by the kernels is taken by
 
 def kernel_seconds(sim):
     """
-    About how long the compiled kernels would take for a whole run of the sim, from the size of its model alone: its
-    time points, substeps, groups, compartments, flows, movers, the mixing between groups and places, and the stages of
-    the integrator. It never times anything, so the estimate (and the engine `choose_engine()` picks) is the same for a
-    model whatever has run before, whether the kernels are compiled, and whatever else the machine is doing. For the
-    chain binomial and tau-leaping: 0.15 µs for each group, flow (and two for each stage of a dwell time), and step
-    (each substep, or for tau-leaping each leap, which is short enough that the fastest of the rates that do not depend
-    on the compartments changes them by 3%), which fits declared SIRs over 50 places, Ghana measles over 260 districts,
-    and two SEIRs with stages tracked jointly to within a factor of 2. For the ODE: see `ss.kernels.compiled_seconds()`
-    (0.93 to 1.6 times the time taken, for runs of more than 0.05 s). Both count the substeps that the rates at the
-    start need, not those an ODE adds as an epidemic grows, and leave out values that vary in time, so they err toward
-    the kernels, which start at once.
+    About how long the compiled kernels would take for a whole run of the ODE, from the size of its model alone: its time
+    points, substeps, groups, compartments, flows, movers, the mixing between groups and places, and the stages of the
+    integrator (see `ss.kernels.compiled_seconds()`: 0.93 to 1.6 times the time taken, for runs of more than 0.05 s). It
+    never times anything, so the estimate (and the engine `choose_engine()` picks) is the same for a model whatever has
+    run before, whether the kernels are compiled, and whatever else the machine is doing. It counts the substeps that
+    the rates at the start need, not those an ODE adds as an epidemic grows, and leaves out values that vary in time, so
+    it errs toward the kernels, which start at once.
     """
     seconds = 0.0
     for mod in sim.declared:
@@ -431,43 +376,31 @@ def kernel_seconds(sim):
             cross.build()
         p = cross.program if cross is not None else engine.program
         groups = cross.n_cols if cross is not None else engine.n_groups
-        leaps = 1
-        if sim.solver in ['tau', 'ode']:
-            rates = np.concatenate([rate for e in engines for rate in e.start_rates()] + [p.mov_rate])
-        if sim.solver == 'ode':
-            solver = ss.kernels.solvers[sim.integrator]
-            n_sub = ss.kernels.substeps(rates, engine.dt, engine.substeps(), solver)
-            seconds += ss.kernels.compiled_seconds(p, np.empty((cross.n_rows if cross is not None else engine.n_comps, groups)), mod.t.npts, solver, n_sub)
-            continue
-        elif sim.solver == 'tau':
-            leaps = max(np.max(rates[np.isfinite(rates)], initial=0)*engine.dt/0.03, 1) # An infinite rate (a probability of 1) moves everyone at once, in no leaps (see ss.kernels.certain())
-        seconds += 1.5e-7*mod.t.npts*groups*(len(p.src) + p.n_movers + 2*np.sum(p.src_chain))*leaps*max(engine.substeps(), 1)
+        rates = np.concatenate([rate for e in engines for rate in e.start_rates()] + [p.mov_rate])
+        solver = ss.kernels.solvers[sim.integrator]
+        n_sub = ss.kernels.substeps(rates, engine.dt, engine.substeps(), solver)
+        seconds += ss.kernels.compiled_seconds(p, np.empty((cross.n_rows if cross is not None else engine.n_comps, groups)), mod.t.npts, solver, n_sub)
     return seconds
 
 
 def choose_engine(sim):
     """
-    Whether JAX takes the sim's whole compartmental run (the ODE as `ss.gradients` runs it, the chain binomial and
-    tau-leaping as `ss.solvers.backends.chain` does), rather than the kernels, and why
+    Whether JAX takes the sim's whole run of the ODE, as `ss.gradients` runs it, rather than the kernels, and why
 
     By `sim.jax`: True for JAX, False for the kernels, or None (the default) to choose: JAX if the run would take the
-    kernels more than `jax_after` seconds (see `kernel_seconds()`). Once started, JAX takes 0.27 to 0.45 times as long
-    as the kernels for the chain binomial, and 0.1 to 0.3 times for the ODE over many groups, but starting it takes
-    about half a second in a session (0.3 s to import it, and 0.1 to 0.25 s to trace a model; compiled code is kept
-    on disk), which a short run would notice. The chain binomial in JAX draws with compiled code (Rust's, or Numba's), so it is not
-    used under `ss.options.kernels = 'python'`; Numba's draws compile once per install, in about 20 s (or ahead of
-    time, with `ss.compile()`). The choice depends on the model only (`kernel_seconds()` is worked out from its size, never
-    timed), not on what has run before, whether the kernels are compiled, or the load on the machine, so a sim with a
-    seed gives the same results whenever it is run (an ODE run in JAX agrees with the kernels to about
-    1e-14). A model JAX does not cover (see `ss.gradients.reason()` and `ss.solvers.backends.chain.reason()`) is taken by the
-    kernels, with a note if JAX was asked for.
+    kernels more than `jax_after` seconds (see `kernel_seconds()`). Once started, JAX takes 0.1 to 0.3 times as long as the
+    kernels for the ODE over many groups, but starting it takes about half a second in a session (0.3 s to import it, and
+    0.1 to 0.25 s to trace a model; compiled code is kept on disk), which a short run would notice. The choice depends on
+    the model only (`kernel_seconds()` is worked out from its size, never timed), not on what has run before, whether the
+    kernels are compiled, or the load on the machine (and an ODE run in JAX agrees with the kernels to about 1e-14). The
+    other solvers are run by the kernels, as is a model JAX does not cover (see `why_not()`), with a note if JAX was asked for.
 
     Returns whether to use JAX, and the reason, also kept as `sim.engine_reason`.
     """
     use, why = False, None
     if sim.jax is False:
         why = 'kernels, as asked (sim.jax = False)'
-    elif sim.solver not in ['ode', 'binomial', 'tau']:
+    elif sim.solver != 'ode':
         why = f'kernels: JAX does not run solver="{sim.solver}"'
         if sim.jax:
             ss.note(f'JAX does not run solver="{sim.solver}", so it is run by the kernels', sim=sim)
@@ -478,7 +411,7 @@ def choose_engine(sim):
         if seconds is not None and seconds < jax_after:
             why = f'kernels: a short run (about {seconds:.2g} s), shorter than JAX takes to start (about {jax_after} s a session)'
         else:
-            no = ss.gradients.reason(sim) if sim.solver not in ['binomial', 'tau'] else importlib.import_module('starsim.solvers.backends.chain').reason(sim) # Imported only when used
+            no = why_not(sim, 'jax')
             if no is not None:
                 why = f'kernels: JAX cannot run this sim, since {no}'
                 if sim.jax:
@@ -494,7 +427,7 @@ def choose_engine(sim):
 
 def resolve_path_triggers(sim):
     """
-    A trigger on a transition of another module by its path (`on=ss.state('pregnancy.delivery')`, for a module declared
+    A trigger on a transition of another module by its path (`ss.on(ss.state('pregnancy.delivery'))`, for a module declared
     before that one exists) is that transition's event, as `ss.on(preg.delivery)` is, not the condition of having gone through
     it: so it happens once, in the step, and to whoever the event also happens to (e.g. the fetuses at a delivery)
     """
@@ -825,20 +758,27 @@ def settle_start(sim):
 
 
 def group_people(sim):
-    """ In a compartmental run, one row per group: the properties that are not dimensions have no values to give, so are removed, and counting who is alive counts the people, not the groups """
+    """ In a compartmental run, one row per group: the properties that are not dimensions have no values to give, so are removed, as are the active agents (`auids`), and counting who is alive counts the people, not the groups """
     if sim.solver == 'abm':
         return
     dims = [strat.name for strat in sim.groups.strats]
     missing = [key for key in ['age', 'female'] if key not in dims and not (key == 'female' and 'sex' in dims)]
     for key in missing:
         sim.people.__dict__.pop(key, None)
+    sim.people.__dict__.pop('auids', None) # Arrays go by their own length: see ss.Arr.auids
     sim.people._no_groups = missing
     sim.people.alive.__class__ = ss.arrays.GroupAlive
     return
 
 
 def init_where(sim):
-    """ The modifiers that `where=` on a transition stands for, and the parameters of modifiers, given to the modules they modify """
+    """ The modifiers that are members of a disease, those that `where=` on a transition stands for, and the parameters of modifiers, given to the modules they modify """
+    for mod in sim.declared: # Given to the sim as a connector, under the disease's name, so two of them can have the same member
+        for name,modifier in mod.graph.modifiers.items():
+            key = f'{mod.name}_{name}'
+            if key not in sim.pars.connectors:
+                modifier.name = modifier.label = key
+                sim.pars.connectors[key] = modifier
     for mod in sim.declared: # A transition for some people only: a modifier that sets its rate to 0 for everyone else
         for name,tr in mod.graph.transitions.items():
             where = getattr(tr, 'where', None)
@@ -966,12 +906,6 @@ def check_betas(sim, nets):
                         if not acts:
                             raise ValueError(f'{where} is {val}, a probability per act, but "{net.name}" has no acts, so there is no act to be per; give a probability (or rate) per contact as a bare number, or give the network acts=')
                         val.resolve(net)
-                    elif acts and ss.expressions.value_dimension(val) == -1 and getattr(p, 'library_default', False): # The default of ss.SIR, ss.SIS, or ss.SEIR: a probability per act, as in Starsim 3
-                        value = getattr(val, 'value', val)
-                        routes = raw if isinstance(raw, dict) else {'default':raw}
-                        p.value = routes | {net.name:ss.peract(value)}
-                        p.value[net.name].resolve(net)
-                        ss.note(f'the default beta of "{mod.name}" ({val!r}) is read as ss.peract({value}) on "{net.name}", which has acts; give beta= to set it', sim=sim)
                     elif acts and ss.expressions.value_dimension(val) == -1:
                         raise TypeError(f'{where} is {val!r}, a rate per unit time, but "{net.name}" has acts per unit time, so the two would multiply to a rate squared; give the probability per act, e.g. ss.peract({getattr(val, "value", val)}), or leave out acts=')
     return
@@ -1140,199 +1074,558 @@ def dwell_cv(raw, sim):
     return std/mean if mean > 0 else np.nan
 
 
-def init_capabilities(sim, modules):
+def init_capabilities(sim):
     """
     One record for each ingredient that changes which solvers can run the model, read by `solver='auto'`, `sim.describe()`, and the `CapabilityError` of a compartmental solver that was asked for
 
     Each record has the ingredient; the reason it makes `auto` run the model as agents (`reason`); whether it stops a
-    compartmental solver that was asked for (`fatal`); and whether `auto` runs as agents for it (`switch`): not for `at_age=`
-    with no age group starting at the age (see `ss.Delivery.age_reason()`), which raises instead, unless something else needs agents. Ingredients that every solver runs are not recorded. Code is never run to find out: setting `compartmental = True` or `False` on a module (or its class)
-    says whether it works on groups. Without it, a module written as code needs agents if it keeps a value for each person
-    (`define_states()`) or adds and removes agents (`ss.Births`, `ss.Deaths`); a network of individuals, or one with lasting
-    partnerships, makes `auto` run as agents, and is approximated by a compartmental solver that was asked for where it can.
-    Any other module written as code, whatever its kind, and the code and functions of a declared module, run beside the
-    compartments (and raise a `CapabilityError` if they ask for agents). What the layout of
-    the compartments refuses (a minimum stay it has no form for, a race with a fixed delay, a network's partnerships, a network with no approximation) is not
-    predicted here: `init_layouts()` makes the layout, which runs none of the model's code, and adds its refusal as a record.
+    compartmental solver that was asked for (`fatal`); and whether `auto` runs as agents for it (`switch`): see `capabilities`.
+    Code is never run to find out: setting `compartmental = True` or `False` on a module (or its class) says whether it works on
+    groups, and `agent_reasons()` is what a module says for itself. Any module written as code that says nothing, and the code and
+    functions of a declared module, run beside the compartments (and raise a `CapabilityError` if they ask for agents). What the
+    layout of the compartments refuses is not predicted here: `init_layouts()` makes the layout, which runs none of the model's
+    code, and adds its refusal as a record.
     """
-    caps = []
-    def add(ingredient, reason, fatal=False, switch=True):
-        caps.append(sc.obj(ingredient=ingredient, reason=reason, fatal=fatal, switch=switch))
-        return
+    sim.capabilities = []
+    add_records(sim, capabilities)
+    del sim.gathered # Kept on the sim only for this, since what the sim holds is searched for distributions
+    return sim.capabilities
 
-    approx = sim.pars.approx
-    if 'n_agents' in sim.given:
-        add('n_agents', 'n_agents was given')
-    if 'people' in sim.given and not sim.named_unsized:
-        add('people', 'people were given')
-    for (name,outcome),need in ss.interventions.memory_needs(sim).items(): # Whether an event happened (.ever) is a level of people; how often and how long ago are each person's own
+
+def add_records(sim, rows):
+    """ The record of each thing some rows find, in `sim.capabilities`; a property of people is said once """
+    for rule,found,values in findings(sim, rows):
+        ingredient = rule.ingredient.format(**values)
+        if ingredient.startswith('property:') and ingredient in [cap.ingredient for cap in sim.capabilities]:
+            continue
+        fatal = 'asked' not in rule.engines and not isinstance(found.get('reason'), ss.modules.Preference)
+        sim.capabilities.append(sc.obj(ingredient=ingredient, reason=rule.message.format(**values), fatal=fatal, switch='raises' not in rule.engines))
+    return
+
+
+def findings(sim, rows, mods=None):
+    """
+    What each of some rules finds, in order, as the rule, what it found, and the values for its message; the rules read the sim, or
+    each module, and rules next to each other are taken together, so that a module's (or a transition's) are said together
+
+    Args:
+        sim (`ss.Sim`): the sim
+        rows (list): the rules
+        mods (list): for rules of the declared modules, the modules to read, if not all of them
+    """
+    def run(rule, *subject):
+        found = rule.test(sim, *subject)
+        found = [found] if isinstance(found, dict) else found if hasattr(found, '__iter__') else [{}] if found else []
+        names = dict(zip(['mod', 'tr'], subject))
+        return [(rule, item, dict(sim=sim, **names) | item) for item in found] # Each is taken in turn, since what a later one reads may depend on what was recorded
+
+    for kind,group in itertools.groupby(rows, key=lambda rule: rule.scope if rule.scope in ['sim', 'declared'] else 'module'):
+        group = list(group)
+        if kind == 'sim':
+            for rule in group:
+                yield from run(rule)
+            continue
+        for mod in ((mods or sim.declared) if kind == 'declared' else sim.gathered):
+            graph = getattr(mod, 'graph', None)
+            for scope,part in itertools.groupby(group, key=lambda rule: rule.scope):
+                part = list(part)
+                if scope in ['graph', 'transition'] and graph is None:
+                    continue
+                for tr in (graph.transitions.values() if scope == 'transition' else [None]):
+                    for rule in part:
+                        yield from run(rule, mod, tr) if tr is not None else run(rule, mod)
+    return
+
+
+def why_not(sim, engine, mods=None):
+    """
+    Why an engine (`'kernels'`, a whole run in one call; or `'jax'`, the ODE in JAX, as for gradients) cannot run the sim, in a few words, or None if it can
+
+    Args:
+        sim (`ss.Sim`): the sim
+        engine (str): the engine
+        mods (list): for the kernels, only these declared modules' rules
+    """
+    rows = kernels if engine == 'kernels' else [rule for rule in jax if engine not in rule.engines]
+    rows = [rule for rule in rows if rule.scope == 'declared'] if mods else rows
+    for rule,_,values in findings(sim, rows, mods):
+        return rule.message.format(**values)
+    return None
+
+
+def solver_table():
+    """
+    What decides which engine runs a model, as a dataframe: a row for each rule, in the order they are read, with a column for each
+    engine: `agents`, `compartments` (one step at a time), `kernels` (the whole run in one call), and `jax` (the ODE in JAX). In `compartments`, "if asked" is what `solver='auto'` runs as agents, but
+    a compartmental solver that was asked for runs, approximating it.
+
+    **Example**:
+
+        ss.solvers.solver_table()
+    """
+    data = []
+    for rule in rules:
+        what = rule.test.__doc__ or re.sub(r'\{[^}]*\}', '...', rule.message)
+        cells = {engine:'yes' if engine in rule.engines else 'no' for engine in engine_names}
+        if 'asked' in rule.engines:
+            cells['compartments'] = 'if asked'
+        data.append(dict(what=what.strip(), **cells))
+    return sc.dataframe(data)
+
+
+#%% The rules
+
+Rule = collections.namedtuple('Rule', ['scope', 'test', 'engines', 'message', 'ingredient'], defaults=[None]) # What it reads ('sim'; 'module', every module; 'graph', a module with a graph; 'transition', each of its transitions; 'declared', every declared module); what it looks for: truthy, or a dict of values for the message, or several; the engines that can run a model with it; why not; and for a capability record, the ingredient
+
+engine_names = ['agents', 'compartments', 'kernels', 'jax'] # Each needs what the one before it does
+AGENTS = ('agents',) # A compartmental solver is refused, and solver='auto' runs as agents
+ASKED = ('agents', 'asked') # A compartmental solver that was asked for runs it, approximately, or with a note; solver='auto' runs as agents
+RAISES = ('agents', 'raises') # A compartmental solver is refused, as is solver='auto', with what to do, unless something else needs agents
+STEPPED = ('agents', 'compartments') # In compartments, a step at a time
+KERNELS = STEPPED + ('kernels',) # A whole run in the kernels, not in JAX
+
+said_of = lambda e: str(e).split('\n')[0] # A CapabilityError's reason
+
+
+def memory_read(sim):
+    """ How often or how long ago an event happened, which are each person's own (whether it happened, `.ever`, is a level of people) """
+    for (name,outcome),need in ss.interventions.memory_needs(sim).items():
         for kind in sorted(need - {'ever'})[:1]:
-            event = name if outcome is None else f'{name}.{outcome}'
-            add(f'memory: {event}', f'a condition reads {event}.{kind}, which only agents keep (.ever is the memory a compartmental run has)', fatal=True)
-    deliveries = [mod for mod in modules if isinstance(mod, ss.Delivery)]
-    for mod in deliveries: # A step triggered by a product delivered by several steps: the union of their people, whose shared people only agents know
+            yield dict(event=name if outcome is None else f'{name}.{outcome}', kind=kind)
+
+
+def several_givers(sim):
+    """ A step triggered by a product delivered by several steps: the union of their people """
+    deliveries = [mod for mod in sim.gathered if isinstance(mod, ss.Delivery)]
+    for mod in deliveries:
         for leaf in ss.conditions.event_leaves(mod.on) if isinstance(mod.on, ss.conditions.Cond) else []:
             name = ss.conditions.modname(leaf.args[0]) if leaf.op == 'event' else None
             givers = [d.name for d in deliveries if d.product is not None and d.product.name == name]
             if len(givers) > 1 and name not in [d.name for d in deliveries]:
-                add(f'module: {mod.name}', f'"{mod.name}" is triggered by {leaf}, which is delivered by {sc.strjoin(givers)}, whose shared people only agents follow', fatal=True)
-    for mod in modules:
-        graph = getattr(mod, 'graph', None)
-        flag = getattr(mod, 'compartmental', None) # Whether it works on groups, if the module says
-        reasons = mod.agent_reasons() if hasattr(mod, 'agent_reasons') else [] # What needs agents, which needs no layout to find (see ss.Delivery.agent_reasons())
-        for reason in reasons: # A priority per agent is ignored by a compartmental solver that was asked for, with a note (see ss.Delivery.key())
-            add(f'module: {mod.name}', reason, fatal=not (reason.startswith('priority=') and approx is not False))
-        aged = isinstance(mod, ss.Delivery) and mod.at_age is not None
-        if aged and mod.age_reason(sim): # Raised, not run as agents: see ss.Delivery.age_reason()
-            add(f'at_age: {mod.name}', mod.age_reason(sim), fatal=True, switch=False)
-        for cond in [mod.where_given if aged and key == 'eligible' else getattr(mod, key, None) for key in ['on', 'eligible', 'where'] if not (key == 'where' and graph is not None)]: # The conditions of a delivery or a modifier (with at_age=, apart from the age)
-            for reason in ss.conditions.group_reasons(cond, sim)[:1]:
-                add(f'condition: {mod.name}', reason, fatal=True)
-        if graph is not None and graph.attrs: # Agents only (see ss.attr), apart from traits, which a compartmental run takes at their mean
-            kept = [name for name,a in graph.attrs.items() if not ss.solvers.Compartmental.trait_mean(mod, a, sim)]
-            if kept:
-                add(f'attributes: {mod.name}', f'the attributes of "{mod.name}" ({sc.strjoin(kept)}) are kept per agent', fatal=True)
-            for name in [name for name in graph.attrs if name not in kept]:
-                add(f'attribute: {name}', f'the attribute "{name}" of "{mod.name}" is a distribution across people')
-        for clock in clocks_of(mod)[:1]: # The time in a state or since an event, kept per agent (see ss.expressions.Clock)
-            add(f'module: {mod.name}', f'{clock} is a clock, which only agents keep', fatal=True)
-        if isinstance(mod, ss.strains.Family): # Its members side by side; what ties them together from their shares (see ss.strains.Family.shares())
-            if mod.coupled:
-                add(f'strains: {mod.name}', f'the strains of "{mod.name}" protect each other or share a state, which only agents follow (or track them jointly: ss.modify(..., where=) between them)', fatal=True)
-            continue
-        if graph is None:
-            if isinstance(mod, ss.DegreeNet): # Lasting partnerships (ss.DegreeNet, ss.SexualNet): approximate, so 'auto' keeps agents (R4)
-                add(f'network: {mod.name}', f'"{mod.name}" ({type(mod).__name__}) has lasting partnerships, which agents follow exactly')
-            elif isinstance(mod, ss.Network): # One with no approximation is refused by the layout of the mixing (see ss.solvers.Mixing.init())
-                if mod.mean_contacts(sim)[0] is not None:
-                    add(f'network: {type(mod).__name__}', f'{type(mod).__name__} is an individual-level network')
-            elif isinstance(mod, ss.MixingPool) and (mod.pars.src is not None or mod.pars.dst is not None): # A pool of some people, which has no compartmental form yet
-                add(f'network: {mod.name}', f'the mixing pool "{mod.name}" is between some people (src= or dst=), which only agents have', fatal=True)
-            elif isinstance(mod, ss.MixingPool) and isinstance(mod.pars.n_contacts, ss.Dist) and not isinstance(mod.pars.n_contacts, ss.constant): # A number of contacts that differs between people
-                add(f'network: {mod.name}', f'the mixing pool "{mod.name}" has a number of contacts that differs between people ({type(mod.pars.n_contacts).__name__})')
-            elif isinstance(mod, ss.networks.Route): # A mixing pool, which works on groups
-                continue
-            elif flag: # It says it works on groups
-                continue
-            elif isinstance(mod, (ss.Births, ss.Deaths)): # They add and remove agents
-                add(f'module: {mod.name}', f'"{mod.name}" ({type(mod).__name__}) adds and removes agents; ss.birth() and ss.death() in the disease are its compartmental form', fatal=True)
-            elif flag is False:
-                add(f'module: {mod.name}', f'"{mod.name}" ({type(mod).__name__}) has compartmental = False, so runs only as agents', fatal=True)
-            elif mod.state_list: # A value for each person (define_states()), which only agents have
-                add(f'module: {mod.name}', f'"{mod.name}" ({type(mod).__name__}) keeps a value for each person ({sc.strjoin(s.name for s in mod.state_list[:3])}), which only agents have; if its code works on groups, set compartmental = True on it', fatal=True)
-            continue # Code with nothing per person runs beside the compartments, whatever its kind; if it asks for agents, it says so then
+                yield dict(mod=mod, leaf=leaf, givers=sc.strjoin(givers))
 
-        # A declared module: what needs agents (its own code and functions run beside the compartments)
-        if flag is False:
-            add(f'module: {mod.name}', f'"{mod.name}" ({type(mod).__name__}) has compartmental = False, so runs only as agents', fatal=True)
-        arrays = [state.name for state in mod.state_list] # Per-agent arrays of its own beside the declared states (made by its engine later)
-        small = type(mod).compartmental_form is not ss.Disease.compartmental_form
-        if arrays and flag is None and not small:
-            add(f'arrays: {mod.name}', f'"{mod.name}" has per-agent arrays of its own ({sc.strjoin(arrays[:3])}), which only agents have', fatal=True)
-        if small: # A small form of its own, only when a compartmental solver is named
-            add(f'module: {mod.name}', f'"{mod.name}" has only a small approximate compartmental form, used when a compartmental solver is named')
-        for name,tr in graph.transitions.items(): # Each person's mother: agents only
-            if ss.expressions.mothers_in([tr.rate, tr.dur, getattr(tr, 'where', None), tr.trigger] + sc.tolist(tr.p)):
-                add(f'transition: {name}', f'"{mod.name}.{name}" reads ss.mother(), the mother of each person, whom only agents know', fatal=True)
-                break
-        for p in graph.all_pars():
-            raw = p.raw
-            if callable(raw) and not isinstance(raw, ss.Dist):
-                name = getattr(raw, '__name__', 'function')
-                if ss.utils.n_args(raw) >= 2:
-                    add(f'function: {name}', f'the function "{name}" takes uids')
-        init_prev = graph.init_prev.raw if isinstance(graph.init_prev, ss.par) else graph.init_prev
-        if isinstance(init_prev, ss.bernoulli) and callable(init_prev.pars.p): # Starsim 3's form, a function of the agents
-            init_prev = init_prev.pars.p
-        if callable(init_prev) and not isinstance(init_prev, (ss.Dist, ss.by)):
-            if len(inspect.signature(init_prev).parameters) >= 2:
-                add('function: init_prev', f'init_prev of "{mod.name}" is a function of the agents')
-        inits = [init_prev] + [init.raw if isinstance(init, ss.par) else init for state in graph.states.values() for init in [state.init, state.init_n]]
-        for by in [val for val in inits if isinstance(val, ss.by)]: # A share by a property of each person that is not a dimension (as for a value in a rate, below)
-            for prop in [prop for prop in by.dims if prop not in [strat.name for strat in sim.groups.strats] + ['female']*any(strat.female is not None for strat in sim.groups.strats)]:
-                ingredient = f'property: people.{"female" if prop == "sex" else prop}'
-                if ingredient not in [cap.ingredient for cap in caps]:
-                    add(ingredient, f'the initial values of "{mod.name}" depend on {ingredient.split(": ")[1]}, which is not a dimension; stratify by it to run as compartments', fatal=True)
-        for p in graph.spread_pars():
-            add(f'distribution: {p.name}', f'"{p.name}" is a distribution across people')
-        dims = [strat.name for strat in sim.groups.strats] + ['female']*any(strat.female is not None for strat in sim.groups.strats) # A dimension by sex is people.female
-        for leaf in graph.leaves(): # A property of people that is not a dimension is each person's own
-            props = leaf.names if isinstance(leaf, ss.expressions.Prop) else leaf.raw.dims if isinstance(leaf, ss.par) and isinstance(leaf.raw, ss.by) else []
-            for name in (leaf.arrays if isinstance(leaf, ss.expressions.Prop) else []): # An array of a module written as code, e.g. hiv.cd4
-                if f'property: {name}' not in [cap.ingredient for cap in caps]:
-                    add(f'property: {name}', f'a value in "{mod.name}" depends on {name}, an array of a module written as code, which only agents have', fatal=True)
-            for prop in props:
-                ingredient = f'property: people.{"female" if prop == "sex" else prop}'
-                if prop not in dims and ingredient not in [cap.ingredient for cap in caps]:
-                    example = "sex=['female', 'male']" if prop in ['sex', 'female'] else f'{prop}=[...]'
-                    add(ingredient, f'a value in "{mod.name}" depends on {ingredient.split(": ")[1]}, which is not a dimension; stratify by it (sim.stratify({example})) to run as compartments', fatal=True)
-        for by in [val for val in inits if isinstance(val, ss.by)] + [leaf.raw for leaf in graph.leaves() if isinstance(leaf, ss.par) and isinstance(leaf.raw, ss.by)]: # A table by bins that split the model's groups, which only agents read (see ss.by.split_groups())
-            dim = by.split_groups(sim)
-            ingredient = f'property: people.{dim}'
-            if dim is not None and ingredient not in [cap.ingredient for cap in caps]:
-                labels = sc.strjoin(sim.groups.strats[sim.groups.dim_index(dim)].labels)
-                add(ingredient, f'a value in "{mod.name}" is given by bins of {dim} that split the model\'s groups ({labels}), which only agents read, for each person; give it by the model\'s groups to run as compartments', fatal=True)
-        aged = any(strat.kind == 'age' and strat.edges is not None for strat in list(graph.strats) + list(sim.groups.strats))
-        for name,tr in graph.transitions.items():
-            raw = None if tr.dur is None else tr.dur.raw
-            fixed = isinstance(raw, ss.constant) and tr.stages is None # A fixed delay, which is a conveyor (see ss.kernels.convey())
-            if isinstance(raw, ss.Dist) and type(raw).__name__ != 'expon':
-                shape = raw.pars.get('a')
-                exact = fixed or tr.stages is not None or (type(raw).__name__ == 'gamma' and sc.isnumber(shape) and shape == int(shape))
-                cv = np.nan if exact else dwell_cv(raw, sim)
-                if approx is False and not exact:
-                    auto = f'"{name}" has a {type(raw).__name__} dwell time, and approx=False'
-                elif cv > max_cv:
-                    auto = f'"{name}" has a {type(raw).__name__} dwell time whose coefficient of variation is {cv:.3g}, which Erlang stages cannot follow'
-                else:
-                    auto = None
-                if auto:
-                    add(f'dwell time: {name} ({type(raw).__name__})', auto)
-            changers = [m for m in list(sim.pars.interventions.values()) + list(sim.pars.connectors.values()) if isinstance(m, ss.modify) and getattr(m.target_module, 'name', m.target_module) == mod.name
-                        and m.target_kind in ['par', None] and m.target_name == getattr(tr.dur, 'name', None)] if isinstance(ss.transitions.by_dist(raw), ss.Dist) else []
-            if changers: # A distribution laid out once as compartments: see Engine.dwell_mods(), which can only refuse it once the modifiers are found, after the solver is chosen
-                add(f'modifier: {changers[0].name}', f'the modifier "{changers[0].name}" changes the dwell time of "{name}", a distribution, which is laid out once as compartments', fatal=True)
-            if tr.trigger is not None and tr.trigger.outcome:
-                pass # Moved when the outcome of a delivery happens
-            elif tr.trigger is not None and tr.trigger.event and ss.solvers.compartmental.synced_event(tr, sim, mod.name) is not None:
-                pass # A synchronized flow of another module's transition
-            elif tr.trigger is not None and tr.trigger.event and not (tr.trigger.x.args[0] in ['tr', 'to'] and ss.conditions.modname(getattr(tr.trigger.x.args[1], 'module', None)) in [None, mod.name]):
-                add(f'transition: {name}', f'"{name}" is triggered by {tr.trigger}, an event that only agents record, which runs as agents for now', fatal=True)
-            elif tr.trigger is not None and ((callable(tr.trigger.x) and not isinstance(tr.trigger.x, ss.conditions.Cond))
-                                             or any(isinstance(leaf, ss.conditions.Event) and leaf.args[0] not in ['tr', 'to'] for leaf in ss.conditions.event_leaves(tr.trigger.x))):
-                add(f'transition: {name}', f'"{name}" is triggered by {tr.trigger}, which only agents can follow', fatal=True)
-            if getattr(tr, 'lifetable', None) is not None and not aged:
-                add(f'transition: {name}', f'"{name}" draws ages at death from a life table, which needs each person\'s age (or a stratification by age)')
-        for name,exits in graph.exits.items(): # Several non-exponential dwell times out of one state: a track for each if each is for other people (see ss.solvers.Compartmental.apart_shares(), which the engine checks), or racing as a compartment for each combination of their stages if not (one that is a fixed delay is refused by the layout)
-            dwells = [tr for tr in exits.timed if isinstance(getattr(tr.dur, 'raw', None), ss.Dist) and not isinstance(tr.dur.raw, ss.expon)]
-            if len(dwells) > 1 and not exits.branches:
-                wheres = [repr(getattr(tr, 'where', None)) for tr in dwells]
-                if all(getattr(tr, 'where', None) is not None for tr in dwells) and len(set(wheres)) < len(wheres): # The same where= for both: the same people
-                    add(f'dwell times: out of {name} ({sc.strjoin(tr.name for tr in dwells)})', f'"{dwells[0].name}" and "{dwells[1].name}" are non-exponential dwell times out of "{name}" for the same people, each with a where=', fatal=True)
-        for name,tf in graph.transfers.items(): # A time drawn for each person, as Erlang stages (see ss.dimensions.transfer_stages())
-            raw = ss.transitions.by_dist(getattr(tf.dur, 'raw', None))
-            if isinstance(raw, ss.Dist) and not isinstance(raw, ss.expon):
-                shape = raw.pars.get('a')
-                exact = type(raw) is ss.gamma and sc.isnumber(shape) and shape == int(shape)
-                varying = bool(ss.transitions.varying_pars(raw))
-                if varying:
-                    add(f'transfer: {name} ({type(raw).__name__})', f'the transfer "{name}" has a {type(raw).__name__} dur= with parameters by group or person, drawn for each person', fatal=True)
-                else:
-                    cv = np.nan if exact else dwell_cv(raw, sim)
-                    if approx is False and not exact:
-                        auto = f'the transfer "{name}" has a {type(raw).__name__} dur=, and approx=False'
-                    elif cv > max_cv: # As for a dwell time (FP53)
-                        auto = f'the transfer "{name}" has a {type(raw).__name__} dur= whose coefficient of variation is {cv:.3g}, which Erlang stages cannot follow'
-                    else:
-                        auto = None
-                    if auto:
-                        add(f'transfer: {name} ({type(raw).__name__})', auto)
-        for strat in graph.strats:
-            reason = None if strat.strains is None else strat.strains.needs_agents(graph) # E.g. a compartment keeps only the strain people carry now (KI15): see ss.solvers.Engine.init_immunity()
-            if reason:
-                add(f'strains: {strat.name}', f'the strains of "{mod.name}": {reason}', fatal=True)
-    sim.capabilities = caps
-    return caps
+
+def says_itself(sim, mod):
+    """ What a module says it needs agents for: see `agent_reasons()` (e.g. lasting partnerships, or a value kept for each person) """
+    kind = 'network' if isinstance(mod, ss.networks.Route) else 'strains' if isinstance(mod, ss.strains.Family) else 'module'
+    return [dict(reason=reason, kind=kind) for reason in mod.agent_reasons(sim)]
+
+
+def bad_age(sim, mod):
+    """ `at_age=` with no age group starting at the age (see `ss.Delivery.age_reason()`) """
+    reason = mod.age_reason(sim) if isinstance(mod, ss.Delivery) and mod.at_age is not None else None
+    return dict(reason=reason) if reason else None
+
+
+def group_conditions(sim, mod):
+    """ A condition of a delivery or a modifier (with `at_age=`, apart from the age) that no group can answer """
+    aged = isinstance(mod, ss.Delivery) and mod.at_age is not None
+    conds = [mod.where_given if aged and key == 'eligible' else getattr(mod, key, None) for key in ['on', 'eligible', 'where'] if not (key == 'where' and getattr(mod, 'graph', None) is not None)]
+    return [dict(reason=reason) for cond in conds for reason in ss.conditions.group_reasons(cond, sim)[:1]]
+
+
+def kept_attrs(sim, mod):
+    """ Attributes that are not traits (see `ss.attr`), kept per agent """
+    kept = [name for name,a in mod.graph.attrs.items() if not ss.solvers.Compartmental.trait_mean(mod, a, sim)]
+    return dict(kept=sc.strjoin(kept)) if kept else None
+
+
+def trait_attrs(sim, mod):
+    """ An attribute that is a distribution across people, which a compartmental run takes at its mean """
+    return [dict(name=name) for name,a in mod.graph.attrs.items() if ss.solvers.Compartmental.trait_mean(mod, a, sim)]
+
+
+def own_arrays(sim, mod):
+    """ Per-agent arrays of its own beside the declared states (made by its engine later) """
+    arrays = [state.name for state in mod.state_list]
+    small = type(mod).compartmental_form is not ss.Disease.compartmental_form
+    return dict(arrays=sc.strjoin(arrays[:3])) if arrays and getattr(mod, 'compartmental', None) is None and not small else None
+
+
+def reads_mother(sim, mod):
+    """ Each person's mother, in a transition """
+    return next((dict(tr=tr) for tr in mod.graph.transitions.values() if ss.expressions.mothers_in([tr.rate, tr.dur, getattr(tr, 'where', None), tr.trigger] + sc.tolist(tr.p))), None)
+
+
+def uid_functions(sim, mod):
+    """ A parameter that is a function of uids """
+    raws = [p.raw for p in mod.graph.all_pars() if callable(p.raw) and not isinstance(p.raw, ss.Dist)]
+    return [dict(name=getattr(raw, '__name__', 'function')) for raw in raws if ss.utils.n_args(raw) >= 2]
+
+
+def plain_init_prev(mod):
+    """ `init_prev`, without its `ss.par` """
+    return mod.graph.init_prev.raw if isinstance(mod.graph.init_prev, ss.par) else mod.graph.init_prev
+
+
+def uid_init_prev(sim, mod):
+    """ `init_prev` as a function of the agents """
+    init_prev = plain_init_prev(mod)
+    return callable(init_prev) and not isinstance(init_prev, (ss.Dist, ss.by)) and len(inspect.signature(init_prev).parameters) >= 2
+
+
+def dim_names(sim):
+    """ The names of the dimensions; a dimension by sex is people.female """
+    return [strat.name for strat in sim.groups.strats] + ['female']*any(strat.female is not None for strat in sim.groups.strats)
+
+
+def init_bys(mod):
+    """ The initial values of a module that are given by level """
+    inits = [plain_init_prev(mod)] + [init.raw if isinstance(init, ss.par) else init for state in mod.graph.states.values() for init in [state.init, state.init_n]]
+    return [val for val in inits if isinstance(val, ss.by)]
+
+
+def people_name(prop):
+    """ A property of people, by the name it has there """
+    return f'people.{"female" if prop == "sex" else prop}'
+
+
+def init_props(sim, mod):
+    """ An initial value by a property of each person that is not a dimension """
+    dims = dim_names(sim)
+    return [dict(prop=people_name(prop)) for by in init_bys(mod) for prop in by.dims if prop not in dims]
+
+
+def value_props(sim, mod):
+    """ A value that depends on a property of each person that is not a dimension """
+    dims = dim_names(sim) # A property of people that is not a dimension is each person's own
+    for leaf in mod.graph.leaves():
+        prop = isinstance(leaf, ss.expressions.Prop)
+        for name in (leaf.arrays if prop else []): # An array of a module written as code, e.g. hiv.cd4
+            yield dict(prop=name, reason=f'a value in "{mod.name}" depends on {name}, an array of a module written as code, which only agents have')
+        for name in leaf.names if prop else leaf.raw.dims if isinstance(leaf, ss.par) and isinstance(leaf.raw, ss.by) else []:
+            if name not in dims:
+                example = "sex=['female', 'male']" if name in ['sex', 'female'] else f'{name}=[...]'
+                yield dict(prop=people_name(name), reason=f'a value in "{mod.name}" depends on {people_name(name)}, which is not a dimension; stratify by it (sim.stratify({example})) to run as compartments')
+
+
+def split_bins(sim, mod):
+    """ A table by bins that split the model's groups, which only agents read (see `ss.by.split_groups()`) """
+    for by in init_bys(mod) + [leaf.raw for leaf in mod.graph.leaves() if isinstance(leaf, ss.par) and isinstance(leaf.raw, ss.by)]:
+        dim = by.split_groups(sim)
+        if dim is not None:
+            yield dict(dim=dim, labels=sc.strjoin(sim.groups.strats[sim.groups.dim_index(dim)].labels))
+
+
+def beyond_stages(raw, exact, sim):
+    """ Why Erlang stages cannot follow a time drawn from a distribution, as the end of a sentence, or None """
+    cv = np.nan if exact else dwell_cv(raw, sim)
+    if sim.pars.approx is False and not exact:
+        return ', and approx=False'
+    return f' whose coefficient of variation is {cv:.3g}, which Erlang stages cannot follow' if cv > max_cv else None
+
+
+def far_dwell(sim, mod, tr):
+    """ A dwell time that Erlang stages cannot follow, or with `approx=False`, not exactly """
+    raw = None if tr.dur is None else tr.dur.raw
+    if not isinstance(raw, ss.Dist) or type(raw).__name__ == 'expon':
+        return None
+    shape = raw.pars.get('a')
+    fixed = isinstance(raw, ss.constant) and tr.stages is None # A fixed delay, which is a conveyor (see ss.kernels.convey())
+    exact = fixed or tr.stages is not None or (type(raw).__name__ == 'gamma' and sc.isnumber(shape) and shape == int(shape))
+    how = beyond_stages(raw, exact, sim)
+    return dict(kind=type(raw).__name__, how=how) if how else None
+
+
+def dwell_changer(sim, mod, tr):
+    """ A modifier of a dwell time that is a distribution, laid out once as compartments: see `Engine.dwell_mods()`, which can only refuse it once the modifiers are found, after the solver is chosen """
+    if not isinstance(ss.transitions.by_dist(None if tr.dur is None else tr.dur.raw), ss.Dist):
+        return None
+    for m in list(sim.pars.interventions.values()) + list(sim.pars.connectors.values()):
+        if isinstance(m, ss.modify) and getattr(m.target_module, 'name', m.target_module) == mod.name and m.target_kind in ['par', None] and m.target_name == getattr(tr.dur, 'name', None):
+            return dict(changer=m)
+    return None
+
+
+def trigger_kind(sim, mod, tr):
+    """ Whether a transition's trigger is an event only agents record, or one only they can follow, or neither: moved when a delivery's outcome happens, or a synchronized flow of another module's transition """
+    trig = tr.trigger
+    if trig is None or trig.outcome:
+        return None
+    elif trig.event:
+        if ss.solvers.compartmental.synced_event(tr, sim, mod.name) is not None:
+            return None
+        elif not (trig.x.args[0] in ['tr', 'to'] and ss.conditions.modname(getattr(trig.x.args[1], 'module', None)) in [None, mod.name]):
+            return 'event'
+    if (callable(trig.x) and not isinstance(trig.x, ss.conditions.Cond)) or any(isinstance(leaf, ss.conditions.Event) and leaf.args[0] not in ['tr', 'to'] for leaf in ss.conditions.event_leaves(trig.x)):
+        return 'code'
+    return None
+
+
+def needs_age(sim, mod, tr):
+    """ A life table, with neither each person's age nor a stratification by age """
+    aged = any(strat.kind == 'age' and strat.edges is not None for strat in list(mod.graph.strats) + list(sim.groups.strats))
+    return getattr(tr, 'lifetable', None) is not None and not aged
+
+
+def same_people_dwells(sim, mod):
+    """ Several non-exponential dwell times out of one state for the same people (for other people, a track for each: see `ss.solvers.Compartmental.apart_shares()`, which the engine checks; else racing, as a compartment for each combination of their stages, and one that is a fixed delay is refused by the layout) """
+    for name,exits in mod.graph.exits.items():
+        dwells = [tr for tr in exits.timed if isinstance(getattr(tr.dur, 'raw', None), ss.Dist) and not isinstance(tr.dur.raw, ss.expon)]
+        if len(dwells) > 1 and not exits.branches:
+            wheres = [repr(getattr(tr, 'where', None)) for tr in dwells]
+            if all(getattr(tr, 'where', None) is not None for tr in dwells) and len(set(wheres)) < len(wheres): # The same where= for both
+                yield dict(name=name, first=dwells[0].name, second=dwells[1].name, names=sc.strjoin(tr.name for tr in dwells))
+
+
+def timed_transfers(mod):
+    """ The transfers of a module with a time drawn for each person, as Erlang stages (see `ss.dimensions.transfer_stages()`), and each one's distribution """
+    for name,tf in mod.graph.transfers.items():
+        raw = ss.transitions.by_dist(getattr(tf.dur, 'raw', None))
+        if isinstance(raw, ss.Dist) and not isinstance(raw, ss.expon):
+            yield name, raw
+
+
+def varying_transfers(sim, mod):
+    """ A transfer whose `dur=` has parameters by group or person """
+    return [dict(name=name, kind=type(raw).__name__) for name,raw in timed_transfers(mod) if ss.transitions.varying_pars(raw)]
+
+
+def far_transfers(sim, mod):
+    """ A transfer's `dur=` that Erlang stages cannot follow, or with `approx=False`, not exactly """
+    for name,raw in timed_transfers(mod):
+        shape = raw.pars.get('a')
+        how = None if ss.transitions.varying_pars(raw) else beyond_stages(raw, type(raw) is ss.gamma and sc.isnumber(shape) and shape == int(shape), sim)
+        if how:
+            yield dict(name=name, kind=type(raw).__name__, how=how)
+
+
+def strain_needs(sim, mod):
+    """ Strains that compartments cannot keep, e.g. a compartment keeps only the strain people carry now (see `ss.solvers.Engine.init_immunity()`) """
+    for strat in mod.graph.strats:
+        reason = None if strat.strains is None else strat.strains.needs_agents(mod.graph)
+        if reason:
+            yield dict(strat=strat, reason=reason)
+
+
+capabilities = [ # What decides between agents and compartments (see init_capabilities())
+    Rule('sim', lambda sim: 'n_agents' in sim.given, ASKED, 'n_agents was given', 'n_agents'),
+    Rule('sim', lambda sim: 'people' in sim.given and not sim.named_unsized, ASKED, 'people were given', 'people'),
+    Rule('sim', memory_read, AGENTS, 'a condition reads {event}.{kind}, which only agents keep (.ever is the memory a compartmental run has)', 'memory: {event}'),
+    Rule('sim', several_givers, AGENTS, '"{mod.name}" is triggered by {leaf}, which is delivered by {givers}, whose shared people only agents follow', 'module: {mod.name}'),
+    Rule('module', says_itself, AGENTS, '{reason}', '{kind}: {mod.name}'),
+    Rule('module', bad_age, RAISES, '{reason}', 'at_age: {mod.name}'),
+    Rule('module', group_conditions, AGENTS, '{reason}', 'condition: {mod.name}'),
+    Rule('graph', kept_attrs, AGENTS, 'the attributes of "{mod.name}" ({kept}) are kept per agent', 'attributes: {mod.name}'),
+    Rule('graph', trait_attrs, ASKED, 'the attribute "{name}" of "{mod.name}" is a distribution across people', 'attribute: {name}'),
+    Rule('module', lambda sim, mod: [dict(clock=clock) for clock in clocks_of(mod)[:1]], AGENTS, '{clock} is a clock, which only agents keep', 'module: {mod.name}'),
+    Rule('graph', lambda sim, mod: getattr(mod, 'compartmental', None) is False, AGENTS, '"{mod.name}" ({mod.__class__.__name__}) has compartmental = False, so runs only as agents', 'module: {mod.name}'),
+    Rule('graph', own_arrays, AGENTS, '"{mod.name}" has per-agent arrays of its own ({arrays}), which only agents have', 'arrays: {mod.name}'),
+    Rule('graph', lambda sim, mod: type(mod).compartmental_form is not ss.Disease.compartmental_form, ASKED, '"{mod.name}" has only a small approximate compartmental form, used when a compartmental solver is named', 'module: {mod.name}'),
+    Rule('graph', reads_mother, AGENTS, '"{mod.name}.{tr.name}" reads ss.mother(), the mother of each person, whom only agents know', 'transition: {tr.name}'),
+    Rule('graph', uid_functions, ASKED, 'the function "{name}" takes uids', 'function: {name}'),
+    Rule('graph', uid_init_prev, ASKED, 'init_prev of "{mod.name}" is a function of the agents', 'function: init_prev'),
+    Rule('graph', init_props, AGENTS, 'the initial values of "{mod.name}" depend on {prop}, which is not a dimension; stratify by it to run as compartments', 'property: {prop}'),
+    Rule('graph', lambda sim, mod: [dict(p=p) for p in mod.graph.spread_pars()], ASKED, '"{p.name}" is a distribution across people', 'distribution: {p.name}'),
+    Rule('graph', value_props, AGENTS, '{reason}', 'property: {prop}'),
+    Rule('graph', split_bins, AGENTS, 'a value in "{mod.name}" is given by bins of {dim} that split the model\'s groups ({labels}), which only agents read, for each person; give it by the model\'s groups to run as compartments', 'property: people.{dim}'),
+    Rule('transition', far_dwell, ASKED, '"{tr.name}" has a {kind} dwell time{how}', 'dwell time: {tr.name} ({kind})'),
+    Rule('transition', dwell_changer, AGENTS, 'the modifier "{changer.name}" changes the dwell time of "{tr.name}", a distribution, which is laid out once as compartments', 'modifier: {changer.name}'),
+    Rule('transition', lambda sim, mod, tr: trigger_kind(sim, mod, tr) == 'event', AGENTS, '"{tr.name}" is triggered by {tr.trigger}, an event that only agents record, which runs as agents for now', 'transition: {tr.name}'),
+    Rule('transition', lambda sim, mod, tr: trigger_kind(sim, mod, tr) == 'code', AGENTS, '"{tr.name}" is triggered by {tr.trigger}, which only agents can follow', 'transition: {tr.name}'),
+    Rule('transition', needs_age, ASKED, '"{tr.name}" draws ages at death from a life table, which needs each person\'s age (or a stratification by age)', 'transition: {tr.name}'),
+    Rule('graph', same_people_dwells, AGENTS, '"{first}" and "{second}" are non-exponential dwell times out of "{name}" for the same people, each with a where=', 'dwell times: out of {name} ({names})'),
+    Rule('graph', varying_transfers, AGENTS, 'the transfer "{name}" has a {kind} dur= with parameters by group or person, drawn for each person', 'transfer: {name} ({kind})'),
+    Rule('graph', far_transfers, ASKED, 'the transfer "{name}" has a {kind} dur={how}', 'transfer: {name} ({kind})'),
+    Rule('graph', strain_needs, AGENTS, 'the strains of "{mod.name}": {reason}', 'strains: {strat.name}'),
+]
+
+
+def refused_layout(sim, mod):
+    """ What the layout of a declared module refuses (see `lay_out()`): e.g. a minimum stay it has no form for, or a race with a fixed delay """
+    try:
+        lay_out(sim, mod, 'ode')
+    except ss.CapabilityError as e:
+        return dict(reason=said_of(e))
+    return None
+
+
+def refused_mixing(sim):
+    """ What the layout of the mixing refuses, e.g. a network's partnerships, or a network with no approximation """
+    try:
+        mixing = ss.solvers.Mixing(sim)
+        mixing.unsaid = [] # Said if it is used (see init_compartments())
+        mixing.init(approx=sim.pars.approx, solver='ode')
+        sim.laid.mixing = mixing
+    except ss.CapabilityError as e:
+        return dict(reason=said_of(e))
+    return None
+
+
+def refused_joints(sim):
+    """ Under `auto`, diseases that cannot be tracked jointly, or would take more than the budget, counted before anything is made """
+    if sim.pars.solver != 'auto' or auto_reasons(sim) or len(sim.declared) <= 1:
+        return
+    sim.laid.joints = []
+    for group in crossing_groups(sim):
+        try:
+            sim.laid.joints.append(joint_layout(sim, group, 'ode'))
+            reason = over_budget(sim.laid.joints[-1])
+        except ss.CapabilityError as e:
+            reason = said_of(e)
+        if reason:
+            yield dict(reason=reason, names=" × ".join(sorted(group.names)))
+
+
+layouts = [ # What the layout of the compartments refuses, found by making it (see init_layouts())
+    Rule('declared', refused_layout, ASKED, '{reason}', 'module: {mod.name}'),
+    Rule('sim', refused_mixing, ASKED, '{reason}', 'networks'),
+    Rule('sim', refused_joints, ASKED, '{reason}', 'jointly: {names}'),
+]
+
+
+def own_steps(sim):
+    """ A module with a step of its own: any written as code (an intervention, analyzer, connector, network, ...), or a modifier the engines cannot tabulate """
+    names = {func['module'] for func in sim.loop.funcs} - {'sim', 'people'} - {mod.name for mod in sim.modules if getattr(mod, 'tabulated', False)} # A modifier that depends only on time and on states is tabulated by the engines: see ss.solvers.Compartmental
+    others = [mod for mod in sim.modules if mod.name in names and mod not in sim.declared]
+    if not others:
+        return None
+    kinds = list(dict.fromkeys('a modifier with where=, when=, or a function as its amount' if isinstance(mod, ss.modify) else 'a module written as code' for mod in others))
+    one = len(others) == 1
+    return dict(names=sc.strjoin(mod.name for mod in others), has='has' if one else 'have', its='its' if one else 'their', kinds=' or '.join(kinds))
+
+
+def flow_births(sim, mod):
+    """ A birth driven by a flow (`ss.birth(per=)`), added in Python after each step """
+    return next((dict(tr=tr) for tr in mod.graph.inflows if getattr(tr, 'per', None) is not None), None)
+
+
+def stepped_modifier(sim, mod):
+    """ A modifier applied each step """
+    return next((dict(m=m) for mods in sim.modifiers.values() for m in mods if not getattr(m, 'tabulated', False)), None)
+
+
+def weighted_rate(sim, mod):
+    """ A weighted count, a count of another disease, or the coverage of a product in a rate or a dwell time, counted in Python once a step (see `init_program()`) """
+    count = lambda leaf: isinstance(leaf, ss.expressions.Count)
+    other = lambda leaf: count(leaf) and mod.engine.split_states(leaf.states)[1]
+    def leaves(expr): # Including those inside a parameter that holds an expression, as a dwell time written as one is held
+        for leaf in expr.leaves:
+            yield leaf
+            if isinstance(leaf, ss.par) and isinstance(leaf.raw, ss.expressions.Expr):
+                yield from leaves(leaf.raw)
+    leaf = next((leaf for tr in mod.graph.transitions.values() for expr in [tr.rate, tr.dur] if isinstance(expr, ss.expressions.Expr) for leaf in leaves(expr) if (count(leaf) and leaf.weighted) or other(leaf) or isinstance(leaf, ss.expressions.Coverage)), None)
+    return None if leaf is None else dict(leaf=leaf, what='a count of another disease' if other(leaf) else 'a weighted count' if count(leaf) else 'the coverage of a product')
+
+
+def modified_key(sim, mod, kind):
+    """ Whether a modifier acts on a kind of quantity of a module """
+    return any(key[:2] == (mod.name, kind) for key,mods in sim.modifiers.items() if mods)
+
+
+def changed_branch(sim, mod):
+    """ A modifier of a parameter that a branch probability reads, which is read once for a whole run, including one by a time series, which is otherwise tabulated """
+    read = [leaf.name for tr in mod.graph.transitions.values() for p in sc.tolist(tr.p) if p is not None for leaf in p.leaves if isinstance(leaf, ss.par) and leaf.name and not leaf.literal]
+    return next((dict(name=name) for name in read if sim.modifiers.get((mod.name, 'par', name))), None)
+
+
+def fixed_reason(sim, mod):
+    """ What cannot change once the sim is initialized, so is checked once: see `fixed` """
+    engine = mod.engine
+    if engine.whole is None:
+        engine.whole = False # No reason
+        if engine.program is None:
+            engine.init_program()
+        for rule,_,values in findings(sim, fixed, [mod]):
+            engine.whole = rule.message.format(**values)
+            break
+    return dict(reason=engine.whole) if engine.whole else None
+
+
+kernels = [ # What stops the kernels taking a whole run in one call: something in Python needs to see the model between one step and the next (see why_not())
+    Rule('sim', lambda sim: sim.solver == 'abm', STEPPED, 'it runs as agents'),
+    Rule('sim', lambda sim: not getattr(sim, 'declared', None), STEPPED, 'it has no declared model'),
+    Rule('sim', lambda sim: sim.loop.index or sim.loop.insertions, STEPPED, 'it has been stepped already, or has functions inserted into its loop'),
+    Rule('sim', lambda sim: sim.diagnostics, STEPPED, 'it records diagnostics'),
+    Rule('sim', lambda sim: sim.verbose >= 2, STEPPED, 'it prints each step (verbose=2)'),
+    Rule('sim', own_steps, STEPPED, '{names} {has} a step of {its} own ({kinds})'),
+    Rule('declared', flow_births, STEPPED, '"{tr.name}" is a birth driven by a flow (ss.birth(per=)), added at each step'),
+    Rule('declared', lambda sim, mod: dict(sync=mod.engine.syncs[0]) if mod.engine.syncs else None, STEPPED, '"{sync.mod.name}.{sync.otr.name}" is a synchronized flow of "{mod.name}.{sync.tr.name}"'), # Recorded in the other module after each step
+    Rule('declared', lambda sim, mod: dict(tr=mod.engine.triggers[0]) if mod.engine.triggers else None, STEPPED, '"{tr.name}" is triggered by {tr.trigger}, which is applied at each step'), # In Python, for those who come to meet them other than by a transition
+    Rule('declared', lambda sim, mod: dict(tr=mod.engine.event_triggers[0]) if mod.engine.event_triggers else None, STEPPED, '"{tr.name}" is triggered by {tr.trigger}, which is applied at each step'), # Moved in Python at the end of each step
+    Rule('declared', stepped_modifier, STEPPED, 'the modifier "{m.name}" is applied each step (it has where=, when=, or a function as its amount, or changes a value that varies by person)'),
+    Rule('declared', lambda sim, mod: bool(mod.engine.net_mods), STEPPED, 'a modifier changes the contacts of a network'), # The contacts are set once for a whole run
+    Rule('declared', weighted_rate, STEPPED, '{leaf} is {what}, which is worked out at each step'),
+    Rule('declared', lambda sim, mod: modified_key(sim, mod, 'route'), STEPPED, 'a modifier acts on a transmission of "{mod.name}" on one route'),
+    Rule('declared', lambda sim, mod: modified_key(sim, mod, 'branch'), STEPPED, 'a modifier changes a branch probability of "{mod.name}"'), # Where arrivals go is set once for a whole run
+    Rule('declared', changed_branch, STEPPED, 'a modifier changes "{name}", which a branch probability of "{mod.name}" reads'),
+    Rule('declared', fixed_reason, STEPPED, '{reason}'),
+]
+
+
+def own_lifecycle(sim, mod):
+    """ A declared module with a step of its own """
+    return next((dict(name=name) for name in ['start_step', 'step_state', 'step', 'step_die', 'update_results', 'finish_step'] if getattr(type(mod), name) is not getattr(ss.Disease, name)), None)
+
+
+def step_function(sim, mod):
+    """ A value that is a function of the sim, called each step """
+    graph = mod.graph
+    exprs = [p for tr in graph.transitions.values() for p in sc.tolist(tr.p) if p is not None] # The values that are read once for the whole run
+    exprs += [w for info in mod.engine.outcomes.values() for key,w in info.sources if isinstance(w, ss.expressions.Expr)]
+    funcs = [p for p in graph.all_pars() if callable(p.raw) and not isinstance(p.raw, (ss.Dist, ss.parameters.TimeValue))]
+    funcs += [leaf for expr in exprs for leaf in expr.leaves if not (isinstance(leaf, ss.par) and (isinstance(leaf.raw, ss.Dist) or not callable(leaf.raw)))]
+    return dict(name=getattr(funcs[0], 'name', None) or getattr(getattr(funcs[0], 'raw', None), '__name__', 'a value')) if funcs else None
+
+
+def changing_transfer(sim, mod):
+    """ A transfer whose rate changes, other than as a parameter that varies in time (diseases tracked jointly hold the rates of their movers for the run) """
+    engine = mod.engine
+    tf = next((tf for tf in mod.graph.transfers.values() if not (engine.constant_transfer(tf) or (engine.par_transfer(tf) and engine.cross is None))), None)
+    if tf is None:
+        return None
+    leaves = [leaf for expr in [tf.rate, tf.dur] + sc.tolist(tf.p) if expr is not None for leaf in expr.leaves]
+    return dict(tf=tf, how='is changed by a modifier' if sim.modifiers.get((mod.name, 'transition', tf.name)) else 'differs between groups' if any(isinstance(getattr(leaf, 'raw', None), ss.by) for leaf in leaves) else 'changes in time')
+
+
+def later_trigger(sim, mod):
+    """ A trigger found when the program is made """
+    return next((dict(tr=tr) for tr in mod.engine.triggers + mod.engine.event_triggers), None)
+
+
+fixed = [ # The same, for what cannot change once the sim is initialized
+    Rule('declared', own_lifecycle, STEPPED, '"{mod.name}" defines its own {name}()'),
+    Rule('declared', lambda sim, mod: dict(name=mod.graph.funcs.keys()[0]) if mod.graph.funcs else None, STEPPED, '"{name}" of "{mod.name}" is called each step'),
+    Rule('declared', step_function, STEPPED, '"{name}" of "{mod.name}" is a function of the sim, so is called each step'),
+    Rule('declared', changing_transfer, STEPPED, 'the rate of the transfer "{tf.name}" of "{mod.name}" {how}'),
+    Rule('declared', later_trigger, STEPPED, '"{tr.name}" of "{mod.name}" is triggered by {tr.trigger}, so moves people between steps'),
+    Rule('declared', lambda sim, mod: mod.t.npts != sim.t.npts, STEPPED, '"{mod.name}" has a timestep of its own'),
+]
+
+
+def families_of(sim):
+    """ The sim's families of strains """
+    return [mod for mod in sim.diseases() if isinstance(mod, ss.strains.Family)]
+
+
+def function_immunity(sim):
+    """ A family that combines protection with a function, which has no gradient """
+    return next((dict(fam=fam, name=getattr(imm.combine, '__name__', 'function')) for fam in families_of(sim) for imm in fam.immunity if callable(imm.combine)), None)
+
+
+def not_whole(sim):
+    """ Whatever stops the kernels taking the whole run """
+    return dict(reason=sim.kernel_reason()) if not sim.kernel_only() else None
+
+
+def certain_rate(sim, mod):
+    """ A probability of 1 over a period at the start, an infinite rate """
+    name = mod.engine.certain()
+    return None if name is None else dict(name=name)
+
+
+jax = [ # What stops JAX taking a whole run of the ODE
+    Rule('sim', function_immunity, KERNELS, '"{fam.name}" combines protection with a function ({name}), which has no gradient; the rules "max", "sum", and "multiply" do'),
+    Rule('sim', lambda sim: not getattr(sim, 'declared', None), KERNELS, 'the model is written as code, with no declared states and transitions, so it has no gradient'), # A fit of it uses the runs alone
+    Rule('sim', lambda sim: dict(fam=families_of(sim)[0]) if families_of(sim) else None, KERNELS, '"{fam.name}" has strains with courses of their own (ss.Strains(shared=...)), which are run a step at a time for now'), # Its step works out the couplings and unions in Python
+    Rule('sim', lambda sim: sim.solver != 'ode', KERNELS, 'solver="{sim.solver}" is stochastic (gradients are for solver="ode" only)'),
+    Rule('sim', not_whole, KERNELS, '{reason}'),
+    Rule('declared', lambda sim, mod: mod.engine.register is not None and len(mod.engine.register.src), KERNELS, '"{mod.name}" has a movement register'),
+    Rule('declared', certain_rate, KERNELS, '"{mod.name}" has a probability of 1 over a period ({name}), an infinite rate, which the kernels take as everyone moving at once'),
+    Rule('declared', lambda sim, mod: [dict(name=name) for name,tf in mod.graph.transfers.items() if mod.engine.par_transfer(tf)][:1], KERNELS, 'the rate of the transfer "{name}" of "{mod.name}" changes in time, which only the kernels take at each step'),
+]
+
+rules = capabilities + layouts + kernels + fixed + jax # The whole table, as solver_table() shows it
 
 
 def auto_reasons(sim):

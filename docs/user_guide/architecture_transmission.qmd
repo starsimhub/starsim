@@ -78,7 +78,7 @@ Code that writes another module's arrays directly is allowed, but isn't tracked.
 
 ## Interventions: products and delivery
 
-An intervention has two parts. *What* is a product (`ss.Vaccine`, `ss.Diagnostic`, `ss.Treatment`: nouns) or a change to a quantity (`ss.change`, `ss.modify`). *Delivery* is who gets it, when, and how many (`ss.vaccinate`, `ss.screen`, `ss.treat`: verbs), given by keywords (`who=`, `coverage=`, `capacity=`, `at=`, `interval=`, `at_age=`), or by one `deliver=` function when those depend on each other. Routine versus campaign delivery is a keyword, not a class. A delivery takes its product's keywords and makes the product itself (`ss.vaccinate(efficacy=0.85, ...)` makes an `ss.Vaccine`); a product is made on its own only when several deliveries give the same one.
+An intervention has two parts. *What* is a product (`ss.Vaccine`, `ss.Diagnostic`, `ss.Treatment`: nouns) or a change to a quantity (`ss.modify`). *Delivery* is who gets it, when, and how many (`ss.vaccinate`, `ss.screen`, `ss.treat`: verbs), given by keywords (`who=`, `coverage=`, `capacity=`, `at=`, `interval=`, `at_age=`), or by one `deliver=` function when those depend on each other. Routine versus campaign delivery is a keyword, not a class. A delivery takes its product's keywords and makes the product itself (`ss.vaccinate(efficacy=0.85, ...)` makes an `ss.Vaccine`); a product is made on its own only when several deliveries give the same one.
 
 A cascade of care is a list of ordinary deliveries, each triggered by the outcome of another:
 
@@ -118,7 +118,7 @@ Extinction and bimodality can't be seen in a median, which is why `msim.plot(lin
 ## Limits
 
 - Modifiers on one quantity combine by the one rule above. Protection from several strains a person holds needs a different rule (the strongest, or a capped sum), which is `ss.immunity`; anything else is `step()` code.
-- `when=` functions and `ss.modify` keep no memory apart from `hold=`; anything that must remember is a class.
+- Functions in `where=` and `ss.modify` keep no memory apart from `hold=`; anything that must remember is a class.
 
 The code is in `starsim/networks.py` and `solvers/mixing.py` (routes), `connectors.py` and `internals/conditions.py` (effects), `interventions.py`, `products.py` and `solvers/deliveries.py` (interventions), and `results.py`. For the modeler's view, see the user guide on [contact networks](populations_networks.qmd), [population data and contact matrices](populations_data.qmd), [geography](populations_geography.qmd), [connectors](interventions_connectors.qmd), [products](interventions_products.qmd), [interventions](interventions_interventions.qmd), [results](building_results.qmd), and [scenarios and many runs](running_scenarios.qmd).
 

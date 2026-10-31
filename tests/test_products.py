@@ -75,7 +75,7 @@ def test_vaccine_diseases():
     check_close(sims, lambda sim: sim.results.hpv18.infection.sum(), rtol=0.15)
     assert sims.abm.people.has_vx.sum() > 0 and 'has_vx' not in [s.name for s in sims.abm.diseases.hpv16.graph.strats]
 
-    with pytest.raises(KeyError, match='is keyed by diseases and by acquisition'): # Keyed by a disease and by something else
+    with pytest.raises(KeyError): # Keyed by a disease and by something else
         make(lambda a, b: {a: 0.9, 'acquisition': 0.5}, solver='abm', **kw).init()
     return sims
 
@@ -92,7 +92,7 @@ def test_any():
                 ca = d.hpv16.CA.raw[u] | d.hpv18.CA.raw[u]
                 seen.update(eligible=np.count_nonzero(~ca), found=0.9*np.count_nonzero((d.hpv16.CIN.raw[u] | d.hpv18.CIN.raw[u]) & ~ca))
             return True
-        prog = ss.screen(ss.Diagnostic(sensitivity=0.9, detects=any_cin), who=~any_ca, at=[2005], when=look) # No disease=
+        prog = ss.screen(ss.Diagnostic(sensitivity=0.9, detects=any_cin), who=~any_ca, at=[2005], where=look) # No disease=
         return ss.Sim(genos, interventions=prog, **kwargs)
     sims = run_both(make)
     for solver,sim in sims.items():

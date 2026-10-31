@@ -42,18 +42,18 @@ def test_events():
     for on, flow in [(lambda d: (d.E | d.I).enter, 'infection'), (lambda d: d.outcome.to(d.D), None)]:
         d, infected = make_seir()
         event = on(d)
-        vx = ss.vaccinate(ss.Vaccine(efficacy=0), on=event, name='vx')
+        vx = ss.vaccinate(ss.Vaccine(efficacy=0), where=event, name='vx')
         res = ss.Sim(d, interventions=vx, n_agents=5000, unit='day', stop=60, **kw).run().results
         target = res.d[flow][:-1].sum() if flow else res.d.D[-2] # Events in a step are acted on by the next, so not those of the last
         assert np.isclose(res.vx.delivered.sum(), target, rtol=0.02), f'{event}: {res.vx.delivered.sum()} delivered, {target} expected'
 
     # A branch is an event under a compartmental solver too; entering a state is not, yet
     d, infected = make_seir()
-    ode = ss.Sim(d, interventions=ss.vaccinate(ss.Vaccine(efficacy=0), on=d.outcome.to(d.D), name='vx'), solver='ode', total_pop=5000, unit='day', stop=60, **kw).run().results
+    ode = ss.Sim(d, interventions=ss.vaccinate(ss.Vaccine(efficacy=0), where=d.outcome.to(d.D), name='vx'), solver='ode', total_pop=5000, unit='day', stop=60, **kw).run().results
     assert np.isclose(ode.vx.delivered.sum(), 0.1*ode.d.outcome[:-1].sum(), rtol=0.01)
     d, infected = make_seir()
     with pytest.raises(ss.CapabilityError):
-        ss.Sim(d, interventions=ss.vaccinate(ss.Vaccine(efficacy=0), on=infected.enter), solver='ode', **kw).run()
+        ss.Sim(d, interventions=ss.vaccinate(ss.Vaccine(efficacy=0), where=infected.enter), solver='ode', **kw).run()
     with pytest.raises(ValueError):
         d.outcome.to(d.E)
     return sim

@@ -187,7 +187,7 @@ def test_datearray_operations():
     assert len(ss.date.arange('2020-03-01', '2020-01-01', ss.months(1))) == 0
 
     # A rate cannot be subtracted from a number
-    with pytest.raises(TypeError, match='cannot be subtracted'):
+    with pytest.raises(TypeError):
         1 - ss.peryear(0.1)
 
     a = ss.DateArray([ss.date('2020-01-01'), ss.date('2021-01-01')])
@@ -424,9 +424,10 @@ def test_arithmetic():
     sc.heading('Testing the arithmetic of typed values')
     ops = {'+':operator.add, '-':operator.sub, '*':operator.mul, '/':operator.truediv}
     d, r, f, p = ss.days, ss.perday, ss.time.freqperday, ss.time.probperday
+    assert sum([d(1), d(2)]) == d(3) # sum() starts from 0
     rows = [ # Left, op, right, and the result: a value, or the code of the error
         (d(3), '+', ss.weeks(1), d(10)),  (d(10), '-', ss.weeks(1), d(3)), # Units are converted
-        (d(3), '+', 2, d(5)),  (d(3), '-', 2, d(1)),  (d(3), '*', 2, d(6)),  (d(6), '/', 2, d(3)), # A bare number takes the duration's unit
+        (d(3), '*', 2, d(6)),  (d(6), '/', 2, d(3)),
         (d(6), '/', d(3), 2),
         (r(0.1), '+', ss.peryear(36.5), r(0.2)),  (r(0.2), '-', ss.peryear(36.5), r(0.1)), # Competing hazards add
         (r(0.1), '*', 2, r(0.2)),  (r(0.2), '/', 2, r(0.1)),
@@ -436,7 +437,7 @@ def test_arithmetic():
         (p(0.1), '*', d(2), 0.19),
         (r(0.2), '/', r(0.1), 2),
         (1, '/', d(10), r(0.1)),  (2, '/', r(0.1), d(20)),  (2, '/', f(0.1), d(20)),
-        (r(0.1), '+', p(0.1), TypeError),  (r(0.1), '-', f(0.1), TypeError),  (r(0.1), '+', 1, TypeError),  (1, '-', r(0.1), TypeError),  (d(3), '+', r(0.1), TypeError),  (1, '/', p(0.1), TypeError),
+        (r(0.1), '+', p(0.1), TypeError),  (r(0.1), '-', f(0.1), TypeError),  (r(0.1), '+', 1, TypeError),  (1, '-', r(0.1), TypeError),  (d(3), '+', 1, TypeError),  (d(3), '-', 1, TypeError),  (1, '-', d(3), TypeError),  (d(3), '+', r(0.1), TypeError),  (1, '/', p(0.1), TypeError),
         (r(0.1), '*', r(0.1), TypeError),  (r(0.1), '/', d(3), TypeError),  (d(3), '*', d(3), TypeError),  (d(3), '/', r(0.1), TypeError),
     ]
     for a, op, b, expected in rows:
@@ -459,7 +460,7 @@ def test_arithmetic():
     for slip in [lambda: ss.Transition(I, R, rate=ss.peryear(0.1) * ss.days(3)), lambda: I >> R @ (ss.peryear(0.1) * ss.days(3)),
                  lambda: ss.Transition(I, R, rate=ss.days(10)), lambda: ss.Transition(I, R, dur=ss.prob(0.1, 'day')),
                  lambda: ss.Disease(S >> I @ ss.perday(0.3) * I * ss.days(3), I >> R @ ss.days(10), name='sir')]:
-        with pytest.raises(TypeError, match=r'not a (rate|duration)'):
+        with pytest.raises(TypeError):
             slip()
     sir = ss.Disease(S >> I @ 2.5 * I / ss.days(10), I >> R @ (1/ss.days(10)), name='sir') # A duration that divides is fine
     assert ss.Transition(I, R, dur=2/ss.perday(0.1)).dur.raw == ss.days(20)

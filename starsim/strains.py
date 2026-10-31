@@ -1014,6 +1014,10 @@ class Family(ss.Module):
             ss.note(msg, sim=sim, verbose=0 if sim.pars.approx else None)
         return
 
+    def agent_reasons(self, sim):
+        """ Its members run side by side, unless they affect each other (see `shares()`) """
+        return [f'the strains of "{self.name}" protect each other or share a state, which only agents follow (or track them jointly: ss.modify(..., where=) between them)'] if self.coupled else []
+
     @property
     def coupled(self):
         """ Whether the members affect each other (protection, or one course at a time), which only agents follow """
@@ -1079,8 +1083,6 @@ class Family(ss.Module):
         elif callable(init_prev) and not isinstance(init_prev, ss.Dist):
             nargs = members[0].engine.n_args(init_prev)
             p = init_prev(sim, uids) if nargs == 2 else init_prev(sim)
-        elif isinstance(init_prev, ss.bernoulli):
-            p = init_prev.pars.p
         else:
             p = float(init_prev)
             if p > 1: # A number of people, as for a disease's own init_prev
@@ -1215,7 +1217,7 @@ class Family(ss.Module):
         super().finalize_results()
         for key,res in self.results.items():
             if isinstance(res, ss.Result) and (key in self.stocks or key in self.flows):
-                res.family = (self.dim, list(self.member_names), np.column_stack([np.asarray(self.member_result(mod, key), dtype=float) for mod in self.members]))
+                res.family = (self.dim, {name:res._like(np.array(self.member_result(mod, key), dtype=float)) for name,mod in zip(self.member_names, self.members)})
         return
 
     def member_result(self, mod, key):

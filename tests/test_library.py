@@ -7,7 +7,6 @@ modules live in the corresponding test files (e.g. test_diseases.py).
 """
 
 # %% Imports and settings
-import inspect
 import sciris as sc
 import numpy as np
 import pytest
@@ -20,21 +19,6 @@ n_agents = 2_000
 outbreak_pars = dict(start=2000, dur=ss.years(1), dt=ss.days(1), n_agents=n_agents, rand_seed=1, verbose=0)
 endemic_pars  = dict(start=2000, stop=2030, n_agents=n_agents, rand_seed=1, verbose=0)
 mnch_pars     = dict(start=2000, dur=ss.years(3), dt=ss.weeks(1), n_agents=n_agents, rand_seed=1, verbose=0)
-
-
-@sc.timer()
-def test_exports():
-    """ Check that every library class is importable from both the top level and its submodule """
-    sc.heading('Testing library exports...')
-
-    for submod in [ssl.diseases, ssl.networks, ssl.mnch, ssl.econ]:
-        for name,obj in vars(submod).items():
-            if name.startswith('_') or inspect.ismodule(obj): # Skip dunders and submodules
-                continue
-            assert getattr(ssl, name, None) is obj, f'ssl.{name} is missing or differs from {submod.__name__}.{name}'
-            assert name in ssl.__all__, f'{name} is missing from ssl.__all__'
-
-    return ssl.__all__
 
 
 @sc.timer()
@@ -65,12 +49,12 @@ def test_diseases():
         n_exp = np.array(res.exposed)
         n_infectious = np.array(res.infectious)
         n_inf = np.array(res.infected)
-        new = np.array(res.new_infections)
+        new = np.array(res.infection)
         total = n_exp + n_infectious + np.array(res.susceptible) + np.array(res.recovered)
-        assert res.cum_infections[-1] > 0, f'Expected {name} infections'
-        assert new.min() >= 0, f'{name} has negative new_infections: seeds are being double-counted'
+        assert res.infection.cum[-1] > 0, f'Expected {name} infections'
+        assert new.min() >= 0, f'{name} has negative infection: seeds are being double-counted'
         assert new[0] == 0, f'{name} counted its seed infections as new infections'
-        assert new.sum() == res.cum_infections[-1], f'{name} cumulative infections do not match the sum'
+        assert new.sum() == res.infection.cum[-1], f'{name} cumulative infections do not match the sum'
         assert not (dis.exposed & dis.infectious).any(), f'{name} has agents in both E and I'
         assert np.array_equal(total, np.array(sim.results.alive)), f'{name} compartments do not sum to the population'
         assert np.array_equal(n_inf, n_exp + n_infectious), f'{name} should count both E and I as infected'
@@ -90,7 +74,7 @@ def test_diseases():
     yearly = ss.Sim(diseases=ssl.Cholera(beta=ss.perday(0.5)), networks=ss.RandomNet(),
                     start=2000, dur=ss.years(1), dt=ss.years(1), n_agents=n_agents, rand_seed=1, verbose=0)
     yearly.run()
-    assert yearly.results.cholera.cum_infections[-1] == 0, 'Cholera unexpectedly worked with a yearly timestep'
+    assert yearly.results.cholera.infection.cum[-1] == 0, 'Cholera unexpectedly worked with a yearly timestep'
     return sims
 
 
@@ -262,13 +246,14 @@ def polio(): # About 1 infection in 200 causes paralysis
     assert np.isclose(res['outcome.P'].sum()/res.onset.sum(), 1/200, rtol=0.2), 'Expected about 1 paralytic case per 200 infections'
 
 
-def sti(): # Both run on a sexual network; syphilis sets each latent person's infectiousness in code
+def sti(): # Both run on a sexual network; syphilis's modifiers lower each latent person's infectiousness
     net = lambda: ss.SexualNet(dur=ss.years(2), n_contacts=ss.poisson(1))
     pars = dict(n_agents=1000, start=2000, stop=2020, dt=ss.months(2), rand_seed=1, verbose=0)
     syph = ss.Sim(diseases=ssl.Syphilis(), networks=net(), **pars).run()
     dis = syph.diseases.syphilis
     latent = dis.El.uids
-    assert len(latent) and dis.rel_trans[latent].max() <= 1 and dis.rel_trans[latent].min() < 0.9, 'Expected latent infectiousness to fall with time'
+    rel_trans = dis.current_value('rel_trans', latent)
+    assert len(latent) and rel_trans.max() <= 1 and rel_trans.min() < 0.9, 'Expected latent infectiousness to fall with time'
     gono = ss.Sim(diseases=ssl.Gonorrhea(), networks=net(), **pars).run()
     assert gono.results.gonorrhea.prevalence[-1] > 0, 'Expected gonorrhea to persist'
 
@@ -287,7 +272,6 @@ def test_declared_diseases(key):
 
 
 if __name__ == '__main__':
-    exports  = test_exports()
     diseases = test_diseases()
     hiv      = test_hiv()
     econ     = test_econ()

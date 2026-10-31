@@ -388,7 +388,19 @@ class MultiSim:
                 progress.finish(text)
             else:
                 print(text)
+            if self.same_runs():
+                ss.note('the repeated runs are identical, since an ODE has no chance in it for their seeds to change; for runs that differ by chance, use solver="binomial"', verbose=verbose)
         return
+
+    def same_runs(self):
+        """ Whether runs of the same sim with different seeds came out the same, as those of an ODE do """
+        if self.runs is None or not isinstance(self.results, MultiResults) or not all(sim.solver == 'ode' for sim in getattr(self.sims, 'runners', self.sims)):
+            return False
+        repeats = np.flatnonzero(self.runs.drop(columns='rand_seed', errors='ignore').astype(str).duplicated(keep=False))
+        if len(repeats) < 2:
+            return False
+        a, b = repeats[:2]
+        return all(np.array_equal(res.values[a], res.values[b], equal_nan=True) for _,_,res in self.results.walk() if res.run_pos is None)
 
     def collect(self, sims):
         """
@@ -514,10 +526,8 @@ class MultiSim:
         if baseline is not None and (self.runs is None or baseline not in set(self.runs['scenario'])):
             errormsg = f'No runs are labeled "{baseline}"; the labels are {list(dict.fromkeys(self.runs["scenario"])) if self.runs is not None else []}'
             raise KeyError(errormsg)
-        flat = self.results.flatten(sep='_', columns=True)
         one = key is not None
-        if one: # Only the result asked for
-            flat = ss.results.match_result_keys(flat, key, show_skipped=True, flattened=True)
+        flat = self.results.flatten(sep='_', columns=True) if not one else ss.results.split_columns(ss.results.match_result_keys(self.results, key, show_skipped=True)) # Only the result asked for
         for name,res in flat.items():
             func = how.get(name, how.get(''))
             if func is None and res.summarize_by is None: # Not summarized over time
@@ -636,14 +646,14 @@ class MultiSim:
         self.check_run('diff')
         return self.results.diff(baseline)
 
-    def to_df(self, quantiles=(0.025, 0.5, 0.975)):
-        """ Every result across the runs, as quantiles at each time for each scenario: a long dataframe with columns `module`, `result`, `scenario`, `time`, `quantile`, and `value` (with `quantiles=None`, one row per run and time instead)
+    def to_df(self, **kwargs):
+        """ Every result across the runs; see `ss.run.MultiResults.to_df()` for the arguments
 
         Args:
-            quantiles (tuple): the quantiles to compute, from 0 to 1
+            kwargs (dict): passed to `ss.run.MultiResults.to_df()`, e.g. `quantiles=(0.025, 0.5, 0.975)`
         """
         self.check_run('to_df')
-        return self.results.to_df(quantiles=quantiles)
+        return self.results.to_df(**kwargs)
 
     def plot(self, key=None, fig=None, legend=True, lines=False, show_data=True, **kwargs):
         """
@@ -682,7 +692,8 @@ class MultiSim:
             mod = sim.results.get(res.module)
             if not isinstance(mod, ss.Results) and res.module is not None and res.module == own_disease(origin):
                 mod = sim.results.get(own_disease(sim))
-            return mod[res.name] if isinstance(mod, ss.Results) and res.name in mod else sim.results.get(res.name)
+            found = mod.find(res.name, die=False) if isinstance(mod, ss.Results) else None
+            return found if found is not None else sim.results.get(res.name)
         keys = list(ss.results.match_result_keys(sims[0].results, key, show_skipped=bool(key)).values())
         if key is None: # Also the results that only later sims have, e.g. of an intervention only some scenarios have
             for sim in sims[1:]:
@@ -1012,12 +1023,10 @@ class MultiResults(ss.Results):
         """
         dfs = []
         for modname,key,res in self.walk():
-            parts = res.by_column().items() if res.columns is not None else [(None, res)]
-            for col,sub in parts:
-                df = sub.to_df(quantiles=quantiles, **kwargs)
-                df.insert(0, 'module', modname or 'sim')
-                df.insert(1, 'result', key if col is None else f'{key}_{col}')
-                dfs.append(df)
+            df = res.to_df(quantiles=quantiles, **kwargs)
+            df.insert(0, 'module', modname or 'sim')
+            df.insert(1, 'result', key if res.columns is None else key + '_' + df.pop('column').astype(str))
+            dfs.append(df)
         return sc.dataframe(pd.concat(dfs, ignore_index=True))
 
     def diff(self, baseline):
@@ -1055,7 +1064,7 @@ class MultiResults(ss.Results):
         for (modname,key),arr in arrays.items():
             like = arr['like']
             values = np.asarray(arr['values'])
-            res = like.asnew(values=values, _shape=values.shape, runs=arr['runs'] if 'runs' in arr else runs, low=None, high=None)
+            res = like.asnew(values=values, _shape=values.shape, runs=arr['runs'] if 'runs' in arr else runs, low=None, high=None, dests=None, by_edge=arr.get('by_edge'), family=arr.get('family')) # The destinations are linked again as they are added
             res.run_pos = arr.get('run_pos') # For a result of only some of the runs, their positions among all the runs
             if getattr(like, 'strata', None) is not None or arr.get('strata') is not None:
                 res.strata, res.denom = arr.get('strata'), arr.get('denom')
@@ -1105,6 +1114,11 @@ class MultiResults(ss.Results):
                 arr['strata'] = np.stack(strata)
                 denom = [getattr(r, 'denom', None) for r in found]
                 arr['denom'] = np.stack(denom) if all(x is not None for x in denom) else None # A ratio's denominator by group, so that selecting groups adds up each part before dividing
+            stacked = lambda parts: {key:parts[0][key].asnew(values=np.stack([part[key].values for part in parts]), runs=arr.get('runs', runs), strata=None, denom=None, group_ti=None) for key in parts[0]}
+            if found[0].by_edge:
+                arr['by_edge'] = stacked([r.by_edge for r in found])
+            if found[0].family:
+                arr['family'] = (found[0].family[0], stacked([r.family[1] for r in found]))
             return arr
 
         first = sims[0]
@@ -1119,7 +1133,7 @@ class MultiResults(ss.Results):
         arrays = {(modname, key):arr for modname,key in entries if (arr := stack([get(sim, modname, key) for sim in sims])) is not None}
         out = cls.build(arrays, runs, timevec=first.results.get('timevec'), order=first.results)
 
-        # The results of each sim's one disease are also at the top, e.g. msim.results.I, as sim.results.I is for a sim's (see ss.Results._implicit_get())
+        # The results of each sim's one disease are also at the top, e.g. msim.results.I, as sim.results.I is for a sim's (see ss.Results.find())
         names = [own_disease(sim) for sim in sims]
         if None not in names and len(set(names)) == 1: # The same disease in each, e.g. msim.results.sir.I
             out.setattribute('_implicit', names[0])
@@ -1148,12 +1162,12 @@ class MultiResults(ss.Results):
             if pos is None:
                 sub = res.take(inds)
                 runs = sub.runs if runs is None else runs
-                arrays[modname, key] = dict(like=sub, values=sub.values, strata=getattr(sub, 'strata', None), denom=getattr(sub, 'denom', None))
+                arrays[modname, key] = dict(like=sub, values=sub.values, strata=getattr(sub, 'strata', None), denom=getattr(sub, 'denom', None), by_edge=sub.by_edge, family=sub.family)
             else: # A result of only some of the runs: those of them taken
                 keep = [(j, inds.index(p)) for j,p in enumerate(pos) if p in inds]
                 if keep:
                     sub = res.take([j for j,_ in keep])
-                    arrays[modname, key] = dict(like=sub, values=sub.values, strata=getattr(sub, 'strata', None), denom=getattr(sub, 'denom', None), runs=sub.runs, run_pos=[i for _,i in keep])
+                    arrays[modname, key] = dict(like=sub, values=sub.values, strata=getattr(sub, 'strata', None), denom=getattr(sub, 'denom', None), by_edge=sub.by_edge, family=sub.family, runs=sub.runs, run_pos=[i for _,i in keep])
         out = MultiResults.build(arrays, runs, timevec=self.get('timevec'))
         implicit = self._implicit # The results of each sim's one disease (see from_sims())
         if implicit is not None:
@@ -1345,7 +1359,7 @@ def restart_runs(sims, n_runs, pars=None, draws=False):
     group_ti = dict()
     for r,sim in enumerate(runners):
         first = r*len(sets[r])*n_runs # The position of the sim's first run
-        if pars is not None and None not in sets[r] and len(sets[r])*n_runs >= jax_runs and ss.gradients.reason(sim) is None: # Every run in one call to JAX (an ODE run does not depend on the seed)
+        if pars is not None and None not in sets[r] and len(sets[r])*n_runs >= jax_runs and ss.solvers.why_not(sim, 'jax') is None: # Every run in one call to JAX (an ODE run does not depend on the seed)
             outs = list(ss.gradients.run_sets(sim, [p for p in sets[r] for i in range(n_runs)]).items())
         else:
             outs = []

@@ -270,45 +270,29 @@ def derivs(ys, p, L, rates, h, euler):
     return dy, df, moved_in
 
 
-def interp(out, table, row, th):
-    a, b, c = (2*th - 1)*(th - 1), 4*th*(1 - th), th*(2*th - 1)
-    out[:] = a*table[row] + b*table[row+1] + c*table[row+2]
-
-
 def set_movers(p):
     on = p.mov_par >= 0
     if on.any():
         p.mov_rate[on] = p.mov_base[on]*p.consts[p.mov_par[on], p.mov_pair[0, on]]
 
 
-def step(rng, y, p, dt, n_sub, solver, flows, tables, row):
+def step(rng, y, p, dt, n_sub, solver, flows):
     """ One step of the ODE, as `ss.kernels.step()` takes it (y and flows changed in place), with NumPy's warnings of division by zero off, as compiled code has them """
     with np.errstate(divide='ignore', invalid='ignore'):
-        return _step(rng, y, p, dt, n_sub, solver, flows, tables, row)
+        return _step(rng, y, p, dt, n_sub, solver, flows)
 
 
-def _step(rng, y, p, dt, n_sub, solver, flows, tables, row):
+def _step(rng, y, p, dt, n_sub, solver, flows):
     if solver >= 2:
-        return K.uncompiled().step(rng, y, p, K.uncompiled().workspace(y, p), dt, n_sub, solver, flows, tables, row)
+        return K.uncompiled().step(rng, y, p, K.uncompiled().workspace(y, p), dt, n_sub, solver, flows, False)
     nc, ng = y.shape
     L = layout(p, nc, ng)
     euler = solver == 1
     stages = 1 if euler else 4
     auto = n_sub <= 0
-    parts = (p.fixed, p.mult, p.consts, p.rel_trans)
-
-    def at(sub, stage):
-        if row >= 0:
-            th = (sub + (0.0 if stage == 0 else (1.0 if stage == 3 else 0.5)))/max(n_sub, 1)
-            for k in range(4):
-                if len(tables[k]) > 1:
-                    interp(parts[k], tables[k], row, th)
-            set_movers(p)
-
-    at(0, 0)
     rates = rates_of(y, p, L)
     if np.isinf(rates).any(): # Everyone in a compartment moves at once: as the kernels do it (see ss.kernels.certain())
-        return K.uncompiled().step(rng, y, p, K.uncompiled().workspace(y, p), dt, n_sub, solver, flows, tables, row)
+        return K.uncompiled().step(rng, y, p, K.uncompiled().workspace(y, p), dt, n_sub, solver, flows, False)
     for f_out,slots in L.conveyors: # step_start(): those due to leave each conveyor leave at a constant rate over the step
         p.inflow[f_out] = y[slots[-1]]/dt
     if auto:
@@ -327,7 +311,6 @@ def _step(rng, y, p, dt, n_sub, solver, flows, tables, row):
         ys = y
         for stage in range(stages):
             if not (sub == 0 and stage == 0):
-                at(sub, stage)
                 rates = rates_of(ys, p, L)
             dy, df, moved_in = derivs(ys, p, L, rates, h, euler)
             dys.append(dy)
@@ -367,14 +350,19 @@ def one_step(rng, y, p, dt, solver, n_sub, tables, row):
     """ As `ss.kernels.one_step()` """
     y = y.copy()
     flows = np.empty((p.n_trans + p.n_movers, y.shape[1]))
-    step(rng, y, p, dt, n_sub, solver, flows, tables, row)
+    if row >= 0:
+        for part,table in zip((p.fixed, p.mult, p.consts, p.rel_trans), tables):
+            if row < len(table):
+                part[:] = table[row]
+        set_movers(p)
+    step(rng, y, p, dt, n_sub, solver, flows)
     return y, flows
 
 
-def run(rng, y, p, dt, npts, solver, n_sub, fixed, mult, consts, rel_trans, reg, sh, tally, per_step, start):
+def run(rng, y, p, dt, npts, solver, n_sub, fixed, mult, consts, rel_trans, reg, sh, tally, start):
     """ As `ss.kernels.run()` """
     if solver >= 2:
-        return K.uncompiled().run(rng, y, p, dt, npts, solver, n_sub, fixed, mult, consts, rel_trans, reg, sh, tally, per_step, start)
+        return K.uncompiled().run(rng, y, p, dt, npts, solver, n_sub, fixed, mult, consts, rel_trans, reg, sh, tally, start)
     plain = K.uncompiled()
     y = y.copy()
     stocks = np.empty((npts - start, *y.shape))
@@ -385,14 +373,14 @@ def run(rng, y, p, dt, npts, solver, n_sub, fixed, mult, consts, rel_trans, reg,
     stocks[0] = y
     for ti in range(start + 1, npts):
         k = ti - start
-        r = (k-1)*per_step
+        r = k - 1
         if len(sh.to):
             plain.apply_shifts(rng, y, sh, ti-1, False, tally[k])
         for j in range(4):
             if r < len(tables[j]):
                 parts[j][:] = tables[j][r]
         set_movers(p)
-        step(rng, y, p, dt, n_sub, solver, flows[k], tables, r if per_step == 3 else -1)
+        step(rng, y, p, dt, n_sub, solver, flows[k])
         if len(reg.src):
             short += plain.apply_events(rng, y, reg, ti, False)
         stocks[k] = y

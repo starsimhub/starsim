@@ -304,7 +304,7 @@ class Event(Cond):
     entering a set means arriving from outside it
 
     An event is a condition, true for the agents it happened to from the moment they moved until the
-    same point in the next step; it can be given to `on=`; and in a running sim, `.uids` are those agents.
+    same point in the next step; it can be given to `where=` or `ss.on()`; and in a running sim, `.uids` are those agents.
 
     Args:
         kind (str): 'tr', 'to', 'enter', or 'exit'
@@ -358,10 +358,10 @@ class Event(Cond):
         """ The agents the event happened to, in a running sim """
         engine = getattr(self.module, 'engine', None)
         if engine is None:
-            how = ' (a module given by name, as in ss.state(), is found by the sim: use the event as a condition or in on=)' if isinstance(self.module, str) else ''
+            how = ' (a module given by name, as in ss.state(), is found by the sim: use the event as a condition or in where=)' if isinstance(self.module, str) else ''
             errormsg = f'{self.label} has no agents yet: .uids is for a module in a sim that has been initialized{how}'
             raise ValueError(errormsg)
-        if not isinstance(engine, ss.solvers.Agents):
+        if not engine.agents:
             raise ss.CapabilityError(f'{self.label}.uids is a list of agents, which exist only with solver="abm".')
         return engine.event_uids(**self.spec())
 
@@ -370,7 +370,7 @@ class Named:
     """
     An event a module records that is not one of its transitions (e.g. `preg.live_birth`), or several events (a tuple of names), for `ss.conditions.Event`
 
-    It exists so that such events can be used wherever a transition can, e.g. in `on=`.
+    It exists so that such events can be used wherever a transition can, e.g. in `where=`.
 
     Args:
         module (Module/str): the module that records it
@@ -405,7 +405,7 @@ class StatePath(Cond):
 
     @property
     def enter(self):
-        """ The event of entering the state, e.g. `on=ss.state('ng.C').enter` """
+        """ The event of entering the state, e.g. `where=ss.state('ng.C').enter` """
         return Event('enter', [tuple(self.args)])
 
     @property
@@ -427,7 +427,7 @@ def state(path):
     Examples:
         ```python
         canceled = (S + P + C + L) >> Z @ ss.on(ss.state('hpv18.X') | ss.state('hpv31.X'))
-        seek = ss.treat(drug, on=ss.state('ng.C').enter) # For a module made from a string
+        seek = ss.treat(drug, where=ss.state('ng.C').enter) # For a module made from a string
         ```
     """
     parts = path.split('.') if isinstance(path, str) else []
@@ -480,6 +480,32 @@ def check_clocks(amount, where, what):
     return
 
 
+def check_when(when):
+    """ when= is a time condition, a function of the sim's timeline, so anything else (e.g. d.I.n > 1000, or sir.I) goes in where= """
+    if when is not None and (isinstance(when, (Cond, ss.expressions.Expr, ss.State, ss.Arr)) or not callable(when)):
+        errormsg = f'when= is a condition on time, a function of the timeline returning True on the steps it applies (e.g. when=lambda t: t.ti % 7 == 0); for {when}, use where='
+        raise TypeError(errormsg)
+    return when
+
+
+def holds_now(when, sim):
+    """ Whether a when= holds on this step: it is given the sim's timeline, so it can read only the time; where= is for functions of the sim """
+    try:
+        return bool(when(sim.t))
+    except AttributeError as e:
+        errormsg = f'when= is a function of the time, given the sim\'s timeline (t.ti, t.now(), t.year), but it read something else: {e}. A function of the sim goes in where='
+        raise AttributeError(errormsg) from e
+
+
+def on_people(cond):
+    """ Whether a condition chooses among people or compartments: not one on the whole population (a count, a parameter), which applies to everyone or to nobody """
+    if isinstance(cond, Cond):
+        if cond.op == 'incidence':
+            return cond.args[2] is not None # By group (see ss.Transition.incidence()), or else one number
+        return cond.op in leaves or any(on_people(arg) for arg in cond.args)
+    return isinstance(cond, ss.expressions.Expr) and any(isinstance(leaf, (ss.State, ss.expressions.Prop, ss.expressions.Clock, ss.expressions.attr, ss.expressions.mother)) for leaf in cond.leaves)
+
+
 def modname(mod):
     """ The name of a module that a condition refers to: kept as the module until it is needed, since a module can be named after the condition is written """
     return mod if (mod is None or isinstance(mod, str)) else mod.name
@@ -522,20 +548,20 @@ def state_refs(obj):
                 for leaf in val.leaves:
                     if isinstance(leaf, ss.State):
                         walk(as_cond(leaf))
-        if hasattr(holder, 'refs'): # The sources of the transitions a treatment moves people along, and the states a test is keyed by
+        if hasattr(type(holder), 'refs'): # On the class, since a miss on a delivery or product builds a message. The sources of the transitions a treatment moves people along, and the states a test is keyed by
             out += holder.refs()
     return out
 
 
 def is_static(cond, sim):
-    """ Whether a condition selects the same people in a compartmental run at every step: one on states and stratifications only (not on transitions, other arrays, or a function of the sim) """
+    """ Whether a condition selects the same people in a compartmental run at every step: one on states and stratifications only (not on transitions, other arrays, counts, or a function of the sim) """
     if cond is None:
         return True
     if callable(cond) and not isinstance(cond, Cond):
         return False
     cond = as_cond(cond)
     if not isinstance(cond, Cond):
-        return True
+        return not isinstance(cond, ss.expressions.Expr) # An expression (e.g. d.I.n > 1000) has a value that changes
     op, args = cond.op, cond.args
     dims = [strat.name for strat in sim.groups.strats]
     if op in ['dim', 'kind']:
@@ -613,7 +639,7 @@ def is_event(cond):
         return False
     if cond.op in leaves:
         return cond.op in ['event', 'move']
-    return all(is_event(arg) for arg in cond.args if isinstance(arg, Cond))
+    return all(is_event(arg) for arg in cond.args)
 
 
 def has_event(cond):
@@ -658,6 +684,21 @@ def group_reasons(cond, sim):
     return out
 
 
+def rebind(cond, memo):
+    """ The condition with the transitions of its events replaced by their copies in `memo`, as `ss.expressions.rebind()` for an expression: e.g. `vax = ss.Transition(R, V, where=recovery)` in a class is of each instance's copy of `recovery`; a condition is not copied (see `Cond.__copy__()`), so this is a new one if anything changed """
+    if not isinstance(cond, Cond):
+        return cond
+    if isinstance(cond, Event):
+        kind, obj, dst = cond.args
+        return Event(kind, memo[id(obj)], memo.get(id(dst), dst)) if kind in ['tr', 'to'] and id(obj) in memo else cond
+    args = tuple(rebind(arg, memo) for arg in cond.args)
+    if all(new is old for new,old in zip(args, cond.args)):
+        return cond
+    out = object.__new__(type(cond))
+    out.__dict__.update(cond.__dict__, args=args)
+    return out
+
+
 def event_leaves(cond):
     """ The event leaves of a condition, including those that its memory is read from """
     if isinstance(cond, ss.expressions.mother): # Read on the mother
@@ -688,7 +729,7 @@ def join(op, conds):
 
 
 def path_events(cond):
-    """ In on=, which is an event, a path (`ss.state('pregnancy.birth')`, for a module made before that one exists) is the event of going through that transition """
+    """ A path made an event (see `split_where()`) is the event of going through that transition, of a module made before that one exists """
     if isinstance(cond, StatePath):
         event = Event('tr', Named(*cond.args))
         event.path = cond # Checked when the sim is initialized: see check_path_events()
@@ -699,7 +740,7 @@ def path_events(cond):
 
 
 def check_path_events(sim, cond, owner):
-    """ Check that each path made an event in on= (see path_events()) is a transition of a module in the sim """
+    """ Check that each transition given by its path (see `split_where()`) is one of a module in the sim """
     for leaf in event_leaves(cond) if isinstance(cond, Cond) else []:
         path = getattr(leaf, 'path', None)
         if path is None:
@@ -708,62 +749,62 @@ def check_path_events(sim, cond, owner):
         mod = next((m for m in sim.declared if m.name == modname), None)
         if mod is None or name not in mod.graph.transitions:
             what = f'"{modname}" is not a declared module in the sim' if mod is None else f'"{name}" is not a transition of "{modname}"{"; for entering the state, use ss.state(" + repr(modname + "." + name) + ").enter" if name in mod.graph.states else "; its transitions are " + sc.strjoin(mod.graph.transitions.keys())}'
-            errormsg = f'on="{modname}.{name}" of "{owner}" is the event of going through a transition, but {what}'
+            errormsg = f'where="{modname}.{name}" of "{owner}" is the event of going through a transition, but {what}'
             raise ValueError(errormsg)
     return
 
 
-def split_who(who, where=None, on=None):
-    """
-    Split who= of a delivery into its trigger (the events in it) and its condition (the rest)
+def split_events(cond):
+    """ Split a condition into its events and the rest, as (events, rest), either of which may be None """
+    if not has_event(cond):
+        return None, cond
+    elif is_event(cond):
+        return cond, None
+    elif cond.op == '&':
+        (ta, ca), (tb, cb) = split_events(cond.args[0]), split_events(cond.args[1])
+        return join('&', [ta, tb]), join('&', [ca, cb])
+    elif cond.op == '|':
+        errormsg = (f'{cond} joins an event and a condition with |, so it is neither triggered (by an event) nor a condition: '
+                    f'use & for "the event, among those meeting the condition" (e.g. where=screening.positive & ss.ppl.female), or make two steps')
+        raise TypeError(errormsg)
+    errormsg = f'{cond} applies "{cond.op}" to an event; an event is the people something happened to on this step, so it can be joined to others with | and &, and narrowed with & a condition, but not negated or compared'
+    raise TypeError(errormsg)
 
-    who= takes a condition, an event, or a combination with & and |.
-    With an event in it, delivery is triggered: it reaches the people the event happened to on this step who meet the condition parts.
-    `on=` and `where=` are the same thing, joined to it by &; `on=` also takes a transition by its path (`on='measles.births'`),
-    found when the sim is initialized. Returns (trigger, condition), either of which may be None.
-    """
-    if isinstance(on, str): # A transition by its path, as ss.state() gives it (see path_events())
-        if len(on.split('.')) != 2 or not all(on.split('.')):
-            errormsg = f'on= as a string is a transition by its path, "module.transition", e.g. on="measles.births"; not {on!r}'
+
+def split_where(where):
+    """ Split a where= into its events, a trigger, and the rest, as (trigger, condition); it can also be a transition by its path (`where='measles.births'`), found when the sim is initialized """
+    if isinstance(where, str): # A transition by its path, as ss.state() gives it (see path_events())
+        if len(where.split('.')) != 2 or not all(where.split('.')):
+            errormsg = f'where= as a string is a transition by its path, "module.transition", e.g. where="measles.births"; not {where!r}'
             raise ValueError(errormsg)
-        on = state(on)
-    parts = []
-    for val in [who, on, where]:
+        return path_events(state(where)), None
+    trigger, rest = split_events(as_cond(where))
+    return (None, where) if trigger is None else (trigger, rest) # As given if it has no event, since a state may not have its name yet
+
+
+def split_who(who, where=None):
+    """
+    Split who= and where= of a delivery into its trigger (the events in them) and its condition (the rest), either of which may be None
+
+    who= chooses people or compartments: a condition on them, or an event, which is the people it happened to.
+    where= is anything else that decides it: a condition on the population, a function of the sim, or an event or condition too.
+    With an event in either, delivery is triggered: it reaches the people the event happened to on this step who meet the rest.
+    """
+    for val in [who, where]:
         if isinstance(val, (list, tuple)):
-            errormsg = 'who=, on=, and where= of a delivery take one condition or event, not a list; join them with | (any of them) or & (all of them), e.g. who=a.positive | b.positive'
+            errormsg = 'who= and where= of a delivery take one condition or event, not a list; join them with | (any of them) or & (all of them), e.g. who=a.positive | b.positive'
             raise TypeError(errormsg)
-        elif val is not None:
-            val = as_cond(val)
-        if val is not None and not isinstance(val, Cond) and not callable(val):
-            errormsg = f'who=, on=, and where= of a delivery take conditions and events (e.g. who=sir.infection, who=ss.ppl.age < 5), or a function of the sim; on= also takes a transition by its path (e.g. on="sir.infection"); not {val!r}'
-            raise TypeError(errormsg)
-        parts.append(val)
-    who, on, where = parts
-    on = path_events(on)
-    if on is not None and isinstance(on, Cond) and not has_event(on):
-        errormsg = f'on= of a delivery is an event: a transition (e.g. on=sir.infection), a delivery or one of its outcomes (e.g. on=screening.positive), or a function of the sim; for the people in a state or meeting a condition, use where= (e.g. where=sir.I, interval=1), not on={on}'
+    if who is not None and not on_people(as_cond(who)):
+        errormsg = f'who= chooses people or compartments, with a condition on them (e.g. who=sir.I, who=ss.ppl.age < 5) or an event (e.g. who=screening.positive); {who!r} does not, so use where= (for a condition on the population or a function of the sim)'
         raise TypeError(errormsg)
-    def split(cond):
-        if not has_event(cond):
-            return None, cond
-        elif is_event(cond):
-            return cond, None
-        elif cond.op == '&':
-            (ta, ca), (tb, cb) = split(cond.args[0]), split(cond.args[1])
-            return join('&', [ta, tb]), join('&', [ca, cb])
-        elif cond.op == '|':
-            errormsg = (f'who={cond} joins an event and a condition with |, so it is neither triggered (by an event) nor routine (a condition): '
-                        f'use & for "the event, among those meeting the condition" (e.g. who=screening.positive & ss.ppl.female), or make two steps')
+    if where is not None and not isinstance(where, str):
+        cond = as_cond(where)
+        if not isinstance(cond, (Cond, ss.expressions.Expr)) and not callable(cond):
+            errormsg = f'where= of a delivery takes a condition or event (e.g. where=sir.infection, where=d.I.n > 1000), a function of the sim, or a transition by its path (e.g. where="sir.infection"); not {where!r}'
             raise TypeError(errormsg)
-        errormsg = f'who={cond} applies "{cond.op}" to an event; an event is the people something happened to on this step, so it can be joined to others with | and &, and narrowed with & a condition, but not negated or compared'
-        raise TypeError(errormsg)
-    trigger, cond = split(who) if isinstance(who, Cond) else (None, who)
-    if on is not None and not isinstance(on, Cond): # A function of the sim returning the people
-        trigger = on if trigger is None else Cond('&', trigger, on)
-    elif on is not None:
-        t, c = split(on)
-        trigger, cond = join('&', [trigger, t]), join('&', [cond, c])
-    return trigger, join('&', [cond, where])
+    trigger, cond = split_where(who) if who is not None else (None, None)
+    where_trigger, where = split_where(where) if where is not None else (None, None)
+    return join('&', [trigger, where_trigger]), join('&', [cond, where])
 
 
 def from_arr(arr):
@@ -1107,6 +1148,8 @@ class Selector(sc.prettyobj):
             if isinstance(out, ss.Arr):
                 out = out.raw
             out = np.asarray(out)
+            if out.ndim == 0: # One value for everyone, e.g. a count compared with a number
+                return np.full(self.shape, as_bool(out))
             if out.shape != self.shape:
                 if out.ndim == 1 and len(out) == len(sim.people): # One value per active agent
                     mask = self.nobody()

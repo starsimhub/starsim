@@ -11,17 +11,16 @@ __all__ = ['Syphilis', 'Gonorrhea']
 
 class Syphilis(ss.Disease):
     """
-    Syphilis, as a staged infection: declared stages, with the infectiousness of latent syphilis written as code
+    Syphilis, as a staged infection, wholly declared
 
     People who are infected incubate (`E`), then have a primary chancre (`P`), then secondary syphilis (`Se`),
     and then early latent syphilis (`El`), from which some relapse to secondary syphilis and the rest pass to late
     latent syphilis (`Ll`). A share of those develop tertiary syphilis (`T`), which can kill; the rest are no
     longer infectious (`R`).
 
-    The stages are declared, but how infectious a person with latent syphilis is cannot be: it falls with the time
-    since their latent stage began, which is a quantity each person carries. That one part is written as code, in
-    `step()`, which sets each latent person's `rel_trans`; everything else runs from the declaration. Since it acts
-    on each person, this disease runs as agents.
+    How infectious a person with latent syphilis is falls with the time since their latent stage began, a quantity
+    each person carries: two modifiers of `rel_trans`, members of the disease. Since it acts on each person, this
+    disease runs as agents.
 
     Source: the natural history and its parameters are those of the syphilis module of STIsim
     (https://github.com/starsimhub/stisim, `stisim/diseases/syphilis.py`), whose own sources are cited there: the
@@ -75,7 +74,7 @@ class Syphilis(ss.Disease):
     P = ss.State(init=0.01, label='Primary syphilis')
     Se, El, Ll, T, R = ss.states('Se El Ll T R')
 
-    infection = S >> E @ beta*(P + Se + El + Ll) # Latent infectiousness falls with time, in step()
+    infection = S >> E @ beta*(P + Se + El + Ll)
     onset     = E >> P @ dur_exp
     secondary = P >> Se @ dur_primary
     latency   = Se >> El @ dur_secondary
@@ -83,16 +82,10 @@ class Syphilis(ss.Disease):
     tertiary  = ss.Transition(Ll, [T, R], dur=dur_late, p=[p_tertiary, None])
     death     = ss.death(T, rate=death_rate)
 
-    prevalence = (E + P + Se + El + Ll + T)/(S + E + P + Se + El + Ll + T + R)
+    fading_early = ss.modify('rel_trans', multiply=0.5**(El.time/latent_half_life), where=El) # Infectiousness falls with time in latency
+    fading_late  = ss.modify('rel_trans', multiply=0.5**(Ll.time/latent_half_life), where=Ll)
 
-    def step(self):
-        """ Run the declared transitions, then let each latent person's infectiousness fall with time since their latent stage began """
-        out = super().step()
-        for state in [self.El, self.Ll]:
-            uids = state.uids
-            if len(uids):
-                self.rel_trans[uids] = 0.5**(state.time[uids]/self.pars.latent_half_life)
-        return out
+    prevalence = (E + P + Se + El + Ll + T)/(S + E + P + Se + El + Ll + T + R)
 
 
 class Gonorrhea(ss.Disease):

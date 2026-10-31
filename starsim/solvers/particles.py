@@ -34,11 +34,9 @@ class Particles(sc.prettyobj):
         flows (array): the flow along each transition and mover over the step to each time point, likewise
         done (int): the time point the runs have reached
         npts (int): the time points of a whole run
-        per_step (int): the rows of the tables for each step (see `ss.solvers.Compartmental.per_step()`)
     """
     def __init__(self, engine, n, rng, by_group=False):
         args, tables = engine.run_args()
-        self.per_step = engine.per_step()
         self.engines = engine.engines
         if isinstance(engine, Crossing):
             state_of = np.arange(engine.n_rows)
@@ -80,7 +78,7 @@ class Particles(sc.prettyobj):
             return
         tables = self.tables if tables is None else tables
         shares = self.shares if shares is None else shares
-        rest = (self.solver, self.n_sub, *tables, shares, self.register, self.shifts, self.state_of, self.stocks, self.flows, self.per_step, row0)
+        rest = (self.solver, self.n_sub, *tables, shares, self.register, self.shifts, self.state_of, self.stocks, self.flows, row0)
         n_sub = ss.kernels.substeps(np.append(self.program.fixed[self.program.src >= 0], self.program.mov_rate), self.dt, self.n_sub, self.solver) # The rates of the step last refreshed
         kn = ss.kernels.choose(len(self.ys)*ss.kernels.plain_seconds(self.program, self.ys[0], end - self.done + 1, self.solver, n_sub))
         if not ss.solvers.backends.rust.on and isinstance(self.rngs, list): # Made for the Rust kernels, now run by Numba's

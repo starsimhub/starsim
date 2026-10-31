@@ -1,6 +1,10 @@
 """
 Test Starsim features not covered by other test files
 """
+import os
+import sys
+import shutil
+import subprocess
 import pytest
 import numpy as np
 import sciris as sc
@@ -188,12 +192,28 @@ class Counter(ss.Module):
     # The names of results: Starsim's own counts renamed after results, and a package's own results left alone (CV5, ST4, HP80, MG10)
     text, changes, todo = migrate_text("a = sim.results.n_alive; b = res['sir.n_infected']; c = df['n_alive']")
     assert text == "a = sim.results.alive; b = res['sir.infected']; c = df['n_alive']" and len(todo) == 1 # A column of a dataframe could be anything's: listed
-    own = "class Mosquito(ss.Module):\n    def init_results(self):\n        self.define_results(ss.Result('n_infected'))\n    def step(self):\n        self.results.n_infected[self.ti] = 5\nx = res['n_infected']; y = res.new_infections"
-    assert migrate_text(own)[1:] == ([], []) # A result the package makes keeps its name, and new_infections is a declared disease's only next to one
-    assert migrate_text('sir = ss.SIR()\nx = res.new_infections')[2][1][0] == 2
+    own = "class Mosquito(ss.Module):\n    def init_results(self):\n        self.define_results(ss.Result('n_infected'))\n    def step(self):\n        self.results.n_infected[self.ti] = 5\nx = res['n_infected']"
+    assert migrate_text(own)[1:] == ([], []) # A result the package makes keeps its name
+    text = migrate_text("a = sim.results.sis.new_infections; b = res.cum_infections[-1]; c = res['new_infections']; d = res['cum_infections']; e = sim.summary.value.sis_cum_infections; data = {'hiv.new_infections': x}")[0] # The results of ss.Infection
+    assert text == "a = sim.results.sis.infection; b = res.infection.cum[-1]; c = res['infection']; d = res['infection'].cum; e = sim.summary.value.sis_infection; data = {'hiv.infection': x}"
+    text, changes, todo = migrate_text("df['obs_new_infections']; total_cum_infections = 3")
+    assert 'obs_new_infections' in text and 'total_cum_infections' in text and len(todo) == 1 # Not the name of a disease of the file: listed
+    mine = migrate_text("self.define_results(ss.Result('new_infections'))\nx = self.results.new_infections")
+    assert 'res' in mine[0] and mine[1] == [] # One the package makes keeps its name
+    text, changes, todo = migrate_text("a = ss.treat(cure=0.9, on=sir.infection, capacity=5)\nb = ss.Transition(I, R, on=a.failed, where=ss.ppl.female)\nc = ss.modify(sir.pars.beta, multiply=0.5, when=lambda sim: sim.ti > 5)\nd = ss.attr(1, on=infection)")
+    assert 'ss.treat(cure=0.9, where=sir.infection, capacity=5)' in text and 'ss.attr(1, on=infection)' in text and [line for line,_ in todo] == [2, 3] # Keywords: on= is where=, when= is time only
+    text = migrate_text("x = ss.change(sir.pars.beta, at=[30, 60], by=[0.5, 1.0], name='m')\ny = ss.change('sir.pars.beta', at=2005, to=0.1)\nz = ss.change(beta, at=times, by=vals)")
+    assert "ss.modify(sir.pars.beta, multiply=ss.timeseries({30: 0.5, 60: 1.0}), start=30, name='m')" in text[0] and "ss.modify('sir.pars.beta', set=0.1, start=2005)" in text[0] and text[2][0][0] == 3
     assert 'ss.treat(' in migrate_text('from starsim.interventions import treat_num, Intervention')[2][0][1] # An import of a removed name
 
     # More of Starsim 3
+    # What ss.SIR and ss.Pregnancy read themselves in Starsim 3
+    new, _, todo = migrate_text("a = ss.SIR(init_prev=ss.bernoulli(p=0.1), p_death=ss.bernoulli(0.2), dur_inf=10, beta=0.1)\nb = ss.SEIR(init_prev=ss.choose_n(20), beta=0.1)\nc = ss.Pregnancy(p_loss=ss.bernoulli(0.01))\nd = ss.Pregnancy(p_loss=ss.bernoulli(ss.probpermonth(0.02)))")
+    assert 'ss.SIR(init_prev=0.1, p_death=0.2, dur_inf=ss.years(10), beta=0.1)' in new and 'ss.SEIR(init_prev=20, beta=0.1)' in new
+    assert 'ss.Pregnancy(loss_rate=ss.probperweek(0.01))' in new and 'ss.Pregnancy(loss_rate=ss.probpermonth(0.02))' in new
+    _, _, todo = migrate_text("f = lambda self, sim, uids: 0.1\na = ss.SIS(init_prev=ss.bernoulli(p=f), dur_inf=[10, 2])\nnet = ss.MFNet()\nclass Net(ss.SexualNet):\n    def net_beta(self, disease_beta=None, uids=None, disease=None):\n        pass")
+    assert all(any(word in message for _,message in todo) for word in ['drop self', 'lognorm_ex', 'needs a beta', 'inds='])
+
     old = "new = ss.uids.cat(a, b); bf = preg.breastfeeding\nnet = ss.RandomNet(n_contacts=10, uniform_targets=True)"
     assert migrate_text(old)[0] == "new = ss.uids.concatenate(a, b); bf = preg.lactating\nnet = ss.RandomNet(n_contacts=10, method='uniform')"
 
@@ -204,7 +224,7 @@ class Counter(ss.Module):
             self.infected[uids] = True
             self.ti_infected[uids] = self.ti
             self.ti_recovered[uids] = self.ti + 5
-    with pytest.warns(RuntimeWarning, match='new_infections'):
+    with pytest.warns(RuntimeWarning, match='infection'):
         ss.Sim(n_agents=200, diseases=Quiet(beta=ss.peryear(5)), networks='random', verbose=0).run()
     return new
 
@@ -255,6 +275,25 @@ def test_jax_platform(monkeypatch):
         ss.gradients.check_plugins()
     monkeypatch.setenv('JAX_PLATFORMS', 'cpu') # Chosen already: nothing to say
     ss.gradients.check_plugins()
+    return
+
+
+@sc.timer()
+def test_no_numba_cache(tmp_path):
+    sc.heading('Testing that Starsim imports with a read-only package and home folder, with Numba\'s cache in a temporary folder')
+    if not hasattr(os, 'geteuid') or os.geteuid() == 0:
+        pytest.skip('Needs a user whom read-only folders stop')
+    site, home = tmp_path/'site', tmp_path/'home'
+    home.mkdir()
+    shutil.copytree(ss.root/'starsim', site/'starsim', ignore=shutil.ignore_patterns('__pycache__', '*.so', 'target', 'library', 'converters'))
+    subprocess.run(['chmod', '-R', 'a-w', site, home], check=True)
+    try:
+        env = {k:v for k,v in os.environ.items() if k not in ['NUMBA_CACHE_DIR', 'XDG_CACHE_HOME']} | dict(HOME=str(home), PYTHONPATH=str(site), TMPDIR=str(tmp_path), PYTHONDONTWRITEBYTECODE='1')
+        out = subprocess.run([sys.executable, '-c', 'import starsim, numba; print(starsim.__file__, numba.config.CACHE_DIR)'], env=env, capture_output=True, text=True, cwd=tmp_path)
+    finally:
+        subprocess.run(['chmod', '-R', 'u+w', site, home], check=True) # So that it can be cleaned up
+    assert out.returncode == 0, out.stderr
+    assert str(site) in out.stdout and f'{tmp_path}/starsim_numba_' in out.stdout
     return
 
 

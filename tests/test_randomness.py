@@ -192,8 +192,8 @@ def test_worlds(do_plot=False):
 
     l1 = len(s1.people)
     l2 = len(s2.people)
-    i1 = sum1.value.sir_cum_infections
-    i2 = sum2.value.sir_cum_infections
+    i1 = sum1.value.sir_infection
+    i2 = sum2.value.sir_infection
     a1 = s1.interventions.countinf.arr
     a2 = s2.interventions.countinf.arr
     assert l2 == l1 + 1, f'Expected one more person in s2 ({l2}) than s1 ({l1})'

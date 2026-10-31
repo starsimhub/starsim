@@ -43,7 +43,7 @@ def test_mnch():
     sim = ss.Sim(diseases=ssl.mnch.NeonatalSepsis(), demographics=demographics(),
                  networks=networks(), **mnch_pars)
     sim.run()
-    new_inf = sim.results.neonatalsepsis.new_infections.sum()
+    new_inf = sim.results.neonatalsepsis.infection.sum()
     nnd = sim.results.pregnancy.neonatal_deaths.sum()
     print(f'  Neonatal sepsis infections: {new_inf:n}; neonatal deaths: {nnd:n}')
     assert new_inf > 0, 'Expected newborns to be infected with sepsis'

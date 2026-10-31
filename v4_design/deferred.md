@@ -11,8 +11,7 @@ Work that has been looked at and set aside for now: worth doing, but not yet. Ea
 - **The particle filter on outcomes** (review W11). With an outcome such as `cases` as the data, `engine.collect(..., expected=True)` works out the whole run again at every data point, about 2.5 times slower than with a flow. It would take keeping the outcome's pending amounts between data points. It waits for the particles-in-the-kernel work (N27, phase 8), which changes the same code.
 - **Threads in parallel workers.** NumPy's BLAS and Numba each start a pool of threads in every process. For one process this costs nothing (measured on the transition tests: the same CPU time, 1.5 to 1.7 times faster in wall time than with one thread), but many processes at once (pytest-xdist, `ss.parallel()`) oversubscribe the cores. It would take setting one thread in each worker (as `SCIRIS_NUM_THREADS=1` does for BLAS). It waits for a measurement of `ss.parallel()` with and without it.
 
-- **Wheels with the Rust kernels.** The Rust kernels (`starsim/solvers/rust/`, `ss.solvers.backends.rust`) are built by hand (`cd starsim/solvers/rust && ./build`) and in CI, but `pip install starsim` doesn't include them yet, so users get Numba's (and their compiling) unless they build Rust. It would take building wheels with maturin (or setuptools-rust beside setuptools): one abi3 wheel per platform for Python 3.11 and later (manylinux x86 and Arm, macOS x86 and Arm, Windows), with Numba's kernels as the fallback where no wheel fits. The default build already chooses AVX2 at run time where it matters. Cliff, 2026-10-28: "we have to set up the CI build pipeline (i guess maturin) so pip install will get the rust kernels. but we don't have to do that riiiight now".
-- **Rust kernels that abort on bad input.** Found in review (2026-10-28), for input Starsim itself never makes: a panic inside the chain binomial's XLA FFI handler (`starsim/solvers/rust/src/chain.rs`, `handle()`) aborts the process, since it can't unwind out of `extern "C"` (it would need `catch_unwind` and an `XLA_FFI_Error` made through the API's `XLA_FFI_Error_Create`); and a failed allocation inside a pass (e.g. `census` with 10^12 groups) aborts, where Numba raises `MemoryError` (it would need `try_reserve` on sizes taken from arguments). Every other panic raises a `RuntimeError` through `ss.perflib.rust.fallback()`, and arrays the kernels can't take (read-only, object, 2-D where 1-D is meant) go to Numba.
+- **Rust kernels that abort on bad input.** Found in review (2026-10-28), for input Starsim itself never makes: a failed allocation inside a pass (e.g. `census` with 10^12 groups) aborts, where Numba raises `MemoryError` (it would need `try_reserve` on sizes taken from arguments). Every other panic raises a `RuntimeError` through `ss.perflib.rust.fallback()`, and arrays the kernels can't take (read-only, object, 2-D where 1-D is meant) go to Numba.
 - **Compiling the kernels by solver.** Each solver could compile only its own path through `ss.kernels.step()`, which would cut a first compiled run from about 45 s to 18 s (ODE) or 27 s (binomial) ([oct21/numba_vs_jax.md](oct21/numba_vs_jax.md)). Numba makes it awkward: a literal `solver` didn't drop the other paths and made calls 20× slower, and passing or closing over a step function defeats Numba's cache (its type, or its pickle, differs in every process). What works is a closure over the solver as a number (Numba drops the other branches and caches each), with each caller reaching the solver's `step()` through an `if` on that number, or a module-level tuple of functions (an experimental Numba feature that can't inline). Set aside on 2026-10-21 (S5.11 of [oct21/plan.md](oct21/plan.md)), since the kernels now run as plain Python until compiling pays, so the compile is opt-in and happens once; worth it if the one-time compile (about 100 s for everything) becomes a problem, e.g. in CI.
 
 ## Accuracy
@@ -178,7 +177,6 @@ Set aside while building [oct22/plan_b.md](oct22/plan_b.md), each with what it w
 
 Tradeoffs from the October 22 Claude assessment (T1–T13) and skeptic review (their status as of 2026-10-25 is in [oct25/backlog/oct22_reviews.md](oct25/backlog/oct22_reviews.md)), set aside for Cliff. The obvious items were built.
 
-- **T1 (EX1)**: the JAX chain binomial calls the kernels' Numba step through counter-based uniforms (−450 lines; same draws on both engines). Reopens X3; needs a speed spike. M.
 - *Done (2026-10-27, by deletion: oct27/plan.md phase 1).* **T2 (EX5)**: move `ss.jit`'s method/class rewriter (about 1,980 lines, 0–5% measured gain) out of core; keep the function compiler. Partly reopens jax_plan decision 3. S.
 - **T3 (DL4 step 2)**: merge `Expr` and `Cond` into one tree, evaluator and printer. S6.4's precondition is met. L; hot-path risk.
 - *Done (2026-10-22; Cliff: a small port edit is fine; the edits are in oct25/backlog/ports.md).* **T4 (DS1/DL5)**: Pregnancy's Starsim 3 callbacks as wrappers over `add_callback` (or drop them: one line in FPsim's port). Timing within the step to check. S.
@@ -239,10 +237,49 @@ Looked at whether v4 should support modeling paradigms beyond the ODE, chain-bin
 - **Reading Atomica's workbooks.** cat-tb India takes 10.7 s to read and write as code, against about 6 s for Atomica to read it; done once with `ss.converters.convert()`, so it waits.
 - **The states a transfer moves, written once.** Each of cat-tb's transfers lists the ~110 states it moves, so its `stratify()` is one line of 14,565 characters; a variable for the list would need `ss.converters.Source` to hold code of its own.
 
+## From the October 31 constitution pass
+
+- **`ss.on(d.I.n > 1000)`** raises `TypeError`, though `init_triggers()`'s comment says counts work.
+- **Agents' `I` at the endemic state** is high by about dt/D (0.1175 against 0.1 at `dt=1`, D 5): the count seems to include those infected in the step reported. Cause not confirmed.
+- **Minimum stays (`after=`):** other exits skip the last slot under every solver; not checked for bias. Under the chain binomial, a cohort leaves half a step later than as agents.
+- **`ss.Result(..., label=)`** given to a declared disease loses its label.
+- **`describe()` of a coded sim with no unit** prints "every 0.00273973 steps".
+- **The capability reason from `solvers/mixing.py:165`** reads badly in the header.
+- **`test_twins`** compares one call of each kernel on one shape; `rust_twin.py` remains the fuller check.
+- **`ss.compile()` dumped core at exit once,** while sources were being edited; not reproduced.
+- **A wheel has no stale check,** since it has no source beside the library.
+- **`ss.options.reticulate`** can go once R can index by `ss.uids`: it needs `convert=FALSE` in rstarsim, or `Arr` accepting plain arrays.
+- **A declared disease on a network overriding `net_beta()`** ignores it silently; should it raise?
+- **Unusable parameter values on a declared disease** (`dur_inf=dict(...)`) fail late, with a raw `TypeError`; one check when the graph is built.
+- **Other Starsim 3 guards** remain: `infect(self)` in `__init_subclass__()`, `_infection_methods`, and the text in `check_betas()`.
+- **`ss.Births` and `ss.Deaths` as thin constructors** (decision 8) aren't reachable yet: they need `parent` and mothers' ages on declared births, a declared rate by year, sex, and age, the `cbr` and `cmr` results, and a replacement for the `make_p_death()` and `get_births()` hooks that seven downstream classes override. A declared per-agent death rate from the UN table also ends 3.5% below `ss.Deaths`, unexplained.
+- **`ss.MixingPools`** stays: `rsvsim.RSVMixingPools` subclasses it, and typhoid, rotasim, tb_acf, and jhu-collab use it.
+- **Stepped runs under 15 µs:** 24 µs now. A prepared kernel handle might save about 4, and compiled result expressions about 3. Spans would help only modules on coarser timelines.
+- **`settled()`** doesn't notice a change inside a coded object held by identity, or to a modifier's `start=`, `stop=`, or `where=` during a run (its amount and new modifiers are noticed).
+- **`loop.insert`** anchored on an empty `step()`, which is no longer in the loop, is untested.
+- **Gillespie and tau-leaping** hold time-varying values for a whole step, which strengthens the thinning item: about 3% too many infections at `dt=91` days with an annual cycle.
+- **`Delivery.on`** could be renamed `.trigger`.
+- **Modifiers with a time-only `when=`** could be tabulated for whole runs, now that `when=` can't read the sim.
+- **`ss.modify` in the class body of a coded disease** is an error for now.
+- **Conditions on unnamed states in a class body** (`I & x` with `ss.states(3)`) get no name.
+- **A coded `stratify=` with `ss.contacts(dims=)`** raises "nothing would use it" unless a result has `groups=True`.
+- **`flatten_rates()`** is still about 190 lines of closures; temporary state in `choose_solver()` is held on the sim and deleted.
+- **Intel Macs:** `jax>=0.8` has no build for them (the newest `jaxlib` for macOS x86 is 0.4.38), so `pip install starsim` fails there. Make JAX optional, or drop the platform and its wheel.
+- **Threaded compartmental ensembles:** `run_many()` is serial, so parallelism comes only from `ss.parallel()` workers. `advance_threads()` shows the way. Forked workers gave 3.7× on 4 cores.
+- **`share()` by BLAS** applies only when every pair has an entry; JAX's rule was an eighth of the entries. Gravity with a cutoff still loops. Measure before widening.
+- **Wheels on macOS, Windows, and Arm** have never been compiled, and the docs say wheels exist before the first release that has them. Run `pypi_release.yml` by hand with `publish` off.
+- **People in a fixed delay at the start** leave half a step late under the stochastic solvers (see decision 8 of `oct31/plan.md`).
+- **`v4_design/design/12-backends.md`** still describes the chain binomial in JAX.
+- **STIsim needs one edit for this pass:** `stisim/networks/base.py:153` takes `inds=` instead of `uids=`.
+
 ## Won't do
 
 Work that was looked at and decided against, with why, so that it is not proposed again without a new reason.
 
+- **Aligning `ss.SIR` with `ssl.AgentSIR`** (October 31, F20): they are meant as two different ways of doing the same thing.
+- **Removing `RandomNet` methods, `library/mnch/`, `gillespie_places`, `to_edgelist()`, `pop_inds()`, or `set_diagnostics()`** (October 31): all are used or wanted.
+- **Trimming importers, IF2, `compare_models()`, or `split_data()`** (October 31): importers and fitting are major value propositions, and future users count.
+- **`'auto'` rebuilding as agents when code needs them** (October 31, decision 6): user code would run twice.
 - **Compiling the kernels per solver** (October 28): a first ODE run compiled in 37 s instead of 136 s, but `ss.compile()` doubled to about 680 s, Gillespie gained nothing, and it needed a Numba compiler pass on Numba's internals; the ODE in NumPy needs no compiling at all. See `oct27/worklogs/atomica_speed_optB.md`.
 - **camdl's `overdispersed`, `deterministic`, and `balance` as features, and more built-in likelihoods** (beta, beta-binomial, zero-inflated negative binomial, a normal whose spread depends on the model). Each is a keyword that one or two benchmark models need, and each is a few lines of code with what v4 already has: a connector that sets a value each step, a function of the sim, a module written as code, and a likelihood given as a function `fn(observed, model)`. Cliff (2026-10-25): no more complexity or built-in features, but a sensible, easy path for unanticipated extensions; that path is [tutorial G8](../docs/tutorials/g8_extending.qmd) and the tutorial `docs/tutorials/g8_extending.qmd`.
 

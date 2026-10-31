@@ -6,7 +6,7 @@ The same `ss.graph.Graph` can be run as compartments (`ode`, `binomial`, `gilles
 the sim's loop like any other module code.
 
 The modules: `engine` (what the engines share), `mixing` (who meets whom in a
-compartmental run), `compartmental` and `agents` (the two engines), `crossing`
+compartmental run), `compartmental` and `agents` (the two engines; `agents_expressions`, `agents_moving`, `agents_stepping`, and `agents_branching` are parts of the second), `crossing`
 (diseases tracked jointly), `choose` (which solver runs a model, and why),
 `deliveries` (what a delivery does differently in a compartmental run), and
 `particles` (many runs of a program stepped together, for a particle filter).
