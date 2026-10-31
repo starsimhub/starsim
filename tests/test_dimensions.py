@@ -95,23 +95,6 @@ def make_resistance(beta=4, immunity=True, cure=(0.9, 0.3), **kwargs):
 
 
 @sc.timer()
-def test_strain_clearance():
-    sc.heading('Testing strains with courses of their own: clearing one leaves the other\'s stage and clock alone')
-    S, I, C = ss.states('S I C')
-    hpv = ss.Disease(S, I, C, infection=S >> I @ ss.peryear(3)*I, progression=I >> C @ ss.years(2), clearance=I >> S @ ss.years(1), regression=C >> S @ ss.years(3),
-                     init_prev=0.3, name='hpv', strains=ss.Strains(['hpv16', 'hpv18'], shared=False))
-    sim = ss.Sim(hpv, n_agents=2000, start=2000, stop=2004, dt=0.25, **kw).init()
-    sim.run(until=2002)
-    d16, d18 = sim.diseases.hpv16, sim.diseases.hpv18
-    both = ss.uids(((d16.I.raw | d16.C.raw) & d18.I.raw).nonzero()[0])
-    before = d16.current_state()[both].copy(), d16.ti_I.raw[both].copy(), d16.ti_exit_I.raw[both].copy()
-    ss.move(d18.I, d18.S, uids=both)
-    assert len(both) and not d18.I.raw[both].any()
-    assert all(np.array_equal(a, b, equal_nan=True) for a,b in zip(before, (d16.current_state()[both], d16.ti_I.raw[both], d16.ti_exit_I.raw[both])))
-    return sim
-
-
-@sc.timer()
 def test_strain_cure():
     sc.heading('Testing an outcome for each strain carried: a regimen that cures DS only')
     sim = ss.Sim(make_resistance(beta=0, cure=(1.0, 0.0), init=dict(Tx=0.5)), n_agents=4000, start=2000, stop=2003, dt=1/52, **kw).init()
@@ -416,7 +399,6 @@ def test_places_by_name():
 
 
 if __name__ == '__main__':
-    clearance = test_strain_clearance()
     cure    = test_strain_cure()
     commuting = test_commuting()
     register = test_register()

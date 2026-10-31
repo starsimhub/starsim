@@ -187,7 +187,7 @@ The rest of the library's diseases are declared, as states and transitions ([Dis
 | `ssl.Influenza` | A yearly cycle in transmission (`ss.seasonal`) with waning immunity | Natural history from Carrat F et al., *Am J Epidemiol* 2008;167:775-785; R0 of 1.3 from Biggerstaff M et al., *BMC Infect Dis* 2014;14:480; the cycle is illustrative |
 | `ssl.RSV` | Maternal immunity: babies born protected, in a seasonal MSEIRS model | Weber A, Weber M, Milligan P, *Math Biosci* 2001;172:95-113, for the infectious period, the seasonal form, and R0 |
 | `ssl.Pertussis` | Immunity that wanes over decades, giving epidemics that return every few years | Wearing HJ, Rohani P, *PLoS Pathogens* 2009;5(10):e1000647, for the natural history, R0, and duration of immunity |
-| `ssl.Dengue` | Several serotypes (`ss.Strains`), each with a vector, and partial cross-protection between them | The Ross-Macdonald structure above, with indicative dengue values; cross-protection as found by Reich NG et al., *J R Soc Interface* 2013;10:20130414 |
+| `ssl.Dengue` | Several serotypes, each a disease with its own vector, and partial cross-protection between them | The Ross-Macdonald structure above, with indicative dengue values; cross-protection as found by Reich NG et al., *J R Soc Interface* 2013;10:20130414 |
 | `ssl.Typhoid` | Chronic carriers: a few people shed for life, at a hundredth of the infectiousness of an acute case | Pitzer VE et al., *PLoS Negl Trop Dis* 2014;8(1):e2642, for the carriers, waning, and R0 of 2.8 |
 | `ssl.Polio` | A rare outcome as a branch: about 1 infection in 200 causes paralysis | US CDC *Pink Book* for the paralytic fraction; Fine PEM, Carneiro IAM, *Am J Epidemiol* 1999;150:1001-1021, for R0 |
 | `ssl.Syphilis` | Stages, with the one thing that cannot be declared (infectiousness that falls with time since the latent stage began) written as code | STIsim's syphilis module, which cites its own sources |
@@ -219,13 +219,13 @@ for C in [0.5*critical, 2*critical, 0.2]:
 
 The same declaration runs as agents (`n_agents=` instead of `total_pop=`), where the prevalence is the same but each run differs by chance.
 
-Since these are declared, `describe()`, `diagram()`, and `equations()` work on any of them, which is the quickest way to see what a model does (`ssl.Dengue` is a family of serotypes, so each serotype is shown in its own right, e.g. `sim.diseases.den1.diagram()`):
+Since these are declared, `describe()`, `diagram()`, and `equations()` work on any of them, which is the quickest way to see what a model does (`ssl.Dengue` is a list of serotypes, so each is shown in its own right, e.g. `sim.diseases.den1.diagram()`):
 
 ```{python}
 ssl.Typhoid().equations()
 ```
 
-Two of them need agents rather than compartments: `ssl.Dengue`, because serotypes that protect each other are followed per person, and `ssl.Syphilis`, because the falling infectiousness of latent syphilis is a quantity each person carries, set in its `step()`. The rest run under any solver.
+One of them needs agents rather than compartments: `ssl.Syphilis`, because the falling infectiousness of latent syphilis is a quantity each person carries, set in its `step()`. The rest run under any solver.
 
 ## Adapting a library module
 

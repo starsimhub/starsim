@@ -100,12 +100,12 @@ LossyExport: exported to SBML: 3 states, 2 transitions, as 13 species and 12 rea
   changed: the agent-based sim was written as its compartmental form (an ODE)
   changed: the lognorm_ex dwell time "dur" written as 11 exponential stages (Erlang) with its mean, 10 days
   changed: "sir" is stratified (age: 0-14, 15-64, 65+), written as one group, the sum of its groups, with the base values of its parameters
-  not exported: network "randomnet" (contacts written as homogeneous mixing)
+  not exported: network "randomnet" (written as homogeneous mixing with 10 contacts per day)
 ```
 
 An export does not fail because something cannot be carried; it writes what it can and lists the rest. A model with functions in it exports its declared parts and lists the functions as not exported.
 
-Petri nets and the other frameworks' formats are not exported (`v4_design/admin/deferred.md`, "Won't do"). SBML and odin are written from the compartmental form of the model (what `sir.equations()` prints), with the numbers in the sim's unit (SBML's `timeUnits`): a dwell time that is not exponential is written as its Erlang stages, and a stratification as one group, both listed. Both read back with `ss.import_from()`. `ss.export_to(sim, format)` returns the text without writing a file.
+Petri nets and the other frameworks' formats are not exported (`v4_design/admin/deferred.md`, "Won't do"). SBML and odin are written from the compartmental form of the model (what `sir.equations()` prints), with the numbers in the sim's unit (SBML's `timeUnits`): a dwell time that is not exponential is written as its Erlang stages, a stratification as one group, both listed, and a network as its mean contacts in the rate of each transmission (a `contacts` parameter). A parameter that varies in time (`ss.seasonal`, `ss.timeseries`) is written as its formula in the time. Both read back with `ss.import_from()`, except a rate that varies in time, which the importers list as not translated. `ss.export_to(sim, format)` returns the text without writing a file.
 
 The diagram is a Mermaid flowchart, from `sir.diagram()`, with each arrow labeled with its transition's name and value (`recovery: 10 days`) and, for a transition with `p=`, the share that takes it. It is a string of the flowchart's text (`print()` gives it), which a notebook draws: JupyterLab and Quarto draw it from a Markdown block. There is no drawn (Matplotlib) diagram: Mermaid is drawn by GitHub, Quarto, JupyterLab, and most Markdown viewers.
 

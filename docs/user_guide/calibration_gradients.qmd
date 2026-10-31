@@ -13,7 +13,7 @@ For a deterministic model, run as an ODE, Starsim can work out how each result c
 - Drawing from the posterior (the distribution of values consistent with the data and the priors) with the No-U-Turn sampler, NUTS, a Hamiltonian Monte Carlo method that uses the gradient to move through the space of parameters efficiently.
 - Seeing which parts of the epidemic a parameter affects, and by how much.
 
-This page assumes the basics of [Fitting a model](calibration_fitting.qmd). Gradients need JAX (`pip install jax`), a model that runs as an ODE, and one whose whole run is compiled: a rate that calls a Python function, a module written as code, or a movement register rules them out, and the fit says which when it can't use gradients. JAX runs on a GPU if it finds one; if it can't use it (e.g. its CUDA plugin is of another version than JAX), run it on the CPU with `ss.options.jax = 'cpu'` (or the environment variable `STARSIM_JAX=cpu`) before it is first used.
+This page assumes the basics of [Fitting a model](calibration_fitting.qmd). Gradients need JAX (`pip install "starsim[jax]"`), a model that runs as an ODE, and one whose whole run is compiled: a rate that calls a Python function, a module written as code, or a movement register rules them out, and the fit says which when it can't use gradients. JAX runs on a GPU if it finds one; if it can't use it (e.g. its CUDA plugin is of another version than JAX), run it on the CPU with `ss.options.jax = 'cpu'` (or the environment variable `STARSIM_JAX=cpu`) before it is first used.
 
 ## The model
 

@@ -1,15 +1,19 @@
 """
 Dengue, with several serotypes and a mosquito vector (`Dengue`)
 """
-import numpy as np
 import starsim as ss
 
 __all__ = ['Dengue']
 
 
-def serotype(name, pars):
-    """ One dengue serotype: people are susceptible, infectious, or recovered, with mosquitoes of its own """
+def serotype(name, pars, others=(), **kwargs):
+    """ One dengue serotype: people are susceptible, infectious, or recovered, with mosquitoes of its own; having recovered from any of the others protects in part """
     p = pars
+    if others: # The strongest protection from any serotype had, which is the same one from each
+        had = ss.state(f'{others[0]}.R')
+        for other in others[1:]:
+            had = had | ss.state(f'{other}.R')
+        kwargs['cross_protection'] = ss.modify('rel_sus', multiply=1 - p['cross'], where=had)
     S, R = ss.states('S R')
     I = ss.State('I', init=p['init'], label='Infectious')
     Sv = ss.State('Sv', people=False, label='Susceptible mosquitoes')
@@ -24,17 +28,19 @@ def serotype(name, pars):
         emergence  = ss.null >> Sv @ p['m']*p['mu_v']*N,
         mortality  = Sv + Ev + Iv >> ss.null @ p['mu_v'],
         name = name,
+        **kwargs,
     )
 
 
-class Dengue(ss.Disease):
+def Dengue(n_serotypes=4, cross=0.3, a=ss.perday(0.5), b=0.5, c=0.5, m=2.0,
+           dur_inf=ss.days(6), eip=ss.days(10), mu_v=ss.perday(0.1), init=0.001, **kwargs):
     """
     Dengue: several serotypes, each passed on by mosquitoes, with partial cross-protection between them
 
-    Each serotype is a disease of its own (`ss.Strains` of members), with the host and vector structure of
-    `ssl.Malaria`, plus the extrinsic incubation period in the mosquito. Having had one serotype gives complete
-    protection against that one and partial protection against the others (`cross`). Because the serotypes
-    protect each other, this runs as agents.
+    Each serotype is a disease of its own, `den1` to `den4`, with the host and vector structure of `ssl.Malaria`,
+    plus the extrinsic incubation period in the mosquito, so this returns a list of diseases, and the results are
+    `sim.results.den1` and so on. Having had one serotype gives complete protection against that one and partial
+    protection against the others (`cross`), a modifier of each serotype's `rel_sus`.
 
     Sources: the host-vector structure is the Ross-Macdonald model as given by Keeling MJ, Rohani P, *Modeling
     Infectious Diseases in Humans and Animals*, Princeton University Press, 2008, section 4.4 (see `ssl.Malaria`).
@@ -59,7 +65,7 @@ class Dengue(ss.Disease):
         eip (`ss.dur`): the extrinsic incubation period: the mean time from a mosquito being infected to being infectious
         mu_v (`ss.per`): the death rate of mosquitoes, which emerge at the same rate
         init (float): the share of people who start infectious with each serotype
-        kwargs (dict): passed to `ss.Disease`, e.g. `name`
+        kwargs (dict): passed to `ss.Disease` for each serotype
 
     Examples:
         ```python
@@ -68,18 +74,12 @@ class Dengue(ss.Disease):
 
         sim = ss.Sim(diseases=ssl.Dengue(), demographics=True, n_agents=5000, unit='day', stop=365*5)
         sim.run()
-        sim.plot('dengue')
+        sim.plot('den1')
         ```
 
     Without births, each serotype burns through the people susceptible to it and stops; `demographics=True` gives
     the sim births and deaths, which keep the serotypes returning.
     """
-    def __init__(self, n_serotypes=4, cross=0.3, a=ss.perday(0.5), b=0.5, c=0.5, m=2.0,
-                 dur_inf=ss.days(6), eip=ss.days(10), mu_v=ss.perday(0.1), init=0.001, name='dengue', **kwargs):
-        pars = dict(a=a, b=b, c=c, m=m, dur_inf=dur_inf, eip=eip, mu_v=mu_v, init=init)
-        members = [serotype(f'den{i + 1}', pars) for i in range(n_serotypes)]
-        protection = np.full((n_serotypes, n_serotypes), cross)
-        np.fill_diagonal(protection, 1.0) # Complete protection against the serotype already had
-        strains = ss.Strains(members, immunity=ss.immunity(due_to='R', rel_sus=protection))
-        super().__init__(name=name, strains=strains, **kwargs)
-        return
+    names = [f'den{i + 1}' for i in range(n_serotypes)]
+    pars = dict(a=a, b=b, c=c, m=m, dur_inf=dur_inf, eip=eip, mu_v=mu_v, init=init, cross=cross)
+    return [serotype(name, pars, [other for other in names if other != name], **kwargs) for name in names]

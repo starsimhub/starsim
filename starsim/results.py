@@ -127,7 +127,7 @@ class Result(ss.arrays.BaseArr):
     """
     runs = None # For a result across the runs of a MultiSim: one row per run (see above)
     part_dims = ['disease', 'edge'] # The dimensions of the keys of by_edge
-    by_edge = dests = family = None # What selects from it besides runs and groups, kept as results: see axes() and parts_after()
+    by_edge = dests = None # What selects from it besides runs and groups, kept as results: see axes() and parts_after()
     strats = dims = strata = denom = denom_dims = group_ti = no_groups = None # The values by group: see init_groups()
     split = parts = None # The result it was split from (see by()), and for a ratio not by group, the results it is made of
     in_people, use_years = False, False # Written in people already (see people_scale()), and labeled by years (see resample())
@@ -309,7 +309,7 @@ class Result(ss.arrays.BaseArr):
         The dimensions of this result, whichever way they are kept, for `select()` and `by()`: for each, its levels, and a function that gives the result for a list of them
 
         A result has the destinations of a transition with several (`to`), the parts of a treatment of several diseases or
-        transitions (`disease`, `edge`), the strains of a family with courses of their own, the scenarios and parameters of a
+        transitions (`disease`, `edge`), the scenarios and parameters of a
         result across runs, and the groups of a stratified result. The values themselves have only the axes of `t_axis` and `columns`.
         """
         out = {}
@@ -318,8 +318,6 @@ class Result(ss.arrays.BaseArr):
         if self.by_edge:
             for i,dim in enumerate(self.part_dims):
                 out[dim] = ([*dict.fromkeys(key[i] for key in self.by_edge if key[i] is not None)], functools.partial(self._pick_parts, dim))
-        if self.family is not None:
-            out[self.family[0]] = (list(self.family[1]), self._pick_member)
         for col,short in self._run_cols().items():
             out[short] = (distinct(self.runs[col]), functools.partial(self._pick_runs, col))
         if self.strata is not None:
@@ -364,10 +362,6 @@ class Result(ss.arrays.BaseArr):
             out.__dict__.update(strata=np.sum([res.strata for res in keep.values()], axis=0), strats=self.strats, dims=self.dims, group_ti=self.group_ti)
         return out
 
-    def _pick_member(self, levels):
-        """ The sum of some members' own results (see `ss.strains.Family`) """
-        return self._like(np.sum([self.family[1][level].values for level in levels], axis=0), runs=self.runs)
-
     def _pick_runs(self, col, levels):
         """ The runs with some of the values of a column of `runs` """
         return self.take(self.match_runs({col:levels}))
@@ -393,10 +387,9 @@ class Result(ss.arrays.BaseArr):
         return np.divide(values, denom, out=np.zeros(values.shape), where=denom!=0)
 
     def parts_after(self, func):
-        """ The results kept beside the values (the destinations, parts, and family members of `axes()`), each with the operation `func` done to it, for a result that had the same one done to its values """
-        dests, by_edge, family = self.dests, self.by_edge, self.family
-        return dict(dests=dests and sc.obj({k:func(res) for k,res in dests.items()}), by_edge=by_edge and {k:func(res) for k,res in by_edge.items()},
-                    family=family and (family[0], {k:func(res) for k,res in family[1].items()}))
+        """ The results kept beside the values (the destinations and parts of `axes()`), each with the operation `func` done to it, for a result that had the same one done to its values """
+        dests, by_edge = self.dests, self.by_edge
+        return dict(dests=dests and sc.obj({k:func(res) for k,res in dests.items()}), by_edge=by_edge and {k:func(res) for k,res in by_edge.items()})
 
     def _like(self, values, columns=None, runs=None, **kwargs):
         """ A new result of this name and kind, with other values, in people already
@@ -549,7 +542,7 @@ class Result(ss.arrays.BaseArr):
                     errormsg = f'Cannot compare "{label}" with "{baseline}": they have {len(inds)} and {len(base.values)} runs'
                     raise ValueError(errormsg)
                 other = self.take(inds)
-                diff = other.asnew(values=other.values - base.values, label=f'{self.label}: difference from {baseline}', dests=None, by_edge=None, family=None)
+                diff = other.asnew(values=other.values - base.values, label=f'{self.label}: difference from {baseline}', dests=None, by_edge=None)
                 if other.strata is not None: # A difference of ratios has no parts
                     diff.strata, diff.denom = (None, None) if other.denom is not None else (other.strata - base.strata, None)
                 out[label] = diff
@@ -564,7 +557,6 @@ class Result(ss.arrays.BaseArr):
 
         For a result across runs, the columns come after the runs and time points, so `res.by('age').young` is a result across runs.
         For strains carried together (`ss.Strains(max_strains=2)`), the columns are the strains, and a person who carries several is in each.
-        For a result of strains with courses of their own (`ss.Strains(shared=...)`), the name of the strains gives each strain's own result.
         """
         levels, pick = self._axis(dim)
         if dim in self._run_cols().values():
@@ -1656,7 +1648,7 @@ class simdata:
 
     def drop_extra(self, sim, df):
         """ Drop the columns that match no result of the sim """
-        dims = [strat.name for strat in getattr(getattr(sim, 'groups', None), 'strats', [])] + [mod.dim for mod in sim.modules if isinstance(mod, ss.strains.Family)] # Columns that say which stratum or strain a row is for
+        dims = [strat.name for strat in getattr(getattr(sim, 'groups', None), 'strats', [])] # Columns that say which stratum a row is for
         keep = [col for col in df.columns if col in self.time_cols or col in dims or match_column(sim, col) is not None]
         return df[keep]
 
@@ -1711,37 +1703,17 @@ def widen_data(sim, df):
     """
     Data in long form, with columns that say which stratum each row is for (named after dimensions of the sim, e.g. `age`), as one column for each result and stratum, e.g. `cases[age=0-15]`
 
-    A level is given by its label (or its position). For a disease whose strains have courses of their own (`ss.Strains([hpv16, hpv18])`),
-    a column named after its strains (`strain`, or the name given to `ss.Strains`) gives each strain's own result: `cancer` in a row
-    for `strain=hpv16` is `hpv16.cancer`.
+    A level is given by its label (or its position).
     """
     dims = [strat.name for strat in getattr(getattr(sim, 'groups', None), 'strats', []) if strat.name in df.columns]
-    fams = list(dict.fromkeys(mod.dim for mod in sim.modules if isinstance(mod, ss.strains.Family) and mod.dim in df.columns and mod.dim not in dims))
-    if not dims and not fams:
+    if not dims:
         return df
     parts = []
-    for key,group in df.groupby(dims + fams, sort=False):
-        levels = dict(zip(dims + fams, key if isinstance(key, tuple) else [key]))
+    for key,group in df.groupby(dims, sort=False):
+        levels = dict(zip(dims, key if isinstance(key, tuple) else [key]))
         tag = ', '.join(f'{dim}={levels[dim]}' for dim in dims)
-        names = {col:member_column(sim, col, {dim:levels[dim] for dim in fams}) for col in group.columns if col not in levels}
-        parts.append(group.drop(columns=dims + fams).rename(columns=lambda col: f'{names[col]}[{tag}]' if tag else names[col]))
+        parts.append(group.drop(columns=dims).rename(columns=lambda col: f'{col}[{tag}]'))
     return sc.dataframe(pd.concat(parts, axis=1))
-
-
-def member_column(sim, col, levels):
-    """ The column of a strain's own result, for a column of a disease whose strains have courses of their own: "cancer" for strain=hpv16 is "hpv16.cancer" (see `widen_data()`) """
-    modname, _, name = col.rpartition('.') # The name alone matches each strain's own result too, so it is looked up in the disease's
-    for dim,level in levels.items():
-        fams = [mod for mod in sim.modules if isinstance(mod, ss.strains.Family) and mod.dim == dim]
-        fam = next((mod for mod in fams if modname in ['', mod.name] and isinstance(mod.results.get(name), ss.Result)), None)
-        if fam is None:
-            raise sc.KeyNotFoundError(f'the data for {col} is by {dim}, but {col} is not a result of {sc.strjoin([mod.name for mod in fams])}, whose strains are the levels of "{dim}".')
-        members = fam.member_names
-        member = str(level) if str(level) in members else members[int(level)] if str(level).isdigit() and int(level) < len(members) else None
-        if member is None:
-            raise sc.KeyNotFoundError(f'the data for {col} has {dim}={level}, which is not a strain of {fam.name}; its strains are {sc.strjoin(members)}.')
-        col = f'{member}.{name}'
-    return col
 
 
 def parse_column(col):
@@ -1801,9 +1773,6 @@ def check_data(sim, df, die=False):
         base = match_name(sim, name)
         if dims and base is not None:
             for dim,level in dims.items():
-                fam = next((mod for mod in sim.modules if isinstance(mod, ss.strains.Family) and mod.dim == dim and dim not in [strat.name for strat in sim.groups.strats]), None)
-                if fam is not None:
-                    raise sc.KeyNotFoundError(f'the data column "{col}" is by {dim}, the strains of {fam.name}, which have courses of their own: name each strain\'s own result, e.g. "{fam.member_names[0]}.{name.rpartition(".")[2]}", or give the data in long form, with a "{dim}" column.')
                 strat = sim.groups.strats[sim.groups.dim_index(dim)]
                 if level not in [str(label) for label in strat.labels] and not (level.isdigit() and int(level) < strat.n):
                     raise sc.KeyNotFoundError(f'the data for {name} has {dim}={level}, which is not a level of "{dim}"; its levels are {sc.strjoin(strat.labels)}.')

@@ -460,9 +460,8 @@ class Delivery(ss.products.EventSource, Intervention):
         self.priority = priority
         self.queue = None if queue is False else queue
         self.disease_list = None # Several diseases (HP7): the product acts on each, as if its values were keyed by them (see init_pre())
-        family = lambda item: getattr(item, 'family', None) # A disease whose strains have courses of their own: its strains, each a disease
-        if isinstance(disease, (list, tuple)) or family(disease) is not None:
-            self.disease_list = [d for item in sc.tolist(disease) for d in (family(item)._members if family(item) is not None else [item])]
+        if isinstance(disease, (list, tuple)):
+            self.disease_list = list(disease)
             if self.product is None or not self.disease_list:
                 errormsg = f'disease= of a delivery is one disease, or a list of them that its product acts on; "{name or type(self).__name__}" has {"no product" if self.product is None else "an empty list"}'
                 raise TypeError(errormsg)
@@ -695,10 +694,9 @@ class Delivery(ss.products.EventSource, Intervention):
             return
         declared = [mod.name for mod in sim.declared]
         names = [d if isinstance(d, str) else d.name for d in self.disease_list]
-        names = [m for n in names for m in (sim.diseases[n].member_names if isinstance(sim.diseases.get(n), ss.strains.Family) else [n])] # Strains with courses of their own, by the disease's name
         missing = [n for n in names if n not in declared]
         coded = [n for n in missing if coded_disease(sim, n) is not None]
-        if coded and (len(coded) < len(names) or not isinstance(self.product, (ss.Diagnostic, ss.Treatment))): # Several diseases written as code (HP70): a test or a cure by their states, as for strains with courses of their own
+        if coded and (len(coded) < len(names) or not isinstance(self.product, (ss.Diagnostic, ss.Treatment))): # Several diseases written as code (HP70): a test or a cure by their states
             raise sc.KeyNotFoundError(f'disease= of "{self.name}" names {sc.strjoin(coded)}, written as code; a delivery for several diseases written as code is a test or a treatment of all of them (and none declared), so give one delivery for each (e.g. disease="{coded[0]}")')
         missing = [n for n in missing if n not in coded]
         if missing:
@@ -717,11 +715,6 @@ class Delivery(ss.products.EventSource, Intervention):
         """
         declared = [mod.name for mod in sim.declared]
         ss.conditions.check_path_events(sim, self.on, self.name)
-        if self.disease_list is None and isinstance(self.disease, str) and isinstance(sim.diseases.get(self.disease), ss.strains.Family): # A disease whose strains have courses of their own, by name: as when given as the disease (see __init__())
-            if self.product is None:
-                errormsg = f'disease="{self.disease}" of "{self.name}" has strains with courses of their own, which a delivery acts on with its product; it has none'
-                raise TypeError(errormsg)
-            self.disease_list = [self.disease]
         for other in [self] + [iv for iv in sim.interventions() if isinstance(iv, Delivery) and iv is not self and iv.product is not None and iv.product is self.product]:
             other.key_product(sim) # A product shared with a delivery for several diseases is keyed by them before any delivery initializes it, whatever the order (HP38)
         if isinstance(self.delay, ss.Dist) and not getattr(self.delay, '_numeric', False): # Durations in the sim's unit, however they are given
@@ -1529,7 +1522,7 @@ class Delivery(ss.products.EventSource, Intervention):
         """ Work out the result of each test (one draw per person, from the probability of each result: see `ss.Diagnostic.tails()`), and either act on it or wait for it """
         selector = self.selector
         product = self.product
-        tails = product.tails(selector, self.dis.name, self.infected_states, family=self.disease_list if self._coded else None)
+        tails = product.tails(selector, self.dis.name, self.infected_states, together=self.disease_list if self._coded else None)
         if self.compartments is not None:
             return self.compartments.test(chosen, tails)
         n = len(product.result_names)

@@ -1124,7 +1124,7 @@ class Diagnostic(Product):
         rest = [t.get(None, 0.0) for t in tables]
         return groups, rest
 
-    def tails(self, selector, home, infected, family=None):
+    def tails(self, selector, home, infected, together=None):
         """
         The probability that each person's result is each one or a more severe one, for each but the least severe (so for a
         positive and a negative result, the probability of a positive one). For each disease, from the state they are in;
@@ -1134,11 +1134,11 @@ class Diagnostic(Product):
             selector (`ss.conditions.Selector`): the selector of the delivery's disease
             home (str): the delivery's disease, for states given without one
             infected (func): returns the infected states of `home`, which a test with no `detects=` detects
-            family (list): the names of diseases written as code that a delivery gives it for (`disease=[...]`), which are tested as the strains of a family are (see `by_family()`)
+            together (list): the names of diseases written as code that a delivery gives it for (`disease=[...]`), which are tested together (see `test_together()`)
         """
         sim = selector.sim
         groups, rest = self.layout(sim, home)
-        groups = self.by_family(sim, groups, family)
+        groups = self.test_together(groups, together)
         none = 1.0
         combined = [1.0]*len(rest) # The probability of no result this severe or more, from any disease
         for name,rows in groups.items():
@@ -1148,7 +1148,7 @@ class Diagnostic(Product):
             if coded: # A disease written as code, whose states need not be exclusive (e.g. infected and cin): each person in the most severe state they are in
                 rows = sorted(rows, key=lambda row: self.severity(row[1]), reverse=True)
             for state,vals in rows:
-                if isinstance(name, tuple): # The strains of a family: the people in the state in any of them, unless in a more severe one (see by_family())
+                if isinstance(name, tuple): # Diseases tested together: the people in the state in any of them, unless in a more severe one (see test_together())
                     sel = np.maximum.reduce([selector.select(ss.conditions.Cond('state', m, state))*1.0 for m in name])*(1 - inside)
                 elif coded:
                     sel = selector.select(ss.conditions.Cond('state', name, state))*(1 - inside)
@@ -1174,28 +1174,24 @@ class Diagnostic(Product):
         return sum(sum(v for v in vals[k:] if sc.isnumber(v)) for k in range(len(vals)))
 
     @staticmethod
-    def by_family(sim, groups, family=None):
+    def test_together(groups, together=None):
         """
-        The strains of a family (`ss.Strains([hpv16, hpv18])`) given the same values by state (a test keyed by a state's name, e.g. `{'CIN': 0.9}`)
-        are one group, keyed by the names of the strains: a person is tested once, in the state that gives the most severe results (a woman
-        with CIN of one genotype and susceptible to the others is tested as with CIN), rather than once for each strain. So are diseases
-        written as code that one delivery gives the test for (`family`, e.g. HPVsim's genotypes, HP70)
+        Diseases written as code that one delivery gives the test for (`together`, e.g. HPVsim's genotypes, HP70), given the same values by
+        state (a test keyed by a state's name, e.g. `{'CIN': 0.9}`), are one group, keyed by their names: a person is tested once, in the state
+        that gives the most severe results (a woman with CIN of one genotype and susceptible to the others is tested as with CIN), rather than
+        once for each disease
         """
+        names = [n for n in together or [] if n in groups]
+        if len(names) < 2:
+            return groups
+        rows = [[(state, [repr(v) for v in vals]) for state,vals in groups[n]] for n in names]
+        if any(r != rows[0] for r in rows[1:]): # Values of their own for some diseases: each is tested on its own
+            return groups
         out = dict(groups)
-        families = [fam.member_names for fam in sim.diseases() if isinstance(fam, ss.strains.Family)] + ([list(family)] if family else [])
-        for members in families:
-            names = [n for n in members if n in out]
-            if len(names) < 2:
-                continue
-            rows = [[(state, [repr(v) for v in vals]) for state,vals in out[n]] for n in names]
-            if any(r != rows[0] for r in rows[1:]): # Values of their own for some strains: each is tested on its own
-                continue
-            graph = getattr(sim.diseases.get(names[0]), 'graph', None)
-            score = lambda row: (Diagnostic.severity(row[1]), graph.states[row[0]].order if graph is not None else 0)
-            merged = sorted(out[names[0]], key=score, reverse=True) # The most severe first
-            for n in names:
-                del out[n]
-            out[tuple(names)] = merged
+        merged = sorted(out[names[0]], key=lambda row: Diagnostic.severity(row[1]), reverse=True) # The most severe first
+        for n in names:
+            del out[n]
+        out[tuple(names)] = merged
         return out
 
     def delays(self):

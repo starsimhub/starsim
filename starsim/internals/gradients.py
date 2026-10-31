@@ -52,7 +52,7 @@ def jax():
     try:
         import jax
     except ImportError as E:
-        errormsg = 'Gradients need JAX, which is not installed (it has no builds for Intel Macs); fitting by methods without gradients works without it'
+        errormsg = 'Gradients need JAX, which is not installed: use pip install "starsim[jax]". Fitting by methods without gradients works without it.'
         raise ImportError(errormsg) from E
     from jax._src import xla_bridge
     if not xla_bridge.backends_are_initialized(): # The first use, by Starsim or anything else

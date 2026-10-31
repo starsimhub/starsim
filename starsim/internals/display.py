@@ -549,13 +549,14 @@ def equation_symbols(graph, engine=None):
     return ([''] if lines else []) + lines
 
 
-def flow_terms(graph, engine=None):
+def flow_terms(graph, engine=None, contacts=None):
     """
     Each flow of the compartmental form, with symbolic parameter names, for `equations()` and for exports
 
     Returns the name of each compartment (a state, or its stages as `I_1`, `I_2`, ...),
     and for each flow its transition, the compartment it leaves (or None), the flow
-    out of it, and the compartments it enters, each with its share of the flow (none for an outflow)
+    out of it, and the compartments it enters, each with its share of the flow (none for an outflow).
+    If `contacts` is given, it is the name to multiply each transmission by (an export has no mixing to carry them).
     """
     mod = graph.module
     if engine is None or not engine.compartmental: # Not in a compartmental sim, so lay the model out with a stand-in
@@ -600,7 +601,8 @@ def flow_terms(graph, engine=None):
             k = f'{flow.stages} * ' if flow.kind == 'stage' and flow.stages > 1 else ''
             term = f'{k}{src} / {name}'
         elif flow.kind == 'contact':
-            parts = [f'{format_expr(coef)} * {src} * {state.name} / N' for state,coef in tr.terms.items()]
+            mix = f'{contacts} * ' if contacts else ''
+            parts = [f'{format_expr(coef)} * {mix}{src} * {state.name} / N' for state,coef in tr.terms.items()]
             if tr.const is not None:
                 parts.append(f'{format_expr(tr.const)} * {src}')
             term = ' + '.join(parts)
@@ -768,7 +770,7 @@ def describe_sim(sim, output=False, verbose=False):
             for text in crossing.describe():
                 add('', text)
     for mod in mods:
-        if hasattr(mod, 'describe') and (getattr(mod, 'graph', None) is not None or isinstance(mod, ss.strains.Family)): # Strains with courses of their own after their members
+        if hasattr(mod, 'describe') and getattr(mod, 'graph', None) is not None:
             mod.describe(out=desc)
     if sim.declared:
         desc.section('Mixing and interventions')

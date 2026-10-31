@@ -9,7 +9,7 @@ authorship:
 
 This page is a ten-minute tour of Starsim. It builds one model step by step: a simple epidemic, then the same epidemic with age groups, an intervention, data to fit it to, and many runs to show the uncertainty. Each step is a few lines of code, and each step says what the code means in the terms of an epidemiological model. The parameters are illustrative, not estimates for any particular disease or setting.
 
-To follow along, install Starsim with `pip install starsim`, and paste each block into a notebook or a Python script, in order.
+To follow along, install Starsim with `pip install "starsim[jax]"`, and paste each block into a notebook or a Python script, in order.
 
 ## An SIR model
 

@@ -242,7 +242,7 @@ class SimPars(ss.Pars):
             if source == 'modules':
                 # Modules from 'modules=' get sorted by type
                 for modkey, modclass in modmap.items():
-                    if isinstance(mod, modclass) or (modkey == 'diseases' and isinstance(mod, ss.strains.Family)): # Strains with courses of their own are with the diseases
+                    if isinstance(mod, modclass):
                         break
                 else:
                     modkey = 'custom'

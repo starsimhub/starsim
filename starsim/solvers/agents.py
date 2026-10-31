@@ -195,7 +195,6 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
         self.init_dwells()
         modifies = lambda m: isinstance(m, ss.modify) or bool(getattr(getattr(m, 'product', None), 'effects', None)) # A modifier, or a delivery of a product with an efficacy (TL17: these were left out, so a product did nothing against a dwell time)
         rescalable = any(modifies(m) for m in list(self.sim.interventions()) + list(self.sim.connectors())) or any(self.varies(dw) for dw in self.dwells.values()) # Whether a dwell time can change after it is drawn: see rescale_exits()
-        rescalable = rescalable or any(isinstance(fam, ss.strains.Family) and any(key.startswith('dur.') for imm in fam.immunity for key in imm.values) for fam in self.sim.diseases()) # Or protection on the time in a state, from a family
         strats = list(graph.strats) + [s for s in self.sim.groups.sim_strats if s not in graph.strats]
         adjusted = {self.sim.groups.dim_index(s.name) for s in strats if any(key.rpartition('.')[2] in graph.transitions for key in s.adjust)}
         rescalable = rescalable or bool(adjusted & self.changing_dims) # Or a multiplier by level, for people who can change level
@@ -438,8 +437,8 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
         return self.cache[key]
 
     def mult_raw_extra(self, kind):
-        """ Whether mult_raw() has a multiplier on a kind of quantity other than its modifiers: the adjust= of the stratifications, or a strain's own value """
-        return bool(getattr(self, 'rel_adjust', None) and self.rel_adjust.get(kind)) or kind in self.__dict__.get('rel_scale', ())
+        """ Whether mult_raw() has a multiplier on a kind of quantity other than its modifiers: the adjust= of the stratifications """
+        return bool(getattr(self, 'rel_adjust', None) and self.rel_adjust.get(kind))
 
     def lifelong_mods(self, mods):
         """ Whether modifiers only say who a quantity is for, by something that never changes (e.g. a transition with `where=ss.ppl.female`), so each person's multiplier stays the same for the whole run """
@@ -780,7 +779,7 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
     def seed(self, uids, log=True):
         """
         Seed some agents who are in the first state: put them where a new infection puts them, the destinations of the first
-        transmission in its shares, as init_prev does (and the strains with courses of their own, for each); returns those seeded
+        transmission in its shares, as init_prev does; returns those seeded
 
         Args:
             uids (uids): the agents; those not in the first state are left where they are

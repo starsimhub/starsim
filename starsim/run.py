@@ -1064,7 +1064,7 @@ class MultiResults(ss.Results):
         for (modname,key),arr in arrays.items():
             like = arr['like']
             values = np.asarray(arr['values'])
-            res = like.asnew(values=values, _shape=values.shape, runs=arr['runs'] if 'runs' in arr else runs, low=None, high=None, dests=None, by_edge=arr.get('by_edge'), family=arr.get('family')) # The destinations are linked again as they are added
+            res = like.asnew(values=values, _shape=values.shape, runs=arr['runs'] if 'runs' in arr else runs, low=None, high=None, dests=None, by_edge=arr.get('by_edge')) # The destinations are linked again as they are added
             res.run_pos = arr.get('run_pos') # For a result of only some of the runs, their positions among all the runs
             if getattr(like, 'strata', None) is not None or arr.get('strata') is not None:
                 res.strata, res.denom = arr.get('strata'), arr.get('denom')
@@ -1117,8 +1117,6 @@ class MultiResults(ss.Results):
             stacked = lambda parts: {key:parts[0][key].asnew(values=np.stack([part[key].values for part in parts]), runs=arr.get('runs', runs), strata=None, denom=None, group_ti=None) for key in parts[0]}
             if found[0].by_edge:
                 arr['by_edge'] = stacked([r.by_edge for r in found])
-            if found[0].family:
-                arr['family'] = (found[0].family[0], stacked([r.family[1] for r in found]))
             return arr
 
         first = sims[0]
@@ -1162,12 +1160,12 @@ class MultiResults(ss.Results):
             if pos is None:
                 sub = res.take(inds)
                 runs = sub.runs if runs is None else runs
-                arrays[modname, key] = dict(like=sub, values=sub.values, strata=getattr(sub, 'strata', None), denom=getattr(sub, 'denom', None), by_edge=sub.by_edge, family=sub.family)
+                arrays[modname, key] = dict(like=sub, values=sub.values, strata=getattr(sub, 'strata', None), denom=getattr(sub, 'denom', None), by_edge=sub.by_edge)
             else: # A result of only some of the runs: those of them taken
                 keep = [(j, inds.index(p)) for j,p in enumerate(pos) if p in inds]
                 if keep:
                     sub = res.take([j for j,_ in keep])
-                    arrays[modname, key] = dict(like=sub, values=sub.values, strata=getattr(sub, 'strata', None), denom=getattr(sub, 'denom', None), by_edge=sub.by_edge, family=sub.family, runs=sub.runs, run_pos=[i for _,i in keep])
+                    arrays[modname, key] = dict(like=sub, values=sub.values, strata=getattr(sub, 'strata', None), denom=getattr(sub, 'denom', None), by_edge=sub.by_edge, runs=sub.runs, run_pos=[i for _,i in keep])
         out = MultiResults.build(arrays, runs, timevec=self.get('timevec'))
         implicit = self._implicit # The results of each sim's one disease (see from_sims())
         if implicit is not None:

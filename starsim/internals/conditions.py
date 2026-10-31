@@ -929,8 +929,6 @@ class Selector(sc.prettyobj):
             return arr.raw if self.abm else np.asarray(arr.raw)[None, :sim.groups.n_groups]
         name = args[1]
         mod = self.module(modname(args[0]))
-        if isinstance(mod, ss.strains.Family): # A state of a disease whose strains have courses of their own: the people in it in any of them (e.g. ss.state('hpv.Ca'))
-            return as_cond(getattr(mod, name)).eval(self)
         if args[0] is None: # A state or transition given without its module: look in this module first, then the others
             for other in [self.mod] + [m for m in sim.declared if m is not self.mod]:
                 if getattr(other, 'graph', None) is not None and (name in other.graph.states or name in other.graph.transitions):

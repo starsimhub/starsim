@@ -1372,15 +1372,6 @@ def test_algebra():
         sim = run(solver, ss.Disease(S, I, R, infection=infection, recovery=I >> R @ ss.years(0.5), rate=1e5*infection/(S + I + R), init=dict(I=0.05), name='sir'))
         assert len(sim.results.sir.rate.select(sex='female')) == len(sim.results.sir.rate) # Kept by group
         return sim
-    def family_ratio(solver): # A member's flow over the family's, by group
-        def member(name, beta):
-            S, I, X = ss.states('S I X')
-            return ss.Disease(S, I, X, infection=S >> I @ ss.peryear(beta)*I, cancer=I >> X @ ss.years(2), init=dict(I=0.05), name=name)
-        sim = run(solver, ss.Disease(name='hpv', strains=ss.Strains([member('hpv16', 2), member('hpv18', 1.5)])), stratify=dict(age=[0, 25, 50]))
-        share = sim.results.hpv16.cancer/sim.results.hpv.cancer
-        vals = share.values[1:][~np.isnan(share.values[1:])] # A step with no cancers in the family is 0/0
-        assert np.all((vals >= 0) & (vals <= 1))
-        return sim
     def person_amount(solver): # A modifier's amount over people's properties
         d = sis()
         return run(solver, d, connectors=ss.modify(d.infection, multiply=ss.ppl.age/50))
@@ -1405,7 +1396,7 @@ def test_algebra():
         rate = dict(random=ss.peryear(1)*(A + 0.5*B), home=ss.peryear(2)*(A + B))
         d = ss.Disease(infection=S >> A @ rate, prog=A >> B @ ss.years(1), rec=B >> S @ ss.years(1), init=dict(A=0.1), name='d')
         return run(solver, d, networks=[ss.RandomNet(), ss.RandomNet(name='home')])
-    slots = [factor_peract, result_ratio, family_ratio, person_amount, other_states, attr_on_exit, dwell_births, peract_dict, by_contacts, route_sources]
+    slots = [factor_peract, result_ratio, person_amount, other_states, attr_on_exit, dwell_births, peract_dict, by_contacts, route_sources]
     agents = [attr_on_exit, dwell_births, route_sources] # Which only agents can run (other_states runs as compartments too, with the two diseases tracked jointly)
     for func in slots:
         for solver in solvers:

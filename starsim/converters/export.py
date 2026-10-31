@@ -16,8 +16,10 @@ The runs of a MultiSim are written as a submission to a hub (by scenario, as qua
 
 SBML and odin are written from the compartmental form of the model (what
 `sir.equations()` prints), with the numbers in the sim's unit of time: a dwell time
-that is not exponential is its Erlang stages, and each stratification is summed into
-one group. Both are read back by `ss.import_from()`.
+that is not exponential is its Erlang stages, each stratification is summed into one
+group, a network is its mean contacts, and a parameter that varies in time is its formula
+in the time. Both are read back by `ss.import_from()`, except a rate that varies in
+time, which the importers list as not translated.
 
 Used with: agents and compartments; declared and coded modules
 """
@@ -31,7 +33,9 @@ import starsim as ss
 
 __all__ = ['exporters', 'export_to', 'flatten', 'to_sbml', 'to_odin', 'to_hub']
 
-math_funcs = dict(exp='exp', log='ln', sqrt='root', abs='abs', absolute='abs', minimum='min', maximum='max', min='min', max='max', sin='sin', cos='cos', floor='floor', ceiling='ceiling')
+math_funcs = dict(exp='exp', log='ln', sqrt='root', abs='abs', absolute='abs', sin='sin', cos='cos', floor='floor', ceiling='ceiling')
+odin_funcs = dict(absolute='abs', minimum='min', maximum='max')
+extrema = dict(minimum='lt', min='lt', maximum='gt', max='gt') # SBML Level 3 Version 1 has no <min> or <max>, so these are written as piecewise
 
 
 #%% The compartmental form
@@ -90,14 +94,67 @@ def rename(text, names, unit):
     return ast.unparse(Sub().visit(node))
 
 
+def contact_rate(sim, engine):
+    """ The mean contacts per person per unit of time of the sim's mixing (with no network, 1), or None if it has no such number """
+    total = 0.0
+    for term in sim.mixing.terms:
+        if term.kind == 'homogeneous':
+            total += term.contacts
+        elif term.kind == 'matrix' and 'matrix' in term and 'cells' not in term: # The mean over people of the contacts in a row
+            rows = np.asarray(term.matrix, dtype=float).sum(axis=1)
+            sizes = np.asarray(engine.y).sum(axis=0)
+            total += np.average(rows, weights=sizes) if len(rows) == len(sizes) else rows.mean()
+        else:
+            return None
+    return float(total)
+
+
+def route_beta(sim, betas, unit):
+    """ A beta for each route as one beta: their mean weighted by contacts, so that with the total contacts it gives the same transmission """
+    key = ss.networks.standardize_netkey
+    betas = {key(k):float(ss.solvers.convert(v, unit)) for k,v in betas.items()}
+    terms = [(term.contacts, betas.get(key(term.name), 0.0)) for term in sim.mixing.terms if term.kind == 'homogeneous']
+    return np.average([b for c,b in terms], weights=[c for c,b in terms])
+
+
+def year_of(sim):
+    """ The expression for the year at time `t` of an export """
+    years = sim.t.yearvec
+    per_year = (len(years) - 1)*float(sim.t.dt.to(sim.unit_base).value)/(years[-1] - years[0]) # From the timeline, since a year of dates need not be 365 days
+    return f'{float(years[0])!r} + t / {float(per_year)!r}'
+
+
+def seasonal_expr(raw, year):
+    """ The factor of an `ss.seasonal`, as an expression in the year: see `ss.seasonal.factor()` """
+    amp = float(ss.parameters.const_value(raw.amplitude))
+    return f'maximum(0.0, 1 + {amp!r} * cos(2 * pi * ({year} - {raw.peak_frac!r}) / {raw.period_years!r}))'
+
+
+def timeseries_expr(raw, sim, year, unit):
+    """ An `ss.timeseries` as an expression in the year, a piece for each interval: see `ss.timeseries.weights()` """
+    years = [float(y) for y in raw.years(sim)]
+    vals = [float(ss.solvers.convert(ss.parameters.const_value(v), unit)) for v in raw.values]
+    if raw.period is not None: # Fold the time into one period from the first time
+        period = raw.period.years if isinstance(raw.period, ss.dur) else float(raw.period)
+        year = f'({year}) - {period!r} * floor((({year}) - {years[0]!r}) / {period!r})'
+    out = repr(vals[-1])
+    for i in reversed(range(len(vals) - 1)):
+        w = f'(({year}) - {years[i]!r}) / {years[i+1] - years[i]!r}'
+        w = dict(constant=None, linear=w, cosine=f'(1 - cos(pi * {w})) / 2')[raw.mode]
+        value = repr(vals[i]) if w is None else f'{vals[i]!r} + {vals[i+1] - vals[i]!r} * ({w})'
+        out = f'where(({year}) < {years[i+1]!r}, {value}, {out})'
+    return f'where(({year}) < {years[0]!r}, {vals[0]!r}, {out})'
+
+
 def flatten(sim):
     """
     The compartmental form of a sim's declared diseases, as plain data for the exporters
 
     Returns an `sc.obj` with the unit of time; the compartments and their initial
     numbers; the parameters (numbers in that unit); named expressions (a state with
-    several stages is their sum, and `N` is the people in a disease); the flows, each
-    with its compartments and its rate in total; and what was left out or changed.
+    several stages is their sum, `N` is the people in a disease, and a parameter that
+    varies in time is its formula, with `t` the time); the flows, each with its
+    compartments and its rate in total; and what was left out or changed.
     """
     sim, how = compartmental(sim)
     unit = sim.unit_base
@@ -109,7 +166,14 @@ def flatten(sim):
     for mod in diseases:
         g, e = mod.graph, mod.engine
         pre = f'{mod.name}_' if many else ''
-        names, flows = ss.display.flow_terms(g, e)
+        contacts = contact_rate(sim, e) if g.transmissions else 1.0
+        word = None
+        if contacts is None:
+            lost.append(f'changed: the contacts of "{mod.name}" have no single number, so its transmission is written with 1 contact per {unit}')
+        elif contacts != 1:
+            word = 'contacts' if 'contacts' not in g.pars else 'mixing_contacts'
+            out.pars[pre + word] = contacts
+        names, flows = ss.display.flow_terms(g, e, contacts=word)
         Y = np.asarray(e.y).sum(axis=1) # Summed over the groups of any stratification
         table = {}
         for i,name in enumerate(names):
@@ -121,6 +185,8 @@ def flatten(sim):
                 table[state.name] = pre + state.name
                 out.exprs[pre + state.name] = ' + '.join(stages)
         table['N'] = pre + 'N'
+        if word:
+            table[word] = pre + word
         out.exprs[pre + 'N'] = ' + '.join(pre + s.name for s in g.people_states)
         out.n_states += len(g.states)
         out.n_transitions += len(g.transitions)
@@ -130,6 +196,23 @@ def flatten(sim):
         for name,p in g.pars.items():
             table[name] = pre + name
             raw = p.raw
+            if isinstance(raw, ss.parameters.seasonal) or isinstance(raw, ss.timeseries):
+                year = year_of(sim)
+                try:
+                    if isinstance(raw, ss.timeseries):
+                        out.exprs[pre + name] = timeseries_expr(raw, sim, year, unit)
+                    else:
+                        out.pars[f'{pre}{name}_mean'] = float(ss.solvers.convert(ss.parameters.const_value(raw.mean), unit))
+                        out.exprs[pre + name] = f'{pre}{name}_mean * {seasonal_expr(raw, year)}'
+                    continue
+                except (TypeError, ValueError):
+                    pass
+            if isinstance(raw, dict):
+                try:
+                    out.pars[pre + name] = route_beta(sim, raw, unit)
+                    continue
+                except (TypeError, ValueError, ZeroDivisionError):
+                    pass
             if isinstance(raw, ss.Dist):
                 dw = dwells.get(id(p))
                 value = float(dw.mean) if dw is not None else np.nan
@@ -162,7 +245,7 @@ def flatten(sim):
     # Anything a rate uses that is not exported
     known = set(out.comps) | set(out.pars) | set(out.exprs)
     for flow in out.flows:
-        used = {n.id for n in ast.walk(ast.parse(flow.rate, mode='eval')) if isinstance(n, ast.Name)} - known - set(math_funcs)
+        used = {n.id for n in ast.walk(ast.parse(flow.rate, mode='eval')) if isinstance(n, ast.Name)} - known - set(math_funcs) - set(extrema) - {'pi', 't', 'where'}
         if used:
             lost.append(f'not exported: {sc.strjoin(sorted(used))}, used in the rate of "{flow.name}" ({flow.rate})')
 
@@ -182,7 +265,7 @@ def flatten(sim):
             lost.append(f'not exported: function "{name}" (Python code)')
     for mods,what in [(list(sim.networks()) + getattr(sim, 'mixed', []), 'network'), (sim.interventions(), 'intervention'), (sim.connectors(), 'modifier')]:
         for mod in mods:
-            extra = ' (contacts written as homogeneous mixing)' if what == 'network' else ''
+            extra = f' (written as homogeneous mixing with {contact_rate(sim, diseases[0].engine) if diseases else 0:n} contacts per {unit})' if what == 'network' else ''
             lost.append(f'not exported: {what} "{mod.name}"{extra}')
     if getattr(sim, 'crossings', None):
         lost.append('not exported: the coupling between diseases (each is written on its own)')
@@ -208,7 +291,14 @@ def mathml(node):
             a.append(arg)
         return a
     def visit(n):
-        if isinstance(n, ast.Name):
+        if isinstance(n, ast.Name) and n.id == 't':
+            e = el('csymbol', 't')
+            e.set('encoding', 'text')
+            e.set('definitionURL', 'http://www.sbml.org/sbml/symbols/time')
+            return e
+        elif isinstance(n, ast.Name) and n.id == 'pi':
+            return el('pi')
+        elif isinstance(n, ast.Name):
             return el('ci', n.id)
         elif isinstance(n, ast.Constant):
             return el('cn', repr(float(n.value)))
@@ -217,6 +307,26 @@ def mathml(node):
             return apply(ops[type(n.op)], [visit(n.left), visit(n.right)])
         elif isinstance(n, ast.UnaryOp) and isinstance(n.op, ast.USub):
             return apply('minus', [visit(n.operand)])
+        elif isinstance(n, ast.Compare) and isinstance(n.ops[0], ast.Lt):
+            return apply('lt', [visit(n.left), visit(n.comparators[0])])
+        elif isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id == 'where':
+            cond, yes, no = n.args
+            out = el('piecewise')
+            piece = el('piece')
+            piece.extend([visit(yes), visit(cond)])
+            otherwise = el('otherwise')
+            otherwise.append(visit(no))
+            out.extend([piece, otherwise])
+            return out
+        elif isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id in extrema:
+            a, b = n.args
+            out = el('piecewise')
+            piece = el('piece')
+            piece.extend([visit(a), apply(extrema[n.func.id], [visit(a), visit(b)])])
+            otherwise = el('otherwise')
+            otherwise.append(visit(b))
+            out.extend([piece, otherwise])
+            return out
         elif isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id in math_funcs:
             return apply(math_funcs[n.func.id], [visit(a) for a in n.args])
         raise ValueError(f'the expression "{ast.unparse(n)}" has no MathML form here')
@@ -287,6 +397,21 @@ def to_sbml(sim):
 
 #%% odin
 
+def odin_expr(text):
+    """ An expression in R, as odin reads it """
+    class Sub(ast.NodeTransformer):
+        def visit_Call(self, n):
+            self.generic_visit(n)
+            if n.func.id == 'where': # R's if, written whole as a name, since Python's expressions have no such form
+                cond, yes, no = [ast.unparse(a) for a in n.args]
+                return ast.Name(f'(if ({cond}) {yes} else {no})')
+            n.func.id = odin_funcs.get(n.func.id, n.func.id)
+            return n
+        def visit_Name(self, n):
+            return ast.Constant(np.pi) if n.id == 'pi' else n # odin has no pi
+    return ast.unparse(Sub().visit(ast.parse(text, mode='eval').body)).replace('**', '^')
+
+
 def to_odin(sim):
     """
     The compartmental form of a sim as an odin model: a `deriv()` equation for each compartment, with each flow a named variable
@@ -295,7 +420,7 @@ def to_odin(sim):
         sim (`ss.Sim`): the sim
     """
     flat = flatten(sim)
-    r = lambda text: text.replace('**', '^')
+    r = odin_expr
     lines = [f'## {flat.name}, exported from Starsim {ss.__version__}; time is in {flat.unit}s', '']
     taken = set(flat.comps) | set(flat.pars) | set(flat.exprs)
     flow_names = []

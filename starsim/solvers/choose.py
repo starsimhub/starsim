@@ -935,10 +935,9 @@ def crossing_groups(sim):
             links[name] = group
             why[name] = reasons
         return
-    families = [{m.name for m in fam.members} for fam in sim.pars.diseases.values() if isinstance(fam, ss.strains.Family)] # Strains with courses of their own have people who die of one die in the others already (see ss.strains.Family.step_shares())
     for mod in sim.declared: # People born or dying, once in every disease
         flows, deaths = flows_of(mod), leaves(mod)
-        if deaths and not flows and set(names) <= next((f for f in families if mod.name in f), {mod.name}):
+        if deaths and not flows and set(names) <= {mod.name}:
             continue
         if flows or deaths:
             reason = 'people are born or die, once, whatever their diseases' if flows else f'people die of {mod.name} ({sc.strjoin(tr.name for tr in deaths)}), so leave the others too'
@@ -1207,7 +1206,7 @@ def several_givers(sim):
 
 def says_itself(sim, mod):
     """ What a module says it needs agents for: see `agent_reasons()` (e.g. lasting partnerships, or a value kept for each person) """
-    kind = 'network' if isinstance(mod, ss.networks.Route) else 'strains' if isinstance(mod, ss.strains.Family) else 'module'
+    kind = 'network' if isinstance(mod, ss.networks.Route) else 'module'
     return [dict(reason=reason, kind=kind) for reason in mod.agent_reasons(sim)]
 
 
@@ -1593,16 +1592,6 @@ fixed = [ # The same, for what cannot change once the sim is initialized
 ]
 
 
-def families_of(sim):
-    """ The sim's families of strains """
-    return [mod for mod in sim.diseases() if isinstance(mod, ss.strains.Family)]
-
-
-def function_immunity(sim):
-    """ A family that combines protection with a function, which has no gradient """
-    return next((dict(fam=fam, name=getattr(imm.combine, '__name__', 'function')) for fam in families_of(sim) for imm in fam.immunity if callable(imm.combine)), None)
-
-
 def not_whole(sim):
     """ Whatever stops the kernels taking the whole run """
     return dict(reason=sim.kernel_reason()) if not sim.kernel_only() else None
@@ -1615,9 +1604,7 @@ def certain_rate(sim, mod):
 
 
 jax = [ # What stops JAX taking a whole run of the ODE
-    Rule('sim', function_immunity, KERNELS, '"{fam.name}" combines protection with a function ({name}), which has no gradient; the rules "max", "sum", and "multiply" do'),
     Rule('sim', lambda sim: not getattr(sim, 'declared', None), KERNELS, 'the model is written as code, with no declared states and transitions, so it has no gradient'), # A fit of it uses the runs alone
-    Rule('sim', lambda sim: dict(fam=families_of(sim)[0]) if families_of(sim) else None, KERNELS, '"{fam.name}" has strains with courses of their own (ss.Strains(shared=...)), which are run a step at a time for now'), # Its step works out the couplings and unions in Python
     Rule('sim', lambda sim: sim.solver != 'ode', KERNELS, 'solver="{sim.solver}" is stochastic (gradients are for solver="ode" only)'),
     Rule('sim', not_whole, KERNELS, '{reason}'),
     Rule('declared', lambda sim, mod: mod.engine.register is not None and len(mod.engine.register.src), KERNELS, '"{mod.name}" has a movement register'),

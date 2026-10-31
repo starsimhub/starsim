@@ -1038,8 +1038,6 @@ class Engine(Telling, Effects):
             out = self.cache[key]
         if getattr(self, 'rel_adjust', None) and self.rel_adjust.get(kind):
             out = out*self.adjusted_rel(kind, state)
-        if kind in self.__dict__.get('rel_scale', ()): # A strain with its own course: its value (see ss.Strains)
-            out = out*self.rel_scale[kind]
         return out
 
     def adjusted_rel(self, kind, state=None):
@@ -1129,14 +1127,6 @@ class Engine(Telling, Effects):
                         current = 1.0 if self.adjust[name] is None else self.adjust[name]
                         self.adjust[name] = current*sim.groups.group_vals(d, vals)
                         self.adjust_dims[name].add(d)
-        self.rel_scale = {}
-        for name,val in (getattr(self.graph, 'scale', None) or {}).items(): # A strain with its own course: its values, which multiply as adjust= does (see ss.Strains)
-            if name in self.rel_adjust:
-                self.rel_scale[name] = val
-            elif self.graph.modifier_kind(name) == 'branch':
-                self.branch_adjust[name] = self.branch_adjust.get(name, 1.0)*val
-            else:
-                self.adjust[name] = (np.ones(sim.groups.n_groups) if self.adjust[name] is None else self.adjust[name])*val
         for name,tr in self.graph.transitions.items(): # A value by level of a dimension that the states moved have no level of: there is no level to take (it took the first)
             ends = tr.src or tr.dst or []
             for expr in [tr.rate, tr.dur] + sc.tolist(tr.p):
@@ -1622,11 +1612,6 @@ class Engine(Telling, Effects):
 
         # Initial prevalence is seeded through the transmission, so people start wherever a new infection starts
         init_prev = graph.init_prev
-        share = 1.0
-        family = getattr(graph, 'seeded_by', None)
-        if family is not None and self.solver != 'abm': # A strain with its own course, seeded by the disease (ss.Strains(shared=...)): the disease's share, times this member's split (independently of the other members, so unlike agents some are seeded with two)
-            family = self.sim.diseases[family]
-            init_prev, share = ss.parameters.starting(family.init_prev), family.split[family.member_names.index(self.mod.name)]
         if isinstance(init_prev, ss.expressions.par): # A parameter (e.g. sir.pars.init_prev), whose value can be a value for each level (worked out for each group below, not for each agent)
             init_prev = init_prev.raw if isinstance(init_prev.raw, (ss.Dist, ss.by)) else self.value(init_prev)
         if isinstance(init_prev, ss.Dist):
@@ -1642,7 +1627,6 @@ class Engine(Telling, Effects):
                 raise ValueError(f'init_prev of "{self.mod.name}" gives a share of more than 1 for some groups ({np.max(init_prev):n}); a value for each group is a share of the people in it')
             elif np.ndim(init_prev) == 0 and init_prev > 1: # More than 1 is a number of people, and up to 1 a share (1.0 is everyone)
                 init_prev = init_prev/self.total_pop
-            init_prev = init_prev*share
             trs = self.seed_transmissions()
             if not trs:
                 errormsg = f'"{self.mod.name}" has no transmission or acquisition to seed init_prev through; use init= on a state instead'

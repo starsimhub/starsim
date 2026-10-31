@@ -43,6 +43,7 @@ Starsim 4 adds a way to write a model as declared states and transitions, which 
   - deliveries take `at=` and `where=` (were `years=`/`dates=` and `eligible=`);
   - `ss.Infection` transmits in `transmit()` (was `infect()`);
   - lactation is part of `ss.Pregnancy`.
+- *Migration*: `ss.strains.Family` is removed, so `ss.Strains` takes the names of strains that share a disease's states, without `shared=` or diseases as strains, and `ss.immunity()` takes `rel_sus=` due to a state, without `rel_trans=`, `dur=`, or an attribute. Strains with courses of their own are one disease per strain, connected by a connector (see the [Diseases](https://docs.starsim.org/user_guide/building_diseases.html#strains) guide). `ssl.Dengue()` is now a list of serotypes, with results `sim.results.den1` and so on, not `sim.results.dengue`.
 - *Migration*: there is no model spec: `sim.to_code()`, `ss.diff()` and `sim.hash()` are removed.
 - *Migration*: `ss.Disease` is the one disease class, declared, written as code, or both; `ss.Infection` adds only transmission.
 - *Migration*: an unnamed transition that is a disease's only transmission is named `infection`, a duration written inline is named by its state (`dur_I`), and a rate by its transition (`rate_death`).
@@ -86,8 +87,10 @@ Starsim 4 adds a way to write a model as declared states and transitions, which 
 - The compartmental kernels are up to 1.8× faster with 100 groups, and `import starsim` no longer imports `scipy.stats`.
 - Which engine runs a model is one table of rules, shown by `ss.solvers.solver_table()`.
 - Mixing between many places is up to 5× faster in the kernels, by BLAS when every pair of places has a time share (Ghana measles, 260 districts: 4.8 s to 1.6 s a run; 600 places: 22.6 s to 4.4 s).
-- `pip install starsim` is set up to include the compiled Rust kernels, as one wheel per platform for Python 3.11 and later; the sdist includes the crate, and Numba's kernels remain the fallback. JAX is not installed on Intel Macs, which have no builds of it; gradients are the only thing they lack.
+- `pip install starsim` is set up to include the compiled Rust kernels, as one wheel per platform for Python 3.11 and later; the sdist includes the crate, and Numba's kernels remain the fallback.
 - `ss.compile()` works under Numba.
+- `import starsim` limits BLAS to one thread, whatever was imported first, since more never made Starsim faster on any platform tested, and slowed its start and its workers. Use `STARSIM_NUM_THREADS` or `ss.options.num_threads` to change it.
+- JAX is optional, and recommended: `pip install "starsim[jax]"`. Without it, gradients aren't available, and the R-hat and effective sample size of a fit are NaN. It has no builds for Intel Macs or Windows on ARM, on which Starsim could not be installed.
 - A rate or duration that reads another disease's count is no longer frozen in a whole run.
 - A change in code to a modifier's amount or a product's efficacy takes effect in a stepped run.
 - Results read time-varying values at each time point.
@@ -100,9 +103,7 @@ Starsim 4 adds a way to write a model as declared states and transitions, which 
 - `sim.run()` of a compartmental model with many groups is up to 1.5× faster, from less copying as results are stored.
 - `sim.summary` is made the first time it is read, not at the end of every run.
 - A modifier whose amount reads a clock (e.g. `multiply=0.5**(El.time/half_life)`) is worked out only for the people in its `where=`, so a declared `ssl.Syphilis` runs within about 6% of the version with `step()`.
-- `sim.fit()` works on a family of strains with `ss.immunity`.
 - As agents, a transition with no driver (moved only by an intervention) is no longer drawn each step, a `where=` by sex no longer makes dwell times rescale, and the one-pass exit check applies per state.
-- Protection in `ss.strains.Family` from an attribute reads its array directly.
 
 ## Version 3.7.2 (2026-10-06)
 - `ss.ClusterNet` (and so `ss.HybridNet`) and `ss.MSMNet` now shuffle agents using `float64` random numbers and a stable sort. Previously, tied `float32` random numbers were ordered differently on different CPUs, so the same seed could give slightly different results on different machines.
