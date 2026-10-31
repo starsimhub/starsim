@@ -36,6 +36,10 @@ on:
       - main
       - v4
 
+concurrency: # A newer push to a pull request replaces its older runs, which would only queue ahead of it
+  group: downstream-${{ github.head_ref || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
 
   frameworks:
@@ -52,14 +56,14 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - {model: STIsim,     repo: starsimhub/stisim,          ref: v4, dir: stisim,     install: pip install -e . -r tests/requirements.txt}
-          - {model: HPVsim,     repo: starsimhub/hpvsim,          ref: v4, dir: hpvsim,     install: 'pip install -e ".[hiv]" -r tests/requirements.txt git+https://github.com/starsimhub/stisim@v4 && hpvsim-download-data'} # [hiv] pulls in stisim, which the HIV tests need, from its v4 branch rather than the release
-          - {model: TBsim,      repo: starsimhub/tbsim,           ref: v4, dir: tbsim,      install: pip install -e . -r tests/requirements.txt}
-          - {model: FPsim,      repo: starsimhub/fpsim,           ref: v4, dir: fpsim,      install: pip install -e . -r tests/requirements.txt}
-          - {model: malariasim, repo: starsimhub/starsim-malaria, ref: v4, dir: malariasim, install: 'pip install -e ".[dev]" pytest-xdist'}
-          - {model: Covasim,    repo: starsimhub/covasim,         ref: v4, dir: covasim,    install: 'pip install -e ".[test]"'}
-          - {model: MIGHTI,     repo: starsimhub/mighti,          ref: v4, dir: mighti,     install: 'pip install -e ".[dev]" pytest-xdist git+https://github.com/starsimhub/stisim@v4'} # As for HPVsim, get stisim from its v4 branch rather than the release
-          - {model: Typhoidsim, repo: starsimhub/typhoidsim,      ref: v4, dir: typhoidsim, install: pip install -e . -r tests/requirements.txt}
+          - {model: STIsim,     repo: starsimhub/stisim,          ref: v4, dir: stisim,     install: uv pip install -e . -r tests/requirements.txt}
+          - {model: HPVsim,     repo: starsimhub/hpvsim,          ref: v4, dir: hpvsim,     install: 'uv pip install -e ".[hiv]" -r tests/requirements.txt git+https://github.com/starsimhub/stisim@v4 && hpvsim-download-data'} # [hiv] pulls in stisim, which the HIV tests need, from its v4 branch rather than the release
+          - {model: TBsim,      repo: starsimhub/tbsim,           ref: v4, dir: tbsim,      install: uv pip install -e . -r tests/requirements.txt}
+          - {model: FPsim,      repo: starsimhub/fpsim,           ref: v4, dir: fpsim,      install: uv pip install -e . -r tests/requirements.txt}
+          - {model: malariasim, repo: starsimhub/starsim-malaria, ref: v4, dir: malariasim, install: 'uv pip install -e ".[dev]" pytest-xdist'}
+          - {model: Covasim,    repo: starsimhub/covasim,         ref: v4, dir: covasim,    install: 'uv pip install -e ".[test]"'}
+          - {model: MIGHTI,     repo: starsimhub/mighti,          ref: v4, dir: mighti,     install: 'uv pip install -e ".[dev]" pytest-xdist git+https://github.com/starsimhub/stisim@v4'} # As for HPVsim, get stisim from its v4 branch rather than the release
+          - {model: Typhoidsim, repo: starsimhub/typhoidsim,      ref: v4, dir: typhoidsim, install: uv pip install -e . -r tests/requirements.txt}
 
     steps:
       - name: Checkout Starsim
@@ -68,8 +72,7 @@ jobs:
         with:
           python-version: '3.14'
 
-      - name: Install Starsim
-        run: pip install -e .
+      - uses: ./.github/actions/install
 
       - name: Check out ${{ matrix.model }} (${{ matrix.ref }})
         uses: actions/checkout@v7 # Fails if the branch doesn't exist
@@ -83,14 +86,14 @@ jobs:
         run: ${{ matrix.install }}
 
       - name: Reinstall Starsim # In case the package's requirements pulled in a released Starsim
-        run: pip install --no-deps -e .
+        run: uv pip install --no-deps -e .
 
       - name: Run ${{ matrix.model }} tests
         working-directory: ./${{ matrix.dir }}/tests
         env:
           SCIRIS_BACKEND: agg
           STARSIM_SHOW: 0
-        run: pytest test_*.py -n auto --durations=0 --junitxml=results.xml
+        run: pytest test_*.py -n logical --durations=0 --junitxml=results.xml
       - name: Upload test results
         uses: actions/upload-artifact@v7
         if: failure()

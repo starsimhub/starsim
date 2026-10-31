@@ -8,6 +8,7 @@ Rust's are skipped if they have not been built (cd starsim/solvers/rust && ./bui
 """
 
 # %% Imports and settings
+import os
 from unittest import mock
 import numba as nb
 import pytest
@@ -164,6 +165,22 @@ def test_stale():
             R.use(True)
     if rust and R.source_hash() is not None: # None when run against a wheel, which has no source beside it
         assert R.source_hash() == R.load().source_hash, 'Rebuild the Rust kernels'
+    return
+
+
+@sc.timer()
+def test_stale_numba(tmp_path):
+    sc.heading('Testing that Numba\'s cache is checked against the contents of a file, not its time')
+    C = ss.solvers.backends.cache
+    path = tmp_path/'kernels.py'
+    path.write_text('x = 1')
+    before = C.contents(str(path))
+    os.utime(path, (1, 1)) # As a fresh checkout does
+    assert C.contents(str(path)) == before, 'A new time should keep a cache that is still right'
+    path.write_text('x = 2') # The same size
+    os.utime(path, (1, 1))
+    C.hashes.clear() # As a new process does
+    assert C.contents(str(path)) != before, 'A change with the same time and size should make a cache stale'
     return
 
 
